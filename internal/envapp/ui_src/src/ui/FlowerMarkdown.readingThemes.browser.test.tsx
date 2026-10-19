@@ -117,7 +117,7 @@ const screenshotContent = [
   '修改 ' + tick + 'DynamicToolHandler' + tick + '，允许 Code Mode 通过 ' + tick + 'Promise.all' + tick + ' 并发发出动态工具请求。([github.com](https://github.com/openai/codex/pull/54654))',
 ].join('\n\n');
 
-it.each(['porcelain-light', 'classic-dark', 'hc-light'])('renders screenshot-like Markdown at the original scale in the real %s transcript', async theme => {
+it.each(['porcelain-light', 'classic-dark', 'hc-light', 'cloud-white', 'soft-black'])('renders screenshot-like Markdown at the original scale in the real %s transcript', async theme => {
   await page.viewport(1100, 1000);
   applyTheme(builtInShellThemePresets.find(preset => preset.name === theme)!);
   const timestamp = Date.parse('2026-10-18T10:18:00Z');

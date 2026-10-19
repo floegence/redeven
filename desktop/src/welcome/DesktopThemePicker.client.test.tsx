@@ -27,6 +27,16 @@ function mount() {
 function preset(name: string) { return document.querySelector<HTMLButtonElement>(`[data-desktop-theme-preset="${name}"]`)!; }
 
 describe('Desktop appearance interaction', () => {
+  it('selects Soft Black through the shared persistence request', async () => {
+    const view = mount();
+    preset('soft-black').click();
+    await vi.waitFor(() => expect(view.onShellThemeChange).toHaveBeenCalledWith('dark', 'soft-black'));
+    view.accept({ ...view.snapshot(), shellThemes: { light: 'cloud-white', dark: 'soft-black' } });
+    await vi.waitFor(() => expect(preset('soft-black').getAttribute('aria-checked')).toBe('true'));
+    view.setSnapshot({ ...view.snapshot(), resolvedTheme: 'light' });
+    await vi.waitFor(() => expect(preset('cloud-white').getAttribute('aria-checked')).toBe('true'));
+  });
+
   it('paints loading before sending a write, deduplicates pending clicks and keeps the checked option authoritative', async () => {
     const view = mount();
     preset('nord').click();

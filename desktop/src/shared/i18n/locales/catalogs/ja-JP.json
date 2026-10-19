@@ -1788,7 +1788,9 @@
       "presets": {
         "classic-light": "クラシック ライト",
         "porcelain-light": "ポーセリン ライト",
+        "cloud-white": "クラウドホワイト",
         "porcelain-dark": "ポーセリン ダーク",
+        "soft-black": "ソフトブラック",
         "paper": "ペーパー",
         "mist": "ミスト",
         "meadow": "メドウ",

@@ -132,25 +132,27 @@ describe('EnvAppThemePicker', () => {
     }
   });
 
-  it('shows all 12 light themes, including Classic Light and Porcelain Light', () => {
+  it('shows all 13 light themes, including Cloud White', () => {
     const { dispose } = mountPicker();
     try {
       const trigger = openPicker();
       const presets = Array.from(host.querySelectorAll<HTMLElement>('[data-envapp-theme-preset]'));
 
       expect(trigger.getAttribute('aria-expanded')).toBe('true');
-      expect(presets).toHaveLength(12);
+      expect(presets).toHaveLength(13);
       expect(presets[0]?.dataset.envappThemePreset).toBe('porcelain-light');
       expect(presets.map((preset) => preset.dataset.envappThemePreset)).toContain('classic-light');
       expect(presets.map((preset) => preset.dataset.envappThemePreset)).toContain('github-light');
+      expect(presets.map((preset) => preset.dataset.envappThemePreset)).toContain('cloud-white');
       expect(presets.map((preset) => preset.dataset.envappThemePreset)).not.toContain('classic-dark');
+      expect(presets.map((preset) => preset.dataset.envappThemePreset)).not.toContain('soft-black');
       expect(host.textContent).toContain('Classic Light');
     } finally {
       dispose();
     }
   });
 
-  it('shows all 14 dark themes and selects Nord without changing the source', async () => {
+  it('shows all 15 dark themes, including Soft Black, and selects Nord without changing the source', async () => {
     themeHarness.setSource('dark');
     themeHarness.setResolved('dark');
     const { dispose, onSourceChange, onShellThemeChange } = mountPicker();
@@ -159,9 +161,10 @@ describe('EnvAppThemePicker', () => {
       const presets = Array.from(host.querySelectorAll<HTMLElement>('[data-envapp-theme-preset]'));
       const nord = host.querySelector<HTMLButtonElement>('[data-envapp-theme-preset="nord"]');
 
-      expect(presets).toHaveLength(14);
+      expect(presets).toHaveLength(15);
       expect(presets[0]?.dataset.envappThemePreset).toBe('porcelain-dark');
       expect(presets.map((preset) => preset.dataset.envappThemePreset)).toContain('classic-dark');
+      expect(presets.map((preset) => preset.dataset.envappThemePreset)).toContain('soft-black');
       expect(presets.map((preset) => preset.dataset.envappThemePreset)).not.toContain('classic-light');
       nord?.click();
       await vi.waitFor(() => expect(onShellThemeChange).toHaveBeenCalledWith('dark', 'nord'));

@@ -1803,7 +1803,9 @@
       "presets": {
         "classic-light": "Классическая светлая",
         "porcelain-light": "Светлый фарфор",
+        "cloud-white": "Облачный белый",
         "porcelain-dark": "Тёмный фарфор",
+        "soft-black": "Мягкий чёрный",
         "paper": "Бумага",
         "mist": "Туман",
         "meadow": "Луг",

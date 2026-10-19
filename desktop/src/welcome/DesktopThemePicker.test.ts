@@ -49,6 +49,7 @@ const builtInShellThemePresets = publishedPresets();
 
 const LIGHT_PRESET_NAMES = [
   'porcelain-light',
+  'cloud-white',
   'classic-light',
   'paper',
   'mist',
@@ -64,6 +65,7 @@ const LIGHT_PRESET_NAMES = [
 
 const DARK_PRESET_NAMES = [
   'porcelain-dark',
+  'soft-black',
   'classic-dark',
   'ink',
   'slate',
@@ -93,7 +95,7 @@ function readWelcomeStyles(): string {
 }
 
 describe('DesktopThemePicker', () => {
-  it('keeps the 12 light and 14 dark presets in their published order', () => {
+  it('keeps the 13 light and 15 dark presets in their published order', () => {
     const lightPresets = builtInShellThemePresets.filter((preset) => preset.mode === 'light');
     const darkPresets = builtInShellThemePresets.filter((preset) => preset.mode === 'dark');
 
@@ -101,7 +103,7 @@ describe('DesktopThemePicker', () => {
     expect(darkPresets.map((preset) => preset.name)).toEqual(DARK_PRESET_NAMES);
     expect(lightPresets[0]?.name).toBe('porcelain-light');
     expect(darkPresets[0]?.name).toBe('porcelain-dark');
-    expect([...lightPresets, ...darkPresets]).toHaveLength(26);
+    expect([...lightPresets, ...darkPresets]).toHaveLength(28);
   });
 
   it('provides localized labels with an upstream display-name fallback and complete Monaco-aware previews', () => {

@@ -178,13 +178,13 @@ function runtimeMonitorPalette(profile: ThemeProfile): readonly [Rgb, Rgb, Rgb] 
   return [graph[0], graph[1], graph[4]];
 }
 
-describe('Redeven 26-preset color quality', () => {
+describe('Redeven 28-preset color quality', () => {
   const profiles = publishedThemeProfiles();
 
   it('keeps all published light and dark presets in the executable matrix', () => {
-    expect(profiles).toHaveLength(26);
-    expect(profiles.filter((profile) => profile.mode === 'light')).toHaveLength(12);
-    expect(profiles.filter((profile) => profile.mode === 'dark')).toHaveLength(14);
+    expect(profiles).toHaveLength(28);
+    expect(profiles.filter((profile) => profile.mode === 'light')).toHaveLength(13);
+    expect(profiles.filter((profile) => profile.mode === 'dark')).toHaveLength(15);
   });
 
   it('keeps graph roles visible, adjacent roles distinct, and text roles readable', () => {

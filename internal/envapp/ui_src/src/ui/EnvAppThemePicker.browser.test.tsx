@@ -73,3 +73,39 @@ it('paints feedback and keeps the workspace usable while the actual theme provid
   await expect.poll(() => document.documentElement.dataset.floeShellTheme).toBe('porcelain-light');
   expect(host.querySelector<HTMLElement>('[data-envapp-theme-preset]')?.dataset.envappThemePreset).toBe('porcelain-light');
 });
+
+it.each([
+  ['light', 'cloud-white', 'rgb(255, 255, 255)', 'rgb(48, 52, 59)'],
+  ['dark', 'soft-black', 'rgb(9, 9, 11)', 'rgb(198, 197, 193)'],
+] as const)('applies the published %s preset %s without replacing the draft', async (mode, name, background, foreground) => {
+  await page.viewport(1100, 800);
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  function Workspace() {
+    const theme = useTheme();
+    return <>
+      <EnvAppThemePicker
+        presentation="inline"
+        onSourceChange={source => { theme.setTheme(source); return true; }}
+        onShellThemeChange={(targetMode, targetName) => { theme.selectShellTheme(targetMode, targetName); return true; }}
+      />
+      <textarea aria-label="Retained theme draft" />
+      <div data-reading-surface style={{ background: 'var(--background)', color: 'var(--foreground)' }}>Reading surface</div>
+    </>;
+  }
+  dispose = render(() => <FloeProvider config={{ storage: { enabled: false }, theme: { defaultTheme: mode, shellPresets: builtInShellThemePresets, defaultShellPreset: BUILT_IN_SHELL_THEME_DEFAULTS } }}><Workspace /></FloeProvider>, host);
+  const draft = host.querySelector('textarea')!;
+  draft.value = 'Keep the draft while changing appearance';
+  draft.setSelectionRange(5, 14);
+  const target = host.querySelector<HTMLButtonElement>('[data-envapp-theme-preset="' + name + '"]')!;
+  expect(target).toBeTruthy();
+  target.click();
+  await expect.poll(() => document.documentElement.dataset.floeShellTheme).toBe(name);
+  expect(target.getAttribute('aria-checked')).toBe('true');
+  const reading = getComputedStyle(host.querySelector<HTMLElement>('[data-reading-surface]')!);
+  expect(reading.backgroundColor).toBe(background);
+  expect(reading.color).toBe(foreground);
+  expect(host.querySelector('textarea')).toBe(draft);
+  expect(draft.value).toBe('Keep the draft while changing appearance');
+  expect([draft.selectionStart, draft.selectionEnd]).toEqual([5, 14]);
+});

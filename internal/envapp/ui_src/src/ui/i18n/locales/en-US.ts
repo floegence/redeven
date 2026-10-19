@@ -1740,6 +1740,8 @@ export const enUS = defineDictionary({
       switching: 'Switching appearance…',
       presets: {
         'classic-light': 'Classic Light',
+        'cloud-white': 'Cloud White',
+        'soft-black': 'Soft Black',
         'porcelain-light': 'Porcelain Light',
         'porcelain-dark': 'Porcelain Dark',
         paper: 'Paper',

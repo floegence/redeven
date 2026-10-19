@@ -459,6 +459,8 @@
       "switching": "Изменение оформления…",
       "presets": {
         "classic-light": "Классическая светлая",
+        "cloud-white": "Облачный белый",
+        "soft-black": "Мягкий чёрный",
         "porcelain-light": "Светлый фарфор",
         "porcelain-dark": "Тёмный фарфор",
         "paper": "Бумага",

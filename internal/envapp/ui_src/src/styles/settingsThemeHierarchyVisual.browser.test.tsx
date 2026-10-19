@@ -215,7 +215,7 @@ describe('Settings theme hierarchy', () => {
   it.each(['standard', 'soft-neumorphic'])('keeps structure quiet and selection clear in every built-in shell theme with %s material', async (material) => {
     await page.viewport(1280, 960);
     document.documentElement.dataset.floeSurfaceStyle = material;
-    expect(builtInShellThemePresets).toHaveLength(26);
+    expect(builtInShellThemePresets).toHaveLength(28);
 
     for (const preset of builtInShellThemePresets) {
       document.body.replaceChildren();
@@ -290,6 +290,8 @@ describe('Settings theme hierarchy', () => {
     const themeNames = [
       'classic-light',
       'classic-dark',
+      'cloud-white',
+      'soft-black',
       'github-light',
       'dracula',
       'nord',

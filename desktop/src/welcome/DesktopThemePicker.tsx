@@ -62,6 +62,8 @@ const PRESET_TRANSLATION_KEYS = {
   nord: 'shell.themePicker.presets.nord',
   dracula: 'shell.themePicker.presets.dracula',
   abyss: 'shell.themePicker.presets.abyss',
+  'cloud-white': 'shell.themePicker.presets.cloud-white',
+  'soft-black': 'shell.themePicker.presets.soft-black',
   'porcelain-light': 'shell.themePicker.presets.porcelain-light',
   'porcelain-dark': 'shell.themePicker.presets.porcelain-dark',
 } as const satisfies Readonly<Record<string, string>>;
