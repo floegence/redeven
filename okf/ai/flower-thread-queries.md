@@ -46,17 +46,21 @@ calendar groups. Query defaults to 50 records and permits at most 200.
 Tool schemas enumerate sort keys and describe their object-specific meaning.
 `threads.query` accepts `created`, `updated`, `title`, `thread_id` for threads;
 `time`, `order` for messages; and `time`, `completed`, `tool_name`, `elapsed`
-for tool calls. `threads.aggregate` has its own `key` and `count` enum. Omitted
-or empty keys retain the released defaults (`created`, `time`, `time`, and
-aggregate `key`). Newest messages use `sort: {key: "time", descending: true}`;
-response field names such as `created_at` are not sort keys.
+for tool calls. Omitted or empty keys retain the released defaults (`created`,
+`time`, `time`). Queries default to descending order, so new threads, messages
+and tool calls appear first without additional arguments. An explicit
+`descending: false` selects ascending order. Redeven sets the query direction
+default before decoding input and preserves explicit values and unchanged
+cursor continuation; it adds no fields, keys or sorting presets.
+`threads.aggregate` keeps its separate `key` and `count` enum and ascending
+default. Response field names such as `created_at` are not sort keys.
 
 Floret remains the validation owner. Schema-invalid keys enter its bounded
 correction path before tool dispatch and do not create visible failed Activity
 rows. The host maps decode failures and published `ErrInvalidQuery` results to
 `INVALID_ARGUMENTS`, retaining the original error identity. Unsupported sort
 feedback names `sort.key`, the supplied value, the object, allowed values and
-the default; it never rewrites the request or adds aliases. Cursor, access,
+the default; invalid inputs are never silently corrected. Cursor, access,
 storage and cancellation errors retain their own boundaries.
 
 Query returns basic fields, hit summaries and exact opaque refs. Read returns

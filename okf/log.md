@@ -4,6 +4,10 @@
 
 - Retain the published typed [Goal activity](ai/flower-goals.md) through the shared public filter for current detail, history and live blocks. Preserve full objectives and evidence, reject invalid display facts and keep waiting interactions independent from review outcomes.
 
+## 2026-10-18 — Recent-first thread queries
+
+- Default [thread queries](ai/flower-thread-queries.md) to descending chronological order using the existing sort fields. Preserve explicit ascending order, aggregation defaults, canonical validation and cursor continuation without adding sort keys or presets.
+
 ## 2026-10-18 — Readable Goal review activity
 
 - Adopt released Floret v7.63.1 typed invocation snapshots and historical review recovery. Show quiet, borderless Goal checks with original text and confirmed evidence, hide generic tool filler and duration, and preserve canonical completion and waiting interactions.
