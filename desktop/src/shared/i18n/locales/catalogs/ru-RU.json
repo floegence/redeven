@@ -815,7 +815,7 @@
       "goalDeleted": "Цель удалена",
       "goalActorUser": "Вы",
       "goalActorModel": "Модель",
-      "commandGoal": "Просмотр и управление целью беседы",
+      "commandGoal": "Задать цель и начать или обновить работу",
       "goalUnavailable": "В этой среде управление целями недоступно."
     },
     "threadList": {

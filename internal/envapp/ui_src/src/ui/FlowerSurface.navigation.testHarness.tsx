@@ -267,7 +267,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
     );
   },
   SurfaceFloatingLayer: (props: any) => {
-    if (props.class === 'flower-composer-more-layer' || props.class === 'flower-model-menu-layer' || props.class === 'flower-subagents-dropdown-layer') return <Dynamic component={actual.SurfaceFloatingLayer} {...props} />;
+    if (props.class === 'flower-composer-more-layer' || props.class === 'flower-model-menu-layer' || props.class === 'flower-subagents-dropdown-layer' || props.class === 'flower-goal-layer') return <Dynamic component={actual.SurfaceFloatingLayer} {...props} />;
     const {
       children, layerRef, position: _position, owner: _owner, estimatedSize: _estimatedSize, clamp: _clamp,
       class: className, style, ...rest

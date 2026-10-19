@@ -22,8 +22,8 @@ require_source() {
 }
 
 echo "[INFO] checking published Floret v7 dependency"
-rg -q '^\s*github\.com/floegence/floret/v7 v7\.61\.0$' go.mod \
-  || fail "go.mod must consume github.com/floegence/floret/v7 v7.61.0"
+rg -q '^\s*github\.com/floegence/floret/v7 v7\.62\.2$' go.mod \
+  || fail "go.mod must consume github.com/floegence/floret/v7 v7.62.2"
 redeven_go_version=$(GOWORK=off go list -m -f '{{.GoVersion}}')
 floret_go_version=$(GOWORK=off go list -m -f '{{.GoVersion}}' github.com/floegence/floret/v7)
 [[ "$redeven_go_version" == "$floret_go_version" ]] \
@@ -69,6 +69,7 @@ require_source internal/ai/send_user_turn.go 's.threadRuntime.Send'
 require_source internal/ai/compact_thread_context.go 'flruntime.ThreadContextCompactor'
 require_source internal/ai/compact_thread_context.go 'compactor.CompactContext'
 require_source internal/ai/thread_goal.go 'flruntime.ThreadGoalController'
+require_source internal/ai/thread_goal.go 'flruntime.ThreadGoalSubmitter'
 require_source internal/ai/floret_runtime.go 'flruntime.WithAgentGoals()'
 if rg -n --glob '*.go' --glob '!**/*_test.go' 'WithAgentManualCompactions|ManualCompactionSource|flowerManualCompactionSource' internal/ai; then
   fail "Redeven must use independent compaction instead of ordinary-turn manual sources"

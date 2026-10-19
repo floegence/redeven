@@ -83,8 +83,12 @@ func TestPublishedGoalUpdatesDuringQuestionAndApprovalUseNextModelRequest(t *tes
 			if waiting.Goal.Status != "active" || len(gateway.Requests()) != 1 {
 				t.Fatalf("waiting=%+v", waiting)
 			}
-			if _, err := controller.SetGoal(t.Context(), flruntime.SetGoalInput{ThreadID: created.ThreadID, RequestKey: "update", ExpectedVersion: 1, Text: "Updated verified result"}); err != nil {
+			if _, err := service.(flruntime.ThreadGoalSubmitter).SubmitGoal(t.Context(), flruntime.SetGoalInput{ThreadID: created.ThreadID, RequestKey: "update", ExpectedVersion: 1, Text: "Updated verified result"}); err != nil {
 				t.Fatal(err)
+			}
+			unchanged, err := service.View(t.Context(), created.ThreadID)
+			if err != nil || len(gateway.Requests()) != 1 || len(unchanged.Queue) != 0 || unchanged.Interactions[0].Resolved || unchanged.Interactions[0].ID != waiting.Interactions[0].ID {
+				t.Fatalf("Goal submission bypassed waiting: %+v err=%v", unchanged, err)
 			}
 			answer := flruntime.InteractionAnswer{Input: map[string]string{"q": "production"}}
 			if interaction == "approval" {

@@ -26,9 +26,14 @@ for the same task; approvals, answers, retry, compaction and restart are not new
 tasks. Ordinary Fork inherits the Goal at its branch point and evolves independently.
 A delegated child manages its own mission Goal.
 
-Mutations do not start execution or interrupt a request. They appear immediately
-and affect the next new logical model request, including requests within the
-current Turn. Frozen transport retries retain the original input. Floret appends
+Explicit command submission delegates one atomic Goal update and idle-only Turn
+admission to Floret. New, idle, completed and user-stopped threads start work with
+the submitted text as actual user input and preserve previous context. Active
+execution only updates the Goal, without queuing a Turn. Questions and approvals
+remain waiting for their original response. Popup saves and deletion never start
+execution; deletion does not stop it. Changes appear immediately and affect the
+next new logical model request, including requests within the current
+Turn. Frozen transport retries retain the original input. Floret appends
 typed runtime facts and preserves stable instructions, tools and provider
 continuation. Cache reuse is measured from actual request usage; no hit rate is
 promised. Compaction retains exact control facts beside its summary.
@@ -51,15 +56,32 @@ execution and reflection; deletion only cancels future Goal checks.
 
 ## Interaction and recovery
 
-/goal opens the inline composer panel; /goal text creates or replaces the Goal;
-/goal clear deletes it. The composer summary opens the same panel. Escape closes
-it and restores focus. Creation, updates, deletion and completion show actor and
-history; reflection uses a lightweight status. Goal tools and typed changes with
-canonical turn/run ownership share that turn's [process disclosure](../ui/flower-turn-process-disclosure.md).
-Independent user edits without that ownership stay visible; the composer Goal
-summary, editing and recovery controls always remain reachable. Editing remains available during
-execution, questions and approval. New-conversation Goal creation saves settings
-and Goal only, with no model call or invented Turn.
+Selecting or entering /goal opens an in-composer command chip. Entering the mode
+alone creates no thread and performs no work. Enter submits the Goal; Escape,
+the chip close button and Backspace on empty input leave the mode. Ordinary text,
+attachments, references and pending question answers remain in their draft scope.
+/goal clear remains the explicit delete command.
+
+Without a Goal, no Goal control is rendered. With one, a small tag sits to the
+right of the progress indicator on the same row. It opens an anchored popup with
+the full editable text and delete control; save and cancel appear for edits.
+Escape and outside dismissal preserve unsaved text, while cancel discards it.
+Creation, updates, deletion and completion retain actor and history. Reflection
+uses a lightweight status. The transcript action menu also exposes /goal during
+questions and approvals without resolving or bypassing them.
+
+Product authorization is persisted under Floret's public
+GoalSubmissionRequestKey using the existing execution authority contract. Floret
+owns admission, preparation, failure and cancellation; Redeven does not mirror
+its lifecycle. A preparation failure retains the saved Goal and ordinary failure
+recovery. An exact retry retains the original admission decision even after Stop,
+completion or restart; a fresh submission may start a new execution. Goal updates
+and deletion never restart the execution they originally only updated.
+
+Goal tools and typed changes with canonical turn/run ownership share that turn's
+[process disclosure](../ui/flower-turn-process-disclosure.md). Independent user
+edits without that ownership stay visible. Goal editing, recovery, Stop and
+navigation remain available during execution, questions and approval.
 
 The existing short-lived outbox freezes each request. An unknown outcome retries
 the exact request identity and content. A mutation or current-view failure after
@@ -68,8 +90,11 @@ outcome semantics in both transports. Removing its local recovery copy does not
 cancel a possibly committed server mutation. Version conflicts preserve edits and
 allow an explicit new submission against the returned version. Editor text belongs
 to the thread's ComposerDraftStore scope, including switching and restart.
-Commands consume only their unchanged command text; newer text, references and
-attachments remain intact. New-thread send and Goal creation share preparation
+Successful commands consume only the unchanged submitted draft revision; newer
+text, including edits that return to the same text, references and attachments
+remain intact. A conflict preserves command mode and resubmits as a command,
+while popup conflicts remain save-only edits. New-thread send and Goal creation
+share preparation
 exclusion so a pending operation cannot create a second conversation.
 
 Creating a Goal moves the draft to the canonical thread without changing its
@@ -101,6 +126,8 @@ input. Deleting Todo later requires no change to Goal execution or interaction.
   for a question or approval reach the next model request without repeating effects;
   historical Todo remains readable without influencing Goal completion.
 - redeven:internal/ai/threadstore/upload_staging.go — resource binding and in-flight upload settlement.
-- redeven:internal/flower_ui/src/FlowerSurface.tsx — inline management, commands and outbox handoff.
+- redeven:internal/ai/thread_goal_submit_test.go — idle admission, active updates, Stop, exact replay and execution authorization.
+- redeven:internal/codeapp/appserver/server_ai_goal_test.go — HTTP save-only and submission contracts.
+- redeven:internal/flower_ui/src/FlowerSurface.tsx — command chip, anchored popup and outbox handoff.
 - redeven:internal/envapp/ui_src/src/ui/FlowerSurface.goal.browser.test.tsx — keyboard, draft preservation, conflicts and unknown recovery.
 - redeven:scripts/check_floret_dependency_boundary.sh — released upstream capability boundary.

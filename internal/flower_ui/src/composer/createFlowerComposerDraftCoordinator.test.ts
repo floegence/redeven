@@ -270,3 +270,15 @@ it('keeps Goal edits independent and accepts concurrent identical staging bindin
  expect(restored.read('thread').value.goal_edit).toEqual({text:'Retained result',version:2});
  coordinator.dispose(); restored.dispose();
 });
+
+it('preserves independent Goal command and ordinary input through handoff and restart', () => {
+ const coordinator=createFlowerComposerDraftCoordinator();
+ const session=coordinator.open('draft');
+ session.mutate(value=>({...value,text:'Ordinary draft',goal_command:{text:'Goal draft',error:'Conflict'},input_drafts:{answer:{text:'Preserved answer'}}}));
+ coordinator.moveScope('draft','thread');
+ const restored=createFlowerComposerDraftCoordinator();restored.restoreAfterRestart(coordinator.exportForRestart());
+ expect(restored.read('thread').value).toMatchObject({text:'Ordinary draft',goal_command:{text:'Goal draft',error:'Conflict'},input_drafts:{answer:{text:'Preserved answer'}}});
+ restored.open('thread').mutate(value=>({...value,goal_command:undefined}));
+ expect(restored.read('thread').value.text).toBe('Ordinary draft');
+ coordinator.dispose();restored.dispose();
+});

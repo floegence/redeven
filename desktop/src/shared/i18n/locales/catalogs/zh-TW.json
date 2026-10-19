@@ -800,7 +800,7 @@
       "goalDeleted": "已刪除目標",
       "goalActorUser": "你",
       "goalActorModel": "模型",
-      "commandGoal": "檢視或管理對話目標",
+      "commandGoal": "設定目標，開始或更新任務",
       "goalUnavailable": "目前環境無法管理目標。"
     },
     "threadList": {

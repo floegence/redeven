@@ -843,7 +843,7 @@ export type FlowerGoal = Readonly<{ version: number; text?: string; status: 'abs
 export type FlowerGoalChange = Readonly<{ goal: FlowerGoal; operation: 'set' | 'delete' | 'completed'; actor: 'user' | 'model'; reason?: string; at: string }>;
 export type FlowerGoalInput = Readonly<{
   storage_generation: string; client_request_id: string; thread_id?: string;
-  operation: 'set' | 'delete'; expected_version: number; text?: string;
+  operation: 'set' | 'submit' | 'delete'; expected_version: number; text?: string;
   new_thread?: Readonly<{ model_id?: string; working_dir?: string; permission_type?: FlowerPermissionType; reasoning_selection?: FlowerReasoningSelection }>;
 }>;
 export type FlowerGoalResult = Readonly<{ client_request_id: string; thread_id: string; current: FlowerRuntimeCurrentView; goal: FlowerGoal; conflict: boolean; replayed?: boolean }>;

@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/session"
@@ -20,7 +21,20 @@ func TestServerAIGoalMutationWithoutUserTurn(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	state := t.TempDir()
 	var calls atomic.Int32
-	svc, err := ai.NewService(ai.Options{Logger: logger, StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", Config: appserverTestAIConfig(), ResolveProviderAPIKey: func(string) (string, bool, error) { calls.Add(1); return "sk-test", true, nil }})
+	requests := make(chan struct{}, 4)
+	release := make(chan struct{})
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests <- struct{}{}
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
+	}))
+	defer provider.Close()
+	defer close(release)
+	cfg := appserverTestAIConfig()
+	cfg.Providers[0].BaseURL = provider.URL + "/v1"
+	svc, err := ai.NewService(ai.Options{Logger: logger, StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", Config: cfg, ResolveProviderAPIKey: func(string) (string, bool, error) { calls.Add(1); return "sk-test", true, nil }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,6 +104,43 @@ func TestServerAIGoalMutationWithoutUserTurn(t *testing.T) {
 	}
 	if calls.Load() != initialCalls {
 		t.Fatalf("Goal mutation requested provider work: %d", calls.Load())
+	}
+	// The same endpoint distinguishes an explicit command from a popup save.
+	req.StorageGeneration = svc.StorageGeneration()
+	req.ClientRequestID, req.Operation, req.ExpectedVersion = "goal-submit-http", "submit", 1
+	body, _ = json.Marshal(req)
+	submitted := performServerRequest(server, http.MethodPost, path, origin, string(body))
+	if submitted.Code != http.StatusOK {
+		t.Fatalf("submit=%d %s", submitted.Code, submitted.Body.String())
+	}
+	if err := json.Unmarshal(submitted.Body.Bytes(), &response); err != nil || response.Data.Current.TurnID == "" || response.Data.Current.Activity != "active" {
+		t.Fatalf("submission=%s err=%v", submitted.Body.String(), err)
+	}
+	select {
+	case <-requests:
+	case <-time.After(5 * time.Second):
+		t.Fatal("HTTP Goal submission never reached the model")
+	}
+	if _, err := svc.StopThread(t.Context(), &meta, req.ThreadID); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		current, err := svc.GetThread(t.Context(), &meta, req.ThreadID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if current.RunStatus != "running" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("stopped Goal execution did not settle")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	retried := performServerRequest(server, http.MethodPost, path, origin, string(body))
+	if err := json.Unmarshal(retried.Body.Bytes(), &response); err != nil || retried.Code != http.StatusOK || !response.Data.Replayed || response.Data.Current.Activity != "idle" {
+		t.Fatalf("stopped replay=%s err=%v", retried.Body.String(), err)
 	}
 }
 
