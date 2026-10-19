@@ -842,7 +842,7 @@ func (service *Service) GetFlowerSubagentDetail(ctx context.Context, meta *sessi
 	if err != nil {
 		return nil, err
 	}
-	projection, err := service.readCanonicalThreadContextProjection(ctx, view)
+	projection, err := flowerCurrentContextProjection(view)
 	if err != nil {
 		return nil, err
 	}
@@ -853,6 +853,7 @@ func (service *Service) GetFlowerSubagentDetail(ctx context.Context, meta *sessi
 	}
 	return &FlowerSubagentDetailResponse{
 		ModelContext: projection.ModelContext, ContextUsage: projection.Usage,
+		ContextCompactions: projection.Compactions, TimelineDecorations: projection.Decorations,
 		Summary: flowerSubagentSummaryFromSnapshot(snapshot),
 		Current: view,
 	}, nil

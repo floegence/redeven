@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"encoding/json"
 	"strconv"
 	"strings"
 	"sync"
@@ -301,6 +302,8 @@ func (builder *flowerRuntimeBoundaryBuilder) addInt(value int64) {
 func flowerRuntimeCurrentBoundaryKey(current flruntime.ThreadView) string {
 	var builder flowerRuntimeBoundaryBuilder
 	builder.add(string(current.Activity))
+	contextJSON, _ := json.Marshal(current.Context)
+	builder.add(string(contextJSON))
 	if current.ParentEvents != nil {
 		for _, event := range current.ParentEvents.Events {
 			builder.add(event.ID)

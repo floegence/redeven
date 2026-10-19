@@ -154,6 +154,8 @@ type FlowerThreadTokenUsage struct {
 }
 
 type FlowerContextCompaction struct {
+	TurnID              string `json:"turn_id"`
+	CanonicalOrdinal    uint64 `json:"canonical_ordinal"`
 	OperationID         string `json:"operation_id"`
 	RequestID           string `json:"request_id"`
 	RunID               string `json:"run_id,omitempty"`

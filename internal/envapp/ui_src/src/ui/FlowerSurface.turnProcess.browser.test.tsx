@@ -80,6 +80,77 @@ const hidden = (root: HTMLElement, id: string) => message(root, id).closest('.fl
 afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('completed turn process disclosure', () => {
+  it('keeps a compaction-only process recoverable and accepts context with its current version', async () => {
+    const { root, live } = await mount();
+    const terminal = current(true, {
+      turns: [turn({ intermediate_item_ids: [] })],
+      items: current(true).items!.filter(item => ['user', 'final-a', 'final-b'].includes(item.id)),
+    });
+    const decoration = {
+      decoration_id: 'only-compaction', kind: 'context_compaction' as const, ordinal: 0,
+      anchor: { target_kind: 'message' as const, message_id: 'user', edge: 'after' as const },
+      compaction: { operation_id: 'only', turn_id: 'turn', canonical_ordinal: 2,
+        phase: 'complete' as const, status: 'compacted' as const, updated_at_ms: 1 },
+    };
+    const send = (version: number, decorations = [decoration]) => live.envelope({
+      schema_version: 1, kind: 'thread.batch', thread_id: 'process',
+      current: { ...terminal, view_version: version }, timeline_decorations: decorations,
+    });
+    send(2);
+    const row = () => root.querySelector<HTMLElement>('[data-flower-decoration-id="only-compaction"]');
+    await waitFor(() => Boolean(summary(root)) && Boolean(row()));
+    expect(summary(root)!.getAttribute('aria-expanded')).toBe('false');
+    summary(root)!.click();
+    await waitFor(() => row()?.closest('.flower-turn-row-viewport')?.getAttribute('aria-hidden') !== 'true');
+    expect(row()!.closest('.flower-turn-row-viewport')?.hasAttribute('inert')).toBe(false);
+    send(1, []); send(2, []);
+    // A later accepted frame with omitted context preserves the prior snapshot.
+    live.envelope({ schema_version: 1, kind: 'thread.batch', thread_id: 'process', current: { ...terminal, view_version: 3,
+      items: terminal.items!.map(item => item.id === 'final-a' ? { ...item, text: 'Version three accepted.' } : item),
+    } });
+    await waitFor(() => message(root, 'final-a')?.textContent?.includes('Version three accepted.') === true);
+    expect(row()).not.toBeNull();
+    send(4, []);
+    await waitFor(() => !row());
+    expect(summary(root)).toBeNull();
+    expect(message(root, 'final-a')).not.toBeNull();
+  });
+
+  it.each(['reduce', 'no-preference'] as const)('keeps three automatic compactions inside disclosure, resets tooltips and retains manual ownership with %s motion', async reducedMotion => {
+    await media.emulateMediaPreferences({ reducedMotion });
+    const { root, live } = await mount();
+    const decoration = (id: string, turnID = 'turn', ordinal = 7) => ({
+      decoration_id: id, kind: 'context_compaction' as const, ordinal: 0,
+      anchor: { target_kind: 'message' as const, message_id: 'progress', edge: 'after' as const },
+      compaction: { operation_id: id, turn_id: turnID, canonical_ordinal: ordinal, phase: 'complete' as const,
+        status: 'compacted' as const, tokens_before: 150000, tokens_after_estimate: 20000, updated_at_ms: 1 },
+    });
+    const decorations = [decoration('first', 'turn', 7), decoration('second', 'turn', 8), decoration('third', 'turn', 9), decoration('manual', 'manual', 10)];
+    const terminal = current(true, { turns: [turn(), turn({ turn_id: 'manual', run_id: 'manual-run', kind: 'context_compaction', intermediate_item_ids: [], final_item_ids: [] })] });
+    live.envelope({ schema_version: 1, kind: 'thread.batch', thread_id: 'process', current: terminal, timeline_decorations: decorations });
+    const divider = (id: string) => root.querySelector<HTMLElement>('[data-flower-decoration-id="' + id + '"]')!;
+    const collapsed = (id: string) => divider(id)?.closest('.flower-turn-row-viewport')?.getAttribute('aria-hidden') === 'true';
+    await waitFor(() => Boolean(summary(root)) && collapsed('third'));
+    expect(['first', 'second', 'third'].every(collapsed)).toBe(true);
+    expect(collapsed('manual')).toBe(false);
+    summary(root)!.click();
+    await waitFor(() => !collapsed('third'));
+    const trigger = divider('third').querySelector<HTMLElement>('[role="button"]')!;
+    trigger.focus();
+    await waitFor(() => Boolean(divider('third').querySelector('[role="tooltip"]')));
+    summary(root)!.click();
+    await waitFor(() => collapsed('third'));
+    expect(divider('third').querySelector('[role="tooltip"]')).toBeNull();
+    expect(document.activeElement).toBe(summary(root));
+    expect(divider('third').closest('.flower-turn-row-viewport')?.hasAttribute('inert')).toBe(true);
+    summary(root)!.click(); summary(root)!.click(); summary(root)!.click();
+    await waitFor(() => !collapsed('third'));
+    live.envelope({ schema_version: 1, kind: 'thread.batch', thread_id: 'process', current: { ...terminal, view_version: 3 }, timeline_decorations: decorations.map(d => ({ ...d, compaction: { ...d.compaction, updated_at_ms: 2 } })) });
+    await waitFor(() => divider('third')?.getAttribute('data-flower-compaction-status') === 'compacted');
+    expect(collapsed('third')).toBe(false);
+    expect(root.querySelectorAll('[data-flower-decoration-id]')).toHaveLength(4);
+  });
+
   const eventRow = (root: HTMLElement, id: string) => root.querySelector<HTMLElement>('[data-parent-event="' + id + '"]')!;
   const eventHidden = (root: HTMLElement, id: string) => eventRow(root, id).closest('.flower-turn-row-viewport')?.getAttribute('aria-hidden') === 'true';
   it.each([0, 1, 2])('folds reported failed structure after its user at Fork depth %s', async depth => {
@@ -427,7 +498,7 @@ describe('completed turn process disclosure', () => {
       { id: 'independent-goal', kind: 'goal' as const, goal: { goal: { ...goal, version: 1, actor: 'user' as const, status: 'active' as const }, operation: 'set' as const, actor: 'user' as const, at: '2026-10-11T11:59:00Z' } },
       done.items![0],
       { id: 'goal-set', turn_id: 'turn', run_id: 'run', kind: 'goal' as const, goal: { goal: { ...goal, status: 'active' as const }, operation: 'set' as const, actor: 'model' as const, at: '2026-10-11T12:00:00Z' } },
-      ...done.items!.slice(1, 4).map(item => item.kind === 'tool' ? { ...item, activity: { item_id: 'tool', tool_id: 'tool', tool_name: 'goal', kind: 'tool', status: 'success', presentation: { label: 'Review Goal', renderer: 'structured', payload: { operation: 'review', status: 'completed' } } } } : item),
+      ...done.items!.slice(1, 4).map(item => item.kind === 'tool' ? { ...item, activity: { item_id: 'tool', tool_id: 'tool', tool_name: 'goal', kind: 'tool', status: 'success', presentation: { label: 'Review Goal', renderer: 'structured', payload: { goal: { operation: 'review', outcome: 'completed', text: 'Verify the deployment', evidence: 'Deployment verified' } } } } } : item),
       { id: 'goal-completed', turn_id: 'turn', run_id: 'run', kind: 'goal' as const, goal: { goal, operation: 'completed' as const, actor: 'model' as const, at: '2026-10-11T12:02:38Z' } },
       ...done.items!.slice(4),
     ].map((item, index) => ({ ...item, ordinal: index + 1 }));

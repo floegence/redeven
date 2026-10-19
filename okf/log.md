@@ -4,6 +4,10 @@
 
 - Acknowledge [sidebar navigation](ui/flower-thread-sidebar.md) before committing transcript work, keep the previous conversation inert during the transition, and retain draft/action ownership. Move size containment to the stable row owner so native pin reordering preserves visible titles in shipped Electron; qualify with synthetic Desktop geometry, trace and click measurements.
 
+## 2026-10-19 — Canonical compaction timeline and disclosure
+
+- Adopt Floret v7.67.1 current-context snapshots; unify detail/live projection, preserve canonical divider order and explicit turn ownership, and fold automatic compactions with execution processes. Remove usage-only transport and obsolete draft anchors. See [context compaction](ai/model-context-usage-and-compaction.md).
+
 ## 2026-10-19 — DeepSeek search and page reading
 
 - Adopt published Floret v7.66.1 DeepSeek Flash Search, Pro hosted search and explicit Fetch; document source freeze, live credentials and shared settings.

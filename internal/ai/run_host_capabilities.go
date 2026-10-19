@@ -14,21 +14,19 @@ import (
 // exact root-thread runtime. It intentionally contains no Service, Floret
 // bootstrap, lifecycle coordinator, or capability binder.
 type runHostCapabilities struct {
-	openAIConnections         *openAIResponsesPool
-	webProvider               func(string) (config.AIProvider, bool)
-	queryThreads              func(context.Context, *session.Meta, string, map[string]any) (any, error)
-	tessiven                  *tessiven.Service
-	tessivenResources         *tessiven.ResourceBackend
-	authorityThreadID         string
-	requestThreadSummary      func()
-	lastVisibleTimelineAnchor func(context.Context) (FlowerTimelineAnchor, error)
-	resolveRunModel           func(context.Context, *config.AIConfig, string, string, *run) (resolvedRunModel, error)
-	publishContextUsage       func(FlowerContextUsage)
-	openLiveAttachment        func(context.Context, UploadOwner, string) (openedCanonicalAttachment, error)
-	readImageAttachment       func(context.Context, *session.Meta, string) (canonicalImageSnapshot, error)
-	saveToolMedia             func(context.Context, TargetToolAttachment, []byte) error
-	readToolMedia             func(context.Context, string) ([]byte, error)
-	terminal                  runTerminalHost
+	openAIConnections    *openAIResponsesPool
+	webProvider          func(string) (config.AIProvider, bool)
+	queryThreads         func(context.Context, *session.Meta, string, map[string]any) (any, error)
+	tessiven             *tessiven.Service
+	tessivenResources    *tessiven.ResourceBackend
+	authorityThreadID    string
+	requestThreadSummary func()
+	resolveRunModel      func(context.Context, *config.AIConfig, string, string, *run) (resolvedRunModel, error)
+	openLiveAttachment   func(context.Context, UploadOwner, string) (openedCanonicalAttachment, error)
+	readImageAttachment  func(context.Context, *session.Meta, string) (canonicalImageSnapshot, error)
+	saveToolMedia        func(context.Context, TargetToolAttachment, []byte) error
+	readToolMedia        func(context.Context, string) ([]byte, error)
+	terminal             runTerminalHost
 }
 
 func (s *Service) bindRunHostCapabilities(endpointID string, threadID string) (runHostCapabilities, error) {
@@ -47,13 +45,7 @@ func (s *Service) bindRunHostCapabilities(endpointID string, threadID string) (r
 	host.requestThreadSummary = func() {
 		s.requestCanonicalThreadSummary(endpointID, threadID)
 	}
-	host.lastVisibleTimelineAnchor = func(ctx context.Context) (FlowerTimelineAnchor, error) {
-		return FlowerTimelineAnchor{}, nil
-	}
 	host.resolveRunModel = s.resolveRunModel
-	host.publishContextUsage = func(usage FlowerContextUsage) {
-		s.publishFlowerRuntimeContextUsage(endpointID, threadID, usage)
-	}
 	host.openLiveAttachment = func(ctx context.Context, owner UploadOwner, attachmentID string) (openedCanonicalAttachment, error) {
 		if owner.EndpointID != endpointID {
 			return openedCanonicalAttachment{}, errors.New("attachment authority mismatch")

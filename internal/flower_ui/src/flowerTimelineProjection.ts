@@ -299,13 +299,6 @@ function activityBlockSlice(
   };
 }
 
-function decorationSortKey(decoration: FlowerTimelineDecoration): string {
-  return [
-    String(Math.max(0, Math.floor(Number(decoration.ordinal ?? 0))).toString().padStart(8, '0')),
-    trimString(decoration.decoration_id),
-  ].join(':');
-}
-
 type FlowerTimelineDecorationEntry = Extract<FlowerTimelineEntry, { type: 'context_compaction' }>;
 
 function timelineDecorationEntry(decoration: FlowerTimelineDecoration): FlowerTimelineDecorationEntry {
@@ -348,7 +341,8 @@ function decorationsByTimelineAnchor(
   const byAnchor = new Map<string, FlowerTimelineDecorationEntry[]>();
   const entries = decorations
     .map(timelineDecorationEntry)
-    .sort((left, right) => decorationSortKey(left.decoration).localeCompare(decorationSortKey(right.decoration)));
+    .sort((left, right) => left.decoration.compaction.canonical_ordinal - right.decoration.compaction.canonical_ordinal
+      || left.decoration.decoration_id.localeCompare(right.decoration.decoration_id));
 
   for (const entry of entries) {
     const key = timelineAnchorKey(entry.decoration);
@@ -542,17 +536,25 @@ export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null |
     seenMessageIDs.add(messageID);
     const activeCursor = message.id === activeCursorMessageID;
     const prior = messageProjections.get(message);
+    let entries: readonly FlowerTimelineEntry[];
     if (prior && prior.threadID === thread.thread_id && prior.activeCursor === activeCursor
       && prior.decorations === sourceDecorations) {
-      if (message.canonical_ordinal !== undefined) for (const entry of prior.entries) positions.set(entry.key, message.canonical_ordinal);
-      return prior.entries;
+      entries = prior.entries;
+    } else {
+      const projectedMessage = activeCursor === message.active_cursor
+        ? message
+        : { ...message, active_cursor: activeCursor };
+      entries = messageTimelineEntries(thread.thread_id, projectedMessage, decorations);
+      messageProjections.set(message, { threadID: thread.thread_id, activeCursor, decorations: sourceDecorations, entries });
     }
-    const projectedMessage = activeCursor === message.active_cursor
-      ? message
-      : { ...message, active_cursor: activeCursor };
-    const entries = messageTimelineEntries(thread.thread_id, projectedMessage, decorations);
-    if (message.canonical_ordinal !== undefined) for (const entry of entries) positions.set(entry.key, message.canonical_ordinal);
-    messageProjections.set(message, { threadID: thread.thread_id, activeCursor, decorations: sourceDecorations, entries });
+    if (message.canonical_ordinal !== undefined) {
+      for (const entry of entries) {
+        const ordinal = entry.type === 'context_compaction' && entry.decoration.anchor.target_kind === 'message'
+          && entry.decoration.anchor.edge === 'after'
+          ? entry.decoration.compaction.canonical_ordinal : message.canonical_ordinal;
+        positions.set(entry.key, ordinal);
+      }
+    }
     return entries;
   });
   // Canonical Path positions order messages, their anchored decorations and

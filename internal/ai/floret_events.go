@@ -1,7 +1,6 @@
 package ai
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -79,7 +78,6 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	if r.acceptsFloretStreamAttempt(ev.Stream) {
 		r.applyFloretStreamObservation(ev.Stream)
 	}
-	r.applyFloretContextStatus(ev.ContextUsage, ev.ThreadUsageTotals)
 	r.recordFloretActivityEvent(ev)
 	switch ev.Type {
 	case floretEventProviderRequest:
@@ -233,115 +231,6 @@ func (r *run) expectFloretRuntimeEventIdentity(runID string, threadID string, tu
 	r.muFloretIdentity.Unlock()
 }
 
-func (r *run) applyFloretContextStatus(status *flruntime.ThreadContextUsage, totals *flruntime.ThreadTokenUsageTotals) {
-	if r == nil || status == nil {
-		return
-	}
-	if !r.acceptsPresentationUpdates() {
-		return
-	}
-	usage, err := flowerContextUsageFromFloret(status, totals)
-	if err != nil {
-		r.rejectFloretContract("context_status", err)
-		return
-	}
-	r.sendStreamEvent(streamEventContextUsage{
-		Type:  "context-usage",
-		Usage: usage,
-	})
-	if r.host.publishContextUsage != nil {
-		r.host.publishContextUsage(usage)
-	}
-}
-
-func (r *run) captureFlowerTimelineAnchor() FlowerTimelineAnchor {
-	if r == nil {
-		return FlowerTimelineAnchor{}
-	}
-	if anchor := r.captureAssistantDraftTimelineAnchor(); validFlowerTimelineAnchor(anchor) {
-		return anchor
-	}
-	if r.host.lastVisibleTimelineAnchor == nil {
-		return FlowerTimelineAnchor{}
-	}
-	anchor, err := r.host.lastVisibleTimelineAnchor(context.Background())
-	if err != nil {
-		return FlowerTimelineAnchor{}
-	}
-	return anchor
-}
-
-func (r *run) captureAssistantDraftTimelineAnchor() FlowerTimelineAnchor {
-	if r == nil {
-		return FlowerTimelineAnchor{}
-	}
-	messageID := strings.TrimSpace(r.messageID)
-	if messageID == "" {
-		return FlowerTimelineAnchor{}
-	}
-	r.muAssistant.Lock()
-	defer r.muAssistant.Unlock()
-	for i := len(r.assistantBlocks) - 1; i >= 0; i-- {
-		block := r.assistantBlocks[i]
-		if itemID, ok := lastVisibleActivityItemID(block); ok {
-			blockIndex := i
-			return FlowerTimelineAnchor{
-				TargetKind:     "activity_item",
-				MessageID:      messageID,
-				BlockIndex:     &blockIndex,
-				ActivityItemID: itemID,
-				Edge:           "after",
-			}
-		}
-		if flowerBlockHasVisibleContent(block) {
-			blockIndex := i
-			return FlowerTimelineAnchor{
-				TargetKind: "block",
-				MessageID:  messageID,
-				BlockIndex: &blockIndex,
-				Edge:       "after",
-			}
-		}
-	}
-	return FlowerTimelineAnchor{}
-}
-
-func lastVisibleActivityItemID(block any) (string, bool) {
-	timeline, ok := activityTimelineFromAny(block)
-	if !ok || len(timeline.Items) == 0 {
-		return "", false
-	}
-	for i := len(timeline.Items) - 1; i >= 0; i-- {
-		if itemID := strings.TrimSpace(timeline.Items[i].ItemID); itemID != "" {
-			return itemID, true
-		}
-	}
-	return "", false
-}
-
-func flowerBlockHasVisibleContent(block any) bool {
-	switch v := block.(type) {
-	case *persistedMarkdownBlock:
-		return v != nil && strings.TrimSpace(v.Content) != ""
-	case persistedMarkdownBlock:
-		return strings.TrimSpace(v.Content) != ""
-	case *persistedThinkingBlock:
-		return v != nil && strings.TrimSpace(v.Content) != ""
-	case persistedThinkingBlock:
-		return strings.TrimSpace(v.Content) != ""
-	case map[string]any:
-		blockType := strings.TrimSpace(anyToString(v["type"]))
-		switch blockType {
-		case "markdown", "text", "thinking":
-			return strings.TrimSpace(anyToString(v["content"])) != ""
-		default:
-			return false
-		}
-	default:
-		return false
-	}
-}
-
 func flowerContextUsageFromFloret(usage *flruntime.ThreadContextUsage, totals *flruntime.ThreadTokenUsageTotals) (FlowerContextUsage, error) {
 	out := FlowerContextUsage{}
 	var err error
@@ -447,6 +336,7 @@ func flowerContextCompactionFromFloret(compaction *observation.CompactionEvent) 
 	}
 	return FlowerContextCompaction{
 		OperationID:         strings.TrimSpace(compaction.OperationID),
+		TurnID:              compaction.TurnID.String(),
 		RequestID:           strings.TrimSpace(compaction.RequestID),
 		RunID:               runID,
 		StepIndex:           compaction.Step,

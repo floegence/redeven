@@ -483,3 +483,47 @@ func TestFlowerRetryAttemptsPublishWithoutWaitingForTextCadence(t *testing.T) {
 		t.Fatalf("retry boundary was coalesced: %d", len(published))
 	}
 }
+
+func TestFlowerRuntimeCurrentPublisherFlushesCanonicalContextChanges(t *testing.T) {
+	clock := newFakeFlowerRuntimePublishClock()
+	var published []recordedFlowerRuntimeCurrent
+	publisher := newFlowerRuntimeCurrentPublisher(50*time.Millisecond, clock, func(endpointID string, current flruntime.ThreadView) {
+		published = append(published, recordedFlowerRuntimeCurrent{endpointID: endpointID, current: current})
+	})
+	t.Cleanup(publisher.Close)
+	current := thinkingCurrent(1, "first", true, flruntime.ThreadActivityActive)
+	current.Context = &flruntime.ThreadContextSnapshot{}
+	publisher.Publish("env-local", current)
+	current.ViewVersion, current.Items[0].Text = 2, "first second"
+	publisher.Publish("env-local", current)
+	if len(published) != 1 {
+		t.Fatalf("text growth escaped cadence: %d", len(published))
+	}
+	current.ViewVersion = 3
+	current.Context = &flruntime.ThreadContextSnapshot{Compactions: []flruntime.ThreadContextCompaction{{
+		ThreadID: current.ThreadID, TurnID: current.TurnID, RunID: current.RunID,
+		OperationID: "operation", CanonicalOrdinal: 8, AfterItemID: "thinking-1", Phase: "start", Status: "compacting",
+	}}}
+	publisher.Publish("env-local", current)
+	if len(published) != 2 || published[1].current.ViewVersion != 3 {
+		t.Fatal("start waited for text cadence")
+	}
+	current.ViewVersion = 4
+	snapshot := *current.Context
+	snapshot.Compactions = append([]flruntime.ThreadContextCompaction(nil), snapshot.Compactions...)
+	snapshot.Compactions[0].Phase, snapshot.Compactions[0].Status = "complete", "compacted"
+	current.Context = &snapshot
+	publisher.Publish("env-local", current)
+	if len(published) != 3 || published[2].current.Activity != flruntime.ThreadActivityActive {
+		t.Fatal("complete was not visible while active")
+	}
+	current.ViewVersion, current.Items[0].Text = 5, "first second third"
+	publisher.Publish("env-local", current)
+	if len(published) != 3 {
+		t.Fatal("equal context defeated text cadence")
+	}
+	clock.Advance(50 * time.Millisecond)
+	if len(published) != 4 || published[3].current.ViewVersion != 5 {
+		t.Fatal("pending text did not drain")
+	}
+}

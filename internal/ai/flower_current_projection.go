@@ -204,20 +204,51 @@ func (current flowerCurrentJSONView) MarshalJSON() ([]byte, error) {
 	return flowerCurrentJSON(flruntime.ThreadView(current))
 }
 
+// marshalFlowerContextJSON emits the product context beside the exact current
+// version. A missing snapshot leaves fields absent; an empty snapshot clears
+// prior objects and lists explicitly.
+func marshalFlowerContextJSON(value any, current flruntime.ThreadView) ([]byte, error) {
+	data, err := json.Marshal(value)
+	if err != nil || current.Context == nil {
+		return data, err
+	}
+	projection, err := flowerCurrentContextProjection(current)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	for key, value := range map[string]any{
+		"model_context": projection.ModelContext, "context_usage": projection.Usage,
+		"context_compactions": projection.Compactions, "timeline_decorations": projection.Decorations,
+	} {
+		fields[key], err = json.Marshal(value)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return json.Marshal(fields)
+}
+
 func (d FlowerThreadDetail) MarshalJSON() ([]byte, error) {
-	type wire FlowerThreadDetail
+	thread, err := marshalFlowerContextJSON(d.Thread, d.Current)
+	if err != nil {
+		return nil, err
+	}
 	return json.Marshal(struct {
-		wire
+		Thread  json.RawMessage       `json:"thread"`
 		Current flowerCurrentJSONView `json:"current"`
-	}{wire(d), flowerCurrentJSONView(d.Current)})
+	}{thread, flowerCurrentJSONView(d.Current)})
 }
 
 func (d FlowerSubagentDetailResponse) MarshalJSON() ([]byte, error) {
 	type wire FlowerSubagentDetailResponse
-	return json.Marshal(struct {
+	return marshalFlowerContextJSON(struct {
 		wire
 		Current flowerCurrentJSONView `json:"current"`
-	}{wire(d), flowerCurrentJSONView(d.Current)})
+	}{wire(d), flowerCurrentJSONView(d.Current)}, d.Current)
 }
 
 func (r SendUserTurnResponse) MarshalJSON() ([]byte, error) {
@@ -280,9 +311,16 @@ func marshalFlowerLiveEnvelopeAt(e FlowerLiveStreamEnvelope, sampledAt time.Time
 		}
 	}
 	type wire FlowerLiveStreamEnvelope
-	return json.Marshal(struct {
+	value := struct {
 		wire
 		Current         json.RawMessage `json:"current,omitempty"`
 		SubagentCurrent json.RawMessage `json:"subagent_current,omitempty"`
-	}{wire(e), current, subagentCurrent})
+	}{wire(e), current, subagentCurrent}
+	if e.Current != nil {
+		return marshalFlowerContextJSON(value, *e.Current)
+	}
+	if e.SubagentCurrent != nil {
+		return marshalFlowerContextJSON(value, *e.SubagentCurrent)
+	}
+	return json.Marshal(value)
 }

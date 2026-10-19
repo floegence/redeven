@@ -9,6 +9,21 @@ const envelope = (version: number, text = 'x'.repeat(version)): FlowerLiveStream
 });
 
 describe('live frame queue', () => {
+  it('coalesces identical complete context snapshots and flushes clears or compaction changes immediately', () => {
+    const snapshot = { model_context: null, context_usage: {}, context_compactions: [], timeline_decorations: [] };
+    expect(flowerLiveTextAppend({ ...envelope(1), ...snapshot }, { ...envelope(2), ...snapshot })).toBe(true);
+    expect(flowerLiveTextAppend({ ...envelope(1), ...snapshot }, { ...envelope(2), ...snapshot, context_usage: null })).toBe(false);
+    const compact = { operation_id: 'operation', turn_id: 'turn', canonical_ordinal: 7, phase: 'start' as const, status: 'compacting' as const, updated_at_ms: 1 };
+    const first = { ...envelope(1), ...snapshot, context_compactions: [compact] };
+    const completed = { ...envelope(2), ...snapshot, context_compactions: [{ ...compact, phase: 'complete' as const, status: 'compacted' as const }] };
+    expect(flowerLiveTextAppend(first, completed)).toBe(false);
+    const apply = vi.fn();
+    const queue = createFlowerLiveFrameQueue({ apply, validateAppend: () => true, requestFrame: () => 1, cancelFrame: vi.fn() });
+    queue.push(first); queue.push(completed);
+    expect(apply).toHaveBeenCalledTimes(2);
+    queue.dispose();
+  });
+
   it('coalesces child text with the same rules while preserving parent, child and semantic boundaries', () => {
     const child = (version: number): FlowerLiveStreamEnvelope => {
       const { current, ...outer } = envelope(version);

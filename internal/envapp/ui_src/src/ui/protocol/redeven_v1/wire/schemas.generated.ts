@@ -453,6 +453,12 @@ export const redevenWireSchemas = {
             "compaction": {
               "kind": "object",
               "properties": {
+                "turn_id": {
+                  "kind": "string"
+                },
+                "canonical_ordinal": {
+                  "kind": "number"
+                },
                 "operation_id": {
                   "kind": "string"
                 },
@@ -540,9 +546,11 @@ export const redevenWireSchemas = {
                 }
               },
               "required": [
+                "canonical_ordinal",
                 "operation_id",
                 "phase",
                 "status",
+                "turn_id",
                 "updated_at_ms"
               ]
             }

@@ -140,3 +140,19 @@ describe('canonical turn process presentation', () => {
     expect(flowerDurationParts(3901000)).toEqual([{ unit: 'hour', count: 1 }, { unit: 'minute', count: 5 }]);
   });
 });
+
+it('folds every automatic compaction by its own turn and leaves manual compaction independent', () => {
+  const compact = (id: string, turnID: string): FlowerTimelineEntry => ({
+    type: 'context_compaction', key: id, decoration: {
+      decoration_id: id, kind: 'context_compaction', ordinal: 0,
+      anchor: { target_kind: 'message', message_id: 'final-b', edge: 'after' },
+      compaction: { operation_id: id, turn_id: turnID, canonical_ordinal: 10, run_id: 'run', phase: 'complete', status: 'compacted', updated_at_ms: 1 },
+    },
+  });
+  const rows = [compact('one', 'turn'), compact('two', 'turn'), compact('three', 'turn'), compact('manual', 'manual')];
+  const projected = projectFlowerTurnProcess(rows, [turn(), turn({ turn_id: 'manual', kind: 'context_compaction' })]);
+  expect(projected.groups.get('turn')?.processKeys).toEqual(['one', 'two', 'three']);
+  expect(projected.groups.get('turn')?.summaryKey).toBe('one');
+  expect(projected.groups.get('turn')?.disclosure).toBe('automatic');
+  expect(projected.groups.get('manual')?.disclosure).toBe('none');
+});

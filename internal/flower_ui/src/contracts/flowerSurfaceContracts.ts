@@ -439,6 +439,8 @@ export type FlowerContextCompactionPhase = 'start' | 'complete' | 'failed' | 'ca
 export type FlowerContextCompactionStatus = 'compacting' | 'compacted' | 'failed' | 'cancelled' | 'noop' | 'checkpoint';
 
 export type FlowerContextCompaction = Readonly<{
+  turn_id: string;
+  canonical_ordinal: number;
   operation_id: string;
   run_id?: string;
   step_index?: number;
@@ -780,8 +782,10 @@ export type FlowerSubagentInputOperation = Readonly<{
 }>;
 
 export type FlowerSubagentDetail = Readonly<{
-  model_context?: FlowerModelContext;
-  context_usage?: FlowerContextUsage;
+  model_context?: FlowerModelContext | null;
+  context_usage?: FlowerContextUsage | null;
+  context_compactions?: readonly FlowerContextCompaction[];
+  timeline_decorations?: readonly FlowerTimelineDecoration[];
   summary: FlowerSubagentSummary;
   current: FlowerRuntimeCurrentView;
 }>;

@@ -22,8 +22,8 @@ require_source() {
 }
 
 echo "[INFO] checking published Floret v7 dependency"
-rg -q '^\s*github\.com/floegence/floret/v7 v7\.66\.1$' go.mod \
-  || fail "go.mod must consume github.com/floegence/floret/v7 v7.66.1"
+rg -q '^\s*github\.com/floegence/floret/v7 v7\.67\.1$' go.mod \
+  || fail "go.mod must consume github.com/floegence/floret/v7 v7.67.1"
 redeven_go_version=$(GOWORK=off go list -m -f '{{.GoVersion}}')
 floret_go_version=$(GOWORK=off go list -m -f '{{.GoVersion}}' github.com/floegence/floret/v7)
 [[ "$redeven_go_version" == "$floret_go_version" ]] \
@@ -93,6 +93,12 @@ fi
 legacy_pattern='TurnAdmissionReceipt|ExecuteAdmission|AdmitTurn|authority.?barrier|RecoveryHandle|ProjectionDelta|PendingToolRecovery|approval.?generation|admission.?handoff|receipt.?observation|ensureCanonicalPermissionSnapshotPersisted|pendingCommandID'
 if rg -n -i --pcre2 --glob '*.go' --glob '!**/*_test.go' "$legacy_pattern" internal/ai; then
   fail "Redeven production retains a removed Floret lifecycle path"
+fi
+
+require_source internal/ai/floret_thread_context.go 'flowerCurrentContextProjection'
+require_source internal/ai/floret_thread_context.go 'current.Context'
+if rg -n --glob '*.go' --glob '!**/*_test.go' 'publishFlowerRuntimeContextUsage|readCanonicalThreadContextProjection|lastVisibleTimelineAnchor|streamEventContextUsage|streamEventContextCompaction' internal/ai; then
+  fail "Flower must use one versioned current context path"
 fi
 
 echo "[INFO] checking one workspace live transport and bounded UI state"

@@ -110,7 +110,9 @@ func delegationContextUpdates(request flprovider.Request) []string {
 func TestFlowerProviderContextIgnoresChildInventoryChanges(t *testing.T) {
 	root := t.TempDir()
 	children := &delegationContextThreadService{}
-	r := newRun(runOptions{WorkingDir: root, AgentHomeDir: root, Shell: "/bin/sh", RunID: "run-context", ThreadID: "thread-parent"})
+	// Exercise the real delegation surface across all inventory changes without
+	// repeatedly persisting unrelated Computer, terminal and file tool schemas.
+	r := newRun(runOptions{WorkingDir: root, AgentHomeDir: root, Shell: "/bin/sh", RunID: "run-context", ThreadID: "thread-parent", ToolAllowlist: []string{"subagents"}})
 	r.ensureSkillManager().userHome = root
 	r.subagentRuntime = newServiceFloretSubagentRuntime(&Service{threadRuntime: children}, r)
 	r.product.currentSettings = func(context.Context) (*threadstore.ThreadSettings, error) {

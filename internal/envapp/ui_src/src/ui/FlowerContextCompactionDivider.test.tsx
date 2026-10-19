@@ -12,7 +12,7 @@ it('explains the message estimate and dismisses by keyboard, outside pointer and
   dispose = render(() => <FlowerContextCompactionDivider copy={DEFAULT_FLOWER_SURFACE_COPY} decoration={{
     decoration_id: 'context-compaction:one', kind: 'context_compaction', ordinal: 0,
     anchor: { target_kind: 'message', message_id: 'message-1', edge: 'after' },
-    compaction: { operation_id: 'one', phase: 'complete', status: 'compacted', tokens_before: 159143, tokens_after_estimate: 17462, updated_at_ms: 1 },
+    compaction: { operation_id: 'one', turn_id: 'turn-1', canonical_ordinal: 1, phase: 'complete', status: 'compacted', tokens_before: 159143, tokens_after_estimate: 17462, updated_at_ms: 1 },
   }} />, host);
   const trigger = host.querySelector<HTMLElement>('[role="button"]')!;
   trigger.focus();
