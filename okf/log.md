@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-18 — Preserve compact Flower reading
+
+- Restore the original shared 14px message scale and 1.75 line height while retaining [theme-adaptive reading colors](ui/flower-message-appearance.md). Verify authored Markdown and real transcript rendering without interpreting prose as metadata.
+
 ## 2026-10-18 — Theme-adaptive Flower reading
 
 - Apply [assistant reading roles](ui/flower-message-appearance.md) with a centered 700px track, calmer semantic links and code, readable completion time, and explicit high-contrast behavior. Preserve authored Markdown, citations, user bubbles, selection and theme-switch geometry across all published presets.

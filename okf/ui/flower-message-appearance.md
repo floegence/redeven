@@ -14,17 +14,17 @@ theme's text-selection accent with readable foreground text. Native selection
 must remain visible within a filled bubble and its insets. Theme changes alter
 paint only, preserving message DOM, geometry and active selection. Queued input
 keeps its quieter pending presentation; forced colors use system roles.
-Transcript reading typography has its own scale; composer controls retain the
-published compact scale. Source destinations and copy follow
+Transcript messages retain their original compact reading scale; composer
+controls retain the published control scale. Source destinations and copy follow
 [Flower citations](flower-citations.md), including safe authored bibliographies.
 
 # Contract
 
 ## Transcript reading scale
 
-Assistant bubbles use a `0.9375rem` body size and unitless `1.88` line height
-(15px and 28.2px at the standard 16px root). User bubbles retain `0.875rem`
-and `1.75` (14px and 24.5px). Markdown follows its message scale; headings use
+Assistant and user bubbles share the original `0.875rem` body size and unitless
+`1.75` line height (14px and 24.5px at the standard 16px root). Assistant color
+roles do not override this shared scale. Markdown follows its message scale; headings use
 proportional sizes and line heights, paragraphs have
 `0.8em` separation, and list items have `0.4em` separation. The first rendered
 block keeps its top margin reset, including while streaming. Assistant prose
