@@ -114,7 +114,7 @@ describe('Flower setup browser presentation', () => {
     const loadSettings = async (): Promise<ReturnType<typeof settingsSnapshot>> => ({ ...snapshot, model_profile: {
         schema_version: 1, current_model_id: modelID, providers: [
           { id: 'search', type: 'openai', models: [{ model_name: 'vision', wire_model_name: 'gpt-5.5', web_search: { status: 'available', reason: 'catalog_supported' } }] },
-          { id: 'deepseek', type: 'deepseek', models: [{ model_name: 'deepseek-v4-flash-vision-exp', web_search: { status: 'unavailable', reason: 'unsupported' } }] },
+          { id: 'deepseek', type: 'deepseek', models: [{ model_name: 'deepseek-v4-flash-vision-exp', web_search: { status: 'available', reason: 'catalog_supported' } }] },
           { id: 'brave', type: 'openai_compatible', web_search: { enabled: true, source: 'brave' }, models: [{ model_name: 'custom', web_search: { status: 'unavailable', reason: 'needs_credentials' } }] },
         ],
       }, provider_secrets: [
@@ -131,9 +131,7 @@ describe('Flower setup browser presentation', () => {
     await waitFor(() => document.querySelectorAll('[data-web-search]').length === 3);
     expect(document.querySelector('[data-web-search="available"]')?.textContent).toBe('Web search');
     const unavailableItems = [...document.querySelectorAll('[data-web-search="unavailable"]')] as HTMLElement[];
-    const unsupported = unavailableItems.find((item) => item.textContent === 'Web search not supported')!;
-    expect(unsupported).toBeDefined();
-    expect((unsupported.closest('button') as HTMLButtonElement).disabled).toBe(false);
+    expect(document.querySelectorAll('[data-web-search="available"]')).toHaveLength(2);
     const unavailable = unavailableItems.find((item) => item.textContent === 'Search API key required')!;
     expect(unavailable.textContent).toBe('Search API key required');
     const option = unavailable.closest('button') as HTMLButtonElement;

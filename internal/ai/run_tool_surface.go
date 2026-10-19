@@ -40,8 +40,12 @@ func (r *run) buildRunToolSurface(cfg runToolSurfaceConfig, permissionType Flowe
 	if r == nil {
 		return runToolSurface{}, fmt.Errorf("nil run")
 	}
+	bindings, err := r.frozenWebToolBindings(cfg.InitialProviderSurface)
+	if err != nil {
+		return runToolSurface{}, err
+	}
 	registry := NewInMemoryToolRegistry()
-	if err := registerBuiltInTools(registry, r); err != nil {
+	if err := registerBuiltInTools(registry, r, bindings); err != nil {
 		return runToolSurface{}, err
 	}
 	for _, def := range r.mcpManager.Tools() {
@@ -52,12 +56,25 @@ func (r *run) buildRunToolSurface(cfg runToolSurfaceConfig, permissionType Flowe
 	permissionFilter := newPermissionToolFilter(!r.noUserInteraction)
 	permissionFilter = r.withToolAllowlistFilter(permissionFilter)
 	activeTools := permissionFilter.FilterTools(permissionType, registry.Snapshot())
+	if cfg.InitialProviderSurface != nil {
+		for i := range activeTools {
+			if !isFloretNativeTool(activeTools[i].Name) {
+				continue
+			}
+			for _, saved := range cfg.InitialProviderSurface.ToolDefinitions {
+				if saved.Name == activeTools[i].Name {
+					activeTools[i].InputSchema = toolSchemaRaw(saved.InputSchema)
+					break
+				}
+			}
+		}
+	}
 	activeSignals := permissionFilter.FilterTools(permissionType, builtInControlSignalDefinitions())
 	permissionSnapshot := buildPermissionSnapshot(permissionType, activeTools, activeSignals)
 	if err := validatePermissionSnapshotConsistency(permissionSnapshot); err != nil {
 		return runToolSurface{}, err
 	}
-	permissionSnapshot, err := r.freezePermissionSnapshot(permissionSnapshot)
+	permissionSnapshot, err = r.freezePermissionSnapshot(permissionSnapshot)
 	if err != nil {
 		return runToolSurface{}, err
 	}
@@ -74,7 +91,7 @@ func (r *run) buildRunToolSurface(cfg runToolSurfaceConfig, permissionType Flowe
 		hosted = cfg.InitialProviderSurface.HostedToolDefinitions
 	}
 	capabilityContract := resolveRunCapabilityContract(r, activeTools, activeSignals, cfg.SupportsAskUserQuestionBatches, hosted...)
-	floretToolItems, err := buildFloretTools(r, activeTools)
+	floretToolItems, err := buildFloretTools(r, activeTools, bindings)
 	if err != nil {
 		return runToolSurface{}, err
 	}

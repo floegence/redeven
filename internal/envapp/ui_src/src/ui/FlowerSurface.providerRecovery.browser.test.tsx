@@ -68,13 +68,13 @@ it('ignores a late child settings read after returning to the parent', async () 
   expect(state.surface.textContent).toContain(state.parent.title);
 });
 
-async function mount(options: { missingProvider?: boolean; code?: string } = {}) {
+async function mount(options: { missingProvider?: boolean; code?: string; deepseek?: boolean } = {}) {
   const failed = thread({ messages: [
     { id: 'accepted-user', role: 'user', content: 'continue', status: 'error', created_at_ms: 1 },
     { id: 'accepted-assistant', role: 'assistant', content: 'I will inspect the runtime.', status: 'error', created_at_ms: 2 },
   ], status: 'failed', error: { code: options.code ?? 'provider_request_rejected', message: 'private protocol error', detail: '{"provider":"unknown","code":"provider_request_rejected","response_shape":"empty"}' } });
   const initial = settingsSnapshot();
-  const provider = { ...initial.model_profile!.providers[0], web_search: { enabled: false, source: 'native' as const } };
+  const provider = { ...initial.model_profile!.providers[0], ...(options.deepseek ? { type: 'deepseek' as const, base_url: 'https://api.deepseek.com' } : {}), web_search: { enabled: false, source: 'native' as const } };
   const policy = { editable: true, default_enabled: true, default_model_enabled: true, enabled: false, source: 'native' as const, supported_sources: ['native'] as const };
   const snapshot: FlowerSettingsSnapshot = { ...initial, model_profile: { ...initial.model_profile!, providers: options.missingProvider ? [] : [provider] }, model_directory: {
     current_model_id: 'openai/gpt-5.2', models: [{ id: 'openai/gpt-5.2', label: 'OpenAI', source: 'runtime_config' as const, state: 'ready' as const, provider_id: 'openai', model_name: 'gpt-5.2' }],
@@ -282,4 +282,26 @@ it('keeps an unknown provider failure actionable without guessing rejection', as
   expect(surface.querySelector('.flower-error-message')?.textContent).toBe(copy.chat.runErrors.providerRequestFailed);
   expect(surface.querySelector('.flower-error-actions')?.textContent).toContain(copy.settings.dialog.catalog.searchConfigure);
   expect(retryThread).not.toHaveBeenCalled();
+});
+
+it('retains the DeepSeek page reader after a failed save and allows cancel and retry', async () => {
+  const { configure, saveModelProfile, snapshot, retryThread } = await mount({ deepseek: true });
+  saveModelProfile.mockRejectedValueOnce(new Error('settings save unavailable'));
+  await userEvent.click(configure());
+  await waitFor(() => Boolean(document.querySelector('[data-flower-provider-fetch] select')));
+  const select = document.querySelector<HTMLSelectElement>('[data-flower-provider-fetch] select')!;
+  select.value = 'deepseek';
+  select.dispatchEvent(new Event('change', { bubbles: true }));
+  await userEvent.click(page.getByRole('button', { name: copy.settings.dialog.saveProvider, exact: true }));
+  await waitFor(() => document.querySelector('.flower-provider-dialog')?.textContent?.includes('settings save unavailable') === true);
+  expect(saveModelProfile.mock.calls[0][0].model_profile!.providers[0].web_fetch).toEqual({ source: 'deepseek' });
+  expect(retryThread).not.toHaveBeenCalled();
+  await userEvent.click(page.getByRole('button', { name: copy.settings.dialog.saveProvider, exact: true }));
+  await waitFor(() => !document.querySelector('.flower-provider-dialog'));
+  expect(saveModelProfile.mock.calls[1][0].model_profile!.providers[0].web_fetch).toEqual({ source: 'deepseek' });
+  expect(snapshot.model_profile!.providers[0].web_fetch).toBeUndefined();
+  await userEvent.click(configure());
+  await expect.element(page.getByRole('dialog', { name: copy.settings.dialog.editTitle, exact: true })).toBeVisible();
+  await userEvent.click(page.getByRole('button', { name: copy.settings.dialog.discard, exact: true }));
+  await waitFor(() => !document.querySelector('.flower-provider-dialog'));
 });

@@ -34,8 +34,13 @@ func (p *deepSeekProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 }
 
 func (p *deepSeekProvider) prepareTurn(ctx context.Context, req ModelGatewayRequest) (preparedModelGatewayTurn, error) {
+	var hosted []flprovider.HostedToolDefinition
 	if req.WebSearchMode != "" && req.WebSearchMode != providerWebSearchModeDisabled {
-		return nil, fmt.Errorf("DeepSeek Responses does not support hosted web search: mode %q", req.WebSearchMode)
+		cap, ok := flprovider.DeepSeekModelCapabilities(req.Model)
+		if !ok || cap.HostedWebSearchWireShape == "" || req.WebSearchMode != cap.HostedWebSearchWireShape {
+			return nil, fmt.Errorf("unsupported DeepSeek hosted search mode %q for %q", req.WebSearchMode, req.Model)
+		}
+		hosted = []flprovider.HostedToolDefinition{{Name: "web_search", Type: "web_search", ReplaySafe: true, Options: map[string]any{"wire_shape": req.WebSearchMode}}}
 	}
 	aliases, err := newOpenAIProviderToolAliases(req.Tools)
 	if err != nil {
@@ -56,7 +61,7 @@ func (p *deepSeekProvider) prepareTurn(ctx context.Context, req ModelGatewayRequ
 	if err != nil {
 		return nil, err
 	}
-	request := flprovider.Request{ReusePolicy: req.ReusePolicy, RunID: req.RunID, PromptScopeID: req.PromptScopeID, Reasoning: req.ProviderControls.ReasoningSelection, MaxOutputTokens: int64(req.Budgets.MaxOutputToken)}
+	request := flprovider.Request{HostedTools: hosted, ReusePolicy: req.ReusePolicy, RunID: req.RunID, PromptScopeID: req.PromptScopeID, Reasoning: req.ProviderControls.ReasoningSelection, MaxOutputTokens: int64(req.Budgets.MaxOutputToken)}
 	if request.RunID == "" {
 		request.RunID = flidentity.RunID("provider-" + rand.Text())
 	}

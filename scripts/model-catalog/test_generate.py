@@ -18,9 +18,9 @@ class SearchDeclarationTests(unittest.TestCase):
         self.rules = json.loads((DIRECTORY / 'overrides.json').read_text())
 
     def test_new_model_requires_search_review(self):
-        model = copy.deepcopy(self.data['providers']['deepseek']['deepseek-v4-pro'])
+        model = copy.deepcopy(self.data['providers']['openai']['gpt-5.5'])
         model['id'] = 'future-agent'
-        self.data['providers']['deepseek']['future-agent'] = model
+        self.data['providers']['openai']['future-agent'] = model
         with self.assertRaisesRegex(ValueError, 'missing reviewed web search declaration'):
             generator.generate(self.data, self.rules)
 
@@ -29,7 +29,7 @@ class SearchDeclarationTests(unittest.TestCase):
                       {'source_checked_at': 'invalid'}, {'status': 'unknown'}]:
             with self.subTest(patch=patch):
                 rules = copy.deepcopy(self.rules)
-                group = next(g for g in rules['web_search'] if g['provider'] == 'deepseek')
+                group = next(g for g in rules['web_search'] if g['provider'] == 'openai')
                 group.update(patch)
                 with self.assertRaises((ValueError, KeyError)):
                     generator.generate(self.data, rules)
@@ -39,18 +39,13 @@ class SearchDeclarationTests(unittest.TestCase):
         for provider, models in generated['providers'].items():
             for model in models:
                 wire = model.get('wire_model_name', model['model_name'])
-                self.assertIn(provider + '/' + wire, generated['web_search'])
-        for model in generated['providers']['deepseek']:
-            review = generated['web_search']['deepseek/' + model['model_name']]
-            self.assertEqual(review['status'], 'unsupported')
-            self.assertNotIn('mode', review)
+                if provider != 'deepseek':
+                    self.assertIn(provider + '/' + wire, generated['web_search'])
+        self.assertFalse(any(key.startswith('deepseek/') for key in generated['web_search']))
         self.assertEqual(generated['web_search']['qwen/qwen3.6-plus-2026-04-02']['status'], 'supported')
 
-    def test_deepseek_cannot_enable_an_ignored_builtin_protocol(self):
-        group = next(g for g in self.rules['web_search'] if g['provider'] == 'deepseek')
-        group.update(status='supported', mode='deepseek_native')
-        with self.assertRaisesRegex(ValueError, 'mode does not match the adapter'):
-            generator.generate(self.data, self.rules)
+    def test_deepseek_review_is_owned_upstream(self):
+        self.assertFalse(any(g['provider'] == 'deepseek' for g in self.rules['web_search']))
 
 
 if __name__ == '__main__':

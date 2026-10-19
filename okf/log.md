@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-19 — DeepSeek search and page reading
+
+- Adopt published Floret v7.66.1 DeepSeek Flash Search, Pro hosted search and explicit Fetch; document source freeze, live credentials and shared settings.
+
 ## 2026-10-19 — Scoped context compaction estimates
 
 - Adopt published Floret v7.65.1 opaque-reasoning budgeting and label successful compaction as a message-context estimate excluding system instructions and tool definitions. Preserve bounded recovery and dismissible, localized details in [context usage](ai/model-context-usage-and-compaction.md).

@@ -19,12 +19,12 @@ let style: HTMLStyleElement;
 const media = commands as unknown as { emulateTouchInput: (enabled: boolean) => Promise<void> };
 afterEach(async () => { dispose?.(); host?.remove(); style?.remove(); localStorage.clear(); await media.emulateTouchInput(false); });
 
-async function mount(surface: 'desktop' | 'env', width: number, locale: string, compatible = false) {
+async function mount(surface: 'desktop' | 'env', width: number, locale: string, compatible = false, deepseek = false) {
  await page.viewport(width, 900);
  style = document.createElement('style'); style.textContent = surface === 'desktop' ? desktopCSS : envCSS + flowerCSS; document.head.append(style);
  host = document.createElement('div'); document.body.append(host);
  const localized = { ...copy, catalog: modelCatalogCopy(locale) };
- const type = compatible ? 'openai_compatible' : 'openai';
+ const type = deepseek ? 'deepseek' : compatible ? 'openai_compatible' : 'openai';
  const search = compatible ? { ...policy, enabled: false, default_enabled: false, supported_sources: ['native', 'brave'] as const } : policy;
  const provider: FlowerProviderDraft = { id: 'proxy', type, base_url: 'https://flow-node.com/v1', search_policy: search,
   web_search: { enabled: false, source: compatible ? 'brave' : 'native' }, models: [{ model_name: 'agent', context_window: 32768, max_output_tokens: 4096, web_search: { status: 'unavailable', reason: 'provider_disabled', recommended_enabled: true, model_enabled: true } }] };
@@ -98,4 +98,17 @@ it('opens search help using touch and leaves the dialog recoverable', async () =
  await expect.element(page.getByRole('tooltip')).toBeVisible();
  await userEvent.click(page.getByRole('button', { name: copy.discard, exact: true }));
  await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
+});
+
+it.each(['en-US','zh-CN','zh-TW','ja-JP','ko-KR','de-DE','fr-FR','it-IT','es-ES','pt-BR','ru-RU'])('configures DeepSeek page reading independently from search in %s',async locale=>{
+ const {confirm,localized}=await mount('env',390,locale,false,true);
+ const section=document.querySelector('[data-flower-provider-fetch]')!;
+ expect(section.textContent).toContain(localized.catalog.deepSeekSearchHint);
+ expect(section.textContent).toContain(localized.catalog.deepSeekCostHint);
+ expect(document.querySelector('[data-flower-provider-search] [data-floe-dropdown-trigger]')).toBeNull();
+ await userEvent.click(section.querySelector('[data-floe-dropdown-trigger]')!);
+ await userEvent.click(page.getByRole('menuitem',{name:localized.catalog.fetchDeepSeek,exact:true}));
+ await userEvent.click(page.getByRole('button',{name:copy.saveProvider,exact:true}));
+ expect(confirm.mock.calls[0][0]).toMatchObject({web_search:{enabled:false,source:'native'},web_fetch:{source:'deepseek'}});
+ expect(document.querySelector<HTMLElement>('[role=dialog]')!.scrollWidth).toBe(document.querySelector<HTMLElement>('[role=dialog]')!.clientWidth);
 });

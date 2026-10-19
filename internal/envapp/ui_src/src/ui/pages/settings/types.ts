@@ -34,6 +34,7 @@ export type AIProvider = Readonly<{
   base_url?: string;
   responses_continuation?: boolean;
   web_search?: AIProviderWebSearch;
+  web_fetch?: import("../../../../../../flower_ui/src/contracts/flowerSurfaceContracts").FlowerProvider["web_fetch"];
   search_policy?: import('../../../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerWebSearchPolicy;
   models?: AIProviderModel[];
   model_selection?: FlowerModelSelection;
@@ -175,6 +176,7 @@ export type AIProviderRow = {
   base_url: string;
   responses_continuation?: boolean;
   web_search?: AIProviderWebSearch;
+  web_fetch?: import("../../../../../../flower_ui/src/contracts/flowerSurfaceContracts").FlowerProvider["web_fetch"];
   search_policy?: import('../../../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerWebSearchPolicy;
   models: AIProviderModelRow[];
   model_selection?: FlowerModelSelection;
@@ -207,6 +209,7 @@ export type AIProviderPreset = Readonly<{
   name: string;
   default_base_url: string;
   web_search?: AIProviderWebSearch;
+  web_fetch?: import("../../../../../../flower_ui/src/contracts/flowerSurfaceContracts").FlowerProvider["web_fetch"];
   search_policy?: import('../../../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerWebSearchPolicy;
   models: readonly AIProviderModelPreset[];
 }>;

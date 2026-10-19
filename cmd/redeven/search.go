@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/floegence/floret/v7/tools/websearch"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/settings"
-	"github.com/floegence/redeven/internal/websearch"
 )
 
 func (c *cli) searchCmd(args []string) int {
@@ -98,7 +98,24 @@ func (c *cli) searchCmd(args []string) int {
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
 
-	result, err := websearch.Search(ctx, providerID, key, websearch.SearchRequest{Query: query, Count: *count})
+	if providerID != websearch.ProviderBrave {
+		fmt.Fprintf(c.stderr, "unsupported web search provider %q\n", providerID)
+		return 1
+	}
+	client, err := websearch.NewBraveClient(websearch.ClientOptions{APIKey: key, Timeout: *timeout})
+	if err != nil {
+		fmt.Fprintf(c.stderr, "search failed: %v\n", err)
+		return 1
+	}
+	limit := *count
+	if limit <= 0 {
+		limit = 5
+	}
+	if limit > 10 {
+		limit = 10
+	}
+	response, err := client.Search(ctx, websearch.Request{Query: query, Count: limit})
+	result := cliSearchResult(response)
 	if err != nil {
 		fmt.Fprintf(c.stderr, "search failed: %v\n", err)
 		return 1
@@ -143,4 +160,30 @@ func (c *cli) searchCmd(args []string) int {
 
 func resolveSearchStateLayout(stateRoot string) (config.StateLayout, error) {
 	return config.LocalEnvironmentStateLayout(stateRoot)
+}
+
+// Preserve the published CLI JSON contract while the upstream client owns HTTP.
+type cliSearchItem struct {
+	Title   string `json:"title"`
+	URL     string `json:"url"`
+	Snippet string `json:"snippet,omitempty"`
+}
+type cliSearchResponse struct {
+	Provider string          `json:"provider"`
+	Query    string          `json:"query"`
+	Results  []cliSearchItem `json:"results"`
+	Sources  []cliSearchItem `json:"sources,omitempty"`
+}
+
+func cliSearchResult(result websearch.Result) cliSearchResponse {
+	out := cliSearchResponse{Provider: result.Provider, Query: result.Query, Results: []cliSearchItem{}}
+	for _, item := range result.Results {
+		title := strings.TrimSpace(item.Title)
+		if title == "" {
+			title = item.URL
+		}
+		out.Results = append(out.Results, cliSearchItem{title, item.URL, strings.TrimSpace(item.Snippet)})
+	}
+	out.Sources = append([]cliSearchItem(nil), out.Results...)
+	return out
 }

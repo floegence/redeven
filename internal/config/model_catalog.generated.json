@@ -1186,7 +1186,7 @@
       },
       {
         "context_window": 1000000,
-        "display_name": "DeepSeek V4.1 Flash",
+        "display_name": "DeepSeek V4.1 Flash (1017)",
         "input_modalities": [
           "text",
           "image"
@@ -4408,42 +4408,6 @@
         "https://docs.z.ai/guides/vlm/glm-4.6v"
       ],
       "status": "not_integrated"
-    },
-    "deepseek/deepseek-flash": {
-      "source_checked_at": "2026-10-12",
-      "source_notes": "Built-in tool types, including web_search, are ignored. Responses format compatibility and replay of historical web_search_call items do not provide hosted search execution.",
-      "source_urls": [
-        "https://api-docs.deepseek.com/guides/responses_api/",
-        "https://api-docs.deepseek.com/guides/thinking_mode"
-      ],
-      "status": "unsupported"
-    },
-    "deepseek/deepseek-v4-flash": {
-      "source_checked_at": "2026-10-12",
-      "source_notes": "Built-in tool types, including web_search, are ignored. Responses format compatibility and replay of historical web_search_call items do not provide hosted search execution.",
-      "source_urls": [
-        "https://api-docs.deepseek.com/guides/responses_api/",
-        "https://api-docs.deepseek.com/guides/thinking_mode"
-      ],
-      "status": "unsupported"
-    },
-    "deepseek/deepseek-v4-flash-vision-exp": {
-      "source_checked_at": "2026-10-12",
-      "source_notes": "Built-in tool types, including web_search, are ignored. Responses format compatibility and replay of historical web_search_call items do not provide hosted search execution.",
-      "source_urls": [
-        "https://api-docs.deepseek.com/guides/responses_api/",
-        "https://api-docs.deepseek.com/guides/thinking_mode"
-      ],
-      "status": "unsupported"
-    },
-    "deepseek/deepseek-v4-pro": {
-      "source_checked_at": "2026-10-12",
-      "source_notes": "Built-in tool types, including web_search, are ignored. Responses format compatibility and replay of historical web_search_call items do not provide hosted search execution.",
-      "source_urls": [
-        "https://api-docs.deepseek.com/guides/responses_api/",
-        "https://api-docs.deepseek.com/guides/thinking_mode"
-      ],
-      "status": "unsupported"
     },
     "google/gemini-2.5-flash": {
       "source_checked_at": "2026-10-12",

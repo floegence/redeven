@@ -3,16 +3,19 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	flprovider "github.com/floegence/floret/v7/provider"
 	"strings"
 )
 
 const (
-	AIWebSearchDisabled = "disabled"
-	AIWebSearchOpenAI   = "openai_responses_builtin"
-	AIWebSearchKimi     = "kimi_builtin"
-	AIWebSearchGLM      = "glm_web_search_tool"
-	AIWebSearchQwen     = "qwen_responses_web_search"
-	AIWebSearchBrave    = "external_brave"
+	AIWebSearchDisabled       = "disabled"
+	AIWebSearchOpenAI         = "openai_responses_builtin"
+	AIWebSearchKimi           = "kimi_builtin"
+	AIWebSearchGLM            = "glm_web_search_tool"
+	AIWebSearchQwen           = "qwen_responses_web_search"
+	AIWebSearchBrave          = "external_brave"
+	AIWebSearchDeepSeek       = "external_deepseek"
+	AIWebSearchDeepSeekHosted = "deepseek_responses_web_search"
 )
 
 // AIWebSearchAvailability is a read-only product projection, never configuration.
@@ -56,8 +59,8 @@ func NativeAIWebSearchMode(providerType string) string {
 
 func ResolveAIWebSearchPolicy(provider AIProvider) AIWebSearchPolicy {
 	typ := strings.ToLower(strings.TrimSpace(provider.Type))
-	editable := NativeAIWebSearchMode(typ) != AIWebSearchDisabled && typ != "redeven_platform"
-	out := AIWebSearchPolicy{Editable: editable, DefaultEnabled: editable && typ != "openai_compatible", DefaultModelEnabled: typ == "openai" || typ == "openai_compatible", Source: AIWebSearchSourceNative}
+	editable := (typ == "deepseek" || NativeAIWebSearchMode(typ) != AIWebSearchDisabled) && typ != "redeven_platform"
+	out := AIWebSearchPolicy{Editable: editable, DefaultEnabled: editable && typ != "openai_compatible", DefaultModelEnabled: typ == "openai" || typ == "openai_compatible" || typ == "deepseek", Source: AIWebSearchSourceNative}
 	if editable {
 		out.SupportedSources = []string{AIWebSearchSourceNative}
 		if typ == "openai_compatible" {
@@ -159,10 +162,17 @@ type AIWebSearchResolution struct {
 }
 
 func (c AIWebSearchResolution) LocalTool() bool {
-	return c.Status == "available" && c.Mode == AIWebSearchBrave
+	return c.Status == "available" && (c.Mode == AIWebSearchBrave || c.Mode == AIWebSearchDeepSeek)
 }
 func (c AIWebSearchResolution) HostedTool() bool {
-	return c.Status == "available" && c.Mode != AIWebSearchDisabled && c.Mode != AIWebSearchBrave
+	if c.Status != "available" {
+		return false
+	}
+	switch c.Mode {
+	case AIWebSearchOpenAI, AIWebSearchKimi, AIWebSearchGLM, AIWebSearchQwen, AIWebSearchDeepSeekHosted:
+		return true
+	}
+	return false
 }
 
 // ResolveAIWebSearch accepts the configured model identity, preserving aliases
@@ -172,6 +182,20 @@ func ResolveAIWebSearch(provider AIProvider, modelName string, braveKeyConfigure
 	model := provider.ModelMetadata(strings.TrimSpace(modelName))
 	wire := model.EffectiveWireModelName()
 	decl, known := webSearchCatalog[typ+"/"+wire]
+	nativeMode := NativeAIWebSearchMode(typ)
+	if typ == "deepseek" {
+		cap, reviewed := flprovider.DeepSeekModelCapabilities(wire)
+		known = reviewed
+		decl = aiWebSearchDeclaration{Status: "unsupported"}
+		if reviewed {
+			decl.Status = "supported"
+			if cap.IndependentSearch {
+				nativeMode = AIWebSearchDeepSeek
+			} else if cap.HostedWebSearchWireShape != "" {
+				nativeMode = cap.HostedWebSearchWireShape
+			}
+		}
+	}
 	recommended := known && decl.Status == "supported"
 	if !known && (typ == "openai" || typ == "openai_compatible") {
 		recommended = true
@@ -183,7 +207,7 @@ func ResolveAIWebSearch(provider AIProvider, modelName string, braveKeyConfigure
 	if model.WebSearchEnabled != nil {
 		enabled = *model.WebSearchEnabled
 	}
-	out := AIWebSearchResolution{AIWebSearchAvailability: AIWebSearchAvailability{Status: "unavailable", Reason: "not_integrated", RecommendedEnabled: recommended, ModelEnabled: enabled}, Mode: NativeAIWebSearchMode(typ), DeclarationStatus: decl.Status}
+	out := AIWebSearchResolution{AIWebSearchAvailability: AIWebSearchAvailability{Status: "unavailable", Reason: "not_integrated", RecommendedEnabled: recommended, ModelEnabled: enabled}, Mode: nativeMode, DeclarationStatus: decl.Status}
 	policy := ResolveAIWebSearchPolicy(provider)
 	if typ == "redeven_platform" {
 		policy.Enabled = true

@@ -81,6 +81,28 @@ it('round-trips Responses continuation through Env App settings and provider bun
   expect(saved.model_profile!.providers[0].responses_continuation).toBe(true);
 });
 
+it('round-trips DeepSeek Fetch through Env App settings and provider bundles', async () => {
+  let settings = { ai: { current_model_id: 'deepseek/deepseek-flash', providers: [
+    { id: 'deepseek', type: 'deepseek', web_fetch: {source:'deepseek'}, web_search:{enabled:false,source:'native'}, models: [{ model_name: 'deepseek-flash' }] },
+  ] } } as AgentSettingsResponse;
+  let bundle: { model_profile: NonNullable<AgentSettingsResponse['ai']> } | undefined;
+  fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+    if (url === '/_redeven_proxy/api/settings') return jsonResponse(settings);
+    if (url === '/_redeven_proxy/api/ai/provider_bundle' && init?.method === 'PUT') {
+      bundle = JSON.parse(String(init.body));
+      settings = { ...settings, ai: bundle!.model_profile };
+      return jsonResponse({});
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env', envLabel: 'Environment', rpc: { ai: {} } as never });
+  const snapshot = await adapter.loadSettings();
+  expect(snapshot.model_profile!.providers[0].web_fetch).toEqual({source:'deepseek'});
+  const saved = await adapter.saveModelProfile({ model_profile: snapshot.model_profile! });
+  expect(bundle!.model_profile.providers![0].web_fetch).toEqual({source:'deepseek'});
+  expect(saved.model_profile!.providers[0].web_fetch).toEqual({source:'deepseek'});
+});
+
 it.each([
   ['env_local', 'env:local-environment'],
   ['env_remote', 'env:env_remote'],

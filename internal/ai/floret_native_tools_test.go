@@ -55,9 +55,9 @@ func TestFloretNativeWebFetchPermissionResolvesForEveryProductMode(t *testing.T)
 	for _, permissionType := range []FlowerPermissionType{FlowerPermissionReadonly, FlowerPermissionApprovalRequired, FlowerPermissionFullAccess} {
 		permissionType := permissionType
 		t.Run(permissionTypeString(permissionType), func(t *testing.T) {
-			tool, ok := buildFloretNativeTool(def, PermissionSnapshot{PermissionType: permissionType})
-			if !ok {
-				t.Fatal("web_fetch native factory is missing")
+			tool, err := (&run{}).buildBoundNativeTool(def, PermissionSnapshot{PermissionType: permissionType}, map[string]webToolBinding{def.Name: {Source: "direct"}})
+			if err != nil {
+				t.Fatal(err)
 			}
 			if tool.Definition.Annotations["source"] != "floret" || tool.Definition.Annotations["namespace"] != "floret.web" {
 				t.Fatalf("native tool provenance missing: %+v", tool.Definition.Annotations)

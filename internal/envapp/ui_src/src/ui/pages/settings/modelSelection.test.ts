@@ -266,3 +266,9 @@ it('persists explicit search choices through refresh and clears them on reset', 
     expect(resolveFlowerProviderModels({ ...reset, catalog_models: catalog }, catalog)[0].web_search_enabled).toBeUndefined();
   }
 });
+
+it('preserves explicit DeepSeek fetch independently of disabled search',()=>{
+ const saved=serializeFlowerProvider({id:'ds',type:'deepseek',web_search:{enabled:false,source:'native'},web_fetch:{source:'deepseek'},models:[]});
+ expect(saved.web_fetch).toEqual({source:'deepseek'});expect(saved.web_search?.enabled).toBe(false);
+ expect(serializeFlowerProvider({...saved,web_fetch:undefined}).web_fetch).toBeUndefined();
+});

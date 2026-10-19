@@ -150,6 +150,17 @@ describe('Local Environment Flower surface adapter', () => {
     expect(bundle.model_profile.providers[0].responses_continuation).toBe(true);
   });
 
+  it('round-trips DeepSeek Fetch through settings and provider bundles', () => {
+    const base = settingsResponse();
+    const settings: AgentSettingsResponse = { ...base, ai: { ...base.ai, providers: [
+      { id: 'deepseek', type: 'deepseek', web_fetch: {source:'deepseek'}, web_search:{enabled:false,source:'native'}, models: [{ model_name: 'deepseek-flash' }] },
+    ] } };
+    const snapshot = mapRuntimeFlowerSettings(settings);
+    expect(snapshot.model_profile!.providers[0].web_fetch).toEqual({source:'deepseek'});
+    const bundle = mapFlowerSettingsDraftToRuntimeBundle({ model_profile: snapshot.model_profile! });
+    expect(bundle.model_profile.providers[0].web_fetch).toEqual({source:'deepseek'});
+  });
+
   it('uses backend model defaults from settings while model IPC is unavailable', async () => {
     const directory = { provider_defaults: { openai_compatible: [{ model_name: 'gpt-4.1', context_window: 128000 }] },
       provider_catalogs: { default: [{ model_name: 'gpt-4.1', context_window: 128000 }] },

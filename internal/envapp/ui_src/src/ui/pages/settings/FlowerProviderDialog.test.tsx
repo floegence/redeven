@@ -354,9 +354,9 @@ describe('shared Flower provider dialog', () => {
     } finally { dialog.dispose(); vi.useRealTimers(); }
   });
 
-  it('shows DeepSeek as unsupported while keeping the provider usable', async () => {
+  it('shows backend reviewed DeepSeek search without a source selector', async () => {
     vi.useFakeTimers();
-    const models = backendModelsForProviderType('deepseek').map(cloneFlowerModel).map((model) => ({ ...model, web_search: { status: 'unavailable', reason: 'unsupported' } as const }));
+    const models = backendModelsForProviderType('deepseek').map(cloneFlowerModel).map((model) => ({ ...model, web_search: { status: 'available', reason: 'catalog_supported' } as const }));
     const discover = vi.fn(async () => ({ models }));
     const dialog = mountDialog('edit', discover);
     try {
@@ -364,9 +364,9 @@ describe('shared Flower provider dialog', () => {
       expect(discover).not.toHaveBeenCalled();
       dialog.button('Sync model list').click();
       await vi.advanceTimersByTimeAsync(1000);
-      expect(dialog.host.querySelector('[data-web-search="available"]')).toBeNull();
-      expect(dialog.host.querySelectorAll('[data-web-search="unavailable"]')).toHaveLength(models.length);
-      expect(dialog.host.textContent).toContain('Web search not supported');
+      expect(dialog.host.querySelectorAll('[data-web-search="available"]')).toHaveLength(models.length);
+      expect(dialog.host.querySelectorAll('[data-web-search="unavailable"]')).toHaveLength(0);
+      expect(dialog.host.querySelector('[data-flower-provider-fetch]')).not.toBeNull();
       expect(dialog.button('Save provider').disabled).toBe(false);
     } finally { dialog.dispose(); vi.useRealTimers(); }
   });

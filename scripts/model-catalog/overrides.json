@@ -176,6 +176,9 @@
     "deepseek/deepseek-flash": {
       "reasoning": {
         "default_level": "high"
+      },
+      "metadata": {
+        "name": "DeepSeek V4.1 Flash (1017)"
       }
     },
     "deepseek/deepseek-v4-flash-vision-exp": {
@@ -290,22 +293,6 @@
         "https://docs.z.ai/guides/vlm/glm-4.6v"
       ],
       "source_checked_at": "2026-10-12"
-    },
-    {
-      "provider": "deepseek",
-      "models": [
-        "deepseek-flash",
-        "deepseek-v4-flash",
-        "deepseek-v4-flash-vision-exp",
-        "deepseek-v4-pro"
-      ],
-      "status": "unsupported",
-      "source_urls": [
-        "https://api-docs.deepseek.com/guides/responses_api/",
-        "https://api-docs.deepseek.com/guides/thinking_mode"
-      ],
-      "source_checked_at": "2026-10-12",
-      "source_notes": "Built-in tool types, including web_search, are ignored. Responses format compatibility and replay of historical web_search_call items do not provide hosted search execution."
     },
     {
       "provider": "google",

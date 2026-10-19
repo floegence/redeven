@@ -8,7 +8,7 @@ timestamp: 2026-10-08T00:00:00Z
 
 # Summary
 
-Flower routes the DeepSeek provider to the published Floret v7.26.0 Responses gateway.
+Flower routes the DeepSeek provider to the published Floret v7.66.1 Responses gateway.
 Floret owns `/responses` rendering, SSE parsing, reasoning, usage normalization,
 function-call validation, and opaque provider history. Redeven only maps its
 model DTOs and canonical dotted tool names to provider-safe aliases.
@@ -24,19 +24,27 @@ contract, with high as the provider default. `deepseek-flash` and the official
 and 393,216-token output ceiling. Existing selections retain their exact IDs;
 provider limits do not override user request budgets.
 
-The official Responses tool compatibility table marks `web_search` and other
-built-in tools as ignored. Responses format compatibility does not provide
-hosted execution. The reviewed directory therefore marks Flash, Pro, and Vision
-search as `unsupported`, without a search protocol. The shared resolver exposes
-that fact to model APIs, UI, prompts, and normal Turn requests. New requests have
-no native search declaration; this does not disable Responses, image input, or
-local function tools such as `web_fetch` for a known public URL.
+Floret's reviewed model capability query is authoritative: Flash 1017 and its
+released aliases use the independent Search API as the local web.search tool;
+Pro uses Responses hosted web_search. Unknown custom models have no search
+unless their effective wire identity maps to a reviewed upstream model. Provider
+and model switches default on and explicit off remains effective. Local and
+hosted search never appear together. Titles omit all search tools.
 
-Unsupported hosted search configurations, including a frozen declaration from
-an earlier Flower version, fail explicitly before dispatch. They are not silently
-sent to an endpoint that ignores them, replaced with another search service, or
-removed from an admitted Turn. A new Turn resolves the corrected declaration.
-Automatic titles remain on Responses without search tools.
+DeepSeek connections independently select web_fetch as Direct (the default) or
+DeepSeek Fetch. Turning search off does not turn Fetch off. Both independent APIs
+use the connection's endpoint and live bearer credential, with no fallback.
+Search uses model summaries and presents source snippets; Fetch returns actual
+title and Markdown, never invented HTTP page metadata. Independent APIs each
+cost $0.75 per 1,000 successful non-empty requests, subject to supplier pricing.
+
+The first canonical provider surface freezes non-secret source, connection ID,
+and endpoint fingerprint for the Turn. Running and waiting recovery reuses it;
+new Turns and canonical manual retries adopt current settings. Execution checks
+current connection availability, address and credential. Rotation is supported;
+deletion, disablement, changed address and missing keys return ordinary tool
+errors without switching sources. Floret owns public-URL checks, cancellation,
+redirect restrictions, response limits, sanitization and tool Activity.
 
 ## Model-specific image input
 
@@ -72,7 +80,7 @@ canonical records are not rewritten when the current capability is corrected.
 - `redeven:internal/ai/floret_runtime.go` - Catalog-owned Turn tool surface.
 - `redeven:internal/ai/model_gateway_deepseek_test.go` - Historical receipt replay, aliases, images, and title isolation.
 - `redeven:internal/ai/thread_model_switch_integration_test.go` - Turn surface switching and replay.
-- `redeven:internal/ai/web_search_capability_test.go` - Rejection of ignored hosted tools.
+- `redeven:internal/ai/web_search_capability_test.go` - Reviewed Flash/Pro routing and rejection of unsupported hosted tools.
 - [Official request tools contract](https://api-docs.deepseek.com/api/create-response/)
 - [Official Responses guide](https://api-docs.deepseek.com/guides/responses_api/)
 - [Model and context runtime](model-context-runtime.md)
@@ -100,9 +108,8 @@ source titles, domains, full URLs, and two-line snippets support inspection.
 
 The opt-in `TestE2E_FlowerDeepSeekV4WebResearchBoundary` qualification starts from
 the production Service and normal Turn admission for Flash, Pro, and Vision.
-It checks the unsupported model projection, accurate prompt, absence of search
-tools on every request, a real successful `web_fetch` with verified page content,
+It checks the reviewed model projection, accurate prompt, mutually exclusive
+search surfaces, a real successful Direct web_fetch with verified page content,
 staged Vision image input, and a restart follow-up. Run the existing DeepSeek
 qualification script with a configured official credential. Normal CI uses
-deterministic HTTP fixtures. Unsupported native search is not tested as though
-it were available, and an assistant's verbal capability claim is never evidence.
+deterministic HTTP fixtures; live paid qualification is explicitly opt-in.
