@@ -27,6 +27,8 @@ func TestThreadGoalSubmissionStartsUpdatesStopsAndReplays(t *testing.T) {
 			writeAskUserIntegrationTextResponse(w, w.(http.Flusher), "title", "Goal task")
 			return
 		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		writeTestRealtimeSSE(w, w.(http.Flusher), map[string]any{"type": "response.output_text.delta", "delta": "Working on the requested result"})
 		requests <- input
 		<-r.Context().Done()
 	}))
@@ -51,6 +53,14 @@ func TestThreadGoalSubmissionStartsUpdatesStopsAndReplays(t *testing.T) {
 		t.Fatalf("result=%+v view=%+v err=%v", result, started, err)
 	}
 	awaitRequest()
+	waitGoalInteraction(t, svc.threadRuntime, started.ThreadID.String(), func(v flruntime.ThreadView) bool {
+		for _, item := range v.Items {
+			if item.Kind == flruntime.ThreadItemAssistant && item.Live {
+				return true
+			}
+		}
+		return false
+	})
 	if started.Failure != nil {
 		t.Fatalf("submission failed: %+v", started.Failure)
 	}
@@ -73,7 +83,7 @@ func TestThreadGoalSubmissionStartsUpdatesStopsAndReplays(t *testing.T) {
 	update.ExpectedVersion = 1
 	update.Text = "Deliver the updated verified result"
 	_, running, err := svc.ManageThreadGoal(t.Context(), meta, update)
-	if err != nil || running.TurnID != started.TurnID || len(running.Queue) != 0 || countUsers(running) != 1 {
+	if err != nil || running.Goal.Version != 2 || running.Goal.Text != update.Text || running.TurnID != started.TurnID || len(running.Queue) != 0 || countUsers(running) != 1 {
 		t.Fatalf("running update admitted work: %+v err=%v", running, err)
 	}
 	if _, err := svc.StopThread(t.Context(), meta, started.ThreadID.String()); err != nil {
@@ -101,7 +111,7 @@ func TestThreadGoalSubmissionStartsUpdatesStopsAndReplays(t *testing.T) {
 	edit.ExpectedVersion = 3
 	edit.Text = "Edited without another execution"
 	_, saved, err := svc.ManageThreadGoal(t.Context(), meta, edit)
-	if err != nil || saved.TurnID != resumed.TurnID || countUsers(saved) != 2 || len(saved.Queue) != 0 {
+	if err != nil || saved.Goal.Version != 4 || saved.Goal.Text != edit.Text || saved.TurnID != resumed.TurnID || countUsers(saved) != 2 || len(saved.Queue) != 0 {
 		t.Fatalf("popup started work: %+v err=%v", saved, err)
 	}
 	edit.Operation = "delete"

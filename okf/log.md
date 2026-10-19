@@ -6,7 +6,7 @@
 
 ## 2026-10-18 — Goal submission and compact composer controls
 
-- Adopt released Floret v7.62.2 atomic [Goal submission](ai/flower-goals.md): start idle work, preserve active and waiting execution, and retain exact retry decisions. Use an inline command chip and anchored popup, preserving drafts and save-only edits.
+- Adopt released Floret v7.62.3 atomic [Goal submission](ai/flower-goals.md): start idle work, preserve active and waiting execution, and retain exact retry decisions. Use an inline command chip and anchored popup, preserving drafts and save-only edits.
 
 ## 2026-10-18 — Flower historical defaults and Goal disclosure
 
