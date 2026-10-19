@@ -74,6 +74,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const searchPolicy = () => store.draft?.type === props.provider?.type && store.draft?.search_policy
     ? store.draft.search_policy : props.searchPolicies?.[store.draft?.type ?? 'openai'];
   const providerSearch = () => store.draft?.web_search ?? (searchPolicy() ? { enabled: searchPolicy()!.enabled, source: searchPolicy()!.source } : undefined);
+  const providerFetchSource = () => store.draft?.web_fetch?.source ?? (providerSearch()?.enabled ? searchPolicy()?.default_fetch_source ?? 'direct' : 'direct');
   const recommended = (enabled: boolean) => enabled ? copy().catalog.searchRecommendedOn : copy().catalog.searchRecommendedOff;
   const FieldInfo = (info: { label: string; text: string | readonly string[]; alignEnd?: boolean; children?: JSX.Element }) => (
     <Tooltip content={<div class="space-y-2"><For each={typeof info.text === 'string' ? [info.text] : info.text}>{text => <p>{text}</p>}</For></div>}
@@ -820,7 +821,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                         <FieldInfo label={copy().catalog.fetchLabel} text={[copy().catalog.deepSeekFetchHint, copy().catalog.deepSeekCostHint]}>
                           <span class="text-xs font-medium text-muted-foreground">{copy().catalog.fetchLabel}</span>
                         </FieldInfo>
-                        <Select value={store.draft!.web_fetch?.source ?? 'direct'}
+                        <Select value={providerFetchSource()}
                           onChange={value => updateProvider({ web_fetch: { source: value as 'direct' | 'deepseek' } })}
                           options={[{ value: 'direct', label: copy().catalog.fetchDirect }, { value: 'deepseek', label: copy().catalog.fetchDeepSeek }]} />
                       </div>

@@ -7,6 +7,7 @@ import { render } from 'solid-js/web';
 import { afterEach, expect, it, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import { FlowerProviderDialog } from '../../../../flower_ui/src/settings/FlowerProviderDialog';
+import { serializeFlowerProvider } from '../../../../flower_ui/src/settings/modelSelection';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import { createLocalizedFlowerSurfaceCopy } from '../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
 import { createI18nHelpers } from './i18n/createI18n';
@@ -15,30 +16,86 @@ import { SUPPORTED_LOCALES, type RedevenLocale } from './i18n/localeMeta';
 import type { FlowerProviderDraft, FlowerWebSearchPolicy } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
 const copy = DEFAULT_FLOWER_SURFACE_COPY.settings.dialog;
-const policy: FlowerWebSearchPolicy = { editable: true, enabled: true, default_enabled: true, default_model_enabled: true, source: 'native', supported_sources: ['native'] };
+const policy: FlowerWebSearchPolicy = { editable: true, enabled: true, default_enabled: true, default_model_enabled: true, default_fetch_source: 'direct', source: 'native', supported_sources: ['native'] };
 let dispose: (() => void) | undefined;
 let host: HTMLElement;
 let style: HTMLStyleElement;
 const media = commands as unknown as { emulateTouchInput: (enabled: boolean) => Promise<void> };
 afterEach(async () => { dispose?.(); host?.remove(); style?.remove(); localStorage.clear(); await media.emulateTouchInput(false); });
 
-async function mount(surface: 'desktop' | 'env', width: number, locale: RedevenLocale, compatible = false, deepseek = false, editModel = true) {
+async function mount(surface: 'desktop' | 'env', width: number, locale: RedevenLocale, compatible = false, deepseek = false, editModel = true, overrides: Partial<FlowerProviderDraft> = {}, mode: 'edit' | 'create' = 'edit') {
  await page.viewport(width, 900);
  style = document.createElement('style'); style.textContent = surface === 'desktop' ? desktopCSS : envCSS + flowerCSS; document.head.append(style);
  host = document.createElement('div'); document.body.append(host);
  const i18n = createI18nHelpers(locale, await loadEnvAppDictionary(locale));
  const localized = createLocalizedFlowerSurfaceCopy({ locale, t: (key, params) => i18n.t(key as EnvAppTranslationKey, params), tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params) }).settings.dialog;
  const type = deepseek ? 'deepseek' : compatible ? 'openai_compatible' : 'openai';
- const search = compatible ? { ...policy, enabled: false, default_enabled: false, supported_sources: ['native', 'brave'] as const } : policy;
+ const search = compatible ? { ...policy, enabled: false, default_enabled: false, supported_sources: ['native', 'brave'] as const } : { ...policy, default_fetch_source: deepseek ? 'deepseek' as const : 'direct' as const };
  const provider: FlowerProviderDraft = { id: 'proxy', type, base_url: deepseek ? 'https://api.deepseek.com' : 'https://flow-node.com/v1', search_policy: search,
-  web_search: { enabled: false, source: compatible ? 'brave' : 'native' }, models: [{ model_name: 'agent', context_window: 32768, max_output_tokens: 4096, web_search: { status: 'unavailable', reason: 'provider_disabled', recommended_enabled: true, model_enabled: true } }] };
+  web_search: { enabled: false, source: compatible ? 'brave' : 'native' }, models: [{ model_name: 'agent', context_window: 32768, max_output_tokens: 4096, web_search: { status: 'unavailable', reason: 'provider_disabled', recommended_enabled: true, model_enabled: true } }], ...overrides };
  const confirm = vi.fn<(draft: FlowerProviderDraft) => void>();
  const [open, setOpen] = createSignal(true);
- dispose = render(() => <FloeProvider><FlowerProviderDialog open={open()} mode="edit" provider={provider} searchPolicies={{ [type]: search }} initialModelName={editModel ? 'agent' : undefined} copy={localized}
+ const [currentProvider, setProvider] = createSignal(provider);
+ dispose = render(() => <FloeProvider><FlowerProviderDialog open={open()} mode={mode} provider={currentProvider()} searchPolicies={{ openai: policy, deepseek: { ...policy, default_fetch_source: 'deepseek' }, [type]: search }} initialModelName={editModel ? 'agent' : undefined} copy={localized}
   keyConfigured webSearchKeyConfigured={compatible} onOpenChange={setOpen} onConfirm={confirm} /></FloeProvider>, host);
  await expect.element(page.getByRole('dialog')).toBeVisible();
- return { confirm, localized };
+ const reopen = async (draft: FlowerProviderDraft) => {
+  setOpen(false);
+  await Promise.resolve();
+  setProvider(serializeFlowerProvider(draft));
+  setOpen(true);
+  await expect.element(page.getByRole('dialog')).toBeVisible();
+ };
+ return { confirm, localized, reopen };
 }
+
+for (const surface of ['desktop', 'env'] as const) {
+ it('defaults DeepSeek search and page reading together in ' + surface, async () => {
+  const { confirm, localized, reopen } = await mount(surface, 390, 'zh-CN', false, true, false, { web_search: undefined });
+  let search = document.querySelector<HTMLInputElement>('[data-flower-provider-search] input')!;
+  let reader = document.querySelector<HTMLElement>('[data-flower-provider-fetch] [data-floe-dropdown-trigger]')!;
+  expect(search.checked).toBe(true);
+  expect(reader.textContent).toContain(localized.catalog.fetchDeepSeek);
+  await userEvent.click(page.getByRole('button', { name: localized.saveProvider, exact: true }));
+  expect(confirm.mock.calls[0][0].web_fetch).toBeUndefined();
+  await reopen(confirm.mock.calls[0][0]);
+  search = document.querySelector<HTMLInputElement>('[data-flower-provider-search] input')!;
+  reader = document.querySelector<HTMLElement>('[data-flower-provider-fetch] [data-floe-dropdown-trigger]')!;
+  expect(search.checked).toBe(true);
+  expect(reader.textContent).toContain(localized.catalog.fetchDeepSeek);
+  await userEvent.click(search.closest('label')!);
+  expect(reader.textContent).toContain(localized.catalog.fetchDirect);
+  await userEvent.click(search.closest('label')!);
+  expect(reader.textContent).toContain(localized.catalog.fetchDeepSeek);
+  await userEvent.click(reader);
+  await userEvent.click(page.getByRole('menuitem', { name: localized.catalog.fetchDirect, exact: true }));
+  await userEvent.click(search.closest('label')!);
+  await userEvent.click(search.closest('label')!);
+  expect(reader.textContent).toContain(localized.catalog.fetchDirect);
+  await userEvent.click(page.getByRole('button', { name: localized.saveProvider, exact: true }));
+  expect(confirm.mock.calls[1][0]).toMatchObject({ web_fetch: { source: 'direct' } });
+  await reopen(confirm.mock.calls[1][0]);
+  expect(document.querySelector('[data-flower-provider-fetch] [data-floe-dropdown-trigger]')!.textContent).toContain(localized.catalog.fetchDirect);
+ });
+
+ it('uses backend web defaults when selecting DeepSeek during creation in ' + surface, async () => {
+  const { confirm, localized } = await mount(surface, 390, 'zh-CN', false, false, false, {}, 'create');
+  await userEvent.click(document.querySelector('[aria-controls=flower-provider-type-deepseek]')!);
+  expect(document.querySelector<HTMLInputElement>('[data-flower-provider-search] input')!.checked).toBe(true);
+  expect(document.querySelector('[data-flower-provider-fetch] [data-floe-dropdown-trigger]')!.textContent).toContain(localized.catalog.fetchDeepSeek);
+  await userEvent.click(page.getByRole('button', { name: localized.saveProvider, exact: true }));
+  expect(confirm.mock.calls[0][0]).toMatchObject({ type: 'deepseek', web_search: { enabled: true, source: 'native' } });
+  expect(confirm.mock.calls[0][0].web_fetch).toBeUndefined();
+ });
+}
+
+it.each([undefined, 'direct', 'deepseek'] as const)('preserves disabled search and reader %s after save and reopen', async source => {
+ const { confirm, localized, reopen } = await mount('env', 390, 'en-US', false, true, false, { web_fetch: source ? { source } : undefined });
+ await userEvent.click(page.getByRole('button', { name: localized.saveProvider, exact: true }));
+ await reopen(confirm.mock.calls[0][0]);
+ expect(document.querySelector<HTMLInputElement>('[data-flower-provider-search] input')!.checked).toBe(false);
+ expect(document.querySelector('[data-flower-provider-fetch] [data-floe-dropdown-trigger]')!.textContent).toContain(source === 'deepseek' ? localized.catalog.fetchDeepSeek : localized.catalog.fetchDirect);
+});
 
 for (const surface of ['desktop', 'env'] as const) for (const width of [1280, 390]) {
  it('preserves model intent with provider off and supports search help in ' + surface + ' at ' + width + 'px', async () => {

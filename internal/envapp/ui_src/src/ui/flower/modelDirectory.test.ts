@@ -146,12 +146,12 @@ describe('connection-owned local model reads', () => {
 });
 
 it('validates and retains backend search policy without frontend capability inference', () => {
-  const policy = { editable: true, default_enabled: true, default_model_enabled: true, enabled: false, source: 'native', supported_sources: ['native'] };
+  const policy = { editable: true, default_enabled: true, default_model_enabled: true, default_fetch_source: 'direct', enabled: false, source: 'native', supported_sources: ['native'] };
   const payload = { current_model: '', directory: { models: [], sources: [], search_policies: { openai: policy }, provider_search_policies: { proxy: policy } } };
   const result = readFlowerModelDirectory(payload);
   expect(result.search_policies?.openai).toEqual(policy);
   expect(result.provider_search_policies?.proxy).toEqual(policy);
-  for (const patch of [{ enabled: 'true' }, { supported_sources: ['unknown'] }, { source: 'auto' }, { editable: undefined }]) {
+  for (const patch of [{ enabled: 'true' }, { supported_sources: ['unknown'] }, { source: 'auto' }, { default_fetch_source: 'auto' }, { default_fetch_source: undefined }, { editable: undefined }]) {
     expect(() => readFlowerModelDirectory({ ...payload, directory: { ...payload.directory, search_policies: { openai: { ...policy, ...patch } } } })).toThrow('invalid');
   }
 });

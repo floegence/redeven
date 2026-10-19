@@ -84,6 +84,18 @@ func TestModelDirectoryCatalogCarriesSearchPolicy(t *testing.T) {
 	}
 }
 
+func TestModelDirectoryPublishesDeepSeekSearchAndFetchDefaults(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		p := config.AIProvider{ID: "ds", Type: "deepseek", WebSearch: &config.AIProviderWebSearch{Enabled: enabled, Source: "native"}}
+		directory := (&Service{}).projectModelDirectory(&config.AIConfig{Providers: []config.AIProvider{p}}, &ModelsResponse{Runtime: &AIRuntimeStatus{}}, nil)
+		defaults := directory.SearchPolicies[p.Type]
+		configured := directory.ProviderSearchPolicies[p.ID]
+		if !defaults.Enabled || !defaults.DefaultEnabled || !defaults.DefaultModelEnabled || defaults.DefaultFetchSource != "deepseek" || configured.Enabled != enabled || configured.DefaultFetchSource != defaults.DefaultFetchSource {
+			t.Fatalf("enabled=%v: defaults=%+v configured=%+v", enabled, defaults, configured)
+		}
+	}
+}
+
 func TestModelDirectoryResolvesAPIKeyByProviderIdentity(t *testing.T) {
 	provider := config.AIProvider{ID: "my-openai", Type: "openai", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini", ContextWindow: 400000}}}
 	s := &Service{resolveProviderKey: func(id string) (string, bool, error) {

@@ -75,7 +75,7 @@ async function mount(options: { missingProvider?: boolean; code?: string; deepse
   ], status: 'failed', error: { code: options.code ?? 'provider_request_rejected', message: 'private protocol error', detail: '{"provider":"unknown","code":"provider_request_rejected","response_shape":"empty"}' } });
   const initial = settingsSnapshot();
   const provider = { ...initial.model_profile!.providers[0], ...(options.deepseek ? { type: 'deepseek' as const, base_url: 'https://api.deepseek.com' } : {}), web_search: { enabled: false, source: 'native' as const } };
-  const policy = { editable: true, default_enabled: true, default_model_enabled: true, enabled: false, source: 'native' as const, supported_sources: ['native'] as const };
+  const policy = { editable: true, default_enabled: true, default_model_enabled: true, default_fetch_source: 'direct' as const, enabled: false, source: 'native' as const, supported_sources: ['native'] as const };
   const snapshot: FlowerSettingsSnapshot = { ...initial, model_profile: { ...initial.model_profile!, providers: options.missingProvider ? [] : [provider] }, model_directory: {
     current_model_id: 'openai/gpt-5.2', models: [{ id: 'openai/gpt-5.2', label: 'OpenAI', source: 'runtime_config' as const, state: 'ready' as const, provider_id: 'openai', model_name: 'gpt-5.2' }],
     sources: [{ id: 'openai', kind: 'runtime_config' as const, state: 'ready' as const }], search_policies: { openai: policy }, provider_search_policies: { openai: policy },

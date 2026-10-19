@@ -5,13 +5,16 @@ import (
 	"strings"
 )
 
-// AIProviderWebFetch selects a product connection's explicitly authorized page reader.
+// AIProviderWebFetch overrides the product connection's default page reader.
 type AIProviderWebFetch struct {
 	Source string `json:"source"`
 }
 
 func (p AIProvider) WebFetchSource() string {
 	if p.WebFetch == nil {
+		if policy := ResolveAIWebSearchPolicy(p); policy.Enabled {
+			return policy.DefaultFetchSource
+		}
 		return "direct"
 	}
 	return p.WebFetch.Source

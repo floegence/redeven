@@ -57,7 +57,7 @@ func TestDeepSeekNativeWebToolsExecuteAndKeepErrorsRecoverable(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	p := config.AIProvider{ID: "ds", Type: "deepseek", BaseURL: server.URL + "/proxy/v1", WebFetch: &config.AIProviderWebFetch{Source: "deepseek"}}
+	p := config.AIProvider{ID: "ds", Type: "deepseek", BaseURL: server.URL + "/proxy/v1"}
 	r := &run{cfg: &config.AIConfig{Providers: []config.AIProvider{p}}, resolveProviderKey: func(id string) (string, bool, error) {
 		if id != "ds" {
 			t.Error("wrong connection")
@@ -135,6 +135,37 @@ func TestDeepSeekNativeWebToolsExecuteAndKeepErrorsRecoverable(t *testing.T) {
 	result = dispatchNativeWeb(t, r, "web.search", `{"query":"news"}`)
 	if !result.IsError || calls != before {
 		t.Fatalf("deleted connection=%+v", result)
+	}
+}
+
+func TestDeepSeekWebBindingsFollowSearchDefaultsAndExplicitReader(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		search     *config.AIProviderWebSearch
+		fetch      *config.AIProviderWebFetch
+		wantSearch bool
+		wantFetch  string
+	}{
+		{name: "omitted", wantSearch: true, wantFetch: "deepseek"},
+		{name: "search_on", search: &config.AIProviderWebSearch{Enabled: true, Source: "native"}, wantSearch: true, wantFetch: "deepseek"},
+		{name: "search_off", search: &config.AIProviderWebSearch{Enabled: false, Source: "native"}, wantFetch: "direct"},
+		{name: "explicit_direct", fetch: &config.AIProviderWebFetch{Source: "direct"}, wantSearch: true, wantFetch: "direct"},
+		{name: "explicit_deepseek_search_off", search: &config.AIProviderWebSearch{Enabled: false, Source: "native"}, fetch: &config.AIProviderWebFetch{Source: "deepseek"}, wantFetch: "deepseek"},
+	} {
+		for _, model := range []string{"deepseek-flash", "deepseek-v4-pro"} {
+			t.Run(tc.name+"/"+model, func(t *testing.T) {
+				p := config.AIProvider{ID: "ds", Type: "deepseek", BaseURL: "https://api.deepseek.com", WebSearch: tc.search, WebFetch: tc.fetch}
+				r := &run{webSearch: config.ResolveAIWebSearch(p, model, true)}
+				r.bindWebTools(p)
+				if got := r.webToolBindings["web_fetch"]; got.Source != tc.wantFetch || got.Source == "deepseek" && (got.ProviderID != p.ID || got.EndpointFingerprint != webEndpointFingerprint(p.BaseURL)) {
+					t.Fatalf("fetch binding=%+v, want %s", got, tc.wantFetch)
+				}
+				_, localSearch := r.webToolBindings["web.search"]
+				if localSearch != (tc.wantSearch && model == "deepseek-flash") || r.webSearch.HostedTool() != (tc.wantSearch && model == "deepseek-v4-pro") {
+					t.Fatalf("search binding=%+v, resolution=%+v", r.webToolBindings, r.webSearch)
+				}
+			})
+		}
 	}
 }
 
