@@ -36,17 +36,14 @@ The 50,000-token target guides tail selection; it does not require a fixed-lengt
 
 ## Compaction decision evidence
 
-The existing canonical lifecycle optionally includes the actual frozen trigger
-candidate, the triggering pressure, and the validated replacement request. These
-full-request estimates include system instructions and tools; they are distinct
-from the divider's message-context estimate and the latest confirmed native
-usage. Calibrated pressure retains its qualified request identity, while provider
-overflow stays an explicit signal rather than a fabricated numerical threshold.
-Historical or unprepared manual candidates remain unavailable. Failed and
-cancelled attempts retain their original trigger evidence without claiming a
-successful installation. Floret schema 25 -> 26 preserves historical payloads
-and rejects older writers; Redeven does not migrate or reconstruct those facts.
-Canonical terminal turns settle interrupted running observations upstream.
+The canonical lifecycle optionally retains the frozen trigger candidate, pressure
+and validated replacement. Full-request estimates include system instructions
+and tools, separately from message estimates and native usage. Calibrated
+pressure keeps its qualified request identity; provider overflow is an explicit
+signal. Historical or unprepared manual candidates remain unavailable. Failure
+and cancellation keep trigger evidence without claiming installation. Floret
+schema 25 -> 26 preserves historical payloads, rejects older writers and settles
+interrupted observations at terminal turns. Redeven only maps these facts.
 
 The divider's shared SurfaceFloatingLayer owns local hosting, projection and
 clamping in Workbench. The trigger remains keyboard accessible, explanations
