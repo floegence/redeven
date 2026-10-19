@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-19 — Scoped context compaction estimates
+
+- Adopt published Floret v7.65.1 opaque-reasoning budgeting and label successful compaction as a message-context estimate excluding system instructions and tool definitions. Preserve bounded recovery and dismissible, localized details in [context usage](ai/model-context-usage-and-compaction.md).
+
 ## 2026-10-19 — Candidate file names during edit preparation
 
 - Show complete streamed edit paths and canonical patch file headers through the existing display-only preview. Preserve progressive multi-file names, rename endpoints, responsive truncation, immediate name publication, and actual-result takeover in [file edit preparation](ui/flower-edit-preparation.md).

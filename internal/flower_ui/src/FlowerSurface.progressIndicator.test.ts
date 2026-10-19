@@ -270,7 +270,8 @@ describe('Flower progress indicator', () => {
     expect(tooltipRule).toContain('bottom: calc(100% + 0.55rem)');
     expect(tooltipRule).toContain('opacity: 0');
     expect(tooltipRule).toContain('pointer-events: none');
-    expect(tooltipRule).toContain('white-space: nowrap');
+    expect(tooltipRule).toContain('white-space: normal');
+    expect(tooltipRule).toContain('overflow-wrap: anywhere');
     expect(css).toContain(".flower-compaction-divider-tooltip[data-open='true']");
     expect(css).not.toContain('.flower-compaction-divider-detail');
     expect(css).toContain(".flower-compaction-divider-pill[role='button']");

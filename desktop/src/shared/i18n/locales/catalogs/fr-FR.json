@@ -607,7 +607,7 @@
       "compactionDividerCancelled": "Compression du contexte annulée",
       "compactionDividerNoop": "Compression du contexte inutile",
       "compactionDividerFallback": "Point de contrôle du contexte",
-      "compactionDividerTokenChange": "{before} vers {after}",
+      "compactionDividerTokenChange": "Contexte estimé des messages : {before} → {after} tokens. Les instructions système et les définitions des outils sont exclues.",
       "projectionUnavailableTitle": "Réponse indisponible",
       "projectionUnavailableDescription": "La réponse enregistrée pour ce tour n’a pas pu être chargée.",
       "toolStatusPending": "En attente",

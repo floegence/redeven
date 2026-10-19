@@ -5528,7 +5528,7 @@
       "compactionDividerCancelled": "Kontextkomprimierung abgebrochen",
       "compactionDividerNoop": "Kontext muss nicht komprimiert werden",
       "compactionDividerFallback": "Kontext-Prüfpunkt",
-      "compactionDividerTokenChange": "{before} auf {after}",
+      "compactionDividerTokenChange": "Geschätzter Nachrichtenkontext: {before} → {after} Tokens. Systemanweisungen und Werkzeugdefinitionen sind nicht enthalten.",
       "projectionUnavailableTitle": "Antwort nicht verfügbar",
       "projectionUnavailableDescription": "Die gespeicherte Antwort für diesen Dialogschritt konnte nicht geladen werden.",
       "toolStatusPending": "Ausstehend",

@@ -607,7 +607,7 @@
       "compactionDividerCancelled": "コンテキスト圧縮をキャンセルしました",
       "compactionDividerNoop": "コンテキスト圧縮は不要です",
       "compactionDividerFallback": "コンテキストチェックポイント",
-      "compactionDividerTokenChange": "{before} から {after} へ",
+      "compactionDividerTokenChange": "メッセージのコンテキスト推定：{before} → {after} トークン。システム指示とツール定義は含みません。",
       "projectionUnavailableTitle": "応答を利用できません",
       "projectionUnavailableDescription": "このターンの保存済み応答を読み込めませんでした。",
       "toolStatusPending": "保留中",
