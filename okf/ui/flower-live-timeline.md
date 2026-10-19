@@ -229,6 +229,10 @@ pending without stopping the task. Saving disables only the selector; Stop and
 approval decisions remain available. Existing approvals still require an explicit
 decision. Approval rows show supporting context directly, without a details
 disclosure, while long commands retain their expand and copy controls.
+At composer container widths of 419px or less, the approval permission selector
+becomes a square icon-only control. Its current-mode tooltip, accessible name,
+keyboard interaction and saving indicator remain available; coarse pointers
+retain a minimum 44px touch target. Wider containers show the mode label.
 
 Floret installs a canonical fallback title with the first accepted user message.
 Automatic-title pending and failure summaries retain it. Flower consumes title,
