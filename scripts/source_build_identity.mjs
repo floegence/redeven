@@ -1,0 +1,56 @@
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { lstatSync, readFileSync, readlinkSync, realpathSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// One in-memory identity covers committed and uncommitted build inputs. Ignored
+// generated assets and installed dependencies are owned by their build steps.
+export function captureSourceBuildIdentity(root, expectedCommit) {
+  const git = (...args) => execFileSync('git', args, { cwd: root, maxBuffer: 32 * 1024 * 1024 });
+  const head = git('rev-parse', 'HEAD').toString().trim();
+  if (expectedCommit && git('rev-parse', `${expectedCommit}^{commit}`).toString().trim() !== head) {
+    throw new Error('Source changed during build: the checkout no longer matches the requested commit. Restart the build from a stable checkout.');
+  }
+  const files = [...new Set(git('ls-files', '--cached', '--others', '--exclude-standard', '-z')
+    .toString().split('\0').filter(Boolean))].sort();
+  const digest = createHash('sha256');
+  for (const name of files) {
+    const file = path.join(root, name);
+    let stat;
+    try { stat = lstatSync(file); } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      continue;
+    }
+    digest.update(JSON.stringify(name) + '\0');
+    if (stat.isSymbolicLink()) digest.update('link\0' + readlinkSync(file));
+    else if (stat.isFile()) {
+      digest.update(`${stat.mode & 0o111}\0${stat.size}\0`);
+      digest.update(readFileSync(file));
+    } else throw new Error(`Unsupported source build input: ${name}`);
+    digest.update('\0');
+  }
+  if (git('rev-parse', 'HEAD').toString().trim() !== head) {
+    throw new Error('Source changed during build identity capture. Restart the build from a stable checkout.');
+  }
+  return { head, digest: digest.digest('hex') };
+}
+
+export function verifySourceBuildIdentity(root, expected) {
+  const actual = captureSourceBuildIdentity(root);
+  if (actual.head !== expected.head || actual.digest !== expected.digest) {
+    throw new Error('Source changed during build. The mixed assets and Runtime cannot be published; restart the build from a stable checkout.');
+  }
+}
+
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    const [operation, root, expected] = process.argv.slice(2);
+    if (operation === 'capture' && root) console.log(JSON.stringify(captureSourceBuildIdentity(root, expected)));
+    else if (operation === 'verify' && root && expected) verifySourceBuildIdentity(root, JSON.parse(expected));
+    else throw new Error('Usage: source_build_identity.mjs capture <root> [commit] | verify <root> <identity>');
+  } catch (error) {
+    console.error(error.message);
+    process.exitCode = 1;
+  }
+}

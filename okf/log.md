@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-19 — Consistent Desktop build sources
+
+- Reject source changes between Desktop, embedded UI and Runtime compilation, including checkout advances during a build. Preserve intentional dirty-source development and require an explicit rebuild after drift. See [development bundles](desktop/desktop-development-bundles.md).
+
 ## 2026-10-19 — Consistent DeepSeek web defaults
 
 - Keep search enabled by default and select DeepSeek Fetch when search is on and no reader is specified. Preserve explicit search and reader preferences, canonical frozen Turn bindings, and backend-owned defaults in [model web search](ai/model-web-search.md) and [provider configuration](ui/flower-provider-configuration.md).

@@ -377,6 +377,8 @@ bundle_from_source() {
   fi
 
   local build_time="${REDEVEN_DESKTOP_BUNDLE_BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
+  local source_identity
+  source_identity=$(node "$SCRIPT_DIR/source_build_identity.mjs" capture "$ROOT_DIR" "$commit")
 
   ui_pkg_log "Building desktop bundled runtime from the current repository..."
   ui_pkg_log "TARGET: ${goos}-${goarch}"
@@ -387,8 +389,10 @@ bundle_from_source() {
     --goos "$goos" \
     --goarch "$goarch"
   "$SCRIPT_DIR/build_assets.sh"
+  node "$SCRIPT_DIR/source_build_identity.mjs" verify "$ROOT_DIR" "$source_identity"
 
   build_go_command "$goos" "$goarch" "$output_path" ./cmd/redeven "$version" "$commit" "$build_time"
+  node "$SCRIPT_DIR/source_build_identity.mjs" verify "$ROOT_DIR" "$source_identity"
 }
 
 main() {
