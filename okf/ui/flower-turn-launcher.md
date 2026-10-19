@@ -11,7 +11,7 @@ Flower assigns one request ID to an input intent and reuses it for retries. New-
 
 # Contract
 
-[Goal commands](../ai/flower-goals.md) use typed control mutations through the same short-lived outbox, never Send. Empty-thread creation preserves composer text, references and attachment authority; its first ordinary send binds the retained draft staging scope to the authorized canonical thread.
+[Goal commands](../ai/flower-goals.md) mutate controls through the same outbox. Empty-thread creation retains text, references and attachment authority; the first Send binds draft staging to the authorized canonical thread.
 
 `ComposerDraftStore` owns text, references, attachments, per-question input drafts, model/reasoning choices, and upload staging for each thread. Switching A-to-B-to-A changes selection immediately and restores each draft without transferring execution ownership. Submission freezes text, references, ready attachments and launch settings under one request ID before awaiting request preparation. Ordinary input stays in the editor and only the published Floe Send button shows loading until an exact receipt or canonical current confirms admission, or a definite failure or unknown outcome ends delivery. Editing stays available while duplicate submission is blocked. Input captured during active work or behind unresolved delivery immediately appears in the queue dock as a static Waiting to queue row, consumes only that captured draft, and releases the composer. Request preparation, IndexedDB and HTTP cannot delay this local feedback. Unfinished uploads and long-text conversion keep their existing preparation and cancellation flow before capture.
 
