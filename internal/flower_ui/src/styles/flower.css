@@ -12430,16 +12430,29 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-context-composition-heading > :last-child { flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .flower-composer-context-tooltip [data-category='hosted_context'], .flower-composer-context-tooltip [data-category='unlabelled'] { --flower-context-color: var(--muted-foreground); }
 
-.flower-goal { margin: 0 0 0.5rem; border: 1px solid var(--border); border-radius: 0.75rem; background: var(--background); }
-.flower-goal-summary { display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 0.5rem 0.75rem; cursor: pointer; text-align: left; font-size: 0.75rem; }
-.flower-goal-label, .flower-goal-status { flex-shrink: 0; white-space: nowrap; }
-.flower-goal-label { font-weight: 600; }
-.flower-goal-text { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); }
-.flower-goal-status { color: var(--muted-foreground); }
-.flower-goal-editor { display: grid; gap: 0.625rem; padding: 0 0.75rem 0.75rem; max-height: min(24rem, 45vh); overflow-y: auto; }
-.flower-goal-input { width: 100%; min-height: 5rem; resize: vertical; border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.5rem; font-size: 0.8125rem; line-height: 1.5; background: var(--background); }
-.flower-goal-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+/* Goal shares the status row; absent objectives create no control. */
+.flower-model-status-lane:has(.flower-goal-tag) { flex-wrap: nowrap; }
+.flower-model-status-lane:has(.flower-goal-tag) > :first-child { min-width: 0; }
+.flower-goal-tag { flex-shrink: 0; display: inline-flex; align-items: center; gap: 0.35rem; margin-left: auto; padding: 0.2rem 0.4rem; border-radius: 0.4rem; font-size: 0.6875rem; line-height: 1; color: var(--muted-foreground); cursor: pointer; white-space: nowrap; }
+.flower-goal-tag:hover, .flower-goal-tag[aria-expanded='true'] { background: var(--muted); color: var(--foreground); }
+.flower-goal-dot { width: 0.3rem; height: 0.3rem; border-radius: 50%; background: var(--primary); }
+.flower-goal-tag[data-goal-status='completed'] .flower-goal-dot { background: var(--muted-foreground); }
+.flower-goal-layer { width: min(22rem, calc(100vw - 1.5rem)); max-width: 100%; }
+.flower-goal-popup { width: 100%; display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem; border: 1px solid var(--border); border-radius: 0.875rem; background: var(--popover, var(--background)); color: var(--foreground); box-shadow: 0 12px 36px color-mix(in srgb, var(--foreground) 10%, transparent); }
+.flower-goal-popup-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; font-size: 0.75rem; font-weight: 600; }
+.flower-goal-popup-controls { display: flex; gap: 0.25rem; }
+.flower-goal-popup-controls button { display: grid; place-items: center; width: 1.5rem; height: 1.5rem; border-radius: 0.375rem; color: var(--muted-foreground); cursor: pointer; }
+.flower-goal-popup-controls button:hover { color: var(--foreground); background: var(--muted); }
+.flower-goal-popup-controls button:disabled { cursor: not-allowed; opacity: 0.5; }
+.flower-goal-input { width: 100%; min-height: 6rem; max-height: min(18rem, 40dvh); resize: vertical; border: 0; padding: 0; background: transparent; font-size: 0.8125rem; line-height: 1.65; overflow-wrap: anywhere; }
+.flower-goal-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.375rem; }
 .flower-goal-current, .flower-goal-history p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.flower-goal-current, .flower-goal-error { font-size: 0.75rem; line-height: 1.5; }
+.flower-goal-error { color: var(--destructive); }
+.flower-composer-entry { display: flex; align-items: flex-start; gap: 0.625rem; min-width: 0; }
+.flower-composer-entry > textarea, .flower-composer-entry > input { flex: 1; min-width: 0; }
+.flower-goal-command-chip { display: inline-flex; align-items: center; gap: 0.375rem; flex-shrink: 0; padding: 0.2rem 0.4rem; margin-top: 0.125rem; border-radius: 0.375rem; background: var(--muted); color: var(--foreground); font-size: 0.75rem; line-height: 1.4; }
+.flower-goal-command-chip button { display: inline-flex; cursor: pointer; color: var(--muted-foreground); }
 .flower-goal-history { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.5rem 0.75rem; font-size: 0.75rem; border-left: 2px solid var(--border); }
 .flower-goal-history details { flex-basis: 100%; }
 .flower-goal-history summary { cursor: pointer; }

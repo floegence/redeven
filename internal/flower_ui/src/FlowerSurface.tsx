@@ -1639,11 +1639,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return next;
   });
   const selectedComposerApprovalDisplayAction = selectedComposerApprovalAction;
-  const bottomActionMode = createMemo<'chat' | 'input_request' | 'approval'>(() => {
-    if (selectedInputRequest()) return 'input_request';
-    if (selectedComposerApprovalActions().length > 0) return 'approval';
-    return 'chat';
-  });
   createEffect(() => {
     const actionID = trimString(selectedComposerApprovalDisplayAction()?.action_id);
     const actionCount = selectedComposerApprovalActions().length;
@@ -1689,6 +1684,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 		return draftSnapshot();
 	};
   const currentComposerSessionKey = createMemo(() => trimString(selectedThreadID()) || pendingDraftKey());
+  const bottomActionMode = createMemo<'chat' | 'input_request' | 'approval'>(() => {
+    if (reactiveDraftSnapshotFor(currentComposerSessionKey()).value.goal_command) return 'chat';
+    if (selectedInputRequest()) return 'input_request';
+    if (selectedComposerApprovalActions().length > 0) return 'approval';
+    return 'chat';
+  });
   const [queueTakeBackPending, setQueueTakeBackPending] = createSignal<ReadonlyMap<string, string>>(new Map());
   const composerTakingBackQueuedTurn = () => queueTakeBackPending().has(trimString(selectedThreadID()));
   const takeBackQueuedTurn = async (turn: FlowerQueuedTurn) => {
@@ -6558,6 +6559,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   type GoalEditor = Readonly<{ sessionKey: string; text: string; version: number; error?: string }>;
+  const goalCommand = createMemo(() => reactiveDraftSnapshotFor(currentComposerSessionKey()).value.goal_command);
+  const [goalPopupScope, setGoalPopupScope] = createSignal('');
+  const goalPopupOpen = () => goalPopupScope() === currentComposerSessionKey();
   const goalEditor = createMemo<GoalEditor | null>(() => {
     const sessionKey = currentComposerSessionKey();
     const edit = reactiveDraftSnapshotFor(sessionKey).value.goal_edit;
@@ -6569,11 +6573,63 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [goalPreparingScopes, setGoalPreparingScopes] = createSignal<readonly string[]>([]);
   const selectedGoal = createMemo(() => selectedThread()?.goal);
   let goalInputRef: HTMLTextAreaElement | undefined;
-  const closeGoalEditor = () => { storeGoalEditor(currentComposerSessionKey(), null); composerRef?.focus(); };
+  let goalTriggerRef: HTMLButtonElement | undefined;
+  let goalPanelRef: HTMLDivElement | undefined;
+  const [goalPopupPosition, setGoalPopupPosition] = createSignal({ x: 8, y: 8 });
+  const [goalPopupSize, setGoalPopupSize] = createSignal({ width: 352, height: 220 });
+  const closeGoalEditor = (discard = false, restoreFocus = true) => {
+    if (discard) storeGoalEditor(currentComposerSessionKey(), null);
+    setGoalPopupScope('');
+    if (restoreFocus) (goalTriggerRef ?? composerRef)?.focus();
+  };
   const openGoalEditor = () => {
     if (!goalEditor()) storeGoalEditor(currentComposerSessionKey(), { text: selectedGoal()?.text ?? '', version: selectedGoal()?.version ?? 0 });
+    setGoalPopupScope(currentComposerSessionKey());
     requestAnimationFrame(() => { if (!surfaceDisposed) goalInputRef?.focus(); });
   };
+  const enterGoalCommand = (text = '') => {
+    draftSessionFor(currentComposerSessionKey()).mutate(value => ({ ...value, goal_command: { text } }));
+    requestAnimationFrame(() => { if (!surfaceDisposed) composerRef?.focus(); });
+  };
+  const exitGoalCommand = () => {
+    draftSessionFor(currentComposerSessionKey()).mutate(value => ({ ...value, goal_command: undefined }));
+    requestAnimationFrame(() => { if (!surfaceDisposed) composerRef?.focus(); });
+  };
+  createEffect(() => {
+    if (goalPopupScope() && (goalPopupScope() !== currentComposerSessionKey() || !selectedGoal()?.text)) setGoalPopupScope('');
+  });
+  createEffect(() => {
+    if (!goalPopupOpen()) return;
+    const measure = () => {
+      if (!goalTriggerRef || !goalPanelRef) return;
+      const anchor = goalTriggerRef.getBoundingClientRect();
+      const panel = goalPanelRef.getBoundingClientRect();
+      setGoalPopupSize(previous => previous.width === panel.width && previous.height === panel.height ? previous : { width: panel.width, height: panel.height });
+      setGoalPopupPosition(previous => previous.x === anchor.right - panel.width && previous.y === anchor.top - panel.height - 8 ? previous : { x: anchor.right - panel.width, y: anchor.top - panel.height - 8 });
+    };
+    const observer = new ResizeObserver(measure);
+    if (goalTriggerRef) observer.observe(goalTriggerRef);
+    if (goalPanelRef) observer.observe(goalPanelRef);
+    if (surfaceRef) observer.observe(surfaceRef);
+    const frame = requestAnimationFrame(measure);
+    const outside = (event: PointerEvent) => {
+      const path = event.composedPath();
+      if (goalPanelRef && path.includes(goalPanelRef) || goalTriggerRef && path.includes(goalTriggerRef)) return;
+      closeGoalEditor(false, false);
+    };
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeGoalEditor(); }
+      if (event.key === 'Tab' && goalPanelRef) {
+        const items = [...goalPanelRef.querySelectorAll<HTMLElement>('button:not(:disabled), textarea:not(:disabled)')];
+        if (event.shiftKey && document.activeElement === items[0] || !event.shiftKey && document.activeElement === items.at(-1)) { event.preventDefault(); closeGoalEditor(); }
+      }
+    };
+    document.addEventListener('pointerdown', outside, true);
+    document.addEventListener('keydown', keydown, true);
+    window.addEventListener('resize', measure);
+    window.addEventListener('scroll', measure, true);
+    onCleanup(() => { cancelAnimationFrame(frame); observer.disconnect(); document.removeEventListener('pointerdown', outside, true); document.removeEventListener('keydown', keydown, true); window.removeEventListener('resize', measure); window.removeEventListener('scroll', measure, true); });
+  });
   const goalPending = createMemo(() => goalPreparingScopes().includes(currentComposerSessionKey())
     || transportOutbox().forThread(currentComposerSessionKey()).some(entry => (entry.operation === 'goal' || !selectedThreadID()) && !entry.terminalError)
     || !selectedThreadID() && composerSendPreparing());
@@ -6589,7 +6645,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const frozen = session.snapshot();
     const threadID = selectedThreadID();
     if (operation === 'delete' && !threadID) {
-      if (fromCommand) updateComposerSessionText(sessionKey, '');
+      if (fromCommand) exitGoalCommand();
       closeGoalEditor(); return;
     }
     const selectionSequence = threadLoadSequence;
@@ -6606,10 +6662,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (surfaceDisposed) return;
       const goalInput: FlowerGoalInput = { storage_generation: generation, client_request_id: requestID,
         ...(threadID ? { thread_id: threadID } : { new_thread: newSettings }),
-        operation, expected_version: expectedVersion, ...(operation === 'set' ? { text } : {}) };
+        operation: operation === 'set' && fromCommand ? 'submit' : operation, expected_version: expectedVersion, ...(operation === 'set' ? { text } : {}) };
       outboxOperations.set(requestID, { adapter });
       pendingAdmissionHandoffs.set(requestID, { sessionKey, selectionSequence, settle: (canonicalThreadID) => {
-        if (fromCommand && session.snapshot().text_revision === frozen.text_revision) updateComposerSessionText(sessionKey, '');
+        if (fromCommand && frozen.value.goal_command && session.snapshot().value.goal_command === frozen.value.goal_command) session.mutate(value => ({ ...value, goal_command: undefined }));
+        else if (fromCommand && !frozen.value.goal_command && session.snapshot().text_revision === frozen.text_revision) updateComposerSessionText(sessionKey, '');
+        if (!fromCommand && session.snapshot().value.goal_edit === frozen.value.goal_edit) session.mutate(value => ({ ...value, goal_edit: undefined }));
         if (isPendingDraftKey(sessionKey)) {
           draftCoordinator.moveScope(sessionKey, canonicalThreadID);
           if (sessionKey.startsWith(PENDING_NEW_THREAD_ID + ':')) embeddedThreads.set(sessionKey, canonicalThreadID);
@@ -6651,12 +6709,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         ?? draftSessionFor(editorScope).snapshot().value.goal_edit;
       const retainedText = editor?.text ?? entry.goalInput?.text ?? result.goal.text ?? '';
       if (result.conflict) {
-        storeGoalEditor(result.thread_id, { text: retainedText, error: copy().chat.goalConflict, version: result.goal.version });
-        if (selectedThreadID() === result.thread_id) openGoalEditor();
+        const command = draftSessionFor(result.thread_id).snapshot().value.goal_command;
+        if (entry.goalInput?.operation === 'submit' || command) {
+          draftSessionFor(result.thread_id).mutate(value => ({ ...value, goal_command: { text: command?.text ?? entry.goalInput?.text ?? '', error: copy().chat.goalConflict } }));
+        } else {
+          storeGoalEditor(result.thread_id, { text: retainedText, error: copy().chat.goalConflict, version: currentGoal.version });
+          if (selectedThreadID() === result.thread_id) openGoalEditor();
+        }
       } else if (editor) {
-        storeGoalEditor(result.thread_id, entry.goalInput?.operation === 'set' && editor.text !== entry.goalInput.text
-          ? { ...editor, version: result.goal.version } : null);
+        storeGoalEditor(result.thread_id, { ...editor, version: currentGoal.version });
       }
+      if (!result.conflict && !draftSessionFor(result.thread_id).snapshot().value.goal_edit && selectedThreadID() === result.thread_id) setGoalPopupScope('');
       pendingAdmissionHandoffs.delete(entry.requestId);
       outboxOperations.delete(entry.requestId);
       setTransportOutbox(outbox => outbox.drop(entry.requestId));
@@ -6664,13 +6727,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     void requestThreadDetail(result.thread_id, 'user_action', true).catch(() => undefined);
   };
   const executeComposerCommand = (suggested?: '/compact' | '/goal') => {
+    if (goalCommand()) {
+      const text = goalCommand()!.text.trim();
+      if (text) void enqueueGoal(text === 'clear' ? 'delete' : 'set', text === 'clear' ? '' : text, true);
+      return;
+    }
     const command = composerSlashCommand();
     const parsed = suggested || command.kind === 'suggest' ? parseFlowerSlashCommand(suggested ?? composerCommandSuggested()) : command;
     if (parsed.kind !== 'intent') return;
     if (parsed.command === '/compact') { void executeCompactContextCommand(); return; }
     if (parsed.operation === 'open') {
-      openGoalEditor();
       if (command.kind === 'intent' || command.kind === 'suggest') updateComposerText('');
+      enterGoalCommand();
     } else void enqueueGoal(parsed.operation, parsed.text ?? '', true);
   };
 
@@ -6731,6 +6799,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const handleComposerKeyDown = (event: KeyboardEvent) => {
     if (event.defaultPrevented) return;
     if (event.isComposing || isComposing() || event.keyCode === 229) return;
+    if (goalCommand()) {
+      if (event.key === 'Escape' || event.key === 'Backspace' && !goalCommand()!.text) { event.preventDefault(); exitGoalCommand(); return; }
+      if (shouldSubmitOnEnterKeydown(event)) { event.preventDefault(); executeComposerCommand(); return; }
+      return;
+    }
+    if ((event.key === ' ' || event.key === 'Tab') && composerTextValue().trim() === '/goal') {
+      event.preventDefault(); updateComposerText(''); enterGoalCommand(); return;
+    }
     if (composerTakingBackQueuedTurn() || composerReferenceMutationActive()) {
       if (event.key === 'Enter') event.preventDefault();
       return;
@@ -7576,6 +7652,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const updateComposerText = (value: string) => {
+    if (goalCommand()) {
+      draftSessionFor(currentComposerSessionKey()).mutate(draft => ({ ...draft, goal_command: { text: value } }));
+      return;
+    }
     const waitingQuestion = activeInputQuestion();
     if (selectedInputRequest() && waitingQuestion) {
       updateInputText(waitingQuestion, value);
@@ -7704,6 +7784,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
   const handleComposerPaste = (event: ClipboardEvent & { currentTarget: HTMLTextAreaElement }) => {
     composerHistory.reset();
+    // Goal text stays text; long-paste attachment conversion belongs to chat drafts.
+    if (goalCommand()) return;
     if (composerReferenceMutationActive()) {
       event.preventDefault();
       event.currentTarget.value = composerTextValue();
@@ -7835,6 +7917,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     requestCompanionForEditing();
     const value = event.currentTarget.value;
+    if (!goalCommand() && /^\/goal\s/.test(value)) {
+      updateComposerText(''); enterGoalCommand(value.slice(6)); return;
+    }
     if (!inspectFlowerText(value)) {
       event.currentTarget.value = composerTextValue();
       notifyComposerError(attachmentCopy().invalidText);
@@ -7959,9 +8044,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!nextQuestion || nextQuestion.id === activeInputQuestion()?.id) return;
     updateCurrentComposerSessionDraft((draft) => ({ ...draft, activeInputQuestionID: nextQuestion.id }));
   };
-  const activeInputQuestionIsSecret = createMemo(() => !!selectedInputRequest() && !!activeInputQuestion()?.is_secret);
+  const activeInputQuestionIsSecret = createMemo(() => !goalCommand() && !!selectedInputRequest() && !!activeInputQuestion()?.is_secret);
 
   const composerTextValue = createMemo(() => {
+    if (goalCommand()) return goalCommand()!.text;
     if (!selectedInputRequest()) {
       return currentComposerSessionDraft().chatDraft;
     }
@@ -7969,6 +8055,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return question ? questionDraft(question.id).text ?? '' : '';
   });
   const activeInputQuestionUsesTextEditor = createMemo(() => {
+    if (goalCommand()) return true;
     const question = activeInputQuestion();
     if (!question) return false;
     if (questionMode(question) === 'write') return true;
@@ -7981,6 +8068,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ]);
   const composerTextareaDisabled = createMemo(() => {
     if (selectedThreadReadOnly()) return true;
+    if (goalCommand()) return false;
     if (!selectedInputRequest()) return false;
     return !activeInputQuestion() || !activeInputQuestionUsesTextEditor();
   });
@@ -8148,6 +8236,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ));
 
   const composerPlaceholder = createMemo(() => {
+    if (goalCommand()) return copy().chat.goalEmpty;
     if (selectedThreadReadOnly()) return selectedThreadReadOnlyDisplay();
     if (surfaceWarmupActive() && !selectedInputRequest()) return copy().chat.warmupComposerPlaceholder;
     if (!selectedInputRequest()) return copy().chat.placeholder;
@@ -8270,7 +8359,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
   const composerReferenceEditingAllowed = createMemo(() => (
-    composerReferenceRemovalAllowed()
+    !goalCommand() && composerReferenceRemovalAllowed()
     && Boolean(displayedWorkingDirectory())
     && composerReferenceIndex !== null
   ));
@@ -8624,14 +8713,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const composerChatDraftText = createMemo(() => trimString(currentComposerSessionDraft().chatDraft));
   const composerChatDraftHasRawText = createMemo(() => currentComposerSessionDraft().chatDraft.length > 0);
-  const composerSlashCommand = createMemo(() => (selectedInputRequest() || selectedComposerApprovalDisplayAction() || composerHistoryBrowsing())
-    ? { kind: 'none' as const }
-    : parseFlowerSlashCommand(composerChatDraftText()));
+  const composerSlashCommand = createMemo(() => {
+    if (goalCommand()) return { kind: 'intent' as const, command: '/goal' as const, operation: 'set' as const, text: goalCommand()!.text };
+    if (composerHistoryBrowsing()) return { kind: 'none' as const };
+    const parsed = parseFlowerSlashCommand(composerTextValue().trim());
+    if (selectedInputRequest() || selectedComposerApprovalDisplayAction()) {
+      return parsed.kind === 'intent' && parsed.command === '/goal' || parsed.kind === 'suggest' && 'goal'.startsWith(parsed.query)
+        ? parsed : { kind: 'none' as const };
+    }
+    return parsed;
+  });
   const [composerCommandIndex, setComposerCommandIndex] = createSignal(0);
   const composerCommandChoices = createMemo(() => {
     const parsed = composerSlashCommand();
     const query = parsed.kind === 'suggest' ? parsed.query : '';
-    return ([FLOWER_COMPACT_CONTEXT_COMMAND, FLOWER_GOAL_COMMAND] as const).filter(command => command.slice(1).startsWith(query));
+    return ([FLOWER_COMPACT_CONTEXT_COMMAND, FLOWER_GOAL_COMMAND] as const).filter(command => command.slice(1).startsWith(query) && (!(selectedInputRequest() || selectedComposerApprovalDisplayAction()) || command === FLOWER_GOAL_COMMAND));
   });
   createEffect(() => { composerChatDraftText(); setComposerCommandIndex(0); });
   const composerCommandSuggested = createMemo(() => composerCommandChoices()[composerCommandIndex()] ?? FLOWER_COMPACT_CONTEXT_COMMAND);
@@ -8645,8 +8741,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return command.kind === 'intent' || command.kind === 'suggest';
   });
   const composerPrimaryActionIsStop = createMemo(() => (
-    longTextPreparing()
-    || (Boolean(selectedThreadID()) && selectedThreadCanStop() && !composerTextOverLimit() && !composerChatDraftText() && !composerHasAttachments() && !composerHasReferences())
+    !goalCommand() && (longTextPreparing()
+    || (Boolean(selectedThreadID()) && selectedThreadCanStop() && !composerTextOverLimit() && !composerChatDraftText() && !composerHasAttachments() && !composerHasReferences()))
   ));
   type ComposerPrimaryAction = 'send' | 'stop' | 'compact' | 'goal' | 'cancel_long_text';
   const composerPrimaryActionKind = createMemo<ComposerPrimaryAction>(() => (
@@ -8661,6 +8757,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const composerPrimaryActionIcon = createMemo(() => composerPrimaryActionIsStop() ? FlowerStopIcon : composerPrimaryActionIsCommand() ? Clock : ArrowUp);
   const composerPrimaryActionLabel = createMemo(() => composerPrimaryActionIsStop() ? selectedThreadStopLabel() : composerSendPreparing() ? copy().chat.preparingSend : selectedComposerPendingSend() ? copy().chat.pendingSending : composerPrimaryActionIsCommand() ? (composerSlashCommand().kind === 'intent' && (composerSlashCommand() as { command?: string }).command === '/goal' ? copy().chat.goalTitle : copy().chat.compactContext) : copy().chat.send);
   const composerPrimaryActionDisabled = createMemo(() => {
+    if (goalCommand()) return !goalCommand()!.text.trim() || goalPending() || !props.adapter.manageGoal || props.adapter.canMutate === false || selectedThreadReadOnly();
     if (composerTakingBackQueuedTurn()) return true;
     if (composerReferenceMutationCount() > 0) return true;
     if (longTextPreparing()) return false;
@@ -12388,6 +12485,40 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </Show>
   );
 
+  const goalControls = () => (
+    <Show when={selectedGoal()?.text}>
+      <button ref={goalTriggerRef} type="button" class="flower-goal-tag" aria-label={copy().chat.goalTitle}
+        title={selectedGoal()?.text} aria-haspopup="dialog" aria-expanded={goalPopupOpen()}
+        data-goal-status={selectedGoal()?.status} onClick={() => goalPopupOpen() ? closeGoalEditor() : openGoalEditor()}>
+        <span class="flower-goal-dot" aria-hidden="true" />{copy().chat.goalTitle}
+        <Show when={selectedGoal()?.reviewing}><span class="flower-visually-hidden" role="status">{copy().chat.goalReviewing}</span></Show>
+      </button>
+      <Show when={goalPopupOpen()}>
+        <SurfaceFloatingLayer owner={goalTriggerRef} position={goalPopupPosition()} estimatedSize={goalPopupSize()} class="flower-goal-layer" data-flower-floating-layer="true">
+          <div ref={goalPanelRef} role="dialog" aria-label={copy().chat.goalTitle} class="flower-goal-popup" data-floe-input-surface="" data-floe-surface="floating">
+            <div class="flower-goal-popup-header"><span>{copy().chat.goalTitle}</span>
+              <div class="flower-goal-popup-controls">
+                <button type="button" aria-label={copy().chat.goalDelete} title={copy().chat.goalDelete} disabled={goalPending() || props.adapter.canMutate === false || selectedThreadReadOnly()} onClick={() => void enqueueGoal('delete', '')}><Trash class="h-3.5 w-3.5" /></button>
+                <button type="button" aria-label={copy().computer.close} title={copy().computer.close} onClick={() => closeGoalEditor()}><X class="h-3.5 w-3.5" /></button>
+              </div>
+            </div>
+            <Show when={goalEditor()?.error}><p class="flower-goal-error" role="alert">{goalEditor()?.error}</p><p class="flower-goal-current">{selectedGoal()?.text}</p></Show>
+            <textarea ref={goalInputRef} aria-label={copy().chat.goalTitle} value={goalEditor()?.text ?? selectedGoal()?.text ?? ''} rows={4}
+              class="flower-goal-input" disabled={props.adapter.canMutate === false || selectedThreadReadOnly()}
+              onInput={event => { const editor = goalEditor(); if (editor) storeGoalEditor(editor.sessionKey, { ...editor, text: event.currentTarget.value }); }}
+              onKeyDown={event => { if (!event.isComposing && event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); if (goalEditor()?.error || goalEditor()?.text !== selectedGoal()?.text) void enqueueGoal('set', goalEditor()?.text ?? ''); } }} />
+            <Show when={goalEditor()?.text !== selectedGoal()?.text || goalEditor()?.error}>
+              <div class="flower-goal-actions">
+                <Button size="xs" variant="ghost" onClick={() => closeGoalEditor(true)}>{copy().threadList.cancel}</Button>
+                <Button size="xs" disabled={goalPending() || !goalEditor()?.text.trim() || props.adapter.canMutate === false || selectedThreadReadOnly()} onClick={() => void enqueueGoal('set', goalEditor()?.text ?? '')}>{copy().chat.goalSave}</Button>
+              </div>
+            </Show>
+          </div>
+        </SurfaceFloatingLayer>
+      </Show>
+    </Show>
+  );
+
   const progressLane = (conversation = false) => (
     <div class={cn('flower-model-status-lane', conversation && 'flower-model-status-lane--conversation')}>
       <Show when={selectedThreadStopPending()} fallback={<FlowerProgressIndicator
@@ -12396,6 +12527,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         label={selectedRunProgress() ? liveProgressLabel(selectedRunProgress()!.kind, selectedRunProgress()!.retry)
           : ''}
       />}><span class="flower-turn-stopping text-xs text-muted-foreground" role="status" aria-live="polite">{copy().chat.stopping}</span></Show>
+      {goalControls()}
     </div>
   );
 
@@ -12422,32 +12554,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             </div>
           </Show>
           <div class="flower-chat-bottom-dock-track">
-            <Show when={props.adapter.manageGoal || selectedGoal()?.version}>
-              <section class="flower-goal" aria-label={copy().chat.goalTitle}>
-                <button type="button" class="flower-goal-summary" onClick={() => openGoalEditor()} aria-expanded={goalEditor()?.sessionKey === currentComposerSessionKey()}>
-                  <span class="flower-goal-label">{copy().chat.goalTitle}</span>
-                  <span class="flower-goal-text">{selectedGoal()?.text || copy().chat.goalEmpty}</span>
-                  <Show when={selectedGoal()?.text}><span class="flower-goal-status" role="status">{selectedGoal()?.reviewing ? copy().chat.goalReviewing : selectedGoal()?.status === 'completed' ? copy().chat.goalCompleted : copy().chat.goalActive}</span></Show>
-                  <Pencil class="h-3 w-3 shrink-0" aria-hidden="true" />
-                </button>
-                <Show when={goalEditor()?.sessionKey === currentComposerSessionKey()}>
-                  <div class="flower-goal-editor">
-                    <p class="text-xs text-muted-foreground">{copy().chat.goalDescription}</p>
-                    <Show when={goalEditor()?.error}><p class="text-xs text-destructive" role="alert">{goalEditor()?.error}</p><p class="flower-goal-current">{selectedGoal()?.text || copy().chat.goalEmpty}</p></Show>
-                    <textarea ref={goalInputRef} aria-label={copy().chat.goalTitle} value={goalEditor()?.text ?? ''} rows={3}
-                      class="flower-goal-input" disabled={props.adapter.canMutate === false || selectedThreadReadOnly()}
-                      onInput={event => { const editor = goalEditor(); if (editor) storeGoalEditor(editor.sessionKey, { ...editor, text: event.currentTarget.value }); }}
-                      onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); closeGoalEditor(); }
-                        if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); void enqueueGoal('set', goalEditor()?.text ?? ''); } }} />
-                    <div class="flower-goal-actions">
-                      <Button size="sm" disabled={goalPending() || !goalEditor()?.text.trim() || props.adapter.canMutate === false || selectedThreadReadOnly()} onClick={() => void enqueueGoal('set', goalEditor()?.text ?? '')}>{copy().chat.goalSave}</Button>
-                      <Button size="sm" variant="ghost" disabled={goalPending() || !selectedGoal()?.text || props.adapter.canMutate === false || selectedThreadReadOnly()} onClick={() => void enqueueGoal('delete', '')}>{copy().chat.goalDelete}</Button>
-                      <Button size="sm" variant="ghost" onClick={closeGoalEditor}>{copy().computer.close}</Button>
-                    </div>
-                  </div>
-                </Show>
-              </section>
-            </Show>
             <Show when={!props.embeddedConversation}>{progressLane()}</Show>
             <Show when={bottomActionMode() !== 'approval'}>{threadSyncErrorNotice()}</Show>
             <div class="flower-composer-anchor">
@@ -12855,12 +12961,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     onFocusFallback={() => attachmentPickerButtonRef?.focus()}
                   />
                 </Show>
-                <Show when={composerTextOverLimit()}>
+                <Show when={!goalCommand() && composerTextOverLimit()}>
                   <div class="flower-composer-over-limit" role="status">
                     {attachmentCopy().overLimit(FLOWER_INLINE_TEXT_CODE_POINT_LIMIT)}
                   </div>
                 </Show>
-                {composerTextEditor()}
+                <Show when={goalCommand()?.error}><p class="flower-goal-error" role="alert">{goalCommand()?.error}</p><p class="flower-goal-current">{selectedGoal()?.text}</p></Show>
+                <div class="flower-composer-entry" data-flower-goal-mode={goalCommand() ? 'true' : undefined}>
+                  <Show when={goalCommand()}>
+                    <span class="flower-goal-command-chip">/goal<button type="button" aria-label={copy().computer.close} title={copy().computer.close} onClick={exitGoalCommand}><X class="h-3 w-3" /></button></span>
+                  </Show>
+                  {composerTextEditor()}
+                </div>
                 <div class="flower-composer-footer">
                     <div class="flower-model-stack">
                       {composerControls()}
@@ -13453,6 +13565,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             resolveRestore={() => menu().restore}
             onClose={closeTranscriptMenu}
           >
+            <Show when={props.adapter.manageGoal && props.adapter.canMutate !== false && !selectedThreadReadOnly()}>
+              <button type="button" role="menuitem" class="flower-thread-menu-item" title={copy().chat.commandGoal} onClick={() => { setTranscriptMenu(null); enterGoalCommand(); }}>
+                <Clock class="h-3.5 w-3.5" aria-hidden="true" /><span>/goal</span>
+              </button>
+            </Show>
             <Show when={menu().selection}>
               <button type="button" role="menuitem" class="flower-thread-menu-item" onClick={() => {
                 const state = menu();

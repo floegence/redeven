@@ -4,6 +4,10 @@
 
 - Apply [assistant reading roles](ui/flower-message-appearance.md) with a centered 700px track, calmer semantic links and code, readable completion time, and explicit high-contrast behavior. Preserve authored Markdown, citations, user bubbles, selection and theme-switch geometry across all published presets.
 
+## 2026-10-18 — Goal submission and compact composer controls
+
+- Adopt released Floret v7.62.2 atomic [Goal submission](ai/flower-goals.md): start idle work, preserve active and waiting execution, and retain exact retry decisions. Use an inline command chip and anchored popup, preserving drafts and save-only edits.
+
 ## 2026-10-18 — Flower historical defaults and Goal disclosure
 
 - Default only the latest abnormal ordinary turn to expanded; fold historical abnormal work, successful screenshot work and owned Goal dynamics through the existing [process disclosure](ui/flower-turn-process-disclosure.md), preserving explicit choices, inspection and recovery controls.

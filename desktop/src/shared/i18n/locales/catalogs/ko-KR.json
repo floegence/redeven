@@ -800,7 +800,7 @@
       "goalDeleted": "목표 삭제됨",
       "goalActorUser": "나",
       "goalActorModel": "모델",
-      "commandGoal": "대화 목표 보기 및 관리",
+      "commandGoal": "목표를 설정하여 작업 시작 또는 업데이트",
       "goalUnavailable": "이 환경에서는 목표를 관리할 수 없습니다."
     },
     "threadList": {

@@ -976,7 +976,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     goalDeleted: "Goal deleted",
     goalActorUser: "You",
     goalActorModel: "Model",
-    commandGoal: "View or manage the conversation goal",
+    commandGoal: "Set a goal to start or update work",
     goalUnavailable: "Goal management is unavailable in this environment.",
     commandMenuLabel: 'Flower commands',
     commandCompactContext: 'Compact this conversation context',

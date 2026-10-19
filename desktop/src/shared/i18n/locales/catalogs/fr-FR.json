@@ -800,7 +800,7 @@
       "goalDeleted": "Objectif supprimé",
       "goalActorUser": "Vous",
       "goalActorModel": "Modèle",
-      "commandGoal": "Afficher ou gérer l’objectif de la conversation",
+      "commandGoal": "Définir un objectif et démarrer ou actualiser le travail",
       "goalUnavailable": "La gestion des objectifs n’est pas disponible dans cet environnement."
     },
     "threadList": {

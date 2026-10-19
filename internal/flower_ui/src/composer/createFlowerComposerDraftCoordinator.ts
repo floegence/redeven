@@ -44,6 +44,8 @@ export type FlowerComposerDraftReference = Readonly<{
 export type FlowerComposerDraftValue = Readonly<{
   text: string;
   goal_edit?: Readonly<{ text: string; version: number; error?: string }>;
+  /** Goal command input is independent from the preserved ordinary draft. */
+  goal_command?: Readonly<{ text: string; error?: string }>;
   omit_embedded_context?: boolean;
   attachments: readonly FlowerComposerDraftAttachment[];
   references: readonly FlowerComposerDraftReference[];
@@ -264,7 +266,7 @@ export function createFlowerComposerDraftCoordinator(
         // Copy user intent explicitly. Staging capabilities, model capability
         // revisions and previously prepared submissions belong to the old session.
         drafts.push({ scope_id: scopeID, files, value: {
-          text: value.text, goal_edit: value.goal_edit, mode: 'ordinary',
+          text: value.text, goal_edit: value.goal_edit, goal_command: value.goal_command, mode: 'ordinary',
           omit_embedded_context: value.omit_embedded_context,
           references: value.references.map(reference => ({ ...reference })),
           page_context_captured: value.page_context_captured,
