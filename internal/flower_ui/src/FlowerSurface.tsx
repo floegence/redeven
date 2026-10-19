@@ -90,6 +90,7 @@ import { FlowerTurnTimeline } from './FlowerTurnTimeline';
 import { createFlowerTurnDisclosureStore } from './flowerTurnDisclosure';
 import type { FlowerComputerStageSessionState, FlowerComputerStageSnapshot } from './FlowerComputerStage';
 import { FlowerToolIcon } from './FlowerToolIcon';
+import { FlowerThreadToolPreview } from './FlowerThreadToolPreview';
 import { FlowerActivityPreview } from './FlowerActivityPreview';
 import { FlowerComposerContextIndicator } from './chat/FlowerComposerContextIndicator';
 import { FlowerMessageImage } from './chat/FlowerMessageImage';
@@ -117,6 +118,7 @@ import type {
   FlowerSubmitInputReceipt,
   FlowerSurfaceAdapter,
   FlowerTerminalProcessSnapshot,
+  FlowerToolPreviewRequest,
   FlowerTurnLaunchFailure,
   FlowerTurnLaunchInput,
   FlowerGoalInput,
@@ -10402,6 +10404,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const expandable = createMemo(() => !compactReports() && !subagentOperation() && ((presentation().suppressEmptyDisclosure
       || item().renderer === 'web_search' && !item().tool_name?.startsWith('okf.')) ? hasDetails() : item().kind === 'tool' || hasDetails()));
     const open = () => expandable() && disclosureControl.open();
+    const threadPreviewTool = () => item().status === 'success' && ['threads.query', 'threads.read', 'threads.aggregate'].includes(item().tool_name ?? '') && Boolean(props.adapter.loadToolPreview);
+    const [previewRequest, setPreviewRequest] = createSignal<FlowerToolPreviewRequest>();
+    const [toolPreview, { refetch: reloadToolPreview }] = createResource(previewRequest, (request) => props.adapter.loadToolPreview!(request));
+    createEffect(on(disclosureKey, () => setPreviewRequest(undefined)));
+    createEffect(() => {
+      if (!open() || !threadPreviewTool()) return;
+      const request = {
+        thread_id: trimString(timeline().thread_id),
+        turn_id: trimString(timeline().turn_id), run_id: trimString(timeline().run_id), tool_call_id: trimString(item().tool_id),
+      };
+      if (!Object.values(request).every(Boolean)) return;
+      if (JSON.stringify(untrack(previewRequest)) !== JSON.stringify(request)) setPreviewRequest(request);
+    });
+
     let toggleButtonRef: HTMLButtonElement | undefined;
     let detailPanelRef: HTMLDivElement | undefined;
     const staticActivityRef = (node: HTMLDivElement) => {
@@ -10545,58 +10561,64 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     {copy().chat.toolApprovalRejectedDetail}
                   </div>
                 </Show>
-                <Show when={!hasDetails()}>
-                  <div class="flower-activity-empty-detail">
-                    <p>{trimString(item().description) || presentation().label}</p>
-                    <p>{copy().chat.toolStatuses[item().status]}</p>
-                    <p class="flower-activity-empty-detail-hint">
-                      {item().status === 'pending' || item().status === 'running' || item().status === 'waiting'
-                        ? copy().chat.toolActivityDetailsPending
-                        : copy().chat.toolActivityNoAdditionalDetails}
-                    </p>
-                  </div>
+                <Show when={threadPreviewTool() && previewRequest()} fallback={null}>
+                  <FlowerThreadToolPreview preview={toolPreview.loading || toolPreview.error ? undefined : toolPreview()} loading={toolPreview.loading}
+                    failed={Boolean(toolPreview.error)} retry={() => { void reloadToolPreview(); }} copy={copy().chat} />
                 </Show>
-                {/* Keep the script input in a stable section when new results arrive. */}
-                <For each={['results', 'inputs', 'error'] as const}>{section => <div class="flower-activity-detail-section"><For each={detailKeys().filter(key => {
-                  const block = detailsByKey().get(key);
-                  return (block?.kind === 'error' ? 'error' : block?.kind === 'structured_rows' && block.section === 'inputs' ? 'inputs' : 'results') === section;
-                })}>
-                  {(detailKey) => {
-                    const block = createMemo(() => detailsByKey().get(detailKey)!);
-                    const terminalBlock = createMemo(() => (
-                      block().kind === 'terminal_output'
-                        ? block() as Extract<FlowerActivityDetailBlock, { kind: 'terminal_output' }>
-                        : null
-                    ));
-                    return (
-                      <>
-                        <Show when={terminalBlock()}>
-                          {(value) => (
-                            <TerminalOutputBlock
-                              context={() => ({
-                                ownerThreadID: trimString(selectedThreadID()),
-								renderThreadID: trimString(timeline().thread_id) || trimString(selectedThreadID()),
-                                runID: trimString(timeline().run_id),
-                                turnID: trimString(timeline().turn_id),
-                                messageID: messageID(),
-                                blockIndex: blockIndex(),
-                                itemID: trimString(item().item_id),
-                                toolID: trimString(item().tool_id),
-                              })}
-                              block={value}
-                              canonicalStatus={() => item().status}
-                              approvalState={() => item().approval_state}
-                              failureDetailPresent={() => presentation().detailBlocks.some(block => block.kind === 'error')}
-                            />
-                          )}
-                        </Show>
-                        <Show when={!terminalBlock()}>
-                          <ActivityDetailBlock threadID={timeline().thread_id ?? ''} block={block() as FlowerNonTerminalDetailBlock} />
-                        </Show>
-                      </>
-                    );
-                  }}
-                </For></div>}</For>
+                <Show when={!threadPreviewTool() || !previewRequest()}>
+                  <Show when={!hasDetails()}>
+                    <div class="flower-activity-empty-detail">
+                      <p>{trimString(item().description) || presentation().label}</p>
+                      <p>{copy().chat.toolStatuses[item().status]}</p>
+                      <p class="flower-activity-empty-detail-hint">
+                        {item().status === 'pending' || item().status === 'running' || item().status === 'waiting'
+                          ? copy().chat.toolActivityDetailsPending
+                          : copy().chat.toolActivityNoAdditionalDetails}
+                      </p>
+                    </div>
+                  </Show>
+                  {/* Keep the script input in a stable section when new results arrive. */}
+                  <For each={['results', 'inputs', 'error'] as const}>{section => <div class="flower-activity-detail-section"><For each={detailKeys().filter(key => {
+                    const block = detailsByKey().get(key);
+                    return (block?.kind === 'error' ? 'error' : block?.kind === 'structured_rows' && block.section === 'inputs' ? 'inputs' : 'results') === section;
+                  })}>
+                    {(detailKey) => {
+                      const block = createMemo(() => detailsByKey().get(detailKey)!);
+                      const terminalBlock = createMemo(() => (
+                        block().kind === 'terminal_output'
+                          ? block() as Extract<FlowerActivityDetailBlock, { kind: 'terminal_output' }>
+                          : null
+                      ));
+                      return (
+                        <>
+                          <Show when={terminalBlock()}>
+                            {(value) => (
+                              <TerminalOutputBlock
+                                context={() => ({
+                                  ownerThreadID: trimString(selectedThreadID()),
+                                  renderThreadID: trimString(timeline().thread_id) || trimString(selectedThreadID()),
+                                  runID: trimString(timeline().run_id),
+                                  turnID: trimString(timeline().turn_id),
+                                  messageID: messageID(),
+                                  blockIndex: blockIndex(),
+                                  itemID: trimString(item().item_id),
+                                  toolID: trimString(item().tool_id),
+                                })}
+                                block={value}
+                                canonicalStatus={() => item().status}
+                                approvalState={() => item().approval_state}
+                                failureDetailPresent={() => presentation().detailBlocks.some(block => block.kind === 'error')}
+                              />
+                            )}
+                          </Show>
+                          <Show when={!terminalBlock()}>
+                            <ActivityDetailBlock threadID={timeline().thread_id ?? ''} block={block() as FlowerNonTerminalDetailBlock} />
+                          </Show>
+                        </>
+                      );
+                    }}
+                  </For></div>}</For>
+                </Show>
               </div>
             </div>
           </div>

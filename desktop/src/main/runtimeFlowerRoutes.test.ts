@@ -209,3 +209,13 @@ it('allows authenticated staging binding only on the exact scope route', () => {
  for (const method of ['GET','POST','PUT','PATCH','DELETE'] as const) expect(runtimeFlowerMethodAllowed(path,method)).toBe(method === 'PATCH' || method === 'DELETE');
  expect(() => runtimeFlowerPath(path+'/extra')).toThrow();
 });
+
+describe('Flower saved tool preview route', () => {
+  it('allows only the bounded read request route', () => {
+    const path = '/_redeven_proxy/api/ai/threads/thread/tool-preview';
+    expect(runtimeFlowerPath(path)).toBe(path);
+    expect(runtimeFlowerMethodAllowed(path, 'POST')).toBe(true);
+    expect(runtimeFlowerMethodAllowed(path, 'GET')).toBe(false);
+    for (const suffix of ['?tool_id=call', '/child', '#fragment']) expect(() => runtimeFlowerPath(path + suffix)).toThrow();
+  });
+});

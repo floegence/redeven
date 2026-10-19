@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower activity disclosure interaction
 description: Keep native tool activation, disclosure state, viewport following, and floating controls consistent during live updates.
 tags: [ai, flower, activity, interaction, accessibility]
-timestamp: 2026-10-15T00:00:00Z
+timestamp: 2026-10-19T00:00:00Z
 ---
 # Summary
 
@@ -43,6 +43,16 @@ state does not require a backend migration or survive a browser restart.
 Triggers expose a pointer cursor, focus indication, `aria-expanded`, and
 `aria-controls`. Enter and Space retain native activation. Before closing a
 panel containing focus, the trigger receives focus with `preventScroll`.
+
+## Thread query and read details
+
+`Thread Query:` and `Thread Read:` are fixed English technical tool labels; their
+suffix preserves the model-authored invocation intent in the user's language.
+Historical calls without a description retain neutral titles. Expansion loads
+authorized saved results using exact timeline identities, shows key parameters
+in two columns and three short result excerpts, and supports local expansion
+and retry. See the [thread query contract](../ai/flower-thread-queries.md) for
+canonical lookup, privacy, server bounds and failure behavior.
 
 ## Web search details
 
@@ -113,32 +123,25 @@ multi-file reads, skills and saved sources retain meaningful content. Computer
 and browser activities use this common path, with authorized target/frame refs
 as supplemental controls. Text is never an attachment capability.
 
-Expanded inputs and results preserve literal whitespace. The current Floe Webapp
-v0.86.32's
-public `CodeBlock` owns highlighting, clipboard writes and accessible copy
-feedback; Flower owns bounded layout and stable disclosure. Scripts start as one
-compact command-style preview with a copy action; clicking expands the complete
-code. Existing terminal, editing, search, script, and other detail presenters
-retain their layout, copy actions, and independent scrolling. Only the previously
-missing thread-query, Computer target-discovery, and Tessiven runtime/service
-presenters use compact previews. They foreground the query or operation, omit
-parameter and status noise, and start with three entries and two-line text
-previews. One localized disclosure reveals the remaining supplied content.
-Absent preview data is stated explicitly and never mistaken for an empty tool
-result. Computer details show returned candidates with readable names and safe
-addresses, or actual page text, field values and controls. Localized semantic
-labels replace raw platform roles. Discovery keeps its default candidate in the
-initial three rows. Page changes remain identified as changes, not a complete
-snapshot. Results precede the retained literal script. Confirmation-only and
-verified blank-page results do not create redundant paragraphs or empty panels;
-the collapsed row carries the concise outcome. Partial execution, actionable
-failures, truncation, screenshots and missing historical details stay explicit.
-These mappings use existing structured Activity rows and chips; they introduce
-no storage or Floret API contract. An
-actionable failure suppresses the duplicate partial-output notice. English and
-all shipped locales provide action labels, missing-data notices and copy feedback. Model descriptions, filenames, scripts and actual output remain
-literal. Stable section keys and row slots retain DOM selection and expansion
-through result updates. Presentation is never execution or authorization input.
+Expanded inputs and results preserve whitespace. Floe Webapp's public `CodeBlock`
+owns highlighting, clipboard writes and accessible copy feedback; Flower owns
+bounded layout and stable disclosure. Scripts start with a compact command-style
+preview and copy action. Existing terminal, editing, search and script presenters
+retain their layouts and independent scrolling. Missing Computer target and
+Tessiven runtime/service presenters start with three entries and two-line previews;
+a localized control reveals remaining supplied content. Missing data is distinct
+from empty output.
+
+Computer details show readable candidates, safe addresses, page text, fields and
+controls using localized semantic roles. Discovery retains its default candidate
+in the initial three rows. Page changes are not complete snapshots. Results
+precede scripts. Confirmation-only and verified blank-page results add no empty
+panel; partial execution, failures, truncation, frames and missing historical
+details stay explicit. Actionable failures suppress duplicate partial-output
+notices. All locales provide action labels, missing-data and copy feedback; model
+descriptions, filenames, scripts and actual output remain literal. Stable section
+keys and row slots preserve selection and expansion during result updates.
+Presentation never supplies execution input or authorization.
 
 ## Viewport and gesture ownership
 

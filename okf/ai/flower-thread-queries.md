@@ -67,7 +67,31 @@ Query returns basic fields, hit summaries and exact opaque refs. Read returns
 full visible content in UTF-8 chunks of at most 16 KiB and responses of at most
 64 KiB, with explicit continuation instead of truncation. Confirmed tool inputs
 and results stay behind authorized tool reads; query tool payloads are excluded
-from ordinary Activity details and list/timeline DTOs.
+from ordinary Activity snapshots and list/timeline DTOs.
+
+Query and read accept an optional `description` for a brief invocation intent
+in the user's language. Flower prompts the model to supply it, preserves it
+through completion and restart, and renders fixed `Thread Query:` / `Thread Read:`
+prefixes. This display metadata is removed before typed canonical query decoding;
+it never changes filters, sorting, pagination or authorization. Historical calls
+without it retain neutral tool titles.
+
+Activity expansion uses `POST /api/ai/threads/{threadID}/tool-preview` with exact
+turn, run and tool-call identities. The service checks current read permission
+and thread ownership before the published `runtime.ThreadToolResultReader`
+lookup. It reads the saved confirmed invocation only, without redispatch, query
+cursor reuse, canonical mutation or another result store. Missing, mismatched,
+unauthorized or unsuccessful invocations return an unavailable preview.
+
+The separate preview response includes readable filters, effective limit and
+sort direction, total matches, record titles and excerpts. Read previews join
+contiguous UTF-8 body chunks and reuse tool presentation allowlists for confirmed
+arguments/results. Opaque refs, cursors, context and raw envelopes are omitted.
+The server returns at most ten result rows, 160 title characters and 1,200 content
+characters per row, with explicit truncation/continuation notices. The UI starts
+with three results and two-line excerpts, supports local expansion, and exposes
+loading and retry states. Historical results remain readable after restart even
+when original query refs have expired.
 
 ## Index and snapshots
 
@@ -95,5 +119,6 @@ expand it. This capability adds no product persistence or runtime lifecycle.
 - [Typed query tools](../../internal/ai/thread_query_tools.go), [exact run capabilities](../../internal/ai/run_host_capabilities.go) and [product metadata scope](../../internal/ai/threadstore/store.go).
 - [Authorization and frozen replay tests](../../internal/ai/thread_reference_query_test.go).
 - [Sort schema and error mapping tests](../../internal/ai/thread_query_tools_test.go) and [published-runtime correction coverage](../../internal/ai/thread_query_correction_test.go).
+- [Authorized saved preview](../../internal/ai/thread_tool_preview.go) and [canonical restart/bounds coverage](../../internal/ai/thread_tool_preview_test.go).
 - [Private Activity boundary](../../internal/ai/tool_activity_details.go) and [tool presentation registry](../../internal/ai/tools/registry.go).
 - [Composer references](../ui/flower-composer-references.md) owns the user-facing snapshot workflow.

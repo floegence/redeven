@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-19 — Readable thread tool Activity
+
+- Preserve model-authored query/read intent in fixed tool titles, and load bounded saved-result previews only on disclosure. Show key parameters, counts and excerpts while keeping private content out of ordinary Activity snapshots. See [queries](ai/flower-thread-queries.md) and [interaction](ui/flower-activity-interaction.md).
+
 ## 2026-10-19 — Canonical output sources
 
 - Adopt published Floret v7.65.0 and pass native output parts through the DeepSeek bridge. Preserve correction reasoning order, canonical takeover, restart identities and Flower interactions through the [typed adapter](ai/floret-redeven-adapter-and-projection.md).

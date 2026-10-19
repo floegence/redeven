@@ -115,8 +115,9 @@ func buildPromptStaticSections(spec promptProfileSpec, snapshot promptRuntimeSna
 	}
 	if promptToolAvailable(snapshot.AvailableToolNames, "threads.query") {
 		lines := []string{"# Conversation References", "- References contain frozen basic information, not history or access rights. Query only authorized referenced threads; never guess another Runtime. Read all pages before claiming completeness."}
+		lines = append(lines, "- Include a brief description of your intent in threads.query, in the user's language, for the Activity title.")
 		if promptToolAvailable(snapshot.AvailableToolNames, "threads.read") {
-			lines = append(lines, "- Use threads.read on returned refs for full authorized messages and tool facts.")
+			lines = append(lines, "- Use threads.read on returned refs for full authorized messages and tool facts; include a brief description of your reading intent for the Activity title.")
 		}
 		if promptToolAvailable(snapshot.AvailableToolNames, "threads.aggregate") {
 			lines = append(lines, "- Use threads.aggregate for exact authorized counts.")

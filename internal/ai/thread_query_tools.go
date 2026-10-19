@@ -51,6 +51,9 @@ func builtInThreadQueryToolDefinitions() []ToolDef {
 		return map[string]any{"object": map[string]any{"type": "string", "enum": []string{"threads", "messages", "tool_calls"}}, "filter": filter, "sort": ordering, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 200}, "cursor": str}
 	}
 	add := func(name, description string, properties map[string]any, required []string) ToolDef {
+		if name == "threads.query" || name == "threads.read" {
+			properties["description"] = map[string]any{"type": "string", "minLength": 1, "maxLength": 160, "description": "Brief user-facing intent in the user's language. Say what you are finding or reading; omit IDs and private excerpts."}
+		}
 		schema := object(properties)
 		schema["required"] = required
 		return ToolDef{Name: name, Description: description, InputSchema: toolSchemaRaw(schema), Visibility: ToolVisibilitySharedReadonly, Capabilities: []ToolCapabilityClass{ToolCapabilityReadonlyLocal}, Source: "builtin", Namespace: "builtin.threads", Priority: 100}
@@ -104,7 +107,12 @@ func (s *Service) execThreadQueryTool(ctx context.Context, meta *session.Meta, n
 		return nil, errors.New("thread query is unavailable")
 	}
 	decode := func(out any) error {
-		raw, err := json.Marshal(args)
+		queryArgs := args
+		if name == "threads.query" || name == "threads.read" {
+			queryArgs = cloneAnyMap(args)
+			delete(queryArgs, "description")
+		}
+		raw, err := json.Marshal(queryArgs)
 		if err != nil {
 			return err
 		}

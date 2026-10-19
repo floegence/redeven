@@ -1871,3 +1871,14 @@ describe('Goal activity presentation', () => {
     expect(result).toMatchObject({ label: 'Goal check failed', meta: 'Goal version changed.', detailBlocks: [{ kind: 'goal', text: 'Original objective', evidence: 'Goal version changed.' }] });
   });
 });
+
+
+describe('thread tool intent titles', () => {
+  it.each([['threads.query', 'Thread Query'], ['threads.read', 'Thread Read']])('shows the %s invocation description', (tool_name, prefix) => {
+    const result = presentFlowerActivityItem(item({ tool_name, renderer: 'structured', label: 'Find recent release discussions' }));
+    expect(result.title).toEqual({ kind: 'plain', text: `${prefix}: Find recent release discussions` });
+  });
+  it.each([['threads.query', 'Thread Query'], ['threads.read', 'Thread Read']])('keeps historical %s titles readable without an invented intent', (tool_name, prefix) => {
+    expect(presentFlowerActivityItem(item({ tool_name, renderer: 'structured', label: tool_name })).title).toEqual({ kind: 'plain', text: prefix });
+  });
+});

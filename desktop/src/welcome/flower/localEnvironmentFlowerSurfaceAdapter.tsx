@@ -58,6 +58,7 @@ import type {
   FlowerSubagentDetail,
   FlowerLiveStreamConnectInput,
   FlowerTerminalProcessSnapshot,
+  FlowerToolPreview,
   FlowerThreadReadStatus,
   FlowerWorkingDirectoryEntry,
   FlowerWorkingDirectoryListInput,
@@ -773,6 +774,10 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       operateSubagentInput: (parentThreadID, childThreadID, input) => runtimeJSON<Readonly<{ detail?: FlowerSubagentDetail }>>(
         bridge, 'POST',
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(parentThreadID)}/subagents/${encodeURIComponent(childThreadID)}/input`, input,
+      ),
+      loadToolPreview: (input) => runtimeJSON<FlowerToolPreview>(bridge, 'POST',
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(input.thread_id)}/tool-preview`,
+        { turn_id: input.turn_id, run_id: input.run_id, tool_call_id: input.tool_call_id },
       ),
       readTerminalProcess: (runID, processID, input) => {
         const params = new URLSearchParams();

@@ -174,3 +174,84 @@ it('keeps production rows compact and reveals concise facts on desktop and mobil
     more.click();
   }
 });
+
+it('loads saved thread tool details only on expansion and keeps the preview compact', async () => {
+  await page.viewport(1280, 1000);
+  const calls: unknown[] = [];
+  let resolveQuery!: (value: import('../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerToolPreview) => void;
+  const seed = thread({ thread_id: 'saved-query', title: 'Saved query', messages: [{
+    id: 'saved-message', turn_id: 'saved-turn', role: 'assistant', status: 'complete', content: '', created_at_ms: 2,
+    blocks: [activityTimeline({ thread_id: 'saved-query', turn_id: 'saved-turn', run_id: 'saved-run', status: 'success', items: [
+      activityItem({ item_id: 'query', tool_id: 'saved-call', tool_name: 'threads.query', renderer: 'structured', label: 'Find recent release discussions', payload: {}, started_at_unix_ms: 1000, ended_at_unix_ms: 3500 }),
+      activityItem({ item_id: 'read', tool_id: 'read-call', tool_name: 'threads.read', renderer: 'structured', label: 'Read the release plan', payload: {} }),
+      activityItem({ item_id: 'count', tool_id: 'count-call', tool_name: 'threads.aggregate', renderer: 'structured', label: 'threads.aggregate', payload: {} }),
+    ] })],
+  }] });
+  const surface = renderSurfaceWithAdapter({ ...adapter(), listThreads: async () => [seed], loadThread: async () => liveBootstrap(seed, 1),
+    loadToolPreview: async (request) => {
+      calls.push(request);
+      if (request.tool_call_id === 'saved-call') return new Promise(resolve => { resolveQuery = resolve; });
+      if (request.tool_call_id === 'read-call') return { tool_name: 'threads.read', inputs: [{ title: 'name', content: 'Release plan', format: 'text' }], rows: [{ title: 'body', content: 'The release is ready.\nValidation has passed.\nMore saved content remains available.', format: 'text' }], has_more: true };
+      return { tool_name: 'threads.aggregate', inputs: [{ title: 'object', content: 'messages', format: 'text' }], rows: [], total: 0, has_more: false };
+    },
+  });
+  await waitFor(() => Boolean(surface.querySelector('[data-thread-id="saved-query"] button')));
+  surface.querySelector<HTMLButtonElement>('[data-thread-id="saved-query"] button')!.click();
+  await waitFor(() => surface.querySelectorAll('[data-flower-disclosure-trigger]').length === 3);
+  expect(calls).toHaveLength(0);
+  const query = surface.querySelector('[data-flower-activity-item-id="query"]')!;
+  const trigger = query.querySelector<HTMLButtonElement>('[data-flower-disclosure-trigger]')!;
+  trigger.click();
+  await waitFor(() => query.textContent!.includes('Loading details'));
+  expect(calls).toEqual([{ thread_id: 'saved-query', turn_id: 'saved-turn', run_id: 'saved-run', tool_call_id: 'saved-call' }]);
+  resolveQuery({ tool_name: 'threads.query', inputs: [{ title: 'query', content: 'release', format: 'text' }, { title: 'object', content: 'messages', format: 'text' }], total: 18, has_more: true,
+    rows: Array.from({ length: 8 }, (_, index) => ({ title: `Release ${index + 1}`, content: 'Ready for review.\nValidation has passed.\nThe full saved snippet remains behind the preview.', format: 'text' as const })),
+  });
+  await waitFor(() => query.textContent!.includes('Matches: 18'));
+  expect(query.textContent).toContain('Thread Query: Find recent release discussions');
+  expect(query.querySelector('dt')?.textContent).toBe('Search terms');
+  expect(query.querySelector('dd')?.textContent).toBe('release');
+  expect(query.textContent).toContain('TypeMessages');
+  expect(query.querySelectorAll('[data-activity-section="results"] .flower-activity-preview-row')).toHaveLength(3);
+  expect(query.textContent).not.toContain('Release 4');
+  query.querySelector<HTMLButtonElement>('[data-activity-section="results"] .flower-activity-detail-expand')!.click();
+  expect(query.textContent).toContain('Release 8');
+  trigger.click();
+  await waitFor(() => query.getAttribute('data-state') === 'closed');
+  trigger.click();
+  await waitFor(() => query.textContent!.includes('Release 1'));
+  expect(calls).toHaveLength(1);
+  surface.querySelector<HTMLButtonElement>('[data-flower-activity-item-id="read"] [data-flower-disclosure-trigger]')!.click();
+  surface.querySelector<HTMLButtonElement>('[data-flower-activity-item-id="count"] [data-flower-disclosure-trigger]')!.click();
+  await waitFor(() => surface.textContent!.includes('The release is ready.') && surface.textContent!.includes('Matches: 0'));
+  expect(surface.textContent).not.toContain('This tool did not provide');
+  expect(surface.textContent).toContain('Thread Read: Read the release plan');
+  expect(query.querySelector('.flower-activity-inline-duration')?.textContent).toBe('3s');
+  for (const width of [1280, 390]) {
+    await page.viewport(width, 1000);
+    await page.screenshot({ element: surface, path: `__screenshots__/flower-thread-preview-${width}.png` });
+    expect(surface.scrollWidth).toBeLessThanOrEqual(surface.clientWidth + 1);
+  }
+});
+
+it('lets the user retry a failed saved preview without replacing canonical tool status', async () => {
+  await page.viewport(1280, 1000);
+  let attempts = 0;
+  const seed = thread({ thread_id: 'preview-retry', messages: [{ id: 'm', role: 'assistant', status: 'complete', content: '', created_at_ms: 2,
+    blocks: [activityTimeline({ thread_id: 'preview-retry', turn_id: 'turn', run_id: 'run', items: [activityItem({ item_id: 'query', tool_id: 'call', tool_name: 'threads.query', renderer: 'structured', payload: {}, status: 'success' })] })],
+  }] });
+  const surface = renderSurfaceWithAdapter({ ...adapter(), listThreads: async () => [seed], loadThread: async () => liveBootstrap(seed, 1), loadToolPreview: async () => {
+    if (++attempts === 1) throw new Error('unavailable');
+    return { tool_name: 'threads.query', inputs: [], rows: [], total: 0, has_more: false };
+  } });
+  await waitFor(() => Boolean(surface.querySelector('[data-thread-id="preview-retry"] button')));
+  surface.querySelector<HTMLButtonElement>('[data-thread-id="preview-retry"] button')!.click();
+  await waitFor(() => Boolean(surface.querySelector('[data-flower-disclosure-trigger]')));
+  surface.querySelector<HTMLButtonElement>('[data-flower-disclosure-trigger]')!.click();
+  await waitFor(() => surface.textContent!.includes('Could not load details.'));
+  const row = surface.querySelector('[data-flower-activity-item-id="query"]')!;
+  expect(row.getAttribute('data-flower-activity-status')).toBe('success');
+  row.querySelector<HTMLButtonElement>('.flower-activity-detail-expand')!.click();
+  await waitFor(() => row.textContent!.includes('Matches: 0'));
+  expect(attempts).toBe(2);
+});
