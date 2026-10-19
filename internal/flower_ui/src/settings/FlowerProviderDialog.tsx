@@ -7,7 +7,7 @@ import { ModelCatalogControls } from './ModelCatalogControls';
 import { applyFlowerModelDiscovery, cloneFlowerModel, filterFlowerModels, flowerProviderModelChoices, setFlowerModelsEnabled } from './modelSelection';
 import { flowerModelSupportsImage, formatFlowerTokenCount } from '../flowerModelLabel';
 import type { FlowerChatGPTAuth, FlowerChatGPTAccount, FlowerModelCatalogDiscovery } from '../contracts/flowerSurfaceContracts';
-import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, untrack } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, untrack, type JSX } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
 import { cn } from '@floegence/floe-webapp-core';
 import { Check, ChevronDown, ExternalLink, Info, Pencil, Save } from '@floegence/floe-webapp-core/icons';
@@ -75,7 +75,18 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
     ? store.draft.search_policy : props.searchPolicies?.[store.draft?.type ?? 'openai'];
   const providerSearch = () => store.draft?.web_search ?? (searchPolicy() ? { enabled: searchPolicy()!.enabled, source: searchPolicy()!.source } : undefined);
   const recommended = (enabled: boolean) => enabled ? copy().catalog.searchRecommendedOn : copy().catalog.searchRecommendedOff;
-  const SearchInfo = (info: { text: string }) => <Tooltip content={info.text} placement="bottom" delay={0} class="!whitespace-normal w-64 max-w-[75vw]"><button type="button" class="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded text-muted-foreground hover:text-foreground" aria-label={copy().webSearch} onClick={event => event.currentTarget.focus()} on:keydown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); event.currentTarget.blur(); } }}><Info class="h-3.5 w-3.5" aria-hidden="true" /></button></Tooltip>;
+  const FieldInfo = (info: { label: string; text: string | readonly string[]; alignEnd?: boolean; children?: JSX.Element }) => (
+    <Tooltip content={<div class="space-y-2"><For each={typeof info.text === 'string' ? [info.text] : info.text}>{text => <p>{text}</p>}</For></div>}
+      placement="bottom" delay={0} class={cn('!whitespace-normal w-64 max-w-[75vw] !translate-x-0', info.alignEnd ? '!left-auto !right-0' : '!left-0')}>
+      <span class="inline-flex min-w-0 items-center gap-1" on:keydown={event => {
+        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); (event.target as HTMLElement).blur(); }
+      }}>
+        {info.children}
+        <button type="button" class="inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          aria-label={info.label} onClick={event => event.currentTarget.focus()}><Info class="h-3.5 w-3.5" aria-hidden="true" /></button>
+      </span>
+    </Tooltip>
+  );
   const canChangeType = () => props.mode === 'create' || props.allowTypeChange === true;
   const [query, setQuery] = createSignal('');
   const [loading, setLoading] = createSignal(false);
@@ -790,11 +801,14 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                         </div>
                       </Show>
                     </Show>
+                  </div>
+                  <div class="flower-provider-web-controls">
                     <div data-flower-provider-search>
-                      <div class="flex items-center gap-1">
+                      <FieldInfo label={copy().webSearch} text={store.draft!.type === 'deepseek'
+                        ? [copy().catalog.searchProviderHint + ' ' + recommended(searchPolicy()?.default_enabled ?? false), copy().catalog.deepSeekSearchHint, copy().catalog.deepSeekCostHint]
+                        : copy().catalog.searchProviderHint + ' ' + recommended(searchPolicy()?.default_enabled ?? false)}>
                         <Checkbox checked={providerSearch()?.enabled ?? false} disabled={!searchPolicy()?.editable} label={copy().webSearch} size="sm" onChange={enabled => updateProvider({ web_search: { enabled, source: providerSearch()?.source ?? 'native' } })} />
-                        <SearchInfo text={copy().catalog.searchProviderHint + ' ' + recommended(searchPolicy()?.default_enabled ?? false)} />
-                      </div>
+                      </FieldInfo>
                       <Show when={!searchPolicy()?.editable}><p class="flower-body-copy text-muted-foreground">{copy().catalog.searchNotIntegrated}</p></Show>
                       <Show when={searchPolicy()?.supported_sources?.length && searchPolicy()!.supported_sources.length > 1}>
                         <Select value={providerSearch()?.source ?? 'native'} onChange={value => updateProvider({ web_search: { enabled: providerSearch()?.enabled ?? false, source: value as 'native' | 'brave' } })}
@@ -802,18 +816,17 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                       </Show>
                     </div>
                     <Show when={store.draft!.type === 'deepseek'}>
-                      <div class="space-y-2" data-flower-provider-fetch>
-                        <p class="flower-body-copy text-muted-foreground">{copy().catalog.deepSeekSearchHint}</p>
-                        <FlowerFieldLabel>{copy().catalog.fetchLabel}</FlowerFieldLabel>
+                      <div class="flower-provider-fetch-control" data-flower-provider-fetch role="group" aria-label={copy().catalog.fetchLabel}>
+                        <FieldInfo label={copy().catalog.fetchLabel} text={[copy().catalog.deepSeekFetchHint, copy().catalog.deepSeekCostHint]}>
+                          <span class="text-xs font-medium text-muted-foreground">{copy().catalog.fetchLabel}</span>
+                        </FieldInfo>
                         <Select value={store.draft!.web_fetch?.source ?? 'direct'}
                           onChange={value => updateProvider({ web_fetch: { source: value as 'direct' | 'deepseek' } })}
-                          options={[{ value: 'direct', label: copy().catalog.fetchDirect }, { value: 'deepseek', label: copy().catalog.fetchDeepSeek }]} class="w-full" />
-                        <p class="flower-body-copy text-muted-foreground">{copy().catalog.deepSeekFetchHint}</p>
-                        <p class="flower-body-copy text-muted-foreground">{copy().catalog.deepSeekCostHint}</p>
+                          options={[{ value: 'direct', label: copy().catalog.fetchDirect }, { value: 'deepseek', label: copy().catalog.fetchDeepSeek }]} />
                       </div>
                     </Show>
                     <Show when={providerSearch()?.source === 'brave'}>
-                      <div>
+                      <div class="flower-provider-brave-key">
                         <FlowerFieldLabel hint={braveKeyHint()}>
                           {copy().braveAPIKey}
                         </FlowerFieldLabel>
@@ -843,6 +856,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                 <Show when={connectionReady()}><section class="flower-provider-models">
                   <div class="flower-provider-section-heading">
                     <h3>{copy().recommendedModelsTitle}</h3>
+                    <FieldInfo label={copy().recommendedModelsTitle} text={copy().catalog.selectionHint} alignEnd />
                   </div>
                   <Show when={store.draft?.model_selection && !store.draft.model_selection.selected_models}><p role="status" class="flower-body-copy text-muted-foreground">{copy().catalog.selectionReview}</p></Show>
                   <ModelCatalogControls hasContent={catalog().length > 0} copy={copy().catalog} query={query()} count={store.draft!.models.length} onQuery={setQuery} onSelectAll={addAllPresets} onClear={() => setEnabled(store.draft?.models ?? [], false)} loading={loading()} error={discoveryError()} onRefresh={props.onDiscoverModels ? discover : undefined} />
@@ -945,12 +959,11 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                       <ManualModelCapabilities model={model()} type={store.draft!.type} baseURL={store.draft!.base_url || defaultBaseURLForFlowerProviderType(store.draft!.type)} copy={copy().catalog} onChange={patch => { if (modelIndex() >= 0) updateModel(modelIndex(), patch); }} />
                                     </Show>
                                     <div class="md:col-span-4" data-flower-model-search>
-                                      <div class="flex items-center gap-1">
+                                      <FieldInfo label={copy().webSearch} text={copy().catalog.searchModelHint + ' ' + recommended(model().web_search?.recommended_enabled ?? searchPolicy()?.default_model_enabled ?? false)}>
                                         <Checkbox label={copy().webSearch} size="sm" disabled={!searchPolicy()?.editable}
                                           checked={model().web_search_enabled ?? model().web_search?.recommended_enabled ?? searchPolicy()?.default_model_enabled ?? false}
                                           onChange={web_search_enabled => { if (modelIndex() >= 0) updateModel(modelIndex(), { web_search_enabled }); }} />
-                                        <SearchInfo text={copy().catalog.searchModelHint + ' ' + recommended(model().web_search?.recommended_enabled ?? searchPolicy()?.default_model_enabled ?? false)} />
-                                      </div>
+                                      </FieldInfo>
                                       <Show when={!searchPolicy()?.editable} fallback={<Show when={!providerSearch()?.enabled}><p class="flower-body-copy text-muted-foreground">{copy().catalog.searchProviderOff}</p></Show>}><p class="flower-body-copy text-muted-foreground">{copy().catalog.searchNotIntegrated}</p></Show>
                                     </div>
                                     <div class="md:col-span-3">

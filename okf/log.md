@@ -8,6 +8,10 @@
 
 - Adopt Floret v7.67.1 current-context snapshots; unify detail/live projection, preserve canonical divider order and explicit turn ownership, and fold automatic compactions with execution processes. Remove usage-only transport and obsolete draft anchors. See [context compaction](ai/model-context-usage-and-compaction.md).
 
+## 2026-10-19 — Compact DeepSeek provider settings
+
+- Align search and page reading below connection fields, move explanatory guidance into accessible contextual help, and preserve narrow-screen layout and settings recovery in [provider configuration](ui/flower-provider-configuration.md).
+
 ## 2026-10-19 — DeepSeek search and page reading
 
 - Adopt published Floret v7.66.1 DeepSeek Flash Search, Pro hosted search and explicit Fetch; document source freeze, live credentials and shared settings.
