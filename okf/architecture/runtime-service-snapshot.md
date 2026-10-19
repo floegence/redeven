@@ -43,6 +43,14 @@ The upgrade window retains earlier reviewed epochs and includes 57 and 58.
 Runtime Service wire protocol and storage schemas do not change. Registration
 semantics belong to the [ChatGPT account lifecycle](../ai/chatgpt-account-lifecycle.md).
 
+# Web-default policy compatibility
+
+Epoch 65 requires the model directory's backend-owned default_fetch_source field
+in provider search policies. Earlier Desktop or Runtime peers enter the existing
+update flow before Flower configuration reads. Explicit user preferences and
+frozen Turn bindings retain their existing owners; Runtime protocol and storage
+schemas do not change. See [model web search](../ai/model-web-search.md).
+
 # Evidence
 
 - `redeven:internal/runtimeservice/snapshot.go:1` - Runtime Service snapshot and independent protocol identifier.

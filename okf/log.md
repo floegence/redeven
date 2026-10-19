@@ -3,6 +3,7 @@
 ## 2026-10-19 — Consistent DeepSeek web defaults
 
 - Keep search enabled by default and select DeepSeek Fetch when search is on and no reader is specified. Preserve explicit search and reader preferences, canonical frozen Turn bindings, and backend-owned defaults in [model web search](ai/model-web-search.md) and [provider configuration](ui/flower-provider-configuration.md).
+- Advance [Runtime compatibility](architecture/runtime-service-snapshot.md) to epoch 65 for the required default_fetch_source projection; older peers retain the existing upgrade path instead of receiving frontend substitutes.
 
 ## 2026-10-19 — Responsive Flower conversation selection
 

@@ -42,6 +42,9 @@ recommended_enabled and model_enabled. Reasons identify provider or model
 disablement, missing credentials, unsupported and unintegrated adapters. Frontends
 do not infer support from brands, endpoints or model names. Draft changes show a
 pending badge until the backend projects the saved state.
+Runtime compatibility epoch 65 requires the backend default_fetch_source policy
+field; earlier Desktop or Runtime peers use the existing update flow before
+opening Flower. The UI does not substitute a brand-based reader default.
 
 Only configuration decoding accepts the released mode shape. Startup atomically
 writes the canonical shape before publishing configuration; failed persistence

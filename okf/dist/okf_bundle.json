@@ -1522,7 +1522,7 @@
               "runtime-service"
             ],
             "summary": "The Runtime Service snapshot is a typed boundary between Runtime, Desktop, Local UI, and optional Gateway supervision. Runtime protocol/version, compatibility epoch, capabilities, service readiness, and workload identity are explicit facts. Gateway is optional for Runtime startup and ordinary access; its absence only closes Redeven-managed lifecycle actions.",
-            "section_count": 4
+            "section_count": 5
           },
           {
             "concept_id": "architecture.runtime-session-permission-gates",
@@ -12412,15 +12412,15 @@
         "title": "Model web search",
         "type": "AI Capability Contract"
       },
-      "body_length": 5517,
+      "body_length": 5746,
       "summary": "Redeven owns provider and model search preferences. One backend resolver supplies\nsettings projections and Turn preparation; the final tool surface drives prompts\nand wire declarations. Floret v7.40.2 validates hosted events against the actual\nfrozen provider request. Undeclared hosted execution remains a provider failure\nbecause its remote effects cannot be assumed absent.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Provider configuration is web_search with enabled and source fields; source is\nnative or brave. Model intent is optional web_search_enabled in existing model\noverrides or custom-model configuration. Both switches must be enabled. Missing\nmodel intent uses the backend recommendation; explicit true or false wins without\nanother catalog allowlist. Authenticated account membership, adapter availability,\ncredentials, tool restrictions and permissions still apply.\n\nOpenAI, including custom endpoints, Moonshot, Z.ai, DeepSeek and Qwen default provider search\non. Generic OpenAI-compatible defaults off and alone supports Brave. Unintegrated\nadapters stay off and cannot be enabled. Reviewed supported models default on;\nother reviewed models default off. Unknown custom OpenAI/compatible models default\non, while other custom models default off. The reviewed catalog records supplier\nevidence and adapter protocols; it supplies recommendations rather than overriding\nexplicit preferences. DeepSeek uses the published Floret capability query for\nFlash independent Search and Pro hosted search; unknown wire identities cannot\nbe enabled. No second host routing catalog exists.\n\nconfig.ResolveAIWebSearchPolicy supplies provider defaults, the default page-reader\nsource and editor capability;\nconfig.ResolveAIWebSearch resolves the configured model identity, aliases,\nprovider/model intent and Brave key presence. Directory responses include provider\npolicies and model web_search projections with status, reason,\nrecommended_enabled and model_enabled. Reasons identify provider or model\ndisablement, missing credentials, unsupported and unintegrated adapters. Frontends\ndo not infer support from brands, endpoints or model names. Draft changes show a\npending badge until the backend projects the saved state.\n\nOnly configuration decoding accepts the released mode shape. Startup atomically\nwrites the canonical shape before publishing configuration; failed persistence\npublishes no upgraded configuration. Migration preserves explicit disablement,\nBrave selection, keys, model selection and overrides. Runtime has one decision\npath. Disabling search or changing its source retains stored keys. Only explicit\nkey deletion or removal of the provider deletes a stored key.\n\nTurn preparation freezes hosted search as Floret HostedToolDefinition; Brave and\nDeepSeek independent Search are native Floret local tools under existing\npermission checks. With provider search enabled, an omitted page-reader setting\nuses the backend default: DeepSeek Fetch for DeepSeek connections and Direct for\nother connections. With search disabled, omission selects Direct. An explicit\nDirect or DeepSeek Fetch choice remains authoritative across search toggles.\nSource bindings live only in the canonical\nfirst-provider surface annotations; keys resolve at dispatch. The prompt reads the final local\nand hosted tools. Browser search is an alternative only when computer/browser\ntools are present and the existing authorized target discovery and selection\nprotocol permits it. URL fetching alone cannot discover URLs. Missing local tools\nreceive paired model feedback; the model chooses an available alternative. The\nhost does not add a fallback scheduler. Permission denial, blocked URLs and\nunknown tool effects retain their stop boundaries.\n\nWaiting and running Turns keep their frozen provider configuration through\ncontinuation and restart. New Turns and manual canonical retries resolve current\nsettings. Titles omit hosted tools without changing the selected Turn transport;\nattachment routing uses the same transport decision. Adapters declare only the\nrequest's hosted tools, and native events absent from that request are rejected.\nThey are never accepted as missing local tools or automatically replayed.\n\nCanonical provider failures, including unrecognized messages and historical\nfailures, receive provider recovery actions. Settings targets the selected\nthread's current provider/model; save or cancel returns to that chat. Save failure\nretains the draft; repeated save/retry clicks coalesce while pending. Retrying is\nmanual through Floret canonical retry, preserving confirmed results. Unknown\neffects never receive this retry action. Diagnostics expose reviewed structured\nfields or a safe typed classification, never arbitrary upstream error text.",
-          "char_count": 4340
+          "body": "Provider configuration is web_search with enabled and source fields; source is\nnative or brave. Model intent is optional web_search_enabled in existing model\noverrides or custom-model configuration. Both switches must be enabled. Missing\nmodel intent uses the backend recommendation; explicit true or false wins without\nanother catalog allowlist. Authenticated account membership, adapter availability,\ncredentials, tool restrictions and permissions still apply.\n\nOpenAI, including custom endpoints, Moonshot, Z.ai, DeepSeek and Qwen default provider search\non. Generic OpenAI-compatible defaults off and alone supports Brave. Unintegrated\nadapters stay off and cannot be enabled. Reviewed supported models default on;\nother reviewed models default off. Unknown custom OpenAI/compatible models default\non, while other custom models default off. The reviewed catalog records supplier\nevidence and adapter protocols; it supplies recommendations rather than overriding\nexplicit preferences. DeepSeek uses the published Floret capability query for\nFlash independent Search and Pro hosted search; unknown wire identities cannot\nbe enabled. No second host routing catalog exists.\n\nconfig.ResolveAIWebSearchPolicy supplies provider defaults, the default page-reader\nsource and editor capability;\nconfig.ResolveAIWebSearch resolves the configured model identity, aliases,\nprovider/model intent and Brave key presence. Directory responses include provider\npolicies and model web_search projections with status, reason,\nrecommended_enabled and model_enabled. Reasons identify provider or model\ndisablement, missing credentials, unsupported and unintegrated adapters. Frontends\ndo not infer support from brands, endpoints or model names. Draft changes show a\npending badge until the backend projects the saved state.\nRuntime compatibility epoch 65 requires the backend default_fetch_source policy\nfield; earlier Desktop or Runtime peers use the existing update flow before\nopening Flower. The UI does not substitute a brand-based reader default.\n\nOnly configuration decoding accepts the released mode shape. Startup atomically\nwrites the canonical shape before publishing configuration; failed persistence\npublishes no upgraded configuration. Migration preserves explicit disablement,\nBrave selection, keys, model selection and overrides. Runtime has one decision\npath. Disabling search or changing its source retains stored keys. Only explicit\nkey deletion or removal of the provider deletes a stored key.\n\nTurn preparation freezes hosted search as Floret HostedToolDefinition; Brave and\nDeepSeek independent Search are native Floret local tools under existing\npermission checks. With provider search enabled, an omitted page-reader setting\nuses the backend default: DeepSeek Fetch for DeepSeek connections and Direct for\nother connections. With search disabled, omission selects Direct. An explicit\nDirect or DeepSeek Fetch choice remains authoritative across search toggles.\nSource bindings live only in the canonical\nfirst-provider surface annotations; keys resolve at dispatch. The prompt reads the final local\nand hosted tools. Browser search is an alternative only when computer/browser\ntools are present and the existing authorized target discovery and selection\nprotocol permits it. URL fetching alone cannot discover URLs. Missing local tools\nreceive paired model feedback; the model chooses an available alternative. The\nhost does not add a fallback scheduler. Permission denial, blocked URLs and\nunknown tool effects retain their stop boundaries.\n\nWaiting and running Turns keep their frozen provider configuration through\ncontinuation and restart. New Turns and manual canonical retries resolve current\nsettings. Titles omit hosted tools without changing the selected Turn transport;\nattachment routing uses the same transport decision. Adapters declare only the\nrequest's hosted tools, and native events absent from that request are rejected.\nThey are never accepted as missing local tools or automatically replayed.\n\nCanonical provider failures, including unrecognized messages and historical\nfailures, receive provider recovery actions. Settings targets the selected\nthread's current provider/model; save or cancel returns to that chat. Save failure\nretains the draft; repeated save/retry clicks coalesce while pending. Retrying is\nmanual through Floret canonical retry, preserving confirmed results. Unknown\neffects never receive this retry action. Diagnostics expose reviewed structured\nfields or a safe typed classification, never arbitrary upstream error text.",
+          "char_count": 4569
         },
         {
           "id": "boundaries",
@@ -12451,6 +12451,12 @@
           "path": "ai/model-directory-and-selection.md",
           "concept_id": "ai.model-directory-and-selection",
           "title": "Model directory and selection"
+        },
+        {
+          "label": "Runtime Service snapshot",
+          "path": "architecture/runtime-service-snapshot.md",
+          "concept_id": "architecture.runtime-service-snapshot",
+          "title": "Runtime Service snapshot"
         },
         {
           "label": "Redeven OKF Bundle",
@@ -21036,7 +21042,7 @@
         "title": "Runtime Service snapshot",
         "type": "Runtime Contract"
       },
-      "body_length": 5226,
+      "body_length": 5656,
       "summary": "The Runtime Service snapshot is a typed boundary between Runtime, Desktop, Local UI, and optional Gateway supervision. Runtime protocol/version, compatibility epoch, capabilities, service readiness, and workload identity are explicit facts. Gateway is optional for Runtime startup and ordinary access; its absence only closes Redeven-managed lifecycle actions.",
       "sections": [
         {
@@ -21066,6 +21072,13 @@
           "level": 1,
           "body": "Epoch 59 pairs Runtime authorization requests with the shared Desktop and Env App\nOpenAI account picker. A saved registry requires an account selection or explicit\nnew-registration intent; old Desktop clients must update before Flower access.\nThe upgrade window retains earlier reviewed epochs and includes 57 and 58.\nRuntime Service wire protocol and storage schemas do not change. Registration\nsemantics belong to the [ChatGPT account lifecycle](../ai/chatgpt-account-lifecycle.md).",
           "char_count": 484
+        },
+        {
+          "id": "web-default-policy-compatibility",
+          "title": "Web-default policy compatibility",
+          "level": 1,
+          "body": "Epoch 65 requires the model directory's backend-owned default_fetch_source field\nin provider search policies. Earlier Desktop or Runtime peers enter the existing\nupdate flow before Flower configuration reads. Explicit user preferences and\nfrozen Turn bindings retain their existing owners; Runtime protocol and storage\nschemas do not change. See [model web search](../ai/model-web-search.md).",
+          "char_count": 392
         }
       ],
       "evidence": [
@@ -21131,6 +21144,12 @@
           "path": "ai/chatgpt-account-lifecycle.md",
           "concept_id": "ai.chatgpt-account-lifecycle",
           "title": "ChatGPT account lifecycle"
+        },
+        {
+          "label": "model web search",
+          "path": "ai/model-web-search.md",
+          "concept_id": "ai.model-web-search",
+          "title": "Model web search"
         },
         {
           "label": "reasoning selection contract",
@@ -44473,5 +44492,5 @@
       ]
     }
   ],
-  "source_sha256": "fd9c14b03ba2706f0ff4f06291f405e275c13effb5047d7945dc0e1e3ee83799"
+  "source_sha256": "d0438082a0a6e6714a6531bb504abd3b1501aef1805f892362ca30a3ded78132"
 }
