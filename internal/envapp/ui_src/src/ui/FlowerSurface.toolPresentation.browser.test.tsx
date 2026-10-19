@@ -20,8 +20,8 @@ it('animates every tool type and restores static glyphs at settlement', async ()
   document.body.append(host);
   const dispose = render(() => <For each={toolNames}>{name => <div style="display:flex;align-items:center;gap:12px;height:28px">
     <FlowerToolIcon toolName={name} running={running()} /><code>{name}</code>
-    <span style="margin-left:auto;color:var(--flower-activity-tool-row-ok)"><FlowerToolIcon toolName={name} running={false} /></span>
-    <span style="color:var(--flower-activity-tool-row-error)"><FlowerToolIcon toolName={name} running={false} /></span>
+    <span style="margin-left:auto;color:var(--flower-activity-tool-row-quiet)"><FlowerToolIcon toolName={name} running={false} /></span>
+    <span style="color:var(--flower-activity-tool-row-quiet)"><FlowerToolIcon toolName={name} running={false} /></span>
   </div>}</For>, host);
   try {
     await waitFor(() => host.getAnimations({ subtree: true }).length > toolNames.length);
