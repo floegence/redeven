@@ -4768,6 +4768,49 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		serveAIFlowerLiveStream(w, r, aiSvc, meta)
 		return
 
+	case (r.Method == http.MethodGet || r.Method == http.MethodPatch) && r.URL.Path == "/_redeven_proxy/api/ai/conversation_preferences":
+		permission := requiredPermissionRead
+		if r.Method == http.MethodPatch {
+			permission = requiredPermissionFull
+		}
+		meta, ok := g.requirePermission(w, r, permission)
+		if !ok || !g.requireAIService(w, aiSvc) {
+			return
+		}
+		if r.Method == http.MethodGet {
+			preferences, err := aiSvc.GetConversationPreferences(r.Context(), meta)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: preferences})
+			return
+		}
+		var patch ai.ConversationPreferencePatch
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&patch); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		if err := dec.Decode(&struct{}{}); err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		preferences, err := aiSvc.PatchConversationPreferences(r.Context(), meta, patch)
+		if err != nil {
+			status := http.StatusBadRequest
+			if errors.Is(err, threadstore.ErrConversationPreferenceConflict) {
+				status = http.StatusConflict
+			}
+			g.appendAudit(meta, "ai_conversation_preferences_update", "failure", nil, err)
+			writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		g.appendAudit(meta, "ai_conversation_preferences_update", "success", nil, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: preferences})
+		return
+
 	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/ai/current_model":
 		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 		if !ok {

@@ -4,6 +4,7 @@ import './flower-feature.css';
 
 import { Show, createContext, createEffect, createSignal, onCleanup, onMount, useContext } from 'solid-js';
 import { Portal, render } from 'solid-js/web';
+import type { FlowerTurnLaunchInput } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import { CommandProvider, ComponentRegistryProvider, useComponentRegistry, FloeConfigProvider, LayoutProvider } from '@floegence/floe-webapp-core';
@@ -47,13 +48,15 @@ const mintLocalDirectConnectArtifactMock = vi.fn();
 const connectArtifactEntryMock = vi.fn();
 const createLocalDirectArtifactSourceMock = vi.fn(() => Object.freeze({ acquire: mintLocalDirectConnectArtifactMock }));
 const createEnvProxyArtifactSourceMock = vi.fn(() => Object.freeze({ acquire: connectArtifactEntryMock }));
-const flowerLaunchTurnMock = vi.fn(async () => ({
+const flowerLaunchTurnMock = vi.fn(async (_input: FlowerTurnLaunchInput) => ({
   client_request_id: 'client_launcher_request',
   thread_id: 'thread-launched',
   turn_id: 'turn-launched',
   run_id: 'run-launched',
   kind: 'start' as const,
 }));
+let flowerLauncherPreferenceRevision = 1;
+const flowerLauncherSettingsMock = vi.fn(async () => ({ defaults: { permission_type: 'approval_required' }, model_profile: null, provider_secrets: [], conversation_preferences: { revision: flowerLauncherPreferenceRevision, model_id: flowerLauncherPreferenceRevision === 1 ? 'provider/model-a' : 'provider/model-b', working_dir: '/remembered', reasoning_by_model: { 'provider/model-a': { level: 'default', budget_tokens: 4096 } } } }));
 const activityDialogUnderlayActionMock = vi.fn();
 const workbenchDialogUnderlayActionMock = vi.fn();
 
@@ -870,7 +873,11 @@ vi.mock('./widgets/FlowerTurnLauncherWindow', () => ({
   ),
 }));
 vi.mock('./flower/envLocalFlowerSurfaceAdapter', () => ({
-  createEnvLocalFlowerSurfaceAdapter: () => ({ launchTurn: flowerLaunchTurnMock }),
+  createEnvLocalFlowerSurfaceAdapter: () => ({
+    launchTurn: flowerLaunchTurnMock,
+    loadSettings: flowerLauncherSettingsMock,
+    getWorkingDirectoryPathContext: async () => ({ agentHomePathAbs: '/home', homePathAbs: '/home', defaultRootId: 'home', roots: [] }),
+  }),
 }));
 vi.mock('./notes/NotesOverlay', () => ({ NotesOverlay: () => <div /> }));
 vi.mock('./pages/EnvSettingsPage', () => ({ EnvSettingsPage: () => <div /> }));
@@ -1165,6 +1172,7 @@ beforeEach(() => {
   activityFlowerPresence = runningActivityFlowerPresence();
   uiStorageItems.clear();
   flowerLaunchTurnMock.mockReset();
+  flowerLauncherPreferenceRevision = 1;
   flowerLaunchTurnMock.mockResolvedValue({
     client_request_id: 'client_launcher_request',
     thread_id: 'thread-launched',
@@ -1365,6 +1373,25 @@ describe('EnvAppShell Activity Flower browser integration', () => {
       if (original) Object.defineProperty(window, 'visualViewport', original);
       else Reflect.deleteProperty(window, 'visualViewport');
     }
+  });
+
+  it('keeps prepared Ask Flower settings when retrying unknown admission after personal preferences change', async () => {
+    testRealFlowerLauncher = true;
+    flowerLaunchTurnMock.mockRejectedValueOnce(Object.assign(new Error('response lost'), { admission_kind: 'unknown' }));
+    await mountShell();
+    await userEvent.click(document.querySelector<HTMLButtonElement>('[data-testid="activity-open-flower-launcher"]')!);
+    await vi.waitFor(() => expect(document.querySelector('.flower-turn-launcher-window textarea')).toBeTruthy());
+    await userEvent.fill(document.querySelector<HTMLTextAreaElement>('.flower-turn-launcher-window textarea')!, 'inspect with frozen preferences');
+    const send = () => document.querySelector<HTMLButtonElement>('[data-testid="flower-turn-launcher-inline-send"]')!;
+    await userEvent.click(send());
+    await vi.waitFor(() => expect(document.querySelector('.flower-turn-launcher-unknown')).toBeTruthy());
+    const first = flowerLaunchTurnMock.mock.calls[0]?.[0];
+    flowerLauncherPreferenceRevision = 2;
+    await userEvent.click(send());
+    await vi.waitFor(() => expect(flowerLaunchTurnMock).toHaveBeenCalledTimes(2));
+    expect(flowerLaunchTurnMock.mock.calls[1]?.[0]).toEqual(first);
+    expect(first).toMatchObject({ model_id: 'provider/model-a', reasoning_selection: { level: 'default', budget_tokens: 4096 } });
+    expect(flowerLauncherSettingsMock).toHaveBeenCalledTimes(1);
   });
 
   it.each([390, 639, 767])('opens mobile Ask Flower handoff in the full page at %i pixels', async (width) => {

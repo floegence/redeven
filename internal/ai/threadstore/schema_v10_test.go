@@ -89,7 +89,17 @@ func TestExecutionPermissionMigrationRollsBackAndRejectsInvalidSources(t *testin
 			spec := threadstoreSchemaSpec()
 			injected := errors.New("injected failure after authority backfill")
 			if test.injectFailure {
-				spec.Migrations[len(spec.Migrations)-1].Apply = func(tx *sql.Tx) error {
+				migrationIndex := -1
+				for i, migration := range spec.Migrations {
+					if migration.FromVersion == 9 {
+						migrationIndex = i
+						break
+					}
+				}
+				if migrationIndex < 0 {
+					t.Fatal("missing v9 to v10 migration")
+				}
+				spec.Migrations[migrationIndex].Apply = func(tx *sql.Tx) error {
 					if err := migrateThreadstoreV9ToV10(tx); err != nil {
 						return err
 					}

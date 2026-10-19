@@ -83,7 +83,10 @@ import type {
   FlowerTurnLauncherAnchor,
   FlowerTurnLauncherIntent,
   FlowerTurnLauncherSubmitInput,
+  FlowerTurnLaunchInput,
 } from '../../../../flower_ui/src';
+import { prepareFlowerNewConversationInput } from '../../../../flower_ui/src/conversationPreferences';
+import { flowerTurnAdmissionFailureKind } from '../../../../flower_ui/src/flowerTurnAdmission';
 import { createFlowerComposerDraftCoordinator } from '../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
 import { captureSessionRestartState, desktopSessionRestartBridge, restoreSessionRestartState, type RestartWorkspace } from './services/sessionRestart';
 import type { ContextActionExecutionContext } from './contextActions/protocol';
@@ -1137,6 +1140,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   }>;
 
   const [flowerTurnLauncherOpen, setFlowerTurnLauncherOpen] = createSignal(false);
+  let flowerTurnLauncherRequest: FlowerTurnLaunchInput | null = null;
   const [flowerTurnLauncherIntent, setFlowerTurnLauncherIntent] = createSignal<FlowerTurnLauncherIntent | null>(null);
   const [flowerTurnLauncherAnchor, setFlowerTurnLauncherAnchor] = createSignal<FlowerTurnLauncherAnchor | null>(null);
   const [flowerTurnLauncherHandoff, setFlowerTurnLauncherHandoff] = createSignal<EnvFlowerTurnHandoffContext | null>(null);
@@ -2613,6 +2617,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   });
 
   const closeFlowerTurnLauncher = (restoreOrigin = true) => {
+    flowerTurnLauncherRequest = null;
     const handoff = flowerTurnLauncherHandoff();
     if (restoreOrigin && handoff?.mode === 'activity') {
       setActivityFlowerPresentation(handoff.activityFlowerOriginPlacement === 'expanded' ? 'expanded' : 'collapsed');
@@ -2709,37 +2714,42 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       openLinkedFilePreview: openFlowerLinkedFilePreview,
       openLinkedDirectoryBrowser: openFlowerLinkedDirectoryBrowser,
     });
-    const attachmentIDs: string[] = [];
-    const stagingScope = (input.intent.pending_attachments?.length ?? 0) > 0
-      ? await adapter.createAttachmentStagingScope?.(clientRequestID)
-      : undefined;
-    if ((input.intent.pending_attachments?.length ?? 0) > 0 && !stagingScope) {
-      throw new Error('Attachment staging is unavailable for this Flower surface.');
-    }
-    for (const [index, file] of (input.intent.pending_attachments ?? []).entries()) {
-      if (!adapter.uploadAttachment) throw new Error('Attachment upload is unavailable for this Flower surface.');
-      const requestID = `${input.intent.id}:attachment:${index}`;
-      const staged = await adapter.uploadAttachment({
-        attempt_id: requestID,
-        request_id: requestID,
-        staging_scope: stagingScope!,
-        model_id: '',
-        capability_revision: '',
-        source: 'file',
-        file,
-        signal: new AbortController().signal,
-        on_progress: () => undefined,
+    if (flowerTurnLauncherRequest?.client_request_id !== clientRequestID) {
+      const prepared = await prepareFlowerNewConversationInput({
+        loadSettings: adapter.loadSettings,
+        getWorkingDirectoryPathContext: adapter.getWorkingDirectoryPathContext!,
+      }, {
+        client_request_id: clientRequestID, thread_id: threadID, prompt: trimmedPrompt,
+        context_action: input.intent.context_action, working_dir: input.intent.suggested_working_dir,
       });
-      attachmentIDs.push(staged.attachment_id);
+      const attachmentIDs: string[] = [];
+      const stagingScope = (input.intent.pending_attachments?.length ?? 0) > 0
+        ? await adapter.createAttachmentStagingScope?.(clientRequestID)
+        : undefined;
+      if ((input.intent.pending_attachments?.length ?? 0) > 0 && !stagingScope) {
+        throw new Error('Attachment staging is unavailable for this Flower surface.');
+      }
+      for (const [index, file] of (input.intent.pending_attachments ?? []).entries()) {
+        if (!adapter.uploadAttachment) throw new Error('Attachment upload is unavailable for this Flower surface.');
+        const requestID = `${input.intent.id}:attachment:${index}`;
+        const staged = await adapter.uploadAttachment({
+          attempt_id: requestID,
+          request_id: requestID,
+          staging_scope: stagingScope!,
+          model_id: prepared.model_id ?? '',
+          capability_revision: '',
+          source: 'file',
+          file,
+          signal: new AbortController().signal,
+          on_progress: () => undefined,
+        });
+        attachmentIDs.push(staged.attachment_id);
+      }
+      flowerTurnLauncherRequest = { ...prepared, attachment_ids: attachmentIDs, ...(stagingScope ? { staging_scope: stagingScope } : {}) };
     }
-    const receipt = await adapter.launchTurn({
-      client_request_id: clientRequestID,
-      thread_id: threadID,
-      prompt: trimmedPrompt,
-      context_action: input.intent.context_action,
-      working_dir: input.intent.suggested_working_dir,
-      attachment_ids: attachmentIDs,
-      ...(stagingScope ? { staging_scope: stagingScope } : {}),
+    const receipt = await adapter.launchTurn(flowerTurnLauncherRequest).catch(error => {
+      if (flowerTurnAdmissionFailureKind(error) !== 'unknown') flowerTurnLauncherRequest = null;
+      throw error;
     });
     const threadId = trimString(receipt.thread_id);
     if (!threadId) {

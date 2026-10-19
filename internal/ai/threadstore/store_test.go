@@ -14,6 +14,7 @@ func TestStoreSchemaContainsOnlyProductThreadState(t *testing.T) {
 	store := openStoreForTest(t)
 	wantTables := []string{
 		"__redeven_db_meta",
+		"ai_conversation_preferences",
 		"ai_flower_execution_authority",
 		"ai_thread_settings",
 		"ai_upload_attempts",

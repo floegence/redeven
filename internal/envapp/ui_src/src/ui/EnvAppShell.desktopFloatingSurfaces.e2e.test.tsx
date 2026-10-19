@@ -618,7 +618,11 @@ vi.mock('./widgets/FlowerTurnLauncherWindow', () => ({
   ),
 }));
 vi.mock('./flower/envLocalFlowerSurfaceAdapter', () => ({
-  createEnvLocalFlowerSurfaceAdapter: () => ({ launchTurn: flowerLaunchTurnMock }),
+  createEnvLocalFlowerSurfaceAdapter: () => ({
+    launchTurn: flowerLaunchTurnMock,
+    loadSettings: async () => ({ defaults: { permission_type: 'approval_required' }, model_profile: null, provider_secrets: [], conversation_preferences: { revision: 1, model_id: 'provider/model-a', working_dir: '/remembered', reasoning_by_model: {} } }),
+    getWorkingDirectoryPathContext: async () => ({ agentHomePathAbs: '/home', homePathAbs: '/home', defaultRootId: 'home', roots: [] }),
+  }),
 }));
 vi.mock('./notes/NotesOverlay', () => ({ NotesOverlay: () => <div /> }));
 vi.mock('./pages/EnvSettingsPage', () => ({ EnvSettingsPage: () => <div /> }));

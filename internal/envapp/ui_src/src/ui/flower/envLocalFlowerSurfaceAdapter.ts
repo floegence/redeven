@@ -1,3 +1,5 @@
+import { createFlowerConversationPreferenceClient } from '../../../../../flower_ui/src/conversationPreferences';
+import type { FlowerConversationPreferences } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { createFlowerSourceIconResolver } from '../../../../../flower_ui/src/chat/markdown/flowerSourceIcons';
 import { flowerExtensionsAdapter } from '../../../../../flower_ui/host/extensionsAdapter';
 import { computerManagementAdapter } from '../../../../../flower_ui/host/computerUseAdapter';
@@ -553,8 +555,13 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
 
   const resource = options.modelReadResource ?? createEnvFlowerModelReadResource(() => String(options.settingsRevision?.() ?? 0));
   const directoryForSurface = (directory: FlowerModelDirectory) => visibleDirectory(directory, options.desktopSessionTargetRoute === 'remote_desktop');
+  const preferences = createFlowerConversationPreferenceClient({
+    load: () => fetchLocalApiJSON<FlowerConversationPreferences>('/_redeven_proxy/api/ai/conversation_preferences', { method: 'GET' }),
+    patch: patch => fetchLocalApiJSON<FlowerConversationPreferences>('/_redeven_proxy/api/ai/conversation_preferences', { method: 'PATCH', body: JSON.stringify(patch) }),
+  });
   const loadSettings = async (refresh = false) => {
-    const snapshot = await resource.loadSettings(refresh);
+    const [settings, conversation_preferences] = await Promise.all([resource.loadSettings(refresh), preferences.load()]);
+    const snapshot = { ...settings, conversation_preferences };
     if (options.isAvailable?.() === false) throw new DOMException('Flower settings load cancelled.', 'AbortError');
     const guarded = restrictChatGPTForRemoteDesktop(snapshot, options.desktopSessionTargetRoute === 'remote_desktop');
     return guarded.model_directory ? withFlowerModelDirectory(guarded, directoryForSurface(guarded.model_directory)) : guarded;
@@ -736,14 +743,15 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       resource.invalidate();
       return { ...await loadSettings(), account_sign_outs: result.account_sign_outs };
     },
+    saveConversationPreferences: async patch => {
+      const saved = await preferences.save(patch);
+      if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
+      return saved;
+    },
     persistDefaultModel: async (modelID) => {
       const mid = trim(modelID);
       if (!mid) throw new Error('Missing model id.');
-      if (mid.startsWith('desktop:')) throw new Error('Model is not part of the environment profile.');
-      await fetchLocalApiJSON<unknown>('/_redeven_proxy/api/ai/current_model', {
-        method: 'PUT',
-        body: JSON.stringify({ model_id: mid }),
-      });
+      await preferences.save({ model_id: mid });
       resource.invalidate();
       const snapshot = await loadSettings();
       if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
@@ -841,7 +849,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       }
       let turnModelID = trim(input.model_id);
       if (!existingThreadID) {
-        turnModelID = turnModelID || trim(snapshot?.model_directory?.current_model_id) || trim(snapshot?.model_profile?.current_model_id);
+        turnModelID = turnModelID || trim(snapshot?.conversation_preferences?.model_id) || trim(snapshot?.model_directory?.current_model_id) || trim(snapshot?.model_profile?.current_model_id);
         if (!turnModelID) throw new Error(copy.selectModelBeforeChat);
       }
       const stagingHeaders = stagingScope ? flowerAttachmentStagingHeaders(stagingScope) : undefined;

@@ -38,15 +38,17 @@ has an explicit source: `model_profile`, `desktop_model_source`, `platform`, or
 missing model; Flower never silently replaces it. Multiple sources are grouped
 with environment models first and the fixed `Desktop` label for Desktop models.
 
-New Chat starts with the Runtime's current model. An explicit environment or
-platform choice persists the default; a Desktop choice stays in the mounted
-surface's draft. Repeated New Chat actions preserve that draft. Creating a
-thread sends its exact chosen model, with draft reasoning only when supported.
-Switching to a model without reasoning clears the draft reasoning override.
-Existing threads resolve their own `model_id` first. Changing it calls
-`setThreadModel`; an environment-model change also persists the environment
-default, while a Desktop-model change stops after the thread PATCH. Returning
-to New Chat restores its draft without copying the thread preference.
+New Chat uses [personal conversation preferences](flower-conversation-preferences.md)
+for all model sources before the Runtime's configured default. Explicit model
+choices, including same-value selections, remember only the model field after
+any required thread mutation succeeds. Desktop opaque identities follow the
+same rule; loading a thread never writes preferences or environment AIConfig.
+Draft overrides and defaults frozen when editing begins remain separate from
+effective admission projections. A true New Chat clears transient overrides
+and reads the latest personal defaults. Creating a thread freezes its exact
+model and model-owned reasoning; an existing thread always uses its own
+confirmed settings. Switching models does not copy returned normalized
+reasoning into another model's personal preference.
 
 The exact directory entry controls chat readiness independently of web search.
 A pending source shows a checking status inside the model popup; an unavailable selection
@@ -127,7 +129,7 @@ The Activity companion reuses this model and selection contract; its placement, 
 
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx:128` - Flower recognizes `model_io.updated` as a model-status presentation boundary.
 - `redeven:internal/flower_ui/src/contracts/flowerSurfaceContracts.ts:380` - Flower thread snapshots expose `model_id` and `reasoning_selection`.
-- `redeven:internal/flower_ui/src/runtimeFlowerSurfaceAdapter.ts:235` - The runtime adapter keeps thread model PATCH and environment default persistence as separate operations.
+- `redeven:internal/flower_ui/src/runtimeFlowerSurfaceAdapter.ts:235` - The runtime adapter keeps thread model PATCH and personal model preference persistence as separate operations.
 - `redeven:internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.ts:288` - The Env adapter exposes Desktop models only for the stable `remote_desktop` session route.
 - `redeven:scripts/check_flower_ui.sh:26` - The Flower UI quality gate includes the Desktop model-source cross-layer test explicitly.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.test.tsx:460` - Combined navigation coverage rejects late detail loads across rapid A-to-B-to-A selection.

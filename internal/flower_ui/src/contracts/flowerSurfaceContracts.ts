@@ -207,7 +207,21 @@ export type FlowerModelSourceRecovery = Readonly<{
   connectionCenter: FlowerSurfaceAction;
 }>;
 
+export type FlowerConversationPreferences = Readonly<{
+  model_id?: string;
+  working_dir?: string;
+  reasoning_by_model: Readonly<Record<string, FlowerReasoningSelection>>;
+  revision: number;
+}>;
+
+export type FlowerConversationPreferencePatch = Readonly<{
+  model_id?: string;
+  working_dir?: string;
+  reasoning?: Readonly<{ model_id: string; selection: FlowerReasoningSelection }>;
+}>;
+
 export type FlowerSettingsSnapshot = Readonly<{
+  conversation_preferences?: FlowerConversationPreferences;
   auth_capabilities?: Readonly<{ openai_chatgpt: Readonly<{ available: boolean; reason?: string; binding_id?: string }> }>;
   chatgpt_accounts?: Readonly<Record<string, FlowerChatGPTAccount>>;
   saved_chatgpt_accounts?: readonly FlowerChatGPTAccount[];
@@ -1605,6 +1619,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   movePinnedThread?: (threadID: string, input: FlowerThreadPinPosition) => Promise<readonly FlowerThreadPinMetadata[]>;
   setThreadPermissionType?: (threadID: string, permissionType: FlowerPermissionType) => Promise<FlowerThreadView>;
   persistDefaultModel: (modelID: string) => Promise<FlowerSettingsSnapshot>;
+  saveConversationPreferences?: (patch: FlowerConversationPreferencePatch) => Promise<FlowerConversationPreferences>;
   setThreadModel?: (threadID: string, modelID: string) => Promise<FlowerThreadView>;
   setThreadReasoningSelection?: (threadID: string, selection: FlowerReasoningSelection | undefined) => Promise<FlowerThreadView>;
   reorderQueuedTurns?: (threadID: string, orderedQueueIDs: readonly string[]) => Promise<FlowerThreadView>;

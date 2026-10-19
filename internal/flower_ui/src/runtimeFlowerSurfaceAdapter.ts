@@ -153,6 +153,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   saveAutoUpdateModelCatalog?: (enabled: boolean) => Promise<FlowerSettingsSnapshot>;
   saveModelProfile: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
   persistDefaultModel: (modelID: string) => Promise<FlowerSettingsSnapshot>;
+  saveConversationPreferences?: FlowerSurfaceAdapter['saveConversationPreferences'];
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
   loadAttachmentCapability?: FlowerSurfaceAdapter['loadAttachmentCapability'];
   createAttachmentStagingScope?: FlowerSurfaceAdapter['createAttachmentStagingScope'];
@@ -416,6 +417,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
         );
       },
     }),
+    saveConversationPreferences: options.saveConversationPreferences,
     persistDefaultModel: async (modelID) => {
       const mid = trim(modelID);
       if (!mid) throw new Error('Missing model id.');

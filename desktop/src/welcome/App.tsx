@@ -158,10 +158,12 @@ import {
   type FlowerTurnLauncherAnchor,
   type FlowerTurnLauncherIntent,
   type FlowerTurnLauncherSubmitInput,
+  type FlowerTurnLaunchInput,
   type FlowerThreadFocusRequest,
   type FlowerSurfaceWarmupState,
   type FlowerSurfaceAdapter,
 } from '../../../internal/flower_ui/src';
+import { flowerTurnAdmissionFailureKind } from '../../../internal/flower_ui/src/flowerTurnAdmission';
 import { desktopEntryKindSupportsDirectRuntimeOperations } from '../shared/environmentManagementPrinciples';
 import {
   openConnectionPhaseSequence,
@@ -357,6 +359,7 @@ import {
   createLocalEnvironmentFlowerSurfaceAdapter,
   createDesktopFlowerModelReadResource,
   launchLocalEnvironmentFlowerTurn,
+  prepareLocalEnvironmentFlowerTurnInput,
   type DesktopSettingsBridge,
 } from './flower/localEnvironmentFlowerSurfaceAdapter';
 import { createDesktopFlowerSurfaceCopy } from './flower/desktopFlowerSurfaceCopy';
@@ -2655,6 +2658,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     open: flowerTurnLauncherOpen,
     chrome: window.redevenDesktopWindowChrome,
   });
+  let flowerTurnLauncherRequest: FlowerTurnLaunchInput | null = null;
   const [flowerTurnLauncherIntent, setFlowerTurnLauncherIntent] = createSignal<FlowerTurnLauncherIntent | null>(null);
   const [flowerTurnLauncherAnchor, setFlowerTurnLauncherAnchor] = createSignal<FlowerTurnLauncherAnchor | null>(null);
   const [flowerFocusThreadRequest, setFlowerFocusThreadRequest] = createSignal<FlowerThreadFocusRequest | null>(null);
@@ -6172,6 +6176,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function closeFlowerTurnLauncher(): void {
+    flowerTurnLauncherRequest = null;
     setFlowerTurnLauncherOpen(false);
     setFlowerTurnLauncherIntent(null);
     setFlowerTurnLauncherAnchor(null);
@@ -6182,11 +6187,17 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (!prompt) {
       throw new Error(i18n().t('environmentCenter.askFlowerCardNoMessage'));
     }
-    const receipt = await launchLocalEnvironmentFlowerTurn(props.runtime.settings, {
-      client_request_id: input.client_request_id,
-      prompt,
-      context_action: input.intent.context_action,
-      working_dir: input.intent.suggested_working_dir,
+    if (flowerTurnLauncherRequest?.client_request_id !== input.client_request_id) {
+      flowerTurnLauncherRequest = await prepareLocalEnvironmentFlowerTurnInput(props.runtime.settings, {
+        client_request_id: input.client_request_id,
+        prompt,
+        context_action: input.intent.context_action,
+        working_dir: input.intent.suggested_working_dir,
+      });
+    }
+    const receipt = await launchLocalEnvironmentFlowerTurn(props.runtime.settings, flowerTurnLauncherRequest).catch(error => {
+      if (flowerTurnAdmissionFailureKind(error) !== 'unknown') flowerTurnLauncherRequest = null;
+      throw error;
     });
     const threadID = trimString(receipt.thread_id);
     if (!threadID) {

@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createLocalEnvironmentFlowerSurfaceAdapter,
   launchLocalEnvironmentFlowerTurn,
+  prepareLocalEnvironmentFlowerTurnInput,
   mapFlowerSettingsDraftToRuntimeBundle,
   mapRuntimeFlowerSettings,
   type DesktopSettingsBridge,
@@ -111,10 +112,20 @@ function detailView(overrides: Record<string, unknown> = {}, currentOverrides: R
 
 function bridgeFor(handler: (request: RuntimeFlowerRequest) => unknown | Promise<unknown>): DesktopSettingsBridge {
   let settings = settingsResponse();
+  let preferences: import('../../../../internal/flower_ui/src/contracts/flowerSurfaceContracts').FlowerConversationPreferences = { revision: 0, reasoning_by_model: {} };
   return {
     ...attachmentBridgeStubs(),
     save: vi.fn(async () => ({ ok: true as const, snapshot: {} as never })),
     requestRuntimeFlower: vi.fn(async (request: RuntimeFlowerRequest) => {
+      if (request.path === '/_redeven_proxy/api/ai/conversation_preferences') {
+        if (request.method === 'PATCH') {
+          const patch = request.body as { expected_revision: number; model_id?: string; working_dir?: string; reasoning?: { model_id: string; selection: import('../../../../internal/flower_ui/src/contracts/flowerSurfaceContracts').FlowerReasoningSelection } };
+          expect(patch.expected_revision).toBe(preferences.revision);
+          preferences = { ...preferences, ...(patch.model_id ? { model_id: patch.model_id } : {}), ...(patch.working_dir ? { working_dir: patch.working_dir } : {}), revision: preferences.revision + 1,
+            reasoning_by_model: { ...preferences.reasoning_by_model, ...(patch.reasoning ? { [patch.reasoning.model_id]: patch.reasoning.selection } : {}) } };
+        }
+        return { ok: true as const, data: preferences };
+      }
       const data = await handler(request);
       if (request.path === '/_redeven_proxy/api/settings') settings = data as AgentSettingsResponse;
       return { ok: true as const, data: request.path.startsWith('/_redeven_proxy/api/ai/models') ? modelDirectoryWireFixture(settings, data as Record<string, unknown>) : data };
@@ -592,6 +603,63 @@ describe('Local Environment Flower surface adapter', () => {
     });
   });
 
+  it('freezes configured defaults when Ask Flower has no personal record', async () => {
+    const bridge = bridgeFor(request => {
+      if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
+      if (request.path === '/_redeven_proxy/api/ai/models?mode=baseline') return { current_model: 'default/gpt-4.1' };
+      if (request.path === '/_redeven_proxy/api/fs/path_context') return { agent_home_path_abs: '/home/agent', default_root_id: 'home', roots: [{ id: 'home', path_abs: '/home/agent' }] };
+      throw new Error(`unexpected path: ${request.path}`);
+    });
+    const prepared = await prepareLocalEnvironmentFlowerTurnInput(bridge, { client_request_id: 'default-memory', prompt: 'hello' });
+    expect(prepared).toMatchObject({ model_id: 'default/gpt-4.1', working_dir: '/home/agent', permission_type: 'approval_required', reasoning_selection: { level: 'default' } });
+    expect(vi.mocked(bridge.requestRuntimeFlower).mock.calls.every(([request]) => request.method === 'GET')).toBe(true);
+  });
+
+  it('freezes all Ask Flower preferences across an unknown-admission retry without writing one-shot overrides', async () => {
+    const bodies: unknown[] = [];
+    const baseBridge = bridgeFor(request => {
+      if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
+      if (request.path === '/_redeven_proxy/api/ai/models?mode=baseline') return { current_model: 'default/gpt-4.1' };
+      throw new Error(`unexpected path: ${request.path}`);
+    });
+    const bridge: DesktopSettingsBridge = { ...baseBridge, requestRuntimeFlower: vi.fn(async request => {
+      if (request.method !== 'POST' || request.path !== '/_redeven_proxy/api/ai/turns') return baseBridge.requestRuntimeFlower(request);
+      bodies.push(request.body);
+      if (bodies.length === 1) return { ok: false as const, failureKind: 'transport_unknown' as const, error: { code: 'runtime_flower_transport_error', message: 'response lost' } };
+      return { ok: true as const, data: { client_request_id: 'retry-memory', thread_id: 'th_retry', current: currentView({ thread_id: 'th_retry' }) } };
+    }) };
+    const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+    await adapter.saveConversationPreferences!({ model_id: 'default/gpt-5.4', working_dir: '/remembered', reasoning: { model_id: 'default/gpt-5.4', selection: { level: 'default', budget_tokens: 4096 } } });
+    const prepared = await prepareLocalEnvironmentFlowerTurnInput(bridge, { client_request_id: 'retry-memory', prompt: 'hello', working_dir: '/one-shot' });
+    await expect(launchLocalEnvironmentFlowerTurn(bridge, prepared)).rejects.toMatchObject({ failureKind: 'transport_unknown' });
+    await adapter.saveConversationPreferences!({ model_id: 'default/gpt-4.1', working_dir: '/changed', reasoning: { model_id: 'default/gpt-5.4', selection: { level: 'off' } } });
+    await launchLocalEnvironmentFlowerTurn(bridge, prepared);
+    expect(bodies[1]).toEqual(bodies[0]);
+    expect(bodies[1]).toMatchObject({ model: 'default/gpt-5.4', create: { model_id: 'default/gpt-5.4', working_dir: '/one-shot', reasoning_selection: { level: 'default', budget_tokens: 4096 } } });
+    expect((await adapter.loadSettings()).conversation_preferences?.working_dir).toBe('/changed');
+  });
+
+  it('uses personal model memory for standalone launches without persisting one-shot launch overrides', async () => {
+    const calls: RuntimeFlowerRequest[] = [];
+    const bridge = bridgeFor(request => {
+      calls.push(request);
+      if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
+      if (request.path === '/_redeven_proxy/api/ai/models?mode=baseline') return { current_model: 'default/gpt-4.1' };
+      if (request.path === '/_redeven_proxy/api/ai/turns') return {
+        client_request_id: 'client-memory', thread_id: 'th_memory',
+        current: currentView({ thread_id: 'th_memory', activity: 'active', turn_id: 'turn-memory' }),
+      };
+      throw new Error(`unexpected path: ${request.path}`);
+    });
+    const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+    await adapter.saveConversationPreferences!({ model_id: 'default/gpt-5.4' });
+    await launchLocalEnvironmentFlowerTurn(bridge, { client_request_id: 'client-memory', prompt: 'hello', working_dir: '/one-shot' });
+    expect(calls.find(call => call.path === '/_redeven_proxy/api/ai/turns')?.body).toMatchObject({
+      model: 'default/gpt-5.4', create: { model_id: 'default/gpt-5.4', working_dir: '/one-shot' },
+    });
+    expect(vi.mocked(bridge.requestRuntimeFlower).mock.calls.filter(([request]) => request.method === 'PATCH' && request.path.endsWith('/conversation_preferences'))).toHaveLength(1);
+  });
+
   it('loads settings and threads, then returns the immediate typed current view from Send', async () => {
     const calls: RuntimeFlowerRequest[] = [];
     const bridge = bridgeFor((request) => {
@@ -886,6 +954,9 @@ describe('Local Environment Flower surface adapter', () => {
             failureKind: 'response' as const,
           };
         }
+        if (request.path === '/_redeven_proxy/api/ai/conversation_preferences') {
+          return { ok: true as const, data: { revision: 0, reasoning_by_model: {} } };
+        }
         throw new Error('unexpected runtime Flower path');
       }),
       cancel: vi.fn(),
@@ -918,7 +989,17 @@ describe('Local Environment Flower surface adapter', () => {
     });
   });
 
-  it('updates the current model through runtime Flower IPC', async () => {
+  it('publishes an isolated preference save to other mounted Flower surfaces', async () => {
+    const onSettingsChanged = vi.fn();
+    const bridge = bridgeFor(request => { throw new Error(`unexpected path: ${request.path}`); });
+    const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge, { onSettingsChanged });
+    const saved = await adapter.saveConversationPreferences!({ reasoning: { model_id: 'default/gpt-5.4', selection: { level: 'off' } } });
+    expect(saved.reasoning_by_model['default/gpt-5.4']).toEqual({ level: 'off' });
+    expect(saved.model_id).toBeUndefined();
+    expect(onSettingsChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it('remembers the personal model through runtime Flower IPC', async () => {
     const calls: RuntimeFlowerRequest[] = [];
     const onSettingsChanged = vi.fn();
     const bridge = bridgeFor((request) => {
@@ -951,15 +1032,14 @@ describe('Local Environment Flower surface adapter', () => {
     const snapshot = await adapter.persistDefaultModel('default/gpt-5.4');
 
     expect(calls).toEqual([
-      {
-        method: 'PUT',
-        path: '/_redeven_proxy/api/ai/current_model',
-        body: { model_id: 'default/gpt-5.4' },
-      },
       { method: 'GET', path: '/_redeven_proxy/api/settings' },
       { method: 'GET', path: '/_redeven_proxy/api/ai/models?mode=baseline' },
     ]);
-    expect(snapshot.model_profile?.current_model_id).toBe('default/gpt-5.4');
+    expect(bridge.requestRuntimeFlower).toHaveBeenCalledWith({
+      method: 'PATCH', path: '/_redeven_proxy/api/ai/conversation_preferences',
+      body: { expected_revision: 0, model_id: 'default/gpt-5.4' },
+    });
+    expect(snapshot.conversation_preferences?.model_id).toBe('default/gpt-5.4');
     expect(onSettingsChanged).toHaveBeenCalledTimes(1);
   });
 

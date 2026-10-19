@@ -23,11 +23,28 @@ vi.mock('../services/controlplaneApi', () => ({
 
 const fetchMock = vi.fn();
 let fixtureSettings: AgentSettingsResponse;
+let fixturePreferences: import('../../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerConversationPreferences;
+const preferenceRequests: Array<{ method: string; body?: Record<string, unknown> }> = [];
 
-globalThis.fetch = fetchMock as unknown as typeof fetch;
+globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+  if (String(input) !== '/_redeven_proxy/api/ai/conversation_preferences') return fetchMock(input, init);
+  const method = init?.method ?? 'GET';
+  const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : undefined;
+  preferenceRequests.push({ method, body });
+  if (method === 'PATCH') {
+    expect(body?.expected_revision).toBe(fixturePreferences.revision);
+    const { expected_revision: _revision, reasoning, ...fields } = body!;
+    const choice = reasoning as { model_id: string; selection: import('../../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerReasoningSelection } | undefined;
+    fixturePreferences = { ...fixturePreferences, ...fields, revision: fixturePreferences.revision + 1,
+      reasoning_by_model: { ...fixturePreferences.reasoning_by_model, ...(choice ? { [choice.model_id]: choice.selection } : {}) } };
+  }
+  return jsonResponse(fixturePreferences);
+}) as typeof fetch;
 
 beforeEach(() => {
 	fetchMock.mockReset();
+  fixturePreferences = { revision: 0, reasoning_by_model: {} };
+  preferenceRequests.length = 0;
   vi.mocked(getLocalRuntime).mockResolvedValue(null);
   fixtureSettings = {} as AgentSettingsResponse;
 	clearLocalAccessResumeToken();
@@ -173,7 +190,8 @@ it('loads authorized platform models without exposing editable provider credenti
   expect(snapshot.provider_secrets).toEqual([]);
   expect(snapshot.platform_model_source).toMatchObject({ current_model_id: 'platform/available', models: [{ id: 'platform/available', input_modalities: ['text', 'image'] }] });
   await adapter.persistDefaultModel?.('platform/available');
-  expect(fetchMock.mock.calls.some(([url]) => url === '/_redeven_proxy/api/ai/current_model')).toBe(true);
+  expect(preferenceRequests).toContainEqual({ method: 'PATCH', body: { model_id: 'platform/available', expected_revision: 0 } });
+  expect(fetchMock.mock.calls.some(([url]) => url === '/_redeven_proxy/api/ai/current_model')).toBe(false);
 });
 
 it('keeps ChatGPT account authentication unavailable in a remote Desktop session', async () => {
@@ -2098,7 +2116,16 @@ describe('Env local Flower surface adapter', () => {
     expect(live?.thread.model_id).toBe('default/gpt-5.4');
   });
 
-  it('updates the current model through the local API and refreshes settings', async () => {
+  it('publishes an isolated preference save to other mounted Flower surfaces', async () => {
+    const onSettingsChanged = vi.fn();
+    const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env_a', envLabel: 'Demo Env', rpc: { ai: {} } as any, onSettingsChanged });
+    const saved = await adapter.saveConversationPreferences!({ reasoning: { model_id: 'default/gpt-5.4', selection: { level: 'off' } } });
+    expect(saved.reasoning_by_model['default/gpt-5.4']).toEqual({ level: 'off' });
+    expect(saved.model_id).toBeUndefined();
+    expect(onSettingsChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it('remembers the personal model through the local API without changing the Env default', async () => {
     const currentModelBodies: unknown[] = [];
     const onSettingsChanged = vi.fn();
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
@@ -2136,12 +2163,12 @@ describe('Env local Flower surface adapter', () => {
 
     const snapshot = await adapter.persistDefaultModel('default/gpt-5.4');
 
-    expect(currentModelBodies).toEqual([{ model_id: 'default/gpt-5.4' }]);
-    expect(snapshot.model_profile?.current_model_id).toBe('default/gpt-5.4');
+    expect(currentModelBodies).toEqual([]);
+    expect(snapshot.conversation_preferences?.model_id).toBe('default/gpt-5.4');
     expect(onSettingsChanged).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects Desktop models from the persisted Env default path', async () => {
+  it('persists Desktop model identity as a personal preference without changing the Env default', async () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/settings' && init?.method === 'GET') {
         return jsonResponse({
@@ -2182,9 +2209,10 @@ describe('Env local Flower surface adapter', () => {
       rpc: { ai: {} } as any,
     });
 
-    await expect(adapter.persistDefaultModel(DESKTOP_MODEL_ID)).rejects.toThrow(
-      'Model is not part of the environment profile.',
-    );
+    await expect(adapter.persistDefaultModel(DESKTOP_MODEL_ID)).resolves.toMatchObject({
+      conversation_preferences: { model_id: DESKTOP_MODEL_ID },
+    });
+    expect(preferenceRequests).toContainEqual({ method: 'PATCH', body: { model_id: DESKTOP_MODEL_ID, expected_revision: 0 } });
     expect(fetchMock).not.toHaveBeenCalledWith(
       '/_redeven_proxy/api/ai/current_model',
       expect.anything(),

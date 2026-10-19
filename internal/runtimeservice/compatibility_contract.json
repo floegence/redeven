@@ -4,10 +4,11 @@
     "release_version": "v0.13.12",
     "previous_release": "v0.13.11",
     "reviewed_at": "2026-10-19",
-    "review_id": "backend-web-default-policy-v1",
-    "summary": "Epoch 65 requires the backend default_fetch_source policy projection so Desktop and Runtime agree on DeepSeek search and page-reader defaults. Model-source RPC v3, Runtime wire protocol and product storage schema remain unchanged.",
-    "same_window_rationale": "The compatibility epoch advances because the shared provider editor requires backend-owned page-reader defaults. Earlier peers enter the existing update flow before Flower reads configuration; there is no frontend brand inference or legacy policy fallback.",
+    "review_id": "flower-personal-conversation-preferences",
+    "summary": "Epoch 66 pairs Desktop and Runtime with the required authenticated Flower conversation-preferences API and retains the epoch 65 backend default_fetch_source policy. Product storage migrates v10 to v11 without changing Floret history or immutable Turn ownership.",
+    "same_window_rationale": "The compatibility epoch advances because new clients require scoped preference reads before new-conversation admission. Older peers use the existing upgrade path instead of silently using environment defaults. Backend-owned page-reader defaults remain required. Runtime Service protocol remains v2; provider RPC v3 and canonical Floret retry ownership are unchanged.",
     "checked_surfaces": [
+      "Epoch 66: Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance and SSH runtime bootstrap consume the canonical epoch and existing upgrade flow. Flower GET/PATCH conversation_preferences require authenticated namespace/endpoint/user, strict field updates and revision conflicts. Env App, Desktop, standalone Ask Flower and Goal root admission use the shared defaults; thread loads, immutable Turns and retries never write memory. Product schema v10-to-v11 preserves existing data and rolls back failures; no Floret SQL authority or Runtime Service DTO is added.",
       "Epoch 65: model-directory search policies require default_fetch_source. DeepSeek defaults search on and omitted page reading to DeepSeek while search is enabled; explicit search and reader settings survive toggles and reopen. Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap use the existing compatibility and update flow. Frozen Turn bindings, credentials, provider retries and Floret storage remain unchanged.",
       "Epoch 64: Desktop model-source RPC v3 preserves Category, absolute NotBefore and Forbidden with sanitized actual-provider diagnostics. EOF recovery uses published Floret v7.58.0. Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap require the canonical epoch; prior epochs remain upgrade-only. Stop, failed writes, malformed terminals and queue overflow settle through the existing connection owner.",
       "Returned effect uncertainty: published Floret v7.55.1 preserves canonical tool errors and post-result retry boundaries without new Runtime Service fields. Desktop and Env App use existing Activity chips and normal Send for Inspect and continue; Stop, child routing, drafts, offline outbox resend and navigation retain their owners. Bundled macOS computer helper protocol 4 requires exact per-event input receipts. Runtime attach/start, Local UI health, startup reports, sys.ping, maintenance and SSH bootstrap retain epoch 63.",
@@ -112,7 +113,7 @@
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v2",
-  "compatibility_epoch": 65,
+  "compatibility_epoch": 66,
   "upgrade_from_runtime_epochs": [
     9,
     10,
@@ -169,7 +170,8 @@
     61,
     62,
     63,
-    64
+    64,
+    65
   ],
   "minimum_desktop_version": "v0.13.0",
   "minimum_runtime_version": "v0.13.0"

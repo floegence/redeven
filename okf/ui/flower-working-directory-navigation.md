@@ -27,8 +27,12 @@ Directory validation and selection state are owned by [absolute filesystem direc
 
 The full-page top-right header uses a compact, borderless folder-and-name button to browse
 the current directory. Clicking it neither copies the path nor edits the draft.
-The current draft uses its selected directory or the runtime-declared default
-root. A selected conversation uses only its identity-matching loaded detail:
+The current draft uses its explicit directory, then its frozen or current
+[personal conversation preference](flower-conversation-preferences.md), then
+the runtime-declared default root. Confirming the picker remembers only the
+validated real directory for future new conversations; browsing, cancellation,
+recent-thread suggestions, and Files/Terminal navigation never write it.
+A selected conversation uses only its identity-matching loaded detail:
 pending or missing detail cannot substitute a previous, draft, or Home path.
 An unavailable target or browse capability disables the button with an explicit
 reason. Successful dispatch hands focus to Files; a dispatch failure reports the
