@@ -4,6 +4,15 @@ import { isRuntimeFlowerReadinessPath, runtimeFlowerMethodAllowed, runtimeFlower
 
 const base = '/_redeven_proxy/api/ai/computer';
 
+it('allows only scoped GET/PATCH for personal conversation preferences without caller identity queries', () => {
+  const path = '/_redeven_proxy/api/ai/conversation_preferences';
+  expect(runtimeFlowerPath(path)).toBe(path);
+  expect(runtimeFlowerMethodAllowed(path, 'GET')).toBe(true);
+  expect(runtimeFlowerMethodAllowed(path, 'PATCH')).toBe(true);
+  for (const method of ['POST', 'PUT', 'DELETE'] as const) expect(runtimeFlowerMethodAllowed(path, method)).toBe(false);
+  for (const query of ['?user_public_id=other', '?endpoint_id=other', '?revision=1']) expect(() => runtimeFlowerPath(path + query)).toThrow();
+});
+
 it('allows only read-only, single-origin source icon requests', () => {
   const path = '/_redeven_proxy/api/flower/source-icon?origin=https%3A%2F%2Fexample.com';
   expect(runtimeFlowerPath(path)).toBe(path);

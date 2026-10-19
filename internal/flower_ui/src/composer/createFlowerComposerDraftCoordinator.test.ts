@@ -271,6 +271,19 @@ it('keeps Goal edits independent and accepts concurrent identical staging bindin
  coordinator.dispose(); restored.dispose();
 });
 
+it('preserves explicit intent separately from effective defaults across restart', () => {
+  const coordinator = createFlowerComposerDraftCoordinator();
+  const draft = coordinator.open('new');
+  draft.mutate(value => ({ ...value, text: 'editing', model_id: 'provider/effective', model_id_override: 'provider/explicit',
+    working_dir: '/effective', working_dir_override: '/explicit', reasoning_model_id: 'provider/explicit', reasoning_selection: { level: 'default', budget_tokens: 2048 },
+    inherited_defaults: { model_id: 'provider/inherited', working_dir: '/inherited', reasoning_by_model: { 'provider/inherited': { level: 'off' } } },
+  }));
+  const restored = createFlowerComposerDraftCoordinator();
+  restored.restoreAfterRestart(coordinator.exportForRestart());
+  expect(restored.read('new').value).toMatchObject(draft.snapshot().value);
+  coordinator.dispose(); restored.dispose();
+});
+
 it('preserves independent Goal command and ordinary input through handoff and restart', () => {
  const coordinator=createFlowerComposerDraftCoordinator();
  const session=coordinator.open('draft');

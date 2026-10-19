@@ -608,7 +608,14 @@ func (s *Service) buildThreadCreateSettings(ctx context.Context, meta *session.M
 	s.mu.Lock()
 	cfg := s.cfg
 	s.mu.Unlock()
+	preferences, err := s.conversationPreferencesForCreate(ctx, meta)
+	if err != nil {
+		return threadstore.ThreadSettings{}, err
+	}
 	modelID := strings.TrimSpace(req.ModelID)
+	if modelID == "" {
+		modelID = preferences.ModelID
+	}
 	defaultPermission := FlowerPermissionApprovalRequired
 	if cfg != nil {
 		configured, err := permissionTypeOrDefault(cfg.EffectivePermissionType(), defaultPermission)
@@ -662,7 +669,11 @@ func (s *Service) buildThreadCreateSettings(ctx context.Context, meta *session.M
 	if err != nil {
 		return threadstore.ThreadSettings{}, err
 	}
-	reasoningSelection, err := normalizeRequestedReasoningOrReject(reasoningCapability, req.ReasoningSelection)
+	requestedReasoning := req.ReasoningSelection
+	if requestedReasoning.IsZero() {
+		requestedReasoning = preferences.ReasoningByModel[modelID]
+	}
+	reasoningSelection, err := normalizeRequestedReasoningOrReject(reasoningCapability, requestedReasoning)
 	if err != nil {
 		return threadstore.ThreadSettings{}, reasoningSelectionError(modelID, err)
 	}
@@ -677,6 +688,9 @@ func (s *Service) buildThreadCreateSettings(ctx context.Context, meta *session.M
 		return threadstore.ThreadSettings{}, err
 	}
 	workingDir := strings.TrimSpace(req.WorkingDir)
+	if workingDir == "" {
+		workingDir = preferences.WorkingDir
+	}
 	if workingDir == "" {
 		workingDir = strings.TrimSpace(s.agentHomeDir)
 	}

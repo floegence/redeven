@@ -78,6 +78,7 @@ const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
       && parsed.searchParams.getAll('preview').length === 1
       && parsed.searchParams.get('preview') === '1';
   } },
+  { path: '/_redeven_proxy/api/ai/conversation_preferences', methods: ['GET', 'PATCH'] },
   { path: '/_redeven_proxy/api/ai/default_permission', methods: ['PUT'] },
   { path: '/_redeven_proxy/api/ai/computer_use', methods: ['PUT'] },
   { path: '/_redeven_proxy/api/ai/model_catalog_auto_update', methods: ['PUT'] },

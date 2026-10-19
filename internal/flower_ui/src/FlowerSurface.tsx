@@ -1,3 +1,4 @@
+import type { FlowerConversationPreferencePatch, FlowerConversationPreferences } from './contracts/flowerSurfaceContracts';
 import { ParentEventRow, createParentEventReading } from './parentEvents';
 import { FlowerAnswerActions } from './FlowerAnswerActions';
 import { FlowerGoalIcon } from './FlowerGoalIcon';
@@ -304,6 +305,7 @@ type FlowerComposerSessionDraft = Readonly<{
   modelIDOverride?: string;
   permissionTypeOverride?: FlowerPermissionType;
   reasoningOverride?: FlowerReasoningSelection;
+  reasoningModelID?: string;
   workingDirDraft?: string;
 }>;
 
@@ -475,6 +477,7 @@ function sameFlowerComposerSessionDraft(left: FlowerComposerSessionDraft, right:
     && left.modelIDOverride === right.modelIDOverride
     && left.permissionTypeOverride === right.permissionTypeOverride
     && left.workingDirDraft === right.workingDirDraft
+    && left.reasoningModelID === right.reasoningModelID
     && sameFlowerInputDrafts(left.inputDrafts, right.inputDrafts)
     && sameFlowerReasoningSelection(left.reasoningOverride, right.reasoningOverride);
 }
@@ -811,6 +814,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     tone: 'error',
     title: 'Flower could not update the model.',
     message,
+  });
+  const notifyConversationPreferenceError = (message: string) => notify({
+    tone: 'error', title: copy().settings.autoSave.saveFailed, message,
   });
   const notifyFutureDefaultModelError = (message: string) => notify({
     tone: 'error',
@@ -1808,14 +1814,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     inputPromptSignature: value.input_prompt_signature ?? '',
     inputDrafts: { ...(value.input_drafts ?? {}) },
     activeInputQuestionID: value.active_input_question_id ?? '',
-    modelIDOverride: value.model_id,
+    modelIDOverride: value.model_id_override,
     permissionTypeOverride: value.permission_type_override,
     reasoningOverride: value.reasoning_selection,
-    workingDirDraft: value.working_dir,
+    reasoningModelID: value.reasoning_model_id,
+    workingDirDraft: value.working_dir_override,
   });
   const currentComposerSessionDraft = createMemo(() => (
     composerSessionDraftFromValue(reactiveDraftSnapshotFor(currentComposerSessionKey()).value)
   ));
+  const newConversationDefaults = () => reactiveDraftSnapshotFor(currentComposerSessionKey()).value.inherited_defaults
+    ?? snapshot()?.conversation_preferences;
   const defaultComposerPermissionType = createMemo<FlowerPermissionType>(() => snapshot()?.defaults.permission_type ?? 'approval_required');
   const selectedThreadPermissionType = createMemo<FlowerPermissionType | undefined>(() => {
     const pending = pendingPermissionPatch();
@@ -1868,10 +1877,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         input_prompt_signature: next.inputPromptSignature || undefined,
         input_drafts: next.inputDrafts,
         active_input_question_id: next.activeInputQuestionID || undefined,
-        model_id: next.modelIDOverride,
+        model_id_override: next.modelIDOverride,
         permission_type_override: next.permissionTypeOverride,
         reasoning_selection: next.reasoningOverride,
-        working_dir: next.workingDirDraft,
+        reasoning_model_id: next.reasoningModelID,
+        working_dir_override: next.workingDirDraft,
       };
     });
   };
@@ -2039,19 +2049,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     updateComposerSessionDraft(sessionKey, (draft) => (
       draft.chatDraft === sharedText
         && JSON.stringify(draft.references) === JSON.stringify(sharedDraft.references)
-        && draft.modelIDOverride === sharedDraft.model_id
+        && draft.modelIDOverride === sharedDraft.model_id_override
         && draft.permissionTypeOverride === sharedDraft.permission_type_override
+        && draft.reasoningModelID === sharedDraft.reasoning_model_id
         && sameFlowerReasoningSelection(draft.reasoningOverride, sharedDraft.reasoning_selection)
-        && draft.workingDirDraft === sharedDraft.working_dir
+        && draft.workingDirDraft === sharedDraft.working_dir_override
         ? draft
         : {
           ...draft,
           chatDraft: sharedText,
           references: sharedDraft.references,
-          modelIDOverride: sharedDraft.model_id,
+          modelIDOverride: sharedDraft.model_id_override,
+          reasoningModelID: sharedDraft.reasoning_model_id,
           permissionTypeOverride: sharedDraft.permission_type_override,
           reasoningOverride: sharedDraft.reasoning_selection,
-          workingDirDraft: sharedDraft.working_dir,
+          workingDirDraft: sharedDraft.working_dir_override,
         }
     ));
     const attachmentController = attachmentControllerFor(sessionKey);
@@ -2081,6 +2093,25 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     hydratedDraftSessionRevisions.set(sessionKey, sharedSnapshot.revision);
   });
 
+  // Freeze inherited defaults once editing starts; hydration/projection is not
+  // a selection event and must never write personal preferences.
+  createEffect(() => {
+    if (selectedThreadID() || !snapshot()) return;
+    const sessionKey = currentComposerSessionKey();
+    const value = reactiveDraftSnapshotFor(sessionKey).value;
+    if (value.inherited_defaults || draftSubmissionActive(value)
+      || !(value.text || value.references.length || value.attachments.length)) return;
+    const modelID = selectedComposerModelID();
+    const reasoning = composerReasoningSelection();
+    const defaults = {
+      model_id: modelID, working_dir: displayedWorkingDirectory(),
+      reasoning_by_model: { ...newConversationDefaults()?.reasoning_by_model,
+        ...(reasoning ? { [modelID]: reasoning } : {}) },
+    };
+    draftSessionFor(sessionKey).mutate(current => current.inherited_defaults ? current
+      : { ...current, inherited_defaults: defaults });
+  });
+
   createEffect(() => {
     const sessionKey = currentComposerSessionKey();
     const session = draftSessionFor(sessionKey);
@@ -2097,7 +2128,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const projectedAttachments = flowerComposerDraftAttachments(attachments);
     const projectedModelID = selectedComposerModelID();
     const projectedPermissionTypeOverride = currentComposerSessionDraft().permissionTypeOverride;
-    const projectedWorkingDir = draftWorkingDirectory();
+    const projectedWorkingDir = displayedWorkingDirectory();
     const projectedCapabilityRevision = currentAttachmentSnapshot().capability?.revision;
     const unchanged = shared.value.mode === mode
       && shared.value.model_id === projectedModelID
@@ -2220,7 +2251,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (selectedThreadID()) return selectedThreadWorkingDirectory();
     const draftPath = draftWorkingDirectory();
     if (draftPath) return draftPath;
-    return defaultWorkingDirectory();
+    return normalizeAbsolutePath(newConversationDefaults()?.working_dir ?? '') || defaultWorkingDirectory();
   });
   const displayedWorkingDirectoryLabel = createMemo(() => (
     basenameFromAbsolutePath(displayedWorkingDirectory(), copy().threadList.workingDirectoryLabel)
@@ -2301,107 +2332,116 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setPermissionMenuOpen(true);
     queueMicrotask(() => focusPermissionMenuItem(permissionMenuActiveIndex()));
   };
+  const preferenceAdapterCurrent = (adapter: FlowerSurfaceAdapter) => !surfaceDisposed
+    && props.adapter.runtime.runtime_id === adapter.runtime.runtime_id
+    && props.adapter.launchTurn === adapter.launchTurn;
+  const acceptSettingsSnapshot = (adapter: FlowerSurfaceAdapter, next: FlowerSettingsSnapshot) => {
+    if (!preferenceAdapterCurrent(adapter)) return;
+    setSnapshot(current => (current?.conversation_preferences?.revision ?? -1) > (next.conversation_preferences?.revision ?? -1)
+      ? { ...next, conversation_preferences: current!.conversation_preferences } : next);
+  };
+  const acceptConversationPreferences = (adapter: FlowerSurfaceAdapter, preferences: FlowerConversationPreferences) => {
+    if (!preferenceAdapterCurrent(adapter)) return;
+    setSnapshot(current => current && (current.conversation_preferences?.revision ?? -1) <= preferences.revision
+      ? { ...current, conversation_preferences: preferences }
+      : current);
+  };
+  const rememberConversationPreference = async (adapter: FlowerSurfaceAdapter, patch: FlowerConversationPreferencePatch) => {
+    if (!adapter.saveConversationPreferences) return;
+    const preferences = await adapter.saveConversationPreferences(patch);
+    acceptConversationPreferences(adapter, preferences);
+    return preferences;
+  };
   const updateComposerModelID = async (modelID: string) => {
     const mid = trimString(modelID);
-    if (!mid) return;
     const option = modelSelectOptions().find((item) => item.id === mid);
-    if (!option) return;
-    const persistsRemoteDefault = option.source === 'model_profile' || option.source === 'platform';
+    if (!mid || !option || !composerModelInteractive()) return;
+    const adapter = props.adapter;
     const threadID = trimString(selectedThreadID());
-    if (!threadID) {
-      const previous = selectedComposerModelID();
-      if (previous === mid) return;
-      const previousDraftOverride = trimString(currentComposerSessionDraft().modelIDOverride);
-      updateCurrentComposerSessionDraft((draft) => (
-        trimString(draft.modelIDOverride) === mid ? draft : { ...draft, modelIDOverride: mid }
-      ));
-      if (!persistsRemoteDefault) return;
-      const previousSnapshot = snapshot();
-      const pendingSessionKey = pendingDraftKey();
-      setPendingModelPatch({ threadID: pendingSessionKey, requested: mid, previous });
-      try {
-        const next = await props.adapter.persistDefaultModel(mid);
-        setSnapshot(next);
-        if (next.model_directory) setModelDirectory(next.model_directory);
-        updateCurrentComposerSessionDraft((draft) => (
-          trimString(draft.modelIDOverride) === mid ? { ...draft, modelIDOverride: '' } : draft
-        ));
-      } catch (error) {
-        setSnapshot(previousSnapshot);
-        updateCurrentComposerSessionDraft((draft) => (
-          trimString(draft.modelIDOverride) === mid ? { ...draft, modelIDOverride: previousDraftOverride } : draft
-        ));
-        notifyModelError(modelErrorMessage(error));
-      } finally {
-        setPendingModelPatch((current) => (
-          current?.threadID === pendingSessionKey && current.requested === mid ? null : current
-        ));
-      }
-      return;
-    }
-    if (!props.adapter.setThreadModel || !composerModelInteractive()) return;
+    const sessionKey = currentComposerSessionKey();
     const previous = selectedComposerModelID();
-    if (previous === mid) return;
-    const previousSnapshot = snapshot();
-    setPendingModelPatch({ threadID, requested: mid, previous });
+    setPendingModelPatch({ threadID: threadID || sessionKey, requested: mid, previous });
     try {
-      const requestEpoch = liveTransport.connectionEpoch();
-      const live = await props.adapter.setThreadModel(threadID, mid);
-      const updated = receiveThreadView(live, 'user_action', requestEpoch).thread;
-      if (persistsRemoteDefault) {
-        try {
-          const next = await props.adapter.persistDefaultModel(mid);
-          setSnapshot(next);
-        } catch (error) {
-          setSnapshot(previousSnapshot);
-          if (selectedThreadDetailMatches(threadID)) {
-            notifyFutureDefaultModelError(getErrorMessage(error) || copy().settings.autoSave.saveFailed);
+      if (threadID) {
+        if (!adapter.setThreadModel) return;
+        if (previous !== mid) {
+          const requestEpoch = liveTransport.connectionEpoch();
+          const live = await adapter.setThreadModel(threadID, mid);
+          if (preferenceAdapterCurrent(adapter)) {
+            const updated = receiveThreadView(live, 'user_action', requestEpoch).thread;
+            if (selectedThreadDetailMatches(threadID)) setSelectedThreadWithDetail(updated.thread_id);
           }
         }
+      } else {
+        updateComposerSessionDraft(sessionKey, draft => ({ ...draft,
+          modelIDOverride: mid,
+          reasoningOverride: draft.reasoningModelID === mid ? draft.reasoningOverride : undefined,
+          reasoningModelID: draft.reasoningModelID === mid ? mid : undefined,
+        }));
       }
-      if (selectedThreadDetailMatches(threadID)) {
-        setSelectedThreadWithDetail(updated.thread_id);
+      // Same-value selection is still an explicit request to remember this field.
+      try {
+        if (adapter.saveConversationPreferences) {
+          await rememberConversationPreference(adapter, { model_id: mid });
+        } else if (option.source === 'model_profile' || option.source === 'platform') {
+          const next = await adapter.persistDefaultModel(mid);
+          if (preferenceAdapterCurrent(adapter)) {
+            acceptSettingsSnapshot(adapter, next);
+            if (next.model_directory) setModelDirectory(next.model_directory);
+          }
+        }
+      } catch (error) {
+        if (preferenceAdapterCurrent(adapter)) {
+          notifyFutureDefaultModelError(getErrorMessage(error) || copy().settings.autoSave.saveFailed);
+        }
       }
     } catch (error) {
-      if (selectedThreadDetailMatches(threadID)) {
+      if (preferenceAdapterCurrent(adapter) && selectedThreadDetailMatches(threadID)) {
         notifyModelError(modelErrorMessage(error));
       }
     } finally {
-      setPendingModelPatch((current) => (current?.threadID === threadID && current.requested === mid ? null : current));
+      setPendingModelPatch(current => current?.threadID === (threadID || sessionKey) && current.requested === mid ? null : current);
     }
   };
   const updateComposerReasoningSelection = async (selection: FlowerReasoningSelection | undefined) => {
-    const normalized = serializeFlowerReasoningSelection(selection);
+    const normalized = serializeFlowerReasoningSelection(selection) ?? { level: 'default' as const };
     const threadID = trimString(selectedThreadID());
-    if (!composerReasoningInteractive()) return;
+    const modelID = selectedComposerModelID();
+    if (!modelID || !composerReasoningInteractive()) return;
+    const adapter = props.adapter;
     if (!threadID) {
-      updateCurrentComposerSessionDraft((draft) => (
-        sameFlowerReasoningSelection(draft.reasoningOverride, normalized)
-          ? draft
-          : { ...draft, reasoningOverride: normalized }
-      ));
+      updateCurrentComposerSessionDraft(draft => ({ ...draft, reasoningOverride: normalized, reasoningModelID: modelID }));
+      try {
+        await rememberConversationPreference(adapter, { reasoning: { model_id: modelID, selection: normalized } });
+      } catch (error) {
+        if (preferenceAdapterCurrent(adapter)) notifyConversationPreferenceError(getErrorMessage(error) || copy().settings.autoSave.saveFailed);
+      }
       return;
     }
-    if (!props.adapter.setThreadReasoningSelection) return;
+    if (!adapter.setThreadReasoningSelection) return;
     const previous = normalizeFlowerReasoningSelection(selectedThreadSettings()?.reasoning_selection);
-    if (sameFlowerReasoningSelection(previous, normalized)) return;
-    setPendingReasoningThreadIDs((current) => new Set(current).add(threadID));
+    setPendingReasoningThreadIDs(current => new Set(current).add(threadID));
     try {
-      const requestEpoch = liveTransport.connectionEpoch();
-      const live = await props.adapter.setThreadReasoningSelection(threadID, normalized);
-      const updated = receiveThreadView(live, 'user_action', requestEpoch).thread;
-      if (selectedThreadDetailMatches(threadID)) {
-        setSelectedThreadWithDetail(updated.thread_id);
+      if (!sameFlowerReasoningSelection(previous, normalized)) {
+        const requestEpoch = liveTransport.connectionEpoch();
+        const live = await adapter.setThreadReasoningSelection(threadID, normalized);
+        if (preferenceAdapterCurrent(adapter)) {
+          const updated = receiveThreadView(live, 'user_action', requestEpoch).thread;
+          if (selectedThreadDetailMatches(threadID)) setSelectedThreadWithDetail(updated.thread_id);
+        }
       }
-      updateComposerSessionDraft(threadID, (draft) => (
-        draft.reasoningOverride ? { ...draft, reasoningOverride: undefined } : draft
-      ));
+      updateComposerSessionDraft(threadID, draft => ({ ...draft, reasoningOverride: undefined, reasoningModelID: undefined }));
+      try {
+        await rememberConversationPreference(adapter, { reasoning: { model_id: modelID, selection: normalized } });
+      } catch (error) {
+        if (preferenceAdapterCurrent(adapter)) notifyConversationPreferenceError(getErrorMessage(error) || copy().settings.autoSave.saveFailed);
+      }
     } catch (error) {
-      if (selectedThreadDetailMatches(threadID)) {
+      if (preferenceAdapterCurrent(adapter) && selectedThreadDetailMatches(threadID)) {
         notifyComposerError(getErrorMessage(error) || copy().settings.autoSave.saveFailed);
       }
     } finally {
-      setPendingReasoningThreadIDs((current) => {
+      setPendingReasoningThreadIDs(current => {
         const next = new Set(current);
         next.delete(threadID);
         return next;
@@ -2899,7 +2939,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       ? trimString(thread.model_id)
       : '';
     if (threadID) return threadModelID;
-    return trimString(currentComposerSessionDraft().modelIDOverride) || currentModelID();
+    return trimString(currentComposerSessionDraft().modelIDOverride)
+      || trimString(newConversationDefaults()?.model_id)
+      || currentModelID();
   });
   let attachmentCapabilitySequence = 0;
   createEffect(() => {
@@ -3002,23 +3044,23 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const composerReasoningLoading = createMemo(() => Boolean(selectedThreadID() && !selectedThreadSettings()));
   const composerReasoningSelection = createMemo(() => {
     if (composerReasoningLoading()) return undefined;
+    const draft = currentComposerSessionDraft();
+    const explicit = !draft.reasoningModelID || draft.reasoningModelID === selectedComposerModelID()
+      ? draft.reasoningOverride : undefined;
     const selection = selectedThreadID()
       ? selectedThreadSettings()?.reasoning_selection
-      : currentComposerSessionDraft().reasoningOverride;
+      : explicit ?? newConversationDefaults()?.reasoning_by_model[selectedComposerModelID()];
     return normalizeFlowerReasoningSelection(selection)
       ?? normalizeFlowerReasoningSelection(selectedModelOption()?.defaultReasoningSelection)
       ?? defaultReasoningSelectionForCapability(selectedReasoningCapability());
   });
   const composerReasoningVisible = createMemo(() => reasoningCapabilityHasPresentation(selectedReasoningCapability()));
   const composerReasoningEnabled = createMemo(() => reasoningCapabilitySupportsControl(selectedReasoningCapability()));
-  const composerLaunchReasoningSelection = createMemo(() => (composerReasoningEnabled() ? composerReasoningSelection() : undefined));
-  createEffect(() => {
-    if (selectedThreadID() || !modelDirectory() || !selectedModelOption() || composerReasoningEnabled()) return;
-    if (!currentComposerSessionDraft().reasoningOverride) return;
-    updateCurrentComposerSessionDraft((draft) => (
-      draft.reasoningOverride ? { ...draft, reasoningOverride: undefined } : draft
-    ));
-  });
+  // Preserve a new draft's inherited/explicit intent even when capability has
+  // changed. Admission must reject it, not silently use a different preference.
+  const composerLaunchReasoningSelection = createMemo(() => !selectedThreadID()
+    ? composerReasoningSelection() ?? { level: 'default' as const }
+    : composerReasoningEnabled() ? composerReasoningSelection() : undefined);
   const modelPatchPending = createMemo(() => {
     const pending = pendingModelPatch();
     if (!pending) return false;
@@ -4528,11 +4570,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const request = (async () => {
       if (surfaceDisposed) return;
       const generation = settingsRefreshGeneration;
+      const adapter = props.adapter;
       try {
-        const next = await props.adapter.loadSettings(invalidateInFlight);
-        if (surfaceDisposed) return;
+        const next = await adapter.loadSettings(invalidateInFlight);
+        if (!preferenceAdapterCurrent(adapter)) return;
         if (generation !== settingsRefreshGeneration) return refreshSettingsForRevision();
-        setSnapshot(next);
+        acceptSettingsSnapshot(adapter, next);
         if (next.model_directory) setModelDirectory(next.model_directory);
         setLoadError('');
       } catch (error) {
@@ -5173,9 +5216,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const saveSettingsMutation = async (mutation: () => Promise<FlowerSettingsSnapshot>) => {
     setSaveError('');
     setSettingsSaving(true);
+    const adapter = props.adapter;
     try {
       const next = await withFlowerRequestDeadline(mutation, copy().settings.dialog.catalog.settingsSaveTimedOut);
-      setSnapshot(next);
+      if (!preferenceAdapterCurrent(adapter)) return next;
+      acceptSettingsSnapshot(adapter, next);
       if (next.model_directory) setModelDirectory(next.model_directory);
       void refreshDirectory();
       setSavedAt(Date.now());
@@ -5567,7 +5612,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const frozenModelID = selectedComposerModelID();
     const frozenPermissionType = composerPermissionType();
     const frozenReasoningSelection = serializeFlowerReasoningSelection(composerLaunchReasoningSelection());
-    const frozenWorkingDir = draftWorkingDirectory() || defaultWorkingDirectory();
+    const frozenWorkingDir = displayedWorkingDirectory();
     if (!selectedID && workingDirectoryPickerAvailable() && !frozenWorkingDir) {
       const failure = workingDirectoryDefaults()?.error;
       notifyComposerError(workingDirectoryDefaults.loading
@@ -6049,13 +6094,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 	// from the previously selected thread.
     updateComposerSessionDraft(pendingDraftKey(), (draft) => ({
 		...draft,
+    modelIDOverride: undefined,
+    reasoningOverride: undefined,
+    reasoningModelID: undefined,
+    workingDirDraft: undefined,
 		chatDraft: '',
 		references: [],
 		inputPromptSignature: '',
 		inputDrafts: {},
 		activeInputQuestionID: '',
 	}));
-    draftSessionFor(pendingDraftKey()).mutate(value => ({ ...value, page_context_captured: false }));
+    draftSessionFor(pendingDraftKey()).mutate(value => ({ ...value, page_context_captured: false, inherited_defaults: undefined }));
 		setThreadLoadError('');
     requestComposerFocus();
     void resolveHandlerDecision();
@@ -13859,10 +13908,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           if (!canPickWorkingDirectory()) return;
           const realPath = selectedPath;
           if (!realPath) return;
-          updateCurrentComposerSessionDraft((draft) => (
-            draft.workingDirDraft === realPath ? draft : { ...draft, workingDirDraft: realPath }
-          ));
+          const sessionKey = currentComposerSessionKey();
+          const adapter = props.adapter;
+          updateComposerSessionDraft(sessionKey, draft => ({ ...draft, workingDirDraft: realPath }));
           setWorkingDirectoryPickerOpen(false);
+          void rememberConversationPreference(adapter, { working_dir: realPath }).then(preferences => {
+            if (!preferences || !preferenceAdapterCurrent(adapter)) return;
+            updateComposerSessionDraft(sessionKey, draft => draft.workingDirDraft === realPath
+              ? { ...draft, workingDirDraft: preferences.working_dir } : draft);
+          }).catch(error => {
+            if (preferenceAdapterCurrent(adapter)) notifyConversationPreferenceError(getErrorMessage(error) || copy().settings.autoSave.saveFailed);
+          });
         }}
       />
       <Show when={computerStageAvailable() && selectedComputerStage()}>

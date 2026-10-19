@@ -1,3 +1,5 @@
+import { createFlowerConversationPreferenceClient, prepareFlowerNewConversationInput } from '../../../../internal/flower_ui/src/conversationPreferences';
+import type { FlowerConversationPreferences } from '../../../../internal/flower_ui/src/contracts/flowerSurfaceContracts';
 import { createFlowerSourceIconResolver } from '../../../../internal/flower_ui/src/chat/markdown/flowerSourceIcons';
 import { flowerExtensionsAdapter } from '../../../../internal/flower_ui/host/extensionsAdapter';
 import { LOCAL_ENVIRONMENT_FLOWER_RUNTIME_ID as LOCAL_ENVIRONMENT_RUNTIME_ID } from '../../../../internal/flower_ui/src/flowerRuntimeIdentity';
@@ -674,6 +676,24 @@ async function uploadRuntimeFlowerAttachment(
   }
 }
 
+// Ask Flower retains this resolved input for an unknown-admission retry. It is
+// per request, not personal memory, and never writes preferences.
+export async function prepareLocalEnvironmentFlowerTurnInput(
+  bridge: DesktopSettingsBridge,
+  input: FlowerTurnLaunchInput,
+): Promise<FlowerTurnLaunchInput> {
+  return prepareFlowerNewConversationInput({
+    loadSettings: async () => {
+      const [snapshot, preferences] = await Promise.all([
+        createDesktopFlowerModelReadResource(bridge, () => 'launch').loadSettings(),
+        runtimeJSON<FlowerConversationPreferences>(bridge, 'GET', '/_redeven_proxy/api/ai/conversation_preferences'),
+      ]);
+      return { ...snapshot, conversation_preferences: preferences };
+    },
+    getWorkingDirectoryPathContext: async () => mapRuntimeWorkingDirectoryPathContext(await runtimeJSON<RuntimeFSPathContextResponse>(bridge, 'GET', '/_redeven_proxy/api/fs/path_context')),
+  }, input);
+}
+
 export async function launchLocalEnvironmentFlowerTurn(
   bridge: DesktopSettingsBridge,
   input: FlowerTurnLaunchInput,
@@ -685,7 +705,8 @@ export async function launchLocalEnvironmentFlowerTurn(
   if (!prompt.trim() && attachmentIDs.length === 0 && !contextAction) throw new Error('Enter a message or add an attachment before sending.');
   const existingThreadID = trim(input.thread_id);
   const snapshot = !existingThreadID && !trim(input.model_id) ? await (modelReadResource ?? createDesktopFlowerModelReadResource(bridge, () => 'launch')).loadSettings() : null;
-  const modelID = trim(input.model_id) || trim(snapshot?.model_directory?.current_model_id) || trim(snapshot?.model_profile?.current_model_id);
+  const preferences = snapshot ? await runtimeJSON<FlowerConversationPreferences>(bridge, 'GET', '/_redeven_proxy/api/ai/conversation_preferences') : null;
+  const modelID = trim(input.model_id) || trim(preferences?.model_id) || trim(snapshot?.model_directory?.current_model_id) || trim(snapshot?.model_profile?.current_model_id);
   if (!existingThreadID && !modelID) throw new Error('Select a Flower model before starting a chat.');
   const permissionType = trim(input.permission_type)
     ? normalizePermissionType(input.permission_type)
@@ -725,7 +746,14 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
   options: LocalEnvironmentFlowerSurfaceAdapterOptions = {},
 ): FlowerSurfaceAdapter {
   const resource = options.modelReadResource ?? createDesktopFlowerModelReadResource(bridge, () => options.runtimeEnvironmentID ?? 'default', options.runtimeEnvironmentID);
-  const loadSettings = (refresh = false) => resource.loadSettings(refresh);
+  const preferences = createFlowerConversationPreferenceClient({
+    load: () => runtimeJSON<FlowerConversationPreferences>(bridge, 'GET', '/_redeven_proxy/api/ai/conversation_preferences'),
+    patch: patch => runtimeJSON<FlowerConversationPreferences>(bridge, 'PATCH', '/_redeven_proxy/api/ai/conversation_preferences', patch),
+  });
+  const loadSettings = async (refresh = false) => {
+    const [settings, conversation_preferences] = await Promise.all([resource.loadSettings(refresh), preferences.load()]);
+    return { ...settings, conversation_preferences };
+  };
   const reloadSettings = () => { resource.invalidate(); return loadSettings(); };
   return createRuntimeFlowerSurfaceAdapter({
     runtime: {
@@ -938,10 +966,15 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       const result = await runtimeJSON<{ account_sign_outs?: FlowerSettingsSnapshot['account_sign_outs'] }>(bridge, 'PUT', '/_redeven_proxy/api/ai/provider_bundle', mapFlowerSettingsDraftToRuntimeBundle(draft));
       return { ...await reloadSettings(), account_sign_outs: result.account_sign_outs };
     },
+    saveConversationPreferences: async patch => {
+      const saved = await preferences.save(patch);
+      if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
+      return saved;
+    },
     persistDefaultModel: async (modelID) => {
       const mid = trim(modelID);
       if (!mid) throw new Error('Missing model id.');
-      await runtimeJSON(bridge, 'PUT', '/_redeven_proxy/api/ai/current_model', { model_id: mid });
+      await preferences.save({ model_id: mid });
       const snapshot = await reloadSettings();
       if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
       return snapshot;

@@ -17,6 +17,17 @@ The connection-local composer draft stores only an explicit new-thread reasoning
 
 Running and waiting Threads expose no editable reasoning control. Input answers continue the immutable Turn surface through the existing runtime contract; they do not submit a reasoning override. New-thread Off survives shared-surface remounts and attachment preparation, while changing to a confirmed model without reasoning clears the unsupported draft choice.
 
+# Personal new-conversation memory
+
+[Conversation preferences](flower-conversation-preferences.md) store only
+explicit reasoning choices, keyed by the complete model identity and including
+budget tokens. A successful user edit on an existing Thread remembers only that
+model's reasoning, not the Thread's model or directory. Reselecting the current
+value also remembers it without an unnecessary Thread PATCH. Loading, sending,
+reconnecting, and automatic model normalization never write preferences.
+A preference-save failure retains the confirmed Thread result and reports a
+separate save error; active Turns and retry snapshots remain immutable.
+
 # Default and effort presentation
 
 All shared control variants use one ordered option list and localized labels.

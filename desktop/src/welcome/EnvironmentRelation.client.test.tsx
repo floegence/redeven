@@ -12,9 +12,11 @@ import type { DesktopWelcomeSnapshot, DesktopLauncherActionRequest, DesktopLaunc
 import { openConnectionProgress } from '../shared/desktopOpenConnectionProgress';
 import { runtimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
 import { launchLocalEnvironmentFlowerTurn } from './flower/localEnvironmentFlowerSurfaceAdapter';
+import type { FlowerTurnLaunchInput } from '../../../internal/flower_ui/src/contracts/flowerSurfaceContracts';
 
 vi.mock('./flower/localEnvironmentFlowerSurfaceAdapter', async importOriginal => ({
   ...await importOriginal<typeof import('./flower/localEnvironmentFlowerSurfaceAdapter')>(),
+  prepareLocalEnvironmentFlowerTurnInput: vi.fn(async (_bridge: unknown, input: FlowerTurnLaunchInput) => structuredClone(input)),
   launchLocalEnvironmentFlowerTurn: vi.fn(async () => { throw new Error('Fixture stops at Flower admission'); }),
 }));
 

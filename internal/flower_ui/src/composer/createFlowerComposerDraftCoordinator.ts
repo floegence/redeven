@@ -1,5 +1,6 @@
 import type { ReferenceSnapshot, ThreadReferenceSnapshot } from '../contextActionWire';
 import type {
+  FlowerConversationPreferences,
   FlowerAttachmentSource,
   FlowerAttachmentStagingScope,
   FlowerPermissionType,
@@ -52,11 +53,20 @@ export type FlowerComposerDraftValue = Readonly<{
   /** Prevent edit-time recapture until an explicit companion opening or New action. */
   page_context_captured?: boolean;
   mode: FlowerComposerDraftMode;
+  /** Defaults frozen when editing begins; not an explicit preference write. */
+  inherited_defaults?: Omit<FlowerConversationPreferences, 'revision'>;
+  /** Effective projection used by admission; never evidence of a user selection. */
   model_id?: string;
+  /** Explicit new-thread model choice, separate from the effective projection. */
+  model_id_override?: string;
   permission_type_override?: FlowerPermissionType;
+  /** Model owning the explicit reasoning selection. */
+  reasoning_model_id?: string;
   /** Explicit new-thread choice only; resolved defaults and request snapshots never write here. */
   reasoning_selection?: FlowerReasoningSelection;
   working_dir?: string;
+  /** Explicit directory choice, not the frozen effective launch directory. */
+  working_dir_override?: string;
   /** Stable upload-staging target for an unsent new-thread draft. */
   client_request_id?: string;
   prepared_long_text_local_id?: string;
@@ -277,8 +287,10 @@ export function createFlowerComposerDraftCoordinator(
             attempt_state: attachment.admitted ? 'staged_ready' : files.some(file => file.local_id === attachment.local_id) ? 'queued' : 'reselect_required',
             ...(attachment.admitted ? { admitted: attachment.admitted } : {}),
           })),
-          model_id: value.model_id, permission_type_override: value.permission_type_override,
-          reasoning_selection: value.reasoning_selection, working_dir: value.working_dir,
+          model_id: value.model_id, model_id_override: value.model_id_override, permission_type_override: value.permission_type_override,
+          reasoning_model_id: value.reasoning_model_id, reasoning_selection: value.reasoning_selection, working_dir: value.working_dir,
+          working_dir_override: value.working_dir_override,
+          inherited_defaults: value.inherited_defaults && structuredClone(value.inherited_defaults),
           input_drafts: value.input_drafts && Object.fromEntries(Object.entries(value.input_drafts)
             .map(([id, answer]) => [id, { ...answer }])),
           active_input_question_id: value.active_input_question_id,

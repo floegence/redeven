@@ -13,7 +13,7 @@ import (
 const (
 	threadstoreSchemaKind           = "ai_threadstore_product_v1"
 	threadstoreMinimumSchemaVersion = 1
-	threadstoreCurrentSchemaVersion = 10
+	threadstoreCurrentSchemaVersion = 11
 )
 
 // CurrentSchemaVersion returns the product-only threadstore schema version.
@@ -45,6 +45,7 @@ func threadstoreSchemaSpecWithPendingInputMigration(ctx context.Context, migrate
 			{FromVersion: 7, ToVersion: 8, Apply: migrateThreadstoreV7ToV8},
 			{FromVersion: 8, ToVersion: 9, Apply: migrateThreadstoreV8ToV9},
 			{FromVersion: 9, ToVersion: 10, Apply: migrateThreadstoreV9ToV10},
+			{FromVersion: 10, ToVersion: 11, Apply: migrateThreadstoreV10ToV11},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -117,6 +118,7 @@ CREATE INDEX idx_ai_thread_settings_endpoint_pinned_created ON ai_thread_setting
 		addComputerTargetColumnTx,
 		addPinRankColumnTx,
 		addComputerAccessColumnTx,
+		createConversationPreferencesTableTx,
 	}
 	for _, build := range builders {
 		if err := build(tx); err != nil {

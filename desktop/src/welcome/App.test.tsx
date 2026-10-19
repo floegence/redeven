@@ -941,6 +941,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("'desktop_welcome_environment_card'");
     expect(appSrc).toContain('launchLocalEnvironmentFlowerTurn(props.runtime.settings');
     expect(appSrc).toContain('const receipt = await launchLocalEnvironmentFlowerTurn(props.runtime.settings');
+    expect(appSrc).toContain('flowerTurnLauncherRequest?.client_request_id !== input.client_request_id');
+    expect(appSrc).toContain('await prepareLocalEnvironmentFlowerTurnInput(props.runtime.settings');
+    expect(appSrc).toContain("flowerTurnAdmissionFailureKind(error) !== 'unknown'");
     expect(appSrc).toContain('const threadID = trimString(receipt.thread_id);');
     expect(appSrc).not.toContain('flowerTurnAdmissionUncertainIdentity');
     expect(appSrc).not.toContain('admission_pending');
