@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." &> /dev/null && pwd)
 if [ "${FAKE_SESSION_CASE:-}" = "" ]; then
-  for session_case in interrupt terminate normal gateway-failure gateway-interrupt; do
+  for session_case in interrupt terminate normal gateway-failure gateway-interrupt source-drift; do
     FAKE_SESSION_CASE="$session_case" "$0"
   done
   exit 0
@@ -36,7 +36,7 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$FAKE_DESKTOP/node_modules/electron" "$FAKE_SCRIPTS" "$FAKE_BIN" "$TEST_HOME"
-cp "$ROOT_DIR/scripts/dev_desktop.sh" "$ROOT_DIR/scripts/ui_package_common.sh" "$FAKE_SCRIPTS/"
+cp "$ROOT_DIR/scripts/dev_desktop.sh" "$ROOT_DIR/scripts/ui_package_common.sh" "$ROOT_DIR/scripts/source_build_identity.mjs" "$FAKE_SCRIPTS/"
 cp "$ROOT_DIR/scripts/prune_dev_desktop_bundles.mjs" "$FAKE_SCRIPTS/"
 cp "$ROOT_DIR/scripts/dev_desktop_gateways.mjs" "$FAKE_SCRIPTS/"
 cp "$ROOT_DIR/.node-version" "$FAKE_CHECKOUT/.node-version"
@@ -62,6 +62,7 @@ printf '%s\n' \
   'set -euo pipefail' \
   'case "${1:-}:${2:-}" in' \
   '  run:build)' \
+  '    if [ "$FAKE_SESSION_CASE" = source-drift ]; then printf "changed during Desktop build\n" >> "$PWD/package.json"; fi' \
   '    exit 0' \
   '    ;;' \
   '  run:prepare:bundled-runtime)' \
@@ -79,7 +80,7 @@ cat > "$FAKE_DESKTOP/dist/main/gatewayServiceHost.js" <<'JS'
 const fs = require('node:fs/promises');
 const path = require('node:path');
 exports.ensureManagedGatewayServiceReady = async options => {
-  if (!options.forceUpdate || options.targetCommit !== 'signal-test') throw new Error('Gateway was not refreshed from current source');
+  if (!options.forceUpdate || options.targetCommit !== process.env.REDEVEN_DESKTOP_BUNDLE_COMMIT) throw new Error('Gateway was not refreshed from current source');
   const binary = path.join(options.stateRoot, 'managed/bin/redeven-gateway');
   await fs.mkdir(path.dirname(binary), { recursive: true });
   await fs.writeFile(binary, '#!/usr/bin/env node\nrequire("node:fs").writeFileSync(process.env.FAKE_GATEWAY_STOPPED, process.argv.slice(2).join(" "));\n', { mode: 0o700 });
@@ -111,9 +112,15 @@ for (let i = 0; i < 6; i++) {
 }
 JS
 export PATH="$FAKE_BIN:$PATH"
+printf '%s\n' 'desktop/node_modules/' 'desktop/dist/' > "$FAKE_CHECKOUT/.gitignore"
+git -C "$FAKE_CHECKOUT" init -q
+git -C "$FAKE_CHECKOUT" config user.name 'Development fixture'
+git -C "$FAKE_CHECKOUT" config user.email 'development@example.invalid'
+git -C "$FAKE_CHECKOUT" add .
+git -C "$FAKE_CHECKOUT" commit -qm 'fixture'
 export HOME="$TEST_HOME"
 export REDEVEN_STATE_ROOT="$STATE_ROOT"
-export REDEVEN_DESKTOP_BUNDLE_COMMIT="signal-test"
+export REDEVEN_DESKTOP_BUNDLE_COMMIT="$(git -C "$FAKE_CHECKOUT" rev-parse --short=12 HEAD)"
 export REDEVEN_DESKTOP_LOCAL_UI_BIND="localhost:32140"
 export REDEVEN_DESKTOP_REMOTE_DEBUGGING_PORT=0
 export REDEVEN_DESKTOP_INSPECT_PORT=0
@@ -141,6 +148,26 @@ for _ in $(seq 1 100); do
   fi
   sleep 0.05
 done
+if [ "$FAKE_SESSION_CASE" = source-drift ]; then
+  if ! rg -Fq 'Source changed during build' "$TEST_ROOT/session.log" \
+    || [ -f "$FAKE_ELECTRON_STARTED" ] || [ -f "$FAKE_GATEWAY_STOPPED" ] || [ -f "$FAKE_RUNTIME_STOPPED" ]; then
+    cat "$TEST_ROOT/session.log" >&2
+    printf 'Source drift did not fail before starting development services\n' >&2
+    exit 1
+  fi
+  bundle_count=$(node -e 'process.stdout.write(String(require("node:fs").readdirSync(process.argv[1]).length))' "$STATE_ROOT/desktop/bundles")
+  if [ "$bundle_count" -ne 6 ]; then
+    printf 'Rejected build published a bundle, pruned previous bundles, or left staging files\n' >&2
+    exit 1
+  fi
+  printf 'dev Desktop cleanup test passed: %s\n' "$FAKE_SESSION_CASE"
+  exit 0
+fi
+if [ "$FAKE_SESSION_CASE" = gateway-interrupt ] && [ ! -f "$FAKE_GATEWAY_PREPARING" ]; then
+  cat "$TEST_ROOT/session.log" >&2
+  printf 'dev Desktop did not reach Gateway preparation\n' >&2
+  exit 1
+fi
 if [ "$FAKE_SESSION_CASE" != gateway-interrupt ] && [ ! -f "$FAKE_ELECTRON_STARTED" ]; then
   cat "$TEST_ROOT/session.log" >&2
   printf 'dev Desktop did not reach the Electron process\n' >&2

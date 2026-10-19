@@ -719,6 +719,7 @@ ensure_desktop_dependencies() {
 }
 
 prepare_instance_bundle_snapshot() {
+	local source_identity="$1"
 	local snapshots_root build_root working_bundle manifest_digest snapshot_root
 	snapshots_root="$DEVELOPMENT_STATE_ROOT/desktop/bundles"
 	mkdir -p "$snapshots_root"
@@ -728,6 +729,10 @@ prepare_instance_bundle_snapshot() {
 		REDEVEN_DESKTOP_BUNDLE_PROVENANCE=development_bundle \
 		npm run prepare:bundled-runtime
 	then
+		rm -rf "$build_root"
+		return 1
+	fi
+	if ! node "$SCRIPT_DIR/source_build_identity.mjs" verify "$ROOT_DIR" "$source_identity"; then
 		rm -rf "$build_root"
 		return 1
 	fi
@@ -820,11 +825,13 @@ start_desktop() {
   fi
   export REDEVEN_DESKTOP_BUNDLE_COMMIT="${REDEVEN_DESKTOP_BUNDLE_COMMIT:-$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)}"
   export REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT="${REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT:-$ROOT_DIR}"
+  local source_identity
+  source_identity=$(node "$SCRIPT_DIR/source_build_identity.mjs" capture "$ROOT_DIR" "$REDEVEN_DESKTOP_BUNDLE_COMMIT")
 
   previous_dir="$PWD"
   cd "$DESKTOP_DIR"
   npm run build
-  prepare_instance_bundle_snapshot
+  prepare_instance_bundle_snapshot "$source_identity"
   cd "$previous_dir"
   [ "$SHUTDOWN_REQUESTED" -eq 0 ] || return "$SHUTDOWN_EXIT_STATUS"
   DEVELOPMENT_SERVICES_OWNED=1

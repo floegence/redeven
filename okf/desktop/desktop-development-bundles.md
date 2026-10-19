@@ -24,6 +24,15 @@ new bundle. Each launch uses a fresh temporary Gateway package cache even when
 the source commit has not changed. The normal package installer validates and
 stamps each Gateway; development does not bypass version or build checks.
 
+Desktop launch and source-built Runtime bundles capture one source identity
+before compiling. The identity includes HEAD and the actual tracked and
+non-ignored untracked file bytes, including intentional local edits. The build
+checks it after asset generation and Runtime compilation; the launcher checks
+it again before starting services. A checkout advance or source edit rejects
+the mixed build with an explicit restart instruction. Ignored generated assets
+and installed dependencies remain owned by their existing build steps. No
+automatic retry, source rewrite, or user-data mutation repairs a rejected build.
+
 Gateway readiness checks the managed executable, installation stamp schema and
 provenance, release identity, and source commit. A source-built Desktop expects
 the Gateway binary and stamp to match its target commit. Matching the release
@@ -102,6 +111,8 @@ this cleanup boundary. In-progress build directories belong to their builders.
 # Evidence
 
 - `redeven:scripts/dev_desktop.sh` - Complete bundle publication and startup cleanup.
+- `redeven:scripts/source_build_identity.mjs` - Shared source identity and mixed-build rejection.
+- `redeven:scripts/desktop_bundle_build_contract.test.mjs` - Checkout advance, dirty sources, and preserved staging boundaries.
 - `redeven:scripts/prune_dev_desktop_bundles.mjs` - Process protection, bounded retention, and exact deletion scope.
 - `redeven:scripts/prune_dev_desktop_bundles.test.mjs` - Repeated builds, live processes, filesystem boundaries, and failed inventory.
 - `redeven:scripts/dev_desktop_signal_cleanup_test.sh` - Actual launcher pruning and signal shutdown with isolated fixtures.
