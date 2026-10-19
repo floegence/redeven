@@ -4,6 +4,10 @@
 
 - Keep [sidebar pinning and ordering](ui/flower-thread-sidebar.md) available during confirmations and list reads. Serialize commands, coalesce unsent toggles, replay later intent after acknowledgements or failure, and reconcile summaries in the background without blocking interaction.
 
+## 2026-10-19 — Concise compaction feedback
+
+- Keep the divider's status and compact message estimate; remove repeated scope and pressure explanations from the tooltip while retaining canonical diagnostics, actionable failures and process disclosure. See [context compaction](ai/model-context-usage-and-compaction.md).
+
 ## 2026-10-19 — Consistent Desktop build sources
 
 - Reject source changes between Desktop, embedded UI and Runtime compilation, including checkout advances during a build. Preserve intentional dirty-source development and require an explicit rebuild after drift. See [development bundles](desktop/desktop-development-bundles.md).

@@ -32,7 +32,7 @@ Projection revision v10 resets prior request lineage through Floret's explicit
 boundary; existing checkpoints and canonical v19 bytes are not rewritten.
 Redeven adds no summary generator, batching policy, or durable compaction state.
 
-The 50,000-token target guides tail selection; it does not require a fixed-length summary or fill unused budget. The actual result combines the generated summary, preserved user requirements, retained complete tail, and checkpoint structure. The summary has a ceiling, so the result may be substantially below the target. Protecting the latest complete input or tool exchange can also exceed the target; Floret records that pressure instead of clipping those messages. The divider reports estimated message context after installation, independently of system-prefix and tool-definition tokens in a complete provider request. The localized detail states this scope explicitly and shows a before/after pair only after successful installation. Its explanation wraps without ellipsis and dismisses through pointer exit, outside touch/click, focus navigation, or Escape. Historical values retain their original estimates; no full-request total is reconstructed from them.
+The 50,000-token target guides tail selection; it does not require a fixed-length summary or fill unused budget. The actual result combines the generated summary, preserved user requirements, retained complete tail, and checkpoint structure. The summary has a ceiling, so the result may be substantially below the target. Protecting the latest complete input or tool exchange can also exceed the target; Floret records that pressure instead of clipping those messages. The divider keeps a short status label. After successful installation, its tooltip shows only a compact before/after message estimate, independently of system-prefix and tool-definition tokens in a complete provider request. Historical values retain their original estimates; no full-request total is reconstructed from them. Missing estimates leave the status without an empty detail control. Failure and noop retain their actionable error or result.
 
 ## Compaction decision evidence
 
@@ -45,9 +45,12 @@ and cancellation keep trigger evidence without claiming installation. Floret
 schema 25 -> 26 preserves historical payloads, rejects older writers and settles
 interrupted observations at terminal turns. Redeven only maps these facts.
 
-The divider's shared SurfaceFloatingLayer owns local hosting, projection and
-clamping in Workbench. The trigger remains keyboard accessible, explanations
-wrap, and Escape, Tab, focus loss and outside pointer actions dismiss the layer.
+Canonical decision diagnostics remain in the mapped contract; the divider does
+not append pressure thresholds, missing-evidence notices or scope paragraphs.
+Its shared SurfaceFloatingLayer owns local hosting, projection and clamping in
+Workbench. Available details remain keyboard accessible and wrap if needed.
+Pointer exit, Escape, Tab, focus loss and outside pointer actions dismiss the
+layer; process collapse closes it through the existing visibility owner.
 
 ## Projection and usage
 
