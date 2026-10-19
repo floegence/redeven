@@ -14,7 +14,7 @@ import type { EnvAppTranslationKey } from './i18n';
 let dispose: (() => void) | undefined;
 afterEach(() => { dispose?.(); dispose = undefined; document.body.replaceChildren(); });
 
-it.each(['en-US', 'zh-CN', 'de-DE'] as const)('keeps the complete estimate explanation readable and dismissible in %s', async locale => {
+it.each(['en-US', 'zh-CN', 'de-DE'] as const)('keeps the estimate concise and dismissible on a narrow screen in %s', async locale => {
   await page.viewport(360, 640);
   const i18n = createTestI18nHelpers(locale);
   const copy = createLocalizedFlowerSurfaceCopy({ locale, t: (key, params) => i18n.t(key as EnvAppTranslationKey, params), tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params) });
@@ -34,9 +34,7 @@ it.each(['en-US', 'zh-CN', 'de-DE'] as const)('keeps the complete estimate expla
   await userEvent.hover(trigger);
   const tooltip = document.querySelector<HTMLElement>('[role="tooltip"]')!;
   await expect.poll(() => getComputedStyle(tooltip).opacity).toBe('1');
-  expect(tooltip.textContent).toContain(copy.chat.compactionDivider.tokenChange('159k', '17k'));
-  expect(tooltip.textContent).toContain(copy.chat.compactionDivider.requestAfter('37594'));
-  expect(tooltip.textContent).toContain(copy.chat.compactionDivider.requestScope);
+  expect(tooltip.textContent).toBe(copy.chat.compactionDivider.tokenChange('159k', '17k'));
   expect(tooltip.scrollWidth).toBeLessThanOrEqual(tooltip.clientWidth);
   const bounds = tooltip.getBoundingClientRect();
   expect(bounds.left).toBeGreaterThanOrEqual(0);
@@ -44,6 +42,7 @@ it.each(['en-US', 'zh-CN', 'de-DE'] as const)('keeps the complete estimate expla
   expect(bounds.top).toBeGreaterThanOrEqual(0);
   expect(bounds.bottom).toBeLessThanOrEqual(640);
   expect(tooltip.scrollHeight).toBeLessThanOrEqual(tooltip.clientHeight);
+  expect(bounds.height).toBeLessThan(52);
   expect(getComputedStyle(tooltip).whiteSpace).toBe('normal');
   trigger.focus();
   await userEvent.keyboard('{Escape}');
@@ -55,7 +54,7 @@ it.each(['en-US', 'zh-CN', 'de-DE'] as const)('keeps the complete estimate expla
   expect(document.querySelector('[role="tooltip"]')).toBeNull();
   if (locale === 'zh-CN') {
     trigger.focus(); trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-    await page.screenshot({ element: host, path: '__screenshots__/flower-compaction-estimate-scope.png' });
+    await page.screenshot({ element: host, path: '__screenshots__/flower-compaction-concise-estimate.png' });
   }
 });
 
@@ -88,9 +87,7 @@ it('uses the local floating layer inside a transformed Workbench and stays dismi
   const surface = host.querySelector<HTMLElement>('[data-testid="surface-host"]')!;
   expect(tooltip.closest('[data-floe-surface-portal-layer="true"]')).toBe(trigger.closest('[data-floe-surface-portal-layer="true"]'));
   expect(getComputedStyle(tooltip.closest('[data-floe-surface-floating-layer]')!).position).toBe('absolute');
-  expect(tooltip.textContent).toContain('470382');
-  expect(tooltip.textContent).toContain('37594');
-  expect(tooltip.textContent).toContain('calibrated');
+  expect(tooltip.textContent).toBe('Message estimate: 159k → 17k tokens');
   expect(tooltip.scrollHeight).toBeLessThanOrEqual(tooltip.clientHeight);
   expect(tooltip.style.position).toBe('');
   expect(tooltip.style.left).toBe('');

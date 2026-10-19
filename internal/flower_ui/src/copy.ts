@@ -717,14 +717,6 @@ export type FlowerSurfaceCopy = Readonly<{
       noop: string;
       fallback: string;
       tokenChange: (before: string, after: string) => string;
-      requestBefore: (value: string) => string;
-      requestAfter: (value: string) => string;
-      pressureEstimate: (value: string, threshold: string, safe: string) => string;
-      pressureCalibrated: (value: string, threshold: string, safe: string) => string;
-      providerOverflow: string;
-      beforeUnavailable: string;
-      afterUnavailable: string;
-      requestScope: string;
     }>;
     projectionUnavailable: Readonly<{
       title: string;
@@ -1203,15 +1195,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       cancelled: 'Context compaction cancelled',
       noop: 'Context does not need compression',
       fallback: 'Context checkpoint',
-      tokenChange: (before, after) => `Estimated message context: ${before} to ${after} tokens. Excludes system instructions and tool definitions.`,
-      requestBefore: (value) => `Estimated full request before compression: ${value} tokens.`,
-      requestAfter: (value) => `Validated full request after compression: ${value} estimated tokens.`,
-      pressureEstimate: (value, threshold, safe) => `Trigger pressure estimate: ${value} tokens; threshold: ${threshold}; safe input limit: ${safe}.`,
-      pressureCalibrated: (value, threshold, safe) => `Trigger pressure calibrated from a qualified request: ${value} tokens; threshold: ${threshold}; safe input limit: ${safe}.`,
-      providerOverflow: "The provider rejected the request because its context limit was exceeded.",
-      beforeUnavailable: "The trigger request was not recorded or was not prepared for this operation.",
-      afterUnavailable: "The replacement request is not yet available.",
-      requestScope: "These request figures include system instructions and tool definitions and are not native token measurements.",
+      tokenChange: (before, after) => `Message estimate: ${before} → ${after} tokens`,
     },
     projectionUnavailable: {
       title: 'Response unavailable',

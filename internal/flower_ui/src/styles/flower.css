@@ -4197,14 +4197,6 @@
   overflow-wrap: anywhere;
 }
 
-.flower-compaction-divider-tooltip-line {
-  display: block;
-}
-
-.flower-compaction-divider-tooltip-line + .flower-compaction-divider-tooltip-line {
-  margin-top: 0.4rem;
-}
-
 .flower-compaction-divider-tooltip[data-open='true'] {
   opacity: 1;
 }

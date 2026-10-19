@@ -1,10 +1,10 @@
 import { Clock } from '@floegence/floe-webapp-core/icons';
 import { Button, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
-import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, onMount } from 'solid-js';
+import { Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, onMount } from 'solid-js';
 
 import type { FlowerTimelineDecoration } from '../contracts/flowerSurfaceContracts';
 import type { FlowerSurfaceCopy } from '../copy';
-import { compactionDecisionDetail, compactionDividerDetail, compactionDividerLabel } from './flowerContextPresentation';
+import { compactionDividerDetail, compactionDividerLabel } from './flowerContextPresentation';
 
 function FlowerContextCompactionRunningIcon() {
   return (
@@ -21,13 +21,12 @@ export function FlowerContextCompactionDivider(props: {
   const visible = () => props.visible !== false;
   const compaction = createMemo(() => props.decoration.compaction);
   const detail = createMemo(() => compactionDividerDetail(compaction(), props.copy));
-  const decisionDetail = createMemo(() => compactionDecisionDetail(compaction(), props.copy));
   const label = createMemo(() => compactionDividerLabel(compaction(), props.copy));
   const running = createMemo(() => compaction().status === 'compacting');
   const [tooltipOpen, setTooltipOpen] = createSignal(false);
-  createEffect(() => { if (!visible()) setTooltipOpen(false); });
   const tooltipID = `flower-compaction-divider-${createUniqueId()}`;
-  const hasDetail = createMemo(() => detail().length > 0 || decisionDetail().length > 0);
+  const hasDetail = createMemo(() => detail().length > 0);
+  createEffect(() => { if (!visible() || !hasDetail()) setTooltipOpen(false); });
   let container: HTMLDivElement | undefined;
   let trigger: HTMLDivElement | undefined;
   const [panel, setPanel] = createSignal<HTMLSpanElement>();
@@ -111,8 +110,7 @@ export function FlowerContextCompactionDivider(props: {
             class="flower-compaction-divider-tooltip"
             data-open="true"
           >
-            <Show when={detail()}><span class="flower-compaction-divider-tooltip-line">{detail()}</span></Show>
-            <For each={decisionDetail()}>{line => <span class="flower-compaction-divider-tooltip-line">{line}</span>}</For>
+            {detail()}
           </span>
         </SurfaceFloatingLayer>
       </Show>
