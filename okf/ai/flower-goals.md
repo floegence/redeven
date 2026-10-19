@@ -87,6 +87,11 @@ transcript, without a card or border. Later Goal edits never replace that text.
 Unknown historical data says Goal check · Details unavailable and has no empty
 disclosure. The released Floret typed activity projection owns historical
 recovery; Redeven never reads private storage or reconstructs review outcomes.
+The shared public Activity filter retains only Floret's typed Goal display fields
+for the goal tool. Current detail, historical messages and live blocks preserve
+the exact objective, confirmed outcome and evidence through the same boundary;
+unknown nested fields remain private. Waiting for an answer or approval never
+supplies a missing review outcome or turns tool success into Goal completion.
 Reflection uses a lightweight status. The transcript action menu also exposes
 /goal during questions and approvals without resolving or bypassing them.
 
@@ -146,6 +151,8 @@ input. Deleting Todo later requires no change to Goal execution or interaction.
 
 # Evidence
 
+- redeven:internal/ai/activity_goal_test.go — public detail, timeline and live Goal
+  fidelity, closed display fields, exact long text and reviews during user waiting.
 - redeven:internal/ai/thread_goal.go — authorization and typed mutation mapping.
 - redeven:internal/ai/thread_goal_test.go — empty creation, provider reflection,
   replay, conflicts, lost-response recovery, Stop during reflection, default Todo
@@ -155,7 +162,8 @@ input. Deleting Todo later requires no change to Goal execution or interaction.
   historical Todo remains readable without influencing Goal completion.
 - redeven:internal/ai/threadstore/upload_staging.go — resource binding and in-flight upload settlement.
 - redeven:internal/ai/thread_goal_submit_test.go — idle admission, active updates, Stop, exact replay and execution authorization.
-- redeven:internal/codeapp/appserver/server_ai_goal_test.go — HTTP save-only and submission contracts.
+- redeven:internal/codeapp/appserver/server_ai_goal_test.go — HTTP save-only and
+  submission contracts, and complete review facts while waiting for user input.
 - redeven:internal/flower_ui/src/FlowerSurface.tsx — command chip, anchored popup and outbox handoff.
 - redeven:internal/envapp/ui_src/src/ui/FlowerSurface.goal.browser.test.tsx — keyboard, draft preservation, conflicts and unknown recovery.
 - redeven:scripts/check_floret_dependency_boundary.sh — released upstream capability boundary.
