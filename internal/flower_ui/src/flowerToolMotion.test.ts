@@ -7,7 +7,7 @@ describe('tool icon catalog', () => {
     const registry = readFileSync(new URL('../../ai/tools/registry.go', import.meta.url), 'utf8');
     const names = [...registry.matchAll(/^\s*"([^" ]+)":\s*\{/gm)].map(match => match[1]);
     expect(names.length).toBeGreaterThanOrEqual(53);
-    for (const name of [...names, 'ask_user', 'sources', 'web_search', 'mcp', 'unknown']) expect(flowerToolMotion[name], name).toBeDefined();
+    for (const name of [...names, 'goal', 'ask_user', 'sources', 'web_search', 'mcp', 'unknown']) expect(flowerToolMotion[name], name).toBeDefined();
   });
   it('uses independent tracks with stable phase timing', () => {
     for (const [name, recipe] of Object.entries(flowerToolMotion)) {

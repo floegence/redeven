@@ -1,5 +1,6 @@
 import { ParentEventRow, createParentEventReading } from './parentEvents';
 import { FlowerAnswerActions } from './FlowerAnswerActions';
+import { FlowerGoalIcon } from './FlowerGoalIcon';
 import { flowerAnswerHTML, downloadFlowerAnswer } from './chat/markdown/flowerAnswerExport';
 import { flowerToolCallPreviewIdentity } from './toolCallPreview';
 import { flowerQueuedDraftReferences } from './composer/flowerQueuedDraft';
@@ -10341,10 +10342,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <span class="flower-activity-inline-icon"><FlowerToolIcon toolName={block().call.name} running={livePresentationConfirmed()} /></span>
           <span class="flower-activity-inline-copy">
             <span class="flower-activity-inline-title" data-floe-progress-shimmer={livePresentationConfirmed() ? 'text' : undefined}>
-              {block().call.name === 'apply_patch' ? copy().chat.toolActivity.patch : copy().chat.toolActivity.edit}
+              {block().call.name === 'goal' ? copy().chat.goalTitle : block().call.name === 'apply_patch' ? copy().chat.toolActivity.patch : copy().chat.toolActivity.edit}
               <Show when={block().call.preview?.display_name}>{(name) => <> <span class="flower-activity-file-name">{name()}</span></>}</Show>
             </span>
-            <span class="flower-activity-inline-detail">{copy().chat.outputProgress.preparingChanges}</span>
+            <Show when={block().call.name !== 'goal'}><span class="flower-activity-inline-detail">{copy().chat.outputProgress.preparingChanges}</span></Show>
             {changeStats(() => block().call.preview ?? undefined, () => true)}
           </span>
         </div>
@@ -10375,6 +10376,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     })));
     const pendingApprovalCommand = createMemo(() => pendingApprovalCommandForActivityItem(item(), selectedApprovalActions()));
     const displayTitle = createMemo<FlowerActivityTitle>(() => {
+      if (item().tool_name === 'goal') return { kind: 'plain', text: copy().chat.goalTitle };
       const command = pendingApprovalCommand();
       return command && item().renderer !== 'terminal' && presentation().title.kind !== 'command'
         ? { kind: 'command', command }
@@ -10492,7 +10494,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         data-flower-activity-approval-state={item().approval_state}
         data-flower-control-error={controlError() ? 'true' : undefined}
         data-state={disclosure.state()}
-        aria-label={compactReports() ? presentation().label + ': ' + copy().chat.toolStatuses[displayStatus()] : activityItemAriaLabel(item())}
+        aria-label={item().tool_name === 'goal' ? copy().chat.goalTitle + ': ' + copy().chat.toolStatuses[displayStatus()] : compactReports() ? presentation().label + ': ' + copy().chat.toolStatuses[displayStatus()] : activityItemAriaLabel(item())}
       >
         <div class="flower-activity-inline-line">
           <Show
@@ -11036,11 +11038,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     };
     return (
       <Show when={visible()}>
-        <Show when={!message().goal} fallback={<div class="flower-goal-history" data-flower-goal-change={message().goal?.operation}>
-          <span>{message().goal?.operation === 'completed' ? copy().chat.goalCompleted : message().goal?.operation === 'delete' ? copy().chat.goalDeleted : message().goal?.goal.version === 1 ? copy().chat.goalCreated : copy().chat.goalUpdated}</span>
-          <span class="text-muted-foreground">{message().goal?.actor === 'user' ? copy().chat.goalActorUser : copy().chat.goalActorModel}</span>
-          <Show when={message().goal?.goal.text || message().goal?.reason}><details><summary>{copy().chat.goalTitle}</summary><p>{message().goal?.goal.text || message().goal?.reason}</p></details></Show>
-        </div>}>
+        <Show when={!message().goal} fallback={<details class="flower-goal-history" data-flower-goal-change={message().goal?.operation} onToggle={() => viewportScope.measureAfterLayout()}>
+          <summary>
+            <FlowerGoalIcon class="flower-goal-history-icon" size={16} strokeWidth={1.65} aria-hidden="true" />
+            <span class="flower-goal-history-label">{message().goal?.operation === 'completed' ? copy().chat.goalCompleted : message().goal?.operation === 'delete' ? copy().chat.goalDeleted : copy().chat.goalSet}</span>
+            <span class="flower-goal-history-preview">{message().goal?.goal.text || message().goal?.reason}</span>
+            <ChevronRight class="flower-goal-history-chevron" aria-hidden="true" />
+          </summary>
+          <div class="flower-goal-history-body">
+            <p class="flower-goal-history-text">{message().goal?.goal.text || message().goal?.reason}</p>
+            <span class="flower-goal-history-actor">{message().goal?.actor === 'user' ? copy().chat.goalActorUser : copy().chat.goalActorModel}</span>
+          </div>
+        </details>}>
         <div
           class={cn(
             'flower-message-row',
@@ -12490,13 +12499,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       <button ref={goalTriggerRef} type="button" class="flower-goal-tag" aria-label={copy().chat.goalTitle}
         title={selectedGoal()?.text} aria-haspopup="dialog" aria-expanded={goalPopupOpen()}
         data-goal-status={selectedGoal()?.status} onClick={() => goalPopupOpen() ? closeGoalEditor() : openGoalEditor()}>
-        <span class="flower-goal-dot" aria-hidden="true" />{copy().chat.goalTitle}
+        <FlowerGoalIcon size={13} strokeWidth={1.65} aria-hidden="true" />{copy().chat.goalTitle}
         <Show when={selectedGoal()?.reviewing}><span class="flower-visually-hidden" role="status">{copy().chat.goalReviewing}</span></Show>
       </button>
       <Show when={goalPopupOpen()}>
         <SurfaceFloatingLayer owner={goalTriggerRef} position={goalPopupPosition()} estimatedSize={goalPopupSize()} class="flower-goal-layer" data-flower-floating-layer="true">
           <div ref={goalPanelRef} role="dialog" aria-label={copy().chat.goalTitle} class="flower-goal-popup" data-floe-input-surface="" data-floe-surface="floating">
-            <div class="flower-goal-popup-header"><span>{copy().chat.goalTitle}</span>
+            <div class="flower-goal-popup-header"><span class="flower-goal-popup-title"><FlowerGoalIcon size={15} strokeWidth={1.65} aria-hidden="true" />{copy().chat.goalTitle}</span>
               <div class="flower-goal-popup-controls">
                 <button type="button" aria-label={copy().chat.goalDelete} title={copy().chat.goalDelete} disabled={goalPending() || props.adapter.canMutate === false || selectedThreadReadOnly()} onClick={() => void enqueueGoal('delete', '')}><Trash class="h-3.5 w-3.5" /></button>
                 <button type="button" aria-label={copy().computer.close} title={copy().computer.close} onClick={() => closeGoalEditor()}><X class="h-3.5 w-3.5" /></button>
@@ -12578,7 +12587,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       onPointerMove={() => setComposerCommandIndex(composerCommandChoices().indexOf(command))}
                       onClick={() => executeComposerCommand(command)}
                     >
-                      <Clock class="h-3.5 w-3.5" aria-hidden="true" />
+                      <Show when={command === '/goal'} fallback={<Clock class="h-3.5 w-3.5" aria-hidden="true" />}><FlowerGoalIcon class="h-3.5 w-3.5" strokeWidth={1.65} aria-hidden="true" /></Show>
                       <span class="flower-composer-command-token">{command}</span>
                       <span class="flower-composer-command-description">{command === '/goal' ? copy().chat.commandGoal : copy().chat.commandCompactContext}</span>
                     </button>}</For>
@@ -12969,7 +12978,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 <Show when={goalCommand()?.error}><p class="flower-goal-error" role="alert">{goalCommand()?.error}</p><p class="flower-goal-current">{selectedGoal()?.text}</p></Show>
                 <div class="flower-composer-entry" data-flower-goal-mode={goalCommand() ? 'true' : undefined}>
                   <Show when={goalCommand()}>
-                    <span class="flower-goal-command-chip">/goal<button type="button" aria-label={copy().computer.close} title={copy().computer.close} onClick={exitGoalCommand}><X class="h-3 w-3" /></button></span>
+                    <span class="flower-goal-command-chip"><FlowerGoalIcon size={13} strokeWidth={1.65} aria-hidden="true" />/goal<button type="button" aria-label={copy().computer.close} title={copy().computer.close} onClick={exitGoalCommand}><X class="h-3 w-3" /></button></span>
                   </Show>
                   {composerTextEditor()}
                 </div>
@@ -13567,7 +13576,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           >
             <Show when={props.adapter.manageGoal && props.adapter.canMutate !== false && !selectedThreadReadOnly()}>
               <button type="button" role="menuitem" class="flower-thread-menu-item" title={copy().chat.commandGoal} onClick={() => { setTranscriptMenu(null); enterGoalCommand(); }}>
-                <Clock class="h-3.5 w-3.5" aria-hidden="true" /><span>/goal</span>
+                <FlowerGoalIcon class="h-3.5 w-3.5" strokeWidth={1.65} aria-hidden="true" /><span>/goal</span>
               </button>
             </Show>
             <Show when={menu().selection}>
