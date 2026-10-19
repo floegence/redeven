@@ -20,7 +20,7 @@ Thread-level child membership comes from Floret v7 `ThreadRuntime.List` scoped b
 
 `FlowerSubagentSummary` contains `parent_thread_id`, canonical child `thread_id`, required `task_name`, task description, agent type, context mode, status, timing, and current control flags. There is no `subagent_id` or `title` compatibility field. Activity payloads route `Open messages` with `thread_id` only. Delegated approval presentation uses `child_thread_id`; it does not duplicate the same identity under another name.
 
-SubAgent tool rows are action-first. One localized formatter combines the typed operation action with the Activity lifecycle and outcome counts, so spawn, wait, list, inspect, send-input, close, and close-all never collapse to the ambiguous title “Subagents.” Every target appears immediately as an inline capsule in request order, with its canonical portrait, compact task name, and status glyph. A single creation target sits beside the operation title in a compact capsule matching the tool row height; its task name appears only in the capsule. Multiple capsules wrap within the transcript. Touch input retains a larger activation target. Management tools have no disclosure or chevron. Clicking or activating a capsule opens the existing floating detail window directly. Operation errors remain visible inline; a failed creation without a canonical child identity never fabricates a clickable capsule. Unknown or invalid operation data uses a neutral operation title and never guesses from a generic label.
+SubAgent tool rows are action-first. One localized formatter combines the typed operation action with the Activity lifecycle and outcome counts, so spawn, wait, list, status, inspect, send-input, close, and close-all never collapse to the ambiguous title “Subagents.” Every target appears immediately as an inline capsule in request order, with its canonical portrait, compact task name, and status glyph. A single target sits beside the operation title in a compact capsule matching the tool row height; its task name appears only in the capsule. Multiple capsules wrap within the transcript. Touch input retains a larger activation target. Management tools have no disclosure or chevron. Clicking or activating a capsule opens the existing floating detail window directly. Operation errors remain visible inline; a failed creation without a canonical child identity never fabricates a clickable capsule. Unknown or invalid operation data uses a neutral operation title and never guesses from a generic label.
 
 Historical management rows describe their own invocation. Published Floret v7.32.1
 supplies canonical dispatch/result timestamps; each row displays that fixed
@@ -30,10 +30,9 @@ clock. Missing execution boundaries leave duration unavailable, without a
 turn-duration or child-clock substitute. Saved target statuses and wait counts
 remain facts at the operation boundary. Current inventory may fill missing task
 identity by exact `thread_id`, but cannot rewrite those outcomes or supply timing.
-Capsule glyphs independently follow current canonical membership status, falling
-back to the recorded target status when membership is temporarily absent. Their
+Capsule glyphs preserve the recorded target status at the invocation boundary. Their
 accessible names expose the full task name and localized status; hover titles
-also retain the task description. Live status changes retain the same capsule
+also retain the task description. Live inventory changes retain the same capsule
 and keyboard focus.
 Current child status and runtime appear in the child dropdown and detail overview;
 later child turns, live replacements, history reloads, and terminal refresh cannot
@@ -86,3 +85,5 @@ Child events use the [parent timeline](flower-parent-events.md), canonical avata
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.subagentDisclosure.browser.test.tsx` - Verifies direct activation, management operations, multi-child switching, live status and focus stability, failed creation, themes, and narrow wrapping.
 
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.subagentSteering.browser.test.tsx` - Verifies row-scoped operations, stable windows, recoverable conflicts, Stop availability, and late-response isolation.
+
+Status checks are labeled “Check subagent status” and result reads “Read subagent results”; localized hover and accessible descriptions explain whether report bodies enter model context. Ordinary success adds no completion suffix. Child outcomes stay on the recorded target capsules, while current status remains in the dropdown and detail view. Partial waits display completed/total counts and claim a timeout only when the wait actually expired. Event tools use event labels; real child reports and completion notifications retain their own meaning.

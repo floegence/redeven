@@ -121,7 +121,7 @@ describe('Subagent inline capsules', () => {
     await page.screenshot({ path: '__screenshots__/subagent-capsules/single-inline-narrow.png' });
   });
 
-  it.each(['spawn', 'list', 'inspect', 'wait', 'send_input', 'close', 'close_all'])('presents a single %s target without a disclosure', async (action) => {
+  it.each(['spawn', 'list', 'status', 'inspect', 'wait', 'send_input', 'close', 'close_all'])('presents a single %s target without a disclosure', async (action) => {
     const { runtime } = mount([operation(action, action, 1)]);
     await waitFor(() => Boolean(row(runtime, action)));
     const activity = row(runtime, action);
@@ -134,7 +134,7 @@ describe('Subagent inline capsules', () => {
     it('wraps lifecycle operations and switches agents in ' + theme + ' mode', async () => {
       await page.viewport(1100, 900);
       document.documentElement.classList.add(theme);
-      const actions = ['spawn', 'list', 'inspect', 'wait', 'send_input', 'close', 'close_all'];
+      const actions = ['spawn', 'list', 'status', 'inspect', 'wait', 'send_input', 'close', 'close_all'];
       const { runtime, loadDetail } = mount(actions.map(action => operation(action, action, 8)), 8);
       await waitFor(() => Boolean(row(runtime, 'close_all')));
       for (const action of actions) {
@@ -286,7 +286,7 @@ describe('Subagent inline capsules', () => {
     expect(buttons.map(button => button.dataset.flowerSubagentSwitch)).toEqual([1, 3, 0, 2, 4, 5, 6, 7].map(index => summaries[index]!.thread_id));
   });
 
-  it.each(['spawn', 'wait'])('updates live %s status without rewriting historical outcomes or replacing focused capsules', async (action) => {
+  it.each(['spawn', 'wait'])('preserves recorded %s status and focused capsules through live inventory changes', async (action) => {
     let emit: ((value: FlowerLiveStreamEnvelope | null) => void) | undefined;
     const { runtime, summaries } = mount([operation('live', action, action === 'spawn' ? 1 : 2), operation('timeout', 'wait', 1, {
       payload: { action: 'wait', targets: targets.slice(0, 1), requested_count: 1, completed_count: 0, timed_out: true },
@@ -309,12 +309,13 @@ describe('Subagent inline capsules', () => {
     const capsule = activity.querySelector<HTMLButtonElement>('[data-flower-subagent-capsule="capsule-child-0"]')!;
     capsule.focus();
     emit!({ schema_version: 1, kind: 'thread.batch', thread_id: parentID, subagents: summaries.map(summary => ({ ...summary, status: 'completed' })) });
-    await waitFor(() => capsule.dataset.flowerSubagentStatus === 'completed');
+    await waitFor(() => Boolean(emit));
+    expect(capsule.dataset.flowerSubagentStatus).toBe('running');
     expect(document.activeElement).toBe(capsule);
     expect(activity.querySelector('[data-flower-subagent-capsule="capsule-child-0"]')).toBe(capsule);
     expect(activity.querySelector('.flower-activity-inline-title')!.textContent).toBe(title);
     expect(row(runtime, 'timeout').textContent).toContain('Wait timed out');
-    expect(row(runtime, 'timeout').querySelector('[data-flower-subagent-capsule]')?.getAttribute('data-flower-subagent-status')).toBe('completed');
+    expect(row(runtime, 'timeout').querySelector('[data-flower-subagent-capsule]')?.getAttribute('data-flower-subagent-status')).toBe('running');
   });
 
   it('shows failed creation inline without inventing a clickable agent', async () => {

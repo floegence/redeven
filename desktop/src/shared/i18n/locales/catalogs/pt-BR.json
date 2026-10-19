@@ -289,9 +289,9 @@
         "parentReportRecorded": "O relatório foi registrado na tarefa principal.",
         "parentReportView": "Ver relatório na tarefa principal",
         "parentReportContent": "Relatório enviado",
-        "subagentReports": "Relatórios de subagentes",
-        "subagentReportsRead": "Ler relatórios de subagentes",
-        "subagentReportsList": "Listar relatórios de subagentes",
+        "subagentReports": "Eventos dos subagentes",
+        "subagentReportsRead": "Ler eventos dos subagentes",
+        "subagentReportsList": "Listar eventos dos subagentes",
         "canvasSchema": "Esquema do canvas",
         "canvasList": "Explorar canvases",
         "canvasRead": "Ler canvas",
@@ -959,10 +959,11 @@
           "sendInput": "Orientar subagente",
           "wait": "Aguardar subagentes",
           "list": "Listar subagentes",
-          "inspect": "Inspecionar subagentes",
+          "inspect": "Ler resultados dos subagentes",
           "close": "Fechar subagente",
           "closeAll": "Fechar subagentes",
-          "unknown": "Operação de subagente"
+          "unknown": "Operação de subagente",
+          "status": "Verificar status dos subagentes"
         },
         "titles": {
           "operation": "Operação de subagente",
@@ -1021,7 +1022,11 @@
           "yes": "Sim",
           "no": "Não"
         },
-        "agentsCount": "Agentes delegados: {count}"
+        "agentsCount": "Agentes delegados: {count}",
+        "hints": {
+          "status": "Consulta apenas o status, sem ler o conteúdo dos relatórios.",
+          "inspect": "Lê os resultados completos e os inclui no contexto do modelo."
+        }
       },
       "feedbackClose": "Fechar detalhes do aviso",
       "input": {

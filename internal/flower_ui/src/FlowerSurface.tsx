@@ -10204,7 +10204,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         <FlowerKeyedList scope={selectedThreadID()} focusFallback={focusComposerIfConnected} each={block().subagents.items} identity={(agent) => agent.thread_id || agent}>
           {(agent) => {
             const current = createMemo(() => selectedSubagentItems().find((item) => item.threadID === agent().open_messages?.thread_id));
-            const status = () => current()?.status ?? normalizeSubagentPanelStatus(agent().raw_status);
+            const status = () => normalizeSubagentPanelStatus(agent().raw_status);
             const title = () => [agent().name, subagentStatusLabel(status()), subagentsCopy().openThread].join('. ');
             return <div class="flower-activity-subagents-item" role="listitem">
               <Show when={agent().open_messages && current()} fallback={<span class="flower-activity-subagent-unavailable">{agent().name}</span>}>
@@ -10391,10 +10391,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const hasDetails = createMemo(() => presentation().detailBlocks.length > 0);
     const subagentOperation = () => item().renderer === 'subagent' || item().renderer === 'subagent_operation';
     const inlineSubagent = createMemo(() => presentation().detailBlocks.find((block) => (
-      block.kind === 'subagents' && block.subagents.action === 'spawn'
-      && block.subagents.items.length === 1 && Boolean(block.subagents.items[0]?.open_messages)
+      block.kind === 'subagents' && block.subagents.items.length === 1 && Boolean(block.subagents.items[0]?.open_messages)
     )));
     const compactReports = () => item().tool_name === 'subagent_events';
+    const subagentReadHint = () => {
+      const rawAction = item().payload?.action;
+      const action = typeof rawAction === 'string' ? rawAction : '';
+      return subagentOperation() && (action === 'status' || action === 'inspect') ? subagentsCopy().activity.hints[action] : undefined;
+    };
     const expandable = createMemo(() => !compactReports() && !subagentOperation() && ((presentation().suppressEmptyDisclosure
       || item().renderer === 'web_search' && !item().tool_name?.startsWith('okf.')) ? hasDetails() : item().kind === 'tool' || hasDetails()));
     const open = () => expandable() && disclosureControl.open();
@@ -10483,11 +10487,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       <div
         class={cn('flower-activity-inline-row', item().tool_name === 'goal' && 'flower-activity-inline-row-goal', `flower-activity-inline-row-${displayStatus()}`, item().tool_name === 'subagent_events' && 'flower-activity-inline-row-reports', item().renderer === 'web_search' && 'flower-activity-inline-row-web-search', subagentOperation() && 'flower-activity-inline-row-subagents', inlineSubagent() && 'flower-activity-inline-row-single-subagent')}
         data-flower-activity-item-id={item().item_id}
+        title={subagentReadHint()}
+        aria-description={subagentReadHint()}
         data-flower-activity-status={displayStatus()}
         data-flower-activity-approval-state={item().approval_state}
         data-flower-control-error={controlError() ? 'true' : undefined}
         data-state={disclosure.state()}
-        aria-label={item().tool_name === 'goal' ? presentation().label + (presentation().meta ? ': ' + presentation().meta : '') : compactReports() ? presentation().label + ': ' + copy().chat.toolStatuses[displayStatus()] : activityItemAriaLabel(item())}
+        aria-label={subagentOperation() ? presentation().label : item().tool_name === 'goal' ? presentation().label + (presentation().meta ? ': ' + presentation().meta : '') : compactReports() ? presentation().label + ': ' + copy().chat.toolStatuses[displayStatus()] : activityItemAriaLabel(item())}
       >
         <div class="flower-activity-inline-line">
           <Show

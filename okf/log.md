@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-18 — Subagent status and result boundaries
+
+- Adopt published Floret v7.64.0, add bounded metadata-only status checks, guide selective event/result reads, and preserve historical capsule outcomes with action-first localized Activity titles. See [runtime](ai/subagent-runtime.md) and [presentation](ui/flower-subagent-detail.md).
+
 ## 2026-10-18 — Preserve public Goal review facts
 
 - Retain the published typed [Goal activity](ai/flower-goals.md) through the shared public filter for current detail, history and live blocks. Preserve full objectives and evidence, reject invalid display facts and keep waiting interactions independent from review outcomes.

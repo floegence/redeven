@@ -434,6 +434,13 @@ func TestInvocationPolicies_Subagents(t *testing.T) {
 			detail:   "close_all",
 		},
 		{
+			name:     "status is readonly delegation metadata",
+			args:     map[string]any{"action": "status", "target": "child"},
+			approval: false,
+			risk:     "delegation",
+			detail:   "status",
+		},
+		{
 			name:     "list is delegation control",
 			args:     map[string]any{"action": "list"},
 			approval: false,

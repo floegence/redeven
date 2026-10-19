@@ -289,9 +289,9 @@
         "parentReportRecorded": "El informe se ha registrado en la tarea principal.",
         "parentReportView": "Ver informe en la tarea principal",
         "parentReportContent": "Informe enviado",
-        "subagentReports": "Informes de subagentes",
-        "subagentReportsRead": "Leer informes de subagentes",
-        "subagentReportsList": "Listar informes de subagentes",
+        "subagentReports": "Eventos de subagentes",
+        "subagentReportsRead": "Leer eventos de subagentes",
+        "subagentReportsList": "Listar eventos de subagentes",
         "canvasSchema": "Esquema del lienzo",
         "canvasList": "Explorar lienzos",
         "canvasRead": "Leer lienzo",
@@ -959,10 +959,11 @@
           "sendInput": "Guiar subagente",
           "wait": "Esperar subagentes",
           "list": "Listar subagentes",
-          "inspect": "Inspeccionar subagentes",
+          "inspect": "Leer resultados de subagentes",
           "close": "Cerrar subagente",
           "closeAll": "Cerrar subagentes",
-          "unknown": "Operación de subagente"
+          "unknown": "Operación de subagente",
+          "status": "Comprobar el estado de los subagentes"
         },
         "titles": {
           "operation": "Operación de subagente",
@@ -1021,7 +1022,11 @@
           "yes": "Sí",
           "no": "No"
         },
-        "agentsCount": "Agentes delegados: {count}"
+        "agentsCount": "Agentes delegados: {count}",
+        "hints": {
+          "status": "Solo consulta el estado; no lee el contenido de los informes.",
+          "inspect": "Lee los resultados completos y los incorpora al contexto del modelo."
+        }
       },
       "feedbackClose": "Cerrar detalles del aviso",
       "input": {

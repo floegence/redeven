@@ -289,9 +289,9 @@
         "parentReportRecorded": "Le rapport a été enregistré dans la tâche parente.",
         "parentReportView": "Voir le rapport dans la tâche parente",
         "parentReportContent": "Rapport envoyé",
-        "subagentReports": "Rapports des sous-agents",
-        "subagentReportsRead": "Lire les rapports des sous-agents",
-        "subagentReportsList": "Lister les rapports des sous-agents",
+        "subagentReports": "Événements des sous-agents",
+        "subagentReportsRead": "Lire les événements des sous-agents",
+        "subagentReportsList": "Lister les événements des sous-agents",
         "canvasSchema": "Schéma du canevas",
         "canvasList": "Parcourir les canevas",
         "canvasRead": "Lire le canevas",
@@ -959,10 +959,11 @@
           "sendInput": "Guider le sous-agent",
           "wait": "Attendre les sous-agents",
           "list": "Lister les sous-agents",
-          "inspect": "Inspecter les sous-agents",
+          "inspect": "Lire les résultats des sous-agents",
           "close": "Fermer le sous-agent",
           "closeAll": "Fermer les sous-agents",
-          "unknown": "Opération de sous-agent"
+          "unknown": "Opération de sous-agent",
+          "status": "Vérifier l’état des sous-agents"
         },
         "titles": {
           "operation": "Opération de sous-agent",
@@ -1021,7 +1022,11 @@
           "yes": "Oui",
           "no": "Non"
         },
-        "agentsCount": "Agents délégués : {count}"
+        "agentsCount": "Agents délégués : {count}",
+        "hints": {
+          "status": "Consulte uniquement l’état, sans lire le contenu des rapports.",
+          "inspect": "Lit les résultats complets et les ajoute au contexte du modèle."
+        }
       },
       "feedbackClose": "Fermer les détails du message",
       "input": {

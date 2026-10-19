@@ -29,6 +29,8 @@ function current(version: number, settled = false): FlowerRuntimeCurrentView {
     operation('completed-wait', 'wait', 3000, { payload: { action: 'wait', targets: [{ ...target, status: 'completed' }, { ...target, thread_id: 'other-child', task_name: 'Audit', status: 'completed' }], requested_count: 2, completed_count: 2 } }),
     operation('timeout-wait', 'wait', 2000, { payload: { action: 'wait', targets: [target], requested_count: 1, completed_count: 0, timed_out: true } }),
     operation('send-input', 'send_input', 500),
+    operation('status-read', 'status', 100),
+    operation('result-read', 'inspect', 120),
     operation('failed', 'inspect', 1000, { status: 'error' }),
     operation('canceled', 'wait', 500, { status: 'canceled' }),
     operation('declined', 'spawn', undefined, { status: 'declined', started_at_unix_ms: undefined, ended_at_unix_ms: now }),
@@ -94,6 +96,12 @@ describe('Flower management operation execution timing', () => {
       for (const [id, label] of Object.entries(expected)) expect(duration(root, id), id).toBe(label);
       expect(row(root, 'completed-wait').textContent).toContain('2 subagents completed');
       expect(row(root, 'timeout-wait').textContent).toContain('Wait timed out');
+      expect(row(root, 'status-read').textContent).toContain('Check subagent status');
+      expect(row(root, 'status-read').textContent).not.toContain('Completed');
+      expect(row(root, 'status-read').getAttribute('title')).toBe('Only checks status; does not read report bodies.');
+      expect(row(root, 'result-read').textContent).toContain('Read subagent results');
+      expect(row(root, 'result-read').getAttribute('aria-description')).toBe('Reads complete results into model context.');
+      expect(row(root, 'spawn-first').querySelector('[data-flower-subagent-capsule]')?.getAttribute('data-flower-subagent-status')).toBe('running');
     };
     checkSettledRows(runtime);
     const spawnRow = row(runtime, 'spawn-first');

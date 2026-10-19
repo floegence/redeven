@@ -1201,10 +1201,11 @@
           "sendInput": "引导子代理",
           "wait": "等待子代理",
           "list": "列出子代理",
-          "inspect": "查看子代理",
+          "inspect": "读取子代理结果",
           "close": "关闭子代理",
           "closeAll": "关闭子代理",
-          "unknown": "Subagent 操作"
+          "unknown": "Subagent 操作",
+          "status": "检查子代理状态"
         },
         "titles": {
           "operation": "Subagent 操作",
@@ -1259,7 +1260,11 @@
           "errorMessage": "错误消息",
           "retryable": "可重试"
         },
-        "agentsCount": "{count} 个代理"
+        "agentsCount": "{count} 个代理",
+        "hints": {
+          "status": "仅查询状态，不读取报告正文。",
+          "inspect": "读取完整结果，内容会进入模型上下文。"
+        }
       }
     },
     "suggestions": {
@@ -5208,9 +5213,9 @@
         "parentReportRecorded": "回报已记录到父任务。",
         "parentReportView": "在父任务中查看回报",
         "parentReportContent": "提交内容",
-        "subagentReports": "子代理回报",
-        "subagentReportsRead": "读取子代理回报",
-        "subagentReportsList": "列出子代理回报",
+        "subagentReports": "子代理事件",
+        "subagentReportsRead": "读取子代理事件",
+        "subagentReportsList": "列出子代理事件",
         "inputQuery": "搜索条件",
         "inputPaths": "文件和文件夹",
         "inputName": "名称",
@@ -5845,10 +5850,11 @@
           "sendInput": "引导子代理",
           "wait": "等待子代理",
           "list": "列出子代理",
-          "inspect": "查看子代理",
+          "inspect": "读取子代理结果",
           "close": "关闭子代理",
           "closeAll": "关闭子代理",
-          "unknown": "Subagent 操作"
+          "unknown": "Subagent 操作",
+          "status": "检查子代理状态"
         },
         "titles": {
           "operation": "Subagent 操作",
@@ -5907,7 +5913,11 @@
           "yes": "是",
           "no": "否"
         },
-        "agentsCount": "{count} 个代理"
+        "agentsCount": "{count} 个代理",
+        "hints": {
+          "status": "仅查询状态，不读取报告正文。",
+          "inspect": "读取完整结果，内容会进入模型上下文。"
+        }
       },
       "feedbackClose": "关闭反馈详情",
       "input": {

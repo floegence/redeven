@@ -6570,7 +6570,7 @@ button.flower-composer-context-source:focus-visible,
   line-height: 1.4;
 }
 
-/* Operation headers retain historical outcomes; capsules show current child status. */
+/* Operation headers and capsules retain outcomes recorded at the invocation boundary. */
 .flower-activity-inline-row-subagents .flower-activity-subagents-panel {
   padding: 0.25rem 0 0.375rem 1.5rem;
 }

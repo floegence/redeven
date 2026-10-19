@@ -356,7 +356,8 @@ export type FlowerSubagentsCopy = Readonly<{
   statusLabels: Readonly<Record<'queued' | 'running' | 'waiting_input' | 'completed' | 'failed' | 'canceled' | 'timed_out' | 'unknown', string>>;
   typeLabels: Readonly<Record<'explore' | 'worker' | 'reviewer' | 'unknown', string>>;
   activity: Readonly<{
-    actions: Readonly<Record<'spawn' | 'send_input' | 'wait' | 'list' | 'inspect' | 'close' | 'close_all' | 'unknown', string>>;
+    actions: Readonly<Record<'spawn' | 'send_input' | 'wait' | 'list' | 'status' | 'inspect' | 'close' | 'close_all' | 'unknown', string>>;
+    hints: Readonly<Record<'status' | 'inspect', string>>;
     titles: Readonly<{
       operation: string;
       failed: string;
@@ -1466,11 +1467,13 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
         send_input: 'Steer subagent',
         wait: 'Wait for subagents',
         list: 'List subagents',
-        inspect: 'Inspect subagents',
+        status: 'Check subagent status',
+        inspect: 'Read subagent results',
         close: 'Close subagent',
         close_all: 'Close subagents',
         unknown: 'Subagent operation',
       },
+      hints: { status: 'Only checks status; does not read report bodies.', inspect: 'Reads complete results into model context.' },
       titles: {
         operation: 'Subagent operation',
         failed: 'Subagent operation failed',

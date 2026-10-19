@@ -585,7 +585,11 @@ func floretToolResources(inv fltools.Invocation[map[string]any]) ([]fltools.Reso
 	case "subagents":
 		if action := strings.TrimSpace(anyToString(args["action"])); action != "" {
 			out := []fltools.ResourceRef{{Kind: "subagent", Value: action}}
-			if action == subagentActionWait {
+			if action == subagentActionStatus {
+				for _, id := range collectInspectTargets(args) {
+					out = append(out, fltools.ResourceRef{Kind: "subagent_thread", Value: id})
+				}
+			} else if action == subagentActionWait {
 				for _, id := range normalizeSubagentThreadIDs(args["ids"]) {
 					out = append(out, fltools.ResourceRef{Kind: "subagent_thread", Value: id})
 				}
@@ -1796,6 +1800,11 @@ func subAgentOperationActivityPayload(payload map[string]any, status string, act
 }
 
 func subAgentOperationRequestedIDs(payload map[string]any) []string {
+	if anyToString(payload["action"]) == subagentActionStatus {
+		if ids := collectInspectTargets(payload); len(ids) > 0 {
+			return ids
+		}
+	}
 	for _, key := range []string{"ids", "target_ids", "requested_ids", "affected_ids"} {
 		if ids := normalizeSubagentThreadIDs(payload[key]); len(ids) > 0 {
 			return ids

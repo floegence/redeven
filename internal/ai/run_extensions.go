@@ -176,6 +176,15 @@ func validateSubagentsArgsByAction(action string, args map[string]any) error {
 		return nil
 	case subagentActionList:
 		return nil
+	case subagentActionStatus:
+		targets := collectInspectTargets(args)
+		if len(targets) == 0 {
+			return invalidSubagentArguments("invalid_arguments.subagents.status_requires_target_or_ids", "status requires target or ids", nil)
+		}
+		if len(targets) > 200 {
+			return invalidSubagentArguments("invalid_arguments.subagents.status_too_many_targets", "status supports at most 200 distinct targets", nil)
+		}
+		return nil
 	case subagentActionInspect:
 		target := strings.TrimSpace(anyToString(args["target"]))
 		ids := extractStringSlice(args["ids"])

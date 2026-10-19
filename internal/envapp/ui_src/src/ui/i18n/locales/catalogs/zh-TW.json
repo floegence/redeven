@@ -1201,10 +1201,11 @@
           "sendInput": "引導子代理",
           "wait": "等待子代理",
           "list": "列出子代理",
-          "inspect": "檢視子代理",
+          "inspect": "讀取子代理結果",
           "close": "關閉子代理",
           "closeAll": "關閉子代理",
-          "unknown": "Subagent 操作"
+          "unknown": "Subagent 操作",
+          "status": "檢查子代理狀態"
         },
         "titles": {
           "operation": "Subagent 操作",
@@ -1259,7 +1260,11 @@
           "errorMessage": "錯誤訊息",
           "retryable": "可重試"
         },
-        "agentsCount": "{count} 個代理"
+        "agentsCount": "{count} 個代理",
+        "hints": {
+          "status": "僅查詢狀態，不讀取報告內文。",
+          "inspect": "讀取完整結果，內容會進入模型上下文。"
+        }
       }
     },
     "suggestions": {
@@ -5208,9 +5213,9 @@
         "parentReportRecorded": "回報已記錄至父任務。",
         "parentReportView": "在父任務中查看回報",
         "parentReportContent": "提交內容",
-        "subagentReports": "子代理回報",
-        "subagentReportsRead": "讀取子代理回報",
-        "subagentReportsList": "列出子代理回報",
+        "subagentReports": "子代理事件",
+        "subagentReportsRead": "讀取子代理事件",
+        "subagentReportsList": "列出子代理事件",
         "inputQuery": "搜尋條件",
         "inputPaths": "檔案與資料夾",
         "inputName": "名稱",
@@ -5845,10 +5850,11 @@
           "sendInput": "引導子代理",
           "wait": "等待子代理",
           "list": "列出子代理",
-          "inspect": "查看子代理",
+          "inspect": "讀取子代理結果",
           "close": "關閉子代理",
           "closeAll": "關閉子代理",
-          "unknown": "Subagent 操作"
+          "unknown": "Subagent 操作",
+          "status": "檢查子代理狀態"
         },
         "titles": {
           "operation": "Subagent 操作",
@@ -5907,7 +5913,11 @@
           "yes": "是",
           "no": "否"
         },
-        "agentsCount": "{count} 個代理"
+        "agentsCount": "{count} 個代理",
+        "hints": {
+          "status": "僅查詢狀態，不讀取報告內文。",
+          "inspect": "讀取完整結果，內容會進入模型上下文。"
+        }
       },
       "feedbackClose": "關閉回饋詳情",
       "input": {

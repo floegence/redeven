@@ -31,17 +31,31 @@ func TestFlowerParentEventReportToolAndNaturalProviderDelivery(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = host.Shutdown(context.Background()) })
 	message := strings.Repeat("界", 2700)
-	raw, _ := json.Marshal(map[string]any{"message": message})
-	childGateway := delegationContextGateway(florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: "report", Name: "report_to_parent", Args: string(raw)}}}, {Type: flprovider.EventDone, Reason: "tool_calls"}}}, delegationContextDone())
+	makeChildGateway := func(messages []string, final string) *florettest.ScriptedGateway {
+		steps := make([]florettest.Step, 0, len(messages)+1)
+		for i, body := range messages {
+			raw, _ := json.Marshal(map[string]any{"message": body})
+			steps = append(steps, florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: fmt.Sprintf("report-%d", i), Name: "report_to_parent", Args: string(raw)}}}, {Type: flprovider.EventDone, Reason: "tool_calls"}}})
+		}
+		steps = append(steps, florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventDelta, Text: final}, {Type: flprovider.EventDone, Reason: "stop"}}})
+		return delegationContextGateway(steps...)
+	}
+	finals := []string{strings.Repeat("A", 10177), strings.Repeat("B", 13006)}
+	childGateway := makeChildGateway([]string{message, message, "short first finding", message}, finals[0])
+	secondGateway := makeChildGateway([]string{message, "short second finding", message}, finals[1])
 	parentGateway := delegationContextGateway(delegationContextDone(), delegationContextDone())
 	var threads flruntime.ThreadService
 	var parentID identity.ThreadID
+	var secondChildID identity.ThreadID
 	threads, err = host.ThreadService(flruntime.AgentFactoryFunc(func(_ context.Context, req flruntime.AgentRequest) (*flruntime.Agent, error) {
 		child := req.ThreadID != parentID
 		gateway := parentGateway
 		depth := 0
 		if child {
 			gateway = childGateway
+			if req.ThreadID == secondChildID {
+				gateway = secondGateway
+			}
 			depth = 1
 		}
 		r := newRun(runOptions{ThreadID: req.ThreadID.String(), TurnID: req.TurnID.String(), AgentHomeDir: t.TempDir(), SubagentDepth: depth, FloretThreadRuntime: threads, SessionMeta: &session.Meta{CanRead: true}})
@@ -84,13 +98,23 @@ func TestFlowerParentEventReportToolAndNaturalProviderDelivery(t *testing.T) {
 		t.Fatal(err)
 	}
 	delegationContextSend(t, threads, child.ThreadID, "work", nil)
+	second, err := threads.Create(t.Context(), flruntime.CreateThreadInput{ParentThreadID: parentID, TaskName: "Audit", TaskDescription: "Second objective", HostProfileRef: "explore", RequestKey: "second-child"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondChildID = second.ThreadID
+	delegationContextSend(t, threads, second.ThreadID, "audit", nil)
 	events := threads.(flruntime.ThreadParentEventService)
 	pending, err := events.ListParentEvents(t.Context(), flruntime.ListParentEventsInput{ThreadID: parentID, PendingOnly: true})
-	if err != nil || len(pending.Events) != 2 {
+	if err != nil || len(pending.Events) != 9 {
 		t.Fatalf("events=%+v err=%v", pending, err)
 	}
 	if len(parentGateway.Requests()) != 0 {
 		t.Fatal("report or completion woke idle parent")
+	}
+	completion, err := events.ReadParentEvents(t.Context(), flruntime.ReadParentEventsInput{ThreadID: parentID, EventID: pending.Events[4].ID})
+	if err != nil || len(completion.Events) != 1 || completion.Events[0].Kind != flruntime.ParentEventCompleted || completion.Events[0].Message != "" {
+		t.Fatalf("completion audit read = %+v, %v", completion, err)
 	}
 	full, err := events.ReadParentEvents(t.Context(), flruntime.ReadParentEventsInput{ThreadID: parentID, EventID: pending.Events[0].ID})
 	if err != nil || full.Events[0].Message != message {
@@ -114,6 +138,30 @@ func TestFlowerParentEventReportToolAndNaturalProviderDelivery(t *testing.T) {
 	if strings.Contains(string(visible), "report_to_parent") {
 		t.Fatal("root received child-only report tool")
 	}
+	eventFacts := ""
+	for _, m := range request.Messages {
+		if strings.Contains(m.Text, "Subagent events (runtime facts") {
+			eventFacts += m.Text
+		}
+	}
+	for _, event := range pending.Events {
+		if !strings.Contains(eventFacts, event.ID) {
+			t.Fatalf("event %s missing from automatic context", event.ID)
+		}
+	}
+	if strings.Count(eventFacts, `"truncated":true`) != 5 || !strings.Contains(eventFacts, "short first finding") || !strings.Contains(eventFacts, "short second finding") {
+		t.Fatalf("unexpected report previews: %s", eventFacts)
+	}
+	for _, final := range finals {
+		if strings.Contains(eventFacts, final) {
+			t.Fatal("completion notification copied final report")
+		}
+	}
+	for _, guidance := range []string{"Use sufficient untruncated reports directly", "Completion events contain no final report", "child result read capability"} {
+		if !strings.Contains(string(visible), guidance) {
+			t.Fatalf("provider event guidance missing %q", guidance)
+		}
+	}
 	childRequest, _ := json.Marshal(childGateway.Requests()[0])
 	if !strings.Contains(string(childRequest), "report_to_parent") || strings.Contains(string(childRequest), "Manage parent-owned subagents") {
 		t.Fatal("child tool boundary changed")
@@ -130,6 +178,20 @@ func TestFlowerParentEventReportToolAndNaturalProviderDelivery(t *testing.T) {
 	encoded, _ := json.Marshal(normalized)
 	if truncated || !strings.Contains(string(encoded), message) {
 		t.Fatal("explicit full event read truncated")
+	}
+	adapter := newServiceFloretSubagentRuntime(&Service{threadRuntime: threads}, r)
+	results, err := adapter.inspect(t.Context(), map[string]any{"ids": []any{child.ThreadID.String(), second.ThreadID.String()}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handoffs := results["handoffs"].([]map[string]any)
+	if len(handoffs) != len(finals) {
+		t.Fatalf("final handoffs = %#v", results)
+	}
+	for i, final := range finals {
+		if handoffs[i]["content"] != final {
+			t.Fatalf("child %d final report changed", i)
+		}
 	}
 	delegationContextSend(t, threads, parentID, "continue", nil)
 	count := 0
