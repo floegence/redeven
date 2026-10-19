@@ -131,8 +131,8 @@ describe('Flower canonical citations in Chromium', () => {
     setContent(content() + '\n```\n\n');
     await expect.poll(() => root.querySelectorAll('.flower-chat-source-card').length).toBe(2);
     const block = root.querySelector<HTMLElement>('.flower-chat-md-block')!;
-    expect(parseFloat(getComputedStyle(block).fontSize)).toBe(14);
-    expect(parseFloat(getComputedStyle(block).lineHeight)).toBeCloseTo(24.5);
+    expect(parseFloat(getComputedStyle(block).fontSize)).toBe(15);
+    expect(parseFloat(getComputedStyle(block).lineHeight)).toBeCloseTo(28.2);
     for (const control of root.querySelectorAll('.flower-permission-trigger, .flower-model-reasoning-model-trigger, .flower-reasoning-segment-button')) {
       expect(getComputedStyle(control).fontSize).toBe('10px');
     }

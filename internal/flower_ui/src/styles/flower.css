@@ -1151,7 +1151,7 @@
   --flower-layer-subagent-dropdown: 120;
   --flower-layer-subagent-window: 160;
   --flower-chat-dock-track-max-width: 112rem;
-  --flower-chat-text-column-width: 48rem;
+  --flower-chat-text-column-width: 43.75rem;
   --flower-chat-user-bubble-width: 44rem;
   display: flex;
   min-width: 0;
@@ -3384,6 +3384,17 @@
   user-select: text;
 }
 
+/* Assistant reading roles inherit the host palette without changing filled messages. */
+.flower-message-bubble-assistant {
+  --flower-message-font-size: 0.9375rem;
+  --flower-message-line-height: 1.88;
+  --flower-reader-meta: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);
+  --flower-content-link: color-mix(in srgb, var(--info) 78%, var(--foreground) 22%);
+  --flower-content-link-hover: color-mix(in srgb, var(--info) 60%, var(--foreground) 40%);
+  --flower-reader-code: color-mix(in srgb, var(--inline-code-foreground) 82%, var(--foreground) 18%);
+  color: var(--foreground);
+}
+
 .flower-message-plain-text {
   white-space: pre-wrap;
 }
@@ -3536,10 +3547,6 @@
   font-size: 0.6875rem;
   font-weight: 700;
   letter-spacing: 0;
-}
-
-.flower-message-bubble-assistant {
-  color: var(--foreground);
 }
 
 .flower-message-image {
@@ -5009,7 +5016,7 @@ button.flower-composer-context-source:focus-visible,
 }
 
 .flower-message-bubble-assistant .flower-chat-md-block {
-  max-width: min(100%, 58rem);
+  max-width: min(100%, var(--flower-chat-text-column-width, 43.75rem));
 }
 
 .flower-chat-md-block .chat-html-canvas {
@@ -5093,6 +5100,18 @@ button.flower-composer-context-source:focus-visible,
   color: inherit;
 }
 
+.flower-message-bubble-assistant .flower-chat-md-link {
+  font-weight: 400;
+  text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in srgb, currentColor 48%, transparent);
+  text-underline-offset: 0.22em;
+}
+
+.flower-message-bubble-assistant .flower-chat-md-link:hover,
+.flower-message-bubble-assistant .flower-chat-md-link:focus-visible {
+  text-decoration-color: currentColor;
+}
+
 .flower-chat-md-link:hover,
 .flower-chat-md-link:focus-visible {
   color: var(--flower-content-link-hover);
@@ -5126,6 +5145,21 @@ button.flower-composer-context-source:focus-visible,
   box-decoration-break: clone;
 }
 
+.flower-message-bubble-assistant .flower-chat-md-inline-code {
+  color: var(--flower-reader-code);
+  font-size: 0.91em;
+  font-weight: 400;
+}
+
+.flower-message-bubble-assistant .flower-chat-md-inline-code::selection {
+  background: var(--flower-reader-code);
+  color: var(--inline-code-background);
+}
+
+.flower-message-bubble-assistant .flower-chat-md-link .flower-chat-md-inline-code {
+  color: inherit;
+}
+
 /* A code link has its own reading surface inside the colored user bubble. */
 .flower-message-bubble-user .flower-chat-md-link .flower-chat-md-inline-code {
   color: var(--inline-code-foreground);
@@ -5141,6 +5175,33 @@ button.flower-composer-context-source:focus-visible,
   border-left: 3px solid color-mix(in srgb, var(--primary) 40%, var(--flower-chat-surface-border));
   color: color-mix(in srgb, var(--foreground) 78%, var(--muted-foreground) 22%);
   padding: 0.18rem 0 0.18rem 0.85rem;
+}
+
+.flower-message-bubble-assistant .flower-chat-md-blockquote {
+  color: inherit;
+  border-left-width: 2px;
+  border-color: color-mix(in srgb, var(--foreground) 13%, var(--flower-chat-surface, var(--background)));
+}
+
+:root[data-floe-shell-theme='hc-light'] .flower-message-bubble-assistant {
+  --flower-reader-meta: var(--foreground);
+  --flower-content-link: var(--info);
+  --flower-content-link-hover: var(--info);
+  --flower-reader-code: var(--inline-code-foreground);
+}
+
+:root[data-floe-shell-theme='hc-light'] .flower-message-bubble-assistant .flower-chat-md-link {
+  text-decoration-thickness: 2px;
+  text-decoration-color: currentColor;
+}
+
+:root[data-floe-shell-theme='hc-light'] .flower-message-bubble-assistant .flower-chat-md-inline-code {
+  outline: 1px solid currentColor;
+  outline-offset: -1px;
+}
+
+:root[data-floe-shell-theme='hc-light'] .flower-message-bubble-assistant .flower-chat-md-blockquote {
+  border-color: currentColor;
 }
 
 .flower-chat-md-block table {
@@ -5237,6 +5298,20 @@ button.flower-composer-context-source:focus-visible,
 }
 
 @media (forced-colors: active) {
+  .flower-message-bubble-assistant {
+    --flower-reader-meta: CanvasText;
+    --flower-content-link: LinkText;
+    --flower-content-link-hover: LinkText;
+    --flower-reader-code: CanvasText;
+    color: CanvasText;
+  }
+
+  .flower-message-bubble-assistant .flower-chat-md-link {
+    color: LinkText;
+    text-decoration-color: currentColor;
+  }
+
+  .flower-message-bubble-assistant .flower-chat-md-inline-code,
   .flower-chat-md-inline-code,
   .flower-message-bubble-user .flower-chat-md-link .flower-chat-md-inline-code {
     background: Canvas;
@@ -5244,6 +5319,7 @@ button.flower-composer-context-source:focus-visible,
     forced-color-adjust: auto;
   }
 
+  .flower-message-bubble-assistant .flower-chat-md-inline-code::selection,
   .flower-chat-md-inline-code::selection {
     background: Highlight;
     color: HighlightText;
@@ -12302,6 +12378,7 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-answer-action[data-exported='true'], .flower-answer-actions .flower-message-copy-button[data-copied='true'] { color: color-mix(in srgb, var(--primary) 72%, var(--foreground) 18%); }
 .flower-answer-action:disabled { opacity: 0.35; cursor: default; background: transparent; }
 .flower-answer-time { flex: 0 0 auto; color: var(--muted-foreground); font-size: 0.6875rem; font-variant-numeric: tabular-nums; white-space: nowrap; user-select: text; }
+.flower-message-bubble-assistant .flower-answer-time { color: var(--flower-reader-meta); font-size: 0.75rem; }
 .flower-chat-md-block:has(.flower-answer-actions) .flower-chat-source-list { margin-top: 0.5rem; }
 @media (pointer: coarse) { .flower-answer-action, .flower-answer-actions .flower-message-copy-button { width: 2.75rem; height: 2.75rem; } }
 @media (prefers-reduced-motion: reduce) { .flower-answer-action, .flower-answer-actions .flower-message-copy-button { transition: none; } }

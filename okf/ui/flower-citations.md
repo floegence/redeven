@@ -44,26 +44,26 @@ remain readable without rewriting historical data.
 
 ## Inline-code references
 
-Inline Markdown code uses the published Floe `--inline-code-foreground` and
-`--inline-code-background` pair. Each of the 26 shell themes owns its palette;
-Flower does not keep another color table. Floe v0.86.43 selects saturated blue,
-teal, ochre and gold reference text for each theme, avoiding purple accents and
-separating references from the surrounding prose. The span has a quiet fill,
-no border and cloned rounded decoration when a long path wraps. Monospace text
-uses 96% of the surrounding reading size, with medium weight 500 across themes.
-The larger strokes keep references distinct beside
-CJK prose and bold text without strengthening the background or duplicating
-the published color palette.
-Native selection reverses the readable token pair without changing the text.
-User bubbles use the same opaque inset, preserving contrast independently of the
-bubble accent. Linked code retains visible link styling; code links in user
-bubbles use the inset foreground. Forced colors use system colors. Fenced code,
-copy behavior and canonical content remain independent.
+Inline Markdown code derives from the published Floe `--inline-code-foreground`
+and `--inline-code-background` pair. Each of the 26 shell themes owns its
+palette; Flower does not keep another color table. Assistant references blend
+foreground 82% with body foreground 18% to soften competing chroma, retaining
+the published quiet background, 91% relative size and regular weight. User
+bubbles retain the original token pair, 96% relative size and medium weight 500.
+Both keep cloned rounded decoration when long paths wrap. High Contrast Light
+retains the original code color and adds an inset outline without changing
+geometry. Native selection reverses the readable pair without changing text.
 
-Browser acceptance covers all presets and both surface materials at desktop and
-320px widths, exact published token consumption, text/selection contrast, native
-selection, medium reference weight, relative reading size, mixed CJK/Latin prose,
-long paths, links, user bubbles and forced colors.
+User bubbles keep their opaque inset independently of the bubble accent.
+Linked code retains visible link styling; code links in user bubbles use the
+inset foreground. Forced colors use system colors. Fenced code, copy behavior
+and canonical content remain independent. Authored emphasis is preserved.
+
+Browser acceptance covers all presets and both materials at desktop and 320px
+widths, exact theme-derived colors, text/selection contrast, native selection,
+role-specific weight and size, mixed CJK/Latin prose, long paths, links, user
+bubbles, 200% text scaling and forced colors. Theme changes preserve focus,
+selection, DOM and geometry; see [message appearance](flower-message-appearance.md).
 
 ## Source-card presentation
 
@@ -131,6 +131,7 @@ enable this assistant-specific presentation.
 - [Citation and Markdown fixtures](../../internal/flower_ui/src/chat/markdown/flowerCitations.test.ts)
 - [CJK emphasis, literal code and stable streaming controls](../../internal/envapp/ui_src/src/ui/FlowerMarkdown.emphasis.browser.test.tsx)
 - [Chromium streaming and layout evidence](../../internal/envapp/ui_src/src/ui/FlowerMarkdown.citations.browser.test.tsx)
+- [Theme-derived reading roles and contrast](../../internal/envapp/ui_src/src/ui/FlowerMarkdown.readingThemes.browser.test.tsx)
 - [Rendered answer action geometry and interaction coverage](../../internal/envapp/ui_src/src/ui/FlowerSurface.answerActions.browser.test.tsx)
 - [Flower UI checks](../../scripts/check_flower_ui.sh)
 
