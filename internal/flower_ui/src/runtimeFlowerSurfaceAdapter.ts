@@ -308,8 +308,8 @@ function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfac
     ...(current ? { current } : {}),
     ...(subagentCurrent ? { subagent_current: subagentCurrent } : {}),
     ...(subagents !== undefined ? { subagents } : {}),
-    ...(modelContext ? { model_context: modelContext } : {}),
-    ...(contextUsage ? { context_usage: contextUsage } : {}),
+    ...(value.model_context !== undefined ? { model_context: modelContext ?? null } : {}),
+    ...(value.context_usage !== undefined ? { context_usage: contextUsage } : {}),
     ...(contextCompactions ? { context_compactions: contextCompactions } : {}),
     ...(timelineDecorations ? { timeline_decorations: timelineDecorations } : {}),
     ...(computerFrame ? { computer_frame: computerFrame } : {}),
@@ -322,7 +322,7 @@ function mapSubagentDetail(raw: LoadSubagentDetailResponse): FlowerSubagentDetai
   if (!raw.detail?.current || !raw.detail.summary) throw new Error('Missing subagent detail.');
   const summary = mapFlowerSubagents([raw.detail.summary], 'subagent.detail.summary')?.[0];
   if (!summary) throw new Error('Flower contract error: missing subagent summary.');
-  return { ...raw.detail, summary, model_context: mapModelContext(raw.detail.model_context), context_usage: mapContextUsage(raw.detail.context_usage) ?? undefined };
+  return { ...raw.detail, summary, model_context: raw.detail.model_context === undefined ? undefined : mapModelContext(raw.detail.model_context) ?? null, context_usage: raw.detail.context_usage === undefined ? undefined : mapContextUsage(raw.detail.context_usage), context_compactions: mapFlowerContextCompactions(raw.detail.context_compactions), timeline_decorations: mapFlowerTimelineDecorations(raw.detail.timeline_decorations) };
 }
 
 export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceAdapterOptions): FlowerSurfaceAdapter {

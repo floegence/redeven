@@ -26,7 +26,7 @@ export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[]
   const eventCounts = new Map<string, number>();
   const terminalKeys = new Map<string, string>();
   for (const entry of entries) {
-    const id = entry.type === 'message' ? entry.message.turn_id : entry.type === 'parent_event' ? entry.event.parent_turn_id : undefined;
+    const id = entry.type === 'message' ? entry.message.turn_id : entry.type === 'parent_event' ? entry.event.parent_turn_id : entry.type === 'context_compaction' ? entry.decoration.compaction.turn_id : undefined;
     if (!id) continue;
     rowTurns.set(entry.key, id);
     if (!groups.has(id)) groups.set(id, []);
@@ -37,6 +37,10 @@ export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[]
         groups.get(id)!.push(entry.key);
         eventCounts.set(id, (eventCounts.get(id) ?? 0) + 1);
       }
+      continue;
+    }
+    if (entry.type === 'context_compaction') {
+      groups.get(id)!.push(entry.key);
       continue;
     }
     if (entry.type !== 'message') continue;

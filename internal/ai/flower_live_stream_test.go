@@ -416,27 +416,43 @@ func TestFlowerWorkspaceStreamSubagentPatchPreservesExplicitEmptyInventory(t *te
 	}
 }
 
-func TestFlowerWorkspaceStreamPublishesContextUsageWithoutReplacingCurrentView(t *testing.T) {
+func TestFlowerWorkspaceStreamPublishesContextWithActiveCurrent(t *testing.T) {
 	t.Parallel()
 	svc := newFlowerLiveMemoryTestService()
 	meta := flowerLiveMemoryTestMeta("env_live_context_usage")
 	subscription, err := svc.SubscribeFlowerLiveStream(context.Background(), &meta, FlowerLiveStreamRequest{})
 	if err != nil {
-		t.Fatalf("workspace subscribe: %v", err)
+		t.Fatal(err)
 	}
 	defer subscription.Close()
 	_ = nextFlowerLiveStreamFrame(t, subscription)
-	svc.publishFlowerRuntimeContextUsage(meta.EndpointID, "thread-context-usage", FlowerContextUsage{Confirmed: &FlowerContextSample{
-		RunID: "run-context-usage", Phase: "provider_usage", InputTokens: 500,
-		ContextWindowTokens: 1000, UsedRatio: 0.5, PressureStatus: "stable", UpdatedAtMs: 42,
-	}})
+	current := flruntime.ThreadView{ThreadID: "thread-context-usage", ViewVersion: 2, Activity: flruntime.ThreadActivityActive,
+		TurnID: "turn-context", RunID: "run-context", Context: &flruntime.ThreadContextSnapshot{}}
+	svc.broadcastFlowerRuntimeCurrent(meta.EndpointID, current)
 	frame := nextFlowerLiveStreamFrame(t, subscription)
-	var envelope FlowerLiveStreamEnvelope
-	if err := json.Unmarshal(frame.Data, &envelope); err != nil {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(frame.Data, &fields); err != nil {
 		t.Fatal(err)
 	}
-	if envelope.Current != nil || envelope.ContextUsage == nil || envelope.ContextUsage.Confirmed.InputTokens != 500 || envelope.ThreadID != "thread-context-usage" {
-		t.Fatalf("envelope=%#v, want usage-only thread batch", envelope)
+	for _, key := range []string{"model_context", "context_usage"} {
+		if string(fields[key]) != "null" {
+			t.Fatalf("%s=%s", key, fields[key])
+		}
+	}
+	for _, key := range []string{"context_compactions", "timeline_decorations"} {
+		if string(fields[key]) != "[]" {
+			t.Fatalf("%s=%s", key, fields[key])
+		}
+	}
+	var wireCurrent map[string]json.RawMessage
+	if err := json.Unmarshal(fields["current"], &wireCurrent); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := wireCurrent["context"]; ok {
+		t.Fatal("raw Floret context reached browser")
+	}
+	if string(wireCurrent["view_version"]) != "2" {
+		t.Fatalf("current=%s", fields["current"])
 	}
 }
 
@@ -1291,5 +1307,26 @@ func TestModelDirectoryNotificationContainsNoScopedMetadata(t *testing.T) {
 		if len(decoded) != 2 || decoded["kind"] != "model_directory.changed" || decoded["schema_version"] != float64(1) {
 			t.Fatalf("scoped metadata leaked: %+v", decoded)
 		}
+	}
+}
+
+func TestFlowerCurrentComparisonRetainsContextBoundariesAndTextCoalescing(t *testing.T) {
+	current := thinkingCurrent(1, "first", true, flruntime.ThreadActivityActive)
+	current.Context = &flruntime.ThreadContextSnapshot{}
+	frame := func(view flruntime.ThreadView) FlowerLiveStreamEnvelope {
+		return FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: view.ThreadID.String(), Current: &view}
+	}
+	first := compareFlowerLiveCurrent(frame(current))
+	current.ViewVersion = 2
+	current.Items = append([]flruntime.ThreadItem(nil), current.Items...)
+	current.Items[0].Text = "first second"
+	second := compareFlowerLiveCurrent(frame(current))
+	if !first.independent || !second.independent || first.fingerprint != second.fingerprint {
+		t.Fatal("equal full snapshots defeated coalescing")
+	}
+	current.Context = &flruntime.ThreadContextSnapshot{UsageTotals: &flruntime.ThreadTokenUsageTotals{InputTokens: 1}}
+	changed := compareFlowerLiveCurrent(frame(current))
+	if changed.fingerprint == second.fingerprint {
+		t.Fatal("context change did not create a barrier")
 	}
 }

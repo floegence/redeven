@@ -269,7 +269,7 @@ import {
 import { formatFilesystemPickerError, mapFilesystemPickerContext, mapFilesystemPickerEntries } from './filePicker/filesystemPicker';
 import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
 import { threadNeedsFileActivityTargets } from './fileActivityTargets';
-import { mapFlowerGoal, mergeFlowerContextUsage } from './flowerLiveMapper';
+import { mapFlowerGoal } from './flowerLiveMapper';
 import { createFlowerScrollTailController, type FlowerScrollTailController } from './flowerScrollTail';
 import { basenameFromAbsolutePath, normalizeAbsolutePath } from './filePicker/path';
 import {
@@ -4653,9 +4653,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         },
       },
     } satisfies FlowerThreadSnapshot;
-    const mergedContextUsage = contextUsage
-      ? mergeFlowerContextUsage(base.context_usage, contextUsage)
-      : base.context_usage;
     const contextualBase = {
       ...base,
       ...(provisionalSettings ? {
@@ -4666,8 +4663,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           ? { reasoning_selection: provisionalSettings.reasoning_selection }
           : {}),
       } : {}),
-      ...(modelContext ? { model_context: modelContext } : {}),
-      ...(mergedContextUsage ? { context_usage: mergedContextUsage } : {}),
+      ...(modelContext !== undefined ? { model_context: modelContext } : {}),
+      ...(contextUsage !== undefined ? { context_usage: contextUsage } : {}),
       ...(contextCompactions ? { context_compactions: contextCompactions } : {}),
       ...(timelineDecorations ? { timeline_decorations: timelineDecorations } : {}),
     };
@@ -4682,7 +4679,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         for (const operation of contextCompactions ?? []) {
           const prior = base.context_compactions?.find((item) => item.operation_id === operation.operation_id);
           const anchored = timelineDecorations?.some((item) => item.kind === 'context_compaction' && item.compaction.operation_id === operation.operation_id);
-          if (operation.status === 'noop' && prior?.status !== 'noop' && !anchored) {
+          if (operation.status === 'noop' && prior?.status === 'compacting' && !anchored) {
             notifySuccess(compactionDividerDetail(operation, copy()));
           }
         }
@@ -4992,7 +4989,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     if (envelope.kind === 'thread.batch' && envelope.subagent_current) {
       const parentThreadID = trimString(envelope.thread_id);
-      acceptActiveSubagentCurrent(parentThreadID, envelope.subagent_current, undefined, envelope.model_context ?? undefined, envelope.context_usage ?? undefined);
+      acceptActiveSubagentCurrent(parentThreadID, envelope.subagent_current, undefined, envelope.model_context, envelope.context_usage, envelope.context_compactions, envelope.timeline_decorations);
       const navigation = attentionNavigation();
       if (navigation?.parentThreadID === parentThreadID && navigation.childThreadID === selectedThreadID() && navigation.childThreadID === envelope.subagent_current.thread_id) {
         applyRuntimeCurrent(envelope.subagent_current, envelope.context_usage, envelope.context_compactions, envelope.timeline_decorations, 'live_current', undefined, envelope.model_context);
@@ -5015,30 +5012,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           setCompanionRunReceipt(observation.terminalTransition);
           setCompanionRunRevision((revision) => revision + 1);
         }
-      }
-      return;
-    }
-    if (envelope.kind === 'thread.batch' && (envelope.context_usage || envelope.model_context)) {
-      const threadID = trimString(envelope.thread_id);
-      const incomingContextUsage = envelope.context_usage;
-      const incomingModelContext = envelope.model_context;
-      const activeChild = untrack(activeSubagentDetail);
-      if (activeChild?.childThreadID === threadID && activeChild.detail) {
-        setActiveSubagentDetail((child) => child?.childThreadID === threadID && child.detail ? {
-          ...child, detail: { ...child.detail,
-            ...(incomingContextUsage ? { context_usage: mergeFlowerContextUsage(child.detail.context_usage, incomingContextUsage) } : {}),
-            ...(incomingModelContext ? { model_context: incomingModelContext } : {}),
-          },
-        } : child);
-        return;
-      }
-      const currentView = threadCache().views.get(threadID);
-      if (threadID && currentView && !retiredThreadIDs.has(threadID)) {
-        setThreadCache((cache) => cache.updateDetailAdjuncts(threadID, (thread) => ({
-          ...thread,
-          ...(incomingContextUsage ? { context_usage: mergeFlowerContextUsage(thread.context_usage, incomingContextUsage) } : {}),
-          ...(incomingModelContext ? { model_context: incomingModelContext } : {}),
-        })));
       }
       return;
     }
@@ -5342,6 +5315,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     summary?: FlowerSubagentSummary,
     modelContext?: FlowerLiveStreamEnvelope['model_context'],
     contextUsage?: FlowerLiveStreamEnvelope['context_usage'],
+    contextCompactions?: FlowerLiveStreamEnvelope['context_compactions'],
+    timelineDecorations?: FlowerLiveStreamEnvelope['timeline_decorations'],
   ): boolean => {
     const childThreadID = trimString(current.thread_id);
     const viewVersion = Math.max(0, Math.floor(Number(current.view_version) || 0));
@@ -5363,14 +5338,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setActiveSubagentDetail((active) => {
       if (!active || active.parentThreadID !== parentThreadID || active.childThreadID !== childThreadID) return active;
       const currentVersion = Math.max(0, Math.floor(Number(active.detail?.current.view_version) || 0));
-      if (active.connectionEpoch === liveTransport.connectionEpoch() && viewVersion <= currentVersion) {
-        if (!active.detail || viewVersion < currentVersion) return active;
-        return { ...active, detail: { ...active.detail, summary: nextSummary, model_context: modelContext ?? active.detail.model_context, context_usage: contextUsage ?? active.detail.context_usage } };
-      }
+      if (active.connectionEpoch === liveTransport.connectionEpoch() && viewVersion <= currentVersion) return active;
       accepted = true;
       return {
         ...active,
-        detail: { summary: nextSummary, current, model_context: modelContext ?? active.detail?.model_context, context_usage: contextUsage ?? active.detail?.context_usage },
+        detail: { summary: nextSummary, current,
+          model_context: modelContext === undefined ? active.detail?.model_context : modelContext,
+          context_usage: contextUsage === undefined ? active.detail?.context_usage : contextUsage,
+          context_compactions: contextCompactions === undefined ? active.detail?.context_compactions : contextCompactions,
+          timeline_decorations: timelineDecorations === undefined ? active.detail?.timeline_decorations : timelineDecorations,
+        },
         connectionEpoch: liveTransport.connectionEpoch(),
         error: '',
       };
@@ -5409,7 +5386,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       const current = untrack(activeSubagentDetail);
       if (!current || current.generation !== generation || requestEpoch !== liveTransport.connectionEpoch()) return;
-      acceptActiveSubagentCurrent(request.parentThreadID, detail.current, detail.summary, detail.model_context, detail.context_usage);
+      acceptActiveSubagentCurrent(request.parentThreadID, detail.current, detail.summary, detail.model_context, detail.context_usage, detail.context_compactions, detail.timeline_decorations);
       setActiveSubagentDetail((latest) => (
         latest?.generation === generation ? { ...latest, requestStatus: 'idle', error: '' } : latest
       ));
@@ -5449,7 +5426,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (!stillSelected()) return;
       if (detail.summary.parent_thread_id !== selected.parentThreadID || detail.summary.thread_id !== selected.childThreadID
         || detail.current.thread_id !== selected.childThreadID) throw new Error('Subagent input response identity mismatch.');
-      acceptActiveSubagentCurrent(selected.parentThreadID, detail.current, detail.summary, detail.model_context, detail.context_usage);
+      acceptActiveSubagentCurrent(selected.parentThreadID, detail.current, detail.summary, detail.model_context, detail.context_usage, detail.context_compactions, detail.timeline_decorations);
       setSubagentInputCommands((commands) => { const next = { ...commands }; delete next[key]; return next; });
     } catch (error) {
       if (!stillSelected()) return;
@@ -7347,7 +7324,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           if (!stillTargeted()) return;
           if (detail.summary.thread_id !== threadID || detail.summary.parent_thread_id !== child.parentThreadID || detail.current.thread_id !== threadID) throw new Error('Subagent recovery returned a different thread.');
           current = projectSubagentDetailThread(detail);
-          acceptActiveSubagentCurrent(child.parentThreadID, detail.current, detail.summary, detail.model_context, detail.context_usage);
+          acceptActiveSubagentCurrent(child.parentThreadID, detail.current, detail.summary, detail.model_context, detail.context_usage, detail.context_compactions, detail.timeline_decorations);
         } else {
           beginThreadDetailDisplayCycle(threadID);
           current = await requestThreadDetail(threadID, 'user_action', true);
@@ -7392,7 +7369,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           if (!stillTargeted()) return;
           if (detail.current.thread_id !== threadID || detail.summary.thread_id !== threadID || detail.summary.parent_thread_id !== child.parentThreadID) throw new Error('Recovery returned a different thread.');
           current = projectSubagentDetailThread(detail);
-          acceptActiveSubagentCurrent(child.parentThreadID, detail.current, detail.summary, detail.model_context, detail.context_usage);
+          acceptActiveSubagentCurrent(child.parentThreadID, detail.current, detail.summary, detail.model_context, detail.context_usage, detail.context_compactions, detail.timeline_decorations);
         } else current = await requestThreadDetail(threadID, 'user_action', true);
         if (!current || !stillTargeted() || current.status !== 'failed' || current.error?.code !== 'floret_effect_outcome_unknown'
           || current.active_run_id || current.input_request || current.approval_pending || current.queued_turn_count) return;
@@ -11274,9 +11251,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   }
 
 
-  const compactionDividerEntry = (entry: Accessor<Extract<FlowerTimelineEntry, { type: 'context_compaction' }>>, target: Accessor<FlowerThreadSnapshot | null | undefined>) => {
+  const compactionDividerEntry = (entry: Accessor<Extract<FlowerTimelineEntry, { type: 'context_compaction' }>>, target: Accessor<FlowerThreadSnapshot | null | undefined>, visible: Accessor<boolean>) => {
     const decoration = createMemo(() => entry().decoration);
-    return <FlowerContextCompactionDivider decoration={decoration()} copy={copy()}
+    return <FlowerContextCompactionDivider decoration={decoration()} copy={copy()} visible={visible()}
       onRetry={target()?.current_execution?.turn_kind === 'context_compaction' && !target()?.active_run_id
         && (decoration().compaction.status === 'failed' || decoration().compaction.status === 'cancelled')
         && decoration().compaction.run_id === target()?.current_execution?.run_id ? () => void executeCompactContextCommand(target()) : undefined} />;
@@ -11325,6 +11302,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     entry: Accessor<FlowerTimelineEntry>,
     viewportScope: FlowerScrollTailController,
     thread: Accessor<FlowerThreadSnapshot | null | undefined>,
+    visible: Accessor<boolean> = () => true,
   ) => {
     switch (entry().type) {
       case 'message': {
@@ -11351,7 +11329,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       case 'queued_turn':
         return queuedTurnEntry(() => entry() as Extract<FlowerTimelineEntry, { type: 'queued_turn' }>);
       case 'context_compaction':
-        return compactionDividerEntry(() => entry() as Extract<FlowerTimelineEntry, { type: 'context_compaction' }>, thread);
+        return compactionDividerEntry(() => entry() as Extract<FlowerTimelineEntry, { type: 'context_compaction' }>, thread, visible);
       case 'input_request':
         return inputRequestEntry(entry, thread);
       case 'error':
@@ -11677,7 +11655,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         failureNoticeVisible={runErrorNoticeVisible(subagentDetailThread())}
         runtimeID={props.adapter.runtime.runtime_id} scope="subagent" choices={turnDisclosureChoices}
         scroll={subagentDetailScroll} reducedMotion={reducedMotionPreferred} copy={copy().chat.turnProcess}
-        renderEntry={(entry) => timelineEntry(entry, subagentDetailScroll, subagentDetailThread)} />}
+        renderEntry={(entry, visible) => timelineEntry(entry, subagentDetailScroll, subagentDetailThread, visible)} />}
       bindScroll={bindSubagentDetailViewport}
       onScroll={subagentDetailScroll.onScroll}
       onWheel={subagentDetailScroll.onWheel}
@@ -13387,7 +13365,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 failureNoticeVisible={runErrorNoticeVisible(selectedThread())}
                 runtimeID={props.adapter.runtime.runtime_id} scope="main" choices={turnDisclosureChoices}
                 scroll={transcriptScroll} reducedMotion={reducedMotionPreferred} copy={copy().chat.turnProcess}
-                renderEntry={(entry) => timelineEntry(entry, transcriptScroll, selectedThread)} />
+                renderEntry={(entry, visible) => timelineEntry(entry, transcriptScroll, selectedThread, visible)} />
               {threadLevelApprovalPanel()}
             </Show>
             <Show when={parentEventReading.recovering()}>

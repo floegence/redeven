@@ -18,7 +18,7 @@ export function FlowerTurnTimeline(props: Readonly<{
   scroll: FlowerScrollTailController;
   reducedMotion: Accessor<boolean>;
   copy: FlowerTurnProcessCopy;
-  renderEntry: (entry: Accessor<FlowerTimelineEntry>) => JSX.Element;
+  renderEntry: (entry: Accessor<FlowerTimelineEntry>, visible: Accessor<boolean>) => JSX.Element;
 }>) {
   const keys = createMemo(() => props.entries.map((entry) => JSON.stringify([props.thread?.thread_id, entry.key])));
   const entries = createMemo(() => new Map(props.entries.map((entry) => [entry.key, entry])));
@@ -191,7 +191,7 @@ export function FlowerTurnTimeline(props: Readonly<{
     onCleanup(() => { nodes.delete(key); motions.delete(key); });
     // Render once per stable row. Entry changes flow through its accessor;
     // calling the renderer from a reactive insertion would replace the tree.
-    const content = untrack(() => props.renderEntry(entry));
+    const content = untrack(() => props.renderEntry(entry, expanded));
     return (
       <div class="flower-turn-row" data-flower-turn-id={group()?.turnID} data-flower-turn-process={process() ? 'true' : undefined}>
         <Show when={summary()}>

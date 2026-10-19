@@ -8,7 +8,8 @@ import {
   mapFlowerGoal,
   mapFlowerGoalChange,
   mapFlowerThread,
-  mergeFlowerContextUsage,
+  mapFlowerContextCompactions,
+  mapFlowerTimelineDecorations,
 } from './flowerLiveMapper';
 import { messageBlockSignature } from './flowerTimelineProjection';
 
@@ -56,21 +57,14 @@ describe('Flower context usage contract', () => {
     expect(mapContextUsage(wire)).toEqual(wire);
     expect(mapContextUsage(JSON.parse(JSON.stringify(wire)))).toEqual(mapContextUsage(wire));
   });
-  it('retains canonical cache totals when a live usage update omits them', () => {
-    const previous = mapContextUsage({ confirmed, thread_usage })!;
-    const incoming = mapContextUsage({ confirmed, estimate })!;
-    expect(mergeFlowerContextUsage(previous, incoming)).toEqual({ ...incoming, thread_usage });
-  });
-  it('clears obsolete samples on model changes and successful compaction', () => {
-    const previous = mapContextUsage({ confirmed, estimate, thread_usage, recent_request_usage: thread_usage })!;
-    expect(mergeFlowerContextUsage(previous, mapContextUsage({})!)).toEqual({ thread_usage });
-    const next = mapContextUsage({ estimate })!;
-    expect(mergeFlowerContextUsage(previous, next).confirmed).toBeUndefined();
-  });
-  it('updates totals from a final measurement and accepts the first snapshot', () => {
-    const next = mapContextUsage({ confirmed, thread_usage })!;
-    expect(mergeFlowerContextUsage(null, next)).toBe(next);
-    expect(mergeFlowerContextUsage(mapContextUsage({ estimate }), next)).toBe(next);
+  it('preserves explicit empty snapshots and rejects invalid compactions', () => {
+    expect(mapContextUsage({})).toEqual({});
+    expect(mapContextUsage(null)).toBeNull();
+    expect(mapFlowerContextCompactions([])).toEqual([]);
+    expect(mapFlowerTimelineDecorations([])).toEqual([]);
+    expect(mapFlowerContextCompactions(undefined)).toBeUndefined();
+    expect(() => mapFlowerContextCompactions([{ operation_id: 'missing-identity', phase: 'start', status: 'compacting' }])).toThrow('canonical identity');
+    expect(() => mapFlowerContextCompactions(null)).toThrow('must be an array');
   });
   it('rejects malformed canonical totals and obsolete mixed samples', () => {
     expect(() => mapContextUsage({ thread_usage: { ...thread_usage, cache_read_tokens: -1 } })).toThrow('context_usage.thread_usage.cache_read_tokens must be a non-negative integer');

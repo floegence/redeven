@@ -229,10 +229,12 @@ type FlowerSubagentSummary struct {
 }
 
 type FlowerSubagentDetailResponse struct {
-	ModelContext *flruntime.ThreadModelContext `json:"model_context,omitempty"`
-	ContextUsage *FlowerContextUsage           `json:"context_usage,omitempty"`
-	Summary      FlowerSubagentSummary         `json:"summary"`
-	Current      flruntime.ThreadView          `json:"current"`
+	ContextCompactions  []FlowerContextCompaction     `json:"context_compactions"`
+	TimelineDecorations []FlowerTimelineDecoration    `json:"timeline_decorations"`
+	ModelContext        *flruntime.ThreadModelContext `json:"model_context,omitempty"`
+	ContextUsage        *FlowerContextUsage           `json:"context_usage,omitempty"`
+	Summary             FlowerSubagentSummary         `json:"summary"`
+	Current             flruntime.ThreadView          `json:"current"`
 }
 
 type CreateThreadRequest struct {
@@ -528,20 +530,6 @@ type streamEventLifecyclePhase struct {
 	MessageID string         `json:"messageId,omitempty"`
 	Phase     string         `json:"phase"`
 	Diag      map[string]any `json:"diag,omitempty"`
-}
-
-type streamEventContextUsage struct {
-	Type    string             `json:"type"`
-	Usage   FlowerContextUsage `json:"usage,omitempty"`
-	Payload map[string]any     `json:"payload,omitempty"`
-}
-
-type streamEventContextCompaction struct {
-	Type               string                   `json:"type"`
-	Compaction         FlowerContextCompaction  `json:"compaction,omitempty"`
-	TimelineDecoration FlowerTimelineDecoration `json:"timelineDecoration,omitempty"`
-	EventType          string                   `json:"eventType,omitempty"`
-	Payload            map[string]any           `json:"payload,omitempty"`
 }
 
 // RealtimeEventType defines the high-level AI event category sent over Flowersec RPC notify.

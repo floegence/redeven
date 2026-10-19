@@ -21,7 +21,7 @@ function usage(overrides: Partial<FlowerContextSample> & Pick<FlowerContextUsage
 
 function compaction(overrides: Partial<FlowerContextCompaction> = {}): FlowerContextCompaction {
   return {
-    operation_id: 'compact-1',
+    operation_id: 'compact-1', turn_id: 'turn-1', canonical_ordinal: 1,
     phase: 'complete',
     status: 'compacted',
     updated_at_ms: 1000,

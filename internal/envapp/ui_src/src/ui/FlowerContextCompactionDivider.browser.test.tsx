@@ -21,7 +21,7 @@ it.each(['en-US', 'zh-CN', 'de-DE'] as const)('keeps the complete estimate expla
   dispose = render(() => <FlowerContextCompactionDivider copy={copy} decoration={{
     decoration_id: 'context-compaction:one', kind: 'context_compaction', ordinal: 0,
     anchor: { target_kind: 'message', message_id: 'message-1', edge: 'after' },
-    compaction: { operation_id: 'one', phase: 'complete', status: 'compacted', tokens_before: 159143, tokens_after_estimate: 17462, updated_at_ms: 1 },
+    compaction: { operation_id: 'one', turn_id: 'turn-1', canonical_ordinal: 1, phase: 'complete', status: 'compacted', tokens_before: 159143, tokens_after_estimate: 17462, updated_at_ms: 1 },
   }} />, host);
   const trigger = host.querySelector<HTMLElement>('[role="button"]')!;
   await userEvent.hover(trigger);

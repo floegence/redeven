@@ -73,6 +73,22 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
 }
 
 describe('buildFlowerTimelineEntries', () => {
+  it('orders multiple compactions by first canonical lifecycle among parent events and preserves position on completion', () => {
+    const message = { id: 'anchor', role: 'assistant' as const, content: 'Before compression', status: 'complete' as const, canonical_ordinal: 2, created_at_ms: 100 };
+    const compact = (id: string, ordinal: number, phase: 'start' | 'complete' = 'start') => ({
+      decoration_id: id, kind: 'context_compaction' as const, ordinal: 0,
+      anchor: { target_kind: 'message' as const, message_id: 'anchor', edge: 'after' as const },
+      compaction: { operation_id: id, turn_id: 'turn', canonical_ordinal: ordinal, phase,
+        status: phase === 'start' ? 'compacting' as const : 'compacted' as const, updated_at_ms: 100 - ordinal },
+    });
+    const event: FlowerParentEvent = { id: 'event', canonical_ordinal: 4, kind: 'report', parent_thread_id: 'thread-1',
+      source_thread_id: 'child', source_turn_id: 'child-turn', source_run_id: 'child-run', source_entry_id: 'child-entry', received_at: new Date(1).toISOString(), admitted: false };
+    const build = (phase: 'start' | 'complete') => buildFlowerTimelineEntries(thread({ messages: [message], timeline_decorations: [compact('later', 5, phase), compact('earlier', 3, phase)] }), [event]);
+    const keys = ['message:anchor', 'timeline-decoration:earlier', 'parent-event:event', 'timeline-decoration:later'];
+    expect(build('start').map(entry => entry.key)).toEqual(keys);
+    expect(build('complete').map(entry => entry.key)).toEqual(keys);
+  });
+
   it('interleaves parent events by canonical position despite rewritten clocks without reordering messages and refreshes with the same message array', () => {
     const messages: FlowerThreadSnapshot['messages'] = [
       { id: 'user', role: 'user', content: 'Research', status: 'complete', created_at_ms: 1000, canonical_ordinal: 2 },
@@ -632,7 +648,7 @@ describe('buildFlowerTimelineEntries', () => {
         },
         ordinal: 0,
         compaction: {
-          operation_id: 'compact-1',
+          operation_id: 'compact-1', turn_id: 'turn-1', canonical_ordinal: 1,
           run_id: 'run-1',
           phase: 'complete',
           status: 'compacted',
@@ -679,7 +695,7 @@ describe('buildFlowerTimelineEntries', () => {
         },
         ordinal: 0,
         compaction: {
-          operation_id: 'compact-between',
+          operation_id: 'compact-between', turn_id: 'turn-1', canonical_ordinal: 1,
           phase: 'start',
           status: 'compacting',
           updated_at_ms: 3,
@@ -733,7 +749,7 @@ describe('buildFlowerTimelineEntries', () => {
         },
         ordinal: 0,
         compaction: {
-          operation_id: 'compact-placeholder-anchor',
+          operation_id: 'compact-placeholder-anchor', turn_id: 'turn-1', canonical_ordinal: 1,
           phase: 'complete',
           status: 'compacted',
           tokens_before: 26_104,
@@ -792,7 +808,7 @@ describe('buildFlowerTimelineEntries', () => {
         },
         ordinal: 0,
         compaction: {
-          operation_id: 'compact-final-tool',
+          operation_id: 'compact-final-tool', turn_id: 'turn-1', canonical_ordinal: 1,
           phase: 'complete',
           status: 'compacted',
           tokens_before: 25_814,
@@ -863,7 +879,7 @@ describe('buildFlowerTimelineEntries', () => {
         },
         ordinal: 0,
         compaction: {
-          operation_id: 'natural-threshold',
+          operation_id: 'natural-threshold', turn_id: 'turn-1', canonical_ordinal: 1,
           phase: 'complete',
           status: 'compacted',
           tokens_before: 25_814,
@@ -909,7 +925,7 @@ describe('buildFlowerTimelineEntries', () => {
         },
         ordinal: 3,
         compaction: {
-          operation_id: 'compact-invalid',
+          operation_id: 'compact-invalid', turn_id: 'turn-1', canonical_ordinal: 1,
           phase: 'start',
           status: 'compacting',
           updated_at_ms: 3,

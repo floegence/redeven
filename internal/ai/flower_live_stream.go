@@ -467,21 +467,6 @@ func (s *Service) broadcastFlowerRuntimeCurrent(endpointID string, current flrun
 		ThreadID:      current.ThreadID.String(),
 		Current:       &copy,
 	}
-	if current.Activity != flruntime.ThreadActivityActive {
-		ctx, cancel := context.WithTimeout(context.Background(), s.persistTimeout())
-		contextProjection, err := s.readCanonicalThreadContextProjection(ctx, current)
-		cancel()
-		if err != nil {
-			if s.log != nil {
-				s.log.Warn("ai: project canonical Flower thread context", "thread_id", current.ThreadID.String(), "error", err)
-			}
-		} else {
-			envelope.ModelContext = contextProjection.ModelContext
-			envelope.ContextUsage = contextProjection.Usage
-			envelope.ContextCompactions = contextProjection.Compactions
-			envelope.TimelineDecorations = contextProjection.Decorations
-		}
-	}
 	batch := newFlowerLiveEncodedBatch(envelope)
 	s.mu.Lock()
 	for _, subscriber := range s.flowerLiveSubscribers {
@@ -503,21 +488,11 @@ func (s *Service) broadcastFlowerSubagentRuntimeCurrent(endpointID, parentThread
 		return
 	}
 	copy := current
-	var modelContext *flruntime.ThreadModelContext
-	var usage *FlowerContextUsage
-	if current.Activity != flruntime.ThreadActivityActive {
-		ctx, cancel := context.WithTimeout(context.Background(), s.persistTimeout())
-		projection, err := s.readCanonicalThreadContextProjection(ctx, current)
-		cancel()
-		if err == nil {
-			modelContext, usage = projection.ModelContext, projection.Usage
-		}
-	}
 	batch := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
 		SchemaVersion:   FlowerLiveSchemaVersion,
 		Kind:            FlowerLiveStreamThreadBatch,
 		ThreadID:        parentThreadID,
-		SubagentCurrent: &copy, ModelContext: modelContext, ContextUsage: usage,
+		SubagentCurrent: &copy,
 	})
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -542,39 +517,6 @@ func (s *Service) broadcastFlowerSubagentsPatch(endpointID, parentThreadID strin
 		Kind:          FlowerLiveStreamThreadBatch,
 		ThreadID:      parentThreadID,
 		Subagents:     &itemsCopy,
-	})
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, subscriber := range s.flowerLiveSubscribers {
-		if subscriber.endpointID != endpointID || subscriber.closed {
-			continue
-		}
-		enqueueFlowerLiveSubscriberLocked(s, subscriber, batch)
-	}
-}
-
-func (s *Service) publishFlowerRuntimeContextUsage(endpointID string, threadID string, usage FlowerContextUsage) {
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	if s == nil || endpointID == "" || threadID == "" {
-		return
-	}
-	copy := usage
-	var modelContext *flruntime.ThreadModelContext
-	if reader, ok := s.threadRuntime.(flruntime.ThreadContextReader); ok {
-		ctx, cancel := context.WithTimeout(context.Background(), s.persistTimeout())
-		snapshot, err := reader.Context(ctx, identity.ThreadID(threadID))
-		cancel()
-		if err == nil {
-			modelContext = snapshot.ModelContext
-		}
-	}
-	batch := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
-		SchemaVersion: FlowerLiveSchemaVersion,
-		Kind:          FlowerLiveStreamThreadBatch,
-		ThreadID:      threadID,
-		ModelContext:  modelContext,
-		ContextUsage:  &copy,
 	})
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -670,7 +612,6 @@ func compareFlowerLiveCurrent(envelope FlowerLiveStreamEnvelope) *flowerLiveCurr
 		threadID: current.ThreadID.String(), routeID: envelope.ThreadID, subagent: envelope.SubagentCurrent != nil,
 		version: current.ViewVersion,
 		independent: envelope.ObserverID == "" && envelope.Summaries == nil && envelope.Subagents == nil &&
-			envelope.ModelContext == nil && envelope.ContextUsage == nil && envelope.ContextCompactions == nil && envelope.TimelineDecorations == nil &&
 			envelope.ReadStatus == nil && envelope.ComputerFrame == nil && envelope.ComputerStatus == nil,
 	}
 	if current.ThreadID == "" || current.Activity != flruntime.ThreadActivityActive || current.TurnID == "" || current.RunID == "" ||

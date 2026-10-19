@@ -234,8 +234,10 @@ function mapContextCompactionPhase(raw: unknown): FlowerContextCompaction['phase
       return 'cancelled';
     case 'noop':
       return 'noop';
-    default:
+    case 'checkpoint':
       return 'checkpoint';
+    default:
+      throw new Error('Flower contract error: unsupported compaction phase or status.');
   }
 }
 
@@ -251,8 +253,10 @@ function mapContextCompactionStatus(raw: unknown): FlowerContextCompaction['stat
       return 'cancelled';
     case 'noop':
       return 'noop';
-    default:
+    case 'checkpoint':
       return 'checkpoint';
+    default:
+      throw new Error('Flower contract error: unsupported compaction phase or status.');
   }
 }
 
@@ -408,17 +412,6 @@ function mapContextSample(raw: unknown): FlowerContextSample | null {
   };
 }
 
-export function mergeFlowerContextUsage(
-  previous: FlowerContextUsage | null | undefined,
-  incoming: FlowerContextUsage,
-): FlowerContextUsage {
-  if (incoming.thread_usage || !previous?.thread_usage) return incoming;
-  return {
-    ...incoming,
-    thread_usage: previous.thread_usage,
-  };
-}
-
 function mapContextCompaction(raw: unknown): FlowerContextCompaction | null {
   const record = recordValue(raw);
   if (!record) return null;
@@ -426,12 +419,14 @@ function mapContextCompaction(raw: unknown): FlowerContextCompaction | null {
   const phase = mapContextCompactionPhase(record.phase);
   const status = mapContextCompactionStatus(record.status);
   const updatedAt = integerOrZero(record.updated_at_ms ?? record.updated_at_unix_ms);
-  if (!operationID) return null;
+  if (!operationID || !trim(record.turn_id) || !Number.isSafeInteger(record.canonical_ordinal) || Number(record.canonical_ordinal) <= 0) return null;
   const stepIndex = optionalInteger(record.step_index);
   const tokensBefore = optionalInteger(record.tokens_before);
   const tokensAfterEstimate = optionalInteger(record.tokens_after_estimate);
   return {
     operation_id: operationID,
+    turn_id: trim(record.turn_id),
+    canonical_ordinal: Number(record.canonical_ordinal),
     ...(trim(record.run_id) ? { run_id: trim(record.run_id) } : {}),
     ...(stepIndex ? { step_index: stepIndex } : {}),
     phase,
@@ -493,13 +488,18 @@ function mapTimelineDecoration(raw: unknown): FlowerTimelineDecoration | null {
 }
 
 export function mapFlowerContextCompactions(raw: unknown): readonly FlowerContextCompaction[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
-  const compactions = raw.map(mapContextCompaction).filter(isPresent);
-  return compactions.length > 0 ? compactions : undefined;
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw)) throw new Error('Flower contract error: context_compactions must be an array.');
+  return raw.map((value) => {
+    const compaction = mapContextCompaction(value);
+    if (!compaction) throw new Error('Flower contract error: context_compactions requires valid canonical identity and payloads.');
+    return compaction;
+  });
 }
 
 export function mapFlowerTimelineDecorations(raw: unknown): readonly FlowerTimelineDecoration[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw)) throw new Error('Flower contract error: timeline_decorations must be an array.');
   const decorations = raw.map((value) => {
     const decoration = mapTimelineDecoration(value);
     if (!decoration) {
@@ -507,7 +507,7 @@ export function mapFlowerTimelineDecorations(raw: unknown): readonly FlowerTimel
     }
     return decoration;
   });
-  return decorations.length > 0 ? decorations : undefined;
+  return decorations;
 }
 
 function stringRecord(raw: unknown): Readonly<Record<string, string>> | undefined {
@@ -1331,8 +1331,8 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
     messages,
     ...(normalizeFlowerReasoningSelection(record.reasoning_selection) ? { reasoning_selection: normalizeFlowerReasoningSelection(record.reasoning_selection) } : {}),
     ...(normalizeFlowerReasoningCapability(record.reasoning_capability) ? { reasoning_capability: normalizeFlowerReasoningCapability(record.reasoning_capability) } : {}),
-    ...(modelContext ? { model_context: modelContext } : {}),
-    ...(contextUsage ? { context_usage: contextUsage } : {}),
+    ...(record.model_context !== undefined ? { model_context: modelContext ?? null } : {}),
+    ...(record.context_usage !== undefined ? { context_usage: contextUsage } : {}),
     ...(contextCompactions ? { context_compactions: contextCompactions } : {}),
     ...(timelineDecorations ? { timeline_decorations: timelineDecorations } : {}),
     ...(subagents !== undefined ? { subagents } : {}),

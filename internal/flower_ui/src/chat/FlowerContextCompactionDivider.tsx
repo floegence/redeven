@@ -1,6 +1,6 @@
 import { Clock } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
-import { Show, createMemo, createSignal, createUniqueId, onCleanup, onMount } from 'solid-js';
+import { Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, onMount } from 'solid-js';
 
 import type { FlowerTimelineDecoration } from '../contracts/flowerSurfaceContracts';
 import type { FlowerSurfaceCopy } from '../copy';
@@ -16,12 +16,15 @@ export function FlowerContextCompactionDivider(props: {
   decoration: Extract<FlowerTimelineDecoration, { kind: 'context_compaction' }>;
   copy: FlowerSurfaceCopy;
   onRetry?: () => void;
+  visible?: boolean;
 }) {
+  const visible = () => props.visible !== false;
   const compaction = createMemo(() => props.decoration.compaction);
   const detail = createMemo(() => compactionDividerDetail(compaction(), props.copy));
   const label = createMemo(() => compactionDividerLabel(compaction(), props.copy));
   const running = createMemo(() => compaction().status === 'compacting');
   const [tooltipOpen, setTooltipOpen] = createSignal(false);
+  createEffect(() => { if (!visible()) setTooltipOpen(false); });
   const tooltipID = `flower-compaction-divider-${createUniqueId()}`;
   const hasDetail = createMemo(() => detail().length > 0);
   let container: HTMLDivElement | undefined;
@@ -33,11 +36,11 @@ export function FlowerContextCompactionDivider(props: {
     onCleanup(() => document.removeEventListener('pointerdown', dismiss, true));
   });
   const openTooltip = () => {
-    if (hasDetail()) setTooltipOpen(true);
+    if (visible() && hasDetail()) setTooltipOpen(true);
   };
   const closeTooltip = () => setTooltipOpen(false);
   const toggleTooltip = () => {
-    if (hasDetail()) setTooltipOpen((open) => !open);
+    if (visible() && hasDetail()) setTooltipOpen((open) => !open);
   };
   return (
     <div

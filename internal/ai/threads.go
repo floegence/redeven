@@ -520,7 +520,7 @@ func (s *Service) GetFlowerThreadDetail(ctx context.Context, meta *session.Meta,
 	for _, queued := range current.Queue {
 		thread.QueuedTurns = append(thread.QueuedTurns, queuedInputView(strings.TrimSpace(threadID), queued))
 	}
-	contextProjection, err := s.readCanonicalThreadContextProjection(ctx, current)
+	contextProjection, err := flowerCurrentContextProjection(current)
 	if err != nil {
 		return nil, err
 	}

@@ -1,7 +1,6 @@
 package ai
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -17,24 +16,23 @@ type flowerCanonicalContextProjection struct {
 	Decorations  []FlowerTimelineDecoration
 }
 
-func (s *Service) readCanonicalThreadContextProjection(ctx context.Context, current flruntime.ThreadView) (flowerCanonicalContextProjection, error) {
-	if s == nil || s.threadRuntime == nil {
-		return flowerCanonicalContextProjection{}, errors.New("flower thread runtime is unavailable")
+func flowerCurrentContextProjection(current flruntime.ThreadView) (flowerCanonicalContextProjection, error) {
+	if current.Context == nil {
+		return flowerCanonicalContextProjection{}, errors.New("Floret current view is missing its context snapshot")
 	}
-	reader, ok := s.threadRuntime.(flruntime.ThreadContextReader)
-	if !ok {
-		return flowerCanonicalContextProjection{}, errors.New("published Floret runtime does not expose canonical thread context reads")
-	}
-	snapshot, err := reader.Context(ctxOrBackground(ctx), current.ThreadID)
-	if err != nil {
-		return flowerCanonicalContextProjection{}, fmt.Errorf("read canonical Floret thread context: %w", err)
-	}
-	return flowerThreadContextProjection(snapshot, current)
+	return flowerThreadContextProjection(*current.Context, current)
 }
 
 func flowerThreadContextProjection(snapshot flruntime.ThreadContextSnapshot, current flruntime.ThreadView) (flowerCanonicalContextProjection, error) {
-	projection := flowerCanonicalContextProjection{ModelContext: snapshot.ModelContext}
-	if snapshot.ContextUsage != nil {
+	projection := flowerCanonicalContextProjection{}
+	if snapshot.ModelContext != nil {
+		modelContext := *snapshot.ModelContext
+		modelContext.Snapshot.Sections = append([]flruntime.ModelContextSection{}, modelContext.Snapshot.Sections...)
+		modelContext.ChangedKeys = append([]string{}, modelContext.ChangedKeys...)
+		modelContext.RemovedKeys = append([]string{}, modelContext.RemovedKeys...)
+		projection.ModelContext = &modelContext
+	}
+	if snapshot.ContextUsage != nil || snapshot.UsageTotals != nil {
 		usage, err := flowerContextUsageFromFloret(snapshot.ContextUsage, snapshot.UsageTotals)
 		if err != nil {
 			return flowerCanonicalContextProjection{}, fmt.Errorf("project Floret context usage: %w", err)
@@ -55,6 +53,10 @@ func flowerThreadContextProjection(snapshot flruntime.ThreadContextSnapshot, cur
 		if err != nil {
 			return flowerCanonicalContextProjection{}, err
 		}
+		if canonical.ThreadID != current.ThreadID || canonical.TurnID == "" || canonical.CanonicalOrdinal == 0 {
+			return flowerCanonicalContextProjection{}, errors.New("Floret compaction has invalid canonical identity or order")
+		}
+		projected.CanonicalOrdinal = canonical.CanonicalOrdinal
 		compactions = append(compactions, projected)
 		if strings.TrimSpace(canonical.AfterItemID) == "" {
 			continue

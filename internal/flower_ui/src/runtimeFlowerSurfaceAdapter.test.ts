@@ -479,7 +479,7 @@ describe('runtime Flower surface adapter read state', () => {
 					kind: 'thread.batch',
 					thread_id: 'thread_stream',
 					context_compactions: [{
-						operation_id: 'compact_stream',
+						operation_id: 'compact_stream', turn_id: 'turn_stream', canonical_ordinal: 7,
 						phase: 'noop',
 						status: 'noop',
 						updated_at_ms: 4,
@@ -490,7 +490,7 @@ describe('runtime Flower surface adapter read state', () => {
 						anchor: { target_kind: 'message', message_id: 'message_compact', edge: 'after' },
 						ordinal: 0,
 						compaction: {
-							operation_id: 'compact_stream',
+							operation_id: 'compact_stream', turn_id: 'turn_stream', canonical_ordinal: 7,
 							phase: 'noop',
 							status: 'noop',
 							updated_at_ms: 4,

@@ -3,11 +3,11 @@ type: AI Runtime Contract
 title: Model context usage and compaction
 description: Independent manual compaction, automatic continuation, and canonical usage presentation.
 tags: [ai, models, context, compaction]
-timestamp: 2026-10-17T00:00:00Z
+timestamp: 2026-10-19T00:00:00Z
 ---
 # Summary
 
-Published Floret v7.60.3 owns context compaction, cancellation, canonical installation, restart recovery, and usage. Redeven authorizes an independent manual operation and presents the canonical result. Manual compaction ends after installation; automatic compaction continues the current task. Failure, cancellation before installation, and noop retain effective context.
+Published Floret v7.67.1 owns context compaction, cancellation, canonical installation, restart recovery, and usage. Redeven authorizes an independent manual operation and presents the canonical result. Manual compaction ends after installation; automatic compaction continues the current task. Failure, cancellation before installation, and noop retain effective context.
 
 # Contract
 
@@ -36,7 +36,11 @@ The 50,000-token target guides tail selection; it does not require a fixed-lengt
 
 ## Projection and usage
 
-Workspace live frames and bootstrap/reconnect use the same public canonical context reader. Redeven neither stores compaction lifecycle records nor accumulates usage. Floret supplies `AfterItemID`; Redeven uses that exact anchor and stable operation identity for one divider. Empty history has no invented anchor and displays a noop notice. Fork, pagination, refresh, and reconnect preserve canonical operation identity.
+Floret installs the complete context snapshot in its actor-owned current view before publishing its version. Detail, baseline, live, terminal and child frames map that same snapshot through one product projection; the browser receives no raw runtime context. Context changes bypass text cadence, while equal snapshots still coalesce text growth within the existing bounded queues. Absent fields preserve context, null clears nullable objects and empty arrays clear lists. Invalid payloads reject the frame and retain the last valid view through existing resync and detail recovery. There is no usage-only publication or polling path.
+
+Redeven neither stores compaction lifecycle records nor accumulates usage. Each operation keeps its explicit TurnID, RunID, first-lifecycle canonical ordinal and AfterItemID anchor. Canonical order places it among parent events; the anchor retains message insertion boundaries. Status updates keep the same divider identity and position across fork, pagination, refresh and reconnect. Empty history has no invented anchor. An observed active manual noop uses the existing result notice; history reload does not repeat notifications.
+
+Automatic compactions belong to their execution turn and collapse with its process, including a process containing only compactions. The shared summary remains reachable and expansion restores original order. Independent manual compactions keep their own context_compaction turn even when anchored after the preceding answer. The existing disclosure preference, inspection protection, scroll anchor and motion owner remain authoritative. Hidden rows are inert and aria-hidden; compaction tooltips reset on collapse, and focus returns to the summary. Approvals, unresolved questions, uncertain effects, Stop, Retry, continuation and draft recovery keep their existing visible controls.
 
 The compact panel displays native input tokens from the last confirmed request
 with =. Without a valid confirmed request it displays an em dash, including
@@ -56,6 +60,12 @@ when distribution changes.
 Cumulative thread totals survive installation. Cache hit rate is `cache_read / (input + cache_read + cache_write)` over those disjoint buckets. Pressure supplies only actionable warnings. No host watermark or second ledger is retained.
 
 Run input limits remain cumulative Floret `TurnLimits.MaxInputTokens`. Explicit output limits also supply context headroom; otherwise the resolved model capability supplies headroom while the provider request retains its normal unset output option. Redeven does not invent a total budget or infer serving capacity from model weights.
+
+## Deterministic timeline qualification
+
+`REDEVEN_COMPACTION_RUNTIME_UI=1 GOWORK=off go test ./internal/ai -run '^TestFlowerCompactionRuntimeUI$' -count=1 -v` starts a task-owned SQLite Runtime and dynamic HTTP port with a scripted overflow provider. It proves start and completion reach the actual FlowerSurface while the turn stays active, then verifies stable identity, disclosure and refresh. The test logs its commit, PID, port and state path and cleans its listeners, browser and temporary state on exit. It is opt-in qualification, outside ordinary commit, push and CI gates.
+
+Optional `REDEVEN_COMPACTION_HISTORY_COPY`, `REDEVEN_COMPACTION_HISTORY_THREAD` and `REDEVEN_COMPACTION_HISTORY_TURN` select an already consistent private database copy. Only the copy is opened through published Floret, with deferred execution and a factory that refuses execution. Browser checks retain every operation, canonical neighbor order, one row per operation, complete collapse and refresh. The original database and running thread are never opened or mutated by this qualification. Empty managed-context collections map to wire arrays without mutating upstream snapshots.
 
 ## Real DeepSeek qualification
 
@@ -77,6 +87,8 @@ Cache counters and the latest/cumulative tooltip rates follow the [request reuse
 - `redeven:internal/ai/compact_thread_context_test.go` - Canvas Send rejection, blocked preparation, disconnect, replay, and authorization.
 - `redeven:internal/codeapp/appserver/server_ai_compaction_test.go` - HTTP admission and strict request boundary.
 - `redeven:internal/ai/floret_thread_context.go` - Canonical divider anchors and usage mapping.
+- `redeven:internal/ai/flower_compaction_ui_test.go` - Isolated scripted Runtime and optional historical-copy qualification.
+- `redeven:scripts/check_flower_compaction_ui.mjs` - Actual FlowerSurface live, order, collapse and refresh assertions.
 - `redeven:internal/ai/run_e2e_deepseek_compaction_acceptance_test.go` - Four real provider lanes.
 - `redeven:scripts/check_flower_context_deepseek.sh` - Mandatory opt-in acceptance entry point.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.compaction.browser.test.tsx` - Dedicated embedded command and draft/navigation interaction.

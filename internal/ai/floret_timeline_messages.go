@@ -362,6 +362,7 @@ func publicFloretMessageReferences(references []flruntime.MessageReference) ([]p
 }
 
 func publicFloretThreadView(current flruntime.ThreadView) flruntime.ThreadView {
+	current.Context = nil
 	out := current
 	out.ToolCallPreviews = append([]flruntime.ThreadToolCallPreview(nil), current.ToolCallPreviews...)
 	for index := range out.ToolCallPreviews {

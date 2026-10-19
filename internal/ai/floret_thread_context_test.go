@@ -15,9 +15,41 @@ import (
 	"github.com/floegence/floret/v7/storage"
 )
 
+func TestFlowerContextProjectionEncodesEmptyModelContextListsWithoutMutatingCanonical(t *testing.T) {
+	canonical := &flruntime.ThreadModelContext{EntryID: "context-entry", PathDepth: 1, TurnID: "turn-context", RunID: "run-context"}
+	current := flruntime.ThreadView{ThreadID: "thread-context", Context: &flruntime.ThreadContextSnapshot{ModelContext: canonical}}
+	data, err := marshalFlowerContextJSON(struct{}{}, current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire struct {
+		ModelContext struct {
+			Snapshot struct {
+				Sections json.RawMessage `json:"sections"`
+			} `json:"snapshot"`
+			ChangedKeys json.RawMessage `json:"changed_keys"`
+			RemovedKeys json.RawMessage `json:"removed_keys"`
+		} `json:"model_context"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		t.Fatal(err)
+	}
+	for name, value := range map[string]json.RawMessage{
+		"sections":     wire.ModelContext.Snapshot.Sections,
+		"changed_keys": wire.ModelContext.ChangedKeys,
+		"removed_keys": wire.ModelContext.RemovedKeys,
+	} {
+		if string(value) != "[]" {
+			t.Errorf("%s=%s, want an empty array", name, value)
+		}
+	}
+	if canonical.Snapshot.Sections != nil || canonical.ChangedKeys != nil || canonical.RemovedKeys != nil {
+		t.Fatal("product projection mutated its canonical snapshot")
+	}
+}
+
 func TestPublishedFloretUsageReachesLiveAndCanonicalFlowerProjections(t *testing.T) {
 	liveUsage := make(chan FlowerContextUsage, 8)
-	contextUsageSnapshots := make(chan FlowerContextUsage, 16)
 	release := make(chan struct{})
 	gateway := florettest.NewScriptedGateway(
 		flprovider.Identity{Provider: "test", Model: "cache-usage", StateCompatibilityKey: "test:cache-usage:v1"},
@@ -50,19 +82,38 @@ func TestPublishedFloretUsageReachesLiveAndCanonicalFlowerProjections(t *testing
 	}
 	t.Cleanup(func() { _ = host.Shutdown(context.Background()) })
 	service, err := host.ThreadService(flruntime.AgentFactoryFunc(func(_ context.Context, request flruntime.AgentRequest) (*flruntime.Agent, error) {
-		adapterRun := &run{threadID: request.ThreadID.String(), host: runHostCapabilities{publishContextUsage: func(usage FlowerContextUsage) {
-			contextUsageSnapshots <- usage
-			if usage.ThreadUsage != nil {
-				liveUsage <- usage
-			}
-		}}}
-		return flruntime.NewAgent(agentConfig, gateway, flruntime.WithAgentEventSink(floretEventSink{run: adapterRun}), flruntime.WithAgentDynamicToolSurface(func(context.Context, flruntime.ToolSurfaceRequest) (flruntime.ToolSurface, error) {
+		return flruntime.NewAgent(agentConfig, gateway, flruntime.WithAgentDynamicToolSurface(func(context.Context, flruntime.ToolSurfaceRequest) (flruntime.ToolSurface, error) {
 			return flruntime.ToolSurface{ModelContextSnapshot: &flruntime.ModelContextSnapshot{Sections: []flruntime.ModelContextSection{{Key: "skills", Title: "Available skills", Text: "Test skill catalog"}}}}, nil
 		}))
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
+	updates, err := service.Subscribe(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { updates.Close() })
+	go func() {
+		defer close(liveUsage)
+		for {
+			view, err := updates.Next(t.Context())
+			if err != nil {
+				return
+			}
+			projection, err := flowerCurrentContextProjection(view)
+			if err != nil {
+				return
+			}
+			if projection.Usage != nil && projection.Usage.ThreadUsage != nil {
+				select {
+				case liveUsage <- *projection.Usage:
+				case <-t.Context().Done():
+					return
+				}
+			}
+		}
+	}()
 	reader := service.(flruntime.ThreadContextReader)
 	created, err := service.Create(t.Context(), flruntime.CreateThreadInput{RequestKey: "create-cache-usage"})
 	if err != nil {
@@ -105,17 +156,14 @@ func TestPublishedFloretUsageReachesLiveAndCanonicalFlowerProjections(t *testing
 	if !projected.Usage.Confirmed.Available || !projected.Usage.Confirmed.Measured || projected.Usage.Confirmed.Characters != nil || projected.Usage.Confirmed.CharactersAvailable {
 		t.Fatalf("unqualified attribution reached display: %+v", projected.Usage.Confirmed)
 	}
-	var latest FlowerContextUsage
-	for len(contextUsageSnapshots) > 0 {
-		latest = <-contextUsageSnapshots
-	}
-	canonicalJSON, _ := json.Marshal([]*FlowerContextSample{projected.Usage.Confirmed, projected.Usage.Estimate})
-	liveJSON, _ := json.Marshal([]*FlowerContextSample{latest.Confirmed, latest.Estimate})
-	if string(canonicalJSON) != string(liveJSON) {
-		t.Fatalf("canonical=%s live=%s", canonicalJSON, liveJSON)
-	}
 	close(release)
-	secondLive := waitForFlowerLiveUsage(t, liveUsage)
+	var secondLive FlowerContextUsage
+	for {
+		secondLive = waitForFlowerLiveUsage(t, liveUsage)
+		if secondLive.ThreadUsage != nil && secondLive.ThreadUsage.InputTokens == 100 {
+			break
+		}
+	}
 	secondWant := FlowerThreadTokenUsage{InputTokens: 100, OutputTokens: 30, CacheReadTokens: 85, CacheWriteTokens: 5}
 	if secondLive.ThreadUsage == nil || *secondLive.ThreadUsage != secondWant {
 		t.Fatalf("second live thread usage=%#v, want %#v", secondLive.ThreadUsage, secondWant)
@@ -295,7 +343,7 @@ func TestFlowerThreadContextProjectionRestoresOneTerminalCompactionDivider(t *te
 	projection, err := flowerThreadContextProjection(flruntime.ThreadContextSnapshot{
 		Compactions: []flruntime.ThreadContextCompaction{{
 			RunID: "run-context", ThreadID: threadID, TurnID: turnID, Step: 1,
-			OperationID: "compact-operation", RequestID: "compact-request", AfterItemID: "message-before",
+			CanonicalOrdinal: 7, OperationID: "compact-operation", RequestID: "compact-request", AfterItemID: "message-before",
 			Phase: "noop", Status: "noop", Trigger: "manual", Reason: "manual",
 			Source: "thread_runtime", TokensBefore: 6354, ObservedAt: observedAt,
 		}},
@@ -382,7 +430,7 @@ func TestFlowerThreadContextProjectionKeepsEmptyHistoryNoopWithoutInventingAncho
 	projection, err := flowerThreadContextProjection(flruntime.ThreadContextSnapshot{
 		Compactions: []flruntime.ThreadContextCompaction{{
 			RunID: "run-context", ThreadID: "thread-context", TurnID: "turn-missing",
-			OperationID: "compact-operation", RequestID: "compact-request",
+			CanonicalOrdinal: 7, OperationID: "compact-operation", RequestID: "compact-request",
 			Phase: "noop", Status: "noop", Source: "thread_runtime", ObservedAt: time.Now(),
 		}},
 	}, flruntime.ThreadView{ThreadID: "thread-context"})

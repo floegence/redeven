@@ -92,7 +92,7 @@ function compactionEntry(key: string): FlowerTimelineEntry {
       anchor: { target_kind: 'message', message_id: 'assistant-next', edge: 'before' },
       ordinal: 2,
       compaction: {
-        operation_id: key,
+        operation_id: key, turn_id: 'turn', canonical_ordinal: 1,
         phase: 'complete',
         status: 'compacted',
         updated_at_ms: 180,

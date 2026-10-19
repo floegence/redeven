@@ -1,7 +1,6 @@
 package ai
 
 import (
-	"context"
 	"encoding/json"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	"io"
@@ -127,7 +126,7 @@ func TestModelContextRefreshAfterConfirmedToolAndSafeRetry(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			projection, err := svc.readCanonicalThreadContextProjection(context.Background(), view)
+			projection, err := flowerCurrentContextProjection(view)
 			if err != nil || projection.ModelContext == nil || !strings.Contains(modelContextSnapshotText(&projection.ModelContext.Snapshot), want) || projection.ModelContext.UsedByRequestID == "" {
 				t.Fatalf("canonical current facts=%+v err=%v", projection.ModelContext, err)
 			}
