@@ -1,9 +1,9 @@
 ---
 type: UI Contract
 title: Flower message appearance
-description: Recognize sent user messages and keep their text, references and native selections readable in every shell theme.
+description: Keep assistant reading and sent user messages readable in every shell theme without changing content or interaction.
 tags: [flower, themes, accessibility, selection]
-timestamp: 2026-10-16T00:00:00Z
+timestamp: 2026-10-18T00:00:00Z
 ---
 
 # Summary
@@ -22,12 +22,14 @@ published compact scale. Source destinations and copy follow
 
 ## Transcript reading scale
 
-Message bubbles use a `0.875rem` body size and unitless `1.75` line height
-(14px and 24.5px at the standard 16px root). Markdown follows that message
-scale; headings use proportional sizes and line heights, paragraphs have
+Assistant bubbles use a `0.9375rem` body size and unitless `1.88` line height
+(15px and 28.2px at the standard 16px root). User bubbles retain `0.875rem`
+and `1.75` (14px and 24.5px). Markdown follows its message scale; headings use
+proportional sizes and line heights, paragraphs have
 `0.8em` separation, and list items have `0.4em` separation. The first rendered
 block keeps its top margin reset, including while streaming. Assistant prose
-retains its 58rem maximum reading width. Code and tables use a smaller relative
+shares the centered transcript/composer track with a `43.75rem` maximum reading
+width (700px at the standard root). Code and tables use a smaller relative
 reading size and keep their own constrained horizontal scrolling.
 
 This scale belongs to transcript message bubbles, not a root theme token or
@@ -41,6 +43,23 @@ they do not alter reading geometry or remount Markdown content.
 Answered-question receipts inherit the message body size for both questions
 and answers, including redacted answers. Their `1.6` line height keeps wrapped
 content readable, while the status label uses `0.75rem` with `1.4` line height.
+
+## Assistant reading roles
+
+Assistant body and headings retain the published foreground on the chat surface.
+Links blend semantic info 78% with foreground 22%, use regular weight and a quiet
+1px underline, and strengthen color and underline on hover or keyboard focus.
+Focus keeps its 2px outline. Inline code retains its published background and
+blends its foreground 82% with body foreground 18%, using 91% relative size and
+regular weight. Quotes inherit body ink beside a quiet 2px rule. Completion time
+uses opaque muted foreground 88% plus foreground 12% at `0.75rem`.
+
+High Contrast Light retains the original foreground, info and code colors with
+a full 2px link underline and an inset code outline that does not change layout.
+Forced colors use system reading, link and selection roles. Theme switching
+preserves DOM, focus, selection and code wrapping. Authored bold text, dates,
+identifiers, source labels and destinations remain unchanged; presentation does
+not infer metadata from prose or rewrite admitted Markdown.
 
 ## Filled messages and content
 
@@ -135,6 +154,7 @@ layout, failed messages and forced colors. Code highlighting retains its indepen
 - [Shared message styles](../../internal/flower_ui/src/styles/flower.css)
 - [Shared transcript rendering](../../internal/flower_ui/src/FlowerSurface.tsx)
 - [Theme, contrast and selection acceptance](../../internal/envapp/ui_src/src/styles/flowerMessageContrast.browser.test.tsx)
+- [Assistant roles, theme switching, zoom and contrast](../../internal/envapp/ui_src/src/ui/FlowerMarkdown.readingThemes.browser.test.tsx)
 - [Rendered text scale and compact composer controls](../../internal/envapp/ui_src/src/ui/FlowerMarkdown.citations.browser.test.tsx)
 - [Horizontal table rules, alignment and narrow scrolling](../../internal/envapp/ui_src/src/ui/FlowerMarkdown.tables.browser.test.tsx)
 - [Answered-question receipt and composer acceptance](../../internal/envapp/ui_src/src/ui/FlowerSurface.inputResponse.browser.test.tsx)
