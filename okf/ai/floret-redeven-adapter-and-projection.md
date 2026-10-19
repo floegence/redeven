@@ -236,7 +236,9 @@ detail reads prove parent endpoint ownership before using the process-wide
 Floret child list or view.
 
 Flower thread navigation assigns the selection generation synchronously with
-the user's rail intent. Deferred presentation work carries that generation,
+the user's rail intent. The rail highlights the intent before the existing
+after-paint boundary commits ThreadCache selection and loads detail. Deferred
+presentation work carries that generation,
 and an older bootstrap is rejected before it can update `ThreadCache` detail.
 Rapid A to B to A navigation therefore keeps the latest selected identity and
 transcript even when earlier detail requests settle out of order.

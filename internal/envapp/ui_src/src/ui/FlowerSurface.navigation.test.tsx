@@ -292,7 +292,7 @@ describe('FlowerSurface navigation', () => {
     expect(markThreadRead).toHaveBeenCalledWith(unreadThread.thread_id, { activity_revision: 7 });
 
     (runtime.querySelector(`[data-thread-id="${otherThread.thread_id}"] button`) as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelector(`[data-thread-id="${otherThread.thread_id}"]`)?.getAttribute('data-flower-thread-active') === 'true');
+    await waitFor(() => runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === otherThread.thread_id);
     expect(runtime.querySelector(`[data-thread-id="${unreadThread.thread_id}"]`)?.getAttribute('data-flower-thread-unread-dot')).toBe('true');
     (runtime.querySelector(`[data-thread-id="${unreadThread.thread_id}"] button`) as HTMLButtonElement).click();
     await waitFor(() => markThreadRead.mock.calls.length === 2);
@@ -1084,7 +1084,7 @@ describe('FlowerSurface navigation', () => {
     button(summaryB.thread_id).click();
     await waitFor(() => loadThread.mock.calls.some(([threadID]) => threadID === summaryB.thread_id));
     button(summaryA.thread_id).click();
-    await waitFor(() => activeThreadID() === summaryA.thread_id);
+    await waitFor(() => runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === summaryA.thread_id);
     lateB.resolve(liveBootstrap(thread({
       ...summaryB,
       messages: [{

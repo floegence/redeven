@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower conversation sidebar
 description: Select conversations clearly and reorder endpoint-owned pins without interrupting live interactions.
 tags: [flower, sidebar, navigation, pins, interaction]
-timestamp: 2026-10-15T00:00:00Z
+timestamp: 2026-10-19T00:00:00Z
 ---
 
 # Summary
@@ -43,6 +43,22 @@ dialog. Both entry points share one rename owner and canonical save path; header
 and sidebar titles update through the existing thread cache.
 
 ## Selection and navigation
+
+The rail acknowledges a selection with a short-lived navigation intent before
+committing the conversation. The existing animation-frame plus task boundary
+lets that highlight paint before ThreadCache selection, transcript projection,
+scroll measurement and detail loading. Only the latest intent commits;
+ThreadCache.selectedId remains the sole committed conversation identity.
+Foreground detail requests cannot bypass this boundary through summary effects.
+
+The previous title, body and draft stay together with a localized loading status
+until commit. That conversation and its composer are inert; Send, Stop, input,
+approval and Goal entry points also reject actions during the intent. The rail
+remains available. An already captured immutable submission keeps its original
+ThreadID and cannot cancel a newer navigation. Returning to the committed
+conversation cancels the pending target without remounting its body. New chat,
+external focus, embedded scope changes, deletion and disposal retain their
+existing cancellation boundaries.
 
 Deferred conversation selection keeps the focus owner from the original selection
 intent. Finishing a load cannot reclaim focus after the user moves to the title
@@ -111,6 +127,13 @@ cancellation takes precedence with the existing stopping feedback. Background
 threads update through the same workspace stream without requiring selection.
 
 ## Pin ordering
+
+Retained rows move through Element.moveBefore where supported. The stable
+.flower-thread-rows owner provides inline-size containment for both real and
+skeleton rows; movable cards must not themselves be size containers. This avoids
+zero-size title/button layout after native moves in shipped Electron while
+preserving ThreadID-owned nodes, keyboard focus and live wave animations. The
+same named container query owns narrow-row status and action layout.
 
 Pinned root conversations have one order per endpoint, shared by Desktop, Env
 App and other windows in that environment. `pin_rank` descending is authoritative;
@@ -199,3 +222,13 @@ owns the broader interaction and runtime boundaries.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.pinOrder.test.tsx` - Revision ordering, failed refresh and nonblocking navigation/composing.
 - `redeven:internal/ai/threadstore/pin_order_test.go` - Complete ordering beyond 200 pins, persistence, concurrency and rollback.
 - `redeven:internal/codeapp/appserver/server_ai_pin_order_test.go` - HTTP validation, permissions and endpoint isolation.
+
+## Qualification
+
+Run node scripts/check_flower_sidebar_responsiveness.mjs for the installed
+Desktop Electron version. The synthetic 247-thread / 610-entry fixture checks
+click-path Markdown/projection isolation, warm click P95 below 8ms, three rail
+widths, delayed pins, rollback, streamed titles, retained focus and animation.
+It records geometry on animation frames plus screenshots and a Chromium trace
+outside tracked source. Geometry and scheduling measurements do not alone prove
+physical screen presentation; inspect the captured trace filmstrip as well.

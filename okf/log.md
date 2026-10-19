@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-19 — Responsive Flower conversation selection
+
+- Acknowledge [sidebar navigation](ui/flower-thread-sidebar.md) before committing transcript work, keep the previous conversation inert during the transition, and retain draft/action ownership. Move size containment to the stable row owner so native pin reordering preserves visible titles in shipped Electron; qualify with synthetic Desktop geometry, trace and click measurements.
+
 ## 2026-10-19 — DeepSeek search and page reading
 
 - Adopt published Floret v7.66.1 DeepSeek Flash Search, Pro hosted search and explicit Fetch; document source freeze, live credentials and shared settings.
