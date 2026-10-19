@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-19 — Candidate file names during edit preparation
+
+- Show complete streamed edit paths and canonical patch file headers through the existing display-only preview. Preserve progressive multi-file names, rename endpoints, responsive truncation, immediate name publication, and actual-result takeover in [file edit preparation](ui/flower-edit-preparation.md).
+
 ## 2026-10-19 — Readable thread tool Activity
 
 - Preserve model-authored query/read intent in fixed tool titles, and load bounded saved-result previews only on disclosure. Show key parameters, counts and excerpts while keeping private content out of ordinary Activity snapshots. See [queries](ai/flower-thread-queries.md) and [interaction](ui/flower-activity-interaction.md).

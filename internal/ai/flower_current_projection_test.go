@@ -290,6 +290,29 @@ func TestTypedFailureProjectionIsConsistentAcrossCurrentAndSummaryPaths(t *testi
 	}
 }
 
+func TestFlowerCurrentPublishesParsedPatchNameBeforeArgumentsComplete(t *testing.T) {
+	parse := flowerArgumentPreviewFactory("apply_patch")()
+	preview, err := parse(`{"patch":"*** Begin Patch\n*** Update File: src/example.ts\n@@\n-old\n+new`, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current := flruntime.ThreadView{ThreadID: "thread-preview", TurnID: "turn-preview", RunID: "run-preview", Activity: flruntime.ThreadActivityActive,
+		RunProgress:      &flruntime.ThreadRunProgress{Phase: flruntime.ThreadRunPhaseStreaming, Request: &flruntime.ProviderRequestProgress{LogicalRequestID: "request", AttemptID: "attempt", AttemptEpoch: 1, StartedAt: time.Now()}},
+		ToolCallPreviews: []flruntime.ThreadToolCallPreview{{ThreadID: "thread-preview", TurnID: "turn-preview", RunID: "run-preview", LogicalRequestID: "request", AttemptID: "attempt", AttemptEpoch: 1, CallID: "patch", Name: "apply_patch", Preview: preview}},
+	}
+	encoded, err := flowerCurrentJSON(current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var public flruntime.ThreadView
+	if err := json.Unmarshal(encoded, &public); err != nil {
+		t.Fatal(err)
+	}
+	if len(public.ToolCallPreviews) != 1 || public.ToolCallPreviews[0].ArgumentsComplete || public.ToolCallPreviews[0].Preview.DisplayName != "example.ts" || len(public.Items) != 0 {
+		t.Fatalf("partial patch preview lost or admitted: %s", encoded)
+	}
+}
+
 func TestFlowerCurrentAndSummaryPreserveExactRunIdentityAndProgress(t *testing.T) {
 	started := time.Now().Add(-5 * time.Second)
 	first := started.Add(time.Second)

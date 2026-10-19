@@ -146,6 +146,26 @@ func TestFlowerRuntimeCurrentPublisherStreamsThinkingAtVisualCadence(t *testing.
 	}
 }
 
+func TestFlowerRuntimeCurrentPublisherPublishesPreviewNamesImmediately(t *testing.T) {
+	clock := newFakeFlowerRuntimePublishClock()
+	var published []recordedFlowerRuntimeCurrent
+	publisher := newFlowerRuntimeCurrentPublisher(50*time.Millisecond, clock, func(endpointID string, current flruntime.ThreadView) {
+		published = append(published, recordedFlowerRuntimeCurrent{endpointID: endpointID, current: current})
+	})
+	t.Cleanup(publisher.Close)
+	for i, name := range []string{"", "", "example.ts", "example.ts, second.ts"} {
+		additions := i
+		publisher.Publish("env", flruntime.ThreadView{ThreadID: "thread", TurnID: "turn", RunID: "run", Activity: flruntime.ThreadActivityActive, ViewVersion: uint64(i + 1),
+			ToolCallPreviews: []flruntime.ThreadToolCallPreview{{CallID: "call", Preview: &tools.ArgumentPreview{DisplayName: name, Additions: &additions}}}})
+	}
+	if got := publishedVersions(published); !equalUint64s(got, []uint64{1, 3, 4}) {
+		t.Fatalf("filename changes were delayed: %v", got)
+	}
+	if published[1].current.ToolCallPreviews[0].Preview.DisplayName != "example.ts" || published[2].current.ToolCallPreviews[0].Preview.DisplayName != "example.ts, second.ts" {
+		t.Fatalf("preview names were lost: %#v", published)
+	}
+}
+
 func TestFlowerRuntimeCurrentPublisherCoalescesOutputNumbersAndFlushesRequestBoundaries(t *testing.T) {
 	clock := newFakeFlowerRuntimePublishClock()
 	var published []recordedFlowerRuntimeCurrent

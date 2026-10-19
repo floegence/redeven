@@ -165,10 +165,23 @@ describe('Flower complete interaction subtree stability', () => {
     const runtime = await mountFixture(fixture);
     await waitFor(() => Boolean(runtime.querySelector('.flower-model-status-metric')?.textContent?.includes('4 s')));
     const indicator = runtime.querySelector('.flower-model-status-indicator');
-    fixture.replace({ ...base, view_version: 3, sampled_at_ms: Date.now(), run_progress: { phase: 'streaming', request: { ...request, first_output_at: new Date().toISOString(), estimated_output_tokens: 128 } }, tool_call_previews: [call] });
+    const streamingProgress = { phase: 'streaming' as const, request: { ...request, first_output_at: new Date().toISOString(), estimated_output_tokens: 128 } };
+    fixture.replace({ ...base, view_version: 3, sampled_at_ms: Date.now(), run_progress: streamingProgress, tool_call_previews: [{ ...call, preview: {} }] });
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-argument-generation]')));
     const row = runtime.querySelector('[data-flower-tool-row-identity]')!;
     const icon = row.querySelector('.flower-tool-icon')!;
+    expect(row.querySelector('.flower-activity-inline-title-target')).toBeNull();
+    fixture.replace({ ...base, view_version: 4, sampled_at_ms: Date.now(), run_progress: streamingProgress, tool_call_previews: [call] });
+    await waitFor(() => row.querySelector('.flower-activity-inline-title-target')?.textContent === 'example.ts');
+    expect(runtime.querySelector('[data-flower-tool-row-identity]')).toBe(row);
+    expect(row.querySelector('.flower-activity-inline-title-target')?.getAttribute('title')).toBe('example.ts');
+    const names = toolName === 'apply_patch' ? 'example.ts, second.ts, third-with-a-long-filename-for-responsive-layout.ts' : 'example.ts';
+    if (toolName === 'apply_patch') {
+      fixture.replace({ ...base, view_version: 5, sampled_at_ms: Date.now(), run_progress: streamingProgress, tool_call_previews: [{ ...call, preview: { ...call.preview, display_name: names } }] });
+      await waitFor(() => row.querySelector('.flower-activity-inline-title-target')?.textContent === names);
+      expect(row.querySelector('.flower-activity-inline-title-target')?.getAttribute('title')).toBe(names);
+      expect(runtime.querySelector('[data-flower-tool-row-identity]')).toBe(row);
+    }
     expect(icon.getAnimations({ subtree: true }).length).toBeGreaterThan(0);
     expect(row.querySelector('.flower-activity-inline-detail')?.textContent).toBe('Preparing changes');
     expect(row.textContent).not.toContain('Generating arguments');
@@ -185,26 +198,40 @@ describe('Flower complete interaction subtree stability', () => {
     expect(runtime.querySelector('.flower-model-status-metric')?.closest('[aria-live="polite"]')).toBeNull();
     await page.screenshot({ element: runtime, path: '__screenshots__/flower-output-progress-wide.png' });
     await page.viewport(390, 844);
+    const target = row.querySelector<HTMLElement>('.flower-activity-inline-title-target')!;
+    expect(getComputedStyle(target).textOverflow).toBe('ellipsis');
+    expect(target.getBoundingClientRect().right).toBeLessThanOrEqual(runtime.getBoundingClientRect().right + 1);
     await page.screenshot({ element: runtime, path: '__screenshots__/flower-output-progress-narrow.png' });
+    const preparedCall = { ...call, arguments_complete: true, preview: { ...call.preview, display_name: names } };
+    const operation = toolName === 'file.edit' ? 'edit' : 'write';
+    const presentation = toolName === 'apply_patch'
+      ? { renderer: 'patch', payload: { operation: 'apply_patch' } }
+      : { renderer: 'file', payload: { operation, display_name: 'example.ts' } };
+    const resultPresentation = toolName === 'apply_patch'
+      ? { renderer: 'patch', payload: { operation: 'apply_patch', mutations: [{ display_name: 'example.ts', change_type: 'noop' }] } }
+      : { renderer: 'file', payload: { operation, display_name: 'example.ts', change_type: 'noop' } };
     const tool = { id: `tool:${base.turn_id}:${call.call_id}`, turn_id: base.turn_id!, run_id: base.run_id!, ordinal: base.items!.length + 1, kind: 'tool' as const,
       activity: { item_id: 'journal-tool-entry', tool_id: call.call_id, tool_name: call.name, kind: 'tool', status: 'waiting', severity: 'normal',
-        presentation: { renderer: 'file', payload: { operation: 'write', display_name: 'example.ts' } } } };
-    fixture.replace({ ...base, view_version: 4, run_progress: null, attention: { approval_count: 1 }, interactions: [{ id: 'approval-preview', turn_id: base.turn_id!, run_id: base.run_id!, kind: 'approval', tool_call_id: call.call_id, approval: { tool_call_id: call.call_id, tool_name: call.name, label: 'Write example.ts' } }], tool_call_previews: [{ ...call, arguments_complete: true }], items: [...base.items!, tool] });
+        presentation } };
+    fixture.replace({ ...base, view_version: 6, run_progress: null, attention: { approval_count: 1 }, interactions: [{ id: 'approval-preview', turn_id: base.turn_id!, run_id: base.run_id!, kind: 'approval', tool_call_id: call.call_id, approval: { tool_call_id: call.call_id, tool_name: call.name, label: 'Edit example.ts' } }], tool_call_previews: [preparedCall], items: [...base.items!, tool] });
     await waitFor(() => Boolean(row.querySelector('[data-flower-activity-status="waiting"]')));
     expect(row.textContent).not.toContain('Preparing changes');
     expect(runtime.querySelector('[data-flower-tool-row-identity]')).toBe(row);
     expect(row.textContent).toContain('+8');
+    expect(row.textContent).toContain(names);
     expect(row.querySelector('.flower-tool-icon')!.getAnimations({ subtree: true })).toHaveLength(0);
     expect(runtime.querySelectorAll('[data-flower-tool-row-identity]')).toHaveLength(1);
-    fixture.replace({ ...base, view_version: 5, run_progress: { phase: 'tool_execution' }, tool_call_previews: [{ ...call, arguments_complete: true }], items: [...base.items!, { ...tool, activity: { ...tool.activity, status: 'running' } }] });
+    fixture.replace({ ...base, view_version: 7, run_progress: { phase: 'tool_execution' }, tool_call_previews: [preparedCall], items: [...base.items!, { ...tool, activity: { ...tool.activity, status: 'running' } }] });
     await waitFor(() => Boolean(row.querySelector('[data-flower-activity-status="running"]')));
     expect(row.textContent).not.toContain('Preparing changes');
+    expect(row.textContent).toContain(names);
     expect(runtime.querySelector('[data-flower-tool-row-identity]')).toBe(row);
     expect(row.querySelector('.flower-tool-icon')!.getAnimations({ subtree: true }).length).toBeGreaterThan(0);
-    fixture.replace({ ...base, view_version: 6, run_progress: { phase: 'tool_execution' }, tool_call_previews: [], items: [...base.items!, { ...tool, activity: { ...tool.activity, status: 'success', presentation: { renderer: 'file', payload: { operation: 'write', display_name: 'example.ts', change_type: 'noop' } } } }] });
+    fixture.replace({ ...base, view_version: 8, run_progress: { phase: 'tool_execution' }, tool_call_previews: [], items: [...base.items!, { ...tool, activity: { ...tool.activity, status: 'success', presentation: resultPresentation } }] });
     await waitFor(() => row.textContent?.includes('+0') === true);
     expect(row.textContent).toContain('−0');
     expect(row.textContent).not.toContain('+8');
+    expect(row.textContent).not.toContain('second.ts');
     expect(runtime.querySelector('[data-flower-tool-row-identity]')).toBe(row);
     expect(runtime.querySelectorAll('[data-flower-tool-row-identity]')).toHaveLength(1);
     expect(row.querySelector('.flower-tool-icon')!.getAnimations({ subtree: true })).toHaveLength(0);
