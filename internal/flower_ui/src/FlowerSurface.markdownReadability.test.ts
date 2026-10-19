@@ -43,9 +43,10 @@ describe('Flower markdown readability', () => {
     expect(css).toContain('.flower-message-bubble-assistant .flower-chat-md-block');
     expect(cssRule(css, '.flower-chat-shell')).toContain('--flower-chat-text-column-width: 43.75rem');
     expect(css).toContain('max-width: min(100%, var(--flower-chat-text-column-width, 43.75rem))');
-    expect(cssRule(css, '.flower-message-bubble-assistant')).toContain('--flower-message-font-size: 0.9375rem');
-    expect(cssRule(css, '.flower-message-bubble-assistant')).toContain('--flower-message-line-height: 1.88');
+    expect(cssRule(css, '.flower-message-bubble-assistant')).not.toContain('--flower-message-font-size:');
+    expect(cssRule(css, '.flower-message-bubble-assistant')).not.toContain('--flower-message-line-height:');
     expect(cssRule(css, '.flower-message-bubble')).toContain('--flower-message-font-size: 0.875rem');
+    expect(cssRule(css, '.flower-message-bubble')).toContain('--flower-message-line-height: 1.75');
     expect(cssRule(css, '.flower-chat-md-block')).toContain('line-height: var(--flower-message-line-height, var(--floe-line-body))');
     expect(css).toContain('.flower-chat-md-block h1');
     expect(cssRule(css, '.flower-chat-md-block h1')).toContain('font-size: 1.5em');

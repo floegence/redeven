@@ -3386,8 +3386,6 @@
 
 /* Assistant reading roles inherit the host palette without changing filled messages. */
 .flower-message-bubble-assistant {
-  --flower-message-font-size: 0.9375rem;
-  --flower-message-line-height: 1.88;
   --flower-reader-meta: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);
   --flower-content-link: color-mix(in srgb, var(--info) 78%, var(--foreground) 22%);
   --flower-content-link-hover: color-mix(in srgb, var(--info) 60%, var(--foreground) 40%);

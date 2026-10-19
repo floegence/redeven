@@ -8,6 +8,7 @@ import { commands, page, userEvent } from 'vitest/browser';
 import { FlowerAnswerActions } from '../../../../flower_ui/src/FlowerAnswerActions';
 import { FlowerMarkdownBlock } from '../../../../flower_ui/src/chat/markdown/FlowerMarkdownBlock';
 import { flowerMessageTextForCopy } from '../../../../flower_ui/src/chat/markdown/flowerCitations';
+import { adapter, liveBootstrap, renderSurfaceWithAdapterProps, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
 let dispose: (() => void) | undefined;
 const media = commands as unknown as {
@@ -84,23 +85,69 @@ function mount() {
   return host;
 }
 
-it('uses a roomier assistant reading scale without enlarging user bubbles', async () => {
+it('preserves the original compact reading scale for assistant and user bubbles', async () => {
   await page.viewport(1100, 1000);
   const host = mount();
   const assistant = host.querySelector<HTMLElement>('.flower-message-bubble-assistant .flower-chat-md-block')!;
   const user = host.querySelector<HTMLElement>('.flower-message-bubble-user .flower-chat-md-block')!;
-  expect(parseFloat(getComputedStyle(assistant).fontSize)).toBe(15);
-  expect(parseFloat(getComputedStyle(assistant).lineHeight)).toBeCloseTo(28.2);
+  expect(parseFloat(getComputedStyle(assistant).fontSize)).toBe(14);
+  expect(parseFloat(getComputedStyle(assistant).lineHeight)).toBeCloseTo(24.5);
   expect(assistant.getBoundingClientRect().width).toBeLessThanOrEqual(700);
   expect(parseFloat(getComputedStyle(user).fontSize)).toBe(14);
   expect(parseFloat(getComputedStyle(user).lineHeight)).toBeCloseTo(24.5);
   const code = assistant.querySelector<HTMLElement>('.flower-chat-md-inline-code')!;
-  expect(parseFloat(getComputedStyle(code).fontSize) / 15).toBeCloseTo(0.91);
+  expect(parseFloat(getComputedStyle(code).fontSize) / 14).toBeCloseTo(0.91);
   expect(getComputedStyle(code).fontWeight).toBe('400');
   expect(getComputedStyle(host.querySelector('.flower-answer-time')!).fontSize).toBe('12px');
   expect(assistant.querySelector('strong')!.textContent).toBe('October 18 · PR #54961');
   expect(getComputedStyle(assistant.querySelector('strong')!).fontWeight).toBe('600');
   expect(flowerMessageTextForCopy(content)).toBe(content);
+});
+
+// Chinese prose reproduces the screenshot's wrapping and authored emphasis.
+const screenshotContent = [
+  '## 三、最值得追踪的主干新提交',
+  '以下提交发生在稳定版 0.163.0 发布之后，**不应视为该稳定版已经包含的能力**。日期按 GitHub 提交列表展示。([github.com](https://github.com/openai/codex/commits/main/))',
+  '### 1. 多代理开始支持“完成后主动唤醒父会话”',
+  '**10 月 18 日 · ' + tick + '8c07694' + tick + ' · PR #54961**',
+  '新增 ' + tick + 'wake_on_agent_messages' + tick + '：子代理完成工作、发来消息时，可以唤醒已经空闲的根会话，启动新一轮处理。它**默认关闭**，并保留边界。([github.com](https://github.com/openai/codex/pull/54961))',
+  '**分析：这是本轮最有架构意义的变化。** 协作模式开始从“父代理一直等着子代理”转向“子代理完成后通过事件通知父代理”。',
+  '### 2. Code Mode 动态工具调用获得真正的并行通道',
+  '**10 月 16 日 · ' + tick + 'beae473' + tick + ' · PR #54654**',
+  '修改 ' + tick + 'DynamicToolHandler' + tick + '，允许 Code Mode 通过 ' + tick + 'Promise.all' + tick + ' 并发发出动态工具请求。([github.com](https://github.com/openai/codex/pull/54654))',
+].join('\n\n');
+
+it.each(['porcelain-light', 'classic-dark', 'hc-light'])('renders screenshot-like Markdown at the original scale in the real %s transcript', async theme => {
+  await page.viewport(1100, 1000);
+  applyTheme(builtInShellThemePresets.find(preset => preset.name === theme)!);
+  const timestamp = Date.parse('2026-10-18T10:18:00Z');
+  const source = thread({ title: 'Reading scale', turns: [{
+    turn_id: 'turn-reading', run_id: 'run-reading', started_at: new Date(timestamp - 1000).toISOString(), ended_at: new Date(timestamp).toISOString(),
+    outcome: 'completed', elapsed_ms: 1000, waiting_ms: 0, work_duration_ms: 1000, final_item_ids: ['reading-answer'], final_boundary_complete: true,
+  }], messages: [{ id: 'reading-answer', turn_id: 'turn-reading', run_id: 'run-reading', role: 'assistant', content: screenshotContent,
+    status: 'complete', created_at_ms: timestamp, blocks: [{ type: 'markdown', content: screenshotContent }] }] });
+  const runtime = renderSurfaceWithAdapterProps({ ...adapter(), listThreads: async () => [source], loadThread: async () => liveBootstrap(source) }, {
+    focusThreadRequest: { request_id: 'reading', thread_id: source.thread_id },
+  });
+  await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="reading-answer"] .flower-answer-actions')));
+  const message = runtime.querySelector<HTMLElement>('[data-flower-message-id="reading-answer"]')!;
+  const article = message.querySelector<HTMLElement>('.flower-chat-md-block')!;
+  const paragraph = article.querySelector<HTMLElement>('p')!;
+  expect(getComputedStyle(paragraph).fontSize).toBe('14px');
+  expect(parseFloat(getComputedStyle(paragraph).lineHeight)).toBeCloseTo(24.5);
+  expect(parseFloat(getComputedStyle(article.querySelector('h2')!).fontSize)).toBe(17.5);
+  expect(parseFloat(getComputedStyle(article.querySelector('h3')!).fontSize)).toBeCloseTo(15.4);
+  const metadata = [...article.querySelectorAll('strong')].find(node => node.textContent?.includes('PR #54961'))!;
+  expect(getComputedStyle(metadata).fontSize).toBe('14px');
+  expect(getComputedStyle(metadata).fontWeight).toBe('600');
+  const link = paragraph.querySelector<HTMLAnchorElement>('a')!;
+  expect(link.textContent).toBe('github.com');
+  expect(link.getAttribute('href')).toBe('https://github.com/openai/codex/commits/main/');
+  expect(getComputedStyle(link).fontSize).toBe('14px');
+  expect(getComputedStyle(message.querySelector('time')!).fontSize).toBe('12px');
+  expect(article.getBoundingClientRect().width).toBeLessThanOrEqual(700);
+  expect(runtime.scrollWidth).toBeLessThanOrEqual(1100);
+  await page.screenshot({ element: runtime, path: '__screenshots__/flower-reading-scale-' + theme + '.png' });
 });
 
 it.each(['standard', 'soft-neumorphic'])('keeps assistant text readable in every published theme with %s material', async material => {
