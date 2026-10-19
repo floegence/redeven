@@ -13803,7 +13803,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 move: copy().chat.computerStageMove,
                 noFrame: copy().computer.noFrame,
                 loading: copy().computer.frameLoading,
-                loadingHint: copy().computer.frameLoadingHint,
                 retry: copy().chat.handlerRetry,
               }}
               onClose={() => { setComputerStageOpen(false); }}
