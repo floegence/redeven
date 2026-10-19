@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-18 — Borderless Goal surfaces
+
+- Use a softly tinted rounded-rectangle [Goal badge](ai/flower-goals.md), a borderless elevated editor and inline history expansion. Preserve individual keyboard focus, full Goal text and existing edit and execution contracts.
+
 ## 2026-10-18 — Compact Goal presentation
 
 - Share a target-and-arrow icon across the composer badge, popup and expandable [Goal history](ai/flower-goals.md). Present one concise action and Goal preview, preserve the full original on expansion, and coalesce unambiguous successful tool rows while retaining failures and unresolved outcomes.

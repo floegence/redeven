@@ -55,7 +55,10 @@ it.each([['en-US', 1100, 'light'], ['zh-CN', 390, 'light'], ['en-US', 1100, 'dar
   const badge = surface.querySelector<HTMLButtonElement>('.flower-goal-tag')!;
   expect(badge.querySelector('[data-flower-goal-icon]')).not.toBeNull();
   expect(badge.querySelector('.flower-goal-dot')).toBeNull();
-  expect(getComputedStyle(badge).borderTopStyle).toBe('solid');
+  const badgeStyle = getComputedStyle(badge);
+  expect(badgeStyle.borderTopWidth).toBe('0px');
+  expect(parseFloat(badgeStyle.borderTopLeftRadius)).toBeGreaterThan(0);
+  expect(parseFloat(badgeStyle.borderTopLeftRadius)).toBeLessThan(badge.getBoundingClientRect().height / 2);
   expect(surface.querySelector('[data-flower-tool-call-id="goal-call"]')).toBeNull();
   if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: surface, path: '__screenshots__/flower-goal-history-' + locale + '-' + theme + '.png' });
   for (const [index, label] of [copy.chat.goalSet, copy.chat.goalCompleted].entries()) {
@@ -71,8 +74,35 @@ it.each([['en-US', 1100, 'light'], ['zh-CN', 390, 'light'], ['en-US', 1100, 'dar
     summary.focus(); await userEvent.keyboard('{Enter}');
     expect(row.open).toBe(true);
     expect(row.querySelector('.flower-goal-history-text')?.textContent).toBe(text);
+    const body = row.querySelector<HTMLElement>('.flower-goal-history-body')!;
+    const bodyStyle = getComputedStyle(body);
+    expect(bodyStyle.borderTopWidth).toBe('0px');
+    expect(bodyStyle.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    expect(bodyStyle.boxShadow).toBe('none');
+    expect(body.getBoundingClientRect().left).toBeCloseTo(summary.querySelector('.flower-goal-history-label')!.getBoundingClientRect().left, 0);
+    expect(getComputedStyle(summary).outlineStyle).not.toBe('none');
   }
-  if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: surface, path: '__screenshots__/flower-goal-history-expanded-' + locale + '-' + theme + '.png' });
+  if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') {
+    await userEvent.click(surface.querySelector<HTMLElement>('.flower-goal-history-actor')!);
+    await page.screenshot({ element: surface, path: '__screenshots__/flower-goal-history-expanded-' + locale + '-' + theme + '.png' });
+  }
+  await userEvent.click(badge);
+  await waitFor(() => Boolean(document.querySelector('.flower-goal-popup')));
+  const popup = document.querySelector<HTMLElement>('.flower-goal-popup')!;
+  const editor = popup.querySelector<HTMLTextAreaElement>('.flower-goal-input')!;
+  await waitFor(() => document.activeElement === editor);
+  const popupStyle = getComputedStyle(popup);
+  expect(popupStyle.borderTopWidth).toBe('0px');
+  expect(popupStyle.outlineStyle).toBe('none');
+  expect(popupStyle.boxShadow).not.toBe('none');
+  expect(popup.hasAttribute('data-floe-input-surface')).toBe(false);
+  if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: surface, path: '__screenshots__/flower-goal-popup-' + locale + '-' + theme + '.png' });
+  await userEvent.keyboard('{Shift>}{Tab}{/Shift}');
+  expect(document.activeElement).toBe(popup.querySelector('.flower-goal-popup-controls button:last-child'));
+  expect(getComputedStyle(document.activeElement!).boxShadow).not.toBe('none');
+  await userEvent.keyboard('{Escape}');
+  expect(document.activeElement).toBe(badge);
+  expect(getComputedStyle(badge).outlineStyle).not.toBe('none');
 });
 
 it('keeps failed Goal tools inspectable with the shared icon and never claims completion', async () => {

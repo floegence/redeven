@@ -12504,7 +12504,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       </button>
       <Show when={goalPopupOpen()}>
         <SurfaceFloatingLayer owner={goalTriggerRef} position={goalPopupPosition()} estimatedSize={goalPopupSize()} class="flower-goal-layer" data-flower-floating-layer="true">
-          <div ref={goalPanelRef} role="dialog" aria-label={copy().chat.goalTitle} class="flower-goal-popup" data-floe-input-surface="" data-floe-surface="floating">
+          <div ref={goalPanelRef} role="dialog" aria-label={copy().chat.goalTitle} class="flower-goal-popup" data-floe-surface="floating">
             <div class="flower-goal-popup-header"><span class="flower-goal-popup-title"><FlowerGoalIcon size={15} strokeWidth={1.65} aria-hidden="true" />{copy().chat.goalTitle}</span>
               <div class="flower-goal-popup-controls">
                 <button type="button" aria-label={copy().chat.goalDelete} title={copy().chat.goalDelete} disabled={goalPending() || props.adapter.canMutate === false || selectedThreadReadOnly()} onClick={() => void enqueueGoal('delete', '')}><Trash class="h-3.5 w-3.5" /></button>

@@ -62,18 +62,22 @@ the chip close button and Backspace on empty input leave the mode. Ordinary text
 attachments, references and pending question answers remain in their draft scope.
 /goal clear remains the explicit delete command.
 
-Without a Goal, no Goal control is rendered. With one, a compact outlined badge
-with the shared target-and-arrow icon sits to the right of the progress indicator
-on the same row. It opens an anchored popup with
-the full editable text and delete control; save and cancel appear for edits.
+Without a Goal, no Goal control is rendered. With one, a compact borderless,
+softly tinted rounded-rectangle badge with the shared target-and-arrow icon sits
+to the right of the progress indicator on the same row. It opens an anchored
+popup with the full editable text and delete control; save and cancel appear
+for edits.
+The popup uses a soft elevation shadow without a visible border or a surrounding
+input focus frame. Keyboard focus remains visible on individual controls.
 Escape and outside dismissal preserve unsaved text, while cancel discards it.
 Creation, updates, deletion and completion use one expandable icon row: action,
 single-line Goal preview and disclosure chevron. Set and update share the Goal-set
 label; completion is reported only by the canonical completion fact. Expansion
-shows the full original text and actor. CSS ellipsis affects only the preview;
-it never truncates the stored or expanded Goal. Reflection
-uses a lightweight status. The transcript action menu also exposes /goal during
-questions and approvals without resolving or bypassing them.
+shows the full original text and actor aligned with the action label, directly
+on the transcript without a card, border or tinted background. CSS ellipsis
+affects only the preview; it never truncates the stored or expanded Goal.
+Reflection uses a lightweight status. The transcript action menu also exposes
+/goal during questions and approvals without resolving or bypassing them.
 
 Product authorization is persisted under Floret's public
 GoalSubmissionRequestKey using the existing execution authority contract. Floret
