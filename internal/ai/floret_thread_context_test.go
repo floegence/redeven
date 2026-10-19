@@ -438,3 +438,29 @@ func TestFlowerThreadContextProjectionKeepsEmptyHistoryNoopWithoutInventingAncho
 		t.Fatalf("empty-history projection=%#v err=%v", projection, err)
 	}
 }
+
+func TestFlowerCompactionDecisionPreservesCanonicalEvidence(t *testing.T) {
+	pressure := config.ContextPressure{Signal: config.PressureSignalProjected, Source: config.PressureSourceUsageAnchoredDelta, ProjectedInputTokens: 480000, ContextWindowTokens: 525000, ThresholdTokens: 472500, RequestSafeLimit: 500000}
+	decision := &observation.CompactionDecision{Pressure: pressure, Before: &observation.CompactionRequestSnapshot{
+		PayloadFingerprint: "unsent-candidate", Provider: "test", Model: "model", CalibrationRequestID: "qualified-request",
+		Estimate: config.RequestEstimate{EstimatedInputTokens: 470382, Source: "fixture_v5", Method: config.EstimateMethodProviderRenderedPayload}, Pressure: pressure,
+	}}
+	canonical := flruntime.ThreadContextCompaction{CanonicalOrdinal: 1, RunID: "run", ThreadID: "thread", TurnID: "turn", OperationID: "compact", Phase: "failed", Status: "failed", Decision: decision}
+	projection, err := flowerThreadContextProjection(flruntime.ThreadContextSnapshot{Compactions: []flruntime.ThreadContextCompaction{canonical}}, flruntime.ThreadView{ThreadID: "thread"})
+	if err != nil || len(projection.Compactions) != 1 {
+		t.Fatalf("projection=%+v err=%v", projection, err)
+	}
+	got := projection.Compactions[0].Decision
+	if got == nil || got.After != nil || got.Before.PayloadFingerprint != "unsent-candidate" || got.Before.EstimatedInputTokens != 470382 || got.Pressure.ProjectedInputTokens != 480000 || got.Before.CalibrationRequestID != "qualified-request" {
+		t.Fatalf("evidence=%+v", got)
+	}
+	got.Before.EstimatedInputTokens = 1
+	if decision.Before.Estimate.EstimatedInputTokens != 470382 {
+		t.Fatal("product mapping aliases canonical evidence")
+	}
+	canonical.Decision = nil
+	historical, err := flowerThreadContextProjection(flruntime.ThreadContextSnapshot{Compactions: []flruntime.ThreadContextCompaction{canonical}}, flruntime.ThreadView{ThreadID: "thread"})
+	if err != nil || historical.Compactions[0].Decision != nil {
+		t.Fatalf("historical evidence fabricated: %+v %v", historical, err)
+	}
+}

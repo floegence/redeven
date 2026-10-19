@@ -1,10 +1,10 @@
 import { Clock } from '@floegence/floe-webapp-core/icons';
-import { Button } from '@floegence/floe-webapp-core/ui';
-import { Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, onMount } from 'solid-js';
+import { Button, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
+import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, onMount } from 'solid-js';
 
 import type { FlowerTimelineDecoration } from '../contracts/flowerSurfaceContracts';
 import type { FlowerSurfaceCopy } from '../copy';
-import { compactionDividerDetail, compactionDividerLabel } from './flowerContextPresentation';
+import { compactionDecisionDetail, compactionDividerDetail, compactionDividerLabel } from './flowerContextPresentation';
 
 function FlowerContextCompactionRunningIcon() {
   return (
@@ -21,16 +21,38 @@ export function FlowerContextCompactionDivider(props: {
   const visible = () => props.visible !== false;
   const compaction = createMemo(() => props.decoration.compaction);
   const detail = createMemo(() => compactionDividerDetail(compaction(), props.copy));
+  const decisionDetail = createMemo(() => compactionDecisionDetail(compaction(), props.copy));
   const label = createMemo(() => compactionDividerLabel(compaction(), props.copy));
   const running = createMemo(() => compaction().status === 'compacting');
   const [tooltipOpen, setTooltipOpen] = createSignal(false);
   createEffect(() => { if (!visible()) setTooltipOpen(false); });
   const tooltipID = `flower-compaction-divider-${createUniqueId()}`;
-  const hasDetail = createMemo(() => detail().length > 0);
+  const hasDetail = createMemo(() => detail().length > 0 || decisionDetail().length > 0);
   let container: HTMLDivElement | undefined;
+  let trigger: HTMLDivElement | undefined;
+  const [panel, setPanel] = createSignal<HTMLSpanElement>();
+  const [owner, setOwner] = createSignal<HTMLElement>();
+  const [layout, setLayout] = createSignal({ position: { x: 0, y: 0 }, size: { width: 320, height: 64 } });
+  createEffect(() => {
+    const tooltip = panel();
+    if (!tooltipOpen() || !trigger || !tooltip) return;
+    const measure = () => {
+      const rect = trigger!.getBoundingClientRect();
+      const { width, height } = tooltip.getBoundingClientRect();
+      setLayout({ position: { x: rect.left + (rect.width - width) / 2, y: rect.top - height - 8 }, size: { width, height } });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(trigger);
+    observer.observe(tooltip);
+    window.addEventListener('resize', measure);
+    window.addEventListener('scroll', measure, true);
+    onCleanup(() => { observer.disconnect(); window.removeEventListener('resize', measure); window.removeEventListener('scroll', measure, true); });
+  });
   onMount(() => {
+    setOwner(trigger);
     const dismiss = (event: PointerEvent) => {
-      if (container && !container.contains(event.target as Node)) setTooltipOpen(false);
+      if (!container?.contains(event.target as Node) && !panel()?.contains(event.target as Node)) setTooltipOpen(false);
     };
     document.addEventListener('pointerdown', dismiss, true);
     onCleanup(() => document.removeEventListener('pointerdown', dismiss, true));
@@ -51,6 +73,7 @@ export function FlowerContextCompactionDivider(props: {
     >
       <div class="flower-compaction-divider-rule" aria-hidden="true" />
       <div
+        ref={trigger}
         class={running() ? 'flower-compaction-divider-pill flower-compaction-divider-pill-running' : 'flower-compaction-divider-pill'}
         aria-describedby={tooltipOpen() && hasDetail() ? tooltipID : undefined}
         role={hasDetail() ? 'button' : undefined}
@@ -77,18 +100,22 @@ export function FlowerContextCompactionDivider(props: {
         <span class="flower-compaction-divider-copy">
           <span class="flower-compaction-divider-label">{label()}</span>
         </span>
-        <Show when={tooltipOpen() && hasDetail()}>
+      </div>
+      <div class="flower-compaction-divider-rule" aria-hidden="true" />
+      <Show when={tooltipOpen() && hasDetail()}>
+        <SurfaceFloatingLayer owner={owner()} boundary={owner()?.closest<HTMLElement>('.flower-subagent-detail-window') ?? undefined} position={layout().position} estimatedSize={layout().size} class="flower-compaction-tooltip-layer" data-flower-floating-layer="true">
           <span
+            ref={setPanel}
             id={tooltipID}
             role="tooltip"
             class="flower-compaction-divider-tooltip"
             data-open="true"
           >
-            {detail()}
+            <Show when={detail()}><span class="flower-compaction-divider-tooltip-line">{detail()}</span></Show>
+            <For each={decisionDetail()}>{line => <span class="flower-compaction-divider-tooltip-line">{line}</span>}</For>
           </span>
-        </Show>
-      </div>
-      <div class="flower-compaction-divider-rule" aria-hidden="true" />
+        </SurfaceFloatingLayer>
+      </Show>
       <Show when={props.onRetry}>
         <Button size="sm" variant="ghost" onClick={() => props.onRetry?.()}>{props.copy.chat.compactContext}</Button>
       </Show>

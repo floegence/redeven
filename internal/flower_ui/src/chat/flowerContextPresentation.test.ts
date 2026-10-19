@@ -5,6 +5,7 @@ import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
 import type { FlowerContextCompaction, FlowerContextUsage, FlowerContextSample } from '../contracts/flowerSurfaceContracts';
 import {
   buildFlowerComposerContextIndicatorView,
+  compactionDecisionDetail,
   compactionDividerDetail,
   compactionDividerLabel,
   contextPressureTone,
@@ -168,7 +169,7 @@ describe('flower context presentation', () => {
     expect(compactionDividerDetail(compaction({
       reason: 'threshold',
       trigger: 'pre_request',
-    }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('threshold');
+    }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('');
     expect(compactionDividerDetail(compaction({
       status: 'noop',
       reason: 'context_too_small',
@@ -213,4 +214,23 @@ describe('request source attribution', () => {
     expect(buildFlowerContextComposition({confirmed:base,estimate})).toBeNull();
     expect(buildFlowerContextComposition({confirmed:{...base,characters_available:false,characters: undefined}})).toBeNull();
   });
+});
+
+it('keeps full request evidence distinct from message estimates and native usage', () => {
+  const candidate = { payload_fingerprint: 'frozen', provider: 'test', model: 'model', estimated_input_tokens: 470382, source: 'fixture_v5', estimate_method: 'provider_rendered_payload_estimate', estimate_confidence: 'conservative', pressure: {} };
+  const pressure = { projected_input_tokens: 480000, threshold_tokens: 472500, request_safe_limit_tokens: 500000, pressure_signal: 'projected_request', pressure_source: 'usage_anchored_delta' };
+  const detail = compactionDecisionDetail(compaction({ decision: { pressure, before: candidate, after: { ...candidate, estimated_input_tokens: 37594 } } }), DEFAULT_FLOWER_SURFACE_COPY);
+  expect(detail.join(' ')).toContain('470382');
+  expect(detail.join(' ')).toContain('37594');
+  expect(detail.join(' ')).toContain('calibrated');
+  expect(detail.join(' ')).toContain('480000');
+  expect(detail.join(' ')).toContain('not native token measurements');
+  expect(compactionDecisionDetail(compaction(), DEFAULT_FLOWER_SURFACE_COPY)).toEqual([DEFAULT_FLOWER_SURFACE_COPY.chat.compactionDivider.beforeUnavailable]);
+  const manual = compactionDecisionDetail(compaction({ decision: { pressure: {}, after: { ...candidate, estimated_input_tokens: 0 } } }), DEFAULT_FLOWER_SURFACE_COPY);
+  expect(manual).toContain(DEFAULT_FLOWER_SURFACE_COPY.chat.compactionDivider.requestAfter('0'));
+  expect(manual).toContain(DEFAULT_FLOWER_SURFACE_COPY.chat.compactionDivider.beforeUnavailable);
+  const overflow = compactionDecisionDetail(compaction({ status: 'failed', decision: { pressure: { pressure_signal: 'provider_overflow' }, before: candidate } }), DEFAULT_FLOWER_SURFACE_COPY);
+  expect(overflow).toContain(DEFAULT_FLOWER_SURFACE_COPY.chat.compactionDivider.providerOverflow);
+  expect(overflow).toContain(DEFAULT_FLOWER_SURFACE_COPY.chat.compactionDivider.afterUnavailable);
+  expect(overflow.some(line => line.includes('threshold:'))).toBe(false);
 });

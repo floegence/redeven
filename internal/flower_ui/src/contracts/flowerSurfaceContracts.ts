@@ -438,9 +438,46 @@ export type FlowerContextCompactionPhase = 'start' | 'complete' | 'failed' | 'ca
 
 export type FlowerContextCompactionStatus = 'compacting' | 'compacted' | 'failed' | 'cancelled' | 'noop' | 'checkpoint';
 
+export type FlowerCompactionPressure = Readonly<{
+  request_output_tokens?: number;
+  output_control?: string;
+  safety_margin_tokens?: number;
+  window_input_tokens?: number;
+  projected_input_tokens?: number;
+  context_window_tokens?: number;
+  threshold_tokens?: number;
+  request_safe_limit_tokens?: number;
+  output_headroom_tokens?: number;
+  pressure_signal?: string;
+  pressure_source?: string;
+  estimate_method?: string;
+  confidence?: string;
+  compaction_needed?: boolean;
+  hard_limit_exceeded?: boolean;
+}>;
+
+export type FlowerCompactionRequestSnapshot = Readonly<{
+  payload_fingerprint: string;
+  provider: string;
+  model: string;
+  estimated_input_tokens: number;
+  source: string;
+  estimate_method: string;
+  estimate_confidence: string;
+  pressure: FlowerCompactionPressure;
+  calibration_request_id?: string;
+}>;
+
+export type FlowerCompactionDecision = Readonly<{
+  pressure: FlowerCompactionPressure;
+  before?: FlowerCompactionRequestSnapshot;
+  after?: FlowerCompactionRequestSnapshot;
+}>;
+
 export type FlowerContextCompaction = Readonly<{
   turn_id: string;
   canonical_ordinal: number;
+  decision?: FlowerCompactionDecision;
   operation_id: string;
   run_id?: string;
   step_index?: number;

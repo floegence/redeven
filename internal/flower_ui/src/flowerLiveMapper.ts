@@ -17,6 +17,9 @@ import type {
   FlowerGoal,
   FlowerGoalChange,
   FlowerContextCompaction,
+  FlowerCompactionDecision,
+  FlowerCompactionPressure,
+  FlowerCompactionRequestSnapshot,
   FlowerContextUsage,
   FlowerModelContext,
   FlowerContextSample,
@@ -412,6 +415,55 @@ function mapContextSample(raw: unknown): FlowerContextSample | null {
   };
 }
 
+function mapCompactionPressure(raw: unknown): FlowerCompactionPressure {
+  const record = plainRecordValue(raw);
+  if (!record) throw new Error('Flower contract error: compaction pressure must be an object.');
+  const pressure: Record<string, number | string | boolean> = {};
+  for (const key of ['request_output_tokens', 'safety_margin_tokens', 'window_input_tokens', 'projected_input_tokens', 'context_window_tokens', 'threshold_tokens', 'request_safe_limit_tokens', 'output_headroom_tokens'] as const) {
+    if (record[key] !== undefined) pressure[key] = nonNegativeInteger(record[key], 'compaction pressure.' + key);
+  }
+  for (const key of ['output_control', 'pressure_signal', 'pressure_source', 'estimate_method', 'confidence'] as const) {
+    if (record[key] === undefined) continue;
+    if (typeof record[key] !== 'string') throw new Error('Flower contract error: invalid compaction pressure.' + key);
+    pressure[key] = record[key];
+  }
+  for (const key of ['compaction_needed', 'hard_limit_exceeded'] as const) {
+    if (record[key] === undefined) continue;
+    if (typeof record[key] !== 'boolean') throw new Error('Flower contract error: invalid compaction pressure.' + key);
+    pressure[key] = record[key];
+  }
+  return pressure;
+}
+
+function mapCompactionRequestSnapshot(raw: unknown): FlowerCompactionRequestSnapshot | undefined {
+  if (raw === undefined) return undefined;
+  const record = plainRecordValue(raw);
+  if (!record) throw new Error('Flower contract error: compaction candidate must be an object.');
+  const requiredText = (key: string): string => {
+    if (typeof record[key] !== 'string' || !record[key].trim()) throw new Error('Flower contract error: invalid compaction candidate.' + key);
+    return record[key];
+  };
+  if (record.calibration_request_id !== undefined && (typeof record.calibration_request_id !== 'string' || !record.calibration_request_id.trim())) throw new Error('Flower contract error: invalid compaction calibration identity.');
+  if (typeof record.estimate_confidence !== 'string') throw new Error('Flower contract error: invalid compaction candidate.estimate_confidence');
+  return {
+    payload_fingerprint: requiredText('payload_fingerprint'), provider: requiredText('provider'), model: requiredText('model'),
+    estimated_input_tokens: nonNegativeInteger(record.estimated_input_tokens, 'compaction candidate.estimated_input_tokens'),
+    source: requiredText('source'), estimate_method: requiredText('estimate_method'), estimate_confidence: record.estimate_confidence,
+    pressure: mapCompactionPressure(record.pressure),
+    ...(record.calibration_request_id !== undefined ? { calibration_request_id: record.calibration_request_id as string } : {}),
+  };
+}
+
+function mapCompactionDecision(raw: unknown): FlowerCompactionDecision | undefined {
+  if (raw === undefined) return undefined;
+  const record = plainRecordValue(raw);
+  if (!record) throw new Error('Flower contract error: compaction decision must be an object.');
+  const before = mapCompactionRequestSnapshot(record.before);
+  const after = mapCompactionRequestSnapshot(record.after);
+  if (!before && !after) throw new Error('Flower contract error: compaction decision requires a candidate.');
+  return { pressure: mapCompactionPressure(record.pressure), ...(before ? { before } : {}), ...(after ? { after } : {}) };
+}
+
 function mapContextCompaction(raw: unknown): FlowerContextCompaction | null {
   const record = recordValue(raw);
   if (!record) return null;
@@ -423,10 +475,12 @@ function mapContextCompaction(raw: unknown): FlowerContextCompaction | null {
   const stepIndex = optionalInteger(record.step_index);
   const tokensBefore = optionalInteger(record.tokens_before);
   const tokensAfterEstimate = optionalInteger(record.tokens_after_estimate);
+  const decision = mapCompactionDecision(record.decision);
   return {
     operation_id: operationID,
     turn_id: trim(record.turn_id),
     canonical_ordinal: Number(record.canonical_ordinal),
+    ...(decision ? { decision } : {}),
     ...(trim(record.run_id) ? { run_id: trim(record.run_id) } : {}),
     ...(stepIndex ? { step_index: stepIndex } : {}),
     phase,

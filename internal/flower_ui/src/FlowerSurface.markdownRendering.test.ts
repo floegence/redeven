@@ -169,7 +169,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(dividerSrc).toContain('onClick={openTooltip}');
     expect(dividerSrc).toContain("event.key === 'Enter' || event.key === ' '");
     expect(dividerSrc).toContain('data-open="true"');
-    expect(dividerSrc).not.toContain('when={detail()}');
+    expect(dividerSrc).toContain('flower-compaction-divider-tooltip-line');
     expect(dividerSrc).not.toContain('flower-compaction-divider-detail');
     expect(src).not.toContain("case 'decoration':");
   });

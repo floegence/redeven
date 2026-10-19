@@ -335,6 +335,7 @@ func flowerContextCompactionFromFloret(compaction *observation.CompactionEvent) 
 		return FlowerContextCompaction{}, err
 	}
 	return FlowerContextCompaction{
+		Decision:            flowerCompactionDecision(compaction.Decision),
 		OperationID:         strings.TrimSpace(compaction.OperationID),
 		TurnID:              compaction.TurnID.String(),
 		RequestID:           strings.TrimSpace(compaction.RequestID),
@@ -350,6 +351,24 @@ func flowerContextCompactionFromFloret(compaction *observation.CompactionEvent) 
 		Error:               strings.TrimSpace(compaction.Error),
 		UpdatedAtMs:         updatedAt,
 	}, nil
+}
+
+func flowerCompactionDecision(decision *observation.CompactionDecision) *FlowerCompactionDecision {
+	if decision == nil {
+		return nil
+	}
+	candidate := func(snapshot *observation.CompactionRequestSnapshot) *FlowerCompactionRequestSnapshot {
+		if snapshot == nil {
+			return nil
+		}
+		return &FlowerCompactionRequestSnapshot{
+			PayloadFingerprint: snapshot.PayloadFingerprint, Provider: snapshot.Provider, Model: snapshot.Model,
+			EstimatedInputTokens: snapshot.Estimate.EstimatedInputTokens, Source: snapshot.Estimate.Source,
+			EstimateMethod: snapshot.Estimate.Method, EstimateConfidence: snapshot.Estimate.Confidence,
+			Pressure: snapshot.Pressure, CalibrationRequestID: snapshot.CalibrationRequestID,
+		}
+	}
+	return &FlowerCompactionDecision{Pressure: decision.Pressure, Before: candidate(decision.Before), After: candidate(decision.After)}
 }
 
 func normalizeFlowerContextUsagePhase(phase observation.ContextPhase) (string, error) {

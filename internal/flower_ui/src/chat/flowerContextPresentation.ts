@@ -223,5 +223,24 @@ export function compactionDividerDetail(compaction: FlowerContextCompaction, cop
   const after = formatContextTokenCount(compaction.tokens_after_estimate);
   const labels = copy.chat.compactionDivider ?? DEFAULT_FLOWER_SURFACE_COPY.chat.compactionDivider;
   if (compaction.status === 'compacted' && before && after) return labels.tokenChange(before, after);
-  return trimString(compaction.error) || trimString(compaction.reason) || trimString(compaction.trigger);
+  return trimString(compaction.error);
+}
+
+export function compactionDecisionDetail(compaction: FlowerContextCompaction, copy: FlowerSurfaceCopy): readonly string[] {
+  const labels = copy.chat.compactionDivider;
+  const decision = compaction.decision;
+  if (!decision) return [labels.beforeUnavailable];
+  const lines: string[] = [];
+  if (decision.before) lines.push(labels.requestBefore(String(decision.before.estimated_input_tokens)));
+  else lines.push(labels.beforeUnavailable);
+  const pressure = decision.pressure;
+  if (pressure.pressure_signal === 'provider_overflow') lines.push(labels.providerOverflow);
+  else if (decision.before && pressure.projected_input_tokens !== undefined && pressure.threshold_tokens !== undefined && pressure.request_safe_limit_tokens !== undefined) {
+    const format = pressure.pressure_source === 'usage_anchored_delta' ? labels.pressureCalibrated : labels.pressureEstimate;
+    lines.push(format(String(pressure.projected_input_tokens), String(pressure.threshold_tokens), String(pressure.request_safe_limit_tokens)));
+  }
+  if (decision.after) lines.push(labels.requestAfter(String(decision.after.estimated_input_tokens)));
+  else lines.push(labels.afterUnavailable);
+  if (decision.before || decision.after) lines.push(labels.requestScope);
+  return lines;
 }

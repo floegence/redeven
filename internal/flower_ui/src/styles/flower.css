@@ -4173,14 +4173,10 @@
 
 
 .flower-compaction-divider-tooltip {
-  position: absolute;
-  bottom: calc(100% + 0.55rem);
-  left: 50%;
-  z-index: 12;
+  display: block;
   max-width: min(22rem, calc(100vw - 2rem));
   width: max-content;
   padding: 0.42rem 0.58rem;
-  transform: translate(-50%, 0.18rem);
   border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 78%, transparent);
   border-radius: 0.5rem;
   background: color-mix(in srgb, var(--flower-chat-surface-elevated) 94%, var(--background) 6%);
@@ -4201,21 +4197,15 @@
   overflow-wrap: anywhere;
 }
 
-.flower-compaction-divider-tooltip::after {
-  content: "";
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  width: 0.48rem;
-  height: 0.48rem;
-  transform: translate(-50%, -50%) rotate(45deg);
-  border-right: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 78%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 78%, transparent);
-  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 94%, var(--background) 6%);
+.flower-compaction-divider-tooltip-line {
+  display: block;
+}
+
+.flower-compaction-divider-tooltip-line + .flower-compaction-divider-tooltip-line {
+  margin-top: 0.4rem;
 }
 
 .flower-compaction-divider-tooltip[data-open='true'] {
-  transform: translate(-50%, 0);
   opacity: 1;
 }
 

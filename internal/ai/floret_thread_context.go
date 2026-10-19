@@ -43,7 +43,7 @@ func flowerThreadContextProjection(snapshot flruntime.ThreadContextSnapshot, cur
 	decorations := make([]FlowerTimelineDecoration, 0, len(snapshot.Compactions))
 	for _, canonical := range snapshot.Compactions {
 		projected, err := flowerContextCompactionFromFloret(&observation.CompactionEvent{
-			RunID: canonical.RunID, ThreadID: canonical.ThreadID, TurnID: canonical.TurnID,
+			Decision: canonical.Decision, RunID: canonical.RunID, ThreadID: canonical.ThreadID, TurnID: canonical.TurnID,
 			Step: canonical.Step, OperationID: canonical.OperationID, RequestID: canonical.RequestID,
 			Phase: observation.CompactionPhase(canonical.Phase), Status: observation.CompactionStatus(canonical.Status),
 			Trigger: canonical.Trigger, Reason: canonical.Reason, Source: canonical.Source,

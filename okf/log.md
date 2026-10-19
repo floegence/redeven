@@ -2053,3 +2053,5 @@ Runtime restart, and compact-panel recovery. See the
 ## 2026-10-18 — Canonical Flower process order
 
 - Adopted published Floret v7.61.0 source positions and intermediate response references. Removed timestamp-based event insertion and client final-boundary inference. Added original/nested Fork regression and interaction coverage; preserve final and trailing partial replies, unresolved controls and reading protection.
+
+- 2026-10-19: Consume published Floret v7.68.2 compaction evidence and continuation cancellation ownership fixes, preserve missing historical diagnostics, and use the shared floating layer for Workbench-safe explanations.
