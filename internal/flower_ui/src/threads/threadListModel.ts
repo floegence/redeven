@@ -49,7 +49,7 @@ export function groupFlowerThreadsByDate(threads: readonly FlowerThreadListItem[
     .map((group) => ({ group, threads: groups[group] }));
 }
 
-export function comparePinnedFlowerThreads(a: FlowerThreadListItem, b: FlowerThreadListItem): number {
+export function comparePinnedFlowerThreads(a: Pick<FlowerThreadListItem, 'thread_id' | 'pin_rank' | 'created_at_ms'>, b: Pick<FlowerThreadListItem, 'thread_id' | 'pin_rank' | 'created_at_ms'>): number {
   return (b.pin_rank ?? 0) - (a.pin_rank ?? 0) || b.created_at_ms - a.created_at_ms || a.thread_id.localeCompare(b.thread_id);
 }
 

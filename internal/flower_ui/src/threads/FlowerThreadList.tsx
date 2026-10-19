@@ -328,7 +328,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
   const groupByKey = createMemo(() => new Map(groups().map((group) => [group.key, group] as const)));
   const rowKeys = createMemo(() => groups().flatMap((group) => [`group:${group.key}`, ...group.threadIDs.map((id) => `thread:${id}`)]));
   const pinnedIDs = createMemo(() => groupFlowerThreadItems(props.items).find((group) => group.kind === 'pinned')?.threads.map((item) => item.thread_id) ?? []);
-  const canReorder = () => Boolean(props.onMovePinned && !props.pinBusy && !props.query.trim() && pinnedIDs().length > 1);
+  const canReorder = createMemo(() => Boolean(props.onMovePinned && !props.pinBusy && !props.query.trim() && pinnedIDs().length > 1));
   const [drag, setDrag] = createSignal<{ threadID: string; keys: readonly string[]; target?: FlowerThreadPinPosition } | null>(null);
   const visibleKeys = createMemo(() => drag()?.keys ?? rowKeys());
   let scrollFrame: number | undefined;

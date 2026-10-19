@@ -195,12 +195,24 @@ layout/scroll events do not dismiss a menu; explicit rail scrolling does.
 
 `ThreadCache` remains the canonical summary owner. A short-lived pin operation
 overlay presents immediate placement without authoring unrelated settings facts.
-Only conflicting pin actions are blocked while a request and its post-command
-read are pending. Revisioned acknowledgements remain visible until an equal or
-newer canonical summary arrives, including when the read fails. Older responses
-cannot overwrite newer streamed settings. Failed requests restore only their own
-overlay, preserve newer titles/status/drafts, read the latest summaries once and
-show localized feedback. No polling or second synchronization transport is added.
+Pin, unpin, relative menu moves and dragging remain available during writes and
+post-command reads. One in-memory command queue preserves operation order;
+unsent adjacent membership changes for the same thread keep only the latest
+intent. The presentation replays pending commands over current canonical facts
+and revisioned acknowledgements, so an earlier response cannot hide a later
+intent. Failed commands remove only their own intent, preserve later commands
+and live titles/status/drafts, and show localized feedback.
+
+The write queue drains without waiting for list reads. A coalesced background
+read reconciles each drained batch, including unknown transport outcomes;
+commands completed during a read request one subsequent read. Revisioned
+acknowledgements remain visible until an equal or newer canonical summary
+arrives, including when the read fails. Older responses cannot overwrite newer
+streamed settings. No polling or second synchronization transport is added.
+
+Each workspace summary batch publishes one ThreadCache update. Individual
+summaries still merge through the existing revision and title rules, but cannot
+repeatedly invalidate the selected conversation's reactive graph within a batch.
 
 # Boundaries
 
@@ -229,6 +241,8 @@ Run node scripts/check_flower_sidebar_responsiveness.mjs for the installed
 Desktop Electron version. The synthetic 247-thread / 610-entry fixture checks
 click-path Markdown/projection isolation, warm click P95 below 8ms, three rail
 widths, delayed pins, rollback, streamed titles, retained focus and animation.
+It also checks rapid membership changes with delayed confirmations and a slow
+list read, including zero disabled frames and writes accepted during that read.
 It records geometry on animation frames plus screenshots and a Chromium trace
 outside tracked source. Geometry and scheduling measurements do not alone prove
 physical screen presentation; inspect the captured trace filmstrip as well.
