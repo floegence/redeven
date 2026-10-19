@@ -78,6 +78,7 @@ export type FlowerProvider = Readonly<{
   base_url?: string;
   responses_continuation?: boolean;
   web_search?: Readonly<{ enabled: boolean; source: FlowerWebSearchSource }>;
+  web_fetch?: Readonly<{ source: 'direct' | 'deepseek' }>;
   search_policy?: FlowerWebSearchPolicy;
   auth_method?: 'api_key' | 'chatgpt';
   account_id?: string;

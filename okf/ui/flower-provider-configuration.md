@@ -189,3 +189,13 @@ catalog synchronization never selects newly discovered models automatically.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.capabilities.browser.test.tsx` - Compatible discovery, missing-field navigation, explicit tool support, save/reopen, hidden selections and narrow-screen behavior in Desktop and Env styles.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.credentials.browser.test.tsx` - Saved credential placeholders, focus, replacement, and empty-key guidance in actual Desktop and Env styles.
 - `redeven:internal/envapp/ui_src/src/ui/pages/settings/FlowerSection.browser.test.tsx` - Global Env credential preservation and replacement request payloads.
+
+## DeepSeek web services
+
+The shared provider dialog shows fixed Flash Search API / Pro hosted search
+routing and no search-source selector for DeepSeek. A separate page-reader
+selector offers Direct (omitted default) or DeepSeek API, with explicit URL
+sharing, Markdown, pricing, and Turn timing guidance in every shipped locale.
+Search off retains the selected page reader. Changing provider type clears
+inapplicable Fetch intent. Existing save, timeout, cancel, Escape, focus and
+return-to-chat behavior owns the interaction; no parallel dialog state exists.

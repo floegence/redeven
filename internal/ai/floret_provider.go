@@ -586,7 +586,12 @@ func (p *floretProviderAdapter) requestWebSearchMode(hosted []flprovider.HostedT
 		}
 	}
 
-	if mode == "" || config.NativeAIWebSearchMode(p.providerType) != mode {
+	supportedMode := config.NativeAIWebSearchMode(p.providerType)
+	if p.providerType == "deepseek" {
+		cap, _ := flprovider.DeepSeekModelCapabilities(p.modelName)
+		supportedMode = cap.HostedWebSearchWireShape
+	}
+	if mode == "" || supportedMode != mode {
 		return "", fmt.Errorf("unsupported %s hosted search mode %q", p.providerType, mode)
 	}
 	return mode, nil

@@ -496,6 +496,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       name: providerTypeLabel(type),
       base_url: defaultBaseURLForFlowerProviderType(type),
       web_search: props.searchPolicies?.[type] ? { enabled: props.searchPolicies[type]!.default_enabled, source: props.searchPolicies[type]!.source } : undefined,
+      web_fetch: undefined,
       web_search_api_key: undefined,
       provider_api_key: undefined,
       models: nextModels,
@@ -800,6 +801,17 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                           options={[{ value: 'native', label: copy().openAIBuiltIn }, { value: 'brave', label: copy().braveSearch }]} class="mt-2 w-full" />
                       </Show>
                     </div>
+                    <Show when={store.draft!.type === 'deepseek'}>
+                      <div class="space-y-2" data-flower-provider-fetch>
+                        <p class="flower-body-copy text-muted-foreground">{copy().catalog.deepSeekSearchHint}</p>
+                        <FlowerFieldLabel>{copy().catalog.fetchLabel}</FlowerFieldLabel>
+                        <Select value={store.draft!.web_fetch?.source ?? 'direct'}
+                          onChange={value => updateProvider({ web_fetch: { source: value as 'direct' | 'deepseek' } })}
+                          options={[{ value: 'direct', label: copy().catalog.fetchDirect }, { value: 'deepseek', label: copy().catalog.fetchDeepSeek }]} class="w-full" />
+                        <p class="flower-body-copy text-muted-foreground">{copy().catalog.deepSeekFetchHint}</p>
+                        <p class="flower-body-copy text-muted-foreground">{copy().catalog.deepSeekCostHint}</p>
+                      </div>
+                    </Show>
                     <Show when={providerSearch()?.source === 'brave'}>
                       <div>
                         <FlowerFieldLabel hint={braveKeyHint()}>

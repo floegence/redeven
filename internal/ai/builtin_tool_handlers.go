@@ -700,18 +700,6 @@ func builtInToolDefinitions() []ToolDef {
 			Priority:         100,
 		},
 		{
-			Name:             "web.search",
-			Description:      "Search the web for discovery and return sources (URLs) with titles/snippets. Prefer direct requests to authoritative sources via terminal.exec/curl; use this tool only when you need discovery.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string"}, "provider": map[string]any{"type": "string"}, "count": map[string]any{"type": "integer", "minimum": 1, "maximum": 10}, "timeout_ms": map[string]any{"type": "integer", "minimum": 1, "maximum": 60000}}, "required": []string{"query"}, "additionalProperties": false}),
-			Mutating:         false,
-			RequiresApproval: false,
-			Visibility:       ToolVisibilitySharedReadonly,
-			Capabilities:     []ToolCapabilityClass{ToolCapabilityReadonlyNetwork, ToolCapabilityOpenWorld},
-			Source:           "builtin",
-			Namespace:        "builtin.web",
-			Priority:         100,
-		},
-		{
 			Name:             "okf.index",
 			Description:      "Browse the embedded Redeven OKF index as a structured directory of maintained repository knowledge. Use this before okf.search when the user asks broad Redeven-internal questions and you need to discover the available OKF areas. OKF covers Redeven-maintained architecture, protocols, runtime/Desktop/gateway behavior, Workbench contracts, release automation, AI tool/runtime contracts, and maintained OKF concepts. OKF does not access the internet and must not be used for current, recent, news, market/pricing, third-party documentation, external, or general web facts. Use okf.open after selecting a concept that needs detailed evidence.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"section": map[string]any{"type": "string", "description": "Optional index section title or slug to narrow the returned directory entries."}}, "additionalProperties": false}),
@@ -822,7 +810,7 @@ func builtInModelCapabilityDefinitions() []ToolDef {
 	return out
 }
 
-func registerBuiltInTools(reg *InMemoryToolRegistry, r *run) error {
+func registerBuiltInTools(reg *InMemoryToolRegistry, r *run, webBindings ...map[string]webToolBinding) error {
 	if reg == nil {
 		return fmt.Errorf("nil tool registry")
 	}
@@ -836,7 +824,13 @@ func registerBuiltInTools(reg *InMemoryToolRegistry, r *run) error {
 		if def.Name == "attachment.read" && (r == nil || r.host.openLiveAttachment == nil || !r.attachmentToolReadEnabled) {
 			continue
 		}
-		if def.Name == "web.search" && (r == nil || !r.webSearch.LocalTool()) {
+		if isFloretNativeTool(def.Name) && len(webBindings) > 0 {
+			binding, ok := webBindings[0][def.Name]
+			if !ok {
+				continue
+			}
+			def = nativeWebToolDefinition(def.Name, binding)
+		} else if def.Name == "web.search" && (r == nil || !r.webSearch.LocalTool()) {
 			continue
 		}
 		if !r.allowSubagentDelegate {

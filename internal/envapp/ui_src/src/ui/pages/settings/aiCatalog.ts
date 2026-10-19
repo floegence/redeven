@@ -167,6 +167,7 @@ export function cloneAIProviderRow(row: AIProvider & Partial<Omit<AIProviderRow,
     base_url: String(row?.base_url ?? ''),
     responses_continuation: row?.responses_continuation === true ? true : undefined,
     web_search: row.web_search,
+    web_fetch: row.web_fetch,
     search_policy: row.search_policy,
     models: (Array.isArray(row?.models) ? row.models : []).map((m) => ({
       display_name: m.display_name, status: m.status, web_search: m.web_search, web_search_enabled: m.web_search_enabled,

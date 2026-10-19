@@ -27,7 +27,7 @@ const (
 	floretToolHostContextAuthorityThreadIDKey    = "permission_authority_thread_id"
 )
 
-func buildFloretTools(r *run, activeTools []ToolDef) ([]fltools.Tool, error) {
+func buildFloretTools(r *run, activeTools []ToolDef, webBindings ...map[string]webToolBinding) ([]fltools.Tool, error) {
 	if r == nil {
 		return nil, errors.New("missing Floret tool registry run")
 	}
@@ -42,7 +42,18 @@ func buildFloretTools(r *run, activeTools []ToolDef) ([]fltools.Tool, error) {
 			continue
 		}
 		def := def
-		if native, ok := buildFloretNativeTool(def, authorizationSnapshot); ok {
+		if isFloretNativeTool(name) {
+			bindings := r.webToolBindings
+			if len(webBindings) > 0 {
+				bindings = webBindings[0]
+			}
+			if bindings == nil {
+				bindings = map[string]webToolBinding{"web_fetch": {Source: "direct"}}
+			}
+			native, err := r.buildBoundNativeTool(def, authorizationSnapshot, bindings)
+			if err != nil {
+				return nil, err
+			}
 			items = append(items, native)
 			continue
 		}

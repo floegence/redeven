@@ -32,7 +32,6 @@ import (
 	"github.com/floegence/redeven/internal/processenv"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/tessiven"
-	"github.com/floegence/redeven/internal/websearch"
 )
 
 type runOptions struct {
@@ -184,6 +183,8 @@ type run struct {
 	currentReasoning   config.AIReasoningSelection
 
 	webSearch                 config.AIWebSearchResolution
+	webToolBindings           map[string]webToolBinding
+	webToolConnection         webToolBinding
 	attachmentToolReadEnabled bool
 
 	subagentDepth               int
@@ -2086,64 +2087,6 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 			return nil, errors.New("invalid args: description is too long")
 		}
 		return r.toolTerminalTerminate(ctx, p.ProcessID)
-
-	case "web.search":
-		if meta == nil || !meta.CanRead {
-			return nil, errors.New("read permission denied")
-		}
-		var p struct {
-			Query     string `json:"query"`
-			Provider  string `json:"provider"`
-			Count     int    `json:"count"`
-			TimeoutMS int64  `json:"timeout_ms"`
-		}
-		b, _ := json.Marshal(args)
-		if err := json.Unmarshal(b, &p); err != nil {
-			return nil, errors.New("invalid args")
-		}
-		query := strings.TrimSpace(p.Query)
-		if query == "" {
-			return nil, errors.New("missing query")
-		}
-		provider := strings.TrimSpace(strings.ToLower(p.Provider))
-		if provider == "" {
-			provider = websearch.ProviderBrave
-		}
-		timeoutMS := p.TimeoutMS
-		if timeoutMS <= 0 {
-			timeoutMS = 15_000
-		}
-		if timeoutMS > 60_000 {
-			timeoutMS = 60_000
-		}
-
-		key := ""
-		ok := false
-		if r.resolveWebSearchKey != nil {
-			var err error
-			key, ok, err = r.resolveWebSearchKey(provider)
-			if err != nil {
-				return nil, err
-			}
-		}
-		if !ok || strings.TrimSpace(key) == "" {
-			// Env var overrides for quick local setup.
-			if provider == websearch.ProviderBrave {
-				key = strings.TrimSpace(os.Getenv("REDEVEN_BRAVE_API_KEY"))
-				if key == "" {
-					key = strings.TrimSpace(os.Getenv("BRAVE_API_KEY"))
-				}
-				ok = strings.TrimSpace(key) != ""
-			}
-		}
-		if !ok || strings.TrimSpace(key) == "" {
-			return nil, fmt.Errorf("missing web search api key for provider %q", provider)
-		}
-
-		ctx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMS)*time.Millisecond)
-		defer cancel()
-
-		return websearch.Search(ctx, provider, key, websearch.SearchRequest{Query: query, Count: p.Count})
 
 	case "okf.index":
 		if meta == nil || !meta.CanRead {

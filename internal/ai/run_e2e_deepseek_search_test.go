@@ -43,17 +43,23 @@ func TestE2E_FlowerDeepSeekV4WebResearchBoundary(t *testing.T) {
 					t.Errorf("requests=%d, want fetch, result, and restart follow-up", len(recorder.observations))
 				}
 				for _, observation := range recorder.observations {
-					if observation.NativeSearchTools != 0 || observation.Model != model || !observation.SearchUnavailablePrompt {
+					wantHosted := 0
+					wantLocal := true
+					if model == "deepseek-v4-pro" {
+						wantHosted = 1
+						wantLocal = false
+					}
+					if observation.NativeSearchTools != wantHosted || observation.Model != model || observation.SearchUnavailablePrompt {
 						t.Errorf("wire boundary: native tools=%d model=%s unavailable prompt=%v", observation.NativeSearchTools, observation.Model, observation.SearchUnavailablePrompt)
 					}
-					if !slices.Contains(observation.DefinitionToolNames, "web_fetch") || slices.Contains(observation.DefinitionToolNames, "web_search") || slices.Contains(observation.DefinitionToolNames, "web_search_tool") {
+					if !slices.Contains(observation.DefinitionToolNames, "web_fetch") || slices.Contains(observation.DefinitionToolNames, "web_search") || slices.Contains(observation.DefinitionToolNames, "web_search_tool") != wantLocal {
 						t.Errorf("unexpected tool definitions: %v", observation.DefinitionToolNames)
 					}
 					if strings.Contains(model, "vision") && !observation.HasImageInput {
 						t.Error("Vision request lost authorized image input")
 					}
 				}
-				t.Logf("verified %d outgoing requests: no native search, local fetch available, accurate prompt", len(recorder.observations))
+				t.Logf("verified %d outgoing requests: reviewed exclusive search, local fetch available, accurate prompt", len(recorder.observations))
 			}()
 			stateDir := t.TempDir()
 			opts := Options{
@@ -75,7 +81,7 @@ func TestE2E_FlowerDeepSeekV4WebResearchBoundary(t *testing.T) {
 				t.Fatal("model projection is empty")
 			}
 			for _, entry := range models.Models {
-				if entry.WebSearch.Status != "unavailable" || entry.WebSearch.Reason != "unsupported" {
+				if entry.WebSearch.Status != "available" {
 					t.Fatalf("incorrect model search projection: %+v", entry.WebSearch)
 				}
 			}
@@ -140,7 +146,7 @@ func TestE2E_FlowerDeepSeekV4WebResearchBoundary(t *testing.T) {
 			}
 			// Restart and replay use the same canonical provider receipts.
 			sendDeepSeekCompactionTurn(t, ctx, svc, meta, "search-follow-up", thread.ThreadID, "deepseek/"+model, "From the page already fetched, repeat only its heading. Do not call tools again.")
-			t.Logf("canonical verified page fetches=%d; restart and follow-up passed; native search correctly unavailable", fetches)
+			t.Logf("canonical verified page fetches=%d; restart and follow-up passed; reviewed search surface retained", fetches)
 		})
 	}
 }

@@ -143,6 +143,7 @@ type AIProvider struct {
 
 	// WebSearch holds provider-wide search intent. Model preferences form a second gate.
 	WebSearch *AIProviderWebSearch `json:"web_search,omitempty"`
+	WebFetch  *AIProviderWebFetch  `json:"web_fetch,omitempty"`
 
 	// Models is the explicit selection for OpenRouter/custom endpoints, or a legacy brand list.
 	Models           []AIProviderModel `json:"models,omitempty"`
@@ -421,6 +422,9 @@ func (p *AIModelProfile) Validate() error {
 			}
 		}
 
+		if err := provider.validateWebFetch(); err != nil {
+			return fmt.Errorf("providers[%d]: %w", i, err)
+		}
 		if err := provider.validateWebSearch(); err != nil {
 			return fmt.Errorf("providers[%d]: %w", i, err)
 		}

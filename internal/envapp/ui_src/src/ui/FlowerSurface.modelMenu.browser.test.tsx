@@ -55,8 +55,8 @@ it.each(['en-US', 'zh-CN', 'de-DE', 'ru-RU'] as const)('keeps the %s picker comp
   const copy = createLocalizedFlowerSurfaceCopy(translator);
   const snapshot: FlowerSettingsSnapshot = { ...settingsSnapshot(), model_profile: { schema_version: 1, current_model_id: 'deepseek/deepseek-v4-flash', providers: [
     { id: 'deepseek', name: 'DeepSeek', type: 'deepseek' as const, models: [
-      { model_name: 'deepseek-v4-flash', display_name: 'DeepSeek V4.1 Flash', context_window: 950000, max_output_tokens: 393216, input_modalities: ['text', 'image'], web_search: { status: 'unavailable', reason: 'unsupported' } },
-      { model_name: 'deepseek-v4-pro', display_name: 'DeepSeek V4 Pro', context_window: 950000, max_output_tokens: 393216, input_modalities: ['text', 'image'], web_search: { status: 'unavailable', reason: 'unsupported' } },
+      { model_name: 'deepseek-v4-flash', display_name: 'DeepSeek V4.1 Flash', context_window: 950000, max_output_tokens: 393216, input_modalities: ['text', 'image'], web_search: { status: 'available', reason: 'catalog_supported' } },
+      { model_name: 'deepseek-v4-pro', display_name: 'DeepSeek V4 Pro', context_window: 950000, max_output_tokens: 393216, input_modalities: ['text', 'image'], web_search: { status: 'available', reason: 'catalog_supported' } },
     ] },
     { id: 'local', name: 'Ollama Qwen 3.8 27B', type: 'ollama' as const, models: [{ model_name: 'qwen3.8:27b', unavailable: true }] },
   ] }, provider_secrets: [{ provider_id: 'deepseek', provider_api_key_configured: true, web_search_api_key_configured: false }] };

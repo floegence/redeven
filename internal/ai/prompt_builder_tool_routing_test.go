@@ -24,6 +24,7 @@ func buildPromptForPermissionTest(t *testing.T, permission FlowerPermissionType)
 		AgentHomeDir: t.TempDir(),
 		WebSearch:    config.AIWebSearchResolution{AIWebSearchAvailability: config.AIWebSearchAvailability{Status: "available"}, Mode: config.AIWebSearchBrave},
 	})
+	r.bindWebTools(config.AIProvider{ID: "test", Type: "openai_compatible"})
 	surface, err := r.buildRunToolSurface(runToolSurfaceConfig{}, permission)
 	if err != nil {
 		t.Fatal(err)

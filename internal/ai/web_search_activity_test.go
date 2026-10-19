@@ -6,14 +6,14 @@ import (
 
 	"github.com/floegence/floret/v7/observation"
 	fltools "github.com/floegence/floret/v7/tools"
-	"github.com/floegence/redeven/internal/websearch"
+	"github.com/floegence/floret/v7/tools/websearch"
 )
 
 func TestWebSearchActivityPreservesCanonicalSources(t *testing.T) {
 	for _, populated := range []bool{false, true} {
-		data := websearch.SearchResult{Query: "weather", Provider: "brave", Results: []websearch.ResultItem{}}
+		data := websearch.Result{Query: "weather", Provider: "brave", Results: []websearch.Item{}}
 		if populated {
-			data.Results = append(data.Results, websearch.ResultItem{Title: "Weather", URL: "https://example.com", Snippet: "Sunny"})
+			data.Results = append(data.Results, websearch.Item{Title: "Weather", URL: "https://example.com", Snippet: "Sunny"})
 		}
 		activity, err := floretActivityForToolResult(nil, ToolResult{ToolID: "search", ToolName: "web.search", Status: toolResultStatusSuccess, Data: data})
 		if err != nil {

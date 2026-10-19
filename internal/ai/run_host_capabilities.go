@@ -15,6 +15,7 @@ import (
 // bootstrap, lifecycle coordinator, or capability binder.
 type runHostCapabilities struct {
 	openAIConnections         *openAIResponsesPool
+	webProvider               func(string) (config.AIProvider, bool)
 	queryThreads              func(context.Context, *session.Meta, string, map[string]any) (any, error)
 	tessiven                  *tessiven.Service
 	tessivenResources         *tessiven.ResourceBackend
@@ -90,6 +91,18 @@ func (s *Service) bindExactRunExecutionCapabilities(endpointID string, execution
 	}
 	return runHostCapabilities{
 		openAIConnections: s.openAIConnectionPool(),
+		webProvider: func(id string) (config.AIProvider, bool) {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			if s.cfg != nil {
+				for _, p := range s.cfg.Providers {
+					if p.ID == id {
+						return p, true
+					}
+				}
+			}
+			return config.AIProvider{}, false
+		},
 		authorityThreadID: effectAuthorityThreadID,
 		queryThreads: func(ctx context.Context, meta *session.Meta, name string, args map[string]any) (any, error) {
 			if meta == nil || strings.TrimSpace(meta.EndpointID) != endpointID {

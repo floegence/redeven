@@ -23,13 +23,15 @@ model intent uses the backend recommendation; explicit true or false wins withou
 another catalog allowlist. Authenticated account membership, adapter availability,
 credentials, tool restrictions and permissions still apply.
 
-OpenAI, including custom endpoints, Moonshot, Z.ai and Qwen default provider search
+OpenAI, including custom endpoints, Moonshot, Z.ai, DeepSeek and Qwen default provider search
 on. Generic OpenAI-compatible defaults off and alone supports Brave. Unintegrated
 adapters stay off and cannot be enabled. Reviewed supported models default on;
 other reviewed models default off. Unknown custom OpenAI/compatible models default
 on, while other custom models default off. The reviewed catalog records supplier
 evidence and adapter protocols; it supplies recommendations rather than overriding
-explicit preferences. DeepSeek has no hosted-search adapter.
+explicit preferences. DeepSeek uses the published Floret capability query for
+Flash independent Search and Pro hosted search; unknown wire identities cannot
+be enabled. No second host routing catalog exists.
 
 config.ResolveAIWebSearchPolicy supplies provider defaults and editor capability;
 config.ResolveAIWebSearch resolves the configured model identity, aliases,
@@ -47,8 +49,11 @@ Brave selection, keys, model selection and overrides. Runtime has one decision
 path. Disabling search or changing its source retains stored keys. Only explicit
 key deletion or removal of the provider deletes a stored key.
 
-Turn preparation freezes native search as Floret HostedToolDefinition; Brave is
-a local tool under existing permission checks. The prompt reads the final local
+Turn preparation freezes hosted search as Floret HostedToolDefinition; Brave and
+DeepSeek independent Search are native Floret local tools under existing
+permission checks. DeepSeek page reading independently selects Direct or Fetch
+with Direct as the omitted default. Source bindings live only in the canonical
+first-provider surface annotations; keys resolve at dispatch. The prompt reads the final local
 and hosted tools. Browser search is an alternative only when computer/browser
 tools are present and the existing authorized target discovery and selection
 protocol permits it. URL fetching alone cannot discover URLs. Missing local tools

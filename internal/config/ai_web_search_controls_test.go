@@ -40,7 +40,7 @@ func TestSearchDefaultsAndExplicitOverrides(t *testing.T) {
 		{"moonshot", "kimi-k2.6", true, true}, {"moonshot", "custom", true, false},
 		{"chatglm", "glm-5.1", true, true}, {"chatglm", "custom", true, false},
 		{"qwen", "qwen3.6-plus", true, true}, {"qwen", "qwen3.6-max-preview", true, false},
-		{"anthropic", "custom", false, false}, {"google", "custom", false, false}, {"deepseek", "deepseek-v4-pro", false, false},
+		{"anthropic", "custom", false, false}, {"google", "custom", false, false}, {"deepseek", "deepseek-v4-pro", true, true},
 	} {
 		t.Run(tc.provider+"/"+tc.model, func(t *testing.T) {
 			p := AIProvider{Type: tc.provider}

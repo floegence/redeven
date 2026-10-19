@@ -114,6 +114,7 @@ function normalizeProviderForSave(provider: FlowerProviderDraft): FlowerProvider
     ...(provider.type === 'openai' && provider.auth_method !== 'chatgpt' && provider.responses_continuation === true
       ? { responses_continuation: true } : {}),
     web_search: provider.web_search,
+    web_fetch: provider.web_fetch,
     ...(providerKey !== undefined ? { provider_api_key: providerKey } : {}),
     ...(webSearchKey !== undefined ? { web_search_api_key: webSearchKey } : {}),
     models: provider.models.map((model) => ({

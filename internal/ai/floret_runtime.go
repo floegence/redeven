@@ -80,6 +80,7 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 		return nil, errors.New("invalid web search configuration")
 	}
 	r.webSearch = webSearchCapability
+	r.bindWebTools(providerCfg)
 	r.attachmentToolReadEnabled = req.ModelCapability.SupportsTools && r.host.openLiveAttachment != nil
 	r.ensureSkillManager()
 

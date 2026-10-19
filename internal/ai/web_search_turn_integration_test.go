@@ -30,10 +30,10 @@ func TestWebSearchTurnSurfaceReachesProvider(t *testing.T) {
 		braveKey                                                              bool
 	}{
 		{name: "openai", provider: "openai", model: "gpt-5.5", toolType: "web_search", path: "/responses"},
-		{name: "vision", provider: "deepseek", model: "deepseek-v4-flash-vision-exp", path: "/responses"},
+		{name: "vision", provider: "deepseek", model: "deepseek-v4-flash-vision-exp", functionName: "web_search_tool", path: "/responses"},
 		{name: "fetch_only", provider: "openai_compatible", model: "custom", searchMode: "openai_builtin", path: "/responses"},
-		{name: "flash", provider: "deepseek", model: "deepseek-v4-flash", path: "/responses"},
-		{name: "pro_alias", provider: "deepseek", model: "my-pro", wire: "deepseek-v4-pro", path: "/responses"},
+		{name: "flash", provider: "deepseek", model: "deepseek-v4-flash", functionName: "web_search_tool", path: "/responses"},
+		{name: "pro_alias", provider: "deepseek", model: "my-pro", wire: "deepseek-v4-pro", toolType: "web_search", path: "/responses"},
 		{name: "kimi", provider: "moonshot", model: "kimi-k2.6", toolType: "builtin_function", path: "/chat/completions"},
 		{name: "glm", provider: "chatglm", model: "glm-5.1", toolType: "web_search", path: "/chat/completions"},
 		{name: "qwen", provider: "qwen", model: "qwen3.6-plus", toolType: "web_search", path: "/responses"},
@@ -128,7 +128,7 @@ func TestWebSearchTurnSurfaceReachesProvider(t *testing.T) {
 			if (models.Models[0].WebSearch.Status == "available") != (wantSearch || tc.name == "fetch_only") {
 				t.Fatalf("model projection=%+v", models.Models[0].WebSearch)
 			}
-			if tc.provider == "deepseek" && models.Models[0].WebSearch.Reason != "unsupported" {
+			if tc.provider == "deepseek" && models.Models[0].WebSearch.Reason != "catalog_supported" {
 				t.Fatalf("DeepSeek projection=%+v", models.Models[0].WebSearch)
 			}
 			mu.Lock()

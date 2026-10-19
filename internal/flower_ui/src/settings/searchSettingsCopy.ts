@@ -1,4 +1,5 @@
 export type SearchSettingsCopy = Readonly<{
+  fetchLabel: string; fetchDirect: string; fetchDeepSeek: string; deepSeekSearchHint: string; deepSeekCostHint: string; deepSeekFetchHint: string;
   searchProviderHint: string; searchModelHint: string; searchProviderOff: string; searchModelOff: string;
   searchRecommendedOn: string; searchRecommendedOff: string; searchConfigure: string;
   settingsCloseSaving: string; settingsSavePending: string; settingsSaveTimedOut: string; retryTimedOut: string;
@@ -18,7 +19,99 @@ const messages: Record<string, readonly string[]> = {
   'ru-RU': ['Управляет поиском для этого поставщика моделей. Переключатели поставщика и модели должны быть включены. Изменения действуют со следующего хода или ручного повтора. Сервер может отклонить поиск даже при включённой настройке.', 'Управляет поиском для этой модели. Оба переключателя должны быть включены. Сброс удаляет явную настройку и восстанавливает рекомендацию. Изменения действуют со следующего хода или ручного повтора; поставщик может отклонить поиск.', 'Поиск поставщика выключен. Настройки модели сохраняются, но не действуют.', 'Поиск модели выключен.', 'Рекомендуется: включено.', 'Рекомендуется: выключено.', 'Настроить текущего поставщика', "Закрыть", "Сохранение продолжится после закрытия этого окна.", "Время сохранения истекло. Настройки могли сохраниться. Откройте настройки заново и проверьте их перед повторной попыткой.", "Время ожидания ответа на повтор истекло. Ход мог уже начаться. Проверьте диалог перед новой попыткой."],
 };
 
+const webServiceMessages: Record<string, readonly string[]> = {
+  "en-US": [
+    "Page reader",
+    "Direct",
+    "DeepSeek API",
+    "Flash uses the Search API; Pro uses hosted search. Both use this connection. Unknown models have no search.",
+    "Search and Fetch APIs each cost $0.75 per 1,000 successful non-empty requests. Provider pricing applies to hosted search.",
+    "Direct remains the default. DeepSeek sends public page URLs to this connection and returns Markdown. Search off does not disable page reading. Changes apply to the next turn; recovery keeps the original source."
+  ],
+  "zh-CN": [
+    "网页读取方式",
+    "直接读取",
+    "DeepSeek API",
+    "Flash 使用 Search API，Pro 使用托管搜索，均绑定此连接。未知模型不提供搜索。",
+    "Search 与 Fetch API 分别按每 1,000 次成功且非空请求收取 0.75 美元。托管搜索以模型提供商定价为准。",
+    "默认直接读取。选择 DeepSeek 后，公开网页地址将发送给此连接并返回 Markdown。关闭搜索不影响网页读取。更改从下一轮生效；恢复执行保留原来源。"
+  ],
+  "zh-TW": [
+    "網頁讀取方式",
+    "直接讀取",
+    "DeepSeek API",
+    "Flash 使用 Search API，Pro 使用託管搜尋，皆綁定此連線。未知模型不提供搜尋。",
+    "Search 與 Fetch API 各按每 1,000 次成功且非空請求收取 0.75 美元。託管搜尋依模型供應商定價。",
+    "預設直接讀取。選擇 DeepSeek 後，公開網頁網址將傳送至此連線並回傳 Markdown。關閉搜尋不影響網頁讀取。變更從下一輪生效；恢復執行保留原來源。"
+  ],
+  "ja-JP": [
+    "ページの読み取り方法",
+    "直接取得",
+    "DeepSeek API",
+    "Flash は Search API、Pro はホスト型検索を使用し、この接続に固定されます。未知のモデルでは検索できません。",
+    "Search API と Fetch API はそれぞれ、空でない成功リクエスト 1,000 件あたり 0.75 米ドルです。ホスト型検索はプロバイダーの料金に従います。",
+    "既定は直接取得です。DeepSeek を選ぶと公開ページの URL をこの接続に送信し、Markdown を取得します。検索をオフにしてもページ取得は無効になりません。変更は次のターンから適用され、復旧時は元の取得元を保持します。"
+  ],
+  "ko-KR": [
+    "페이지 읽기 방식",
+    "직접 읽기",
+    "DeepSeek API",
+    "Flash는 Search API, Pro는 호스팅 검색을 사용하며 이 연결에 고정됩니다. 알 수 없는 모델은 검색을 지원하지 않습니다.",
+    "Search 및 Fetch API는 각각 비어 있지 않은 성공 요청 1,000건당 미화 0.75달러입니다. 호스팅 검색은 공급자 요금이 적용됩니다.",
+    "기본값은 직접 읽기입니다. DeepSeek를 선택하면 공개 페이지 URL을 이 연결로 보내 Markdown을 받습니다. 검색을 꺼도 페이지 읽기는 유지됩니다. 변경은 다음 턴부터 적용되며 복구 시 원래 소스를 유지합니다."
+  ],
+  "de-DE": [
+    "Seitenabruf",
+    "Direkt",
+    "DeepSeek API",
+    "Flash verwendet die Search API, Pro die gehostete Suche. Beide sind an diese Verbindung gebunden. Unbekannte Modelle haben keine Suche.",
+    "Search API und Fetch API kosten jeweils 0,75 USD pro 1.000 erfolgreiche, nicht leere Anfragen. Für gehostete Suche gelten die Anbieterpreise.",
+    "Standard ist der direkte Abruf. DeepSeek sendet öffentliche Seiten-URLs an diese Verbindung und liefert Markdown. Suche ausschalten deaktiviert den Seitenabruf nicht. Änderungen gelten ab dem nächsten Zug; bei Wiederaufnahme bleibt die ursprüngliche Quelle erhalten."
+  ],
+  "fr-FR": [
+    "Lecture des pages",
+    "Directe",
+    "DeepSeek API",
+    "Flash utilise Search API et Pro la recherche hébergée, avec cette connexion. Les modèles inconnus ne disposent pas de recherche.",
+    "Search API et Fetch API coûtent chacune 0,75 USD pour 1 000 requêtes réussies non vides. La recherche hébergée suit les tarifs du fournisseur.",
+    "La lecture directe reste le choix par défaut. DeepSeek transmet les URL publiques à cette connexion et renvoie du Markdown. Désactiver la recherche ne désactive pas la lecture. Les changements prennent effet au prochain tour ; la reprise conserve la source initiale."
+  ],
+  "it-IT": [
+    "Lettura delle pagine",
+    "Diretta",
+    "DeepSeek API",
+    "Flash usa Search API e Pro la ricerca ospitata, entrambe con questa connessione. I modelli sconosciuti non hanno ricerca.",
+    "Search API e Fetch API costano ciascuna 0,75 USD ogni 1.000 richieste riuscite non vuote. Per la ricerca ospitata valgono i prezzi del fornitore.",
+    "La lettura diretta resta predefinita. DeepSeek invia gli URL pubblici a questa connessione e restituisce Markdown. Disattivare la ricerca non disattiva la lettura. Le modifiche valgono dal turno successivo; la ripresa mantiene la fonte originale."
+  ],
+  "es-ES": [
+    "Lectura de páginas",
+    "Directa",
+    "DeepSeek API",
+    "Flash usa Search API y Pro la búsqueda alojada, ambas con esta conexión. Los modelos desconocidos no tienen búsqueda.",
+    "Search API y Fetch API cuestan cada una 0,75 USD por 1.000 solicitudes correctas no vacías. La búsqueda alojada sigue los precios del proveedor.",
+    "La lectura directa sigue siendo la predeterminada. DeepSeek envía las URL públicas a esta conexión y devuelve Markdown. Desactivar la búsqueda no desactiva la lectura. Los cambios se aplican al siguiente turno; la recuperación conserva la fuente original."
+  ],
+  "pt-BR": [
+    "Leitura de páginas",
+    "Direta",
+    "DeepSeek API",
+    "Flash usa a Search API e Pro usa a pesquisa hospedada, ambas nesta conexão. Modelos desconhecidos não têm pesquisa.",
+    "Search API e Fetch API custam cada uma US$ 0,75 por 1.000 solicitações bem-sucedidas não vazias. A pesquisa hospedada segue os preços do provedor.",
+    "A leitura direta continua como padrão. DeepSeek envia URLs públicas para esta conexão e retorna Markdown. Desativar a pesquisa não desativa a leitura. As alterações valem no próximo turno; a recuperação mantém a fonte original."
+  ],
+  "ru-RU": [
+    "Чтение страниц",
+    "Напрямую",
+    "DeepSeek API",
+    "Flash использует Search API, Pro — встроенный поиск через это подключение. Для неизвестных моделей поиск недоступен.",
+    "Search API и Fetch API стоят по 0,75 USD за 1 000 успешных непустых запросов. Для встроенного поиска действуют тарифы поставщика.",
+    "По умолчанию страницы читаются напрямую. DeepSeek отправляет публичные URL через это подключение и возвращает Markdown. Отключение поиска не отключает чтение. Изменения действуют со следующего хода; восстановление сохраняет исходный источник."
+  ]
+};
+
 export function searchSettingsCopy(locale: string): SearchSettingsCopy {
   const [searchProviderHint, searchModelHint, searchProviderOff, searchModelOff, searchRecommendedOn, searchRecommendedOff, searchConfigure, settingsCloseSaving, settingsSavePending, settingsSaveTimedOut, retryTimedOut] = messages[locale] ?? messages['en-US'];
-  return { searchProviderHint, searchModelHint, searchProviderOff, searchModelOff, searchRecommendedOn, searchRecommendedOff, searchConfigure, settingsCloseSaving, settingsSavePending, settingsSaveTimedOut, retryTimedOut };
+  const [fetchLabel, fetchDirect, fetchDeepSeek, deepSeekSearchHint, deepSeekCostHint, deepSeekFetchHint] = webServiceMessages[locale] ?? webServiceMessages['en-US'];
+  return { fetchLabel, fetchDirect, fetchDeepSeek, deepSeekSearchHint, deepSeekCostHint, deepSeekFetchHint, searchProviderHint, searchModelHint, searchProviderOff, searchModelOff, searchRecommendedOn, searchRecommendedOff, searchConfigure, settingsCloseSaving, settingsSavePending, settingsSaveTimedOut, retryTimedOut };
 }

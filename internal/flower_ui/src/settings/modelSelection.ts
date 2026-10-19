@@ -46,7 +46,7 @@ export function serializeFlowerProvider(provider: FlowerProviderDraft): FlowerPr
     ...(provider.type === 'openai' && provider.auth_method !== 'chatgpt' && provider.responses_continuation === true
       ? { responses_continuation: true } : {}),
     auth_method: provider.auth_method, account_id: provider.account_id,
-    web_search: provider.web_search, models: provider.models.map(serializeFlowerModel),
+    web_search: provider.web_search, web_fetch: provider.web_fetch, models: provider.models.map(serializeFlowerModel),
   };
   if (provider.type === 'openai_compatible') return out;
   // Offline legacy preferences require an explicit selection action before saving.

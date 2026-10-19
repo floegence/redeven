@@ -123,7 +123,8 @@ def generate(data, rules):
                 continue
             if pid == 'google' and not mid.startswith('gemini-'):
                 continue
-            if pid + '/' + mid not in result['web_search']:
+            # DeepSeek search capabilities are owned by the published Floret query.
+            if pid != 'deepseek' and pid + '/' + mid not in result['web_search']:
                 raise ValueError(f'{pid}/{mid}: missing reviewed web search declaration')
             limits = model['limit']
             if limits.get('context', 0) <= 0 or limits.get('output', 0) <= 0:
