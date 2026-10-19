@@ -45,6 +45,31 @@ function mount(seed = [item('first', 3), item('second', 2), item('third', 1)]) {
 }
 
 describe('Flower pinned conversation interaction', () => {
+  it.each([224, 272, 360])('keeps title geometry and stable containment through pin group moves at %ipx', async (width) => {
+    const ui = mount([item('first', 3), item('second', 2), item('ordinary', 0)]);
+    ui.host.style.width = width + 'px';
+    await frame();
+    const owner = ui.host.querySelector<HTMLElement>('.flower-thread-rows')!;
+    const row = ui.row('ordinary');
+    const title = row.querySelector<HTMLElement>('.flower-thread-list-title')!;
+    expect(getComputedStyle(owner).containerType).toBe('inline-size');
+    expect(getComputedStyle(row).containerType).toBe('normal');
+    for (let index = 0; index < 8; index++) {
+      ui.setItems(ui.items().map(entry => entry.thread_id === 'ordinary'
+        ? { ...entry, title: 'Updated title ' + index, pinned: index % 2 === 0, pin_rank: index % 2 === 0 ? 5 : 0 }
+        : entry));
+      await frame();
+      expect(ui.row('ordinary')).toBe(row);
+      expect(row.querySelector('.flower-thread-list-title')).toBe(title);
+      expect(title.textContent).toBe('Updated title ' + index);
+      for (const element of [title, row.querySelector('.flower-thread-card-select-button')!]) {
+        const bounds = element.getBoundingClientRect();
+        expect(bounds.width).toBeGreaterThan(0);
+        expect(bounds.height).toBeGreaterThan(0);
+      }
+    }
+  });
+
   it.each([224, 272])('gives pinned and ordinary titles the same space at %ipx width', async (width) => {
     const ui = mount([item('first', 3), item('second', 2), item('ordinary', 0)]);
     ui.host.style.width = `${width}px`;

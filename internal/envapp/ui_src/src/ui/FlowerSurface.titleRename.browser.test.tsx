@@ -40,9 +40,9 @@ describe('Flower title rename shortcut', () => {
     });
     await waitFor(() => !!runtime.querySelector('[data-thread-id="thread-1"] button'));
     runtime.querySelector<HTMLButtonElement>('[data-thread-id="thread-1"] button')!.click();
+    await waitFor(() => loadThread.mock.calls.length > 0);
     const trigger = runtime.querySelector<HTMLButtonElement>('.flower-chat-header-rename')!;
     trigger.focus();
-    await waitFor(() => loadThread.mock.calls.length > 0);
     detail.resolve(liveBootstrap(initial));
     await waitFor(() => !!runtime.querySelector('.flower-composer textarea'));
     await flush();
