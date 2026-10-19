@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-18 — Minimal computer preview placeholders
+
+- Center three quiet dots and one short localized status in the [computer viewer](ui/flower-computer-viewer.md). Pulse only during active loading, keep empty and assistance states static, and preserve explicit recovery, reduced motion and high-contrast presentation.
+
 ## 2026-10-18 — Scoped child interactions after forks
 
 - Keep [subagent ownership](ai/subagent-runtime.md) with the original parent, return non-mutating stale-target recovery, refresh current-thread facts, and suppress unowned historical navigation. Verify independent roots, forks, restart, provider continuation, and valid child controls.

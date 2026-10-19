@@ -29,7 +29,6 @@ export type FlowerComputerStageCopy = Readonly<{
   move: string;
   noFrame: string;
   loading: string;
-  loadingHint: string;
   retry: string;
   resumeControl: string;
   frameRate: string;
@@ -255,23 +254,14 @@ export const FlowerComputerStage: Component<FlowerComputerStageProps> = (props) 
         />
       </Show>
       <Show when={resolvedURL()} fallback={<div class="flower-computer-stage-no-frame" data-loading={framePending() ? 'true' : undefined} data-interrupted={frameRetryAvailable() ? 'true' : undefined}>
-        <div class="flower-computer-placeholder-art" aria-hidden="true">
+        <div class="flower-computer-placeholder-indicator" aria-hidden="true">
           <Show when={frameRetryAvailable()} fallback={
-            <svg class="flower-computer-placeholder-scan" viewBox="0 0 104 64" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-              <path class="flower-computer-placeholder-guides" d="M24 10H12v12m68-12h12v12M12 42v12h12m68-12v12H80" />
-              <path opacity=".24" d="M30 20h28m7 0h9M26 44h12m7 0h33" />
-              <path opacity=".4" d="M26 26h42m7 0h7M22 38h8m7 0h41" />
-              <path opacity=".65" d="M22 32h60" />
-            </svg>
-          }><AlertTriangle size={30} /></Show>
-          <Show when={framePending()}><span class="flower-computer-placeholder-scan-light" data-floe-progress-shimmer="surface" /></Show>
+            <><span class="flower-computer-placeholder-dot" /><span class="flower-computer-placeholder-dot" /><span class="flower-computer-placeholder-dot" /></>
+          }><AlertTriangle size={20} /></Show>
         </div>
-        <div class="flower-computer-placeholder-copy">
-          <p class="flower-computer-placeholder-title" role="status" data-floe-progress-shimmer={framePending() ? 'text' : undefined}>
-            {framePending() ? (props.loading && props.emptyMessage ? props.emptyMessage : props.copy.loading) : props.emptyMessage || props.copy.noFrame}
-          </p>
-          <Show when={framePending()}><p class="flower-computer-placeholder-hint">{props.copy.loadingHint}</p></Show>
-        </div>
+        <p class="flower-computer-placeholder-title" role="status">
+          {framePending() ? (props.loading && props.emptyMessage ? props.emptyMessage : props.copy.loading) : props.emptyMessage || props.copy.noFrame}
+        </p>
         <Show when={frameRetryAvailable()}>
           <Button variant="secondary" size="sm" icon={Refresh} onClick={retryFrames}>{retryLabel()}</Button>
         </Show>
