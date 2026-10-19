@@ -4,6 +4,7 @@ title: Flower context distribution qualification
 description: Historical token attribution evidence and current native-token plus visible-character qualification.
 tags: [flower, context, deepseek, qualification]
 timestamp: 2026-10-18T00:00:00Z
+quality_exception: Historical and current provider qualification evidence is retained together to distinguish measured results from superseded token-attribution claims.
 ---
 # Summary
 
@@ -290,7 +291,7 @@ Validation results:
 - Normal commit hooks run. Redeven's push gate and its component groups are
   deliberately not executed; Redeven main and feature branches are not pushed.
 
-## Boundaries
+# Boundaries
 
 This evidence applies to the fixed synthetic inputs and recorded real tasks. It
 does not establish exact provider category counts or certify other providers

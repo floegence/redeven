@@ -196,7 +196,7 @@ and unrelated parent or child frames cannot close or replace it. There is no
 child detail pagination, polling, tail timer, request lock, sync message, pulse,
 or bottom status lane.
 
-Canonical terminal updates and reconnect baselines converge the current view. Background running, waiting_user, waiting_approval, and completed summaries update without pointer or focus events. One detail request may run per thread and selection cycle. Updates received during that request retain only the greatest target revision and start at most one follow-up request. A cache hit with no newer summary renders immediately and does not revalidate. A failed revision is not retried automatically in the same display cycle; without cached detail Flower leaves loading and shows an explicit retry, while an update failure with valid cached detail is non-blocking. There is no retry delay, exhausted state, foreground reload, initial-request map, or message-content completeness guess.
+Canonical terminal updates and reconnect baselines converge without pointer or focus events, including background running, waiting_user, waiting_approval and completed summaries. One detail request runs per thread and selection cycle; concurrent updates retain only the greatest revision for at most one follow-up. Cache hits render without revalidation unless a newer summary exists. Failed revisions need explicit retry in the same cycle: no cache shows Retry, while valid cached detail stays usable. There is no retry delay, exhausted state, foreground reload, initial-request map or content-completeness guess.
 
 Context pressure and whole-thread usage remain separate projections. The context circle uses the latest request pressure, while its tooltip displays the canonical cumulative cache-hit rate supplied live and in detail snapshots by Floret v7.25.2. A committed provider-usage frame replaces the confirmed totals; a projected-request frame without totals preserves them through the single merge helper. The client never sums stream samples, and missing totals or a zero input denominator is displayed as unavailable.
 
@@ -229,10 +229,10 @@ pending without stopping the task. Saving disables only the selector; Stop and
 approval decisions remain available. Existing approvals still require an explicit
 decision. Approval rows show supporting context directly, without a details
 disclosure, while long commands retain their expand and copy controls.
-At composer container widths of 419px or less, the approval permission selector
-becomes a square icon-only control. Its current-mode tooltip, accessible name,
-keyboard interaction and saving indicator remain available; coarse pointers
-retain a minimum 44px touch target. Wider containers show the mode label.
+At composer widths up to 419px, the approval permission selector is a square
+icon-only control with mode tooltip, accessible name, keyboard interaction and
+saving indicator. Coarse pointers retain a 44px minimum target; wider containers
+show the mode label.
 
 Floret installs a canonical fallback title with the first accepted user message.
 Automatic-title pending and failure summaries retain it. Flower consumes title,
