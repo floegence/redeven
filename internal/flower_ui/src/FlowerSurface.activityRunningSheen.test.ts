@@ -12,11 +12,10 @@ function flowerStyles(): string {
 }
 
 function cssRule(css: string, selector: string): string {
-  const start = css.indexOf(`${selector} {`);
-  expect(start).toBeGreaterThanOrEqual(0);
-  const end = css.indexOf('\n}', start);
-  expect(end).toBeGreaterThan(start);
-  return css.slice(start, end + 2);
+  const rules = [...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .filter(match => match[1].trim() === selector);
+  expect(rules.length, `Missing exact CSS rule: ${selector}`).toBeGreaterThan(0);
+  return rules.map(match => `${match[1].trim()} {${match[2]}}`).join('\n');
 }
 
 describe('Flower activity status presentation', () => {
@@ -84,22 +83,19 @@ describe('Flower activity status presentation', () => {
     const titleVerbRule = cssRule(css, '.flower-activity-inline-title-verb');
     const detailRule = cssRule(css, '.flower-activity-inline-detail');
     const durationRule = cssRule(css, '.flower-activity-inline-duration');
-    const runningTitleRule = cssRule(css, '.flower-activity-inline-row-running .flower-activity-inline-title');
-    const runningButtonRule = cssRule(css, '.flower-activity-inline-row-running .flower-activity-inline-button');
-    const successButtonRule = cssRule(css, '.flower-activity-inline-row-success .flower-activity-inline-button');
-    const failedIconRule = cssRule(css, '.flower-activity-inline-row-error .flower-activity-inline-icon');
-    const canceledIconRule = cssRule(css, '.flower-activity-inline-row-canceled .flower-activity-inline-icon');
+    const runningTitleRule = cssRule(css, ".flower-activity-inline-row-running:has([data-floe-progress-shimmer='text']) .flower-activity-inline-title");
+    const runningButtonRule = cssRule(css, ".flower-activity-inline-row-running:has([data-floe-progress-shimmer='text']) .flower-activity-inline-button");
 
-    expect(activityInlineRule).toContain('--flower-activity-tool-row-foreground: var(--redeven-chat-muted)');
-    expect(activityInlineRule).toContain('--flower-activity-tool-row-foreground-strong: color-mix(in srgb, var(--redeven-chat-text) 72%, var(--redeven-chat-muted) 28%)');
-    expect(activityInlineRule).toContain('--flower-activity-tool-row-foreground-complete: color-mix(in srgb, var(--redeven-chat-muted) 84%, var(--redeven-chat-text) 16%)');
-    expect(activityInlineRule).toContain('--flower-activity-tool-row-soft: color-mix(in srgb, var(--redeven-chat-muted) 11%, transparent)');
+    expect(activityInlineRule).toContain('--flower-activity-tool-row-foreground: var(--flower-reading-title)');
+    expect(activityInlineRule).toContain('--flower-activity-tool-row-foreground-strong: var(--foreground)');
+    expect(activityInlineRule).toContain('--flower-activity-tool-row-quiet: color-mix(in srgb, var(--muted-foreground) 94%, var(--background) 6%)');
+    expect(activityInlineRule).toContain('--flower-activity-tool-row-soft: color-mix(in srgb, var(--redeven-chat-muted) 6%, transparent)');
     expect(buttonRule).toContain('position: relative');
     expect(buttonRule).toContain('overflow: hidden');
-    expect(buttonRule).toContain('min-height: 1.75rem');
+    expect(buttonRule).toContain('min-height: 2rem');
     expect(buttonRule).toContain('gap: 0.42rem');
     expect(buttonRule).toContain('border-radius: 6px');
-    expect(buttonRule).toContain('color: var(--flower-activity-tool-row-foreground)');
+    expect(buttonRule).toContain('color: var(--flower-activity-tool-row-quiet)');
     expect(buttonHoverRule).toContain('background: var(--flower-activity-tool-row-soft)');
     expect(buttonHoverRule).not.toContain('color: var(--flower-activity-tool-row-foreground-strong)');
     expect(css).toContain('.flower-activity-inline-button-static');
@@ -112,14 +108,14 @@ describe('Flower activity status presentation', () => {
     expect(titleRule).toContain('overflow: hidden');
     expect(titleRule).toContain('color: currentColor');
     expect(titleRule).toContain('font-family: var(--font-sans)');
-    expect(titleRule).toContain('font-weight: 500');
+    expect(titleRule).toContain('font-weight: 400');
     expect(titleVerbRule).toContain('color: currentColor');
     expect(titleVerbRule).toContain('font-weight: inherit');
-    expect(detailRule).toContain('color: currentColor');
-    expect(detailRule).toContain('font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace');
-    expect(durationRule).toContain('color: currentColor');
+    expect(detailRule).toContain('color: var(--flower-activity-tool-row-quiet)');
+    expect(detailRule).toContain('font-family: var(--font-sans, inherit)');
+    expect(durationRule).toContain('color: var(--flower-activity-tool-row-quiet)');
     expect(durationRule).toContain('font-size: 0.6875rem');
-    expect(durationRule).toContain('font-weight: 500');
+    expect(durationRule).toContain('font-weight: 400');
     expect(runningTitleRule).toContain('font-weight: 500');
     expect(runningTitleRule).not.toContain('text-shadow');
     expect(css).not.toContain('flower-activity-title-sweep');
@@ -130,10 +126,10 @@ describe('Flower activity status presentation', () => {
     expect(css).not.toContain('.flower-activity-inline-row-pending .flower-activity-inline-title::after');
     expect(css).not.toContain('.flower-activity-inline-row-waiting .flower-activity-inline-title::after');
     expect(runningButtonRule).toContain('color: var(--flower-activity-tool-row-foreground-strong)');
-    expect(successButtonRule).toContain('color: var(--flower-activity-tool-row-foreground-complete)');
-    expect(activityInlineRule).toContain('--flower-activity-tool-row-error: var(--redeven-status-error-foreground)');
-    expect(failedIconRule).toContain('color: var(--flower-activity-tool-row-error)');
-    expect(canceledIconRule).toContain('color: var(--destructive)');
+    expect(css).not.toContain('--flower-activity-tool-row-foreground-complete');
+    expect(css).not.toContain('--flower-activity-tool-row-error');
+    expect(css).not.toContain('.flower-activity-inline-row-error .flower-activity-inline-icon {');
+    expect(css).not.toContain('.flower-activity-inline-row-canceled .flower-activity-inline-icon {');
     expect(css).not.toContain('.flower-activity-inline-details::before');
     expect(css).not.toContain('.flower-activity-inline-row-running::before');
   });
@@ -192,7 +188,7 @@ describe('Flower activity status presentation', () => {
     const detailWindowRule = cssRule(css, '.flower-subagent-detail-window');
     const detailActiveRule = cssRule(css, ".flower-subagent-detail-window[data-floe-floating-window-state='active']");
     const detailOverviewRule = cssRule(css, '.flower-subagent-detail-overview');
-    const detailAvatarRule = cssRule(css, '.flower-subagent-detail-avatar');
+    const detailAvatarRule = cssRule(css, '.flower-subagent-detail-window .flower-subagent-detail-avatar');
     const runningStatusRule = cssRule(css, '.flower-subagent-status-label-running');
     const detailScrollRule = cssRule(css, '.flower-subagent-detail-scroll-to-latest');
 
@@ -242,7 +238,7 @@ describe('Flower activity status presentation', () => {
     expect(detailOverviewRule).toContain('background: var(--flower-subagent-window-surface-soft)');
     expect(detailAvatarRule).toContain('width: 1.5rem');
     expect(detailAvatarRule).toContain('height: 1.5rem');
-    expect(runningStatusRule).toContain('color: var(--primary)');
+    expect(runningStatusRule).toContain('color: var(--foreground)');
     expect(detailScrollRule).toContain('position: sticky');
     expect(css).not.toContain('.flower-subagent-detail-bottom-dock');
     expect(css).not.toContain('.flower-subagent-detail-bottom-track');
@@ -284,7 +280,7 @@ describe('Flower activity status presentation', () => {
 
     expect(overviewRule).toContain('align-items: start');
     expect(overviewRule).toContain('display: grid');
-    expect(overviewRule).toContain('grid-template-columns: minmax(0, 1fr) minmax(0, 15rem)');
+    expect(overviewRule).toContain('grid-template-columns: minmax(0, 1fr) minmax(0, 21rem)');
     expect(switcherRule).toContain('flex-wrap: wrap');
     expect(switcherRule).not.toContain('border-bottom');
     expect(metaRule).toContain('flex-wrap: nowrap');
