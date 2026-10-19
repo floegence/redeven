@@ -576,7 +576,7 @@
       "contextIndicatorRules": "Regeln",
       "contextIndicatorSkills": "Skills",
       "runErrorModelContextUnavailable": "Der aktuelle Kontext konnte nicht geladen werden. Beheben Sie das in den Fehlerdetails angegebene Problem und versuchen Sie es erneut.",
-      "contextIndicatorLabel": "Anfrageeingabe",
+      "contextIndicatorLabel": "Anfrageeingabe (tokens)",
       "contextIndicatorNearThreshold": "Nahe am Limit",
       "contextIndicatorWillCompact": "Komprimierung bald",
       "contextIndicatorHardLimit": "Am Limit",

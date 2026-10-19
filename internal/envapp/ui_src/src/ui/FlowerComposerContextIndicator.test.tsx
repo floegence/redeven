@@ -32,6 +32,8 @@ describe('Flower context source breakdown', () => {
    expect(host.textContent).not.toContain(text);
   }
   expect(host.querySelectorAll('.flower-context-heading')).toHaveLength(1);
+  expect(host.querySelector('.flower-context-heading > span')?.textContent).toBe('Request input (tokens)');
+  expect(host.querySelector('.flower-context-composition-heading')?.textContent).toContain('chars');
   expect(host.querySelectorAll('.flower-context-composition-row').length).toBeGreaterThan(0);
   expect(host.querySelector('.flower-model-context-amount')?.textContent).toMatch(/^\d.*chars$/);
  });

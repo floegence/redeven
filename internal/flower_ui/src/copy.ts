@@ -1140,7 +1140,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     liveProgressTool: 'Using a tool',
     liveProgressOutput: 'Writing the reply',
     contextIndicator: {
-      label: 'Request input',
+      label: 'Request input (tokens)',
       nearThreshold: 'Near limit',
       willCompact: 'Compacting soon',
       hardLimit: 'At limit',
