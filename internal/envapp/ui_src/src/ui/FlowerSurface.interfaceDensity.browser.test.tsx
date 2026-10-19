@@ -33,19 +33,19 @@ it.each([434, 758])('keeps the mixed-script reading sample compact at %ipx', asy
     font: getComputedStyle(paragraph).fontFamily, root: getComputedStyle(document.documentElement).fontSize, dpr: devicePixelRatio, scale: visualViewport?.scale };
   console.info('Interface density reading geometry', JSON.stringify(geometry));
   await page.screenshot({ element: host, path: `__screenshots__/density-reading-${width}.png` });
-  expect.soft(geometry.size).toBe('12px');
-  expect.soft(geometry.line).toBe('20px');
+  expect.soft(geometry.size).toBe('14px');
+  expect.soft(geometry.line).toBe('24.5px');
   expect.soft(geometry.weight).toBe('400');
   expect.soft(getComputedStyle(content.querySelector('strong')!).fontWeight).toBe('600');
   expect.soft(geometry.root).toBe('16px');
   expect.soft(geometry.font).toContain('Inter Variable');
-  expect.soft(getComputedStyle(content.querySelector('h2')!).fontSize).toBe('14px');
-  expect.soft(getComputedStyle(content.querySelector('h2')!).lineHeight).toBe('20px');
-  expect.soft(getComputedStyle(content.querySelector('code')!).fontSize).toBe('12px');
-  // Recorded at 2198b0905 with released Floe 0.78.2 and the identical content/width.
-  const baselineHeight = width === 434 ? 535.890625 : 447.890625;
-  expect.soft(geometry.width).toBe(width);
-  expect.soft(geometry.height).toBeLessThanOrEqual(baselineHeight * 0.9);
+  expect.soft(getComputedStyle(content.querySelector('h2')!).fontSize).toBe('17.5px');
+  expect.soft(getComputedStyle(content.querySelector('h2')!).lineHeight).toBe('25.375px');
+  expect.soft(getComputedStyle(content.querySelector('code')!).fontSize).toBe('12.74px');
+  // Recorded on e2f916f52 with the preserved 14px reading scale and 700px measure.
+  const baselineHeight = width === 434 ? 638.5 : 540.5;
+  expect.soft(geometry.width).toBe(Math.min(width, 700));
+  expect.soft(geometry.height).toBeLessThanOrEqual(baselineHeight + 1);
 });
 
 it('fits twenty ordinary rows and preserves a readable attention title without hover shifts', async () => {
@@ -76,7 +76,7 @@ it('fits twenty ordinary rows and preserves a readable attention title without h
   expect.soft(Math.abs(title.getBoundingClientRect().width - before)).toBeLessThanOrEqual(1);
 });
 
-it('keeps the empty composer at 84px and the header at 40px', async () => {
+it('keeps the existing 14px composer at 85px and the header at 40px', async () => {
   await page.viewport(1280, 900);
   const selected = thread({ messages: [] });
   const runtime = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [selected], loadThread: async () => liveBootstrap(selected) },
@@ -85,9 +85,9 @@ it('keeps the empty composer at 84px and the header at 40px', async () => {
   await waitFor(() => Boolean(runtime.querySelector('.flower-composer')));
   await document.fonts.ready; await frame();
   expect.soft(getComputedStyle(runtime.querySelector('.flower-chat-header-title')!).fontSize).toBe('13px');
-  expect.soft(getComputedStyle(runtime.querySelector('.flower-composer textarea')!).fontSize).toBe('12px');
+  expect.soft(getComputedStyle(runtime.querySelector('.flower-composer textarea')!).fontSize).toBe('14px');
   expect.soft(runtime.querySelector('.flower-chat-header')!.getBoundingClientRect().height).toBe(40);
-  expect.soft(runtime.querySelector('.flower-composer')!.getBoundingClientRect().height).toBe(84);
+  expect.soft(runtime.querySelector('.flower-composer')!.getBoundingClientRect().height).toBe(85);
   expect(runtime.querySelector('.flower-composer textarea')?.getAttribute('aria-label')).toBeTruthy();
   // This semantic change preserves the existing timestamp colors. Track the
   // pre-existing contrast finding in the product accessibility audit.

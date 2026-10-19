@@ -5711,18 +5711,18 @@ button.flower-composer-context-source:focus-visible,
 
 .flower-activity-inline {
   --flower-activity-tool-row-foreground: var(--flower-reading-title);
+  --flower-activity-tool-row-quiet: color-mix(in srgb, var(--muted-foreground) 94%, var(--background) 6%);
   --flower-activity-tool-row-foreground-strong: var(--foreground);
-  --flower-activity-tool-row-foreground-complete: var(--flower-reading-title);
-  --flower-activity-tool-row-soft: color-mix(in srgb, var(--redeven-chat-muted) 11%, transparent);
-  --flower-activity-tool-row-ok: var(--flower-reading-success);
-  --flower-activity-tool-row-error: var(--flower-reading-error);
+  --flower-activity-tool-row-soft: color-mix(in srgb, var(--redeven-chat-muted) 6%, transparent);
   display: grid;
   width: 100%;
   min-width: 0;
-  gap: 0.125rem;
-  border-left: 2px solid color-mix(in srgb, var(--flower-chat-surface-border) 72%, transparent);
-  margin: 0.125rem 0;
-  padding-left: 0.625rem;
+  gap: 0;
+  margin: 0;
+}
+
+:root[data-floe-shell-theme='hc-light'] .flower-activity-inline {
+  --flower-activity-tool-row-quiet: var(--muted-foreground);
 }
 
 .flower-activity-inline-row {
@@ -5751,7 +5751,7 @@ button.flower-composer-context-source:focus-visible,
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--flower-activity-tool-row-foreground);
+  color: var(--flower-activity-tool-row-quiet);
   cursor: pointer;
   overflow: hidden;
   padding: 0.125rem 0.25rem;
@@ -5769,7 +5769,9 @@ button.flower-composer-context-source:focus-visible,
 
 .flower-activity-inline-button:is(button):hover,
 .flower-activity-inline-button:is(button):focus-visible {
+  --flower-activity-tool-row-quiet: var(--flower-reading-secondary);
   background: var(--flower-activity-tool-row-soft);
+  color: var(--flower-activity-tool-row-quiet);
 }
 
 .flower-activity-inline-button:is(button):focus-visible {
@@ -6168,10 +6170,6 @@ button.flower-composer-context-source:focus-visible,
   color: currentColor;
 }
 
-.flower-activity-inline-row-running .flower-activity-inline-icon {
-  color: currentColor;
-}
-
 .flower-activity-inline-loader {
   display: inline-grid;
   width: 0.8rem;
@@ -6208,31 +6206,6 @@ button.flower-composer-context-source:focus-visible,
   animation-delay: 405ms;
 }
 
-.flower-activity-inline-row-pending .flower-activity-inline-icon {
-  color: var(--flower-reading-warning);
-}
-
-.flower-activity-inline-row-success .flower-activity-inline-icon {
-  color: var(--flower-activity-tool-row-ok);
-}
-
-.flower-activity-inline-row-error .flower-activity-inline-icon {
-  color: var(--flower-activity-tool-row-error);
-}
-
-.flower-activity-inline-row-error[data-flower-control-error='true'] .flower-activity-inline-icon {
-  color: color-mix(in srgb, var(--muted-foreground) 72%, var(--redeven-status-warning-foreground) 28%);
-}
-
-.flower-activity-inline-row-canceled .flower-activity-inline-icon {
-  color: var(--flower-reading-secondary);
-}
-
-.flower-activity-inline-row-canceled[data-flower-activity-approval-state='rejected'] .flower-activity-inline-icon,
-.flower-activity-inline-row-error[data-flower-activity-approval-state='rejected'] .flower-activity-inline-icon {
-  color: var(--muted-foreground);
-}
-
 .flower-activity-user-rejected-marker {
   display: inline-flex;
   width: 0.875rem;
@@ -6262,10 +6235,10 @@ button.flower-composer-context-source:focus-visible,
   overflow: hidden;
   color: currentColor;
   font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  font-weight: 500;
+  font-size: 0.75rem;
+  font-weight: 400;
   letter-spacing: 0;
-  line-height: 1.25rem;
+  line-height: 1.125rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -6292,13 +6265,13 @@ button.flower-composer-context-source:focus-visible,
 
 .flower-activity-web-fetch-title-url {
   flex: 1 1 auto;
-  color: var(--flower-reading-secondary);
+  color: var(--flower-activity-tool-row-quiet);
 }
 
 .flower-activity-inline-detail {
   min-width: 0;
   overflow: hidden;
-  color: var(--flower-reading-secondary);
+  color: var(--flower-activity-tool-row-quiet);
   font-family: var(--font-sans, inherit);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -6321,26 +6294,23 @@ button.flower-composer-context-source:focus-visible,
 }
 
 .flower-activity-inline-duration {
-  color: var(--flower-reading-secondary);
+  color: var(--flower-activity-tool-row-quiet);
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 400;
   letter-spacing: 0;
   line-height: 1.125rem;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.flower-activity-inline-row-running .flower-activity-inline-title {
+.flower-activity-inline-row-running:has([data-floe-progress-shimmer='text']) .flower-activity-inline-title {
   font-weight: 500;
 }
 
 
-.flower-activity-inline-row-running .flower-activity-inline-button {
+.flower-activity-inline-row-running:has([data-floe-progress-shimmer='text']) .flower-activity-inline-button {
   color: var(--flower-activity-tool-row-foreground-strong);
-}
-
-.flower-activity-inline-row-success .flower-activity-inline-button {
-  color: var(--flower-activity-tool-row-foreground-complete);
 }
 
 .flower-activity-inline-chevron {
@@ -6357,17 +6327,11 @@ button.flower-composer-context-source:focus-visible,
 }
 
 .flower-activity-inline-row-subagents .flower-activity-inline-title,
-.flower-activity-inline-row-subagents .flower-activity-inline-detail,
-.flower-activity-inline-row-subagents .flower-activity-inline-duration {
+.flower-activity-inline-row-subagents .flower-activity-inline-detail {
   font-family: var(--font-sans, inherit);
 }
 
-.flower-activity-inline-row-subagents .flower-activity-inline-title {
-  font-weight: 500;
-}
-
 .flower-activity-inline-row-subagents .flower-activity-inline-detail {
-  color: var(--flower-reading-secondary);
   font-weight: 400;
 }
 
@@ -10718,14 +10682,7 @@ button.flower-attachment-preview-trigger:disabled {
   padding: 0.18rem 0.35rem;
 }
 
-.flower-subagent-detail-transcript .flower-activity-inline-title {
-  font-family: var(--font-sans, inherit);
-  font-size: 0.8125rem;
-  font-weight: 500;
-}
-
 .flower-subagent-detail-transcript .flower-activity-inline-detail,
-.flower-subagent-detail-transcript .flower-activity-inline-duration,
 .flower-subagent-detail-transcript .flower-activity-inline-status {
   font-family: var(--font-mono, Iosevka, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 0.75rem;
@@ -11768,6 +11725,8 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 @media (forced-colors: active) {
+  .flower-activity-inline,
+  :root[data-floe-shell-theme='hc-light'] .flower-activity-inline { --flower-activity-tool-row-quiet: CanvasText; }
 
   .flower-subagent-dropdown-row-running .flower-subagent-dropdown-name,
   .flower-subagent-status-label-running .flower-subagent-status-text {
@@ -11846,7 +11805,7 @@ button.flower-attachment-preview-trigger:disabled {
 
 .flower-activity-inline-row-web-search .flower-activity-inline-title,
 .flower-activity-inline-row-web-search .flower-activity-inline-detail { font-family: var(--font-sans, system-ui, sans-serif); }
-.flower-activity-inline-row-web-search .flower-activity-inline-detail { color: var(--flower-reading-secondary); font-weight: 400; }
+.flower-activity-inline-row-web-search .flower-activity-inline-detail { font-weight: 400; }
 
 .flower-restored-inputs { padding: 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; }
 .flower-restored-inputs > h4 { font-weight: 600; }
@@ -12532,10 +12491,9 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-activity-inline-goal { border-left: 0; padding-left: 0; }
 .flower-activity-inline-row-goal .flower-activity-inline-button { grid-template-columns: 1rem minmax(0, 1fr) auto; }
 .flower-activity-inline-row-goal .flower-activity-inline-copy { flex: 1; overflow: hidden; flex-direction: row; align-items: baseline; }
-.flower-activity-inline-row-goal .flower-activity-inline-title { flex: none; width: auto; font-weight: 500; }
+.flower-activity-inline-row-goal .flower-activity-inline-title { flex: none; width: auto; }
 .flower-activity-inline-row-goal .flower-activity-inline-detail { font-family: var(--font-sans); font-weight: 400; }
 .flower-activity-inline-row-goal .flower-activity-inline-detail::before { content: '·'; margin-right: 0.4rem; opacity: 0.5; }
-.flower-activity-inline-row-goal.flower-activity-inline-row-success .flower-activity-inline-icon { color: var(--muted-foreground); }
 .flower-activity-inline-row-goal:is([data-state='open'], [data-state='opening']) .flower-activity-inline-detail { visibility: hidden; }
 .flower-activity-inline-row-goal .flower-activity-inline-details-content { border: 0; padding: 0.125rem 0 0.625rem; background: transparent; box-shadow: none; }
 .flower-goal-review-body { display: grid; gap: 0.5rem; }

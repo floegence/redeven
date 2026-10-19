@@ -3,7 +3,8 @@ import './flower-feature.css';
 import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
 import { afterEach, expect, it } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
-import { activityItem, activityTimeline, adapter, liveBootstrap, renderSurfaceWithAdapterProps, subagentDetail, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+import { streamingFixture } from '../../../../flower_ui/testing/streamingFixture';
+import { activityItem, activityTimeline, adapter, deferred, liveBootstrap, renderSurfaceWithAdapterProps, subagentDetail, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
 const media = commands as unknown as {
   emulateMediaPreferences: (input: { forcedColors: 'active' | 'none' }) => Promise<void>;
@@ -35,7 +36,7 @@ async function mount() {
   const baseDetail = subagentDetail({ summary: child });
   const detail = { ...baseDetail, current: { ...baseDetail.current, activity: 'idle' as const, last_outcome: 'completed' as const, items: baseDetail.current.items!.map(item => item.kind === 'assistant' ? { ...item, text: markdown, live: false } : item.kind === 'tool' ? (() => {
     const { label, description, renderer, payload, chips, target_refs, ...facts } = item.activity!;
-    return { ...item, activity: { ...facts, status: 'success', presentation: { label, description, renderer, payload, chips, target_refs } } };
+    return { ...item, activity: { ...facts, status: 'success', started_at_unix_ms: 1000, ended_at_unix_ms: 3500, presentation: { label, description, renderer, payload, chips, target_refs } } };
   })() : item) } };
   const source = thread({ thread_id: 'type-parent', title: 'Flower reading hierarchy', subagents: [child], parent_events: {
     thread_id: 'type-parent', first_event_id: 'report', last_event_id: 'input_required', events: ['report', 'completed', 'failed', 'input_required'].map(kind => ({
@@ -48,7 +49,8 @@ async function mount() {
       activityItem({ item_id: 'query', tool_id: 'query', tool_name: 'threads.query', renderer: 'structured', label: 'Search conversations', started_at_unix_ms: 1000, ended_at_unix_ms: 3500,
         payload: { inputs: [{ title: 'query', content: 'release', format: 'text' }], rows_provided: true,
           rows: [{ title: 'Original release notes', meta: 'assistant', content: '已核对版本、时间和完整上下文。', format: 'text' }] } }),
-      ...(['error', 'pending', 'running', 'canceled'] as const).map(status => activityItem({ item_id: status, tool_id: status, tool_name: 'threads.query', renderer: 'structured', label: status + ' search', status, ...(status === 'error' ? { payload: { error: { message: 'The requested source is unavailable.', code: 'source_unavailable' } } } : {}) })),
+      ...(['error', 'pending', 'waiting', 'running', 'canceled'] as const).map(status => activityItem({ item_id: status, tool_id: status, tool_name: 'threads.query', renderer: 'structured', label: status + ' search', status, ...(status === 'error' ? { payload: { error: { message: 'The requested source is unavailable.', code: 'source_unavailable' } } } : {}) })),
+      activityItem({ item_id: 'subagents', tool_id: 'subagents', tool_name: 'subagents', renderer: 'subagent_operation', payload: { action: 'status', targets: [{ thread_id: child.thread_id, task_name: child.task_name, status: 'completed' }] } }),
     ] })] }] });
   const runtime = renderSurfaceWithAdapterProps({ ...adapter(), listThreads: async () => [source], loadThread: async () => liveBootstrap(source), loadSubagentDetail: async () => detail },
     { focusThreadRequest: { request_id: 'typography', thread_id: source.thread_id } });
@@ -84,7 +86,7 @@ function background(node: HTMLElement): string {
 }
 const roles = [
   ['.flower-chat-md-block p', 14, 24.5], ['.flower-chat-md-block table', 13, 20],
-  ['.flower-activity-inline-title', 13, 20], ['.flower-activity-inline-duration', 12, 18],
+  ['.flower-activity-inline-title', 12, 18], ['.flower-activity-inline-duration', 11, 18],
   ['.flower-activity-error-message', 13, 21], ['.flower-activity-inline-details', 12, 20], ['.flower-activity-preview-text', 12, 20],
   ['.flower-parent-event-heading', 12, 18], ['.flower-parent-event-body', 13, 21], ['.flower-parent-event-action', 12, 18],
 ] as const;
@@ -95,6 +97,16 @@ it('keeps prose at 14px with smaller tables and consistent tool/report roles in 
     expect(parseFloat(style.lineHeight), selector).toBeCloseTo(line);
   }
   expect(getComputedStyle(element(runtime, '.flower-activity-error-message')).fontWeight).toBe('400');
+  expect(getComputedStyle(element(runtime, '.flower-chat-md-block p')).fontWeight).toBe('400');
+  expect(getComputedStyle(element(runtime, '.flower-activity-inline')).borderLeftWidth).toBe('0px');
+  for (const state of ['query', 'error', 'pending', 'waiting', 'canceled', 'subagents']) {
+    const row = element(runtime, '[data-flower-activity-item-id="' + state + '"]');
+    const title = element(row, '.flower-activity-inline-title');
+    expect(getComputedStyle(title).fontWeight, state).toBe('400');
+    expect(getComputedStyle(element(row, '.flower-activity-inline-icon')).color, state).toBe(getComputedStyle(title).color);
+    expect(getComputedStyle(title).color, state).not.toBe(getComputedStyle(element(runtime, '.flower-chat-md-block p')).color);
+  }
+  expect(getComputedStyle(element(runtime, '.flower-activity-inline-row-running .flower-activity-inline-title')).fontWeight).toBe('500');
   expect(getComputedStyle(element(runtime, 'table code')).fontSize).toBe('12.48px');
   expect(getComputedStyle(element(runtime, 'td')).paddingTop).toBe('8px');
   expect(getComputedStyle(element(runtime, 'td + td')).paddingLeft).toBe('12px');
@@ -107,10 +119,47 @@ it('keeps prose at 14px with smaller tables and consistent tool/report roles in 
   expect(trigger.getBoundingClientRect().height).toBeGreaterThanOrEqual(32);
   await media.emulateTouchInput(true); expect(trigger.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
 });
+it('emphasizes only confirmed running tools and quiets them when the canonical result arrives', async () => {
+  await page.viewport(1100, 1000); theme('porcelain-light');
+  const fixture = streamingFixture(1, 0);
+  const current = fixture.current();
+  const activity = activityItem({ item_id: 'live-tool', tool_id: 'live-tool', tool_name: 'threads.query', status: 'running' });
+  fixture.replace({ ...current, view_version: current.view_version + 1, items: [
+    { id: 'live-answer', ordinal: 1, kind: 'assistant', turn_id: current.turn_id, run_id: current.run_id, text: 'The answer remains the primary reading surface.' },
+    { id: 'live-tool', ordinal: 2, kind: 'tool', turn_id: current.turn_id, run_id: current.run_id, activity },
+  ] });
+  const confirmed = deferred<void>();
+  const runtime = renderSurfaceWithAdapterProps({ ...fixture.adapter, async *connectLiveStream(input) {
+    await confirmed.promise;
+    yield* fixture.adapter.connectLiveStream!(input);
+  } }, { focusThreadRequest: { request_id: 'live-typography', thread_id: fixture.thread.thread_id } });
+  await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="live-tool"]')));
+  const unconfirmed = element(runtime, '[data-flower-activity-item-id="live-tool"] .flower-activity-inline-title');
+  expect(unconfirmed.hasAttribute('data-floe-progress-shimmer')).toBe(false);
+  expect(getComputedStyle(unconfirmed).fontWeight).toBe('400');
+  expect(getComputedStyle(unconfirmed).color).not.toBe(getComputedStyle(element(runtime, '.flower-chat-md-block p')).color);
+  confirmed.resolve();
+  await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="live-tool"] [data-floe-progress-shimmer="text"]')));
+  const row = element(runtime, '[data-flower-activity-item-id="live-tool"]');
+  const title = element(row, '.flower-activity-inline-title');
+  const prose = element(runtime, '.flower-chat-md-block p');
+  expect(getComputedStyle(title).fontSize).toBe('12px');
+  expect(getComputedStyle(title).fontWeight).toBe('500');
+  expect(getComputedStyle(title).color).toBe(getComputedStyle(prose).color);
+  const running = fixture.current();
+  fixture.replace({ ...running, view_version: running.view_version + 1, activity: 'idle', last_outcome: 'completed', run_progress: undefined,
+    items: running.items!.map(item => item.id === 'live-tool' ? { ...item, activity: { ...activity, status: 'success' } } : item) });
+  await waitFor(() => row.dataset.flowerActivityStatus === 'success');
+  expect(element(row, '.flower-activity-inline-title')).toBe(title);
+  expect(title.hasAttribute('data-floe-progress-shimmer')).toBe(false);
+  expect(getComputedStyle(title).fontWeight).toBe('400');
+  expect(getComputedStyle(title).color).not.toBe(getComputedStyle(prose).color);
+  expect(row.getAnimations({ subtree: true })).toHaveLength(0);
+});
 it.each(['standard', 'soft-neumorphic'])('keeps actual tools and parent events readable across every theme with %s material', async material => {
   await page.viewport(1100, 1000); const runtime = await mount();
   const selectors = [...roles.map(([selector]) => selector), '.flower-activity-preview-meta', '.flower-parent-event-source',
-    '.flower-parent-event-heading time', '.flower-parent-event-status', ...['success', 'error', 'pending', 'running', 'canceled'].map(state => '.flower-activity-inline-row-' + state + ' .flower-activity-inline-icon')];
+    '.flower-parent-event-heading time', '.flower-parent-event-status', ...['success', 'error', 'pending', 'waiting', 'running', 'canceled'].map(state => '.flower-activity-inline-row-' + state + ' .flower-activity-inline-icon')];
   for (const preset of builtInShellThemePresets) {
     theme(preset.name, material);
     for (const selector of selectors) for (const node of runtime.querySelectorAll<HTMLElement>(selector)) {
@@ -118,16 +167,27 @@ it.each(['standard', 'soft-neumorphic'])('keeps actual tools and parent events r
       expect.soft(contrast(getComputedStyle(node).color, background(node)), preset.name + '/' + material + ': ' + selector).toBeGreaterThanOrEqual(4.5);
       expect.soft(getComputedStyle(node).opacity, selector).toBe('1');
     }
+    for (const trigger of runtime.querySelectorAll<HTMLElement>('.flower-activity-inline-button:is(button)')) {
+      await userEvent.hover(trigger);
+      for (const node of trigger.querySelectorAll<HTMLElement>('.flower-activity-inline-title, .flower-activity-inline-icon, .flower-activity-inline-duration, .flower-activity-inline-detail')) {
+        expect.soft(contrast(getComputedStyle(node).color, background(node)), preset.name + '/' + material + ': hovered ' + node.className).toBeGreaterThanOrEqual(4.5);
+      }
+    }
   }
 });
-it.each(['porcelain-light', 'classic-dark', 'solarized-light'])('renders the complete design with real components in %s', async name => {
+it.each(['porcelain-light', 'classic-dark', 'solarized-light', 'cloud-white', 'soft-black'])('renders the complete design with real components in %s', async name => {
   await page.viewport(1100, 1000); theme(name); const runtime = await mount();
+  element(runtime, '.flower-parent-event-disclosure').click();
+  element(runtime, '.flower-chat-md-block p').scrollIntoView({ block: 'start' });
   await page.screenshot({ element: runtime, path: '__screenshots__/flower-typography/production-' + name + '.png' });
   element(runtime, '.flower-parent-event-source').click(); await waitFor(() => Boolean(document.querySelector('.flower-subagent-detail-transcript .flower-chat-md-block p')));
   await waitFor(() => document.querySelector<HTMLElement>('.flower-subagent-detail-window')?.dataset.floatingPresence === 'open');
   const ledger = element(document, '.flower-subagent-detail-window');
   expect(getComputedStyle(element(ledger, '.flower-subagent-detail-overview-meta')).fontSize).toBe('12px');
-  expect(getComputedStyle(element(ledger, '.flower-activity-inline-title')).fontSize).toBe('13px');
+  expect(getComputedStyle(element(ledger, '.flower-activity-inline-title')).fontSize).toBe('12px');
+  expect(getComputedStyle(element(ledger, '.flower-activity-inline-title')).fontWeight).toBe('400');
+  expect(getComputedStyle(element(ledger, '.flower-activity-inline-duration')).fontSize).toBe('11px');
+  expect(getComputedStyle(element(ledger, '.flower-activity-inline-duration')).fontFamily).toBe(getComputedStyle(element(runtime, '.flower-activity-inline-duration')).fontFamily);
   expect(getComputedStyle(element(ledger, '.flower-activity-inline-title')).fontFamily).toBe(getComputedStyle(element(runtime, '.flower-activity-inline-title')).fontFamily);
   expect(getComputedStyle(element(ledger, '.flower-chat-md-block p')).fontSize).toBe('14px');
   for (const preset of builtInShellThemePresets) {
@@ -151,7 +211,7 @@ it.each([320, 390])('keeps the actual surface within %i px at normal and doubled
   }
 });
 it('uses native forced-color text and visible keyboard focus for activity controls', async () => {
-  await page.viewport(1100, 1000); const runtime = await mount(); await media.emulateMediaPreferences({ forcedColors: 'active' });
+  await page.viewport(1100, 1000); theme('hc-light'); const runtime = await mount(); await media.emulateMediaPreferences({ forcedColors: 'active' });
   const probe = document.createElement('span'); probe.style.color = 'CanvasText'; runtime.append(probe);
   for (const selector of ['.flower-parent-event-body', '.flower-parent-event-status', '.flower-activity-inline-title']) expect(getComputedStyle(element(runtime, selector)).color).toBe(getComputedStyle(probe).color);
   const trigger = element(runtime, '[data-flower-activity-item-id="query"] button');
