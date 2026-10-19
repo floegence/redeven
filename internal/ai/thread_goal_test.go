@@ -161,8 +161,16 @@ func TestFlowerGoalReflectionUsesExistingContextAndExcludesDefaultTodo(t *testin
 	if err != nil || current.Goal == nil || current.Goal.Status != "completed" {
 		t.Fatalf("goal=%+v err=%v", current.Goal, err)
 	}
+	publicJSON, err := MarshalFlowerCurrentView(current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var publicCurrent flruntime.ThreadView
+	if err := json.Unmarshal(publicJSON, &publicCurrent); err != nil {
+		t.Fatal(err)
+	}
 	foundReview := false
-	for _, item := range current.Items {
+	for _, item := range publicCurrent.Items {
 		if item.Activity == nil || item.Activity.ToolName != "goal" {
 			continue
 		}

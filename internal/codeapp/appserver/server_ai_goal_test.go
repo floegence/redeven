@@ -3,6 +3,7 @@ package appserver
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -13,9 +14,110 @@ import (
 	"testing/fstest"
 	"time"
 
+	flruntime "github.com/floegence/floret/v7/runtime"
+	fltools "github.com/floegence/floret/v7/tools"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/session"
 )
+
+func TestServerAIGoalReviewDetailPreservesEvidenceWhileWaitingForUser(t *testing.T) {
+	const objective = "Deliver the result after confirming the target"
+	const evidence = "The target must be selected by the user."
+	var calls atomic.Int32
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct{ Tools []json.RawMessage }
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		writeEvent := func(event any) {
+			encoded, err := json.Marshal(event)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			fmt.Fprintf(w, "data: %s\n\n", encoded)
+			w.(http.Flusher).Flush()
+		}
+		if len(request.Tools) == 0 {
+			writeEvent(map[string]any{"type": "response.output_text.delta", "delta": "Confirm target"})
+		} else {
+			step := calls.Add(1)
+			name, args := "goal", `{"operation":"review","expected_version":1,"outcome":"blocked","evidence":"The target must be selected by the user."}`
+			if step > 1 {
+				name, args = "ask_user", `{"reason_code":"user_decision_required","required_from_user":["target"],"evidence_refs":[],"questions":[{"id":"target","header":"Target","question":"Which target should be used?","response_mode":"write","is_secret":false}]}`
+			}
+			callID := fmt.Sprintf("goal-review-%d", step)
+			item := map[string]any{"type": "function_call", "id": callID, "call_id": callID, "name": name, "arguments": args}
+			for _, event := range []string{"response.output_item.added", "response.output_item.done"} {
+				writeEvent(map[string]any{"type": event, "output_index": 0, "item": item})
+			}
+		}
+		writeEvent(map[string]any{"type": "response.completed", "response": map[string]any{"id": "goal-review-response", "model": "gpt-5-mini", "status": "completed"}})
+		io.WriteString(w, "data: [DONE]\n\n")
+		w.(http.Flusher).Flush()
+	}))
+	defer provider.Close()
+	cfg := appserverTestAIConfig()
+	cfg.Providers[0].BaseURL = provider.URL + "/v1"
+	dir := t.TempDir()
+	svc, err := ai.NewService(ai.Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: dir, AgentHomeDir: dir, Shell: "/bin/sh", Config: cfg,
+		ResolveProviderAPIKey: func(string) (string, bool, error) { return "fixture", true, nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer svc.Close()
+	meta := session.Meta{ChannelID: "ch_ai_readiness", EndpointID: "env_goal_review", NamespacePublicID: "ns", UserPublicID: "user", CanRead: true, CanWrite: true, CanExecute: true}
+	server, origin := newAIReadinessTestServer(t, newStaticAIServiceProvider(svc), meta)
+	_, current, err := svc.ManageThreadGoal(t.Context(), &meta, ai.ThreadGoalRequest{StorageGeneration: svc.StorageGeneration(), ClientRequestID: "goal", Operation: "set", Text: objective, NewThread: &ai.CreateThreadRequest{ModelID: "openai/gpt-5-mini"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SendUserTurn(t.Context(), &meta, ai.SendUserTurnRequest{ClientRequestID: "send", ThreadID: current.ThreadID.String(), Input: ai.RunInput{Text: "Complete the requested work"}}); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		detail, err := svc.GetFlowerThreadDetail(t.Context(), &meta, current.ThreadID.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(detail.Current.Interactions) == 1 && !detail.Current.Interactions[0].Resolved {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("Goal review did not reach the user interaction: calls=%d activity=%s failure=%+v items=%+v", calls.Load(), detail.Current.Activity, detail.Current.Failure, detail.Current.Items)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	response := performServerRequest(server, http.MethodGet, "/_redeven_proxy/api/ai/threads/"+current.ThreadID.String(), origin, "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("thread detail status=%d body=%s", response.Code, response.Body.String())
+	}
+	var wire struct {
+		Data struct{ Current flruntime.ThreadView }
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &wire); err != nil {
+		t.Fatal(err)
+	}
+	view := wire.Data.Current
+	if view.Goal == nil || view.Goal.Status != "active" || len(view.Interactions) != 1 || view.Interactions[0].Resolved || calls.Load() != 2 {
+		t.Fatalf("HTTP detail changed waiting or Goal state: %s", response.Body.String())
+	}
+	for _, item := range view.Items {
+		if item.Activity == nil || item.Activity.ToolName != "goal" {
+			continue
+		}
+		goal := item.Activity.Presentation.Payload.(fltools.StructuredActivityPayload).Goal
+		if goal == nil || goal.Text != objective || goal.Outcome != "blocked" || goal.Evidence != evidence {
+			t.Fatalf("HTTP Goal activity lost canonical review: %+v", goal)
+		}
+		return
+	}
+	t.Fatal("HTTP detail is missing the Goal activity")
+}
 
 func TestServerAIGoalMutationWithoutUserTurn(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))

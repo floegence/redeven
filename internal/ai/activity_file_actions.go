@@ -305,6 +305,14 @@ func sanitizeActivityPayloadValue(value any, renderer fltools.ActivityRenderer, 
 		if _, ok := allowed[key]; !ok {
 			continue
 		}
+		if key == "goal" {
+			if strings.TrimSpace(toolName) == "goal" {
+				if goal := sanitizeGoalActivityValue(item); goal != nil {
+					out[key] = goal
+				}
+			}
+			continue
+		}
 		if key == "mutations" {
 			if mutations := sanitizeActivityPayloadMutations(item); len(mutations) > 0 {
 				out[key] = mutations
@@ -344,6 +352,28 @@ func sanitizeActivityPayloadValue(value any, renderer fltools.ActivityRenderer, 
 		return nil, false
 	}
 	return out, true
+}
+
+func sanitizeGoalActivityValue(value any) *fltools.GoalActivity {
+	record, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	raw, err := json.Marshal(record)
+	if err != nil {
+		return nil
+	}
+	// Decode only the published display fields and use Floret's validation.
+	// Preserve the exact objective and evidence without generic preview fitting.
+	var goal fltools.GoalActivity
+	if err := json.Unmarshal(raw, &goal); err != nil {
+		return nil
+	}
+	activity := fltools.ActivityPresentation{Renderer: fltools.ActivityRendererStructured, Payload: fltools.StructuredActivityPayload{Goal: &goal}}
+	if err := activity.Validate(); err != nil {
+		return nil
+	}
+	return &goal
 }
 
 func sanitizeStructuredActivityRows(value any) []any {
@@ -617,7 +647,7 @@ func activityPayloadAllowedKeys(renderer fltools.ActivityRenderer) map[string]st
 	case fltools.ActivityRendererCompletion:
 		return stringSet("result", "evidence_refs", "remaining_risks", "next_actions", "truncated", "summary", "details", "status", "error", "content_ref")
 	case fltools.ActivityRendererStructured:
-		return stringSet("operation", "status", "display_name", "summary", "duration_ms", "error", "rows", "inputs", "rows_provided")
+		return stringSet("operation", "status", "display_name", "summary", "duration_ms", "error", "rows", "inputs", "rows_provided", "goal")
 	default:
 		return nil
 	}
