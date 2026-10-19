@@ -14,7 +14,7 @@ export type FlowerProviderType =
   | 'openai_compatible';
 
 export type FlowerWebSearchSource = 'native' | 'brave';
-export type FlowerWebSearchPolicy = Readonly<{ editable: boolean; default_enabled: boolean; default_model_enabled: boolean; enabled: boolean; source: FlowerWebSearchSource; supported_sources: readonly FlowerWebSearchSource[] }>;
+export type FlowerWebSearchPolicy = Readonly<{ editable: boolean; default_enabled: boolean; default_model_enabled: boolean; default_fetch_source: 'direct' | 'deepseek'; enabled: boolean; source: FlowerWebSearchSource; supported_sources: readonly FlowerWebSearchSource[] }>;
 
 export type FlowerReasoningLevel = 'default' | 'off' | 'on' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 

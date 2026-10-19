@@ -24,6 +24,7 @@ export function readFlowerModelDirectory(value: unknown): FlowerModelDirectory {
   const invalidSearchPolicies = [directory?.search_policies, directory?.provider_search_policies].some(policies => policies !== undefined && (!policies || typeof policies !== 'object' || Array.isArray(policies)
     || Object.entries(policies).some(([key, policy]) => !key.trim() || !policy
       || [policy.editable, policy.default_enabled, policy.default_model_enabled, policy.enabled].some(flag => typeof flag !== 'boolean')
+      || !['direct', 'deepseek'].includes(policy.default_fetch_source)
       || !['native', 'brave'].includes(policy.source) || !Array.isArray(policy.supported_sources)
       || new Set(policy.supported_sources).size !== policy.supported_sources.length
       || policy.supported_sources.some(source => !['native', 'brave'].includes(source)))));

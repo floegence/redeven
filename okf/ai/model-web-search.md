@@ -33,7 +33,8 @@ explicit preferences. DeepSeek uses the published Floret capability query for
 Flash independent Search and Pro hosted search; unknown wire identities cannot
 be enabled. No second host routing catalog exists.
 
-config.ResolveAIWebSearchPolicy supplies provider defaults and editor capability;
+config.ResolveAIWebSearchPolicy supplies provider defaults, the default page-reader
+source and editor capability;
 config.ResolveAIWebSearch resolves the configured model identity, aliases,
 provider/model intent and Brave key presence. Directory responses include provider
 policies and model web_search projections with status, reason,
@@ -51,8 +52,11 @@ key deletion or removal of the provider deletes a stored key.
 
 Turn preparation freezes hosted search as Floret HostedToolDefinition; Brave and
 DeepSeek independent Search are native Floret local tools under existing
-permission checks. DeepSeek page reading independently selects Direct or Fetch
-with Direct as the omitted default. Source bindings live only in the canonical
+permission checks. With provider search enabled, an omitted page-reader setting
+uses the backend default: DeepSeek Fetch for DeepSeek connections and Direct for
+other connections. With search disabled, omission selects Direct. An explicit
+Direct or DeepSeek Fetch choice remains authoritative across search toggles.
+Source bindings live only in the canonical
 first-provider surface annotations; keys resolve at dispatch. The prompt reads the final local
 and hosted tools. Browser search is an alternative only when computer/browser
 tools are present and the existing authorized target discovery and selection

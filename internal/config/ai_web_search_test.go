@@ -66,8 +66,8 @@ func TestDeepSeekSearchRoutingAndDefaults(t *testing.T) {
 }
 func TestWebFetchConfiguration(t *testing.T) {
 	p := AIProvider{Type: "deepseek"}
-	if p.WebFetchSource() != "direct" {
-		t.Fatal("changed direct default")
+	if p.WebFetchSource() != "deepseek" {
+		t.Fatal("DeepSeek search must default to the matching page reader")
 	}
 	p.WebFetch = &AIProviderWebFetch{Source: "deepseek"}
 	if err := p.validateWebFetch(); err != nil {
@@ -80,6 +80,29 @@ func TestWebFetchConfiguration(t *testing.T) {
 	p.WebFetch = &AIProviderWebFetch{Source: "unknown"}
 	if err := p.validateWebFetch(); err == nil {
 		t.Fatal("accepted invalid source")
+	}
+}
+
+func TestWebFetchDefaultsFollowSearchAndPreserveExplicitChoice(t *testing.T) {
+	for _, providerType := range []string{"deepseek", " DeepSeek ", "openai", "openai_compatible", "anthropic"} {
+		for _, searchEnabled := range []bool{false, true} {
+			for _, source := range []string{"", "direct", "deepseek"} {
+				p := AIProvider{Type: providerType, WebSearch: &AIProviderWebSearch{Enabled: searchEnabled, Source: AIWebSearchSourceNative}}
+				if source != "" {
+					p.WebFetch = &AIProviderWebFetch{Source: source}
+				}
+				want := source
+				if want == "" {
+					want = "direct"
+					if (providerType == "deepseek" || providerType == " DeepSeek ") && searchEnabled {
+						want = "deepseek"
+					}
+				}
+				if got := p.WebFetchSource(); got != want {
+					t.Fatalf("type=%q search=%v source=%q: got %q, want %q", providerType, searchEnabled, source, got, want)
+				}
+			}
+		}
 	}
 }
 

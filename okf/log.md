@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-19 — Consistent DeepSeek web defaults
+
+- Keep search enabled by default and select DeepSeek Fetch when search is on and no reader is specified. Preserve explicit search and reader preferences, canonical frozen Turn bindings, and backend-owned defaults in [model web search](ai/model-web-search.md) and [provider configuration](ui/flower-provider-configuration.md).
+
 ## 2026-10-19 — Responsive Flower conversation selection
 
 - Acknowledge [sidebar navigation](ui/flower-thread-sidebar.md) before committing transcript work, keep the previous conversation inert during the transition, and retain draft/action ownership. Move size containment to the stable row owner so native pin reordering preserves visible titles in shipped Electron; qualify with synthetic Desktop geometry, trace and click measurements.

@@ -37,6 +37,7 @@ type AIWebSearchPolicy struct {
 	Editable            bool     `json:"editable"`
 	DefaultEnabled      bool     `json:"default_enabled"`
 	DefaultModelEnabled bool     `json:"default_model_enabled"`
+	DefaultFetchSource  string   `json:"default_fetch_source"`
 	Enabled             bool     `json:"enabled"`
 	Source              string   `json:"source"`
 }
@@ -61,6 +62,10 @@ func ResolveAIWebSearchPolicy(provider AIProvider) AIWebSearchPolicy {
 	typ := strings.ToLower(strings.TrimSpace(provider.Type))
 	editable := (typ == "deepseek" || NativeAIWebSearchMode(typ) != AIWebSearchDisabled) && typ != "redeven_platform"
 	out := AIWebSearchPolicy{Editable: editable, DefaultEnabled: editable && typ != "openai_compatible", DefaultModelEnabled: typ == "openai" || typ == "openai_compatible" || typ == "deepseek", Source: AIWebSearchSourceNative}
+	out.DefaultFetchSource = "direct"
+	if typ == "deepseek" {
+		out.DefaultFetchSource = "deepseek"
+	}
 	if editable {
 		out.SupportedSources = []string{AIWebSearchSourceNative}
 		if typ == "openai_compatible" {
