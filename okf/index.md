@@ -253,6 +253,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Flower timeline ordering](ui/flower-timeline-ordering.md) - Consume canonical turn pages, projections, decorations, cursors, and replacement events.
 - [Flower terminal turn process disclosure](ui/flower-turn-process-disclosure.md) - Control ended work manually and collapse successful work automatically while retaining conclusions, reading position and historical outcomes.
 - [Flower reasoning selection ownership](ui/flower-reasoning-selection.md) - Preserve explicit reasoning choices through cold loading, shared drafts, and restart.
+- [Flower personal conversation preferences](ui/flower-conversation-preferences.md) - Persist explicit model, directory, and model-owned reasoning choices without importing thread settings into future defaults.
 - [Flower model and navigation presentation](ui/flower-model-navigation.md) - Keep model-source controls, notifications, and staged thread selection explicit.
 - [Flower setup and settings](ui/flower-setup-and-settings.md) - Configure Flower through clear setup destinations and flat settings sections while preserving drafts and permission ownership.
 - [Flower provider configuration](ui/flower-provider-configuration.md) - Complete provider access before configuring models, with clear authentication selection and stable catalog interaction.
