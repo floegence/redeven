@@ -33,8 +33,8 @@ function normalizeRuntimeServiceSnapshot(value: unknown) {
 }
 
 describe('runtimeService', () => {
-  it('publishes the backend web-default policy compatibility window', () => {
-    expect(RUNTIME_SERVICE_COMPATIBILITY_EPOCH).toBe(65);
+  it('publishes the personal preferences and backend web-default policy compatibility window', () => {
+    expect(RUNTIME_SERVICE_COMPATIBILITY_EPOCH).toBe(66);
     expect(RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION).toBe('v0.13.0');
     expect(RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION).toBe('v0.13.0');
   });
