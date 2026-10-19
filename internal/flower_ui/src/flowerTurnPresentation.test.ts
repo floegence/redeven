@@ -20,6 +20,23 @@ const thinking: MessageEntry = {
 };
 
 describe('canonical turn process presentation', () => {
+  it.each(['failed', 'cancelled', 'interrupted'] as const)('collapses historical %s work after a newer ordinary turn starts', outcome => {
+    const old = turn({ outcome, final_item_ids: [], final_boundary_complete: false });
+    const next = turn({ turn_id: 'next', run_id: 'next-run', outcome: undefined, ended_at: undefined });
+    expect(projectFlowerTurnProcess([thinking, ...entries], [old, next]).groups.get('turn')?.disclosure).toBe('automatic');
+    expect(projectFlowerTurnProcess([thinking, ...entries], [old, turn({ turn_id: 'compact', kind: 'context_compaction' })]).groups.get('turn')?.disclosure).toBe('manual');
+  });
+  it.each(['set', 'completed', 'delete'] as const)('folds canonical in-turn Goal %s facts and leaves unowned or mismatched edits visible', operation => {
+    const goal = { goal: { version: 1, text: 'Verify changes', status: 'active' as const, actor: 'model' as const }, actor: 'model' as const, operation, at: '2026-10-18T12:00:00Z' };
+    const model: MessageEntry = { ...entry('goal'), message: { ...entry('goal').message, role: 'system', goal } };
+    const independent: MessageEntry = { ...model, key: 'independent-goal', message: { ...model.message, id: 'independent-goal', turn_id: undefined, run_id: undefined } };
+    const mismatched: MessageEntry = { ...model, key: 'mismatched-goal', message: { ...model.message, id: 'mismatched-goal', run_id: 'other-run' } };
+    const projected = projectFlowerTurnProcess([entries[0], model, thinking, independent, mismatched, ...entries.slice(1)], [turn()]);
+    expect(projected.groups.get('turn')?.processKeys).toEqual(['goal', 'thinking', 'progress']);
+    expect(projected.rows.has('independent-goal')).toBe(false);
+    expect(projected.rows.get('mismatched-goal')?.processKeys).not.toContain('mismatched-goal');
+  });
+
   const events: FlowerTimelineEntry[] = parentProcessEvents.map((event) => ({ type: 'parent_event', key: 'parent-event:' + event.id, event }));
   it('folds all eleven canonical child dynamics with failed work, including late receipts', () => {
     const projected = projectFlowerTurnProcess([thinking, ...entries, ...events], [turn({ outcome: 'failed', intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })]);
@@ -52,11 +69,11 @@ describe('canonical turn process presentation', () => {
     expect(projectFlowerTurnProcess([resolved], [turn()]).groups.get('turn')?.processKeys).toEqual(['pending']);
   });
   it.each([
-    ['computer.screenshot', `computer://browser/${'a'.repeat(64)}`, 'manual'],
+    ['computer.screenshot', `computer://browser/${'a'.repeat(64)}`, 'automatic'],
     ['computer.screenshot', 'computer://browser/invalid', 'automatic'],
     ['computer.screenshot', undefined, 'automatic'],
     ['computer.observe', `computer://browser/${'a'.repeat(64)}`, 'automatic'],
-  ] as const)('keeps saved screenshot turns visible for %s with %s', (tool_name, resource_ref, disclosure) => {
+  ] as const)('collapses successful work including %s with %s', (tool_name, resource_ref, disclosure) => {
     const item: FlowerActivityItem = { item_id: 'capture', tool_id: 'capture', tool_name, kind: 'tool', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
       target_refs: resource_ref ? [{ kind: 'computer_frame', label: 'Saved screenshot', resource_ref }] : [],
     };

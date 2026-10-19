@@ -54,7 +54,10 @@ execution and reflection; deletion only cancels future Goal checks.
 /goal opens the inline composer panel; /goal text creates or replaces the Goal;
 /goal clear deletes it. The composer summary opens the same panel. Escape closes
 it and restores focus. Creation, updates, deletion and completion show actor and
-history; reflection uses a lightweight status. Editing remains available during
+history; reflection uses a lightweight status. Goal tools and typed changes with
+canonical turn/run ownership share that turn's [process disclosure](../ui/flower-turn-process-disclosure.md).
+Independent user edits without that ownership stay visible; the composer Goal
+summary, editing and recovery controls always remain reachable. Editing remains available during
 execution, questions and approval. New-conversation Goal creation saves settings
 and Goal only, with no model call or invented Turn.
 

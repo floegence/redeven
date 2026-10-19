@@ -1,6 +1,5 @@
 import type { FlowerRuntimeTurn } from './contracts/flowerSurfaceContracts';
 import type { FlowerTimelineEntry } from './flowerTimelineProjection';
-import { isSavedComputerScreenshot } from './flowerActivityPresentation';
 
 export type FlowerTurnDisclosurePolicy = 'none' | 'manual' | 'automatic';
 
@@ -21,11 +20,11 @@ export type FlowerTurnProcessProjection = Readonly<{
 
 export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[], turns: readonly FlowerRuntimeTurn[] = [], pendingTurnIDs: readonly string[] = []): FlowerTurnProcessProjection {
   const facts = new Map(turns.map((turn) => [turn.turn_id, turn]));
+  const latestTurnID = turns.filter((turn) => !turn.kind).at(-1)?.turn_id;
   const groups = new Map<string, string[]>();
   const rowTurns = new Map<string, string>();
   const eventCounts = new Map<string, number>();
   const terminalKeys = new Map<string, string>();
-  const screenshotTurns = new Set<string>();
   for (const entry of entries) {
     const id = entry.type === 'message' ? entry.message.turn_id : entry.type === 'parent_event' ? entry.event.parent_turn_id : undefined;
     if (!id) continue;
@@ -41,23 +40,26 @@ export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[]
       continue;
     }
     if (entry.type !== 'message') continue;
-    if (entry.blocks.some((block) => block.type === 'activity' && block.block.items.some(isSavedComputerScreenshot))) screenshotTurns.add(id);
     terminalKeys.set(id, entry.key);
-    const final = facts.get(id)?.final_item_ids.includes(entry.message.id);
+    const turn = facts.get(id);
+    const final = turn?.final_item_ids.includes(entry.message.id);
+    const goalProcess = entry.message.role === 'system' && Boolean(entry.message.goal)
+      && Boolean(turn && turn.run_id === entry.message.run_id);
     const dialogue = entry.message.role !== 'assistant' || entry.blocks.some((block) => block.type === 'input_response');
     // Only the canonical owner can classify prose as superseded. Unknown and
     // trailing partial output stay visible regardless of terminal outcome.
-    const intermediate = facts.get(id)?.run_id === entry.message.run_id
-      && facts.get(id)?.intermediate_item_ids?.includes(entry.message.id) && !entry.message.live;
+    const intermediate = turn?.run_id === entry.message.run_id
+      && turn?.intermediate_item_ids?.includes(entry.message.id) && !entry.message.live;
     const explicitProcess = entry.blocks.length > 0 && entry.blocks.every((block) => block.type === 'activity'
       || block.type === 'content' && block.block_type === 'thinking');
-    if (!final && !dialogue && (intermediate || explicitProcess)) groups.get(id)!.push(entry.key);
+    if (!final && (goalProcess || !dialogue && (intermediate || explicitProcess))) groups.get(id)!.push(entry.key);
   }
   const projected = new Map([...groups].map(([turnID, processKeys]) => {
     const turn = facts.get(turnID);
     const pending = pendingTurnIDs.includes(turnID);
     const disclosable = Boolean(turn?.outcome && turn.ended_at && !turn.kind && processKeys.length && !pending);
-    const disclosure: FlowerTurnDisclosurePolicy = !disclosable ? 'none' : turn?.outcome === 'completed' && !screenshotTurns.has(turnID) ? 'automatic' : 'manual';
+    const disclosure: FlowerTurnDisclosurePolicy = !disclosable ? 'none'
+      : turnID === latestTurnID && turn?.outcome !== 'completed' ? 'manual' : 'automatic';
     return [turnID, { turnID, turn, processKeys, parentEventCount: eventCounts.get(turnID) ?? 0, summaryKey: processKeys[0], terminalKey: terminalKeys.get(turnID), disclosure }];
   }));
   return { groups: projected, rows: new Map([...rowTurns].map(([key, turnID]) => [key, projected.get(turnID)!])) };

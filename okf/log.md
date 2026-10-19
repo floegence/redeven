@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-18 — Flower historical defaults and Goal disclosure
+
+- Default only the latest abnormal ordinary turn to expanded; fold historical abnormal work, successful screenshot work and owned Goal dynamics through the existing [process disclosure](ui/flower-turn-process-disclosure.md), preserving explicit choices, inspection and recovery controls.
+
 ## 2026-10-18 — Provider stream recovery and diagnosis
 
 - Consume published Floret v7.58.0 shared EOF classification; retain one Engine retry owner and one safe provider envelope. Require [Desktop RPC v3](desktop/desktop-session-model-source.md) under epoch 64, settle malformed/overflow/write failures, and keep [manual recovery](ui/flower-failure-recovery.md) bounded and available. See [provider ownership](ai/model-provider-surface-and-history.md#temporary-provider-failures).

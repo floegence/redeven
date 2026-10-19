@@ -71,7 +71,9 @@ export function FlowerTurnTimeline(props: Readonly<{
       if (menuOwner === turnID && document.querySelector('[role="menu"]')) return true;
       if (row.querySelector('details[open]')) return true;
       for (const button of row.querySelectorAll('[aria-expanded="true"]')) {
-        if (!button.closest('.flower-thinking-disclosure')) return true;
+        if (button.closest('.flower-thinking-disclosure')) continue;
+        if (button.matches('.flower-activity-inline-button') && button.getAttribute('data-flower-manual-open') !== 'true') continue;
+        return true;
       }
       if (selection && !selection.isCollapsed) {
         for (let i = 0; i < selection.rangeCount; i += 1) {
@@ -122,7 +124,7 @@ export function FlowerTurnTimeline(props: Readonly<{
     untrack(() => {
       if (!threadID) return;
       for (const group of groups.groups.values()) {
-        // The protection decision runs once, after final content has committed.
+        // Check protection after content commits, when defaults first settle or change.
         props.choices.observe(identity(group.turnID), group.disclosure,
           () => inspectionProtected(group.turnID, group.processKeys),
           (expanded) => {

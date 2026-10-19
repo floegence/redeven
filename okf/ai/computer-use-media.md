@@ -78,8 +78,11 @@ into a request for human inspection.
 A valid saved screenshot reference makes its Activity default open. Disclosure
 uses `manualOpen ?? defaultOpen`; updates never override a manual collapse.
 Choices stay local to the activity during the mounted UI session; reload restores
-the default. Completed turns containing a saved screenshot also default expanded
-through the existing turn disclosure store, preserving manual turn collapse.
+the default. Completed turns containing a saved screenshot default collapsed
+through the existing turn disclosure store. The automatically open image preview
+does not count as deliberate inspection; focus, selection and manual expansion
+retain the existing reading protection. Reopening the turn preserves the inner
+Activity disclosure and image retry controls.
 Other tools stay collapsed and may show attached images on expansion.
 Computer and browser screenshots in expanded Activity details use a compact
 thumbnail, bounded to 20rem wide with a 16:9 viewport and contain sizing. They
