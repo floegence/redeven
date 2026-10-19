@@ -49,6 +49,31 @@ function row(runtime: HTMLElement, id: string) {
 afterEach(() => document.documentElement.classList.remove('dark', 'light'));
 
 describe('Subagent inline capsules', () => {
+  it('renders inherited child activity without a broken source-child action', async () => {
+    const loadDetail = vi.fn();
+    const { runtime } = mount([operation('inherited', 'spawn', 1)], 0, { loadSubagentDetail: loadDetail });
+    await waitFor(() => Boolean(row(runtime, 'inherited')));
+    expect(row(runtime, 'inherited').textContent).toContain(targets[0]!.task_name);
+    expect(row(runtime, 'inherited').querySelector('[data-flower-subagent-capsule]')).toBeNull();
+    expect(document.querySelector('[data-flower-subagent-detail="open"]')).toBeNull();
+    expect(loadDetail).not.toHaveBeenCalled();
+  });
+
+  it('ignores source children even if a foreign summary appears in a fork snapshot', async () => {
+    const loadDetail = vi.fn();
+    const inherited = operation('fork-history', 'spawn', 1);
+    const snapshot = thread({ thread_id: 'fork-thread', messages: [{ ...inherited, blocks: [
+      { ...inherited.blocks[0]!, thread_id: 'fork-thread' },
+    ] }],
+      subagents: [subagentSummary({ ...targets[0]!, parent_thread_id: parentID })] });
+    const runtime = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [snapshot]),
+      loadThread: vi.fn(async () => liveBootstrap(snapshot)), loadSubagentDetail: loadDetail },
+    { focusThreadRequest: { request_id: 'fork-scope', thread_id: 'fork-thread' } });
+    await waitFor(() => Boolean(row(runtime, 'fork-history')));
+    expect(runtime.querySelector('[data-flower-subagent-capsule]')).toBeNull();
+    expect(loadDetail).not.toHaveBeenCalled();
+  });
+
   it('opens one agent immediately with keyboard and no disclosure or switcher', async () => {
     await page.viewport(1100, 900);
     const pending = deferred<ReturnType<typeof subagentDetail>>();

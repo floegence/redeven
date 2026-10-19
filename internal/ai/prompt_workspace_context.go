@@ -196,6 +196,9 @@ func (r *run) collectModelContextSnapshot(ctx context.Context, permission Flower
 		}
 	}
 	runtimeLines := []string{"Tool execution environment: terminal.exec runs on the AI runtime host. A user-selected device may be different; selection does not route a command.", "- Working directory: " + workspace.Environment.WorkingDir}
+	if threadID := strings.TrimSpace(r.threadID); threadID != "" {
+		runtimeLines = append(runtimeLines, "Current thread ID: "+threadID)
+	}
 	if endpoint := strings.TrimSpace(r.endpointID); endpoint != "" {
 		runtimeLines = append(runtimeLines, "Runtime endpoint ID: "+endpoint)
 	}

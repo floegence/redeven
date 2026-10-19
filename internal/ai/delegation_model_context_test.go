@@ -215,6 +215,54 @@ func TestFlowerProviderContextIgnoresChildInventoryChanges(t *testing.T) {
 	}
 }
 
+func TestFlowerProviderContextRefreshesThreadScopeAfterFork(t *testing.T) {
+	root := t.TempDir()
+	children := &delegationContextThreadService{}
+	now := func() time.Time { return time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC) }
+	gateway := delegationContextGateway(delegationContextDone(), delegationContextDone(), delegationContextDone())
+	service := delegationContextThread(t, gateway, func(ctx context.Context, request flruntime.ToolSurfaceRequest) (flruntime.ToolSurface, error) {
+		r := newRun(runOptions{WorkingDir: root, AgentHomeDir: root, ThreadID: request.ThreadID.String()})
+		r.ensureSkillManager().userHome = root
+		r.subagentRuntime = newServiceFloretSubagentRuntime(&Service{threadRuntime: children}, r)
+		snapshot, err := r.collectModelContextSnapshot(ctx, FlowerPermissionFullAccess, now)
+		return flruntime.ToolSurface{ModelContextSnapshot: snapshot}, err
+	})
+	source, err := service.Create(t.Context(), flruntime.CreateThreadInput{RequestKey: "source-scope"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	delegationContextSend(t, service, source.ThreadID, "before-fork", nil)
+	fork, err := service.Fork(t.Context(), flruntime.ForkThreadInput{SourceThreadID: source.ThreadID, RequestKey: "fork-scope"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	delegationContextSend(t, service, fork.ThreadID, "after-fork", nil)
+	delegationContextSend(t, service, fork.ThreadID, "same-scope", nil)
+	requests := gateway.Requests()
+	if len(requests) != 3 {
+		t.Fatalf("requests=%d", len(requests))
+	}
+	original := delegationContextUpdates(requests[0])
+	for _, request := range requests[1:] {
+		updates := delegationContextUpdates(request)
+		if len(updates) != 2 || len(original) != 1 || updates[0] != original[0] || !strings.Contains(updates[1], "Current thread ID: "+fork.ThreadID.String()) {
+			t.Fatalf("fork lost exact scope or repeated its update: %v", updates)
+		}
+		var delta struct {
+			Sections []flruntime.ModelContextSection
+		}
+		if err := json.Unmarshal([]byte(strings.SplitN(updates[1], "\n", 2)[1]), &delta); err != nil {
+			t.Fatal(err)
+		}
+		if len(delta.Sections) != 1 || delta.Sections[0].Key != "execution_environment" {
+			t.Fatalf("scope update changed unrelated facts: %+v", delta)
+		}
+	}
+	if children.reads.Load() != 0 {
+		t.Fatal("scope refresh queried child inventory")
+	}
+}
+
 func TestFlowerProviderContextRemovesExistingDelegationOnce(t *testing.T) {
 	root := t.TempDir()
 	r := newRun(runOptions{WorkingDir: root, AgentHomeDir: root})

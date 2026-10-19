@@ -3,7 +3,7 @@ type: AI Tool Contract
 title: Flower subagent runtime
 description: Canonical child threads, passive important events, scoped reads, and complete handoffs.
 tags: [ai, floret, subagents, permissions]
-timestamp: 2026-10-16T00:00:00Z
+timestamp: 2026-10-18T00:00:00Z
 ---
 # Summary
 
@@ -87,6 +87,12 @@ received versus added-to-context state, full read and source navigation. Both
 Env App and Desktop use an authorized recipient route with explicit pagination.
 The browser keeps only temporary reading/disclosure state.
 
+## Child ownership and historical references
+
+Forks copy conversation facts, never child ownership. Every child tool and detail/input route uses the current parent ThreadID. Missing or foreign `send_input` and `close` targets return an explicit `not_found` result, false admission/cancellation flags, and guidance to list current children; no authority, steering, or cancellation is dispatched. Canonical read failures remain errors. The execution-environment snapshot identifies the current thread and refreshes naturally after a fork without querying child inventories.
+
+Historical Activity preserves task facts and distinct child identities, but navigation is offered only for a canonical child of the selected thread. Panel projection, Activity actions, and the detail-open boundary all check current membership; a historical child ID never becomes a synthetic current child. Missing targets are presented as missing rather than completed or timed out.
+
 # Boundaries
 
 Task labels and previews are presentation, not identity or results. Redeven must not query Floret storage, persist child lifecycle or handoff projections, infer membership from activity, or reintroduce publication, permission-snapshot, recovery, receipt, output-budget, or authority-barrier state.
@@ -97,6 +103,7 @@ Task labels and previews are presentation, not identity or results. Redeven must
 - `redeven:internal/ai/subagents_floret.go` - Adapts subagent operations to typed Floret v7 child Thread methods.
 - `redeven:internal/ai/floret_tools.go` - Maps SubAgent calls and results into the typed operation Activity without losing action or target order.
 - `redeven:internal/ai/subagents_handoff_test.go` - Proves complete handoffs, timeout behavior, identity failures, and Activity separation.
+- `redeven:internal/ai/subagents_scope_test.go` - Proves non-mutating stale-target recovery, independent-root and fork isolation before/after restart, and provider continuation.
 - `redeven:internal/ai/delegation_model_context_test.go` - Checks actual provider requests for absent automatic overviews, one-time removal, capability refresh, and preserved management results.
 - `redeven:internal/ai/subagents_failure_test.go` - Proves canonical failure delivery to the parent model across list, wait, inspect, and retry.
 - `redeven:internal/ai/subagent_input_operations_test.go` - Proves immediate provider interruption, task identity, queue consumption, and authorization failures.

@@ -287,22 +287,22 @@ func (service *Service) ensureChildThreadSettings(ctx context.Context, parent *r
 	return service.threadsDB.CreateThreadSettings(ctxOrBackground(ctx), child)
 }
 
-func (runtime *floretSubagentRuntime) childSummary(ctx context.Context, childID string) (flruntime.ThreadSummary, error) {
+func (runtime *floretSubagentRuntime) childSummary(ctx context.Context, childID string) (flruntime.ThreadSummary, bool, error) {
 	_, parent, threads, err := runtime.boundaries()
 	if err != nil {
-		return flruntime.ThreadSummary{}, err
+		return flruntime.ThreadSummary{}, false, err
 	}
 	parentID := identity.ThreadID(strings.TrimSpace(parent.threadID))
 	items, err := threads.List(ctxOrBackground(ctx), flruntime.ThreadScope{ParentID: &parentID})
 	if err != nil {
-		return flruntime.ThreadSummary{}, err
+		return flruntime.ThreadSummary{}, false, err
 	}
 	for _, item := range items {
 		if item.ID.String() == strings.TrimSpace(childID) {
-			return item, nil
+			return item, true, nil
 		}
 	}
-	return flruntime.ThreadSummary{}, sql.ErrNoRows
+	return flruntime.ThreadSummary{}, false, nil
 }
 
 func (runtime *floretSubagentRuntime) sendInput(ctx context.Context, toolCallID string, args map[string]any) (map[string]any, error) {
@@ -315,9 +315,12 @@ func (runtime *floretSubagentRuntime) sendInput(ctx context.Context, toolCallID 
 	if target == "" || message == "" {
 		return nil, errors.New("subagents send_input requires target and message")
 	}
-	summary, err := runtime.childSummary(ctx, target)
+	summary, found, err := runtime.childSummary(ctx, target)
 	if err != nil {
-		return nil, errors.New("SubAgent target is not owned by the current parent")
+		return nil, err
+	}
+	if !found {
+		return subagentTargetNotFound(parent.threadID, target, subagentActionSendInput), nil
 	}
 	requestKey, err := subagentInputRequestID(parent.threadID, target, toolCallID)
 	if err != nil {
@@ -358,9 +361,12 @@ func (runtime *floretSubagentRuntime) close(ctx context.Context, toolCallID stri
 		return nil, err
 	}
 	target := strings.TrimSpace(anyToString(args["target"]))
-	summary, err := runtime.childSummary(ctx, target)
+	summary, found, err := runtime.childSummary(ctx, target)
 	if err != nil {
 		return nil, err
+	}
+	if !found {
+		return subagentTargetNotFound(parent.threadID, target, subagentActionClose), nil
 	}
 	result, err := threads.Cancel(ctxOrBackground(ctx), flruntime.CancelInput{
 		ThreadID:   summary.ID,
@@ -801,6 +807,22 @@ func (service *Service) GetFlowerSubagentDetail(ctx context.Context, meta *sessi
 		Summary: flowerSubagentSummaryFromSnapshot(snapshot),
 		Current: view,
 	}, nil
+}
+
+func subagentTargetNotFound(parentID, target, action string) map[string]any {
+	out := subagentBoundedResult(action, nil)
+	out["status"] = "not_found"
+	out["parent_thread_id"] = strings.TrimSpace(parentID)
+	out["target"] = target
+	out["requested_count"], out["found_count"], out["missing_count"] = 1, 0, 1
+	out["recovery_action"] = subagentActionList
+	out["message"] = "The target is not a child of the current thread. No action was taken. List the current thread's children before choosing a target; inherited history does not transfer child ownership. Spawn a new child explicitly if the work is still needed."
+	if action == subagentActionSendInput {
+		out["accepted"] = false
+	} else {
+		out["closed"], out["stopped"] = false, false
+	}
+	return out
 }
 
 func subagentBoundedResult(action string, items []map[string]any) map[string]any {

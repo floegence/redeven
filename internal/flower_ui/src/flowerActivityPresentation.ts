@@ -185,6 +185,7 @@ export type FlowerActivitySubagentMessageAction = Readonly<{
 }>;
 
 export type FlowerActivitySubagentDetailItem = Readonly<{
+  thread_id: string;
   name: string;
   description: string;
   agent_type: string;
@@ -773,13 +774,14 @@ function subagentDetailItemFromRecord(
     : '';
   if (!name) return null;
   return {
+    thread_id: threadID,
     name,
     description,
     agent_type: agentType,
     raw_status: normalizedStatus,
     status,
     show_status: item.renderer === 'subagent_operation' ? Boolean(status) : shouldShowSubagentStatus(rawStatus),
-    ...(threadID ? {
+    ...(threadID && copy?.subagentSummaries?.some(summary => trimString(summary.thread_id) === threadID) ? {
       open_messages: {
         thread_id: threadID,
       },
@@ -800,7 +802,7 @@ function uniqueSubagentDetailItems(items: readonly FlowerActivitySubagentDetailI
   const seen = new Set<string>();
   const out: FlowerActivitySubagentDetailItem[] = [];
   for (const item of items) {
-    const key = [item.open_messages?.thread_id, item.name, item.description].join('\x1e');
+    const key = [item.thread_id, item.name, item.description].join('\x1e');
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(item);
@@ -859,7 +861,7 @@ function subagentActionTitle(
   const statusTitle = (status: string, fallback: string): string => (
     actionTitle && normalizedAction !== 'unknown' ? `${actionTitle} · ${status}` : fallback
   );
-  const singleName = items.length === 1 && !items[0]?.open_messages ? trimString(items[0]?.name) : '';
+  const singleName = items.length === 1 && !items[0]?.thread_id ? trimString(items[0]?.name) : '';
   const withSingleName = (title: string): string => singleName ? `${title} · ${singleName}` : title;
   if (normalizedAction === 'spawn') {
     if (item.status === 'error') return withSingleName(activityCopy.titles.createFailed);
@@ -869,6 +871,7 @@ function subagentActionTitle(
   if (items.some((entry) => entry.raw_status === 'waiting_input')) {
     return statusTitle(subagentsCopy(copy).statusLabels.waiting_input, activityCopy.titles.needsInput);
   }
+  if (!isActive && missingCount > 0) return statusTitle(activityCopy.labels.missing, activityCopy.titles.operation);
   if (normalizedAction === 'wait') {
     if (requestedCount === 0) return timedOut ? activityCopy.titles.timedOut : activityCopy.actions.wait;
     if (timedOut) return activityCopy.titles.waitTimedOut(String(completedCount), countText);
