@@ -45,6 +45,12 @@ const reasonActionCases: readonly ReasonActionCase[] = [
 ];
 
 describe('createAIReadinessPresentation', () => {
+  it('offers only a status refresh after an unconfirmed readiness command', () => {
+    const projection = createAIReadinessPresentation(blocked('temporarily_blocked', { retry_reason: 'readiness_request_timeout' }), i18n);
+    expect(projection.mode).toBe('blocked');
+    expect(projection.primaryAction).toBe('refresh');
+    expect(projection.secondaryAction).toBe('show_diagnostics');
+  });
   it('fails closed for contradictory wire facts', () => {
     expect(normalizeAIReadinessSnapshot(blocked('store_io_error', {
       retryable: false,

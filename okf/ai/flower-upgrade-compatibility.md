@@ -45,9 +45,13 @@ upgrade matrix. The checked-in producer is provenance, not a current-code
 regeneration command.
 
 The source-only check validates closed fixture inventories, digests, provenance
-shape and the frozen migration package's dependency boundary. Normal push/PR CI
-does not run migration or model tests. The [final main gate](../release/ci-and-release-gates.md)
-runs real acceptance against published dependencies: every writer upgrades,
+shape and the frozen migration package's dependency boundary. Immutable
+`compaction-v7.64.0` and `compaction-v7.68.2` databases and producer source come
+from published Floret v7.68.3. They cover repeated automatic compaction,
+observations between tools, historical hashes, Fork and nested Fork. Product
+setup writes only product-owned settings. Normal push/PR CI and the
+[final main gate](../release/ci-and-release-gates.md) check source contracts;
+dedicated qualification runs real acceptance against published dependencies: every writer upgrades,
 history and read state remain, selected model settings survive, forks retain
 attachments, canonical child identity persists, and new turns complete with a
 controlled provider. A second startup must not repeat the upgrade.
@@ -58,14 +62,24 @@ tampered files, interrupted replacement at every rename, invalidated old
 approvals, non-replayed queues and explicit new submissions after restoration.
 Floret release adoption also passes its public v7 compatibility and independent
 published-module consumer checks before Redeven consumes the version.
+Published v7.68.3 atomically migrates proven compaction identities through
+schema 26 to 27 and upgrades provider-context lineage to v11 without modifying
+old requests. Redeven never interprets or repairs those opaque records.
+
+Historical compatibility is a hard release requirement. Dispatch
+`flower-history-qualification.yml` for the exact final main commit before
+tagging. Release-ref requires its successful Actions evidence before packaging
+can start. Failed, cancelled, missing or different-commit evidence blocks the
+release. Qualification uses fake providers and copied synthetic data; production
+startup never resumes a user's task automatically.
 
 # Boundaries
 
 Historical producers are immutable evidence, never helpers linked into current
 production code. Acceptance covers the declared supported writer baseline and
 owner migration lineages; it cannot establish compatibility with unrecorded
-experimental formats. Source-only CI validates provenance, while the exact-main
-gate owns execution and product continuation evidence.
+experimental formats. Source-only CI validates provenance; the dedicated exact
+commit qualification owns execution and product continuation evidence.
 
 # Evidence
 
@@ -73,6 +87,8 @@ gate owns execution and product continuation evidence.
 - `redeven:internal/ai/testdata/upgrade/10ce4c152-lifecycle/manifest.json` - Real lifecycle and committed-WAL writer provenance.
 - `redeven:scripts/check_flower_storage_compatibility.py` - Source-only immutable fixture and decoder checks.
 - `redeven:internal/ai/storage_compatibility_test.go` - All-writer product upgrade, continuation and restore acceptance.
+- `redeven:internal/ai/compaction_history_compatibility_test.go` - Released compaction history through product startup, continuation and restart.
+- `redeven:.github/workflows/flower-history-qualification.yml` - Dedicated exact-commit historical compatibility qualification.
 - `redeven:internal/ai/pending_input_migration_startup_test.go` - Cross-owner commit and retry boundary.
-- `redeven:scripts/check_final_integration.sh` - Exact-main acceptance owner.
+- `redeven:.github/workflows/release.yml` - Require exact-commit historical qualification before packaging.
 - `redeven:scripts/check_quick_ci.sh` - Bounded hosted source checks.

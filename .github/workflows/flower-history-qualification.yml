@@ -1,0 +1,30 @@
+name: Flower historical conversation compatibility
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GOWORK: "off"
+
+jobs:
+  history:
+    name: Historical upgrade and explicit continuation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact qualification source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Setup Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+      - name: Verify immutable historical writer sources
+        run: python3 scripts/check_flower_storage_compatibility.py
+      - name: Qualify product upgrade, continuation, restart and recovery
+        run: >-
+          go test ./internal/ai
+          -run 'TestFlowerEveryHistoricalWriterUpgradesAndContinues|TestFlowerReleasedCompactionWritersUpgradeAndContinue|TestFlowerRestoreLifecycleFixtureCannotResumeOldWork'
+          -count=1 -timeout=10m

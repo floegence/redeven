@@ -38,6 +38,16 @@ def check_fixture(directory):
 def main():
     manifests = [check_fixture(path) for path in sorted(FIXTURES.iterdir()) if path.is_dir()]
     assert any(item['redeven_commit'] == BASELINE and item['floret_version'] == 'v7.5.0' for item in manifests), 'compatibility baseline is missing'
+    compaction = sorted((ROOT / 'internal/ai/testdata').glob('compaction-v*'))
+    assert {'compaction-v7.64.0', 'compaction-v7.68.2'} <= {path.name for path in compaction}, 'released compaction writer baseline is missing'
+    for directory in compaction:
+        manifest = json.loads((directory / 'manifest.json').read_text())
+        assert re.fullmatch(r'[a-f0-9]{40}', manifest['writer_commit']), directory
+        assert directory.name == 'compaction-' + manifest['writer_version'], directory
+        assert {'repeated_automatic_compaction', 'legacy_hash_boundary', 'fork', 'nested_fork'} <= set(manifest['scenarios']), directory
+        assert set(manifest['files']) == {'history.sqlite', 'producer_test.go.txt'}, directory
+        for name, expected in manifest['files'].items():
+            assert sha((directory / name).read_bytes()) == expected, f'{directory}: historical writer bytes changed'
     frozen = ROOT / 'internal/ai/pendinginputlegacy'
     for file in frozen.glob('*.go'):
         if file.name.endswith('_test.go'):
@@ -48,7 +58,7 @@ def main():
     migration = (ROOT / 'internal/ai/pending_input_migration.go').read_text()
     for retired_dependency in ('session.Meta', 'decodeStrictJSON', 'normalizeAskFlowerContextActionEnvelope', 'normalizeToolTargetPolicy', 'floretContextProjectionForInput', 'floretTurnInputWithUploadLoader'):
         assert retired_dependency not in migration, f'migration depends on mutable decoder: {retired_dependency}'
-    print(f'Flower compatibility source checks passed ({len(manifests)} immutable writer fixtures).')
+    print(f'Flower compatibility source checks passed ({len(manifests)} product and {len(compaction)} compaction writer fixtures).')
 
 
 if __name__ == '__main__':

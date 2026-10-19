@@ -71,20 +71,24 @@ func TestPublishedFloretV7MigratesTargetThreadCopyAndAcceptsNewTurn(t *testing.T
 		prefixIDs[index] = item.ID
 	}
 
-	if _, err := service.Send(t.Context(), flruntime.SendInput{
+	accepted, err := service.Send(t.Context(), flruntime.SendInput{
 		ThreadID:   typedThreadID,
 		Input:      flruntime.UserInput{Text: "Continue this migrated thread with the current version."},
 		RequestKey: "redeven-v7-target-thread-new-turn",
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(60 * time.Second)
 	for {
 		after, viewErr := service.View(t.Context(), typedThreadID)
 		if viewErr != nil {
 			t.Fatal(viewErr)
 		}
-		if after.Activity == flruntime.ThreadActivityIdle && len(after.Items) >= len(prefixIDs)+2 {
+		if after.Activity == flruntime.ThreadActivityIdle && after.TurnID == accepted.TurnID {
+			if after.Failure != nil || after.LastOutcome == nil || *after.LastOutcome != flruntime.TurnOutcomeCompleted || len(after.Items) < len(prefixIDs)+2 {
+				t.Fatalf("target continuation failed: outcome=%v failure=%+v items=%d", after.LastOutcome, after.Failure, len(after.Items))
+			}
 			for index, id := range prefixIDs {
 				if after.Items[index].ID != id {
 					t.Fatalf("historical item prefix changed at %d: got %q want %q", index, after.Items[index].ID, id)
@@ -100,6 +104,9 @@ func TestPublishedFloretV7MigratesTargetThreadCopyAndAcceptsNewTurn(t *testing.T
 			t.Fatalf("target thread did not complete a new turn: activity=%q items=%d failure=%#v", after.Activity, len(after.Items), after.Failure)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+	if len(gateway.Requests()) == 0 {
+		t.Fatal("explicit target continuation did not reach the provider")
 	}
 
 	afterSourceHash, err := targetThreadFileSHA256(sourcePath)
@@ -134,11 +141,11 @@ func TestPublishedFloretV7MigratesTargetThreadCopyAndAcceptsNewTurn(t *testing.T
 				results++
 			}
 			if message.Role == flprovider.RoleUser && (strings.Contains(message.Text, "Agent requested user input") || strings.Contains(message.Text, `"interaction_response"`)) {
-				t.Fatalf("target thread retained legacy interaction text: %#v", message)
+				t.Fatal("target thread retained legacy interaction text")
 			}
 		}
 		if calls != wantAskUserPairs || results != wantAskUserPairs {
-			t.Fatalf("target thread ask_user pairs=(calls:%d results:%d), want %d: %#v", calls, results, wantAskUserPairs, requests[0].Messages)
+			t.Fatalf("target thread ask_user pairs=(calls:%d results:%d), want %d", calls, results, wantAskUserPairs)
 		}
 	}
 }

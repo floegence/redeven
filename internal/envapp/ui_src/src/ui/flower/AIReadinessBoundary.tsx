@@ -142,6 +142,10 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
         restoreSurfaceFocus = true;
         await props.controller.retry();
         return;
+      case 'refresh':
+        restoreSurfaceFocus = true;
+        await props.controller.refresh();
+        return;
       case 'open_update':
         props.onOpenUpdate();
         return;
@@ -161,6 +165,7 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
   const actionLabel = (action: AIReadinessAction): string => {
     switch (action) {
       case 'stop': return i18n.t('aiReadiness.startup.stop');
+      case 'refresh': return i18n.t('common.actions.refresh');
       case 'retry':
         return props.controller.retryPending()
           ? i18n.t('aiReadiness.actions.retrying')
@@ -203,8 +208,9 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
   const ActionIcon = (iconProps: Readonly<{ action: AIReadinessAction }>) => {
     switch (iconProps.action) {
       case 'stop': return null;
+      case 'refresh':
       case 'retry':
-        return <RefreshIcon class={`h-4 w-4 ${props.controller.retryPending() ? 'animate-spin motion-reduce:animate-none' : ''}`} aria-hidden="true" />;
+        return <RefreshIcon class={`h-4 w-4 ${props.controller.retryPending() || props.controller.loading() ? 'animate-spin motion-reduce:animate-none' : ''}`} aria-hidden="true" />;
       case 'open_update':
         return <Download class="h-4 w-4" aria-hidden="true" />;
       case 'open_permissions':
@@ -231,9 +237,9 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
       }}
       type="button"
       class={`ai-readiness-action ${INTERACTIVE_CLASS} ${actionProps.action === 'stop' ? 'ai-readiness-action--quiet' : actionProps.primary ? 'ai-readiness-action--primary' : 'ai-readiness-action--secondary'}`}
-      disabled={actionProps.action === 'retry' && props.controller.retryPending()}
-      aria-busy={actionProps.action === 'retry' && props.controller.retryPending() ? 'true' : undefined}
-      data-pending={actionProps.action === 'retry' && props.controller.retryPending() ? 'true' : undefined}
+      disabled={actionProps.action === 'retry' && props.controller.retryPending() || actionProps.action === 'refresh' && props.controller.loading()}
+      aria-busy={actionProps.action === 'retry' && props.controller.retryPending() || actionProps.action === 'refresh' && props.controller.loading() ? 'true' : undefined}
+      data-pending={actionProps.action === 'retry' && props.controller.retryPending() || actionProps.action === 'refresh' && props.controller.loading() ? 'true' : undefined}
       aria-expanded={actionProps.action === 'show_diagnostics' ? diagnosticsOpen() : undefined}
       aria-controls={actionProps.action === 'show_diagnostics' ? diagnosticContentID : undefined}
       onClick={() => void runAction(actionProps.action)}
