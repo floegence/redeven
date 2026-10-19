@@ -30,9 +30,7 @@ const busy = (): AIReadinessSnapshot => ({
 });
 
 async function flushAsync(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
+  for (let step = 0; step < 10; step += 1) await Promise.resolve();
 }
 
 function deferred<T>(): Readonly<{
@@ -535,6 +533,30 @@ describe('createAIReadinessController', () => {
     expect(request).toHaveBeenCalledTimes(1);
     expect(visibilitySource.listenerCount()).toBe(0);
   });
+});
+
+it.each(['refresh', 'retry', 'stop'] as const)('releases a hung %s without replaying a command or accepting its late result', async (command) => {
+  vi.useFakeTimers();
+  const response = deferred<AIReadinessSnapshot>();
+  const request = vi.fn().mockResolvedValueOnce({ ...inspecting(), stoppable: true }).mockImplementationOnce(() => response.promise).mockResolvedValue(ready());
+  const controller = createAIReadinessController({ request, autoStart: false, visibilitySource: null });
+  await controller.refresh();
+  const pending = controller[command]();
+  await vi.advanceTimersByTimeAsync(command === 'refresh' ? 15_000 : 120_000);
+  await pending;
+  expect(controller.snapshot()).toMatchObject({ state: 'blocked', reason_code: 'temporarily_blocked', retryable: false, safe_to_retry: false, retry_reason: 'readiness_request_timeout' });
+  expect(controller.loading()).toBe(false);
+  expect(controller.retryPending()).toBe(false);
+  expect(controller.busyStartedAt()).toBeNull();
+  expect(request).toHaveBeenCalledTimes(2);
+  await controller.refresh();
+  expect(controller.snapshot()).toEqual(ready());
+  response.resolve({ ...inspecting(), state: 'stopped' });
+  await flushAsync();
+  expect(controller.snapshot()).toEqual(ready());
+  expect(request).toHaveBeenCalledTimes(3);
+  controller.dispose();
+  vi.useRealTimers();
 });
 
 it('stops immediately, deduplicates stop requests, and polls until rollback completes', async () => {

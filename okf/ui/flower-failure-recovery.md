@@ -11,6 +11,11 @@ Floret owns canonical execution outcomes and retry checkpoints. Flower keeps
 accepted messages readable and provides one turn-level failure and recovery
 surface. Navigation, settings exit, drafts and queue editing remain available.
 Transport uncertainty never proves backend success or authorizes replay.
+Readiness timeouts use the shared bounded request helpers and expose a status
+refresh without replaying Prepare or Stop. Deterministic migration failures
+remain diagnostic/admin recovery states; supported compaction history is
+automatically migrated by published Floret v7.68.3. See
+[historical compatibility](../ai/flower-upgrade-compatibility.md).
 
 # Contract
 

@@ -1,7 +1,7 @@
 import type { I18nHelpers } from '../i18n';
 import type { AIReadinessSnapshot } from './aiReadiness';
 
-export type AIReadinessAction = 'stop' | 'retry' | 'open_update' | 'open_permissions' | 'review_issues' | 'show_diagnostics' | 'open_backups';
+export type AIReadinessAction = 'stop' | 'retry' | 'refresh' | 'open_update' | 'open_permissions' | 'review_issues' | 'show_diagnostics' | 'open_backups';
 
 export type AIReadinessDiagnosticRow = Readonly<{
   label: string;
@@ -87,6 +87,7 @@ function presentationActions(
   if (snapshot.state === 'stopped') return canRetryGeneration ? { primaryAction: 'retry', secondaryAction: 'show_diagnostics' } : { primaryAction: 'show_diagnostics' };
   if (snapshot.stoppable && canRetryGeneration) return { primaryAction: 'stop' };
   if (snapshot.state !== 'blocked') return {};
+  if (snapshot.retry_reason === 'readiness_request_timeout') return { primaryAction: 'refresh', secondaryAction: 'show_diagnostics' };
   const canRetry = canRetryGeneration && snapshot.retryable && snapshot.safe_to_retry;
   switch (snapshot.reason_code) {
     case 'temporarily_blocked':
@@ -121,6 +122,9 @@ function stateCopy(snapshot: AIReadinessSnapshot): Readonly<{
   description: TranslationKey;
   tone: AIReadinessPresentation['tone'];
 }> {
+  if (snapshot.retry_reason === 'readiness_request_timeout') {
+    return { title: 'aiReadiness.states.temporarilyUnavailableTitle', description: 'aiReadiness.states.temporarilyUnavailableDescription', tone: 'warning' };
+  }
   if (snapshot.state === 'degraded') {
     return { title: 'aiReadiness.states.degradedTitle', description: 'aiReadiness.states.degradedDescription', tone: 'warning' };
   }

@@ -75,6 +75,12 @@ The final script requires a clean worktree and runs bounded source, dependency,
 release-manifest, compatibility, focused changed-package, and OKF contracts.
 Any generator that changes the tree fails the gate. Full Desktop, browser,
 Docker, stress, and performance suites belong to explicit qualification only.
+Flower's historical conversation qualification is a dedicated manual workflow
+for the exact final main commit. It opens immutable released-writer copies,
+explicitly continues through the product and repeats after restart. Release-ref
+requires successful same-commit Actions evidence before packaging. This is a
+hard historical-data compatibility requirement; ordinary CI and the bounded
+main gate retain source-only fixture checks.
 The [Desktop qualification lifecycle](../desktop/desktop-test-lifecycle.md) owns
 test teardown and final cleanup evidence.
 

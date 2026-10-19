@@ -29,6 +29,13 @@ The boundary never disables or hides the shell, Workbench, terminal, files,
 Settings, or a shared ancestor. Only the visible Flower placement may move or
 restore focus.
 
+Readiness status reads share Flower's 15-second read deadline; Prepare and Stop
+share its 120-second command response deadline. Timeout releases loading and
+single-flight ownership, preserves drafts and offers Refresh to read the actual
+backend status. A lost response never proves cancellation or safe retry. Late
+responses cannot overwrite a later refresh, paused workspace or new generation.
+Only typed backend safety enables a subsequent mutation.
+
 Env App begins readiness inspection only after the HTTP access status has been
 checked and access is granted. The readiness HTTP route remains available while
 the encrypted direct RPC transport connects, resumes, or reconnects, so

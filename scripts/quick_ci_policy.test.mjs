@@ -235,6 +235,13 @@ test("release workflow validates exact main and contains no test gate", () => {
   assert.match(releaseWorkflow, /refs\/remotes\/origin\/main/);
   assert.match(releaseWorkflow, /tagged_commit.*main_commit/s);
   assert.match(releaseWorkflow, /tagged_commit.*GITHUB_SHA/s);
+  assert.ok(releaseWorkflow.includes('--workflow flower-history-qualification.yml --commit "${GITHUB_SHA}" --status success'));
+  assert.match(releaseWorkflow, /historical conversation qualification must pass for the exact release source/u);
+  const historyWorkflow = readFileSync(new URL('../.github/workflows/flower-history-qualification.yml', import.meta.url), 'utf8');
+  assert.match(historyWorkflow, /workflow_dispatch:/u);
+  assert.doesNotMatch(historyWorkflow, /(?:push|pull_request):/u);
+  for (const scenario of ['TestFlowerEveryHistoricalWriterUpgradesAndContinues', 'TestFlowerReleasedCompactionWritersUpgradeAndContinue', 'TestFlowerRestoreLifecycleFixtureCannotResumeOldWork']) assert.ok(historyWorkflow.includes(scenario));
+  assert.match(historyWorkflow, /GOWORK: "off"/u);
   assert.equal(
     [...releaseJobsSource.matchAll(/^  ([a-z][a-z0-9-]*):$/gm)].length,
     [...releaseJobsSource.matchAll(/^    timeout-minutes: [0-9]+$/gm)].length,

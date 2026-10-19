@@ -1096,8 +1096,8 @@ confirmed request. Native input is last request input, not an independently
 measured current window or guaranteed remaining capacity. Floret alone
 qualifies pressure anchors, normalizes usage, and migrates its opaque storage,
 including schema 23 to 24. No host accounting ledger or legacy token fallback.
-Published Floret v7.68.2 owns frozen compaction trigger/replacement evidence and
-domain schema 25 to 26. Flower maps optional canonical diagnostics without
+Published Floret v7.68.3 owns frozen compaction trigger/replacement evidence,
+canonical provider-context identity and domain schema 25 to 26 to 27. Flower maps optional canonical diagnostics without
 reconstructing missing candidates, recalculating pressure, or treating estimates
 as native measurements. Compaction floating UI uses the shared surface layer.
 
@@ -1161,6 +1161,16 @@ Flower storage startup uses the published Floret incremental prompt-record and
 atomic SQLite upgrade contract. Readiness phases drive Welcome feedback and
 controller timing logs; Redeven must not decode cache records, keep a parallel
 migration lifecycle, or substitute cache deletion for an upstream migration.
+Historical conversations must survive every Flower release: immutable released
+writer fixtures must upgrade, preserve facts, explicitly continue and reopen.
+Run the dedicated Flower historical conversation qualification on the exact
+final main commit before tagging; release-ref verifies its successful Actions
+evidence and blocks packaging when absent. Keep these product tests outside
+ordinary push/PR CI and the bounded main gate. Preserve every fixture and every
+upstream migration; never add product-owned repair or automatic tool replay.
+Readiness reads and commands use the shared Flower deadlines. A lost command
+response releases UI ownership and offers a status refresh, never an inferred
+safe retry; only subsequent typed backend readiness may authorize another command.
 
 Computer model results use one final JSON envelope encoder, independently of
 Activity presentation. Preserve Computer JSON types and source-side truncation;

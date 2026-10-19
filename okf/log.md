@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-10-19 — Historical Flower conversation compatibility
+
+- Adopt published Floret v7.68.3 canonical compaction identity migration; preserve historical conversation facts and explicit continuation without a host repair path. Bind packaging to exact-commit [historical qualification](ai/flower-upgrade-compatibility.md).
+- Bound readiness reads and commands with shared Flower deadlines and allow status refresh after a lost response, preserving typed retry safety and [startup interaction ownership](architecture/flower-startup-presentation.md).
+
 ## 2026-10-19 — Continuous Flower pin interactions
 
 - Keep [sidebar pinning and ordering](ui/flower-thread-sidebar.md) available during confirmations and list reads. Serialize commands, coalesce unsent toggles, replay later intent after acknowledgements or failure, and reconcile summaries in the background without blocking interaction.

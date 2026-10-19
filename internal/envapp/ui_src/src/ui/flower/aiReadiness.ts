@@ -1,4 +1,5 @@
 import { createSignal, getOwner, onCleanup, type Accessor } from 'solid-js';
+import { FlowerReadDeadlineError, FlowerRequestDeadlineError, withFlowerReadDeadline, withFlowerRequestDeadline } from '../../../../../flower_ui/src/requestDeadline';
 
 import { fetchLocalApiJSON, LocalApiError } from '../services/localApi';
 
@@ -357,13 +358,20 @@ export function createAIReadinessController(args: CreateAIReadinessControllerArg
     schedule(nextSnapshot);
   };
 
-  const resolveFailure = (error: unknown): AIReadinessSnapshot => (
-    aiReadinessFromLocalApiError(error) ?? contractErrorSnapshot
-  );
+  const resolveFailure = (error: unknown): AIReadinessSnapshot => {
+    if (error instanceof FlowerReadDeadlineError || error instanceof FlowerRequestDeadlineError) {
+      return Object.freeze({ state: 'blocked', reason_code: 'temporarily_blocked', retryable: false, safe_to_retry: false, retry_reason: 'readiness_request_timeout' });
+    }
+    return aiReadinessFromLocalApiError(error) ?? contractErrorSnapshot;
+  };
 
   const invokeRequest = (url: string, init: RequestInit): Promise<unknown> => {
     try {
-      return Promise.resolve(request(url, init));
+      const pending = Promise.resolve(request(url, init));
+      const operation = () => pending;
+      return init.method === 'GET'
+        ? withFlowerReadDeadline(operation, 'Readiness status request timed out.')
+        : withFlowerRequestDeadline(operation, 'Readiness command response timed out.');
     } catch (error) {
       return Promise.reject(error);
     }

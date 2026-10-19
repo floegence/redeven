@@ -60,7 +60,7 @@ function mount(
     busyStartedAt: () => options.busyStartedAt ?? null,
     startupElapsedMs: () => options.startupElapsedMs ?? null,
     longStartupReadySequence: () => 0,
-    refresh: async () => current(),
+    refresh: vi.fn(async () => current()),
     retry,
     pause: vi.fn(),
     resume: async () => current(),
@@ -85,7 +85,7 @@ function mount(
       />
     </I18nProvider>
   ), host);
-  return { host, dispose, setCurrent, retry, openUpdate, openPermissions, reviewIssues };
+  return { host, dispose, setCurrent, retry, refresh: controller.refresh, openUpdate, openPermissions, reviewIssues };
 }
 
 function buttonWithText(host: HTMLElement, text: string): HTMLButtonElement {
@@ -105,6 +105,15 @@ afterEach(() => {
 });
 
 describe('AIReadinessBoundary', () => {
+  it('reads current status after a timed-out command without offering command retry', async () => {
+    const fixture = mount(snapshot('temporarily_blocked', { retryable: false, safe_to_retry: false, retry_reason: 'readiness_request_timeout' }));
+    buttonWithText(fixture.host, 'Refresh').click();
+    await flushMicrotasks();
+    expect(fixture.refresh).toHaveBeenCalledOnce();
+    expect(fixture.retry).not.toHaveBeenCalled();
+    expect(fixture.host.textContent).not.toContain('Prepare again');
+    fixture.dispose();
+  });
   it.each([
     'unavailable',
     'inspecting',
