@@ -174,6 +174,7 @@ it('keeps all locales and themes within a narrow card', async () => {
  summary.focus(); await userEvent.keyboard('{Enter}');
  for (const value of ['en-US', 'zh-CN', 'zh-TW', 'ja-JP', 'ko-KR', 'de-DE', 'fr-FR', 'es-ES', 'pt-BR', 'ru-RU'] as const) {
   setLocale(value);
+  expect(panel.querySelector('.flower-context-heading > span')?.textContent, value).toContain('(tokens)');
   expect(panel.scrollWidth, value).toBe(panel.clientWidth);
   expect(panel.getBoundingClientRect().top, value).toBeGreaterThanOrEqual(0);
   expect(panel.getBoundingClientRect().height, value).toBeLessThanOrEqual(408);

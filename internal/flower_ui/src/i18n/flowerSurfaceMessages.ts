@@ -378,7 +378,7 @@ export const flowerSurfaceEnUS = {
     contextIndicatorRules: 'Rules',
     contextIndicatorSkills: 'Skills',
     runErrorModelContextUnavailable: 'Could not load the current context. Resolve the issue shown in the error details, then retry.',
-    contextIndicatorLabel: 'Request input',
+    contextIndicatorLabel: 'Request input (tokens)',
     contextIndicatorNearThreshold: 'Near limit',
     contextIndicatorWillCompact: 'Compacting soon',
     contextIndicatorHardLimit: 'At limit',

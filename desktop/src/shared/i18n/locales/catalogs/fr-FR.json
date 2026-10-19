@@ -576,7 +576,7 @@
       "contextIndicatorRules": "Règles",
       "contextIndicatorSkills": "Compétences",
       "runErrorModelContextUnavailable": "Impossible de charger le contexte actuel. Corrigez le problème indiqué dans les détails de l’erreur, puis réessayez.",
-      "contextIndicatorLabel": "Entrée de la requête",
+      "contextIndicatorLabel": "Entrée de la requête (tokens)",
       "contextIndicatorNearThreshold": "Proche de la limite",
       "contextIndicatorWillCompact": "Compression imminente",
       "contextIndicatorHardLimit": "À la limite",

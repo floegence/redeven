@@ -576,7 +576,7 @@
       "contextIndicatorRules": "규칙",
       "contextIndicatorSkills": "스킬",
       "runErrorModelContextUnavailable": "현재 컨텍스트를 불러올 수 없습니다. 오류 세부 정보를 확인하고 문제를 해결한 후 다시 시도하세요.",
-      "contextIndicatorLabel": "요청 입력",
+      "contextIndicatorLabel": "요청 입력 (tokens)",
       "contextIndicatorNearThreshold": "한도에 가까움",
       "contextIndicatorWillCompact": "곧 압축",
       "contextIndicatorHardLimit": "한도 도달",

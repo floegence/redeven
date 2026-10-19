@@ -576,7 +576,7 @@
       "contextIndicatorRules": "ルール",
       "contextIndicatorSkills": "スキル",
       "runErrorModelContextUnavailable": "現在のコンテキストを読み込めません。エラーの詳細を確認し、問題を解決してから再試行してください。",
-      "contextIndicatorLabel": "リクエスト入力",
+      "contextIndicatorLabel": "リクエスト入力 (tokens)",
       "contextIndicatorNearThreshold": "上限に近い",
       "contextIndicatorWillCompact": "まもなく圧縮",
       "contextIndicatorHardLimit": "上限到達",

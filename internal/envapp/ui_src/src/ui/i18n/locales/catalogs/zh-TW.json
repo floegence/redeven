@@ -5490,7 +5490,7 @@
       "contextIndicatorRules": "儲存庫規則",
       "contextIndicatorSkills": "可用技能",
       "runErrorModelContextUnavailable": "無法載入目前的上下文。請依錯誤詳細資訊修正問題後重試。",
-      "contextIndicatorLabel": "請求輸入",
+      "contextIndicatorLabel": "請求輸入 (tokens)",
       "contextIndicatorNearThreshold": "接近上限",
       "contextIndicatorWillCompact": "即將壓縮",
       "contextIndicatorHardLimit": "已達上限",

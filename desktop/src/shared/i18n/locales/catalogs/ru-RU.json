@@ -583,7 +583,7 @@
       "contextIndicatorRules": "Правила",
       "contextIndicatorSkills": "Навыки",
       "runErrorModelContextUnavailable": "Не удалось загрузить текущий контекст. Устраните проблему, указанную в сведениях об ошибке, и повторите попытку.",
-      "contextIndicatorLabel": "Вход запроса",
+      "contextIndicatorLabel": "Вход запроса (tokens)",
       "contextIndicatorNearThreshold": "Близко к лимиту",
       "contextIndicatorWillCompact": "Скоро сжатие",
       "contextIndicatorHardLimit": "На лимите",
