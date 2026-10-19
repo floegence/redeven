@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/floegence/floret/v7/identity"
@@ -33,19 +35,31 @@ func builtInThreadQueryToolDefinitions() []ToolDef {
 		fields[key] = timeRange
 	}
 	filter := object(fields)
-	sort := object(map[string]any{"key": str, "descending": map[string]any{"type": "boolean"}})
-	common := func() map[string]any {
-		return map[string]any{"object": map[string]any{"type": "string", "enum": []string{"threads", "messages", "tool_calls"}}, "filter": filter, "sort": sort, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 200}, "cursor": str}
+	queryKeys := []string{""}
+	for _, kind := range []threadquery.Object{threadquery.Threads, threadquery.Messages, threadquery.ToolCalls} {
+		for _, key := range threadQuerySortKeys("threads.query", kind) {
+			if !slices.Contains(queryKeys, key) {
+				queryKeys = append(queryKeys, key)
+			}
+		}
+	}
+	common := func(keys []string, description string) map[string]any {
+		ordering := object(map[string]any{
+			"key":        map[string]any{"type": "string", "enum": keys, "description": description},
+			"descending": map[string]any{"type": "boolean", "description": "True for newest/largest first; false or omitted for ascending order."},
+		})
+		return map[string]any{"object": map[string]any{"type": "string", "enum": []string{"threads", "messages", "tool_calls"}}, "filter": filter, "sort": ordering, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 200}, "cursor": str}
 	}
 	add := func(name, description string, properties map[string]any, required []string) ToolDef {
 		schema := object(properties)
 		schema["required"] = required
 		return ToolDef{Name: name, Description: description, InputSchema: toolSchemaRaw(schema), Visibility: ToolVisibilitySharedReadonly, Capabilities: []ToolCapabilityClass{ToolCapabilityReadonlyLocal}, Source: "builtin", Namespace: "builtin.threads", Priority: 100}
 	}
-	aggregate := common()
+	query := common(queryKeys, "Allowed by object: threads = created, updated, title, thread_id; messages = time, order; tool_calls = time, completed, tool_name, elapsed. Omit or use an empty string for the default: threads created, messages time, tool_calls time. For newest messages use {\"key\":\"time\",\"descending\":true}. Response fields such as created_at are not sort keys.")
+	aggregate := common(append([]string{""}, threadQuerySortKeys("threads.aggregate", "")...), "Allowed for every object: key or count. Omit or use an empty string for key (group key); count sorts by group size. Query record sort keys do not apply to aggregation.")
 	aggregate["group_by"] = map[string]any{"type": "string", "enum": []string{"", "thread", "role", "tool_name", "status", "day", "week", "month"}}
 	return []ToolDef{
-		add("threads.query", "Search canonical active paths of all readable conversations in the current Runtime, including children. Reference IDs grant no access. Filters combine with AND; enum arrays use OR. Literal Unicode substring, keywords and contiguous phrase matching ignore case by default. Excludes reasoning and secrets. Sort: threads created/updated/title/thread_id; messages time/order; tool_calls time/completed/tool_name/elapsed. Default 50, maximum 200. Follow next_cursor with unchanged input; invalid/expired cursors require a new query. Use returned ref with threads.read for full content.", common(), []string{"object"}),
+		add("threads.query", "Search canonical active paths of all readable conversations in the current Runtime, including children. Reference IDs grant no access. Filters combine with AND; enum arrays use OR. Literal Unicode substring, keywords and contiguous phrase matching ignore case by default. Excludes reasoning and secrets. Sort: threads created/updated/title/thread_id; messages time/order; tool_calls time/completed/tool_name/elapsed. Default 50, maximum 200. Follow next_cursor with unchanged input; invalid/expired cursors require a new query. Use returned ref with threads.read for full content.", query, []string{"object"}),
 		add("threads.read", "Read the exact authorized ref returned by threads.query. Full visible content includes confirmed tool arguments/results only here. UTF-8 chunks have field-local byte offsets, at most 16 KiB each and 64 KiB per response; follow next_cursor without changing ref. No silent truncation. Expiry or access changes require a new query.", map[string]any{"ref": str, "cursor": str}, []string{"ref"}),
 		add("threads.aggregate", "Count canonical records with the same filters as threads.query. Omit group_by for exact count; otherwise group by thread, role, tool_name, status or UTC day/week/month (Monday weeks). Sort key is key or count, with stable key ties. Authorization applies before counting. Follow next_cursor with unchanged input.", aggregate, []string{"object"}),
 	}
@@ -95,7 +109,10 @@ func (s *Service) execThreadQueryTool(ctx context.Context, meta *session.Meta, n
 		}
 		d := json.NewDecoder(bytes.NewReader(raw))
 		d.DisallowUnknownFields()
-		return d.Decode(out)
+		if err := d.Decode(out); err != nil {
+			return threadQueryArgumentsError{cause: err}
+		}
+		return nil
 	}
 	switch name {
 	case "threads.query":
@@ -103,22 +120,79 @@ func (s *Service) execThreadQueryTool(ctx context.Context, meta *session.Meta, n
 		if err := decode(&input); err != nil {
 			return nil, err
 		}
-		return reader.Query(ctx, scope, input)
+		page, err := reader.Query(ctx, scope, input)
+		return page, threadQueryToolError(name, input.Object, input.Sort, err)
 	case "threads.read":
 		var input threadquery.ReadInput
 		if err := decode(&input); err != nil {
 			return nil, err
 		}
-		return reader.Read(ctx, scope, input)
+		page, err := reader.Read(ctx, scope, input)
+		return page, threadQueryToolError(name, "", threadquery.Sort{}, err)
 	case "threads.aggregate":
 		var input threadquery.AggregateInput
 		if err := decode(&input); err != nil {
 			return nil, err
 		}
-		return reader.Aggregate(ctx, scope, input)
+		page, err := reader.Aggregate(ctx, scope, input)
+		return page, threadQueryToolError(name, input.Object, input.Sort, err)
 	default:
 		return nil, errors.New("unknown thread query tool")
 	}
+}
+
+// These tool-schema values mirror the released threadquery contract. Floret
+// remains the validation owner; the adapter only explains its invalid inputs.
+func threadQuerySortKeys(toolName string, object threadquery.Object) []string {
+	if toolName == "threads.aggregate" {
+		return []string{"key", "count"}
+	}
+	switch object {
+	case threadquery.Threads:
+		return []string{"created", "updated", "title", "thread_id"}
+	case threadquery.Messages:
+		return []string{"time", "order"}
+	case threadquery.ToolCalls:
+		return []string{"time", "completed", "tool_name", "elapsed"}
+	default:
+		return nil
+	}
+}
+
+type threadQueryArgumentsError struct {
+	cause   error
+	message string
+	details map[string]any
+}
+
+func (e threadQueryArgumentsError) Error() string {
+	if e.message != "" {
+		return e.message
+	}
+	return e.cause.Error()
+}
+
+func (e threadQueryArgumentsError) Unwrap() error { return e.cause }
+
+func (e threadQueryArgumentsError) InvalidArgumentsCode() string {
+	return "invalid_arguments.threads"
+}
+
+func (e threadQueryArgumentsError) InvalidArgumentsMeta() map[string]any {
+	return cloneAnyMap(e.details)
+}
+
+func threadQueryToolError(toolName string, object threadquery.Object, ordering threadquery.Sort, err error) error {
+	if !errors.Is(err, threadquery.ErrInvalidQuery) {
+		return err
+	}
+	out := threadQueryArgumentsError{cause: err}
+	allowed := threadQuerySortKeys(toolName, object)
+	if ordering.Key != "" && len(allowed) > 0 && !slices.Contains(allowed, ordering.Key) {
+		out.message = fmt.Sprintf("%s; sort.key %q is unsupported for object %q; allowed values: %s. Omit sort.key or use an empty string for the default %q.", err, ordering.Key, object, strings.Join(allowed, ", "), allowed[0])
+		out.details = map[string]any{"field": "sort.key", "value": ordering.Key, "object": string(object), "allowed_values": allowed}
+	}
+	return out
 }
 
 func isThreadQueryTool(name string) bool {

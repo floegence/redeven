@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-18 — Explicit thread query sorting
+
+- Enumerate [thread query sort keys](ai/flower-thread-queries.md), distinguish aggregation ordering, and describe defaults and newest-message queries. Map invalid inputs to actionable parameter errors while preserving Floret validation, authorization, cursor and runtime failure boundaries. Verify correction before dispatch and visible Activity filtering.
+
 ## 2026-10-18 — Minimal computer preview placeholders
 
 - Center three quiet dots and one short localized status in the [computer viewer](ui/flower-computer-viewer.md). Pulse only during active loading, keep empty and assistance states static, and preserve explicit recovery, reduced motion and high-contrast presentation.
