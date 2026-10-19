@@ -20,6 +20,13 @@ let summaries: FlowerThreadSnapshot[] = Array.from({ length: 247 }, (_, index) =
   pin_rank: index > 1 && index < 5 ? 10 - index : 0,
 }));
 let nextPinFailure = false;
+let pinDelay = 100;
+let listDelay = 0;
+let pinStarted = 0;
+let pinSettled = 0;
+let listStarted = 0;
+let listSettled = 0;
+const pinCalls: { id: string; pinned: boolean }[] = [];
 let loads = 0;
 let lastContent = '';
 const selectionEvents: unknown[] = [];
@@ -30,23 +37,33 @@ const commitPins = (pins: readonly FlowerThreadPinMetadata[]) => {
   fixture.emit({ schema_version: 1, kind: 'summary.batch', summaries });
 };
 const confirmPins = async (pins: readonly FlowerThreadPinMetadata[]) => {
-  await pause(100);
-  if (nextPinFailure) { nextPinFailure = false; throw new Error('Fixture pin failure'); }
-  commitPins(pins);
-  return pins;
+  pinStarted++;
+  try {
+    await pause(pinDelay);
+    if (nextPinFailure) { nextPinFailure = false; throw new Error('Fixture pin failure'); }
+    commitPins(pins);
+    return pins;
+  } finally { pinSettled++; }
 };
 const root = document.getElementById('root')!;
 root.style.height = '100vh';
 render(() => <FloeProvider><FlowerSurface notify={() => undefined} draftCoordinator={createFlowerComposerDraftCoordinator()} adapter={{
   ...fixture.adapter,
-  listThreads: async () => summaries,
+  listThreads: async () => {
+    listStarted++;
+    const snapshot = summaries;
+    try { await pause(listDelay); return snapshot; } finally { listSettled++; }
+  },
   loadThread: async id => {
     loads++;
     const view = { ...current, thread_id: id, items: id === bigID ? current.items : current.items?.slice(0, 2), queue: [] };
     return { thread: applyFlowerRuntimeCurrentView(summary(id), view), current: view };
   },
-  setThreadPinned: async (id, pinned) => (await confirmPins([{ thread_id: id, pinned_at_ms: pinned ? Date.now() : 0,
-    pin_rank: pinned ? Math.max(...summaries.map(value => value.pin_rank || 0)) + 1 : 0, settings_revision: summary(id).settings_revision! + 1 }]))[0],
+  setThreadPinned: async (id, pinned) => {
+    pinCalls.push({ id, pinned });
+    return (await confirmPins([{ thread_id: id, pinned_at_ms: pinned ? Date.now() : 0,
+      pin_rank: pinned ? Math.max(...summaries.map(value => value.pin_rank || 0)) + 1 : 0, settings_revision: summary(id).settings_revision! + 1 }]))[0];
+  },
   movePinnedThread: async (id, position) => confirmPins([
     { thread_id: id, pin_rank: summary(position.anchor_thread_id).pin_rank!, pinned_at_ms: summary(id).pinned_at_ms!, settings_revision: summary(id).settings_revision! + 1 },
     { thread_id: position.anchor_thread_id, pin_rank: summary(id).pin_rank!, pinned_at_ms: summary(position.anchor_thread_id).pinned_at_ms!, settings_revision: summary(position.anchor_thread_id).settings_revision! + 1 },
@@ -69,6 +86,8 @@ async function until(condition: () => boolean) {
 }
 const sidebar = {
   smallID, bigID,
+  pinState: () => ({ pinStarted, pinSettled, listStarted, listSettled, pinCalls: [...pinCalls] }),
+  setDelays(pin: number, list: number) { pinDelay = pin; listDelay = list; },
   failNextPin() { nextPinFailure = true; },
   updateTitle(id: string) {
     const value = summary(id);

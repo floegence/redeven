@@ -82,6 +82,7 @@ await session.run(async () => {
   await page.screenshot({ path: path.join(output, 'large-conversation.png') });
   const pins = [];
   for (const width of [224, 272, 360]) {
+    console.log('Sidebar pin qualification width: ' + width);
     await page.evaluate(width => document.querySelector('.flower-surface').style.setProperty('--flower-thread-rail-width', width + 'px'), width);
     for (let index = 0; index < 16; index++) {
       const id = ['sidebar-2', 'sidebar-3', 'sidebar-4', 'sidebar-5'][index % 4];
@@ -93,15 +94,18 @@ await session.run(async () => {
         const time = animation?.currentTime;
         const button = row.querySelector('.flower-thread-card-pin-button');
         const beforePinned = button.getAttribute('aria-label');
+        const initial = window.flowerSidebar.pinState();
         if (index === 7) window.flowerSidebar.failNextPin();
         const focused = row.querySelector('.flower-thread-card-select-button');
         focused.focus(); button.click();
         if (index === 3) window.flowerSidebar.updateTitle(id);
         let frames = 0;
         const invalid = [];
+        let disabledFrames = 0;
         const start = performance.now();
         do {
           await new Promise(requestAnimationFrame); frames++;
+          if (button.disabled) disabledFrames++;
           for (const card of document.querySelectorAll('[data-flower-thread-card]')) {
             const bounds = card.getBoundingClientRect();
             if (bounds.bottom <= 0 || bounds.top >= innerHeight) continue;
@@ -112,15 +116,18 @@ await session.run(async () => {
               if (!element.textContent.trim() || rect.width <= 0 || rect.height <= 0 || style.visibility !== 'visible' || style.opacity === '0') invalid.push(card.dataset.threadId);
             }
           }
-        } while ((button.disabled || frames < 3) && performance.now() - start < 3000);
-        return { id, frames, invalid, rowRetained: row === document.querySelector('[data-thread-id="' + id + '"]'),
+        } while ((window.flowerSidebar.pinState().pinSettled === initial.pinSettled
+          || window.flowerSidebar.pinState().listSettled === initial.listSettled || frames < 3) && performance.now() - start < 3000);
+        return { id, frames, invalid, disabledFrames, rowRetained: row === document.querySelector('[data-thread-id="' + id + '"]'),
           titleRetained: title === row.querySelector('.flower-thread-list-title'), focusRetained: document.activeElement === focused,
           animationRetained: !animation || animation === wave.getAnimations()[0] && animation.currentTime >= time,
-          settled: !button.disabled, rolledBack: index !== 7 || button.getAttribute('aria-label') === beforePinned };
+          settled: window.flowerSidebar.pinState().pinSettled > initial.pinSettled, rolledBack: index !== 7 || button.getAttribute('aria-label') === beforePinned };
       }, { id, index });
       assert.deepEqual(result.invalid, []);
+      assert.equal(result.disabledFrames, 0, 'Pin actions remain available during confirmation');
       assert.ok(result.rowRetained && result.titleRetained && result.focusRetained && result.animationRetained && result.settled && result.rolledBack, JSON.stringify(result));
       pins.push({ width, ...result });
+      console.log('Sidebar pin operation passed: ' + width + '/' + index);
     }
     const reorder = await page.evaluate(async () => {
       const row = document.querySelector('[data-thread-id="sidebar-4"]');
@@ -130,13 +137,14 @@ await session.run(async () => {
       await new Promise(requestAnimationFrame);
       const down = [...document.querySelectorAll('[role="menuitem"]')].find(item => item.textContent.includes('Move down'));
       if (!down || down.disabled) throw new Error('Pinned reorder action is unavailable');
+      const initial = window.flowerSidebar.pinState().pinSettled;
       down.click();
       let frames = 0;
       do {
         await new Promise(requestAnimationFrame); frames++;
         const bounds = title.getBoundingClientRect();
         if (bounds.width <= 0 || bounds.height <= 0) throw new Error('Pinned reorder lost title layout');
-      } while (row.querySelector('.flower-thread-card-pin-button').disabled && frames < 120);
+      } while (window.flowerSidebar.pinState().pinSettled === initial && frames < 120);
       return { frames, rowRetained: row === document.querySelector('[data-thread-id="sidebar-4"]'),
         titleRetained: title === row.querySelector('.flower-thread-list-title'),
         order: [...document.querySelectorAll('[data-thread-id][data-pinned="true"]')].map(item => item.dataset.threadId) };
@@ -145,15 +153,63 @@ await session.run(async () => {
     assert.ok(reorder.order.indexOf('sidebar-3') < reorder.order.indexOf('sidebar-4'));
     await page.locator('.flower-component-thread-rail').screenshot({ path: path.join(output, 'rail-' + width + '.png') });
   }
+  const rapid = await page.evaluate(async () => {
+    window.flowerSidebar.setDelays(250, 900);
+    const row = document.querySelector('[data-thread-id="sidebar-6"]');
+    const title = row.querySelector('.flower-thread-list-title');
+    const button = row.querySelector('.flower-thread-card-pin-button');
+    const other = document.querySelector('[data-thread-id="sidebar-7"] .flower-thread-card-pin-button');
+    const initial = window.flowerSidebar.pinState();
+    button.focus();
+    const started = performance.now();
+    button.click(); button.click(); button.click(); other.click();
+    const syncMs = performance.now() - started;
+    const immediate = { pinned: row.dataset.pinned, otherPinned: other.closest('[data-thread-id]').dataset.pinned,
+      disabled: button.disabled || other.disabled, requests: window.flowerSidebar.pinState().pinStarted - initial.pinStarted };
+    while (window.flowerSidebar.pinState().pinSettled < initial.pinSettled + 3) {
+      await new Promise(requestAnimationFrame);
+      if (performance.now() - started > 7000) throw new Error('Rapid pin write queue timed out');
+    }
+    const duringRead = window.flowerSidebar.pinState();
+    button.click();
+    const writeDuringRead = window.flowerSidebar.pinState().pinStarted > duringRead.pinStarted
+      && duringRead.listStarted > duringRead.listSettled;
+    let frames = 0;
+    let disabledFrames = 0;
+    let invalidFrames = 0;
+    do {
+      await new Promise(requestAnimationFrame); frames++;
+      if (button.disabled || other.disabled) disabledFrames++;
+      const bounds = title.getBoundingClientRect();
+      if (bounds.width <= 0 || bounds.height <= 0) invalidFrames++;
+      if (performance.now() - started > 7000) throw new Error('Rapid pin confirmation timed out');
+    } while (window.flowerSidebar.pinState().pinStarted !== window.flowerSidebar.pinState().pinSettled
+      || window.flowerSidebar.pinState().listStarted !== window.flowerSidebar.pinState().listSettled);
+    return { syncMs, immediate, writeDuringRead, frames, disabledFrames, invalidFrames,
+      rowRetained: row === document.querySelector('[data-thread-id="sidebar-6"]'),
+      titleRetained: title === row.querySelector('.flower-thread-list-title'), focusRetained: document.activeElement === button,
+      finalPinned: row.dataset.pinned, otherPinned: other.closest('[data-thread-id]').dataset.pinned,
+      requests: window.flowerSidebar.pinState().pinCalls.slice(initial.pinCalls.length) };
+  });
+  assert.deepEqual(rapid.immediate, { pinned: 'true', otherPinned: 'true', disabled: false, requests: 1 });
+  assert.ok(rapid.writeDuringRead, 'A delayed list read must not block another write');
+  assert.ok(rapid.rowRetained && rapid.titleRetained && rapid.focusRetained);
+  assert.equal(rapid.finalPinned, 'false');
+  assert.equal(rapid.otherPinned, 'true');
+  assert.equal(rapid.disabledFrames, 0);
+  assert.equal(rapid.invalidFrames, 0);
+  assert.deepEqual(rapid.requests, [{ id: 'sidebar-6', pinned: true }, { id: 'sidebar-6', pinned: true },
+    { id: 'sidebar-7', pinned: true }, { id: 'sidebar-6', pinned: false }]);
+  await page.locator('.flower-component-thread-rail').screenshot({ path: path.join(output, 'rapid-pins.png') });
   assert.deepEqual(pageErrors, []);
   const sorted = selections.slice(2).map(value => value.syncMs).sort((a, b) => a - b);
   const clickP95 = sorted[Math.ceil(sorted.length * 0.95) - 1];
   assert.ok(clickP95 < 8, 'Warm sidebar click P95 must stay below 8ms: ' + clickP95);
   const report = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
     sourceDiff: execFileSync('git', ['diff', '--stat'], { cwd: root, encoding: 'utf8' }).trim(),
-    version, clickP95, selections, pins, frames: pins.reduce((sum, value) => sum + value.frames, 0),
+    version, clickP95, selections, pins, rapid, frames: pins.reduce((sum, value) => sum + value.frames, 0),
     traceScreenshots: trace.filter(value => value.name === 'Screenshot').length };
   await session.writeEvidence(path.join(output, 'metrics.json'), JSON.stringify(report, null, 2));
-  console.log(JSON.stringify({ output, electron: version.electron, chrome: version.chrome, clickP95, pinOperations: pins.length, sampledFrames: report.frames, traceScreenshots: report.traceScreenshots }));
+  console.log(JSON.stringify({ output, electron: version.electron, chrome: version.chrome, clickP95, pinOperations: pins.length, sampledFrames: report.frames, traceScreenshots: report.traceScreenshots, rapid }));
   await session.closeElectron(app);
 });

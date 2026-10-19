@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-19 — Continuous Flower pin interactions
+
+- Keep [sidebar pinning and ordering](ui/flower-thread-sidebar.md) available during confirmations and list reads. Serialize commands, coalesce unsent toggles, replay later intent after acknowledgements or failure, and reconcile summaries in the background without blocking interaction.
+
 ## 2026-10-19 — Consistent Desktop build sources
 
 - Reject source changes between Desktop, embedded UI and Runtime compilation, including checkout advances during a build. Preserve intentional dirty-source development and require an explicit rebuild after drift. See [development bundles](desktop/desktop-development-bundles.md).
@@ -8,6 +12,7 @@
 
 - Keep search enabled by default and select DeepSeek Fetch when search is on and no reader is specified. Preserve explicit search and reader preferences, canonical frozen Turn bindings, and backend-owned defaults in [model web search](ai/model-web-search.md) and [provider configuration](ui/flower-provider-configuration.md).
 - Advance [Runtime compatibility](architecture/runtime-service-snapshot.md) to epoch 65 for the required default_fetch_source projection; older peers retain the existing upgrade path instead of receiving frontend substitutes.
+
 
 ## 2026-10-19 — Responsive Flower conversation selection
 

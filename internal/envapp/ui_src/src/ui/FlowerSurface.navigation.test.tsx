@@ -1459,7 +1459,8 @@ describe('FlowerSurface navigation', () => {
 
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${threadID}"] button`)));
     (runtime.querySelector(`[data-thread-id="${threadID}"] button`) as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+    await waitFor(() => runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === threadID
+      && Boolean(runtime.querySelector('textarea')));
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'restore after rejection';
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));

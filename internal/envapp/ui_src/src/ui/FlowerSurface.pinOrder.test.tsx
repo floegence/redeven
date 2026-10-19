@@ -5,7 +5,8 @@ import { textWithoutHiddenCopies } from './textContent.test-support';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import type { FlowerThreadPinMetadata, FlowerThreadSnapshot } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { streamingFixture } from '../../../../flower_ui/testing/streamingFixture';
-import { adapter, deferred, flush, flowerSurfaceNotifications, liveBootstrap, renderSurfaceWithAdapter, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+import { createFlowerComposerDraftCoordinator } from '../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
+import { adapter, deferred, disposeRenderedSurface, flush, flowerSurfaceNotifications, liveBootstrap, renderSurfaceWithDraftCoordinator, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
 const copy = DEFAULT_FLOWER_SURFACE_COPY.threadList;
 async function setup() {
@@ -18,15 +19,16 @@ async function setup() {
   const loadThread = vi.fn(async (id: string) => liveBootstrap(summaries.find((entry) => entry.thread_id === id)!));
   const base = adapter();
   const movePinnedThread = vi.fn(() => result.promise);
-  const runtime = renderSurfaceWithAdapter({ ...base, listThreads, loadThread,
+  const setThreadPinned = vi.fn(async () => ({ thread_id: 'third', pinned_at_ms: 0, pin_rank: 0, settings_revision: 2 }));
+  const runtime = renderSurfaceWithDraftCoordinator({ ...base, listThreads, loadThread,
     connectLiveStream: stream.adapter.connectLiveStream, movePinnedThread,
-    setThreadPinned: vi.fn(async () => ({ thread_id: 'third', pinned_at_ms: 0, pin_rank: 0, settings_revision: 2 })),
-  });
+    setThreadPinned,
+  }, createFlowerComposerDraftCoordinator());
   const row = (id: string) => runtime.querySelector<HTMLElement>(`[data-thread-id="${id}"]`)!;
   const order = () => Array.from(runtime.querySelectorAll<HTMLElement>('[data-flower-thread-card]')).map((node) => node.dataset.threadId);
   await waitFor(() => Boolean(row('third')));
-  const moveDown = async () => {
-    row('first').querySelector<HTMLButtonElement>('.flower-thread-card-menu-button')!.click();
+  const moveDown = async (id = 'first') => {
+    row(id).querySelector<HTMLButtonElement>('.flower-thread-card-menu-button')!.click();
     await flush();
     Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find((button) => textWithoutHiddenCopies(button) === copy.movePinnedDown)!.click();
     await flush();
@@ -37,7 +39,7 @@ async function setup() {
     await waitFor(() => row(next[0].thread_id)?.textContent?.includes(next[0].title) === true);
     await flush();
   };
-  return { runtime, row, order, moveDown, result, listThreads, loadThread, base, movePinnedThread, emit, stream, summaries: () => summaries };
+  return { runtime, row, order, moveDown, result, listThreads, loadThread, base, movePinnedThread, setThreadPinned, emit, stream, summaries: () => summaries };
 }
 
 const acknowledgement: FlowerThreadPinMetadata[] = [
@@ -46,6 +48,133 @@ const acknowledgement: FlowerThreadPinMetadata[] = [
 ];
 
 describe('Flower pin operation convergence', () => {
+  it('stops queued writes and reconciliation when the surface is disposed', async () => {
+    const ui = await setup();
+    await ui.moveDown();
+    ui.row('third').querySelector<HTMLButtonElement>('.flower-thread-card-pin-button')!.click();
+    const reads = ui.listThreads.mock.calls.length;
+    disposeRenderedSurface(ui.runtime);
+    ui.result.resolve(acknowledgement);
+    await flush();
+    expect(ui.setThreadPinned).not.toHaveBeenCalled();
+    expect(ui.listThreads).toHaveBeenCalledTimes(reads);
+    expect(flowerSurfaceNotifications()).toEqual([]);
+  });
+
+  it('accepts pin changes immediately while another mutation is awaiting confirmation', async () => {
+    const ui = await setup();
+    await ui.moveDown();
+    const button = ui.row('third').querySelector<HTMLButtonElement>('.flower-thread-card-pin-button')!;
+    expect(button.disabled).toBe(false);
+    button.click();
+    expect(ui.row('third').dataset.pinned).toBe('false');
+    expect(ui.setThreadPinned).not.toHaveBeenCalled();
+    ui.result.resolve(acknowledgement);
+    await waitFor(() => ui.setThreadPinned.mock.calls.length === 1);
+    expect(ui.setThreadPinned).toHaveBeenCalledExactlyOnceWith('third', false);
+    expect(ui.row('third').dataset.pinned).toBe('false');
+  });
+
+  it('does not hold controls or new writes behind the post-command list read', async () => {
+    const ui = await setup();
+    const refresh = deferred<FlowerThreadSnapshot[]>();
+    await ui.moveDown();
+    ui.listThreads.mockImplementationOnce(() => refresh.promise);
+    ui.result.resolve(acknowledgement);
+    await waitFor(() => ui.listThreads.mock.calls.length === 2);
+    const button = ui.row('third').querySelector<HTMLButtonElement>('.flower-thread-card-pin-button')!;
+    expect(button.disabled).toBe(false);
+    button.click();
+    await waitFor(() => ui.setThreadPinned.mock.calls.length === 1);
+    expect(ui.row('third').dataset.pinned).toBe('false');
+    refresh.resolve(ui.summaries());
+    await flush();
+    expect(ui.row('third').dataset.pinned).toBe('false');
+  });
+
+  it('coalesces unsent toggles while keeping the latest visible intent over acknowledgements', async () => {
+    const ui = await setup();
+    const first = deferred<FlowerThreadPinMetadata>();
+    const last = deferred<FlowerThreadPinMetadata>();
+    ui.setThreadPinned.mockImplementationOnce(() => first.promise).mockImplementationOnce(() => last.promise);
+    const button = ui.row('third').querySelector<HTMLButtonElement>('.flower-thread-card-pin-button')!;
+    button.click();
+    expect(ui.row('third').dataset.pinned).toBe('false');
+    button.click(); button.click(); button.click();
+    expect(ui.row('third').dataset.pinned).toBe('true');
+    expect(ui.setThreadPinned.mock.calls).toEqual([['third', false]]);
+    first.resolve({ thread_id: 'third', pinned_at_ms: 0, pin_rank: 0, settings_revision: 2 });
+    await waitFor(() => ui.setThreadPinned.mock.calls.length === 2);
+    expect(ui.setThreadPinned.mock.calls).toEqual([['third', false], ['third', true]]);
+    expect(ui.row('third').dataset.pinned).toBe('true');
+    expect(button.disabled).toBe(false);
+    last.resolve({ thread_id: 'third', pinned_at_ms: 40, pin_rank: 4, settings_revision: 3 });
+    await flush();
+    expect(ui.order()).toEqual(['third', 'first', 'second']);
+  });
+
+  it('replays consecutive relative moves without waiting for a list refresh', async () => {
+    const ui = await setup();
+    const second = deferred<readonly FlowerThreadPinMetadata[]>();
+    ui.movePinnedThread.mockImplementationOnce(() => ui.result.promise).mockImplementationOnce(() => second.promise);
+    await ui.moveDown();
+    await ui.moveDown();
+    expect(ui.order()).toEqual(['second', 'third', 'first']);
+    expect(ui.movePinnedThread).toHaveBeenCalledTimes(1);
+    ui.result.resolve(acknowledgement);
+    await waitFor(() => ui.movePinnedThread.mock.calls.length === 2);
+    expect(ui.movePinnedThread).toHaveBeenLastCalledWith('first', { anchor_thread_id: 'third', placement: 'after' });
+    expect(ui.order()).toEqual(['second', 'third', 'first']);
+    second.resolve([
+      { thread_id: 'first', pinned_at_ms: 30, pin_rank: 1, settings_revision: 3 },
+      { thread_id: 'third', pinned_at_ms: 28, pin_rank: 2, settings_revision: 2 },
+    ]);
+    await flush();
+    expect(ui.order()).toEqual(['second', 'third', 'first']);
+  });
+
+  it('rolls back a failed move without discarding a later pin or streamed title', async () => {
+    const ui = await setup();
+    const pin = deferred<FlowerThreadPinMetadata>();
+    ui.setThreadPinned.mockImplementationOnce(() => pin.promise);
+    await ui.moveDown();
+    ui.row('third').querySelector<HTMLButtonElement>('.flower-thread-card-pin-button')!.click();
+    await ui.emit(ui.summaries().map(entry => ({ ...entry, title: entry.title + ' live', title_generation: 2 })));
+    ui.result.reject(new Error('anchor changed'));
+    await waitFor(() => ui.setThreadPinned.mock.calls.length === 1);
+    expect(ui.order()).toEqual(['first', 'second', 'third']);
+    expect(ui.row('third').dataset.pinned).toBe('false');
+    expect(ui.row('third').textContent).toContain('third live');
+    expect(flowerSurfaceNotifications().some(notice => notice.message.includes(copy.pinUpdateFailed))).toBe(true);
+    pin.resolve({ thread_id: 'third', pinned_at_ms: 0, pin_rank: 0, settings_revision: 2 });
+    await flush();
+    expect(ui.row('third').dataset.pinned).toBe('false');
+  });
+
+  it('keeps pending intent visible across newer settings and rejects stale post-command reads', async () => {
+    const ui = await setup();
+    const refresh = deferred<FlowerThreadSnapshot[]>();
+    const nextRead = deferred<FlowerThreadSnapshot[]>();
+    await ui.moveDown();
+    ui.listThreads.mockImplementationOnce(() => refresh.promise).mockImplementationOnce(() => nextRead.promise);
+    ui.result.resolve(acknowledgement);
+    await waitFor(() => ui.listThreads.mock.calls.length === 2);
+    const pin = deferred<FlowerThreadPinMetadata>();
+    ui.setThreadPinned.mockImplementationOnce(() => pin.promise);
+    ui.row('third').querySelector<HTMLButtonElement>('.flower-thread-card-pin-button')!.click();
+    await ui.emit(ui.summaries().map(entry => ({ ...entry, title: entry.title + ' latest', title_generation: 2, settings_revision: 4 })));
+    expect(ui.row('third').dataset.pinned).toBe('false');
+    pin.resolve({ thread_id: 'third', pinned_at_ms: 0, pin_rank: 0, settings_revision: 5 });
+    await flush();
+    refresh.resolve(ui.summaries().map(entry => ({ ...entry, settings_revision: 1 })));
+    await waitFor(() => ui.listThreads.mock.calls.length === 3);
+    expect(ui.row('third').dataset.pinned).toBe('false');
+    expect(ui.row('third').textContent).toContain('third latest');
+    await ui.emit(ui.summaries().map(entry => ({ ...entry, settings_revision: 6 })));
+    expect(ui.row('third').dataset.pinned).toBe('true');
+    nextRead.resolve(ui.summaries());
+  });
+
   it('keeps the confirmed position after a failed refresh until the workspace stream converges', async () => {
     const ui = await setup();
     const first = ui.row('first');

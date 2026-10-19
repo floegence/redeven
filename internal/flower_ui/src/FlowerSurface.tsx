@@ -990,26 +990,49 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [threadActionBusy, setThreadActionBusy] = createSignal<{ threadID: string; action: FlowerThreadMenuAction } | null>(null);
   const forkRequests = new Map<string, Readonly<{ client_request_id: string; title: string; source_item_id?: string }>>();
   const [createdForkThreadID, setCreatedForkThreadID] = createSignal('');
-  const [pinMutation, setPinMutation] = createSignal<ReadonlyMap<string, {
-    pinned_at_ms: number; pin_rank: number; settings_revision?: number;
-  }> | null>(null);
-  const [pinSaving, setPinSaving] = createSignal(false);
+  type ThreadPinCommand = Readonly<{ threadID: string } & (
+    | { kind: 'pin'; pinned: boolean; pinnedAt: number }
+    | { kind: 'move'; position: FlowerThreadPinPosition }
+  )>;
+  const [pinMutation, setPinMutation] = createSignal<ReadonlyMap<string, FlowerThreadPinMetadata>>(new Map());
+  const [pinCommands, setPinCommands] = createSignal<readonly ThreadPinCommand[]>([]);
   createEffect(() => {
     const pending = pinMutation();
-    if (!pending) return;
     const summaries = threadCache().summaries;
     const retained = new Map([...pending].filter(([id, pin]) => {
       const summary = summaries.get(id);
-      return summary && (pin.settings_revision === undefined || summary.settings_revision < pin.settings_revision);
+      return summary && summary.settings_revision < pin.settings_revision;
     }));
-    if (retained.size === 0 || retained.size !== pending.size) setPinMutation(retained.size ? retained : null);
+    if (retained.size !== pending.size) setPinMutation(retained);
   });
   let pinMutationGeneration = 0;
   onCleanup(() => { pinMutationGeneration += 1; });
-  const threadWithPinnedPresentation = (thread: FlowerThreadSnapshot): FlowerThreadSnapshot => {
-    const pin = pinMutation()?.get(thread.thread_id);
-    if (!pin || (pin.settings_revision !== undefined && thread.settings_revision >= pin.settings_revision)) return thread;
-    return { ...thread, pinned_at_ms: pin.pinned_at_ms, pin_rank: pin.pin_rank };
+  const projectThreadPins = (summaries: readonly FlowerThreadSnapshot[]) => {
+    const acknowledged = pinMutation();
+    const pending = pinCommands();
+    const projected = new Map(summaries.filter(thread => !thread.parent_thread_id).map(thread => {
+      const pin = acknowledged.get(thread.thread_id);
+      return [thread.thread_id, pin && thread.settings_revision < pin.settings_revision
+        ? { ...thread, pinned_at_ms: pin.pinned_at_ms, pin_rank: pin.pin_rank } : thread] as const;
+    }));
+    for (const command of pending) {
+      const current = projected.get(command.threadID);
+      if (!current) continue;
+      if (command.kind === 'pin') {
+        if ((Number(current.pinned_at_ms) > 0) === command.pinned) continue;
+        const rank = command.pinned ? Math.max(0, ...[...projected.values()].map(thread => thread.pin_rank ?? 0)) + 1 : 0;
+        projected.set(command.threadID, { ...current, pinned_at_ms: command.pinned ? command.pinnedAt : 0, pin_rank: rank });
+        continue;
+      }
+      const ordered = [...projected.values()].filter(thread => Number(thread.pinned_at_ms) > 0).sort(comparePinnedFlowerThreads);
+      const source = ordered.findIndex(thread => thread.thread_id === command.threadID);
+      if (source < 0 || !ordered.some(thread => thread.thread_id === command.position.anchor_thread_id)) continue;
+      const [moved] = ordered.splice(source, 1);
+      const anchor = ordered.findIndex(thread => thread.thread_id === command.position.anchor_thread_id);
+      ordered.splice(anchor + (command.position.placement === 'after' ? 1 : 0), 0, moved);
+      ordered.forEach((thread, index) => projected.set(thread.thread_id, { ...thread, pin_rank: ordered.length - index }));
+    }
+    return [...projected.values()];
   };
   const [renameTarget, setRenameTarget] = createSignal<Readonly<{ threadID: string; placement: 'dialog' | 'header' }> | null>(null);
   const renameThreadID = () => renameTarget()?.threadID ?? '';
@@ -2662,8 +2685,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ].join('\x1f');
   const threadItems = createMemo(() => {
     localReadVisibilityRevision();
-		return threads().filter(thread => !thread.parent_thread_id).map((t) => {
-      const visibleThread = threadWithPinnedPresentation(threadWithLocalReadVisibility(t));
+		return projectThreadPins(threads()).map((t) => {
+      const visibleThread = threadWithLocalReadVisibility(t);
       const sig = threadItemSignature(visibleThread);
       const cached = threadItemCache.get(t.thread_id);
       if (cached && cached.sig === sig) {
@@ -2690,8 +2713,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const companionThreadItems = createMemo<readonly FlowerCompanionThreadListItem[]>(() => {
     companionRunRevision();
     const cache = threadCache();
-    return threads().filter(thread => !thread.parent_thread_id).map((summary) => {
-      const visibleSummary = threadWithPinnedPresentation(threadWithLocalReadVisibility(summary));
+    return projectThreadPins(threads()).map((summary) => {
+      const visibleSummary = threadWithLocalReadVisibility(summary);
       const item = projectFlowerThreadListItem(visibleSummary, copy().threadList.untitled);
       const detail = cache.views.get(summary.thread_id)?.thread;
       const activeRunID = trimString(summary.active_run_id);
@@ -3359,60 +3382,99 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return requestPromise;
   };
 
-  const mutateThreadPins = async (
-    optimistic: ReadonlyMap<string, { pinned_at_ms: number; pin_rank: number }>,
-    request: () => Promise<readonly FlowerThreadPinMetadata[]>,
-  ) => {
-    if (pinSaving()) return;
-    const generation = ++pinMutationGeneration;
-    const previous = pinMutation();
-    setPinSaving(true);
-    setPinMutation(new Map([...(previous ?? []), ...optimistic]));
+  let pinCommandRunning = false;
+  let activePinCommand: ThreadPinCommand | undefined;
+  let pinRefreshRunning = false;
+  let pinRefreshNeeded = false;
+  let pinRefreshNotify = false;
+  const reconcileThreadPins = async (saved: boolean) => {
+    pinRefreshNeeded = true;
+    pinRefreshNotify ||= saved;
+    if (pinRefreshRunning) return;
+    pinRefreshRunning = true;
+    const generation = pinMutationGeneration;
+    try {
+      while (pinRefreshNeeded && generation === pinMutationGeneration) {
+        pinRefreshNeeded = false;
+        const notifyFailure = pinRefreshNotify;
+        pinRefreshNotify = false;
+        try {
+          // Coalesce post-command reads independently of writes and interaction.
+          const summaries = await withFlowerThreadListTimeout(props.adapter.listThreads());
+          if (generation !== pinMutationGeneration) return;
+          setThreadCache(cache => cache.replaceSummaries(summaries.filter(thread => !retiredThreadIDs.has(thread.thread_id)), attentionNavigation()?.childThreadID));
+        } catch {
+          if (generation === pinMutationGeneration && notifyFailure) notifyThreadActionError(copy().threadList.pinRefreshFailed);
+        }
+      }
+    } finally {
+      pinRefreshRunning = false;
+    }
+  };
+  const drainThreadPins = async () => {
+    if (pinCommandRunning) return;
+    pinCommandRunning = true;
+    const generation = pinMutationGeneration;
     let saved = false;
     try {
-      const result = await request();
-      if (generation !== pinMutationGeneration) return;
-      saved = true;
-      // A newer canonical summary wins over this acknowledgement. Keep the
-      // overlay separate: pin metadata cannot advance unrelated settings facts.
-      setPinMutation(new Map([...(previous ?? []), ...result.map((pin) => [pin.thread_id, pin] as const)]));
-    } catch (error) {
-      if (generation !== pinMutationGeneration) return;
-      setPinMutation(previous);
-      notifyThreadActionError(copy().threadList.pinUpdateFailed + ' ' + getErrorMessage(error));
-    }
-    try {
-      // One post-command read also reconciles an unknown transport outcome.
-      // Do not use the navigation refresh: ordering must not acknowledge reads,
-      // load transcripts, or replace the list with a loading/error surface.
-      const summaries = await withFlowerThreadListTimeout(props.adapter.listThreads());
-      if (generation !== pinMutationGeneration) return;
-      setThreadCache((cache) => cache.replaceSummaries(summaries.filter((thread) => !retiredThreadIDs.has(thread.thread_id)), attentionNavigation()?.childThreadID));
-    } catch {
-      if (generation === pinMutationGeneration && saved) notifyThreadActionError(copy().threadList.pinRefreshFailed);
+      while (pinCommands().length && generation === pinMutationGeneration) {
+        const command = pinCommands()[0];
+        activePinCommand = command;
+        try {
+          // Serialize relative moves and membership changes, never the UI or list read.
+          const result = command.kind === 'pin'
+            ? [await props.adapter.setThreadPinned!(command.threadID, command.pinned)]
+            : await props.adapter.movePinnedThread!(command.threadID, command.position);
+          if (generation !== pinMutationGeneration) return;
+          saved = true;
+          batch(() => {
+            setPinMutation(previous => {
+              const next = new Map(previous);
+              for (const pin of result) {
+                if (!next.has(pin.thread_id) || next.get(pin.thread_id)!.settings_revision < pin.settings_revision) next.set(pin.thread_id, pin);
+              }
+              return next;
+            });
+            setPinCommands(previous => previous.slice(1));
+          });
+        } catch (error) {
+          if (generation !== pinMutationGeneration) return;
+          // Remove only the failed intent, then replay later intents over current facts.
+          setPinCommands(previous => previous.slice(1));
+          notifyThreadActionError(copy().threadList.pinUpdateFailed + ' ' + getErrorMessage(error));
+        }
+      }
     } finally {
-      if (generation === pinMutationGeneration) setPinSaving(false);
+      activePinCommand = undefined;
+      pinCommandRunning = false;
+      if (generation === pinMutationGeneration) void reconcileThreadPins(saved);
     }
+  };
+  const enqueueThreadPin = (command: ThreadPinCommand) => {
+    setPinCommands(previous => {
+      const last = previous.at(-1);
+      // Unsent adjacent toggles need only the latest requested membership.
+      return command.kind === 'pin' && last?.kind === 'pin' && last !== activePinCommand && last.threadID === command.threadID
+        ? [...previous.slice(0, -1), command]
+        : [...previous, command];
+    });
+    void drainThreadPins();
   };
   const toggleThreadPin = (item: FlowerThreadListItem) => {
-    if (!props.adapter.setThreadPinned || pinSaving()) return;
-    const current = sidebarListItems().find((thread) => thread.thread_id === item.thread_id);
+    if (!props.adapter.setThreadPinned) return;
+    const current = sidebarListItems().find(thread => thread.thread_id === item.thread_id);
     if (!current) return;
-    const pinned = !current.pinned;
-    const rank = pinned ? Math.max(0, ...sidebarListItems().map((thread) => thread.pin_rank ?? 0)) + 1 : 0;
-    void mutateThreadPins(new Map([[item.thread_id, { pinned_at_ms: pinned ? Date.now() : 0, pin_rank: rank }]]), async () => [await props.adapter.setThreadPinned!(item.thread_id, pinned)]);
+    enqueueThreadPin({ kind: 'pin', threadID: item.thread_id, pinned: !current.pinned, pinnedAt: Date.now() });
   };
   const movePinnedThread = (threadID: string, input: FlowerThreadPinPosition) => {
-    if (!props.adapter.movePinnedThread || pinSaving()) return;
-    const items = sidebarListItems().filter((item) => item.pinned).sort(comparePinnedFlowerThreads);
-    const source = items.findIndex((item) => item.thread_id === threadID);
-    if (source < 0 || threadID === input.anchor_thread_id || !items.some((item) => item.thread_id === input.anchor_thread_id)) return;
-    const [moved] = items.splice(source, 1);
-    const anchor = items.findIndex((item) => item.thread_id === input.anchor_thread_id) + (input.placement === 'after' ? 1 : 0);
+    if (!props.adapter.movePinnedThread) return;
+    const items = sidebarListItems().filter(item => item.pinned).sort(comparePinnedFlowerThreads);
+    const source = items.findIndex(item => item.thread_id === threadID);
+    if (source < 0 || threadID === input.anchor_thread_id || !items.some(item => item.thread_id === input.anchor_thread_id)) return;
+    items.splice(source, 1);
+    const anchor = items.findIndex(item => item.thread_id === input.anchor_thread_id) + (input.placement === 'after' ? 1 : 0);
     if (anchor === source) return;
-    items.splice(anchor, 0, moved);
-    const optimistic = new Map(items.map((item, index) => [item.thread_id, { pinned_at_ms: item.pinned_at_ms ?? 0, pin_rank: items.length - index }]));
-    void mutateThreadPins(optimistic, () => props.adapter.movePinnedThread!(threadID, input));
+    enqueueThreadPin({ kind: 'move', threadID, position: input });
   };
   const reportThreadDetailDiagnostic = (
     threadID: string,
@@ -4959,9 +5021,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           setSelectedThreadID('');
         }
       } else {
-        for (const summary of incoming) {
-          setThreadCache((cache) => cache.replaceSummary(summary));
-        }
+        // A workspace batch publishes once, so unrelated summaries do not
+        // repeatedly invalidate the selected conversation's reactive graph.
+        setThreadCache(cache => incoming.reduce((next, summary) => next.replaceSummary(summary), cache));
       }
       if (selectedID) {
         if (envelope.kind === 'ready') beginThreadDetailDisplayCycle(selectedID);
@@ -13444,7 +13506,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           canFork={!!props.adapter.forkThread}
           canRename={!!props.adapter.renameThread}
           canPin={!!props.adapter.setThreadPinned}
-          pinBusy={pinSaving()}
           onMovePinned={props.adapter.movePinnedThread ? movePinnedThread : undefined}
           showStopAction
           showDeleteAction={typeof props.adapter.deleteThread === 'function'}
