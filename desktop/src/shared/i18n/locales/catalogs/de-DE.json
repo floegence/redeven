@@ -1788,7 +1788,9 @@
       "presets": {
         "classic-light": "Klassisch hell",
         "porcelain-light": "Porzellan Hell",
+        "cloud-white": "Wolkenweiß",
         "porcelain-dark": "Porzellan Dunkel",
+        "soft-black": "Sanftes Schwarz",
         "paper": "Papier",
         "mist": "Nebel",
         "meadow": "Wiese",

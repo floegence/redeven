@@ -67,6 +67,23 @@ test('published standalone palette colors belong only to their generated string 
   ).length, 1);
 });
 
+test('allows published preset labels only in their explicit English catalog entries', () => {
+  const source = [
+    "  'cloud-white': 'Cloud White',",
+    "  'soft-black': 'Soft Black',",
+    'const surface = "white";',
+  ].join('\n');
+  for (const pathname of [
+    'desktop/src/shared/i18n/locales/en-US.ts',
+    'internal/envapp/ui_src/src/ui/i18n/locales/en-US.ts',
+  ]) {
+    assert.deepEqual(findThemeColorViolations(source, pathname), [
+      pathname + ':3: replace white with a semantic theme token or add a precise owner/path/use exception',
+    ]);
+  }
+  assert.equal(findThemeColorViolations(source, 'other.ts').length, 3);
+});
+
 test('video letterboxing belongs only to the media renderer and does not require a fixed height', () => {
   const pathname = 'internal/envapp/ui_src/src/ui/file-preview/rendererRegistry.tsx';
   assert.deepEqual(findThemeColorViolations([

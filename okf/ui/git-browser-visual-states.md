@@ -3,7 +3,7 @@ type: UI Contract
 title: Git browser visual states
 description: Keep Git selection, repository facts, semantic status, hover, and focus visually independent across themes.
 tags: [ui, git, files, accessibility, themes]
-timestamp: 2026-09-22T00:00:00Z
+timestamp: 2026-10-18T00:00:00Z
 ---
 # Summary
 
@@ -14,6 +14,8 @@ Env App's Git browser owns file selection and inline diff inspection. File lists
 ## State ownership
 
 Selected navigation, branch rows, history rows, status summaries, and changed-file rows share the Git selection accent, background, border, and indicator tokens. List-like selections use a filled surface plus a solid left indicator. Compact segmented tabs and Files/Git mode buttons use the primary/primary-foreground selection contract owned by [Shared surface material](surface-material.md). They update the actual selected button immediately, retain both button instances, and do not adopt list indicators. Hover uses a lower-emphasis neutral surface and never overrides an active selection. Keyboard focus uses a distinct outline that remains visible on selected and unselected controls.
+
+Selected-row secondary metadata blends the published muted and body foregrounds and must retain at least 4.5:1 contrast against its selected surface in every preset and material, including Soft Black. This product alias does not override the upstream palette.
 
 The Current branch chip is independent of selection styling. It always uses the current-branch chip tokens, including when the current branch is selected. Git change and health tones such as success, warning, danger, info, and remote-branch violet remain on semantic icons, badges, paths, and values; they must not determine a selection indicator or focus ring.
 

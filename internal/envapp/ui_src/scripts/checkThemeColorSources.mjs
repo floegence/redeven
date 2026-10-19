@@ -119,6 +119,19 @@ function isInsideNamedFunction(source, offset, functionName) {
 // Exceptions are deliberately scoped by path and source context. A whole file or
 // directory must never be exempted merely because it currently contains one valid color source.
 export const THEME_COLOR_EXCEPTIONS = Object.freeze([
+  ...[
+    'desktop/src/shared/i18n/locales/en-US.ts',
+    'internal/envapp/ui_src/src/ui/i18n/locales/en-US.ts',
+  ].map((pathname) => exception(
+    pathname,
+    'theme-source',
+    'Cloud White and Soft Black are published preset display names in the explicit English catalog, not CSS color declarations.',
+    ({ value, lineSource }) => (
+      value === 'White' && /^\s*'cloud-white': 'Cloud White',\s*$/u.test(lineSource)
+    ) || (
+      value === 'Black' && /^\s*'soft-black': 'Soft Black',\s*$/u.test(lineSource)
+    ),
+  )),
   exception(
     'desktop/src/shared/floeStandaloneStyles.generated.ts',
     'theme-source',

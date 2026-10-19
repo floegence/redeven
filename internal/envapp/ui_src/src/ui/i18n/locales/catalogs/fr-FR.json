@@ -459,6 +459,8 @@
       "switching": "Changement d’apparence…",
       "presets": {
         "classic-light": "Classique clair",
+        "cloud-white": "Blanc nuage",
+        "soft-black": "Noir doux",
         "porcelain-light": "Porcelaine claire",
         "porcelain-dark": "Porcelaine sombre",
         "paper": "Papier",

@@ -15,12 +15,21 @@ describe('desktop shell theme contract', () => {
   });
 
   it('keeps the published unique presets for each mode', () => {
-    expect(DESKTOP_SHELL_THEME_PRESETS.light).toHaveLength(12);
-    expect(DESKTOP_SHELL_THEME_PRESETS.dark).toHaveLength(14);
+    expect(DESKTOP_SHELL_THEME_PRESETS.light).toHaveLength(13);
+    expect(DESKTOP_SHELL_THEME_PRESETS.dark).toHaveLength(15);
     expect(new Set([
       ...DESKTOP_SHELL_THEME_PRESETS.light,
       ...DESKTOP_SHELL_THEME_PRESETS.dark,
-    ]).size).toBe(26);
+    ]).size).toBe(28);
+  });
+
+  it('retains the new published presets in a version-one saved selection', () => {
+    const saved = { version: 1, light: 'cloud-white', dark: 'soft-black' };
+    expect(normalizeDesktopShellThemeSelection(saved)).toEqual(saved);
+    expect(isDesktopShellThemePresetForMode('cloud-white', 'light')).toBe(true);
+    expect(isDesktopShellThemePresetForMode('soft-black', 'dark')).toBe(true);
+    expect(isDesktopShellThemePresetForMode('cloud-white', 'dark')).toBe(false);
+    expect(isDesktopShellThemePresetForMode('soft-black', 'light')).toBe(false);
   });
 
   it('normalizes persisted selections per mode and version', () => {

@@ -114,7 +114,7 @@ afterEach(() => {
 
 describe('Git browser rendered selection contract', () => {
   it.each(['standard', 'soft-neumorphic'])('keeps selected, hovered, focused, and current states distinct in every built-in theme with %s', async (material) => {
-    expect.soft(builtInShellThemePresets).toHaveLength(26);
+    expect.soft(builtInShellThemePresets).toHaveLength(28);
     document.documentElement.dataset.floeSurfaceStyle = material;
 
     for (const preset of builtInShellThemePresets) {

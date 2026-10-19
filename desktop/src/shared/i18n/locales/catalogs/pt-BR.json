@@ -1788,7 +1788,9 @@
       "presets": {
         "classic-light": "Clássico claro",
         "porcelain-light": "Porcelana clara",
+        "cloud-white": "Branco nuvem",
         "porcelain-dark": "Porcelana escura",
+        "soft-black": "Preto suave",
         "paper": "Papel",
         "mist": "Névoa",
         "meadow": "Prado",

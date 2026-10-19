@@ -165,9 +165,9 @@ contracts remain authoritative.
 The source guard checks the production opt-in, removed decoration overrides,
 and shared Switch boundary. Browser coverage exercises the published package
 with real product styles, light/dark controls and dialogs, unchanged draft
-selection and focus geometry, and the 26-preset settings hierarchy in both
+selection and focus geometry, and the 28-preset settings hierarchy in both
 materials. Relevant Flower, terminal, and Workbench tests validate existing
-interaction ownership. Compact selection matrices cover 26 presets, both
+interaction ownership. Compact selection matrices cover 28 presets, both
 materials, selected hover, keyboard activation, retained button identity,
 forced colors, and reduced-motion appearance. Real Electron settings capture
 access scope and protocol controls alongside Welcome filters. Screenshots

@@ -341,7 +341,7 @@
   --git-browser-hover-bg: color-mix(in srgb, var(--foreground) 1%, var(--redeven-surface-panel));
   --git-browser-selection-bg: color-mix(in srgb, var(--git-browser-selection-source) 28%, var(--redeven-surface-panel));
   --git-browser-selection-border: color-mix(in srgb, var(--git-browser-selection-source) 36%, var(--redeven-stroke-divider));
-  --git-browser-selection-secondary-fg: color-mix(in srgb, var(--muted-foreground) 68%, var(--foreground) 32%);
+  --git-browser-selection-secondary-fg: color-mix(in srgb, var(--muted-foreground) 60%, var(--foreground) 40%);
   --git-browser-selection-chip-bg: color-mix(in srgb, var(--git-browser-selection-source) 15%, var(--redeven-surface-panel));
   --git-browser-selection-chip-border: color-mix(in srgb, var(--git-browser-selection-source) 34%, var(--redeven-surface-panel));
   --git-browser-selection-chip-fg: color-mix(in srgb, var(--git-browser-selection-accent) 58%, var(--foreground) 42%);

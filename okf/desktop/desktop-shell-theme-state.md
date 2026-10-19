@@ -13,7 +13,9 @@ Redeven Desktop owns the global `system | light | dark` source and the remembere
 
 ## Catalog and authority
 
-The shared Desktop contract derives admitted ids, defaults, and semantic metadata from the published Floe Webapp dependency's browser-neutral `/themes` entry. Its 26 presets include 12 light and 14 dark choices, with Porcelain first in each mode and the other presets retaining their published relative order. Porcelain Light uses warm ivory surfaces and dark ink. Porcelain Dark uses near-black backgrounds, charcoal surfaces, and warm white text. Its idle input edges are deliberately quiet; the shared focus border provides stronger interaction feedback. Redeven must not copy the palette or weaken the upstream high-contrast and forced-color behavior.
+The shared Desktop contract derives admitted ids, defaults, and semantic metadata from the published Floe Webapp dependency's browser-neutral `/themes` entry. Its 28 presets include 13 light and 15 dark choices, with Porcelain first in each mode and the other presets retaining their published relative order. Porcelain Light uses warm ivory surfaces and dark ink. Porcelain Dark uses near-black backgrounds, charcoal surfaces, and warm white text. Its idle input edges are deliberately quiet; the shared focus border provides stronger interaction feedback. Redeven must not copy the palette or weaken the upstream high-contrast and forced-color behavior.
+
+Cloud White adds pure-white reading, card, popover and terminal surfaces with graphite text and a nearly white sidebar. Soft Black adds a near-black canvas, subtly raised panels, warm-gray text and softened semantic and syntax colors. Both are optional published presets, admitted by the same catalog in Welcome, Env App, native chrome and auxiliary documents; they do not change the per-mode defaults.
 
 The selection schema remains version 1, persisted separately from the source key. Invalid versions, unknown ids, and cross-mode ids normalize independently to the upstream per-mode defaults. Valid stored selections, including Classic presets, remain unchanged.
 

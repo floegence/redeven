@@ -459,6 +459,8 @@
       "switching": "Darstellung wird geändert…",
       "presets": {
         "classic-light": "Klassisch hell",
+        "cloud-white": "Wolkenweiß",
+        "soft-black": "Sanftes Schwarz",
         "porcelain-light": "Porzellan Hell",
         "porcelain-dark": "Porzellan Dunkel",
         "paper": "Papier",

@@ -131,7 +131,7 @@ it('previews the saved topology with groups and routed relationships under an in
   expect(host.querySelectorAll('button, [tabindex]')).toHaveLength(1);
   expect(request).toHaveBeenCalledWith('GET', '/canvases/commerce/versions/3');
   await page.screenshot({ element: host, path: '__screenshots__/tessiven-card-initial.png' });
-  expect(builtInShellThemePresets).toHaveLength(26);
+  expect(builtInShellThemePresets).toHaveLength(28);
   for (const preset of builtInShellThemePresets) {
     applyTheme(preset);
     expect(getComputedStyle(overlay).color, preset.name).toBe(resolvedThemeColor('--foreground'));

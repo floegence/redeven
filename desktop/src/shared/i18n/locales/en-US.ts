@@ -816,7 +816,9 @@ export const enUS = {
       presets: {
         'classic-light': 'Classic Light',
         'porcelain-light': 'Porcelain Light',
+        'cloud-white': 'Cloud White',
         'porcelain-dark': 'Porcelain Dark',
+        'soft-black': 'Soft Black',
         paper: 'Paper',
         mist: 'Mist',
         meadow: 'Meadow',

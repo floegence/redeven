@@ -459,6 +459,8 @@
       "switching": "外観を切り替えています…",
       "presets": {
         "classic-light": "クラシック ライト",
+        "cloud-white": "クラウドホワイト",
+        "soft-black": "ソフトブラック",
         "porcelain-light": "ポーセリン ライト",
         "porcelain-dark": "ポーセリン ダーク",
         "paper": "ペーパー",
