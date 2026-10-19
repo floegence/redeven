@@ -193,26 +193,18 @@ filter changes, thread removal, outside interaction, keyboard dismissal, resize,
 blur and sidebar visibility retain their normal closing behavior. Automatic
 layout/scroll events do not dismiss a menu; explicit rail scrolling does.
 
-`ThreadCache` remains the canonical summary owner. A short-lived pin operation
-overlay presents immediate placement without authoring unrelated settings facts.
-Pin, unpin, relative menu moves and dragging remain available during writes and
-post-command reads. One in-memory command queue preserves operation order;
-unsent adjacent membership changes for the same thread keep only the latest
-intent. The presentation replays pending commands over current canonical facts
-and revisioned acknowledgements, so an earlier response cannot hide a later
-intent. Failed commands remove only their own intent, preserve later commands
-and live titles/status/drafts, and show localized feedback.
+`ThreadCache` owns canonical summaries. Pin, unpin, menu moves and dragging stay
+available during writes and reads. One in-memory queue serializes commands and
+coalesces adjacent unsent toggles for the same thread. Pending commands replay
+over canonical facts and revisioned acknowledgements; failures remove only the
+failed command, preserve later intent and live content, and show localized errors.
 
-The write queue drains without waiting for list reads. A coalesced background
-read reconciles each drained batch, including unknown transport outcomes;
-commands completed during a read request one subsequent read. Revisioned
-acknowledgements remain visible until an equal or newer canonical summary
-arrives, including when the read fails. Older responses cannot overwrite newer
-streamed settings. No polling or second synchronization transport is added.
-
-Each workspace summary batch publishes one ThreadCache update. Individual
-summaries still merge through the existing revision and title rules, but cannot
-repeatedly invalidate the selected conversation's reactive graph within a batch.
+Writes never await list reads. One coalesced background read reconciles each
+drained batch, including unknown outcomes; completions during a read request
+one follow-up read. Acknowledgements remain until equal or newer summaries
+arrive, even after read failure. Stale responses cannot replace newer settings.
+There is no polling or second transport. Each summary batch publishes once
+through existing title/revision rules to avoid repeated transcript invalidation.
 
 # Boundaries
 
