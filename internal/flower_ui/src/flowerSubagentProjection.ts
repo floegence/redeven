@@ -130,7 +130,7 @@ function subagentUpdatedAtMs(summary: FlowerSubagentSummary): number {
 
 function itemFromSummary(summary: FlowerSubagentSummary, ownerThreadID: string): FlowerSubagentPanelItem | null {
   const threadID = trimString(summary.thread_id);
-  if (!threadID || threadID === ownerThreadID) return null;
+  if (!ownerThreadID || trimString(summary.parent_thread_id) !== ownerThreadID || !threadID || threadID === ownerThreadID) return null;
   const taskName = trimString(summary.task_name);
   if (!taskName) return null;
   const taskDescription = trimString(summary.task_description);

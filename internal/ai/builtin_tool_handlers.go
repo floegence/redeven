@@ -760,7 +760,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:         "subagents",
-			Description:  "Manage parent-owned subagents. Use spawn with a short 1-5 word English Title Case task_name such as Safety Review, required task_description, agent_type, and message to start a durable child thread. Never use snake_case or kebab-case names. Use wait/list/inspect to observe children, send_input to immediately guide a child, and close/close_all to stop child threads. Read completed reports from handoffs[].content and failures from items[].failure; last_message_preview is only a preview.",
+			Description:  "Manage direct children of the current thread only. Forked or inherited history does not transfer child ownership; use list to refresh historical targets and never retry an unavailable target ID. Use spawn with a short 1-5 word English Title Case task_name such as Safety Review, required task_description, agent_type, and message to start a durable child thread. Never use snake_case or kebab-case names. Use wait/list/inspect to observe children, send_input to immediately guide a child, and close/close_all to stop child threads. Read completed reports from handoffs[].content and failures from items[].failure; last_message_preview is only a preview.",
 			InputSchema:  toSchema(subagentsToolInputSchema()),
 			Mutating:     false,
 			Visibility:   ToolVisibilityDelegationControl,

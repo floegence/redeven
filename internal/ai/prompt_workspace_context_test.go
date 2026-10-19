@@ -119,7 +119,7 @@ func TestBuildPromptWorkspaceContextSection_RendersStructuredFacts(t *testing.T)
 
 func TestModelContextSnapshotCarriesCompleteStablePartitions(t *testing.T) {
 	root := t.TempDir()
-	r := newRun(runOptions{WorkingDir: root, AgentHomeDir: root, Shell: "/bin/zsh"})
+	r := newRun(runOptions{WorkingDir: root, AgentHomeDir: root, Shell: "/bin/zsh", ThreadID: "current-thread"})
 	now := func() time.Time { return time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC) }
 	first, err := r.collectModelContextSnapshot(t.Context(), FlowerPermissionApprovalRequired, now)
 	if err != nil {
@@ -129,7 +129,7 @@ func TestModelContextSnapshotCarriesCompleteStablePartitions(t *testing.T) {
 		t.Fatalf("sections=%+v", first.Sections)
 	}
 	text := modelContextSnapshotText(first)
-	for _, want := range []string{root, "- Current date: 2026-10-15", "- Timezone: UTC", "- Shell: /bin/zsh", "approval_required"} {
+	for _, want := range []string{root, "Current thread ID: current-thread", "- Current date: 2026-10-15", "- Timezone: UTC", "- Shell: /bin/zsh", "approval_required"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("missing %q: %s", want, text)
 		}

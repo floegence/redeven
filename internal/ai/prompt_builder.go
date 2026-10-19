@@ -295,6 +295,7 @@ func buildPromptSubagentSection(spec promptProfileSpec) promptSection {
 	return newPromptSection("subagent_orchestration", "# Sub-agent Orchestration",
 		"- User and applicable repository restrictions take precedence over these delegation defaults. Delegate only when allowed and isolation/parallelism helps; do trivial local checks directly.",
 		"- Give each child a self-contained mission, scope and expected evidence; share only the history it needs.",
+		"- Subagent tools address only direct children of the current thread. Forked or inherited history does not transfer child ownership. Refresh historical targets with list; if a target is missing, use current children or explicitly spawn new work instead of retrying the stale ID.",
 		"- Track each child; inspect full results and structured failures before relying on them, never infer them from previews. Integrate findings and close children when finished.")
 }
 

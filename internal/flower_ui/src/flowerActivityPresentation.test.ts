@@ -367,6 +367,36 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.detailBlocks).toEqual([]);
   });
 
+  it('keeps inherited task facts without offering navigation to an unowned child', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'subagents', renderer: 'subagent_operation',
+      payload: { action: 'spawn', targets: [{ thread_id: 'source-child', task_name: 'Source research', status: 'completed' }] },
+    }), { subagentSummaries: [] });
+    const detail = presentation.detailBlocks.find(block => block.kind === 'subagents');
+    expect(detail).toMatchObject({ subagents: { items: [{ name: 'Source research', raw_status: 'completed' }] } });
+    expect(JSON.stringify(detail)).not.toContain('open_messages');
+  });
+
+  it.each(['send_input', 'close', 'inspect', 'wait'])('shows an unavailable %s target without claiming completion or timeout', action => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'subagents', renderer: 'subagent_operation',
+      payload: { action, targets: [{ thread_id: 'source-child' }], requested_count: 1, missing_count: 1 },
+    }), { subagentSummaries: [] });
+    expect(presentation.label).toContain(DEFAULT_FLOWER_SURFACE_COPY.subagents!.activity.labels.missing);
+    expect(presentation.label).not.toContain('Completed');
+    expect(presentation.label).not.toContain('timed out');
+  });
+
+  it('keeps distinct inherited children that share a task name', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'subagents', renderer: 'subagent_operation', payload: { action: 'list',
+        targets: ['source-child-a', 'source-child-b'].map(thread_id => ({ thread_id, task_name: 'Research' })) },
+    }), { subagentSummaries: [] });
+    expect(presentation.detailBlocks).toMatchObject([{ subagents: { items: [
+      { thread_id: 'source-child-a', name: 'Research' }, { thread_id: 'source-child-b', name: 'Research' },
+    ] } }]);
+  });
+
   it('keeps historical operation results independent of later child completion and reruns', () => {
     const operation = item({ tool_name: 'subagents', renderer: 'subagent_operation',
       payload: { action: 'wait', targets: [{ thread_id: 'child-thread-1' }], requested_count: 1, completed_count: 0, timed_out: true },
@@ -734,7 +764,7 @@ describe('presentFlowerActivityItem', () => {
         }],
         requested_count: 1,
       },
-    }));
+    }), { subagentSummaries: [subagentSummary()] });
 
     expect(presentation.label).toBe('Created subagent');
     expect(presentation.title).toEqual({ kind: 'plain', text: 'Created subagent' });
@@ -845,7 +875,7 @@ describe('presentFlowerActivityItem', () => {
         fork_mode: 'none',
         status: 'completed',
       },
-    }));
+    }), { subagentSummaries: [subagentSummary()] });
 
     expect(presentation.label).toBe('Subagent');
     expect(presentation.meta).toBe('Review API boundary · Review the API boundary and identify contract risks.');

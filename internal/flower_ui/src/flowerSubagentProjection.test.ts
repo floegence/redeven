@@ -51,6 +51,13 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
 }
 
 describe('buildFlowerSubagentPanelItems', () => {
+  it('excludes children owned by source or unrelated threads', () => {
+    expect(buildFlowerSubagentPanelItems(thread({
+      thread_id: 'fork-thread',
+      subagents: [summary({ thread_id: 'source-child' }), summary({ thread_id: 'other-child', parent_thread_id: 'other-parent' })],
+    }))).toEqual([]);
+  });
+
   it('shows completed children from thread.subagents after a restart snapshot', () => {
     const items = buildFlowerSubagentPanelItems(thread({
       messages: [],

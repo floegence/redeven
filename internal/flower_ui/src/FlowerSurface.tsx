@@ -5462,7 +5462,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const openSubagentDetail = (item: FlowerSubagentPanelItem) => {
     const parentID = trimString(selectedThread()?.thread_id);
     const childID = trimString(item.threadID);
-    if (!parentID || !childID) return;
+    if (!parentID || item.parentThreadID !== parentID || !selectedSubagentItems().some(child => child.parentThreadID === parentID && child.threadID === childID)) return;
     subagentDetailGeneration += 1;
     setSubagentInputCommands({});
     resetSubagentDetailScroll();
@@ -6503,7 +6503,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setContextSnapshotPreview(null);
     }
   });
-  const selectedSubagentSummaries = createMemo(() => selectedThread()?.subagents);
+  const selectedSubagentSummaries = createMemo(() => selectedThread()?.subagents?.filter(summary => trimString(summary.parent_thread_id) === selectedThreadID()));
   const selectedSubagentItems = createMemo<readonly FlowerSubagentPanelItem[]>((previous) => {
     const threadID = selectedThreadID();
     const subagents = selectedSubagentSummaries();
@@ -10169,23 +10169,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const openSubagentMessages = (agent: FlowerActivitySubagentDetailItem) => {
     const action = agent.open_messages;
     if (!action?.thread_id) return;
-    void openSubagentDetail({
-      key: action.thread_id,
-      threadID: action.thread_id,
-      taskName: agent.name,
-      taskDescription: agent.description,
-      title: agent.name,
-      displayName: presentSubagentTaskName(agent.name),
-      agentType: agent.agent_type,
-      status: 'unknown',
-      action: 'inspect',
-      canOpen: true,
-      parentThreadID: selectedThreadID(),
-      startedAtMs: 0,
-      createdAtMs: 0,
-      updatedAtMs: 0,
-      itemStatus: 'success',
-    });
+    const item = selectedSubagentItems().find(child => child.threadID === action.thread_id);
+    if (item) openSubagentDetail(item);
   };
 
   const errorDetailBlock = (block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'error' }>>) => (
@@ -10215,13 +10200,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const subagentsDetailBlock = (block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'subagents' }>>) => (
     <section class="flower-activity-subagents-panel" aria-label={subagentsCopy().title}>
       <div class="flower-activity-subagents-list" role="list">
-        <FlowerKeyedList scope={selectedThreadID()} focusFallback={focusComposerIfConnected} each={block().subagents.items} identity={(agent) => agent.open_messages?.thread_id ?? agent}>
+        <FlowerKeyedList scope={selectedThreadID()} focusFallback={focusComposerIfConnected} each={block().subagents.items} identity={(agent) => agent.thread_id || agent}>
           {(agent) => {
             const current = createMemo(() => selectedSubagentItems().find((item) => item.threadID === agent().open_messages?.thread_id));
             const status = () => current()?.status ?? normalizeSubagentPanelStatus(agent().raw_status);
             const title = () => [agent().name, subagentStatusLabel(status()), subagentsCopy().openThread].join('. ');
             return <div class="flower-activity-subagents-item" role="listitem">
-              <Show when={agent().open_messages} fallback={<span class="flower-activity-subagent-unavailable">{agent().name}</span>}>
+              <Show when={agent().open_messages && current()} fallback={<span class="flower-activity-subagent-unavailable">{agent().name}</span>}>
                 <button type="button" class="flower-subagent-capsule"
                   data-flower-subagent-capsule={agent().open_messages?.thread_id}
                   data-flower-subagent-status={status()}
@@ -10366,7 +10351,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       webSearch: copy().chat.webSearch,
       statuses: copy().chat.toolStatuses,
       subagents: subagentsCopy(),
-      subagentSummaries: selectedSubagentSummaries() ?? [],
+      subagentSummaries: timeline().thread_id === selectedThreadID() ? selectedSubagentSummaries() ?? [] : [],
       terminal: {
         runCommand: copy().chat.toolActivityRunCommand,
         readCommandOutput: copy().chat.toolActivityReadCommandOutput,
