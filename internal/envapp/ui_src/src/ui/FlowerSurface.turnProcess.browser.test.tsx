@@ -4,6 +4,7 @@ import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
 import { commands, page, userEvent } from 'vitest/browser';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FlowerLiveStreamEnvelope, FlowerParentEvent, FlowerRuntimeCurrentView, FlowerRuntimeTurn, FlowerSurfaceAdapter } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import { canonicalProcessFixture } from '../../../../flower_ui/src/flowerCanonicalProcess.testFixture';
 import { parentProcessEvents, parentProcessPage } from '../../../../flower_ui/src/flowerParentEventProcess.testFixture';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import { createLocalizedFlowerSurfaceCopy, type FlowerSurfaceTranslator } from '../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
@@ -16,13 +17,13 @@ const media = commands as unknown as { emulateMediaPreferences: (input: { reduce
 const turn = (changes: Partial<FlowerRuntimeTurn> = {}): FlowerRuntimeTurn => ({
   turn_id: 'turn', run_id: 'run', started_at: '2026-10-11T12:00:00Z', ended_at: '2026-10-11T12:02:38Z',
   outcome: 'completed', elapsed_ms: 158000, waiting_ms: 20000, work_duration_ms: 138000,
-  final_item_ids: ['final-a', 'final-b'], final_boundary_complete: true, ...changes,
+  intermediate_item_ids: ['progress'], final_item_ids: ['final-a', 'final-b'], final_boundary_complete: true, ...changes,
 });
 function current(terminal = false, changes: Partial<FlowerRuntimeCurrentView> = {}): FlowerRuntimeCurrentView {
   return {
     thread_id: 'process', view_version: terminal ? 2 : 1, turn_id: 'turn', run_id: 'run', activity: terminal ? 'idle' : 'active',
     ...(terminal ? { last_outcome: 'completed' as const } : { run_progress: { phase: 'streaming' as const } }),
-    turns: [terminal ? turn() : turn({ ended_at: undefined, outcome: undefined, elapsed_ms: 0, waiting_ms: 0, work_duration_ms: 0, final_item_ids: [], final_boundary_complete: false })],
+    turns: [terminal ? turn() : turn({ ended_at: undefined, outcome: undefined, elapsed_ms: 0, waiting_ms: 0, work_duration_ms: 0, intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })],
     items: [
       { id: 'user', turn_id: 'turn', run_id: 'run', ordinal: 1, kind: 'user', text: 'User request' },
       { id: 'thinking', turn_id: 'turn', run_id: 'run', ordinal: 2, kind: 'thinking', text: 'Inspecting the evidence.', live: !terminal },
@@ -74,6 +75,46 @@ afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.
 describe('completed turn process disclosure', () => {
   const eventRow = (root: HTMLElement, id: string) => root.querySelector<HTMLElement>('[data-parent-event="' + id + '"]')!;
   const eventHidden = (root: HTMLElement, id: string) => eventRow(root, id).closest('.flower-turn-row-viewport')?.getAttribute('aria-hidden') === 'true';
+  it.each([0, 1, 2])('folds reported failed structure after its user at Fork depth %s', async depth => {
+    const fixture = canonicalProcessFixture(depth);
+    const items = fixture.items!.map((item, index) => ({ ...item, id: ['user', 'progress', 'tool', 'second-progress', 'final-a'][index], turn_id: 'turn', run_id: 'run' }));
+    const events = fixture.parent_events!.events.map(event => ({ ...event, parent_turn_id: 'turn' }));
+    const { root } = await mount(current(true, { last_outcome: 'failed', items, turns: [turn({ outcome: 'failed', intermediate_item_ids: ['progress', 'second-progress'], final_item_ids: [], final_boundary_complete: false })], parent_events: parentProcessPage(events) }));
+    const user = message(root, 'user');
+    expect(user.compareDocumentPosition(summary(root)!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
+    summary(root)!.click();
+    expect(hidden(root, 'progress')).toBe(true);
+    expect(hidden(root, 'second-progress')).toBe(true);
+    expect(events.every(event => eventHidden(root, event.id))).toBe(true);
+    expect(hidden(root, 'user')).toBe(false);
+    expect(root.querySelector('.flower-run-error')?.closest('[inert]')).toBeNull();
+    summary(root)!.click();
+    expect(hidden(root, 'progress')).toBe(false);
+    expect(events.every(event => !eventHidden(root, event.id))).toBe(true);
+  });
+  it.each(['selection', 'focus', 'reading'] as const)('protects %s when canonical prose classification arrives after terminal settlement', async protection => {
+    const initial = current(true, { turns: [turn({ intermediate_item_ids: [] })] });
+    const { root, live } = await mount(initial);
+    const prose = message(root, 'progress');
+    expect(hidden(root, 'progress')).toBe(false);
+    if (protection === 'selection') {
+      (document.activeElement as HTMLElement | null)?.blur();
+      const range = document.createRange(); range.selectNodeContents(prose);
+      document.getSelection()!.removeAllRanges(); document.getSelection()!.addRange(range);
+      expect(document.getSelection()?.toString()).toContain('Intermediate progress report.');
+    } else if (protection === 'focus') { prose.tabIndex = 0; prose.focus(); }
+    else root.querySelector('.flower-chat-transcript')!.dispatchEvent(new WheelEvent('wheel', { deltaY: -10, bubbles: true }));
+    live.push(current(true, { view_version: 3 }));
+    await waitFor(() => prose.closest('.flower-turn-row')?.getAttribute('data-flower-turn-process') === 'true');
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
+    expect(hidden(root, 'progress')).toBe(false);
+    expect(message(root, 'progress')).toBe(prose);
+    document.getSelection()?.removeAllRanges();
+    summary(root)!.click();
+    expect(hidden(root, 'progress')).toBe(true);
+    expect(hidden(root, 'final-a')).toBe(false);
+  });
   it('keeps failed report reads and continuation retries reachable outside collapsed work', async () => {
     const complete = parentProcessPage();
     const partial = { ...complete, events: [parentProcessEvents[0]], next_after_event_id: parentProcessEvents[0].id };
@@ -105,7 +146,7 @@ describe('completed turn process disclosure', () => {
     expect(eventHidden(root, 'event-10')).toBe(false);
   });
   it('folds all eleven child dynamics with failed work and preserves reports, order and late updates', async () => {
-    const failed = current(true, { last_outcome: 'failed', turns: [turn({ outcome: 'failed', final_item_ids: [], final_boundary_complete: false })], parent_events: parentProcessPage(parentProcessEvents.slice(0, 9)) });
+    const failed = current(true, { last_outcome: 'failed', turns: [turn({ outcome: 'failed', intermediate_item_ids: ['progress'], final_item_ids: [], final_boundary_complete: false })], parent_events: parentProcessPage(parentProcessEvents.slice(0, 9)) });
     const { root, live } = await mount(failed);
     await waitFor(() => root.querySelectorAll('[data-parent-event]').length === 9);
     const report = eventRow(root, 'event-0');
@@ -211,7 +252,7 @@ describe('completed turn process disclosure', () => {
     const { root } = await mount(current(true, {
       turns: authority === 'missing' ? undefined : [turn({
         outcome: authority === 'failed' || authority === 'cancelled' || authority === 'interrupted' ? authority : 'completed',
-        final_item_ids: [], final_boundary_complete: false,
+        intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false,
       })],
       ...(authority === 'failed' || authority === 'cancelled' || authority === 'interrupted' ? { last_outcome: authority } : {}),
     }));
@@ -226,7 +267,7 @@ describe('completed turn process disclosure', () => {
     live.push({ ...done, view_version: 3, turn_id: 'next-turn', run_id: 'next-run', activity: 'active',
       last_outcome: undefined, run_progress: { phase: 'streaming' }, turns: [turn(), turn({
         turn_id: 'next-turn', run_id: 'next-run', started_at: '2026-10-11T12:03:00Z', ended_at: undefined, outcome: undefined,
-        elapsed_ms: 0, waiting_ms: 0, work_duration_ms: 0, final_item_ids: [], final_boundary_complete: false,
+        elapsed_ms: 0, waiting_ms: 0, work_duration_ms: 0, intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false,
       })], items: [...done.items!,
         { id: 'next-user', turn_id: 'next-turn', run_id: 'next-run', ordinal: 7, kind: 'user', text: 'Continue the review.' },
         { id: 'next-progress', turn_id: 'next-turn', run_id: 'next-run', ordinal: 8, kind: 'assistant', text: 'Inspecting the next result.', live: true },
@@ -245,7 +286,7 @@ describe('completed turn process disclosure', () => {
     const items = [done.items![0], ...Array.from({ length: 28 }, (_, index) => ({ ...thinking, id: `thinking-${index}` })),
       done.items!.find((item) => item.id === 'tool')!, ...done.items!.filter((item) => item.id.startsWith('final-'))];
     const { root } = await mount({ ...done, items: items.map((item, index) => ({ ...item, ordinal: index + 1 })),
-      turns: [policy === 'canonical' ? turn() : turn({ final_item_ids: [], final_boundary_complete: false })] });
+      turns: [policy === 'canonical' ? turn({ intermediate_item_ids: [] }) : turn({ intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })] });
     expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
     await waitFor(() => [...root.querySelectorAll('.flower-turn-row-viewport[aria-hidden="true"]')].every((row) => getComputedStyle(row).display === 'none'));
     expect(message(root, 'final-a').getBoundingClientRect().top - summary(root)!.getBoundingClientRect().bottom).toBeLessThanOrEqual(32);
@@ -283,7 +324,7 @@ describe('completed turn process disclosure', () => {
       last_outcome: 'failed', run_error_code: 'provider_server_error', error: 'The model provider returned a server error.',
       run_error_detail: JSON.stringify({ provider: 'openai', http_status: 500, message: 'The model is overloaded.' }),
       items: [...oldItems, ...done.items!],
-      turns: [turn({ turn_id: 'old-turn', run_id: 'old-run', outcome: 'failed', final_item_ids: [], final_boundary_complete: false }), turn({ outcome: 'failed', final_item_ids: [], final_boundary_complete: false })],
+      turns: [turn({ turn_id: 'old-turn', run_id: 'old-run', outcome: 'failed', intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false }), turn({ outcome: 'failed', intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })],
     }));
     await waitFor(() => Boolean(root.querySelector('.flower-error-card')));
     expect(root.querySelectorAll('.flower-error-card')).toHaveLength(1);
@@ -294,7 +335,7 @@ describe('completed turn process disclosure', () => {
   it('retains the interruption label when the generic failure notice is hidden', async () => {
     const { root } = await mount(current(true, {
       last_outcome: 'interrupted', run_error_code: 'floret_turn_interrupted', error: 'Runtime interrupted.',
-      turns: [turn({ outcome: 'interrupted', final_item_ids: [], final_boundary_complete: false })],
+      turns: [turn({ outcome: 'interrupted', intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })],
     }));
     expect(root.querySelector('.flower-error-card')).toBeNull();
     expect(root.querySelector('[data-flower-turn-id="turn"] .flower-turn-ended')).not.toBeNull();
@@ -302,7 +343,7 @@ describe('completed turn process disclosure', () => {
   it.each(['failed', 'cancelled', 'interrupted'] as const)('keeps %s work and an active thinking preview visible', async (outcome) => {
     const { root, live } = await mount();
     expect(root.querySelector('[data-flower-thinking-view="preview"]')).not.toBeNull();
-    live.push(current(true, { last_outcome: outcome, turns: [turn({ outcome, final_item_ids: [], final_boundary_complete: false })] }));
+    live.push(current(true, { last_outcome: outcome, turns: [turn({ outcome, intermediate_item_ids: ['progress'], final_item_ids: [], final_boundary_complete: false })] }));
     const outcomeNotice = () => root.querySelector(outcome === 'cancelled' ? '.flower-turn-ended' : '.flower-run-error');
     await waitFor(() => Boolean(outcomeNotice()));
     expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
@@ -311,7 +352,7 @@ describe('completed turn process disclosure', () => {
     summary(root)!.click();
     expect(hidden(root, 'thinking')).toBe(true);
     expect(hidden(root, 'tool')).toBe(true);
-    expect(hidden(root, 'progress')).toBe(false);
+    expect(hidden(root, 'progress')).toBe(true);
     expect(hidden(root, 'final-a')).toBe(false);
     expect(outcomeNotice()?.textContent).toBeTruthy();
     expect(root.querySelectorAll('.flower-run-error')).toHaveLength(outcome === 'cancelled' ? 0 : 1);
@@ -407,7 +448,7 @@ describe('completed turn process disclosure', () => {
   it('retains an older stopped turn while a new successful turn collapses independently', async () => {
     const done = current(true);
     const oldItems = done.items!.filter((item) => !item.id.startsWith('final-')).map((item) => ({ ...item, id: `old-${item.id}`, turn_id: 'old-turn', run_id: 'old-run' }));
-    const { root } = await mount({ ...done, items: [...oldItems, ...done.items!], turns: [turn({ turn_id: 'old-turn', run_id: 'old-run', outcome: 'cancelled', final_item_ids: [], final_boundary_complete: false }), turn()] });
+    const { root } = await mount({ ...done, items: [...oldItems, ...done.items!], turns: [turn({ turn_id: 'old-turn', run_id: 'old-run', outcome: 'cancelled', intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false }), turn()] });
     expect(root.querySelectorAll('.flower-turn-summary-button')).toHaveLength(2);
     expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
     expect(hidden(root, 'old-progress')).toBe(false);
@@ -436,7 +477,7 @@ describe('completed turn process disclosure', () => {
     const root = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [parent]),
       loadThread: vi.fn(async () => liveBootstrap(parent, 1)), connectLiveStream: live.connect,
       loadSubagentDetail: vi.fn(async () => ({ summary: child, current: current(true, history === 'legacy'
-        ? { turns: [turn({ final_item_ids: [], final_boundary_complete: false })] } : {}) })) });
+        ? { turns: [turn({ intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })] } : {}) })) });
     root.style.height = '780px';
     await waitFor(() => Boolean(root.querySelector('[data-thread-id="parent"] button')));
     root.querySelector<HTMLButtonElement>('[data-thread-id="parent"] button')!.click();
@@ -464,7 +505,7 @@ describe('completed turn process disclosure', () => {
     expect(message(root, 'final-a').closest('.flower-turn-row-viewport')?.getAttribute('data-state')).toBe('open');
   });
   it('collapses typed legacy process while retaining every assistant reply and manual choice', async () => {
-    const legacy = current(true, { turns: [turn({ final_item_ids: [], final_boundary_complete: false })] });
+    const legacy = current(true, { turns: [turn({ intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })] });
     const { root, live } = await mount(legacy);
     expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
     expect(hidden(root, 'progress')).toBe(false);
@@ -499,8 +540,8 @@ describe('completed turn process disclosure', () => {
     const oldItems = done.items!.map((item) => ({ ...item, id: `old-${item.id}`, turn_id: 'old-turn', run_id: 'old-run' }));
     const { root } = await mount({ ...done, items: [...oldItems, ...done.items!], turns: [
       turn({ turn_id: 'old-turn', run_id: 'old-run', outcome: 'cancelled', elapsed_ms: 91730, waiting_ms: 0, work_duration_ms: 91730,
-        ended_at: '2026-10-11T12:01:31.730Z', final_item_ids: [], final_boundary_complete: false }),
-      turn({ elapsed_ms: 8541, waiting_ms: 0, work_duration_ms: 8541, ended_at: '2026-10-11T12:00:08.541Z', final_item_ids: [], final_boundary_complete: false }),
+        ended_at: '2026-10-11T12:01:31.730Z', intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false }),
+      turn({ elapsed_ms: 8541, waiting_ms: 0, work_duration_ms: 8541, ended_at: '2026-10-11T12:00:08.541Z', intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false }),
     ] });
     const buttons = [...root.querySelectorAll<HTMLButtonElement>('.flower-turn-summary-button')];
     expect(buttons.map((button) => button.getAttribute('aria-expanded'))).toEqual(['true', 'false']);

@@ -1153,6 +1153,7 @@ export function mapFlowerMessage(raw: unknown): FlowerChatMessage {
   const turnID = trim(message.turn_id);
   const runID = trim(message.run_id);
   const logicalRequestID = trim(message.logical_request_id);
+  if (message.canonical_ordinal !== undefined && (!Number.isSafeInteger(message.canonical_ordinal) || Number(message.canonical_ordinal) < 1)) throw new Error("Flower contract error: invalid canonical message position.");
   const role = trim(message.role).toLowerCase();
   const goal = message.goal === undefined ? undefined : mapFlowerGoalChange(message.goal);
   if (goal && role !== 'system') throw new Error('Flower contract error: Goal changes require the system role.');
@@ -1190,6 +1191,7 @@ export function mapFlowerMessage(raw: unknown): FlowerChatMessage {
     turn_id: turnID,
     run_id: runID,
     ...(logicalRequestID ? { logical_request_id: logicalRequestID } : {}),
+    ...(message.canonical_ordinal !== undefined ? { canonical_ordinal: Number(message.canonical_ordinal) } : {}),
     ...(goal ? { goal } : {}),
     role,
     ...(role === 'assistant' && message.sources ? { sources: mapFlowerCitationSources(message.sources) } : {}),

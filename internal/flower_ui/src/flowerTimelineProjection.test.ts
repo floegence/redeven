@@ -73,17 +73,17 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
 }
 
 describe('buildFlowerTimelineEntries', () => {
-  it('interleaves parent events by received time without reordering messages and refreshes with the same message array', () => {
+  it('interleaves parent events by canonical position despite rewritten clocks without reordering messages and refreshes with the same message array', () => {
     const messages: FlowerThreadSnapshot['messages'] = [
-      { id: 'user', role: 'user', content: 'Research', status: 'complete', created_at_ms: 10 },
-      { id: 'assistant', role: 'assistant', content: 'Results', status: 'complete', created_at_ms: 30 },
+      { id: 'user', role: 'user', content: 'Research', status: 'complete', created_at_ms: 1000, canonical_ordinal: 2 },
+      { id: 'assistant', role: 'assistant', content: 'Results', status: 'complete', created_at_ms: 30, canonical_ordinal: 4 },
     ];
-    const report: FlowerParentEvent = { id: 'report', kind: 'report', parent_thread_id: 'thread-1', source_thread_id: 'child',
+    const report: FlowerParentEvent = { id: 'report', canonical_ordinal: 3, kind: 'report', parent_thread_id: 'thread-1', source_thread_id: 'child',
       source_turn_id: 'turn-child', source_run_id: 'run-child', source_entry_id: 'entry-child', received_at: new Date(20).toISOString(), admitted: false };
     const value = thread({ messages, parent_events: { thread_id: 'thread-1', events: [report] } });
     const initial = buildFlowerTimelineEntries(value);
     expect(initial.map(entry => entry.key)).toEqual(['message:user', 'parent-event:report', 'message:assistant']);
-    const events = [{ ...report, admitted: true, message: 'Complete report' }, { ...report, id: 'failed', kind: 'failed' as const, received_at: new Date(40).toISOString() }];
+    const events = [{ ...report, admitted: true, message: 'Complete report' }, { ...report, id: 'failed', canonical_ordinal: 5, kind: 'failed' as const, received_at: new Date(40).toISOString() }];
     const updated = buildFlowerTimelineEntries(value, events);
     expect(updated.map(entry => entry.key)).toEqual(['message:user', 'parent-event:report', 'message:assistant', 'parent-event:failed']);
     expect(updated[1]).toMatchObject({ event: { admitted: true, message: 'Complete report' } });
@@ -91,6 +91,21 @@ describe('buildFlowerTimelineEntries', () => {
     expect(buildFlowerTimelineEntries(thread({ messages }), [report, report, { ...report, id: 'inherited', parent_thread_id: 'ancestor' }]).filter(entry => entry.type === 'parent_event')).toHaveLength(2);
   });
 
+  it('preserves same-record item order, canonical receipt pagination and uncommitted tail order', () => {
+    const messages: FlowerThreadSnapshot['messages'] = [
+      { id: 'user', role: 'user', content: 'Work', status: 'complete', canonical_ordinal: 2, created_at_ms: 100 },
+      { id: 'thinking', role: 'assistant', content: 'Reasoning', status: 'complete', canonical_ordinal: 3, created_at_ms: 90 },
+      { id: 'draft', role: 'assistant', content: 'Draft', status: 'complete', canonical_ordinal: 3, created_at_ms: 80 },
+      { id: 'tail-a', role: 'assistant', content: 'First tail', status: 'streaming', created_at_ms: 10 },
+      { id: 'tail-b', role: 'assistant', content: 'Second tail', status: 'streaming', created_at_ms: 5 },
+    ];
+    const event: FlowerParentEvent = { id: 'first', canonical_ordinal: 4, kind: 'report', parent_thread_id: 'thread-1', source_thread_id: 'child',
+      source_turn_id: 'child-turn', source_run_id: 'child-run', source_entry_id: 'child-entry', received_at: new Date(0).toISOString(), admitted: false };
+    const value = thread({ messages });
+    const rows = buildFlowerTimelineEntries(value, [{ ...event, id: 'late', canonical_ordinal: 6 }, event]);
+    expect(rows.map(row => row.key)).toEqual(['message:user', 'message:thinking', 'message:draft', 'parent-event:first', 'parent-event:late', 'message:tail-a', 'message:tail-b']);
+    expect(buildFlowerTimelineEntries(value, [event]).filter(row => row.type === 'message').map(row => row.key)).toEqual(messages.map(message => 'message:' + message.id));
+  });
   it('keeps transient run progress out of the canonical message timeline', () => {
     const user = {
       id: 'user:turn-live', turn_id: 'turn-live', role: 'user' as const,

@@ -88,7 +88,7 @@ export function FlowerTurnTimeline(props: Readonly<{
     const value = projectFlowerTurnProcess(props.entries, props.thread?.turns,
       props.thread?.current_execution && ['running', 'waiting_user', 'waiting_approval'].includes(props.thread.status)
         ? [props.thread.current_execution.turn_id] : []);
-    // Protect a resolved event before any row can become inert or hidden.
+    // Protect newly classified process before any row can become inert or hidden.
     const previous = previousProjection;
     if (previous && previous.threadID === threadID) untrack(() => {
       for (const group of value.groups.values()) {

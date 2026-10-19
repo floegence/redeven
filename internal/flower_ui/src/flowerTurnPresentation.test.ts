@@ -12,7 +12,7 @@ const entry = (id: string, role: 'user' | 'assistant' = 'assistant'): MessageEnt
 const turn = (changes: Partial<FlowerRuntimeTurn> = {}): FlowerRuntimeTurn => ({
   turn_id: 'turn', run_id: 'run', started_at: '2026-10-11T12:00:00Z', ended_at: '2026-10-11T12:02:18Z',
   outcome: 'completed', elapsed_ms: 138000, waiting_ms: 0, work_duration_ms: 138000,
-  final_item_ids: ['final-a', 'final-b'], final_boundary_complete: true, ...changes,
+  intermediate_item_ids: ['progress'], final_item_ids: ['final-a', 'final-b'], final_boundary_complete: true, ...changes,
 });
 const entries = [entry('user', 'user'), entry('progress'), entry('final-a'), entry('final-b')];
 const thinking: MessageEntry = {
@@ -22,7 +22,7 @@ const thinking: MessageEntry = {
 describe('canonical turn process presentation', () => {
   const events: FlowerTimelineEntry[] = parentProcessEvents.map((event) => ({ type: 'parent_event', key: 'parent-event:' + event.id, event }));
   it('folds all eleven canonical child dynamics with failed work, including late receipts', () => {
-    const projected = projectFlowerTurnProcess([thinking, ...entries, ...events], [turn({ outcome: 'failed', final_item_ids: [], final_boundary_complete: false })]);
+    const projected = projectFlowerTurnProcess([thinking, ...entries, ...events], [turn({ outcome: 'failed', intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })]);
     const group = projected.groups.get('turn')!;
     expect(group.disclosure).toBe('manual');
     expect(group.parentEventCount).toBe(11);
@@ -66,18 +66,18 @@ describe('canonical turn process presentation', () => {
     expect(projectFlowerTurnProcess([screenshot, ...entries], [turn()]).groups.get('turn')?.disclosure).toBe(disclosure);
   });
   it('defaults successful legacy process to collapsed without hiding uncertain assistant content', () => {
-    const result = projectFlowerTurnProcess([entries[0], thinking, ...entries.slice(1)], [turn({ final_item_ids: [], final_boundary_complete: false })]).groups.get('turn');
+    const result = projectFlowerTurnProcess([entries[0], thinking, ...entries.slice(1)], [turn({ intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })]).groups.get('turn');
     expect(result?.disclosure).toBe('automatic');
     expect(result?.processKeys).toEqual(['thinking']);
   });
   it.each(['failed', 'cancelled', 'interrupted'] as const)('offers expanded manual disclosure for %s work', (outcome) => {
-    const result = projectFlowerTurnProcess([thinking, ...entries], [turn({ outcome, final_item_ids: [], final_boundary_complete: false })]).groups.get('turn');
+    const result = projectFlowerTurnProcess([thinking, ...entries], [turn({ outcome, intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })]).groups.get('turn');
     expect(result?.disclosure).toBe('manual');
     expect(result?.processKeys).toEqual(['thinking']);
   });
   it('keeps mixed thinking and answer rows visible when their final boundary is unknown', () => {
     const mixed: MessageEntry = { ...thinking, blocks: [...thinking.blocks, { type: 'content', key: 'answer', block_index: 1, block_type: 'markdown', content: 'The answer.' }] };
-    const result = projectFlowerTurnProcess([mixed, ...entries], [turn({ final_item_ids: [], final_boundary_complete: false })]).groups.get('turn');
+    const result = projectFlowerTurnProcess([mixed, ...entries], [turn({ intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })]).groups.get('turn');
     expect(result?.disclosure).toBe('none');
     expect(result?.processKeys).toEqual([]);
   });
@@ -90,7 +90,7 @@ describe('canonical turn process presentation', () => {
   it('keeps attachments and user messages outside a legacy process', () => {
     const image: MessageEntry = { ...entry('image'), blocks: [...thinking.blocks, { type: 'image', key: 'image:0', block_index: 1, src: '/image.png' }] };
     const answer = entry('answer', 'user');
-    const result = projectFlowerTurnProcess([thinking, image, answer, ...entries], [turn({ final_item_ids: [], final_boundary_complete: false })]).groups.get('turn');
+    const result = projectFlowerTurnProcess([thinking, image, answer, ...entries], [turn({ intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })]).groups.get('turn');
     expect(result?.processKeys).toEqual(['thinking']);
     expect(result?.disclosure).toBe('automatic');
   });
@@ -101,13 +101,16 @@ describe('canonical turn process presentation', () => {
     expect(result.groups.get('turn')?.disclosure).toBe('automatic');
   });
   it.each(['failed', 'cancelled', 'interrupted'] as const)('keeps %s turns expanded', (outcome) => {
-    expect(projectFlowerTurnProcess(entries, [turn({ outcome, final_item_ids: [], final_boundary_complete: false })]).groups.get('turn')?.disclosure).toBe('none');
+    expect(projectFlowerTurnProcess(entries, [turn({ outcome, intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })]).groups.get('turn')?.disclosure).toBe('none');
   });
-  it('requires complete boundaries and all final segments', () => {
-    expect(projectFlowerTurnProcess(entries, [turn({ final_boundary_complete: false })]).groups.get('turn')?.disclosure).toBe('none');
-    expect(projectFlowerTurnProcess(entries, [turn({ final_item_ids: [] })]).groups.get('turn')?.disclosure).toBe('none');
-    expect(projectFlowerTurnProcess(entries.slice(0, -1), [turn()]).groups.get('turn')?.disclosure).toBe('none');
-    expect(projectFlowerTurnProcess(entries, [turn({ ended_at: undefined, outcome: undefined })]).groups.get('turn')?.disclosure).toBe('none');
+  it('uses explicit intermediate references without depending on successful final boundaries', () => {
+    for (const outcome of ['completed', 'failed', 'cancelled', 'interrupted'] as const) {
+      const group = projectFlowerTurnProcess(entries, [turn({ outcome, final_item_ids: [], final_boundary_complete: false })]).groups.get('turn');
+      expect(group?.processKeys).toEqual(['progress']);
+      expect(group?.disclosure).toBe(outcome === 'completed' ? 'automatic' : 'manual');
+    }
+    expect(projectFlowerTurnProcess(entries, [turn({ intermediate_item_ids: undefined })]).groups.get('turn')?.processKeys).toEqual([]);
+    expect(projectFlowerTurnProcess(entries.slice(0, -1), [turn()]).groups.get('turn')?.processKeys).toEqual(['progress']);
   });
   it('does not create an empty summary or summarize context-only work', () => {
     expect(projectFlowerTurnProcess(entries.filter((e) => e.key !== 'progress'), [turn()]).groups.get('turn')?.disclosure).toBe('none');

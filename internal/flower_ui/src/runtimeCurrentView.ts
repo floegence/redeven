@@ -230,12 +230,13 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
     const itemID = trim(item.id);
     if (!itemID || seenItemIDs.has(itemID)) continue;
     seenItemIDs.add(itemID);
+    if (item.canonical_ordinal !== undefined && (!Number.isSafeInteger(item.canonical_ordinal) || item.canonical_ordinal < 1)) throw new Error("Flower contract error: invalid canonical item position.");
     const createdAtMs = itemCreatedAt(item, base.updated_at_ms);
     const references = itemReferences(item);
     const attachmentBlocks = itemAttachmentBlocks(item);
     if (item.kind === 'goal') {
       const goal = mapFlowerGoalChange(item.goal);
-      messages.push({ id: itemID, thread_id: base.thread_id, ...(identity.turnID ? { turn_id: identity.turnID, run_id: identity.runID } : {}), role: 'system', content: '', status: 'complete', created_at_ms: createdAtMs, goal });
+      messages.push({ id: itemID, thread_id: base.thread_id, ...(identity.turnID ? { turn_id: identity.turnID, run_id: identity.runID } : {}), role: 'system', content: '', status: 'complete', created_at_ms: createdAtMs, canonical_ordinal: item.canonical_ordinal, goal });
       continue;
     }
     if (item.kind === 'interaction') {
@@ -246,7 +247,7 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
         if (!block) continue;
         messages.push({
           id: itemID, thread_id: base.thread_id, turn_id: identity.turnID, run_id: identity.runID, role: 'user',
-          content: inputResponseVisibleText(block), status: 'complete', created_at_ms: createdAtMs,
+          content: inputResponseVisibleText(block), status: 'complete', created_at_ms: createdAtMs, canonical_ordinal: item.canonical_ordinal,
           blocks: [block],
           ...(references ? { references } : {}),
         });
@@ -258,7 +259,7 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
       matchedCalls.add(JSON.stringify([identity.turnID, identity.runID, trim(item.activity?.tool_id)]));
       messages.push({
         id: itemID, thread_id: base.thread_id, turn_id: identity.turnID, run_id: identity.runID, role: 'assistant',
-        content: '', status: 'complete', created_at_ms: createdAtMs,
+        content: '', status: 'complete', created_at_ms: createdAtMs, canonical_ordinal: item.canonical_ordinal,
         blocks: [activityBlock(base, view, item, identity)],
         ...(references ? { references } : {}),
       });
@@ -267,7 +268,7 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
     if (item.kind === 'thinking') {
       messages.push({
         id: itemID, thread_id: base.thread_id, turn_id: identity.turnID, run_id: identity.runID, role: 'assistant',
-        content: '', status: messageStatus(item), created_at_ms: createdAtMs,
+        content: '', status: messageStatus(item), created_at_ms: createdAtMs, canonical_ordinal: item.canonical_ordinal,
         blocks: [{ type: 'thinking', content: String(item.text ?? '') }],
         ...(item.live ? { live: true } : {}),
         ...(references ? { references } : {}),
@@ -279,7 +280,7 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
       role: item.kind === 'user' || item.kind === 'steering' ? 'user' : 'assistant',
       ...(item.steering ? { steering: item.steering } : {}), content: String(item.text ?? ''),
       ...(item.kind === 'assistant' && item.sources?.length ? { sources: mapFlowerCitationSources(item.sources) } : {}),
-      status: messageStatus(item), created_at_ms: createdAtMs,
+      status: messageStatus(item), created_at_ms: createdAtMs, canonical_ordinal: item.canonical_ordinal,
       ...(attachmentBlocks.length > 0 ? { blocks: attachmentBlocks } : {}),
       ...(item.live ? { live: true, active_cursor: item.kind === 'assistant' } : {}),
       ...(references ? { references } : {}),
@@ -526,6 +527,15 @@ function validateFlowerRuntimeTurns(current: FlowerRuntimeCurrentView) {
         || item.turn_id !== turn.turn_id || item.run_id !== turn.run_id || item.ordinal < ordinal) failure();
       refs.add(id); ordinal = item!.ordinal;
     }
-    return { ...turn, final_item_ids: [...turn.final_item_ids] };
+    if (turn.intermediate_item_ids !== undefined && !Array.isArray(turn.intermediate_item_ids)) failure();
+    const intermediates = new Set<string>();
+    let intermediateOrdinal = 0;
+    for (const id of turn.intermediate_item_ids ?? []) {
+      const item = items.get(id);
+      if (!trim(id) || intermediates.has(id) || refs.has(id) || duplicateItems.has(id) || !item || item.kind !== 'assistant'
+        || !trim(item.text) || item.turn_id !== turn.turn_id || item.run_id !== turn.run_id || item.ordinal < intermediateOrdinal) failure();
+      intermediates.add(id); intermediateOrdinal = item!.ordinal;
+    }
+    return { ...turn, final_item_ids: [...turn.final_item_ids], ...(turn.intermediate_item_ids ? { intermediate_item_ids: [...turn.intermediate_item_ids] } : {}) };
   });
 }

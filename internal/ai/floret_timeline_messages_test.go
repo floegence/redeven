@@ -50,6 +50,7 @@ func TestTypedThreadItemsPreserveOrderedPresentation(t *testing.T) {
 
 	var gotIDs []string
 	for _, item := range items {
+		item.CanonicalOrdinal = item.Ordinal + 5
 		raw, ok, err := typedThreadItemMessage(threadID, item)
 		if err != nil {
 			t.Fatalf("map %s: %v", item.ID, err)
@@ -60,6 +61,9 @@ func TestTypedThreadItemsPreserveOrderedPresentation(t *testing.T) {
 		var message map[string]any
 		if err := json.Unmarshal(raw, &message); err != nil {
 			t.Fatalf("decode %s: %v", item.ID, err)
+		}
+		if message["canonical_ordinal"] != float64(item.CanonicalOrdinal) {
+			t.Fatalf("lost canonical position: %s", raw)
 		}
 		gotIDs = append(gotIDs, message["id"].(string))
 		if message["turn_id"] != turnID || message["run_id"] != runID {

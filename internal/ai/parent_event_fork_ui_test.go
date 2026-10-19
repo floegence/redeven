@@ -55,8 +55,8 @@ func newParentEventForkFixture(t *testing.T) *parentEventForkFixture {
 		t.Fatal(err)
 	}
 	f.child = child.ThreadID
-	delegationContextSend(t, f.canonical, f.child, "research", nil)
 	delegationContextSend(t, f.canonical, identity.ThreadID(f.source), "review", nil)
+	delegationContextSend(t, f.canonical, f.child, "research", nil)
 	return f
 }
 
@@ -103,6 +103,14 @@ func TestFlowerForkParentEventScopeThroughService(t *testing.T) {
 		page := detail.Current.ParentEvents
 		if page == nil || page.ThreadID.String() != fork.ThreadID || len(page.Events) != 2 {
 			t.Fatalf("fork page=%+v", page)
+		}
+		for _, item := range detail.Current.Items {
+			if item.CanonicalOrdinal == 0 || item.CanonicalOrdinal >= page.Events[0].CanonicalOrdinal {
+				t.Fatalf("late event precedes copied conversation: item=%+v event=%+v", item, page.Events[0])
+			}
+		}
+		if page.Events[0].ParentTurnID == "" {
+			t.Fatal("late event lost parent ownership")
 		}
 		full, err := f.service.GetFlowerParentEvents(t.Context(), meta, fork.ThreadID, ParentEventReadRequest{Action: "read", FirstEventID: page.FirstEventID, LastEventID: page.LastEventID})
 		if err != nil || full.ThreadID.String() != fork.ThreadID || len(full.Events) != 2 || full.Events[0].Message != f.report || full.Events[0].ParentThreadID.String() != f.source {
