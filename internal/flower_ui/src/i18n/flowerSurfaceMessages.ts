@@ -181,8 +181,6 @@ export const flowerSurfaceEnUS = {
     goalCompleted: "Goal completed",
     goalSet: "Goal set",
     goalDeleted: "Goal deleted",
-    goalActorUser: "You",
-    goalActorModel: "Model",
     commandGoal: "Set a goal to start or update work",
     goalUnavailable: "Goal management is unavailable in this environment.",
     commandMenuLabel: 'Flower commands',

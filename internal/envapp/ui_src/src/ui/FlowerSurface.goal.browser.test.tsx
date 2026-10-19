@@ -47,11 +47,12 @@ it.each([['en-US', 1100, 'light'], ['zh-CN', 390, 'light'], ['en-US', 1100, 'dar
   const current: FlowerRuntimeCurrentView = { ...liveBootstrap(snapshot, 20).current, goal, items: [
     { id: 'goal-tool', ordinal: 1, canonical_ordinal: 1, kind: 'tool', turn_id: 'goal-turn', run_id: 'goal-run', activity: { item_id: 'goal-call', tool_id: 'goal-call', tool_name: 'goal', kind: 'tool', status: 'success', severity: 'normal' } },
     { id: 'goal-set', ordinal: 2, canonical_ordinal: 2, kind: 'goal', turn_id: 'goal-turn', run_id: 'goal-run', goal: { goal: { ...goal, status: 'active' }, operation: 'set', actor: 'model', at: '2026-10-18T00:00:00Z' } },
-    { id: 'goal-done', ordinal: 3, canonical_ordinal: 3, kind: 'goal', goal: { goal, operation: 'completed', actor: 'model', at: '2026-10-18T00:01:00Z' } },
+    { id: 'goal-user-set', ordinal: 3, canonical_ordinal: 3, kind: 'goal', goal: { goal: { ...goal, status: 'active', actor: 'user' }, operation: 'set', actor: 'user', at: '2026-10-18T00:00:30Z' } },
+    { id: 'goal-done', ordinal: 4, canonical_ordinal: 4, kind: 'goal', goal: { goal, operation: 'completed', actor: 'model', at: '2026-10-18T00:01:00Z' } },
   ] };
   const surface = renderSurfaceWithAdapterProps({ ...base, listThreads: async () => [snapshot], loadThread: async () => ({ thread: applyFlowerRuntimeCurrentView(snapshot, current), current }) }, { copy, focusThreadRequest: focus });
   surface.style.cssText = 'width:100%;height:800px;position:relative;';
-  await waitFor(() => surface.querySelectorAll('.flower-goal-history').length === 2, 10000);
+  await waitFor(() => surface.querySelectorAll('.flower-goal-history').length === 3, 10000);
   const badge = surface.querySelector<HTMLButtonElement>('.flower-goal-tag')!;
   expect(badge.querySelector('[data-flower-goal-icon]')).not.toBeNull();
   expect(badge.querySelector('.flower-goal-dot')).toBeNull();
@@ -61,7 +62,7 @@ it.each([['en-US', 1100, 'light'], ['zh-CN', 390, 'light'], ['en-US', 1100, 'dar
   expect(parseFloat(badgeStyle.borderTopLeftRadius)).toBeLessThan(badge.getBoundingClientRect().height / 2);
   expect(surface.querySelector('[data-flower-tool-call-id="goal-call"]')).toBeNull();
   if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: surface, path: '__screenshots__/flower-goal-history-' + locale + '-' + theme + '.png' });
-  for (const [index, label] of [copy.chat.goalSet, copy.chat.goalCompleted].entries()) {
+  for (const [index, label] of [copy.chat.goalSet, copy.chat.goalSet, copy.chat.goalCompleted].entries()) {
     const row = surface.querySelectorAll<HTMLDetailsElement>('.flower-goal-history')[index]!;
     const summary = row.querySelector('summary')!;
     expect(summary.querySelector('[data-flower-goal-icon]')).not.toBeNull();
@@ -75,6 +76,7 @@ it.each([['en-US', 1100, 'light'], ['zh-CN', 390, 'light'], ['en-US', 1100, 'dar
     expect(row.open).toBe(true);
     expect(row.querySelector('.flower-goal-history-text')?.textContent).toBe(text);
     const body = row.querySelector<HTMLElement>('.flower-goal-history-body')!;
+    expect(body.textContent).toBe(text);
     const bodyStyle = getComputedStyle(body);
     expect(bodyStyle.borderTopWidth).toBe('0px');
     expect(bodyStyle.backgroundColor).toBe('rgba(0, 0, 0, 0)');
@@ -83,7 +85,7 @@ it.each([['en-US', 1100, 'light'], ['zh-CN', 390, 'light'], ['en-US', 1100, 'dar
     expect(getComputedStyle(summary).outlineStyle).not.toBe('none');
   }
   if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') {
-    await userEvent.click(surface.querySelector<HTMLElement>('.flower-goal-history-actor')!);
+    await userEvent.click(surface.querySelector<HTMLElement>('.flower-goal-history-text')!);
     await page.screenshot({ element: surface, path: '__screenshots__/flower-goal-history-expanded-' + locale + '-' + theme + '.png' });
   }
   await userEvent.click(badge);

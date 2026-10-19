@@ -73,8 +73,9 @@ Escape and outside dismissal preserve unsaved text, while cancel discards it.
 Creation, updates, deletion and completion use one expandable icon row: action,
 single-line Goal preview and disclosure chevron. Set and update share the Goal-set
 label; completion is reported only by the canonical completion fact. Expansion
-shows the full original text and actor aligned with the action label, directly
-on the transcript without a card, border or tinted background. CSS ellipsis
+shows only the full original text aligned with the action label, directly on the
+transcript without a card, border or tinted background. Actor metadata remains
+in canonical history but is not displayed in Goal rows. CSS ellipsis
 affects only the preview; it never truncates the stored or expanded Goal.
 Reflection uses a lightweight status. The transcript action menu also exposes
 /goal during questions and approvals without resolving or bypassing them.

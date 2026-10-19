@@ -330,8 +330,6 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       goalCompleted: t(i18n, k('chat.goalCompleted')),
       goalSet: t(i18n, k('chat.goalSet')),
       goalDeleted: t(i18n, k('chat.goalDeleted')),
-      goalActorUser: t(i18n, k('chat.goalActorUser')),
-      goalActorModel: t(i18n, k('chat.goalActorModel')),
       commandGoal: t(i18n, k('chat.commandGoal')),
       goalUnavailable: t(i18n, k('chat.goalUnavailable')),
       commandMenuLabel: t(i18n, k('chat.commandMenuLabel')),

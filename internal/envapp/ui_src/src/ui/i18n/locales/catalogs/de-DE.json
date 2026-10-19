@@ -5696,8 +5696,6 @@
       "goalCompleted": "Ziel erreicht",
       "goalSet": "Ziel gesetzt",
       "goalDeleted": "Ziel gelöscht",
-      "goalActorUser": "Sie",
-      "goalActorModel": "Modell",
       "commandGoal": "Ziel setzen und Arbeit starten oder aktualisieren",
       "goalUnavailable": "Die Zielverwaltung ist in dieser Umgebung nicht verfügbar."
     },
