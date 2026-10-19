@@ -45,12 +45,13 @@ type PartialUsage struct {
 }
 
 type StreamEvent struct {
-	HostedToolEvent *flprovider.Event `json:"-"`
-	Type            StreamEventType   `json:"type"`
-	Text            string            `json:"text,omitempty"`
-	ToolCall        *PartialToolCall  `json:"tool_call,omitempty"`
-	Usage           *PartialUsage     `json:"usage,omitempty"`
-	FinishHint      string            `json:"finish_hint,omitempty"`
+	OutputPart      *flprovider.OutputPart `json:"output_part,omitempty"`
+	HostedToolEvent *flprovider.Event      `json:"-"`
+	Type            StreamEventType        `json:"type"`
+	Text            string                 `json:"text,omitempty"`
+	ToolCall        *PartialToolCall       `json:"tool_call,omitempty"`
+	Usage           *PartialUsage          `json:"usage,omitempty"`
+	FinishHint      string                 `json:"finish_hint,omitempty"`
 }
 
 type ContentPart struct {

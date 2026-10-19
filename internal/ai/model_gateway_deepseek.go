@@ -153,10 +153,10 @@ func (p *deepSeekPreparedTurn) StreamTurn(ctx context.Context, onEvent func(Stre
 		switch event.Type {
 		case flprovider.EventDelta:
 			text.WriteString(event.Text)
-			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventTextDelta, Text: event.Text})
+			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventTextDelta, Text: event.Text, OutputPart: event.OutputPart})
 		case flprovider.EventReasoning:
 			reasoning.WriteString(event.Text)
-			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventThinkingDelta, Text: event.Text})
+			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventThinkingDelta, Text: event.Text, OutputPart: event.OutputPart})
 		case flprovider.EventToolCallStart, flprovider.EventToolCallDelta, flprovider.EventToolCallEnd:
 			if call := event.ToolCallStream; call != nil {
 				kind := StreamEventToolCallStart
@@ -166,7 +166,7 @@ func (p *deepSeekPreparedTurn) StreamTurn(ctx context.Context, onEvent func(Stre
 				if event.Type == flprovider.EventToolCallEnd {
 					kind = StreamEventToolCallEnd
 				}
-				emitProviderEvent(onEvent, StreamEvent{Type: kind, Text: event.Text, ToolCall: &PartialToolCall{ID: call.ID, Name: canonicalProviderToolName(call.Name, aliases)}})
+				emitProviderEvent(onEvent, StreamEvent{Type: kind, Text: event.Text, OutputPart: event.OutputPart, ToolCall: &PartialToolCall{ID: call.ID, Name: canonicalProviderToolName(call.Name, aliases)}})
 			}
 		case flprovider.EventHostedToolCall, flprovider.EventHostedToolResult:
 			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventHostedTool, HostedToolEvent: &event})

@@ -1143,8 +1143,11 @@ not fall back to a local diagnostic. Tool Activity describes where its own proce
 ran; a nested CLI target result describes where the diagnostic ran.
 
 Floret owns bounded correction of schema-invalid tool arguments and persists the
-complete call/result pairs. Flower keeps running during correction, shows only
-valid interactions, and filters technical feedback only in presentation. Failed
+complete call/result pairs. Published Floret v7.65.0 also owns output-source
+identity, response commit takeover and schema 25 migration. Redeven passes native
+OutputPart descriptors through its DeepSeek DTO unchanged. Flower preserves the
+upstream sequence and IDs, including correction reasoning, while invalid calls
+and technical feedback stay hidden only in presentation. Failed
 question generation preserves generated content and the existing retry action;
 programmer, storage, and unknown-effect errors retain their terminal boundaries.
 

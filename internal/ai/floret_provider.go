@@ -256,24 +256,24 @@ func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, provider
 					return
 				}
 				streamedText.WriteString(ev.Text)
-				sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventDelta, Text: ev.Text})
+				sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventDelta, OutputPart: ev.OutputPart, Text: ev.Text})
 			case StreamEventThinkingDelta:
 				if ev.Text == "" {
 					return
 				}
 				streamedReasoning.WriteString(ev.Text)
-				sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventReasoning, Text: ev.Text})
+				sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventReasoning, OutputPart: ev.OutputPart, Text: ev.Text})
 			case StreamEventToolCallStart:
 				if stream := floretToolCallStreamFromFlower(ev.ToolCall); stream != nil {
-					sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventToolCallStart, ToolCallStream: stream})
+					sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventToolCallStart, OutputPart: ev.OutputPart, ToolCallStream: stream})
 				}
 			case StreamEventToolCallDelta:
 				if stream := floretToolCallStreamFromFlower(ev.ToolCall); stream != nil {
-					sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventToolCallDelta, Text: ev.Text, ToolCallStream: stream})
+					sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventToolCallDelta, OutputPart: ev.OutputPart, Text: ev.Text, ToolCallStream: stream})
 				}
 			case StreamEventToolCallEnd:
 				if stream := floretToolCallStreamFromFlower(ev.ToolCall); stream != nil {
-					sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventToolCallEnd, ToolCallStream: stream})
+					sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventToolCallEnd, OutputPart: ev.OutputPart, ToolCallStream: stream})
 				}
 			}
 		}

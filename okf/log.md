@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-19 — Canonical output sources
+
+- Adopt published Floret v7.65.0 and pass native output parts through the DeepSeek bridge. Preserve correction reasoning order, canonical takeover, restart identities and Flower interactions through the [typed adapter](ai/floret-redeven-adapter-and-projection.md).
+
 ## 2026-10-18 — Subagent status and result boundaries
 
 - Adopt published Floret v7.64.0, add bounded metadata-only status checks, guide selective event/result reads, and preserve historical capsule outcomes with action-first localized Activity titles. See [runtime](ai/subagent-runtime.md) and [presentation](ui/flower-subagent-detail.md).
