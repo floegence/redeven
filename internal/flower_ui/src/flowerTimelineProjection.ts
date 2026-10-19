@@ -480,6 +480,42 @@ const queueProjections = new WeakMap<FlowerQueuedTurn, Readonly<{ threadID: stri
 
 const emptyParentEvents: readonly FlowerParentEvent[] = [];
 
+// A canonical Goal fact replaces its one successful invocation in the visible
+// timeline. Ambiguous batches retain every tool row, including conflicts and
+// reviews that never produced a committed completion. Source messages stay intact.
+function coalesceGoalActivity(entries: readonly FlowerTimelineEntry[]): readonly FlowerTimelineEntry[] {
+  const pending = new Map<string, FlowerTimelineEntry[]>();
+  const replaced = new Set<string>();
+  for (const entry of entries) {
+    if (entry.type !== 'message') continue;
+    const { message } = entry;
+    if (!message.turn_id || !message.run_id || message.canonical_ordinal === undefined) continue;
+    const execution = JSON.stringify([message.turn_id, message.run_id]);
+    if (message.goal) {
+      const candidates = pending.get(execution) ?? [];
+      pending.delete(execution);
+      if (message.goal.actor !== 'model' || candidates.length !== 1) continue;
+      const candidate = candidates[0];
+      if (candidate.type !== 'message' || candidate.message.canonical_ordinal! >= message.canonical_ordinal) continue;
+      const block = candidate.blocks[0];
+      if (block.type !== 'activity') continue;
+      const item = block.block.items[0];
+      if (item.status === 'success' && !item.needs_attention && !item.requires_approval
+        && !item.approval_state && !item.attention_reasons?.length
+        && !item.payload?.error && !item.chips?.some(chip => chip.kind === 'effect_outcome' && chip.value === 'uncertain')
+        && (item.severity === 'normal' || item.severity === 'quiet')) replaced.add(candidate.key);
+      continue;
+    }
+    if (entry.blocks.length !== 1) continue;
+    const block = entry.blocks[0];
+    if (block.type !== 'activity' || block.block.items.length !== 1 || block.block.items[0].tool_name !== 'goal') continue;
+    const candidates = pending.get(execution) ?? [];
+    candidates.push(entry);
+    pending.set(execution, candidates);
+  }
+  return replaced.size ? entries.filter(entry => !replaced.has(entry.key)) : entries;
+}
+
 export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | undefined, parentEvents = thread?.parent_events ? thread.parent_events.events : emptyParentEvents): readonly FlowerTimelineEntry[] {
   if (!thread) return [];
   const threadRunning = thread.status === 'running';
@@ -571,9 +607,10 @@ export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null |
       error,
     });
   }
+  const visibleEntries = coalesceGoalActivity(entries);
   timelineProjections.set(thread.messages, {
     threadID: thread.thread_id, cursorID: activeCursorMessageID, decorations: sourceDecorations,
-    queued: thread.queued_turns, input, error: thread.error, status: thread.status, parentEvents, entries,
+    queued: thread.queued_turns, input, error: thread.error, status: thread.status, parentEvents, entries: visibleEntries,
   });
-  return entries;
+  return visibleEntries;
 }

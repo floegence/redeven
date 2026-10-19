@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-18 — Compact Goal presentation
+
+- Share a target-and-arrow icon across the composer badge, popup and expandable [Goal history](ai/flower-goals.md). Present one concise action and Goal preview, preserve the full original on expansion, and coalesce unambiguous successful tool rows while retaining failures and unresolved outcomes.
+
 ## 2026-10-18 — Preserve compact Flower reading
 
 - Restore the original shared 14px message scale and 1.75 line height while retaining [theme-adaptive reading colors](ui/flower-message-appearance.md). Verify authored Markdown and real transcript rendering without interpreting prose as metadata.

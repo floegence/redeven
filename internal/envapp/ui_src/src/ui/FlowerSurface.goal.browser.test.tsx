@@ -1,14 +1,19 @@
 import '../index.css';
 import './flower-feature.css';
 import { page, userEvent } from 'vitest/browser';
-import { expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import type { FlowerGoal, FlowerGoalInput, FlowerGoalResult, FlowerRuntimeCurrentView } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { createFlowerComposerDraftCoordinator } from '../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
 import { withModelDirectoryFixture } from '../../../../flower_ui/testing/modelDirectoryFixture';
 import { flowerTurnAdmissionError } from '../../../../flower_ui/src/flowerTurnAdmission';
+import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
+import { createLocalizedFlowerSurfaceCopy } from '../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
+import { createTestI18nHelpers } from './i18n/locales/testDictionaries';
+import type { EnvAppTranslationKey } from './i18n';
 import { adapter, deferred, inputRequest, liveBootstrap, thread, renderSurfaceWithAdapterProps, renderSurfaceWithDraftCoordinator, waitFor } from './FlowerSurface.navigation.testHarness';
 
 const focus = { request_id: 'goal-focus', thread_id: 'thread-1' };
+afterEach(() => document.documentElement.classList.remove('dark'));
 function response(input: FlowerGoalInput, version = input.expected_version + 1, conflict = false): FlowerGoalResult {
   const goal: FlowerGoal = { version, text: input.operation !== 'delete' ? input.text : undefined, status: input.operation !== 'delete' ? 'active' : 'absent', actor: 'user' };
   const current: FlowerRuntimeCurrentView = { thread_id: input.thread_id || 'created-goal', view_version: version + 2, activity: 'idle', goal, items: [{ id: 'goal:' + version, ordinal: version, kind: 'goal', goal: { goal, operation: input.operation === 'delete' ? 'delete' : 'set', actor: 'user', at: '2026-10-18T00:00:00Z' } }] };
@@ -29,6 +34,64 @@ function action(surface: HTMLElement, label: string) {
   if (!button) throw new Error('Goal action is unavailable: ' + label);
   return button;
 }
+
+it.each([['en-US', 1100, 'light'], ['zh-CN', 390, 'light'], ['en-US', 1100, 'dark'], ['zh-CN', 390, 'dark']] as const)('presents %s Goal facts as a single icon row at %s px in %s mode', async (locale, width, theme) => {
+  await page.viewport(width, 850);
+  document.documentElement.classList.toggle('dark', theme === 'dark');
+  const i18n = createTestI18nHelpers(locale);
+  const copy = createLocalizedFlowerSurfaceCopy({ locale, t: (key, params) => i18n.t(key as EnvAppTranslationKey, params), tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params) });
+  const base = adapter(true);
+  const text = locale === 'zh-CN' ? '完善目标交互与界面设计，验证所有状态和恢复流程，并保留用户的全部要求。\n这一行原文也需要完整保留。' : 'Verify the release, preserve every user requirement, and document the result.\nKeep this second line intact.';
+  const goal: FlowerGoal = { version: 1, text, status: 'completed', actor: 'model' };
+  const snapshot = thread({ goal });
+  const current: FlowerRuntimeCurrentView = { ...liveBootstrap(snapshot, 20).current, goal, items: [
+    { id: 'goal-tool', ordinal: 1, canonical_ordinal: 1, kind: 'tool', turn_id: 'goal-turn', run_id: 'goal-run', activity: { item_id: 'goal-call', tool_id: 'goal-call', tool_name: 'goal', kind: 'tool', status: 'success', severity: 'normal' } },
+    { id: 'goal-set', ordinal: 2, canonical_ordinal: 2, kind: 'goal', turn_id: 'goal-turn', run_id: 'goal-run', goal: { goal: { ...goal, status: 'active' }, operation: 'set', actor: 'model', at: '2026-10-18T00:00:00Z' } },
+    { id: 'goal-done', ordinal: 3, canonical_ordinal: 3, kind: 'goal', goal: { goal, operation: 'completed', actor: 'model', at: '2026-10-18T00:01:00Z' } },
+  ] };
+  const surface = renderSurfaceWithAdapterProps({ ...base, listThreads: async () => [snapshot], loadThread: async () => ({ thread: applyFlowerRuntimeCurrentView(snapshot, current), current }) }, { copy, focusThreadRequest: focus });
+  surface.style.cssText = 'width:100%;height:800px;position:relative;';
+  await waitFor(() => surface.querySelectorAll('.flower-goal-history').length === 2, 10000);
+  const badge = surface.querySelector<HTMLButtonElement>('.flower-goal-tag')!;
+  expect(badge.querySelector('[data-flower-goal-icon]')).not.toBeNull();
+  expect(badge.querySelector('.flower-goal-dot')).toBeNull();
+  expect(getComputedStyle(badge).borderTopStyle).toBe('solid');
+  expect(surface.querySelector('[data-flower-tool-call-id="goal-call"]')).toBeNull();
+  if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: surface, path: '__screenshots__/flower-goal-history-' + locale + '-' + theme + '.png' });
+  for (const [index, label] of [copy.chat.goalSet, copy.chat.goalCompleted].entries()) {
+    const row = surface.querySelectorAll<HTMLDetailsElement>('.flower-goal-history')[index]!;
+    const summary = row.querySelector('summary')!;
+    expect(summary.querySelector('[data-flower-goal-icon]')).not.toBeNull();
+    expect(summary.querySelector('.flower-goal-history-label')?.textContent).toBe(label);
+    expect(summary.querySelector('.flower-goal-history-preview')?.textContent).toBe(text);
+    expect(getComputedStyle(summary.querySelector('.flower-goal-history-preview')!).textOverflow).toBe('ellipsis');
+    expect(row.open).toBe(false);
+    expect(summary.getBoundingClientRect().height).toBeLessThan(40);
+    expect(summary.scrollWidth).toBeLessThanOrEqual(summary.clientWidth + 1);
+    summary.focus(); await userEvent.keyboard('{Enter}');
+    expect(row.open).toBe(true);
+    expect(row.querySelector('.flower-goal-history-text')?.textContent).toBe(text);
+  }
+  if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: surface, path: '__screenshots__/flower-goal-history-expanded-' + locale + '-' + theme + '.png' });
+});
+
+it('keeps failed Goal tools inspectable with the shared icon and never claims completion', async () => {
+  const base = adapter(true), snapshot = thread({ messages: [] });
+  const current: FlowerRuntimeCurrentView = { ...liveBootstrap(snapshot, 20).current, items: [
+    { id: 'goal-error', ordinal: 1, canonical_ordinal: 1, turn_id: 'turn-goal', run_id: 'run-goal', kind: 'tool', activity: {
+      item_id: 'goal-error', tool_id: 'goal-error', tool_name: 'goal', kind: 'tool', status: 'error', severity: 'error', needs_attention: true,
+      presentation: { renderer: 'structured', payload: { error: { message: 'The Goal changed before review.' } } },
+    } },
+  ] };
+  const surface = renderSurfaceWithAdapterProps({ ...base, listThreads: async () => [snapshot], loadThread: async () => ({ thread: applyFlowerRuntimeCurrentView(snapshot, current), current }) }, { focusThreadRequest: focus });
+  await waitFor(() => Boolean(surface.querySelector('[data-flower-activity-item-id="goal-error"]')), 10000);
+  const row = surface.querySelector<HTMLElement>('[data-flower-activity-item-id="goal-error"]')!;
+  expect(row.querySelector('[data-flower-goal-icon]')).not.toBeNull();
+  expect(row.querySelector('.flower-activity-inline-title')?.textContent).toBe('Goal');
+  expect(surface.querySelector('[data-flower-goal-change="completed"]')).toBeNull();
+  await userEvent.click(row.querySelector('button')!);
+  await waitFor(() => Boolean(row.textContent?.includes('The Goal changed before review.')));
+});
 
 it('opens Goal from slash suggestions with keyboard and restores composer focus on Escape', async () => {
   const base = adapter(true);

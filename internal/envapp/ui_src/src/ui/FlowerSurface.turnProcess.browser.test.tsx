@@ -438,11 +438,11 @@ describe('completed turn process disclosure', () => {
     expect(changes.map(row => row.closest('.flower-turn-row-viewport')?.getAttribute('aria-hidden'))).toEqual([null, 'true', 'true']);
     expect(hidden(root, 'tool')).toBe(true);
     expect(message(root, 'user').compareDocumentPosition(summary(root)!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const editor = root.querySelector<HTMLButtonElement>('.flower-goal-summary')!;
+    const editor = root.querySelector<HTMLButtonElement>('.flower-goal-tag')!;
     expect(editor.closest('[inert], [aria-hidden="true"]')).toBeNull();
     editor.click();
-    await waitFor(() => Boolean(root.querySelector('.flower-goal-input')));
-    expect(root.querySelector('.flower-goal-input')?.closest('[inert], [aria-hidden="true"]')).toBeNull();
+    await waitFor(() => Boolean(document.querySelector('.flower-goal-input')));
+    expect(document.querySelector('.flower-goal-input')?.closest('[inert], [aria-hidden="true"]')).toBeNull();
     await userEvent.keyboard('{Escape}');
     summary(root)!.click();
     expect(changes.every(row => row.closest('.flower-turn-row-viewport')?.getAttribute('aria-hidden') !== 'true')).toBe(true);

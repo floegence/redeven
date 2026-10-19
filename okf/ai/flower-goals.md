@@ -62,11 +62,16 @@ the chip close button and Backspace on empty input leave the mode. Ordinary text
 attachments, references and pending question answers remain in their draft scope.
 /goal clear remains the explicit delete command.
 
-Without a Goal, no Goal control is rendered. With one, a small tag sits to the
-right of the progress indicator on the same row. It opens an anchored popup with
+Without a Goal, no Goal control is rendered. With one, a compact outlined badge
+with the shared target-and-arrow icon sits to the right of the progress indicator
+on the same row. It opens an anchored popup with
 the full editable text and delete control; save and cancel appear for edits.
 Escape and outside dismissal preserve unsaved text, while cancel discards it.
-Creation, updates, deletion and completion retain actor and history. Reflection
+Creation, updates, deletion and completion use one expandable icon row: action,
+single-line Goal preview and disclosure chevron. Set and update share the Goal-set
+label; completion is reported only by the canonical completion fact. Expansion
+shows the full original text and actor. CSS ellipsis affects only the preview;
+it never truncates the stored or expanded Goal. Reflection
 uses a lightweight status. The transcript action menu also exposes /goal during
 questions and approvals without resolving or bypassing them.
 
@@ -82,6 +87,15 @@ Goal tools and typed changes with canonical turn/run ownership share that turn's
 [process disclosure](../ui/flower-turn-process-disclosure.md). Independent user
 edits without that ownership stay visible. Goal editing, recovery, Stop and
 navigation remain available during execution, questions and approval.
+
+The timeline presents a canonical model Goal change in place of its single
+preceding successful Goal invocation within the same turn/run and canonical
+positions. The underlying source message remains unchanged for history and
+diagnostics.
+Ambiguous batches, unmatched reviews, errors, cancellation, approval and attention
+states keep their tool rows and use the same Goal icon. A user edit or another
+execution cannot serve as a successful tool receipt. This is presentation only;
+it does not infer completion or add a Goal state owner.
 
 The existing short-lived outbox freezes each request. An unknown outcome retries
 the exact request identity and content. A mutation or current-view failure after

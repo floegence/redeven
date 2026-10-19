@@ -52,8 +52,10 @@ import {
   Wrench
 } from 'lucide-solid';
 import { FlowerWritingPencil } from './FlowerWritingPencil';
+import { FlowerGoalIcon } from './FlowerGoalIcon';
 
 export const flowerToolGlyphs = {
+  'flower-goal': FlowerGoalIcon,
   'arrow-left': ArrowLeft,
   'book-marked': BookMarked,
   'book-open-text': BookOpenText,

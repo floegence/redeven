@@ -520,8 +520,7 @@ export type FlowerSurfaceCopy = Readonly<{
     goalReviewing: string;
     goalActive: string;
     goalCompleted: string;
-    goalCreated: string;
-    goalUpdated: string;
+    goalSet: string;
     goalDeleted: string;
     goalActorUser: string;
     goalActorModel: string;
@@ -970,9 +969,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     goalConflict: "This goal changed. Your edit is preserved; review the current goal and submit again.",
     goalReviewing: "Checking goal",
     goalActive: "In progress",
-    goalCompleted: "Completed",
-    goalCreated: "Goal created",
-    goalUpdated: "Goal updated",
+    goalCompleted: "Goal completed",
+    goalSet: "Goal set",
     goalDeleted: "Goal deleted",
     goalActorUser: "You",
     goalActorModel: "Model",

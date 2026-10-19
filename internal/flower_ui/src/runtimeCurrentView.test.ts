@@ -994,6 +994,59 @@ it('renders Goal facts before the first Turn and preserves their control identit
   expect(entries[0]).toMatchObject({ type: 'message', message: { goal: change } });
 });
 
+describe('Goal activity presentation', () => {
+  const goal = { version: 1, text: 'Verify the result', status: 'active' as const, actor: 'model' as const };
+  const change = { goal, operation: 'set' as const, actor: 'model' as const, at: '2026-10-18T00:00:00Z' };
+  const call = { id: 'goal-tool', ordinal: 1, canonical_ordinal: 1, turn_id: 'turn-a', run_id: 'run-a', kind: 'tool' as const,
+    activity: { item_id: 'goal-call', tool_id: 'call-a', tool_name: 'goal', kind: 'tool', status: 'success', severity: 'normal' } };
+  const fact = { id: 'goal-fact', ordinal: 2, canonical_ordinal: 2, turn_id: 'turn-a', run_id: 'run-a', kind: 'goal' as const, goal: change };
+  const project = (items: FlowerRuntimeCurrentView['items']) => {
+    const snapshot = applyFlowerRuntimeCurrentView(summary(), { thread_id: 'thread-a', view_version: 1, activity: 'idle', items });
+    return { snapshot, entries: buildFlowerTimelineEntries(snapshot) };
+  };
+
+  it('shows one canonical fact for a successful Goal tool without discarding the underlying activity', () => {
+    const { snapshot, entries } = project([call, fact]);
+    expect(snapshot.messages).toHaveLength(2);
+    expect(entries.map(entry => entry.key)).toEqual(['message:goal-fact']);
+    const completed = { ...fact, goal: { ...change, operation: 'completed' as const, goal: { ...goal, status: 'completed' as const } } };
+    expect(project([call, completed]).entries.map(entry => entry.key)).toEqual(['message:goal-fact']);
+  });
+
+  it.each(['running', 'waiting', 'error', 'declined', 'canceled'])('preserves %s Goal activity beside a fact', status => {
+    expect(project([{ ...call, activity: { ...call.activity, status } }, fact]).entries).toHaveLength(2);
+  });
+
+  it('never treats a user edit, another run, missing position, or an earlier fact as a tool receipt', () => {
+    for (const unmatched of [
+      { ...fact, goal: { ...change, actor: 'user' as const } },
+      { ...fact, run_id: 'other-run' },
+      { ...fact, turn_id: 'other-turn' },
+      { ...fact, canonical_ordinal: undefined },
+    ]) {
+      expect(project([call, unmatched]).entries).toHaveLength(2);
+    }
+    expect(project([call, { ...fact, canonical_ordinal: 1 }, { ...call, id: 'later-call', canonical_ordinal: 3 }]).entries).toHaveLength(3);
+    expect(project([call]).entries).toHaveLength(1);
+    expect(project([{ ...call, activity: { ...call.activity, needs_attention: true } }, fact]).entries).toHaveLength(2);
+    expect(project([{ ...call, activity: { ...call.activity, presentation: { chips: [{ kind: 'effect_outcome', label: 'Unconfirmed', value: 'uncertain' }] } } }, fact]).entries).toHaveLength(2);
+    expect(project([{ ...call, activity: { ...call.activity, presentation: { renderer: 'structured', payload: { error: { message: 'Unconfirmed result' } } } } }, fact]).entries).toHaveLength(2);
+  });
+
+  it('retains ambiguous concurrent invocations so a successful conflict is never hidden', () => {
+    const latest = { ...call, id: 'latest-call', canonical_ordinal: 2, activity: { ...call.activity, tool_id: 'latest' } };
+    const { entries } = project([call, latest, { ...fact, canonical_ordinal: 3 }]);
+    expect(entries).toHaveLength(3);
+  });
+
+  it('coalesces set and committed completion separately while retaining unmatched reviews', () => {
+    const review = { ...call, id: 'review-call', canonical_ordinal: 3, activity: { ...call.activity, tool_id: 'review' } };
+    const completed = { ...fact, id: 'completed', canonical_ordinal: 4, goal: { ...change, operation: 'completed' as const, goal: { ...goal, status: 'completed' as const } } };
+    expect(project([call, fact, review]).entries).toHaveLength(2);
+    expect(project([call, fact, review, completed]).entries.map(entry => entry.key)).toEqual(['message:goal-fact', 'message:completed']);
+  });
+});
+
 describe('canonical original and Fork process regression', () => {
   it.each([0, 1, 2])('keeps the user before all six child dynamics and both intermediate bodies at Fork depth %s', depth => {
     const current = canonicalProcessFixture(depth);
