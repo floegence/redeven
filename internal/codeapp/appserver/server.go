@@ -5654,6 +5654,31 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: resp})
 			return
 
+		case action == "tool-preview" && r.Method == http.MethodPost && len(parts) == 2:
+			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+			if !ok || !g.requireAIService(w, aiSvc) {
+				return
+			}
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			var body ai.FlowerToolPreviewRequest
+			if err := dec.Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := dec.Decode(&struct{}{}); err != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			body.ThreadID = threadID
+			preview, err := aiSvc.ReadFlowerToolPreview(r.Context(), meta, body)
+			if err != nil {
+				writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "tool preview is unavailable"})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: preview})
+			return
+
 		case action == "reference-open-target" && r.Method == http.MethodPost && len(parts) == 2:
 			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
 			if !ok {

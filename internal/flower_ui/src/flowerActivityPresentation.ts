@@ -1471,6 +1471,11 @@ function structuredTitle(item: FlowerActivityItem, words: FlowerToolActivityCopy
   const action = TOOL_ACTIONS[tool];
   const target = item.target_refs?.find(ref => ref.kind === 'computer_target' || ref.kind === 'computer_control' || ref.kind === 'computer_frame');
   const label = trimString(item.label);
+  if (tool === 'threads.query' || tool === 'threads.read') {
+    const prefix = tool === 'threads.query' ? 'Thread Query' : 'Thread Read';
+    const intent = label && label !== tool && !isApprovalLifecycleText(label) ? label : '';
+    return { kind: 'plain', text: intent ? `${prefix}: ${intent}` : prefix };
+  }
   if (tool.startsWith('computer.') || tool.startsWith('browser.')) {
     const intent = label && label !== tool && label !== target?.label && label !== target?.resource_ref
       && label !== payloadValue(item.payload, 'operation') && !isApprovalLifecycleText(label) ? label : '';

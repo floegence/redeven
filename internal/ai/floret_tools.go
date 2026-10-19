@@ -1147,7 +1147,7 @@ func activityTodoCountValue(source map[string]any, field string) (any, bool) {
 }
 
 func activityCallLabel(toolName string, spec aitools.ToolPresentationSpec, hasSpec bool, renderer fltools.ActivityRenderer, args map[string]any, payload map[string]any) string {
-	if isComputerUseTool(toolName) {
+	if isComputerUseTool(toolName) || toolName == "threads.query" || toolName == "threads.read" {
 		return activityPresentationLabel(anyToString(args["description"]))
 	}
 	if renderer == fltools.ActivityRendererTerminal {
@@ -1161,7 +1161,7 @@ func activityCallLabel(toolName string, spec aitools.ToolPresentationSpec, hasSp
 }
 
 func activityResultLabel(toolName string, spec aitools.ToolPresentationSpec, hasSpec bool, renderer fltools.ActivityRenderer, payload map[string]any) string {
-	if isComputerUseTool(toolName) {
+	if isComputerUseTool(toolName) || toolName == "threads.query" || toolName == "threads.read" {
 		return "" // Result metadata must never replace the invocation intent.
 	}
 	if renderer == fltools.ActivityRendererTerminal {
@@ -1254,6 +1254,9 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 		Payload:    activityPayloadForRenderer(renderer, payload),
 	}
 	if structured, ok := activity.Payload.(fltools.StructuredActivityPayload); ok {
+		if toolName == "threads.query" || toolName == "threads.read" {
+			activity.Label = activityPresentationLabel(anyToString(result.activityInput["description"]))
+		}
 		structured.Inputs = structuredToolInputs(toolName, result.activityInput, spec)
 		if toolName == "subagent_events" {
 			structured.Operation = anyToString(result.activityInput["action"])

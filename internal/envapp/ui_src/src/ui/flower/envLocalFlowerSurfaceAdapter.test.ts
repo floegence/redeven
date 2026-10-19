@@ -2360,3 +2360,15 @@ it.each([
   const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env', envLabel: 'Environment', rpc: { ai: {} } as never });
   await expect(adapter.manageGoal!({ storage_generation: 'generation', client_request_id: 'same-goal-request', thread_id: 'thread', operation: 'set', expected_version: 0, text: 'Verify result' })).rejects.toMatchObject({ admission_kind: kind, code });
 });
+
+it('loads saved tool previews through the exact scoped Env App route', async () => {
+  const preview = { tool_name: 'threads.query', inputs: [], rows: [], total: 0, has_more: false };
+  fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+    expect(url).toBe('/_redeven_proxy/api/ai/threads/thread-1/tool-preview');
+    expect(init?.method).toBe('POST');
+    expect(JSON.parse(String(init?.body))).toEqual({ turn_id: 'turn-1', run_id: 'run-1', tool_call_id: 'call-1' });
+    return jsonResponse(preview);
+  });
+  const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env', envLabel: 'Environment', rpc: { ai: {} } as never });
+  await expect(adapter.loadToolPreview!({ thread_id: 'thread-1', turn_id: 'turn-1', run_id: 'run-1', tool_call_id: 'call-1' })).resolves.toEqual(preview);
+});

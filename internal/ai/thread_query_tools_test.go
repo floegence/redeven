@@ -309,3 +309,63 @@ func TestThreadQueryToolPreservesRuntimeFailures(t *testing.T) {
 		}
 	}
 }
+
+func TestThreadQueryInvocationDescription(t *testing.T) {
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	svc.threadRuntime = &threadQueryRecordingRuntime{ThreadService: svc.threadRuntime}
+	for _, name := range []string{"threads.query", "threads.read"} {
+		args := map[string]any{"description": "Find recent release discussions", "object": "threads"}
+		if name == "threads.read" {
+			args = map[string]any{"description": "Read the release plan", "ref": "expired"}
+		}
+		_, err := svc.execThreadQueryTool(t.Context(), meta, name, args)
+		if err != nil {
+			t.Fatalf("description reached canonical query decoder: %v", err)
+		}
+		if args["description"] == nil {
+			t.Fatal("invocation metadata mutated")
+		}
+		call := floretActivityForToolCall(name, args)
+		if call == nil || call.Label != args["description"] {
+			t.Fatalf("intent label: %+v", call)
+		}
+		result, err := floretActivityForToolResult(nil, ToolResult{ToolName: name, Status: toolResultStatusSuccess, activityInput: args, Data: map[string]any{"description": "Untrusted result title"}})
+		if err != nil || result.Label != args["description"] {
+			t.Fatalf("result lost invocation intent: %+v %v", result, err)
+		}
+	}
+}
+
+func TestThreadQueryDescriptionSchemas(t *testing.T) {
+	for _, def := range builtInThreadQueryToolDefinitions() {
+		if def.Name == "threads.aggregate" {
+			continue
+		}
+		var schema map[string]any
+		if err := json.Unmarshal(def.InputSchema, &schema); err != nil {
+			t.Fatal(err)
+		}
+		validator, err := compileArgumentSchema(schema)
+		if err != nil {
+			t.Fatal(err)
+		}
+		args := map[string]any{"object": "threads"}
+		if def.Name == "threads.read" {
+			args = map[string]any{"ref": "opaque"}
+		}
+		if err := validator.Validate(args); err != nil {
+			t.Fatalf("historical arguments rejected: %v", err)
+		}
+		args["description"] = "Find release discussions"
+		if err := validator.Validate(args); err != nil {
+			t.Fatalf("invocation intent rejected: %v", err)
+		}
+		for _, invalid := range []any{"", 42, strings.Repeat("a", 161)} {
+			args["description"] = invalid
+			if err := validator.Validate(args); err == nil {
+				t.Fatalf("invalid intent accepted for %s", def.Name)
+			}
+		}
+	}
+}

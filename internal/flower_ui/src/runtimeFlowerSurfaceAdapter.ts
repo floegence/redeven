@@ -28,6 +28,8 @@ import type {
   FlowerSubmitInputReceipt,
   FlowerSurfaceRuntimeDescriptor,
   FlowerTerminalProcessSnapshot,
+  FlowerToolPreview,
+  FlowerToolPreviewRequest,
   FlowerThreadActivitySnapshot,
   FlowerThreadReadStatus,
   FlowerThreadSnapshot,
@@ -117,6 +119,7 @@ export type FlowerRuntimeTransport = Readonly<{
   readParentEvents?(threadID: string, query: FlowerParentEventQuery): Promise<FlowerParentEventPage>;
   loadSubagentDetail(parentThreadID: string, childThreadID: string): Promise<LoadSubagentDetailResponse>;
   operateSubagentInput?(parentThreadID: string, childThreadID: string, input: FlowerSubagentInputOperation): Promise<LoadSubagentDetailResponse>;
+  loadToolPreview?(input: FlowerToolPreviewRequest): Promise<FlowerToolPreview>;
   readTerminalProcess?(runID: string, processID: string, input: { after_seq: number }): Promise<FlowerTerminalProcessSnapshot>;
   markThreadRead(threadID: string, input: MarkThreadReadInput): Promise<MarkThreadReadResponse>;
   patchThread(threadID: string, input: ThreadPatchInput): Promise<RuntimeThreadPatchResponse>;
@@ -582,6 +585,9 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
         ...(input.reject_all ? { reject_all: true } : {}),
       });
     },
+    ...(options.transport.loadToolPreview ? {
+      loadToolPreview: (input) => options.transport.loadToolPreview!(input),
+    } : {}),
     ...(options.transport.readTerminalProcess ? {
       readTerminalProcess: async (input) => {
         const runID = trim(input.run_id);

@@ -44,6 +44,7 @@ import type {
   FlowerStagedAttachment,
   FlowerStagedLongTextReadResult,
   FlowerTerminalProcessSnapshot,
+  FlowerToolPreview,
   FlowerThreadReadStatus,
   FlowerLiveStreamConnectInput,
 } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -586,6 +587,10 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       loadSubagentDetail: (parentThreadID, childThreadID) => fetchLocalApiJSON(
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(parentThreadID)}/subagents/${encodeURIComponent(childThreadID)}/detail`,
         { method: 'GET' },
+      ),
+      loadToolPreview: (input) => fetchLocalApiJSON<FlowerToolPreview>(
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(input.thread_id)}/tool-preview`,
+        { method: 'POST', body: JSON.stringify({ turn_id: input.turn_id, run_id: input.run_id, tool_call_id: input.tool_call_id }) },
       ),
       readTerminalProcess: (runID, processID, input) => {
         const params = new URLSearchParams();

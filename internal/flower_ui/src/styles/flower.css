@@ -12196,6 +12196,11 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-activity-preview-text[data-format='code'] { font-family: var(--font-mono); }
 .flower-activity-preview[data-expanded='false'] .flower-activity-preview-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .flower-activity-preview-count { margin-inline-start: 0.4rem; color: var(--flower-reading-secondary); }
+.flower-thread-tool-inputs { margin: 0 0 0.5rem; font-size: 0.75rem; line-height: 1.25rem; }
+.flower-thread-tool-inputs > div { display: grid; grid-template-columns: minmax(5rem, 25%) minmax(0, 1fr); gap: 0.75rem; padding: 0.2rem 0; border-bottom: 1px solid var(--border); }
+.flower-thread-tool-inputs dt { color: var(--flower-reading-secondary); overflow-wrap: anywhere; }
+.flower-thread-tool-inputs dd { margin: 0; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.flower-thread-tool-inputs .flower-activity-detail-notice { display: block; }
 
 .flower-subagent-inputs { margin-top: 1rem; padding: 0.75rem; border: 1px solid var(--border); border-radius: 0.75rem; }
 .flower-subagent-inputs h3 { font-size: 0.75rem; font-weight: 600; color: var(--muted-foreground); }

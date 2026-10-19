@@ -1632,3 +1632,14 @@ it.each([
   const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
   await expect(adapter.manageGoal!({ storage_generation: 'generation', client_request_id: 'same-goal-request', thread_id: 'thread', operation: 'set', expected_version: 0, text: 'Verify result' })).rejects.toMatchObject({ admission_kind: kind, code });
 });
+
+it('loads saved tool previews through the exact scoped Desktop route', async () => {
+  const preview = { tool_name: 'threads.query', inputs: [], rows: [], total: 0, has_more: false };
+  const bridge = bridgeFor(request => {
+    expect(request).toMatchObject({ method: 'POST', path: '/_redeven_proxy/api/ai/threads/thread-1/tool-preview',
+      body: { turn_id: 'turn-1', run_id: 'run-1', tool_call_id: 'call-1' } });
+    return preview;
+  });
+  const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+  await expect(adapter.loadToolPreview!({ thread_id: 'thread-1', turn_id: 'turn-1', run_id: 'run-1', tool_call_id: 'call-1' })).resolves.toEqual(preview);
+});

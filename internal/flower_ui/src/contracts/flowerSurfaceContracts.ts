@@ -1368,6 +1368,22 @@ export type FlowerCanonicalReferenceOpenRequest = Readonly<{
   reference_id: string;
 }>;
 
+export type FlowerToolPreviewRequest = Readonly<{
+  thread_id: string;
+  turn_id: string;
+  run_id: string;
+  tool_call_id: string;
+}>;
+
+export type FlowerToolPreview = Readonly<{
+  tool_name: string;
+  inputs: readonly Readonly<{ title?: string; content?: string; format: 'text'; truncated?: boolean }>[];
+  rows: readonly Readonly<{ title?: string; meta?: string; content?: string; format: 'text'; truncated?: boolean }>[];
+  total?: number;
+  has_more: boolean;
+  content_unavailable?: boolean;
+}>;
+
 export type FlowerTerminalProcessReadRequest = Readonly<{
   run_id: string;
   process_id: string;
@@ -1589,6 +1605,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   stopThread: (threadID: string) => Promise<void>;
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerSubmitInputReceipt>;
   submitApproval: (input: FlowerSubmitApprovalRequest) => Promise<FlowerApprovalCommandResult>;
+  loadToolPreview?: (input: FlowerToolPreviewRequest) => Promise<FlowerToolPreview>;
   readTerminalProcess?: (input: FlowerTerminalProcessReadRequest) => Promise<FlowerTerminalProcessSnapshot>;
   getWorkingDirectoryPathContext?: () => Promise<FlowerWorkingDirectoryPathContext>;
   listWorkingDirectoryEntries?: (input: FlowerWorkingDirectoryListInput) => Promise<readonly FlowerWorkingDirectoryEntry[]>;
