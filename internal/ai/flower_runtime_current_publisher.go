@@ -362,6 +362,9 @@ func flowerRuntimeCurrentBoundaryKey(current flruntime.ThreadView) string {
 		builder.add(preview.CallID)
 		builder.addBool(preview.ArgumentsComplete)
 		builder.addBool(preview.Preview != nil)
+		if preview.Preview != nil {
+			builder.add(preview.Preview.DisplayName)
+		}
 	}
 	builder.addInt(int64(len(current.Items)))
 	for _, item := range current.Items {

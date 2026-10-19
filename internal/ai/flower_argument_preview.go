@@ -3,9 +3,11 @@ package ai
 import (
 	"encoding/json"
 	"errors"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf16"
 	"unicode/utf8"
 
@@ -138,6 +140,7 @@ func (p *flowerArgumentPreview) append(delta string, complete bool) (*fltools.Ar
 			adds, dels := p.patch.count()
 			out.Additions = integer(adds)
 			out.Deletions = integer(dels)
+			out.DisplayName = p.patch.displayName()
 		}
 	}
 	return out, nil
@@ -378,6 +381,14 @@ type previewPatchCounter struct {
 	hunk                 bool
 	invalidUTF8          bool
 	additions, deletions int
+	canonical, ended     bool
+	moveFrom             string
+	files                []previewPatchFile
+	moreFiles            bool
+}
+
+type previewPatchFile struct {
+	path, destination string
 }
 
 func (p *previewPatchCounter) append(text string) {
@@ -392,6 +403,7 @@ func (p *previewPatchCounter) append(text string) {
 	}
 }
 func (p *previewPatchCounter) consume(line string) {
+	p.consumeFileHeader(line)
 	switch {
 	case strings.HasPrefix(line, "*** Add File:"), strings.HasPrefix(line, "*** Update File:"):
 		p.hunk = true
@@ -410,6 +422,101 @@ func (p *previewPatchCounter) consume(line string) {
 		}
 	}
 }
+
+// Only complete canonical operation headers describe candidate files. Body
+// text, unfinished paths and preview names never become execution authority.
+func (p *previewPatchCounter) consumeFileHeader(line string) {
+	if p.ended {
+		return
+	}
+	if line == "*** Begin Patch" {
+		p.canonical = true
+		return
+	}
+	if !p.canonical {
+		return
+	}
+	if line == "*** End Patch" {
+		p.ended = true
+		return
+	}
+	for _, prefix := range []string{"*** Add File: ", "*** Update File: ", "*** Delete File: "} {
+		if !strings.HasPrefix(line, prefix) {
+			continue
+		}
+		filePath := previewPatchPath(strings.TrimPrefix(line, prefix))
+		p.moveFrom = ""
+		if filePath == "" {
+			return
+		}
+		if prefix == "*** Update File: " {
+			p.moveFrom = filePath
+		}
+		for _, file := range p.files {
+			if file.path == filePath {
+				return
+			}
+		}
+		if len(p.files) >= 64 {
+			p.moreFiles = true
+			return
+		}
+		p.files = append(p.files, previewPatchFile{path: filePath})
+		return
+	}
+	if p.moveFrom != "" && strings.HasPrefix(line, "*** Move to: ") {
+		destination := previewPatchPath(strings.TrimPrefix(line, "*** Move to: "))
+		if destination != "" {
+			for i := range p.files {
+				if p.files[i].path == p.moveFrom {
+					p.files[i].destination = destination
+					break
+				}
+			}
+		}
+	}
+	p.moveFrom = ""
+}
+
+func previewPatchPath(value string) string {
+	value = strings.ReplaceAll(strings.TrimSpace(value), `\`, "/")
+	if !utf8.ValidString(value) || strings.ContainsFunc(value, unicode.IsControl) {
+		return ""
+	}
+	value = path.Clean(value)
+	if value == "." || value == ".." || strings.HasPrefix(value, "../") || path.IsAbs(value) {
+		return ""
+	}
+	return value
+}
+
+func (p *previewPatchCounter) displayName() string {
+	// Floret sanitizes display names to 200 runes. Keep the omission explicit
+	// before that boundary instead of cutting off a filename without a marker.
+	const limit = 196
+	var names []string
+	length := 0
+	for _, file := range p.files {
+		name := path.Base(file.path)
+		if file.destination != "" {
+			name += " → " + path.Base(file.destination)
+		}
+		size := utf8.RuneCountInString(name)
+		if length+size+2 > limit {
+			if len(names) == 0 {
+				return string([]rune(name)[:min(size, limit)]) + "…"
+			}
+			return strings.Join(names, ", ") + ", …"
+		}
+		names = append(names, name)
+		length += size + 2
+	}
+	if p.moreFiles {
+		return strings.Join(names, ", ") + ", …"
+	}
+	return strings.Join(names, ", ")
+}
+
 func (p *previewPatchCounter) count() (int, int) {
 	copy := previewPatchCounter{hunk: p.hunk, additions: p.additions, deletions: p.deletions}
 	if p.line.Len() > 0 {

@@ -1003,6 +1003,10 @@ function titleForPatchItem(item: FlowerActivityItem, files: readonly FlowerActiv
   if (files.length > 1) {
     return { kind: 'file', verb: 'Edit', display_name: `${files.length} files` };
   }
+  const previewName = trimString(item.argument_preview?.display_name);
+  if (['pending', 'running', 'waiting'].includes(item.status) && previewName) {
+    return { kind: 'file', verb: 'Edit', display_name: previewName };
+  }
   const fallbackName = trimString(item.label);
   return { kind: 'file', verb: 'Edit', display_name: (fallbackName && fallbackName !== 'apply_patch' ? fallbackName : 'files') };
 }

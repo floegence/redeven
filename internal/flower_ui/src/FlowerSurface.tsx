@@ -10336,8 +10336,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <span class="flower-activity-inline-icon"><FlowerToolIcon toolName={block().call.name} running={livePresentationConfirmed()} /></span>
           <span class="flower-activity-inline-copy">
             <span class="flower-activity-inline-title" data-floe-progress-shimmer={livePresentationConfirmed() ? 'text' : undefined}>
-              {block().call.name === 'goal' ? copy().chat.goalTitle : block().call.name === 'apply_patch' ? copy().chat.toolActivity.patch : copy().chat.toolActivity.edit}
-              <Show when={block().call.preview?.display_name}>{(name) => <> <span class="flower-activity-file-name">{name()}</span></>}</Show>
+              <span class="flower-activity-inline-title-verb">{block().call.name === 'goal' ? copy().chat.goalTitle : block().call.name === 'apply_patch' ? copy().chat.toolActivity.patch : copy().chat.toolActivity.edit}</span>
+              <Show when={block().call.preview?.display_name}>{(name) => <span class="flower-activity-inline-title-target" title={name()}>{name()}</span>}</Show>
             </span>
             <Show when={block().call.name !== 'goal'}><span class="flower-activity-inline-detail">{copy().chat.outputProgress.preparingChanges}</span></Show>
             {changeStats(() => block().call.preview ?? undefined, () => true)}

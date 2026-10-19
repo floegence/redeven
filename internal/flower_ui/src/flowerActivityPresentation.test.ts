@@ -1478,6 +1478,23 @@ Go Runtime`}}));
     expect(JSON.stringify(presentation.detailBlocks)).not.toContain('PERMISSION_DENIED');
   });
 
+  it.each(['pending', 'waiting', 'running'] as const)('retains candidate patch names while %s without creating file actions', status => {
+    const presentation = presentFlowerActivityItem(item({ tool_name: 'apply_patch', renderer: 'patch', status,
+      argument_preview: { display_name: 'example.ts, second.ts', additions: 8 }, payload: { operation: 'apply_patch' },
+    }));
+    expect(presentation.title).toEqual({ kind: 'file', verb: 'Edit', display_name: 'example.ts, second.ts' });
+    expect(presentation.primaryAction).toBeUndefined();
+    expect(presentation.detailBlocks).toEqual([]);
+  });
+
+  it('uses the actual patch result instead of a stale preview name', () => {
+    const presentation = presentFlowerActivityItem(item({ tool_name: 'apply_patch', renderer: 'patch', status: 'success',
+      argument_preview: { display_name: 'candidate.ts', additions: 8 },
+      payload: { operation: 'apply_patch', mutations: [{ display_name: 'actual.ts', change_type: 'noop' }] },
+    }));
+    expect(presentation.title).toEqual({ kind: 'file', verb: 'Edit', display_name: 'actual.ts' });
+  });
+
   it('renders multi-file apply_patch as Edit N files and keeps per-file actions', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'apply_patch',

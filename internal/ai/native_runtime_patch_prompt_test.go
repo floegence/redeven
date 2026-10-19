@@ -5,6 +5,7 @@ import "testing"
 func TestBuildLayeredSystemPrompt_DocumentsCanonicalPatchUsage(t *testing.T) {
 	t.Parallel()
 	prompt := buildPromptForToolRoutingTest(t)
+	assertPromptContains(t, prompt, "emit file_path before old_string, new_string or content")
 	for _, contract := range []string{"Prefer apply_patch for patch-shaped edits", "After rejection reread and regenerate", "inspect partial changes", "Do not fall back to shell overwrites", "another authorized worktree use absolute-path file tools"} {
 		assertPromptContains(t, prompt, contract)
 	}

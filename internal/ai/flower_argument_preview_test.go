@@ -85,6 +85,64 @@ func TestFlowerArgumentPreviewPartialAndIsolation(t *testing.T) {
 	}
 }
 
+func TestFlowerArgumentPreviewNamesArriveBeforeArgumentsComplete(t *testing.T) {
+	for _, tool := range []string{"file.edit", "file.write"} {
+		t.Run(tool, func(t *testing.T) {
+			parse := flowerArgumentPreviewFactory(tool)()
+			preview, err := parse(`{"file_path":"src/exam`, false)
+			if err != nil || preview.DisplayName != "" {
+				t.Fatalf("incomplete path: %#v, %v", preview, err)
+			}
+			preview, err = parse(`ple.ts",`, false)
+			if err != nil || preview.DisplayName != "example.ts" {
+				t.Fatalf("complete path before body: %#v, %v", preview, err)
+			}
+		})
+	}
+}
+
+func TestFlowerArgumentPreviewPatchNamesStreamFromCompleteHeaders(t *testing.T) {
+	parse := flowerArgumentPreviewFactory("apply_patch")()
+	for _, step := range []struct{ delta, name string }{
+		{`{"patch":"*** Begin Patch\n*** Update File: src/exam`, ""},
+		{`ple.ts\n@@\n-old\n+new`, "example.ts"},
+		{`\n*** Add File: src/second.ts`, "example.ts"},
+		{`\n+second`, "example.ts, second.ts"},
+		{`\n*** Delete File: src/removed.ts\n`, "example.ts, second.ts, removed.ts"},
+		{`*** End Patch"}`, "example.ts, second.ts, removed.ts"},
+	} {
+		preview, err := parse(step.delta, false)
+		if err != nil || preview.DisplayName != step.name {
+			t.Fatalf("delta %q: %#v, %v; want %q", step.delta, preview, err, step.name)
+		}
+	}
+}
+
+func TestFlowerArgumentPreviewPatchNamesRespectPatchStructure(t *testing.T) {
+	for _, test := range []struct{ name, patch, want string }{
+		{"move", "*** Begin Patch\n*** Update File: src/old.ts\n*** Move to: src/new.ts\n@@\n-old\n+new\n*** End Patch", "old.ts → new.ts"},
+		{"body and duplicates", "*** Begin Patch\n*** Add File: src/real.ts\n+*** Update File: fake.ts\n+*** Delete File: fake.ts\n*** Update File: src/real.ts\n@@\n-old\n+new\n*** End Patch", "real.ts"},
+		{"unicode", "*** Begin Patch\r\n*** Delete File: src/中文😀.ts\r\n*** End Patch", "中文😀.ts"},
+		{"no canonical envelope", "*** Update File: fake.ts\n+text", ""},
+		{"after end", "*** Begin Patch\n*** Delete File: real.ts\n*** End Patch\n*** Delete File: fake.ts\n", "real.ts"},
+		{"invalid path", "*** Begin Patch\n*** Update File: ../outside.ts\n*** Add File: /absolute.ts\n+text\n*** End Patch", ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			raw, _ := json.Marshal(map[string]string{"patch": test.patch})
+			parse := flowerArgumentPreviewFactory("apply_patch")()
+			for i := range len(raw) {
+				preview, err := parse(string(raw[i:i+1]), i == len(raw)-1)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if i == len(raw)-1 && preview.DisplayName != test.want {
+					t.Fatalf("got %q; want %q", preview.DisplayName, test.want)
+				}
+			}
+		})
+	}
+}
+
 func TestFlowerArgumentPreviewRejectsMalformedAndBoundedInput(t *testing.T) {
 	for _, raw := range []string{
 		`{"content":"a","content":"b"}`, `{"content":1}`, `{"content":"bad\q"}`,
@@ -96,5 +154,19 @@ func TestFlowerArgumentPreviewRejectsMalformedAndBoundedInput(t *testing.T) {
 		if _, err := flowerArgumentPreviewFactory("file.write")()(raw, true); err == nil {
 			t.Fatalf("accepted malformed input %.80q", raw)
 		}
+	}
+}
+
+func TestFlowerArgumentPreviewPatchNamesStayBounded(t *testing.T) {
+	var patch strings.Builder
+	patch.WriteString("*** Begin Patch\n")
+	for i := range 1000 {
+		patch.WriteString("*** Delete File: src/" + strings.Repeat("x", i+1) + ".ts\n")
+	}
+	patch.WriteString("*** End Patch")
+	raw, _ := json.Marshal(map[string]string{"patch": patch.String()})
+	preview, err := flowerArgumentPreviewFactory("apply_patch")()(string(raw), true)
+	if err != nil || len([]rune(preview.DisplayName)) > 200 || !strings.HasSuffix(preview.DisplayName, "…") {
+		t.Fatalf("unbounded display name: %#v, %v", preview, err)
 	}
 }
