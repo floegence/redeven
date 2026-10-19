@@ -533,15 +533,27 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
         }}
       >
         <Show when={!showLoadingSkeleton()} fallback={(
-          <div class="flower-thread-warmup-list" role="status" aria-live="polite" aria-label={copy().warmupDescription}>
+          <div class="flower-thread-warmup-list flower-thread-rows" role="status" aria-live="polite" aria-label={copy().warmupDescription}>
+            <div class="flower-thread-group-label px-1 text-[11px] font-semibold uppercase tracking-[0.08em]" aria-hidden="true">
+              <span class="flower-thread-warmup-line flower-thread-warmup-line-group" />
+            </div>
             <For each={warmupRows}>
               {(row) => (
-                <div class="flower-thread-warmup-card" data-row={String(row)}>
-                  <span class="flower-thread-warmup-dot" />
-                  <span class="flower-thread-warmup-lines">
-                    <span class="flower-thread-warmup-line flower-thread-warmup-line-title" />
-                    <span class="flower-thread-warmup-line flower-thread-warmup-line-meta" />
-                  </span>
+                <div class="flower-thread-warmup-card" data-row={String(row)} aria-hidden="true">
+                  <div class="flower-thread-card-select-button">
+                    <span class="flower-thread-indicator h-2 shrink-0" />
+                    <span class="flower-thread-list-title min-w-0 flex-1">
+                      <span class="flower-thread-warmup-line flower-thread-warmup-line-title" />
+                    </span>
+                  </div>
+                  <div class="flower-thread-card-trailing" data-has-timestamp="true">
+                    <div class="flower-thread-card-summary">
+                      <span class="flower-thread-card-time flower-thread-warmup-line flower-thread-warmup-time" />
+                    </div>
+                    <span class="flower-thread-warmup-menu">
+                      <span class="flower-thread-warmup-line" />
+                    </span>
+                  </div>
                 </div>
               )}
             </For>
