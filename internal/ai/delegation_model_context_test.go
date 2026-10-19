@@ -381,7 +381,7 @@ func TestFlowerProviderContextKeepsCapabilityAndPermissionRefresh(t *testing.T) 
 }
 
 func TestFlowerSubagentResultsReachProviderWithoutAutomaticOverview(t *testing.T) {
-	for _, action := range []string{subagentActionList, subagentActionInspect, subagentActionWait} {
+	for _, action := range []string{subagentActionList, subagentActionStatus, subagentActionInspect, subagentActionWait} {
 		t.Run(action, func(t *testing.T) {
 			now := time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)
 			completed := completedSubagentTestSummary("child-completed", "Evidence Review", "FINAL_PREVIEW_ONLY", now)
@@ -407,7 +407,7 @@ func TestFlowerSubagentResultsReachProviderWithoutAutomaticOverview(t *testing.T
 			adapter, _ := newSubagentHandoffTestAdapter(t, []flruntime.ThreadSummary{completed, failed, cancelled, waiting, approval}, map[identity.ThreadID]flruntime.ThreadView{completed.ID: completedSubagentTestView(completed, final)})
 			definition := fltools.Definition{Name: "subagents", InputSchema: fltools.StrictObject(map[string]any{"action": map[string]any{"type": "string"}}, []string{"action"}), Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}
 			tool := fltools.Define[map[string]any](definition, nil, nil, func(ctx context.Context, inv fltools.Invocation[map[string]any]) (fltools.Result, error) {
-				data, err := adapter.manage(ctx, inv.CallID, map[string]any{"action": action, "timeout_ms": 1})
+				data, err := adapter.manage(ctx, inv.CallID, map[string]any{"action": action, "timeout_ms": 1, "ids": []any{completed.ID.String(), failed.ID.String(), cancelled.ID.String(), waiting.ID.String(), approval.ID.String()}})
 				if err != nil {
 					return fltools.Result{}, err
 				}
@@ -525,6 +525,16 @@ func TestFlowerSubagentResultsReachProviderWithoutAutomaticOverview(t *testing.T
 			byID := map[string]int{}
 			for index, item := range data.Items {
 				byID[item.ThreadID] = index
+			}
+			if action == subagentActionStatus {
+				if len(data.Handoffs) != 0 || strings.Contains(resultText, final) || strings.Contains(resultText, "FINAL_PREVIEW_ONLY") || strings.Contains(resultText, "EFFECT_OUTCOME_UNKNOWN_DO_NOT_REPLAY") || strings.Contains(resultText, "INPUT_REQUIRED_FROM_USER") {
+					t.Fatalf("status leaked report text: %s", resultText)
+				}
+				failure := data.Items[byID[failed.ID.String()]].Failure
+				if failure == nil || failure.Code != failed.Failure.Code || failure.Message != "" {
+					t.Fatalf("status failure = %+v", failure)
+				}
+				return
 			}
 			if !reflect.DeepEqual(data.Items[byID[failed.ID.String()]].Failure, failed.Failure) || data.Items[byID[cancelled.ID.String()]].Status != subagentStatusCanceled {
 				t.Fatalf("failure or cancellation lost: %s", resultText)

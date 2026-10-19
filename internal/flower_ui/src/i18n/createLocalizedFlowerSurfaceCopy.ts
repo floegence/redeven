@@ -873,11 +873,13 @@ function createLocalizedFlowerSubagentsCopy(i18n: FlowerSurfaceTranslator): Flow
         send_input: t(i18n, k('activity.actions.sendInput')),
         wait: t(i18n, k('activity.actions.wait')),
         list: t(i18n, k('activity.actions.list')),
+        status: t(i18n, k('activity.actions.status')),
         inspect: t(i18n, k('activity.actions.inspect')),
         close: t(i18n, k('activity.actions.close')),
         close_all: t(i18n, k('activity.actions.closeAll')),
         unknown: t(i18n, k('activity.actions.unknown')),
       },
+      hints: { status: t(i18n, k('activity.hints.status')), inspect: t(i18n, k('activity.hints.inspect')) },
       titles: {
         operation: t(i18n, k('activity.titles.operation')),
         failed: t(i18n, k('activity.titles.failed')),

@@ -289,9 +289,9 @@
         "parentReportRecorded": "보고가 상위 작업에 기록되었습니다.",
         "parentReportView": "상위 작업에서 보고 보기",
         "parentReportContent": "제출한 보고",
-        "subagentReports": "하위 에이전트 보고",
-        "subagentReportsRead": "하위 에이전트 보고 읽기",
-        "subagentReportsList": "하위 에이전트 보고 목록 보기",
+        "subagentReports": "하위 에이전트 이벤트",
+        "subagentReportsRead": "하위 에이전트 이벤트 읽기",
+        "subagentReportsList": "하위 에이전트 이벤트 나열",
         "canvasSchema": "캔버스 스키마",
         "canvasList": "캔버스 둘러보기",
         "canvasRead": "캔버스 읽기",
@@ -959,10 +959,11 @@
           "sendInput": "하위 에이전트 지시",
           "wait": "하위 에이전트 대기",
           "list": "하위 에이전트 나열",
-          "inspect": "하위 에이전트 확인",
+          "inspect": "하위 에이전트 결과 읽기",
           "close": "하위 에이전트 닫기",
           "closeAll": "모든 하위 에이전트 닫기",
-          "unknown": "하위 에이전트 작업"
+          "unknown": "하위 에이전트 작업",
+          "status": "하위 에이전트 상태 확인"
         },
         "titles": {
           "operation": "하위 에이전트 작업",
@@ -1021,7 +1022,11 @@
           "yes": "예",
           "no": "아니요"
         },
-        "agentsCount": "{count}개의 위임된 에이전트"
+        "agentsCount": "{count}개의 위임된 에이전트",
+        "hints": {
+          "status": "상태만 확인하며 보고서 본문은 읽지 않습니다.",
+          "inspect": "전체 결과를 읽어 모델 컨텍스트에 추가합니다."
+        }
       },
       "feedbackClose": "알림 세부 정보 닫기",
       "input": {

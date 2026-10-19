@@ -16,6 +16,7 @@ import (
 
 type subagentHandoffTestRuntime struct {
 	flruntime.ThreadService
+	viewCalls  int
 	summaries  []flruntime.ThreadSummary
 	views      map[identity.ThreadID]flruntime.ThreadView
 	viewErrs   map[identity.ThreadID]error
@@ -68,6 +69,7 @@ func (runtime *subagentHandoffTestRuntime) WaitThreads(ctx context.Context, in f
 }
 
 func (runtime *subagentHandoffTestRuntime) View(ctx context.Context, threadID identity.ThreadID) (flruntime.ThreadView, error) {
+	runtime.viewCalls++
 	if err := ctx.Err(); err != nil {
 		return flruntime.ThreadView{}, err
 	}
@@ -307,10 +309,10 @@ func TestFloretSubagentModelResultPreservesLongHandoffAndBoundsActivity(t *testi
 
 func TestSubagentPromptUsesOneHandoffContract(t *testing.T) {
 	prompt := buildPromptSubagentSection(promptProfileSpec{}).render()
-	if !strings.Contains(prompt, "inspect full results and structured failures") {
+	if !strings.Contains(prompt, "subagents inspect") {
 		t.Fatalf("prompt does not describe the handoff contract:\n%s", prompt)
 	}
-	for _, required := range []string{"never infer them from previews", "Integrate findings and close children"} {
+	for _, required := range []string{"Use sufficient untruncated reports directly", "Completion events contain no final report", "subagents status for metadata-only checks", "Reuse complete results already available", "never automatically retry unknown effects", "Integrate findings and close children"} {
 		if !strings.Contains(prompt, required) {
 			t.Fatalf("prompt is missing failure guidance %q:\n%s", required, prompt)
 		}

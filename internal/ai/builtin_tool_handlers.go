@@ -378,7 +378,7 @@ func subagentsToolInputSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type": "string",
-				"enum": []string{"spawn", "send_input", "wait", "list", "inspect", "close", "close_all"},
+				"enum": []string{"spawn", "send_input", "wait", "list", "status", "inspect", "close", "close_all"},
 			},
 			"task_name": map[string]any{
 				"type":        "string",
@@ -760,7 +760,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:         "subagents",
-			Description:  "Manage direct children of the current thread only. Forked or inherited history does not transfer child ownership; use list to refresh historical targets and never retry an unavailable target ID. Use spawn with a short 1-5 word English Title Case task_name such as Safety Review, required task_description, agent_type, and message to start a durable child thread. Never use snake_case or kebab-case names. Use wait/list/inspect to observe children, send_input to immediately guide a child, and close/close_all to stop child threads. Read completed reports from handoffs[].content and failures from items[].failure; last_message_preview is only a preview.",
+			Description:  "Manage direct children of the current thread only. Forked or inherited history does not transfer child ownership; use list to refresh historical targets and never retry an unavailable target ID. Use spawn with a short 1-5 word English Title Case task_name such as Safety Review, required task_description, agent_type, and message to start a durable child thread. Never use snake_case or kebab-case names. Use status with explicit target or ids (at most 200 distinct direct children) for bounded metadata only: no report bodies or previews. Use inspect to read complete final reports from handoffs[].content and structured failures from items[].failure. Reuse results already available for the same child turn. Use wait only for outstanding children when there is no independent work; wait may return complete reports too. Use list to discover children, send_input to guide a child, and close/close_all to stop children. last_message_preview is only a preview.",
 			InputSchema:  toSchema(subagentsToolInputSchema()),
 			Mutating:     false,
 			Visibility:   ToolVisibilityDelegationControl,

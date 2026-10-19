@@ -642,7 +642,7 @@ const webFetchActivityPayloadKeys = new Set([
   'bytes_read', 'truncated', 'status', 'error',
 ]);
 const webFetchActivityPreviewMaxCharacters = 2_000;
-const subagentOperationActions = new Set(['spawn', 'wait', 'list', 'inspect', 'send_input', 'close', 'close_all']);
+const subagentOperationActions = new Set(['spawn', 'wait', 'list', 'status', 'inspect', 'send_input', 'close', 'close_all']);
 const subagentOperationPayloadKeys = new Set(['action', 'status', 'targets', 'requested_count', 'completed_count', 'missing_count', 'timed_out', 'error']);
 const subagentOperationTargetKeys = new Set(['thread_id', 'task_name', 'task_description', 'status']);
 const subagentOperationTargetLimit = 200;

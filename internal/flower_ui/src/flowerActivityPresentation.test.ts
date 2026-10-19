@@ -19,6 +19,18 @@ function item(overrides: Partial<FlowerActivityItem>): FlowerActivityItem {
   };
 }
 
+describe('subagent read boundaries', () => {
+  it.each(['running', 'failed', 'timed_out', 'completed'])('keeps a successful status check distinct from child %s', status => {
+    const result = presentFlowerActivityItem(item({ tool_name: 'subagents', renderer: 'subagent_operation', payload: { action: 'status', targets: [{ thread_id: 'child', task_name: 'Audit', status }], requested_count: 1 } }));
+    expect(result.label).toBe('Check subagent status');
+  });
+  it('shows partial wait progress without inventing a timeout', () => {
+    const result = presentFlowerActivityItem(item({ tool_name: 'subagents', renderer: 'subagent_operation', payload: { action: 'wait', requested_count: 3, completed_count: 2, targets: [{ thread_id: 'child', status: 'running' }] } }));
+    expect(result.label).toBe('Wait for subagents · 2/3');
+    expect(result.label).not.toContain('timed out');
+  });
+});
+
 describe('parent event tool rows', () => {
   it('shows an accepted submission without exposing protocol receipts as rows', () => {
     const result = presentFlowerActivityItem(item({ tool_name: 'report_to_parent', renderer: 'structured',
@@ -38,20 +50,20 @@ describe('parent event tool rows', () => {
 
   it('uses a neutral report title when the historical action is unknown', () => {
     const result = presentFlowerActivityItem(item({ tool_name: 'subagent_events', renderer: 'structured' }));
-    expect(result.label).toBe('Subagent reports');
+    expect(result.label).toBe('Subagent events');
   });
   it.each(['list', 'read'])('keeps %s compact with unique returned source identities', action => {
     const result = presentFlowerActivityItem(item({ tool_name: 'subagent_events', renderer: 'structured', label: action,
       description: 'Technical result summary', payload: { operation: action, rows_provided: true, inputs: [{ title: 'action', content: action, format: 'text' }] },
       target_refs: [{ kind: 'subagent', label: 'child-a', resource_ref: 'child-a' }, { kind: 'subagent', label: 'child-a', resource_ref: 'child-a' }, { kind: 'subagent', label: 'child-b', resource_ref: 'child-b' }],
     }));
-    expect(result.label).toBe(action === 'read' ? 'Read subagent reports' : 'List subagent reports');
+    expect(result.label).toBe(action === 'read' ? 'Read subagent events' : 'List subagent events');
     expect(result).toMatchObject({ meta: '', detailLines: [], detailBlocks: [], suppressEmptyDisclosure: true, subagentThreadIDs: ['child-a', 'child-b'] });
   });
 
   it('uses the saved action for historical titles without inventing source avatars', () => {
     const result = presentFlowerActivityItem(item({ tool_name: 'subagent_events', renderer: 'structured', label: 'read' }), { subagentSummaries: [subagentSummary()] });
-    expect(result.label).toBe('Read subagent reports');
+    expect(result.label).toBe('Read subagent events');
     expect(result.subagentThreadIDs).toEqual([]);
     expect(result.detailBlocks).toEqual([]);
   });
@@ -794,11 +806,12 @@ describe('presentFlowerActivityItem', () => {
   it.each([
     ['spawn', 'Creating subagent', 'Created subagent', 'Failed to create subagent'],
     ['wait', 'Waiting for 2 subagents', '2 subagents completed', 'Wait for subagents · Failed'],
-    ['list', 'List subagents · Running', 'List subagents · Completed', 'List subagents · Failed'],
-    ['inspect', 'Inspect subagents · Running', 'Inspect subagents · Completed', 'Inspect subagents · Failed'],
-    ['send_input', 'Steer subagent · Running', 'Steer subagent · Completed', 'Steer subagent · Failed'],
-    ['close', 'Close subagent · Running', 'Close subagent · Completed', 'Close subagent · Failed'],
-    ['close_all', 'Close subagents · Running', 'Close subagents · Completed', 'Close subagents · Failed'],
+    ['list', 'List subagents', 'List subagents', 'List subagents · Failed'],
+    ['status', 'Check subagent status', 'Check subagent status', 'Check subagent status · Failed'],
+    ['inspect', 'Read subagent results', 'Read subagent results', 'Read subagent results · Failed'],
+    ['send_input', 'Steer subagent', 'Steer subagent', 'Steer subagent · Failed'],
+    ['close', 'Close subagent', 'Close subagent', 'Close subagent · Failed'],
+    ['close_all', 'Close subagents', 'Close subagents', 'Close subagents · Failed'],
   ] as const)('formats %s titles from action and execution state', (action, runningTitle, successTitle, failedTitle) => {
     const targets = [
       { task_name: 'One', status: action === 'wait' ? 'running' : 'completed' },
@@ -1027,7 +1040,7 @@ describe('presentFlowerActivityItem', () => {
         completed_count: 1,
       },
     }));
-    expect(partial.label).toBe('Wait timed out · 1/2 completed');
+    expect(partial.label).toBe('Wait for subagents · 1/2');
   });
 
   it('does not render unrelated nested result ids as delegation', () => {

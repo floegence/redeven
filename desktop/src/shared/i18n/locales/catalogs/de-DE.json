@@ -289,9 +289,9 @@
         "parentReportRecorded": "Der Bericht wurde in der übergeordneten Aufgabe gespeichert.",
         "parentReportView": "Bericht in übergeordneter Aufgabe ansehen",
         "parentReportContent": "Eingereichter Bericht",
-        "subagentReports": "Unteragentenberichte",
-        "subagentReportsRead": "Unteragentenberichte lesen",
-        "subagentReportsList": "Unteragentenberichte auflisten",
+        "subagentReports": "Sub-Agent-Ereignisse",
+        "subagentReportsRead": "Sub-Agent-Ereignisse lesen",
+        "subagentReportsList": "Sub-Agent-Ereignisse auflisten",
         "canvasSchema": "Canvas-Schema",
         "canvasList": "Canvases durchsuchen",
         "canvasRead": "Canvas lesen",
@@ -959,10 +959,11 @@
           "sendInput": "Sub-Agent steuern",
           "wait": "Auf Sub-Agenten warten",
           "list": "Sub-Agenten auflisten",
-          "inspect": "Sub-Agenten prüfen",
+          "inspect": "Sub-Agent-Ergebnisse lesen",
           "close": "Sub-Agent schließen",
           "closeAll": "Sub-Agenten schließen",
-          "unknown": "Sub-Agent-Aktion"
+          "unknown": "Sub-Agent-Aktion",
+          "status": "Sub-Agent-Status prüfen"
         },
         "titles": {
           "operation": "Sub-Agent-Aktion",
@@ -1021,7 +1022,11 @@
           "yes": "Ja",
           "no": "Nein"
         },
-        "agentsCount": "{count} delegierte Agenten"
+        "agentsCount": "{count} delegierte Agenten",
+        "hints": {
+          "status": "Prüft nur den Status, ohne Berichtsinhalte zu lesen.",
+          "inspect": "Liest vollständige Ergebnisse in den Modellkontext ein."
+        }
       },
       "feedbackClose": "Rückmeldung schließen",
       "input": {

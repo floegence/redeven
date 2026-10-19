@@ -14,6 +14,7 @@ import (
 
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
+	fltools "github.com/floegence/floret/v7/tools"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -33,6 +34,7 @@ const (
 	subagentActionSpawn     = "spawn"
 	subagentActionWait      = "wait"
 	subagentActionList      = "list"
+	subagentActionStatus    = string(fltools.SubAgentOperationStatus)
 	subagentActionInspect   = "inspect"
 	subagentActionSendInput = "send_input"
 	subagentActionClose     = "close"
@@ -131,6 +133,8 @@ func (runtime *floretSubagentRuntime) manage(ctx context.Context, toolCallID str
 		return runtime.wait(ctx, args)
 	case subagentActionList:
 		return runtime.list(ctx, args)
+	case subagentActionStatus:
+		return runtime.status(ctx, args)
 	case subagentActionInspect:
 		return runtime.inspect(ctx, args)
 	case subagentActionSendInput:
@@ -512,6 +516,51 @@ func (runtime *floretSubagentRuntime) list(ctx context.Context, args map[string]
 	out["total"] = len(snapshots)
 	out["running_only"] = runningOnly
 	out["updated_at_unix_ms"] = time.Now().UnixMilli()
+	return out, nil
+}
+
+// status reads only canonical summaries; report bodies stay on explicit result reads.
+func (runtime *floretSubagentRuntime) status(ctx context.Context, args map[string]any) (map[string]any, error) {
+	if err := validateSubagentsArgsByAction(subagentActionStatus, args); err != nil {
+		return nil, err
+	}
+	targets := collectInspectTargets(args)
+	snapshots, err := runtime.snapshots(ctx)
+	if err != nil {
+		return nil, err
+	}
+	selected := selectSubagentSnapshots(snapshots, targets)
+	items := make([]map[string]any, 0, len(selected))
+	found := make(map[string]bool, len(selected))
+	for _, snapshot := range selected {
+		taskName, _ := truncateByRunes(snapshot.TaskName, 140)
+		item := map[string]any{
+			"thread_id": snapshot.ThreadID, "task_name": taskName,
+			"agent_type": snapshot.AgentType, "status": snapshot.Status,
+			"latest_turn_id": snapshot.LatestTurnID, "closed": snapshot.Closed,
+			"queued_inputs": snapshot.QueuedInputs, "updated_at_ms": snapshot.UpdatedAtMS,
+		}
+		if snapshot.Failure != nil {
+			item["failure"] = map[string]any{"code": string(snapshot.Failure.Code)}
+		}
+		items = append(items, item)
+		found[snapshot.ThreadID] = true
+	}
+	missing := make([]string, 0)
+	for _, target := range targets {
+		if !found[target] {
+			missing = append(missing, target)
+		}
+	}
+	out := subagentBoundedResult(subagentActionStatus, items)
+	out["requested_ids"], out["missing_ids"] = targets, missing
+	out["requested_count"], out["found_count"], out["missing_count"] = len(targets), len(items), len(missing)
+	out["counts"] = subagentModelStatusCounts(items)
+	if len(items) == 0 {
+		out["status"] = "not_found"
+	} else if len(missing) > 0 {
+		out["status"] = "partial"
+	}
 	return out, nil
 }
 
@@ -997,7 +1046,7 @@ func buildFlowerSubagentPrompt(spec flowerSubagentPromptSpec) string {
 		"- Finish the delegated slice independently and verify concrete claims with tools when needed.",
 		"- Do not delegate, spawn child work, or ask the user for input.",
 		"- Return a focused final handoff with summary, evidence, verification, open risks, and parent actions.",
-		"- Use report_to_parent for important discoveries, blockers, or help while working. Ordinary progress needs no report. Completion is delivered automatically; reporting does not end your mission.",
+		"- Use report_to_parent for important discoveries, blockers, or help while working. Ordinary progress needs no report. Completion notifications are delivered automatically; they contain no final report. The parent reads your final report when needed. Reporting does not end your mission.",
 	}
 	if normalizeSubagentContextMode(spec.ContextMode) == subagentContextModeFullHistory {
 		lines = append(lines, "- Use the inherited parent history only when it is relevant to this mission.")

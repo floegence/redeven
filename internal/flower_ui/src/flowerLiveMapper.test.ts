@@ -345,6 +345,11 @@ describe('mapFlowerActivityItem Subagent operation contract', () => {
     },
   });
 
+  it('accepts metadata-only status activity without expanding its payload', () => {
+    const payload = { action: 'status', status: 'success', targets: [{ thread_id: 'child', status: 'running' }], requested_count: 1 };
+    expect(mapFlowerActivityItem(activity(payload))?.payload).toEqual(payload);
+  });
+
   it('preserves the exact action, ordered targets, and outcome counts', () => {
     const mapped = mapFlowerActivityItem(activity({
       action: 'wait',

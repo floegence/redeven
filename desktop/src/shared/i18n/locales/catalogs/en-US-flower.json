@@ -151,9 +151,9 @@
       "parentReportRecorded": "The report was recorded in the parent task.",
       "parentReportView": "View report in parent task",
       "parentReportContent": "Submitted report",
-      "subagentReports": "Subagent reports",
-      "subagentReportsRead": "Read subagent reports",
-      "subagentReportsList": "List subagent reports",
+      "subagentReports": "Subagent events",
+      "subagentReportsRead": "Read subagent events",
+      "subagentReportsList": "List subagent events",
       "canvasSchema": "Canvas schema",
       "canvasList": "Browse canvases",
       "canvasRead": "Read canvas",
@@ -820,10 +820,11 @@
         "sendInput": "Steer subagent",
         "wait": "Wait for subagents",
         "list": "List subagents",
-        "inspect": "Inspect subagents",
+        "inspect": "Read subagent results",
         "close": "Close subagent",
         "closeAll": "Close subagents",
-        "unknown": "Subagent operation"
+        "unknown": "Subagent operation",
+        "status": "Check subagent status"
       },
       "titles": {
         "operation": "Subagent operation",
@@ -882,7 +883,11 @@
         "yes": "Yes",
         "no": "No"
       },
-      "agentsCount": "{count} delegated agents"
+      "agentsCount": "{count} delegated agents",
+      "hints": {
+        "status": "Only checks status; does not read report bodies.",
+        "inspect": "Reads complete results into model context."
+      }
     },
     "feedbackClose": "Close feedback",
     "input": {

@@ -1201,10 +1201,11 @@
           "sendInput": "サブエージェントを誘導",
           "wait": "サブエージェントを待機",
           "list": "サブエージェントを一覧",
-          "inspect": "サブエージェントを確認",
+          "inspect": "サブエージェントの結果を読み取る",
           "close": "サブエージェントを閉じる",
           "closeAll": "サブエージェントを閉じる",
-          "unknown": "サブエージェント操作"
+          "unknown": "サブエージェント操作",
+          "status": "サブエージェントの状態を確認"
         },
         "titles": {
           "operation": "サブエージェント操作",
@@ -1259,7 +1260,11 @@
           "errorMessage": "エラーメッセージ",
           "retryable": "再試行可"
         },
-        "agentsCount": "{count} エージェント"
+        "agentsCount": "{count} エージェント",
+        "hints": {
+          "status": "状態のみを確認し、レポート本文は読み取りません。",
+          "inspect": "結果の全文を読み取り、モデルのコンテキストに追加します。"
+        }
       }
     },
     "suggestions": {
@@ -5208,9 +5213,9 @@
         "parentReportRecorded": "報告を親タスクに記録しました。",
         "parentReportView": "親タスクで報告を見る",
         "parentReportContent": "送信した報告",
-        "subagentReports": "サブエージェントの報告",
-        "subagentReportsRead": "サブエージェントの報告を読む",
-        "subagentReportsList": "サブエージェントの報告を一覧表示",
+        "subagentReports": "サブエージェントのイベント",
+        "subagentReportsRead": "サブエージェントのイベントを読み取る",
+        "subagentReportsList": "サブエージェントのイベントを一覧表示",
         "inputQuery": "検索条件",
         "inputPaths": "ファイルとフォルダー",
         "inputName": "名前",
@@ -5845,10 +5850,11 @@
           "sendInput": "サブエージェントを誘導",
           "wait": "サブエージェントを待機",
           "list": "サブエージェントを一覧",
-          "inspect": "サブエージェントを確認",
+          "inspect": "サブエージェントの結果を読み取る",
           "close": "サブエージェントを閉じる",
           "closeAll": "サブエージェントを閉じる",
-          "unknown": "サブエージェント操作"
+          "unknown": "サブエージェント操作",
+          "status": "サブエージェントの状態を確認"
         },
         "titles": {
           "operation": "サブエージェント操作",
@@ -5907,7 +5913,11 @@
           "yes": "はい",
           "no": "いいえ"
         },
-        "agentsCount": "{count} エージェント"
+        "agentsCount": "{count} エージェント",
+        "hints": {
+          "status": "状態のみを確認し、レポート本文は読み取りません。",
+          "inspect": "結果の全文を読み取り、モデルのコンテキストに追加します。"
+        }
       },
       "feedbackClose": "通知の詳細を閉じる",
       "input": {

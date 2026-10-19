@@ -858,13 +858,14 @@ function subagentActionTitle(
   const missingCount = subagentPayloadCount(payload, 'missing_count');
   const countText = String(requestedCount || items.length);
   const isActive = item.status === 'pending' || item.status === 'running' || item.status === 'waiting';
-  const timedOut = boolValue(payload.timed_out) || items.some((entry) => entry.raw_status === 'timed_out');
+  const timedOut = boolValue(payload.timed_out);
   const actionTitle = activityCopy.actions[normalizedAction as keyof typeof activityCopy.actions];
   const statusTitle = (status: string, fallback: string): string => (
     actionTitle && normalizedAction !== 'unknown' ? `${actionTitle} · ${status}` : fallback
   );
   const singleName = items.length === 1 && !items[0]?.thread_id ? trimString(items[0]?.name) : '';
   const withSingleName = (title: string): string => singleName ? `${title} · ${singleName}` : title;
+  if (item.status === 'canceled') return statusTitle(subagentsCopy(copy).statusLabels.canceled, activityCopy.titles.operation);
   if (normalizedAction === 'spawn') {
     if (item.status === 'error') return withSingleName(activityCopy.titles.createFailed);
     return withSingleName(item.status === 'success' ? activityCopy.titles.started : activityCopy.titles.starting);
@@ -881,11 +882,11 @@ function subagentActionTitle(
     if (requestedCount > 0 && completedCount === requestedCount && missingCount === 0) {
       return activityCopy.titles.completed(countText);
     }
-    return activityCopy.titles.waitTimedOut(String(completedCount), countText);
+    return `${activityCopy.actions.wait} · ${completedCount}/${countText}`;
   }
   if (timedOut) return statusTitle(subagentsCopy(copy).statusLabels.timed_out, activityCopy.titles.timedOut);
   if (!actionTitle || normalizedAction === 'unknown') return activityCopy.titles.operation;
-  return `${actionTitle} · ${isActive ? subagentsCopy(copy).statusLabels.running : subagentsCopy(copy).statusLabels.completed}`;
+  return actionTitle;
 }
 
 function subagentTaskPreview(items: readonly FlowerActivitySubagentDetailItem[], copy?: FlowerActivityPresentationCopy): string {
