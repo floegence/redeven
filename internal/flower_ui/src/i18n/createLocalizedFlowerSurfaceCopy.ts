@@ -328,6 +328,13 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       goalReviewing: t(i18n, k('chat.goalReviewing')),
       goalActive: t(i18n, k('chat.goalActive')),
       goalCompleted: t(i18n, k('chat.goalCompleted')),
+      goalReviewIncomplete: t(i18n, k('chat.goalReviewIncomplete')),
+      goalReviewBlocked: t(i18n, k('chat.goalReviewBlocked')),
+      goalReviewChecked: t(i18n, k('chat.goalReviewChecked')),
+      goalReviewFailed: t(i18n, k('chat.goalReviewFailed')),
+      goalReviewUnavailable: t(i18n, k('chat.goalReviewUnavailable')),
+      goalReviewCanceled: t(i18n, k('chat.goalReviewCanceled')),
+
       goalSet: t(i18n, k('chat.goalSet')),
       goalDeleted: t(i18n, k('chat.goalDeleted')),
       commandGoal: t(i18n, k('chat.commandGoal')),

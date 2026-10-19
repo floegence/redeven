@@ -1831,3 +1831,30 @@ it.each(['computer.click', 'mcp_fixture', 'tessiven.action'])('labels returned u
   expect(result.meta).toBe(toolActivityEnUS.effectUncertain);
   expect(result.detailBlocks.some(block => block.kind === 'structured_rows' && block.rows.some(row => row.content === 'input_delivery'))).toBe(true);
 });
+
+
+describe('Goal activity presentation', () => {
+  it.each([
+    ['continue', 'Goal not yet complete'], ['blocked', 'Goal blocked'], ['completed', 'Goal checked'],
+  ])('presents recorded %s reviews without claiming canonical completion', (outcome, label) => {
+    const result = presentFlowerActivityItem(item({ tool_name: 'goal', payload: { goal: { operation: 'review', version: 1, text: 'Original objective\nFull text', outcome, evidence: 'Waiting for a decision.' } } }));
+    expect(result).toMatchObject({ label, meta: 'Waiting for a decision.', detailLines: [], detailBlocks: [{ kind: 'goal', text: 'Original objective\nFull text', evidence: 'Waiting for a decision.' }] });
+    expect(result.label).not.toBe('Goal completed');
+  });
+  it.each(['pending', 'running', 'waiting'] as const)('shows %s without inferring a blocker or completion', status => {
+    const result = presentFlowerActivityItem(item({ tool_name: 'goal', status, payload: { goal: { operation: 'review', text: 'Objective' } } }));
+    expect(result).toMatchObject({ label: 'Checking goal', meta: '', detailBlocks: [{ kind: 'goal', text: 'Objective', evidence: '' }] });
+  });
+  it('hides generic historical filler without borrowing the current Goal', () => {
+    const result = presentFlowerActivityItem(item({ tool_name: 'goal', label: 'goal', description: 'Historical tool activity', payload: { summary: 'Historical tool activity' } }));
+    expect(result).toMatchObject({ label: 'Goal check · Details unavailable', meta: '', detailBlocks: [], suppressEmptyDisclosure: true });
+  });
+  it('does not treat tool success or a conflicted mutation as an applied goal', () => {
+    const result = presentFlowerActivityItem(item({ tool_name: 'goal', payload: { goal: { operation: 'set', text: 'Rejected objective', version: 1 } } }));
+    expect(result.label).toBe('Goal check · Details unavailable');
+  });
+  it('keeps failure details in the quiet Goal expansion', () => {
+    const result = presentFlowerActivityItem(item({ tool_name: 'goal', status: 'error', payload: { goal: { operation: 'review', text: 'Original objective' }, error: { message: 'Goal version changed.' } } }));
+    expect(result).toMatchObject({ label: 'Goal check failed', meta: 'Goal version changed.', detailBlocks: [{ kind: 'goal', text: 'Original objective', evidence: 'Goal version changed.' }] });
+  });
+});

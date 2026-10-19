@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-18 — Readable Goal review activity
+
+- Adopt released Floret v7.63.1 typed invocation snapshots and historical review recovery. Show quiet, borderless Goal checks with original text and confirmed evidence, hide generic tool filler and duration, and preserve canonical completion and waiting interactions.
+
 ## 2026-10-18 — Explicit thread query sorting
 
 - Enumerate [thread query sort keys](ai/flower-thread-queries.md), distinguish aggregation ordering, and describe defaults and newest-message queries. Map invalid inputs to actionable parameter errors while preserving Floret validation, authorization, cursor and runtime failure boundaries. Verify correction before dispatch and visible Activity filtering.

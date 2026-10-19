@@ -798,7 +798,13 @@
       "goalSet": "已設定目標",
       "goalDeleted": "已刪除目標",
       "commandGoal": "設定目標，開始或更新任務",
-      "goalUnavailable": "目前環境無法管理目標。"
+      "goalUnavailable": "目前環境無法管理目標。",
+      "goalReviewIncomplete": "目標尚未完成",
+      "goalReviewBlocked": "目標受阻",
+      "goalReviewChecked": "已檢查目標",
+      "goalReviewFailed": "目標檢查失敗",
+      "goalReviewUnavailable": "目標檢查 · 暫無詳細結果",
+      "goalReviewCanceled": "目標檢查已取消"
     },
     "threadList": {
       "title": "對話",

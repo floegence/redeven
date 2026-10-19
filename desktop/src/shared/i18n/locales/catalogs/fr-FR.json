@@ -798,7 +798,13 @@
       "goalSet": "Objectif défini",
       "goalDeleted": "Objectif supprimé",
       "commandGoal": "Définir un objectif et démarrer ou actualiser le travail",
-      "goalUnavailable": "La gestion des objectifs n’est pas disponible dans cet environnement."
+      "goalUnavailable": "La gestion des objectifs n’est pas disponible dans cet environnement.",
+      "goalReviewIncomplete": "Objectif non atteint",
+      "goalReviewBlocked": "Objectif bloqué",
+      "goalReviewChecked": "Objectif vérifié",
+      "goalReviewFailed": "Échec de la vérification de l’objectif",
+      "goalReviewUnavailable": "Vérification de l’objectif · Aucun détail disponible",
+      "goalReviewCanceled": "Vérification de l’objectif annulée"
     },
     "threadList": {
       "title": "Discussions",

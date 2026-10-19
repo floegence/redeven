@@ -77,6 +77,16 @@ shows only the full original text aligned with the action label, directly on the
 transcript without a card, border or tinted background. Actor metadata remains
 in canonical history but is not displayed in Goal rows. CSS ellipsis
 affects only the preview; it never truncates the stored or expanded Goal.
+Goal review tools use the same target-and-arrow icon in a quiet single line,
+without duration, actor labels or generic tool field names. Pending reviews say
+Checking goal; confirmed continue and blocked reviews say Goal not yet complete
+or Goal blocked with the saved brief evidence. A completed review says Goal
+checked until canonical completion exists; tool success never implies completion.
+Expansion shows the invocation's original objective and evidence directly on the
+transcript, without a card or border. Later Goal edits never replace that text.
+Unknown historical data says Goal check · Details unavailable and has no empty
+disclosure. The released Floret typed activity projection owns historical
+recovery; Redeven never reads private storage or reconstructs review outcomes.
 Reflection uses a lightweight status. The transcript action menu also exposes
 /goal during questions and approvals without resolving or bypassing them.
 

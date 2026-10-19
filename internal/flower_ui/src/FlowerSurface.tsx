@@ -9452,6 +9452,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       webSearch: copy().chat.webSearch,
         statuses: copy().chat.toolStatuses,
         subagents: subagentsCopy(),
+        goal: copy().chat,
         subagentSummaries: selectedSubagentSummaries() ?? [],
         terminal: {
           runCommand: copy().chat.toolActivityRunCommand,
@@ -10269,6 +10270,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         <FlowerActivityRows block={{ kind: 'structured_rows', section: 'inputs', rows: blockOfKind('parent_report')().message
           ? [{ title: copy().chat.toolActivity.parentReportContent, content: blockOfKind('parent_report')().message, meta: '', format: 'text' }] : [] }} copy={copy().chat} />
       </Match>
+      <Match when={detailProps.block.kind === 'goal'}>
+        <div class="flower-goal-review-body">
+          <Show when={blockOfKind('goal')().text}><p class="flower-goal-review-text">{blockOfKind('goal')().text}</p></Show>
+          <Show when={blockOfKind('goal')().evidence}><p class="flower-goal-review-evidence">{blockOfKind('goal')().evidence}</p></Show>
+        </div>
+      </Match>
       <Match when={detailProps.block.kind === 'error'}>{errorDetailBlock(blockOfKind('error'))}</Match>
       <Match when={detailProps.block.kind === 'structured_rows'}>
         <Show when={blockOfKind('structured_rows')().preview} fallback={<FlowerActivityRows block={blockOfKind('structured_rows')()} copy={copy().chat} renderTargetActions={target => fileActionButtons(() => ({ path: target.path ?? '', target_kind: target.kind, display_name: target.label, can_preview: target.kind === 'file', can_browse_directory: true }))} />}>
@@ -10351,6 +10358,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       webSearch: copy().chat.webSearch,
       statuses: copy().chat.toolStatuses,
       subagents: subagentsCopy(),
+      goal: copy().chat,
       subagentSummaries: timeline().thread_id === selectedThreadID() ? selectedSubagentSummaries() ?? [] : [],
       terminal: {
         runCommand: copy().chat.toolActivityRunCommand,
@@ -10361,7 +10369,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     })));
     const pendingApprovalCommand = createMemo(() => pendingApprovalCommandForActivityItem(item(), selectedApprovalActions()));
     const displayTitle = createMemo<FlowerActivityTitle>(() => {
-      if (item().tool_name === 'goal') return { kind: 'plain', text: copy().chat.goalTitle };
       const command = pendingApprovalCommand();
       return command && item().renderer !== 'terminal' && presentation().title.kind !== 'command'
         ? { kind: 'command', command }
@@ -10431,6 +10438,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     ));
     const duration = createMemo(() => {
       const value = item();
+      if (value.tool_name === 'goal') return '';
       const start = value.started_at_unix_ms;
       if (!start) return '';
       const end = value.ended_at_unix_ms;
@@ -10473,13 +10481,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
     return (
       <div
-        class={cn('flower-activity-inline-row', `flower-activity-inline-row-${displayStatus()}`, item().tool_name === 'subagent_events' && 'flower-activity-inline-row-reports', item().renderer === 'web_search' && 'flower-activity-inline-row-web-search', subagentOperation() && 'flower-activity-inline-row-subagents', inlineSubagent() && 'flower-activity-inline-row-single-subagent')}
+        class={cn('flower-activity-inline-row', item().tool_name === 'goal' && 'flower-activity-inline-row-goal', `flower-activity-inline-row-${displayStatus()}`, item().tool_name === 'subagent_events' && 'flower-activity-inline-row-reports', item().renderer === 'web_search' && 'flower-activity-inline-row-web-search', subagentOperation() && 'flower-activity-inline-row-subagents', inlineSubagent() && 'flower-activity-inline-row-single-subagent')}
         data-flower-activity-item-id={item().item_id}
         data-flower-activity-status={displayStatus()}
         data-flower-activity-approval-state={item().approval_state}
         data-flower-control-error={controlError() ? 'true' : undefined}
         data-state={disclosure.state()}
-        aria-label={item().tool_name === 'goal' ? copy().chat.goalTitle + ': ' + copy().chat.toolStatuses[displayStatus()] : compactReports() ? presentation().label + ': ' + copy().chat.toolStatuses[displayStatus()] : activityItemAriaLabel(item())}
+        aria-label={item().tool_name === 'goal' ? presentation().label + (presentation().meta ? ': ' + presentation().meta : '') : compactReports() ? presentation().label + ': ' + copy().chat.toolStatuses[displayStatus()] : activityItemAriaLabel(item())}
       >
         <div class="flower-activity-inline-line">
           <Show
@@ -10604,7 +10612,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       ? [flowerToolCallPreviewIdentity(preview()!.call)] : [...visibleItemsByKey().keys()]);
     return (
       <Show when={visibleItemKeys().length > 0}>
-        <div class="flower-activity-inline" data-flower-activity-run-id={block()?.run_id ?? preview()?.call.run_id}>
+        <div class={cn("flower-activity-inline", visibleItems().length > 0 && visibleItems().every(item => item.tool_name === "goal") && "flower-activity-inline-goal")} data-flower-activity-run-id={block()?.run_id ?? preview()?.call.run_id}>
           <For each={visibleItemKeys()}>
             {(itemKey) => {
               const visibleItem = createMemo(() => visibleItemsByKey().get(itemKey) ?? null);

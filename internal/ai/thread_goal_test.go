@@ -161,6 +161,31 @@ func TestFlowerGoalReflectionUsesExistingContextAndExcludesDefaultTodo(t *testin
 	if err != nil || current.Goal == nil || current.Goal.Status != "completed" {
 		t.Fatalf("goal=%+v err=%v", current.Goal, err)
 	}
+	foundReview := false
+	for _, item := range current.Items {
+		if item.Activity == nil || item.Activity.ToolName != "goal" {
+			continue
+		}
+		raw, err := json.Marshal(item.Activity.Presentation)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var activity struct {
+			Payload struct {
+				Goal struct{ Text, Outcome, Evidence string }
+			}
+		}
+		if err = json.Unmarshal(raw, &activity); err != nil {
+			t.Fatal(err)
+		}
+		if activity.Payload.Goal.Text != "Deliver the verified result" || activity.Payload.Goal.Outcome != "completed" || activity.Payload.Goal.Evidence != "The requested result is present in the preceding response." {
+			t.Fatalf("Goal presentation lost canonical evidence: %s", raw)
+		}
+		foundReview = true
+	}
+	if !foundReview {
+		t.Fatal("missing typed Goal review activity")
+	}
 	mu.Lock()
 	defer mu.Unlock()
 	if len(requests) != 3 {
