@@ -297,3 +297,57 @@ func TestDeepSeekAdapterPreservesToolResultImages(t *testing.T) {
 		t.Fatal("production provider adapter lost tool-result image before DeepSeek function_call_output")
 	}
 }
+
+func TestDeepSeekGatewayPreservesNativeOutputPartsAcrossTerminalSuffix(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		for _, event := range []string{
+			`{"type":"response.reasoning_text.delta","item_id":"reason","output_index":0,"content_index":0,"delta":"think"}`,
+			`{"type":"response.output_item.added","output_index":1,"item":{"type":"web_search_call","id":"search","action":{"type":"search","query":"docs"}}}`,
+			`{"type":"response.output_text.delta","item_id":"message","output_index":2,"content_index":0,"delta":"ans"}`,
+			`{"type":"response.output_item.added","output_index":3,"item":{"type":"function_call","id":"function","call_id":"call","name":"okf_index","arguments":""}}`,
+			`{"type":"response.function_call_arguments.delta","item_id":"function","output_index":3,"delta":"{}"}`,
+			`{"type":"response.output_item.done","output_index":3,"item":{"type":"function_call","id":"function","call_id":"call","name":"okf_index","arguments":"{}"}}`,
+			`{"type":"response.completed","response":{"id":"response","status":"completed","output":[{"type":"reasoning","id":"reason","content":[{"type":"reasoning_text","text":"thinking"}]},{"type":"web_search_call","id":"search","status":"completed","action":{"type":"search","query":"docs"}},{"type":"message","id":"message","role":"assistant","content":[{"type":"output_text","text":"answer"}]},{"type":"function_call","id":"function","call_id":"call","name":"okf_index","arguments":"{}"}]}}`,
+		} {
+			fmt.Fprintf(w, "data: %s\n\n", event)
+		}
+	}))
+	defer server.Close()
+	base, err := newProviderAdapter("deepseek", server.URL, "fixture", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter := newFloretProviderAdapter(base, "deepseek", "deepseek-v4-pro", ProviderControls{}, TurnBudgets{}, providerWebSearchModeDisabled)
+	events, err := adapter.Stream(t.Context(), flprovider.Request{RunID: "run", PromptScopeID: "scope", Messages: []flprovider.Message{{Role: flprovider.RoleUser, Text: "inspect"}}, Tools: deepSeekTestTools()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	counts := map[flprovider.EventType]int{}
+	for event := range events {
+		if event.Err != nil {
+			t.Fatal(event.Err)
+		}
+		item, index := "", 0
+		switch event.Type {
+		case flprovider.EventReasoning:
+			item = "reason"
+		case flprovider.EventDelta:
+			item, index = "message", 2
+		case flprovider.EventToolCallStart, flprovider.EventToolCallDelta, flprovider.EventToolCallEnd:
+			item, index = "function", 3
+		case flprovider.EventHostedToolCall, flprovider.EventHostedToolResult:
+			item, index = "search", 1
+		default:
+			continue
+		}
+		counts[event.Type]++
+		want := flprovider.OutputPart{ItemID: item, OutputIndex: index, ContentIndex: 0}
+		if event.OutputPart == nil || *event.OutputPart != want {
+			t.Errorf("event %s lost native part: got %+v want %+v", event.Type, event.OutputPart, want)
+		}
+	}
+	if counts[flprovider.EventReasoning] != 2 || counts[flprovider.EventDelta] != 2 || counts[flprovider.EventToolCallStart] != 1 || counts[flprovider.EventToolCallEnd] != 1 {
+		t.Fatalf("event coverage: %v", counts)
+	}
+}

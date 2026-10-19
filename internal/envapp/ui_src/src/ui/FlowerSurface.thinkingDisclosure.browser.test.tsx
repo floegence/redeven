@@ -1,4 +1,5 @@
 import '../index.css';
+import outputSources from '../../../../flower_ui/src/testdata/outputSourceCurrentViews.json';
 import './flower-feature.css';
 import { expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
@@ -249,4 +250,55 @@ it.each(['normal-child', 'failed-child'] as const)('uses the child thread facts 
     subagent_current: sealed(initial, scenario === 'failed-child' ? { activity: 'idle', last_outcome: 'failed', turns: [turn('failed')] } : {}) });
   await waitFor(() => disclosure(transcript).dataset.flowerThinkingActive === 'false');
   expect(disclosure(transcript).dataset.flowerThinkingView).toBe(scenario === 'failed-child' ? 'expanded' : 'collapsed');
+});
+
+it('retains correction disclosure, selection and focus through real provider checkpoints and reconnect', async () => {
+  await page.viewport(1280, 900);
+  const checkpoints = outputSources as unknown as FlowerRuntimeCurrentView[];
+  const initial = checkpoints[1];
+  const seed = thread({ thread_id: initial.thread_id, title: 'Source order', messages: [] });
+  const summary = () => applyFlowerRuntimeCurrentView(seed, live.current());
+  const live = stream(initial, () => ({ schema_version: 1, kind: 'ready', summaries: [summary()] }));
+  const root = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [summary()]),
+    loadThread: vi.fn(async () => ({ thread: summary(), current: live.current() })), connectLiveStream: live.connect,
+  }, { engaged: true, transcriptVisible: true });
+  root.style.height = '780px';
+  await waitFor(() => Boolean(root.querySelector('[data-thread-id="source-thread"] button')));
+  root.querySelector<HTMLButtonElement>('[data-thread-id="source-thread"] button')!.click();
+  await waitFor(() => Boolean(disclosure(root, 'source-2')));
+  const button = toggle(root, 'source-2');
+  button.click();
+  await waitFor(() => disclosure(root, 'source-2').dataset.flowerThinkingView === 'expanded');
+  const row = root.querySelector('[data-flower-message-id="source-2"]')!;
+  const content = disclosure(root, 'source-2').querySelector('.flower-thinking-content')!;
+  const range = document.createRange(); range.selectNodeContents(content);
+  const selection = window.getSelection()!; selection.removeAllRanges(); selection.addRange(range);
+  const selected = selection.toString();
+  expect(selected).toContain('Correction one reasoning.');
+  button.focus();
+  const transcript = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
+  transcript.scrollTop = 0;
+  for (const checkpoint of checkpoints.slice(2, 4)) {
+    live.push(checkpoint);
+    await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="' + checkpoint.items!.at(-1)!.id + '"]')));
+    expect(root.querySelector('[data-flower-message-id="source-2"]')).toBe(row);
+    expect(disclosure(root, 'source-2').dataset.flowerThinkingView).toBe('expanded');
+    expect(document.activeElement).toBe(button);
+    expect(selection.toString()).toBe(selected);
+    expect(transcript.scrollTop).toBe(0);
+  }
+  live.fail();
+  await waitFor(() => Boolean(root.querySelector('[data-flower-sync-state="failed"]')));
+  expect(disclosure(root, 'source-2').dataset.flowerThinkingView).toBe('expanded');
+  live.setCurrent(checkpoints[4]);
+  root.querySelector<HTMLButtonElement>('.flower-workspace-sync button')!.click();
+  await waitFor(() => Boolean(root.textContent?.includes('Inspection complete.')));
+  expect(root.querySelector('[data-flower-message-id="source-2"]')).toBe(row);
+  expect(disclosure(root, 'source-2').dataset.flowerThinkingView).toBe('expanded');
+  expect([...root.querySelectorAll('[data-flower-message-id]')].map(element => element.getAttribute('data-flower-message-id')))
+    .toEqual(checkpoints[4].items!.map(item => item.id));
+  button.focus(); await userEvent.keyboard(' ');
+  expect(disclosure(root, 'source-2').dataset.flowerThinkingView).toBe('collapsed');
+  expect(document.activeElement).toBe(button);
+  selection.removeAllRanges();
 });

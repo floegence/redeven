@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Floret Redeven adapter and projection
 description: Map authorized Redeven requests and Floret typed views without creating a second thread lifecycle.
 tags: [ai, floret, adapter, projection]
-timestamp: 2026-10-18T00:00:00Z
+timestamp: 2026-10-19T00:00:00Z
 quality_exception: Cross-boundary adapter contract spanning authorization, live projections, Activity sanitization, recovery, and browser ordering.
 ---
 # Summary
@@ -137,8 +137,18 @@ attempt ownership, and publishes `preparing` before provider dispatch. The
 RunID fence still rejects late events from the previous execution. Redeven
 therefore forwards waiting-response, streaming reasoning, and assistant growth
 before terminal settlement without polling or reconstructing missing frames.
-At terminal settlement, Floret's canonical ordered items replace temporary
-stream text. `TurnResult.Output` remains a run aggregate and is not another
+Published Floret v7.65.0 assigns output sources in the Engine and commits each
+response before tools execute. Its memory-only batch takeover retires the exact
+committed drafts. Schema-correction reasoning retains its source and original
+position while invalid calls and technical validation feedback remain hidden.
+Technical pairs remain canonical model context. Redeven passes optional native
+`provider.Event.OutputPart` descriptors through its DeepSeek DTO bridge without
+interpreting positions or generating IDs. Native terminal suffixes update their
+original fragments. Floret alone migrates canonical sources through schema 25;
+Redeven never decodes its storage or keeps a second presentation ledger.
+
+Canonical refresh, interactions and terminal settlement share upstream source
+reconciliation. `TurnResult.Output` remains a run aggregate and is not another
 message source. Flower deduplicates exact item IDs only; equal text with
 different stable IDs remains visible.
 
@@ -258,6 +268,8 @@ settle the short-lived browser outbox; the two values are not interchangeable.
 The adapter may add product authorization, resource resolution, DTO mapping, and browser-safe presentation. It must not import Floret internals, read or migrate Floret storage, create a legacy run handler, infer lifecycle from error text or timestamps, or introduce a second event/retry/replay state machine. Product migrations may import retired queued inputs once, then remove staging rows.
 
 # Evidence
+
+- [Output-source integration fixture](../../internal/ai/flower_output_sources_integration_test.go) checks every intermediate HTTP-provider publication and canonical reopen; shared mapper and isolated browser tests consume its sanitized checkpoints.
 
 - `redeven:internal/ai/floret_runtime.go` - Composes the published typed runtime.
 - `redeven:internal/ai/threads.go` - Enforces endpoint/thread ownership and summary-only inventory mapping.

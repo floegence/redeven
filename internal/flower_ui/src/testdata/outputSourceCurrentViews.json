@@ -1,0 +1,398 @@
+[
+  {
+    "turns": null,
+    "thread_id": "source-thread",
+    "view_version": 1,
+    "activity": "active",
+    "attention": {
+      "approval_count": 0,
+      "input_count": 0
+    },
+    "turn_id": "source-turn",
+    "run_id": "source-run",
+    "run_progress": {
+      "phase": "streaming"
+    },
+    "items": [
+      {
+        "id": "source-1",
+        "turn_id": "source-turn",
+        "run_id": "source-run",
+        "canonical_ordinal": 1,
+        "ordinal": 1,
+        "kind": "user",
+        "text": "Inspect the fixture.",
+        "created_at": "0001-01-01T00:00:00Z"
+      },
+      {
+        "id": "source-2",
+        "turn_id": "source-turn",
+        "run_id": "source-run",
+        "ordinal": 2,
+        "kind": "thinking",
+        "text": "Correction one",
+        "created_at": "0001-01-01T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "turns": null,
+    "thread_id": "source-thread",
+    "view_version": 2,
+    "activity": "active",
+    "attention": {
+      "approval_count": 0,
+      "input_count": 0
+    },
+    "turn_id": "source-turn",
+    "run_id": "source-run",
+    "run_progress": {
+      "phase": "streaming"
+    },
+    "items": [
+      {
+        "id": "source-1",
+        "turn_id": "source-turn",
+        "run_id": "source-run",
+        "canonical_ordinal": 1,
+        "ordinal": 1,
+        "kind": "user",
+        "text": "Inspect the fixture.",
+        "created_at": "0001-01-01T00:00:00Z"
+      },
+      {
+        "id": "source-2",
+        "turn_id": "source-turn",
+        "run_id": "source-run",
+        "canonical_ordinal": 2,
+        "ordinal": 2,
+        "kind": "thinking",
+        "text": "Correction one reasoning.",
+        "created_at": "0001-01-01T00:00:00Z"
+      },
+      {
+        "id": "source-3",
+        "turn_id": "source-turn",
+        "run_id": "source-run",
+        "ordinal": 3,
+        "kind": "thinking",
+        "text": "Correction two",
+        "created_at": "0001-01-01T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "turns": null,
+    "thread_id": "source-thread",
+    "view_version": 3,
+    "activity": "active",
+    "attention": {
+      "approval_count": 0,
+      "input_count": 0
+    },
+    "turn_id": "source-turn",
+    "run_id": "source-run",
+    "run_progress": {
+      "phase": "streaming"
+    },
+    "items": [
+      {
+        "id": "source-1",
+        "turn_id": "source-turn",
+        "run_id": "source-run",
+        "canonical_ordinal": 1,
+        "ordinal": 1,
+        "kind": "user",
+        "text": "Inspect the fixture.",
+        "created_at": "0001-01-01T00:00:00Z"
+      },
+      {
+        "id": "source-2",
+        "turn_id": "source-turn",
+        "run_id": "source-run",
+        "canonical_ordinal": 2,
+        "ordinal": 2,
+        "kind": "thinking",
+        "text": "Correction one reasoning.",
+        "created_at": "0001-01-01T00:00:00Z"
+      },
+      {
+        "id": "source-3",
+        "turn_id": "source-turn",
+        "run_id": "source-run",
+        "canonical_ordinal": 3,
+        "ordinal": 3,
+        "kind": "thinking",
+        "text": "Correction two reasoning.",
+        "created_at": "0001-01-01T00:00:00Z"
+      },
+      {
+        "id": "source-4",
+        "turn_id": "source-turn",
+        "run_id": "source-run",
+        "ordinal": 4,
+        "kind": "thinking",
+        "text": "Inspect first",
+        "created_at": "0001-01-01T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "turns": null,
+    "thread_id": "source-thread",
+    "view_version": 4,
+    "activity": "active",
+    "attention": {
+      "approval_count": 0,
+      "input_count": 0
+    },
+    "turn_id": "source-turn",
+    "run_id": "source-run",
+    "run_progress": {
+      "phase": "streaming"
+    },
+    "items": [
+      {
+        "id": "source-1",
+        "turn_id": "source-turn",
+        "run_id": "source-run",
+        "canonical_ordinal": 1,
+        "ordinal": 1,
+        "kind": "user",
+        "text": "Inspect the fixture.",
+        "created_at": "0001-01-01T00:00:00Z"
+      },
+      {
+        "id": "source-2",
+        "turn_id": "source-turn",
+        "run_id": "source-run",
+        "canonical_ordinal": 2,
+        "ordinal": 2,
+        "kind": "thinking",
+        "text": "Correction one reasoning.",
+        "created_at": "0001-01-01T00:00:00Z"
+      },
+      {
+        "id": "source-3",
+        "turn_id": "source-turn",
+        "run_id": "source-run",
+        "canonical_ordinal": 3,
+        "ordinal": 3,
+        "kind": "thinking",
+        "text": "Correction two reasoning.",
+        "created_at": "0001-01-01T00:00:00Z"
+      },
+      {
+        "id": "source-4",
+        "turn_id": "source-turn",
+        "run_id": "source-run",
+        "canonical_ordinal": 4,
+        "ordinal": 4,
+        "kind": "thinking",
+        "text": "Inspect first reasoning.",
+        "created_at": "0001-01-01T00:00:00Z"
+      },
+      {
+        "id": "source-5",
+        "turn_id": "source-turn",
+        "run_id": "source-run",
+        "canonical_ordinal": 5,
+        "ordinal": 5,
+        "kind": "tool",
+        "created_at": "0001-01-01T00:00:00Z",
+        "activity": {
+          "item_id": "source-5",
+          "tool_id": "call-3",
+          "tool_name": "terminal.exec",
+          "kind": "tool",
+          "status": "success",
+          "severity": "normal",
+          "needs_attention": false,
+          "requires_approval": false,
+          "started_at_unix_ms": 1,
+          "ended_at_unix_ms": 2,
+          "presentation": {
+            "label": "Inspect first",
+            "renderer": "terminal",
+            "payload": {
+              "operation": "exec",
+              "command": "printf fixture-ok",
+              "status": "success",
+              "process_id": "fixture-process",
+              "output": "fixture-ok",
+              "exit_code": 0,
+              "duration_ms": 1,
+              "first_seq": 1,
+              "last_seq": 1,
+              "latest_seq": 1,
+              "total_bytes": 10,
+              "execution_location": "local_runtime"
+            }
+          }
+        }
+      },
+      {
+        "id": "source-6",
+        "turn_id": "source-turn",
+        "run_id": "source-run",
+        "ordinal": 6,
+        "kind": "thinking",
+        "text": "Inspect second",
+        "created_at": "0001-01-01T00:00:00Z"
+      }
+    ]
+  },
+  {
+    "turns": null,
+    "thread_id": "source-thread",
+    "view_version": 5,
+    "activity": "idle",
+    "attention": {
+      "approval_count": 0,
+      "input_count": 0
+    },
+    "last_outcome": "completed",
+    "turn_id": "source-turn",
+    "run_id": "source-run",
+    "items": [
+      {
+        "id": "source-1",
+        "turn_id": "source-turn",
+        "run_id": "source-run",
+        "canonical_ordinal": 1,
+        "ordinal": 1,
+        "kind": "user",
+        "text": "Inspect the fixture.",
+        "created_at": "0001-01-01T00:00:00Z"
+      },
+      {
+        "id": "source-2",
+        "turn_id": "source-turn",
+        "run_id": "source-run",
+        "canonical_ordinal": 2,
+        "ordinal": 2,
+        "kind": "thinking",
+        "text": "Correction one reasoning.",
+        "created_at": "0001-01-01T00:00:00Z"
+      },
+      {
+        "id": "source-3",
+        "turn_id": "source-turn",
+        "run_id": "source-run",
+        "canonical_ordinal": 3,
+        "ordinal": 3,
+        "kind": "thinking",
+        "text": "Correction two reasoning.",
+        "created_at": "0001-01-01T00:00:00Z"
+      },
+      {
+        "id": "source-4",
+        "turn_id": "source-turn",
+        "run_id": "source-run",
+        "canonical_ordinal": 4,
+        "ordinal": 4,
+        "kind": "thinking",
+        "text": "Inspect first reasoning.",
+        "created_at": "0001-01-01T00:00:00Z"
+      },
+      {
+        "id": "source-5",
+        "turn_id": "source-turn",
+        "run_id": "source-run",
+        "canonical_ordinal": 5,
+        "ordinal": 5,
+        "kind": "tool",
+        "created_at": "0001-01-01T00:00:00Z",
+        "activity": {
+          "item_id": "source-5",
+          "tool_id": "call-3",
+          "tool_name": "terminal.exec",
+          "kind": "tool",
+          "status": "success",
+          "severity": "",
+          "needs_attention": false,
+          "requires_approval": false,
+          "started_at_unix_ms": 1,
+          "ended_at_unix_ms": 2,
+          "presentation": {
+            "label": "Inspect first",
+            "renderer": "terminal",
+            "payload": {
+              "operation": "exec",
+              "command": "printf fixture-ok",
+              "status": "success",
+              "process_id": "fixture-process",
+              "output": "fixture-ok",
+              "exit_code": 0,
+              "duration_ms": 1,
+              "first_seq": 1,
+              "last_seq": 1,
+              "latest_seq": 1,
+              "total_bytes": 10,
+              "execution_location": "local_runtime"
+            }
+          }
+        }
+      },
+      {
+        "id": "source-6",
+        "turn_id": "source-turn",
+        "run_id": "source-run",
+        "canonical_ordinal": 6,
+        "ordinal": 6,
+        "kind": "thinking",
+        "text": "Inspect second reasoning.",
+        "created_at": "0001-01-01T00:00:00Z"
+      },
+      {
+        "id": "source-7",
+        "turn_id": "source-turn",
+        "run_id": "source-run",
+        "canonical_ordinal": 7,
+        "ordinal": 7,
+        "kind": "tool",
+        "created_at": "0001-01-01T00:00:00Z",
+        "activity": {
+          "item_id": "source-7",
+          "tool_id": "call-4",
+          "tool_name": "terminal.exec",
+          "kind": "tool",
+          "status": "success",
+          "severity": "",
+          "needs_attention": false,
+          "requires_approval": false,
+          "started_at_unix_ms": 1,
+          "ended_at_unix_ms": 2,
+          "presentation": {
+            "label": "Inspect second",
+            "renderer": "terminal",
+            "payload": {
+              "operation": "exec",
+              "command": "printf fixture-ok",
+              "status": "success",
+              "process_id": "fixture-process",
+              "output": "fixture-ok",
+              "exit_code": 0,
+              "duration_ms": 1,
+              "first_seq": 1,
+              "last_seq": 1,
+              "latest_seq": 1,
+              "total_bytes": 10,
+              "execution_location": "local_runtime"
+            }
+          }
+        }
+      },
+      {
+        "id": "source-8",
+        "turn_id": "source-turn",
+        "run_id": "source-run",
+        "canonical_ordinal": 8,
+        "ordinal": 8,
+        "kind": "assistant",
+        "text": "Inspection complete.",
+        "created_at": "0001-01-01T00:00:00Z"
+      }
+    ]
+  }
+]

@@ -421,11 +421,12 @@ describe('Canonical managed facts on the existing workspace transport', () => {
   await flush(); publish.resolve(); await flush();
   expect(surface.querySelector('.flower-model-context-details')?.textContent ?? '').not.toContain('Background catalog changed');
   selectThread(surface, second.thread_id);
-  await waitFor(() => !surface.querySelector('.flower-thread-loading') && Boolean(surface.querySelector('[data-category="skills"]')));
+  await waitFor(() => !surface.querySelector('.flower-thread-loading') && Boolean(surface.querySelector('[role="progressbar"]')));
   await flush();
   const contextTrigger = surface.querySelector('[role="progressbar"]') as HTMLElement;
   contextTrigger.focus();
-  expect(surface.querySelector('[data-category="skills"]')?.textContent).toContain('60 chars');
+  const panel = document.getElementById(contextTrigger.getAttribute('aria-controls')!)!;
+  await waitFor(() => panel.querySelector('[data-category="skills"]')?.textContent?.includes('60 chars') ?? false);
   expect(document.activeElement).toBe(contextTrigger);
   expect(surface.textContent).not.toContain('Background catalog changed');
   expect(surface.querySelectorAll('.flower-user-message')).toHaveLength(0);
@@ -458,7 +459,11 @@ describe('Canonical managed facts on the existing workspace transport', () => {
   (document.querySelector('[data-flower-subagent-row="0"]') as HTMLButtonElement).click();
   await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-detail="open"]')));
   await flush();publish.resolve();
-  await waitFor(() => document.querySelector('[data-flower-subagent-detail="open"] [data-category="skills"]')?.textContent?.includes('60 chars') ?? false);
+  await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-detail="open"] [role="progressbar"]')));
+  const contextTrigger = document.querySelector<HTMLElement>('[data-flower-subagent-detail="open"] [role="progressbar"]')!;
+  contextTrigger.focus();
+  const panel = document.getElementById(contextTrigger.getAttribute('aria-controls')!)!;
+  await waitFor(() => panel.querySelector('[data-category="skills"]')?.textContent?.includes('60 chars') ?? false);
   expect(document.body.textContent).not.toContain('Current child catalog');
   expect(surface.querySelector('.flower-composer [data-category="skills"]')).toBeNull();
  });

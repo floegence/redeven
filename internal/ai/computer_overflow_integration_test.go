@@ -68,8 +68,8 @@ func testComputerDeepSeekImageOverflow(t *testing.T, longHistory bool) {
 				observation := map[string]any{"type": "message", "role": "assistant", "content": []any{map[string]any{"type": "output_text", "text": strings.Repeat("Earlier observed application state. ", 1500)}}}
 				output = []any{observation, item}
 			}
-			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
-			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})
+			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": len(output) - 1, "item": item})
+			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.done", "output_index": len(output) - 1, "item": item})
 			writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.completed", "response": map[string]any{"id": "capture", "status": "completed", "output": output}})
 			return
 		}
