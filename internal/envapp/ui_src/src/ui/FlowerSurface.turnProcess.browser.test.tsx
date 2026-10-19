@@ -123,7 +123,8 @@ describe('completed turn process disclosure', () => {
       decoration_id: id, kind: 'context_compaction' as const, ordinal: 0,
       anchor: { target_kind: 'message' as const, message_id: 'progress', edge: 'after' as const },
       compaction: { operation_id: id, turn_id: turnID, canonical_ordinal: ordinal, phase: 'complete' as const,
-        status: 'compacted' as const, tokens_before: 150000, tokens_after_estimate: 20000, updated_at_ms: 1 },
+        status: 'compacted' as const, tokens_before: 150000, tokens_after_estimate: 20000, updated_at_ms: 1,
+        decision: { pressure: {}, after: { payload_fingerprint: 'validated', provider: 'test', model: 'model', estimated_input_tokens: 37594, source: 'fixture', estimate_method: 'provider_rendered_payload_estimate', estimate_confidence: 'conservative', pressure: {} } } },
     });
     const decorations = [decoration('first', 'turn', 7), decoration('second', 'turn', 8), decoration('third', 'turn', 9), decoration('manual', 'manual', 10)];
     const terminal = current(true, { turns: [turn(), turn({ turn_id: 'manual', run_id: 'manual-run', kind: 'context_compaction', intermediate_item_ids: [], final_item_ids: [] })] });
@@ -137,10 +138,13 @@ describe('completed turn process disclosure', () => {
     await waitFor(() => !collapsed('third'));
     const trigger = divider('third').querySelector<HTMLElement>('[role="button"]')!;
     trigger.focus();
-    await waitFor(() => Boolean(divider('third').querySelector('[role="tooltip"]')));
+    const tooltip = () => document.getElementById(trigger.getAttribute('aria-describedby') ?? '');
+    await waitFor(() => tooltip()?.getAttribute('role') === 'tooltip');
+    expect(tooltip()?.textContent).toContain('37594');
     summary(root)!.click();
     await waitFor(() => collapsed('third'));
-    expect(divider('third').querySelector('[role="tooltip"]')).toBeNull();
+    expect(tooltip()).toBeNull();
+    expect(document.querySelector('[role="tooltip"]')).toBeNull();
     expect(document.activeElement).toBe(summary(root));
     expect(divider('third').closest('.flower-turn-row-viewport')?.hasAttribute('inert')).toBe(true);
     summary(root)!.click(); summary(root)!.click(); summary(root)!.click();

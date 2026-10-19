@@ -153,22 +153,43 @@ type FlowerThreadTokenUsage struct {
 	CacheWriteTokens int64 `json:"cache_write_tokens"`
 }
 
+// FlowerCompactionRequestSnapshot maps a frozen upstream candidate without
+// re-estimating or treating it as a confirmed provider measurement.
+type FlowerCompactionRequestSnapshot struct {
+	PayloadFingerprint   string                      `json:"payload_fingerprint"`
+	Provider             string                      `json:"provider"`
+	Model                string                      `json:"model"`
+	EstimatedInputTokens int64                       `json:"estimated_input_tokens"`
+	Source               string                      `json:"source"`
+	EstimateMethod       flconfig.EstimateMethod     `json:"estimate_method"`
+	EstimateConfidence   flconfig.EstimateConfidence `json:"estimate_confidence"`
+	Pressure             flconfig.ContextPressure    `json:"pressure"`
+	CalibrationRequestID string                      `json:"calibration_request_id,omitempty"`
+}
+
+type FlowerCompactionDecision struct {
+	Pressure flconfig.ContextPressure         `json:"pressure"`
+	Before   *FlowerCompactionRequestSnapshot `json:"before,omitempty"`
+	After    *FlowerCompactionRequestSnapshot `json:"after,omitempty"`
+}
+
 type FlowerContextCompaction struct {
-	TurnID              string `json:"turn_id"`
-	CanonicalOrdinal    uint64 `json:"canonical_ordinal"`
-	OperationID         string `json:"operation_id"`
-	RequestID           string `json:"request_id"`
-	RunID               string `json:"run_id,omitempty"`
-	StepIndex           int    `json:"step_index,omitempty"`
-	Phase               string `json:"phase"`
-	Status              string `json:"status"`
-	Trigger             string `json:"trigger,omitempty"`
-	Reason              string `json:"reason,omitempty"`
-	Source              string `json:"source"`
-	TokensBefore        int64  `json:"tokens_before,omitempty"`
-	TokensAfterEstimate int64  `json:"tokens_after_estimate,omitempty"`
-	Error               string `json:"error,omitempty"`
-	UpdatedAtMs         int64  `json:"updated_at_ms"`
+	Decision            *FlowerCompactionDecision `json:"decision,omitempty"`
+	TurnID              string                    `json:"turn_id"`
+	CanonicalOrdinal    uint64                    `json:"canonical_ordinal"`
+	OperationID         string                    `json:"operation_id"`
+	RequestID           string                    `json:"request_id"`
+	RunID               string                    `json:"run_id,omitempty"`
+	StepIndex           int                       `json:"step_index,omitempty"`
+	Phase               string                    `json:"phase"`
+	Status              string                    `json:"status"`
+	Trigger             string                    `json:"trigger,omitempty"`
+	Reason              string                    `json:"reason,omitempty"`
+	Source              string                    `json:"source"`
+	TokensBefore        int64                     `json:"tokens_before,omitempty"`
+	TokensAfterEstimate int64                     `json:"tokens_after_estimate,omitempty"`
+	Error               string                    `json:"error,omitempty"`
+	UpdatedAtMs         int64                     `json:"updated_at_ms"`
 }
 
 type FlowerTimelineAnchor struct {

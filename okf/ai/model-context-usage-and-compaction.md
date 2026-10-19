@@ -7,7 +7,7 @@ timestamp: 2026-10-19T00:00:00Z
 ---
 # Summary
 
-Published Floret v7.67.1 owns context compaction, cancellation, canonical installation, restart recovery, and usage. Redeven authorizes an independent manual operation and presents the canonical result. Manual compaction ends after installation; automatic compaction continues the current task. Failure, cancellation before installation, and noop retain effective context.
+Published Floret v7.68.2 owns context compaction, cancellation, canonical installation, restart recovery, and usage. Redeven authorizes an independent manual operation and presents the canonical result. Manual compaction ends after installation; automatic compaction continues the current task. Failure, cancellation before installation, and noop retain effective context.
 
 # Contract
 
@@ -33,6 +33,24 @@ boundary; existing checkpoints and canonical v19 bytes are not rewritten.
 Redeven adds no summary generator, batching policy, or durable compaction state.
 
 The 50,000-token target guides tail selection; it does not require a fixed-length summary or fill unused budget. The actual result combines the generated summary, preserved user requirements, retained complete tail, and checkpoint structure. The summary has a ceiling, so the result may be substantially below the target. Protecting the latest complete input or tool exchange can also exceed the target; Floret records that pressure instead of clipping those messages. The divider reports estimated message context after installation, independently of system-prefix and tool-definition tokens in a complete provider request. The localized detail states this scope explicitly and shows a before/after pair only after successful installation. Its explanation wraps without ellipsis and dismisses through pointer exit, outside touch/click, focus navigation, or Escape. Historical values retain their original estimates; no full-request total is reconstructed from them.
+
+## Compaction decision evidence
+
+The existing canonical lifecycle optionally includes the actual frozen trigger
+candidate, the triggering pressure, and the validated replacement request. These
+full-request estimates include system instructions and tools; they are distinct
+from the divider's message-context estimate and the latest confirmed native
+usage. Calibrated pressure retains its qualified request identity, while provider
+overflow stays an explicit signal rather than a fabricated numerical threshold.
+Historical or unprepared manual candidates remain unavailable. Failed and
+cancelled attempts retain their original trigger evidence without claiming a
+successful installation. Floret schema 25 -> 26 preserves historical payloads
+and rejects older writers; Redeven does not migrate or reconstruct those facts.
+Canonical terminal turns settle interrupted running observations upstream.
+
+The divider's shared SurfaceFloatingLayer owns local hosting, projection and
+clamping in Workbench. The trigger remains keyboard accessible, explanations
+wrap, and Escape, Tab, focus loss and outside pointer actions dismiss the layer.
 
 ## Projection and usage
 

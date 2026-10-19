@@ -66,6 +66,29 @@ describe('Flower context usage contract', () => {
     expect(() => mapFlowerContextCompactions([{ operation_id: 'missing-identity', phase: 'start', status: 'compacting' }])).toThrow('canonical identity');
     expect(() => mapFlowerContextCompactions(null)).toThrow('must be an array');
   });
+  it('preserves compaction evidence through live and reloaded timeline mapping without aliases', () => {
+    const pressure = { projected_input_tokens: 480000, threshold_tokens: 472500, request_safe_limit_tokens: 500000, pressure_signal: 'projected_request', pressure_source: 'usage_anchored_delta' };
+    const before = { payload_fingerprint: 'unsent', provider: 'test', model: 'model', estimated_input_tokens: 470382, source: 'fixture', estimate_method: 'provider_rendered_payload_estimate', estimate_confidence: 'conservative', pressure, calibration_request_id: 'confirmed' };
+    const decision = { pressure, before, after: { ...before, estimated_input_tokens: 0 } };
+    const compaction = { operation_id: 'compact', turn_id: 'turn', canonical_ordinal: 7, phase: 'complete', status: 'compacted', updated_at_ms: 10, decision };
+    const decoration = { decoration_id: 'context-compaction:compact', kind: 'context_compaction', ordinal: 0, anchor: { target_kind: 'message', message_id: 'message', edge: 'after' }, compaction };
+    expect(mapFlowerContextCompactions([compaction])?.[0].decision).toEqual(decision);
+    const mapped = mapFlowerTimelineDecorations(JSON.parse(JSON.stringify([decoration])))?.[0];
+    expect(mapped?.compaction.decision).toEqual(decision);
+    const live = mapFlowerContextCompactions([compaction])![0].decision!;
+    expect(live).not.toBe(decision);
+    expect(live.before).not.toBe(before);
+    expect(live.before?.pressure).not.toBe(pressure);
+    expect(mapFlowerContextCompactions([{ ...compaction, decision: undefined }])?.[0].decision).toBeUndefined();
+  });
+  it('rejects malformed decision evidence without inventing a replacement', () => {
+    const candidate = { payload_fingerprint: 'frozen', provider: 'test', model: 'model', estimated_input_tokens: 0, source: 'fixture', estimate_method: 'provider_rendered_payload_estimate', estimate_confidence: '', pressure: {} };
+    const compaction = { operation_id: 'compact', turn_id: 'turn', canonical_ordinal: 7, phase: 'complete', status: 'compacted', updated_at_ms: 10 };
+    for (const decision of [null, [], { pressure: {} }, { pressure: {}, before: null }, { pressure: [], after: candidate }, { pressure: {}, after: { ...candidate, estimated_input_tokens: -1 } }, { pressure: {}, after: { ...candidate, pressure: { threshold_tokens: '472500' } } }, { pressure: {}, after: { ...candidate, calibration_request_id: 7 } }]) {
+      expect(() => mapFlowerContextCompactions([{ ...compaction, decision }])).toThrow('Flower contract error');
+    }
+    expect(mapFlowerContextCompactions([{ ...compaction, decision: { pressure: {}, after: candidate } }])?.[0].decision?.after?.estimated_input_tokens).toBe(0);
+  });
   it('rejects malformed canonical totals and obsolete mixed samples', () => {
     expect(() => mapContextUsage({ thread_usage: { ...thread_usage, cache_read_tokens: -1 } })).toThrow('context_usage.thread_usage.cache_read_tokens must be a non-negative integer');
     expect(() => mapContextUsage(confirmed)).toThrow('requires a measurement/estimate snapshot');

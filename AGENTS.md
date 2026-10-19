@@ -1096,6 +1096,10 @@ confirmed request. Native input is last request input, not an independently
 measured current window or guaranteed remaining capacity. Floret alone
 qualifies pressure anchors, normalizes usage, and migrates its opaque storage,
 including schema 23 to 24. No host accounting ledger or legacy token fallback.
+Published Floret v7.68.2 owns frozen compaction trigger/replacement evidence and
+domain schema 25 to 26. Flower maps optional canonical diagnostics without
+reconstructing missing candidates, recalculating pressure, or treating estimates
+as native measurements. Compaction floating UI uses the shared surface layer.
 
 Redeven consumes the published `github.com/floegence/floret/v7` typed thread runtime. Redeven owns product authorization, attachment resolution, effect execution, provider configuration, read acknowledgement, and UI mapping. Floret owns each thread current view, canonical journal, queue, interactions, effect-attempt identity, immutable provider checkpoints, context lineage, and restart recovery.
 

@@ -459,6 +459,305 @@ export const redevenWireSchemas = {
                 "canonical_ordinal": {
                   "kind": "number"
                 },
+                "decision": {
+                  "kind": "object",
+                  "properties": {
+                    "pressure": {
+                      "kind": "object",
+                      "properties": {
+                        "request_output_tokens": {
+                          "kind": "number"
+                        },
+                        "output_control": {
+                          "kind": "string"
+                        },
+                        "safety_margin_tokens": {
+                          "kind": "number"
+                        },
+                        "window_input_tokens": {
+                          "kind": "number"
+                        },
+                        "projected_input_tokens": {
+                          "kind": "number"
+                        },
+                        "context_window_tokens": {
+                          "kind": "number"
+                        },
+                        "threshold_tokens": {
+                          "kind": "number"
+                        },
+                        "request_safe_limit_tokens": {
+                          "kind": "number"
+                        },
+                        "output_headroom_tokens": {
+                          "kind": "number"
+                        },
+                        "pressure_signal": {
+                          "kind": "string"
+                        },
+                        "pressure_source": {
+                          "kind": "string"
+                        },
+                        "estimate_method": {
+                          "kind": "string"
+                        },
+                        "confidence": {
+                          "kind": "string"
+                        },
+                        "compaction_needed": {
+                          "kind": "union",
+                          "options": [
+                            {
+                              "kind": "literal",
+                              "value": false
+                            },
+                            {
+                              "kind": "literal",
+                              "value": true
+                            }
+                          ]
+                        },
+                        "hard_limit_exceeded": {
+                          "kind": "union",
+                          "options": [
+                            {
+                              "kind": "literal",
+                              "value": false
+                            },
+                            {
+                              "kind": "literal",
+                              "value": true
+                            }
+                          ]
+                        }
+                      },
+                      "required": []
+                    },
+                    "before": {
+                      "kind": "object",
+                      "properties": {
+                        "payload_fingerprint": {
+                          "kind": "string"
+                        },
+                        "provider": {
+                          "kind": "string"
+                        },
+                        "model": {
+                          "kind": "string"
+                        },
+                        "estimated_input_tokens": {
+                          "kind": "number"
+                        },
+                        "source": {
+                          "kind": "string"
+                        },
+                        "estimate_method": {
+                          "kind": "string"
+                        },
+                        "estimate_confidence": {
+                          "kind": "string"
+                        },
+                        "pressure": {
+                          "kind": "object",
+                          "properties": {
+                            "request_output_tokens": {
+                              "kind": "number"
+                            },
+                            "output_control": {
+                              "kind": "string"
+                            },
+                            "safety_margin_tokens": {
+                              "kind": "number"
+                            },
+                            "window_input_tokens": {
+                              "kind": "number"
+                            },
+                            "projected_input_tokens": {
+                              "kind": "number"
+                            },
+                            "context_window_tokens": {
+                              "kind": "number"
+                            },
+                            "threshold_tokens": {
+                              "kind": "number"
+                            },
+                            "request_safe_limit_tokens": {
+                              "kind": "number"
+                            },
+                            "output_headroom_tokens": {
+                              "kind": "number"
+                            },
+                            "pressure_signal": {
+                              "kind": "string"
+                            },
+                            "pressure_source": {
+                              "kind": "string"
+                            },
+                            "estimate_method": {
+                              "kind": "string"
+                            },
+                            "confidence": {
+                              "kind": "string"
+                            },
+                            "compaction_needed": {
+                              "kind": "union",
+                              "options": [
+                                {
+                                  "kind": "literal",
+                                  "value": false
+                                },
+                                {
+                                  "kind": "literal",
+                                  "value": true
+                                }
+                              ]
+                            },
+                            "hard_limit_exceeded": {
+                              "kind": "union",
+                              "options": [
+                                {
+                                  "kind": "literal",
+                                  "value": false
+                                },
+                                {
+                                  "kind": "literal",
+                                  "value": true
+                                }
+                              ]
+                            }
+                          },
+                          "required": []
+                        },
+                        "calibration_request_id": {
+                          "kind": "string"
+                        }
+                      },
+                      "required": [
+                        "estimate_confidence",
+                        "estimate_method",
+                        "estimated_input_tokens",
+                        "model",
+                        "payload_fingerprint",
+                        "pressure",
+                        "provider",
+                        "source"
+                      ]
+                    },
+                    "after": {
+                      "kind": "object",
+                      "properties": {
+                        "payload_fingerprint": {
+                          "kind": "string"
+                        },
+                        "provider": {
+                          "kind": "string"
+                        },
+                        "model": {
+                          "kind": "string"
+                        },
+                        "estimated_input_tokens": {
+                          "kind": "number"
+                        },
+                        "source": {
+                          "kind": "string"
+                        },
+                        "estimate_method": {
+                          "kind": "string"
+                        },
+                        "estimate_confidence": {
+                          "kind": "string"
+                        },
+                        "pressure": {
+                          "kind": "object",
+                          "properties": {
+                            "request_output_tokens": {
+                              "kind": "number"
+                            },
+                            "output_control": {
+                              "kind": "string"
+                            },
+                            "safety_margin_tokens": {
+                              "kind": "number"
+                            },
+                            "window_input_tokens": {
+                              "kind": "number"
+                            },
+                            "projected_input_tokens": {
+                              "kind": "number"
+                            },
+                            "context_window_tokens": {
+                              "kind": "number"
+                            },
+                            "threshold_tokens": {
+                              "kind": "number"
+                            },
+                            "request_safe_limit_tokens": {
+                              "kind": "number"
+                            },
+                            "output_headroom_tokens": {
+                              "kind": "number"
+                            },
+                            "pressure_signal": {
+                              "kind": "string"
+                            },
+                            "pressure_source": {
+                              "kind": "string"
+                            },
+                            "estimate_method": {
+                              "kind": "string"
+                            },
+                            "confidence": {
+                              "kind": "string"
+                            },
+                            "compaction_needed": {
+                              "kind": "union",
+                              "options": [
+                                {
+                                  "kind": "literal",
+                                  "value": false
+                                },
+                                {
+                                  "kind": "literal",
+                                  "value": true
+                                }
+                              ]
+                            },
+                            "hard_limit_exceeded": {
+                              "kind": "union",
+                              "options": [
+                                {
+                                  "kind": "literal",
+                                  "value": false
+                                },
+                                {
+                                  "kind": "literal",
+                                  "value": true
+                                }
+                              ]
+                            }
+                          },
+                          "required": []
+                        },
+                        "calibration_request_id": {
+                          "kind": "string"
+                        }
+                      },
+                      "required": [
+                        "estimate_confidence",
+                        "estimate_method",
+                        "estimated_input_tokens",
+                        "model",
+                        "payload_fingerprint",
+                        "pressure",
+                        "provider",
+                        "source"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "pressure"
+                  ]
+                },
                 "operation_id": {
                   "kind": "string"
                 },

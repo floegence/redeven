@@ -266,8 +266,8 @@ describe('Flower progress indicator', () => {
     expect(copyRule).not.toContain('flex-direction: column');
     expect(labelRule).toContain('text-overflow: ellipsis');
     expect(labelRule).toContain('white-space: nowrap');
-    expect(tooltipRule).toContain('position: absolute');
-    expect(tooltipRule).toContain('bottom: calc(100% + 0.55rem)');
+    expect(tooltipRule).not.toContain('position: absolute');
+    expect(fs.readFileSync(path.join(repoRoot, 'internal/flower_ui/src/chat/FlowerContextCompactionDivider.tsx'), 'utf8')).toContain('<SurfaceFloatingLayer');
     expect(tooltipRule).toContain('opacity: 0');
     expect(tooltipRule).toContain('pointer-events: none');
     expect(tooltipRule).toContain('white-space: normal');
