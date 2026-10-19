@@ -609,7 +609,7 @@
       "compactionDividerCancelled": "上下文压缩已取消",
       "compactionDividerNoop": "上下文无需压缩",
       "compactionDividerFallback": "上下文检查点",
-      "compactionDividerTokenChange": "{before} 压缩至 {after}",
+      "compactionDividerTokenChange": "消息上下文估算：{before} → {after} tokens。不含系统提示词和工具定义。",
       "toolStatusPending": "待处理",
       "toolStatusRunning": "运行中",
       "toolStatusWaiting": "等待中",

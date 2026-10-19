@@ -61,6 +61,7 @@ main() {
       src/ui/FlowerSurface.navigation.test.tsx \
       src/ui/FlowerSurface.liveRecovery.test.tsx \
       src/ui/FlowerComposerContextIndicator.test.tsx \
+      src/ui/FlowerContextCompactionDivider.test.tsx \
       src/ui/FlowerContextAccounting.test.ts \
       src/ui/FlowerSurface.providerReadiness.test.tsx \
       src/ui/FlowerSurface.modelMenu.test.tsx \
@@ -192,6 +193,7 @@ main() {
       ui_pkg_log "Flower UI: Chromium interaction contracts..."
       (cd "$ROOT_DIR" && REDEVEN_FORK_PARENT_EVENTS_UI=1 GOWORK=off go test ./internal/ai -run '^TestFlowerForkParentEventsUI$' -count=1)
       ui_pkg_run_pnpm run test:browser -- \
+        src/ui/FlowerContextCompactionDivider.browser.test.tsx \
         src/ui/EnvAppShell.flowerCompanion.browser.test.tsx \
         src/ui/flowerCompanionTailMotion.browser.test.tsx \
         src/ui/FlowerSurface.toolPresentation.browser.test.tsx \

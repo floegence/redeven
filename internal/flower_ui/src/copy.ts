@@ -1195,7 +1195,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       cancelled: 'Context compaction cancelled',
       noop: 'Context does not need compression',
       fallback: 'Context checkpoint',
-      tokenChange: (before, after) => `${before} to ${after}`,
+      tokenChange: (before, after) => `Estimated message context: ${before} to ${after} tokens. Excludes system instructions and tool definitions.`,
     },
     projectionUnavailable: {
       title: 'Response unavailable',

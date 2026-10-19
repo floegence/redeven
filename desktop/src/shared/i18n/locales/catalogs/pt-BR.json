@@ -607,7 +607,7 @@
       "compactionDividerCancelled": "Compressão de contexto cancelada",
       "compactionDividerNoop": "O contexto não precisa de compressão",
       "compactionDividerFallback": "Ponto de controle de contexto",
-      "compactionDividerTokenChange": "{before} para {after}",
+      "compactionDividerTokenChange": "Contexto estimado das mensagens: {before} → {after} tokens. Não inclui instruções do sistema nem definições de ferramentas.",
       "projectionUnavailableTitle": "Resposta indisponível",
       "projectionUnavailableDescription": "Não foi possível carregar a resposta salva para este turno.",
       "toolStatusPending": "Pendente",

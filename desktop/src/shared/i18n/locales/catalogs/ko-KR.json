@@ -607,7 +607,7 @@
       "compactionDividerCancelled": "컨텍스트 압축 취소됨",
       "compactionDividerNoop": "컨텍스트 압축이 필요하지 않음",
       "compactionDividerFallback": "컨텍스트 체크포인트",
-      "compactionDividerTokenChange": "{before}에서 {after}로",
+      "compactionDividerTokenChange": "메시지 컨텍스트 추정: {before} → {after} 토큰. 시스템 지침과 도구 정의는 제외됩니다.",
       "projectionUnavailableTitle": "응답을 사용할 수 없음",
       "projectionUnavailableDescription": "이 턴에 저장된 응답을 불러오지 못했습니다.",
       "toolStatusPending": "대기",

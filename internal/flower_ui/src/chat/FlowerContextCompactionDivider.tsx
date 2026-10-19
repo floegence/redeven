@@ -1,6 +1,6 @@
 import { Clock } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
-import { Show, createMemo, createSignal, createUniqueId } from 'solid-js';
+import { Show, createMemo, createSignal, createUniqueId, onCleanup, onMount } from 'solid-js';
 
 import type { FlowerTimelineDecoration } from '../contracts/flowerSurfaceContracts';
 import type { FlowerSurfaceCopy } from '../copy';
@@ -24,6 +24,14 @@ export function FlowerContextCompactionDivider(props: {
   const [tooltipOpen, setTooltipOpen] = createSignal(false);
   const tooltipID = `flower-compaction-divider-${createUniqueId()}`;
   const hasDetail = createMemo(() => detail().length > 0);
+  let container: HTMLDivElement | undefined;
+  onMount(() => {
+    const dismiss = (event: PointerEvent) => {
+      if (container && !container.contains(event.target as Node)) setTooltipOpen(false);
+    };
+    document.addEventListener('pointerdown', dismiss, true);
+    onCleanup(() => document.removeEventListener('pointerdown', dismiss, true));
+  });
   const openTooltip = () => {
     if (hasDetail()) setTooltipOpen(true);
   };
@@ -33,6 +41,7 @@ export function FlowerContextCompactionDivider(props: {
   };
   return (
     <div
+      ref={container}
       class="flower-compaction-divider"
       data-flower-decoration-id={props.decoration.decoration_id}
       data-flower-compaction-status={compaction().status}

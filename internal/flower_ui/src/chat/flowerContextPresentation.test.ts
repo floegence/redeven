@@ -158,7 +158,7 @@ describe('flower context presentation', () => {
       tokens_before: 60_000,
       tokens_after_estimate: 488,
       error: 'ignored',
-    }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('60k to 488');
+    }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('Estimated message context: 60k to 488 tokens. Excludes system instructions and tool definitions.');
     expect(compactionDividerDetail(compaction({
       tokens_before: undefined,
       tokens_after_estimate: undefined,
@@ -174,6 +174,10 @@ describe('flower context presentation', () => {
       reason: 'context_too_small',
       trigger: 'manual',
     }), DEFAULT_FLOWER_SURFACE_COPY)).toBe(DEFAULT_FLOWER_SURFACE_COPY.chat.compactionContextTooSmall);
+  });
+
+  it.each(['failed', 'cancelled', 'compacting'] as const)('does not describe %s as successful compression', (status) => {
+    expect(compactionDividerDetail(compaction({ status, tokens_before: 159143, tokens_after_estimate: 17462, error: 'summary unavailable' }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('summary unavailable');
   });
 });
 

@@ -4142,6 +4142,7 @@
   left: 50%;
   z-index: 12;
   max-width: min(22rem, calc(100vw - 2rem));
+  width: max-content;
   padding: 0.42rem 0.58rem;
   transform: translate(-50%, 0.18rem);
   border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 78%, transparent);
@@ -4158,10 +4159,10 @@
   overflow: hidden;
   pointer-events: none;
   text-align: center;
-  text-overflow: ellipsis;
   transition:
     opacity 120ms ease;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .flower-compaction-divider-tooltip::after {

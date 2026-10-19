@@ -5528,7 +5528,7 @@
       "compactionDividerCancelled": "上下文壓縮已取消",
       "compactionDividerNoop": "上下文無需壓縮",
       "compactionDividerFallback": "上下文檢查點",
-      "compactionDividerTokenChange": "{before} 壓縮至 {after}",
+      "compactionDividerTokenChange": "訊息上下文估算：{before} → {after} tokens。不含系統提示詞和工具定義。",
       "projectionUnavailableTitle": "回應無法使用",
       "projectionUnavailableDescription": "無法載入此輪已儲存的回應。",
       "toolStatusPending": "待處理",

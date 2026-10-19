@@ -5629,7 +5629,7 @@
       "compactionDividerCancelled": "Сжатие контекста отменено",
       "compactionDividerNoop": "Сжатие контекста не требуется",
       "compactionDividerFallback": "Контрольная точка контекста",
-      "compactionDividerTokenChange": "{before} → {after}",
+      "compactionDividerTokenChange": "Оценка контекста сообщений: {before} → {after} токенов. Системные инструкции и определения инструментов не включены.",
       "projectionUnavailableTitle": "Ответ недоступен",
       "projectionUnavailableDescription": "Сохранённый ответ на этот запрос не удалось загрузить.",
       "toolStatusPending": "Ожидает",

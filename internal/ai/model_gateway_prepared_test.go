@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	flprovider "github.com/floegence/floret/v7/provider"
 )
 
 func TestProviderPreparationFreezesDispatchedWireAndEstimate(t *testing.T) {
@@ -134,5 +136,45 @@ func TestProviderPreparationFreezesDispatchedWireAndEstimate(t *testing.T) {
 			}
 			t.Logf("wire bytes=%d, estimated input tokens=%d, source=%s", len(actual), estimate.EstimatedInputTokens, estimate.Source)
 		})
+	}
+}
+
+func TestPreparedOpaqueReasoningKeepsWireWithoutInflatingBudget(t *testing.T) {
+	var baseline int64
+	for i, size := range []int{0, 285984} {
+		encrypted := strings.Repeat("A", size)
+		params := map[string]any{"instructions": "System.", "input": []any{map[string]any{"type": "reasoning", "encrypted_content": encrypted}, map[string]any{"role": "user", "content": "Continue."}}}
+		var sent []byte
+		prepared, err := newPreparedModelWire("openai", "gpt-6.1-sol", flprovider.RequestFormatOpenAIResponses, params, ModelGatewayRequest{}, providerToolAliases{}, func(_ context.Context, raw []byte, _ func(StreamEvent)) (ModelGatewayResult, error) {
+			sent = bytes.Clone(raw)
+			return ModelGatewayResult{Text: "done"}, nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		estimate := prepared.TokenEstimate()
+		if i == 0 {
+			baseline = estimate.EstimatedInputTokens
+		}
+		if estimate.EstimatedInputTokens != baseline || estimate.Breakdown.OpaqueBytes != int64(size) || estimate.Breakdown.AttributionCoverage != "partial" {
+			t.Fatalf("invalid opaque estimate: %+v", estimate)
+		}
+		frozen := bytes.Clone(prepared.payload)
+		replay, err := prepared.replay(t.Context(), flprovider.Request{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := prepared.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := replay.StreamTurn(t.Context(), nil); err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(sent, frozen) || !bytes.Contains(sent, []byte(encrypted)) {
+			t.Fatal("opaque reasoning changed during prepared replay")
+		}
+		if err := replay.Close(); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

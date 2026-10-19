@@ -52,7 +52,8 @@ describe('Flower context failure recovery', () => {
     expect(card.textContent).not.toContain('private effect state');
     expect(card.textContent).not.toContain('must stay hidden');
     expect(card.querySelector('details')).toBeNull();
-    expect(card.querySelector('button')).toBeNull();
+    expect(card.textContent).not.toContain('Retry reply');
+    expect(card.querySelector('button')?.textContent).toContain('Inspect and continue');
   });
 });
 

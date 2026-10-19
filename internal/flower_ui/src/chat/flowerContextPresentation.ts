@@ -222,6 +222,6 @@ export function compactionDividerDetail(compaction: FlowerContextCompaction, cop
   const before = formatContextTokenCount(compaction.tokens_before);
   const after = formatContextTokenCount(compaction.tokens_after_estimate);
   const labels = copy.chat.compactionDivider ?? DEFAULT_FLOWER_SURFACE_COPY.chat.compactionDivider;
-  if (before && after) return labels.tokenChange(before, after);
+  if (compaction.status === 'compacted' && before && after) return labels.tokenChange(before, after);
   return trimString(compaction.error) || trimString(compaction.reason) || trimString(compaction.trigger);
 }
