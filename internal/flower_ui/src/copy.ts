@@ -512,6 +512,13 @@ export type FlowerSurfaceCopy = Readonly<{
     stopOutcomeUnknownTitle: string;
     stopOutcomeUnknownDescription: string;
     goalTitle: string;
+    goalReviewIncomplete: string;
+    goalReviewBlocked: string;
+    goalReviewChecked: string;
+    goalReviewFailed: string;
+    goalReviewUnavailable: string;
+    goalReviewCanceled: string;
+
     goalDescription: string;
     goalEmpty: string;
     goalSave: string;
@@ -960,6 +967,13 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     stopOutcomeUnknownTitle: "Stopped with unconfirmed results",
     stopOutcomeUnknownDescription: "Some operations may have completed. This turn will not be replayed automatically. Use Inspect and continue to check current state and continue in a new turn.",
     goalTitle: "Goal",
+    goalReviewIncomplete: "Goal not yet complete",
+    goalReviewBlocked: "Goal blocked",
+    goalReviewChecked: "Goal checked",
+    goalReviewFailed: "Goal check failed",
+    goalReviewUnavailable: "Goal check · Details unavailable",
+    goalReviewCanceled: "Goal check canceled",
+
     goalDescription: "Describe the result you want. Changes apply to the next model request.",
     goalEmpty: "Set a goal",
     goalSave: "Save goal",

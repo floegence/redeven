@@ -119,7 +119,7 @@ it('keeps failed Goal tools inspectable with the shared icon and never claims co
   await waitFor(() => Boolean(surface.querySelector('[data-flower-activity-item-id="goal-error"]')), 10000);
   const row = surface.querySelector<HTMLElement>('[data-flower-activity-item-id="goal-error"]')!;
   expect(row.querySelector('[data-flower-goal-icon]')).not.toBeNull();
-  expect(row.querySelector('.flower-activity-inline-title')?.textContent).toBe('Goal');
+  expect(row.querySelector('.flower-activity-inline-title')?.textContent).toBe('Goal check failed');
   expect(surface.querySelector('[data-flower-goal-change="completed"]')).toBeNull();
   await userEvent.click(row.querySelector('button')!);
   await waitFor(() => Boolean(row.textContent?.includes('The Goal changed before review.')));
@@ -425,4 +425,56 @@ it('preserves popup conflict edits without converting a save into submission', a
   await waitFor(() => manageGoal.mock.calls.length === 3);
   expect(manageGoal.mock.calls[2]![0]).toMatchObject({ operation: 'set', text: 'Preserved popup edit', expected_version: 4 });
   expect(surface.querySelector('.flower-goal-command-chip')).toBeNull();
+});
+
+it.each([['en-US', 1100, 'light'], ['zh-CN', 390, 'light'], ['en-US', 1100, 'dark'], ['zh-CN', 390, 'dark']] as const)('keeps %s Goal checks quiet and readable at %s px in %s mode', async (locale, width, theme) => {
+  await page.viewport(width, 850);
+  document.documentElement.classList.toggle('dark', theme === 'dark');
+  const i18n = createTestI18nHelpers(locale);
+  const copy = createLocalizedFlowerSurfaceCopy({ locale, t: (key, params) => i18n.t(key as EnvAppTranslationKey, params), tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params) });
+  const text = locale === 'zh-CN' ? '在本地启动 Redeven 开发环境，保留现有数据并验证服务可用。\n完整保留目标原文。' : 'Start the local development environment, preserve the existing data and verify availability.\nKeep the complete original goal.';
+  const evidence = locale === 'zh-CN' ? '等待你确认处理方式后继续。' : 'Waiting for your decision before continuing.';
+  const base = adapter(true), snapshot = thread({ messages: [], status: 'waiting_user', goal: { version: 2, status: 'active', text: 'A newer objective', actor: 'user' } });
+  const cases = [
+    { id: 'review-continue', status: 'success', goal: { operation: 'review', outcome: 'continue', text, evidence }, label: copy.chat.goalReviewIncomplete },
+    { id: 'review-blocked', status: 'success', goal: { operation: 'review', outcome: 'blocked', text, evidence }, label: copy.chat.goalReviewBlocked },
+    { id: 'review-completed', status: 'success', goal: { operation: 'review', outcome: 'completed', text, evidence }, label: copy.chat.goalReviewChecked },
+    { id: 'review-running', status: 'running', goal: { operation: 'review', text }, label: copy.chat.goalReviewing },
+    { id: 'review-missing', status: 'success', label: copy.chat.goalReviewUnavailable },
+  ] as const;
+  const current: FlowerRuntimeCurrentView = { ...liveBootstrap(snapshot, 20).current, activity: 'active', interactions: [{ id: 'input-1', turn_id: 'review-turn', run_id: 'review-run', kind: 'input', input: { summary: 'Choose how to continue', questions: [{ id: 'choice', header: 'Choice', prompt: 'Choose how to continue', kind: 'select', options: ['Preserve data', 'Pause'] }] } }], items: cases.map((test, index) => ({
+    id: test.id, ordinal: index + 1, canonical_ordinal: index + 1, kind: 'tool', turn_id: 'review-turn', run_id: 'review-run', activity: { item_id: test.id, tool_id: test.id, tool_name: 'goal', kind: 'tool', status: test.status, severity: 'quiet', needs_attention: false, requires_approval: false, started_at_unix_ms: 1, ended_at_unix_ms: test.status === 'running' ? undefined : 36, presentation: { renderer: 'structured', payload: 'goal' in test ? { goal: { version: 1, ...test.goal } } : { summary: 'Historical tool activity' } } },
+  })) };
+  const surface = renderSurfaceWithAdapterProps({ ...base, listThreads: async () => [snapshot], loadThread: async () => ({ thread: applyFlowerRuntimeCurrentView(snapshot, current), current }) }, { copy, focusThreadRequest: focus });
+  surface.style.cssText = 'width:100%;height:800px;position:relative;';
+  await waitFor(() => surface.querySelectorAll('.flower-activity-inline-row-goal').length === cases.length, 10000);
+  expect(surface.querySelector('[data-flower-goal-change="completed"]')).toBeNull();
+  for (const test of cases) {
+    const row = surface.querySelector<HTMLElement>('[data-flower-activity-item-id="' + test.id + '"]')!;
+    expect(row.querySelector('[data-flower-goal-icon]')).not.toBeNull();
+    expect(row.querySelector('.flower-activity-inline-title')?.textContent).toBe(test.label);
+    expect(test.label).not.toContain('flowerSurface.');
+    expect(getComputedStyle(row.closest('.flower-activity-inline')!).borderLeftWidth).toBe('0px');
+    expect(row.querySelector('.flower-activity-inline-duration')).toBeNull();
+    expect(row.querySelector('.flower-activity-inline-line')!.scrollWidth).toBeLessThanOrEqual(row.clientWidth + 1);
+    if (test.id === 'review-missing') {
+      expect(row.querySelector('button')).toBeNull();
+      expect(row.textContent).not.toContain('Historical tool activity');
+      continue;
+    }
+    const button = row.querySelector<HTMLButtonElement>('button')!;
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    button.focus(); await userEvent.keyboard('{Enter}');
+    await waitFor(() => Boolean(row.querySelector('.flower-goal-review-text')));
+    expect(row.querySelector('.flower-goal-review-text')?.textContent).toBe(text);
+    const body = row.querySelector('.flower-activity-inline-details-content')!;
+    expect(getComputedStyle(body).borderLeftWidth).toBe('0px');
+    expect(getComputedStyle(body).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    expect(body.textContent).not.toContain('A newer objective');
+    if ('evidence' in test.goal) expect(row.querySelector('.flower-goal-review-evidence')?.textContent).toBe(evidence);
+  }
+  surface.querySelectorAll<HTMLButtonElement>('.flower-activity-inline-row-goal button[aria-expanded="true"]').forEach(button => button.click());
+  await userEvent.click(surface.querySelector<HTMLButtonElement>('[data-flower-activity-item-id="review-continue"] button')!);
+  await userEvent.click(surface.querySelector<HTMLElement>('.flower-goal-review-text')!);
+  if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: surface, path: '__screenshots__/flower-goal-review-' + locale + '-' + theme + '.png' });
 });

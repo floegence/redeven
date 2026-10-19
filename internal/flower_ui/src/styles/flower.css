@@ -12534,3 +12534,18 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
   .flower-activity-inline-button:is(button):focus-visible,
   .flower-parent-event button:focus-visible { outline-color: Highlight; }
 }
+
+/* Goal reviews share the quiet, borderless Goal history treatment. */
+.flower-activity-inline-goal { border-left: 0; padding-left: 0; }
+.flower-activity-inline-row-goal .flower-activity-inline-button { grid-template-columns: 1rem minmax(0, 1fr) auto; }
+.flower-activity-inline-row-goal .flower-activity-inline-copy { flex: 1; overflow: hidden; flex-direction: row; align-items: baseline; }
+.flower-activity-inline-row-goal .flower-activity-inline-title { flex: none; width: auto; font-weight: 500; }
+.flower-activity-inline-row-goal .flower-activity-inline-detail { font-family: var(--font-sans); font-weight: 400; }
+.flower-activity-inline-row-goal .flower-activity-inline-detail::before { content: '·'; margin-right: 0.4rem; opacity: 0.5; }
+.flower-activity-inline-row-goal.flower-activity-inline-row-success .flower-activity-inline-icon { color: var(--muted-foreground); }
+.flower-activity-inline-row-goal:is([data-state='open'], [data-state='opening']) .flower-activity-inline-detail { visibility: hidden; }
+.flower-activity-inline-row-goal .flower-activity-inline-details-content { border: 0; padding: 0.125rem 0 0.625rem; background: transparent; box-shadow: none; }
+.flower-goal-review-body { display: grid; gap: 0.5rem; }
+.flower-goal-review-text, .flower-goal-review-evidence { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.8125rem; line-height: 1.65; }
+.flower-goal-review-text { color: var(--foreground); }
+.flower-goal-review-evidence { color: var(--muted-foreground); }

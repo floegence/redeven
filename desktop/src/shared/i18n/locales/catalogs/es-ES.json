@@ -798,7 +798,13 @@
       "goalSet": "Objetivo establecido",
       "goalDeleted": "Objetivo eliminado",
       "commandGoal": "Establecer un objetivo e iniciar o actualizar el trabajo",
-      "goalUnavailable": "La gestión de objetivos no está disponible en este entorno."
+      "goalUnavailable": "La gestión de objetivos no está disponible en este entorno.",
+      "goalReviewIncomplete": "Objetivo aún pendiente",
+      "goalReviewBlocked": "Objetivo bloqueado",
+      "goalReviewChecked": "Objetivo revisado",
+      "goalReviewFailed": "Error al revisar el objetivo",
+      "goalReviewUnavailable": "Revisión del objetivo · Sin detalles disponibles",
+      "goalReviewCanceled": "Revisión del objetivo cancelada"
     },
     "threadList": {
       "title": "Conversaciones",

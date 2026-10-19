@@ -203,6 +203,7 @@ export type FlowerActivitySubagentsDetail = Readonly<{
 }>;
 
 export type FlowerActivityDetailBlock =
+  | Readonly<{ kind: 'goal'; text: string; evidence: string }>
   | Readonly<{ kind: 'parent_report'; message: string; accepted: boolean; parentThreadID: string; eventID: string }>
   | Readonly<{ kind: 'image'; resource_ref: string; name: string }>
   | Readonly<{
@@ -284,6 +285,7 @@ type FlowerActivityPresentationCopy = Readonly<{
   statuses?: Readonly<Record<FlowerActivityItem['status'], string>>;
   subagents?: FlowerSubagentsCopy;
   subagentSummaries?: readonly FlowerSubagentSummary[];
+  goal?: Pick<typeof DEFAULT_FLOWER_SURFACE_COPY.chat, 'goalReviewing' | 'goalReviewIncomplete' | 'goalReviewBlocked' | 'goalReviewChecked' | 'goalReviewFailed' | 'goalReviewUnavailable' | 'goalReviewCanceled' | 'goalSet' | 'goalDeleted'>;
   terminal?: Readonly<{
     runCommand: string;
     readCommandOutput: string;
@@ -1614,7 +1616,31 @@ const FLOWER_ACTIVITY_RENDERERS: Readonly<Record<FlowerActivityRenderer, FlowerA
   browser: (item, context) => presentationForStructured(item, context.copy),
 };
 
+function presentationForGoal(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy): FlowerActivityPresentation {
+  const words = copy?.goal ?? DEFAULT_FLOWER_SURFACE_COPY.chat;
+  const raw = item.payload?.goal;
+  const goal = raw && typeof raw === 'object' ? raw as Record<string, unknown> : undefined;
+  const text = typeof goal?.text === 'string' ? goal.text : '';
+  const evidence = typeof goal?.evidence === 'string' ? goal.evidence : '';
+  const error = errorDetailBlockForItem(item, item.payload);
+  const active = item.status === 'pending' || item.status === 'running' || item.status === 'waiting';
+  const label = item.status === 'error' || item.status === 'declined' ? words.goalReviewFailed
+    : item.status === 'canceled' ? words.goalReviewCanceled
+    : active ? words.goalReviewing
+    : goal?.operation === 'review' && goal.outcome === 'continue' ? words.goalReviewIncomplete
+    : goal?.operation === 'review' && goal.outcome === 'blocked' ? words.goalReviewBlocked
+    : goal?.operation === 'review' && goal.outcome === 'completed' ? words.goalReviewChecked
+    : goal?.operation === 'set' && goal.applied === true && item.status === 'success' ? words.goalSet
+    : goal?.operation === 'delete' && goal.applied === true && item.status === 'success' ? words.goalDeleted
+    : words.goalReviewUnavailable;
+  const reason = error?.kind === 'error' ? error.error.message : evidence;
+  const meta = active ? '' : reason || (goal?.operation === 'set' ? text : '');
+  const detailBlocks: FlowerActivityDetailBlock[] = text || reason ? [{ kind: 'goal', text, evidence: reason }] : [];
+  return { label, title: { kind: 'plain', text: label }, meta, detailLines: [], detailBlocks, suppressEmptyDisclosure: true };
+}
+
 export function presentFlowerActivityItem(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy): FlowerActivityPresentation {
+  if (item.tool_name === 'goal') return presentationForGoal(item, copy);
   const renderer = rendererForItem(item);
   const result = FLOWER_ACTIVITY_RENDERERS[renderer](item, { copy });
   const words = copy?.tools ?? toolActivityEnUS;

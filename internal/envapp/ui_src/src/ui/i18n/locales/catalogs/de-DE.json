@@ -5697,7 +5697,13 @@
       "goalSet": "Ziel gesetzt",
       "goalDeleted": "Ziel gelöscht",
       "commandGoal": "Ziel setzen und Arbeit starten oder aktualisieren",
-      "goalUnavailable": "Die Zielverwaltung ist in dieser Umgebung nicht verfügbar."
+      "goalUnavailable": "Die Zielverwaltung ist in dieser Umgebung nicht verfügbar.",
+      "goalReviewIncomplete": "Ziel noch nicht erreicht",
+      "goalReviewBlocked": "Ziel blockiert",
+      "goalReviewChecked": "Ziel geprüft",
+      "goalReviewFailed": "Zielprüfung fehlgeschlagen",
+      "goalReviewUnavailable": "Zielprüfung · Keine Details verfügbar",
+      "goalReviewCanceled": "Zielprüfung abgebrochen"
     },
     "threadList": {
       "title": "Unterhaltungen",

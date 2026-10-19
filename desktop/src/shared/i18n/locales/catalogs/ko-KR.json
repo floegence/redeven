@@ -798,7 +798,13 @@
       "goalSet": "목표 설정됨",
       "goalDeleted": "목표 삭제됨",
       "commandGoal": "목표를 설정하여 작업 시작 또는 업데이트",
-      "goalUnavailable": "이 환경에서는 목표를 관리할 수 없습니다."
+      "goalUnavailable": "이 환경에서는 목표를 관리할 수 없습니다.",
+      "goalReviewIncomplete": "목표 미완료",
+      "goalReviewBlocked": "목표 진행이 막힘",
+      "goalReviewChecked": "목표 확인됨",
+      "goalReviewFailed": "목표 확인 실패",
+      "goalReviewUnavailable": "목표 확인 · 세부 정보 없음",
+      "goalReviewCanceled": "목표 확인 취소됨"
     },
     "threadList": {
       "title": "대화",

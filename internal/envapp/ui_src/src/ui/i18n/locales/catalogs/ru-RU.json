@@ -5806,7 +5806,13 @@
       "goalSet": "Цель задана",
       "goalDeleted": "Цель удалена",
       "commandGoal": "Задать цель и начать или обновить работу",
-      "goalUnavailable": "В этой среде управление целями недоступно."
+      "goalUnavailable": "В этой среде управление целями недоступно.",
+      "goalReviewIncomplete": "Цель ещё не достигнута",
+      "goalReviewBlocked": "Работа над целью заблокирована",
+      "goalReviewChecked": "Цель проверена",
+      "goalReviewFailed": "Не удалось проверить цель",
+      "goalReviewUnavailable": "Проверка цели · Подробности недоступны",
+      "goalReviewCanceled": "Проверка цели отменена"
     },
     "threadList": {
       "title": "Беседы",

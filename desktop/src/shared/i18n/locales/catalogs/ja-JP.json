@@ -798,7 +798,13 @@
       "goalSet": "目標を設定",
       "goalDeleted": "目標を削除",
       "commandGoal": "目標を設定して作業を開始・更新",
-      "goalUnavailable": "この環境では目標を管理できません。"
+      "goalUnavailable": "この環境では目標を管理できません。",
+      "goalReviewIncomplete": "目標は未達成です",
+      "goalReviewBlocked": "目標の達成が妨げられています",
+      "goalReviewChecked": "目標を確認しました",
+      "goalReviewFailed": "目標の確認に失敗しました",
+      "goalReviewUnavailable": "目標の確認 · 詳細情報なし",
+      "goalReviewCanceled": "目標の確認をキャンセルしました"
     },
     "threadList": {
       "title": "会話",
