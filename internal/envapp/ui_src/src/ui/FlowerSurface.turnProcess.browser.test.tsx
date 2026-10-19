@@ -37,6 +37,13 @@ function current(terminal = false, changes: Partial<FlowerRuntimeCurrentView> = 
     ], ...changes,
   };
 }
+function continued(stopped: FlowerRuntimeCurrentView): FlowerRuntimeCurrentView {
+  return { ...stopped, view_version: 3, activity: 'active', turn_id: 'next', run_id: 'next-run', last_outcome: undefined,
+    run_progress: { phase: 'streaming' },
+    turns: [...stopped.turns!, turn({ turn_id: 'next', run_id: 'next-run', ended_at: undefined, outcome: undefined, elapsed_ms: 0, waiting_ms: 0, work_duration_ms: 0, intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })],
+    items: [...stopped.items!, { id: 'next-user', turn_id: 'next', run_id: 'next-run', ordinal: 7, kind: 'user', text: 'Continue or retry the task' }],
+  };
+}
 function liveStream(initial: FlowerRuntimeCurrentView) {
   let latest = initial;
   const values: FlowerLiveStreamEnvelope[] = [];
@@ -357,6 +364,109 @@ describe('completed turn process disclosure', () => {
     expect(outcomeNotice()?.textContent).toBeTruthy();
     expect(root.querySelectorAll('.flower-run-error')).toHaveLength(outcome === 'cancelled' ? 0 : 1);
   });
+  it.each(['failed', 'cancelled', 'interrupted'] as const)('collapses default %s work when a newer ordinary turn starts', async outcome => {
+    const stopped = current(true, { last_outcome: outcome, turns: [turn({ outcome, final_item_ids: [], final_boundary_complete: false })] });
+    const { root, live } = await mount(stopped);
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
+    const partial = message(root, 'final-a');
+    live.push(continued(stopped));
+    await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'false');
+    expect(hidden(root, 'thinking')).toBe(true);
+    expect(hidden(root, 'tool')).toBe(true);
+    expect(hidden(root, 'progress')).toBe(true);
+    expect(hidden(root, 'final-a')).toBe(false);
+    expect(hidden(root, 'next-user')).toBe(false);
+    expect(message(root, 'final-a')).toBe(partial);
+    expect(root.querySelector('.flower-turn-ended')).not.toBeNull();
+    summary(root)!.click();
+    expect(hidden(root, 'tool')).toBe(false);
+  });
+  it.each(['selection', 'focus', 'tool', 'pointer', 'keyboard', 'menu', 'reading', 'manual-open', 'manual-collapse'] as const)('preserves %s inspection or choice when abnormal work becomes historical', async protection => {
+    const stopped = current(true, { last_outcome: 'failed', turns: [turn({ outcome: 'failed', final_item_ids: [], final_boundary_complete: false })] });
+    const { root, live } = await mount(stopped);
+    const process = message(root, 'progress');
+    if (protection === 'selection') {
+      (document.activeElement as HTMLElement | null)?.blur();
+      const range = document.createRange(); range.selectNodeContents(process);
+      document.getSelection()!.removeAllRanges(); document.getSelection()!.addRange(range);
+    } else if (protection === 'focus') { process.tabIndex = 0; process.focus(); }
+    else if (protection === 'tool') message(root, 'tool').querySelector<HTMLButtonElement>('button')!.click();
+    else if (protection === 'pointer') process.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    else if (protection === 'keyboard') process.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }));
+    else if (protection === 'menu') {
+      process.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+      const menu = document.createElement('div'); menu.setAttribute('role', 'menu'); root.append(menu);
+    } else if (protection === 'reading') root.querySelector('.flower-chat-transcript')!.dispatchEvent(new WheelEvent('wheel', { deltaY: -10, bubbles: true }));
+    else { summary(root)!.click(); if (protection === 'manual-open') summary(root)!.click(); }
+    live.push(continued(stopped));
+    await waitFor(() => Boolean(message(root, 'next-user')));
+    const expanded = protection !== 'manual-collapse';
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe(String(expanded));
+    expect(hidden(root, 'progress')).toBe(!expanded);
+    expect(message(root, 'progress')).toBe(process);
+    document.getSelection()?.removeAllRanges();
+    (document.activeElement as HTMLElement | null)?.blur();
+    root.querySelector('[role="menu"]')?.remove();
+    process.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+    process.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: 'Enter' }));
+    live.push({ ...live.current(), view_version: 4 });
+    await new Promise(resolve => setTimeout(resolve, 80));
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe(String(expanded));
+    root.querySelector<HTMLButtonElement>('[data-thread-id="peer"] button')!.click();
+    await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="m1"]')));
+    root.querySelector<HTMLButtonElement>('[data-thread-id="process"] button')!.click();
+    await waitFor(() => Boolean(summary(root)));
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe(String(expanded));
+    if (expanded) summary(root)!.click();
+    expect(hidden(root, 'progress')).toBe(true);
+  });
+  it('folds Goal tools and owned changes while keeping independent edits and the Goal editor reachable', async () => {
+    const done = current(true);
+    const goal = { version: 2, text: 'Verify the deployment', status: 'completed' as const, actor: 'model' as const };
+    const items = [
+      { id: 'independent-goal', kind: 'goal' as const, goal: { goal: { ...goal, version: 1, actor: 'user' as const, status: 'active' as const }, operation: 'set' as const, actor: 'user' as const, at: '2026-10-11T11:59:00Z' } },
+      done.items![0],
+      { id: 'goal-set', turn_id: 'turn', run_id: 'run', kind: 'goal' as const, goal: { goal: { ...goal, status: 'active' as const }, operation: 'set' as const, actor: 'model' as const, at: '2026-10-11T12:00:00Z' } },
+      ...done.items!.slice(1, 4).map(item => item.kind === 'tool' ? { ...item, activity: { item_id: 'tool', tool_id: 'tool', tool_name: 'goal', kind: 'tool', status: 'success', presentation: { label: 'Review Goal', renderer: 'structured', payload: { operation: 'review', status: 'completed' } } } } : item),
+      { id: 'goal-completed', turn_id: 'turn', run_id: 'run', kind: 'goal' as const, goal: { goal, operation: 'completed' as const, actor: 'model' as const, at: '2026-10-11T12:02:38Z' } },
+      ...done.items!.slice(4),
+    ].map((item, index) => ({ ...item, ordinal: index + 1 }));
+    const { root, live } = await mount({ ...done, items, goal });
+    const final = message(root, 'final-a');
+    const changes = [...root.querySelectorAll<HTMLElement>('[data-flower-goal-change]')];
+    expect(changes).toHaveLength(3);
+    expect(changes.map(row => row.closest('.flower-turn-row-viewport')?.getAttribute('aria-hidden'))).toEqual([null, 'true', 'true']);
+    expect(hidden(root, 'tool')).toBe(true);
+    expect(message(root, 'user').compareDocumentPosition(summary(root)!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const editor = root.querySelector<HTMLButtonElement>('.flower-goal-summary')!;
+    expect(editor.closest('[inert], [aria-hidden="true"]')).toBeNull();
+    editor.click();
+    await waitFor(() => Boolean(root.querySelector('.flower-goal-input')));
+    expect(root.querySelector('.flower-goal-input')?.closest('[inert], [aria-hidden="true"]')).toBeNull();
+    await userEvent.keyboard('{Escape}');
+    summary(root)!.click();
+    expect(changes.every(row => row.closest('.flower-turn-row-viewport')?.getAttribute('aria-hidden') !== 'true')).toBe(true);
+    const tool = message(root, 'tool');
+    tool.querySelector<HTMLButtonElement>('button')!.click();
+    const details = tool.querySelector('[aria-expanded="true"]');
+    expect(details).not.toBeNull();
+    summary(root)!.click();
+    live.push({ ...done, items, goal, view_version: 3 });
+    await new Promise(resolve => setTimeout(resolve, 80));
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
+    summary(root)!.click();
+    expect(message(root, 'tool')).toBe(tool);
+    expect(tool.querySelector('[aria-expanded="true"]')).toBe(details);
+    expect(message(root, 'final-a')).toBe(final);
+  });
+  it('does not supersede the latest failed turn for context compaction', async () => {
+    const stopped = current(true, { last_outcome: 'failed', turns: [turn({ outcome: 'failed', final_item_ids: [], final_boundary_complete: false })] });
+    const { root, live } = await mount(stopped);
+    live.push({ ...stopped, view_version: 3, turns: [...stopped.turns!, turn({ turn_id: 'compact', run_id: 'compact-run', kind: 'context_compaction', intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })] });
+    await new Promise(resolve => setTimeout(resolve, 80));
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
+    expect(hidden(root, 'progress')).toBe(false);
+  });
   it.each(['selection', 'focus', 'tool', 'pointer', 'keyboard', 'menu', 'reading'] as const)('protects %s inspection once at completion', async (protection) => {
     const { root, live } = await mount();
     const process = message(root, 'progress');
@@ -445,12 +555,14 @@ describe('completed turn process disclosure', () => {
     expect(Math.abs(final.getBoundingClientRect().top - top)).toBeLessThanOrEqual(1);
     expect(message(root, 'final-a')).toBe(final);
   });
-  it('retains an older stopped turn while a new successful turn collapses independently', async () => {
+  it('collapses historical stopped work independently of the latest successful turn', async () => {
     const done = current(true);
     const oldItems = done.items!.filter((item) => !item.id.startsWith('final-')).map((item) => ({ ...item, id: `old-${item.id}`, turn_id: 'old-turn', run_id: 'old-run' }));
     const { root } = await mount({ ...done, items: [...oldItems, ...done.items!], turns: [turn({ turn_id: 'old-turn', run_id: 'old-run', outcome: 'cancelled', intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false }), turn()] });
     expect(root.querySelectorAll('.flower-turn-summary-button')).toHaveLength(2);
-    expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
+    expect(hidden(root, 'old-thinking')).toBe(true);
+    expect(hidden(root, 'old-tool')).toBe(true);
     expect(hidden(root, 'old-progress')).toBe(false);
     expect(root.querySelector('.flower-turn-ended')?.textContent).toBe('Stopped');
     expect(hidden(root, 'progress')).toBe(true);
@@ -535,7 +647,7 @@ describe('completed turn process disclosure', () => {
     await new Promise((resolve) => setTimeout(resolve, 80));
     expect(message(root, 'final-a')).toBe(reloadedFinal);
   });
-  it('keeps legacy stopped work open while completed work defaults to collapsed in Desktop', async () => {
+  it('collapses historical stopped and successful work while preserving unknown Desktop replies', async () => {
     const done = current(true);
     const oldItems = done.items!.map((item) => ({ ...item, id: `old-${item.id}`, turn_id: 'old-turn', run_id: 'old-run' }));
     const { root } = await mount({ ...done, items: [...oldItems, ...done.items!], turns: [
@@ -544,10 +656,9 @@ describe('completed turn process disclosure', () => {
       turn({ elapsed_ms: 8541, waiting_ms: 0, work_duration_ms: 8541, ended_at: '2026-10-11T12:00:08.541Z', intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false }),
     ] });
     const buttons = [...root.querySelectorAll<HTMLButtonElement>('.flower-turn-summary-button')];
-    expect(buttons.map((button) => button.getAttribute('aria-expanded'))).toEqual(['true', 'false']);
+    expect(buttons.map((button) => button.getAttribute('aria-expanded'))).toEqual(['false', 'false']);
     expect(buttons[0].textContent).toContain('1 minute 31 seconds');
     expect(buttons[1].textContent).toContain('8 seconds');
-    buttons[0].click();
     expect(hidden(root, 'old-thinking')).toBe(true);
     expect(hidden(root, 'old-tool')).toBe(true);
     expect(hidden(root, 'old-final-a')).toBe(false);

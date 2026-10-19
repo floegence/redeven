@@ -3,12 +3,13 @@ import type { FlowerTurnDisclosurePolicy } from './flowerTurnPresentation';
 
 // Interface-lifetime state only. Canonical outcomes stay in ThreadCache.
 export function createFlowerTurnDisclosureStore() {
-  const choices = new Map<string, { settled: boolean; expanded: boolean }>();
+  const choices = new Map<string, { policy: FlowerTurnDisclosurePolicy; expanded: boolean; retained: boolean }>();
   const [revision, setRevision] = createSignal(0);
   return {
     settled(key: string): boolean {
       revision();
-      return choices.get(key)?.settled ?? false;
+      const choice = choices.get(key);
+      return Boolean(choice && choice.policy !== 'none');
     },
     expanded(key: string, policy: FlowerTurnDisclosurePolicy): boolean {
       revision();
@@ -16,27 +17,28 @@ export function createFlowerTurnDisclosureStore() {
     },
     observe(key: string, policy: FlowerTurnDisclosurePolicy, protect: () => boolean, beforeSettle?: (expanded: boolean) => void): boolean {
       const previous = choices.get(key);
-      if (previous?.settled) return false;
       if (policy === 'none') {
-        if (!previous) choices.set(key, { settled: false, expanded: true });
+        if (!previous) choices.set(key, { policy, expanded: true, retained: false });
         return false;
       }
-      const expanded = policy === 'manual' || Boolean(previous && protect());
+      if (previous?.retained || previous?.policy === policy) return false;
+      const retained = policy === 'automatic' && Boolean(previous && protect());
+      const expanded = policy === 'manual' || retained;
       if (previous) beforeSettle?.(expanded);
-      choices.set(key, { settled: true, expanded });
+      choices.set(key, { policy, expanded, retained });
       setRevision((value) => value + 1);
       return !expanded && Boolean(previous);
     },
     retainExpanded(key: string) {
       const previous = choices.get(key);
-      if (!previous?.settled || previous.expanded) return;
-      choices.set(key, { settled: true, expanded: true });
+      if (!previous || previous.policy === 'none' || previous.expanded && previous.retained) return;
+      choices.set(key, { ...previous, expanded: true, retained: true });
       setRevision((value) => value + 1);
     },
     toggle(key: string, policy: FlowerTurnDisclosurePolicy) {
       if (policy === 'none') return;
       const expanded = !(choices.get(key)?.expanded ?? policy !== 'automatic');
-      choices.set(key, { settled: true, expanded });
+      choices.set(key, { policy, expanded, retained: true });
       setRevision((value) => value + 1);
     },
   };

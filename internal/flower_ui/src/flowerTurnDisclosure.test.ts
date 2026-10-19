@@ -3,6 +3,18 @@ import { describe, expect, it, vi } from 'vitest';
 import { createFlowerTurnDisclosureStore } from './flowerTurnDisclosure';
 
 describe('turn disclosure interface state', () => {
+  it('reconsiders only default abnormal expansion when the turn becomes historical', () => createRoot(dispose => {
+    const store = createFlowerTurnDisclosureStore();
+    store.observe('old', 'manual', () => false);
+    const before = vi.fn();
+    expect(store.observe('old', 'automatic', () => false, before)).toBe(true);
+    expect(before).toHaveBeenCalledWith(false);
+    expect(store.expanded('old', 'automatic')).toBe(false);
+    store.observe('old', 'automatic', () => true);
+    expect(store.expanded('old', 'automatic')).toBe(false);
+    dispose();
+  }));
+
   it('retains newly foldable content being inspected without adding another disclosure state', () => createRoot((dispose) => {
     const store = createFlowerTurnDisclosureStore();
     store.observe('turn', 'automatic', () => false);
@@ -13,9 +25,46 @@ describe('turn disclosure interface state', () => {
     expect(store.expanded('turn', 'automatic')).toBe(true);
     store.toggle('turn', 'automatic');
     expect(store.expanded('turn', 'automatic')).toBe(false);
+    store.retainExpanded('turn');
+    expect(store.expanded('turn', 'automatic')).toBe(true);
     dispose();
   }));
-  it('defaults abnormal history to expanded and retains deliberate collapse when details change', () => createRoot((dispose) => {
+  it.each([false, true])('preserves explicit expanded=%s across a default policy change', expanded => createRoot(dispose => {
+    const store = createFlowerTurnDisclosureStore();
+    store.observe('turn', 'manual', () => false);
+    store.toggle('turn', 'manual');
+    if (expanded) store.toggle('turn', 'manual');
+    const protect = vi.fn(() => false);
+    store.observe('turn', 'automatic', protect);
+    expect(store.expanded('turn', 'automatic')).toBe(expanded);
+    expect(protect).not.toHaveBeenCalled();
+    dispose();
+  }));
+  it('checks reading protection once when default abnormal work becomes historical', () => createRoot(dispose => {
+    const store = createFlowerTurnDisclosureStore();
+    store.observe('turn', 'manual', () => false);
+    const protect = vi.fn(() => true);
+    store.observe('turn', 'automatic', protect);
+    expect(store.expanded('turn', 'automatic')).toBe(true);
+    protect.mockReturnValue(false);
+    store.observe('turn', 'automatic', protect);
+    expect(protect).toHaveBeenCalledOnce();
+    expect(store.expanded('turn', 'automatic')).toBe(true);
+    store.toggle('turn', 'automatic');
+    expect(store.expanded('turn', 'automatic')).toBe(false);
+    dispose();
+  }));
+  it('retains inspected content even while its default is already expanded', () => createRoot(dispose => {
+    const store = createFlowerTurnDisclosureStore();
+    store.observe('turn', 'manual', () => false);
+    store.retainExpanded('turn');
+    store.observe('turn', 'automatic', () => false);
+    expect(store.expanded('turn', 'automatic')).toBe(true);
+    store.toggle('turn', 'automatic');
+    expect(store.expanded('turn', 'automatic')).toBe(false);
+    dispose();
+  }));
+  it('defaults the latest abnormal turn to expanded and retains deliberate collapse when details change', () => createRoot((dispose) => {
     const store = createFlowerTurnDisclosureStore();
     const protect = vi.fn(() => false);
     expect(store.expanded('legacy', 'manual')).toBe(true);
@@ -40,8 +89,8 @@ describe('turn disclosure interface state', () => {
     expect(before).toHaveBeenCalledOnce();
     expect(protect).not.toHaveBeenCalled();
     expect(store.expanded('live', 'manual')).toBe(true);
-    store.observe('live', 'automatic', protect);
-    expect(store.expanded('live', 'automatic')).toBe(true);
+    store.observe('live', 'manual', protect);
+    expect(store.expanded('live', 'manual')).toBe(true);
     dispose();
   }));
   it('settles reading protection exactly once and preserves manual choices across navigation', () => createRoot((dispose) => {

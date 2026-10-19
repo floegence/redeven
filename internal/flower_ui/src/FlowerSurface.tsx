@@ -10408,6 +10408,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               type="button"
               class="flower-activity-inline-button"
               aria-expanded={open()}
+              data-flower-manual-open={openActivityRuns()[disclosureKey()] === true ? 'true' : undefined}
               aria-controls={`flower-activity-detail-${disclosureKey()}`}
               onClick={toggleDisclosure}
             >
