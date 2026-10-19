@@ -136,8 +136,8 @@ export function ParentEventRow(props: Readonly<{
     <div class="flower-parent-event-heading">
       <SubagentAvatar threadID={props.event.source_thread_id} class="flower-parent-event-avatar" />
       <Show when={report()}><span class="flower-parent-event-type">{props.copy.events.report}</span></Show>
-      <Show when={props.canOpenSource} fallback={<span class="flower-parent-event-source">{props.sourceName}</span>}>
-        <button type="button" class="flower-parent-event-source" onClick={props.onOpenSource}>{props.sourceName}</button>
+      <Show when={props.canOpenSource} fallback={<span class="flower-parent-event-source" title={props.sourceName}>{props.sourceName}</span>}>
+        <button type="button" class="flower-parent-event-source" title={props.sourceName} onClick={props.onOpenSource}>{props.sourceName}</button>
       </Show>
       <Show when={!report()}>
         <span class="flower-parent-event-status">

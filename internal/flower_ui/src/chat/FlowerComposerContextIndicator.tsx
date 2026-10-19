@@ -85,9 +85,10 @@ export function FlowerComposerContextIndicator(props: {
     const measure = () => {
       const rect = trigger!.getBoundingClientRect();
       const { width, height } = panel!.getBoundingClientRect();
+      const below = Math.max(rect.bottom, trigger!.closest('.flower-subagent-detail-overview')?.getBoundingClientRect().bottom ?? rect.bottom);
       setLayout({ size: { width, height }, position: {
         x: placement === 'below-start' ? rect.left : rect.right - width,
-        y: placement === 'below-start' ? rect.bottom + 8 : rect.top - height - 8,
+        y: placement === 'below-start' ? below + 8 : rect.top - height - 8,
       } });
     };
     measure();
@@ -152,7 +153,7 @@ export function FlowerComposerContextIndicator(props: {
           }
         }}
       />
-      <SurfaceFloatingLayer owner={anchor()} position={layout().position} estimatedSize={layout().size} class="flower-context-panel-layer" data-flower-floating-layer="true">
+      <SurfaceFloatingLayer owner={anchor()} boundary={anchor()?.closest<HTMLElement>('.flower-subagent-detail-window') ?? undefined} position={layout().position} estimatedSize={layout().size} class="flower-context-panel-layer" data-flower-floating-layer="true">
       <div
         ref={panel}
         on:keydown={escape}

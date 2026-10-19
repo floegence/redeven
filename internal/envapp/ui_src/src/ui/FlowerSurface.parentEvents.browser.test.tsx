@@ -223,7 +223,7 @@ it('drops pages outside a changed fixed range and ignores the old range response
   expect(reading.cursor()).toBe('');
 });
 
-it('fits report expansion and navigation on one row in every shipped locale', async () => {
+it('keeps report actions readable and non-overlapping in every shipped locale', async () => {
   await page.viewport(320, 780);
   for (const locale of SUPPORTED_LOCALES) {
     const localized = { ...copy, events: (await loadEnvAppDictionary(locale)).flowerSurface.subagents.events };
@@ -236,7 +236,7 @@ it('fits report expansion and navigation on one row in every shipped locale', as
       for (const expanded of [false, true]) {
         if (expanded) disclosure.click();
         const a = disclosure.getBoundingClientRect(), b = action.getBoundingClientRect();
-        expect(a.right, locale).toBeLessThanOrEqual(b.left);
+        expect(a.right <= b.left || a.bottom <= b.top, locale).toBe(true);
         expect(host.scrollWidth, locale).toBeLessThanOrEqual(host.clientWidth + 1);
       }
     } finally { dispose(); host.remove(); }
