@@ -98,6 +98,23 @@ func (service *Service) hydrateTimelineMessageTargets(ctx context.Context, meta 
 }
 
 func typedThreadItemMessage(threadID string, item flruntime.ThreadItem) (json.RawMessage, bool, error) {
+	raw, visible, err := typedThreadItemMessageBody(threadID, item)
+	if err != nil || !visible || item.CanonicalOrdinal == 0 {
+		return raw, visible, err
+	}
+	var message map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &message); err != nil {
+		return nil, false, err
+	}
+	message["canonical_ordinal"], err = json.Marshal(item.CanonicalOrdinal)
+	if err != nil {
+		return nil, false, err
+	}
+	raw, err = json.Marshal(message)
+	return raw, err == nil, err
+}
+
+func typedThreadItemMessageBody(threadID string, item flruntime.ThreadItem) (json.RawMessage, bool, error) {
 	threadID = strings.TrimSpace(threadID)
 	turnID := strings.TrimSpace(item.TurnID.String())
 	runID := strings.TrimSpace(item.RunID.String())

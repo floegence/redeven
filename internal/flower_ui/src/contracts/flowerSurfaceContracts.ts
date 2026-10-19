@@ -254,6 +254,7 @@ export type FlowerChatMessage = Readonly<{
   run_id?: string;
   logical_request_id?: string;
   turn_ordinal?: number;
+  canonical_ordinal?: number;
   sources?: readonly FlowerCitationSource[];
   role: FlowerChatMessageRole;
   content: string;
@@ -852,6 +853,7 @@ export type FlowerRuntimeCurrentItem = Readonly<{
   turn_id?: string;
   run_id?: string;
   ordinal: number;
+  canonical_ordinal?: number;
   kind: 'user' | 'steering' | 'thinking' | 'assistant' | 'tool' | 'interaction' | 'goal';
   goal?: FlowerGoalChange;
   steering?: FlowerChatMessage['steering'];
@@ -949,11 +951,13 @@ export type FlowerRuntimeTurn = Readonly<{
   elapsed_ms: number;
   waiting_ms: number;
   work_duration_ms: number;
+  intermediate_item_ids?: readonly string[];
   final_item_ids: readonly string[];
   final_boundary_complete: boolean;
 }>;
 
 export type FlowerParentEvent = Readonly<{
+  canonical_ordinal?: number;
   id: string; parent_thread_id: string; parent_turn_id?: string; source_thread_id: string; source_turn_id: string; source_run_id: string;
   source_entry_id: string; kind: 'report' | 'completed' | 'failed' | 'cancelled' | 'interrupted' | 'timed_out' | 'input_required' | 'approval_required';
   reason_code?: string; interaction_id?: string; message?: string; received_at: string; admitted: boolean; resolved?: boolean;

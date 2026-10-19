@@ -3,6 +3,9 @@ import type { FlowerRuntimeCurrentView, FlowerThreadSnapshot, FlowerToolCallPrev
 import { buildFlowerTimelineEntries, flowerMessageSignature } from './flowerTimelineProjection';
 import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
 import { createThreadCache } from './threadCache';
+import { canonicalProcessFixture } from './flowerCanonicalProcess.testFixture';
+import { projectFlowerTurnProcess } from './flowerTurnPresentation';
+import { mapFlowerMessage } from './flowerLiveMapper';
 
 const summary = (): FlowerThreadSnapshot => ({
   thread_id: 'thread-a', title: 'Product title', title_status: 'ready', title_generation: 1, model_id: 'deepseek/chat', working_dir: '/',
@@ -989,4 +992,30 @@ it('renders Goal facts before the first Turn and preserves their control identit
   const entries = buildFlowerTimelineEntries(next);
   expect(entries).toHaveLength(1);
   expect(entries[0]).toMatchObject({ type: 'message', message: { goal: change } });
+});
+
+describe('canonical original and Fork process regression', () => {
+  it.each([0, 1, 2])('keeps the user before all six child dynamics and both intermediate bodies at Fork depth %s', depth => {
+    const current = canonicalProcessFixture(depth);
+    const snapshot = applyFlowerRuntimeCurrentView({ ...summary(), thread_id: current.thread_id, messages: [] }, current);
+    const entries = buildFlowerTimelineEntries(snapshot);
+    const group = projectFlowerTurnProcess(entries, snapshot.turns).groups.get('research-turn')!;
+    expect(entries[0]).toMatchObject({ type: 'message', message: { id: 'research-user' } });
+    expect(entries.findIndex(row => row.key === group.summaryKey)).toBe(1);
+    expect(group.disclosure).toBe('manual');
+    expect(group.parentEventCount).toBe(6);
+    expect(group.processKeys).toHaveLength(10);
+    expect(entries.filter(row => row.type === 'message' || row.type === 'parent_event').map(row => row.type === 'message' ? row.message.canonical_ordinal : row.event.canonical_ordinal))
+      .toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    expect(new Set(entries.map(row => row.key)).size).toBe(entries.length);
+    expect(snapshot.messages.every(message => mapFlowerMessage({ ...message, timestamp: message.created_at_ms }).canonical_ordinal === message.canonical_ordinal)).toBe(true);
+  });
+  it.each(['overlap', 'wrong-run', 'out-of-order', 'duplicate', 'missing'] as const)('rejects %s intermediate authority before cache admission', invalid => {
+    const current = canonicalProcessFixture();
+    const references = invalid === 'out-of-order' ? ['research-progress', 'research-intro'] : invalid === 'duplicate' ? ['research-intro', 'research-intro'] : invalid === 'missing' ? ['missing'] : ['research-intro'];
+    const turns = [{ ...current.turns![0], intermediate_item_ids: references,
+      ...(invalid === 'overlap' ? { outcome: 'completed' as const, final_item_ids: ['research-intro'], final_boundary_complete: true } : {}) }];
+    const items = current.items!.map(item => invalid === 'wrong-run' && item.id === 'research-intro' ? { ...item, run_id: 'foreign-run' } : item);
+    expect(() => applyFlowerRuntimeCurrentView({ ...summary(), thread_id: current.thread_id }, { ...current, items, turns })).toThrow(/canonical turn presentation/);
+  });
 });

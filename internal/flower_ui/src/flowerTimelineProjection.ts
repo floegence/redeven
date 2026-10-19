@@ -154,6 +154,7 @@ export function flowerMessageSignature(message: FlowerChatMessage): string {
     JSON.stringify(message.sources ?? []),
     message.status,
     String(message.created_at_ms),
+    String(message.canonical_ordinal ?? ''),
     message.blocks?.map(messageBlockSignature).join('\x1d') ?? '',
     message.references?.map((reference) => [
       reference.reference_id,
@@ -498,6 +499,7 @@ export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null |
     decorationProjections.set(sourceDecorations, decorations);
   }
   const seenMessageIDs = new Set<string>();
+  const positions = new Map<string, number>();
   const entries: FlowerTimelineEntry[] = thread.messages.flatMap((message): readonly FlowerTimelineEntry[] => {
     const messageID = trimString(message.id);
     if (!messageID || seenMessageIDs.has(messageID)) return [];
@@ -505,33 +507,33 @@ export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null |
     const activeCursor = message.id === activeCursorMessageID;
     const prior = messageProjections.get(message);
     if (prior && prior.threadID === thread.thread_id && prior.activeCursor === activeCursor
-      && prior.decorations === sourceDecorations) return prior.entries;
+      && prior.decorations === sourceDecorations) {
+      if (message.canonical_ordinal !== undefined) for (const entry of prior.entries) positions.set(entry.key, message.canonical_ordinal);
+      return prior.entries;
+    }
     const projectedMessage = activeCursor === message.active_cursor
       ? message
       : { ...message, active_cursor: activeCursor };
     const entries = messageTimelineEntries(thread.thread_id, projectedMessage, decorations);
+    if (message.canonical_ordinal !== undefined) for (const entry of entries) positions.set(entry.key, message.canonical_ordinal);
     messageProjections.set(message, { threadID: thread.thread_id, activeCursor, decorations: sourceDecorations, entries });
     return entries;
   });
-  // Insert observations without reordering canonical messages or their decorations.
+  // Canonical Path positions order messages, their anchored decorations and
+  // receipts together. Uncommitted tail rows retain their original order.
   const seenEvents = new Set<string>();
-  const eventEntries: Extract<FlowerTimelineEntry, { type: 'parent_event' }>[] = parentEvents.flatMap(event => {
-    if (seenEvents.has(event.id)) return [];
+  for (const event of parentEvents) {
+    if (seenEvents.has(event.id)) continue;
     seenEvents.add(event.id);
-    return [{ type: 'parent_event' as const, key: `parent-event:${event.id}`, event }];
-  }).sort((left, right) => Date.parse(left.event.received_at) - Date.parse(right.event.received_at));
-  let eventIndex = 0;
-  const chronological: FlowerTimelineEntry[] = [];
-  for (const entry of entries) {
-    if (entry.type === 'message') {
-      while (eventIndex < eventEntries.length && Date.parse(eventEntries[eventIndex].event.received_at) <= entry.message.created_at_ms) {
-        chronological.push(eventEntries[eventIndex++]);
-      }
-    }
-    chronological.push(entry);
+    const key = 'parent-event:' + event.id;
+    if (event.canonical_ordinal !== undefined) positions.set(key, event.canonical_ordinal);
+    entries.push({ type: 'parent_event', key, event });
   }
-  chronological.push(...eventEntries.slice(eventIndex));
-  entries.splice(0, entries.length, ...chronological);
+  entries.sort((left, right) => {
+    const a = positions.get(left.key), b = positions.get(right.key);
+    return a === undefined ? b === undefined ? 0 : 1 : b === undefined ? -1 : a - b;
+  });
+
   const queuedIDs = new Set<string>();
   for (const turn of thread.queued_turns ?? []) {
     const queueID = trimString(turn.queue_id);

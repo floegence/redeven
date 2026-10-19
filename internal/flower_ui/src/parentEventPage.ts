@@ -19,7 +19,8 @@ export function validateParentEventPage(value: unknown, threadID: string, query?
   for (const raw of page.events) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return invalid();
     const event = raw as Record<string, unknown>;
-    if (identityFields.some(field => !nonempty(event[field]))
+    if ((event.canonical_ordinal !== undefined && (!Number.isSafeInteger(event.canonical_ordinal) || Number(event.canonical_ordinal) < 1))
+      || identityFields.some(field => !nonempty(event[field]))
       || typeof event.kind !== 'string' || !kinds.has(event.kind) || !nonempty(event.received_at) || !Number.isFinite(Date.parse(event.received_at))
       || typeof event.admitted !== 'boolean' || (event.resolved !== undefined && typeof event.resolved !== 'boolean')
       || (event.message !== undefined && typeof event.message !== 'string') || seen.has(event.id as string)) return invalid();

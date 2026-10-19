@@ -21,12 +21,6 @@ export type FlowerTurnProcessProjection = Readonly<{
 
 export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[], turns: readonly FlowerRuntimeTurn[] = [], pendingTurnIDs: readonly string[] = []): FlowerTurnProcessProjection {
   const facts = new Map(turns.map((turn) => [turn.turn_id, turn]));
-  const messages = new Map(entries.flatMap((entry) => entry.type === 'message' ? [[entry.message.id, entry] as const] : []));
-  const completeBoundaries = new Set(turns.filter((turn) => turn.outcome === 'completed'
-    && turn.final_boundary_complete && turn.final_item_ids.length > 0 && turn.final_item_ids.every((id) => {
-      const item = messages.get(id)?.message;
-      return item?.role === 'assistant' && item.turn_id === turn.turn_id && item.run_id === turn.run_id;
-    })).map((turn) => turn.turn_id));
   const groups = new Map<string, string[]>();
   const rowTurns = new Map<string, string>();
   const eventCounts = new Map<string, number>();
@@ -51,11 +45,13 @@ export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[]
     terminalKeys.set(id, entry.key);
     const final = facts.get(id)?.final_item_ids.includes(entry.message.id);
     const dialogue = entry.message.role !== 'assistant' || entry.blocks.some((block) => block.type === 'input_response');
-    // Without an exact final boundary, assistant prose may contain a conclusion.
-    // Only exclusively typed process blocks are safe to hide.
+    // Only the canonical owner can classify prose as superseded. Unknown and
+    // trailing partial output stay visible regardless of terminal outcome.
+    const intermediate = facts.get(id)?.run_id === entry.message.run_id
+      && facts.get(id)?.intermediate_item_ids?.includes(entry.message.id) && !entry.message.live;
     const explicitProcess = entry.blocks.length > 0 && entry.blocks.every((block) => block.type === 'activity'
       || block.type === 'content' && block.block_type === 'thinking');
-    if (!final && !dialogue && (completeBoundaries.has(id) || explicitProcess)) groups.get(id)!.push(entry.key);
+    if (!final && !dialogue && (intermediate || explicitProcess)) groups.get(id)!.push(entry.key);
   }
   const projected = new Map([...groups].map(([turnID, processKeys]) => {
     const turn = facts.get(turnID);

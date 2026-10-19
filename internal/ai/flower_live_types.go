@@ -302,6 +302,7 @@ func (decoration *FlowerTimelineDecoration) UnmarshalJSON(data []byte) error {
 }
 
 type FlowerTimelineMessage struct {
+	CanonicalOrdinal uint64                   `json:"canonical_ordinal,omitempty"`
 	MessageID        string                   `json:"id"`
 	ThreadID         string                   `json:"thread_id"`
 	TurnID           string                   `json:"turn_id"`

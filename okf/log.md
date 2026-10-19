@@ -1956,3 +1956,7 @@ characters and recent cache. Remove token residual/scaling and unused telemetry
 paths. Qualify actual frozen bodies independently, real official-account calls,
 Runtime restart, and compact-panel recovery. See the
 [qualification record](operations/flower-context-distribution-qualification.md).
+
+## 2026-10-18 — Canonical Flower process order
+
+- Adopted published Floret v7.61.0 source positions and intermediate response references. Removed timestamp-based event insertion and client final-boundary inference. Added original/nested Fork regression and interaction coverage; preserve final and trailing partial replies, unresolved controls and reading protection.

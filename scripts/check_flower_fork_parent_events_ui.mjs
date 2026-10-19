@@ -47,6 +47,15 @@ try {
   await page.goto(url + '/?thread=' + setup.source);
   const sourceCard = page.locator('[data-thread-id="' + setup.source + '"]');
   await sourceCard.locator('.flower-thread-card-menu-button').waitFor();
+  const process = page.locator('.flower-turn-summary-button');
+  await process.waitFor();
+  const assertOrder = async () => assert.equal(await page.evaluate(() => {
+    const user = document.querySelector('[data-flower-message-role="user"], .flower-chat-message-user');
+    const summary = document.querySelector('.flower-turn-summary-button');
+    return Boolean(user && summary && (user.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING));
+  }), true, 'summary must follow the user message');
+  await assertOrder();
+  if (await process.getAttribute('aria-expanded') === 'false') await process.click();
   const sourceBody = page.locator('[data-parent-event-kind="report"] [data-parent-event-body]');
   await sourceBody.waitFor();
   assert.equal(await sourceBody.textContent(), setup.report);
@@ -63,6 +72,9 @@ try {
   assert.equal(await page.locator('.flower-thread-load-error').count(), 0);
   assert.equal(await page.locator('.flower-composer textarea').isEnabled(), true);
   await page.locator('.flower-parent-event-reading').getByRole('button', { name: 'Retry', exact: true }).click();
+  await process.waitFor();
+  await assertOrder();
+  if (await process.getAttribute('aria-expanded') === 'false') await process.click();
   const body = page.locator('[data-parent-event-kind="report"] [data-parent-event-body]');
   await body.waitFor();
   assert.equal(await body.textContent(), setup.report);
@@ -78,6 +90,9 @@ try {
   assert.equal(before.child_requests, 2);
   await api('restart');
   await page.goto(url + '/?thread=' + forkID);
+  await process.waitFor();
+  await assertOrder();
+  if (await process.getAttribute('aria-expanded') === 'false') await process.click();
   await body.waitFor();
   assert.equal(await body.textContent(), setup.report);
   await page.locator('[data-thread-id="' + setup.source + '"] .flower-thread-card-select-button').click();
