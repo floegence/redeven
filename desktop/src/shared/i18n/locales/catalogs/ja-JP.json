@@ -797,8 +797,6 @@
       "goalCompleted": "目標を達成",
       "goalSet": "目標を設定",
       "goalDeleted": "目標を削除",
-      "goalActorUser": "あなた",
-      "goalActorModel": "モデル",
       "commandGoal": "目標を設定して作業を開始・更新",
       "goalUnavailable": "この環境では目標を管理できません。"
     },

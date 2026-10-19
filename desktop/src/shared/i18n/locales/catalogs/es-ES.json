@@ -797,8 +797,6 @@
       "goalCompleted": "Objetivo completado",
       "goalSet": "Objetivo establecido",
       "goalDeleted": "Objetivo eliminado",
-      "goalActorUser": "Tú",
-      "goalActorModel": "Modelo",
       "commandGoal": "Establecer un objetivo e iniciar o actualizar el trabajo",
       "goalUnavailable": "La gestión de objetivos no está disponible en este entorno."
     },

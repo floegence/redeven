@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-18 — Goal history without source labels
+
+- Keep expanded [Goal history](ai/flower-goals.md) focused on the original objective. Remove user and model source labels from the presentation while preserving canonical actor metadata.
+
 ## 2026-10-18 — Borderless Goal surfaces
 
 - Use a softly tinted rounded-rectangle [Goal badge](ai/flower-goals.md), a borderless elevated editor and inline history expansion. Preserve individual keyboard focus, full Goal text and existing edit and execution contracts.

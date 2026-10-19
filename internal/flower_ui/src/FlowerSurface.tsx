@@ -11047,7 +11047,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           </summary>
           <div class="flower-goal-history-body">
             <p class="flower-goal-history-text">{message().goal?.goal.text || message().goal?.reason}</p>
-            <span class="flower-goal-history-actor">{message().goal?.actor === 'user' ? copy().chat.goalActorUser : copy().chat.goalActorModel}</span>
           </div>
         </details>}>
         <div

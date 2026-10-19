@@ -797,8 +797,6 @@
       "goalCompleted": "已完成目標",
       "goalSet": "已設定目標",
       "goalDeleted": "已刪除目標",
-      "goalActorUser": "你",
-      "goalActorModel": "模型",
       "commandGoal": "設定目標，開始或更新任務",
       "goalUnavailable": "目前環境無法管理目標。"
     },
