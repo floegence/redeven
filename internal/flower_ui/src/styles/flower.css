@@ -1140,6 +1140,18 @@
   overflow: hidden;
 }
 
+.flower-chat-shell, .flower-subagent-detail-window, .flower-subagents-dropdown {
+  --flower-reading-title: color-mix(in srgb, var(--foreground) 82%, var(--muted-foreground) 18%);
+  --flower-reading-secondary: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);
+  --flower-reading-report: color-mix(in srgb, var(--foreground) 92%, var(--muted-foreground) 8%);
+  --flower-reading-success: color-mix(in srgb, var(--success) 45%, var(--foreground) 55%);
+  --flower-reading-warning: color-mix(in srgb, var(--warning) 45%, var(--foreground) 55%);
+  --flower-reading-error: color-mix(in srgb, var(--error) 45%, var(--foreground) 55%);
+  --flower-subagents-success: var(--flower-reading-success);
+  --flower-subagents-warning: var(--flower-reading-warning);
+  --flower-subagents-danger: var(--flower-reading-error);
+}
+
 .flower-chat-shell {
   container: flower-chat / inline-size;
   --flower-chat-surface: var(--redeven-surface-main, var(--background));
@@ -5208,14 +5220,19 @@ button.flower-composer-context-source:focus-visible,
   max-width: 100%;
   overflow-x: auto;
   border-collapse: collapse;
-  font-size: 0.9333em;
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
 }
 
 .flower-chat-md-block :is(th, td) {
   border: 0;
-  padding: 0.65rem 0.875rem;
+  padding: 0.5rem 0.75rem;
   text-align: left;
   vertical-align: top;
+}
+
+.flower-message-bubble-assistant .flower-chat-md-block :is(th, td) .flower-chat-md-inline-code {
+  font-size: 0.96em;
 }
 
 .flower-chat-md-block th {
@@ -5693,12 +5710,12 @@ button.flower-composer-context-source:focus-visible,
 }
 
 .flower-activity-inline {
-  --flower-activity-tool-row-foreground: var(--redeven-chat-muted);
-  --flower-activity-tool-row-foreground-strong: color-mix(in srgb, var(--redeven-chat-text) 72%, var(--redeven-chat-muted) 28%);
-  --flower-activity-tool-row-foreground-complete: color-mix(in srgb, var(--redeven-chat-muted) 84%, var(--redeven-chat-text) 16%);
+  --flower-activity-tool-row-foreground: var(--flower-reading-title);
+  --flower-activity-tool-row-foreground-strong: var(--foreground);
+  --flower-activity-tool-row-foreground-complete: var(--flower-reading-title);
   --flower-activity-tool-row-soft: color-mix(in srgb, var(--redeven-chat-muted) 11%, transparent);
-  --flower-activity-tool-row-ok: var(--redeven-status-success-foreground);
-  --flower-activity-tool-row-error: var(--redeven-status-error-foreground);
+  --flower-activity-tool-row-ok: var(--flower-reading-success);
+  --flower-activity-tool-row-error: var(--flower-reading-error);
   display: grid;
   width: 100%;
   min-width: 0;
@@ -5727,7 +5744,7 @@ button.flower-composer-context-source:focus-visible,
   display: grid;
   width: 100%;
   min-width: 0;
-  min-height: 1.75rem;
+  min-height: 2rem;
   grid-template-columns: 1rem minmax(0, 1fr) auto 1rem;
   align-items: center;
   gap: 0.42rem;
@@ -5753,7 +5770,11 @@ button.flower-composer-context-source:focus-visible,
 .flower-activity-inline-button:is(button):hover,
 .flower-activity-inline-button:is(button):focus-visible {
   background: var(--flower-activity-tool-row-soft);
-  outline: none;
+}
+
+.flower-activity-inline-button:is(button):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
 }
 
 .flower-activity-structured-rows {
@@ -5855,8 +5876,8 @@ button.flower-composer-context-source:focus-visible,
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.6875rem;
-  line-height: 1.45;
+  font-size: 0.75rem;
+  line-height: 1.25rem;
 }
 
 .flower-activity-structured-row[data-script='true'] {
@@ -5913,14 +5934,14 @@ button.flower-composer-context-source:focus-visible,
   min-width: 0;
   overflow-wrap: anywhere;
   color: var(--flower-activity-tool-row-foreground-strong);
-  font-size: 0.78rem;
+  font-size: 0.8125rem;
   font-weight: 650;
 }
 
 .flower-activity-structured-row-heading span {
   flex: 0 1 auto;
   color: var(--flower-activity-tool-row-foreground);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   text-align: right;
 }
 
@@ -6186,7 +6207,7 @@ button.flower-composer-context-source:focus-visible,
 }
 
 .flower-activity-inline-row-pending .flower-activity-inline-icon {
-  color: var(--redeven-status-warning-foreground);
+  color: var(--flower-reading-warning);
 }
 
 .flower-activity-inline-row-success .flower-activity-inline-icon {
@@ -6202,7 +6223,7 @@ button.flower-composer-context-source:focus-visible,
 }
 
 .flower-activity-inline-row-canceled .flower-activity-inline-icon {
-  color: var(--destructive);
+  color: var(--flower-reading-secondary);
 }
 
 .flower-activity-inline-row-canceled[data-flower-activity-approval-state='rejected'] .flower-activity-inline-icon,
@@ -6239,10 +6260,10 @@ button.flower-composer-context-source:focus-visible,
   overflow: hidden;
   color: currentColor;
   font-family: var(--font-sans);
-  font-size: var(--floe-type-control);
+  font-size: 0.8125rem;
   font-weight: 500;
   letter-spacing: 0;
-  line-height: var(--floe-line-control);
+  line-height: 1.25rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -6269,20 +6290,20 @@ button.flower-composer-context-source:focus-visible,
 
 .flower-activity-web-fetch-title-url {
   flex: 1 1 auto;
-  color: color-mix(in srgb, currentColor 84%, transparent);
+  color: var(--flower-reading-secondary);
 }
 
 .flower-activity-inline-detail {
   min-width: 0;
   overflow: hidden;
-  color: currentColor;
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color: var(--flower-reading-secondary);
+  font-family: var(--font-sans, inherit);
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.6875rem;
-  font-weight: 500;
+  font-size: 0.75rem;
+  font-weight: 400;
   letter-spacing: 0;
-  line-height: 1.25;
+  line-height: 1.125rem;
 }
 
 .flower-activity-inline-change-stats {
@@ -6291,19 +6312,19 @@ button.flower-composer-context-source:focus-visible,
   align-items: center;
   color: currentColor;
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 0.6875rem;
-  font-weight: 500;
-  line-height: 1.25;
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.125rem;
   white-space: nowrap;
 }
 
 .flower-activity-inline-duration {
-  color: currentColor;
+  color: var(--flower-reading-secondary);
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 0.6875rem;
-  font-weight: 500;
+  font-size: 0.75rem;
+  font-weight: 400;
   letter-spacing: 0;
-  line-height: 1;
+  line-height: 1.125rem;
   white-space: nowrap;
 }
 
@@ -6344,8 +6365,8 @@ button.flower-composer-context-source:focus-visible,
 }
 
 .flower-activity-inline-row-subagents .flower-activity-inline-detail {
-  color: color-mix(in srgb, var(--muted-foreground) 86%, var(--foreground) 14%);
-  font-weight: 520;
+  color: var(--flower-reading-secondary);
+  font-weight: 400;
 }
 
 .flower-activity-waiting-clock {
@@ -6413,10 +6434,10 @@ button.flower-composer-context-source:focus-visible,
   min-width: 0;
   margin: 0 0 0 1.375rem;
   overflow: hidden;
-  color: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);
+  color: var(--flower-reading-secondary);
   font-family: var(--font-sans, inherit);
-  font-size: 0.6875rem;
-  line-height: 1.45;
+  font-size: 0.75rem;
+  line-height: 1.25rem;
   opacity: 0;
   overflow-wrap: anywhere;
   transform: translateY(-0.125rem);
@@ -6467,10 +6488,10 @@ button.flower-composer-context-source:focus-visible,
 }
 
 .flower-activity-inline-detail-key {
-  color: color-mix(in srgb, var(--muted-foreground) 72%, transparent);
+  color: var(--flower-reading-secondary);
   font-family: var(--font-sans, inherit);
-  font-weight: 700;
-  text-transform: uppercase;
+  font-weight: 500;
+  text-transform: none;
 }
 
 .flower-activity-inline-detail-value {
@@ -6490,16 +6511,16 @@ button.flower-composer-context-source:focus-visible,
 }
 
 .flower-activity-error-panel {
-  border-left: 2px solid color-mix(in srgb, var(--destructive) 62%, transparent);
+  border-left: 2px solid var(--flower-reading-error);
   padding: 0.125rem 0 0.125rem 0.5rem;
 }
 
 .flower-activity-error-message {
   min-width: 0;
-  color: color-mix(in srgb, var(--foreground) 84%, var(--destructive) 16%);
-  font-size: 0.75rem;
-  font-weight: 650;
-  line-height: 1.4;
+  color: var(--flower-reading-error);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.3125rem;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -6510,8 +6531,8 @@ button.flower-composer-context-source:focus-visible,
   align-items: center;
   gap: 0.35rem;
   color: color-mix(in srgb, var(--foreground) 68%, var(--muted-foreground) 32%);
-  font-size: 0.6875rem;
-  line-height: 1.35;
+  font-size: 0.75rem;
+  line-height: 1.25rem;
 }
 
 .flower-activity-error-chip,
@@ -6520,14 +6541,16 @@ button.flower-composer-context-source:focus-visible,
   border-radius: 999px;
   padding: 0.1rem 0.35rem;
   font-family: var(--font-mono, monospace);
-  font-size: 0.625rem;
+  font-size: 0.75rem;
+  line-height: 1.25rem;
 }
 
 .flower-activity-error-repair,
 .flower-activity-error-targets {
   color: color-mix(in srgb, var(--foreground) 72%, var(--muted-foreground) 28%);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   overflow-wrap: anywhere;
+  line-height: 1.25rem;
 }
 
 .flower-activity-inline-row[data-flower-control-error='true'] .flower-activity-error-panel {
@@ -9688,9 +9711,6 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-subagents-dropdown {
   --flower-subagents-panel-elevated: var(--redeven-surface-panel-elevated, var(--card));
   --flower-subagents-border: var(--redeven-surface-panel-border, var(--border));
-  --flower-subagents-success: var(--redeven-status-success);
-  --flower-subagents-warning: var(--redeven-status-warning);
-  --flower-subagents-danger: var(--redeven-status-error);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   width: clamp(22rem, 28vw, 25rem);
@@ -9737,8 +9757,8 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 .flower-subagents-dropdown-count {
-  color: var(--muted-foreground);
-  font-size: 0.6875rem;
+  color: var(--flower-reading-secondary);
+  font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
   font-weight: 400;
 }
@@ -9747,8 +9767,8 @@ button.flower-attachment-preview-trigger:disabled {
   display: inline-flex;
   align-items: center;
   gap: 0.3125rem;
-  color: var(--muted-foreground);
-  font-size: 0.6875rem;
+  color: var(--flower-reading-secondary);
+  font-size: 0.75rem;
   white-space: nowrap;
 }
 
@@ -9763,31 +9783,34 @@ button.flower-attachment-preview-trigger:disabled {
   scrollbar-width: thin;
 }
 
-.flower-parent-event { min-width: 0; margin-block: 0.25rem; font-size: var(--floe-type-caption); }
+.flower-parent-event { min-width: 0; margin-block: 0.25rem; font-size: 0.75rem; line-height: 1.125rem; }
 .flower-parent-event-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 0.375rem; min-width: 0; }
 .flower-subagent-avatar.flower-parent-event-avatar { width: 1.25rem; height: 1.25rem; }
 .flower-parent-event-type { color: var(--foreground); white-space: nowrap; }
-.flower-parent-event-source { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); }
+.flower-parent-event-source { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--flower-reading-secondary); }
 .flower-parent-event button { cursor: pointer; }
 .flower-parent-event button:disabled { cursor: default; opacity: 0.5; }
 .flower-parent-event-source:is(button):hover, .flower-parent-event-action:hover { color: var(--foreground); text-decoration: underline; text-underline-offset: 3px; }
-.flower-parent-event-heading time { margin-left: auto; flex-shrink: 0; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
-.flower-parent-event-status { display: inline-flex; align-items: center; gap: 0.25rem; white-space: nowrap; }
-.flower-parent-event-status svg { width: 0.75rem; height: 0.75rem; color: var(--muted-foreground); }
-.flower-parent-event[data-parent-event-kind='failed'] .flower-parent-event-status svg,
-.flower-parent-event[data-parent-event-kind='timed_out'] .flower-parent-event-status svg { color: var(--destructive); }
-.flower-parent-event[data-parent-event-kind='completed'] .flower-parent-event-status svg { color: var(--success); }
+.flower-parent-event-heading time { margin-left: auto; flex-shrink: 0; color: var(--flower-reading-secondary); font-variant-numeric: tabular-nums; }
+.flower-parent-event-status { display: inline-flex; align-items: center; gap: 0.25rem; white-space: nowrap; color: var(--flower-reading-secondary); }
+.flower-parent-event-status svg { width: 0.75rem; height: 0.75rem; color: currentColor; }
+.flower-parent-event[data-parent-event-kind='failed'] .flower-parent-event-status,
+.flower-parent-event[data-parent-event-kind='timed_out'] .flower-parent-event-status { color: var(--flower-reading-error); }
+.flower-parent-event[data-parent-event-kind='completed'] .flower-parent-event-status { color: var(--flower-reading-success); }
+.flower-parent-event[data-parent-event-kind='input_required'] .flower-parent-event-status,
+.flower-parent-event[data-parent-event-kind='approval_required'] .flower-parent-event-status { color: var(--flower-reading-warning); }
+.flower-parent-event button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .flower-parent-event-report { margin: 0.5rem 0 0 0.625rem; padding-left: 1.125rem; border-left: 1px solid var(--border); min-width: 0; }
-.flower-parent-event-body { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; line-height: var(--floe-line-body); font-size: var(--floe-type-supporting); }
+.flower-parent-event-body { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; line-height: 1.3125rem; font-size: 0.8125rem; color: var(--flower-reading-report); }
 .flower-parent-event-body[data-expanded='false'] { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.flower-parent-event-actions { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-width: 0; margin-top: 0.25rem; }
-.flower-parent-event-action { display: inline-flex; align-items: center; justify-content: center; gap: 0.25rem; min-height: 1.75rem; cursor: pointer; white-space: nowrap; color: var(--muted-foreground); font-size: var(--floe-type-caption); flex-shrink: 0; }
+.flower-parent-event-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; min-width: 0; margin-top: 0.25rem; }
+.flower-parent-event-action { display: inline-flex; max-width: 100%; overflow: hidden; text-overflow: ellipsis; align-items: center; justify-content: center; gap: 0.25rem; min-height: 2rem; cursor: pointer; white-space: nowrap; color: var(--flower-reading-secondary); font-size: 0.75rem; flex-shrink: 0; }
 .flower-parent-event-action svg { width: 0.75rem; height: 0.75rem; flex-shrink: 0; }
 .flower-parent-event-action:disabled { cursor: default; opacity: 0.6; }
 .flower-parent-event-disclosure[aria-expanded='true'] svg { transform: rotate(180deg); }
 .flower-parent-event-actions .flower-parent-event-open { margin-left: auto; }
 .flower-parent-event-heading>.flower-parent-event-open { margin-left: 0.25rem; }
-.flower-parent-event-reading { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; color: var(--destructive); font-size: var(--floe-type-caption); }
+.flower-parent-event-reading { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; color: var(--flower-reading-error); font-size: 0.75rem; }
 .flower-parent-event-reading>span { flex: 1 1 15rem; min-width: 0; overflow-wrap: anywhere; }
 @media (max-width: 639px) {
   .flower-parent-event-type { display: none; }
@@ -9846,8 +9869,8 @@ button.flower-attachment-preview-trigger:disabled {
   border: 0;
   border-radius: 0.5rem;
   background: transparent;
-  color: var(--muted-foreground);
-  font-size: 0.6875rem;
+  color: var(--flower-reading-secondary);
+  font-size: 0.75rem;
   text-align: left;
   cursor: pointer;
 }
@@ -9904,8 +9927,8 @@ button.flower-attachment-preview-trigger:disabled {
 
 .flower-subagents-dropdown-overflow {
   margin-left: 0.375rem;
-  color: var(--muted-foreground);
-  font-size: 0.625rem;
+  color: var(--flower-reading-secondary);
+  font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -10023,11 +10046,11 @@ button.flower-attachment-preview-trigger:disabled {
 
 .flower-subagent-dropdown-description {
   min-width: 0;
-  color: color-mix(in srgb, var(--muted-foreground) 84%, transparent);
+  color: var(--flower-reading-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.71875rem;
+  font-size: 0.75rem;
   line-height: 1.35;
 }
 
@@ -10058,8 +10081,8 @@ button.flower-attachment-preview-trigger:disabled {
 
 .flower-subagent-dropdown-status-label,
 .flower-subagent-dropdown-duration {
-  color: var(--muted-foreground);
-  font-size: 0.65625rem;
+  color: var(--flower-reading-secondary);
+  font-size: 0.75rem;
   line-height: 1.2;
   white-space: nowrap;
 }
@@ -10115,9 +10138,9 @@ button.flower-attachment-preview-trigger:disabled {
   --flower-subagent-window-text: var(--redeven-chat-text);
   --flower-subagent-window-muted: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);
   --flower-subagent-window-accent: var(--redeven-categorical-2);
-  --flower-subagent-window-success: var(--redeven-status-success);
-  --flower-subagent-window-warning: var(--redeven-status-warning);
-  --flower-subagent-window-danger: var(--redeven-status-error);
+  --flower-subagent-window-success: var(--flower-reading-success);
+  --flower-subagent-window-warning: var(--flower-reading-warning);
+  --flower-subagent-window-danger: var(--flower-reading-error);
   border: 1px solid var(--flower-subagent-window-border);
   border-radius: 0.875rem;
   background: var(--flower-subagent-window-surface);
@@ -10167,7 +10190,7 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-subagent-detail-overview {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 15rem);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 21rem);
   min-width: 0;
   flex: 0 0 auto;
   align-items: start;
@@ -10199,8 +10222,12 @@ button.flower-attachment-preview-trigger:disabled {
   flex-wrap: nowrap;
   gap: 0.4rem 0.65rem;
   color: var(--flower-subagent-window-muted);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   line-height: 1.2;
+}
+
+.flower-subagent-detail-window .flower-composer-context-tooltip {
+  width: min(20rem, calc(100cqw - 1rem));
 }
 
 .flower-subagent-detail-context {
@@ -10242,7 +10269,7 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 .flower-subagent-status-label-running {
-  color: var(--primary);
+  color: var(--foreground);
 }
 
 .flower-subagent-status-text {
@@ -10276,18 +10303,35 @@ button.flower-attachment-preview-trigger:disabled {
   color: var(--flower-subagent-window-warning);
 }
 
+.flower-subagent-status-label-canceled {
+  color: var(--flower-subagent-window-muted);
+}
+
+.flower-subagent-detail-surface[data-flower-subagent-status='canceled'] .flower-subagent-ledger-entry-outcome .flower-subagent-ledger-entry-label {
+  color: var(--flower-subagent-window-muted);
+}
+
+.flower-subagent-detail-surface[data-flower-subagent-status='canceled'] .flower-subagent-ledger-entry-outcome .flower-subagent-ledger-entry-body {
+  border-left-color: var(--flower-subagent-window-muted);
+}
+
 .flower-subagent-status-label-completed {
   color: var(--flower-subagent-window-success);
 }
 
 .flower-subagent-status-label-failed,
-.flower-subagent-status-label-canceled,
 .flower-subagent-status-label-timed_out {
   color: var(--flower-subagent-window-danger);
 }
 
 .flower-subagent-detail-overview-meta > * {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.flower-subagent-detail-elapsed > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .flower-subagent-detail-loading {
@@ -10496,9 +10540,9 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-subagent-ledger-entry-label {
   min-width: 0;
   overflow: hidden;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 500;
-  line-height: 1.2;
+  line-height: 1.125rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -10514,9 +10558,9 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-subagent-ledger-entry-time {
   color: var(--flower-subagent-window-muted);
   font-family: var(--font-mono, Iosevka, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
-  opacity: 0.72;
+  line-height: 1.125rem;
 }
 
 .flower-subagent-ledger-entry-chevron {
@@ -10543,14 +10587,13 @@ button.flower-attachment-preview-trigger:disabled {
 
 .flower-subagent-ledger-entry-outcome .flower-subagent-ledger-entry-body {
   border-left: 2px solid color-mix(in srgb, var(--flower-subagent-window-success) 66%, transparent);
-  background: color-mix(in srgb, var(--flower-subagent-window-success) 7%, transparent);
+  background: transparent;
   margin-top: 0.28rem;
   padding: 0.6rem 0.75rem;
 }
 
 .flower-subagent-detail-surface:is(
   [data-flower-subagent-status='failed'],
-  [data-flower-subagent-status='canceled'],
   [data-flower-subagent-status='timed_out']
 ) .flower-subagent-ledger-entry-outcome::before {
   border-color: color-mix(in srgb, var(--flower-subagent-window-danger) 70%, var(--flower-subagent-window-border));
@@ -10559,7 +10602,6 @@ button.flower-attachment-preview-trigger:disabled {
 
 .flower-subagent-detail-surface:is(
   [data-flower-subagent-status='failed'],
-  [data-flower-subagent-status='canceled'],
   [data-flower-subagent-status='timed_out']
 ) .flower-subagent-ledger-entry-outcome .flower-subagent-ledger-entry-label {
   color: color-mix(in srgb, var(--flower-subagent-window-danger) 78%, var(--flower-subagent-window-text) 22%);
@@ -10567,11 +10609,10 @@ button.flower-attachment-preview-trigger:disabled {
 
 .flower-subagent-detail-surface:is(
   [data-flower-subagent-status='failed'],
-  [data-flower-subagent-status='canceled'],
   [data-flower-subagent-status='timed_out']
 ) .flower-subagent-ledger-entry-outcome .flower-subagent-ledger-entry-body {
   border-left-color: color-mix(in srgb, var(--flower-subagent-window-danger) 70%, transparent);
-  background: color-mix(in srgb, var(--flower-subagent-window-danger) 7%, transparent);
+  background: transparent;
 }
 
 .flower-subagent-ledger-entry-body .flower-message-row,
@@ -10676,23 +10717,33 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 .flower-subagent-ledger-entry-body .flower-activity-inline-button {
-  min-height: 1.9rem;
+  min-height: 2rem;
   grid-template-columns: 1rem minmax(0, 1fr) auto 1rem;
   border-radius: 4px;
   padding: 0.18rem 0.35rem;
 }
 
-.flower-subagent-ledger-entry-body .flower-activity-inline-title {
-  font-family: var(--font-mono, Iosevka, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 0.75rem;
-  font-weight: 560;
+.flower-subagent-detail-transcript .flower-activity-inline-title {
+  font-family: var(--font-sans, inherit);
+  font-size: 0.8125rem;
+  font-weight: 500;
 }
 
-.flower-subagent-ledger-entry-body .flower-activity-inline-detail,
-.flower-subagent-ledger-entry-body .flower-activity-inline-duration,
-.flower-subagent-ledger-entry-body .flower-activity-inline-status {
+.flower-subagent-detail-transcript .flower-activity-inline-detail,
+.flower-subagent-detail-transcript .flower-activity-inline-duration,
+.flower-subagent-detail-transcript .flower-activity-inline-status {
   font-family: var(--font-mono, Iosevka, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.flower-subagent-detail-transcript .flower-activity-inline-detail {
+  font-family: var(--font-sans, inherit);
+}
+
+@media (pointer: coarse) {
+  .flower-activity-inline-button,
+  .flower-subagent-ledger-entry-body .flower-activity-inline-button { min-height: 2.75rem; }
 }
 
 .flower-subagent-ledger-entry-body .flower-activity-inline-details {
@@ -10705,7 +10756,8 @@ button.flower-attachment-preview-trigger:disabled {
   border-radius: 4px;
   background: var(--flower-subagent-window-surface-raised);
   padding: 0.65rem;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
+  line-height: 1.25rem;
 }
 
 .flower-subagent-detail-scroll-to-latest {
@@ -11782,12 +11834,12 @@ button.flower-attachment-preview-trigger:disabled {
   user-select: text;
 }
 .flower-web-operation-source-body { display: flex; flex: 1; min-width: 0; flex-wrap: wrap; align-items: baseline; column-gap: 0.5rem; }
-.flower-web-operation-snippet { flex: 1 1 12rem; min-width: 0; margin: 0; color: var(--muted-foreground); font-size: 0.6875rem; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
-.flower-web-operation-source-number { flex: 0 0 0.75rem; color: var(--muted-foreground); font-size: 0.6875rem; font-variant-numeric: tabular-nums; }
+.flower-web-operation-snippet { flex: 1 1 12rem; min-width: 0; margin: 0; color: var(--flower-reading-secondary); font-size: 0.75rem; line-height: 1.25rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.flower-web-operation-source-number { flex: 0 0 0.75rem; color: var(--flower-reading-secondary); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
 .flower-web-operation-source { display: inline-flex; flex: 0 1 auto; min-width: 0; max-width: 100%; align-items: baseline; white-space: nowrap; }
 .flower-web-operation-source-primary { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .flower-web-operation-source-secondary { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted-foreground); }
-.flower-web-operation-source-domain { flex: 0 1 auto; min-width: 2rem; padding-left: 0.5rem; font-size: 0.6875rem; }
+.flower-web-operation-source-domain { flex: 0 1 auto; min-width: 2rem; padding-left: 0.5rem; font-size: 0.75rem; color: var(--flower-reading-secondary); }
 .flower-web-operation-more { display: flex; width: fit-content; min-width: 0; align-items: center; gap: 0.25rem; cursor: pointer; color: var(--muted-foreground); font-size: 0.75rem; padding: 0.25rem 0 0.0625rem; white-space: nowrap; }
 .flower-web-operation-more:hover { color: var(--foreground); }
 .flower-web-operation-more > svg { width: 0.875rem; height: 0.875rem; flex-shrink: 0; }
@@ -11799,7 +11851,7 @@ button.flower-attachment-preview-trigger:disabled {
 
 .flower-activity-inline-row-web-search .flower-activity-inline-title,
 .flower-activity-inline-row-web-search .flower-activity-inline-detail { font-family: var(--font-sans, system-ui, sans-serif); }
-.flower-activity-inline-row-web-search .flower-activity-inline-detail { color: var(--muted-foreground); font-weight: 400; }
+.flower-activity-inline-row-web-search .flower-activity-inline-detail { color: var(--flower-reading-secondary); font-weight: 400; }
 
 .flower-restored-inputs { padding: 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; }
 .flower-restored-inputs > h4 { font-weight: 600; }
@@ -12183,13 +12235,13 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-activity-preview { min-width: 0; }
 .flower-activity-preview + .flower-activity-preview { margin-top: 0.35rem; }
 .flower-activity-preview-row { min-width: 0; padding: 0.25rem 0; }
-.flower-activity-preview-title { font-size: 0.78rem; font-weight: 500; overflow-wrap: anywhere; }
-.flower-activity-preview-meta { display: block; color: var(--muted-foreground); font-size: 0.75rem; overflow-wrap: anywhere; }
-.flower-activity-preview-text { margin: 0; color: var(--flower-activity-tool-row-foreground); font-size: 0.75rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.flower-activity-preview-title { font-size: 0.8125rem; font-weight: 500; overflow-wrap: anywhere; }
+.flower-activity-preview-meta { display: block; color: var(--flower-reading-secondary); font-size: 0.75rem; overflow-wrap: anywhere; }
+.flower-activity-preview-text { margin: 0; color: var(--flower-activity-tool-row-foreground); font-size: 0.75rem; line-height: 1.25rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 .flower-activity-preview[data-activity-section='inputs'] .flower-activity-preview-text,
 .flower-activity-preview-text[data-format='code'] { font-family: var(--font-mono); }
 .flower-activity-preview[data-expanded='false'] .flower-activity-preview-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.flower-activity-preview-count { margin-inline-start: 0.4rem; color: var(--muted-foreground); }
+.flower-activity-preview-count { margin-inline-start: 0.4rem; color: var(--flower-reading-secondary); }
 
 .flower-subagent-inputs { margin-top: 1rem; padding: 0.75rem; border: 1px solid var(--border); border-radius: 0.75rem; }
 .flower-subagent-inputs h3 { font-size: 0.75rem; font-weight: 600; color: var(--muted-foreground); }
@@ -12467,3 +12519,16 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-goal-history-body { margin: 0.125rem 0.25rem 0.625rem 1.75rem; }
 .flower-goal-history-text { margin: 0; color: var(--foreground); font-size: 0.8125rem; line-height: 1.65; }
 @media (prefers-reduced-motion: reduce) { .flower-goal-tag, .flower-goal-history-chevron { transition: none; } }
+
+@media (forced-colors: active) {
+  .flower-chat-shell, .flower-subagent-detail-window, .flower-subagents-dropdown {
+    --flower-reading-title: CanvasText;
+    --flower-reading-secondary: CanvasText;
+    --flower-reading-report: CanvasText;
+    --flower-reading-success: CanvasText;
+    --flower-reading-warning: CanvasText;
+    --flower-reading-error: CanvasText;
+  }
+  .flower-activity-inline-button:is(button):focus-visible,
+  .flower-parent-event button:focus-visible { outline-color: Highlight; }
+}
