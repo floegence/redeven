@@ -26,6 +26,12 @@ next-Turn/manual-retry timing and possible remote rejection. Help opens on hover
 keyboard focus or touch; Escape dismisses help without closing the dialog. Reset
 removes the model override. Search source changes and disablement preserve keys.
 The editor marks changed availability pending until a saved backend projection.
+DeepSeek search and page-reader controls share a compact row below credentials
+and wrap into separate rows on narrow screens. Routing, pricing, privacy and
+next-Turn behavior remain in the corresponding information tooltip. Page-reader
+help stays available while search is off. Model-selection guidance lives beside
+the Models heading. Required-field state, unavailable search and save failures
+remain visible; tooltips do not replace actionable feedback.
 See [the search contract](../ai/model-web-search.md) for defaults and migration.
 
 Failure and manual retry behavior follows [Flower failure recovery](flower-failure-recovery.md).

@@ -9,7 +9,6 @@ export function ModelCatalogControls(props: Readonly<{
 }>) {
   let search: HTMLInputElement | undefined;
   return <div class="flower-model-catalog-controls">
-    <p class="mb-2 text-xs text-muted-foreground">{props.copy.selectionHint}</p>
     <div class="flex min-w-0 items-center gap-2">
       <div class="min-w-0 flex-1"><Input ref={search} value={props.query} onInput={(event) => props.onQuery(event.currentTarget.value)} placeholder={props.copy.search} aria-label={props.copy.search} size="sm" class="min-w-0 w-full" /></div>
       <Show when={props.hasContent && props.error}>

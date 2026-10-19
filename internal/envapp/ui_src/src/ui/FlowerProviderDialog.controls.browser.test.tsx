@@ -272,10 +272,10 @@ for (const surface of ['desktop', 'env'] as const) {
     finish({ id: 'attempt', state: 'ready', account: { account_id: 'account', email: 'person@example.com', state: 'ready', welcome_acknowledged: true } });
     await expect.element(page.getByRole('checkbox', { name: 'GPT-6.1 Sol', exact: true })).toBeVisible();
     expect(discover).toHaveBeenCalledTimes(1);
-    const checkbox = document.querySelector('input[type=checkbox]');
+    const checkbox = page.getByRole('checkbox', { name: 'GPT-6.1 Sol', exact: true }).element();
     await userEvent.click(checkbox!.closest('label')!);
     await userEvent.click(page.getByRole('button', { name: copy.chatGPT.account, exact: true }));
-    expect(dialog.querySelector('input[type=checkbox]')).toBe(checkbox);
+    expect(page.getByRole('checkbox', { name: 'GPT-6.1 Sol', exact: true }).element()).toBe(checkbox);
     expect(auth.mock.calls.some(([action]) => action === 'cancel')).toBe(false);
     await expect.poll(() => dialog.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running')).toBe(true);
     if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/flower-controls-${surface}-ready.png` });
