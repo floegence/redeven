@@ -8574,6 +8574,29 @@ button.flower-composer-context-source:focus-visible,
     flex: 1 1 100%;
   }
 
+  .flower-approval-controls .flower-permission-trigger {
+    position: relative;
+    width: 1.75rem;
+    height: 1.75rem;
+    gap: 0;
+    padding: 0;
+  }
+
+  .flower-approval-controls .flower-permission-label {
+    display: none;
+  }
+
+  .flower-approval-controls .flower-permission-icon {
+    width: 0.875rem;
+    height: 0.875rem;
+  }
+
+  .flower-approval-controls .flower-permission-saving-dot {
+    position: absolute;
+    top: 0.125rem;
+    right: 0.125rem;
+  }
+
   .flower-approval-queue-footer .flower-approval-scope {
     position: absolute;
     width: 1px;

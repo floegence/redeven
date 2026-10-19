@@ -304,6 +304,14 @@ it.each([
   const trigger = fixture.mount.querySelector<HTMLButtonElement>('.flower-approval-queue-footer button.flower-permission-trigger')!;
   expect(trigger.disabled).toBe(false);
   expect(getComputedStyle(trigger).cursor).toBe('pointer');
+  const label = trigger.querySelector<HTMLElement>('.flower-permission-label')!;
+  expect(getComputedStyle(label).display === 'none').toBe(width === 320);
+  expect(trigger.title).toBe(trigger.getAttribute('aria-label'));
+  expect(trigger.title).toContain(label.textContent);
+  if (width === 320) {
+    expect(trigger.offsetWidth).toBe(trigger.offsetHeight);
+    expect(trigger.querySelector('.flower-permission-icon')!.getBoundingClientRect().width).toBeGreaterThan(0);
+  }
   await userEvent.click(trigger);
   const menu = fixture.mount.querySelector<HTMLElement>('.flower-permission-menu')!;
   await expect.poll(() => menu.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
@@ -320,6 +328,55 @@ it.each([
   expect(fixture.surfaceAdapter.setThreadPermissionType).toHaveBeenCalledExactlyOnceWith('approval-layout', 'full_access');
   expect(fixture.surfaceAdapter.submitApproval).not.toHaveBeenCalled();
   expect(fixture.mount.querySelectorAll('[data-flower-composer-approval]')).toHaveLength(2);
+  expectFooterInside(fixture.mount);
+});
+
+it.each([true, false])('compacts the approval permission selector as its container resizes with full=%s', async full => {
+  await page.viewport(1280, 800);
+  const fixture = mountApprovals(2, { full });
+  await waitFor(() => Boolean(fixture.mount.querySelector('button.flower-permission-trigger')));
+  if (!full) await waitFor(() => fixture.phase() === 'expanded');
+  const trigger = fixture.mount.querySelector<HTMLButtonElement>('.flower-approval-queue-footer button.flower-permission-trigger')!;
+  const label = trigger.querySelector<HTMLElement>('.flower-permission-label')!;
+  for (const narrow of [false, true, false]) {
+    if (full) fixture.mount.style.width = narrow ? '320px' : '900px';
+    else await page.viewport(narrow ? 320 : 1280, 800);
+    await expect.poll(() => getComputedStyle(label).display === 'none').toBe(narrow);
+    expect(trigger.title).toContain(label.textContent);
+    if (narrow) await expect.poll(() => trigger.offsetWidth).toBe(trigger.offsetHeight);
+    await userEvent.click(trigger);
+    await waitFor(() => Boolean(fixture.mount.querySelector('.flower-permission-menu')));
+    await userEvent.keyboard('{Escape}');
+    await expect.poll(() => document.activeElement).toBe(trigger);
+    expectFooterInside(fixture.mount);
+  }
+});
+
+it('keeps the compact permission control steady and shows its saving indicator', async () => {
+  await page.viewport(320, 800);
+  const fixture = mountApprovals(2);
+  const saved = deferred<void>();
+  const updatePermission = fixture.surfaceAdapter.setThreadPermissionType.getMockImplementation()!;
+  fixture.surfaceAdapter.setThreadPermissionType.mockImplementationOnce(async (...args) => {
+    await saved.promise;
+    return updatePermission(...args);
+  });
+  await waitFor(() => fixture.phase() === 'expanded' && Boolean(fixture.mount.querySelector('button.flower-permission-trigger')));
+  const trigger = fixture.mount.querySelector<HTMLButtonElement>('button.flower-permission-trigger')!;
+  const width = trigger.offsetWidth;
+  await userEvent.click(trigger);
+  await userEvent.click(fixture.mount.querySelector('[role=option][data-permission-type=full_access]')!);
+  await expect.poll(() => trigger.disabled).toBe(true);
+  const indicator = trigger.querySelector<HTMLElement>('.flower-permission-saving-dot')!;
+  expect(getComputedStyle(indicator).visibility).toBe('visible');
+  expect(trigger.offsetWidth).toBe(width);
+  expect(trigger.title).toBe(trigger.getAttribute('aria-label'));
+  expect(indicator.getBoundingClientRect().right).toBeLessThanOrEqual(trigger.getBoundingClientRect().right);
+  expect(fixture.mount.querySelector<HTMLButtonElement>('.flower-approval-queue-footer .flower-composer-stop-thread')!.disabled).toBe(false);
+  saved.resolve();
+  await expect.poll(() => trigger.disabled).toBe(false);
+  expect(getComputedStyle(indicator).visibility).toBe('hidden');
+  expect(trigger.offsetWidth).toBe(width);
   expectFooterInside(fixture.mount);
 });
 
@@ -388,6 +445,11 @@ it('marks only the constrained approval list for selected Workbench scrolling an
   await touch.emulateTouchInput(true);
   onTestFinished(() => touch.emulateTouchInput(false));
   expect(matchMedia('(pointer: coarse)').matches).toBe(true);
+  fixture.mount.style.width = '320px';
+  const permission = fixture.mount.querySelector<HTMLButtonElement>('button.flower-permission-trigger')!;
+  await expect.poll(() => getComputedStyle(permission.querySelector('.flower-permission-label')!).display).toBe('none');
+  expect(permission.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+  expect(permission.offsetWidth).toBe(permission.offsetHeight);
   for (const button of fixture.mount.querySelectorAll<HTMLButtonElement>('.flower-approval-surface button')) {
     await expect.poll(() => button.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
   }
