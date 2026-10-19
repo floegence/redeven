@@ -94,8 +94,7 @@ Successful commands consume only the unchanged submitted draft revision; newer
 text, including edits that return to the same text, references and attachments
 remain intact. A conflict preserves command mode and resubmits as a command,
 while popup conflicts remain save-only edits. New-thread send and Goal creation
-share preparation
-exclusion so a pending operation cannot create a second conversation.
+share preparation exclusion so a pending operation cannot create a second conversation.
 
 Creating a Goal moves the draft to the canonical thread without changing its
 attachment scope. Before the retained draft sends, the existing scope is bound
