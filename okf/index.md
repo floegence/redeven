@@ -350,6 +350,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## Release
 
+- [Self-contained installer distribution](release/self-contained-installer.md) - Authenticate prebuilt installers, activate complete suites, and gate default-version promotion on deployed and rollback entry compatibility.
 - [CI and release gates](release/ci-and-release-gates.md) - Local/CI checks and release artifact contracts.
 - [ReDevPlugin release artifact gate](release/redevplugin-release-gates.md) - Verify published runtime evidence, native packaging, and closed release inventory.
 - [Plugin integration gate](release/plugin-integration-gates.md) - Qualify released plugin Host, market, renderer, and Desktop integration.

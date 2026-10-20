@@ -1,0 +1,82 @@
+#!/bin/sh
+# Bootstrap only: authenticate the pinned installer before executing it.
+# This HTTPS entry is the initial trust boundary, not an offline trust anchor.
+set -eu
+set -f
+
+INSTALLER_VERSION='@INSTALLER_VERSION@'
+INSTALLER_CONTRACT='redeven.installer_distribution.v1'
+INSTALLER_CHANNEL='@INSTALLER_CHANNEL@'
+INSTALLER_MIRROR='@INSTALLER_MIRROR@'
+SHA256_DARWIN_AMD64='@SHA256_DARWIN_AMD64@'
+SHA256_DARWIN_ARM64='@SHA256_DARWIN_ARM64@'
+SHA256_LINUX_AMD64='@SHA256_LINUX_AMD64@'
+SHA256_LINUX_ARM64='@SHA256_LINUX_ARM64@'
+
+fail() {
+    printf 'Redeven installation failed: %s\n' "$*" >&2
+    exit 1
+}
+
+# Do not create temporary files or fetch payloads on unsupported targets.
+os=$(uname -s) || fail 'Could not detect the operating system.'
+arch=$(uname -m) || fail 'Could not detect the processor architecture.'
+case "$os" in
+    Darwin) os=darwin ;;
+    Linux) os=linux ;;
+    *) fail 'Use macOS or Linux. On Windows, run the command inside WSL.' ;;
+esac
+case "$arch" in
+    x86_64|amd64) arch=amd64 ;;
+    arm64|aarch64) arch=arm64 ;;
+    *) fail "Unsupported processor architecture: $arch" ;;
+esac
+case "$os/$arch" in
+    darwin/amd64) expected=$SHA256_DARWIN_AMD64 ;;
+    darwin/arm64) expected=$SHA256_DARWIN_ARM64 ;;
+    linux/amd64) expected=$SHA256_LINUX_AMD64 ;;
+    linux/arm64) expected=$SHA256_LINUX_ARM64 ;;
+esac
+
+if command -v curl >/dev/null 2>&1; then
+    fetch() {
+        curl -fsSL --proto '=https' --proto-redir '=https' --tlsv1.2 \
+            --connect-timeout 15 --max-time 180 --retry 2 -o "$2" "$1"
+    }
+elif command -v wget >/dev/null 2>&1; then
+    fetch() { wget -q --https-only --timeout=30 --tries=3 -O "$2" "$1"; }
+else
+    fail 'A standard HTTPS downloader (curl or wget) is required.'
+fi
+if command -v sha256sum >/dev/null 2>&1; then
+    hash_file() { sha256sum "$1"; }
+elif command -v shasum >/dev/null 2>&1; then
+    hash_file() { shasum -a 256 "$1"; }
+else
+    fail 'The system SHA-256 utility (sha256sum or shasum) is unavailable.'
+fi
+
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/redeven-bootstrap.XXXXXXXX") || fail 'Could not create a private temporary directory.'
+cleanup() { rm -rf -- "$tmp"; }
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
+asset="redeven-installer_${os}_${arch}"
+file="$tmp/$asset"
+url="https://github.com/floegence/redeven/releases/download/$INSTALLER_VERSION/$asset"
+printf 'Downloading the verified Redeven installer for %s/%s...\n' "$os" "$arch"
+if ! fetch "$url" "$file"; then
+    if [ -z "$INSTALLER_MIRROR" ]; then
+        fail 'The official installer could not be downloaded. Check your connection and try again.'
+    fi
+    rm -f -- "$file"
+    fetch "$INSTALLER_MIRROR/$INSTALLER_VERSION/$asset" "$file" || fail 'Both official download sources are unavailable.'
+fi
+observed=$(hash_file "$file") || fail 'Could not calculate the installer checksum.'
+observed=${observed%% *}
+[ "$observed" = "$expected" ] || fail 'Installer checksum mismatch. Nothing was executed; do not bypass this check.'
+chmod 700 "$file" || fail 'Could not prepare the authenticated installer.'
+# Keep the shell alive to clean up its private directory after the child exits.
+# Runtime self-upgrade owns re-exec; this entry never starts a background service.
+"$file" install --channel "$INSTALLER_CHANNEL" "$@"

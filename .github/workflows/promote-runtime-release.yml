@@ -1,0 +1,53 @@
+name: Promote verified Runtime release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Exact stable release whose installation entry is already deployed
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-release-promotion
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    if: github.ref == 'refs/heads/main'
+    environment: redeven-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout reviewed main entry
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+      - name: Verify immutable release and active and rollback entries
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease \
+            --jq 'if .isDraft or .isPrerelease then error("only completed stable releases may be promoted") else . end'
+          GOWORK=off go run ./cmd/redeven-installer check-distribution \
+            --channel github --runtime-version "$RELEASE_TAG" \
+            --expected-entry scripts/install.sh --rollback-entry scripts/install-rollback.sh
+      - name: Advance and read back GitHub default version
+        run: |
+          set -euo pipefail
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --latest
+          actual=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
+          if [[ "$actual" != "$RELEASE_TAG" ]]; then
+            echo '::error::Default version update was submitted but readback did not confirm it; inspect current state before retrying.'
+            exit 1
+          fi

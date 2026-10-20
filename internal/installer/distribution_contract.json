@@ -1,0 +1,11 @@
+{
+  "schema_version": "redeven.installer_distribution.v1",
+  "minimum_installer_version": "v0.13.13",
+  "runtime_archive_contract": "redeven.runtime-suite.v1",
+  "platforms": [
+    "darwin_amd64",
+    "darwin_arm64",
+    "linux_amd64",
+    "linux_arm64"
+  ]
+}

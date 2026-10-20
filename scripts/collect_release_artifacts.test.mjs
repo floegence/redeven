@@ -51,6 +51,7 @@ function createFixture(root, version = '1.2.3') {
   const downloads = path.join(root, 'downloads');
   mkdirSync(downloads, { recursive: true });
   const sharedFiles = new Map([
+    ['redeven-installer-contract.json', readFileSync(new URL('../internal/installer/distribution_contract.json', import.meta.url))],
     ['LICENSE', Buffer.from('license\n')],
     ['THIRD_PARTY_NOTICES.md', Buffer.from('notices\n')],
     ['okf_bundle.manifest.json', Buffer.from('{}\n')],
@@ -66,6 +67,7 @@ function createFixture(root, version = '1.2.3') {
     for (const updateFile of target.updateFiles) write(desktopDirectory, updateFile, Buffer.from(`version: ${version}\npath: ${target.desktopArch}\n`));
     write(packageDirectory, `redeven_${target.goos}_${target.goarch}.tar.gz`, Buffer.from(`runtime ${target.goos}/${target.goarch}\n`));
     write(packageDirectory, `redeven-gateway_${target.goos}_${target.goarch}.tar.gz`, Buffer.from(`gateway ${target.goos}/${target.goarch}\n`));
+    write(packageDirectory, `redeven-installer_${target.goos}_${target.goarch}`, Buffer.from(`self-contained installer ${target.goos}/${target.goarch}\n`));
     if (target.goos === 'linux') write(packageDirectory, `redeven_relink_linux_${target.goarch}.tar.gz`, Buffer.from(`library source and link objects ${target.goarch}\n`));
 
     for (const extension of target.extensions) {
@@ -109,7 +111,8 @@ test('collects only the closed four-target release inventory', () => {
     assert.equal(outputs.filter((name) => name.startsWith('redeven-gateway_')).length, 4);
     assert.equal(outputs.filter((name) => /\.(?:deb|rpm|dmg)$/u.test(name)).length, 6);
     assert.equal(outputs.filter((name) => name.endsWith('.redevplugin-verification.json')).length, 6);
-    assert.equal(outputs.length, 32);
+    assert.equal(outputs.filter((name) => name.startsWith('redeven-installer_')).length, 4);
+    assert.equal(outputs.length, 37);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -145,7 +148,7 @@ test('excludes Sparkle stable-feed assets from prereleases', () => {
     const outputs = readdirSync(destination).sort();
     assert.equal(outputs.some((name) => name.startsWith('appcast-mac-')), false);
     assert.equal(outputs.some((name) => name.startsWith('Redeven-Desktop-') && name.endsWith('.md')), false);
-    assert.equal(outputs.length, 28);
+    assert.equal(outputs.length, 33);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
