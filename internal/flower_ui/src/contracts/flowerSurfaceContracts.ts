@@ -260,7 +260,15 @@ export type FlowerCitationSource = Readonly<{
   end_index?: number;
 }>;
 
+export type FlowerMessageTextSource = Readonly<{
+  readonly length: number;
+  readonly revision: number;
+  read(from: number): readonly string[];
+}>;
+
 export type FlowerChatMessage = Readonly<{
+  /** In-memory append source owned by ThreadCache, never serialized. */
+  text_source?: FlowerMessageTextSource;
   goal?: FlowerGoalChange;
   id: string;
   // Canonical root-thread and SubAgent messages always carry turn_id. Synthetic
@@ -1084,6 +1092,31 @@ export type FlowerThreadView = Readonly<{
   current: FlowerRuntimeCurrentView;
 }>;
 
+export type FlowerRuntimeComponent<T> = Readonly<{ value: T }>;
+export type FlowerRuntimeUpdate = Readonly<{
+  thread_id: string;
+  turn_id?: string;
+  run_id?: string;
+  base_version: number;
+  view_version: number;
+  facts: Pick<FlowerRuntimeCurrentView, 'activity' | 'attention' | 'turn_kind' | 'last_outcome' | 'cancellation' | 'run_progress' | 'sampled_at_ms' | 'error' | 'run_error_code' | 'run_error_detail'> & { queue_count: number };
+  items?: readonly Readonly<{
+    kind: 'add' | 'replace' | 'remove' | 'append';
+    item_id: string;
+    item?: FlowerRuntimeCurrentItem;
+    append?: Readonly<{ offset_bytes: number; text: string }>;
+  }>[];
+  item_order?: FlowerRuntimeComponent<readonly string[]>;
+  context?: FlowerRuntimeComponent<Pick<FlowerLiveStreamEnvelope, 'model_context' | 'context_usage' | 'context_compactions' | 'timeline_decorations'>>;
+  goal?: FlowerRuntimeComponent<FlowerGoal | null>;
+  parent_events?: FlowerRuntimeComponent<FlowerParentEventPage | null>;
+  turns?: FlowerRuntimeComponent<readonly FlowerRuntimeTurn[] | null>;
+  queue?: FlowerRuntimeComponent<FlowerRuntimeCurrentView['queue'] | null>;
+  interactions?: FlowerRuntimeComponent<readonly FlowerRuntimeInteraction[] | null>;
+  tool_call_previews?: FlowerRuntimeComponent<readonly FlowerToolCallPreview[] | null>;
+  restored_inputs?: FlowerRuntimeComponent<readonly FlowerRestoredInput[] | null>;
+}>;
+
 export type FlowerLiveStreamEnvelope = Readonly<{
   schema_version: number;
   kind: 'ready' | 'summary.batch' | 'thread.batch' | 'viewer.read_state' | 'computer.frame' | 'computer.status' | 'model_directory.changed';
@@ -1092,8 +1125,10 @@ export type FlowerLiveStreamEnvelope = Readonly<{
   summaries?: readonly FlowerThreadSummary[];
   /** Typed current-state replacement from Floret; never contains replay metadata. */
   current?: FlowerRuntimeCurrentView;
+  update?: FlowerRuntimeUpdate;
   /** Parent-scoped typed current-state replacement for one SubAgent thread. */
   subagent_current?: FlowerRuntimeCurrentView;
+  subagent_update?: FlowerRuntimeUpdate;
   /** Full replacement of the parent thread's canonical Subagent inventory. */
   subagents?: readonly FlowerSubagentSummary[];
   model_context?: FlowerModelContext | null;

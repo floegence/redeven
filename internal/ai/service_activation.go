@@ -85,12 +85,14 @@ func (s *Service) Activate(ctx context.Context) error {
 	if err := s.activateFloret(ctx); err != nil {
 		return err
 	}
+	if err := s.startFlowerRuntimeViewPump(); err != nil {
+		return err
+	}
 	s.activated = true
 	s.mu.Lock()
 	s.maintenanceStopCh = make(chan struct{})
 	s.maintenanceDoneCh = make(chan struct{})
 	s.mu.Unlock()
-	s.startFlowerRuntimeViewPump()
 	s.startBackgroundMaintenance()
 	if err := s.resumeMigratedPendingInputs(s.lifecycleCtx, s.pendingStartupThreads); err != nil && !errors.Is(err, context.Canceled) && s.log != nil {
 		s.log.Error("ai: pending input recovery failed", "error", err)

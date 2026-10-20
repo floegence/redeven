@@ -46,6 +46,23 @@ function mount(seed = [item('first', 3), item('second', 2), item('third', 1)]) {
 }
 
 describe('Flower pinned conversation interaction', () => {
+  it('animates the running wave without changing its layout height', async () => {
+    const ui = mount();
+    await frame();
+    const wave = ui.row('first').querySelector<HTMLElement>('.flower-thread-wave-bar')!;
+    const animation = wave.getAnimations()[0];
+    animation.pause();
+    const heights: number[] = [];
+    const transforms: string[] = [];
+    for (const time of [0, 600, 1200, 1800]) {
+      animation.currentTime = time;
+      heights.push(wave.offsetHeight);
+      transforms.push(getComputedStyle(wave).transform);
+    }
+    expect(new Set(heights).size).toBe(1);
+    expect(new Set(transforms).size).toBeGreaterThan(1);
+  });
+
   it('applies the complete selection background immediately under the pointer', async () => {
     const ui = mount();
     const row = ui.row('second');

@@ -51,7 +51,7 @@ function liveStream(initial: FlowerRuntimeCurrentView) {
   return {
     current: () => latest,
     envelope(value: FlowerLiveStreamEnvelope) { values.push(value); wake?.(); },
-    push(value: FlowerRuntimeCurrentView) { latest = value; values.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'process', current: value }); wake?.(); },
+    push(value: FlowerRuntimeCurrentView) { latest = value; values.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'process', current: value }); wake?.(); },
     async *connect({ signal }: { signal: AbortSignal }) {
       const abort = () => wake?.(); signal.addEventListener('abort', abort, { once: true });
       try { while (!signal.aborted) { const value = values.shift(); if (value) yield value; else await new Promise<void>((resolve) => { wake = resolve; }); } }
@@ -64,7 +64,7 @@ async function mount(initial = current(), copy?: FlowerSurfaceCopy, overrides: P
   const seed = applyFlowerRuntimeCurrentView(thread({ thread_id: 'process', title: 'Process disclosure', messages: [] }), initial);
   const peer = thread({ thread_id: 'peer', title: 'Another conversation' });
   const live = liveStream(initial);
-  live.envelope({ schema_version: 1, kind: 'ready', summaries: [seed, peer] });
+  live.envelope({ schema_version: 2, kind: 'ready', summaries: [seed, peer] });
   const root = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [applyFlowerRuntimeCurrentView(seed, live.current()), peer]),
     loadThread: vi.fn(async (id) => id === peer.thread_id ? liveBootstrap(peer) : { thread: applyFlowerRuntimeCurrentView(seed, live.current()), current: live.current() }), connectLiveStream: live.connect, ...overrides }, { copy });
   root.style.height = '780px';
@@ -75,14 +75,13 @@ async function mount(initial = current(), copy?: FlowerSurfaceCopy, overrides: P
   return { root, live };
 }
 // Reading protection requires a viewport that can actually leave the tail.
-async function inspectTranscript(root: HTMLElement) {
+async function inspectTranscript(root: HTMLElement, target = root.querySelector<HTMLElement>('[data-flower-message-id="progress"]')!) {
   const viewport = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
   viewport.style.height = '80px';
   viewport.style.maxHeight = '80px';
   viewport.style.flex = 'none';
   await waitFor(() => viewport.scrollHeight > viewport.clientHeight + 20);
   await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-  const target = root.querySelector<HTMLElement>('[data-flower-message-id="progress"]')!;
   viewport.scrollTop = viewport.scrollHeight;
   viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -40, bubbles: true }));
   viewport.scrollTop += target.getBoundingClientRect().top - viewport.getBoundingClientRect().top;
@@ -90,10 +89,27 @@ async function inspectTranscript(root: HTMLElement) {
 }
 const message = (root: HTMLElement, id: string) => root.querySelector<HTMLElement>(`[data-flower-message-id="${id}"]`)!;
 const summary = (root: HTMLElement) => root.querySelector<HTMLButtonElement>('.flower-turn-summary-button');
-const hidden = (root: HTMLElement, id: string) => message(root, id).closest('.flower-turn-row-viewport')?.getAttribute('aria-hidden') === 'true';
+const messageRow = (root: HTMLElement, id: string) => root.querySelector<HTMLElement>(`[data-flower-row-message-id="${id}"]`)!;
+const hidden = (root: HTMLElement, id: string) => messageRow(root, id)?.querySelector('.flower-turn-row-viewport')?.getAttribute('aria-hidden') === 'true';
 afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('completed turn process disclosure', () => {
+  it('mounts collapsed process content on demand and releases it after closing', async () => {
+    const { root } = await mount(current(true));
+    await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'false');
+    await new Promise(resolve => setTimeout(resolve, 250));
+    expect(root.querySelector('[data-flower-message-id="progress"]')).toBeNull();
+    expect(root.querySelector('[data-flower-activity-item-id="tool"]')).toBeNull();
+    expect(message(root, 'final-a')).not.toBeNull();
+    summary(root)!.click();
+    await waitFor(() => Boolean(message(root, 'progress')));
+    summary(root)!.click();
+    await waitFor(() => !message(root, 'progress'));
+    summary(root)!.click();
+    await waitFor(() => Boolean(message(root, 'progress')));
+    expect(message(root, 'final-a')).not.toBeNull();
+  });
+
   it('keeps a compaction-only process recoverable and accepts context with its current version', async () => {
     const initial = current(false, { items: current(false).items!.filter(item => ['user', 'final-a'].includes(item.id)) });
     const { root, live } = await mount(initial);
@@ -108,24 +124,25 @@ describe('completed turn process disclosure', () => {
         phase: 'complete' as const, status: 'compacted' as const, updated_at_ms: 1 },
     };
     const send = (version: number, decorations = [decoration]) => live.envelope({
-      schema_version: 1, kind: 'thread.batch', thread_id: 'process',
+      schema_version: 2, kind: 'thread.batch', thread_id: 'process',
       current: { ...terminal, view_version: version }, timeline_decorations: decorations,
     });
     send(2);
     const row = () => root.querySelector<HTMLElement>('[data-flower-decoration-id="only-compaction"]');
-    await waitFor(() => Boolean(summary(root)) && Boolean(row()));
+    await waitFor(() => Boolean(summary(root)) && Boolean(root.querySelector('[data-flower-row-decoration-id="only-compaction"]')));
     expect(summary(root)!.getAttribute('aria-expanded')).toBe('false');
     summary(root)!.click();
     await waitFor(() => row()?.closest('.flower-turn-row-viewport')?.getAttribute('aria-hidden') !== 'true');
     expect(row()!.closest('.flower-turn-row-viewport')?.hasAttribute('inert')).toBe(false);
     send(1, []); send(1, []);
     // A later accepted frame with omitted context preserves the prior snapshot.
-    live.envelope({ schema_version: 1, kind: 'thread.batch', thread_id: 'process', current: { ...terminal, view_version: 3,
+    live.envelope({ schema_version: 2, kind: 'thread.batch', thread_id: 'process', current: { ...terminal, view_version: 3,
       items: terminal.items!.map(item => item.id === 'final-a' ? { ...item, text: 'Version three accepted.' } : item),
     } });
     await waitFor(() => message(root, 'final-a')?.textContent?.includes('Version three accepted.') === true);
     expect(row()).not.toBeNull();
-    send(4, []);
+    // Same-version context is independently authoritative, including clearing.
+    send(3, []);
     await waitFor(() => !row());
     expect(summary(root)).toBeNull();
     expect(message(root, 'final-a')).not.toBeNull();
@@ -143,9 +160,9 @@ describe('completed turn process disclosure', () => {
     });
     const decorations = [decoration('first', 'turn', 7), decoration('second', 'turn', 8), decoration('third', 'turn', 9), decoration('manual', 'manual', 10)];
     const terminal = current(true, { turns: [turn(), turn({ turn_id: 'manual', run_id: 'manual-run', kind: 'context_compaction', intermediate_item_ids: [], final_item_ids: [] })] });
-    live.envelope({ schema_version: 1, kind: 'thread.batch', thread_id: 'process', current: terminal, timeline_decorations: decorations });
+    live.envelope({ schema_version: 2, kind: 'thread.batch', thread_id: 'process', current: terminal, timeline_decorations: decorations });
     const divider = (id: string) => root.querySelector<HTMLElement>('[data-flower-decoration-id="' + id + '"]')!;
-    const collapsed = (id: string) => divider(id)?.closest('.flower-turn-row-viewport')?.getAttribute('aria-hidden') === 'true';
+    const collapsed = (id: string) => root.querySelector(`[data-flower-row-decoration-id="${id}"] .flower-turn-row-viewport`)?.getAttribute('aria-hidden') === 'true';
     await waitFor(() => Boolean(summary(root)) && collapsed('third'));
     expect(['first', 'second', 'third'].every(collapsed)).toBe(true);
     expect(collapsed('manual')).toBe(false);
@@ -161,17 +178,17 @@ describe('completed turn process disclosure', () => {
     expect(tooltip()).toBeNull();
     expect(document.querySelector('[role="tooltip"]')).toBeNull();
     expect(document.activeElement).toBe(summary(root));
-    expect(divider('third').closest('.flower-turn-row-viewport')?.hasAttribute('inert')).toBe(true);
+    expect(root.querySelector('[data-flower-row-decoration-id="third"] .flower-turn-row-viewport')?.hasAttribute('inert')).toBe(true);
     summary(root)!.click(); summary(root)!.click(); summary(root)!.click();
     await waitFor(() => !collapsed('third'));
-    live.envelope({ schema_version: 1, kind: 'thread.batch', thread_id: 'process', current: { ...terminal, view_version: 3 }, timeline_decorations: decorations.map(d => ({ ...d, compaction: { ...d.compaction, updated_at_ms: 2 } })) });
+    live.envelope({ schema_version: 2, kind: 'thread.batch', thread_id: 'process', current: { ...terminal, view_version: 3 }, timeline_decorations: decorations.map(d => ({ ...d, compaction: { ...d.compaction, updated_at_ms: 2 } })) });
     await waitFor(() => divider('third')?.getAttribute('data-flower-compaction-status') === 'compacted');
     expect(collapsed('third')).toBe(false);
     expect(root.querySelectorAll('[data-flower-decoration-id]')).toHaveLength(4);
   });
 
   const eventRow = (root: HTMLElement, id: string) => root.querySelector<HTMLElement>('[data-parent-event="' + id + '"]')!;
-  const eventHidden = (root: HTMLElement, id: string) => eventRow(root, id).closest('.flower-turn-row-viewport')?.getAttribute('aria-hidden') === 'true';
+  const eventHidden = (root: HTMLElement, id: string) => root.querySelector(`[data-flower-row-event-id="${id}"] .flower-turn-row-viewport`)?.getAttribute('aria-hidden') === 'true';
   it.each([0, 1, 2])('folds reported failed structure after its user at Fork depth %s', async depth => {
     const fixture = canonicalProcessFixture(depth);
     const items = fixture.items!.map((item, index) => ({ ...item, id: ['user', 'progress', 'tool', 'second-progress', 'final-a'][index], turn_id: 'turn', run_id: 'run' }));
@@ -232,7 +249,7 @@ describe('completed turn process disclosure', () => {
     more.click();
     await waitFor(() => Boolean(recovery()?.querySelector('button:not(:disabled)')));
     recovery()!.querySelector<HTMLButtonElement>('button')!.click();
-    await waitFor(() => root.querySelectorAll('[data-parent-event]').length === 11);
+    await waitFor(() => root.querySelectorAll('[data-flower-row-event-id]').length === 11);
     expect(read.mock.calls[2]).toEqual(read.mock.calls[3]);
     expect(summary(root)?.textContent).toContain('11 subtask updates');
     expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
@@ -247,8 +264,7 @@ describe('completed turn process disclosure', () => {
     const { root, live } = await mount(failed);
     await waitFor(() => root.querySelectorAll('[data-parent-event]').length === 9);
     const report = eventRow(root, 'event-0');
-    const body = report.querySelector('[data-parent-event-body]');
-    const full = report.querySelector<HTMLButtonElement>('.flower-parent-event-disclosure')!;
+    let full = report.querySelector<HTMLButtonElement>('.flower-parent-event-disclosure')!;
     full.click();
     expect(full.getAttribute('aria-expanded')).toBe('true');
     expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
@@ -258,20 +274,18 @@ describe('completed turn process disclosure', () => {
     summary(root)!.click();
     await waitFor(() => eventHidden(root, 'event-0'));
     live.push({ ...failed, view_version: 3, parent_events: parentProcessPage() });
-    await waitFor(() => root.querySelectorAll('[data-parent-event]').length === 11);
+    await waitFor(() => root.querySelectorAll('[data-flower-row-event-id]').length === 11);
     expect(summary(root)?.textContent).toContain('11 subtask updates');
     expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
     expect(parentProcessEvents.every((event) => eventHidden(root, event.id))).toBe(true);
-    expect(eventRow(root, 'event-0')).toBe(report);
-    expect(report.querySelector('[data-parent-event-body]')).toBe(body);
-    expect(full.getAttribute('aria-expanded')).toBe('true');
+    await waitFor(() => !eventRow(root, 'event-0'));
     expect(message(root, 'final-a')).toBe(final);
     expect(hidden(root, 'final-a')).toBe(false);
     expect(hidden(root, 'user')).toBe(false);
-    expect(report.closest('[inert]')).not.toBeNull();
-    expect(summary(root)?.getAttribute('aria-controls')).toContain(eventRow(root, 'event-10').closest('.flower-turn-row-viewport')!.id);
+    expect(summary(root)?.getAttribute('aria-controls')).toContain(root.querySelector('[data-flower-row-event-id="event-10"] .flower-turn-row-viewport')!.id);
     summary(root)!.click();
     await waitFor(() => !eventHidden(root, 'event-10'));
+    full = eventRow(root, 'event-0').querySelector<HTMLButtonElement>('.flower-parent-event-disclosure')!;
     expect([...root.querySelectorAll('[data-parent-event]')].slice(0, 9).map((node) => node.getAttribute('data-parent-event'))).toEqual(order);
     expect(full.getAttribute('aria-expanded')).toBe('true');
     full.focus(); summary(root)!.click();
@@ -312,7 +326,7 @@ describe('completed turn process disclosure', () => {
     else if (protection === 'menu') {
       row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
       const menu = document.createElement('div'); menu.setAttribute('role', 'menu'); root.append(menu);
-    } else await inspectTranscript(root);
+    } else await inspectTranscript(root, row);
     live.push(current(true, { view_version: 3, parent_events: parentProcessPage([{ ...pending, resolved: true }]) }));
     await waitFor(() => summary(root)?.textContent?.includes('1 subtask update') === true);
     expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
@@ -523,9 +537,8 @@ describe('completed turn process disclosure', () => {
     ].map((item, index) => ({ ...item, ordinal: index + 1 }));
     const { root, live } = await mount({ ...done, items, goal });
     const final = message(root, 'final-a');
-    const changes = [...root.querySelectorAll<HTMLElement>('[data-flower-goal-change]')];
-    expect(changes).toHaveLength(3);
-    expect(changes.map(row => row.closest('.flower-turn-row-viewport')?.getAttribute('aria-hidden'))).toEqual([null, 'true', 'true']);
+    expect(root.querySelectorAll('[data-flower-goal-change]')).toHaveLength(1);
+    expect(['goal-set', 'goal-completed'].every(id => hidden(root, id))).toBe(true);
     expect(hidden(root, 'tool')).toBe(true);
     expect(message(root, 'user').compareDocumentPosition(summary(root)!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const editor = root.querySelector<HTMLButtonElement>('.flower-goal-tag')!;
@@ -535,18 +548,18 @@ describe('completed turn process disclosure', () => {
     expect(document.querySelector('.flower-goal-input')?.closest('[inert], [aria-hidden="true"]')).toBeNull();
     await userEvent.keyboard('{Escape}');
     summary(root)!.click();
-    expect(changes.every(row => row.closest('.flower-turn-row-viewport')?.getAttribute('aria-hidden') !== 'true')).toBe(true);
+    await waitFor(() => root.querySelectorAll('[data-flower-goal-change]').length === 3);
     const tool = message(root, 'tool');
     tool.querySelector<HTMLButtonElement>('button')!.click();
     const details = tool.querySelector('[aria-expanded="true"]');
     expect(details).not.toBeNull();
     summary(root)!.click();
     live.push({ ...done, items, goal, view_version: 3 });
-    await new Promise(resolve => setTimeout(resolve, 80));
+    await waitFor(() => !message(root, 'tool'));
     expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
     summary(root)!.click();
-    expect(message(root, 'tool')).toBe(tool);
-    expect(tool.querySelector('[aria-expanded="true"]')).toBe(details);
+    await waitFor(() => Boolean(message(root, 'tool')));
+    expect(message(root, 'tool').querySelector('[aria-expanded="true"]')).not.toBeNull();
     expect(message(root, 'final-a')).toBe(final);
   });
   it('does not supersede the latest failed turn for context compaction', async () => {
@@ -675,7 +688,7 @@ describe('completed turn process disclosure', () => {
     const child = subagentSummary({ parent_thread_id: 'parent', thread_id: 'process', status: 'completed' });
     const parent = thread({ thread_id: 'parent', subagents: [child] });
     const live = liveStream(liveBootstrap(parent).current);
-    live.envelope({ schema_version: 1, kind: 'ready', summaries: [parent] });
+    live.envelope({ schema_version: 2, kind: 'ready', summaries: [parent] });
     const root = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [parent]),
       loadThread: vi.fn(async () => liveBootstrap(parent, 1)), connectLiveStream: live.connect,
       loadSubagentDetail: vi.fn(async () => ({ summary: child, current: current(true, history === 'legacy'
@@ -684,7 +697,7 @@ describe('completed turn process disclosure', () => {
     await waitFor(() => Boolean(root.querySelector('[data-thread-id="parent"] button')));
     root.querySelector<HTMLButtonElement>('[data-thread-id="parent"] button')!.click();
     await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="m1"]')));
-    live.envelope({ schema_version: 1, kind: 'thread.batch', thread_id: 'parent', subagents: [child] });
+    live.envelope({ schema_version: 2, kind: 'thread.batch', thread_id: 'parent', subagents: [child] });
     await waitFor(() => Boolean(root.querySelector('[data-flower-subagent-count="1"]')));
     root.querySelector<HTMLButtonElement>('button[aria-controls="flower-subagents-dropdown"]')!.click();
     await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-disclosure]')));
@@ -703,7 +716,7 @@ describe('completed turn process disclosure', () => {
   it('loads successful history collapsed without an initial animation', async () => {
     const { root } = await mount(current(true));
     expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
-    expect(message(root, 'progress').closest('.flower-turn-row-viewport')?.getAttribute('data-state')).toBe('closed');
+    expect(messageRow(root, 'progress').querySelector('.flower-turn-row-viewport')?.getAttribute('data-state')).toBe('closed');
     expect(message(root, 'final-a').closest('.flower-turn-row-viewport')?.getAttribute('data-state')).toBe('open');
   });
   it('collapses typed legacy process while retaining every assistant reply and manual choice', async () => {
@@ -765,12 +778,12 @@ describe('completed turn process disclosure', () => {
     const { root } = await mount(current(true, { parent_events: parentProcessPage() }));
     await page.viewport(420, 900);
     const button = summary(root)!; button.click();
-    await waitFor(() => message(root, 'progress').closest('.flower-turn-row-viewport')?.getAttribute('data-state') === 'open');
+    await waitFor(() => messageRow(root, 'progress').querySelector('.flower-turn-row-viewport')?.getAttribute('data-state') === 'open');
     expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth + 1);
     expect(button.getAttribute('aria-controls')).toBeTruthy();
     button.click();
-    await waitFor(() => message(root, 'progress').closest('.flower-turn-row-viewport')?.getAttribute('data-state') === 'closed');
-    expect(message(root, 'progress').closest('[inert]')).not.toBeNull();
+    await waitFor(() => messageRow(root, 'progress').querySelector('.flower-turn-row-viewport')?.getAttribute('data-state') === 'closed');
+    expect(messageRow(root, 'progress').querySelector('[inert]')).not.toBeNull();
   });
   it('uses a quiet inline label and trailing chevron with native keyboard disclosure', async () => {
     const { root } = await mount(current(true));
@@ -823,7 +836,7 @@ describe('completed turn process disclosure', () => {
         const final = message(root, 'final-a');
         for (const expanded of [false, true]) {
           if (button.getAttribute('aria-expanded') !== String(expanded)) button.click();
-          await waitFor(() => message(root, 'progress').closest('.flower-turn-row-viewport')?.getAttribute('data-state') === (expanded ? 'open' : 'closed'));
+          await waitFor(() => messageRow(root, 'progress').querySelector('.flower-turn-row-viewport')?.getAttribute('data-state') === (expanded ? 'open' : 'closed'));
           expect(Math.abs(button.getBoundingClientRect().left - final.getBoundingClientRect().left)).toBeLessThanOrEqual(1);
           expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth + 1);
           expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);

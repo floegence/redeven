@@ -510,7 +510,7 @@ describe('Env local Flower surface adapter', () => {
 
 	it('consumes one cancellable workspace fetch-SSE stream without replay cursors', async () => {
 		fetchMock.mockResolvedValue(new Response(
-			`data: ${flowerLiveWireFixture({ schema_version: 1, kind: 'ready', summaries: [] })[0]!.data}\n\n`,
+			`data: ${flowerLiveWireFixture({ schema_version: 2, kind: 'ready', summaries: [] })[0]!.data}\n\n`,
 			{ status: 200, headers: { 'Content-Type': 'text/event-stream; charset=utf-8' } },
 		));
 		const adapter = createEnvLocalFlowerSurfaceAdapter({

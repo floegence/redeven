@@ -1,7 +1,6 @@
 package ai
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"net/url"
@@ -37,105 +36,11 @@ func flowerCurrentJSON(current flruntime.ThreadView) (json.RawMessage, error) {
 }
 
 func flowerCurrentJSONAt(current flruntime.ThreadView, sampledAt time.Time) (json.RawMessage, error) {
-	if err := validateFlowerCurrentIdentity(current); err != nil {
-		return nil, err
-	}
-	// Keep all product-specific redaction in the existing public projection,
-	// then add only scoped preview URLs from the original opaque references.
-	public := publicFloretThreadView(current)
-	// Typed failures are consumed below; only the product-safe error crosses
-	// the public boundary.
-	public.Failure = nil
-	encoded, err := json.Marshal(public)
+	public, err := projectFlowerCurrent(current, sampledAt)
 	if err != nil {
 		return nil, err
 	}
-	var root map[string]any
-	decoder := json.NewDecoder(bytes.NewReader(encoded))
-	decoder.UseNumber()
-	if err := decoder.Decode(&root); err != nil {
-		return nil, err
-	}
-	if current.RunProgress != nil && current.RunProgress.Request != nil && !sampledAt.IsZero() {
-		root["sampled_at_ms"] = sampledAt.UnixMilli()
-	}
-	// Product actions derive from the same canonical evidence resolver as host
-	// commands. The browser consumes this projection instead of parsing questions.
-	assistance := make(map[string]*ComputerInputAssistance)
-	for _, interaction := range current.Interactions {
-		if value := computerAssistanceFromEvidence(current, interaction); value != nil {
-			assistance[interaction.ID] = value
-		}
-	}
-	if interactions, ok := root["interactions"].([]any); ok {
-		for _, value := range interactions {
-			if item, ok := value.(map[string]any); ok {
-				if entry := assistance[anyToString(item["id"])]; entry != nil {
-					item["computer_assistance"] = entry
-				}
-			}
-		}
-	}
-	threadID := strings.TrimSpace(current.ThreadID.String())
-	if items, ok := root["items"].([]any); ok {
-		for index, value := range items {
-			item, ok := value.(map[string]any)
-			if !ok || index >= len(current.Items) {
-				continue
-			}
-			if interaction, ok := item["interaction"].(map[string]any); ok {
-				if entry := assistance[anyToString(interaction["id"])]; entry != nil {
-					interaction["computer_assistance"] = entry
-				}
-			}
-			turnID := strings.TrimSpace(current.Items[index].TurnID.String())
-			projectCurrentAttachmentURLs(item, current.Items[index].Attachments, threadID, turnID, "")
-		}
-	}
-	if queue, ok := root["queue"].([]any); ok {
-		for index, value := range queue {
-			entry, ok := value.(map[string]any)
-			if !ok || index >= len(current.Queue) {
-				continue
-			}
-			input, _ := entry["input"].(map[string]any)
-			if input == nil {
-				continue
-			}
-			entry["input_fingerprint"] = queuedInputFingerprint(current.Queue[index].Input)
-			projectCurrentAttachmentURLs(input, current.Queue[index].Input.Attachments, threadID, "", current.Queue[index].ID)
-		}
-	}
-	if restored, ok := root["restored_inputs"].([]any); ok {
-		for index, value := range restored {
-			entry, ok := value.(map[string]any)
-			if !ok || index >= len(current.RestoredInputs) {
-				continue
-			}
-			input, _ := entry["input"].(map[string]any)
-			if input != nil {
-				// Retained inputs are copyable history, without an executable
-				// queue or Turn scope from which to mint a preview URL.
-				projectCurrentAttachmentURLs(input, current.RestoredInputs[index].Input.Attachments, "", "", "")
-			}
-		}
-	}
-
-	// Floret's typed failure is consumed at this boundary. Its internal message
-	// must not become a second public UI contract.
-	if current.Failure != nil {
-		code, message := projectFloretTurnFailure(current.Failure, "floret_turn_failed")
-		if code == "" && message == "" {
-			delete(root, "run_error_code")
-			return json.Marshal(root)
-		}
-		root["run_error_code"] = code
-		root["error"] = message
-		if detail := scopedFailureDetail(current.Failure, current.ThreadID.String(), current.TurnID.String(), current.RunID.String()); detail != "" {
-			root["run_error_detail"] = detail
-		}
-	}
-	return json.Marshal(root)
+	return json.Marshal(public)
 }
 
 func validateFlowerCurrentIdentity(current flruntime.ThreadView) error {
@@ -176,26 +81,6 @@ func MarshalFlowerCurrentView(current flruntime.ThreadView) (json.RawMessage, er
 	return flowerCurrentJSON(current)
 }
 
-func projectCurrentAttachmentURLs(parent map[string]any, attachments []flruntime.MessageAttachment, threadID, turnID, queueID string) {
-	values, ok := parent["attachments"].([]any)
-	if !ok {
-		return
-	}
-	for index, value := range values {
-		attachment, ok := value.(map[string]any)
-		if !ok || index >= len(attachments) {
-			continue
-		}
-		if uploadID, err := uploadIDFromFloretResourceRef(attachments[index].ResourceRef); err == nil {
-			attachment["attachment_id"] = uploadID
-			if previewURL := flowerAttachmentURL(uploadID, threadID, turnID, queueID); previewURL != "" {
-				attachment["url"] = previewURL
-			}
-		}
-		delete(attachment, "resource_ref")
-	}
-}
-
 // The explicit current field in each wire envelope overrides the embedded raw
 // field, so private runtime data never reaches envelope serialization.
 type flowerCurrentJSONView flruntime.ThreadView
@@ -204,51 +89,60 @@ func (current flowerCurrentJSONView) MarshalJSON() ([]byte, error) {
 	return flowerCurrentJSON(flruntime.ThreadView(current))
 }
 
-// marshalFlowerContextJSON emits the product context beside the exact current
-// version. A missing snapshot leaves fields absent; an empty snapshot clears
-// prior objects and lists explicitly.
-func marshalFlowerContextJSON(value any, current flruntime.ThreadView) ([]byte, error) {
-	data, err := json.Marshal(value)
-	if err != nil || current.Context == nil {
-		return data, err
+// Snapshot context fields override the product metadata at one typed boundary.
+// Omitted snapshots preserve absence; present empty snapshots explicitly clear.
+func projectFlowerContext(current flruntime.ThreadView) (*flowerPublicContext, error) {
+	if current.Context == nil {
+		return nil, nil
 	}
 	projection, err := flowerCurrentContextProjection(current)
 	if err != nil {
 		return nil, err
 	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &fields); err != nil {
-		return nil, err
-	}
-	for key, value := range map[string]any{
-		"model_context": projection.ModelContext, "context_usage": projection.Usage,
-		"context_compactions": projection.Compactions, "timeline_decorations": projection.Decorations,
-	} {
-		fields[key], err = json.Marshal(value)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return json.Marshal(fields)
+	return &flowerPublicContext{projection.ModelContext, projection.Usage, projection.Compactions, projection.Decorations}, nil
 }
 
 func (d FlowerThreadDetail) MarshalJSON() ([]byte, error) {
-	thread, err := marshalFlowerContextJSON(d.Thread, d.Current)
+	context, err := projectFlowerContext(d.Current)
 	if err != nil {
 		return nil, err
 	}
+	var thread any = d.Thread
+	if context != nil {
+		thread = struct {
+			ThreadView
+			ModelContext        *flruntime.ThreadModelContext `json:"model_context"`
+			ContextUsage        *FlowerContextUsage           `json:"context_usage"`
+			ContextCompactions  []FlowerContextCompaction     `json:"context_compactions"`
+			TimelineDecorations []FlowerTimelineDecoration    `json:"timeline_decorations"`
+		}{d.Thread, context.ModelContext, context.ContextUsage, context.ContextCompactions, context.TimelineDecorations}
+	}
 	return json.Marshal(struct {
-		Thread  json.RawMessage       `json:"thread"`
+		Thread  any                   `json:"thread"`
 		Current flowerCurrentJSONView `json:"current"`
 	}{thread, flowerCurrentJSONView(d.Current)})
 }
 
 func (d FlowerSubagentDetailResponse) MarshalJSON() ([]byte, error) {
+	context, err := projectFlowerContext(d.Current)
+	if err != nil {
+		return nil, err
+	}
 	type wire FlowerSubagentDetailResponse
-	return marshalFlowerContextJSON(struct {
+	if context == nil {
+		return json.Marshal(struct {
+			wire
+			Current flowerCurrentJSONView `json:"current"`
+		}{wire(d), flowerCurrentJSONView(d.Current)})
+	}
+	return json.Marshal(struct {
 		wire
-		Current flowerCurrentJSONView `json:"current"`
-	}{wire(d), flowerCurrentJSONView(d.Current)}, d.Current)
+		ModelContext        *flruntime.ThreadModelContext `json:"model_context"`
+		ContextUsage        *FlowerContextUsage           `json:"context_usage"`
+		ContextCompactions  []FlowerContextCompaction     `json:"context_compactions"`
+		TimelineDecorations []FlowerTimelineDecoration    `json:"timeline_decorations"`
+		Current             flowerCurrentJSONView         `json:"current"`
+	}{wire(d), context.ModelContext, context.ContextUsage, context.ContextCompactions, context.TimelineDecorations, flowerCurrentJSONView(d.Current)})
 }
 
 func (r SendUserTurnResponse) MarshalJSON() ([]byte, error) {
@@ -296,7 +190,7 @@ func (e FlowerLiveStreamEnvelope) MarshalJSON() ([]byte, error) {
 }
 
 func marshalFlowerLiveEnvelopeAt(e FlowerLiveStreamEnvelope, sampledAt time.Time) ([]byte, error) {
-	var current, subagentCurrent json.RawMessage
+	var current, subagentCurrent, update, subagentUpdate json.RawMessage
 	var err error
 	if e.Current != nil {
 		current, err = flowerCurrentJSONAt(*e.Current, sampledAt)
@@ -310,17 +204,49 @@ func marshalFlowerLiveEnvelopeAt(e FlowerLiveStreamEnvelope, sampledAt time.Time
 			return nil, err
 		}
 	}
+	if e.Update != nil {
+		update, err = flowerUpdateJSONAt(*e.Update, sampledAt, e.updateEvidence)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if e.SubagentUpdate != nil {
+		subagentUpdate, err = flowerUpdateJSONAt(*e.SubagentUpdate, sampledAt, e.updateEvidence)
+		if err != nil {
+			return nil, err
+		}
+	}
 	type wire FlowerLiveStreamEnvelope
 	value := struct {
 		wire
 		Current         json.RawMessage `json:"current,omitempty"`
 		SubagentCurrent json.RawMessage `json:"subagent_current,omitempty"`
-	}{wire(e), current, subagentCurrent}
+		Update          json.RawMessage `json:"update,omitempty"`
+		SubagentUpdate  json.RawMessage `json:"subagent_update,omitempty"`
+	}{wire(e), current, subagentCurrent, update, subagentUpdate}
+
+	var context *flowerPublicContext
 	if e.Current != nil {
-		return marshalFlowerContextJSON(value, *e.Current)
+		context, err = projectFlowerContext(*e.Current)
 	}
 	if e.SubagentCurrent != nil {
-		return marshalFlowerContextJSON(value, *e.SubagentCurrent)
+		context, err = projectFlowerContext(*e.SubagentCurrent)
 	}
-	return json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	if context == nil {
+		return json.Marshal(value)
+	}
+	return json.Marshal(struct {
+		wire
+		ModelContext        *flruntime.ThreadModelContext `json:"model_context"`
+		ContextUsage        *FlowerContextUsage           `json:"context_usage"`
+		ContextCompactions  []FlowerContextCompaction     `json:"context_compactions"`
+		TimelineDecorations []FlowerTimelineDecoration    `json:"timeline_decorations"`
+		Current             json.RawMessage               `json:"current,omitempty"`
+		SubagentCurrent     json.RawMessage               `json:"subagent_current,omitempty"`
+		Update              json.RawMessage               `json:"update,omitempty"`
+		SubagentUpdate      json.RawMessage               `json:"subagent_update,omitempty"`
+	}{value.wire, context.ModelContext, context.ContextUsage, context.ContextCompactions, context.TimelineDecorations, current, subagentCurrent, update, subagentUpdate})
 }

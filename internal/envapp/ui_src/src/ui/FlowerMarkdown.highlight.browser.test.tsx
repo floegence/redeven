@@ -62,13 +62,13 @@ it('leaves growing and nested HTML tails uncolored, then colors finalized interr
   const [streaming, setStreaming] = createSignal(true);
   mount(() => <FlowerMarkdownBlock content={content()} streaming={streaming()} copyCodeLabel="Copy code" codeCopiedLabel="Copied" />);
   await frame();
-  const raw = root.querySelector('.flower-chat-md-raw-tail')!;
+  const raw = root.querySelector('.flower-chat-md-content code')!;
   const node = raw.firstChild;
   for (let index = 0; index < 50; index++) { setContent((value) => `${value}x`); await frame(); }
   expect(raw.firstChild).toBe(node);
   expect(root.querySelector('code span')).toBeNull();
   setContent('> ```python\n> def quoted():\n>     return True'); await frame();
-  expect(root.querySelector('.flower-chat-md-tail-frame code')?.textContent).toContain('def quoted');
+  expect(root.querySelector('.flower-chat-md-content code')?.textContent).toContain('def quoted');
   expect(root.querySelector('code span')).toBeNull();
   setStreaming(false);
   await highlighted();
@@ -96,7 +96,7 @@ it('colors fence aliases and metadata while leaving inline, unknown and oversize
   mount(() => <FlowerMarkdownBlock content={`Inline \`const n = 1\`\n\n${blocks.join('\n\n')}`} copyCodeLabel="Copy code" codeCopiedLabel="Copied" />);
   await highlighted(3);
   const codes = root.querySelectorAll('pre > code');
-  expect([...codes].slice(3).map((code) => code.children.length)).toEqual([0, 0, 0]);
+  expect([...codes].slice(3).map((code) => code.querySelectorAll(':scope > :not(.flower-chat-md-code-chunk)').length)).toEqual([0, 0, 0]);
   expect(root.querySelector('.flower-chat-md-inline-code')?.children.length).toBe(0);
   expect(codes[3].textContent).toBe('literal <script> text');
   expect(codes[5].textContent).toHaveLength(32_769);

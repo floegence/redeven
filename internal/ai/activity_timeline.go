@@ -6,7 +6,6 @@ import (
 
 	"github.com/floegence/floret/v7/identity"
 	"github.com/floegence/floret/v7/observation"
-	flruntime "github.com/floegence/floret/v7/runtime"
 )
 
 const activityTimelineBlockType = "activity-timeline"
@@ -14,6 +13,19 @@ const activityTimelineBlockType = "activity-timeline"
 type ActivityTimelineBlock struct {
 	Type string `json:"type"`
 	observation.ActivityTimeline
+}
+
+func (block ActivityTimelineBlock) MarshalJSON() ([]byte, error) {
+	type timeline observation.ActivityTimeline
+	items := make([]flowerPublicActivity, len(block.Items))
+	for index, item := range block.Items {
+		items[index] = projectFlowerActivity(item)
+	}
+	return json.Marshal(struct {
+		Type string `json:"type"`
+		timeline
+		Items []flowerPublicActivity `json:"items"`
+	}{block.Type, timeline(block.ActivityTimeline), items})
 }
 
 type activityTimelinePublicIdentity struct {
@@ -43,105 +55,7 @@ func publicActivityTimelineForBlock(timeline observation.ActivityTimeline, publi
 	timeline.ThreadID = identity.ThreadID(strings.TrimSpace(publicIdentity.ThreadID))
 	timeline.TurnID = identity.TurnID(strings.TrimSpace(publicIdentity.TurnID))
 	timeline.TraceID = identity.TraceID(strings.TrimSpace(publicIdentity.TraceID))
-	if len(timeline.Items) == 0 {
-		return timeline
-	}
-	items := make([]observation.ActivityItem, len(timeline.Items))
-	copy(items, timeline.Items)
-	for index := range items {
-		items[index] = publicActivityItem(items[index])
-	}
-	timeline.Items = items
 	return timeline
-}
-
-// publicActivityItem applies the same payload, target-ref, metadata, and
-// nested-value policy to every public Activity item. It is deliberately
-// renderer-agnostic so current view, timeline, and live projections cannot
-// drift into separate sanitizers.
-func publicActivityItem(item observation.ActivityItem) observation.ActivityItem {
-	raw, err := json.Marshal(item)
-	if err != nil {
-		return observation.ActivityItem{}
-	}
-	var record map[string]any
-	if err := json.Unmarshal(raw, &record); err != nil {
-		return observation.ActivityItem{}
-	}
-	block := map[string]any{
-		"type":  activityTimelineBlockType,
-		"items": []any{record},
-	}
-	if err := sanitizeActivityTimelineBlockRecord(block); err != nil {
-		return observation.ActivityItem{}
-	}
-	items, _ := block["items"].([]any)
-	if len(items) != 1 {
-		return observation.ActivityItem{}
-	}
-	safe, err := json.Marshal(items[0])
-	if err != nil {
-		return observation.ActivityItem{}
-	}
-	var out observation.ActivityItem
-	if err := json.Unmarshal(safe, &out); err != nil {
-		return observation.ActivityItem{}
-	}
-	return out
-}
-
-func (r *run) recordFloretActivityEvent(ev flruntime.Event) {
-	if r == nil || !isActivityObservationEvent(ev.Type) {
-		return
-	}
-	if !r.acceptsPresentationUpdates() {
-		return
-	}
-}
-
-func (r *run) recordObservationActivityEvent(ev observation.Event) {
-	if r == nil || !isActivityObservationEvent(ev.Type) {
-		return
-	}
-	if !r.acceptsPresentationUpdates() {
-		return
-	}
-	if !shouldRecordObservationActivityEvent(ev) {
-		return
-	}
-}
-
-func shouldRecordObservationActivityEvent(ev observation.Event) bool {
-	if ev.Type != observation.EventTypeRunEnd {
-		return true
-	}
-	if strings.TrimSpace(ev.Error) != "" {
-		return true
-	}
-	message := strings.TrimSpace(ev.Message)
-	return message == string(observation.ActivityStatusWaiting) ||
-		message == string(observation.ActivityStatusCanceled) ||
-		message == "cancelled"
-}
-
-func isActivityObservationEvent(eventType observation.EventType) bool {
-	switch eventType {
-	case observation.EventTypeToolCall,
-		observation.EventTypeToolResult,
-		observation.EventTypeToolApprovalRequested,
-		observation.EventTypeToolApprovalApproved,
-		observation.EventTypeToolApprovalRejected,
-		observation.EventTypeToolApprovalTimedOut,
-		observation.EventTypeToolApprovalCanceled,
-		observation.EventTypeHostedToolCall,
-		observation.EventTypeHostedToolResult,
-		observation.EventTypeControlSignal,
-		observation.EventTypeBudgetExceeded,
-		observation.EventTypeRunEnd:
-		return true
-	default:
-		return false
-	}
 }
 
 func activityTimelineFromAny(block any) (observation.ActivityTimeline, bool) {

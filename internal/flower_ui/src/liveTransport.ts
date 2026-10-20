@@ -65,6 +65,10 @@ export function createLiveTransport<T>(): LiveTransport<T> {
   const fail = (error: unknown, connectionEpoch = epoch) => {
     const current = owner;
     if (!current || current.stopped || connectionEpoch !== epoch || state.status === 'failed') return;
+    if ((error as { code?: unknown })?.code === 'flower_live_sync_error' && current.attempt) {
+      disconnect(current, current.attempt, error);
+      return;
+    }
     invalidate(current);
     setState(current, 'failed', error);
     current.input.onTerminalError(error);
@@ -73,23 +77,17 @@ export function createLiveTransport<T>(): LiveTransport<T> {
     if (!currentAttempt(current, attempt)) return;
     const status = Number((error as { status?: unknown })?.status ?? 0);
     const code = String((error as { code?: unknown })?.code ?? '').trim();
-    if (error !== undefined && status !== 429 && (status === 401 || status === 403 || status === 423
-      || ((!code && status === 0) || (code && code !== 'transport' && code !== 'unexpected_status')))) {
+    if (error !== undefined && (status === 401 || status === 403 || status === 423 || status === 426 || status === 429
+      || ((!code && status === 0) || (code && code !== 'transport' && code !== 'unexpected_status' && code !== 'flower_live_sync_error')))) {
       fail(error, attempt.epoch);
       return;
     }
     if (Date.now() - attempt.connectedAt >= 30_000) current.reconnectAttempt = 0;
     invalidate(current);
     setState(current, 'reconnecting', error);
-    const retryAfterSeconds = status === 429 ? Number((error as { retryAfter?: unknown })?.retryAfter ?? 0) : 0;
-    let delay: number;
-    if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
-      delay = Math.min(30_000, retryAfterSeconds * 1000);
-    } else {
-      const base = RECONNECT_DELAYS_MS[Math.min(current.reconnectAttempt, RECONNECT_DELAYS_MS.length - 1)];
-      current.reconnectAttempt++;
-      delay = Math.round(base * (0.8 + Math.random() * 0.4));
-    }
+    const base = RECONNECT_DELAYS_MS[Math.min(current.reconnectAttempt, RECONNECT_DELAYS_MS.length - 1)];
+    current.reconnectAttempt++;
+    const delay = Math.round(base * (0.8 + Math.random() * 0.4));
     const retryEpoch = epoch;
     current.retryTimer = window.setTimeout(() => {
       if (owner !== current || current.stopped || epoch !== retryEpoch) return;

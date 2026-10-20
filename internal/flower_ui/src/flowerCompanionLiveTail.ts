@@ -25,10 +25,30 @@ function singleLine(value: string | null | undefined): string {
 }
 
 function singleLineTail(value: string | null | undefined): string {
-  const characters = Array.from(singleLine(value));
-  return characters.length > FLOWER_COMPANION_LIVE_TAIL_MAX_CHARACTERS
-    ? characters.slice(-FLOWER_COMPANION_LIVE_TAIL_MAX_CHARACTERS).join('')
-    : characters.join('');
+  if (!value) return '';
+  const characters: string[] = [];
+  let whitespace = false;
+  for (let index = value.length; index > 0 && characters.length < FLOWER_COMPANION_LIVE_TAIL_MAX_CHARACTERS;) {
+    let start = index - 1;
+    const unit = value.charCodeAt(start);
+    if (unit >= 0xdc00 && unit <= 0xdfff && start > 0) {
+      const previous = value.charCodeAt(start - 1);
+      if (previous >= 0xd800 && previous <= 0xdbff) start -= 1;
+    }
+    const character = value.slice(start, index);
+    index = start;
+    if (/\s/u.test(character)) {
+      whitespace = characters.length > 0;
+      continue;
+    }
+    if (whitespace) {
+      characters.push(' ');
+      whitespace = false;
+      if (characters.length === FLOWER_COMPANION_LIVE_TAIL_MAX_CHARACTERS) break;
+    }
+    characters.push(character);
+  }
+  return characters.reverse().join('');
 }
 
 function singleLineHead(value: string | null | undefined): string {
@@ -62,9 +82,10 @@ export function projectFlowerCompanionLiveTail(
   const progress = flowerRunProgress(thread);
   if (!progress) return null;
   if (progress.kind === 'retrying') return { kind: 'status', text: liveProgressLabel(progress.kind, progress.retry), identity: progress.identity };
-  const messages = thread.messages.filter((message) => trimString(message.turn_id) === progress.turnID);
+  const messages = thread.messages;
   for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
     const message = messages[messageIndex];
+    if (trimString(message.turn_id) !== progress.turnID) continue;
     if (message.role !== 'assistant') continue;
     for (let blockIndex = (message.blocks?.length ?? 0) - 1; blockIndex >= 0; blockIndex -= 1) {
       const block = message.blocks?.[blockIndex];

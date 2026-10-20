@@ -25,7 +25,7 @@ const defaults = streamingFixture().adapter;
 const unavailable = async (): Promise<never> => { throw new Error('Outside qualification scope'); };
 const adapter = createRuntimeFlowerSurfaceAdapter({
   runtime: defaults.runtime,
-  canMutate: false,
+  canMutate: new URLSearchParams(location.search).has('cpu'),
   mapperOptions: { runtimeID: 'fixture', runtimeKind: 'env_local', sourceLabel: 'Isolated runtime', targetLabels: [] },
   loadSettings: defaults.loadSettings, saveDefaultPermission: defaults.saveDefaultPermission,
   saveModelProfile: defaults.saveModelProfile, persistDefaultModel: defaults.persistDefaultModel,
@@ -59,15 +59,18 @@ const adapter = createRuntimeFlowerSurfaceAdapter({
     markThreadRead: async () => ({ read_status: readStatus }),
     patchThread: unavailable, submitApproval: unavailable,
   },
-  launchTurn: unavailable, retryThread: unavailable, stopThread: unavailable, submitInput: unavailable,
+  launchTurn: unavailable, retryThread: unavailable, stopThread: new URLSearchParams(location.search).has('cpu') ? threadID => api('cancel', threadID) : unavailable, submitInput: unavailable,
 });
 const loadThread = adapter.loadThread;
 const qualified = { ...adapter, loadThread: async (threadID: string, signal: AbortSignal) => { try { return await loadThread(threadID, signal); } catch (error) { console.error('qualification detail:', String(error)); throw error; } } };
 const [notice, setNotice] = createSignal('');
+const [visible, setVisible] = createSignal(true);
+const draftCoordinator = createFlowerComposerDraftCoordinator();
+Object.assign(window, { flowerQualification: { setVisible } });
 document.getElementById('root')!.style.height = '100vh';
 render(() => <FloeProvider>
   <Show when={notice()}><div role="status">{notice()}</div></Show>
-  <FlowerSurface adapter={qualified} notify={message => setNotice(message.message)}
-    draftCoordinator={createFlowerComposerDraftCoordinator()}
-    focusThreadRequest={{ request_id: 'qualification', thread_id: id }} />
+  <Show when={visible()}><FlowerSurface adapter={qualified} notify={message => setNotice(message.message)}
+    draftCoordinator={draftCoordinator}
+    focusThreadRequest={{ request_id: 'qualification', thread_id: id }} /></Show>
 </FloeProvider>, document.getElementById('root')!);

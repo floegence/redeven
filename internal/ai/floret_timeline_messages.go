@@ -361,55 +361,6 @@ func publicFloretMessageReferences(references []flruntime.MessageReference) ([]p
 	return out, nil
 }
 
-func publicFloretThreadView(current flruntime.ThreadView) flruntime.ThreadView {
-	current.Context = nil
-	out := current
-	out.ToolCallPreviews = append([]flruntime.ThreadToolCallPreview(nil), current.ToolCallPreviews...)
-	for index := range out.ToolCallPreviews {
-		out.ToolCallPreviews[index].Preview = out.ToolCallPreviews[index].Preview.Clone()
-	}
-	out.Cancellation = cloneFlowerCancellation(current.Cancellation)
-	out.Items = append([]flruntime.ThreadItem(nil), current.Items...)
-	for index := range out.Items {
-		out.Items[index].Attachments = publicFloretAttachments(out.Items[index].Attachments)
-		out.Items[index].References = publicRuntimeReferences(out.Items[index].References)
-		if out.Items[index].Activity != nil {
-			activity := publicActivityItem(*out.Items[index].Activity)
-			out.Items[index].Activity = &activity
-		}
-		if out.Items[index].Interaction != nil {
-			interaction := publicFloretInteraction(*out.Items[index].Interaction)
-			out.Items[index].Interaction = &interaction
-		}
-	}
-	out.Queue = append([]flruntime.QueuedInput(nil), current.Queue...)
-	for index := range out.Queue {
-		out.Queue[index].Input.Attachments = publicFloretAttachments(out.Queue[index].Input.Attachments)
-		out.Queue[index].Input.References = publicRuntimeReferences(out.Queue[index].Input.References)
-		// Supplemental context is turn-scoped host input. It is consumed by the
-		// provider execution, but must not cross the public Flower projection.
-		out.Queue[index].SupplementalContext = nil
-	}
-	out.RestoredInputs = append([]flruntime.RestoredInput(nil), current.RestoredInputs...)
-	for index := range out.RestoredInputs {
-		out.RestoredInputs[index].Input.Attachments = publicFloretAttachments(out.RestoredInputs[index].Input.Attachments)
-		out.RestoredInputs[index].Input.References = publicRuntimeReferences(out.RestoredInputs[index].Input.References)
-	}
-	out.Interactions = append([]flruntime.ThreadInteraction(nil), current.Interactions...)
-	for index := range out.Interactions {
-		out.Interactions[index] = publicFloretInteraction(out.Interactions[index])
-	}
-	return out
-}
-
-func publicFloretAttachments(attachments []flruntime.MessageAttachment) []flruntime.MessageAttachment {
-	out := append([]flruntime.MessageAttachment(nil), attachments...)
-	for index := range out {
-		out[index].ResourceRef = ""
-	}
-	return out
-}
-
 func publicRuntimeReferences(references []flruntime.MessageReference) []flruntime.MessageReference {
 	out := append([]flruntime.MessageReference(nil), references...)
 	for index := range out {

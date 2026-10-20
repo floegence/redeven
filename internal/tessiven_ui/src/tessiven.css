@@ -1660,7 +1660,7 @@
   border: 0;
 }
 .tessiven-flower-composer .flower-chat-bottom-dock-track { width: 100%; max-width: none; padding: 0; }
-.tessiven-flower-composer .flower-composer { background: var(--card); }
+.tessiven-flower-composer .flower-composer { background: color-mix(in srgb, var(--foreground) 3%, var(--card)); }
 .tessiven-flower-output .tessiven-flower-composer {
   position: relative;
   left: auto;
@@ -1695,6 +1695,8 @@
   min-height: 0;
 }
 .tessiven-flower-chat .flower-composer textarea { flex: 0 1 auto; }
+.tessiven-flower-chat .flower-composer-entry { min-height: 0; flex: 0 1 auto; }
+.tessiven-flower-chat .flower-composer-entry > textarea { max-height: 100%; }
 .tessiven-flower-chat .flower-composer-footer { flex: 0 0 auto; }
 .tessiven-flower-chat .flower-input-request-actions { border-top: 0; }
 .tessiven-flower-chat .flower-input-request-questions {

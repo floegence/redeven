@@ -64,7 +64,7 @@ export function renderSurfaceWithAdapter(adapter: FlowerSurfaceAdapter): HTMLDiv
   const host = document.createElement('div');
   document.body.appendChild(host);
   const surfaceAdapter: FlowerSurfaceAdapter = { ...adapter, connectLiveStream: async function* ({ signal }) {
-    yield { schema_version: 1, kind: 'ready', summaries: await adapter.listThreads() };
+    yield { schema_version: 2, kind: 'ready', summaries: await adapter.listThreads() };
     if (!signal.aborted) await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
   } };
   const dispose = render(() => <FloeConfigProvider><LayoutProvider>

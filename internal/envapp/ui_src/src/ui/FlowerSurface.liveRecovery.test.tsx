@@ -47,10 +47,10 @@ describe('parent event synchronization boundaries', () => {
     const surface = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [selected]), loadThread, launchTurn,
       connectLiveStream: async function* (input): AsyncIterable<FlowerLiveStreamEnvelope> {
         connections++;
-        yield { schema_version: 1, kind: 'ready', summaries: [selected] };
+        yield { schema_version: 2, kind: 'ready', summaries: [selected] };
         if (connections === 1) {
           await broken.promise;
-          yield { schema_version: 1, kind: 'thread.batch', thread_id: selected.thread_id,
+          yield { schema_version: 2, kind: 'thread.batch', thread_id: selected.thread_id,
             current: { ...runtimeCurrentView(selected, 2), parent_events: JSON.parse('{"events":null}') } };
         }
         await waitForAbort(input);
@@ -116,7 +116,7 @@ function failedStream(summaries: readonly FlowerThreadSnapshot[]) {
   const attempts: FlowerLiveStreamConnectInput[] = [];
   const connectLiveStream = vi.fn(async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
     attempts.push(input);
-    yield { schema_version: 1, kind: 'ready', summaries };
+    yield { schema_version: 2, kind: 'ready', summaries };
     if (attempts.length === 1) {
       await firstFailure.promise;
       throw encodingFailure();
@@ -127,6 +127,42 @@ function failedStream(summaries: readonly FlowerThreadSnapshot[]) {
 }
 
 describe('Flower workspace synchronization recovery', () => {
+  it.each([
+    [426, 'matching app and runtime version'],
+    [429, 'Close unused Flower views'],
+  ] as const)('shows actionable recovery for status %i without an automatic retry loop', async (status, guidance) => {
+    const selected = thread({ thread_id: 'thread-explicit-recovery' });
+    const failure = deferred<void>();
+    let attempts = 0;
+    const connectLiveStream = vi.fn(async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
+      const attempt = ++attempts;
+      yield { schema_version: 2, kind: 'ready', summaries: [selected] };
+      if (attempt === 1) {
+        await failure.promise;
+        throw Object.assign(new Error('Private recovery diagnostic'), { status, code: 'unexpected_status' });
+      }
+      await waitForAbort(input);
+    });
+    const surface = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [selected]),
+      loadThread: vi.fn(async () => liveBootstrap(selected, 9)), connectLiveStream });
+    await waitFor(() => Boolean(surface.querySelector(`[data-thread-id="${selected.thread_id}"] button`)));
+    selectThread(surface, selected.thread_id);
+    await waitFor(() => surface.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === selected.thread_id && !surface.querySelector('main')?.hasAttribute('data-flower-pending-thread-id') && Boolean(surface.querySelector('.flower-composer textarea')));
+    const editor = surface.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
+    editor.value = 'Preserve my recovery draft';
+    editor.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    failure.resolve();
+    await waitFor(() => surface.querySelector('[data-flower-sync-state="failed"]') !== null);
+    expect(surface.querySelector('.flower-workspace-sync')?.textContent).toContain(guidance);
+    expect(surface.textContent).not.toContain('Private recovery diagnostic');
+    await flush();
+    expect(attempts).toBe(1);
+    expect(editor.disabled).toBe(false);
+    (surface.querySelector('.flower-workspace-sync button') as HTMLButtonElement).click();
+    await waitFor(() => attempts === 2 && surface.querySelector('.flower-workspace-sync') === null);
+    expect(editor.value).toBe('Preserve my recovery draft');
+  });
+
   it('retains the displayed transcript while a reconnect delivers more baselines than the detail cache', async () => {
     const selected = thread({ thread_id: 'thread-selected-baseline', status: 'running' });
     const summaries = [selected, ...Array.from({ length: 23 }, (_, index) => thread({ thread_id: `thread-background-${index}`, title: `Background ${index}`, status: 'running' }))];
@@ -137,10 +173,10 @@ describe('Flower workspace synchronization recovery', () => {
       ...adapter(true), listThreads: vi.fn(async () => summaries), loadThread,
       connectLiveStream: async function* (input): AsyncIterable<FlowerLiveStreamEnvelope> {
         const connection = ++connections;
-        yield { schema_version: 1, kind: 'ready', summaries };
+        yield { schema_version: 2, kind: 'ready', summaries };
         if (connection === 1) { await disconnect.promise; return; }
         await publishBaselines.promise;
-        for (const summary of summaries) yield { schema_version: 1, kind: 'thread.batch', thread_id: summary.thread_id, current: runtimeCurrentView(summary, 10) };
+        for (const summary of summaries) yield { schema_version: 2, kind: 'thread.batch', thread_id: summary.thread_id, current: runtimeCurrentView(summary, 10) };
         await waitForAbort(input);
       },
     });
@@ -281,9 +317,9 @@ describe('Flower workspace synchronization recovery', () => {
       const attempt = attempts.length;
       if (attempt === 1) {
         await late.promise;
-        yield { schema_version: 1, kind: 'thread.batch', thread_id: selected.thread_id,
+        yield { schema_version: 2, kind: 'thread.batch', thread_id: selected.thread_id,
           current: { ...runtimeCurrentView(selected, 99), items: [{ id: 'late-answer', turn_id: 'turn-1', run_id: selected.active_run_id!, ordinal: 2, kind: 'assistant', text: 'Obsolete connection output' }] } };
-      } else yield { schema_version: 1, kind: 'ready', summaries: [selected] };
+      } else yield { schema_version: 2, kind: 'ready', summaries: [selected] };
       await waitForAbort(input);
     });
     const loadThread = vi.fn(async () => liveBootstrap(selected, 9));
@@ -350,10 +386,10 @@ describe('Flower workspace synchronization recovery', () => {
       .mockResolvedValue(subagentDetail({ summary: child, current: childCurrent('Fresh child result after server restart', 1) }));
     const connectLiveStream = vi.fn(async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
       attempts.push(input);
-      yield { schema_version: 1, kind: 'ready', summaries: [parent] };
+      yield { schema_version: 2, kind: 'ready', summaries: [parent] };
       if (attempts.length === 1) {
         await publishChild.promise;
-        yield { schema_version: 1, kind: 'thread.batch', thread_id: parent.thread_id,
+        yield { schema_version: 2, kind: 'thread.batch', thread_id: parent.thread_id,
           subagent_current: childCurrent('Previous server child version fifty', 50) };
         await failure.promise;
         throw encodingFailure();
@@ -406,9 +442,9 @@ describe('Canonical managed facts on the existing workspace transport', () => {
   const facts = { snapshot: { sections: [{ key: 'skills', title: 'Skills', text: 'Background catalog changed' }] }, entry_id: 'facts-background', path_depth: 1,
    turn_id: 'turn-facts', run_id: 'run-facts', updated_at: '2026-10-15T12:00:00Z', changed_keys: ['skills'], removed_keys: [] };
   const connectLiveStream = vi.fn(async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
-   yield { schema_version: 1, kind: 'ready', summaries: [first, second] };
+   yield { schema_version: 2, kind: 'ready', summaries: [first, second] };
    await publish.promise;
-   yield { schema_version: 1, kind: 'thread.batch', thread_id: second.thread_id,
+   yield { schema_version: 2, kind: 'thread.batch', thread_id: second.thread_id,
     ...(withCurrent ? { current: liveBootstrap(second).current } : {}), model_context: facts, context_usage: sourceUsage };
    await waitForAbort(input);
   });
@@ -447,13 +483,13 @@ describe('Canonical managed facts on the existing workspace transport', () => {
   const facts = { snapshot: { sections: [{ key: 'skills', title: 'Skills', text: 'Current child catalog' }] }, entry_id: 'child-facts', path_depth: 1,
    turn_id: 'turn-child', run_id: 'run-child', updated_at: '2026-10-15T12:00:00Z', changed_keys: ['skills'], removed_keys: [] };
   const connectLiveStream = vi.fn(async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
-   yield { schema_version: 1, kind: 'ready', summaries: [parent] };
+   yield { schema_version: 2, kind: 'ready', summaries: [parent] };
    await publish.promise;
-   yield { schema_version: 1, kind: 'thread.batch', thread_id: parent.thread_id, subagent_current: detail.current, model_context: facts, context_usage: sourceUsage };
+   yield { schema_version: 2, kind: 'thread.batch', thread_id: parent.thread_id, subagent_current: detail.current, model_context: facts, context_usage: sourceUsage };
    await clear.promise;
-   yield { schema_version: 1, kind: 'thread.batch', thread_id: parent.thread_id, subagent_current: detail.current, model_context: null, context_usage: null, context_compactions: [], timeline_decorations: [] };
+   yield { schema_version: 2, kind: 'thread.batch', thread_id: parent.thread_id, subagent_current: detail.current, model_context: null, context_usage: null, context_compactions: [], timeline_decorations: [] };
    await stale.promise;
-   yield { schema_version: 1, kind: 'thread.batch', thread_id: parent.thread_id, subagent_current: { ...detail.current, view_version: 3 }, model_context: facts, context_usage: sourceUsage };
+   yield { schema_version: 2, kind: 'thread.batch', thread_id: parent.thread_id, subagent_current: { ...detail.current, view_version: 3 }, model_context: facts, context_usage: sourceUsage };
    await waitForAbort(input);
   });
   const loadThread = vi.fn(async () => liveBootstrap(parent));

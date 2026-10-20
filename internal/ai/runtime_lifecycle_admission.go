@@ -96,7 +96,7 @@ func (s *Service) acceptAIUserTurnLease(key, threadID string, current flruntime.
 	}
 	s.workloadMu.Unlock()
 	if current.Activity != flruntime.ThreadActivityActive && len(current.Queue) == 0 {
-		s.reconcileAIWorkloadLeases(strings.TrimSpace(threadID), current)
+		s.reconcileAIWorkloadLeases(strings.TrimSpace(threadID), current.Activity, len(current.Queue))
 	}
 }
 
@@ -111,8 +111,8 @@ func (s *Service) rejectAIUserTurnLease(key string, newlyAdmitted bool) {
 	lease.Release()
 }
 
-func (s *Service) reconcileAIWorkloadLeases(threadID string, current flruntime.ThreadView) {
-	if s == nil || strings.TrimSpace(threadID) == "" || current.Activity == flruntime.ThreadActivityActive || len(current.Queue) > 0 {
+func (s *Service) reconcileAIWorkloadLeases(threadID string, activity flruntime.ThreadActivity, queueCount int) {
+	if s == nil || strings.TrimSpace(threadID) == "" || activity == flruntime.ThreadActivityActive || queueCount > 0 {
 		return
 	}
 	var releases []*aiWorkloadLease

@@ -75,7 +75,7 @@ describe('Activity disclosure interaction', () => {
       items = [...items, ...Array.from({ length: count }, (_, offset) => activityItem({
         ...read(), item_id: `short-growth-${index}-${offset}`, tool_id: `short-growth-${index}-${offset}`, label: `New tool ${index}-${offset}`,
       }))];
-      live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor(items, index + 2) });
+      live.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor(items, index + 2) });
       await waitFor(() => Boolean(rowFor(runtime, items.at(-1)!.item_id)));
       await waitFor(() => distance() <= 1);
       expect(runtime.querySelector('.flower-scroll-to-latest-button')).toBeNull();
@@ -99,7 +99,7 @@ describe('Activity disclosure interaction', () => {
     const distance = () => viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop;
     await waitFor(() => viewport.dataset.flowerTailPreparing !== 'true' && distance() <= 1);
     await userEvent.click(viewport, { position: { x: 24, y: 20 } });
-    live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([
+    live.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([
       ...items, ...Array.from({ length: 8 }, (_, index) => activityItem({
         ...read(), item_id: `appended-${index}`, tool_id: `appended-${index}`, label: `New tool ${index}`,
       })),
@@ -131,13 +131,13 @@ describe('Activity disclosure interaction', () => {
     const appended = [...items, ...Array.from({ length: 8 }, (_, index) => activityItem({
       ...read(), item_id: `appended-${index}`, tool_id: `appended-${index}`, label: `New tool ${index}`,
     }))];
-    live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor(appended, 2) });
+    live.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor(appended, 2) });
     await waitFor(() => Boolean(rowFor(runtime, 'appended-7')));
     await waitFor(() => distance() <= 1);
     await wheel.wheelScrollRegion({ regionSelector: '.flower-chat-transcript', deltaY: -300 });
     await waitFor(() => distance() > 96);
     const readingTop = viewport.scrollTop;
-    live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([
+    live.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([
       ...appended, { ...read(), item_id: 'reading-update', tool_id: 'reading-update' },
     ], 3) });
     await waitFor(() => Boolean(rowFor(runtime, 'reading-update')));
@@ -152,7 +152,7 @@ describe('Activity disclosure interaction', () => {
       ...read(), item_id: `read-${index}`, tool_id: `read-${index}`, label: `Check diagnostic output ${index}`,
     }))];
     const { runtime, live } = await mount(items);
-    live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor(items, 2) });
+    live.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor(items, 2) });
     await new Promise((resolve) => setTimeout(resolve, 100));
     const target = toggleFor(runtime, 'read-23');
     await waitFor(() => runtime.querySelector('.flower-chat-transcript')?.getAttribute('data-flower-tail-preparing') !== 'true');
@@ -166,7 +166,7 @@ describe('Activity disclosure interaction', () => {
         const nextItems = [...items, ...Array.from({ length: 4 }, (_, index) => activityItem({
           ...read(), item_id: `new-${index}`, tool_id: `new-${index}`, label: `Next diagnostic ${index}`,
         }))];
-        live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor(nextItems, 3) });
+        live.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor(nextItems, 3) });
       }, 10);
     }, { once: true });
     await userEvent.click(target, { delay: pressDuration });
@@ -184,7 +184,7 @@ describe('Activity disclosure interaction', () => {
       ...read(), item_id: `read-${index}`, tool_id: `read-${index}`, label: `Check diagnostic output ${index}`,
     }))];
     const { runtime, live } = await mount(items);
-    live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor(items, 2) });
+    live.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor(items, 2) });
     await new Promise((resolve) => setTimeout(resolve, 100));
     const wheel = commands as unknown as { wheelScrollRegion: (request: { regionSelector: string; deltaY: number }) => Promise<unknown> };
     await wheel.wheelScrollRegion({ regionSelector: '.flower-chat-transcript', deltaY: -180 });
@@ -203,7 +203,7 @@ describe('Activity disclosure interaction', () => {
         wasBlocked = getComputedStyle(latest).pointerEvents === 'none';
         const composer = runtime.querySelector<HTMLElement>('.flower-chat-bottom-dock-track')!;
         composer.style.minHeight = `${composer.clientHeight + 48}px`;
-        live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([...items, { ...read(), item_id: 'new-output', tool_id: 'new-output' }], 3) });
+        live.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([...items, { ...read(), item_id: 'new-output', tool_id: 'new-output' }], 3) });
       }, 10);
     }, { once: true });
     await userEvent.click(target, { delay: 160 });
@@ -231,7 +231,7 @@ describe('Activity disclosure interaction', () => {
     const early = activityItem({ item_id: 'early', tool_id: 'early', tool_name: 'use_skill', renderer: 'structured', label: 'diagnostic-guide', status: 'running', payload: {} });
     const file = activityItem({ item_id: 'file', tool_id: 'file', tool_name: 'read_file', renderer: 'file', label: 'Read project guide', status: 'error', payload: { operation: 'read', display_name: 'README.md', error: { message: 'Access denied' } } });
     const { runtime, live } = await mount([write(), early, file]);
-    live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([write(), early, file], 2) });
+    live.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([write(), early, file], 2) });
     await new Promise((resolve) => setTimeout(resolve, 100));
     const button = toggleFor(runtime, 'early');
     expect(button.tagName).toBe('BUTTON');
@@ -244,13 +244,13 @@ describe('Activity disclosure interaction', () => {
     await waitFor(() => rowFor(runtime, 'file').textContent?.includes('Access denied') === true);
     await userEvent.click(toggleFor(runtime, 'file'));
     const ready = { ...early, status: 'success' as const, payload: { operation: 'use_skill', rows: [{ title: 'Guide loaded', content: 'Ready for diagnostics', format: 'text' }] } };
-    live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([write(), ready, file], 3) });
+    live.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([write(), ready, file], 3) });
     await waitFor(() => rowFor(runtime, 'early').textContent?.includes('Ready for diagnostics') === true);
     expect(toggleFor(runtime, 'early')).toBe(button);
     expect(button.getAttribute('aria-expanded')).toBe('true');
     await userEvent.click(button);
     const failed = { ...ready, status: 'error' as const, payload: { error: { message: 'Guide refresh failed' } } };
-    live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([write(), failed, file], 4) });
+    live.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([write(), failed, file], 4) });
     await waitFor(() => rowFor(runtime, 'early').getAttribute('data-flower-activity-status') === 'error');
     expect(toggleFor(runtime, 'early')).toBe(button);
     expect(button.getAttribute('aria-expanded')).toBe('false');
@@ -268,14 +268,14 @@ describe('Activity disclosure interaction', () => {
     });
     const { runtime, live } = await mount([write(), tool]);
     expect(toggleFor(runtime, tool.item_id).getAttribute('aria-expanded')).toBe('false');
-    live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([write(), tool], 2) });
+    live.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([write(), tool], 2) });
     await new Promise((resolve) => setTimeout(resolve, 100));
     const row = rowFor(runtime, tool.item_id);
     const toggle = toggleFor(runtime, tool.item_id);
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(row.querySelector('.flower-activity-inline-details')).toBeNull();
     const running = { ...tool, status: 'running' as const, label: 'Inspecting environment status' };
-    live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([write(), running], 3) });
+    live.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([write(), running], 3) });
     await waitFor(() => row.textContent?.includes(running.label) === true);
     expect(toggleFor(runtime, tool.item_id)).toBe(toggle);
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
@@ -286,7 +286,7 @@ describe('Activity disclosure interaction', () => {
     await userEvent.click(toggle);
     await waitFor(() => row.querySelector('.flower-activity-terminal-command')?.textContent === 'printf READY');
     const finished = { ...running, status: 'success' as const, payload: { ...running.payload, exit_code: 0, output: 'Ready' } };
-    live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([write(), finished], 4) });
+    live.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([write(), finished], 4) });
     await waitFor(() => row.getAttribute('data-flower-activity-status') === 'success');
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
     expect(window.getComputedStyle(title, '::after').animationName).toBe('none');
@@ -297,12 +297,12 @@ describe('Activity disclosure interaction', () => {
       ...read(), item_id: `read-${index}`, tool_id: `read-${index}`, label: `Check diagnostic output ${index}`,
     }))];
     const { runtime, live } = await mount(items);
-    live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor(items, 2) });
+    live.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor(items, 2) });
     await new Promise((resolve) => setTimeout(resolve, 100));
     const waiting = items.map((item) => item.item_id === 'read-23'
       ? { ...item, status: 'waiting' as const, needs_attention: true }
       : item);
-    live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor(waiting, 3) });
+    live.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor(waiting, 3) });
     await waitFor(() => rowFor(runtime, 'read-23').getAttribute('data-flower-activity-status') === 'waiting');
     expect(toggleFor(runtime, 'read-23').getAttribute('aria-expanded')).toBe('false');
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -329,7 +329,7 @@ describe('Activity disclosure interaction', () => {
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${parent.thread_id}"] button`)));
     (runtime.querySelector(`[data-thread-id="${parent.thread_id}"] button`) as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="write"]')));
-    live.push({ schema_version: 1, kind: 'thread.batch', thread_id: parent.thread_id, subagents: [child] });
+    live.push({ schema_version: 2, kind: 'thread.batch', thread_id: parent.thread_id, subagents: [child] });
     await waitFor(() => runtime.querySelector('[data-flower-subagent-count]')?.getAttribute('data-flower-subagent-count') === '1');
     runtime.querySelector<HTMLButtonElement>('button[aria-controls="flower-subagents-dropdown"]')!.click();
     await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-row="0"]')));
@@ -350,7 +350,7 @@ describe('Activity disclosure interaction', () => {
         const appended = [...items, ...Array.from({ length: 4 }, (_, index) => activityItem({
           ...read(), item_id: `new-child-${index}`, tool_id: `new-child-${index}`, status: 'running',
         }))];
-        live.push({ schema_version: 1, kind: 'thread.batch', thread_id: parent.thread_id, subagent_current: childCurrent(appended, 2) });
+        live.push({ schema_version: 2, kind: 'thread.batch', thread_id: parent.thread_id, subagent_current: childCurrent(appended, 2) });
       }, 10);
     }, { once: true });
     await userEvent.click(title, { delay: 160 });

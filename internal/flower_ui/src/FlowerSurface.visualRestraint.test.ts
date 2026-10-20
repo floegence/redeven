@@ -28,7 +28,7 @@ function lastCssRule(selector: string): string {
 
 describe('Flower restrained selection and focus treatments', () => {
   it('uses only background and text contrast for the active thread', () => {
-    const cardRule = cssRule('.flower-thread-card {');
+    const cardRule = cssRule('.flower-thread-card,');
     const activeRule = cssRule('.flower-thread-card-active,\n.flower-thread-card-active:hover {');
     const activeTitleRule = cssRule('.flower-thread-card-active .flower-thread-list-title {');
 

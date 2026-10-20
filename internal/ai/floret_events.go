@@ -78,7 +78,6 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	if r.acceptsFloretStreamAttempt(ev.Stream) {
 		r.applyFloretStreamObservation(ev.Stream)
 	}
-	r.recordFloretActivityEvent(ev)
 	switch ev.Type {
 	case floretEventProviderRequest:
 		r.recordRunDiagnostic("floret.provider.request", RealtimeStreamKindLifecycle, map[string]any{

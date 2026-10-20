@@ -224,10 +224,10 @@ describe('FlowerSurface navigation', () => {
       listThreads: vi.fn(async () => [initialSummary]),
       loadThread,
       connectLiveStream: async function* ({ signal }) {
-        yield { schema_version: 1, kind: 'ready' as const, summaries: [initialSummary] };
+        yield { schema_version: 2, kind: 'ready' as const, summaries: [initialSummary] };
         await publishUpdate.promise;
-        yield { schema_version: 1, kind: 'summary.batch' as const, summaries: [updatedSummary] };
-        yield { schema_version: 1, kind: 'summary.batch' as const, summaries: [updatedSummary] };
+        yield { schema_version: 2, kind: 'summary.batch' as const, summaries: [updatedSummary] };
+        yield { schema_version: 2, kind: 'summary.batch' as const, summaries: [updatedSummary] };
         await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
       },
     });
@@ -384,14 +384,14 @@ describe('FlowerSurface navigation', () => {
       listThreads: vi.fn(async () => [initialThread]),
       loadThread: vi.fn(async () => liveBootstrap(initialThread, 1)),
       connectLiveStream: async function* ({ signal }) {
-        yield { schema_version: 1, kind: 'ready' as const, summaries: [initialThread] };
+        yield { schema_version: 2, kind: 'ready' as const, summaries: [initialThread] };
         await Promise.race([
           publishUpdate.promise,
           new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true })),
         ]);
         if (signal.aborted) return;
         yield {
-          schema_version: 1,
+          schema_version: 2,
           kind: 'thread.batch' as const,
           thread_id: initialThread.thread_id,
           current: runtimeCurrentView(updatedThread, 2),
@@ -499,9 +499,9 @@ describe('FlowerSurface navigation', () => {
 			listThreads: vi.fn(async () => [fallback]),
 			loadThread: vi.fn(async () => liveBootstrap(fallback)),
 			connectLiveStream: async function* ({ signal }) {
-				yield { schema_version: 1, kind: 'ready' as const, summaries: [fallback] };
+				yield { schema_version: 2, kind: 'ready' as const, summaries: [fallback] };
 				await publishProviderTitle.promise;
-				yield { schema_version: 1, kind: 'summary.batch' as const, summaries: [provider] };
+				yield { schema_version: 2, kind: 'summary.batch' as const, summaries: [provider] };
 				await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
 			},
 		});

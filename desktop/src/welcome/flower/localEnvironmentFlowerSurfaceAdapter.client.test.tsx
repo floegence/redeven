@@ -327,7 +327,7 @@ describe('Local Environment Flower surface adapter', () => {
     let streamListener: ((event: RuntimeFlowerStreamEvent) => void) | undefined;
     const startRuntimeFlowerStream = vi.fn(async (request: RuntimeFlowerStreamRequest) => {
       queueMicrotask(() => {
-        const data = flowerLiveWireFixture({ schema_version: 1, kind: 'ready' })[0]!.data;
+        const data = flowerLiveWireFixture({ schema_version: 2, kind: 'ready' })[0]!.data;
         streamListener?.({ stream_id: request.stream_id, kind: 'chunk', chunk: new TextEncoder().encode(`data: ${data}\n\n`) });
         streamListener?.({ stream_id: request.stream_id, kind: 'end' });
       });
@@ -350,7 +350,7 @@ describe('Local Environment Flower surface adapter', () => {
     for await (const frame of adapter.connectLiveStream!({ signal: controller.signal })) frames.push(frame);
 
     expect(frames).toEqual([{
-      schema_version: 1,
+      schema_version: 2,
       kind: 'ready',
     }]);
     expect(startRuntimeFlowerStream).toHaveBeenCalledWith(expect.objectContaining({
@@ -377,7 +377,7 @@ describe('Local Environment Flower surface adapter', () => {
     await vi.waitFor(() => expect(id).not.toBe(''));
     for (let index = 0; index < 3; index++) {
       const next = index ? iterator.next() : first;
-      const value = { schema_version: 1, kind: 'thread.batch', thread_id: 'thread-1', current: {
+      const value = { schema_version: 2, kind: 'thread.batch', thread_id: 'thread-1', current: {
         thread_id: 'thread-1', view_version: index + 1, activity: 'active', turn_id: 'turn', run_id: 'run',
         queue: [], interactions: [], items: [{ id: 'reply', kind: 'assistant', ordinal: 1, turn_id: 'turn', run_id: 'run', live: true, text: 'Live reply '.repeat(index + 1) }],
       } };

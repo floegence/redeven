@@ -29,7 +29,7 @@ it('retries restored outbox input only explicitly with its original generation',
     ...adapter(true), launchTurn, resolveStorageGeneration,
     listThreads: vi.fn(async () => [initial]),
     connectLiveStream: async function* ({ signal }) {
-      yield { schema_version: 1, kind: 'ready', summaries: [initial] };
+      yield { schema_version: 2, kind: 'ready', summaries: [initial] };
       await new Promise<void>((resolve) => { if (signal.aborted) resolve(); else signal.addEventListener('abort', () => resolve(), { once: true }); });
     },
     loadThread: vi.fn(async () => ({ thread: applyFlowerRuntimeCurrentView(initial, current), current })),

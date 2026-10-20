@@ -6,6 +6,7 @@ import { createFlowerComposerDraftCoordinator } from '../../../../flower_ui/src'
 import type { FlowerAttachmentCapability, FlowerLiveStreamEnvelope, FlowerRuntimeCurrentView, FlowerSurfaceAdapter, FlowerTurnLaunchReceipt } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { flowerTurnAdmissionError } from '../../../../flower_ui/src/flowerTurnAdmission';
 import { createTransportOutbox } from '../../../../flower_ui/src/transportOutbox';
+import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import { adapter, deferred, liveBootstrap, renderSurfaceWithDraftCoordinator, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
 beforeEach(async () => {
@@ -19,7 +20,8 @@ beforeEach(async () => {
 async function setup(options: { generation?: Promise<string> | (() => Promise<string>); newThread?: boolean; idle?: boolean; overrides?: Partial<FlowerSurfaceAdapter> } = {}) {
   const initial = thread({ thread_id: 'delivery-thread', status: options.idle ? 'idle' : 'running', active_run_id: options.idle ? undefined : 'original-run' });
   const other = thread({ thread_id: 'other-thread' });
-  const queued: FlowerLiveStreamEnvelope[] = [{ schema_version: 1, kind: 'ready', summaries: [initial, other] }];
+  let authoritative = liveBootstrap(initial, 1);
+  const queued: FlowerLiveStreamEnvelope[] = [{ schema_version: 2, kind: 'ready', summaries: [initial, other] }];
   let wake = () => {};
   const requests: ReturnType<typeof deferred<FlowerTurnLaunchReceipt>>[] = [];
   const launch = vi.fn((_input: Parameters<FlowerSurfaceAdapter['launchTurn']>[0]) => {
@@ -29,7 +31,7 @@ async function setup(options: { generation?: Promise<string> | (() => Promise<st
   const runtime = renderSurfaceWithDraftCoordinator({ ...adapter(true), ...options.overrides, launchTurn: launch,
     resolveStorageGeneration: () => typeof options.generation === 'function' ? options.generation() : options.generation ?? Promise.resolve('a'.repeat(32)),
     listThreads: vi.fn(async () => [initial, other]),
-    loadThread: vi.fn(async id => liveBootstrap(id === initial.thread_id ? initial : other, 1)),
+    loadThread: vi.fn(async id => id === initial.thread_id ? authoritative : liveBootstrap(other, 1)),
     connectLiveStream: async function* ({ signal }) {
       while (!signal.aborted) {
         const value = queued.shift(); if (value) { yield value; continue; }
@@ -43,10 +45,14 @@ async function setup(options: { generation?: Promise<string> | (() => Promise<st
     await waitFor(() => runtime.querySelector(`[data-thread-id="${initial.thread_id}"]`)?.getAttribute('data-flower-thread-active') === 'true');
   }
   const editor = () => runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement;
-  await waitFor(() => Boolean(editor()) && !editor().disabled);
+  await waitFor(() => Boolean(editor()) && !editor().disabled
+    && runtime.querySelector('.flower-thread-navigation-status')?.hasAttribute('hidden') === true);
   const type = (text: string) => { editor().value = text; editor().dispatchEvent(new Event('input', { bubbles: true })); };
   const submit = () => (runtime.querySelector('[data-flower-primary-action="send"]') as HTMLButtonElement).click();
-  const emit = (current: FlowerRuntimeCurrentView) => { queued.push({ schema_version: 1, kind: 'thread.batch', thread_id: current.thread_id, current }); wake(); };
+  const emit = (current: FlowerRuntimeCurrentView) => {
+    authoritative = { thread: applyFlowerRuntimeCurrentView(authoritative.thread, current), current };
+    queued.push({ schema_version: 2, kind: 'thread.batch', thread_id: current.thread_id, current }); wake();
+  };
   const receipt = (index: number, current?: FlowerRuntimeCurrentView) => requests[index].resolve({ client_request_id: launch.mock.calls[index][0].client_request_id, thread_id: initial.thread_id, ...(current ? { current } : {}) });
   const rows = () => [...runtime.querySelectorAll<HTMLElement>('[data-flower-transport-outbox-id]')];
   return { runtime, drafts, launch, requests, editor, type, submit, emit, receipt, rows, initial, other };
@@ -100,6 +106,7 @@ it.each(['receipt', 'current'] as const)('binds follow-up preparation after the 
   if (confirmation === 'receipt') s.receipt(0);
   else s.emit(queuedCurrent(s.initial.thread_id, s.launch.mock.calls[0][0].client_request_id, 'Create A'));
   await waitFor(() => s.runtime.querySelector(`[data-thread-id="${s.initial.thread_id}"]`)?.getAttribute('data-flower-thread-active') === 'true');
+  await waitFor(() => s.runtime.querySelector('.flower-thread-navigation-status')?.hasAttribute('hidden') === true);
   expect(s.editor().value).toBe('Follow-up B');
   s.submit();
   await waitFor(() => generationRequests === 2);
@@ -255,6 +262,7 @@ it('keeps another thread usable while the first thread awaits confirmation', asy
   await waitFor(() => s.rows()[0].dataset.flowerTransportDelivery === 'unknown');
   (s.runtime.querySelector(`[data-thread-id="${s.other.thread_id}"] button`) as HTMLButtonElement).click();
   await waitFor(() => s.runtime.querySelector(`[data-thread-id="${s.other.thread_id}"]`)?.getAttribute('data-flower-thread-active') === 'true');
+  await waitFor(() => s.runtime.querySelector('.flower-thread-navigation-status')?.hasAttribute('hidden') === true);
   s.type('Independent message'); s.submit();
   await waitFor(() => s.launch.mock.calls.length === 2);
   expect(s.launch.mock.calls[1][0].thread_id).toBe(s.other.thread_id);

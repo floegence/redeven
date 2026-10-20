@@ -36,7 +36,7 @@ async function setup(initialPins = ['first', 'second', 'third']) {
   };
   const emit = async (next: FlowerThreadSnapshot[]) => {
     summaries = next;
-    stream.emit({ schema_version: 1, kind: 'summary.batch', summaries });
+    stream.emit({ schema_version: 2, kind: 'summary.batch', summaries });
     await waitFor(() => row(next[0].thread_id)?.textContent?.includes(next[0].title) === true);
     await flush();
   };

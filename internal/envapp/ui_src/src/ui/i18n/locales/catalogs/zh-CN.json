@@ -5484,6 +5484,8 @@
       "syncFailed": "无法读取或应用数据，实时更新已停止。显示的状态可能已过时。",
       "syncAuthorization": "实时更新需要授权。恢复访问权限后重新同步，显示的状态可能已过时。",
       "syncLocked": "实时更新已锁定。解锁后重新同步，显示的状态可能已过时。",
+      "syncVersion": "Flower 实时更新要求应用与运行时版本匹配。请刷新应用，或更新两者后重新同步。",
+      "syncCapacity": "Flower 实时更新连接已满。请关闭不使用的 Flower 视图后重新同步。草稿已保留。",
       "syncResync": "重新同步",
       "stopUnconfirmed": "停止状态尚未确认。请先重新同步，再决定是否重试。",
       "syncTimeout": "同步在 15 秒后超时，请重试。",

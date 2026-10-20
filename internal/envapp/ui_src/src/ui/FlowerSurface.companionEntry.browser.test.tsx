@@ -40,7 +40,7 @@ function mountCompanion(selected: FlowerThreadSnapshot, summary?: FlowerSurfaceP
     const index = threads.findIndex((value) => value.thread_id === current.thread_id);
     threads[index] = applyFlowerRuntimeCurrentView(threads[index], current);
     views.set(current.thread_id, { thread: threads[index], current });
-    events.push({ schema_version: 1, kind: 'thread.batch', thread_id: current.thread_id, current });
+    events.push({ schema_version: 2, kind: 'thread.batch', thread_id: current.thread_id, current });
     wake?.();
   };
   const surfaceAdapter = {
@@ -50,7 +50,7 @@ function mountCompanion(selected: FlowerThreadSnapshot, summary?: FlowerSurfaceP
     listThreads: vi.fn(async () => threads),
     loadThread: vi.fn(async (id: string) => views.get(id)!),
     connectLiveStream: vi.fn(async function* (input) {
-      yield { schema_version: 1 as const, kind: 'ready' as const, summaries: threads };
+      yield { schema_version: 2 as const, kind: 'ready' as const, summaries: threads };
       while (!input.signal.aborted) {
         if (!events.length) await new Promise<void>((resolve) => {
           const resume = () => { input.signal.removeEventListener('abort', resume); resolve(); };

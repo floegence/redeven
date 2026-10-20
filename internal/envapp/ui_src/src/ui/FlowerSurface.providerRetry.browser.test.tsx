@@ -23,7 +23,7 @@ it.each([[1100, 'stop'], [420, 'stop'], [1100, 'success'], [1100, 'failure'], [4
   const retryThread = vi.fn(async () => undefined);
   const base = { ...adapter(true), retryThread, listThreads: vi.fn(async () => [selected, other]), loadThread: vi.fn(async (id: string) => liveBootstrap(id === other.thread_id ? other : selected, version)),
     async *connectLiveStream({ signal }: { signal: AbortSignal }) {
-      yield { schema_version: 1 as const, kind: 'ready' as const, summaries: [selected] };
+      yield { schema_version: 2 as const, kind: 'ready' as const, summaries: [selected] };
       while (!signal.aborted) {
         const event = await new Promise<FlowerLiveStreamEnvelope | null>(resolve => { emit = resolve; signal.addEventListener('abort', () => resolve(null), { once: true }); });
         if (!event) return;
@@ -35,7 +35,7 @@ it.each([[1100, 'stop'], [420, 'stop'], [1100, 'success'], [1100, 'failure'], [4
   const push = async (next: FlowerThreadSnapshot) => {
     selected = next; version += 1;
     await waitFor(() => emit != null);
-    emit!({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: runtimeCurrentView(next, version) });
+    emit!({ schema_version: 2, kind: 'thread.batch', thread_id: threadID, current: runtimeCurrentView(next, version) });
   };
   const stopThread = vi.fn(async () => { await push({ ...selected, status: 'canceled', active_run_id: undefined, run_progress: null }); });
   const surface = renderSurfaceWithAdapterProps({ ...base, stopThread }, { get focusThreadRequest() { return focus(); } });

@@ -3372,6 +3372,8 @@
 }
 
 .flower-chat-transcript {
+  /* Confine live text paint to the existing clipped scroll viewport. */
+  contain: paint;
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
@@ -4366,6 +4368,8 @@
 .flower-model-status-text {
   position: relative;
   display: inline-block;
+  /* Keep the animated glyph paint out of the transcript's backing layer. */
+  will-change: transform;
   color: color-mix(in srgb, var(--muted-foreground) 78%, var(--foreground) 22%);
   font-size: 0.75rem;
   font-weight: 500;
@@ -5349,6 +5353,19 @@ button.flower-composer-context-source:focus-visible,
   margin-top: 0;
 }
 
+.flower-chat-md-code-chunk {
+  display: inline-block;
+  vertical-align: baseline;
+  white-space: pre;
+}
+
+.flower-chat-md-text-chunk {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: baseline;
+  overflow-wrap: anywhere;
+}
+
 .flower-message-bubble-user .flower-chat-md-code-block {
   border-color: color-mix(in srgb, var(--primary) 24%, var(--flower-chat-surface-border));
   background: color-mix(in srgb, var(--flower-chat-surface-elevated) 78%, var(--primary) 9%);
@@ -5489,10 +5506,7 @@ button.flower-composer-context-source:focus-visible,
   margin-top: 0.75rem;
 }
 
-.flower-chat-md-raw-tail {
-  min-width: 0;
-  max-width: 100%;
-}
+
 
 .flower-chat-md-streaming-fade-in {
   animation: flower-chat-md-fade-in 160ms ease-out;
@@ -6358,6 +6372,7 @@ button.flower-composer-context-source:focus-visible,
 
 .flower-activity-inline-row-running:has([data-floe-progress-shimmer='text']) .flower-activity-inline-title {
   font-weight: 500;
+  will-change: transform;
 }
 
 
@@ -11695,6 +11710,7 @@ button.flower-attachment-preview-trigger:disabled {
 
 .flower-thread-wave-bar {
   width: 2px;
+  height: 8px;
   border-radius: 9999px;
   background: var(--primary);
   animation: flower-thread-wave 2.4s ease-in-out infinite;
@@ -11703,16 +11719,16 @@ button.flower-attachment-preview-trigger:disabled {
 @keyframes flower-thread-wave {
   0%,
   100% {
-    height: 3px;
+    transform: scaleY(0.375);
   }
   25% {
-    height: 8px;
+    transform: scaleY(1);
   }
   50% {
-    height: 5px;
+    transform: scaleY(0.625);
   }
   75% {
-    height: 7px;
+    transform: scaleY(0.875);
   }
 }
 
@@ -12095,6 +12111,7 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 .flower-turn-timeline, .flower-turn-row { min-width: 0; }
+.flower-turn-row[data-flower-turn-settled='true'] { content-visibility: auto; contain-intrinsic-block-size: auto 80px; }
 .flower-turn-row-viewport { overflow: clip; min-width: 0; }
 .flower-turn-row-viewport[data-state='open'] { overflow: visible; }
 .flower-turn-row-content { display: flow-root; min-width: 0; padding-bottom: 1rem; }

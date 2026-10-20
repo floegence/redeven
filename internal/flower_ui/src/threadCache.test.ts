@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
+import type { FlowerThreadSnapshot, FlowerRuntimeCurrentView, FlowerRuntimeUpdate } from './contracts/flowerSurfaceContracts';
 import {
   classifyThreadView,
   createThreadCache,
@@ -32,6 +32,22 @@ function receive(
 }
 
 describe('ThreadCache', () => {
+  it('hydrates editable product settings independently of a newer subagent runtime baseline', () => {
+    const child = { ...thread('child', 2, 'child answer'), settings_revision: 0, model_id: '',
+      parent_thread_id: 'parent', read_only_reason: 'Managed subagent projection' };
+    let cache = receive(createThreadCache(), { thread: child, version: 7 });
+    const product = { ...child, model_id: 'provider/model', settings_revision: 1, read_only_reason: undefined };
+    cache = receive(cache, { thread: product, version: 6 });
+    expect(cache.views.get('child')?.version).toBe(7);
+    expect(cache.views.get('child')?.thread.model_id).toBe('provider/model');
+    expect(cache.views.get('child')?.thread.read_only_reason).toBeUndefined();
+    expect(cache.views.get('child')?.thread.parent_thread_id).toBe('parent');
+  });
+  it('accepts current read restrictions without requiring a settings revision change', () => {
+    let cache = receive(createThreadCache(), view('root', 2, 'body'));
+    cache = receive(cache, { version: 9, thread: { ...thread('root', 2, 'body'), read_only_reason: 'Read-only access' } });
+    expect(cache.views.get('root')?.thread.read_only_reason).toBe('Read-only access');
+  });
   it('merges read confirmations independently of activity and body revisions', () => {
     const unread = { ...thread('a', 7, 'body seven'), read_status: { is_unread: true, snapshot: { activity_revision: 7 }, read_state: { last_seen_activity_revision: 6 } } };
     let cache = receive(createThreadCache(), { thread: unread, version: 7 });
@@ -588,5 +604,55 @@ describe('title updates independent of runtime revisions', () => {
     cache = cache.replaceSummary({ ...thread('a', 2, ''), turns: [{ ...turns[0], outcome: 'completed' }] });
     expect(cache.summaries.get('a')?.turns).toBeUndefined();
     expect(cache.views.get('a')?.thread.turns?.[0].outcome).toBe('interrupted');
+  });
+});
+
+describe('ThreadCache native baseline reads', () => {
+  const current: FlowerRuntimeCurrentView = { thread_id: 'a', view_version: 2, activity: 'active', turn_id: 'turn', run_id: 'run', run_progress: { phase: 'streaming' },
+    items: [{ id: 'answer', ordinal: 1, kind: 'assistant', text: 'text', live: true, turn_id: 'turn', run_id: 'run' }] };
+  const update: FlowerRuntimeUpdate = { thread_id: 'a', base_version: 2, view_version: 3, turn_id: 'turn', run_id: 'run',
+    facts: { activity: 'active', queue_count: 0, run_progress: { phase: 'streaming' } }, items: [{ kind: 'append', item_id: 'answer', append: { offset_bytes: 4, text: '!' } }] };
+  it('updates indexed records and their version without replacing the workspace cache', () => {
+    const baseline = createThreadCache().receiveView({ thread: thread('a', 1, ''), version: 2 }, { current }).cache;
+    const detail = baseline.views.get('a');
+    const received = baseline.receiveUpdate(update);
+    expect(received.accepted).toBe(true);
+    expect(received.cache).toBe(baseline);
+    expect(received.cache.views.get('a')).toBe(detail);
+    expect(detail?.version).toBe(3);
+    expect(detail?.thread.messages[0].content).toBe('text!');
+  });
+  it('buffers only demanded baselines, discards covered updates, and drains continuous successors', () => {
+    let cache = createThreadCache().replaceSummary(thread('a', 1, ''));
+    expect(cache.receiveUpdate(update).accepted).toBe(false);
+    const release = cache.beginRuntimeRead('a');
+    cache = cache.receiveUpdate({ ...update, base_version: 1, view_version: 2 }).cache;
+    cache = cache.receiveUpdate(update).cache;
+    const initial = { ...thread('a', 1, ''), status: 'running' as const, messages: [{ id: 'answer', role: 'assistant' as const, content: 'text', status: 'streaming' as const, live: true, active_cursor: true, created_at_ms: 1, turn_id: 'turn', run_id: 'run' }] };
+    const received = cache.receiveView({ thread: initial, version: 2 }, { current }); cache = received.cache;
+    expect(cache.views.get('a')?.version).toBe(3); expect(cache.views.get('a')?.thread.messages[0].content).toBe('text!');
+    expect(received.observations).toHaveLength(1); release();
+    cache = cache.invalidateRuntimeVersions(); const releaseOld = cache.beginRuntimeRead('a'); cache.receiveUpdate(update);
+    cache = cache.invalidateRuntimeVersions(); releaseOld();
+    expect(cache.receiveView({ thread: initial, version: 2 }, { current }).cache.views.get('a')?.version).toBe(2);
+  });
+  it('fences old read cleanup after a reconnect and releases each lease only once', () => {
+    let cache = createThreadCache().replaceSummary(thread('a', 1, ''));
+    const old = cache.beginRuntimeRead('a');
+    cache = cache.invalidateRuntimeVersions();
+    const currentRead = cache.beginRuntimeRead('a');
+    const concurrent = cache.beginRuntimeRead('a');
+    old(); currentRead(); currentRead();
+    cache.receiveUpdate(update);
+    const received = cache.receiveView({ thread: thread('a', 1, ''), version: 2 }, { current });
+    expect(received.cache.views.get('a')?.version).toBe(3);
+    concurrent();
+    expect(() => { for (let i = 0; i < 100; i++) cache.receiveUpdate(update); }).not.toThrow();
+  });
+  it('invalidates a bounded pending read instead of silently overwriting deltas', () => {
+    const cache = createThreadCache(); const release = cache.beginRuntimeRead('a');
+    for (let i = 0; i < 64; i++) cache.receiveUpdate(update);
+    expect(() => cache.receiveUpdate(update)).toThrow('overflow'); release();
+    expect(() => cache.receiveUpdate(update)).not.toThrow();
   });
 });

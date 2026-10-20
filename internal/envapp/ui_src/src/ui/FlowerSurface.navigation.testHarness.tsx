@@ -80,7 +80,7 @@ async function* testLiveStreamFromLegacyFixture(
   const summaries = await adapter.listThreads();
   const cursors = new Map<string, number>();
   yield {
-    schema_version: 1,
+    schema_version: 2,
     kind: 'ready',
     summaries,
   };
@@ -98,7 +98,7 @@ async function* testLiveStreamFromLegacyFixture(
           cursors.set(threadID, Math.max(cursors.get(threadID) ?? 0, event.seq));
         }
         yield {
-          schema_version: 1,
+          schema_version: 2,
           kind: 'ready',
           summaries: await adapter.listThreads(),
         };

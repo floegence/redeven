@@ -38,12 +38,12 @@ describe('Flower fork results', () => {
       ...adapter(true), listThreads, loadThread, forkThread, launchTurn,
       connectLiveStream: async function* ({ signal }) {
         const connection = ++connections;
-        yield { schema_version: 1, kind: 'ready' as const, summaries: await listThreads() };
+        yield { schema_version: 2, kind: 'ready' as const, summaries: await listThreads() };
         if (connection === 1) {
           await Promise.race([publishReply.promise, new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }))]);
           if (signal.aborted) return;
         }
-        if (sent) yield { schema_version: 1, kind: 'thread.batch' as const, thread_id: forked.thread_id, current: liveBootstrap(completed, 3).current };
+        if (sent) yield { schema_version: 2, kind: 'thread.batch' as const, thread_id: forked.thread_id, current: liveBootstrap(completed, 3).current };
         if (connection === 1) return;
         await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
       },

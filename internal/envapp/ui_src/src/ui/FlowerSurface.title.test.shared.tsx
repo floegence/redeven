@@ -21,11 +21,11 @@ describe('Flower canonical title synchronization', () => {
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true), listThreads: vi.fn(async () => [initial]), loadThread, renameThread: vi.fn(),
       connectLiveStream: async function* ({ signal }) {
-        yield { schema_version: 1, kind: 'ready' as const, summaries: [initial] };
+        yield { schema_version: 2, kind: 'ready' as const, summaries: [initial] };
         await publishTitle.promise;
-        yield { schema_version: 1, kind: 'summary.batch' as const, summaries: [named] };
+        yield { schema_version: 2, kind: 'summary.batch' as const, summaries: [named] };
         await publishBody.promise;
-        yield { schema_version: 1, kind: 'thread.batch' as const, thread_id: initial.thread_id, current: runtimeCurrentView(completed, 2) };
+        yield { schema_version: 2, kind: 'thread.batch' as const, thread_id: initial.thread_id, current: runtimeCurrentView(completed, 2) };
         await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
       },
     });
@@ -58,10 +58,10 @@ describe('Flower canonical title synchronization', () => {
       const runtime = renderSurfaceWithAdapter({
         ...adapter(true), listThreads: vi.fn(async () => [initial]), loadThread,
         connectLiveStream: async function* ({ signal }) {
-          yield { schema_version: 1, kind: 'ready' as const, summaries: [initial] };
+          yield { schema_version: 2, kind: 'ready' as const, summaries: [initial] };
           await publishTitle.promise;
-          yield { schema_version: 1, kind: 'summary.batch' as const, summaries: [named] };
-          yield { schema_version: 1, kind: 'thread.batch' as const, thread_id: initial.thread_id, current: runtimeCurrentView(initial, 2) };
+          yield { schema_version: 2, kind: 'summary.batch' as const, summaries: [named] };
+          yield { schema_version: 2, kind: 'thread.batch' as const, thread_id: initial.thread_id, current: runtimeCurrentView(initial, 2) };
           await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
         },
       });

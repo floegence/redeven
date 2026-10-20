@@ -156,14 +156,14 @@ describe('runtime Flower surface adapter read state', () => {
     await adapter.resolveSourceIcon?.('https://example.com');
     expect(resolveSourceIcon).toHaveBeenCalledExactlyOnceWith('https://example.com');
   });
-  it('rejects the removed unfragmented wire shape at the production adapter boundary', async () => {
+  it('reports an old logical wire version with an actionable terminal error', async () => {
     const base = adapterOptions();
     const adapter = createRuntimeFlowerSurfaceAdapter({ ...base, transport: {
       ...base.transport,
       connectLiveStream: async function* () { yield { data: '{"schema_version":1,"kind":"ready"}' }; },
     } });
     const iterator = adapter.connectLiveStream!({ signal: new AbortController().signal })[Symbol.asyncIterator]();
-    await expect(iterator.next()).rejects.toMatchObject({ code: 'flower_live_sync_error' });
+    await expect(iterator.next()).rejects.toMatchObject({ code: 'flower_live_version_error' });
   });
 
   it('maps the full reconstructed large current rather than a partial history projection', async () => {
@@ -175,7 +175,7 @@ describe('runtime Flower surface adapter read state', () => {
     const base = adapterOptions();
     const adapter = createRuntimeFlowerSurfaceAdapter({ ...base, transport: {
       ...base.transport,
-      connectLiveStream: async function* () { yield* flowerLiveWireFixture({ schema_version: 1, kind: 'thread.batch', thread_id: 'large', current }); },
+      connectLiveStream: async function* () { yield* flowerLiveWireFixture({ schema_version: 2, kind: 'thread.batch', thread_id: 'large', current }); },
     } });
     const iterator = adapter.connectLiveStream!({ signal: new AbortController().signal })[Symbol.asyncIterator]();
     expect(await iterator.next()).toMatchObject({ done: false, value: { current } });
@@ -184,17 +184,40 @@ describe('runtime Flower surface adapter read state', () => {
 
   it('rejects an unsupported logical schema after assembly', async () => {
     const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ connectLiveStream: async function* () {
-      yield { schema_version: 2, kind: 'ready' };
+      yield { schema_version: 99, kind: 'ready' };
     } }));
     const iterator = adapter.connectLiveStream!({ signal: new AbortController().signal })[Symbol.asyncIterator]();
     await expect(iterator.next()).rejects.toThrow('unsupported schema version');
   });
 
+  it('maps only changed context and distinguishes absence from explicit clears', async () => {
+    const update = { thread_id: 'task', base_version: 1, view_version: 2,
+      facts: { activity: 'idle', queue_count: 0 }, context: { value: { model_context: null, context_usage: null, context_compactions: [], timeline_decorations: [] } } };
+    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ connectLiveStream: async function* () {
+      yield { schema_version: 2, kind: 'thread.batch', thread_id: 'task', update };
+    } }));
+    const received = await adapter.connectLiveStream!({ signal: new AbortController().signal })[Symbol.asyncIterator]().next();
+    expect(received.value?.update?.context?.value).toEqual(update.context.value);
+    expect(received.value?.update?.queue).toBeUndefined();
+  });
+  it.each([
+    { base_version: 2 }, { facts: { activity: 'idle', queue_count: -1 } },
+    { items: [{ kind: 'append', item_id: 'a', append: { offset_bytes: -1, text: 'x' } }] },
+    { items: [{ kind: 'replace', item_id: 'a', item: { id: 'other', ordinal: 1, kind: 'assistant' } }] },
+    { queue: { value: [], ambiguous: true } },
+  ])('rejects malformed changes before an uncached thread can ignore them', async patch => {
+    const update = { thread_id: 'task', base_version: 1, view_version: 2, facts: { activity: 'idle', queue_count: 0 }, ...patch };
+    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ connectLiveStream: async function* () {
+      yield { schema_version: 2, kind: 'thread.batch', thread_id: 'task', update };
+    } }));
+    await expect(adapter.connectLiveStream!({ signal: new AbortController().signal })[Symbol.asyncIterator]().next()).rejects.toMatchObject({ code: 'flower_live_contract_error' });
+  });
+
   it('preserves closed safety classifications from the real frame transport', async () => {
     const frame = { session_id: 'observer', target_id: 'task-page', viewer_revision: 1, sequence: 1, mime_type: 'image/png', error_code: 'computer_control_required' };
     const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ connectLiveStream: async function* () {
-      yield { schema_version: 1, kind: 'computer.frame', thread_id: 'task', computer_frame: { ...frame, assistance_kind: 'captcha' } };
-      yield { schema_version: 1, kind: 'computer.frame', thread_id: 'task', computer_frame: { ...frame, assistance_kind: 'untrusted arbitrary page text' } };
+      yield { schema_version: 2, kind: 'computer.frame', thread_id: 'task', computer_frame: { ...frame, assistance_kind: 'captcha' } };
+      yield { schema_version: 2, kind: 'computer.frame', thread_id: 'task', computer_frame: { ...frame, assistance_kind: 'untrusted arbitrary page text' } };
     } }));
     const frames = [];
     for await (const envelope of adapter.connectLiveStream!({ signal: new AbortController().signal })) frames.push(envelope.computer_frame);
@@ -208,7 +231,7 @@ describe('runtime Flower surface adapter read state', () => {
       { thread_id: 'task', interaction_id: 'input-1', target_id: 'browser-1', state: 'unavailable', reason_code: 'password=secret', at_unix_ms: 11 },
     ];
     const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ connectLiveStream: async function* () {
-      for (const computer_status of statuses) yield { schema_version: 1, kind: 'computer.status', thread_id: 'task', computer_status };
+      for (const computer_status of statuses) yield { schema_version: 2, kind: 'computer.status', thread_id: 'task', computer_status };
     } }));
     const received = [];
     for await (const envelope of adapter.connectLiveStream!({ signal: new AbortController().signal })) received.push(envelope.computer_status);
@@ -463,7 +486,7 @@ describe('runtime Flower surface adapter read state', () => {
 		it('maps the published SSE transport into typed Flower envelopes', async () => {
 			const connectLiveStream = vi.fn(async function* () {
 				yield {
-					schema_version: 1,
+					schema_version: 2,
 					kind: 'ready',
 					summaries: [{
 						thread_id: 'thread_stream',
@@ -483,7 +506,7 @@ describe('runtime Flower surface adapter read state', () => {
 					}],
 				};
 				yield {
-					schema_version: 1,
+					schema_version: 2,
 					kind: 'thread.batch',
 					thread_id: 'thread_stream',
 					context_compactions: [{
@@ -518,13 +541,13 @@ describe('runtime Flower surface adapter read state', () => {
 					},
 				};
 				yield {
-					schema_version: 1,
+					schema_version: 2,
 					kind: 'viewer.read_state',
 					thread_id: 'thread_stream',
 					read_status: readStatus(),
 				};
 				yield {
-					schema_version: 1,
+					schema_version: 2,
 					kind: 'thread.batch',
 					thread_id: 'thread_stream',
 					subagents: [{
@@ -538,7 +561,7 @@ describe('runtime Flower surface adapter read state', () => {
 					}],
 				};
 				yield {
-					schema_version: 1,
+					schema_version: 2,
 					kind: 'thread.batch',
 					thread_id: 'thread_stream',
 					subagent_current: {
@@ -588,7 +611,7 @@ describe('runtime Flower surface adapter read state', () => {
 	it('maps summary-only SSE frames without requiring viewer read state', async () => {
 		const connectLiveStream = vi.fn(async function* () {
 			yield {
-				schema_version: 1,
+				schema_version: 2,
 				kind: 'ready',
 				summaries: [{
 					thread_id: 'thread_failed',

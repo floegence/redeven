@@ -15,7 +15,8 @@ describe('FlowerMarkdownBlock component wiring', () => {
     const src = source();
 
     expect(src).toContain('createMarkdownRenderModel');
-    expect(src).toContain('StreamingMarkdownTail');
+    expect(src).toContain('createIncrementalMarkdownDOM');
+    expect(src).not.toContain('prepareFlowerCitations');
     expect(src).toContain('decorateFlowerMarkdownCodeBlocks');
     expect(src).toContain('flowerMarkdownCodeTextForCopyButton');
     expect(src).not.toContain('committedSourceLength <');

@@ -36,7 +36,7 @@ function mountApprovals(count: number, options: { input?: ReturnType<typeof inpu
   const replaceActions = (actions: readonly FlowerApprovalAction[]) => {
     snapshot = { ...snapshot, approval_actions: actions };
     const current = liveBootstrap(snapshot, ++version).current;
-    events.push({ schema_version: 1, kind: 'thread.batch', thread_id: snapshot.thread_id, current });
+    events.push({ schema_version: 2, kind: 'thread.batch', thread_id: snapshot.thread_id, current });
     wake?.();
     return current;
   };
@@ -47,7 +47,7 @@ function mountApprovals(count: number, options: { input?: ReturnType<typeof inpu
       return liveBootstrap(snapshot, ++version);
     }),
     connectLiveStream: vi.fn(async function* (input) {
-      yield { schema_version: 1 as const, kind: 'ready' as const, summaries: [snapshot] };
+      yield { schema_version: 2 as const, kind: 'ready' as const, summaries: [snapshot] };
       while (!input.signal.aborted) {
         if (!events.length) await new Promise<void>(resolve => {
           const resume = () => { input.signal.removeEventListener('abort', resume); resolve(); };

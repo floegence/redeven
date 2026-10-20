@@ -25,6 +25,14 @@ describe('canonical turn process presentation', () => {
     expect(projectFlowerTurnProcess([thinking], [turn({ kind: 'goal_continuation', outcome: 'failed' })]).groups.get('turn')?.disclosure).toBe('manual');
   });
 
+  it('preserves historical groups when only the active turn structure changes', () => {
+    const previousTurn = turn();
+    const first = projectFlowerTurnProcess([thinking, ...entries], [previousTurn]);
+    const active = { ...entry('new'), message: { ...entry('new').message, turn_id: 'next', run_id: 'next-run' } };
+    const next = projectFlowerTurnProcess([thinking, ...entries, active], [previousTurn, turn({ turn_id: 'next', run_id: 'next-run', outcome: undefined, ended_at: undefined })], ['next'], first);
+    expect(next.groups.get('turn')).toBe(first.groups.get('turn'));
+    expect(next.rows.get('progress')).toBe(first.rows.get('progress'));
+  });
   it.each(['failed', 'cancelled', 'interrupted'] as const)('collapses historical %s work after a newer ordinary turn starts', outcome => {
     const old = turn({ outcome, final_item_ids: [], final_boundary_complete: false });
     const next = turn({ turn_id: 'next', run_id: 'next-run', outcome: undefined, ended_at: undefined });

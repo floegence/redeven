@@ -154,7 +154,8 @@ describe('shared Flower UI boundary', () => {
       expect(surfaceSrc).not.toContain(token);
     }
     expect(surfaceSrc).toContain('const companionThreadItems = createMemo');
-    expect(surfaceSrc).toContain('return threads().filter(thread => !thread.parent_thread_id).map((summary) => {');
+    expect(surfaceSrc).toContain('return projectThreadPins(threads()).map((summary) => {');
+    expect(surfaceSrc).toContain('if (!props.onPresenceChange && !threadSwitcherOpen()) return [];');
     expect(surfaceSrc).toContain('const cache = threadCache();');
     expect(surfaceSrc).toContain("detail?.status === 'running'");
     expect(surfaceSrc).toContain('trimString(detail.active_run_id) === activeRunID');
@@ -215,9 +216,10 @@ describe('shared Flower UI boundary', () => {
 		const contractsSrc = readText(path.join(flowerRoot, 'contracts', 'flowerSurfaceContracts.ts'));
 
 		expect(surfaceSrc).toContain('? selectedThreadSettings()?.reasoning_selection');
-		expect(surfaceSrc).toContain(': currentComposerSessionDraft().reasoningOverride');
-		expect(surfaceSrc).toContain('const composerLaunchReasoningSelection = createMemo(() => (composerReasoningEnabled() ? composerReasoningSelection() : undefined))');
-		expect(surfaceSrc).toContain('props.adapter.setThreadReasoningSelection(threadID, normalized)');
+		expect(surfaceSrc).toContain(': explicit ?? newConversationDefaults()?.reasoning_by_model[selectedComposerModelID()]');
+		expect(surfaceSrc).toContain('const composerLaunchReasoningSelection = createMemo(() => !selectedThreadID()');
+		expect(surfaceSrc).toContain("? composerReasoningSelection() ?? { level: 'default' as const }");
+		expect(surfaceSrc).toContain('adapter.setThreadReasoningSelection(threadID, normalized)');
 		expect(surfaceSrc).toContain('const frozenReasoningSelection = serializeFlowerReasoningSelection(composerLaunchReasoningSelection())');
 		expect(surfaceSrc).toContain('const draftReasoningSelection = !selectedID ? frozenReasoningSelection : undefined');
 		expect(surfaceSrc).toContain('...(!admittedThreadID && draftReasoningSelection ? { reasoning_selection: draftReasoningSelection } : {})');

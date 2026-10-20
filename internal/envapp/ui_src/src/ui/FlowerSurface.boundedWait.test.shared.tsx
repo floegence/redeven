@@ -202,7 +202,7 @@ it('keeps a selected child current through the single workspace stream and root 
     id: 'subagent_attention', header: '', question: 'How should the parent continue?', response_mode: 'write',
   }] }) });
   let childThread = thread({ thread_id: child.thread_id, status: 'waiting_user', input_request: inputRequest({ prompt_id: 'child-live-input' }) });
-  const queued: FlowerLiveStreamEnvelope[] = [{ schema_version: 1, kind: 'ready', summaries: [parent] }];
+  const queued: FlowerLiveStreamEnvelope[] = [{ schema_version: 2, kind: 'ready', summaries: [parent] }];
   let wake: (() => void) | undefined;
   const push = (event: FlowerLiveStreamEnvelope) => { queued.push(event); wake?.(); wake = undefined; };
   const base = adapter();
@@ -223,10 +223,10 @@ it('keeps a selected child current through the single workspace stream and root 
   surface.querySelector<HTMLButtonElement>('.flower-attention-child')!.click();
   await waitFor(() => surface.querySelector('[data-flower-input-request-prompt]')?.textContent?.includes('Where should Flower deploy') === true);
   childThread = thread({ thread_id: child.thread_id, status: 'success', active_run_id: undefined, messages: [{ id: 'child-final', role: 'assistant', content: 'CHILD_LIVE_COMPLETED', status: 'complete', created_at_ms: 4 }] });
-  push({ schema_version: 1, kind: 'thread.batch', thread_id: parent.thread_id, subagent_current: runtimeCurrentView(childThread, 7) });
+  push({ schema_version: 2, kind: 'thread.batch', thread_id: parent.thread_id, subagent_current: runtimeCurrentView(childThread, 7) });
   await waitFor(() => surface.textContent?.includes('CHILD_LIVE_COMPLETED') === true && surface.querySelector('[data-flower-input-request-prompt]') === null);
   const reads = loadThread.mock.calls.length;
-  push({ schema_version: 1, kind: 'ready', summaries: [parent] });
+  push({ schema_version: 2, kind: 'ready', summaries: [parent] });
   await waitFor(() => loadThread.mock.calls.length > reads);
   expect([...surface.querySelectorAll('button')].some(button => button.textContent === 'Return to parent')).toBe(true);
   expect(surface.textContent).toContain('CHILD_LIVE_COMPLETED');

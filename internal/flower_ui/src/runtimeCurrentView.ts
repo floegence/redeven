@@ -18,7 +18,7 @@ import type {
 import { mapFlowerActivityItem } from './flowerLiveMapper';
 import { flowerAttachmentDisplayKind, safeFlowerAttachmentURL } from './attachments/flowerAttachmentPresentation';
 import { inputResponseBlockFromInteraction, inputResponseVisibleText } from './inputResponse';
-import { retainThreadPresentation } from './presentationIdentity';
+import { retainEqualValue, retainThreadPresentation } from './presentationIdentity';
 import { retainThreadFileActivityTargets } from './fileActivityTargets';
 
 type ResolvedApprovalState = Exclude<FlowerActivityApprovalState, 'requested'>;
@@ -219,7 +219,7 @@ function activityBlock(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentVie
   };
 }
 
-function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentView): readonly FlowerChatMessage[] {
+export function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentView): readonly FlowerChatMessage[] {
   const previews = flowerCurrentToolCallPreviews(view);
   view = { ...view, tool_call_previews: previews };
   const matchedCalls = new Set<string>();
@@ -413,13 +413,21 @@ type FlowerRuntimeContext = Pick<FlowerThreadSnapshot, 'model_context' | 'contex
 export function applyFlowerRuntimeContext<T extends Pick<FlowerThreadSnapshot, 'thread_id' | 'messages'> & Partial<FlowerThreadSnapshot>>(
   base: T, context: FlowerRuntimeContext,
 ): T {
-  return retainThreadPresentation(base, {
+  if (context.model_context === undefined && context.context_usage === undefined && context.context_compactions === undefined && context.timeline_decorations === undefined) return base;
+  context = { ...context,
+    ...(context.model_context !== undefined ? { model_context: retainEqualValue(base.model_context, context.model_context) } : {}),
+    ...(context.context_usage !== undefined ? { context_usage: retainEqualValue(base.context_usage, context.context_usage) } : {}),
+    ...(context.context_compactions !== undefined ? { context_compactions: retainEqualValue(base.context_compactions, context.context_compactions) } : {}),
+    ...(context.timeline_decorations !== undefined ? { timeline_decorations: retainEqualValue(base.timeline_decorations, context.timeline_decorations) } : {}),
+  };
+  if ((context.model_context === undefined || context.model_context === base.model_context) && (context.context_usage === undefined || context.context_usage === base.context_usage) && (context.context_compactions === undefined || context.context_compactions === base.context_compactions) && (context.timeline_decorations === undefined || context.timeline_decorations === base.timeline_decorations)) return base;
+  return {
     ...base,
     ...(context.model_context !== undefined ? { model_context: context.model_context } : {}),
     ...(context.context_usage !== undefined ? { context_usage: context.context_usage } : {}),
     ...(context.context_compactions !== undefined ? { context_compactions: context.context_compactions } : {}),
     ...(context.timeline_decorations !== undefined ? { timeline_decorations: context.timeline_decorations } : {}),
-  });
+  };
 }
 
 export function applyFlowerRuntimeCurrentView(
@@ -427,14 +435,27 @@ export function applyFlowerRuntimeCurrentView(
   current: FlowerRuntimeCurrentView,
   context: FlowerRuntimeContext = {},
 ): FlowerThreadSnapshot {
+  const projected = projectFlowerRuntimeComponents(base, current, context);
+  return retainThreadPresentation(base, retainThreadFileActivityTargets(base, {
+    ...projected, messages: runtimeMessages(base, current), turns: validateFlowerRuntimeTurns(current),
+  }));
+}
+
+export function projectFlowerRuntimeComponents(
+  base: FlowerThreadSnapshot,
+  current: FlowerRuntimeCurrentView,
+  context: FlowerRuntimeContext = {},
+  changed?: Readonly<{ interactions?: unknown; queue?: unknown; goal?: unknown; parent_events?: unknown; restored_inputs?: unknown }>,
+): FlowerThreadSnapshot {
   const threadID = trim(current.thread_id);
   if (!threadID || threadID !== base.thread_id) {
     throw new Error('Flower contract error: current thread_id does not match the selected thread.');
   }
-  for (const interaction of current.interactions ?? []) runtimeInteractionIdentity(interaction);
-  const pending = (current.interactions ?? []).filter((interaction) => !interaction.resolved);
-  const approvalCount = pending.filter((interaction) => interaction.kind === 'approval').length;
-  const hasInput = pending.some((interaction) => interaction.kind === 'input');
+  const interactionsChanged = !changed || Boolean(changed.interactions);
+  if (interactionsChanged) for (const interaction of current.interactions ?? []) runtimeInteractionIdentity(interaction);
+  const pending = interactionsChanged ? (current.interactions ?? []).filter((interaction) => !interaction.resolved) : [];
+  const approvalCount = interactionsChanged ? pending.filter((interaction) => interaction.kind === 'approval').length : base.approval_pending_count ?? 0;
+  const hasInput = interactionsChanged ? pending.some((interaction) => interaction.kind === 'input') : Boolean(base.input_request);
   const runtimeError = trim(current.error);
   const status: FlowerThreadSnapshot['status'] = hasInput
     ? 'waiting_user'
@@ -451,11 +472,9 @@ export function applyFlowerRuntimeCurrentView(
               : current.last_outcome === 'completed'
                 ? 'success'
                 : 'idle';
-  const turns = validateFlowerRuntimeTurns(current);
-  const messages = runtimeMessages(base, current);
-  const approvalActions = runtimeApprovalActions(base, current);
-  const inputRequest = runtimeInputRequest(current);
-  const queuedTurns = (current.queue ?? []).map((queued) => ({
+  const approvalActions = interactionsChanged ? runtimeApprovalActions(base, current) : base.approval_actions;
+  const inputRequest = interactionsChanged ? runtimeInputRequest(current) : base.input_request;
+  const queuedTurns = changed && !changed.queue ? base.queued_turns ?? [] : (current.queue ?? []).map((queued) => ({
     queue_id: trim(queued.id),
     request_key: trim(queued.request_key),
     input_fingerprint: trim(queued.input_fingerprint) || undefined,
@@ -484,33 +503,33 @@ export function applyFlowerRuntimeCurrentView(
   }
   const projected: FlowerThreadSnapshot = {
     ...base,
-    goal: current.goal === undefined ? undefined : mapFlowerGoal(current.goal),
+    goal: changed && !changed.goal ? base.goal : current.goal === undefined ? undefined : mapFlowerGoal(current.goal),
     updated_at_ms: base.updated_at_ms,
     status,
     active_run_id: activeRunID || undefined,
-    current_execution: trim(current.turn_id) && trim(current.run_id)
+    current_execution: retainEqualValue(base.current_execution, trim(current.turn_id) && trim(current.run_id)
       ? { turn_id: trim(current.turn_id), run_id: trim(current.run_id), status, ...(current.turn_kind ? { turn_kind: current.turn_kind } : {}) }
-      : undefined,
-    run_progress: runtimeRunProgress(current, base.run_progress),
-    cancellation: mapFlowerCancellation(current.cancellation, threadID, trim(current.run_id), trim(current.turn_id)),
+      : undefined),
+    run_progress: retainEqualValue(base.run_progress, runtimeRunProgress(current, base.run_progress)),
+    cancellation: retainEqualValue(base.cancellation, mapFlowerCancellation(current.cancellation, threadID, trim(current.run_id), trim(current.turn_id))),
     approval_pending: approvalCount > 0,
     approval_pending_count: approvalCount,
     approval_actions: approvalActions,
     input_request: inputRequest,
     queued_turn_count: queuedTurns.length,
     queued_turns: queuedTurns,
-    restored_inputs: current.restored_inputs ?? [],
-    parent_events: current.parent_events === undefined ? undefined : validateParentEventPage(current.parent_events, threadID),
-    messages,
-    turns,
-    error: trim(current.error)
+    restored_inputs: changed && !changed.restored_inputs ? base.restored_inputs : current.restored_inputs ?? [],
+    parent_events: changed && !changed.parent_events ? base.parent_events : current.parent_events === undefined ? undefined : validateParentEventPage(current.parent_events, threadID),
+    messages: base.messages,
+    turns: base.turns,
+    error: retainEqualValue(base.error, trim(current.error)
       ? { code: trim(current.run_error_code) || 'floret_turn_failed', message: trim(current.error), ...(trim(current.run_error_detail) ? { detail: trim(current.run_error_detail) } : {}) }
-      : undefined,
+      : undefined),
   };
-  return retainThreadPresentation(base, retainThreadFileActivityTargets(base, applyFlowerRuntimeContext(projected, context)));
+  return applyFlowerRuntimeContext(projected, context);
 }
 
-function validateFlowerRuntimeTurns(current: FlowerRuntimeCurrentView) {
+export function validateFlowerRuntimeTurns(current: FlowerRuntimeCurrentView) {
   const seen = new Set<string>();
   const duplicateItems = new Set<string>();
   const items = new Map<string, FlowerRuntimeCurrentItem>();

@@ -244,7 +244,7 @@ describe('SSH terminal activity', () => {
     expect(rowFor(runtime, 'read').textContent).not.toContain('2 / 2');
     expect(rowFor(runtime, 'read').textContent).not.toContain('0–2');
     const nextRead = { ...read(), payload: { ...read().payload, output: 'GPU ready', first_seq: 3, last_seq: 4, latest_seq: 4, has_more: false } };
-    live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([write(), nextRead], 2) });
+    live.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([write(), nextRead], 2) });
     await waitFor(() => rowFor(runtime, 'read').textContent?.includes('GPU ready') === true);
     expect(toggleFor(runtime, 'write').getAttribute('aria-expanded')).toBe('true');
     expect(toggleFor(runtime, 'read').getAttribute('aria-expanded')).toBe('true');

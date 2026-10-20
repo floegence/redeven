@@ -252,7 +252,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Flower companion composer and motion](ui/flower-companion-composer.md) - Keep one native editor, anchor its toolbar below text, and dissolve closing detail without a compact-entry jump.
 - [Flower companion presence](ui/flower-companion-presence.md) - Present live work, pending actions, and new completion feedback without displacing drafts or creating a second observation stream.
 - [Flower read state](ui/flower-read-state.md) - Keep read indicators monotonic, acknowledge rendered content and recover silently from synchronization failures.
-- [Flower live timeline](ui/flower-live-timeline.md) - Canonical live thread timeline projection, replacement events, and cursor ownership.
+- [Flower live timeline](ui/flower-live-timeline.md) - Apply native runtime mutations through one workspace stream, authorized public DTOs and indexed local rendering.
 - [Flower file edit preparation](ui/flower-edit-preparation.md) - Candidate filenames during argument streaming, immediate publication, and actual-result takeover.
 - [Flower timeline ordering](ui/flower-timeline-ordering.md) - Consume canonical turn pages, projections, decorations, cursors, and replacement events.
 - [Flower terminal turn process disclosure](ui/flower-turn-process-disclosure.md) - Control ended work manually and collapse successful work automatically while retaining conclusions, reading position and historical outcomes.

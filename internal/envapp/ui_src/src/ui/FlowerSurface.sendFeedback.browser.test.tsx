@@ -41,7 +41,7 @@ function mount(embedded: boolean) {
   const queued: FlowerLiveStreamEnvelope[] = [];
   let wake = () => {};
   const adapter: FlowerSurfaceAdapter = { ...base, launchTurn: sent, resolveStorageGeneration: () => preparation, connectLiveStream: async function* ({ signal }) {
-    yield { schema_version: 1, kind: 'ready', summaries: [] };
+    yield { schema_version: 2, kind: 'ready', summaries: [] };
     while (!signal.aborted) {
       const value = queued.shift();
       if (value) { yield value; continue; }
@@ -149,7 +149,7 @@ for (const embedded of [false, true]) {
     await expect.poll(() => indicator()?.dataset.flowerProgressRunId).toBe('run');
     expect(indicator()?.textContent).toContain('Waiting for model response');
     const retained = indicator();
-    runtime.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'canvas-thread', current: {
+    runtime.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'canvas-thread', current: {
       thread_id: 'canvas-thread', view_version: 2, activity: 'active', turn_id: 'turn', run_id: 'run',
       run_progress: { phase: 'streaming' }, queue: [], interactions: [],
       items: [{ id: userID, turn_id: 'turn', run_id: 'run', ordinal: 1, kind: 'user', text: 'Draw a service architecture' }],
@@ -177,12 +177,12 @@ for (const embedded of [false, true]) {
       try {
         await media.emulateMediaPreferences({ reducedMotion: 'reduce' });
         expect(indicator()?.getAnimations({ subtree: true }).some(animation => animation.playState === 'running')).toBe(false);
-        expect(indicator()?.textContent).toContain('Thinking');
+        expect(indicator()?.textContent).toContain('Generating');
       } finally {
         await media.emulateMediaPreferences({ reducedMotion: 'no-preference' });
       }
     }
-    runtime.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'canvas-thread', current: {
+    runtime.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'canvas-thread', current: {
       thread_id: 'canvas-thread', view_version: 3, activity: 'idle', queue: [], interactions: [],
       items: [{ id: userID, turn_id: 'turn', run_id: 'run', ordinal: 1, kind: 'user', text: 'Draw a service architecture' },
         { id: 'reply', turn_id: 'turn', run_id: 'run', ordinal: 2, kind: 'assistant', text: 'The canvas is ready.' }],

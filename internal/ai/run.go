@@ -17,7 +17,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/floegence/floret/v7/observation"
 	flprovider "github.com/floegence/floret/v7/provider"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	fltools "github.com/floegence/floret/v7/tools"
@@ -1321,53 +1320,6 @@ func toolStartActivityPresentation(toolName string, args map[string]any) *fltool
 
 func cloneActivityPresentation(in *fltools.ActivityPresentation) *fltools.ActivityPresentation {
 	return fltools.CloneActivityPresentation(in)
-}
-
-func (r *run) recordToolResultActivity(toolID string, toolName string, status string, result any, toolErr *aitools.ToolError, observedAt time.Time) {
-	if r == nil {
-		return
-	}
-	if observedAt.IsZero() {
-		observedAt = time.Now()
-	}
-	toolResult := ToolResult{
-		ToolID:   strings.TrimSpace(toolID),
-		ToolName: strings.TrimSpace(toolName),
-		Status:   strings.TrimSpace(status),
-		Data:     result,
-		Error:    toolErr,
-	}
-	if _, err := validateToolResultStatus(toolResult.Status); err != nil {
-		r.recordRunDiagnostic("activity.tool_result.invalid", RealtimeStreamKindTool, map[string]any{
-			"tool_id":   toolResult.ToolID,
-			"tool_name": toolResult.ToolName,
-			"error":     sanitizeLogText(err.Error(), 240),
-		})
-		return
-	}
-	if toolErr != nil {
-		toolErr.Normalize()
-		toolResult.Summary = string(toolErr.Code)
-		toolResult.Details = toolErr.Message
-	}
-	activity, err := floretActivityForToolResult(r, toolResult)
-	if err != nil {
-		r.recordRunDiagnostic("activity.tool_result.invalid", RealtimeStreamKindTool, map[string]any{
-			"tool_id":   toolResult.ToolID,
-			"tool_name": toolResult.ToolName,
-			"error":     sanitizeLogText(err.Error(), 240),
-		})
-		return
-	}
-	r.recordObservationActivityEvent(observation.Event{
-		Type:       observation.EventTypeToolResult,
-		ToolID:     toolResult.ToolID,
-		ToolName:   toolResult.ToolName,
-		ToolKind:   "local",
-		Error:      strings.TrimSpace(toolResult.Details),
-		Activity:   activity,
-		ObservedAt: observedAt,
-	})
 }
 
 func cloneAnyMap(in map[string]any) map[string]any {

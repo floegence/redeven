@@ -99,6 +99,13 @@ function isExternalHTMLPage(href: string): boolean {
 
 export function createFlowerMarkdownRenderer(options: { media?: boolean; sourceFence?: (token: Tokens.Code) => string | null } = {}): RendererObject<string, string> {
   return {
+    text(token: Tokens.Text | Tokens.Escape) {
+      if ('tokens' in token && token.tokens) return this.parser.parseInline(token.tokens);
+      // Raw HTML is displayed as text, including Marked's raw-block text tokens.
+      // Preserve already encoded entities in normal text, matching Marked.
+      const text = escapeFlowerMarkdownHtml(token.text);
+      return 'escaped' in token && token.escaped ? text : text.replace(/&amp;(#\d+;|#x[0-9a-f]+;|[a-z][a-z0-9]+;)/gi, '&$1');
+    },
     html(token: { text?: string; raw?: string }) {
       return escapeFlowerMarkdownHtml(String(token.text ?? token.raw ?? ''));
     },

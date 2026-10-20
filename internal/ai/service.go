@@ -169,9 +169,10 @@ type Service struct {
 	flowerLiveSubscriberSeq         uint64
 	flowerLiveSubscribersByEndpoint map[string]int
 	flowerLiveSubscribers           map[uint64]*flowerLiveSubscriber
+	flowerRuntimeUpdatesUnavailable bool
+	flowerRuntimePumpRunning        bool
 	flowerLiveQueuedBytes           int
 	flowerLiveMetrics               flowerLiveMetrics
-	flowerRuntimeCurrentPublisher   *flowerRuntimeCurrentPublisher
 	flowerThreadSummaryPublisher    *flowerThreadSummaryPublisher
 	flowerRuntimeEndpointByThread   map[string]string
 	flowerRuntimeParentByThread     map[string]string
@@ -501,12 +502,6 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 	if svc.flowerReadStateCleaner == nil {
 		svc.flowerReadStateCleaner = reads
 	}
-	svc.flowerRuntimeCurrentPublisher = newFlowerRuntimeCurrentPublisher(
-		flowerRuntimeCurrentPublishInterval,
-		systemFlowerRuntimePublishClock{},
-		svc.broadcastFlowerRuntimeProjection,
-	)
-	svc.flowerRuntimeCurrentPublisher.metrics = &svc.flowerLiveMetrics
 	svc.flowerThreadSummaryPublisher = newFlowerThreadSummaryPublisher(
 		lifecycleCtx,
 		persistTO,
@@ -550,60 +545,6 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 	return svc, nil
 }
 
-func (s *Service) startFlowerRuntimeViewPump() {
-	if s == nil || s.threadRuntime == nil || s.lifecycleCtx == nil {
-		return
-	}
-	subscription, err := s.threadRuntime.Subscribe(s.lifecycleCtx)
-	if err != nil {
-		if s.log != nil {
-			s.log.Error("ai: subscribe to Floret thread runtime", "error", err)
-		}
-		return
-	}
-	s.serviceWorkers.Add(1)
-	go func() {
-		defer s.serviceWorkers.Done()
-		defer subscription.Close()
-		for {
-			current, nextErr := subscription.Next(s.lifecycleCtx)
-			if nextErr != nil {
-				if !errors.Is(nextErr, context.Canceled) && !errors.Is(nextErr, flruntime.ErrHostClosed) && s.log != nil {
-					s.log.Warn("ai: Floret thread runtime subscription stopped", "error", nextErr)
-				}
-				return
-			}
-			threadID := strings.TrimSpace(current.ThreadID.String())
-			if threadID == "" || s.threadsDB == nil {
-				continue
-			}
-			if current.Activity == flruntime.ThreadActivityIdle {
-				if computer, ok := s.targetToolExecutor.(*ComputerUseRuntime); ok {
-					computer.releaseComputerControl(threadID, string(current.RunID))
-				}
-			}
-			s.reconcileAccountWatches(current)
-			s.reconcileAIWorkloadLeases(threadID, current)
-			lookupCtx, cancel := context.WithTimeout(s.lifecycleCtx, s.persistTimeout())
-			endpointID, parentThreadID, lookupErr := s.resolveFlowerRuntimeRoute(lookupCtx, threadID)
-			cancel()
-			if lookupErr != nil {
-				if s.log != nil && !errors.Is(lookupErr, context.Canceled) {
-					s.log.Warn("ai: resolve Flower runtime view owner", "thread_id", logsafe.Text(threadID, 256), "error", lookupErr)
-				}
-				continue
-			}
-			if endpointID == "" {
-				continue
-			}
-			if parentThreadID != "" {
-				s.rememberFlowerRuntimeParent(threadID, parentThreadID)
-			}
-			s.publishFlowerRuntimeCurrent(endpointID, current)
-		}
-	}()
-}
-
 func (s *Service) Close() error {
 	if s == nil {
 		return nil
@@ -634,7 +575,6 @@ func (s *Service) closeService() error {
 	maintenanceStopCh := s.maintenanceStopCh
 	maintenanceDoneCh := s.maintenanceDoneCh
 	lifecycleCancel := s.lifecycleCancel
-	currentPublisher := s.flowerRuntimeCurrentPublisher
 	summaryPublisher := s.flowerThreadSummaryPublisher
 	s.maintenanceStopCh = nil
 	s.maintenanceDoneCh = nil
@@ -642,9 +582,6 @@ func (s *Service) closeService() error {
 	responsesPool.Close()
 	if lifecycleCancel != nil {
 		lifecycleCancel()
-	}
-	if currentPublisher != nil {
-		currentPublisher.Close()
 	}
 	if summaryPublisher != nil {
 		summaryPublisher.Close()

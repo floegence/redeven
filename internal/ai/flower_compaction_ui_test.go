@@ -69,9 +69,11 @@ func TestFlowerCompactionRuntimeUI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := newSendTurnTestService(t)
+	service := newSendTurnTestServiceWithActivation(t, true)
 	service.threadRuntime = canonical
-	service.startFlowerRuntimeViewPump()
+	if err := service.Activate(t.Context()); err != nil {
+		t.Fatal(err)
+	}
 	meta := testSendTurnMeta()
 	created, err := service.CreateThread(t.Context(), meta, "Compaction runtime qualification", "", "", "")
 	if err != nil {

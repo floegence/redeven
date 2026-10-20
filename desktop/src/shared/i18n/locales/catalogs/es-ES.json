@@ -558,6 +558,8 @@
       "syncFailed": "Las actualizaciones en directo se detuvieron porque no se pudieron leer o aplicar los datos. El estado mostrado puede estar desactualizado.",
       "syncAuthorization": "Las actualizaciones en directo requieren autorización. Restablece el acceso y vuelve a sincronizar. El estado mostrado puede estar desactualizado.",
       "syncLocked": "Las actualizaciones en directo están bloqueadas. Desbloquea el acceso y vuelve a sincronizar. El estado mostrado puede estar desactualizado.",
+      "syncVersion": "Las actualizaciones en directo de Flower requieren versiones compatibles de la aplicación y el entorno de ejecución. Recarga la aplicación o actualiza ambos antes de volver a sincronizar.",
+      "syncCapacity": "Se ha alcanzado el límite de conexiones de actualizaciones en directo de Flower. Cierra las vistas de Flower que no uses y vuelve a sincronizar. Tu borrador se conserva.",
       "syncResync": "Volver a sincronizar",
       "stopUnconfirmed": "El estado de detención no está confirmado. Vuelve a sincronizar antes de intentarlo de nuevo.",
       "syncTimeout": "La sincronización agotó el tiempo de espera de 15 segundos. Inténtalo de nuevo.",

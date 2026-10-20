@@ -18,7 +18,7 @@ export type FlowerTurnProcessProjection = Readonly<{
   rows: ReadonlyMap<string, FlowerTurnProcess>;
 }>;
 
-export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[], turns: readonly FlowerRuntimeTurn[] = [], pendingTurnIDs: readonly string[] = []): FlowerTurnProcessProjection {
+export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[], turns: readonly FlowerRuntimeTurn[] = [], pendingTurnIDs: readonly string[] = [], previous?: FlowerTurnProcessProjection): FlowerTurnProcessProjection {
   const facts = new Map(turns.map((turn) => [turn.turn_id, turn]));
   const latestTurnID = turns.filter((turn) => turn.kind !== 'context_compaction').at(-1)?.turn_id;
   const groups = new Map<string, string[]>();
@@ -64,7 +64,11 @@ export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[]
     const disclosable = Boolean(turn?.outcome && turn.ended_at && turn.kind !== 'context_compaction' && processKeys.length && !pending);
     const disclosure: FlowerTurnDisclosurePolicy = !disclosable ? 'none'
       : turnID === latestTurnID && turn?.outcome !== 'completed' ? 'manual' : 'automatic';
-    return [turnID, { turnID, turn, processKeys, parentEventCount: eventCounts.get(turnID) ?? 0, summaryKey: processKeys[0], terminalKey: terminalKeys.get(turnID), disclosure }];
+    const next = { turnID, turn, processKeys, parentEventCount: eventCounts.get(turnID) ?? 0, summaryKey: processKeys[0], terminalKey: terminalKeys.get(turnID), disclosure };
+    const prior = previous?.groups.get(turnID);
+    return [turnID, prior && prior.turn === turn && prior.disclosure === disclosure
+      && prior.parentEventCount === next.parentEventCount && prior.terminalKey === next.terminalKey
+      && prior.processKeys.length === processKeys.length && prior.processKeys.every((key, index) => key === processKeys[index]) ? prior : next];
   }));
   return { groups: projected, rows: new Map([...rowTurns].map(([key, turnID]) => [key, projected.get(turnID)!])) };
 }

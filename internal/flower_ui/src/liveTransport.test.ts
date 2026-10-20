@@ -2,6 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { FlowerLiveSyncError } from './flowerLiveWire';
 import { createLiveTransport } from './liveTransport';
 
 function controlledConnections<T>() {
@@ -150,23 +151,18 @@ describe('LiveTransport recovery ownership', () => {
     stop();
   });
 
-  it.each(['eof', 'transport', 'rate_limit'])('keeps the existing %s retry policy and cancels a pending retry on manual restart', async (kind) => {
+  it.each(['eof', 'transport'])('retries %s and cancels a pending retry on manual restart', async (kind) => {
     vi.useFakeTimers();
     const fixture = controlledConnections<{ kind: string }>();
     const onTerminalError = vi.fn();
     const transport = createLiveTransport<{ kind: string }>();
     const stop = transport.start({ ...fixture, onCurrent: vi.fn(), onTerminalError, isReady: value => value.kind === 'ready' });
     if (kind === 'eof') fixture.connections[0]!.end();
-    else fixture.connections[0]!.reject(Object.assign(new Error('disconnected'), kind === 'transport'
-      ? { code: 'transport' } : { code: 'rate_limit', status: 429, retryAfter: '2' }));
+    else fixture.connections[0]!.reject(Object.assign(new Error('disconnected'), { code: 'transport' }));
     await vi.advanceTimersByTimeAsync(0);
     expect(transport.state().status).toBe('reconnecting');
     expect(onTerminalError).not.toHaveBeenCalled();
-    if (kind === 'rate_limit') {
-      await vi.advanceTimersByTimeAsync(1_999);
-      expect(fixture.connect).toHaveBeenCalledOnce();
-      await vi.advanceTimersByTimeAsync(1);
-    } else await vi.advanceTimersByTimeAsync(300);
+    await vi.advanceTimersByTimeAsync(300);
     expect(fixture.connect).toHaveBeenCalledTimes(2);
     fixture.connections[1]!.end();
     await vi.advanceTimersByTimeAsync(0);
@@ -175,6 +171,26 @@ describe('LiveTransport recovery ownership', () => {
     fixture.connections[2]!.push({ kind: 'ready' });
     await vi.advanceTimersByTimeAsync(60_000);
     expect(fixture.connect).toHaveBeenCalledTimes(3);
+    expect(transport.state().status).toBe('ready');
+    stop();
+  });
+
+  it.each([401, 403, 423, 426, 429])('keeps HTTP %i actionable until an explicit restart', async status => {
+    vi.useFakeTimers();
+    const fixture = controlledConnections<{ kind: string }>();
+    const onTerminalError = vi.fn();
+    const transport = createLiveTransport<{ kind: string }>();
+    const stop = transport.start({ ...fixture, onCurrent: vi.fn(), onTerminalError, isReady: value => value.kind === 'ready' });
+    const error = Object.assign(new Error('observation requires recovery'), { status, code: 'unexpected_status', retryAfter: '2' });
+    fixture.connections[0]!.reject(error);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(transport.state()).toMatchObject({ status: 'failed', error });
+    expect(fixture.connect).toHaveBeenCalledOnce();
+    expect(onTerminalError).toHaveBeenCalledExactlyOnceWith(error);
+    expect(vi.getTimerCount()).toBe(0);
+    transport.restart();
+    fixture.connections[1]!.push({ kind: 'ready' });
+    await vi.advanceTimersByTimeAsync(0);
     expect(transport.state().status).toBe('ready');
     stop();
   });
@@ -248,4 +264,14 @@ it.each([401, 403, 423])('terminates observation after authorization status %s w
     expect(connect).toHaveBeenCalledOnce();
     expect(onTerminalError).toHaveBeenCalledExactlyOnceWith(failure);
   } finally { stop(); vi.useRealTimers(); }
+});
+
+it('recovers sync gaps through the same transport owner and fences repeated late failures', async () => {
+  vi.useFakeTimers(); const h = controlledConnections<number>(); const terminal = vi.fn(); const boundary = vi.fn();
+  const transport = createLiveTransport<number>(); const stop = transport.start({ connect: h.connect, onCurrent: () => undefined, onTerminalError: terminal, onBoundary: boundary });
+  const epoch = transport.connectionEpoch(); transport.fail(new FlowerLiveSyncError('version gap'), epoch);
+  expect(transport.state().status).toBe('reconnecting'); expect(boundary).toHaveBeenCalledOnce(); expect(terminal).not.toHaveBeenCalled();
+  transport.fail(new FlowerLiveSyncError('late gap'), epoch);
+  await vi.advanceTimersByTimeAsync(301); expect(h.connect).toHaveBeenCalledTimes(2);
+  stop(); expect(vi.getTimerCount()).toBe(0);
 });

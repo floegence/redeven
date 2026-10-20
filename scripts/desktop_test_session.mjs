@@ -37,6 +37,7 @@ export function processSnapshot() {
   return JSON.parse(
     execFileSync(process.platform === 'win32' ? 'python' : 'python3', [processHelper], {
       encoding: 'utf8',
+      maxBuffer: 16 * 1024 * 1024,
       timeout: 5000,
       killSignal: 'SIGKILL',
     }),

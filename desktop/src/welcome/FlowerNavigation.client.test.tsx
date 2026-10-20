@@ -196,6 +196,7 @@ it('keeps filesystem and model reads stable through health snapshots and refresh
     '/_redeven_proxy/api/fs/path_context',
     '/_redeven_proxy/api/settings',
     '/_redeven_proxy/api/ai/models?mode=baseline',
+    '/_redeven_proxy/api/ai/conversation_preferences',
   ];
   expect(h.requestRuntimeFlower.mock.calls.slice(initialCalls).map(([request]) => request.path).sort()).toEqual([...replacementReads].sort());
   h.publish({ environments: h.snapshot.environments.map(entry => ({ ...entry, runtime_started_at_unix_ms: 42, open_session_key: 'replacement' })) });

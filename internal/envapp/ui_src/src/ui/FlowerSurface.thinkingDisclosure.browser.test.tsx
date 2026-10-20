@@ -53,7 +53,7 @@ function stream(initial: FlowerRuntimeCurrentView, summaries: () => FlowerLiveSt
     current: () => latest, connect, connections, envelope,
     setCurrent(value: FlowerRuntimeCurrentView) { latest = value; },
     push(value: FlowerRuntimeCurrentView) {
-      latest = value; envelope({ schema_version: 1, kind: 'thread.batch', thread_id: value.thread_id, current: value });
+      latest = value; envelope({ schema_version: 2, kind: 'thread.batch', thread_id: value.thread_id, current: value });
     },
     fail() { envelope(Object.assign(new Error('private diagnostic'), { code: 'envelope_encoding_failed' })); },
   };
@@ -74,7 +74,7 @@ async function mount(presentation: 'full' | 'companion' = 'full', localized = fa
   const initial = current();
   const seed = thread({ thread_id: initial.thread_id, title: 'Thinking disclosure', messages: [] });
   const summary = () => applyFlowerRuntimeCurrentView(seed, live.current());
-  const live = stream(initial, () => ({ schema_version: 1, kind: 'ready', summaries: [summary()] }));
+  const live = stream(initial, () => ({ schema_version: 2, kind: 'ready', summaries: [summary()] }));
   const root = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [summary()]),
     loadThread: vi.fn(async () => ({ thread: summary(), current: live.current() })), connectLiveStream: live.connect,
   }, { presentation, companionOpen: true, engaged: true, transcriptVisible: true,
@@ -228,7 +228,7 @@ it.each(['normal-child', 'failed-child'] as const)('uses the child thread facts 
   const parentCurrent = sealed(current({ thread_id: 'parent' }), { activity: 'idle',
     last_outcome: scenario === 'normal-child' ? 'failed' : 'completed', turns: [turn(scenario === 'normal-child' ? 'failed' : 'completed')] });
   const parent = applyFlowerRuntimeCurrentView(thread({ thread_id: 'parent', subagents: [child] }), parentCurrent);
-  const live = stream(initial, () => ({ schema_version: 1, kind: 'ready', summaries: [parent] }));
+  const live = stream(initial, () => ({ schema_version: 2, kind: 'ready', summaries: [parent] }));
   const root = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [parent]),
     loadThread: vi.fn(async () => ({ ...liveBootstrap(parent), current: parentCurrent })), connectLiveStream: live.connect,
     loadSubagentDetail: vi.fn(async () => ({ summary: child, current: live.current() })),
@@ -237,7 +237,7 @@ it.each(['normal-child', 'failed-child'] as const)('uses the child thread facts 
   await waitFor(() => Boolean(root.querySelector('[data-thread-id="parent"] button')));
   root.querySelector<HTMLButtonElement>('[data-thread-id="parent"] button')!.click();
   await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="user"]')));
-  live.envelope({ schema_version: 1, kind: 'thread.batch', thread_id: 'parent', subagents: [child] });
+  live.envelope({ schema_version: 2, kind: 'thread.batch', thread_id: 'parent', subagents: [child] });
   await waitFor(() => Boolean(root.querySelector('[data-flower-subagent-count="1"]')));
   root.querySelector<HTMLButtonElement>('button[aria-controls="flower-subagents-dropdown"]')!.click();
   await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-row="0"]')));
@@ -246,7 +246,7 @@ it.each(['normal-child', 'failed-child'] as const)('uses the child thread facts 
   const transcript = document.querySelector<HTMLElement>('.flower-subagent-detail-transcript')!;
   expect(disclosure(transcript).dataset.flowerThinkingView).toBe('preview');
   toggle(transcript).click();
-  live.envelope({ schema_version: 1, kind: 'thread.batch', thread_id: 'parent',
+  live.envelope({ schema_version: 2, kind: 'thread.batch', thread_id: 'parent',
     subagent_current: sealed(initial, scenario === 'failed-child' ? { activity: 'idle', last_outcome: 'failed', turns: [turn('failed')] } : {}) });
   await waitFor(() => disclosure(transcript).dataset.flowerThinkingActive === 'false');
   expect(disclosure(transcript).dataset.flowerThinkingView).toBe(scenario === 'failed-child' ? 'expanded' : 'collapsed');
@@ -258,7 +258,7 @@ it('retains correction disclosure, selection and focus through real provider che
   const initial = checkpoints[1];
   const seed = thread({ thread_id: initial.thread_id, title: 'Source order', messages: [] });
   const summary = () => applyFlowerRuntimeCurrentView(seed, live.current());
-  const live = stream(initial, () => ({ schema_version: 1, kind: 'ready', summaries: [summary()] }));
+  const live = stream(initial, () => ({ schema_version: 2, kind: 'ready', summaries: [summary()] }));
   const root = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [summary()]),
     loadThread: vi.fn(async () => ({ thread: summary(), current: live.current() })), connectLiveStream: live.connect,
   }, { engaged: true, transcriptVisible: true });

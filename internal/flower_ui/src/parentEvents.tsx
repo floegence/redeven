@@ -32,7 +32,8 @@ export function createParentEventReading(props: Readonly<{
   let readIDs = new Set<string>();
   const invalidate = () => { generation++; controller?.abort(); controller = undefined; };
   onCleanup(invalidate);
-  const events = createMemo(() => [...(props.page ? props.page.events : emptyEvents), ...extra()].map(event => ({
+  const currentPage = createMemo(() => props.page);
+  const events = createMemo(() => [...(currentPage() ? currentPage()!.events : emptyEvents), ...extra()].map(event => ({
     ...event, ...(bodies()[event.id]?.message !== undefined ? { message: bodies()[event.id].message } : {}),
   })));
   const read = async (request: EventReadRequest) => {
@@ -123,8 +124,9 @@ export function parentEventLabel(event: FlowerParentEvent, copy: FlowerSubagents
 export function ParentEventRow(props: Readonly<{
   event: FlowerParentEvent; copy: FlowerSubagentsCopy; sourceName: string;
   canOpenSource: boolean; onOpenSource: () => void; onDisclosureClick: (title: HTMLElement) => void;
+  expanded: boolean; onExpandedChange: (expanded: boolean) => void;
 }>) {
-  const [open, setOpen] = createSignal(false);
+  const open = () => props.expanded;
   const report = () => props.event.kind === 'report';
   const message = () => props.event.message ?? '';
   let reportBody!: HTMLDivElement;
@@ -170,7 +172,7 @@ export function ParentEventRow(props: Readonly<{
               aria-controls={`flower-parent-event-body-${encodeURIComponent(props.event.parent_thread_id + ':' + props.event.id)}`}
               onClick={event => {
                 props.onDisclosureClick(open() ? event.currentTarget : reportBody);
-                setOpen(value => !value);
+                props.onExpandedChange(!open());
               }}>
               {open() ? props.copy.events.collapse : props.copy.events.read}<ChevronDown aria-hidden="true" />
             </button>

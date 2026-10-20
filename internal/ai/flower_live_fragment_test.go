@@ -14,7 +14,6 @@ import (
 
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
-	fltools "github.com/floegence/floret/v7/tools"
 	"github.com/floegence/redeven/internal/config"
 )
 
@@ -157,121 +156,6 @@ func TestFlowerLiveFragmentsRetainActiveBytesAndNeverReplaceStartedEnvelope(t *t
 	}
 }
 
-func TestFlowerLiveFragmentsCoalesceOnlyUnsentPureTextGrowth(t *testing.T) {
-	for _, initializing := range []bool{false, true} {
-		for _, semanticChange := range []string{"none", "activity", "new_item", "thread", "context_usage", "numeric_metadata"} {
-			t.Run(fmt.Sprintf("initializing_%t/%s", initializing, semanticChange), func(t *testing.T) {
-				svc, sub := subscribeFlowerFragmentTest(t)
-				sub.subscriber.initializing = initializing
-				before := largeFlowerLiveCurrent()
-				after := before
-				after.ViewVersion++
-				after.Items = append([]flruntime.ThreadItem(nil), before.Items...)
-				after.Items[len(after.Items)-1].Text += " second"
-				left := FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, Current: &before}
-				right := FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, Current: &after}
-				switch semanticChange {
-				case "activity":
-					after.Activity = flruntime.ThreadActivityIdle
-				case "new_item":
-					item := after.Items[len(after.Items)-1]
-					item.ID = "assistant-first"
-					item.Kind = flruntime.ThreadItemAssistant
-					after.Items = append(after.Items, item)
-				case "thread":
-					after.ThreadID = "other-thread"
-				case "context_usage":
-					right.ContextUsage = &FlowerContextUsage{}
-				case "numeric_metadata":
-					// Numeric item metadata is a semantic boundary, even during text growth.
-					before.Items[0].Ordinal = 1 << 52
-					after.Items[0].Ordinal = 1<<52 + 1
-				}
-				first, second := newFlowerLiveEncodedBatch(left), newFlowerLiveEncodedBatch(right)
-				enqueueFlowerFragmentTest(t, svc, sub, first)
-				enqueueFlowerFragmentTest(t, svc, sub, second)
-				want := 2
-				if semanticChange == "none" {
-					want = 1
-				}
-				queued := len(sub.subscriber.queue)
-				if initializing {
-					svc.mu.Lock()
-					finalizeFlowerLiveSubscriberInitializationLocked(svc, sub.subscriber)
-					svc.mu.Unlock()
-				}
-				if queued != want {
-					t.Fatalf("queued envelopes=%d want %d", queued, want)
-				}
-				if semanticChange != "none" && !bytes.Equal(nextFlowerLiveStreamFrame(t, sub).Data, first.data) {
-					t.Fatal("semantic boundary discarded the earlier current")
-				}
-				if !bytes.Equal(nextFlowerLiveStreamFrame(t, sub).Data, second.data) {
-					t.Fatal("the latest current was not retained")
-				}
-			})
-		}
-	}
-}
-
-func TestFlowerLiveProgressCoalescingRetainsAttemptAndPreviewBoundaries(t *testing.T) {
-	started := time.Date(2026, 10, 15, 0, 0, 0, 0, time.UTC)
-	for _, boundary := range []string{"numbers", "first_output", "attempt", "complete", "removed", "unknown_count", "progress_presence", "first_output_time", "started_at"} {
-		t.Run(boundary, func(t *testing.T) {
-			before := flruntime.ThreadView{ThreadID: "thread", TurnID: "turn", RunID: "run", Activity: flruntime.ThreadActivityActive, ViewVersion: 1,
-				RunProgress: &flruntime.ThreadRunProgress{Phase: flruntime.ThreadRunPhaseStreaming, Request: &flruntime.ProviderRequestProgress{
-					LogicalRequestID: "request", AttemptID: "attempt", AttemptEpoch: 1, StartedAt: started, EstimatedOutputTokens: 10}},
-				ToolCallPreviews: []flruntime.ThreadToolCallPreview{{ThreadID: "thread", TurnID: "turn", RunID: "run", LogicalRequestID: "request", AttemptID: "attempt", AttemptEpoch: 1,
-					CallID: "call", Name: "file.write", Preview: &fltools.ArgumentPreview{DisplayName: "example.ts", Additions: new(int)}}}}
-			// Round trip detaches every nested value so normalization cannot mutate
-			// either caller-owned snapshot.
-			raw, _ := json.Marshal(before)
-			var after flruntime.ThreadView
-			if err := json.Unmarshal(raw, &after); err != nil {
-				t.Fatal(err)
-			}
-			after.ViewVersion++
-			after.RunProgress.Request.EstimatedOutputTokens = 20
-			*after.ToolCallPreviews[0].Preview.Additions = 8
-			switch boundary {
-			case "first_output":
-				after.RunProgress.Request.FirstOutputAt = &started
-			case "attempt":
-				after.RunProgress.Request.AttemptID = "attempt-2"
-				after.ToolCallPreviews[0].AttemptID = "attempt-2"
-			case "complete":
-				after.ToolCallPreviews[0].ArgumentsComplete = true
-			case "removed":
-				after.ToolCallPreviews = nil
-			case "unknown_count":
-				after.ToolCallPreviews[0].Preview.Deletions = new(int)
-			case "progress_presence":
-				after.RunProgress.Request.LastProgressAt = &started
-			case "first_output_time":
-				before.RunProgress.Request.FirstOutputAt = &started
-				next := started.Add(time.Second)
-				after.RunProgress.Request.FirstOutputAt = &next
-			case "started_at":
-				after.RunProgress.Request.StartedAt = started.Add(time.Second)
-			}
-			left := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: 1, Kind: FlowerLiveStreamThreadBatch, Current: &before})
-			right := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: 1, Kind: FlowerLiveStreamThreadBatch, Current: &after})
-			if left.err != nil || right.err != nil {
-				t.Fatalf("encode: %v, %v", left.err, right.err)
-			}
-			if got := flowerLiveTextAppend(left, right); got != (boundary == "numbers") {
-				t.Fatalf("coalesce=%t for %s", got, boundary)
-			}
-			if before.RunProgress.Request.EstimatedOutputTokens != 10 || after.RunProgress.Request.EstimatedOutputTokens != 20 || (boundary != "removed" && *after.ToolCallPreviews[0].Preview.Additions != 8) {
-				t.Fatal("comparison mutated source")
-			}
-			if !bytes.Contains(right.data, []byte(`"sampled_at_ms":`)) {
-				t.Fatal("wire snapshot lost server sample")
-			}
-		})
-	}
-}
-
 func TestFlowerLiveFragmentsReleaseInitializationAndInterruptedAssemblyBytes(t *testing.T) {
 	svc, sub := subscribeFlowerFragmentTest(t)
 	current := largeFlowerLiveCurrent()
@@ -389,6 +273,7 @@ func TestFlowerWorkspaceLargeBaselineRecoversAfterPartialDisconnect(t *testing.T
 	}
 	nextFlowerLiveStreamFrame(t, first)
 	assertFlowerViewerReadBaseline(t, first, thread.ThreadID)
+	enqueueFlowerFragmentTest(t, svc, first, newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: thread.ThreadID, Current: &current}))
 	if frame, err := first.Next(t.Context()); err != nil || frame.Kind != FlowerLiveStreamThreadBatch {
 		t.Fatalf("first baseline fragment=%v error=%v", frame, err)
 	}
@@ -405,6 +290,7 @@ func TestFlowerWorkspaceLargeBaselineRecoversAfterPartialDisconnect(t *testing.T
 		t.Fatal("reconnect did not start with ready")
 	}
 	assertFlowerViewerReadBaseline(t, reconnected, thread.ThreadID)
+	enqueueFlowerFragmentTest(t, svc, reconnected, newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: thread.ThreadID, Current: &current}))
 	baseline := nextFlowerLiveStreamFrame(t, reconnected)
 	want, err := json.Marshal(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: thread.ThreadID, Current: &current})
 	if err != nil || len(want) < 1489792 || !bytes.Equal(baseline.Data, want) {
@@ -453,41 +339,6 @@ func TestFlowerLiveFragmentsAccountLatestAndActiveMediaWithoutLifecycleInterfere
 	sub.Close()
 	if sub.subscriber.mediaBytes != 0 || svc.flowerLiveQueuedBytes != 0 {
 		t.Fatal("closing active media retained bytes")
-	}
-}
-
-func TestFlowerLiveFragmentsInitializationCoalescesOnlyPureTextGrowth(t *testing.T) {
-	svc, sub := subscribeFlowerFragmentTest(t)
-	current := largeFlowerLiveCurrent()
-	current.Items = current.Items[len(current.Items)-1:]
-	svc.mu.Lock()
-	sub.subscriber.initializing = true
-	svc.mu.Unlock()
-	var latest *flowerLiveEncodedBatch
-	for index := range flowerLiveSubscriberBatchLimit + 10 {
-		current.ViewVersion = uint64(index + 1)
-		current.Items[0].Text = "first" + strings.Repeat(".", index)
-		latest = newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, Current: &current})
-		enqueueFlowerFragmentTest(t, svc, sub, latest)
-	}
-	if sub.subscriber.closed || len(sub.subscriber.queue) != 1 || sub.subscriber.queuedBytes != len(latest.data) || svc.flowerLiveQueuedBytes != len(latest.data) {
-		t.Fatal("pure text growth exhausted initialization count or retained stale bytes")
-	}
-	current.ViewVersion++
-	current.Activity = flruntime.ThreadActivityIdle
-	terminal := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, Current: &current})
-	enqueueFlowerFragmentTest(t, svc, sub, terminal)
-	if len(sub.subscriber.queue) != 2 || svc.flowerLiveQueuedBytes != len(latest.data)+len(terminal.data) {
-		t.Fatal("initialization text coalescing erased a terminal boundary")
-	}
-	svc.mu.Lock()
-	finalizeFlowerLiveSubscriberInitializationLocked(svc, sub.subscriber)
-	svc.mu.Unlock()
-	if !bytes.Equal(nextFlowerLiveStreamFrame(t, sub).Data, latest.data) || !bytes.Equal(nextFlowerLiveStreamFrame(t, sub).Data, terminal.data) {
-		t.Fatal("initialization delivered text and terminal boundaries out of order")
-	}
-	if svc.flowerLiveQueuedBytes != 0 {
-		t.Fatal("initialization text coalescing leaked retained bytes")
 	}
 }
 

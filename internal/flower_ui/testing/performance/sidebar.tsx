@@ -37,7 +37,7 @@ const pause = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, m
 const summary = (id: string) => summaries.find(value => value.thread_id === id)!;
 const commitPins = (pins: readonly FlowerThreadPinMetadata[]) => {
   summaries = summaries.map(value => ({ ...value, ...pins.find(pin => pin.thread_id === value.thread_id) }));
-  fixture.emit({ schema_version: 1, kind: 'summary.batch', summaries });
+  fixture.emit({ schema_version: 2, kind: 'summary.batch', summaries });
 };
 const confirmPins = async (pins: readonly FlowerThreadPinMetadata[]) => {
   pinStarted++;
@@ -80,7 +80,7 @@ render(() => <FloeProvider><FlowerSurface notify={() => undefined} draftCoordina
     { thread_id: position.anchor_thread_id, pin_rank: summary(id).pin_rank!, pinned_at_ms: summary(position.anchor_thread_id).pinned_at_ms!, settings_revision: summary(position.anchor_thread_id).settings_revision! + 1 },
   ]),
   async *connectLiveStream(input) {
-    yield { schema_version: 1 as const, kind: 'ready' as const, summaries };
+    yield { schema_version: 2 as const, kind: 'ready' as const, summaries };
     for await (const event of fixture.adapter.connectLiveStream!(input)) {
       if (event.kind !== 'ready') yield event;
     }
@@ -106,7 +106,7 @@ const sidebar = {
   updateTitle(id: string) {
     const value = summary(id);
     summaries = summaries.map(item => item.thread_id === id ? { ...item, title: item.title + ' updated', title_generation: (item.title_generation || 0) + 1 } : item);
-    fixture.emit({ schema_version: 1, kind: 'summary.batch', summaries });
+    fixture.emit({ schema_version: 2, kind: 'summary.batch', summaries });
   },
   async select(id: string) {
     await until(() => !!root.querySelector('[data-thread-id="' + id + '"]'));

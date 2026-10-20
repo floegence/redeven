@@ -69,7 +69,7 @@ describe('Flower progress shimmer', () => {
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true), listThreads: vi.fn(async () => [running]), loadThread: vi.fn(async () => liveBootstrap(running)),
       async *connectLiveStream({ signal }) {
-        yield { schema_version: 1, kind: 'ready', summaries: [running] };
+        yield { schema_version: 2, kind: 'ready', summaries: [running] };
         const event = await new Promise<FlowerLiveStreamEnvelope | null>(resolve => {
           settle = resolve;
           signal.addEventListener('abort', () => resolve(null), { once: true });
@@ -141,7 +141,7 @@ describe('Flower progress shimmer', () => {
       expect(selection.toString().replace(/\s+/gu, '')).toBe(titles[0].textContent?.replace(/\s+/gu, ''));
       selection.removeAllRanges();
       const current = runtimeCurrentView(running, 2);
-      settle({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: {
+      settle({ schema_version: 2, kind: 'thread.batch', thread_id: threadID, current: {
         ...current, activity: 'idle', last_outcome: 'completed', run_progress: undefined,
         items: (current.items ?? []).map(item => {
           if (item.kind !== 'tool') return item;

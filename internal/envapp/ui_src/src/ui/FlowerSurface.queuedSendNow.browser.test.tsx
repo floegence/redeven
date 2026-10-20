@@ -77,8 +77,8 @@ function reactiveSurface(initial: FlowerSurfaceAdapter) {
 
 function canonicalStream(value: ReturnType<typeof queuedThread>, version: number): NonNullable<FlowerSurfaceAdapter['connectLiveStream']> {
   return async function* ({ signal }) {
-    yield { schema_version: 1, kind: 'ready', summaries: [value] };
-    yield { schema_version: 1, kind: 'thread.batch', thread_id: value.thread_id, current: liveBootstrap(value, version).current };
+    yield { schema_version: 2, kind: 'ready', summaries: [value] };
+    yield { schema_version: 2, kind: 'thread.batch', thread_id: value.thread_id, current: liveBootstrap(value, version).current };
     if (!signal.aborted) await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
   };
 }
@@ -197,7 +197,7 @@ describe('Flower queued send now', () => {
     const envelopes: FlowerLiveStreamEnvelope[] = [];
     let wake = () => {};
     const { runtime } = mount(value, () => pending, { connectLiveStream: async function* ({ signal }) {
-      yield { schema_version: 1, kind: 'ready', summaries: [value] };
+      yield { schema_version: 2, kind: 'ready', summaries: [value] };
       while (!signal.aborted) {
         const next = envelopes.shift();
         if (next) { yield next; continue; }
@@ -207,7 +207,7 @@ describe('Flower queued send now', () => {
     await open(runtime);
     sendButton(runtime).click();
     await waitFor(() => sendButton(runtime).getAttribute('aria-busy') === 'true');
-    envelopes.push({ schema_version: 1, kind: 'thread.batch', thread_id: value.thread_id, current: sentView(value, 2).current }); wake();
+    envelopes.push({ schema_version: 2, kind: 'thread.batch', thread_id: value.thread_id, current: sentView(value, 2).current }); wake();
     await waitFor(() => runtime.querySelector('[data-flower-queued-turn-dock-id="queued-first"]') === null);
     resolve(sentView(value, 3));
   });
@@ -217,7 +217,7 @@ describe('Flower queued send now', () => {
     const envelopes: FlowerLiveStreamEnvelope[] = [];
     let wake = () => {};
     const { runtime, calls } = mount(value, async () => liveBootstrap(value, 1), { connectLiveStream: async function* ({ signal }) {
-      yield { schema_version: 1, kind: 'ready', summaries: [value] };
+      yield { schema_version: 2, kind: 'ready', summaries: [value] };
       while (!signal.aborted) {
         const next = envelopes.shift();
         if (next) { yield next; continue; }
@@ -229,7 +229,7 @@ describe('Flower queued send now', () => {
     sendButton(runtime).click();
     await waitFor(() => calls.mock.calls.length === 1 && !sendButton(runtime).hasAttribute('aria-busy'));
     expect(runtime.querySelector('[data-flower-queued-turn-dock-id="queued-first"]')).toBe(row);
-    envelopes.push({ schema_version: 1, kind: 'thread.batch', thread_id: value.thread_id, current: sentView(value, 2).current }); wake();
+    envelopes.push({ schema_version: 2, kind: 'thread.batch', thread_id: value.thread_id, current: sentView(value, 2).current }); wake();
     await waitFor(() => runtime.querySelector('[data-flower-queued-turn-dock-id="queued-first"]') === null);
   });
 
