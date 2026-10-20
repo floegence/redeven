@@ -219,8 +219,8 @@ func TestFlowerGoalReflectionUsesExistingContextAndExcludesDefaultTodo(t *testin
 		}
 		prompt, _ := request["instructions"].(string)
 		// Before the shared-policy replacement this fixture used 9,889 bytes.
-		if len(prompt) > 9_844 {
-			t.Fatalf("final provider instructions=%d bytes; budget=9844", len(prompt))
+		if len(prompt) > 9_839 {
+			t.Fatalf("final provider instructions=%d bytes; budget=9839", len(prompt))
 		}
 		if strings.Contains(prompt, "Available tools for this request:") {
 			t.Fatal("host tool enumeration duplicates the final runtime tool definitions")

@@ -311,7 +311,7 @@ func TestRedevenHostedRunNaturalStopCompletesTurn(t *testing.T) {
 			t.Fatalf("unexpected main provider request %d", mainCalls.Load())
 		}
 		prompt, _ := request["instructions"].(string)
-		assertPromptContains(t, prompt, "Answer directly from sufficient context")
+		assertPromptContains(t, prompt, "Answer directly when context suffices")
 		assertPromptNotContains(t, prompt, "Follow this workflow for every task")
 		assertPromptNotContains(t, prompt, "file.read")
 		writeAskUserIntegrationTextResponse(w, flusher, "resp_natural_stop", "Finished naturally.")

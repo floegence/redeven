@@ -21,13 +21,16 @@ REPEATS=${REDEVEN_FLOWER_PROMPT_REPEATS:-3}
 [[ "$REPEATS" =~ ^[1-5]$ ]] || { echo "Repeats must be 1..5" >&2; exit 2; }
 cd "$ROOT_DIR"
 echo "Real configured DeepSeek flash prompt qualification. Reports: $REPORT_DIR"
+set +e
 REDEVEN_FLOWER_PROMPT_E2E=1 \
 REDEVEN_FLOWER_PROMPT_REPEATS="$REPEATS" \
 REDEVEN_FLOWER_CONTEXT_SOURCE_STATE_ROOT="$SOURCE_STATE_ROOT" \
 REDEVEN_FLOWER_PROMPT_REPORT_DIR="$REPORT_DIR" \
 GOWORK=off go test ./internal/ai -run '^TestE2E_FlowerPromptDeepSeek(Runtime)?$' -count=1 -parallel 3 -v -timeout 30m | tee "$REPORT_DIR/test.log"
-# An absent, skipped, empty or failed qualification is not a passing run.
-python3 - "$REPORT_DIR" "$REPEATS" <<'PY'
+PIPELINE_STATUS=("${PIPESTATUS[@]}")
+set -e
+# Pending trace reviews are neither failures nor qualification passes.
+python3 - "$REPORT_DIR" "$REPEATS" "${PIPELINE_STATUS[0]}" "${PIPELINE_STATUS[1]}" <<'PY'
 import json, pathlib, sys
 root = pathlib.Path(sys.argv[1])
 manifest = json.loads((root / 'manifest.json').read_text())
@@ -38,7 +41,19 @@ assert cases and len(cases) == len(set(cases)), 'invalid case manifest'
 expected = {root / case / str(i) / 'report.json' for case in cases for i in range(1, repeats + 1)}
 reports = set(root.glob('*/*/report.json'))
 assert reports == expected, 'incomplete qualification'
-assert all(json.loads(p.read_text())['passed'] for p in reports), 'failed qualification'
-assert json.loads((pathlib.Path(sys.argv[1]) / 'runtime/report.json').read_text())['passed'], 'runtime qualification failed'
-print(f'Passed {len(reports)} real-provider behavior cases')
+records = [json.loads(p.read_text()) for p in sorted(reports)]
+runtime = json.loads((root / 'runtime/report.json').read_text())
+failed = [f"{r['case']}/{r['round']}" for r in records if r.get('status', 'pass' if r['passed'] else 'fail') == 'fail']
+review = [f"{r['case']}/{r['round']}" for r in records if r.get('review_required')]
+runtime_review = [key.removesuffix('_review_required') for key in runtime if key.endswith('_review_required')]
+summary = {'cases': len(records), 'automatic_pass': sum(r['passed'] for r in records), 'failed': failed, 'review_required': review,
+           'runtime_checks_passed': runtime['passed'], 'runtime_review_required': runtime_review,
+           'go_exit_code': int(sys.argv[3]), 'tee_exit_code': int(sys.argv[4])}
+summary['qualified'] = not failed and not review and runtime['passed'] and not runtime_review and sys.argv[3:] == ['0', '0']
+(root / 'automatic-summary.json').write_text(json.dumps(summary, indent=2) + '\n')
+print(json.dumps(summary, indent=2))
+if failed or not runtime['passed'] or sys.argv[3:] != ['0', '0']:
+    sys.exit(1)
+if review or runtime_review:
+    sys.exit(3)
 PY

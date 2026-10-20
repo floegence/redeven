@@ -2,16 +2,19 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/config"
 )
@@ -33,15 +36,15 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 	if err := os.Mkdir(workspace, 0700); err != nil {
 		t.Fatal("runtime report directory must be fresh")
 	}
-	fixtures := map[string]string{
-		"AGENTS.md":    "# Fixture rules\nDo not use subagents. Preserve the exported Add function. Before changing code, read SPEC.md completely and follow its requirements. Run the existing unittest after the change.\n",
-		"SPEC.md":      strings.Repeat("Disposable fixture background.\n", 80) + "\nRequired: Add returns the sum. Keep the marker FIXTURE_RULE_READ_7319 as a comment next to Add.\n",
-		"calc.py":      "def Add(a, b):\n    return a - b\n",
-		"test_calc.py": "import unittest\nfrom calc import Add\nclass TestAdd(unittest.TestCase):\n    def test_add(self):\n        self.assertEqual(Add(2, 3), 5)\n        self.assertEqual(Add(-2, 2), 0)\nif __name__ == '__main__':\n    unittest.main()\n"}
+	fixtures := qualificationRuntimeFixtures()
 	for name, body := range fixtures {
 		if err := os.WriteFile(filepath.Join(workspace, name), []byte(body), 0600); err != nil {
 			t.Fatal(err)
 		}
+	}
+	init := exec.Command("git", "init", "--quiet", workspace)
+	if out, err := init.CombinedOutput(); err != nil {
+		t.Fatalf("initialize disposable repository: %v %s", err, out)
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 8*time.Minute)
 	defer cancel()
@@ -92,13 +95,20 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 		assertQualificationContextAttribution(t, detail)
 		return detail
 	}
-	// Fresh consultations retain the production tool surface and Floret Goal
-	// injection. No user instruction forbids tools or task management here.
-	for _, tc := range []struct{ name, input string }{
-		{"subjective_feedback", "你觉得‘简单问题直接回答，复杂问题先确认范围’这句话会让你困惑吗？说说你的感受。"},
-		{"supplied_code_discussion", "帮我看看这段提供的代码：func Add(a, b int) int { return a - b }。它是否符合函数名表达的含义？"},
-		{"workflow_scope", "帮我看看这条仓库规则是否合理：‘实现后验证、提交、推送并部署’。"},
+	// Intent pairs share the actual tool surface and Goal injection. Contextual
+	// assessment may inspect; request/call counts are efficiency observations.
+	for _, tc := range []struct {
+		name, input string
+		noTools     bool
+		evidence    string
+	}{
+		{"subjective_feedback", "你觉得‘简单问题直接回答，复杂问题先确认范围’这句话会让你困惑吗？说说你的感受。", false, ""},
+		{"supplied_code_discussion", "帮我看看这段提供的代码：func Add(a, b int) int { return a - b }。它是否符合函数名表达的含义？", false, ""},
+		{"workflow_text_only", "只评价下面这句话的措辞，无需检查仓库：‘实现后验证、提交、推送并部署’。", true, ""},
+		{"workflow_scope", "帮我看看这条仓库规则是否合理：‘实现后验证、提交、推送并部署’。", false, ""},
+		{"workflow_repository", "请结合当前仓库的实际工作流，评价这条规则是否合理：‘实现后验证、提交、推送并部署’。请说明仓库规定的发布目标。", false, "staging-only"},
 	} {
+		before := qualificationFileSnapshot(t, workspace)
 		consultation, err := svc.CreateThread(ctx, meta, tc.name, modelID, config.AIPermissionFullAccess, workspace)
 		if err != nil {
 			t.Fatal(err)
@@ -112,21 +122,47 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 			return d.Current.TurnID == response.Current.TurnID && d.Current.Activity == flruntime.ThreadActivityIdle && d.Current.LastOutcome != nil
 		})
 		if *detail.Current.LastOutcome != flruntime.TurnOutcomeCompleted || (detail.Current.Goal != nil && detail.Current.Goal.Status != "absent") || strings.TrimSpace(ollamaTaskText(detail.Current)) == "" {
-			t.Errorf("%s: consultation did not complete directly without Goal", tc.name)
+			t.Errorf("%s: brief assessment did not complete without Goal", tc.name)
+		}
+		results := qualificationCanonicalResults(t, ctx, svc, detail)
+		if err := checkQualificationFixtureRules(results, fixtures); err != nil {
+			t.Errorf("%s: %v", tc.name, err)
+		}
+		calls := []ToolCall{}
+		for _, result := range results {
+			var args map[string]any
+			if err := json.Unmarshal([]byte(result.Arguments), &args); err != nil {
+				t.Fatal(err)
+			}
+			calls = append(calls, ToolCall{Name: result.ToolName, Args: args})
+		}
+		if tc.noTools && len(calls) != 0 {
+			t.Errorf("%s: inspected despite sufficient text-only context", tc.name)
+		}
+		if err := checkPromptQualificationReadonly(ModelGatewayResult{ToolCalls: calls}); err != nil {
+			if strings.HasPrefix(err.Error(), "review_required:") {
+				report[tc.name+"_review_required"] = err.Error()
+				t.Logf("%s: manual trace review required", tc.name)
+			} else {
+				t.Errorf("%s: %v", tc.name, err)
+			}
+		}
+		if !reflect.DeepEqual(before, qualificationFileSnapshot(t, workspace)) {
+			t.Errorf("%s: assessment changed repository files", tc.name)
+		}
+		if tc.evidence != "" {
+			if err := checkQualificationWorkflowEvidence(ollamaTaskText(detail.Current), results, tc.evidence); err != nil {
+				t.Errorf("%s: %v", tc.name, err)
+			}
 		}
 		mainRequests := 0
 		for _, request := range recorder.snapshot()[start:] {
 			if request.Kind == "main" {
 				mainRequests++
 			}
-			if len(request.ResponseToolNames) != 0 {
-				t.Errorf("%s: consultation invoked tools: %v", tc.name, request.ResponseToolNames)
-			}
-		}
-		if mainRequests != 1 {
-			t.Errorf("%s: consultation required %d provider steps", tc.name, mainRequests)
 		}
 		report[tc.name] = detail
+		report[tc.name+"_observations"] = map[string]any{"main_requests": mainRequests, "tool_calls": calls, "canonical_results": results, "explicit_no_inspection": tc.noTools}
 	}
 	detail := send("repair", "Fix Add in this fixture project. Follow its repository rules and verify the existing tests. Work only inside this workspace; no subagents. Reply concisely in Chinese with the result.")
 	code, err := os.ReadFile(filepath.Join(workspace, "calc.py"))
@@ -151,12 +187,31 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 		t.Errorf("insufficient canonical tool loop evidence: %d", toolCount)
 	}
 	report["repair"] = detail
+	repairResults := qualificationCanonicalResults(t, ctx, svc, detail)
+	if err := checkQualificationFixtureRules(repairResults, fixtures); err != nil {
+		t.Error(err)
+	}
+	report["repair_results"] = repairResults
 	terminalStart := len(recorder.snapshot())
 	detail = send("terminal", fmt.Sprintf("Run this finite command once in %s with yield_ms:0, then observe the existing process until completion: python3 -c 'import time; time.sleep(2); print(7319 * 2)'. Report its result, do not modify files.", workspace))
 	if !strings.Contains(ollamaTaskText(detail.Current), "14638") {
 		t.Error("terminal output was not reported")
 	}
 	report["terminal"] = detail
+	terminalResults := qualificationCanonicalResults(t, ctx, svc, detail)
+	var currentResults []flruntime.ThreadToolResult
+	for _, result := range terminalResults {
+		var args map[string]any
+		_ = json.Unmarshal([]byte(result.Arguments), &args)
+		command, _ := args["command"].(string)
+		if result.ToolName == "terminal.read" || strings.Contains(command, "time.sleep(2)") {
+			currentResults = append(currentResults, result)
+		}
+	}
+	if err := checkQualificationTerminalContinuation(currentResults); err != nil {
+		t.Error(err)
+	}
+	report["terminal_results"] = currentResults
 	reads, starts := 0, 0
 	for _, request := range recorder.snapshot()[terminalStart:] {
 		for _, name := range request.ResponseToolNames {
@@ -241,4 +296,200 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 	}
 	report["readonly"] = detail
 	t.Logf("wire_model=%s verified code repair, repository rules, terminal continuation, restart recall, structured interaction resume and readonly execution", model.EffectiveWireModelName())
+}
+
+// Canonical receipts retain actual arguments and outcomes, rather than inferring
+// effects from tool names or counting provider responses.
+func qualificationCanonicalResults(t *testing.T, ctx context.Context, svc *Service, detail *FlowerThreadDetail) []flruntime.ThreadToolResult {
+	t.Helper()
+	reader, ok := svc.threadRuntime.(flruntime.ThreadToolResultReader)
+	if !ok {
+		t.Fatal("canonical tool reader unavailable")
+	}
+	var results []flruntime.ThreadToolResult
+	for _, item := range detail.Current.Items {
+		if item.TurnID != detail.Current.TurnID || item.Activity == nil || item.Activity.ToolID == "" {
+			continue
+		}
+		result, found, err := reader.LookupToolResult(ctx, flruntime.LookupToolResultInput{ThreadID: identity.ThreadID(detail.Current.ThreadID), TurnID: identity.TurnID(item.TurnID), RunID: identity.RunID(item.RunID), ToolCallID: item.Activity.ToolID})
+		if err != nil || !found {
+			t.Fatalf("canonical receipt unavailable: found=%v err=%v", found, err)
+		}
+		results = append(results, result)
+	}
+	return results
+}
+
+func qualificationFileSnapshot(t *testing.T, root string) map[string]string {
+	t.Helper()
+	files := map[string]string{}
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		files[rel] = string(b)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return files
+}
+
+func checkQualificationTerminalContinuation(results []flruntime.ThreadToolResult) error {
+	process := ""
+	cursor := float64(0)
+	completed := false
+	for _, result := range results {
+		var args map[string]any
+		if err := json.Unmarshal([]byte(result.Arguments), &args); err != nil {
+			return err
+		}
+		var envelope struct {
+			Data map[string]any `json:"data"`
+		}
+		if err := json.Unmarshal([]byte(strings.TrimPrefix(result.Content, "ERROR: ")), &envelope); err != nil {
+			return err
+		}
+		data := envelope.Data
+		if result.ToolName == "terminal.exec" {
+			if process != "" {
+				return fmt.Errorf("finite command was relaunched")
+			}
+			process, _ = data["process_id"].(string)
+			if process == "" {
+				return fmt.Errorf("missing process identity")
+			}
+		} else if result.ToolName == "terminal.read" {
+			if process == "" || args["process_id"] != process || args["after_seq"] != cursor {
+				return fmt.Errorf("process identity or returned cursor changed")
+			}
+		} else {
+			return fmt.Errorf("unexpected continuation operation: %s", result.ToolName)
+		}
+		if seq, ok := data["last_seq"].(float64); ok {
+			cursor = seq
+		}
+		status, _ := data["status"].(string)
+		completed = status == terminalProcessStatusSuccess
+	}
+	if !completed {
+		return fmt.Errorf("finite command was not observed to completion")
+	}
+	return nil
+}
+
+func TestQualificationTerminalContinuationOracle(t *testing.T) {
+	start := flruntime.ThreadToolResult{ToolName: "terminal.exec", Arguments: `{"command":"build"}`, Content: `{"data":{"process_id":"build","status":"running","last_seq":19}}`}
+	read := flruntime.ThreadToolResult{ToolName: "terminal.read", Arguments: `{"process_id":"build","after_seq":19}`, Content: `{"data":{"process_id":"build","status":"success","last_seq":20}}`}
+	if err := checkQualificationTerminalContinuation([]flruntime.ThreadToolResult{start, read}); err != nil {
+		t.Fatal(err)
+	}
+	for _, results := range [][]flruntime.ThreadToolResult{{start}, {start, start}, {start, {ToolName: "terminal.read", Arguments: `{"process_id":"other","after_seq":19}`, Content: read.Content}}, {start, {ToolName: "terminal.read", Arguments: `{"process_id":"build","after_seq":0}`, Content: read.Content}}} {
+		if err := checkQualificationTerminalContinuation(results); err == nil {
+			t.Fatal("accepted incomplete/relaunched/wrong-cursor execution")
+		}
+	}
+}
+
+// Fixture contents establish coverage and order without requiring one shell
+// spelling. Names in a listing do not count as reading file contents.
+func checkQualificationFixtureRules(results []flruntime.ThreadToolResult, fixtures map[string]string) error {
+	rules, spec := false, false
+	coverage := ""
+	for _, result := range results {
+		var envelope struct {
+			Data map[string]any `json:"data"`
+		}
+		content := strings.TrimPrefix(result.Content, "ERROR: ")
+		if err := json.Unmarshal([]byte(content), &envelope); err != nil {
+			if result.Status == "error" {
+				continue
+			}
+			return fmt.Errorf("invalid successful tool receipt: %w", err)
+		}
+		output, _ := envelope.Data["output"].(string)
+		output = strings.ReplaceAll(output, "\r\n", "\n")
+		for _, name := range []string{"WORKFLOW.md", "SPEC.md", "calc.py", "test_calc.py"} {
+			if strings.Contains(output, fixtures[name]) && !rules {
+				return fmt.Errorf("dependent content read before complete rules: %s", name)
+			}
+		}
+		if result.ToolName == "file.edit" || result.ToolName == "file.write" || result.ToolName == "apply_patch" {
+			if !rules || !spec {
+				return fmt.Errorf("code changed before complete applicable rules/specification")
+			}
+		}
+		coverage += output
+		rules = rules || strings.Contains(coverage, fixtures["AGENTS.md"])
+		spec = spec || strings.Contains(coverage, fixtures["SPEC.md"])
+	}
+	return nil
+}
+
+func TestQualificationFixtureRuleOracle(t *testing.T) {
+	fixtures := map[string]string{"AGENTS.md": "rules complete\n", "SPEC.md": "spec complete\n", "WORKFLOW.md": "workflow complete\n", "calc.py": "source complete\n", "test_calc.py": "tests complete\n"}
+	receipt := func(output string) flruntime.ThreadToolResult {
+		b, _ := json.Marshal(map[string]any{"data": map[string]any{"output": output}})
+		return flruntime.ThreadToolResult{ToolName: "terminal.exec", Content: string(b)}
+	}
+	rules, spec, source := receipt(fixtures["AGENTS.md"]), receipt(fixtures["SPEC.md"]), receipt(fixtures["calc.py"])
+	write := flruntime.ThreadToolResult{ToolName: "file.edit", Content: `{"data":{}}`}
+	for _, valid := range [][]flruntime.ThreadToolResult{{rules, source, {Status: "error", Content: "ERROR: rejected before execution"}}, {rules, {Status: "error", Content: "ERROR: " + spec.Content}, write}, {rules, source}, {rules, spec, write}, {receipt("calc.py\nAGENTS.md\n"), rules}, {receipt("rules "), receipt("complete\n"), source}} {
+		if err := checkQualificationFixtureRules(valid, fixtures); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, invalid := range [][]flruntime.ThreadToolResult{{source}, {receipt(fixtures["AGENTS.md"] + fixtures["calc.py"])}, {rules, write}, {receipt("rules comp"), source}} {
+		if err := checkQualificationFixtureRules(invalid, fixtures); err == nil {
+			t.Fatal("accepted incomplete/out-of-order rule coverage")
+		}
+	}
+}
+
+func checkQualificationWorkflowEvidence(answer string, results []flruntime.ThreadToolResult, target string) error {
+	evidence, _ := json.Marshal(results)
+	if !strings.Contains(string(evidence), target) {
+		return fmt.Errorf("workflow source was not read")
+	}
+	lower := strings.ToLower(answer)
+	if !strings.Contains(lower, "staging") && !strings.Contains(answer, "预发布") {
+		return fmt.Errorf("answer omitted repository release target")
+	}
+	return nil
+}
+
+func TestQualificationWorkflowEvidenceOracle(t *testing.T) {
+	results := []flruntime.ThreadToolResult{{Content: `{"data":{"output":"Release target: staging-only."}}`}}
+	for _, answer := range []string{"仅限 staging 环境", "仅限预发布环境"} {
+		if err := checkQualificationWorkflowEvidence(answer, results, "staging-only"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := checkQualificationWorkflowEvidence("staging", nil, "staging-only"); err == nil {
+		t.Fatal("accepted unsupported claim")
+	}
+	if err := checkQualificationWorkflowEvidence("默认部署生产环境", results, "staging-only"); err == nil {
+		t.Fatal("accepted incorrect release target")
+	}
+}
+
+func qualificationRuntimeFixtures() map[string]string {
+	return map[string]string{
+		"AGENTS.md":    "# Fixture rules\nDo not use subagents. Preserve the exported Add function. For workflow assessment, consult WORKFLOW.md. Before changing code, read SPEC.md completely and follow its requirements. Run the existing unittest after the change.\n",
+		"WORKFLOW.md":  "Release target: staging-only. Production deployment requires a separate operator request. Verify with python3 -m unittest. No automatic commit or push is required.\n",
+		"SPEC.md":      strings.Repeat("Disposable fixture background.\n", 80) + "\nRequired: Add returns the sum. Keep the marker FIXTURE_RULE_READ_7319 as a comment next to Add.\n",
+		"calc.py":      "def Add(a, b):\n    return a - b\n",
+		"test_calc.py": "import unittest\nfrom calc import Add\nclass TestAdd(unittest.TestCase):\n    def test_add(self):\n        self.assertEqual(Add(2, 3), 5)\n        self.assertEqual(Add(-2, 2), 0)\nif __name__ == '__main__':\n    unittest.main()\n"}
 }

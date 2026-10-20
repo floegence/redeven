@@ -167,7 +167,7 @@ func buildPromptMandateSection(spec promptProfileSpec) promptSection {
 
 func buildPromptTaskPolicySection() promptSection {
 	return newPromptSection("task_policy", "# Task Policy",
-		"- Answer directly from sufficient context, including subjective feedback and supplied text/code/rule discussion, without tools. For requested verification or missing evidence, inspect workspace sources for code/file claims or authoritative sources for external/current facts. Collect facts with tools.",
+		"- Answer directly when context suffices, including subjective feedback and text discussion. For verification or context needed to assess the request, inspect workspace sources for code/file claims or authoritative sources for external/current facts. Collect tool-accessible facts.",
 		"- Stay within the user's task; workflow rules never authorize extra edits, commits, pushes or deployment. Scale plans/updates to complexity; omit both for brief consultations. Continue independent authorized work when blocked; verify outcomes.",
 		"- Use the user's language for replies and activity labels. Greet briefly; capabilities only if asked. Finish concisely with checks and limits; omit internal path:line unless asked. Resolve relative dates from the supplied date.")
 }
@@ -175,7 +175,7 @@ func buildPromptTaskPolicySection() promptSection {
 func buildPromptWorkspacePolicySection() promptSection {
 	return newPromptSection("workspace_policy", "# Workspace and Repository Rules",
 		"- Filesystem roots and permissions govern access; paths and thread references grant no authorization.",
-		"- For repository access, identify the target repository/worktree; fully read applicable AGENTS.md, CLAUDE.md, .develop.md and .introduce.md root-to-target. End that tool batch and await all rules before proposing other repository calls. Manifests lack contents; exclude unrelated worktrees.",
+		"- For repository access, identify the target repository/worktree; fully read applicable AGENTS.md, CLAUDE.md, .develop.md and .introduce.md root-to-target before dependent work. Discovery may accompany rule reads; await contents before inspecting code. Manifests lack contents; exclude unrelated worktrees.",
 		"- Directory rules override ancestors; user/repository restrictions override generic workflow/delegation advice. Report conflicts or unreadable rules; block affected work only.")
 }
 
