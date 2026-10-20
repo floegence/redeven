@@ -11,7 +11,7 @@ describe('directory favorites sidebar', () => {
     const host = document.createElement('div');
     document.body.append(host);
     const dispose = render(() => <DirectoryFavoritesSection
-      favorites={{ get paths() { return paths(); } }} copy={filesystemPickerEnUS}
+      favorites={{ get paths() { return paths(); } }} copy={{ ...filesystemPickerEnUS, selectedCount: (count) => `Selected: ${count}` }}
       onNavigate={vi.fn()} onContextMenu={vi.fn()} />, host);
     try {
       const filter = host.querySelector<HTMLInputElement>('input')!;
