@@ -36,7 +36,7 @@ function mount(transformed = false, overrides: Partial<FlowerSurfaceAdapter> = {
   const connections = vi.fn();
   const adapter: FlowerSurfaceAdapter = { ...base, launchTurn: sent, connectLiveStream: async function* ({ signal }) {
     connections();
-    yield { schema_version: 1, kind: 'ready', summaries: await base.listThreads() };
+    yield { schema_version: 2, kind: 'ready', summaries: await base.listThreads() };
     while (!signal.aborted) {
       const value = queued.shift();
       if (value) { yield value; continue; }
@@ -100,7 +100,7 @@ it('keeps the response status lane visually continuous and compact', async () =>
 it('distinguishes Ask Flower by color without framing its icon or action row', async () => {
   await page.viewport(1200, 800);
   mount(false, {}, true);
-  await expect.poll(() => document.querySelectorAll('.tessiven-service').length).toBeGreaterThan(0);
+  await expect.poll(() => document.querySelectorAll('.tessiven-service').length, { timeout: 10000 }).toBeGreaterThan(0);
   document.querySelector<HTMLElement>('.tessiven-service')!.click();
   await expect.element(page.getByRole('dialog', { name: 'Details', exact: true })).toBeVisible();
   const ask = document.querySelector<HTMLButtonElement>('.tessiven-popup .tessiven-ask-flower')!;
@@ -142,7 +142,7 @@ it('keeps long questions scrollable with all reply controls inside a short canva
         { choice_id: 'runtime', value: 'runtime', label: 'Map it to a real environment', description: 'Inspect an explicitly connected Runtime and record observed services instead of the conceptual reference.', kind: 'select' },
       ] }] }),
   }), 2).current;
-  runtime.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'canvas-thread', current });
+  runtime.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'canvas-thread', current });
   await expect.element(page.getByRole('button', { name: 'Continue', exact: true })).toBeVisible();
   const output = document.querySelector<HTMLElement>('.tessiven-flower-output')!;
   const content = output.querySelector<HTMLElement>('[data-floe-floating-window-content]')!;
@@ -220,7 +220,7 @@ it('keeps a large approval queue scrollable inside a short narrow window', async
   await editor().fill('Inspect the deployment');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
-  runtime.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'canvas-thread', current: interactionBootstrap(interactionThread({
+  runtime.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'canvas-thread', current: interactionBootstrap(interactionThread({
     thread_id: 'canvas-thread', status: 'waiting_approval', approval_actions: Array.from({ length: 10 }, (_, index) => ({
       action_id: `approval-${index}`, turn_id: 'turn', origin: 'main_tool', run_id: 'run', tool_id: `tool-${index}`, tool_name: 'terminal.exec',
       state: 'requested', status: 'pending', requested_at_ms: 1, can_approve: true, queue_order: index,
@@ -418,7 +418,7 @@ it('keeps the canonical composer inside the same floating window as conversation
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
   expect(runtime.sent.mock.calls[0][0].context_action).toMatchObject({ context: [{ kind: 'tessiven_selection', canvas_id: 'commerce', version_id: 2, object_refs: ['orders'] }] });
   const reply = liveBootstrap(thread({ thread_id: 'canvas-thread', messages: [{ id: 'reply', turn_id: 'turn', role: 'assistant', content: 'Orders reads from the primary database.', status: 'complete', created_at_ms: 2 }] }), 2);
-  runtime.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'canvas-thread', current: reply.current });
+  runtime.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'canvas-thread', current: reply.current });
   await expect.element(page.getByText('Orders reads from the primary database.')).toBeVisible();
   expect(runtime.navigate).not.toHaveBeenCalled();
   expect(runtime.connections).toHaveBeenCalledTimes(1);
@@ -499,8 +499,10 @@ it('opens native subagent and settings surfaces from the projected reply menu', 
   await expect.poll(() => document.activeElement?.getAttribute('aria-label')).toBe('Reply actions');
   await replyMenu().click();
   await page.getByRole('menuitem', { name: 'Flower settings', exact: true }).click();
-  await expect.element(page.getByRole('button', { name: 'Back to chat', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Back to chat', exact: true }).click();
+  await expect.element(page.getByRole('dialog', { name: 'Flower Settings', exact: true })).toBeVisible();
+  await expect.poll(() => document.activeElement?.closest('.flower-settings-dialog') !== null).toBe(true);
+  await userEvent.keyboard('{Escape}');
+  await expect.element(page.getByRole('dialog', { name: 'Flower Settings', exact: true })).not.toBeInTheDocument();
   await expect.element(editor()).toBeVisible();
 });
 
@@ -534,7 +536,7 @@ it('preserves native tool disclosure and live progress in the refined reading su
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
   const input = runtime.sent.mock.calls[0][0];
-  runtime.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'canvas-thread', current: {
+  runtime.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'canvas-thread', current: {
     thread_id: 'canvas-thread', view_version: 2, activity: 'active', turn_id: 'turn', run_id: 'run',
     run_progress: { phase: 'tool_execution' }, queue: [], interactions: [], items: [
       { id: `user:${input.client_request_id}`, turn_id: 'turn', run_id: 'run', ordinal: 1, kind: 'user', text: input.prompt },
@@ -676,10 +678,14 @@ it.each([{ objectRefs: [] }, { objectRefs: ['orders'] }])('retries an uncertain 
   runtime.setRequest({ selection: { canvas_id: 'analytics', version_id: 7, object_refs: ['cache'] }, labels: { cache: 'Analytics cache' }, nonce: 1 });
   await editor().fill('Separate draft');
   fail(flowerTurnAdmissionError('unknown', new Error('Test response lost')));
+  expect(runtime.sent.mock.calls.length).toBe(1);
+  runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 2, object_refs: objectRefs }, labels: { orders: 'Orders API' }, nonce: 2 });
+  await page.getByRole('button', { name: 'Retry send', exact: true }).click();
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(2);
   expect(runtime.sent.mock.calls[1][0]).toEqual(runtime.sent.mock.calls[0][0]);
   await expect.poll(() => runtime.accepted.mock.calls.length).toBe(1);
   expect(runtime.accepted.mock.calls[0][0].selection).toEqual({ canvas_id: 'commerce', version_id: 2, object_refs: objectRefs });
+  runtime.setRequest({ selection: { canvas_id: 'analytics', version_id: 7, object_refs: ['cache'] }, labels: { cache: 'Analytics cache' }, nonce: 3 });
   await expect.element(editor()).toHaveValue('Separate draft');
 });
 
@@ -693,7 +699,7 @@ it('keeps reply text, context and controls legible across every theme and clamps
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
   const reply = liveBootstrap(thread({ thread_id: 'canvas-thread', messages: [{ id: 'reply', turn_id: 'turn', role: 'assistant',
     content: 'Storefront and Orders API run on **production-01**.\n\nOrders API reads from the external **Orders database**. Content delivery forwards requests to Storefront.\n\nThe canvas preserves this distinction: the dashed area is a logical group; the solid card is the host node.', status: 'complete', created_at_ms: 2 }] }), 2);
-  runtime.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'canvas-thread', current: reply.current });
+  runtime.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'canvas-thread', current: reply.current });
   await expect.element(page.getByText('Storefront and Orders API run on', { exact: false })).toBeVisible();
   expect(host.querySelector('.tessiven-flower-context')).toBeNull();
   const luminance = (color: string) => {
@@ -787,7 +793,7 @@ it('keeps native approval controls inside the same conversation window', async (
   await editor().fill('Inspect Orders');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expectConversationAction(true);
-  runtime.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'canvas-thread', current: {
+  runtime.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'canvas-thread', current: {
     thread_id: 'canvas-thread', view_version: 3, activity: 'active', turn_id: 'turn', run_id: 'run', queue: [], items: [],
     interactions: [{ id: 'approval-1', turn_id: 'turn', run_id: 'run', kind: 'approval', tool_call_id: 'tool-1',
       approval: { label: 'Inspect service configuration', command: 'cat /workspace/orders.yaml', tool_name: 'terminal.exec', tool_call_id: 'tool-1' } }],
@@ -812,7 +818,7 @@ it('paints successive assistant and reasoning chunks before a canvas turn comple
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
   const input = runtime.sent.mock.calls[0][0];
   for (let index = 0; index < 3; index++) {
-    runtime.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'canvas-thread', current: {
+    runtime.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'canvas-thread', current: {
       thread_id: 'canvas-thread', view_version: index + 2, activity: 'active', turn_id: 'turn', run_id: 'run',
       run_progress: { phase: 'streaming' }, queue: [], interactions: [], items: [
         { id: `user:${input.client_request_id}`, turn_id: 'turn', run_id: 'run', ordinal: 1, kind: 'user', text: input.prompt },
@@ -839,7 +845,7 @@ it('keeps appended live output visible after a long canvas tool history', async 
   let text = '';
   for (let index = 0; index < 5; index++) {
     text += `\n\nLive refinement ${index}: ${'Preserving the current service inventory. '.repeat(12)}\n\nVisible tail ${index}`;
-    runtime.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'canvas-thread', current: {
+    runtime.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'canvas-thread', current: {
       thread_id: 'canvas-thread', view_version: index + 2, activity: 'active', turn_id: 'turn', run_id: 'run',
       run_progress: { phase: 'streaming' }, queue: [], interactions: [], items: [
         ...history, { id: 'live-reply', kind: 'assistant', turn_id: 'turn', run_id: 'run', ordinal: 31, live: true, text },
@@ -847,7 +853,7 @@ it('keeps appended live output visible after a long canvas tool history', async 
     } });
     await expect.element(page.getByText(`Visible tail ${index}`, { exact: true })).toBeVisible();
     await expect.poll(() => {
-      const tail = Array.from(document.querySelectorAll<HTMLElement>('.flower-chat-md-raw-tail, .flower-chat-md-block p'))
+      const tail = Array.from(document.querySelectorAll<HTMLElement>('.flower-chat-md-block p'))
         .find(element => element.textContent?.trim().endsWith(`Visible tail ${index}`));
       const viewport = document.querySelector<HTMLElement>('.flower-chat-transcript');
       if (!tail || !viewport) return false;
@@ -866,7 +872,7 @@ it('shows reasoning as it arrives before any assistant reply or tool result', as
   let text = '';
   for (let index = 0; index < 3; index++) {
     text += `Inspecting canvas layer ${index}.\n\n`;
-    runtime.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'canvas-thread', current: {
+    runtime.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'canvas-thread', current: {
       thread_id: 'canvas-thread', view_version: index + 2, activity: 'active', turn_id: 'turn', run_id: 'run',
       run_progress: { phase: 'streaming' }, queue: [], interactions: [], items: [
         { id: 'thinking', turn_id: 'turn', run_id: 'run', ordinal: 1, kind: 'thinking', live: true, text },

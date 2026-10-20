@@ -5482,6 +5482,8 @@
       "syncFailed": "Les mises à jour en direct sont arrêtées car les données n’ont pas pu être lues ou appliquées. L’état affiché peut être obsolète.",
       "syncAuthorization": "Les mises à jour en direct nécessitent une autorisation. Rétablissez l’accès puis resynchronisez. L’état affiché peut être obsolète.",
       "syncLocked": "Les mises à jour en direct sont verrouillées. Déverrouillez l’accès puis resynchronisez. L’état affiché peut être obsolète.",
+      "syncVersion": "Les mises à jour en direct de Flower nécessitent des versions compatibles de l’application et de l’environnement d’exécution. Rechargez l’application ou mettez les deux à jour avant de resynchroniser.",
+      "syncCapacity": "La capacité de connexion des mises à jour en direct de Flower est atteinte. Fermez les vues Flower inutilisées, puis resynchronisez. Votre brouillon est conservé.",
       "syncResync": "Resynchroniser",
       "stopUnconfirmed": "L’arrêt n’est pas confirmé. Resynchronisez avant de réessayer.",
       "syncTimeout": "La synchronisation a expiré après 15 secondes. Réessayez.",

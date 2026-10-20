@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower code highlighting
 description: Color stable Markdown code without disturbing streaming, selection, copy or layout.
 tags: [flower, markdown, syntax, performance]
-timestamp: 2026-10-08T00:00:00Z
+timestamp: 2026-10-20T00:00:00Z
 ---
 
 # Summary
@@ -19,15 +19,15 @@ unavailable or excessive highlighting work leaves plain code visible.
 
 ## Stable content boundary
 
-Flower decorates only committed HTML regions. Raw append-only tails and unstable
-HTML tails receive no syntax work. The existing parser decides when source becomes
-committed, including finalizing an interrupted answer. A completed fence may wait
-for the next stable segment or finalization before being colored.
+Flower decorates only regions changed by the published incremental parser.
+Ordinary text/code growth appends locally. Closed top-level fences may receive
+colors immediately while later text is generating; unfinished or nested active
+fences remain readable and receive enhancement once at settlement.
 
-Each region retains the disposer for each code element and releases it when that
-element is replaced or the region unmounts. Unrelated streaming updates do not
-recreate the code element, restart parsing, or replace its copy button. Nested
-fences follow the same committed-region boundary. Inline code remains inline.
+Each region retains its disposers and completion callbacks. Finalization only
+finishes unfinished decoration: it never releases an already settled code block,
+recreates its copy icons, resubmits Worker work or replaces a protected selection.
+Replacement and unmount release pending enhancement. Inline code remains inline.
 
 The renderer separately escapes the first fence-info word as language metadata.
 Presentation class sanitization does not redefine language identity: fence
@@ -77,5 +77,5 @@ node scripts/check_flower_code_highlighting.mjs --output=/tmp/flower-code-highli
 - [Escaped fence metadata](../../internal/flower_ui/src/chat/markdown/markedConfig.ts)
 - [Browser interaction acceptance](../../internal/envapp/ui_src/src/ui/FlowerMarkdown.highlight.browser.test.tsx)
 - [Production acceptance runner](../../scripts/check_flower_code_highlighting.mjs)
-- [Historical Floe v0.82.0 enhancement contract](https://github.com/floegence/floe-webapp/blob/v0.82.0/docs/code-highlighting.md) - The current package is v0.86.5; this link records the original upstream feature contract.
+- `@floegence/floe-webapp-core` v0.86.50 - Published incremental parser and bounded highlighter consumed by both hosts.
 - [Streaming stability](flower-streaming-stability.md)

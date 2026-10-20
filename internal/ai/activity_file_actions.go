@@ -3,6 +3,7 @@ package ai
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 	"unicode/utf8"
 
@@ -85,21 +86,6 @@ func rawMessageBytes(value any) ([]byte, error) {
 		}
 		return b, nil
 	}
-}
-
-func activityPayloadMap(payload fltools.ActivityPayload) map[string]any {
-	if payload == nil {
-		return nil
-	}
-	raw, err := json.Marshal(payload)
-	if err != nil {
-		return nil
-	}
-	var out map[string]any
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil
-	}
-	return out
 }
 
 func sanitizeActivityTimelineBlockRecord(block map[string]any) error {
@@ -359,14 +345,37 @@ func sanitizeGoalActivityValue(value any) *fltools.GoalActivity {
 	if !ok {
 		return nil
 	}
-	raw, err := json.Marshal(record)
-	if err != nil {
-		return nil
-	}
 	// Decode only the published display fields and use Floret's validation.
 	// Preserve the exact objective and evidence without generic preview fitting.
 	var goal fltools.GoalActivity
-	if err := json.Unmarshal(raw, &goal); err != nil {
+	for key, target := range map[string]*string{"operation": &goal.Operation, "text": &goal.Text, "outcome": &goal.Outcome, "evidence": &goal.Evidence} {
+		if value := record[key]; value != nil {
+			text, ok := value.(string)
+			if !ok {
+				return nil
+			}
+			*target = text
+		}
+	}
+	if value := record["applied"]; value != nil {
+		applied, ok := value.(bool)
+		if !ok {
+			return nil
+		}
+		goal.Applied = applied
+	}
+	switch version := record["version"].(type) {
+	case nil:
+	case int:
+		goal.Version = int64(version)
+	case int64:
+		goal.Version = version
+	case float64:
+		if math.IsNaN(version) || version < math.MinInt64 || version >= 1<<63 || math.Trunc(version) != version {
+			return nil
+		}
+		goal.Version = int64(version)
+	default:
 		return nil
 	}
 	activity := fltools.ActivityPresentation{Renderer: fltools.ActivityRendererStructured, Payload: fltools.StructuredActivityPayload{Goal: &goal}}

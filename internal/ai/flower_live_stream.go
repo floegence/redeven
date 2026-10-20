@@ -3,7 +3,6 @@ package ai
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -40,6 +39,7 @@ type flowerLiveSubscriberCloseReason string
 const (
 	flowerLiveSubscriberCloseClient            flowerLiveSubscriberCloseReason = "client_closed"
 	flowerLiveSubscriberCloseService           flowerLiveSubscriberCloseReason = "service_closed"
+	flowerLiveSubscriberCloseRuntime           flowerLiveSubscriberCloseReason = "runtime_subscription_invalidated"
 	flowerLiveSubscriberCloseOversizedEnvelope flowerLiveSubscriberCloseReason = "oversized_envelope"
 	flowerLiveSubscriberCloseEncoding          flowerLiveSubscriberCloseReason = "envelope_encoding_failed"
 	flowerLiveSubscriberCloseInitQueueLimit    flowerLiveSubscriberCloseReason = "initialization_queue_limit"
@@ -75,11 +75,14 @@ func (s *Service) publishModelDirectoryChanged() {
 type FlowerLiveStreamRequest struct{}
 
 type FlowerLiveStreamEnvelope struct {
-	ObserverID          string                        `json:"observer_id,omitempty"`
-	SchemaVersion       int64                         `json:"schema_version"`
-	Kind                FlowerLiveStreamKind          `json:"kind"`
-	ThreadID            string                        `json:"thread_id,omitempty"`
-	Summaries           []ThreadView                  `json:"summaries,omitempty"`
+	ObserverID          string                  `json:"observer_id,omitempty"`
+	SchemaVersion       int64                   `json:"schema_version"`
+	Kind                FlowerLiveStreamKind    `json:"kind"`
+	ThreadID            string                  `json:"thread_id,omitempty"`
+	Summaries           []ThreadView            `json:"summaries,omitempty"`
+	Update              *flruntime.ThreadUpdate `json:"update,omitempty"`
+	SubagentUpdate      *flruntime.ThreadUpdate `json:"subagent_update,omitempty"`
+	updateEvidence      *flruntime.ThreadView
 	Current             *flruntime.ThreadView         `json:"current,omitempty"`
 	SubagentCurrent     *flruntime.ThreadView         `json:"subagent_current,omitempty"`
 	Subagents           *[]FlowerSubagentSummary      `json:"subagents,omitempty"`
@@ -161,14 +164,18 @@ func (s *Service) publishFlowerComputerStatus(endpointID string, requested Flowe
 		return
 	}
 	for _, status := range s.flowerComputerStatusesForCurrent(context.Background(), current, strings.TrimSpace(requested.TargetID)) {
-		batch := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamComputerStatus, ThreadID: status.ThreadID, ComputerStatus: &status})
-		s.mu.Lock()
-		for _, subscriber := range s.flowerLiveSubscribers {
-			if subscriber.endpointID == endpointID && !subscriber.closed {
-				enqueueFlowerLiveSubscriberLocked(s, subscriber, batch)
-			}
+		s.broadcastFlowerComputerStatus(endpointID, status)
+	}
+}
+
+func (s *Service) broadcastFlowerComputerStatus(endpointID string, status FlowerComputerStatus) {
+	batch := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamComputerStatus, ThreadID: status.ThreadID, ComputerStatus: &status})
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, subscriber := range s.flowerLiveSubscribers {
+		if subscriber.endpointID == endpointID && !subscriber.closed {
+			enqueueFlowerLiveSubscriberLocked(s, subscriber, batch)
 		}
-		s.mu.Unlock()
 	}
 }
 
@@ -217,7 +224,7 @@ type FlowerLiveStreamFrame struct {
 	Data []byte
 }
 
-// Every public envelope takes this wire path, including one-fragment envelopes.
+// Large public envelopes use bounded fragments; small batches carry direct JSON.
 // Fragmentation happens after the public projection has removed private fields.
 type FlowerLiveStreamFragment struct {
 	EnvelopeID    string `json:"envelope_id"`
@@ -233,20 +240,6 @@ type flowerLiveEncodedBatch struct {
 	id                  string
 	err                 error
 	encodingDiagnostics *flowerLiveEncodingDiagnostics
-	current             *flowerLiveCurrentComparison
-}
-
-// Comparison data is frozen once, outside subscriber fanout and its lock. The
-// fingerprint excludes version, sample time, growing text and replaceable progress numbers.
-type flowerLiveCurrentComparison struct {
-	threadID    string
-	routeID     string
-	subagent    bool
-	version     uint64
-	fingerprint [sha256.Size]byte
-	texts       []string
-	metrics     []int64
-	independent bool
 }
 
 type flowerLiveEncodingDiagnostics struct {
@@ -308,6 +301,10 @@ func (s *Service) SubscribeFlowerLiveStream(ctx context.Context, meta *session.M
 	}
 
 	s.mu.Lock()
+	if s.flowerRuntimeUpdatesUnavailable {
+		s.mu.Unlock()
+		return nil, ErrFlowerLiveSync
+	}
 	if s.flowerLiveSubscribersByEndpoint == nil {
 		s.flowerLiveSubscribersByEndpoint = make(map[string]int)
 	}
@@ -378,42 +375,7 @@ func (s *Service) SubscribeFlowerLiveStream(ctx context.Context, meta *session.M
 			}
 		}
 	}
-	if retained && s.threadRuntime != nil {
-		for _, summary := range summaries {
-			if !flowerLiveSummaryNeedsCurrentBaseline(summary) {
-				continue
-			}
-			current, viewErr := s.threadRuntime.View(ctxOrBackground(ctx), identity.ThreadID(summary.ThreadID))
-			if viewErr != nil {
-				continue
-			}
-			copy := current
-			copy.Items, viewErr = s.hydrateActivityTargets(ctx, meta, summary.ThreadID, copy.Items)
-			if viewErr != nil {
-				closeFlowerLiveSubscription(s, subscriber)
-				return nil, viewErr
-			}
-			if !retainInitial(newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
-				SchemaVersion: FlowerLiveSchemaVersion,
-				Kind:          FlowerLiveStreamThreadBatch,
-				ThreadID:      summary.ThreadID,
-				Current:       &copy,
-			})) {
-				break
-			}
-			for _, status := range s.flowerComputerStatusesForCurrent(ctxOrBackground(ctx), current, "") {
-				statusCopy := status
-				if !retainInitial(newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
-					SchemaVersion:  FlowerLiveSchemaVersion,
-					Kind:           FlowerLiveStreamComputerStatus,
-					ThreadID:       status.ThreadID,
-					ComputerStatus: &statusCopy,
-				})) {
-					break
-				}
-			}
-		}
-	}
+
 	s.mu.Lock()
 	finalizeFlowerLiveSubscriberInitializationLocked(s, subscriber)
 	s.mu.Unlock()
@@ -472,63 +434,6 @@ func finalizeFlowerLiveSubscriberInitializationLocked(service *Service, subscrib
 	// work uses the same bounded FIFO during and after initialization.
 	subscriber.initializing = false
 	wakeFlowerLiveSubscriberLocked(subscriber)
-}
-
-func flowerLiveSummaryNeedsCurrentBaseline(summary ThreadView) bool {
-	switch NormalizeRunState(summary.RunStatus) {
-	case RunStateAccepted, RunStateRunning, RunStateWaitingApproval, RunStateWaitingUser, RunStateRecovering, RunStateFinalizing:
-		return true
-	default:
-		return false
-	}
-}
-
-func (s *Service) broadcastFlowerRuntimeCurrent(endpointID string, current flruntime.ThreadView) {
-	if s == nil || strings.TrimSpace(endpointID) == "" || current.ThreadID == "" {
-		return
-	}
-	copy := current
-	envelope := FlowerLiveStreamEnvelope{
-		SchemaVersion: FlowerLiveSchemaVersion,
-		Kind:          FlowerLiveStreamThreadBatch,
-		ThreadID:      current.ThreadID.String(),
-		Current:       &copy,
-	}
-	batch := newFlowerLiveEncodedBatch(envelope)
-	s.mu.Lock()
-	for _, subscriber := range s.flowerLiveSubscribers {
-		if subscriber.endpointID != endpointID || subscriber.closed {
-			continue
-		}
-		enqueueFlowerLiveSubscriberLocked(s, subscriber, batch)
-	}
-	s.mu.Unlock()
-	for _, status := range s.flowerComputerStatusesForCurrent(context.Background(), current, "") {
-		s.publishFlowerComputerStatus(endpointID, status)
-	}
-}
-
-func (s *Service) broadcastFlowerSubagentRuntimeCurrent(endpointID, parentThreadID string, current flruntime.ThreadView) {
-	endpointID = strings.TrimSpace(endpointID)
-	parentThreadID = strings.TrimSpace(parentThreadID)
-	if s == nil || endpointID == "" || parentThreadID == "" || current.ThreadID == "" {
-		return
-	}
-	copy := current
-	batch := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
-		SchemaVersion:   FlowerLiveSchemaVersion,
-		Kind:            FlowerLiveStreamThreadBatch,
-		ThreadID:        parentThreadID,
-		SubagentCurrent: &copy,
-	})
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, subscriber := range s.flowerLiveSubscribers {
-		if subscriber.endpointID != endpointID || subscriber.closed {
-			continue
-		}
-		enqueueFlowerLiveSubscriberLocked(s, subscriber, batch)
-	}
 }
 
 func (s *Service) broadcastFlowerSubagentsPatch(endpointID, parentThreadID string, subagents []FlowerSubagentSummary) {
@@ -624,142 +529,7 @@ func newFlowerLiveEncodedBatch(envelope FlowerLiveStreamEnvelope) *flowerLiveEnc
 			},
 		}
 	}
-	return &flowerLiveEncodedBatch{kind: envelope.Kind, data: data, id: rand.Text(), current: compareFlowerLiveEncodedCurrent(envelope, data)}
-}
-
-func compareFlowerLiveEncodedCurrent(envelope FlowerLiveStreamEnvelope, encoded []byte) *flowerLiveCurrentComparison {
-	if envelope.Kind != FlowerLiveStreamThreadBatch || (envelope.Current == nil) == (envelope.SubagentCurrent == nil) {
-		return nil
-	}
-	current := envelope.Current
-	if current == nil {
-		current = envelope.SubagentCurrent
-	}
-	comparison := &flowerLiveCurrentComparison{
-		threadID: current.ThreadID.String(), routeID: envelope.ThreadID, subagent: envelope.SubagentCurrent != nil,
-		version: current.ViewVersion,
-		independent: envelope.ObserverID == "" && envelope.Summaries == nil && envelope.Subagents == nil &&
-			envelope.ReadStatus == nil && envelope.ComputerFrame == nil && envelope.ComputerStatus == nil,
-	}
-	if current.ThreadID == "" || current.Activity != flruntime.ThreadActivityActive || current.TurnID == "" || current.RunID == "" ||
-		current.ViewVersion == 0 || current.ViewVersion > 1<<53-1 {
-		return comparison
-	}
-	normalized := *current
-	normalized.ViewVersion = 0
-	if current.RunProgress != nil && current.RunProgress.Request != nil {
-		progress := *current.RunProgress
-		request := *progress.Request
-		comparison.metrics = append(comparison.metrics, request.EstimatedOutputTokens)
-		request.EstimatedOutputTokens = 0
-		// Advancing provider activity is replaceable progress within the same
-		// attempt. Preserve timestamp presence and first-output boundaries.
-		if request.LastProgressAt != nil {
-			comparison.metrics = append(comparison.metrics, request.LastProgressAt.UnixNano())
-			request.LastProgressAt = new(time.Time)
-		}
-		progress.Request = &request
-		normalized.RunProgress = &progress
-	}
-	normalized.ToolCallPreviews = append([]flruntime.ThreadToolCallPreview(nil), current.ToolCallPreviews...)
-	for index, call := range current.ToolCallPreviews {
-		if call.Preview == nil {
-			continue
-		}
-		preview := *call.Preview
-		if preview.Additions != nil {
-			comparison.metrics = append(comparison.metrics, int64(*preview.Additions))
-			preview.Additions = new(int)
-		}
-		if preview.Deletions != nil {
-			comparison.metrics = append(comparison.metrics, int64(*preview.Deletions))
-			preview.Deletions = new(int)
-		}
-		normalized.ToolCallPreviews[index].Preview = &preview
-	}
-	normalized.Items = append([]flruntime.ThreadItem(nil), current.Items...)
-	for index, item := range current.Items {
-		if !item.Live || item.TurnID != current.TurnID || item.RunID != current.RunID ||
-			(item.Kind != flruntime.ThreadItemAssistant && item.Kind != flruntime.ThreadItemThinking) || item.Text == "" {
-			continue
-		}
-		comparison.texts = append(comparison.texts, item.Text)
-		// Keep the eligible positions distinct from absent/empty text fields.
-		normalized.Items[index].Text = "\x00"
-	}
-	// Reuse the exact public envelope. Historical items remain opaque JSON;
-	// comparing an unsent snapshot must not repeat per-item redaction or decode
-	// every historical tool payload into a second object graph.
-	data, err := flowerLiveComparisonJSON(encoded, current, normalized, comparison.subagent)
-	if err != nil {
-		comparison.texts = nil
-		return comparison
-	}
-	comparison.fingerprint = sha256.Sum256(data)
-	return comparison
-}
-
-func flowerLiveComparisonJSON(encoded []byte, current *flruntime.ThreadView, normalized flruntime.ThreadView, subagent bool) ([]byte, error) {
-	var envelope map[string]json.RawMessage
-	if err := json.Unmarshal(encoded, &envelope); err != nil {
-		return nil, err
-	}
-	key := "current"
-	if subagent {
-		key = "subagent_current"
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(envelope[key], &fields); err != nil {
-		return nil, err
-	}
-	fields["view_version"] = json.RawMessage("0")
-	delete(fields, "sampled_at_ms")
-	if current.RunProgress != nil && current.RunProgress.Request != nil {
-		data, err := json.Marshal(normalized.RunProgress)
-		if err != nil {
-			return nil, err
-		}
-		fields["run_progress"] = data
-	}
-	if len(current.ToolCallPreviews) > 0 {
-		data, err := json.Marshal(normalized.ToolCallPreviews)
-		if err != nil {
-			return nil, err
-		}
-		fields["tool_call_previews"] = data
-	}
-	if len(current.Items) > 0 {
-		var items []json.RawMessage
-		if err := json.Unmarshal(fields["items"], &items); err != nil {
-			return nil, err
-		}
-		for index, item := range current.Items {
-			if item.Text == normalized.Items[index].Text {
-				continue
-			}
-			var fields map[string]json.RawMessage
-			if err := json.Unmarshal(items[index], &fields); err != nil {
-				return nil, err
-			}
-			fields["text"] = json.RawMessage("\"\\u0000\"")
-			data, err := json.Marshal(fields)
-			if err != nil {
-				return nil, err
-			}
-			items[index] = data
-		}
-		data, err := json.Marshal(items)
-		if err != nil {
-			return nil, err
-		}
-		fields["items"] = data
-	}
-	data, err := json.Marshal(fields)
-	if err != nil {
-		return nil, err
-	}
-	envelope[key] = data
-	return json.Marshal(envelope)
+	return &flowerLiveEncodedBatch{kind: envelope.Kind, data: data, id: rand.Text()}
 }
 
 func flowerLiveCurrentEncodingContext(current *flruntime.ThreadView) *flowerLiveCurrentEncodingDiagnostics {
@@ -864,23 +634,6 @@ func enqueueFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveS
 	if !validateFlowerLiveBatchLocked(service, subscriber, batch) {
 		return false
 	}
-	// Remove an unsent predecessor only across independent thread currents.
-	// Same-thread semantic changes and auxiliary messages are ordering barriers.
-	for index := len(subscriber.queue) - 1; index >= 0; index-- {
-		previous := subscriber.queue[index]
-		if flowerLiveTextAppend(previous, batch) {
-			releaseFlowerLiveBatchLocked(service, subscriber, previous)
-			copy(subscriber.queue[index:], subscriber.queue[index+1:])
-			last := len(subscriber.queue) - 1
-			subscriber.queue[last] = nil
-			subscriber.queue = subscriber.queue[:last]
-			break
-		}
-		if previous.current == nil || batch.current == nil || !previous.current.independent || !batch.current.independent ||
-			previous.current.threadID == batch.current.threadID {
-			break
-		}
-	}
 	if len(subscriber.queue) >= flowerLiveSubscriberBatchLimit {
 		reason := flowerLiveSubscriberCloseBatchQueueLimit
 		if subscriber.initializing {
@@ -895,28 +648,6 @@ func enqueueFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveS
 	subscriber.queue = append(subscriber.queue, batch)
 	wakeFlowerLiveSubscriberLocked(subscriber)
 	return true
-}
-
-// Text growth and progress numbers may replace unsent snapshots only when all
-// structural fields match. Tool, interaction and lifecycle boundaries stay ordered.
-func flowerLiveTextAppend(previous, next *flowerLiveEncodedBatch) bool {
-	before, after := previous.current, next.current
-	if before == nil || after == nil || (len(before.texts) == 0 && len(before.metrics) == 0) || len(before.texts) != len(after.texts) || len(before.metrics) != len(after.metrics) ||
-		before.threadID != after.threadID || before.routeID != after.routeID || before.subagent != after.subagent ||
-		after.version <= before.version || before.fingerprint != after.fingerprint {
-		return false
-	}
-	changed := false
-	for index, text := range after.texts {
-		if !strings.HasPrefix(text, before.texts[index]) {
-			return false
-		}
-		changed = changed || text != before.texts[index]
-	}
-	for index, value := range after.metrics {
-		changed = changed || value != before.metrics[index]
-	}
-	return changed
 }
 
 func closeFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSubscriber, reason flowerLiveSubscriberCloseReason, failedBatch ...*flowerLiveEncodedBatch) {
@@ -1066,6 +797,17 @@ func (s *FlowerLiveStreamSubscription) Next(ctx context.Context) (*FlowerLiveStr
 			}
 			if batch.id == "" {
 				batch.id = rand.Text()
+			}
+			if len(batch.data) <= flowerLiveFragmentByteLimit {
+				if subscriber.activeAccounted {
+					releaseFlowerLiveBatchLocked(s.service, subscriber, batch)
+				} else {
+					subscriber.mediaBytes -= len(batch.data)
+					s.service.flowerLiveQueuedBytes -= len(batch.data)
+				}
+				subscriber.active = nil
+				s.service.mu.Unlock()
+				return &FlowerLiveStreamFrame{Kind: batch.kind, Data: batch.data}, nil
 			}
 			count := (len(batch.data) + flowerLiveFragmentByteLimit - 1) / flowerLiveFragmentByteLimit
 			offset := subscriber.activeIndex * flowerLiveFragmentByteLimit

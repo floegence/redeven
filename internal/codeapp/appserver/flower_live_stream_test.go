@@ -109,7 +109,7 @@ func TestServeAIFlowerLiveStreamFlushesReadyFrameWithSafeHeaders(t *testing.T) {
 		t.Fatalf("unsafe stream headers=%v", response.header)
 	}
 	body := response.body.String()
-	if !strings.HasPrefix(body, "data: ") || !strings.Contains(body, `"fragment_count":1`) || !strings.Contains(decodedFlowerLiveSSEData(t, body), `"kind":"ready"`) || !strings.HasSuffix(body, "\n\n") {
+	if !strings.HasPrefix(body, "data: ") || !strings.Contains(decodedFlowerLiveSSEData(t, body), `"kind":"ready"`) || !strings.HasSuffix(body, "\n\n") {
 		t.Fatalf("ready frame=%q", body)
 	}
 	if len(response.deadlines) < 2 || !response.deadlines[len(response.deadlines)-1].IsZero() {
@@ -138,7 +138,7 @@ func TestServeAIFlowerLiveStreamRefreshesDeadlineForIdleHeartbeat(t *testing.T) 
 		t.Fatalf("flushes=%d, want ready frame and heartbeat", response.flushes)
 	}
 	body := response.body.String()
-	if !strings.Contains(body, `"fragment_count":1`) || !strings.Contains(decodedFlowerLiveSSEData(t, body), `"kind":"ready"`) || !strings.HasSuffix(body, "\n\n: heartbeat\n\n") {
+	if !strings.Contains(decodedFlowerLiveSSEData(t, body), `"kind":"ready"`) || !strings.HasSuffix(body, "\n\n: heartbeat\n\n") {
 		t.Fatalf("stream did not contain two complete frames: %q", body)
 	}
 	if len(response.deadlineWrites) != 4 {
@@ -154,6 +154,13 @@ func TestServeAIFlowerLiveStreamRefreshesDeadlineForIdleHeartbeat(t *testing.T) 
 func decodedFlowerLiveSSEData(t *testing.T, body string) string {
 	t.Helper()
 	first := strings.Split(strings.TrimPrefix(body, "data: "), "\n\n")[0]
+	var direct map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(first), &direct); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := direct["schema_version"]; ok {
+		return first
+	}
 	var fragment ai.FlowerLiveStreamFragment
 	if err := json.Unmarshal([]byte(first), &fragment); err != nil {
 		t.Fatal(err)
@@ -171,6 +178,13 @@ func readFlowerLiveStreamEnvelope(ctx context.Context, subscription *ai.FlowerLi
 		frame, err := subscription.Next(ctx)
 		if err != nil {
 			return nil, err
+		}
+		var direct map[string]json.RawMessage
+		if err := json.Unmarshal(frame.Data, &direct); err != nil {
+			return nil, err
+		}
+		if _, ok := direct["schema_version"]; ok {
+			return frame, nil
 		}
 		var fragment ai.FlowerLiveStreamFragment
 		if err := json.Unmarshal(frame.Data, &fragment); err != nil {

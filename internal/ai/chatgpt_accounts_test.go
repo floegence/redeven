@@ -64,7 +64,7 @@ func TestAccountSignOutImmediatelyCancelsCanonicalExecution(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A prior turn's delayed idle observation must not dispose this turn's watch.
-	svc.reconcileAccountWatches(flruntime.ThreadView{ThreadID: current.ThreadID, TurnID: "earlier", Activity: flruntime.ThreadActivityIdle})
+	svc.reconcileAccountWatches(current.ThreadID.String(), "earlier", flruntime.ThreadActivityIdle)
 	if svc.AccountTaskCount(account.ID()) != 1 {
 		t.Fatal("stale observation removed active watch")
 	}

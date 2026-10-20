@@ -9,7 +9,7 @@ import { adapter, deferred, flush, inputRequest, liveBootstrap, renderSurfaceWit
 beforeEach(async () => { await page.viewport(1280, 900); });
 
 function controlledStream(summaries: ReturnType<typeof thread>[]) {
-  const queued: FlowerLiveStreamEnvelope[] = [{ schema_version: 1, kind: 'ready', summaries }];
+  const queued: FlowerLiveStreamEnvelope[] = [{ schema_version: 2, kind: 'ready', summaries }];
   let wake: (() => void) | undefined;
   return {
     push(value: FlowerLiveStreamEnvelope) { queued.push(value); wake?.(); },
@@ -46,7 +46,7 @@ async function setup(options: { request?: FlowerInputRequest; canMutate?: boolea
   const input = () => runtime.querySelector('.flower-decision-surface input, .flower-decision-surface textarea') as HTMLInputElement;
   const type = (text: string) => { input().value = text; input().dispatchEvent(new Event('input', { bubbles: true })); };
   const submit = () => (runtime.querySelector('.flower-composer-continue') as HTMLButtonElement).click();
-  const emit = (current: ReturnType<typeof runtimeCurrentView>) => stream.push({ schema_version: 1, kind: 'thread.batch', thread_id: waiting.thread_id, current });
+  const emit = (current: ReturnType<typeof runtimeCurrentView>) => stream.push({ schema_version: 2, kind: 'thread.batch', thread_id: waiting.thread_id, current });
   return { waiting, other, request, drafts, response, submitInput, runtime, select, type, submit, input, emit, stream };
 }
 
@@ -144,7 +144,7 @@ it('retains a newly arrived approval during a pending batch and keeps navigation
   const button = (label: string) => Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision')).find((button) => button.textContent?.trim() === label);
   await waitFor(() => !!button('Allow once · 2'));
   button('Allow once · 2')!.click();
-  stream.push({ schema_version: 1, kind: 'thread.batch', thread_id: waiting.thread_id,
+  stream.push({ schema_version: 2, kind: 'thread.batch', thread_id: waiting.thread_id,
     current: runtimeCurrentView({ ...waiting, approval_actions: [first, second, later] }, 2) });
   await waitFor(() => runtime.querySelectorAll('[data-flower-composer-approval="true"]').length === 3);
   expect(submitApproval).toHaveBeenCalledExactlyOnceWith({ thread_id: waiting.thread_id, interaction_ids: ['first', 'second'], approved: true });
@@ -184,7 +184,7 @@ it('disables the old decision when a malformed current view enters recovery', as
   expect(s.submitInput).not.toHaveBeenCalled();
   expect(s.input().value).toBe('draft remains available for recovery');
   const resync = s.runtime.querySelector<HTMLButtonElement>('[data-flower-sync-state="failed"] button')!;
-  s.stream.push({ schema_version: 1, kind: 'ready', summaries: [s.waiting, s.other] });
+  s.stream.push({ schema_version: 2, kind: 'ready', summaries: [s.waiting, s.other] });
   resync.click();
   await waitFor(() => !s.runtime.querySelector<HTMLButtonElement>('.flower-composer-continue')!.disabled);
   expect(s.runtime.querySelector('.flower-thread-sync-error')).toBeNull();

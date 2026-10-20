@@ -2,9 +2,9 @@ import '../index.css';
 import './flower-feature.css';
 import { page, userEvent } from 'vitest/browser';
 import { expect, it, onTestFinished, vi } from 'vitest';
-import { For, createSignal } from 'solid-js';
+import { For, createSignal, type ComponentProps } from 'solid-js';
 import { render } from 'solid-js/web';
-import { ParentEventRow, createParentEventReading } from '../../../../flower_ui/src/parentEvents';
+import { ParentEventRow as ControlledParentEventRow, createParentEventReading } from '../../../../flower_ui/src/parentEvents';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import type { FlowerLiveStreamEnvelope, FlowerParentEvent, FlowerParentEventPage } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { activityItem, activityTimeline, adapter, liveBootstrap, renderSurfaceWithAdapterProps, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
@@ -13,6 +13,11 @@ import { SUPPORTED_LOCALES } from './i18n/localeMeta';
 import { createLocalizedFlowerSurfaceCopy } from '../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
 import type { EnvAppTranslationKey } from './i18n';
 import { createTestI18nHelpers } from './i18n/locales/testDictionaries';
+
+function ParentEventRow(props: Omit<ComponentProps<typeof ControlledParentEventRow>, 'expanded' | 'onExpandedChange'>) {
+  const [expanded, setExpanded] = createSignal(false);
+  return <ControlledParentEventRow {...props} expanded={expanded()} onExpandedChange={setExpanded} />;
+}
 
 const copy = DEFAULT_FLOWER_SURFACE_COPY.subagents!;
 const event = (id: string, kind: FlowerParentEvent['kind'] = 'report'): FlowerParentEvent => ({ id, parent_thread_id: 'parent', source_thread_id: 'child', source_turn_id: 'turn-child', source_run_id: 'run-child', source_entry_id: 'entry-' + id, kind, received_at: '2026-10-16T00:00:00Z', admitted: false });
@@ -128,7 +133,7 @@ it('preserves the mounted report, expansion and keyboard focus across canonical 
   const parent = thread({ thread_id: 'parent', subagents: [child], parent_events: events });
   const base = liveBootstrap(parent, 1);
   const current = { ...base.current, parent_events: events };
-  const queued: FlowerLiveStreamEnvelope[] = [{ schema_version: 1, kind: 'ready', summaries: [parent] }];
+  const queued: FlowerLiveStreamEnvelope[] = [{ schema_version: 2, kind: 'ready', summaries: [parent] }];
   let wake: (() => void) | undefined;
   const connectLiveStream = async function* ({ signal }: { signal: AbortSignal }): AsyncIterable<FlowerLiveStreamEnvelope> {
     while (!signal.aborted) {
@@ -146,7 +151,7 @@ it('preserves the mounted report, expansion and keyboard focus across canonical 
   const disclosure = row.querySelector<HTMLButtonElement>('.flower-parent-event-disclosure')!;
   disclosure.click(); disclosure.focus();
   const body = row.querySelector('[data-parent-event-body]');
-  queued.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'parent', current: { ...current, view_version: 2,
+  queued.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'parent', current: { ...current, view_version: 2,
     parent_events: { ...events, events: [{ ...event('report'), admitted: true }, event('completed', 'completed')], last_event_id: 'completed' } } });
   wake?.();
   await waitFor(() => Boolean(runtime.querySelector('[data-parent-event="completed"]')));
@@ -341,14 +346,14 @@ it.each([false, true])('locates the canonical parent report from its accepted ch
   }] };
   const surface = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [parent], loadThread: async () => ({ ...base, current: { ...base.current, parent_events: events } }),
     loadSubagentDetail: async () => ({ summary: child, current: childCurrent }) }, { focusThreadRequest: { request_id: 'receipt-parent', thread_id: 'parent' } });
-  await waitFor(() => Boolean(surface.querySelector('[data-parent-event="receipt-event"]')));
-  const report = surface.querySelector<HTMLElement>('[data-parent-event="receipt-event"]')!;
+  await waitFor(() => Boolean(surface.querySelector('[data-flower-row-event-id="receipt-event"]')));
+  const report = () => surface.querySelector<HTMLElement>('[data-parent-event="receipt-event"]')!;
   if (folded) {
-    expect(report.closest('[inert]')).not.toBeNull();
+    expect(surface.querySelector('[data-flower-row-event-id="receipt-event"] .flower-turn-row-viewport[inert]')).not.toBeNull();
     surface.querySelector<HTMLButtonElement>('button[aria-controls="flower-subagents-dropdown"]')!.click();
     await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-row]')));
     document.querySelector<HTMLButtonElement>('[data-flower-subagent-row]')!.click();
-  } else report.querySelector<HTMLButtonElement>('.flower-parent-event-source')!.click();
+  } else report().querySelector<HTMLButtonElement>('.flower-parent-event-source')!.click();
   await waitFor(() => Boolean(document.querySelector('[data-flower-activity-item-id="submitted-report"]')));
   const row = document.querySelector('[data-flower-activity-item-id="submitted-report"]')!;
   expect(row.querySelector('.flower-activity-inline-title')?.textContent).toBe('Report to parent task');
@@ -361,11 +366,11 @@ it.each([false, true])('locates the canonical parent report from its accepted ch
   view.click();
   await waitFor(() => surface.querySelector('[data-parent-event="receipt-event"] .flower-parent-event-disclosure')?.getAttribute('aria-expanded') === 'true');
   if (folded) {
-    await waitFor(() => report.closest('.flower-turn-row-viewport')?.getAttribute('data-state') === 'open');
+    await waitFor(() => report()?.closest('.flower-turn-row-viewport')?.getAttribute('data-state') === 'open');
     expect(surface.querySelector('.flower-turn-summary-button')?.getAttribute('aria-expanded')).toBe('true');
-    expect(report.closest('[inert], [aria-hidden="true"]')).toBeNull();
-    expect(report.getBoundingClientRect().height).toBeGreaterThan(0);
-    expect(document.activeElement).toBe(report.querySelector('.flower-parent-event-disclosure'));
+    expect(report().closest('[inert], [aria-hidden="true"]')).toBeNull();
+    expect(report().getBoundingClientRect().height).toBeGreaterThan(0);
+    expect(document.activeElement).toBe(report().querySelector('.flower-parent-event-disclosure'));
     expect(document.querySelector('[data-flower-subagent-detail="open"]')).toBeNull();
   }
 });

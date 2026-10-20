@@ -81,11 +81,11 @@ func (s *Service) cancelAccountTurn(threadID string, turnID identity.TurnID) {
 	}
 }
 
-func (s *Service) reconcileAccountWatches(current flruntime.ThreadView) {
+func (s *Service) reconcileAccountWatches(threadID string, turnID identity.TurnID, activity flruntime.ThreadActivity) {
 	s.accountMu.Lock()
 	defer s.accountMu.Unlock()
-	id := current.ThreadID.String()
-	if watch, ok := s.accountTasks[id]; ok && (current.TurnID == watch.turnID && current.Activity == flruntime.ThreadActivityIdle) {
+	id := threadID
+	if watch, ok := s.accountTasks[id]; ok && (turnID == watch.turnID && activity == flruntime.ThreadActivityIdle) {
 		watch.stop()
 		delete(s.accountTasks, id)
 	}

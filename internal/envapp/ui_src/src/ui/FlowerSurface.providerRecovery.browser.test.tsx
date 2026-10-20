@@ -129,7 +129,7 @@ async function mount(options: { missingProvider?: boolean; code?: string; deepse
   const other = thread({ thread_id: 'thread-2', title: 'Other chat' });
   const disconnected = deferred<void>();
   const connectLiveStream = options.disconnectable ? async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
-    yield { schema_version: 1, kind: 'ready', summaries: [failed, other] };
+    yield { schema_version: 2, kind: 'ready', summaries: [failed, other] };
     await Promise.race([disconnected.promise, new Promise<void>(resolve => input.signal.addEventListener('abort', () => resolve(), { once: true }))]);
     if (!input.signal.aborted) throw Object.assign(new Error('connection permission changed'), { status: 403 });
   } : undefined;

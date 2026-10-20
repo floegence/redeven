@@ -579,11 +579,7 @@ func TestThreadListSummaryConsumesUnknownEffectFailureCode(t *testing.T) {
 func TestFlowerCancellationFactIsSharedBySummaryCurrentAndPublication(t *testing.T) {
 	fact := &flruntime.ThreadCancellation{ThreadID: "thread-stop", TurnID: "turn-stop", RunID: "run-stop", Source: "user_stop", Mode: flruntime.CancelModeGraceful, RequestedAt: time.Now().UTC()}
 	current := flruntime.ThreadView{ThreadID: fact.ThreadID, TurnID: fact.TurnID, RunID: fact.RunID, Activity: flruntime.ThreadActivityActive}
-	before := flowerRuntimeCurrentBoundaryKey(current)
 	current.Cancellation = fact
-	if before == flowerRuntimeCurrentBoundaryKey(current) {
-		t.Fatal("stop admission was treated as coalescible output")
-	}
 	var summaryView, currentView ThreadView
 	applyFlowerThreadRuntimeProjection(&summaryView, flowerThreadRuntimeProjectionFromSummary(flruntime.ThreadSummary{ID: fact.ThreadID, TurnID: fact.TurnID, RunID: fact.RunID, Activity: flruntime.ThreadActivityActive, Cancellation: fact}))
 	applyFlowerThreadRuntimeProjection(&currentView, flowerThreadRuntimeProjectionFromCurrent(current))

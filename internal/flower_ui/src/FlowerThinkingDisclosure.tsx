@@ -14,6 +14,8 @@ export type FlowerThinkingDisclosureProps = Readonly<{
   expandLabel: Accessor<string>;
   collapseLabel: Accessor<string>;
   contentBody: Component;
+  manualExpanded?: Accessor<boolean | undefined>;
+  onManualExpanded?: (expanded: boolean) => void;
 }>;
 
 function safeContentID(value: string): string {
@@ -21,7 +23,7 @@ function safeContentID(value: string): string {
 }
 
 export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> = (props) => {
-  const [view, setView] = createSignal<FlowerThinkingDisclosureView>('collapsed');
+  const [view, setView] = createSignal<FlowerThinkingDisclosureView>(props.manualExpanded?.() ? 'expanded' : 'collapsed');
   const [overflowing, setOverflowing] = createSignal(false);
   let viewport: HTMLDivElement | undefined;
   let toggleButton: HTMLButtonElement | undefined;
@@ -34,7 +36,10 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
 
   createEffect(on(props.live, (isLive, wasLive) => {
     if (isLive) setView('preview');
-    else if (wasLive && !props.preserveOnEnd()) collapse();
+    else if (wasLive && !props.preserveOnEnd()) {
+      props.onManualExpanded?.(false);
+      collapse();
+    }
   }));
 
   createEffect(() => {
@@ -58,8 +63,10 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
       setView((current) => current === 'expanded' ? 'preview' : 'expanded');
       return;
     }
-    if (view() === 'expanded') collapse();
-    else setView('expanded');
+    const expanded = view() !== 'expanded';
+    props.onManualExpanded?.(expanded);
+    if (expanded) setView('expanded');
+    else collapse();
   };
 
   return (

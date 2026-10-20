@@ -164,6 +164,10 @@ func openRealtimeTestService(t *testing.T, stateDir string, baseURL string) *Ser
 }
 
 func newSendTurnTestService(t *testing.T) *Service {
+	return newSendTurnTestServiceWithActivation(t, false)
+}
+
+func newSendTurnTestServiceWithActivation(t *testing.T, deferred bool) *Service {
 	t.Helper()
 	cfg := &config.AIConfig{
 		CurrentModelID: "openai/gpt-5-mini",
@@ -173,7 +177,8 @@ func newSendTurnTestService(t *testing.T) *Service {
 		}},
 	}
 	svc, err := NewService(Options{
-		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: t.TempDir(), AgentHomeDir: t.TempDir(), Shell: "/bin/bash", Config: cfg,
+		DeferExecution: deferred,
+		Logger:         slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: t.TempDir(), AgentHomeDir: t.TempDir(), Shell: "/bin/bash", Config: cfg,
 		PersistOpTimeout: 2 * time.Second, ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 2 * time.Second, FirstOutputTimeout: time.Second, IdleTimeout: time.Second},
 		ResolveProviderAPIKey: func(string) (string, bool, error) { return "", false, nil },
 	})

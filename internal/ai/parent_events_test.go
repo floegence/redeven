@@ -370,20 +370,6 @@ func TestFlowerParentEventWaitWithoutTargetsIncludesEveryDirectChild(t *testing.
 	}
 }
 
-func TestFlowerParentEventBoundaryPublishesReceiptAdmissionAndResolution(t *testing.T) {
-	current := thinkingCurrent(1, "", true, flruntime.ThreadActivityActive)
-	initial := flowerRuntimeCurrentBoundaryKey(current)
-	current.ParentEvents = &flruntime.ParentEventPage{ThreadID: "thread-parent", Events: []flruntime.ParentEvent{{ID: "event", Kind: flruntime.ParentEventInputRequired}}}
-	receipt := flowerRuntimeCurrentBoundaryKey(current)
-	current.ParentEvents.Events[0].Admitted = true
-	admitted := flowerRuntimeCurrentBoundaryKey(current)
-	current.ParentEvents.Events[0].Resolved = true
-	resolved := flowerRuntimeCurrentBoundaryKey(current)
-	if initial == receipt || receipt == admitted || admitted == resolved {
-		t.Fatal("event boundary coalesced")
-	}
-}
-
 type parentEventSubscribeBarrier struct {
 	flruntime.ThreadService
 	flruntime.ThreadParentEventService

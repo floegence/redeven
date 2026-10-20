@@ -1,5 +1,5 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
-import type { Accessor, Component, JSX } from 'solid-js';
+import { batch, createEffect, createMemo, createSignal, createRoot, onCleanup, Show, untrack } from 'solid-js';
+import type { Component, JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { createMarkdownParser } from '@floegence/floe-webapp-core/markdown';
 import { cn } from '@floegence/floe-webapp-core';
@@ -9,13 +9,12 @@ import { MarkdownMedia, readMarkdownMediaPlaceholder, type MarkdownMediaLabels, 
 
 import { writeTextToClipboard } from '../../clipboard';
 import { createFlowerMarkdownRenderer } from './markedConfig';
-import { normalizeMarkdownForDisplay } from './normalizeMarkdownForDisplay';
-import { createMarkdownRenderModel, type MarkdownRenderSnapshot } from './streamingMarkdownModel';
-import { StreamingMarkdownTail } from './StreamingMarkdownTail';
-import { prepareFlowerCitations } from './flowerCitations';
+import { createMarkdownRenderModel } from './streamingMarkdownModel';
+import { createIncrementalMarkdownDOM } from './incrementalMarkdownDOM';
+import { createIncrementalCitations } from './incrementalCitations';
 import { enhanceFlowerSourceIcons, type FlowerSourceIconResolver } from './flowerSourceIcons';
 import { parseFlowerSourceFence, renderFlowerSourceCards } from './flowerSourceCards';
-import type { FlowerCitationSource } from '../../contracts/flowerSurfaceContracts';
+import type { FlowerCitationSource, FlowerMessageTextSource } from '../../contracts/flowerSurfaceContracts';
 import {
   decorateFlowerMarkdownCodeBlocks,
   flowerMarkdownCodeTextForCopyButton,
@@ -24,6 +23,7 @@ import { markdownMediaEnUS } from './mediaCopy';
 
 export interface FlowerMarkdownBlockProps {
   content: string;
+  textSource?: FlowerMessageTextSource;
   footer?: JSX.Element;
   sources?: readonly FlowerCitationSource[];
   citationLabels?: Readonly<{ sources: string; unavailable: string }>;
@@ -56,36 +56,12 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
   }) });
 
   const [copiedButton, setCopiedButton] = createSignal<HTMLButtonElement | null>(null);
-  const citations = createMemo(() => props.citationLabels
-    ? prepareFlowerCitations(String(props.content ?? ''), props.sources ?? [], props.citationLabels.unavailable, props.streaming === true)
-    : { markdown: String(props.content ?? ''), html: [], remaining: [] });
-  marked.use({ extensions: [{
-    name: 'flowerCitation', level: 'inline',
-    start(source) { return source.indexOf('\uE200flower-citation:'); },
-    tokenizer(source) {
-      const match = /^\uE200flower-citation:(\d+)\uE201/.exec(source);
-      return match ? { type: 'flowerCitation', raw: match[0], index: Number(match[1]) } : undefined;
-    },
-    renderer(token) { return citations().html[Number(token.index)] ?? ''; },
-  }] });
-  const displayContent = createMemo(() => normalizeMarkdownForDisplay(citations().markdown));
-  const renderMarkdown = createMarkdownRenderModel(marked);
-  const snapshot = createMemo<MarkdownRenderSnapshot>(() => renderMarkdown(
-    displayContent(),
-    props.streaming === true,
-    JSON.stringify([citations().html, props.citationLabels]),
-    props.mediaEnabled === true,
-  ));
-  const segments = createMemo(() => new Map(snapshot().committedSegments.map((segment) => [segment.key, segment])));
-  const sourceHTML = (html: string) => html.startsWith('<aside class="flower-chat-source-list"');
-  const sourceTail = () => { const tail = snapshot().tail; return tail.kind === 'html' && sourceHTML(tail.html); };
-  const sourceSegment = (key: string) => sourceHTML(segments().get(key)?.html ?? '');
-  const segmentKeys = createMemo(() => [...segments().keys()].filter(key => !sourceSegment(key)));
-  const sourceSegmentKeys = createMemo(() => [...segments().keys()].filter(sourceSegment));
-  const remainingSourcesHTML = createMemo(() => props.citationLabels ? renderFlowerSourceCards(
-    citations().remaining,
-    props.citationLabels,
-  ) : '');
+  const citations = createIncrementalCitations(marked, {
+    sources: () => props.sources ?? [], unavailable: () => props.citationLabels?.unavailable ?? '', streaming: () => props.streaming === true,
+  });
+  const [remainingSourcesHTML, setRemainingSourcesHTML] = createSignal('');
+  let contentRef!: HTMLDivElement;
+  let sourcesRef!: HTMLDivElement;
   let rootRef: HTMLDivElement | undefined;
   let copiedResetTimer: number | undefined;
   let activeLinkController: AbortController | undefined;
@@ -190,103 +166,111 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
       });
   };
 
-  const decorateRegion = (element: Accessor<HTMLDivElement>, content: Accessor<unknown>, committed = true) => {
-    let buttons: readonly HTMLButtonElement[] = [];
-    const sourceIcons = new Map<HTMLElement, () => void>();
-    const media = new Map<HTMLElement, () => void>();
-    const highlighted = new Map<HTMLElement, () => void>();
-    const release = (button: HTMLButtonElement) => {
-      iconCleanups.get(button)?.();
-      iconCleanups.delete(button);
-      mountedButtons.delete(button);
-    };
-    createEffect(() => {
-      content();
-      const labels = copyLabels();
-      let cancelled = false;
-      onCleanup(() => { cancelled = true; });
-      queueMicrotask(() => {
-        if (cancelled) return;
-        const root = element();
-        for (const [node, dispose] of sourceIcons) {
-          if (!root.contains(node)) { dispose(); sourceIcons.delete(node); }
-        }
-        for (const node of root.querySelectorAll<HTMLElement>('.flower-chat-source-list')) {
-          if (!sourceIcons.has(node)) sourceIcons.set(node, enhanceFlowerSourceIcons(node, props.resolveSourceIcon));
-        }
-        for (const button of buttons) {
-          if (!root.contains(button)) release(button);
-        }
-        buttons = decorateFlowerMarkdownCodeBlocks(root, labels, mountCopyIcons);
-        for (const [node, dispose] of highlighted) {
-          if (!root.contains(node)) { dispose(); highlighted.delete(node); }
-        }
-        // Only committed segments own enhancement. Streaming tails remain appendable.
-        if (committed) {
-          for (const code of root.querySelectorAll<HTMLElement>('pre.flower-chat-md-code-block > code')) {
-            if (!highlighted.has(code)) highlighted.set(code, enhanceCodeBlock(code, code.dataset.flowerCodeLanguage ?? ''));
-          }
-        }
-        for (const [node, dispose] of media) {
-          if (!root.contains(node)) { dispose(); media.delete(node); }
-        }
-        const mediaLabels = resolvedMediaLabels();
-        for (const node of root.querySelectorAll<HTMLElement>('[data-floe-markdown-media]')) {
-          if (media.has(node)) continue;
-          const source = readMarkdownMediaPlaceholder(node);
-          if (!source) continue;
-          if (!committed) { node.textContent = source.title || source.src || mediaLabels.html; continue; }
-          media.set(node, render(() => <MarkdownMedia loadTimeoutMs={15_000} source={source} labels={resolvedMediaLabels()} resolve={props.resolveMedia} onOpenLink={props.onOpenMediaLink} />, node));
-        }
-      });
-    });
+  const decorateRegion = (element: HTMLElement, token: import('marked').Token, live: boolean) => createRoot(dispose => {
+    const cleanups: (() => void)[] = [];
+    const finishers: (() => void)[] = [];
+    let updatePreview: ((next: import('marked').Token, streaming: boolean) => boolean) | undefined;
+    const buttons = decorateFlowerMarkdownCodeBlocks(element, copyLabels(), mountCopyIcons);
+    for (const node of element.querySelectorAll<HTMLElement>('.flower-chat-source-list')) cleanups.push(enhanceFlowerSourceIcons(node, props.resolveSourceIcon));
+    for (const code of element.querySelectorAll<HTMLElement>('pre.flower-chat-md-code-block > code')) {
+      const enhance = () => cleanups.push(enhanceCodeBlock(code, code.dataset.flowerCodeLanguage ?? ''));
+      if (!live || token.type === 'code' && isClosedFence(token.raw)) enhance();
+      else finishers.push(enhance);
+    }
+    for (const node of element.querySelectorAll<HTMLElement>('[data-floe-markdown-media]')) {
+      const source = readMarkdownMediaPlaceholder(node);
+      if (!source) continue;
+      const state = token.type === 'code' && token.lang?.trim().toLowerCase() === 'html preview' && !isClosedFence(token.raw)
+        ? live ? 'generating' as const : 'incomplete' as const : undefined;
+      const [mediaSource, setMediaSource] = createSignal(source);
+      const [mediaState, setMediaState] = createSignal(state);
+      if (token.type === 'code' && token.lang?.trim().toLowerCase() === 'html preview') {
+        let current = token;
+        updatePreview = (next, streaming) => {
+          if (next.type !== 'code' || next.lang?.trim().toLowerCase() !== 'html preview') return false;
+          current = next;
+          batch(() => {
+            setMediaSource({ ...source, html: next.text });
+            setMediaState(isClosedFence(next.raw) ? undefined : streaming ? 'generating' : 'incomplete');
+          });
+          return true;
+        };
+        finishers.push(() => updatePreview?.(current, false));
+      }
+      cleanups.push(render(() => <MarkdownMedia loadTimeoutMs={15_000} source={mediaSource()} htmlState={mediaState()} labels={resolvedMediaLabels()} resolve={props.resolveMedia} onOpenLink={props.onOpenMediaLink} />, node));
+    }
     onCleanup(() => {
-      for (const dispose of sourceIcons.values()) dispose();
-      sourceIcons.clear();
-      for (const button of buttons) release(button);
-      for (const dispose of media.values()) dispose();
-      media.clear();
-      for (const dispose of highlighted.values()) dispose();
-      highlighted.clear();
+      for (const cleanup of cleanups) cleanup();
+      for (const button of buttons) { iconCleanups.get(button)?.(); iconCleanups.delete(button); mountedButtons.delete(button); }
     });
+    return { dispose, update: (next: import('marked').Token, streaming: boolean) => updatePreview?.(next, streaming) ?? false,
+      finish: () => { for (const finish of finishers.splice(0)) finish(); } };
+  });
+  const isClosedFence = (raw: string) => {
+    const end = raw.trimEnd();
+    const firstLine = end.indexOf('\n');
+    if (firstLine < 0) return false;
+    const opening = end.slice(0, firstLine).match(/^[ \t]{0,3}(\x60{3,}|~{3,})/)?.[1];
+    const closing = end.slice(end.lastIndexOf('\n') + 1).match(/^[ \t]{0,3}(\x60+|~+)[ \t]*$/)?.[1];
+    return !!opening && !!closing && opening[0] === closing[0] && closing.length >= opening.length;
   };
-
-  const HtmlSegment: Component<{ segmentKey: string }> = (segmentProps) => {
-    let element!: HTMLDivElement;
-    const segment = () => segments().get(segmentProps.segmentKey);
-    const html = createMemo(() => segment()?.html ?? '');
-    const source = createMemo(() => ({ kind: 'html' as const, html: segment()?.media?.html ?? '', title: '' }), undefined, { equals: (previous, next) => previous.html === next.html });
-    decorateRegion(() => element, html);
-    return <div ref={element} class="flower-chat-md-committed-segment" data-segment-key={segmentProps.segmentKey}>
-      <Show when={segment()?.media} fallback={<div class="flower-chat-md-segment-html" innerHTML={html()} />}>
-        <MarkdownMedia loadTimeoutMs={15_000} source={source()} htmlState={segment()?.media?.state} labels={resolvedMediaLabels()} resolve={props.resolveMedia} onOpenLink={props.onOpenMediaLink} />
-      </Show>
-    </div>;
-  };
-
-  const TailFrame: Component = () => {
-    let element!: HTMLDivElement;
-    const tail = createMemo(() => snapshot().tail);
-    decorateRegion(() => element, () => tail().kind === 'html' ? tail() : null, false);
-    return <div ref={element} class="flower-chat-md-tail-frame"><StreamingMarkdownTail tail={tail()} /></div>;
-  };
-
+  let dom: ReturnType<typeof createIncrementalMarkdownDOM> | undefined;
+  let model: ReturnType<typeof createMarkdownRenderModel> | undefined;
+  let priorRenderingKey: string | undefined;
+  let priorStreaming = false;
+  let priorMediaEnabled = false;
+  const renderingMetadata = createMemo(() => {
+    const key = JSON.stringify([props.sources, props.citationLabels?.sources, props.citationLabels?.unavailable, props.mediaEnabled]);
+    citations.sources();
+    return key;
+  });
+  createEffect(() => {
+    const streaming = props.streaming === true;
+    const mediaEnabled = props.mediaEnabled === true;
+    const textSource = props.textSource;
+    const key = renderingMetadata();
+    // Content is read only for a new record, snapshot replacement, or explicit
+    // metadata boundary; source revision carries ordinary growth.
+    void textSource?.revision;
+    const fallback = textSource ? undefined : props.content;
+    untrack(() => {
+      dom ??= createIncrementalMarkdownDOM(marked, contentRef, decorateRegion, citations.locate, token => token.type === 'code' && 'text' in token && props.citationLabels && parseFlowerSourceFence(token as { text: string; lang?: string; raw?: string }) ? sourcesRef : contentRef, citations.forget);
+      model ??= createMarkdownRenderModel(marked, (update, live) => dom!.apply(update, live), {
+        reset: citations.reset, append: citations.index.append,
+      });
+      model.update(() => fallback ?? props.content, streaming, textSource, key);
+      if (priorRenderingKey !== undefined && (priorRenderingKey !== key || priorStreaming && !streaming)) {
+        dom.refresh((token, element) => {
+          let citation = false;
+          marked.walkTokens([token], child => { if (child.type === 'flowerCitation') citation = true; });
+          return citation || priorRenderingKey !== key && Boolean(element.querySelector('.flower-chat-source-list'))
+            || priorMediaEnabled !== mediaEnabled && Boolean(element.querySelector('[data-floe-markdown-media]'));
+        }, streaming);
+      }
+      priorRenderingKey = key;
+      priorStreaming = streaming;
+      priorMediaEnabled = mediaEnabled;
+      setRemainingSourcesHTML(!streaming && props.citationLabels ? renderFlowerSourceCards(citations.remaining(), props.citationLabels) : '');
+    });
+  });
+  onCleanup(() => dom?.dispose());
   const RemainingSources: Component = () => {
     let element!: HTMLDivElement;
-    decorateRegion(() => element, remainingSourcesHTML);
-    return <div ref={element} innerHTML={remainingSourcesHTML()} />;
+    createEffect(() => {
+      const html = remainingSourcesHTML();
+      element.innerHTML = html;
+      const cleanups = [...element.querySelectorAll<HTMLElement>('.flower-chat-source-list')].map(node => enhanceFlowerSourceIcons(node, props.resolveSourceIcon));
+      onCleanup(() => cleanups.forEach(cleanup => cleanup()));
+    });
+    return <div ref={element} />;
   };
 
   return (
     <div ref={(node) => { rootRef = node; }} class={cn('flower-chat-md-block', props.class)} onClick={handleClick}>
-      <For each={segmentKeys()}>{(key) => <HtmlSegment segmentKey={key} />}</For>
-      <Show when={snapshot().tail.kind !== 'empty' && !sourceTail()}><TailFrame /></Show>
+      <div ref={contentRef} class="flower-chat-md-content" />
       {props.footer}
-      <For each={sourceSegmentKeys()}>{(key) => <HtmlSegment segmentKey={key} />}</For>
-      <Show when={sourceTail()}><TailFrame /></Show>
-      <Show when={citations().remaining.length > 0 && props.streaming !== true}>
-        <RemainingSources />
-      </Show>
+      <div ref={sourcesRef} class="flower-chat-md-authored-sources" />
+      <Show when={remainingSourcesHTML()}><RemainingSources /></Show>
     </div>
   );
 };

@@ -89,7 +89,7 @@ export function FlowerTurnTimeline(props: Readonly<{
     const threadID = props.thread?.thread_id;
     const value = projectFlowerTurnProcess(props.entries, props.thread?.turns,
       props.thread?.current_execution && ['running', 'waiting_user', 'waiting_approval'].includes(props.thread.status)
-        ? [props.thread.current_execution.turn_id] : []);
+        ? [props.thread.current_execution.turn_id] : [], previousProjection && previousProjection.threadID === threadID ? previousProjection.value : undefined);
     // Protect newly classified process before any row can become inert or hidden.
     const previous = previousProjection;
     if (previous && previous.threadID === threadID) untrack(() => {
@@ -152,6 +152,11 @@ export function FlowerTurnTimeline(props: Readonly<{
       if (current?.turnID === failureTurnID() && (outcome === 'failed' || outcome === 'interrupted')) return '';
       return current?.terminalKey === key && outcome && outcome !== 'completed' ? props.copy[outcome] : '';
     });
+    // Historical rows can skip offscreen layout immediately. A row that was
+    // live keeps its measured layout until the next transcript mount, so
+    // completion cannot move the reading anchor before disclosure settles.
+    const historical = untrack(() => Boolean(group()?.turn?.ended_at));
+    const settled = createMemo(() => historical && !process());
     // Decide protection and capture the anchor before inserting summary height.
     const summary = createMemo(() => group()?.disclosure !== 'none' && group()?.summaryKey === key
       && props.choices.settled(identity(group()!.turnID)));
@@ -189,11 +194,18 @@ export function FlowerTurnTimeline(props: Readonly<{
       props.choices.toggle(identity(current.turnID), current.disclosure);
     };
     onCleanup(() => { nodes.delete(key); motions.delete(key); });
-    // Render once per stable row. Entry changes flow through its accessor;
-    // calling the renderer from a reactive insertion would replace the tree.
-    const content = untrack(() => props.renderEntry(entry, expanded));
+    // Mount only while the disclosure is visible or animating. Stable rows
+    // keep their subtree until closing has finished.
+    const Content = () => {
+      const content = untrack(() => props.renderEntry(entry, expanded));
+      return content;
+    };
     return (
-      <div class="flower-turn-row" data-flower-turn-id={group()?.turnID} data-flower-turn-process={process() ? 'true' : undefined}>
+      <div class="flower-turn-row" data-flower-turn-id={group()?.turnID} data-flower-turn-process={process() ? 'true' : undefined}
+        data-flower-row-message-id={entry().type === 'message' ? (entry() as Extract<FlowerTimelineEntry, { type: 'message' }>).message.id : undefined}
+        data-flower-row-event-id={entry().type === 'parent_event' ? (entry() as Extract<FlowerTimelineEntry, { type: 'parent_event' }>).event.id : undefined}
+        data-flower-row-decoration-id={entry().type === 'context_compaction' ? (entry() as Extract<FlowerTimelineEntry, { type: 'context_compaction' }>).decoration.decoration_id : undefined}
+        data-flower-turn-settled={settled() ? 'true' : undefined}>
         <Show when={summary()}>
           <div class="flower-turn-summary">
             <button type="button" class="flower-turn-summary-button" data-flower-disclosure-trigger
@@ -212,7 +224,7 @@ export function FlowerTurnTimeline(props: Readonly<{
             onPointerDown={(event) => startGesture(event.target as Element)}
             onKeyDown={(event) => startGesture(event.target as Element)}
             onContextMenu={() => { menuOwner = group()?.turnID; }}>
-            {content}
+            <Show when={motion.mounted()}><Content /></Show>
           </div>
         </div>
         <Show when={ended()}>{(label) => <div class="flower-turn-ended" role="status">{label()}</div>}</Show>

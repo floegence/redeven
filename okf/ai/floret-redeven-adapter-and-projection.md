@@ -3,16 +3,42 @@ type: AI Runtime Contract
 title: Floret Redeven adapter and projection
 description: Map authorized Redeven requests and Floret typed views without creating a second thread lifecycle.
 tags: [ai, floret, adapter, projection]
-timestamp: 2026-10-19T00:00:00Z
+timestamp: 2026-10-20T00:00:00Z
 quality_exception: Cross-boundary adapter contract spanning authorization, live projections, Activity sanitization, recovery, and browser ordering.
 ---
 # Summary
 
-Redeven's adapter is a thin typed boundary over published Floret. It authorizes endpoint and thread ownership, resolves resources, sanitizes Activity, maps typed views and failures, and projects live summaries. Floret remains the only lifecycle, persistence, migration, cancellation, and provider-state owner; Redeven never waits on provider work or mirrors a receipt, authority barrier, transcript, or execution projection.
+Redeven's adapter is a thin typed boundary over published Floret. It authorizes endpoint and thread ownership, resolves resources, sanitizes Activity, maps typed views, native updates and failures, and projects live summaries. Floret remains the only lifecycle, persistence, migration, cancellation, and provider-state owner; Redeven never waits on provider work or mirrors a receipt, authority barrier, transcript, or execution projection.
 
 # Contract
 
 [Flower Goals](flower-goals.md) use the optional published Goal controller. Current and historical Goal facts may precede the first Turn; omit missing execution identity only for validated Goal facts. Ordinary executable items retain strict identity.
+
+## Incremental observation and public projection
+
+Published Floret v7.71.0 supplies optional `ThreadUpdateSource`. Redeven requires
+that released contract at activation and consumes one actor-native subscription.
+Lightweight facts drive account/watch/workload/Computer cleanup independently of
+viewers. One immutable ownership route precedes authorization-scoped observer
+selection; no observer means no display projection or encoding. Floret alone owns
+text cadence, versions, append buffers, Activity reduction and canonical reads.
+
+`flower_public_dto.go` is the field-level public boundary for complete views and
+changed items/components. Snapshot, native stream, history and command handoffs
+share those policies. Typed data does not round-trip through JSON maps. Dynamic
+Activity payloads still validate their nested structure and renderer-specific
+limits once at the public boundary. Private ResourceRef, file-reference body,
+sensitive tool arguments, secret answers and raw internal failures cannot enter
+the public DTO. Attachments retain their canonical URL membership rules.
+
+Ordinary text append processes only the added text. Interaction-specific Computer
+assistance may read canonical evidence at that explicit boundary; private frames
+and viewer read state keep their separate scope. The [live timeline contract](../ui/flower-live-timeline.md)
+owns wire v2, bounded distribution, indexed browser acceptance and recovery. There
+is no complete-view classifier, fingerprint, legacy fallback or product-owned
+transcript copy. Existing Floret v7 View/Subscribe compatibility remains upstream,
+backed by the same state and versions. No database schema or migration changes
+are part of this optimization.
 
 ## Model output and presentation
 
@@ -78,7 +104,7 @@ is documented in [Flower live timeline](../ui/flower-live-timeline.md).
 Floret title events are settlement notifications, not a second title source.
 The synchronous event sink requests one Service-owned, per-thread coalesced
 summary publication and returns without reading `ThreadService`. That publisher
-then reads the canonical current view and summary and emits the existing
+then reads the canonical lightweight summary and emits the existing
 `summary.batch`. A failed canonical read fences the endpoint's live observers;
 reconnection restores the authoritative baseline instead of retrying, polling,
 or applying an event-derived title patch.

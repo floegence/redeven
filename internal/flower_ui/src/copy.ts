@@ -681,6 +681,8 @@ export type FlowerSurfaceCopy = Readonly<{
     syncFailed: string;
     syncAuthorization: string;
     syncLocked: string;
+    syncVersion: string;
+    syncCapacity: string;
     syncResync: string;
     stopUnconfirmed: string;
     syncTimeout: string;
@@ -1162,6 +1164,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     syncFailed: "Live updates stopped because data could not be read or applied. Displayed state may be outdated.",
     syncAuthorization: "Live updates require authorization. Restore access, then resync. Displayed state may be outdated.",
     syncLocked: "Live updates are locked. Unlock access, then resync. Displayed state may be outdated.",
+    syncVersion: "Flower live updates require a matching app and runtime version. Refresh the app, or update both before resyncing.",
+    syncCapacity: "Flower live update capacity is full. Close unused Flower views, then resync. Your draft is preserved.",
     syncResync: "Resync",
     stopUnconfirmed: "Stop status is unconfirmed. Resync before trying again.",
     syncTimeout: "Synchronization timed out after 15 seconds. Try again.",

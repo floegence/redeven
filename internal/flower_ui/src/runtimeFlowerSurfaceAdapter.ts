@@ -38,7 +38,7 @@ import type {
   FlowerThreadPinPosition,
   FlowerLiveStreamConnectInput,
   FlowerLiveStreamEnvelope,
-  FlowerRuntimeCurrentView, FlowerParentEventQuery, FlowerParentEventPage,
+  FlowerRuntimeCurrentView, FlowerRuntimeUpdate, FlowerParentEventQuery, FlowerParentEventPage,
 } from './contracts/flowerSurfaceContracts';
 import {
   mapFlowerContextCompactions,
@@ -232,10 +232,61 @@ function mapRuntimeThreadView(raw: unknown, options: RuntimeFlowerSurfaceAdapter
   throw new Error('Flower thread detail requires product metadata and a typed current view.');
 }
 
+function mapRuntimeUpdate(raw: unknown): FlowerRuntimeUpdate {
+  const fail = (): never => { throw Object.assign(new Error('Flower live update violates the published contract.'), { code: 'flower_live_contract_error' }); };
+  const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : fail();
+  const integer = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) >= 0;
+  const identity = (value: unknown): value is string => typeof value === 'string' && value.length > 0 && value.trim() === value && !Array.from(value).some(character => character.charCodeAt(0) <= 32);
+  const value = record(raw);
+  if (!identity(value.thread_id) || !integer(value.base_version) || !integer(value.view_version) || value.view_version <= value.base_version
+    || value.turn_id !== undefined && !identity(value.turn_id) || value.run_id !== undefined && !identity(value.run_id)) fail();
+  const facts = record(value.facts);
+  if (!['idle', 'active'].includes(String(facts.activity)) || !integer(facts.queue_count)) fail();
+  if (facts.attention !== undefined) {
+    const attention = record(facts.attention);
+    if (!integer(attention.approval_count) || !integer(attention.input_count)) fail();
+  }
+  if (facts.activity === 'active' && (!identity(value.turn_id) || !identity(value.run_id))) fail();
+  if (value.items !== undefined) {
+    if (!Array.isArray(value.items)) fail();
+    for (const rawChange of value.items as unknown[]) {
+      const change = record(rawChange);
+      if (!identity(change.item_id)) fail();
+      if (change.kind === 'append') {
+        const append = record(change.append);
+        if (change.item !== undefined || !integer(append.offset_bytes) || typeof append.text !== 'string') fail();
+      } else if (change.kind === 'add' || change.kind === 'replace') {
+        const item = record(change.item);
+        if (change.append !== undefined || item.id !== change.item_id || !integer(item.ordinal)
+          || !['user', 'steering', 'thinking', 'assistant', 'tool', 'interaction', 'goal'].includes(String(item.kind))
+          || item.kind !== 'goal' && (!identity(item.turn_id) || !identity(item.run_id))
+          || item.text !== undefined && typeof item.text !== 'string' || item.live !== undefined && typeof item.live !== 'boolean') fail();
+      } else if (change.kind !== 'remove' || change.item !== undefined || change.append !== undefined) fail();
+    }
+  }
+  for (const name of ['item_order', 'turns', 'queue', 'interactions', 'tool_call_previews', 'restored_inputs', 'goal', 'parent_events', 'context']) {
+    if (value[name] === undefined) continue;
+    const component = record(value[name]);
+    if (Object.keys(component).length !== 1 || !Object.hasOwn(component, 'value')) fail();
+    if (['item_order', 'turns', 'queue', 'interactions', 'tool_call_previews', 'restored_inputs'].includes(name)
+      && component.value !== null && !Array.isArray(component.value)) fail();
+    if (name === 'item_order' && (!Array.isArray(component.value) || !component.value.every(identity))) fail();
+  }
+  const update = value as FlowerRuntimeUpdate;
+  if (!update.context) return update;
+  const context = record(update.context.value);
+  return { ...update, context: { value: {
+    ...(Object.hasOwn(context, 'model_context') ? { model_context: mapModelContext(context.model_context) ?? null } : {}),
+    ...(Object.hasOwn(context, 'context_usage') ? { context_usage: mapContextUsage(context.context_usage) } : {}),
+    ...(Object.hasOwn(context, 'context_compactions') ? { context_compactions: mapFlowerContextCompactions(context.context_compactions) ?? [] } : {}),
+    ...(Object.hasOwn(context, 'timeline_decorations') ? { timeline_decorations: mapFlowerTimelineDecorations(context.timeline_decorations) ?? [] } : {}),
+  } } };
+}
+
 function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfaceAdapterOptions): FlowerLiveStreamEnvelope {
   const value = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
   const kind = trim(value.kind);
-  if (value.schema_version !== 1) throw new Error('Flower live stream returned an unsupported schema version.');
+  if (value.schema_version !== 2) throw Object.assign(new Error('Flower live stream returned an unsupported schema version. Refresh or upgrade the application.'), { code: 'flower_live_version_error' });
   if (kind !== 'ready' && kind !== 'summary.batch' && kind !== 'thread.batch' && kind !== 'viewer.read_state' && kind !== 'computer.frame' && kind !== 'computer.status' && kind !== 'model_directory.changed') {
     throw new Error('Flower live stream returned an unsupported envelope.');
   }
@@ -243,7 +294,7 @@ function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfac
     if (Object.keys(value).some(key => key !== 'kind' && key !== 'schema_version' && key !== 'observer_id')) {
       throw new Error('Flower model directory notification is invalid.');
     }
-    return { schema_version: 1, kind };
+    return { schema_version: 2, kind };
   }
   const summaries = Array.isArray(value.summaries)
     ? value.summaries
@@ -295,6 +346,11 @@ function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfac
       at_unix_ms: Number(rawStatus.at_unix_ms),
     }
     : undefined;
+  const update = value.update === undefined ? undefined : mapRuntimeUpdate(value.update);
+  const subagentUpdate = value.subagent_update === undefined ? undefined : mapRuntimeUpdate(value.subagent_update);
+  if ((update || subagentUpdate) && (kind !== 'thread.batch' || !trim(value.thread_id) || current || subagentCurrent || update && subagentUpdate || update && update.thread_id !== value.thread_id)) {
+    throw Object.assign(new Error('Flower live update envelope has conflicting identity or payloads.'), { code: 'flower_live_contract_error' });
+  }
   const subagents = mapFlowerSubagents(value.subagents, 'live.subagents');
   return {
     schema_version: Math.floor(Number(value.schema_version)),
@@ -303,7 +359,9 @@ function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfac
     ...(trim(value.thread_id) ? { thread_id: trim(value.thread_id) } : {}),
     ...(summaries ? { summaries } : {}),
     ...(current ? { current } : {}),
+    ...(update ? { update } : {}),
     ...(subagentCurrent ? { subagent_current: subagentCurrent } : {}),
+    ...(subagentUpdate ? { subagent_update: subagentUpdate } : {}),
     ...(subagents !== undefined ? { subagents } : {}),
     ...(value.model_context !== undefined ? { model_context: modelContext ?? null } : {}),
     ...(value.context_usage !== undefined ? { context_usage: contextUsage } : {}),

@@ -48,12 +48,12 @@ async function setup(kind: 'site' | 'captcha' | 'unknown' | 'connection' | 'inst
   const publishInstallation = (value: FlowerBrowserInstallationSnapshot) => receiveInstallation!(value);
   const installBrowser = vi.fn().mockResolvedValue({ ...browser, state: 'downloading', launch: { state: 'installation_required' as const }, operation_id: 'confirmed' });
   let deliver: (envelope: FlowerLiveStreamEnvelope) => void = () => undefined;
-  const publishStatus = (computer_status: NonNullable<FlowerLiveStreamEnvelope['computer_status']>, thread_id = computer_status.thread_id) => deliver({ schema_version: 1, kind: 'computer.status', thread_id, computer_status });
+  const publishStatus = (computer_status: NonNullable<FlowerLiveStreamEnvelope['computer_status']>, thread_id = computer_status.thread_id) => deliver({ schema_version: 2, kind: 'computer.status', thread_id, computer_status });
   const surface = renderSurfaceWithAdapterProps({ ...adapter(true), submitInput, inputComputerControl, setComputerViewer,
     computerManagement: { loadBrowserInstallation, subscribeBrowserInstallation, installBrowser, saveBrowserEnabled: vi.fn(), openExtension: vi.fn(), loadExtensionStatus, setupExtension: vi.fn(), listCandidates: vi.fn().mockResolvedValue({current_target_id:"",candidates:[]}), selectCandidate:vi.fn(), loadAccess, saveAccess,     },
     listThreads: vi.fn(async () => [snapshot, other]), loadThread: vi.fn(async id => id === threadID ? { thread: applyFlowerRuntimeCurrentView(snapshot, current), current } : liveBootstrap(other)),
     connectLiveStream: async function* ({ signal }) {
-      yield { schema_version: 1 as const, kind: 'ready' as const, observer_id: 'assistance-observer', summaries: [snapshot, other] };
+      yield { schema_version: 2 as const, kind: 'ready' as const, observer_id: 'assistance-observer', summaries: [snapshot, other] };
       while (!signal.aborted) {
         const envelope = await new Promise<FlowerLiveStreamEnvelope | undefined>((resolve) => {
           const abort = () => resolve(undefined);

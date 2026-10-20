@@ -39,7 +39,7 @@ function fixture(initial: FlowerRuntimeCurrentView) {
     listThreads: vi.fn(async () => [snapshot(), other]), loadThread,
     connectLiveStream: async function* ({ signal }) {
       connections++;
-      yield { schema_version: 1, kind: 'ready', observer_id: `observer-${connections}`, summaries: [snapshot(), other] };
+      yield { schema_version: 2, kind: 'ready', observer_id: `observer-${connections}`, summaries: [snapshot(), other] };
       while (!signal.aborted) {
         const value = await new Promise<FlowerLiveStreamEnvelope | undefined>(resolve => {
           const abort = () => resolve(undefined);
@@ -54,7 +54,7 @@ function fixture(initial: FlowerRuntimeCurrentView) {
   return { surface, loadThread, snapshot, submitInput, setComputerViewer, inputComputerControl, loadComputerFrame, connections: () => connections,
     restart: (next: FlowerRuntimeCurrentView) => { canonical = next; revision++; receive(undefined); },
     disconnect: () => receive(undefined), emit: (value: FlowerLiveStreamEnvelope) => receive(value),
-    update: (next: FlowerRuntimeCurrentView) => { canonical = next; revision++; receive({ schema_version: 1, kind: 'thread.batch', thread_id: threadID, current: next }); },
+    update: (next: FlowerRuntimeCurrentView) => { canonical = next; revision++; receive({ schema_version: 2, kind: 'thread.batch', thread_id: threadID, current: next }); },
   };
 }
 
@@ -278,7 +278,7 @@ it('requires explicit recovery and a newly decoded private frame after the works
   await waitFor(() => Boolean(f.setComputerViewer.mock.calls.at(-1)?.[0].interaction_id));
   const offerFrame = () => {
     const viewer = f.setComputerViewer.mock.calls.at(-1)![0];
-    f.emit({ schema_version: 1, kind: 'computer.frame', thread_id: threadID, computer_frame: { session_id: viewer.observer_id, viewer_revision: viewer.revision, target_id: 'browser-main', interaction_id: 'tool-input:takeover', frame_id: '1', sequence: 1, mime_type: 'image/png' } });
+    f.emit({ schema_version: 2, kind: 'computer.frame', thread_id: threadID, computer_frame: { session_id: viewer.observer_id, viewer_revision: viewer.revision, target_id: 'browser-main', interaction_id: 'tool-input:takeover', frame_id: '1', sequence: 1, mime_type: 'image/png' } });
   };
   offerFrame();
   await waitFor(() => Boolean(document.querySelector('.flower-computer-stage textarea')));
@@ -286,7 +286,7 @@ it('requires explicit recovery and a newly decoded private frame after the works
   const oldViewer = f.setComputerViewer.mock.calls.at(-1)![0];
   let finishOldFrame: (value: Blob) => void = () => undefined;
   f.loadComputerFrame.mockImplementationOnce(() => new Promise(resolve => { finishOldFrame = resolve; }));
-  f.emit({ schema_version: 1, kind: 'computer.frame', thread_id: threadID, computer_frame: { session_id: oldViewer.observer_id, viewer_revision: oldViewer.revision, target_id: 'browser-main', interaction_id: 'tool-input:takeover', frame_id: 'late', sequence: 2, mime_type: 'image/png' } });
+  f.emit({ schema_version: 2, kind: 'computer.frame', thread_id: threadID, computer_frame: { session_id: oldViewer.observer_id, viewer_revision: oldViewer.revision, target_id: 'browser-main', interaction_id: 'tool-input:takeover', frame_id: 'late', sequence: 2, mime_type: 'image/png' } });
   await waitFor(() => f.loadComputerFrame.mock.calls.some(([frame]) => frame.private_frame?.frame_id === 'late'));
   let finishInput: () => void = () => undefined;
   f.inputComputerControl.mockImplementationOnce(() => new Promise(resolve => { finishInput = () => resolve(undefined); }));
@@ -307,7 +307,7 @@ it('requires explicit recovery and a newly decoded private frame after the works
   expect(document.querySelector('.flower-computer-stage textarea')).toBeNull();
   expect(document.querySelector<HTMLImageElement>('.flower-computer-stage img')?.src).toBe(before);
   const loads = f.loadComputerFrame.mock.calls.length;
-  f.emit({ schema_version: 1, kind: 'computer.frame', thread_id: threadID, computer_frame: { session_id: oldViewer.observer_id, viewer_revision: oldViewer.revision, target_id: 'browser-main', interaction_id: 'tool-input:takeover', frame_id: 'stale', sequence: 3, mime_type: 'image/png' } });
+  f.emit({ schema_version: 2, kind: 'computer.frame', thread_id: threadID, computer_frame: { session_id: oldViewer.observer_id, viewer_revision: oldViewer.revision, target_id: 'browser-main', interaction_id: 'tool-input:takeover', frame_id: 'stale', sequence: 3, mime_type: 'image/png' } });
   await settle();
   expect(f.loadComputerFrame.mock.calls.length).toBe(loads);
   const take = f.surface.querySelector<HTMLButtonElement>('[data-computer-control-action="take"]')!;
@@ -356,7 +356,7 @@ it.each(['close', 'switch', 'expire'] as const)('discards private decoding when 
   let finish: (value: Blob) => void = () => undefined;
   f.loadComputerFrame.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
   const loads = f.loadComputerFrame.mock.calls.length;
-  f.emit({ schema_version: 1, kind: 'computer.frame', thread_id: threadID, computer_frame: { session_id: viewer.observer_id, viewer_revision: viewer.revision, target_id: 'browser-main', interaction_id: 'tool-input:takeover', frame_id: 'recovering', sequence: 1, mime_type: 'image/png' } });
+  f.emit({ schema_version: 2, kind: 'computer.frame', thread_id: threadID, computer_frame: { session_id: viewer.observer_id, viewer_revision: viewer.revision, target_id: 'browser-main', interaction_id: 'tool-input:takeover', frame_id: 'recovering', sequence: 1, mime_type: 'image/png' } });
   await waitFor(() => f.loadComputerFrame.mock.calls.length > loads);
   if (action === 'close') document.querySelector<HTMLButtonElement>('[data-floe-floating-window-control="close"]')!.click();
   else if (action === 'expire') f.update({ ...current('cancelled'), view_version: 2 });
@@ -389,7 +389,7 @@ it('rejects a delayed HTTP current from the previous Runtime connection', async 
   let finish: (value: Awaited<ReturnType<typeof f.loadThread>>) => void = () => undefined;
   const calls = f.loadThread.mock.calls.length;
   f.loadThread.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
-  f.emit({ schema_version: 1, kind: 'summary.batch', summaries: [{ ...f.snapshot(), updated_at_ms: 3, read_status: { ...f.snapshot().read_status, snapshot: { activity_revision: 3 } } }] });
+  f.emit({ schema_version: 2, kind: 'summary.batch', summaries: [{ ...f.snapshot(), updated_at_ms: 3, read_status: { ...f.snapshot().read_status, snapshot: { activity_revision: 3 } } }] });
   await waitFor(() => f.loadThread.mock.calls.length > calls);
   f.restart({ ...current('cancelled'), view_version: 1 });
   await waitFor(() => f.connections() === 2);
@@ -402,7 +402,7 @@ it('clears public pixels on a sampled CAPTCHA and waits for canonical assistance
   const f = fixture(current());
   await openStage(f.surface);
   const viewer = f.setComputerViewer.mock.calls.at(-1)![0];
-  f.emit({ schema_version: 1, kind: 'computer.frame', thread_id: threadID, computer_frame: {
+  f.emit({ schema_version: 2, kind: 'computer.frame', thread_id: threadID, computer_frame: {
     session_id: viewer.observer_id, viewer_revision: viewer.revision, target_id: 'browser-main', sequence: 2, mime_type: 'image/png',
     error_code: 'computer_control_required', assistance_kind: 'captcha',
   } });
@@ -513,11 +513,12 @@ it('folds saved screenshot work and retains image retry and manual disclosure ac
   f.loadComputerFrame.mockRejectedValueOnce(new Error('Missing saved image'));
   const row = () => f.surface.querySelector<HTMLElement>('[data-flower-activity-item-id="observed"]')!;
   await waitFor(() => Boolean(f.surface.querySelector('.flower-turn-summary-button')));
-  expect(row().querySelector('[data-flower-disclosure-trigger]')?.getAttribute('aria-expanded')).toBe('true');
   expect(f.surface.querySelector('.flower-turn-summary-button')?.getAttribute('aria-expanded')).toBe('false');
-  expect(row().closest('[inert]')).not.toBeNull();
+  expect(row()).toBeNull();
+  expect(f.loadComputerFrame).not.toHaveBeenCalled();
   f.surface.querySelector<HTMLButtonElement>('.flower-turn-summary-button')!.click();
   await waitFor(() => Boolean(row().querySelector('.chat-media-retry')));
+  expect(row().querySelector('[data-flower-disclosure-trigger]')?.getAttribute('aria-expanded')).toBe('true');
   expect(row().textContent).toContain('Screenshot could not be loaded');
   expect(row().textContent).not.toContain('View last screenshot');
   const first = f.loadComputerFrame.mock.calls[0][0];

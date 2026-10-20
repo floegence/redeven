@@ -1,288 +1,65 @@
 ---
 type: UI Contract
-title: Flower live current state
-description: One workspace stream, typed current views, and bounded browser caches.
+title: Flower incremental live state
+description: One workspace stream, actor-native updates, and one indexed ThreadCache.
 tags: [ui, flower, live, threads]
-timestamp: 2026-10-11T00:00:00Z
-quality_exception: Cross-domain Flower live-state contract spanning transport, cache ownership, current-view publication, lifecycle identity, routing, and reconnect recovery.
+timestamp: 2026-10-20T00:00:00Z
 ---
 # Summary
 
-Flower uses one workspace SSE for every thread. The stream carries a baseline of summaries, summary replacements, active-thread current views, open SubAgent current views, and viewer read state. Selecting a thread changes only `ThreadCache.selectedId`; it never reconnects transport or cancels background execution. A selected summary that advances beyond cached detail requests that exact revision through one per-thread coordinator without cursor replay or polling.
-
-Env App retains one `EnvAIPage` and one `FlowerSurface` after access becomes
-available. Activity companion, Activity full page, and the selected Workbench
-Flower widget provide placement hosts for that same DOM tree. Moving between
-hosts does not create another adapter, thread cache, list request, or workspace
-stream.
+Floret owns runtime state, canonical history, item identity and view versions. Redeven authorizes and projects public data; one workspace stream delivers it to ThreadCache. Ordinary text growth carries only the changed item and its UTF-8 append offset. It must not copy, scan, redact, encode or rebuild the complete history. Missing authority or a broken sequence invalidates observation and refreshes summaries plus the required current view through the existing connection owner. Execution and user drafts survive that recovery.
 
 # Contract
 
-`ThreadCache` owns selected ID, summary map, and at most 12 typed detail views. The selected detail is protected from eviction. User selection determines access priority; background currents and adjunct updates never promote an entry, and never-visited details are evicted first. Summary updates are stripped of messages and interaction detail and can never overwrite a cached view. HTTP detail, state-bearing action responses, and `LiveCurrent` all use one receiver. Floret's monotonic `view_version` orders runtime content; Redeven's activity revision orders update and read metadata; Redeven's monotonic `settings_revision` orders product settings. The receiver merges those authorities independently. Canonical title text, status, and generation have one owner in the summary record; cached details store no title and compose it from that record when read. An unchanged runtime view cannot discard newer product metadata or titles. Reconnect retains accepted content, including a valid empty conversation; only missing detail shows the initial loading state.
+## Publication and public data
 
-Canonical per-turn outcomes, timing and explicit final boundaries also belong exclusively to accepted detail. Summary updates strip `turns`; reconnect does not change outcomes or interface disclosure choices. The presentation boundary is [Flower terminal turn process disclosure](flower-turn-process-disclosure.md).
+Redeven requires the released optional Floret `ThreadUpdateSource` contract at startup. It does not add required methods to `ThreadService` or fall back to complete-view subscription. Actor-native notifications carry exact thread/turn/run identity, `base_version`, `view_version`, lightweight runtime facts, and explicit item/component changes. Omitted components are unchanged; explicit nulls or empty collections clear their component. Item add, replacement, removal and ordering are explicit. Append offsets count UTF-8 bytes, not JavaScript string units.
 
-The [Flower read-state contract](flower-read-state.md) owns private confirmation, rendered-content evidence, the shared unread projection and silent background recovery. These metadata never qualify stale detail as current content.
+Floret owns the existing 50 ms ordinary-growth cadence and merges changes before copying payloads. First output and semantic boundaries flush pending growth immediately. Its legacy View and Subscribe APIs adapt the same state/version/publication kernel; complete defensive snapshots are materialized only for explicit reads or actual legacy subscribers. Redeven has no full-view classifier, JSON fingerprint, historical diff or second publication cadence.
 
-Stop is a command acknowledgement. Request feedback bridges acknowledgement to
-its live observation; the current view's canonical `Cancellation` plus active state
-keeps “Stopping...” visible after acknowledgement, navigation, and reload.
-Confirmed cancellation shows a neutral “Stopped” notice, retains output and
-changes, and permits continuation through a new message. An unconfirmed effect
-with explicit user Stop provenance shows a specific result warning without
-replay controls; older failures retain their recorded classification. Both
-offer Inspect and continue through one visible normal Send message using the
-latest canonical state, storage generation and existing outbox. Drafts remain
-untouched. Root and child views expose resend or removal after transport errors;
-navigation and Stop retain their owners. Returned uncertainty instead ends the
-tool card with Result unconfirmed and continues without a turn error banner. Stop
-failure produces an actionable localized notification and leaves Stop retryable.
-Thread navigation, draft editing, and attachments remain available throughout.
-Queued input follows Floret admission and never starts automatically after Stop.
+One Service pump consumes native updates. Account watches, workload leases and Computer cleanup consume lightweight authoritative facts even with no viewer. Immutable thread-to-endpoint/parent routing is cached without lifecycle or transcript state. With no authorized endpoint observer, presentation projection and encoding are skipped. Root updates retain their ThreadID; child updates are nested under their authorized parent and never create root summaries. Child lifecycle boundaries refresh the existing parent-scoped inventory.
 
-Queued messages expose **Send now** through the adapter's `sendQueuedTurnNow`
-capability. It calls the existing `send-now` command to safely stop the current
-reply and admit the selected queued input; running, approval and answer waits
-permit this action. Ordinary Send continues to queue. Read-only access, pending
-Stop and another send on the same thread disable the action; adapters without
-the capability hide it. One temporary per-thread request freezes the adapter,
-ThreadID, queue ID and connection epoch. Its selected row shows stable loading
-feedback while queue deletion and reordering are disabled. Draft editing and
-thread navigation remain available. Only canonical current removes a consumed
-queue item. A failed or unknown response refreshes the original thread without
-changing selection; any still-queued item may retry with the same queue identity.
-The UI never resubmits its content or chains separate Stop and Send commands.
+The public DTO projector is shared by snapshots, native changes, history and command handoffs. It strips private resource authority, file-reference body text, sensitive tool arguments, secret answers and internal failure payloads. Dynamic Activity fields retain their existing renderer-specific limits and nested-field policy. Public attachment URLs remain scoped to canonical thread/turn or queue membership; their download endpoint remains the authority. Only changed data passes this boundary during ordinary streaming. Viewer read state and private Computer frames retain separate user/observer scopes. See [the adapter boundary](../ai/floret-redeven-adapter-and-projection.md).
 
-An accepted send receipt proves admission through the exact request and Thread identities; it does not order runtime content. The receipt binds the outbox entry to the canonical ThreadID, settles the submitted draft, and transfers the still-current New Chat selection. A valid current view independently confirms and removes that entry when it contains the same canonical request key, even when its runtime detail is unchanged or older than the cached view. A missing receipt identity, conflicting identity, malformed success body, timeout, or disconnect is an unknown admission result: Flower preserves the original outbox request and never reports a definitive send failure. A valid receipt without a usable current view triggers canonical detail loading. A later navigation invalidates only the selection transfer, not admission or cache convergence. Only accepted runtime content may move the transcript, clear runtime errors, or update status presentation.
+## Wire v2 and bounded delivery
 
-A pending typed input interaction is valid only when `questions` is a non-empty
-array and every question has its required identity, prompt, and kind. Null,
-missing, empty, or incomplete questions reject the Current View with one Flower
-contract error before it enters `ThreadCache`. Existing detail remains visible,
-and one persistent error with Retry stays directly above the Composer until a
-valid converged Current View is accepted. While that error exists, ordinary
-Send, Enter submission, and `/compact` are blocked; draft editing, Stop, Retry,
-and thread navigation remain available. No retry clears the error early or
-creates polling, reconnection, cache, or lifecycle state.
+Flower schema v2 has one decoder and one update pipeline. Small envelopes are direct JSON, without Base64 or a second JSON envelope. Larger envelopes retain bounded fragments: envelope identity, zero-based fragment index/count, total bytes and Base64 payload. Fragments contain at most 32 KiB of raw bytes and frames at most 64 KiB. A logical envelope is bounded to 32 MiB. Pending frames retain the 1 MiB budget, live FIFO the 16-envelope budget, and all retained envelopes the 32 MiB global budget. Shared public batches are encoded once and reused across authorized observers; each observer owns only its cursor and private metadata.
 
-`LiveTransport` owns the single connection and a process-local `connectionEpoch`. The epoch only invalidates callbacks from the prior connection; it is not stored in `ThreadCache` and never orders detail content. Normal network failures reconnect quietly with bounded backoff; authorization failure is terminal and visible. There is no browser event log, cursor, generation graph, replay endpoint, retention-gap reducer, polling loop, or per-selection SSE.
+The `ready` envelope carries the complete paginated summary baseline, followed by viewer read metadata; that initialization prefix precedes concurrent live FIFO delivery. Subscription is established before authoritative snapshots are read. Invalid or non-advancing catalog pagination fails initialization. Snapshot versions and earlier updates are discarded; every later update must match the accepted base version. No observer can block provider work. Overflow closes the affected observation instead of dropping a semantic boundary. Started envelopes are immutable; the browser validates all fragments and complete UTF-8/JSON before applying the envelope.
 
-Redeven owns one visual publication boundary for Floret current views. The first
-non-empty live thinking view publishes immediately. Later text-only growth keeps
-only the highest `view_version` and publishes at most once every 50 ms, giving
-the browser a stable paint opportunity without rebuilding text deltas. Item,
-tool, interaction, activity, failure, and terminal transitions bypass that
-cadence and publish immediately. The final current is always a complete Floret
-view; Flower never accumulates reasoning text or restores the retired block
-delta protocol.
+Missing baseline, a version gap, queue overflow or damaged fragments uses `FlowerLiveSyncError`: invalidate the connection, keep displayed content, refresh workspace summaries and the selected/open-child current view. There is no cursor replay, polling, invented event or second resynchronization machine. Service subscription failure fences connected observers, then rebinds the one native subscription and reconciles missed cleanup from authoritative summaries before admitting new observers. Browser reconnection cannot leave a permanently dead Service pump.
 
-Floret v7.25.2 publishes the exact TurnID and RunID on every ordered current
-item and interaction, including historical rows after restart. It also retains
-the exact active RunID and one process-local `RunProgress` phase. Flower rejects
-an incomplete or conflicting identity before detail enters `ThreadCache`; it
-never assigns an empty identity or substitutes the latest run. Flower renders
-the active phase in one fixed lane above the composer, or at the bottom of the
-reply window when Tessiven places the composer separately. It never inserts a
-transient timeline row or duplicates progress in both placements. One RunID keeps the same
-indicator, Flower, and dots DOM nodes while phase text changes, so CSS animation
-time remains continuous. Active tool titles and progress text opt into the
-shared glyph-only flow described by the [surface contract](surface-material.md);
-status changes do not add a row background or remount the label.
-Only a different thread or exact RunID remounts the
-indicator. Waiting for interaction and terminal views clear it. Messages and
-Activity still provide transcript and collapsed-summary content, but never
-decide the lifecycle phase. Redeven has no model-I/O stream, message-content
-phase inference, TurnID-as-RunID fallback, polling, or second progress state.
+`LiveTransport` alone owns network retries and callback epochs. Network failures use bounded backoff. Authorization, lock, capacity, wire-version and contract failures remain visible with explicit Resync/recovery; they do not reconnect forever. A connection epoch fences callbacks only and never orders canonical content. Unknown command results retain their original request keys; a disconnect never repeats an effect automatically.
 
-Before canonical admission, the same lane shows delivery feedback directly from
-the selected composer's unresolved transport outbox entry. This uses the exact
-product request identity and the localized sending label, never an invented RunID
-or model phase. Canonical progress takes priority after admission. Outbox
-confirmation, rejection or terminal restoration clears delivery feedback through
-the existing owner; switching canvas scopes never retargets a pending send or
-blocks editing another canvas. Reduced motion keeps the label visible without
-animation.
+## ThreadCache and independent authorities
 
-Floret v7.25.2 publishes an approval interaction and its cleared active progress
-in one transition. Active summaries without an unresolved interaction retain
-`run_progress`, so the live summary mapper never observes an invalid state while
-an approval is being installed.
+ThreadCache owns selection, summaries and at most 12 indexed detail records. Selection protects the current entry; background traffic never promotes cache priority. Unvisited threads retain summaries only. Navigation changes selection without reconnecting the workspace stream. Env App placements retain one Surface, adapter, cache and stream across Activity/Workbench hosts.
 
-Resolving Ask User starts a new Floret Run inside the same Turn. The runtime
-first publishes the resolved interaction, then the new RunID in `preparing`,
-followed by `waiting_response`, `streaming`, and `finalizing`. Reasoning and
-assistant items grow under that exact RunID before terminal settlement. The
-workspace stream forwards those authoritative views directly; Flower does not
-poll, synthesize progress, split a terminal response into fake deltas, or keep
-the prior Run's attempt identity.
+A detail snapshot initializes one indexed record. Native batches validate then atomically commit changed items and components through that record. Ordinary appends retain cache/view/list identity and notify only affected fields. The transcript and turn grouping change only when their structural inputs change. There is no raw-current history replica or browser lifecycle projection. Complete materialization is reserved for explicit reads, copy/export or validation boundaries.
 
-Canonical Thread ownership is immutable product routing metadata. The runtime
-view pump resolves `thread_id -> (endpoint_id, parent_thread_id?)` once and
-reuses that binding instead of querying SQLite for every provider token. Root
-current views feed the thread cache. Each child current is sent through its
-parent stream as `thread.batch.subagent_current`; it never becomes a root
-summary. Child lifecycle boundaries separately refresh the parent-scoped full
-SubAgent inventory. The binding contains no lifecycle, message, permission,
-model, or settings state and is removed with the Thread or Service.
+Runtime `view_version`, product `settings_revision`, activity/read watermarks and title generation remain independent authorities. Summary updates never author cached messages, turns or interactions. Same-version context supplements and explicit clears retain their existing acceptance rules; omitted context stays unchanged. A late HTTP response cannot roll runtime content back or erase newer title/settings/read metadata. Reconnect fences old runtime versions without clearing accepted content or drafts.
 
-The server never silently drops an authoritative frame. An initial baseline
-paginates the complete workspace summary inventory and includes current views
-for active and waiting threads, even when the inventory exceeds one catalog
-page or the ordinary live-frame count. A missing, repeated, or non-advancing
-page cursor fails the subscription before `ready`.
-The byte-budgeted baseline stays a prefix ahead of one bounded live FIFO, both
-during initialization and while sending. Only the live FIFO counts toward its
-16-envelope limit; a large unfinished baseline cannot consume that allowance.
+A cold or invalidated detail read buffers a bounded set of native updates. Snapshot admission discards earlier versions and applies continuous successors atomically. Only explicit user retry revisits a failed detail revision. Navigation generations fence late responses without changing admission or outbox settlement. The [selection contract](flower-thread-selection.md) owns the interaction.
 
-Every final sanitized public envelope uses the same transport-fragment shape:
-`envelope_id`, zero-based `fragment_index`, `fragment_count`, `total_bytes`, and
-`data_base64`. Raw fragments contain at most 32 KiB; encoded SSE data frames
-contain at most 64 KiB. A small envelope is one fragment. The logical envelope
-limit is 32 MiB, separate from the 1 MiB pending-frame budget and the existing
-queue-count limit. Initialization, queued and actively transmitted envelope
-bytes remain subject to the 32 MiB global retained-byte limit. The server
-produces only the next requested fragment; it never enqueues all fragments.
-Only unsent root or child currents with cumulative live assistant/thinking text
-or replaceable progress-number growth may coalesce. Within an existing provider
-attempt, advancing `last_progress_at` values do not create ordering barriers;
-timestamp presence, request identity, start and first-output boundaries still do.
-The complete transmitted snapshot retains the latest progress timestamp. The
-actual ThreadID and parent route must match. A newer current removes its older
-unsent predecessor across independent other-thread
-currents, then appends at the FIFO tail. Same-thread semantic changes and
-auxiliary envelopes are barriers. Encoding freezes the eligible text and a
-fingerprint of every other public field once, outside subscriber fanout. The
-comparison reuses that exact already-sanitized envelope: historical items stay
-opaque JSON, and only eligible live text, progress, preview counts, version, and
-sample time are normalized. It never runs a second historical activity redaction
-pass. Unknown public fields remain part of the fingerprint, and the complete
-transmitted snapshot is unchanged. Queue operations never decode full snapshots.
-Started envelopes are immutable. Tool,
-interaction, identity, lifecycle and terminal changes preserve order; slow
-observers cannot block Flower execution.
+## Commands and interaction
 
-One connection assembles one envelope at a time and validates identity, order,
-counts, Base64, byte bounds, complete UTF-8 and JSON before the existing mapper,
-frame queue and `ThreadCache` receive it. A snapshot replaces current only after
-complete assembly; no partial history becomes visible. Disconnect discards
-unfinished assembly while retaining the last displayed view. Queue or global
-budget closure reconnects through the existing baseline. Corrupt fragments,
-encoding failures and envelopes beyond 32 MiB produce a terminal
-`flower_live_sync_error`, preserving visible content and stopping automatic
-reconnect. Encoding failure never fabricates `ready`.
+Canonical cancellation plus active state owns Stopping feedback. Stop acknowledgement is not a terminal outcome; it never clears drafts or disables navigation. Unknown Stop results remain actionable through the existing read/retry owner. Send admission uses exact request and thread identities; only a canonical receipt or matching accepted input settles the transport outbox. Conflicting or malformed acknowledgements retain the original request for safe recovery.
 
-Runtime compatibility epoch 51 requires this fragment contract for Desktop;
-there is no older wire decoder. Full current history remains complete and
-replaceable, including root and SubAgent views. Fragmentation fixes frame-size
-limits without reducing full-snapshot bandwidth or adding sparse history merge,
-cursor replay, acknowledgements or a second lifecycle.
-
-The baseline list is built from one Floret root-inventory `List` projection.
-Redeven does not call `View` for each row; timeline, attachment, context, and
-SubAgent detail load only for the selected thread. Until the first list request
-succeeds, the rail shows a loading skeleton. The empty-conversation copy is
-valid only after an authoritative empty list response. A reconnecting `ready`
-baseline replaces the root summary set and removes stale non-root cache entries.
-
-`thread.batch.subagents` is a strict full replacement for one cached parent
-inventory; an empty array clears it. The patch never creates a summary, changes
-the selected thread, navigates to a child, or clears an open child detail.
-`thread.batch.subagent_current` is independent: the envelope identifies the
-parent, the nested view identifies the child, and only the exact active pair may
-accept it. The top-right panel and Activity rows read the canonical inventory,
-and both open the existing floating SubAgent detail window.
-
-The open child detail is one stable browser selection containing parent and
-child identity, summary snapshot, request generation, loading state, and the
-highest accepted current. HTTP and SSE share its monotonic `view_version`
-receiver. A reconnecting `ready` starts one deduplicated HTTP refresh for that
-open child; ordinary time passage starts none. Membership refresh, late HTTP,
-and unrelated parent or child frames cannot close or replace it. There is no
-child detail pagination, polling, tail timer, request lock, sync message, pulse,
-or bottom status lane.
-
-Canonical terminal updates and reconnect baselines converge without pointer or focus events, including background running, waiting_user, waiting_approval and completed summaries. One detail request runs per thread and selection cycle; concurrent updates retain only the greatest revision for at most one follow-up. Cache hits render without revalidation unless a newer summary exists. Failed revisions need explicit retry in the same cycle: no cache shows Retry, while valid cached detail stays usable. There is no retry delay, exhausted state, foreground reload, initial-request map or content-completeness guess.
-
-Context pressure and whole-thread usage remain separate projections. The context circle uses the latest request pressure, while its tooltip displays the canonical cumulative cache-hit rate supplied live and in detail snapshots by Floret v7.25.2. A committed provider-usage frame replaces the confirmed totals; a projected-request frame without totals preserves them through the single merge helper. The client never sums stream samples, and missing totals or a zero input denominator is displayed as unavailable.
-
-Summary revision and runtime state only trigger detail loading. Product settings revisions and message content shape do not. Summary never creates, merges, or replaces timeline messages. While a terminal summary is ahead of active detail, Flower hides stale thinking and shows that the latest reply is syncing. Stop remains available while summary, detail, or an active-turn admission failure proves that a turn may still be active; an in-flight Stop request changes that control to its localized pending state without creating another lifecycle fact.
-
-Runtime failures are classified once at the Redeven projection boundary before
-summary, detail, and typed current responses reach Flower. Published Floret
-v7.25.2 supplies the canonical terminal `Failure.Code`; Redeven maps that code
-once for summary, detail, and live current, then removes the upstream failure
-payload before serializing Flower data. Known provider, gateway, control,
-canonical-authority, and unknown-effect failures use stable codes and localized
-presentation; raw engine wording stays in internal diagnostics. Explicit provider
-error messages cross the bounded [provider diagnostic boundary](../ai/chatgpt-local-authentication.md)
-and appear as literal text. A failed reply uses one quiet inline explanation with
-small text actions and collapsed, copyable technical details. It has no repeated
-visible generic heading, filled warning panel or duplicate turn-ended label. There is no
-error-text fallback. Classification never changes canonical messages, replays
-an Effect, or creates a client recovery lifecycle.
-
-Every product settings mutation advances `settings_revision` with `max(now,
-previous+1)`. A settings PATCH returns the complete thread and current view in
-one response. Flower shows the requested permission while that request is in
-flight, then accepts or rolls back to the server-confirmed value. A mid-run
-permission change applies only to later tool operations; running tools and
-already-created approvals are not reconsidered.
-
-The approval footer retains the same permission selector as the chat composer,
-including in the companion. Users can change permission while an approval is
-pending without stopping the task. Saving disables only the selector; Stop and
-approval decisions remain available. Existing approvals still require an explicit
-decision. Approval rows show supporting context directly, without a details
-disclosure, while long commands retain their expand and copy controls.
-At composer widths up to 419px, the approval permission selector is a square
-icon-only control with mode tooltip, accessible name, keyboard interaction and
-saving indicator. Coarse pointers retain a 44px minimum target; wider containers
-show the mode label.
-
-Floret installs a canonical fallback title with the first accepted user message.
-Automatic-title pending and failure summaries retain it. Flower consumes title,
-status, and `title_generation` as one canonical snapshot from the published
-Floret API. A higher generation wins; within one generation pending may settle
-to ready or failed. Late pending snapshots cannot replace a terminal title, and
-conflicting terminal snapshots fail explicitly without replacing accepted data.
-
-ThreadCache summaries are the only browser title owner. List, detail, creation,
-fork, rename, and live-summary responses use one title merge. Runtime current
-views and adjunct updates cannot author titles. Detail reads compose the title
-from the summary without persisting another copy, so title-only events update
-headers and lists without fetching history or changing selection, unread state,
-or list order. Untitled persisted threads remain visible with a localized label
-and short ThreadID. Display labels never become canonical titles.
+Queued Send now uses the canonical queue ID and one Floret command, never a host Stop/Send chain. Canonical updates alone remove consumed input. Pending approvals and input requests retain exact identities and validated questions; malformed detail leaves the last view visible with Retry while draft editing, Stop and navigation remain available. See [approval/input contracts](flower-approval-context.md), [read state](flower-read-state.md) and [terminal disclosure](flower-turn-process-disclosure.md).
 
 # Boundaries
 
-`LiveTransport` and `ThreadCache` are bounded observation state, not a durable event log or lifecycle mirror. A disconnect, byte-budget closure, or stale version discards local authority and triggers baseline refresh; the browser cannot replay, settle, reorder, or synthesize canonical thread state.
+The stream, frame queue and indexed cache are bounded observation mechanisms. They cannot decide execution outcomes, rewrite history, settle effects, persist another transcript or infer lifecycle from message content. Wire v1 is upgrade-only, not a parallel runtime implementation. Database kinds and all released migration edges remain unchanged.
 
 # Evidence
 
-- `internal/ai/flower_live_encoding_test.go`: allocation ceiling, complete public projection equivalence, root/child context and unknown-field barriers.
-- `internal/ai/flower_live_encoding_benchmark_test.go`: valid terminal-payload workloads with 20 and 200 completed activities.
-
-
-- `redeven:internal/ai/flower_live_stream.go` - Workspace baseline and current-state stream.
-- `redeven:internal/ai/flower_runtime_current_publisher.go` - Single current-view cadence and structural-boundary publisher.
-- `redeven:internal/ai/flower_runtime_current_publisher_test.go` - Deterministic progressive thinking, terminal flush, stale-version, and immutable-routing coverage.
-- `redeven:internal/flower_ui/src/flowerLiveWire.ts` - Strict connection-local atomic envelope assembly.
-- `redeven:internal/flower_ui/src/liveTransport.ts` - Single connection and epoch fencing.
-- `redeven:internal/flower_ui/src/threadCache.ts` - Summary/detail separation, independent monotonic read watermarks and bounded view cache.
-- `redeven:internal/flower_ui/src/threadReadSync.test.ts` - Deterministic background retry, timeout, access recovery, coalescing and late-callback regressions.
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Selection, current-view application, and quiet reconnect integration.
-- `redeven:internal/flower_ui/src/runtimeCurrentView.ts` - Exact item and interaction identity validation with no current-run fallback.
-- `redeven:internal/flower_ui/src/runtimeCurrentView.test.ts` - Rejects null, missing, empty, and incomplete pending-input question contracts.
-- `redeven:internal/flower_ui/src/flowerLiveProgress.ts` - Single truthful current-turn progress projection for expanded and companion presentation.
-- `redeven:internal/flower_ui/src/flowerLiveProgress.test.ts` - Waiting, thinking, tool, output, terminal, and stopped-turn isolation coverage.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.sendFeedback.browser.test.tsx` - Delayed admission, truthful request-to-run feedback, reply-window placement, phase continuity, terminal clearing, scope isolation and reduced motion.
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Retained Flower product placement across Activity and Workbench hosts.
-- `redeven:internal/envapp/ui_src/src/ui/workbench/redevenWorkbenchWidgets.tsx` - Workbench host registration without a second Flower instance.
-- `redeven:internal/flower_ui/src/FlowerSurface.terminalConvergence.test.ts` - Single receiver and obsolete-path removal checks.
-- `redeven:internal/flower_ui/src/flowerLiveMapper.ts` - One context adjunct merge rule retains canonical whole-thread usage across partial live frames.
-- `redeven:internal/flower_ui/src/chat/flowerContextPresentation.test.ts` - Covers cache-hit formula, unavailable data, exact 100 percent, and near-perfect rounding.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.test.tsx` - Cold-load deduplication, latest-revision coalescing, explicit failure, retry, and stale-selection coverage.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.finalArchitecture.browser.test.tsx` - Covers persistent bottom-dock sync errors, blocked submission, retained draft and Stop, successful Retry, and control-failure recovery.
-- `redeven:internal/flower_ui/src/flowerThreadTitle.ts` - Canonical title display without history-derived substitutes.
-- `redeven:internal/ai/flower_live_stream_test.go` - Complete baseline, byte-budget, oversized-frame, terminal-state, and reconnect coverage.
+- [Native pump and recovery](../../internal/ai/flower_runtime_update.go)
+- [Projection and recovery tests](../../internal/ai/flower_runtime_update_test.go)
+- [Field-level public DTOs](../../internal/ai/flower_public_dto.go)
+- [Workspace baseline and bounded distribution](../../internal/ai/flower_live_stream.go)
+- [Small JSON and fragmented wire tests](../../internal/ai/flower_live_fragment_test.go)
+- [Strict browser decoder](../../internal/flower_ui/src/flowerLiveWire.ts)
+- [Single connection owner](../../internal/flower_ui/src/liveTransport.ts)
+- [Indexed detail record](../../internal/flower_ui/src/runtimeThreadRecord.ts)
+- [Cache identity and acceptance regressions](../../internal/flower_ui/src/threadCache.test.ts)
+- [Production CPU qualifier](../../scripts/qualify_flower_cpu.mjs)

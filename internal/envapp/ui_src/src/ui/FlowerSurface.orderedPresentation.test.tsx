@@ -74,15 +74,15 @@ describe('Flower ordered presentation DOM identity', () => {
     const publishRunning = deferred<void>();
     const publishCompleted = deferred<void>();
     const connectLiveStream = vi.fn(async function* (input: FlowerLiveStreamConnectInput) {
-      yield { schema_version: 1 as const, kind: 'ready' as const, summaries: [summary] };
+      yield { schema_version: 2 as const, kind: 'ready' as const, summaries: [summary] };
       await publishRunning.promise;
       yield {
-        schema_version: 1 as const, kind: 'thread.batch' as const, thread_id: summary.thread_id,
+        schema_version: 2 as const, kind: 'thread.batch' as const, thread_id: summary.thread_id,
         current: orderedCurrent('running'),
       };
       await publishCompleted.promise;
       yield {
-        schema_version: 1 as const, kind: 'thread.batch' as const, thread_id: summary.thread_id,
+        schema_version: 2 as const, kind: 'thread.batch' as const, thread_id: summary.thread_id,
         current: orderedCurrent('completed'),
       };
       await new Promise<void>((resolve) => input.signal.addEventListener('abort', () => resolve(), { once: true }));

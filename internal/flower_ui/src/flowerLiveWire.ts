@@ -53,6 +53,14 @@ export async function* assembleFlowerLiveEnvelopes(frames: AsyncIterable<FlowerL
   let assembly: Assembly | undefined;
   for await (const frame of frames) {
     const value = decodeFrame(frame);
+    if (Object.hasOwn(value, 'schema_version')) {
+      if (assembly) throw new FlowerLiveSyncError('Flower live stream interrupted an envelope.');
+      if (new TextEncoder().encode(frame.data).length > FLOWER_LIVE_FRAGMENT_BYTES) {
+        throw new FlowerLiveSyncError('Flower live stream returned an oversized direct envelope.');
+      }
+      yield value;
+      continue;
+    }
     const { envelope_id: envelopeID, fragment_index: index, fragment_count: count, total_bytes: total, data_base64: data } = value;
     if (Object.keys(value).length !== FRAGMENT_FIELDS.size || Object.keys(value).some((key) => !FRAGMENT_FIELDS.has(key))
       || typeof envelopeID !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/u.test(envelopeID)
@@ -94,4 +102,5 @@ export async function* assembleFlowerLiveEnvelopes(frames: AsyncIterable<FlowerL
       yield envelope;
     }
   }
+  if (assembly) throw new FlowerLiveSyncError('Flower live stream ended with an incomplete envelope.');
 }

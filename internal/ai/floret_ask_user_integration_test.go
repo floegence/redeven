@@ -476,15 +476,14 @@ func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderC
 	defer live.Close()
 	_ = nextFlowerLiveStreamFrame(t, live)
 	assertFlowerViewerReadBaseline(t, live, thread.ThreadID)
-	baseline := nextFlowerLiveStreamFrame(t, live)
-	var baselineEnvelope FlowerLiveStreamEnvelope
-	if err := json.Unmarshal(baseline.Data, &baselineEnvelope); err != nil {
-		t.Fatalf("decode waiting baseline: %v", err)
+	baseline, err := svc.GetFlowerThreadDetail(t.Context(), meta, thread.ThreadID)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if baselineEnvelope.Current == nil || baselineEnvelope.Current.RunID == "" {
-		t.Fatalf("waiting baseline=%s, want active run identity", baseline.Data)
+	if baseline.Current.RunID == "" {
+		t.Fatal("waiting detail requires active run identity")
 	}
-	waitingRunID := baselineEnvelope.Current.RunID
+	waitingRunID := baseline.Current.RunID
 
 	router := sessionrpc.NewRouter()
 	rpcClient := newTestRPCPeer(router)
@@ -605,6 +604,7 @@ func assertAskUserContinuationLiveThinking(t *testing.T, live *FlowerLiveStreamS
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	sawPreparing := false
+	thinking := map[string]string{}
 	for time.Now().Before(deadline) {
 		ctx, cancel := context.WithDeadline(context.Background(), deadline)
 		frame, err := readFlowerLiveStreamEnvelope(ctx, live)
@@ -619,15 +619,24 @@ func assertAskUserContinuationLiveThinking(t *testing.T, live *FlowerLiveStreamS
 		if err := json.Unmarshal(frame.Data, &envelope); err != nil {
 			t.Fatalf("decode continuation live frame: %v", err)
 		}
-		current := envelope.Current
-		if envelope.ThreadID != threadID || current == nil || current.RunID == "" || current.RunID == waitingRunID {
+		update := envelope.Update
+		if envelope.ThreadID != threadID || update == nil || update.RunID == "" || update.RunID == waitingRunID {
 			continue
 		}
-		if current.RunProgress != nil && current.RunProgress.Phase == flruntime.ThreadRunPhasePreparing {
+		if update.Facts.RunProgress != nil && update.Facts.RunProgress.Phase == flruntime.ThreadRunPhasePreparing {
 			sawPreparing = true
 		}
-		for _, item := range current.Items {
-			if item.Kind == flruntime.ThreadItemThinking && item.RunID == current.RunID && item.Live && item.Text == wantThinking {
+		for _, change := range update.Items {
+			item := change.Item
+			if item != nil && item.Kind == flruntime.ThreadItemThinking && item.RunID == update.RunID && item.Live {
+				thinking[change.ItemID] = item.Text
+			}
+			if change.Append != nil {
+				if prior, ok := thinking[change.ItemID]; ok {
+					thinking[change.ItemID] = prior + change.Append.Text
+				}
+			}
+			if thinking[change.ItemID] == wantThinking {
 				if !sawPreparing {
 					t.Fatal("live thinking arrived before the new Run published preparing")
 				}

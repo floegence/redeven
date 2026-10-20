@@ -81,6 +81,7 @@ func TestFlowerHiEmptyParentEventsThroughLiveAndDetail(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertFlowerEmptyParentEvents(t, SendUserTurnResponse{Kind: "start", Current: admitted})
+	current := admitted
 	for {
 		frame, err := readFlowerLiveStreamEnvelope(ctx, subscription)
 		if err != nil {
@@ -90,15 +91,15 @@ func TestFlowerHiEmptyParentEventsThroughLiveAndDetail(t *testing.T) {
 		if err := json.Unmarshal(frame.Data, &envelope); err != nil {
 			t.Fatal(err)
 		}
-		if envelope.Current == nil || envelope.ThreadID != thread.ThreadID {
+		if envelope.Update == nil || envelope.ThreadID != thread.ThreadID {
 			continue
 		}
-		assertFlowerEmptyParentEvents(t, envelope)
-		current := envelope.Current
+		applyFlowerTestUpdate(t, &current, *envelope.Update)
+		assertFlowerEmptyParentEvents(t, SendUserTurnResponse{Current: current})
 		if current.Activity != flruntime.ThreadActivityIdle {
 			continue
 		}
-		if current.LastOutcome == nil || *current.LastOutcome != flruntime.TurnOutcomeCompleted || !strings.Contains(string(frame.Data), "Hi! How can I help?") {
+		if current.LastOutcome == nil || *current.LastOutcome != flruntime.TurnOutcomeCompleted || !flowerTestHasText(current, "Hi! How can I help?") {
 			t.Fatalf("hi did not converge to its saved reply: %s", frame.Data)
 		}
 		break

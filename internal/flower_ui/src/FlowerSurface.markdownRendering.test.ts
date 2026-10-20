@@ -96,7 +96,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
   it('renders context usage in standard actions and compact companion More outside timeline entries', () => {
     const src = surfaceSource();
     const timelineListIndex = src.indexOf('<FlowerTurnTimeline thread={selectedThread()}');
-    const headerIndex = src.indexOf('flower-chat-header flower-chat-header');
+    const headerIndex = src.indexOf('class="flower-chat-header ');
     const headerRowIndex = src.indexOf('flower-chat-header-row');
     const dockIndex = src.indexOf('flower-chat-bottom-dock-track', src.indexOf('const composerPanel ='));
     const statusLaneIndex = src.indexOf('<Show when={!props.embeddedConversation}>{progressLane()}</Show>', dockIndex);

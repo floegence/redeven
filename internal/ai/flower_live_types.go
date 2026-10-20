@@ -11,7 +11,7 @@ import (
 	flruntime "github.com/floegence/floret/v7/runtime"
 )
 
-const FlowerLiveSchemaVersion int64 = 1
+const FlowerLiveSchemaVersion int64 = 2
 
 type FlowerThreadReadSnapshot struct {
 	ActivityRevision int64 `json:"activity_revision"`

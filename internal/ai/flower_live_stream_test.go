@@ -163,6 +163,7 @@ func TestFlowerWorkspaceStreamEncodesActivityUpdatesThroughFinalAnswer(t *testin
 		t.Fatal(err)
 	}
 	seenFirst, seenSecond, snapshots := false, false, 0
+	current := admitted
 	for {
 		frame, err := readFlowerLiveStreamEnvelope(ctx, subscription)
 		if err != nil {
@@ -172,14 +173,10 @@ func TestFlowerWorkspaceStreamEncodesActivityUpdatesThroughFinalAnswer(t *testin
 		if err := json.Unmarshal(frame.Data, &envelope); err != nil {
 			t.Fatalf("published envelope is invalid: %v", err)
 		}
-		if envelope.Current == nil || envelope.ThreadID != thread.ThreadID {
+		if envelope.Update == nil || envelope.ThreadID != thread.ThreadID {
 			continue
 		}
-		current := envelope.Current
-		// The subscription may still hold the idle baseline captured before Send.
-		if current.ViewVersion < admitted.ViewVersion {
-			continue
-		}
+		applyFlowerTestUpdate(t, &current, *envelope.Update)
 		snapshots++
 		if current.TurnID != admitted.TurnID || current.RunID != admitted.RunID {
 			t.Fatalf("current execution identity changed: current=%s/%s admitted=%s/%s", current.TurnID, current.RunID, admitted.TurnID, admitted.RunID)
@@ -200,7 +197,7 @@ func TestFlowerWorkspaceStreamEncodesActivityUpdatesThroughFinalAnswer(t *testin
 		if current.Activity != flruntime.ThreadActivityIdle {
 			continue
 		}
-		if current.LastOutcome == nil || *current.LastOutcome != flruntime.TurnOutcomeCompleted || !strings.Contains(string(frame.Data), "Final activity answer.") || !seenFirst || !seenSecond || snapshots < 3 {
+		if current.LastOutcome == nil || *current.LastOutcome != flruntime.TurnOutcomeCompleted || !flowerTestHasText(current, "Final activity answer.") || !seenFirst || !seenSecond || snapshots < 3 {
 			t.Fatalf("final current lost activity or answer: snapshots=%d activity=%t/%t frame=%s", snapshots, seenFirst, seenSecond, frame.Data)
 		}
 		break
@@ -295,9 +292,7 @@ func TestFlowerWorkspaceStreamBaselinesAndBroadcastsCanonicalComputerStatus(t *t
 		t.Fatalf("first baseline kind=%q, want ready", got)
 	}
 	assertFlowerViewerReadBaseline(t, subscription, thread.ThreadID)
-	if got := nextFlowerLiveStreamFrame(t, subscription).Kind; got != FlowerLiveStreamThreadBatch {
-		t.Fatalf("second baseline kind=%q, want thread.batch", got)
-	}
+	svc.publishFlowerComputerStatus(meta.EndpointID, FlowerComputerStatus{ThreadID: thread.ThreadID, TargetID: "browser-main"})
 	statusFrame := nextFlowerLiveStreamFrame(t, subscription)
 	if statusFrame.Kind != FlowerLiveStreamComputerStatus {
 		t.Fatalf("third baseline kind=%q, want computer.status", statusFrame.Kind)
@@ -525,7 +520,7 @@ func TestFlowerWorkspaceStreamReconnectsWithCompletePagedBaseline(t *testing.T) 
 	assertCompleteBaseline(second)
 }
 
-func TestFlowerWorkspaceStreamReceivesTypedRuntimeCurrentViewWithoutSelectingThread(t *testing.T) {
+func TestFlowerWorkspaceStreamReceivesNativeUpdateWithoutSelectingThread(t *testing.T) {
 	ctx := context.Background()
 	svc := newSendTurnTestService(t)
 	meta := &session.Meta{
@@ -562,10 +557,10 @@ func TestFlowerWorkspaceStreamReceivesTypedRuntimeCurrentViewWithoutSelectingThr
 	if err := json.Unmarshal(frame.Data, &envelope); err != nil {
 		t.Fatal(err)
 	}
-	if frame.Kind != FlowerLiveStreamThreadBatch || envelope.Current == nil {
-		t.Fatalf("workspace frame=%s, want typed current thread batch", frame.Data)
+	if frame.Kind != FlowerLiveStreamThreadBatch || envelope.Update == nil || envelope.Current != nil {
+		t.Fatalf("workspace frame=%s, want native update thread batch", frame.Data)
 	}
-	if envelope.ThreadID != thread.ThreadID || envelope.Current.ThreadID.String() != thread.ThreadID || envelope.Current.Activity != flruntime.ThreadActivityActive {
+	if envelope.ThreadID != thread.ThreadID || envelope.Update.ThreadID.String() != thread.ThreadID || envelope.Update.Facts.Activity != flruntime.ThreadActivityActive {
 		t.Fatalf("typed current envelope=%#v", envelope)
 	}
 }
@@ -591,7 +586,7 @@ func TestFlowerWorkspaceTerminalBatchAndDetailRestoreCanonicalManualCompaction(t
 		t.Fatal(err)
 	}
 
-	var terminal FlowerLiveStreamEnvelope
+	var terminal *flowerPublicContext
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		frame := nextFlowerLiveStreamFrame(t, subscription)
@@ -602,13 +597,23 @@ func TestFlowerWorkspaceTerminalBatchAndDetailRestoreCanonicalManualCompaction(t
 		if err := json.Unmarshal(frame.Data, &envelope); err != nil {
 			t.Fatal(err)
 		}
-		if envelope.ThreadID == thread.ThreadID && envelope.Current != nil &&
-			envelope.Current.Activity == flruntime.ThreadActivityIdle && len(envelope.ContextCompactions) > 0 {
-			terminal = envelope
-			break
+		if envelope.ThreadID == thread.ThreadID && envelope.Update != nil && envelope.Update.Facts.Activity == flruntime.ThreadActivityIdle {
+			var projected struct {
+				Update struct {
+					Context *flruntime.ThreadComponent[flowerPublicContext]
+				}
+			}
+			if err := json.Unmarshal(frame.Data, &projected); err != nil {
+				t.Fatal(err)
+			}
+			if projected.Update.Context != nil && len(projected.Update.Context.Value.ContextCompactions) > 0 {
+				value := projected.Update.Context.Value
+				terminal = &value
+				break
+			}
 		}
 	}
-	if terminal.Current == nil {
+	if terminal == nil {
 		t.Fatal("terminal thread.batch omitted canonical manual compaction")
 	}
 	expectedAnchor := ""
@@ -751,7 +756,7 @@ func TestFlowerLiveSummaryFailureReconnectsToCanonicalBaseline(t *testing.T) {
 	}
 }
 
-func TestFlowerWorkspaceReadyUsesTypedRuntimeViewWithoutProjectionMirror(t *testing.T) {
+func TestFlowerWorkspaceReadyKeepsDetailOnTheExplicitReadBoundary(t *testing.T) {
 	ctx := context.Background()
 	svc := newSendTurnTestService(t)
 	meta := &session.Meta{
@@ -804,17 +809,20 @@ func TestFlowerWorkspaceReadyUsesTypedRuntimeViewWithoutProjectionMirror(t *test
 		t.Fatalf("ready summary=%#v, want typed running state", got)
 	}
 	assertFlowerViewerReadBaseline(t, subscription, thread.ThreadID)
-	currentFrame := nextFlowerLiveStreamFrame(t, subscription)
-	var currentEnvelope FlowerLiveStreamEnvelope
-	if err := json.Unmarshal(currentFrame.Data, &currentEnvelope); err != nil {
+	detail, err := svc.GetFlowerThreadDetail(ctx, meta, thread.ThreadID)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if currentFrame.Kind != FlowerLiveStreamThreadBatch || currentEnvelope.Current == nil {
-		t.Fatalf("baseline current frame=%s, want typed thread.batch", currentFrame.Data)
+	if detail.Current.ThreadID.String() != thread.ThreadID || detail.Current.Activity != flruntime.ThreadActivityActive {
+		t.Fatalf("authoritative current=%#v", detail.Current)
 	}
-	if currentEnvelope.ThreadID != thread.ThreadID || currentEnvelope.Current.ThreadID.String() != thread.ThreadID || currentEnvelope.Current.Activity != flruntime.ThreadActivityActive {
-		t.Fatalf("baseline current envelope=%#v", currentEnvelope)
+	svc.mu.Lock()
+	pending := len(subscription.subscriber.initial) + len(subscription.subscriber.queue)
+	svc.mu.Unlock()
+	if pending != 0 {
+		t.Fatalf("workspace initialization materialized %d unsolicited detail batches", pending)
 	}
+
 }
 
 func TestFlowerLiveSummaryBatchDoesNotExposeViewerReadState(t *testing.T) {
@@ -1011,6 +1019,15 @@ func readFlowerLiveStreamEnvelope(ctx context.Context, subscription *FlowerLiveS
 		}
 		if len(frame.Data) > flowerLiveFrameByteLimit {
 			return nil, fmt.Errorf("wire frame exceeds byte budget: %d", len(frame.Data))
+		}
+		var direct struct {
+			SchemaVersion int64 `json:"schema_version"`
+		}
+		if err := json.Unmarshal(frame.Data, &direct); err == nil && direct.SchemaVersion == FlowerLiveSchemaVersion {
+			if index != 0 {
+				return nil, errors.New("direct envelope interrupted fragments")
+			}
+			return frame, nil
 		}
 		var fragment FlowerLiveStreamFragment
 		if err := json.Unmarshal(frame.Data, &fragment); err != nil {
@@ -1405,29 +1422,8 @@ func TestModelDirectoryNotificationContainsNoScopedMetadata(t *testing.T) {
 		if err := json.Unmarshal(batch.data, &decoded); err != nil {
 			t.Fatal(err)
 		}
-		if len(decoded) != 2 || decoded["kind"] != "model_directory.changed" || decoded["schema_version"] != float64(1) {
+		if len(decoded) != 2 || decoded["kind"] != "model_directory.changed" || decoded["schema_version"] != float64(FlowerLiveSchemaVersion) {
 			t.Fatalf("scoped metadata leaked: %+v", decoded)
 		}
-	}
-}
-
-func TestFlowerCurrentComparisonRetainsContextBoundariesAndTextCoalescing(t *testing.T) {
-	current := thinkingCurrent(1, "first", true, flruntime.ThreadActivityActive)
-	current.Context = &flruntime.ThreadContextSnapshot{}
-	frame := func(view flruntime.ThreadView) FlowerLiveStreamEnvelope {
-		return FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: view.ThreadID.String(), Current: &view}
-	}
-	first := newFlowerLiveEncodedBatch(frame(current)).current
-	current.ViewVersion = 2
-	current.Items = append([]flruntime.ThreadItem(nil), current.Items...)
-	current.Items[0].Text = "first second"
-	second := newFlowerLiveEncodedBatch(frame(current)).current
-	if !first.independent || !second.independent || first.fingerprint != second.fingerprint {
-		t.Fatal("equal full snapshots defeated coalescing")
-	}
-	current.Context = &flruntime.ThreadContextSnapshot{UsageTotals: &flruntime.ThreadTokenUsageTotals{InputTokens: 1}}
-	changed := newFlowerLiveEncodedBatch(frame(current)).current
-	if changed.fingerprint == second.fingerprint {
-		t.Fatal("context change did not create a barrier")
 	}
 }

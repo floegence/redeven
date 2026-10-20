@@ -1,3 +1,4 @@
+import { untrack } from 'solid-js';
 import { flowerToolCallPreviewIdentity } from './toolCallPreview';
 import type {
   FlowerActivityTimelineBlock,
@@ -210,20 +211,20 @@ function contentBlocksFromMessage(threadID: string, message: FlowerChatMessage):
       }];
     }
     const content = String(block.content ?? '');
-    return content.trim() ? [{ type: 'content', key: `${message.id}:block:${index}`, block_index: index, block_type: block.type, content, sources: block.sources }] : [];
+    return content.trim() || message.live ? [{ type: 'content', key: `${message.id}:block:${index}`, block_index: index, block_type: block.type, get content() { return String((message.blocks?.[index] as { content?: string })?.content ?? ''); }, get sources() { return (message.blocks?.[index] as { sources?: readonly FlowerCitationSource[] })?.sources; } }] : [];
   });
   // Attachments do not represent the independent canonical message body.
   if (projectedBlocks.some(block => block.type !== 'image' && block.type !== 'file')) return projectedBlocks;
 
   const content = String(message.content ?? '');
-  return content.trim()
+  return content.trim() || message.live
     ? [...projectedBlocks, {
       type: 'content',
       key: `${message.id}:content`,
       block_index: message.blocks?.length ?? 0,
       block_type: 'markdown',
-      content,
-      sources: message.sources,
+      get content() { return String(message.content ?? ''); },
+      get sources() { return message.sources; },
     }]
     : projectedBlocks;
 }
@@ -510,7 +511,7 @@ function coalesceGoalActivity(entries: readonly FlowerTimelineEntry[]): readonly
   return replaced.size ? entries.filter(entry => !replaced.has(entry.key)) : entries;
 }
 
-export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | undefined, parentEvents = thread?.parent_events ? thread.parent_events.events : emptyParentEvents): readonly FlowerTimelineEntry[] {
+function projectFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | undefined, parentEvents = thread?.parent_events ? thread.parent_events.events : emptyParentEvents): readonly FlowerTimelineEntry[] {
   if (!thread) return [];
   const threadRunning = thread.status === 'running';
   const activeCursorMessageID = threadRunning
@@ -615,4 +616,22 @@ export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null |
     queued: thread.queued_turns, input, error: thread.error, status: thread.status, parentEvents, entries: visibleEntries,
   });
   return visibleEntries;
+}
+
+// Content lives in indexed reactive records. Only structural inputs invalidate
+// the timeline, so text growth never re-groups all historical turns or rows.
+export function createFlowerTimelineProjection() {
+  let prior: readonly unknown[] | undefined;
+  let entries: readonly FlowerTimelineEntry[] = [];
+  return (thread: FlowerThreadSnapshot | null | undefined, parentEvents = thread?.parent_events?.events ?? emptyParentEvents) => {
+    const inputs = [thread?.thread_id, thread?.messages, thread?.status, thread?.timeline_decorations, thread?.queued_turns, thread?.input_request, thread?.error, parentEvents];
+    if (prior && inputs.every((value, index) => value === prior![index])) return entries;
+    prior = inputs;
+    entries = untrack(() => projectFlowerTimelineEntries(thread, parentEvents));
+    return entries;
+  };
+}
+
+export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | undefined, parentEvents = thread?.parent_events?.events ?? emptyParentEvents) {
+  return untrack(() => projectFlowerTimelineEntries(thread, parentEvents));
 }

@@ -558,6 +558,8 @@
       "syncFailed": "As atualizações ao vivo foram interrompidas porque os dados não puderam ser lidos ou aplicados. O estado exibido pode estar desatualizado.",
       "syncAuthorization": "As atualizações ao vivo exigem autorização. Restaure o acesso e sincronize novamente. O estado exibido pode estar desatualizado.",
       "syncLocked": "As atualizações ao vivo estão bloqueadas. Desbloqueie o acesso e sincronize novamente. O estado exibido pode estar desatualizado.",
+      "syncVersion": "As atualizações ao vivo do Flower exigem versões compatíveis do aplicativo e do ambiente de execução. Recarregue o aplicativo ou atualize ambos antes de sincronizar novamente.",
+      "syncCapacity": "O limite de conexões de atualizações ao vivo do Flower foi atingido. Feche as visualizações do Flower que não usa e sincronize novamente. Seu rascunho foi preservado.",
       "syncResync": "Sincronizar novamente",
       "stopUnconfirmed": "O estado da parada não foi confirmado. Sincronize novamente antes de tentar de novo.",
       "syncTimeout": "A sincronização excedeu o limite de 15 segundos. Tente novamente.",

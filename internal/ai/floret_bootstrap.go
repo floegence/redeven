@@ -224,6 +224,9 @@ func configureFloretRuntime(host *flruntime.Host) (*floretBootstrapResult, error
 	if err != nil {
 		return nil, err
 	}
+	if _, ok := threadRuntime.(flruntime.ThreadUpdateSource); !ok {
+		return nil, errors.New("published Floret ThreadUpdateSource contract is unavailable")
+	}
 	return &floretBootstrapResult{
 		activate:       host.Activate,
 		prepareRestore: host.PrepareRestore,

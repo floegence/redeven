@@ -514,6 +514,8 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       syncFailed: t(i18n, k('chat.syncFailed')),
       syncAuthorization: t(i18n, k('chat.syncAuthorization')),
       syncLocked: t(i18n, k('chat.syncLocked')),
+      syncVersion: t(i18n, k('chat.syncVersion')),
+      syncCapacity: t(i18n, k('chat.syncCapacity')),
       syncResync: t(i18n, k('chat.syncResync')),
       stopUnconfirmed: t(i18n, k('chat.stopUnconfirmed')),
       syncTimeout: t(i18n, k('chat.syncTimeout')),

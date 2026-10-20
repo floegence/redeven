@@ -12,6 +12,7 @@ import { adapter, deferred, flowerSurfaceNotifications, liveBootstrap, thread, r
 const focus = { request_id: 'compact-focus', thread_id: 'thread-1' };
 const accepted = (): FlowerRuntimeCurrentView => ({ thread_id: 'thread-1', view_version: 2, activity: 'active', turn_kind: 'context_compaction', turn_id: 'compact-turn', run_id: 'compact-run', items: [], run_progress: { phase: 'preparing' } });
 async function enterCommand(surface: HTMLElement, command = '/compact') {
+  await waitFor(() => surface.querySelector<HTMLElement>('.flower-thread-navigation-status')?.hidden !== false);
   const input = surface.querySelector<HTMLTextAreaElement>('textarea')!;
   input.value = command;
   input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: command }));

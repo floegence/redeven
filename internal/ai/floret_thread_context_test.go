@@ -18,7 +18,11 @@ import (
 func TestFlowerContextProjectionEncodesEmptyModelContextListsWithoutMutatingCanonical(t *testing.T) {
 	canonical := &flruntime.ThreadModelContext{EntryID: "context-entry", PathDepth: 1, TurnID: "turn-context", RunID: "run-context"}
 	current := flruntime.ThreadView{ThreadID: "thread-context", Context: &flruntime.ThreadContextSnapshot{ModelContext: canonical}}
-	data, err := marshalFlowerContextJSON(struct{}{}, current)
+	projected, err := projectFlowerContext(current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(projected)
 	if err != nil {
 		t.Fatal(err)
 	}

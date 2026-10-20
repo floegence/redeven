@@ -7,84 +7,16 @@ import (
 	"strings"
 
 	flruntime "github.com/floegence/floret/v7/runtime"
-	"github.com/floegence/redeven/internal/logsafe"
 )
 
 var errFlowerRuntimeEndpointConflict = errors.New("flower runtime endpoint routing conflict")
 
-func (s *Service) publishFlowerRuntimeCurrent(endpointID string, current flruntime.ThreadView) {
-	if s == nil {
-		return
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID := strings.TrimSpace(current.ThreadID.String())
-	if endpointID == "" || threadID == "" || current.ViewVersion == 0 {
-		return
-	}
-	if err := s.rememberFlowerRuntimeEndpoint(threadID, endpointID); err != nil {
-		if s.log != nil {
-			s.log.Error("ai: reject conflicting Flower runtime view owner", "thread_id", logsafe.Text(threadID, 256), "error", err)
-		}
-		return
-	}
-	publisher := s.ensureFlowerRuntimeCurrentPublisher()
-	publisher.Publish(endpointID, current)
-}
-
-func (s *Service) ensureFlowerRuntimeCurrentPublisher() *flowerRuntimeCurrentPublisher {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.flowerRuntimeCurrentPublisher == nil {
-		s.flowerRuntimeCurrentPublisher = newFlowerRuntimeCurrentPublisher(
-			flowerRuntimeCurrentPublishInterval,
-			systemFlowerRuntimePublishClock{},
-			s.broadcastFlowerRuntimeProjection,
-		)
-		s.flowerRuntimeCurrentPublisher.metrics = &s.flowerLiveMetrics
-	}
-	return s.flowerRuntimeCurrentPublisher
-}
-
-func (s *Service) broadcastFlowerRuntimeProjection(endpointID string, current flruntime.ThreadView) {
-	if s == nil {
-		return
-	}
-	threadID := strings.TrimSpace(current.ThreadID.String())
-	s.mu.Lock()
-	parentThreadID := strings.TrimSpace(s.flowerRuntimeParentByThread[threadID])
-	s.mu.Unlock()
-	if parentThreadID == "" {
-		s.broadcastFlowerRuntimeCurrent(endpointID, current)
-		return
-	}
-	s.broadcastFlowerSubagentRuntimeCurrent(endpointID, parentThreadID, current)
-	boundary := flowerSubagentInventoryBoundary(current)
-	s.mu.Lock()
-	if s.flowerSubagentBoundaryByThread == nil {
-		s.flowerSubagentBoundaryByThread = make(map[string]string)
-	}
-	if s.flowerSubagentBoundaryByThread[threadID] == boundary {
-		s.mu.Unlock()
-		return
-	}
-	s.flowerSubagentBoundaryByThread[threadID] = boundary
-	s.mu.Unlock()
-	s.publishFlowerSubagentsPatch(context.Background(), endpointID, parentThreadID)
-}
-
-func flowerSubagentInventoryBoundary(current flruntime.ThreadView) string {
+func flowerSubagentFactsBoundary(turnID string, facts flruntime.ThreadRuntimeFacts) string {
 	lastOutcome := ""
-	if current.LastOutcome != nil {
-		lastOutcome = string(*current.LastOutcome)
+	if facts.LastOutcome != nil {
+		lastOutcome = string(*facts.LastOutcome)
 	}
-	return strings.Join([]string{
-		strings.TrimSpace(current.TurnID.String()),
-		string(current.Activity),
-		lastOutcome,
-		fmt.Sprintf("approval:%d", current.Attention.ApprovalCount),
-		fmt.Sprintf("input:%d", current.Attention.InputCount),
-		fmt.Sprintf("queue:%d", len(current.Queue)),
-	}, "\x1f")
+	return strings.Join([]string{turnID, string(facts.Activity), lastOutcome, fmt.Sprintf("approval:%d", facts.Attention.ApprovalCount), fmt.Sprintf("input:%d", facts.Attention.InputCount), fmt.Sprintf("queue:%d", facts.QueueCount)}, "\x1f")
 }
 
 func (s *Service) rememberFlowerRuntimeParent(threadID, parentThreadID string) {
@@ -173,9 +105,5 @@ func (s *Service) forgetFlowerRuntimeThread(threadID string) {
 	delete(s.flowerRuntimeParentByThread, threadID)
 	delete(s.flowerRuntimeRouteKnown, threadID)
 	delete(s.flowerSubagentBoundaryByThread, threadID)
-	publisher := s.flowerRuntimeCurrentPublisher
 	s.mu.Unlock()
-	if publisher != nil {
-		publisher.Forget(threadID)
-	}
 }

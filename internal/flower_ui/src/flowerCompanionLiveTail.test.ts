@@ -91,6 +91,22 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
 const label = (kind: FlowerLiveProgressKind) => labels[kind];
 
 describe('projectFlowerCompanionLiveTail', () => {
+  it('preserves normalized Unicode tails without scanning long content from its beginning', () => {
+    const content = `${'x'.repeat(1 << 20)}  中文😀 \n  final \t`;
+    const fullReplace = vi.spyOn(String.prototype, 'replace');
+    try {
+      const projected = projectFlowerCompanionLiveTail(thread({ messages: [message({ live: true, content })] }), label);
+      expect(projected?.text).toBe(`${'x'.repeat(310)} 中文😀 final`);
+      expect(fullReplace.mock.calls.every((_, index) => String(fullReplace.mock.contexts[index]).length < 1024)).toBe(true);
+    } finally { fullReplace.mockRestore(); }
+  });
+  it('reads only the newest relevant record when live output is available', () => {
+    const old = new Proxy(message({ id: 'historical', turn_id: 'turn-old' }), {
+      get() { throw new Error('ordinary growth must not read historical records'); },
+    });
+    expect(projectFlowerCompanionLiveTail(thread({ messages: [old, message({ live: true, content: 'latest output' })] }), label))
+      .toMatchObject({ kind: 'output', text: 'latest output' });
+  });
   it('shows the waiting state instead of stale active-run output before a response arrives', () => {
     expect(projectFlowerCompanionLiveTail(thread({
       messages: [message({ content: 'Previous model step' })],

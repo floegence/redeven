@@ -16,7 +16,7 @@ Floret v7 `ThreadService` is the sole owner of active and canonical thread lifec
 
 Optional ThreadGoalController and WithAgentGoals provide [canonical Goals](flower-goals.md). Product handlers authorize and map; they never maintain a second Goal state or completion loop.
 
-Redeven consumes published Floret v7.72.0. Its additive
+Redeven consumes published Floret v7.73.0. Its additive
 OutputPolicy.ArchiveAboveBytes archives complete large tool text independently
 of visible truncation. Completed error results may request input while preserving
 error status. Floret owns batch settlement, waiting, Respond and restart; Redeven
@@ -61,8 +61,8 @@ Encoding failures retain the internal cause and safe identity/version diagnostic
 clients receive the existing synchronization error contract.
 
 The workspace LiveTransport alone owns connection state, retries and manual
-resynchronization. Network interruption, ordinary EOF and rate limits reconnect
-with backoff; protocol, parsing, application and authorization failures remain
+resynchronization. Network interruption and ordinary EOF reconnect
+with backoff; capacity, version, protocol, parsing, application and authorization failures remain
 visible until a manual resync. Resync cancels the previous attempt, timers and
 unapplied frames, advances the epoch and starts one connection. A valid applied
 ready refreshes summaries and the selected root and open SubAgent through their
@@ -152,7 +152,7 @@ the latest complete interaction plus protected user anchors, rather than using
 a text-only tail budget to bound image transport. Ordinary compaction policy
 and the single provider retry remain unchanged.
 
-One `ThreadRuntime` plus mutex owns each active thread. Provider and tool I/O run outside that mutex and return through a stable execution token; late results for a replaced, canceled, or terminal token are ignored. The public boundary is typed `Create`, `Fork`, `Delete`, `View`, `Send`, `Respond`, `Cancel`, `Retry`, queue mutation, and workspace `Subscribe`. There is no public generic command receipt, event replay cursor, execution handle, or projection delta.
+One `ThreadRuntime` plus mutex owns each active thread. Provider and tool I/O run outside that mutex and return through a stable execution token; late results for a replaced, canceled, or terminal token are ignored. The public boundary is typed `Create`, `Fork`, `Delete`, `View`, `Send`, `Respond`, `Cancel`, `Retry`, queue mutation, and workspace `Subscribe`. There is no public generic command receipt, event replay cursor, execution handle, or durable projection delta. The optional ThreadUpdateSource publishes native actor mutations without widening ThreadService. Snapshot and legacy Subscribe share the same state, version and publication owner. [Flower live timeline](../ui/flower-live-timeline.md) owns browser delivery, public projection and recovery; ordinary growth does not read canonical history or materialize a complete view.
 
 `Send` validates a stable `(thread_id, request_key)` and completes canonical turn acceptance before returning or publishing the user segment. Acceptance failure leaves the in-memory view unchanged; provider work starts asynchronously only after the accepted receipt. The canonical journal is the only durable lifecycle fact source. Unique request, turn, tool-call, effect-attempt, and terminal keys make repeated provider dispatch safe without duplicating the visible timeline. Irreversible effects alone require a minimal durable intent before dispatch. Returned EffectOutcomeUncertain commits a canonical tool error and continues the model without a mandatory question. Repeated invocation identity returns that result; retry retains a boundary after the latest uncertain result. Crashes, panics, failed persistence and unsettled cancellation retain terminal effect_outcome_unknown and cannot replay the effect.
 
