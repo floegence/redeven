@@ -43,8 +43,8 @@ func TestFlowerPromptMatchesSelectedToolSurface(t *testing.T) {
 					}
 					prompt := surface.SystemPrompt
 					before, ok := baseline[t.Name()[len("TestFlowerPromptMatchesSelectedToolSurface/"):]]
-					if !ok || len(prompt) > before.SystemBytes-45 {
-						t.Fatalf("policy budget: before=%d after=%d; want reduction of 45 UTF-8 bytes", before.SystemBytes, len(prompt))
+					if !ok || len(prompt) > before.SystemBytes-50 {
+						t.Fatalf("policy budget: before=%d after=%d; want reduction of 50 UTF-8 bytes", before.SystemBytes, len(prompt))
 					}
 					definitions, err := promptBoundaryToolDefinitions(surface)
 					if err != nil {
@@ -75,7 +75,7 @@ func TestFlowerPromptMatchesSelectedToolSurface(t *testing.T) {
 						assertPromptNotContains(t, prompt, "ask_user")
 						assertPromptContains(t, prompt, "Do not pretend to wait for an answer")
 					}
-					assertPromptContains(t, prompt, "Answer directly from sufficient context")
+					assertPromptContains(t, prompt, "Answer directly when context suffices")
 					assertPromptContains(t, prompt, "Never blindly repeat an uncertain operation")
 				})
 			}
@@ -121,11 +121,11 @@ func TestFlowerPromptKeepsOneOwnerForSharedPolicies(t *testing.T) {
 		"Managed context updates are runtime facts, not user requests", "after replacements and removals",
 		"fully read applicable AGENTS.md, CLAUDE.md, .develop.md and .introduce.md root-to-target",
 		"identify the target repository/worktree", "Honor Stop and cancellation",
-		"For requested verification or missing evidence",
-		"including subjective feedback and supplied text/code/rule discussion, without tools",
+		"For verification or context needed to assess the request",
+		"including subjective feedback and text discussion",
 		"workflow rules never authorize extra edits, commits, pushes or deployment",
 		"omit both for brief consultations", "exclude unrelated worktrees",
-		"Retry hints do not prove non-execution", "End that tool batch and await all rules before proposing other repository calls",
+		"Retry hints do not prove non-execution", "Discovery may accompany rule reads; await contents before inspecting code",
 		"target selection never clears it or Stop", "Preserve the requested browser/account and unsaved content",
 		"Never reuse stale refs or coordinates", "Verify GUI results through visible confirmation or changed state",
 		"install only through built-in consent", "submit browser.navigate separately",

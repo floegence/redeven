@@ -10944,22 +10944,22 @@
         "title": "Flower prompt and rule sources",
         "type": "AI Prompt Contract"
       },
-      "body_length": 10170,
+      "body_length": 8759,
       "summary": "Flower shares task, interaction and recovery policies across three profiles.\nCurrent tools supply operation semantics; admitted context carries complete facts\nand rule-source manifests, without silent clipping or a second lifecycle.\nEvidence triggers and task authorization remain explicit.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "The three profiles share task, interaction and recovery policies; profiles\nexpress persona and interaction differences. The selected `runToolSurface`,\nincluding control signals and Floret's Goal, is the only capability list. Current\nauthorization governs each call. Sufficient supplied context, subjective feedback\nand supplied-text discussion receive direct answers. Requested verification or\nmissing necessary evidence triggers focused inspection: workspace sources for\ncode/file claims, authoritative sources for external/current facts. Workflow\nrules constrain execution; they never authorize extra edits, commits, pushes or\ndeployment. Brief consultations omit plans and progress updates. User and\nrepository restrictions override generic delegation advice.\n\nRuntime manifests list rule paths, scope and readability, never contents. Registry\ndiscovery checks symlinks and distinguishes complete empty results from failed\nscans. Identify the target repository/worktree, then completely read applicable\n`AGENTS.md`, `CLAUDE.md`, `.develop.md` and `.introduce.md` from root to target\nbefore other repository operations. End the rule-reading tool batch and await\nits results before proposing other repository calls. Discovery and rule reads\ncome first; exclude\nunrelated worktrees. Supplied-text discussion does not initiate repository work.\nGit roots bound ancestor discovery; non-repositories scan their working directory.\nFailed probes reject admission. New worktrees require discovery. Specific rules\noverride ancestors; conflicts use the interaction policy. Unreadable rules block\naffected work while independent work continues.\n\nFloret validates complete context before saving authority. Overflow releases the\nsend and workload lease, allowing corrected input with the same request identity.\nEarlier context stays immutable. Skill catalogs are facts; current capabilities\nsupply activation advice.\n\nUse `ask_user` for necessary decisions and requested guided questions; ordinary\ndiscussion and optional feedback can use prose. Noninteractive runs report\nblockers and recovery conditions. Never duplicate tool approval with a question.\nResponses preserves supplied descriptions, including Floret's question contract.\n\nObserve finite commands in the same turn through their existing identity and\ncursor. Shared timeout classification preserves partial results and conservative\nadvice; neither timeouts nor retry hints prove non-execution or authorize replay.\nInspect uncertainty before a new authorized action; unsettled effects remain\nterminal. Never bypass denials. Floret bounds schema correction before dispatch\nand owns approval, cancellation, restart and [Goal reflection](flower-goals.md).\nDefault prompts contain no Todo discipline. New actions retain authorization and\nrepeated-call protection.\n\nThe working directory defaults relative paths; filesystem roots and permissions\ndefine access. Authorized sibling worktrees use explicit terminal `cwd`/`workdir`\nand absolute file paths. `apply_patch` is confined to the run directory; other\nworktrees use `file.edit` or `file.write`. `read_file` retains typed pagination.\n\nResearch cites verified URLs. Local and hosted search remain distinct; `web_fetch`\nreads known public text sources. Browser fallback handles missing search, confirmed\npre-execution failure or rendering needs, never denial or URL blocking. Replacing\nrequested GUI work with text research requires user acceptance.",
-          "char_count": 3445
+          "body": "Profiles express persona and interaction differences. The selected runToolSurface,\nincluding control signals and Floret Goal, defines capabilities. Answer directly\nwhen context suffices. Verification or context needed to assess a request triggers\nrelevant workspace or authoritative external inspection. Explicit text-only\nrequests forbid inspection; supplied text alone does not. Workflow rules constrain\nexecution, never authorize extra edits, commits, pushes or deployment. Brief\nconsultations omit plans and progress updates.\n\nIdentify the target repository/worktree and fully read applicable AGENTS.md,\nCLAUDE.md, .develop.md and .introduce.md root-to-target before dependent work.\nDiscovery may accompany rule reads; await contents before code inspection.\nExclude unrelated worktrees. Specific directory rules override ancestors;\nuser/repository restrictions override generic delegation advice. Unreadable rules\nblock affected work only; report blockers/conflicts.\n\nManifests list rule paths/scope/readability, not contents. Discovery checks\nsymlinks, distinguishes empty scans from failures and stops at Git roots.\nNew worktrees require discovery. Floret validates complete admitted context;\noverflow releases admission for corrected same-identity retry. Earlier context\nremains immutable. Skill catalogs are facts, not activation instructions.\n\nUse ask_user for necessary decisions and requested guided questions; ordinary\ndiscussion/optional feedback may use prose. Noninteractive runs report blockers.\nTool calls submit approval; never duplicate approval with a question. Floret owns\nschema correction, approval, cancellation, restart and [Goal](flower-goals.md).\nObserve finite commands this turn with existing process identity/returned cursor.\nTimeout classification retains partial results: hints do not prove non-execution\nor authorize replay. Inspect uncertainty; never bypass denials. No default Todo.\n\nFilesystem roots/permissions define access; paths/references grant no authority.\nAuthorized sibling worktrees use explicit terminal cwd/workdir and absolute file\npaths. apply_patch stays in the run directory; elsewhere use file tools.\nread_file retains typed pagination. Cite verified research URLs; local/hosted\nsearch differ. Browser fallback serves unavailable search, confirmed pre-execution\nfailure or rendering needs, never denial. Replacing requested GUI work requires\nuser acceptance.",
+          "char_count": 2411
         },
         {
           "id": "prompt-budget-and-qualification",
           "title": "Prompt Budget And Qualification",
           "level": 1,
-          "body": "System instructions own behavior and boundaries; tool definitions own invocation\nsemantics, custom APIs, cursors and result shapes. Do not duplicate schemas or\ntutorials, or move guidance into definitions to claim system savings. Language,\ncapability authority and effect recovery each have one owner. Preserve complete\nrule reading, approval, Stop, unknown effects, browser identity, observed GUI\nverification, finite-command continuation, media and isolated `html preview`.\n\nByte budgets are deterministic guards, not tokenizer measurements: 11,000 for the\nbuilt-in surface, 12,000 for permission transitions including Goal, and 9,844 for\nthe production fixture (definitions 37,000; combined 47,500). All 18 permission/\nprofile/allowlist combinations shrink 45 UTF-8 bytes against `b65d82480`, retaining\ndefinition hashes and matching tool guidance. The final Goal-injected fixture\nfalls from 9,889 to 9,844 bytes; definitions remain 36,683 bytes.\n\n`scripts/check_flower_prompt_deepseek.sh` is an opt-in paid qualification lane. It\nreads the selected local DeepSeek provider and its effective `deepseek-flash`\nconfiguration through production parsers, without modifying source state. It\nrequires a fresh report directory and normally repeats 31 behavior cases three\ntimes. Model-proposed operations in those cases are not executed; synthetic\nreceipts allow denial, unknown-effect and GUI recovery checks without effects.\nAll historical and returned calls must satisfy the tool schema. The manifest governs completeness. Paired feedback, supplied code and explicit\nsource-verification scenarios distinguish discussion from repository work; target\nand switched-worktree fixtures check rule-first scope. Unreadable rules block\nrepository work while independent supplied-data analysis can finish.\n\nProduction Service checks fresh consultations with Goal injection:\none provider step, no tools or Goal creation. It performs\ncode repair and complete rule reading in a disposable project, waits through real terminal continuation,\nchecks restart recall, resumes a structured answer and reads a file in readonly\nmode. It never controls the user's browser or launches subagents. Reports retain\nprompt/tool hashes, inputs, outputs, errors and usage, never credentials. Missing configuration, skips and absent reports fail qualification. DeepSeek total input includes both cache-miss and cache-read\ntokens. Baseline snapshots can be supplied through\n`REDEVEN_FLOWER_PROMPT_BASELINE_DIR` for the same fixtures and tool definitions;\nfailures remain visible rather than being repaired by a test-owned retry loop.\nFreeze cases, oracles, prompt sources and repetition count before comparison.\nRun each version once with identical tool definitions; retain every result and\ncompare multi-turn execution as well as routing. Partial passes never qualify a later candidate. Report system and full provider input separately.\nMalformed calls fail qualification. Deterministic tests or isolated execution do\nnot establish a paid-lane pass.\n\nOn 2026-10-20, qualification retained all diagnostic failures. Two oracle defects\n(absent Goal snapshots and valid parent-report routing) were fixed before paired\ncomparison; both terminal directory fields are accepted. The final shared text\nuses 1,953 bytes versus 1,998; personas, Goal guidance and tools are unchanged.\n\nThe final frozen pair used the same 31 cases, three repetitions, inputs, histories\nand tool hashes. Baseline passed 78/93; candidate 86/93. Both failed qualification.\nCandidate failures were workflow discussion (3), explicit verification (1), target\nrules (2), and an existing terminal cursor (1). Both Service runs still inspected\nthe repository for workflow-rule discussion; feedback and supplied-code\nconsultations completed without tools or Goals. Repair, terminal continuation,\nrestart, structured input and readonly checks completed. Total measured synthetic\ninput was 1,087,395 versus 1,088,325 tokens. Byte savings and this sample do not\nprove provider-token savings or reliable behavioral improvement. Original local\nconfiguration hashes remained unchanged; temporary credentials and overlays were\nremoved. These results do not qualify the candidate for release.",
-          "char_count": 4213
+          "body": "Policies own behavior; definitions own schemas/APIs/cursors. Do not shift guidance\ninto tool definitions to claim savings. Preserve approval, Stop, uncertain effects,\nbrowser identity, verification, finite commands, media and isolated HTML previews.\n\nByte budgets are deterministic guards, not tokenizer measurements: 11,000 for the\nbuilt-in surface, 12,000 for permission transitions including Goal, and 9,839 for\nthe production fixture (definitions 37,000; combined 47,500). All 18 permission/\nprofile/allowlist combinations shrink 50 UTF-8 bytes against `b65d82480`, retaining\ndefinition hashes. The final Goal-injected fixture falls from 9,889 to 9,839\nbytes; definitions remain 36,683 bytes. Replaced instructions use 1,948 bytes\nversus 1,998. Personas, Goal guidance and tool contracts are unchanged.\n\n`scripts/check_flower_prompt_deepseek.sh` is an opt-in paid lane. It uses the\nselected local DeepSeek provider's effective `deepseek-flash` configuration via\nproduction parsers, fresh reports and normally three repetitions of 33 cases.\nSynthetic receipts test denial and uncertain effects without executing proposed\noperations. Fixtures and returned calls must satisfy tool schemas.\n\nAcceptance tests intent, evidence, scope and effects. Text-only requests forbid\ninspection; repository-aware assessment requires source evidence. Open-ended rule\nassessment permits proportionate read-only inspection. Quoted workflows do not\nauthorize delivery. Calls/provider steps are efficiency observations; one-step\nrouting cannot establish eventual completion of independent work after a blocker.\n\nService retains Goal and real tools. A disposable Git repository carries a hidden\nworkflow fact; the answer must use actual receipts, accepting equivalent Chinese.\nFile snapshots and arguments check effects. Complete rules precede dependent reads;\nspecifications precede repair. Process identity/cursors/completion, restart,\nstructured input resume and readonly execution remain covered.\n\nConservative shell classification does not prove a write. Unknown syntax/relevance\nis review_required, neither pass nor fail; scripts stay nonzero pending review.\nOracle regressions cover incomplete/paginated rules, failed receipts, unsupported\nfacts, unauthorized writes, process relaunches and wrong cursors. Manual semantic\nreview must also assess source meaning and answer usefulness, not just keywords.\n\nFreeze prompts, inputs and harness before sampling. Retain hashes, requests,\nreceipts, responses, errors and usage, never credentials. Missing configuration,\nskips or absent reports do not qualify. After oracle repairs, the same scorer in\nTestFlowerPromptQualificationRetainedEvidence reassesses both immutable response\nsets offline into a separate report; it does not resample until green or erase\nprovider errors. Baseline source overlays cover old-prompt Service execution.\nRemove copied credentials/overlays before formal checks. Measure system bytes\nseparately from provider input, including cache-read tokens.\n\nOn 2026-10-20, the earlier 78/93 versus 86/93 claim was withdrawn: reasonable\ninspection was wrongly failed, including in Service. The earlier terminal defect\nwas real: promised observation without a call, not a wrong cursor or relaunch.\nRetained diagnostics also exposed shell-classifier, exact-English matching and\nERROR-prefix receipt-decoding defects.\n\nFinal sampling retained 99 responses each. Shared offline scoring: baseline\n83 pass / 1 fail / 15 review; candidate 84 / 2 / 13 before manual adjudication.\nCandidate failures: three questions despite one-at-a-time instruction; screenshot\nreference treated as local image path. Baseline failure: malformed tool output.\nManual review finds two baseline source reads before rules returned. Discovery\nand Git metadata reads are legitimate. One blocked-rule response remains\ninconclusive; candidate runtime inventory relevance is unproven, not a write.\n\nBoth retained Service traces satisfy execution checks after receipt repair: no\nconsultation edits/Goal, workflow evidence, repair, process/cursors, restart,\nstructured input and readonly execution. This is replay assessment, not a newly\npassing model run. Semantic review still finds both versions interpreting “not\nrequired” as prohibition, plus one candidate answer inverting directory-rule\nprecedence. Keep these quality failures; neither sample proves reliable behavior,\noverall improvement or token savings. Source hashes stayed unchanged; copied\ncredentials and overlays were removed.",
+          "char_count": 4506
         },
         {
           "id": "boundaries",
@@ -10969,82 +10969,10 @@
           "char_count": 309
         }
       ],
-      "evidence": [
-        {
-          "id": "redeven:internal/ai/prompt_builder.go:0:one behavior policy with capability-gated operation instructions.",
-          "source": "redeven:internal/ai/prompt_builder.go",
-          "description": "One behavior policy with capability-gated operation instructions."
-        },
-        {
-          "id": "redeven:internal/ai/prompt_profiles.go:0:three profiles express role and interaction differences.",
-          "source": "redeven:internal/ai/prompt_profiles.go",
-          "description": "Three profiles express role and interaction differences."
-        },
-        {
-          "id": "redeven:internal/ai/prompt_workspace_context.go:0:authorized rule descriptors and complete validated runtime context.",
-          "source": "redeven:internal/ai/prompt_workspace_context.go",
-          "description": "Authorized rule descriptors and complete validated runtime context."
-        },
-        {
-          "id": "redeven:internal/ai/send_user_turn.go:0:complete input validation precedes execution-authority persistence.",
-          "source": "redeven:internal/ai/send_user_turn.go",
-          "description": "Complete input validation precedes execution-authority persistence."
-        },
-        {
-          "id": "redeven:internal/ai/prompt_consistency_test.go:0:actual permission, profile and allowlist matrix governs instructions.",
-          "source": "redeven:internal/ai/prompt_consistency_test.go",
-          "description": "Actual permission, profile and allowlist matrix governs instructions."
-        },
-        {
-          "id": "redeven:internal/ai/prompt_rule_sources_test.go:0:long unicode rules, complete read pages, discovery failures and worktree authorization.",
-          "source": "redeven:internal/ai/prompt_rule_sources_test.go",
-          "description": "Long Unicode rules, complete read pages, discovery failures and worktree authorization."
-        },
-        {
-          "id": "redeven:internal/ai/prompt_context_admission_test.go:0:overflow releases busy state and permits corrected retry without canonical mutation.",
-          "source": "redeven:internal/ai/prompt_context_admission_test.go",
-          "description": "Overflow releases busy state and permits corrected retry without canonical mutation."
-        },
-        {
-          "id": "redeven:internal/ai/floret_ask_user_integration_test.go:0:a fresh supplied-prompt analysis completes without tools and accepts follow-up input.",
-          "source": "redeven:internal/ai/floret_ask_user_integration_test.go",
-          "description": "A fresh supplied-prompt analysis completes without tools and accepts follow-up input."
-        },
-        {
-          "id": "redeven:internal/ai/thread_permission_admission_test.go:0:actual provider requests match live permission surfaces.",
-          "source": "redeven:internal/ai/thread_permission_admission_test.go",
-          "description": "Actual provider requests match live permission surfaces."
-        },
-        {
-          "id": "redeven:internal/ai/tools/orchestrator_test.go:0:timeout and denial advice cannot authorize unsafe replay or bypass.",
-          "source": "redeven:internal/ai/tools/orchestrator_test.go",
-          "description": "Timeout and denial advice cannot authorize unsafe replay or bypass."
-        },
-        {
-          "id": "redeven:internal/ai/tool_timeout_test.go:0:actual file/computer dispatch uses shared timeout classification, preserving partial results and one execution.",
-          "source": "redeven:internal/ai/tool_timeout_test.go",
-          "description": "Actual file/Computer dispatch uses shared timeout classification, preserving partial results and one execution."
-        },
-        {
-          "id": "redeven:internal/ai/prompt_qualification_test.go:0:size budget, schema-valid fixtures and real-provider behavior comparison.",
-          "source": "redeven:internal/ai/prompt_qualification_test.go",
-          "description": "Size budget, schema-valid fixtures and real-provider behavior comparison."
-        },
-        {
-          "id": "redeven:internal/ai/prompt_runtime_qualification_test.go:0:isolated real execution, terminal continuation, restart, structured answer and readonly checks.",
-          "source": "redeven:internal/ai/prompt_runtime_qualification_test.go",
-          "description": "Isolated real execution, terminal continuation, restart, structured answer and readonly checks."
-        },
-        {
-          "id": "redeven:scripts/check_flower_prompt_deepseek.sh:0:explicit paid qualification with unchanged-source and complete-report checks.",
-          "source": "redeven:scripts/check_flower_prompt_deepseek.sh",
-          "description": "Explicit paid qualification with unchanged-source and complete-report checks."
-        }
-      ],
       "snippet": "Flower shares task, interaction and recovery policies across three profiles. Current tools supply operation semantics; admitted context carries complete facts and rule-source manifests, without silent clipping or a second lifecycle.",
       "links": [
         {
-          "label": "Goal reflection",
+          "label": "Goal",
           "path": "ai/flower-goals.md",
           "concept_id": "ai.flower-goals",
           "title": "Flower thread Goals"
@@ -46154,5 +46082,5 @@
       ]
     }
   ],
-  "source_sha256": "f728bf197fa166cca300d6d53d4de2e66f86ef397b44c3491e68c18e4e8f38f6"
+  "source_sha256": "dae27bf7be37c4478ca471343b90a8500fa3405d1d4ccc5ba7941dfe999ec586"
 }

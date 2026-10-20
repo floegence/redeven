@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -17,7 +18,9 @@ import (
 	"time"
 
 	flprovider "github.com/floegence/floret/v7/provider"
+	flruntime "github.com/floegence/floret/v7/runtime"
 
+	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/settings"
 )
@@ -25,15 +28,16 @@ import (
 // This lane calls the configured provider but never executes model-proposed tools.
 // Tool receipts are synthetic, so unsafe recovery can be tested without effects.
 type promptQualificationCase struct {
-	name       string
-	input      string
-	permission FlowerPermissionType
-	profile    string
-	history    []Message
-	wantTools  []string
-	noTools    bool
-	contains   []string
-	check      func(ModelGatewayResult) error
+	name         string
+	preferDirect bool
+	input        string
+	permission   FlowerPermissionType
+	profile      string
+	history      []Message
+	wantTools    []string
+	noTools      bool
+	contains     []string
+	check        func(ModelGatewayResult) error
 }
 
 func promptQualificationMessage(role, text string) Message {
@@ -56,13 +60,26 @@ func promptQualificationCases() []promptQualificationCase {
 			return nil
 		}},
 		{name: "supplied_analysis", input: "只根据这些数据计算总数：12、30、5。无需检查文件或联网。", noTools: true, contains: []string{"47"}},
-		{name: "subjective_feedback", input: "你觉得这句话让你困惑吗：‘简单问题直接回答，复杂问题先确认范围’？说说你的感受。", noTools: true},
-		{name: "supplied_code_discussion", input: "帮我看看这段提供的代码：func Add(a, b int) int { return a - b }。它是否符合函数名表达的含义？", noTools: true},
-		{name: "workflow_scope", input: "帮我看看这条仓库规则是否合理：‘实现后验证、提交、推送并部署’。", noTools: true},
-		{name: "explicit_verification", input: "请核验 /workspace/demo/calc.py 中 Add 的真实实现，并给出源码证据。", history: []Message{promptQualificationMessage("user", "Repository: /workspace/demo. Applicable rule sources: /workspace/demo/AGENTS.md; contents not loaded.")}, wantTools: []string{"read_file", "read_files", "terminal.exec"}, check: checkPromptQualificationTargetRules("/workspace/demo")},
-		{name: "target_repository_rules", input: "核查 /workspace/flower 的 Add 实现。", history: []Message{promptQualificationMessage("user", "Working directory: /workspace. Repositories: /workspace/flower, /workspace/flower-old, /workspace/floret. Target repository is /workspace/flower. Its only applicable rule source is /workspace/flower/AGENTS.md; contents not loaded.")}, wantTools: []string{"read_file", "read_files", "terminal.exec"}, check: checkPromptQualificationTargetRules("/workspace/flower")},
-		{name: "switched_worktree_rules", input: "切换到 /workspace/flower-feature，核查这里的 Add 实现。", history: []Message{promptQualificationMessage("user", "Previous target /workspace/flower: rules already read. New target /workspace/flower-feature is another worktree with its own /workspace/flower-feature/AGENTS.md; contents not loaded. No other applicable rule files.")}, wantTools: []string{"read_file", "read_files", "terminal.exec"}, check: checkPromptQualificationTargetRules("/workspace/flower-feature")},
-		{name: "unreadable_rules", input: "现在能否核查代码？另外，根据我提供的数字 12、30、5 给出总和。", history: promptQualificationReceipt("terminal.exec", `{"command":"cat /workspace/demo/AGENTS.md","cwd":"/workspace/demo"}`, `{"status":"completed","exit_code":1,"output":"Permission denied: /workspace/demo/AGENTS.md. Repository operations are blocked until the rule file is readable."}`), noTools: true, contains: []string{"47"}},
+		{name: "subjective_feedback", input: "你觉得这句话让你困惑吗：‘简单问题直接回答，复杂问题先确认范围’？说说你的感受。", preferDirect: true, check: checkPromptQualificationReadonly},
+		{name: "supplied_code_discussion", input: "帮我看看这段提供的代码：func Add(a, b int) int { return a - b }。它是否符合函数名表达的含义？", preferDirect: true, check: checkPromptQualificationReadonly},
+		{name: "workflow_text_only", input: "只评价下面这句话的措辞，无需检查仓库：‘实现后验证、提交、推送并部署’。", noTools: true},
+		{name: "workflow_scope", input: "帮我看看这条仓库规则是否合理：‘实现后验证、提交、推送并部署’。", check: checkPromptQualificationReadonly},
+		{name: "workflow_repository", input: "请结合 /workspace/demo 的实际工作流，评价这条规则是否合理：‘实现后验证、提交、推送并部署’。", history: []Message{promptQualificationMessage("user", "Target repository: /workspace/demo. Applicable rules: /workspace/demo/AGENTS.md, contents not loaded.")}, wantTools: []string{"read_file", "read_files", "terminal.exec", "find"}, check: checkPromptQualificationTargetRules("/workspace/demo")},
+		{name: "explicit_verification", input: "请核验 /workspace/demo/calc.py 中 Add 的真实实现，并给出源码证据。", history: []Message{promptQualificationMessage("user", "Repository: /workspace/demo. Applicable rule sources: /workspace/demo/AGENTS.md; contents not loaded.")}, wantTools: []string{"read_file", "read_files", "terminal.exec", "find"}, check: checkPromptQualificationTargetRules("/workspace/demo")},
+		{name: "target_repository_rules", input: "核查 /workspace/flower 的 Add 实现。", history: []Message{promptQualificationMessage("user", "Working directory: /workspace. Repositories: /workspace/flower, /workspace/flower-old, /workspace/floret. Target repository is /workspace/flower. Its only applicable rule source is /workspace/flower/AGENTS.md; contents not loaded.")}, wantTools: []string{"read_file", "read_files", "terminal.exec", "find"}, check: checkPromptQualificationTargetRules("/workspace/flower")},
+		{name: "switched_worktree_rules", input: "切换到 /workspace/flower-feature，核查这里的 Add 实现。", history: []Message{promptQualificationMessage("user", "Previous target /workspace/flower: rules already read. New target /workspace/flower-feature is another worktree with its own /workspace/flower-feature/AGENTS.md; contents not loaded. No other applicable rule files.")}, wantTools: []string{"read_file", "read_files", "terminal.exec", "find"}, check: checkPromptQualificationTargetRules("/workspace/flower-feature")},
+		{name: "unreadable_rules", input: "现在能否核查代码？另外，根据我提供的数字 12、30、5 给出总和。", history: promptQualificationReceipt("terminal.exec", `{"command":"cat /workspace/demo/AGENTS.md","cwd":"/workspace/demo"}`, `{"status":"completed","exit_code":1,"output":"Permission denied: /workspace/demo/AGENTS.md. Repository operations are blocked until the rule file is readable."}`), preferDirect: true, check: func(r ModelGatewayResult) error {
+			if len(r.ToolCalls) > 0 {
+				if err := checkPromptQualificationReadonly(r); err != nil {
+					return err
+				}
+				return fmt.Errorf("review_required: first-step inspection cannot establish completion of independent supplied-data answer")
+			}
+			if !strings.Contains(r.Text, "47") {
+				return fmt.Errorf("independent supplied-data answer omitted")
+			}
+			return nil
+		}},
 		{name: "markdown", input: "请用一个 Markdown 表格比较 TCP 与 UDP，然后用两条列表说明区别。不要调用工具。", noTools: true, contains: []string{"|", "TCP", "UDP"}},
 		{name: "media", input: "工具已保存截图，确切引用是 computer://fixture/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef。请直接把截图显示在聊天中。", noTools: true, contains: []string{"![", "computer://fixture/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}},
 		{name: "html_preview", input: "只输出一个很小的自包含可交互 HTML 预览，点击按钮计数。不要写文件或调用工具。", noTools: true, contains: []string{"```html preview"}, check: func(r ModelGatewayResult) error {
@@ -72,14 +89,22 @@ func promptQualificationCases() []promptQualificationCase {
 			return nil
 		}},
 		{name: "read_current_file", input: "读取 /workspace/demo/README.md，告诉我它的标题。", wantTools: []string{"read_file", "read_files", "terminal.exec"}, check: checkPromptQualificationRead},
-		{name: "repository_rules", input: "请修复 /workspace/demo 的 bug，先按仓库规则工作。", history: []Message{promptQualificationMessage("user", "Managed model context update: repository rule sources: /workspace/demo/AGENTS.md (not loaded). Working directory: /workspace/demo.")}, wantTools: []string{"read_file", "read_files", "terminal.exec"}, check: func(r ModelGatewayResult) error {
-			b, _ := json.Marshal(r.ToolCalls)
-			if !strings.Contains(string(b), "AGENTS.md") {
-				return fmt.Errorf("applicable rules not read first")
+		{name: "repository_rules", input: "请修复 /workspace/demo 的 bug，先按仓库规则工作。", history: []Message{promptQualificationMessage("user", "Managed model context update: repository rule sources: /workspace/demo/AGENTS.md (not loaded). Working directory: /workspace/demo.")}, wantTools: []string{"read_file", "read_files", "terminal.exec", "find"}, check: checkPromptQualificationTargetRules("/workspace/demo")},
+		{name: "skill_activation", input: "请按已安装的 invoice-audit 技能审计这份账单。", history: []Message{promptQualificationMessage("user", "Current skill catalog: invoice-audit: audit invoices and explain discrepancies.")}, check: func(r ModelGatewayResult) error {
+			found := false
+			var discovery []ToolCall
+			for _, call := range r.ToolCalls {
+				if call.Name == "use_skill" {
+					found = true
+				} else {
+					discovery = append(discovery, call)
+				}
 			}
-			return nil
+			if !found {
+				return fmt.Errorf("requested skill activation missing")
+			}
+			return checkPromptQualificationReadonly(ModelGatewayResult{ToolCalls: discovery})
 		}},
-		{name: "skill_activation", input: "请按已安装的 invoice-audit 技能审计这份账单。", history: []Message{promptQualificationMessage("user", "Current skill catalog: invoice-audit: audit invoices and explain discrepancies.")}, wantTools: []string{"use_skill"}},
 		{name: "approval_submission", input: "把 /workspace/demo/answer.txt 完整写成 42。这是一个新文件，内容和路径已确定。", permission: FlowerPermissionApprovalRequired, wantTools: []string{"file.write", "apply_patch"}},
 		{name: "no_delegation", input: "仓库规则和用户都禁止使用子代理。只回答 2+2 的结果。", noTools: true, contains: []string{"4"}},
 		{name: "guided_choices", input: "帮我选周末活动，一次只问一个问题，用可点击选项，也允许自己填写。先了解我的偏好。", wantTools: []string{"ask_user"}, check: checkPromptQualificationChoices},
@@ -217,33 +242,85 @@ func toolNamesForQualification(defs []ToolDef) []string {
 	return names
 }
 
-// Only the target's complete rules may be read before inspecting its source.
-// This checks the first proposed batch; the runtime lane checks the full loop.
+// This first-step check permits discovery and equivalent read-only commands.
+// It cannot establish full rule coverage or answer quality; the Service lane
+// checks canonical results and hidden fixture evidence across the complete loop.
+func checkPromptQualificationReadonly(r ModelGatewayResult) error {
+	reviews := []string{}
+	for _, call := range r.ToolCalls {
+		switch call.Name {
+		case "read_file", "read_files", "find", "rgrep", "terminal.read", "okf.index", "okf.search", "okf.open":
+		case "terminal.exec":
+			command, _ := call.Args["command"].(string)
+			if aitools.ProfileTerminalCommand(command).Risk != aitools.TerminalCommandRiskReadonly {
+				reviews = append(reviews, "inspect command scope and effects: "+command)
+			}
+		default:
+			definition, known := aitools.LookupDefinition(call.Name)
+			if known && !definition.Mutating {
+				reviews = append(reviews, "inspect relevance of read-only tool: "+call.Name)
+			} else {
+				return fmt.Errorf("consultation proposed non-read operation: %s", call.Name)
+			}
+		}
+	}
+	if len(reviews) > 0 {
+		return fmt.Errorf("review_required: %s", strings.Join(reviews, "; "))
+	}
+	return nil
+}
+
+var qualificationSourcePath = regexp.MustCompile(`(?:^|[[:space:]'"/])[^[:space:]'";|]*\.(?:py|go|js|ts|tsx)(?:$|[[:space:]'";|])`)
+var qualificationWorkspacePath = regexp.MustCompile(`/workspace/[A-Za-z0-9_.*-]+`)
+
 func checkPromptQualificationTargetRules(root string) func(ModelGatewayResult) error {
 	return func(r ModelGatewayResult) error {
+		reviews := []string{}
 		for _, call := range r.ToolCalls {
-			switch call.Name {
-			case "read_file":
-				if call.Args["path"] != root+"/AGENTS.md" || (call.Args["offset"] != nil && call.Args["offset"] != float64(0)) {
-					return fmt.Errorf("read outside target rules or skipped their beginning")
+			raw, _ := json.Marshal(call.Args)
+			for _, path := range qualificationWorkspacePath.FindAllString(string(raw), -1) {
+				if path != root {
+					return fmt.Errorf("unrelated repository access: %s", path)
 				}
-			case "read_files":
-				paths, _ := call.Args["paths"].([]any)
-				if len(paths) != 1 || paths[0] != root+"/AGENTS.md" {
-					return fmt.Errorf("batch read beyond target rules")
-				}
-			case "terminal.exec":
-				command, _ := call.Args["command"].(string)
-				cwd, _ := call.Args["cwd"].(string)
-				if cwd == "" {
-					cwd, _ = call.Args["workdir"].(string)
-				}
-				if strings.TrimSpace(command) != "cat "+root+"/AGENTS.md" && !(cwd == root && strings.TrimSpace(command) == "cat AGENTS.md") {
-					return fmt.Errorf("command did not read only complete target rules")
-				}
-			default:
-				return fmt.Errorf("unexpected operation before reading target rules: %s", call.Name)
 			}
+			if call.Name == "rgrep" {
+				reviews = append(reviews, "inspect search scope before rule contents")
+			}
+			if call.Name == "read_file" {
+				path, _ := call.Args["path"].(string)
+				if filepath.Base(path) != "AGENTS.md" {
+					return fmt.Errorf("content read before rules: %s", path)
+				}
+				if offset, _ := call.Args["offset"].(float64); offset != 0 {
+					return fmt.Errorf("initial rule page skipped its beginning")
+				}
+			}
+			if call.Name == "read_files" {
+				paths, _ := call.Args["paths"].([]any)
+				for _, raw := range paths {
+					path, _ := raw.(string)
+					if filepath.Base(path) != "AGENTS.md" {
+						return fmt.Errorf("content read before rules: %s", path)
+					}
+				}
+			}
+			if call.Name == "terminal.exec" {
+				command, _ := call.Args["command"].(string)
+				// Listing names is discovery, not reading source. Unknown shell forms
+				// still require trace review; this is not a general shell interpreter.
+				if qualificationSourcePath.MatchString(command) && !strings.Contains(command, "--files") && !strings.HasPrefix(strings.TrimSpace(command), "ls ") && !strings.HasPrefix(strings.TrimSpace(command), "find ") {
+					reviews = append(reviews, "inspect source/rule dependency in command: "+command)
+				}
+			}
+		}
+		if err := checkPromptQualificationReadonly(r); err != nil {
+			if !strings.HasPrefix(err.Error(), "review_required:") {
+				return err
+			}
+			reviews = append(reviews, strings.TrimPrefix(err.Error(), "review_required: "))
+		}
+		if len(reviews) > 0 {
+			return fmt.Errorf("review_required: %s", strings.Join(reviews, "; "))
 		}
 		return nil
 	}
@@ -347,56 +424,39 @@ func TestE2E_FlowerPromptDeepSeek(t *testing.T) {
 				if callErr != nil {
 					issues = append(issues, "provider request failed: "+safePromptQualificationError(callErr))
 				} else {
-					for _, call := range result.ToolCalls {
-						index := slices.IndexFunc(defs, func(def ToolDef) bool { return def.Name == call.Name })
-						if index < 0 {
-							issues = append(issues, "undefined tool: "+call.Name)
-							continue
-						}
-						var schema map[string]any
-						if err := json.Unmarshal(defs[index].InputSchema, &schema); err != nil {
-							t.Fatal(err)
-						}
-						compiled, err := compileArgumentSchema(schema)
-						if err != nil {
-							t.Fatal(err)
-						}
-						if err := compiled.Validate(call.Args); err != nil {
-							issues = append(issues, "invalid arguments for "+call.Name)
-						}
-					}
-					if tc.noTools && len(result.ToolCalls) > 0 {
-						issues = append(issues, "unexpected tool call")
-					}
-					if len(tc.wantTools) > 0 {
-						if len(result.ToolCalls) == 0 {
-							issues = append(issues, "required tool call missing")
-						}
-						for _, c := range result.ToolCalls {
-							if !slices.Contains(tc.wantTools, c.Name) {
-								issues = append(issues, "unexpected tool: "+c.Name)
-							}
-						}
-					}
-					for _, want := range tc.contains {
-						if !strings.Contains(result.Text, want) {
-							issues = append(issues, "answer missing: "+want)
-						}
-					}
-					if tc.check != nil {
-						if err := tc.check(result); err != nil {
-							issues = append(issues, err.Error())
-						}
-					}
-					if len(result.ToolCalls) == 0 && strings.TrimSpace(result.Text) == "" {
-						issues = append(issues, "empty response")
-					}
+					issues = append(issues, evaluatePromptQualificationResponse(t, tc, defs, result)...)
 				}
 				digest := sha256.Sum256([]byte(prompt))
 				toolJSON, _ := json.Marshal(defs)
 				toolDigest := sha256.Sum256(toolJSON)
 				report := map[string]any{"case": tc.name, "round": round, "model": model.ModelName, "wire_model": model.EffectiveWireModelName(), "system_bytes": len(prompt), "system_sha256": hex.EncodeToString(digest[:]), "tools_sha256": hex.EncodeToString(toolDigest[:]), "input": tc.input, "history": tc.history, "text": result.Text, "tool_calls": result.ToolCalls, "usage": result.Usage, "total_input_tokens": result.Usage.InputTokens + result.Usage.CacheReadTokens, "duration_ms": time.Since(started).Milliseconds(), "passed": len(issues) == 0, "issues": issues}
 				report["tool_definition_bytes"] = len(toolJSON)
+				report["direct_answer_preferred"] = tc.preferDirect
+				report["proposed_call_count"] = len(result.ToolCalls)
+				reviewRequired := false
+				for _, issue := range issues {
+					reviewRequired = reviewRequired || strings.HasPrefix(issue, "review_required:")
+				}
+				report["review_required"] = reviewRequired
+				hardIssues := []string{}
+				reviewNotes := []string{}
+				for _, issue := range issues {
+					if strings.HasPrefix(issue, "review_required:") {
+						reviewNotes = append(reviewNotes, issue)
+					} else {
+						hardIssues = append(hardIssues, issue)
+					}
+				}
+				report["issues"] = hardIssues
+				report["review_notes"] = reviewNotes
+				report["passed"] = len(hardIssues) == 0 && !reviewRequired
+				report["status"] = "pass"
+				if reviewRequired {
+					report["status"] = "review_required"
+				}
+				if len(hardIssues) > 0 {
+					report["status"] = "fail"
+				}
 				encoded, _ := json.MarshalIndent(report, "", "  ")
 				wire, _ := json.MarshalIndent(recorder.snapshot(), "", "  ")
 				if err := os.WriteFile(filepath.Join(directory, "wire.json"), wire, 0600); err != nil {
@@ -406,8 +466,11 @@ func TestE2E_FlowerPromptDeepSeek(t *testing.T) {
 					t.Fatal(err)
 				}
 				t.Logf("wire_model=%s system_bytes=%d input_tokens=%d output_tokens=%d tools=%d", model.EffectiveWireModelName(), len(prompt), result.Usage.InputTokens, result.Usage.OutputTokens, len(result.ToolCalls))
-				for _, issue := range issues {
+				for _, issue := range hardIssues {
 					t.Error(issue)
+				}
+				if reviewRequired {
+					t.Logf("manual trace review required: %v", reviewNotes)
 				}
 			})
 		}
@@ -552,23 +615,230 @@ func TestPromptQualificationFixturesAndOracles(t *testing.T) {
 		t.Fatal("replayed effect escaped the oracle")
 	}
 	rules := checkPromptQualificationTargetRules("/workspace/flower")
-	for _, calls := range [][]ToolCall{
-		{{Name: "terminal.exec", Args: map[string]any{"command": "cat /workspace/flower*/AGENTS.md"}}},
-		{{Name: "terminal.exec", Args: map[string]any{"command": "cat /workspace/flower/AGENTS.md; cat /workspace/flower/calc.py"}}},
-		{{Name: "read_files", Args: map[string]any{"paths": []any{"/workspace/flower/AGENTS.md", "/workspace/flower-old/AGENTS.md"}}}},
-		{{Name: "file.write", Args: map[string]any{"file_path": "/workspace/flower/calc.py"}}},
-	} {
-		if err := rules(ModelGatewayResult{ToolCalls: calls}); err == nil {
-			t.Fatalf("rules oracle accepted out-of-order or unrelated work: %+v", calls)
+	for _, command := range []string{"cat /workspace/flower*/AGENTS.md", "cat /workspace/flower/AGENTS.md; cat /workspace/flower/calc.py", "git commit -am fix", "git push", "./deploy.sh", "sed -i s/a/b/ calc.py"} {
+		if err := rules(ModelGatewayResult{ToolCalls: []ToolCall{{Name: "terminal.exec", Args: map[string]any{"command": command}}}}); err == nil {
+			t.Errorf("accepted unauthorized/dependent command: %s", command)
 		}
 	}
-	for _, args := range []map[string]any{
-		{"command": "cat /workspace/flower/AGENTS.md"},
-		{"command": "cat AGENTS.md", "cwd": "/workspace/flower"},
-		{"command": "cat AGENTS.md", "workdir": "/workspace/flower"},
+	for _, command := range []string{"cat /workspace/flower/AGENTS.md", "cat AGENTS.md; ls -la", "pwd; ls", "sed -n '1,120p' AGENTS.md", "rg --files", "git status --short"} {
+		if err := rules(ModelGatewayResult{ToolCalls: []ToolCall{{Name: "terminal.exec", Args: map[string]any{"command": command, "cwd": "/workspace/flower"}}}}); err != nil {
+			t.Errorf("rejected legitimate discovery/read: %s: %v", command, err)
+		}
+	}
+	for _, calls := range [][]ToolCall{
+		{{Name: "read_files", Args: map[string]any{"paths": []any{"/workspace/flower/AGENTS.md", "/workspace/flower-old/AGENTS.md"}}}},
+		{{Name: "file.write", Args: map[string]any{"file_path": "/workspace/flower/calc.py"}}},
+		{{Name: "read_file", Args: map[string]any{"path": "/workspace/flower/AGENTS.md", "offset": float64(100)}}},
 	} {
-		if err := rules(ModelGatewayResult{ToolCalls: []ToolCall{{Name: "terminal.exec", Args: args}}}); err != nil {
+		if err := rules(ModelGatewayResult{ToolCalls: calls}); err == nil {
+			t.Errorf("accepted invalid scope/order: %+v", calls)
+		}
+	}
+	// Ambiguous advice may answer directly or inspect; quoted workflow text
+	// cannot authorize implementation or delivery through another tool.
+	for _, result := range []ModelGatewayResult{{Text: "这条规则需要结合发布流程判断。"}, {ToolCalls: []ToolCall{{Name: "terminal.exec", Args: map[string]any{"command": "cat AGENTS.md; ls"}}}}} {
+		if err := checkPromptQualificationReadonly(result); err != nil {
 			t.Fatal(err)
 		}
 	}
+	mixed := ModelGatewayResult{ToolCalls: []ToolCall{{Name: "terminal.exec", Args: map[string]any{"command": "echo listing"}}, {Name: "file.write", Args: map[string]any{"file_path": "/workspace/flower/calc.py"}}}}
+	if err := checkPromptQualificationReadonly(mixed); err == nil || strings.HasPrefix(err.Error(), "review_required:") {
+		t.Fatal("pending shell review hid unauthorized write")
+	}
+
+	for _, name := range []string{"file.edit", "apply_patch", "task_create", "goal"} {
+		if err := checkPromptQualificationReadonly(ModelGatewayResult{ToolCalls: []ToolCall{{Name: name}}}); err == nil {
+			t.Errorf("accepted consultation scope expansion: %s", name)
+		}
+	}
+}
+
+// The same scorer evaluates live responses and immutable retained responses.
+// Re-evaluation repairs an oracle without sampling until the model gets lucky.
+func evaluatePromptQualificationResponse(t *testing.T, tc promptQualificationCase, defs []ToolDef, result ModelGatewayResult) []string {
+	t.Helper()
+	issues := []string{}
+	for _, call := range result.ToolCalls {
+		index := slices.IndexFunc(defs, func(def ToolDef) bool { return def.Name == call.Name })
+		if index < 0 {
+			issues = append(issues, "undefined tool: "+call.Name)
+			continue
+		}
+		var schema map[string]any
+		if err := json.Unmarshal(defs[index].InputSchema, &schema); err != nil {
+			t.Fatal(err)
+		}
+		compiled, err := compileArgumentSchema(schema)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := compiled.Validate(call.Args); err != nil {
+			issues = append(issues, "invalid arguments for "+call.Name)
+		}
+	}
+	if tc.noTools && len(result.ToolCalls) > 0 {
+		issues = append(issues, "unexpected tool call")
+	}
+	if len(tc.wantTools) > 0 {
+		if len(result.ToolCalls) == 0 {
+			issues = append(issues, "required tool call missing")
+		}
+		for _, c := range result.ToolCalls {
+			if !slices.Contains(tc.wantTools, c.Name) {
+				issues = append(issues, "unexpected tool: "+c.Name)
+			}
+		}
+	}
+	for _, want := range tc.contains {
+		if !strings.Contains(result.Text, want) {
+			issues = append(issues, "answer missing: "+want)
+		}
+	}
+	if tc.check != nil {
+		if err := tc.check(result); err != nil {
+			issues = append(issues, err.Error())
+		}
+	}
+	if len(result.ToolCalls) == 0 && strings.TrimSpace(result.Text) == "" {
+		issues = append(issues, "empty response")
+	}
+	return issues
+}
+
+// Retained replay never contacts a provider or executes tools. Assessments are
+// separate from immutable raw responses and original oracle results.
+func TestFlowerPromptQualificationRetainedEvidence(t *testing.T) {
+	root := os.Getenv("REDEVEN_FLOWER_PROMPT_REVIEW_DIR")
+	if root == "" {
+		t.Skip("set retained paired qualification directory")
+	}
+	cases := map[string]promptQualificationCase{}
+	for _, tc := range promptQualificationCases() {
+		cases[tc.name] = tc
+	}
+	summary := map[string]any{}
+	for _, label := range []string{"baseline", "candidate"} {
+		paths, err := filepath.Glob(filepath.Join(root, label, "*", "*", "report.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(paths) == 0 {
+			t.Fatal("retained reports absent")
+		}
+		records := []map[string]any{}
+		for _, path := range paths {
+			var raw struct {
+				Case   string
+				Round  int
+				Input  string
+				Text   string
+				Calls  []ToolCall `json:"tool_calls"`
+				Issues []string
+			}
+			b, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := json.Unmarshal(b, &raw); err != nil {
+				t.Fatal(err)
+			}
+			tc, ok := cases[raw.Case]
+			if !ok || tc.input != raw.Input {
+				t.Fatalf("fixture drift: %s", path)
+			}
+			_, defs := promptQualificationSurface(t, tc)
+			issues := []string{}
+			for _, issue := range raw.Issues {
+				if strings.HasPrefix(issue, "provider request failed:") {
+					issues = append(issues, issue)
+				}
+			}
+			if len(issues) == 0 {
+				issues = evaluatePromptQualificationResponse(t, tc, defs, ModelGatewayResult{Text: raw.Text, ToolCalls: raw.Calls})
+			}
+			hard, review := []string{}, []string{}
+			for _, issue := range issues {
+				if strings.HasPrefix(issue, "review_required:") {
+					review = append(review, issue)
+				} else {
+					hard = append(hard, issue)
+				}
+			}
+			status := "pass"
+			if len(review) > 0 {
+				status = "review_required"
+			}
+			if len(hard) > 0 {
+				status = "fail"
+			}
+			records = append(records, map[string]any{"case": raw.Case, "round": raw.Round, "status": status, "issues": hard, "review_notes": review})
+		}
+		var runtime map[string]json.RawMessage
+		b, err := os.ReadFile(filepath.Join(root, label, "runtime", "report.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(b, &runtime); err != nil {
+			t.Fatal(err)
+		}
+		runtimeIssues := []string{}
+		runtimeReviews := map[string]any{}
+		for _, name := range []string{"subjective_feedback", "supplied_code_discussion", "workflow_text_only", "workflow_scope", "workflow_repository"} {
+			var detail FlowerThreadDetail
+			if err := json.Unmarshal(runtime[name], &detail); err != nil {
+				t.Fatal(err)
+			}
+			if detail.Current.LastOutcome == nil || *detail.Current.LastOutcome != "completed" || strings.TrimSpace(ollamaTaskText(detail.Current)) == "" || (detail.Current.Goal != nil && detail.Current.Goal.Status != "absent") {
+				runtimeIssues = append(runtimeIssues, name+": outcome/Goal/answer")
+			}
+			var observations struct {
+				Calls   []ToolCall                   `json:"tool_calls"`
+				Results []flruntime.ThreadToolResult `json:"canonical_results"`
+			}
+			if err := json.Unmarshal(runtime[name+"_observations"], &observations); err != nil {
+				t.Fatal(err)
+			}
+			if name == "workflow_text_only" && len(observations.Calls) != 0 {
+				runtimeIssues = append(runtimeIssues, name+": explicit no-inspection violated")
+			}
+			if err := checkPromptQualificationReadonly(ModelGatewayResult{ToolCalls: observations.Calls}); err != nil {
+				if strings.HasPrefix(err.Error(), "review_required:") {
+					runtimeReviews[name] = err.Error()
+				} else {
+					runtimeIssues = append(runtimeIssues, name+": "+err.Error())
+				}
+			}
+			if err := checkQualificationFixtureRules(observations.Results, qualificationRuntimeFixtures()); err != nil {
+				runtimeIssues = append(runtimeIssues, name+": "+err.Error())
+			}
+			if name == "workflow_repository" {
+				if err := checkQualificationWorkflowEvidence(ollamaTaskText(detail.Current), observations.Results, "staging-only"); err != nil {
+					runtimeIssues = append(runtimeIssues, name+": "+err.Error())
+				}
+			}
+		}
+		for _, name := range []string{"repair_results", "terminal_results"} {
+			var results []flruntime.ThreadToolResult
+			if err := json.Unmarshal(runtime[name], &results); err != nil {
+				t.Fatal(err)
+			}
+			if name == "repair_results" {
+				err = checkQualificationFixtureRules(results, qualificationRuntimeFixtures())
+			} else {
+				err = checkQualificationTerminalContinuation(results)
+			}
+			if err != nil {
+				runtimeIssues = append(runtimeIssues, name+": "+err.Error())
+			}
+		}
+		summary[label] = map[string]any{"records": records, "runtime_issues": runtimeIssues, "runtime_review_required": runtimeReviews, "original_runtime_result": json.RawMessage(runtime["passed"])}
+	}
+	encoded, err := json.MarshalIndent(summary, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "reassessment.json"), encoded, 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Log("reassessed retained evidence; pending review is not a qualification pass")
 }

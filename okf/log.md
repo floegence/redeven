@@ -2,7 +2,7 @@
 
 ## 2026-10-20 — Focused Flower execution boundaries
 
-- Clarify direct answers, evidence triggers, target rule reading and workflow authorization in the existing [prompt contract](ai/flower-prompt-and-rule-sources.md). Reduce all shared-policy surfaces by 45 UTF-8 bytes, preserve Floret Goal ownership and tool definitions, and unify timeout advice while retaining partial execution. Extend paired real-provider and production Service qualification without adding runtime recovery state. Final comparison passes 78/93 baseline and 86/93 candidate cases; both remain unqualified, with retained failures documented in the contract.
+- Clarify sufficient-context answers, proportionate inspection, rule dependencies and workflow authorization in the existing [prompt contract](ai/flower-prompt-and-rule-sources.md). Reduce shared policies by 50 UTF-8 bytes; preserve personas, Goal and tools, and unify timeout advice with partial results intact. Replace route-based acceptance with intent/evidence/effect checks, separate pending review, withdraw biased totals, and replay both retained versions through one scorer. Keep real model, actual Service, semantic review and deterministic evidence distinct; retain residual failures.
 
 ## 2026-10-20 — Concise ChatGPT account feedback
 
