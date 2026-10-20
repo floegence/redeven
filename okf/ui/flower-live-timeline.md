@@ -33,6 +33,8 @@ Missing baseline, a version gap, queue overflow or damaged fragments uses `Flowe
 
 ## ThreadCache and independent authorities
 
+Workspace summary publication reads one authoritative Floret summary. It never combines lifecycle from an earlier complete view with a later activity watermark. The summary reader avoids presentation-history copies and preserves coherent Stop/start transitions. Fragment decoding checks canonical Base64 alphabet, exact padding and unused bits once; small direct frames avoid temporary UTF-8 buffers when their worst-case encoded size is already below the limit.
+
 ThreadCache owns selection, summaries and at most 12 indexed detail records. Selection protects the current entry; background traffic never promotes cache priority. Unvisited threads retain summaries only. Navigation changes selection without reconnecting the workspace stream. Env App placements retain one Surface, adapter, cache and stream across Activity/Workbench hosts.
 
 A detail snapshot initializes one indexed record. Native batches validate then atomically commit changed items and components through that record. Ordinary appends retain cache/view/list identity and notify only affected fields. The transcript and turn grouping change only when their structural inputs change. There is no raw-current history replica or browser lifecycle projection. Complete materialization is reserved for explicit reads, copy/export or validation boundaries.
@@ -40,6 +42,8 @@ A detail snapshot initializes one indexed record. Native batches validate then a
 Runtime `view_version`, product `settings_revision`, activity/read watermarks and title generation remain independent authorities. Summary updates never author cached messages, turns or interactions. Same-version context supplements and explicit clears retain their existing acceptance rules; omitted context stays unchanged. A late HTTP response cannot roll runtime content back or erase newer title/settings/read metadata. Reconnect fences old runtime versions without clearing accepted content or drafts.
 
 A cold or invalidated detail read buffers a bounded set of native updates. Snapshot admission discards earlier versions and applies continuous successors atomically. Only explicit user retry revisits a failed detail revision. Navigation generations fence late responses without changing admission or outbox settlement. The [selection contract](flower-thread-selection.md) owns the interaction.
+
+An authoritative same-version detail read also confirms summary lifecycle when its content and settings revisions cover the summary. A lifecycle-only mismatch at equal revisions must not preserve the contradicted summary forever. Older body, settings, read and title authorities retain their independent acceptance rules.
 
 ## Commands and interaction
 

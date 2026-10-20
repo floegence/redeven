@@ -63,7 +63,14 @@ if (process.argv.includes('--build')) {
     });
     const page = await application.firstWindow();
     const errors = []; page.on('pageerror', error => errors.push(String(error)));
-    page.on('console', message => { if (message.type() === 'error') console.error('renderer:', message.text()); });
+    const consoleErrors = [];
+    const diagnosticReads = [];
+    page.on('console', message => {
+      if (message.type() !== 'error') return;
+      console.error('renderer:', message.text());
+      diagnosticReads.push(Promise.all(message.args().map(argument => argument.jsonValue().catch(() => undefined)))
+        .then(arguments_ => consoleErrors.push({ message: message.text(), arguments: arguments_ })));
+    });
     await page.locator('.flower-composer textarea').waitFor({ timeout: 30000 });
     await page.locator('[data-flower-message-id]').first().waitFor({ timeout: 30000 });
     await page.evaluate(({ idle }) => {
@@ -283,6 +290,8 @@ if (process.argv.includes('--build')) {
       evidence.wireBytes = after.stats.wire_bytes - before.stats.wire_bytes;
       evidence.workload = workload;
       evidence.initialBytes = initialBytes;
+      await Promise.all(diagnosticReads);
+      evidence.consoleErrors = consoleErrors;
       await writeFile(output, JSON.stringify(evidence, null, 2) + '\n');
       assert.ok(evidence.output.coverage >= .95, 'output latency must observe at least 95% of foreground text markers');
       if (process.argv.includes('--candidate-gates')) {
@@ -298,6 +307,7 @@ if (process.argv.includes('--build')) {
         assert.ok(evidence.longTasks.every(value => value < 100), 'main thread long task limit');
       }
       assert.deepEqual(errors, []);
+      assert.ok(!consoleErrors.some(error => error.message.startsWith('Flower thread detail convergence failed.')), 'thread detail must converge without synchronization errors');
       assert.ok(configured.threads.every(id => after.stats.thread_updates[id] - before.stats.thread_updates[id] >= seconds * hz * .95), 'every configured thread must maintain its requested update rate during measurement');
       assert.ok(after.stats.produced - before.stats.produced >= seconds * hz * threads * .95, 'provider must maintain its requested update rate');
     } catch (error) {

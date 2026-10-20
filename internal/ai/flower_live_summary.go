@@ -10,7 +10,7 @@ import (
 )
 
 // publishCanonicalThreadSummary publishes one product summary derived from the
-// canonical Floret current view. It deliberately does not maintain a second
+// canonical Floret summary. It deliberately does not maintain a second
 // lifecycle projection or wait for provider work.
 func (s *Service) publishCanonicalThreadSummary(ctx context.Context, endpointID, threadID string) error {
 	if s == nil || s.threadRuntime == nil || s.threadsDB == nil {
@@ -37,15 +37,11 @@ func (s *Service) publishCanonicalThreadSummary(ctx context.Context, endpointID,
 		s.broadcastFlowerSubagentsPatch(endpointID, parentThreadID, items)
 		return nil
 	}
-	current, err := s.threadRuntime.View(ctx, identity.ThreadID(threadID))
-	if err != nil {
-		return err
-	}
 	summary, err := threadSummaryFromRuntime(ctx, s.threadRuntime, identity.ThreadID(threadID))
 	if err != nil {
 		return err
 	}
-	view, err := s.threadViewFromRuntimeCurrent(ctx, settings, current, &summary)
+	view, err := s.threadViewFromSummary(ctx, settings, summary)
 	if err != nil {
 		return err
 	}

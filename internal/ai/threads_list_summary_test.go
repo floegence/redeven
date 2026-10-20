@@ -162,6 +162,7 @@ func TestPointThreadReadsUsePublishedSummaryReader(t *testing.T) {
 	if _, err := svc.GetFlowerThreadDetail(t.Context(), meta, created.ThreadID); err != nil {
 		t.Fatal(err)
 	}
+	viewsBeforePublication := counter.views.Load()
 	if err := svc.publishCanonicalThreadSummary(t.Context(), meta.EndpointID, created.ThreadID); err != nil {
 		t.Fatal(err)
 	}
@@ -170,6 +171,9 @@ func TestPointThreadReadsUsePublishedSummaryReader(t *testing.T) {
 	}
 	if got := counter.summaries.Load(); got != 3 {
 		t.Fatalf("Summary calls = %d, want 3", got)
+	}
+	if got := counter.views.Load(); got != viewsBeforePublication {
+		t.Fatalf("summary publication loaded %d full views; use one authoritative summary instead of combining independent lifecycle reads", got-viewsBeforePublication)
 	}
 }
 
