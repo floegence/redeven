@@ -58,7 +58,7 @@ describe('Flower published absolute directory picker', () => {
     try {
       await client.refresh();
       const f = await setup(context, [], favorites);
-      const star = f.host.querySelector<HTMLButtonElement>('button[aria-label="Add directory to favorites: ' + home + '"]')!;
+      const star = f.host.querySelector<HTMLButtonElement>('button[aria-label="Favorite: ' + home + '"]')!;
       expect(star).toBeTruthy(); star.click();
       await waitFor(() => favorites.paths.includes(home));
       expect(f.host.querySelector('.flower-working-directory-select')?.getAttribute('title')).toContain(home);

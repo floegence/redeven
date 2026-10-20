@@ -25,7 +25,7 @@ describe('captured Git directory favorite actions', () => {
       reopened.onSelect?.();
       await vi.waitFor(() => expect(second).toHaveBeenCalledOnce());
       expect(JSON.parse(String(second.mock.calls[0]?.[1]?.body))).toEqual({path:'/new-target'});
-      expect(captured.label).toBe('Add directory to favorites');
+      expect(captured.label).toBe('Favorite');
       await vi.waitFor(() => expect(envDirectoryFavorites(() => 'Failed')?.pendingPaths).toEqual([]));
     } finally {dispose();releaseFirst();releaseSecond();}
   });

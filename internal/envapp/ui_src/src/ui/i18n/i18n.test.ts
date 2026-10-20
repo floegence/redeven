@@ -949,6 +949,26 @@ describe('Env App and Desktop i18n contract', () => {
     });
   });
 
+  it('uses concise directory favorite actions in every shipped locale', () => {
+    const actions = {
+      'en-US': ['Favorite', 'Unfavorite'],
+      'zh-CN': ['收藏', '取消收藏'],
+      'zh-TW': ['收藏', '取消收藏'],
+      'ja-JP': ['お気に入りに追加', 'お気に入りから削除'],
+      'ko-KR': ['즐겨찾기 추가', '즐겨찾기 해제'],
+      'de-DE': ['Favorisieren', 'Favorit entfernen'],
+      'es-ES': ['Añadir a favoritos', 'Quitar de favoritos'],
+      'fr-FR': ['Ajouter aux favoris', 'Retirer des favoris'],
+      'pt-BR': ['Favoritar', 'Desfavoritar'],
+      'ru-RU': ['В избранное', 'Убрать из избранного'],
+    } as const;
+    expect(Object.keys(actions).sort()).toEqual([...SUPPORTED_LOCALES].sort());
+    for (const locale of SUPPORTED_LOCALES) {
+      const copy = dictionaries[locale].flowerSurface.filesystemPicker;
+      expect([copy.favoriteDirectory, copy.unfavoriteDirectory], locale).toEqual(actions[locale]);
+    }
+  });
+
   it('keeps Flower surface catalogs identical and avoids default-English production fallback', () => {
     const envAIPage = fs.readFileSync(
       path.resolve(process.cwd(), 'src/ui/pages/EnvAIPage.tsx'),
