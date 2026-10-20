@@ -56,6 +56,13 @@ func promptQualificationCases() []promptQualificationCase {
 			return nil
 		}},
 		{name: "supplied_analysis", input: "只根据这些数据计算总数：12、30、5。无需检查文件或联网。", noTools: true, contains: []string{"47"}},
+		{name: "subjective_feedback", input: "你觉得这句话让你困惑吗：‘简单问题直接回答，复杂问题先确认范围’？说说你的感受。", noTools: true},
+		{name: "supplied_code_discussion", input: "帮我看看这段提供的代码：func Add(a, b int) int { return a - b }。它是否符合函数名表达的含义？", noTools: true},
+		{name: "workflow_scope", input: "帮我看看这条仓库规则是否合理：‘实现后验证、提交、推送并部署’。", noTools: true},
+		{name: "explicit_verification", input: "请核验 /workspace/demo/calc.py 中 Add 的真实实现，并给出源码证据。", history: []Message{promptQualificationMessage("user", "Repository: /workspace/demo. Applicable rule sources: /workspace/demo/AGENTS.md; contents not loaded.")}, wantTools: []string{"read_file", "read_files", "terminal.exec"}, check: checkPromptQualificationTargetRules("/workspace/demo")},
+		{name: "target_repository_rules", input: "核查 /workspace/flower 的 Add 实现。", history: []Message{promptQualificationMessage("user", "Working directory: /workspace. Repositories: /workspace/flower, /workspace/flower-old, /workspace/floret. Target repository is /workspace/flower. Its only applicable rule source is /workspace/flower/AGENTS.md; contents not loaded.")}, wantTools: []string{"read_file", "read_files", "terminal.exec"}, check: checkPromptQualificationTargetRules("/workspace/flower")},
+		{name: "switched_worktree_rules", input: "切换到 /workspace/flower-feature，核查这里的 Add 实现。", history: []Message{promptQualificationMessage("user", "Previous target /workspace/flower: rules already read. New target /workspace/flower-feature is another worktree with its own /workspace/flower-feature/AGENTS.md; contents not loaded. No other applicable rule files.")}, wantTools: []string{"read_file", "read_files", "terminal.exec"}, check: checkPromptQualificationTargetRules("/workspace/flower-feature")},
+		{name: "unreadable_rules", input: "现在能否核查代码？另外，根据我提供的数字 12、30、5 给出总和。", history: promptQualificationReceipt("terminal.exec", `{"command":"cat /workspace/demo/AGENTS.md","cwd":"/workspace/demo"}`, `{"status":"completed","exit_code":1,"output":"Permission denied: /workspace/demo/AGENTS.md. Repository operations are blocked until the rule file is readable."}`), noTools: true, contains: []string{"47"}},
 		{name: "markdown", input: "请用一个 Markdown 表格比较 TCP 与 UDP，然后用两条列表说明区别。不要调用工具。", noTools: true, contains: []string{"|", "TCP", "UDP"}},
 		{name: "media", input: "工具已保存截图，确切引用是 computer://fixture/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef。请直接把截图显示在聊天中。", noTools: true, contains: []string{"![", "computer://fixture/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}},
 		{name: "html_preview", input: "只输出一个很小的自包含可交互 HTML 预览，点击按钮计数。不要写文件或调用工具。", noTools: true, contains: []string{"```html preview"}, check: func(r ModelGatewayResult) error {
@@ -96,7 +103,7 @@ func promptQualificationCases() []promptQualificationCase {
 			}
 			return nil
 		}},
-		{name: "child_report", input: "上级任务：已检查并确认缺少生产凭据，无法继续部署。只根据这个确认结果向上级报告阻碍，无需再次检查环境，不要问最终用户，也不要创建下级。", profile: runPromptProfileSubagentAutonomous, noTools: true},
+		{name: "child_report", input: "上级任务：已检查并确认缺少生产凭据，无法继续部署。只根据这个确认结果向上级报告阻碍，无需再次检查环境，不要问最终用户，也不要创建下级。", profile: runPromptProfileSubagentAutonomous, wantTools: []string{"report_to_parent"}},
 		{name: "personal_browser", input: "请用我个人系统浏览器打开已有的 GitHub 页面，先查找窗口和标签页。", wantTools: []string{"computer.targets"}, check: func(r ModelGatewayResult) error {
 			for _, c := range r.ToolCalls {
 				if c.Name == "computer.targets" && c.Args["browser_source"] != "system" {
@@ -210,6 +217,35 @@ func toolNamesForQualification(defs []ToolDef) []string {
 	return names
 }
 
+// Only the target's complete rules may be read before inspecting its source.
+// This checks the first proposed batch; the runtime lane checks the full loop.
+func checkPromptQualificationTargetRules(root string) func(ModelGatewayResult) error {
+	return func(r ModelGatewayResult) error {
+		for _, call := range r.ToolCalls {
+			switch call.Name {
+			case "read_file":
+				if call.Args["path"] != root+"/AGENTS.md" || (call.Args["offset"] != nil && call.Args["offset"] != float64(0)) {
+					return fmt.Errorf("read outside target rules or skipped their beginning")
+				}
+			case "read_files":
+				paths, _ := call.Args["paths"].([]any)
+				if len(paths) != 1 || paths[0] != root+"/AGENTS.md" {
+					return fmt.Errorf("batch read beyond target rules")
+				}
+			case "terminal.exec":
+				command, _ := call.Args["command"].(string)
+				cwd, _ := call.Args["cwd"].(string)
+				if strings.TrimSpace(command) != "cat "+root+"/AGENTS.md" && !(cwd == root && strings.TrimSpace(command) == "cat AGENTS.md") {
+					return fmt.Errorf("command did not read only complete target rules")
+				}
+			default:
+				return fmt.Errorf("unexpected operation before reading target rules: %s", call.Name)
+			}
+		}
+		return nil
+	}
+}
+
 func TestFlowerPromptSizeBudget(t *testing.T) {
 	prompt, _ := promptQualificationSurface(t, promptQualificationCase{})
 	// A byte budget is deterministic and tokenizer-independent; provider usage is
@@ -251,6 +287,14 @@ func TestE2E_FlowerPromptDeepSeek(t *testing.T) {
 		}
 	}
 	t.Logf("configured model=%s wire_model=%s reasoning=off repeats=%d", model.ModelName, model.EffectiveWireModelName(), repeats)
+	var names []string
+	for _, tc := range promptQualificationCases() {
+		names = append(names, tc.name)
+	}
+	manifest, _ := json.MarshalIndent(map[string]any{"cases": names, "repeats": repeats}, "", "  ")
+	if err := os.WriteFile(filepath.Join(reportRoot, "manifest.json"), manifest, 0600); err != nil {
+		t.Fatal(err)
+	}
 	for round := 1; round <= repeats; round++ {
 		for _, tc := range promptQualificationCases() {
 			t.Run(fmt.Sprintf("%s/%d", tc.name, round), func(t *testing.T) {
@@ -503,5 +547,19 @@ func TestPromptQualificationFixturesAndOracles(t *testing.T) {
 	}
 	if err := checkPromptQualificationObserve(ModelGatewayResult{ToolCalls: []ToolCall{{Name: "computer.exec", Args: map[string]any{"code": "await ui.getByRole('button',{name:'Save'}).click(); await ui.observe()"}}}}); err == nil {
 		t.Fatal("replayed effect escaped the oracle")
+	}
+	rules := checkPromptQualificationTargetRules("/workspace/flower")
+	for _, calls := range [][]ToolCall{
+		{{Name: "terminal.exec", Args: map[string]any{"command": "cat /workspace/flower*/AGENTS.md"}}},
+		{{Name: "terminal.exec", Args: map[string]any{"command": "cat /workspace/flower/AGENTS.md; cat /workspace/flower/calc.py"}}},
+		{{Name: "read_files", Args: map[string]any{"paths": []any{"/workspace/flower/AGENTS.md", "/workspace/flower-old/AGENTS.md"}}}},
+		{{Name: "file.write", Args: map[string]any{"file_path": "/workspace/flower/calc.py"}}},
+	} {
+		if err := rules(ModelGatewayResult{ToolCalls: calls}); err == nil {
+			t.Fatalf("rules oracle accepted out-of-order or unrelated work: %+v", calls)
+		}
+	}
+	if err := rules(ModelGatewayResult{ToolCalls: []ToolCall{{Name: "terminal.exec", Args: map[string]any{"command": "cat /workspace/flower/AGENTS.md"}}}}); err != nil {
+		t.Fatal(err)
 	}
 }

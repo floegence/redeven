@@ -61,7 +61,7 @@ func TestBuildLayeredSystemPrompt_RoutesOKFToRedevenRepositoryKnowledgeOnly(t *t
 	t.Parallel()
 
 	prompt := buildPromptForToolRoutingTest(t)
-	assertPromptContains(t, prompt, "Verify code/file claims against workspace sources")
+	assertPromptContains(t, prompt, "workspace sources for code/file claims")
 	assertPromptContains(t, prompt, "OKF is not internet access")
 	for _, def := range builtInToolDefinitions() {
 		switch def.Name {
@@ -98,7 +98,7 @@ func TestBuildLayeredSystemPrompt_ExcludesOKFFromExternalResearch(t *testing.T) 
 	t.Parallel()
 
 	prompt := buildPromptForToolRoutingTest(t)
-	assertPromptContains(t, prompt, "external/current facts against authoritative external sources")
+	assertPromptContains(t, prompt, "authoritative sources for external/current facts")
 	assertPromptContains(t, prompt, "OKF is not internet access.")
 	assertPromptContains(t, prompt, "Use curl only for authentication, custom headers, non-GET requests or binary downloads that web_fetch cannot express")
 	assertPromptContains(t, prompt, "never for URL discovery or bypass")
@@ -233,7 +233,7 @@ func TestBuildLayeredSystemPromptUsesNaturalCompletion(t *testing.T) {
 	t.Parallel()
 
 	prompt := buildPromptForToolRoutingTest(t)
-	assertPromptContains(t, prompt, "When the task is complete, provide the final assistant response")
+	assertPromptContains(t, prompt, "Finish concisely with checks and material limits")
 }
 
 func TestBuildLayeredSystemPromptRequiresAskUserForBlockingQuestions(t *testing.T) {
