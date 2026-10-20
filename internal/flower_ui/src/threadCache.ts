@@ -280,15 +280,21 @@ function createCache(
       || acceptedTitle.title_status !== currentSummary.title_status || acceptedTitle.title !== currentSummary.title ? 'accepted' : 'unchanged';
     const readChanged = view.thread.read_status.read_state.last_seen_activity_revision > (currentSummary?.read_status.read_state.last_seen_activity_revision ?? 0);
     const incomingContentRevision = view.contentRevision ?? threadSnapshotRevision(view.thread);
-    const contentRevision = current && runtimeState === 'stale' ? current.contentRevision
+    // Continuous native updates already cover an older HTTP actor snapshot.
+    // Its activity watermark can confirm retained content without replacing the
+    // newer lifecycle. Reconnect resets version to zero before any such claim.
+    const nativeCoversRead = Boolean(current?.version && views.get(id)?.runtime && options?.current
+      && options.current.view_version === view.version && view.version <= current.version);
+    const contentRevision = current && runtimeState === 'stale' && !nativeCoversRead ? current.contentRevision
       : runtimeState === 'accepted' ? incomingContentRevision
         : Math.max(current?.contentRevision ?? 0, incomingContentRevision);
+    const runtimeView = current && runtimeState !== 'accepted' ? current : view;
     // A same-version authoritative read can confirm a lifecycle already applied
     // by native updates while a concurrently delivered summary still differs.
-    const summaryChanged = !options?.preserveSummary && runtimeState !== 'stale' && currentSummary
+    const summaryChanged = !options?.preserveSummary && (runtimeState !== 'stale' || nativeCoversRead) && currentSummary
       && incomingContentRevision >= threadSnapshotRevision(currentSummary)
       && threadSettingsRevision(view.thread) >= threadSettingsRevision(currentSummary)
-      && threadRuntimeStateKey(view.thread as FlowerThreadSnapshot) !== threadRuntimeStateKey(currentSummary);
+      && threadRuntimeStateKey(runtimeView.thread as FlowerThreadSnapshot) !== threadRuntimeStateKey(currentSummary);
     const state = summaryChanged || navigationChanged || readChanged || contentRevision !== current?.contentRevision ? 'accepted' : aggregateAcceptance(runtimeState, activityState, settingsState, titleState);
     if (state !== 'accepted') return {
       cache,
@@ -297,7 +303,6 @@ function createCache(
       activityState,
       settingsState,
     };
-    const runtimeView = current && runtimeState !== 'accepted' ? current : view;
     const activityThread = current && activityState !== 'accepted' ? current.thread : view.thread;
     const settingsThread = current && settingsState !== 'accepted' ? current.thread : view.thread;
     const mergedView: ThreadDetailView = {

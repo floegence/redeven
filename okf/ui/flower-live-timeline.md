@@ -45,6 +45,8 @@ A cold or invalidated detail read buffers a bounded set of native updates. Snaps
 
 An authoritative same-version detail read also confirms summary lifecycle when its content and settings revisions cover the summary. A lifecycle-only mismatch at equal revisions must not preserve the contradicted summary forever. Older body, settings, read and title authorities retain their independent acceptance rules.
 
+A late HTTP actor snapshot covered by the same uninterrupted native version sequence confirms its activity/content watermark without replacing the newer retained runtime state. This coverage requires an indexed native baseline and the response's explicit actor version; a reconnect invalidates that authority before another snapshot can confirm it. Viewer read events and current-only updates cannot manufacture loaded-content coverage.
+
 ## Commands and interaction
 
 Canonical cancellation plus active state owns Stopping feedback. Stop acknowledgement is not a terminal outcome; it never clears drafts or disables navigation. Unknown Stop results remain actionable through the existing read/retry owner. Send admission uses exact request and thread identities; only a canonical receipt or matching accepted input settles the transport outbox. Conflicting or malformed acknowledgements retain the original request for safe recovery.
