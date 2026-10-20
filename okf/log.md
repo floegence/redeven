@@ -3,7 +3,8 @@
 ## 2026-10-19 — Single-source Flower execution guidance
 
 - Remove the host's duplicate tool enumeration and standalone search-scope section; distinguish local and hosted search, narrow structured questions, and measure final provider instructions after Goal injection. See [prompt contracts](ai/flower-prompt-and-rule-sources.md).
-- Record actual rule-discovery directories and reject failed scope probes through existing context recovery. Use published Floret guidance for compact [Goal guidance](ai/flower-goals.md) and explicit schema-correction ownership without changing durable contracts.
+- Record actual rule-discovery directories and reject failed scope probes through existing context recovery. Adopt published Floret v7.69.1 with compact [Goal guidance](ai/flower-goals.md), explicit schema-correction ownership and consistent question-tool scope without changing durable contracts.
+- Preserve tool descriptions in Responses requests and remove the host's duplicate question-tool description so supplied definitions reach the model consistently.
 
 ## 2026-10-19 — Append newly pinned conversations
 

@@ -3,6 +3,8 @@ package ai
 import (
 	"reflect"
 	"testing"
+
+	flruntime "github.com/floegence/floret/v7/runtime"
 )
 
 func TestPermissionToolFilter_VisibilityMatrix(t *testing.T) {
@@ -174,6 +176,11 @@ func TestBuiltInControlSignalDefinitionsExposeOnlyAskUser(t *testing.T) {
 
 	if got := toolNames(builtInControlSignalDefinitions()); !reflect.DeepEqual(got, []string{"ask_user"}) {
 		t.Fatalf("control signals=%v, want [ask_user]", got)
+	}
+	for i, def := range builtInControlSignalDefinitions() {
+		if def.Description != flruntime.CoreControlDefinitions()[i].Description {
+			t.Fatalf("host overrides runtime question scope: %s", def.Description)
+		}
 	}
 }
 

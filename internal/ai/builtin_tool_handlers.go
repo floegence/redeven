@@ -775,16 +775,14 @@ func builtInControlSignalDefinitions() []ToolDef {
 	defs := make([]ToolDef, 0, 1)
 	for _, core := range flruntime.CoreControlDefinitions() {
 		name := strings.TrimSpace(core.Name)
-		description := strings.TrimSpace(core.Description)
 		inputSchema := core.InputSchema
 		switch name {
 		case flruntime.CoreControlAskUser:
-			description = "Ask user for required structured input when the next step depends on a user decision, external input, approval, or a guided interaction turn. Preserve explicit interaction-shape constraints from the user, such as asking for fixed options, clickable choices, one-question-at-a-time, or indirect questioning. Each question must declare response_mode. Choice-based questions must also declare choices_exhaustive: use select only when choices_exhaustive=true, write for direct free text, and select_or_write when choices_exhaustive=false and custom text is allowed. If the user asks for answer choices, do not downgrade the question into pure write mode. choices[] should contain fixed options only. Do not use it to delegate tool-collectable work. Include reason_code, required_from_user, and evidence_refs for explainable policy checks."
 			inputSchema = redevenAskUserSignalInputSchema(core.InputSchema)
 		}
 		defs = append(defs, ToolDef{
 			Name:         name,
-			Description:  description,
+			Description:  strings.TrimSpace(core.Description),
 			InputSchema:  toSchema(inputSchema),
 			Mutating:     false,
 			Visibility:   ToolVisibilityControl,
