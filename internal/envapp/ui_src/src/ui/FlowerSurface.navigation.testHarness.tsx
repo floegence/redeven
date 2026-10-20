@@ -27,6 +27,7 @@ function fixtureAdapter(adapter: TestFlowerSurfaceAdapter): FlowerSurfaceAdapter
   if (existing) return existing;
   const fixture: FlowerSurfaceAdapter = {
     ...adapter,
+    get canMutate() { return adapter.canMutate; },
     connectLiveStream: adapter.connectLiveStream ?? ((input) => testLiveStreamFromLegacyFixture(adapter, input)),
     loadSettings: async (refresh, signal) => withModelDirectoryFixture(await adapter.loadSettings(refresh, signal)),
     loadModelDirectory: adapter.loadModelDirectory ?? (async () => withModelDirectoryFixture(await adapter.loadSettings()).model_directory!),

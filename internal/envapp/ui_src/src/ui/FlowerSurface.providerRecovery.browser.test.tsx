@@ -6,7 +6,7 @@ import { page, userEvent } from 'vitest/browser';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import { createFlowerComposerDraftCoordinator } from '../../../../flower_ui/src';
 import type { FlowerLiveStreamConnectInput, FlowerLiveStreamEnvelope, FlowerSettingsDraft, FlowerSettingsSnapshot } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
-import { adapter, deferred, disposeRenderedSurface, flowerSurfaceNotifications, liveBootstrap, renderSurfaceWithAdapterProps, renderSurfaceWithDraftCoordinator, settingsSnapshot, subagentSummary, subagentDetail, runtimeCurrentView, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+import { adapter, deferred, flush, disposeRenderedSurface, flowerSurfaceNotifications, liveBootstrap, renderSurfaceWithAdapterProps, renderSurfaceWithDraftCoordinator, settingsSnapshot, subagentSummary, subagentDetail, runtimeCurrentView, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
 const copy = DEFAULT_FLOWER_SURFACE_COPY;
 beforeEach(() => page.viewport(1100, 900));
@@ -418,12 +418,16 @@ it('releases correction preflight when mutation permission is revoked and permit
   retry().click();
   await waitFor(() => state.loadThread.mock.calls.length > reads);
   state.setCanMutate(false);
-  preflight.resolve(liveBootstrap(thread({ status: 'failed', error: { code: 'floret_tool_argument_correction_exhausted', message: 'stopped' } }), 9));
-  await Promise.resolve(); await Promise.resolve();
+  const failed = liveBootstrap(thread({ status: 'failed', error: { code: 'floret_tool_argument_correction_exhausted', message: 'stopped' } }), 9);
+  preflight.resolve(failed);
+  await flush();
   expect(state.retryThread).not.toHaveBeenCalled();
   expect(state.configure().disabled).toBe(true);
   state.setCanMutate(true);
   await waitFor(() => !retry().disabled && !state.configure().disabled);
+  const recovered = liveBootstrap(thread({ status: 'idle', error: undefined }), 10);
+  state.loadThread.mockResolvedValue(failed);
+  state.retryThread.mockImplementationOnce(async () => { state.loadThread.mockResolvedValue(recovered); });
   await userEvent.click(retry());
   await waitFor(() => state.retryThread.mock.calls.length === 1 && !state.surface.querySelector('.flower-error-card'));
 });
