@@ -3,7 +3,7 @@ import { createEffect, createMemo, createSignal, onCleanup, Show } from 'solid-j
 
 import { FlowerIcon } from '../icons/FlowerIcon';
 import { trimString } from '../flowerSurfaceModel';
-import type { FlowerProviderRequestProgress } from '../contracts/flowerSurfaceContracts';
+import type { FlowerProviderTransportProgress, FlowerProviderRequestProgress } from '../contracts/flowerSurfaceContracts';
 import type { FlowerSurfaceCopy } from '../copy';
 import { flowerRequestStallSeconds, flowerRequestWaitSeconds } from '../providerRequestProgress';
 
@@ -11,12 +11,14 @@ export type FlowerProgressIndicatorState = Readonly<{
   kind: string;
   runID: string;
   request?: FlowerProviderRequestProgress;
+  transport?: FlowerProviderTransportProgress;
 }>;
 
 export type FlowerProgressIndicatorProps = Readonly<{
   progress: FlowerProgressIndicatorState | null;
   label: string;
   outputCopy?: FlowerSurfaceCopy['chat']['outputProgress'];
+  transportCopy?: FlowerSurfaceCopy['chat']['transportProgress'];
 }>;
 
 export const FlowerProgressIndicator: Component<FlowerProgressIndicatorProps> = (props) => {
@@ -28,6 +30,13 @@ export const FlowerProgressIndicator: Component<FlowerProgressIndicatorProps> = 
   const streaming = createMemo(() => !!props.progress?.request?.first_output_at
     && (props.progress.kind === 'streaming' || props.progress.kind === 'waiting_response'));
   const stalledSeconds = createMemo(() => streaming() ? flowerRequestStallSeconds(props.progress?.request, now()) : null);
+  const transportLabel = () => {
+    const transport = props.progress?.transport;
+    if (!transport || props.progress?.request?.first_output_at || !props.transportCopy) return null;
+    if (transport.phase === 'failed' && transport.next_transport === 'http_sse') return props.transportCopy.switching;
+    if (transport.transport === 'http_sse' && ['sending', 'receiving'].includes(transport.phase)) return props.transportCopy.https;
+    return null;
+  };
   const label = () => stalledSeconds() !== null && props.outputCopy
     ? props.outputCopy.waitingForContinuation : props.label.replace(/\.\.\.$/, '');
   createEffect(() => {
@@ -75,6 +84,7 @@ export const FlowerProgressIndicator: Component<FlowerProgressIndicatorProps> = 
               <span class="flower-model-status-dots" aria-hidden="true">...</span>
             </Show>
           </span>
+          <Show when={transportLabel()}>{(value) => <span class="flower-model-status-metric" data-flower-transport={props.progress?.transport?.transport}>{value()}</span>}</Show>
           <Show when={metric()}>
             {(value) => <span class="flower-model-status-metric" title={value().title} aria-live="off">
               <span aria-hidden="true">· </span>{value().label}

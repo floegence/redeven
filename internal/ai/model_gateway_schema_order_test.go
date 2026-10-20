@@ -82,7 +82,7 @@ func TestFileToolSchemasKeepDeclaredOrderAcrossStrictAndFrozenReplay(t *testing.
 			}
 			var sent []byte
 			params := map[string]any{"input": []any{map[string]any{"role": "user", "content": "edit"}}, "tools": []any{map[string]any{"type": "function", "name": "file_write", "parameters": schema}}}
-			prepared, err := newPreparedModelWire("openai", "gpt-4o", flprovider.RequestFormatOpenAIResponses, params, ModelGatewayRequest{}, providerToolAliases{}, func(_ context.Context, raw []byte, _ func(StreamEvent)) (ModelGatewayResult, error) {
+			prepared, err := newPreparedModelWire("openai", "gpt-4o", flprovider.RequestFormatOpenAIResponses, params, ModelGatewayRequest{}, providerToolAliases{}, func(_ context.Context, _ ModelGatewayRequest, raw []byte, _ func(StreamEvent)) (ModelGatewayResult, error) {
 				sent = bytes.Clone(raw)
 				return ModelGatewayResult{}, nil
 			})

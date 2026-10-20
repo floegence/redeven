@@ -329,6 +329,15 @@ func flowerRuntimeCurrentBoundaryKey(current flruntime.ThreadView) string {
 	builder.add(current.RunID.String())
 	if current.RunProgress != nil {
 		builder.add(string(current.RunProgress.Phase))
+		if transport := current.RunProgress.Transport; transport != nil {
+			builder.add(string(transport.Transport))
+			builder.add(string(transport.Phase))
+			builder.add(string(transport.NextTransport))
+			builder.add(transport.Reason)
+			builder.add(transport.LogicalRequestID.String())
+			builder.add(transport.AttemptID)
+			builder.addInt(int64(transport.AttemptEpoch))
+		}
 		if retry := current.RunProgress.Retry; retry != nil {
 			builder.addInt(int64(retry.Retry))
 			builder.addInt(int64(retry.MaxRetries))

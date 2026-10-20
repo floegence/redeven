@@ -1,4 +1,4 @@
-import type { FlowerProviderRequestProgress } from './contracts/flowerSurfaceContracts';
+import type { FlowerProviderTransportProgress, FlowerProviderRequestProgress } from './contracts/flowerSurfaceContracts';
 
 /** Anchor server-sampled elapsed time to the browser's monotonic clock. */
 export function mapFlowerProviderRequestProgress(raw: unknown, sampledAt: unknown, previous?: FlowerProviderRequestProgress): FlowerProviderRequestProgress {
@@ -39,4 +39,17 @@ export function flowerRequestStallSeconds(request: FlowerProviderRequestProgress
   if (!request?.first_output_at || request.progress_anchor_monotonic_ms === undefined) return null;
   const elapsed = Math.max(0, now - request.progress_anchor_monotonic_ms);
   return elapsed >= 15000 ? Math.floor(elapsed / 1000) : null;
+}
+
+/** Validate protocol facts only; this mapper never schedules recovery. */
+export function mapFlowerProviderTransportProgress(raw: unknown): FlowerProviderTransportProgress {
+  const v = raw as FlowerProviderTransportProgress | null;
+  const kinds = ['http', 'http_sse', 'websocket'];
+  if (!v || !v.logical_request_id?.trim() || !v.attempt_id?.trim() || !Number.isSafeInteger(v.attempt_epoch) || v.attempt_epoch < 1
+   || !kinds.includes(v.transport) || !['connecting', 'sending', 'receiving', 'completed', 'failed'].includes(v.phase)
+   || (v.next_transport !== undefined && !kinds.includes(v.next_transport))
+   || (v.reason !== undefined && !/^[a-z][a-z0-9_]{0,63}$/.test(v.reason))) {
+   throw new Error('Flower contract error: invalid provider transport progress.');
+  }
+  return { ...v };
 }

@@ -247,6 +247,8 @@ func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, provider
 		var streamedReasoning strings.Builder
 		onEvent := func(ev StreamEvent) {
 			switch ev.Type {
+			case StreamEventTransport:
+				sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventTransport, Transport: ev.Transport})
 			case StreamEventHostedTool:
 				if ev.HostedToolEvent != nil {
 					sendFloretProviderEvent(ctx, out, *ev.HostedToolEvent)
@@ -320,7 +322,9 @@ func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, provider
 		usage := floretUsageFromFlower(result.Usage)
 		if result.Measurement != nil {
 			evidence := *result.Measurement
-			evidence.AttemptID = providerReq.AttemptID
+			if evidence.AttemptID != providerReq.AttemptID {
+				evidence.CompleteInput = false
+			}
 			usage.Measurement = &evidence
 		}
 		if usage.Available {

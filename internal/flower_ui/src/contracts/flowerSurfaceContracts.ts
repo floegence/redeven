@@ -357,7 +357,18 @@ export type FlowerToolCallPreviewBlock = Readonly<{
   call: FlowerToolCallPreview;
 }>;
 
+export type FlowerProviderTransportProgress = Readonly<{
+ logical_request_id: string;
+ attempt_id: string;
+ attempt_epoch: number;
+ transport: 'http' | 'http_sse' | 'websocket';
+ phase: 'connecting' | 'sending' | 'receiving' | 'completed' | 'failed';
+ next_transport?: 'http' | 'http_sse' | 'websocket';
+ reason?: string;
+}>;
+
 export type FlowerRunProgress = Readonly<{
+ transport?: FlowerProviderTransportProgress;
   retry?: FlowerRunRetry;
   phase: FlowerRunProgressPhase;
   run_id: string;
@@ -1037,7 +1048,7 @@ export type FlowerRuntimeCurrentView = Readonly<{
   run_id?: string;
   sampled_at_ms?: number;
   tool_call_previews?: readonly FlowerToolCallPreview[];
-  run_progress?: Readonly<{ phase: FlowerRunProgressPhase; retry?: FlowerRunRetry; request?: FlowerProviderRequestProgress }> | null;
+  run_progress?: Readonly<{ phase: FlowerRunProgressPhase; retry?: FlowerRunRetry; request?: FlowerProviderRequestProgress; transport?: FlowerProviderTransportProgress }> | null;
   last_outcome?: 'completed' | 'failed' | 'cancelled' | 'interrupted';
   error?: string;
   run_error_code?: string;

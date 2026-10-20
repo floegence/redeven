@@ -1456,6 +1456,7 @@
     "modelStatusRetrying": "Nouvelle tentative de requête modèle...",
     "providerRetryWaiting": "Service du modèle indisponible. Nouvel essai dans {seconds} s · {retry}/{max}",
     "providerRetryRegenerating": "Connexion interrompue. Régénération dans {seconds} s · {retry}/{max}",
+    "transportProgress": {"switching": "Connexion interrompue. La prochaine tentative utilisera HTTPS.", "https": "Connexion HTTPS"},
     "modelStatusFinalizing": "Finalisation de la réponse...",
     "waitingForReasoning": "En attente du reasoning",
     "reasoning": "Raisonnement"
@@ -5486,6 +5487,7 @@
       "modelStatusRetrying": "Nouvelle tentative d’envoi de la requête au modèle…",
       "providerRetryWaiting": "Service du modèle indisponible. Nouvel essai dans {seconds} s · {retry}/{max}",
       "providerRetryRegenerating": "Connexion interrompue. Régénération dans {seconds} s · {retry}/{max}",
+      "transportProgress": {"switching": "Connexion interrompue. La prochaine tentative utilisera HTTPS.", "https": "Connexion HTTPS"},
       "modelStatusFinalizing": "Finalisation de la réponse...",
       "contextIndicatorComposition": "Entrée visible",
       "contextIndicatorMeasured": "Mesuré",

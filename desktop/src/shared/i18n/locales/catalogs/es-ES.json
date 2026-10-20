@@ -562,6 +562,10 @@
       "modelStatusRetrying": "Reintentando solicitud al modelo...",
       "providerRetryWaiting": "Servicio del modelo no disponible. Reintento en {seconds} s · {retry}/{max}",
       "providerRetryRegenerating": "Conexión interrumpida. Regeneración en {seconds} s · {retry}/{max}",
+      "transportProgress": {
+        "switching": "Conexión interrumpida. El siguiente intento usará HTTPS.",
+        "https": "Usando HTTPS"
+      },
       "modelStatusFinalizing": "Finalizando respuesta...",
       "outputTokens": "{count} tokens",
       "waitingForModelContinuation": "Esperando a que el modelo continúe",
@@ -1275,7 +1279,10 @@
       "modelCatalogAutoUpdateLabel": "Actualizar automáticamente las listas de modelos de los proveedores",
       "modelCatalogAutoUpdateDisclosure": "Al activar esta opción, Redeven solicita periódicamente las listas de modelos a las API de los proveedores de modelos habilitados, excepto OpenRouter.",
       "dialogOpenRouterDiscovery": "Al añadir OpenRouter, Redeven solicita su lista de modelos cuando termina de introducir la clave API o la dirección y sale del campo. Esto también ocurre con las actualizaciones automáticas desactivadas. Las actualizaciones posteriores solo se realizan mediante sincronización manual.",
-      "dialogOllamaDiscovery": "Al añadir Ollama, Redeven solicita los modelos a la dirección predeterminada. Vuelve a solicitarlos cuando termina de cambiar la dirección o la clave API y sale del campo. Esto también ocurre con las actualizaciones automáticas desactivadas."
+      "dialogOllamaDiscovery": "Al añadir Ollama, Redeven solicita los modelos a la dirección predeterminada. Vuelve a solicitarlos cuando termina de cambiar la dirección o la clave API y sale del campo. Esto también ocurre con las actualizaciones automáticas desactivadas.",
+      "dialogChatGPTRemoveAccount": "Eliminar cuenta",
+      "dialogChatGPTRemoveDescription": "¿Eliminar esta cuenta desconectada de este dispositivo? Se conservarán los ajustes del proveedor y las conversaciones. Para volver a usarla, inicia sesión o elige otra cuenta guardada.",
+      "dialogChatGPTRemoveFailed": "No se pudo eliminar la cuenta. Comprueba que se haya cerrado la sesión y vuelve a intentarlo."
     },
     "reasoningControl": {
       "default": "Predeterminado",

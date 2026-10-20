@@ -33,7 +33,7 @@ function renderIndicator() {
   });
   const [label, setLabel] = createSignal('Waiting for model response...');
   disposers.push(render(() => (
-    <FlowerProgressIndicator progress={progress()} label={label()} outputCopy={DEFAULT_FLOWER_SURFACE_COPY.chat.outputProgress} />
+    <FlowerProgressIndicator progress={progress()} label={label()} outputCopy={DEFAULT_FLOWER_SURFACE_COPY.chat.outputProgress} transportCopy={DEFAULT_FLOWER_SURFACE_COPY.chat.transportProgress} />
   ), host));
   return { host, setProgress, setLabel };
 }
@@ -174,6 +174,23 @@ it('shows a pause after fifteen seconds, retains tokens, and resumes on semantic
   await vi.advanceTimersByTimeAsync(30000);
   expect(host.textContent).not.toContain('Waiting for model to continue');
   expect(host.querySelector('.flower-model-status-metric')).toBeNull();
+  setProgress(null);
+  expect(host.querySelector('.flower-model-status-indicator')).toBeNull();
+});
+
+it('shows planned HTTPS separately from an actual attempt and clears it on output', async () => {
+  const { host, setProgress } = renderIndicator();
+  const transport = { logical_request_id: 'request', attempt_id: 'attempt-1', attempt_epoch: 1, transport: 'websocket' as const, phase: 'failed' as const, next_transport: 'http_sse' as const, reason: 'connection_lost' };
+  setProgress({ kind: 'retrying', runID: 'run-1', transport });
+  await flushEffects();
+  expect(host.textContent).toContain('The next attempt will use HTTPS');
+  expect(host.textContent).not.toContain('Using HTTPS');
+  const request = mapFlowerProviderRequestProgress({ logical_request_id: 'request', attempt_id: 'attempt-2', attempt_epoch: 2, started_at: '2026-01-01T00:00:00Z', estimated_output_tokens: 0 }, Date.parse('2026-01-01T00:00:00Z'));
+  setProgress({ kind: 'waiting_response', runID: 'run-1', request, transport: { ...transport, attempt_id: 'attempt-2', attempt_epoch: 2, transport: 'http_sse', phase: 'sending' } });
+  expect(host.textContent).toContain('Using HTTPS');
+  expect(host.textContent).not.toContain('The next attempt');
+  setProgress({ kind: 'streaming', runID: 'run-1', request: { ...request, first_output_at: '2026-01-01T00:00:01Z', estimated_output_tokens: 1 }, transport });
+  expect(host.querySelector('[data-flower-transport]')).toBeNull();
   setProgress(null);
   expect(host.querySelector('.flower-model-status-indicator')).toBeNull();
 });

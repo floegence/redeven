@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-20 — Unified ChatGPT transport recovery
+
+- Adopt published Floret v7.73.0 attempt-bound transport observation and replay measurement boundaries. Pin recoverable ChatGPT WebSocket failures to full-input SSE through Engine-owned retries; unify sanitized diagnostics, Desktop RPC v4/epoch 68 and localized current-view feedback. See [request reuse](ai/model-request-reuse.md) and [provider history](ai/model-provider-surface-and-history.md).
+
 ## 2026-10-20 — Stable ChatGPT sign-out and explicit account removal
 
 - Preserve account summary geometry and owned focus through logout; collapse the picker once without loading flicker. Add confirmed local removal of signed-out registrations, retaining provider settings and conversations and rejecting late returning callbacks. See [ChatGPT authentication](ui/flower-provider-chatgpt-authentication.md), [provider configuration](ui/flower-provider-configuration.md) and [account lifecycle](ai/chatgpt-account-lifecycle.md).

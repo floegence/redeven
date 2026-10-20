@@ -562,6 +562,10 @@
       "modelStatusRetrying": "モデルリクエストを再試行中...",
       "providerRetryWaiting": "モデルサービスを利用できません。{seconds}秒後に再試行 · {retry}/{max}",
       "providerRetryRegenerating": "接続が切断されました。{seconds}秒後に再生成 · {retry}/{max}",
+      "transportProgress": {
+        "switching": "接続が切断されました。次の試行では HTTPS を使用します。",
+        "https": "HTTPS を使用中"
+      },
       "modelStatusFinalizing": "返信を整理中...",
       "outputTokens": "{count} トークン",
       "waitingForModelContinuation": "モデルの応答再開を待機中",
@@ -1275,7 +1279,10 @@
       "modelCatalogAutoUpdateLabel": "モデルプロバイダーのモデル一覧を自動更新",
       "modelCatalogAutoUpdateDisclosure": "有効にすると、Redeven は有効なモデルプロバイダーの API に定期的にモデル一覧を要求します。OpenRouter は対象外です。",
       "dialogOpenRouterDiscovery": "OpenRouter の追加時は、API キーまたはアドレスの入力を終えて入力欄から移動すると、Redeven がモデル一覧を取得します。自動更新がオフでも取得します。以降の更新は手動同期のみです。",
-      "dialogOllamaDiscovery": "Ollama の追加時は、Redeven が既定のアドレスからモデル一覧を取得します。アドレスまたは API キーを変更して入力欄から移動すると再取得します。自動更新がオフでも取得します。"
+      "dialogOllamaDiscovery": "Ollama の追加時は、Redeven が既定のアドレスからモデル一覧を取得します。アドレスまたは API キーを変更して入力欄から移動すると再取得します。自動更新がオフでも取得します。",
+      "dialogChatGPTRemoveAccount": "アカウントを削除",
+      "dialogChatGPTRemoveDescription": "ログアウト済みのこのアカウントをこのデバイスから削除しますか？プロバイダー設定と会話は保持されます。再び使用するには、ログインするか、別の保存済みアカウントを選択してください。",
+      "dialogChatGPTRemoveFailed": "アカウントを削除できませんでした。ログアウトが完了していることを確認して、もう一度お試しください。"
     },
     "reasoningControl": {
       "default": "デフォルト",

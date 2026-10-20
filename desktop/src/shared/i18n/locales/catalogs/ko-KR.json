@@ -562,6 +562,10 @@
       "modelStatusRetrying": "모델 요청을 다시 시도 중...",
       "providerRetryWaiting": "모델 서비스를 사용할 수 없습니다. {seconds}초 후 재시도 · {retry}/{max}",
       "providerRetryRegenerating": "연결이 끊겼습니다. {seconds}초 후 다시 생성 · {retry}/{max}",
+      "transportProgress": {
+        "switching": "연결이 끊겼습니다. 다음 시도에서는 HTTPS를 사용합니다.",
+        "https": "HTTPS 사용 중"
+      },
       "modelStatusFinalizing": "답변을 정리 중...",
       "outputTokens": "{count} 토큰",
       "waitingForModelContinuation": "모델의 응답 재개를 기다리는 중",
@@ -1275,7 +1279,10 @@
       "modelCatalogAutoUpdateLabel": "모델 공급자의 모델 목록 자동 업데이트",
       "modelCatalogAutoUpdateDisclosure": "활성화하면 Redeven이 활성화된 모델 제공업체의 API에서 주기적으로 모델 목록을 가져옵니다. OpenRouter는 제외됩니다.",
       "dialogOpenRouterDiscovery": "OpenRouter를 추가할 때 API 키 또는 주소 입력을 마치고 입력란을 벗어나면 Redeven이 모델 목록을 가져옵니다. 자동 업데이트가 꺼져 있어도 가져옵니다. 이후에는 수동 동기화로만 업데이트합니다.",
-      "dialogOllamaDiscovery": "Ollama를 추가할 때 Redeven이 기본 주소에서 모델 목록을 가져옵니다. 주소 또는 API 키를 변경하고 입력란을 벗어나면 다시 가져옵니다. 자동 업데이트가 꺼져 있어도 가져옵니다."
+      "dialogOllamaDiscovery": "Ollama를 추가할 때 Redeven이 기본 주소에서 모델 목록을 가져옵니다. 주소 또는 API 키를 변경하고 입력란을 벗어나면 다시 가져옵니다. 자동 업데이트가 꺼져 있어도 가져옵니다.",
+      "dialogChatGPTRemoveAccount": "계정 삭제",
+      "dialogChatGPTRemoveDescription": "이 기기에서 로그아웃된 계정을 삭제할까요? 제공업체 설정과 대화는 유지됩니다. 다시 사용하려면 로그인하거나 다른 저장된 계정을 선택하세요.",
+      "dialogChatGPTRemoveFailed": "계정을 삭제하지 못했습니다. 로그아웃이 완료되었는지 확인한 후 다시 시도하세요."
     },
     "reasoningControl": {
       "default": "기본값",

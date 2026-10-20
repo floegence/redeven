@@ -590,7 +590,7 @@ func flowerRunProgress(runID identity.RunID, turnID identity.TurnID, progress *f
 	if progress == nil || strings.TrimSpace(runID.String()) == "" || strings.TrimSpace(turnID.String()) == "" {
 		return nil
 	}
-	return &FlowerRunProgress{RunID: runID.String(), TurnID: turnID.String(), Phase: progress.Phase, Retry: progress.Retry, Request: progress.Request, SampledAtMS: time.Now().UnixMilli()}
+	return &FlowerRunProgress{RunID: runID.String(), TurnID: turnID.String(), Phase: progress.Phase, Transport: progress.Transport, Retry: progress.Retry, Request: progress.Request, SampledAtMS: time.Now().UnixMilli()}
 }
 
 func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title string, modelID string, permissionType string, workingDir string) (*ThreadView, error) {
@@ -1335,6 +1335,19 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 		return ErrThreadBusy
 	}
 	requestKey := flruntime.RequestKey("delete:" + threadID)
+	transportThreadIDs := []identity.ThreadID{identity.ThreadID(threadID)}
+	if !canonicalDeleted {
+		for index := 0; index < len(transportThreadIDs); index++ {
+			parentID := transportThreadIDs[index]
+			children, listErr := runtime.List(ctxOrBackground(ctx), flruntime.ThreadScope{ParentID: &parentID})
+			if listErr != nil {
+				return listErr
+			}
+			for _, child := range children {
+				transportThreadIDs = append(transportThreadIDs, child.ID)
+			}
+		}
+	}
 	if !canonicalDeleted && force {
 		if _, cancelErr := runtime.Cancel(ctxOrBackground(ctx), flruntime.CancelInput{
 			ThreadID: identity.ThreadID(threadID), RequestKey: flruntime.RequestKey("delete-cancel:" + threadID),
@@ -1349,10 +1362,19 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 			return err
 		}
 	}
+	s.mu.Lock()
+	pool, desktop := s.openAIConnections, s.desktopModelSource
+	s.mu.Unlock()
+	releaseCtx, releaseCancel := context.WithTimeout(ctxOrBackground(ctx), time.Second)
+	for _, deletedID := range transportThreadIDs {
+		s.forgetFlowerRuntimeThread(deletedID.String())
+		pool.releaseThread(deletedID.String())
+		desktop.releaseThreadTransport(releaseCtx, deletedID.String())
+	}
+	releaseCancel()
 	if err := db.DeleteThreadProductData(ctxOrBackground(ctx), endpointID, threadID); err != nil {
 		return err
 	}
-	s.forgetFlowerRuntimeThread(threadID)
 	if readStateCleaner != nil {
 		s.startServiceWorker(func() {
 			if err := readStateCleaner.RetireFlowerThreadReadState(context.Background(), endpointID, threadID); err != nil && s.log != nil {

@@ -4300,6 +4300,7 @@
 
 .flower-model-status-indicator {
   display: inline-flex;
+  flex-wrap: wrap;
   min-width: 0;
   align-items: center;
   gap: 0.38rem;
@@ -4313,6 +4314,13 @@
   font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.flower-model-status-metric[data-flower-transport] {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .flower-model-status-flower {

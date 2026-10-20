@@ -2682,6 +2682,7 @@ export const enUS = defineDictionary({
     modelStatusRetrying: 'Retrying model request...',
     providerRetryWaiting: 'Model service unavailable. Retry in {seconds}s · {retry}/{max}',
     providerRetryRegenerating: 'Connection interrupted. Regenerating in {seconds}s · {retry}/{max}',
+    transportProgress: { switching: 'Connection interrupted. The next attempt will use HTTPS.', https: 'Using HTTPS' },
     modelStatusFinalizing: 'Finalizing reply...',
     waitingForReasoning: 'Waiting for reasoning',
     reasoning: 'Reasoning',

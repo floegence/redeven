@@ -20,7 +20,7 @@ import (
 )
 
 // The physical socket closes without a close frame, reproducing the original
-// EOF. Only the Engine may replay the frozen request on a new connection.
+// EOF. Only the Engine may replay the frozen request, using full-input SSE.
 func TestProviderWebSocketEOFRecovery(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -28,16 +28,35 @@ func TestProviderWebSocketEOFRecovery(t *testing.T) {
 		stop     bool
 	}{
 		{"before_output", 1, false}, {"partial_text", 1, false}, {"partial_arguments", 1, false},
-		{"exhaustion_manual_retry", 5, false}, {"stop_during_recovery", 1, true},
+		{"request_timeout", 1, false}, {"exhaustion_manual_retry", 5, false}, {"stop_during_recovery", 1, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var requests, connections atomic.Int32
 			var mu sync.Mutex
 			var frozen json.RawMessage
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method != "GET" {
-					t.Error("unexpected HTTP fallback")
-					w.WriteHeader(500)
+				if r.Method == "POST" {
+					var body map[string]json.RawMessage
+					if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+						t.Error(err)
+						return
+					}
+					n := requests.Add(1)
+					mu.Lock()
+					if n <= 5 && string(frozen) != string(body["input"]) {
+						t.Error("SSE retry changed frozen input")
+					}
+					mu.Unlock()
+					if body["previous_response_id"] != nil {
+						t.Error("SSE inherited socket continuation")
+					}
+					w.Header().Set("Content-Type", "text/event-stream")
+					if n <= tc.failures {
+						fmt.Fprint(w, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"abandoned draft\"}\n\n")
+						return
+					}
+					raw, _ := json.Marshal(testOpenAICompleted(fmt.Sprintf("response_%d", n)))
+					fmt.Fprintf(w, "data: %s\n\n", raw)
 					return
 				}
 				conn, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
@@ -61,6 +80,10 @@ func TestProviderWebSocketEOFRecovery(t *testing.T) {
 					}
 					mu.Unlock()
 					if n <= tc.failures {
+						if tc.name == "request_timeout" {
+							_, _, _ = conn.ReadMessage()
+							return
+						}
 						if tc.name != "before_output" {
 							_ = conn.WriteJSON(map[string]any{"type": "response.output_text.delta", "delta": "abandoned draft"})
 						}
@@ -89,7 +112,7 @@ func TestProviderWebSocketEOFRecovery(t *testing.T) {
 				policy.BaseDelay = 10 * time.Second
 				policy.MaxDelay = 10 * time.Second
 			}
-			agent, err := flruntime.NewAgent(flconfig.AgentConfig{Profile: flconfig.AgentProfile{ID: "test", Name: "Test"}, SystemPrompt: "Reply briefly.", Context: flconfig.ContextPolicy{ContextWindowTokens: 128000, CompactedContextTargetTokens: 2000, RecentTailTokens: 100, RecentUserTokens: 100, ReservedSummaryTokens: 1000}}, gateway, flruntime.WithAgentProviderRetryPolicy(policy))
+			agent, err := flruntime.NewAgent(flconfig.AgentConfig{Profile: flconfig.AgentProfile{ID: "test", Name: "Test"}, SystemPrompt: "Reply briefly.", Context: flconfig.ContextPolicy{ContextWindowTokens: 128000, CompactedContextTargetTokens: 2000, RecentTailTokens: 100, RecentUserTokens: 100, ReservedSummaryTokens: 1000}}, gateway, flruntime.WithAgentProviderRetryPolicy(policy), flruntime.WithAgentProviderRequestTimeoutPolicy(flruntime.ProviderRequestTimeoutPolicy{FirstOutputTimeout: 200 * time.Millisecond, IdleTimeout: time.Second}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -163,7 +186,7 @@ func TestProviderWebSocketEOFRecovery(t *testing.T) {
 			} else if view.TurnID != sent.TurnID {
 				t.Fatal("automatic recovery changed TurnID")
 			}
-			if view.Failure != nil || view.LastOutcome == nil || *view.LastOutcome != flruntime.TurnOutcomeCompleted || requests.Load() != tc.failures+1 || connections.Load() != tc.failures+1 {
+			if view.Failure != nil || view.LastOutcome == nil || *view.LastOutcome != flruntime.TurnOutcomeCompleted || requests.Load() != tc.failures+1 || connections.Load() != 1 {
 				t.Fatalf("result=%+v requests=%d connections=%d", view.Failure, requests.Load(), connections.Load())
 			}
 			for _, item := range view.Items {

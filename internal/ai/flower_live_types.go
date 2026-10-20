@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	flconfig "github.com/floegence/floret/v7/config"
+	"github.com/floegence/floret/v7/observation"
 	flruntime "github.com/floegence/floret/v7/runtime"
 )
 
@@ -27,12 +28,13 @@ type FlowerThreadReadView struct {
 }
 
 type FlowerRunProgress struct {
-	Retry       *flruntime.ProviderRetryProgress   `json:"retry,omitempty"`
-	Request     *flruntime.ProviderRequestProgress `json:"request,omitempty"`
-	SampledAtMS int64                              `json:"sampled_at_ms,omitempty"`
-	RunID       string                             `json:"run_id"`
-	TurnID      string                             `json:"turn_id"`
-	Phase       flruntime.ThreadRunPhase           `json:"phase"`
+	Transport   *observation.ProviderTransportProgress `json:"transport,omitempty"`
+	Retry       *flruntime.ProviderRetryProgress       `json:"retry,omitempty"`
+	Request     *flruntime.ProviderRequestProgress     `json:"request,omitempty"`
+	SampledAtMS int64                                  `json:"sampled_at_ms,omitempty"`
+	RunID       string                                 `json:"run_id"`
+	TurnID      string                                 `json:"turn_id"`
+	Phase       flruntime.ThreadRunPhase               `json:"phase"`
 }
 
 type FlowerApprovalState string

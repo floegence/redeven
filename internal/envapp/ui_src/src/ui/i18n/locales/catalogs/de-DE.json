@@ -1456,6 +1456,7 @@
     "modelStatusRetrying": "Modellanfrage wird erneut versucht...",
     "providerRetryWaiting": "Modelldienst nicht verfügbar. Neuer Versuch in {seconds} s · {retry}/{max}",
     "providerRetryRegenerating": "Verbindung unterbrochen. Neue Generierung in {seconds} s · {retry}/{max}",
+    "transportProgress": {"switching": "Verbindung unterbrochen. Der nächste Versuch verwendet HTTPS.", "https": "HTTPS wird verwendet"},
     "modelStatusFinalizing": "Antwort wird vorbereitet...",
     "waitingForReasoning": "Warten auf reasoning",
     "reasoning": "Begründung"
@@ -5486,6 +5487,7 @@
       "modelStatusRetrying": "Modellanfrage wird erneut versucht...",
       "providerRetryWaiting": "Modelldienst nicht verfügbar. Neuer Versuch in {seconds} s · {retry}/{max}",
       "providerRetryRegenerating": "Verbindung unterbrochen. Neue Generierung in {seconds} s · {retry}/{max}",
+      "transportProgress": {"switching": "Verbindung unterbrochen. Der nächste Versuch verwendet HTTPS.", "https": "HTTPS wird verwendet"},
       "modelStatusFinalizing": "Antwort wird vorbereitet...",
       "contextIndicatorComposition": "Sichtbare Eingabe",
       "contextIndicatorMeasured": "Gemessen",

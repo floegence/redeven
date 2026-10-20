@@ -27,14 +27,15 @@ const providerFailurePrefix = "redeven_provider_failure_v1:"
 // message. Only structured error messages and reviewed diagnostic fields enter
 // it; raw bodies, metadata, endpoints and credentials stay private.
 type providerFailureDiagnostic struct {
-	Provider    string `json:"provider"`
-	Status      int    `json:"http_status,omitempty"`
-	Code        string `json:"code,omitempty"`
-	Message     string `json:"message,omitempty"`
-	Param       string `json:"param,omitempty"`
-	RequestID   string `json:"request_id,omitempty"`
-	Shape       string `json:"response_shape"`
-	LimitSource string `json:"limit_source,omitempty"`
+	Attempt     *providerAttemptDiagnostic `json:"attempt,omitempty"`
+	Provider    string                     `json:"provider"`
+	Status      int                        `json:"http_status,omitempty"`
+	Code        string                     `json:"code,omitempty"`
+	Message     string                     `json:"message,omitempty"`
+	Param       string                     `json:"param,omitempty"`
+	RequestID   string                     `json:"request_id,omitempty"`
+	Shape       string                     `json:"response_shape"`
+	LimitSource string                     `json:"limit_source,omitempty"`
 }
 
 type providerFailure struct {
@@ -65,6 +66,7 @@ var diagnosticParamPattern = regexp.MustCompile(`^(tools|input|messages|model|in
 var diagnosticRequestIDPattern = regexp.MustCompile(`^req[_-][A-Za-z0-9_-]{1,120}$`)
 
 func (d providerFailureDiagnostic) sanitized() providerFailureDiagnostic {
+	d.Attempt = d.Attempt.sanitized()
 	switch d.Provider {
 	case "openai", "chatgpt", "openai_compatible", "openrouter", "xai", "groq", "ollama", "google", "chatglm", "qwen", "moonshot", "deepseek", "anthropic":
 	default:

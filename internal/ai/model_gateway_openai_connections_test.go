@@ -36,7 +36,7 @@ func testOpenAISocketProvider(t *testing.T, server *httptest.Server, pool *openA
 	return p
 }
 func testOpenAISocketRequest(scope string) ModelGatewayRequest {
-	return ModelGatewayRequest{Model: "gpt-5.5", PromptScopeID: flidentity.PromptScopeID(scope), ReusePolicy: &flprovider.RequestReusePolicy{PromptCacheEnabled: true, PromptCacheNamespace: "stable-namespace", ProviderStateAllowed: true, PreferContinuation: true}, Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "first input"}}}}}
+	return ModelGatewayRequest{ThreadID: flidentity.ThreadID(scope), Model: "gpt-5.5", PromptScopeID: flidentity.PromptScopeID(scope), ReusePolicy: &flprovider.RequestReusePolicy{PromptCacheEnabled: true, PromptCacheNamespace: "stable-namespace", ProviderStateAllowed: true, PreferContinuation: true}, Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "first input"}}}}}
 }
 func testOpenAICompleted(id string) map[string]any {
 	return map[string]any{"type": "response.completed", "response": map[string]any{"id": id, "model": "gpt-5.5", "status": "completed", "output": []any{
@@ -162,11 +162,16 @@ func TestOpenAIWebSocketUpgradeFallbackPreservesFailures(t *testing.T) {
 				fmt.Fprintf(w, "data: %s\n\n", raw)
 			}))
 			defer server.Close()
-			result, err := testOpenAISocketProvider(t, server, pool).StreamTurn(t.Context(), testOpenAISocketRequest("scope"), nil)
+			p := testOpenAISocketProvider(t, server, pool)
+			result, err := p.StreamTurn(t.Context(), testOpenAISocketRequest("scope"), nil)
 			fallback := status == 404 || status == 405 || status == 426 || status == 501
 			if fallback {
-				if err != nil || posts.Load() != 1 || result.RawProviderDiag["transport_fallback"] != "upgrade_unsupported" {
+				if err == nil || posts.Load() != 0 || flprovider.RetryAdviceForError(err).Category != flprovider.RetryTransient {
 					t.Fatalf("fallback=%+v posts=%d err=%v", result, posts.Load(), err)
+				}
+				result, err = p.StreamTurn(t.Context(), testOpenAISocketRequest("scope"), nil)
+				if err != nil || posts.Load() != 1 || result.RawProviderDiag["transport"] != "http_sse" {
+					t.Fatalf("next attempt=%+v posts=%d err=%v", result, posts.Load(), err)
 				}
 			} else {
 				if err == nil || posts.Load() != 0 {
@@ -234,11 +239,22 @@ func TestOpenAIWebSocketStreamErrorsPreserveStatus(t *testing.T) {
 		})
 	}
 }
-func TestOpenAIWebSocketStaleResponseRetriesFullOnlyOnce(t *testing.T) {
+func TestOpenAIWebSocketStaleResponseRequiresNextAttemptFullSSE(t *testing.T) {
 	pool := newOpenAIResponsesPool()
 	defer pool.Close()
-	var commands atomic.Int32
+	var commands, posts atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" {
+			posts.Add(1)
+			var body map[string]json.RawMessage
+			if json.NewDecoder(r.Body).Decode(&body) != nil || body["previous_response_id"] != nil || !strings.Contains(string(body["input"]), "opaque_response_1") {
+				t.Error("SSE lost full frozen native history")
+			}
+			w.Header().Set("Content-Type", "text/event-stream")
+			raw, _ := json.Marshal(testOpenAICompleted("http"))
+			fmt.Fprintf(w, "data: %s\n\n", raw)
+			return
+		}
 		conn, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
 		if err != nil {
 			return
@@ -257,9 +273,6 @@ func TestOpenAIWebSocketStaleResponseRetriesFullOnlyOnce(t *testing.T) {
 				_ = conn.WriteJSON(map[string]any{"type": "error", "error": map[string]any{"code": "previous_response_not_found", "param": "previous_response_id"}})
 				continue
 			}
-			if n == 3 && (body["previous_response_id"] != nil || !strings.Contains(string(body["input"]), "opaque_response_1")) {
-				t.Error("recovery did not send full native history")
-			}
 			_ = conn.WriteJSON(testOpenAICompleted(fmt.Sprintf("response_%d", n)))
 		}
 	}))
@@ -270,11 +283,16 @@ func TestOpenAIWebSocketStaleResponseRetriesFullOnlyOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = p.StreamTurn(t.Context(), nextSocketRequest(req, first), nil); err != nil {
+	next := nextSocketRequest(req, first)
+	_, err = p.StreamTurn(t.Context(), next, nil)
+	if err == nil || flprovider.RetryAdviceForError(err).Category != flprovider.RetryStreamInterrupted || commands.Load() != 2 || posts.Load() != 0 {
+		t.Fatalf("inline resend commands=%d posts=%d err=%v", commands.Load(), posts.Load(), err)
+	}
+	if _, err = p.StreamTurn(t.Context(), next, nil); err != nil {
 		t.Fatal(err)
 	}
-	if commands.Load() != 3 {
-		t.Fatalf("commands=%d", commands.Load())
+	if commands.Load() != 2 || posts.Load() != 1 {
+		t.Fatalf("next attempt commands=%d posts=%d", commands.Load(), posts.Load())
 	}
 }
 func TestOpenAIWebSocketDisconnectAndCancelDoNotReplay(t *testing.T) {
@@ -286,6 +304,12 @@ func TestOpenAIWebSocketDisconnectAndCancelDoNotReplay(t *testing.T) {
 			started := make(chan struct{})
 			ended := make(chan struct{})
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == "POST" {
+					w.Header().Set("Content-Type", "text/event-stream")
+					raw, _ := json.Marshal(testOpenAICompleted("recovered"))
+					fmt.Fprintf(w, "data: %s\n\n", raw)
+					return
+				}
 				conn, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
 				if err != nil {
 					return
@@ -348,18 +372,18 @@ func TestOpenAIConnectionPoolBoundsWaitAndShutdown(t *testing.T) {
 	pool.capacity = 1
 	defer pool.Close()
 	key := openAIConnectionKey{Model: "model", Scope: "scope"}
-	first, err := pool.acquire(t.Context(), key, "token")
+	first, err := pool.acquire(t.Context(), key, "token", "thread")
 	if err != nil {
 		t.Fatal(err)
 	}
 	other := key
 	other.Scope = "other"
-	if _, err = pool.acquire(t.Context(), other, "token"); !errors.Is(err, errOpenAIPoolFull) {
+	if _, err = pool.acquire(t.Context(), other, "token", "other"); !errors.Is(err, errOpenAIPoolFull) {
 		t.Fatalf("capacity=%v", err)
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
 	defer cancel()
-	if _, err = pool.acquire(ctx, key, "token"); !errors.Is(err, context.DeadlineExceeded) {
+	if _, err = pool.acquire(ctx, key, "token", "thread"); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("wait=%v", err)
 	}
 	pool.Close()
@@ -367,7 +391,7 @@ func TestOpenAIConnectionPoolBoundsWaitAndShutdown(t *testing.T) {
 		t.Fatal("close did not cancel active request")
 	}
 	first.finish(false)
-	if _, err = pool.acquire(t.Context(), key, "token"); !errors.Is(err, errOpenAIPoolClosed) {
+	if _, err = pool.acquire(t.Context(), key, "token", "thread"); !errors.Is(err, errOpenAIPoolClosed) {
 		t.Fatal(err)
 	}
 }
@@ -544,7 +568,7 @@ func TestOpenAIConnectionIdentityRotationAndLogout(t *testing.T) {
 func TestDesktopModelSourceDisconnectClosesExecutorConnections(t *testing.T) {
 	executor := &desktopModelSourceExecutor{}
 	pool := executor.openAIConnectionPool()
-	lease, err := pool.acquire(t.Context(), openAIConnectionKey{Scope: "scope"}, "token")
+	lease, err := pool.acquire(t.Context(), openAIConnectionKey{Scope: "scope"}, "token", "thread")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -574,8 +598,14 @@ func TestDesktopModelSourceDisconnectClosesExecutorConnections(t *testing.T) {
 	}
 	next := executor.openAIConnectionPool()
 	defer next.Close()
-	if next == pool {
-		t.Fatal("RPC reconnect retained closed pool")
+	if next != pool {
+		t.Fatal("RPC reconnect reset thread transport manager")
+	}
+	next.mu.Lock()
+	remaining, closed := len(next.entries), next.closed
+	next.mu.Unlock()
+	if remaining != 0 || closed {
+		t.Fatal("RPC reconnect retained sockets or closed manager")
 	}
 }
 
@@ -586,7 +616,7 @@ func TestOpenAIHTTPFallbackHappensBeforeWebSocketDispatch(t *testing.T) {
 			defer pool.Close()
 			pool.capacity = 1
 			if !oversized {
-				lease, err := pool.acquire(t.Context(), openAIConnectionKey{Scope: "occupied"}, "token")
+				lease, err := pool.acquire(t.Context(), openAIConnectionKey{Scope: "occupied"}, "token", "thread")
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -615,7 +645,7 @@ func TestOpenAIHTTPFallbackHappensBeforeWebSocketDispatch(t *testing.T) {
 			}
 			payload, _ := json.Marshal(map[string]any{"model": req.Model, "stream": true, "store": false, "input": []any{map[string]any{"role": "user", "content": text}}})
 			var response *http.Response
-			stream, lease, reason, err := p.responsesStream(t.Context(), req, "token", payload, &response, []option.RequestOption{option.WithRequestBody("application/json", payload)})
+			stream, lease, reason, err := p.responsesStream(t.Context(), req, "token", payload, &response, []option.RequestOption{option.WithRequestBody("application/json", payload)}, newProviderAttemptDiagnostic(t.Context(), req, payload, p, nil))
 			if err != nil {
 				t.Fatal(err)
 			}

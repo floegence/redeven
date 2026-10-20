@@ -23,8 +23,16 @@ import (
 )
 
 const openAIWebSocketMaxMessageBytes = 8 << 20
+const openAIWebSocketConnectTimeout = 15 * time.Second
+
+var errOpenAIThreadSSE = errors.New("thread uses HTTP streaming")
 
 type openAIConnectionIdentity struct{ Provider, Endpoint, Account string }
+type openAIThreadRoute struct {
+	openAIConnectionIdentity
+	ThreadID string
+}
+
 type openAIConnectionKey struct {
 	openAIConnectionIdentity
 	Model, Scope string
@@ -34,6 +42,17 @@ func normalizedOpenAIEndpoint(endpoint string) string {
 	endpoint = strings.TrimRight(strings.TrimSpace(endpoint), "/")
 	if endpoint == "" {
 		return "https://api.openai.com/v1"
+	}
+	if u, err := url.Parse(endpoint); err == nil && u.Host != "" {
+		u.Scheme = strings.ToLower(u.Scheme)
+		u.Host = strings.ToLower(u.Host)
+		if (u.Scheme == "https" && u.Port() == "443") || (u.Scheme == "http" && u.Port() == "80") {
+			u.Host = u.Hostname()
+			if strings.Contains(u.Host, ":") {
+				u.Host = "[" + u.Host + "]"
+			}
+		}
+		return u.String()
 	}
 	return endpoint
 }
@@ -55,12 +74,21 @@ func openAIHash(value any) string {
 type openAIResponsesPool struct {
 	mu             sync.Mutex
 	entries        map[openAIConnectionKey]*openAIConnection
+	selections     map[openAIThreadRoute]*openAITransportSelection
 	changed        chan struct{}
 	closed         bool
 	capacity       int
 	idle, lifetime time.Duration
 }
+
+// The pool mutex owns both selection changes and generation-send admission.
+// An admitted write is in flight; cancellation never waits for network I/O.
+type openAITransportSelection struct {
+	reason string // guarded by the pool mutex
+}
+
 type openAIConnection struct {
+	threadID                                        string
 	measurementID                                   string
 	reasoningIncluded                               bool
 	conn                                            *responses.ResponseConnection
@@ -74,16 +102,19 @@ type openAIConnection struct {
 	prefixCount                                     int
 }
 type openAIConnectionLease struct {
+	route     openAIThreadRoute
+	selection *openAITransportSelection
 	pool      *openAIResponsesPool
 	key       openAIConnectionKey
 	entry     *openAIConnection
 	ctx       context.Context
 	cancel    context.CancelFunc
 	stopAbort func() bool
+	finished  bool // guarded by the pool mutex
 }
 
 func newOpenAIResponsesPool() *openAIResponsesPool {
-	return &openAIResponsesPool{entries: map[openAIConnectionKey]*openAIConnection{}, changed: make(chan struct{}), capacity: 16, idle: 5 * time.Minute, lifetime: 55 * time.Minute}
+	return &openAIResponsesPool{selections: map[openAIThreadRoute]*openAITransportSelection{}, entries: map[openAIConnectionKey]*openAIConnection{}, changed: make(chan struct{}), capacity: 16, idle: 5 * time.Minute, lifetime: 55 * time.Minute}
 }
 func (p *openAIResponsesPool) signalLocked() { close(p.changed); p.changed = make(chan struct{}) }
 func (p *openAIResponsesPool) dropLocked(key openAIConnectionKey, e *openAIConnection) {
@@ -122,6 +153,7 @@ func (p *openAIResponsesPool) Close() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.closed = true
+	clear(p.selections)
 	for k, e := range p.entries {
 		p.dropLocked(k, e)
 	}
@@ -131,15 +163,24 @@ func (p *openAIResponsesPool) Close() {
 var errOpenAIPoolFull = errors.New("OpenAI connection pool is full")
 var errOpenAIPoolClosed = errors.New("OpenAI connection pool is closed")
 
-func (p *openAIResponsesPool) acquire(ctx context.Context, key openAIConnectionKey, bearer string) (*openAIConnectionLease, error) {
+func (p *openAIResponsesPool) acquire(ctx context.Context, key openAIConnectionKey, bearer, threadID string) (*openAIConnectionLease, error) {
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 		p.mu.Lock()
+		if err := ctx.Err(); err != nil {
+			p.mu.Unlock()
+			return nil, err
+		}
 		if p.closed {
 			p.mu.Unlock()
 			return nil, errOpenAIPoolClosed
+		}
+		route := openAIThreadRoute{key.openAIConnectionIdentity, threadID}
+		if selection := p.selections[route]; selection != nil && selection.reason != "" {
+			p.mu.Unlock()
+			return nil, errOpenAIThreadSSE
 		}
 		e := p.entries[key]
 		if e != nil && e.busy {
@@ -161,7 +202,7 @@ func (p *openAIResponsesPool) acquire(ctx context.Context, key openAIConnectionK
 				p.mu.Unlock()
 				return nil, errOpenAIPoolFull
 			}
-			e = &openAIConnection{measurementID: rand.Text(), opened: time.Now(), auth: sha256.Sum256([]byte(bearer))}
+			e = &openAIConnection{threadID: threadID, measurementID: rand.Text(), opened: time.Now(), auth: sha256.Sum256([]byte(bearer))}
 			p.entries[key] = e
 		}
 		if e.timer != nil {
@@ -184,14 +225,19 @@ func (l *openAIConnectionLease) finish(success bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	e := l.entry
+	if l.finished {
+		return
+	}
 	if p.entries[l.key] != e {
+		l.finished = true
 		l.cancel()
 		return
 	}
 	if !success || l.ctx.Err() != nil {
-		p.dropLocked(l.key, e)
+		l.retireLocked()
 		return
 	}
+	l.finished = true
 	e.busy = false
 	e.cancel = nil
 	l.cancel()
@@ -203,6 +249,20 @@ func (l *openAIConnectionLease) finish(success bool) {
 		}
 	})
 	p.signalLocked()
+}
+
+// retireLocked is the single cancellation boundary for an active socket.
+func (l *openAIConnectionLease) retireLocked() {
+	p := l.pool
+	if l.finished || p.entries[l.key] != l.entry {
+		return
+	}
+	l.finished = true
+	var timeout *flprovider.RequestTimeoutError
+	if errors.As(context.Cause(l.ctx), &timeout) && l.selection != nil && p.selections[l.route] == l.selection && l.selection.reason == "" {
+		l.selection.reason = "request_timeout"
+	}
+	p.dropLocked(l.key, l.entry)
 }
 func (l *openAIConnectionLease) install(conn *responses.ResponseConnection, watch func(context.Context, func(error)) (func(), error)) error {
 	p := l.pool
@@ -232,7 +292,7 @@ func (l *openAIConnectionLease) install(conn *responses.ResponseConnection, watc
 }
 
 // HTTP and WebSocket feed this same Responses event consumer. The socket adapter
-// only handles response.create and the one explicit stale-response rejection.
+// sends exactly one response.create and reports failures to the Engine.
 type openAIResponsesEvents interface {
 	Next() bool
 	Current() responses.ResponseStreamEventUnion
@@ -240,21 +300,34 @@ type openAIResponsesEvents interface {
 	Close() error
 }
 type openAIWebSocketEvents struct {
-	lease                  *openAIConnectionLease
-	full, command          map[string]json.RawMessage
-	current                responses.ResponseStreamEventUnion
-	err                    error
-	done, started, retried bool
+	lease         *openAIConnectionLease
+	diagnostic    *providerAttemptDiagnostic
+	command       map[string]json.RawMessage
+	current       responses.ResponseStreamEventUnion
+	err           error
+	done, started bool
 }
 
 func (s *openAIWebSocketEvents) Current() responses.ResponseStreamEventUnion { return s.current }
 func (s *openAIWebSocketEvents) Err() error                                  { return s.err }
 func (s *openAIWebSocketEvents) Close() error                                { return nil }
 func (s *openAIWebSocketEvents) send(body map[string]json.RawMessage) error {
+	p := s.lease.pool
+	p.mu.Lock()
+	valid := !p.closed && s.lease.selection != nil && p.selections[s.lease.route] == s.lease.selection && p.entries[s.lease.key] == s.lease.entry
+	pinned := s.lease.selection != nil && s.lease.selection.reason != ""
+	p.mu.Unlock()
+	if !valid || s.lease.ctx.Err() != nil {
+		return context.Canceled
+	}
+	if pinned {
+		return errOpenAIThreadSSE
+	}
 	raw, err := json.Marshal(body)
 	if err != nil {
 		return err
 	}
+	s.diagnostic.RequestBytes = len(raw)
 	return s.lease.entry.conn.Create(s.lease.ctx, param.Override[responses.ResponsesClientEventResponseCreateParam](json.RawMessage(raw)))
 }
 func openAIWebSocketFailure(err error) error {
@@ -295,17 +368,14 @@ func (s *openAIWebSocketEvents) Next() bool {
 			s.err = err
 			return false
 		}
-		if failure.Type == "error" && !s.started && !s.retried && s.command["previous_response_id"] != nil && failure.Error.Code == "previous_response_not_found" {
-			s.retried = true
-			s.lease.entry.responseID = ""
-			s.lease.entry.stateHash = ""
-			s.command = s.full
-			if s.err = s.send(s.full); s.err != nil {
-				return false
-			}
-			continue
+		if failure.Type == "error" && !s.started && s.command["previous_response_id"] != nil && failure.Error.Code == "previous_response_not_found" {
+			s.diagnostic.firstEvent(true)
+			s.err = flprovider.WithRetryAdvice(errOpenAIStaleResponse, flprovider.RetryAdvice{Category: flprovider.RetryStreamInterrupted})
+			return false
 		}
-		s.started = true
+		if failure.Type != "response.created" && failure.Type != "response.in_progress" {
+			s.started = true
+		}
 		if err = json.Unmarshal([]byte(raw), &s.current); err != nil {
 			s.err = err
 			return false
@@ -346,28 +416,24 @@ func normalizedInputHash(input []json.RawMessage) (string, error) {
 	}
 	return openAIHash(values), nil
 }
-func (l *openAIConnectionLease) command(payload []byte, req ModelGatewayRequest) (map[string]json.RawMessage, map[string]json.RawMessage, error) {
+func (l *openAIConnectionLease) command(payload []byte, req ModelGatewayRequest) (map[string]json.RawMessage, error) {
 	body, input, settings, err := openAIWireParts(payload)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	body["type"] = json.RawMessage(`"response.create"`)
-	full := make(map[string]json.RawMessage, len(body))
-	for k, v := range body {
-		full[k] = v
-	}
 	e := l.entry
 	if req.ReusePolicy != nil && req.ReusePolicy.ProviderStateAllowed && req.ReusePolicy.PreferContinuation && req.PreviousState != nil && e.responseID != "" && req.PreviousState.Attributes["response_id"] == e.responseID && openAIHash(req.PreviousState) == e.stateHash && settings == e.settingsHash && len(input) >= e.prefixCount {
 		prefix, err := normalizedInputHash(input[:e.prefixCount])
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		if prefix == e.prefixHash {
 			body["previous_response_id"], _ = json.Marshal(e.responseID)
 			body["input"], _ = json.Marshal(input[e.prefixCount:])
 		}
 	}
-	return full, body, nil
+	return body, nil
 }
 func (l *openAIConnectionLease) confirm(payload []byte, response responses.Response, state *ModelGatewayState) error {
 	e := l.entry
@@ -394,24 +460,40 @@ func (l *openAIConnectionLease) confirm(payload []byte, response responses.Respo
 	e.settingsHash = settings
 	return nil
 }
-func (p *openAIProvider) responsesStream(ctx context.Context, req ModelGatewayRequest, bearer string, payload []byte, response **http.Response, options []option.RequestOption) (openAIResponsesEvents, *openAIConnectionLease, string, error) {
+func (p *openAIProvider) responsesStream(ctx context.Context, req ModelGatewayRequest, bearer string, payload []byte, response **http.Response, options []option.RequestOption, diag *providerAttemptDiagnostic) (openAIResponsesEvents, *openAIConnectionLease, string, error) {
 	key := openAIConnectionKey{p.transportIdentity, req.Model, string(req.PromptScopeID)}
 	if req.ReusePolicy != nil && !req.ReusePolicy.ProviderStateAllowed {
 		p.responsesPool.invalidate(key)
 	}
 	fallback := ""
-	eligible := p.chatGPT && p.officialOpenAI && p.responsesPool != nil && key.Scope != "" && (req.ReusePolicy == nil || req.ReusePolicy.ProviderStateAllowed)
+	route := openAIRequestRoute(p.transportIdentity, req)
+	eligible := p.chatGPT && p.officialOpenAI && p.responsesPool != nil && key.Scope != "" && route.ThreadID != "" && (req.ReusePolicy == nil || req.ReusePolicy.ProviderStateAllowed)
+	if eligible && p.responsesPool.selection(route) != "" {
+		eligible = false
+		fallback = "thread_sse"
+	}
 	if eligible && len(payload) > openAIWebSocketMaxMessageBytes-1024 {
 		eligible = false
 		fallback = "message_limit"
 	}
 	if eligible {
-		lease, err := p.responsesPool.acquire(ctx, key, bearer)
-		if errors.Is(err, errOpenAIPoolFull) {
+		lease, err := p.responsesPool.acquire(ctx, key, bearer, req.ThreadID.String())
+		if errors.Is(err, errOpenAIThreadSSE) {
+			fallback = "thread_sse"
+		} else if errors.Is(err, errOpenAIPoolFull) {
 			fallback = "pool_capacity"
 		} else if err != nil {
 			return nil, nil, "", err
 		} else {
+			lease.route = route
+			lease.selection = diag.selection
+			// The same lease owner retires connect and receive cancellation.
+			lease.stopAbort = context.AfterFunc(lease.ctx, func() {
+				p.responsesPool.mu.Lock()
+				defer p.responsesPool.mu.Unlock()
+				lease.retireLocked()
+			})
+			diag.observe(flprovider.TransportWebSocket, flprovider.TransportConnecting, "", "")
 			if lease.entry.conn == nil {
 				var handshake *http.Response
 				connectOpts := []option.RequestOption{option.WithAPIKey(bearer), option.WithMaxRetries(0), option.WithMiddleware(func(r *http.Request, next option.MiddlewareNext) (*http.Response, error) {
@@ -431,45 +513,64 @@ func (p *openAIProvider) responsesStream(ctx context.Context, req ModelGatewayRe
 					}
 					return res, err
 				})}
-				conn, err := p.client.Responses.Connect(lease.ctx, responses.ResponseConnectionOptions{MaxMessageBytes: openAIWebSocketMaxMessageBytes, MaxBufferedBytes: 16 << 20, MaxBufferedEvents: 1024, MaxPendingSends: 1, MaxLanes: 1, CloseTimeout: time.Second}, connectOpts...)
+				connectCtx, cancelConnect := context.WithTimeout(lease.ctx, openAIWebSocketConnectTimeout)
+				connectStarted := time.Now()
+				conn, err := p.client.Responses.Connect(connectCtx, responses.ResponseConnectionOptions{MaxMessageBytes: openAIWebSocketMaxMessageBytes, MaxBufferedBytes: 16 << 20, MaxBufferedEvents: 1024, MaxPendingSends: 1, MaxLanes: 1, CloseTimeout: time.Second}, connectOpts...)
+				elapsed := time.Since(connectStarted).Milliseconds()
+				diag.ConnectMS = &elapsed
+				cancelConnect()
 				if err != nil {
-					lease.finish(false)
-					if handshake != nil && (handshake.StatusCode == http.StatusNotFound || handshake.StatusCode == http.StatusMethodNotAllowed || handshake.StatusCode == http.StatusUpgradeRequired || handshake.StatusCode == http.StatusNotImplemented) {
-						fallback = "upgrade_unsupported"
-					} else {
-						*response = handshake
-						return nil, nil, "", err
+					defer lease.finish(false)
+					*response = handshake
+					failure := providerRequestFailure(err, handshake, p.failureProviderType())
+					if ctx.Err() == nil && handshake != nil && (handshake.StatusCode == 404 || handshake.StatusCode == 405 || handshake.StatusCode == 426 || handshake.StatusCode == 501) {
+						diag.switchToSSE("upgrade_unsupported")
+						return nil, nil, "", flprovider.WithRetryAdvice(failure, flprovider.RetryAdvice{Category: flprovider.RetryTransient})
 					}
+					if ctx.Err() == nil && recoverableWebSocketTransport(err) {
+						reason := "connect_failed"
+						if errors.Is(err, context.DeadlineExceeded) {
+							reason = "connect_timeout"
+						}
+						diag.switchToSSE(reason)
+					}
+					return nil, nil, "", failure
 				} else if err = lease.install(conn, p.chatGPTWatch); err != nil {
 					lease.finish(false)
 					return nil, nil, "", err
 				}
 				if err == nil && handshake != nil {
+					diag.HTTPStatus = handshake.StatusCode
+					diag.RequestID = handshake.Header.Get("x-request-id")
 					p.responsesPool.mu.Lock()
 					lease.entry.reasoningIncluded = handshake.Header.Values("x-reasoning-included") != nil
 					p.responsesPool.mu.Unlock()
 				}
 			}
 			if fallback == "" {
-				lease.stopAbort = context.AfterFunc(lease.ctx, func() {
-					p.responsesPool.mu.Lock()
-					defer p.responsesPool.mu.Unlock()
-					p.responsesPool.dropLocked(key, lease.entry)
-				})
-				full, command, err := lease.command(payload, req)
+				command, err := lease.command(payload, req)
 				if err != nil {
 					lease.finish(false)
 					return nil, nil, "", err
 				}
-				stream := &openAIWebSocketEvents{lease: lease, full: full, command: command}
+				stream := &openAIWebSocketEvents{lease: lease, diagnostic: diag, command: command}
+				diag.observe(flprovider.TransportWebSocket, flprovider.TransportSending, "", "")
 				if err = stream.send(command); err != nil {
+					if ctx.Err() == nil && recoverableWebSocketTransport(err) {
+						diag.switchToSSE("connection_lost")
+					}
 					lease.finish(false)
+					if errors.Is(err, errOpenAIThreadSSE) {
+						diag.observe(flprovider.TransportHTTPSSE, flprovider.TransportSending, "", "")
+						return p.client.Responses.NewStreaming(ctx, responses.ResponseNewParams{}, options...), nil, "thread_sse", nil
+					}
 					return nil, nil, "", err
 				}
 				return stream, lease, "", nil
 			}
 		}
 	}
+	diag.observe(flprovider.TransportHTTPSSE, flprovider.TransportSending, "", "")
 	stream := p.client.Responses.NewStreaming(ctx, responses.ResponseNewParams{}, options...)
 	return stream, nil, fallback, nil
 }
@@ -491,4 +592,75 @@ func (s *Service) openAIConnectionPool() *openAIResponsesPool {
 		}
 	}
 	return s.openAIConnections
+}
+
+func openAIRequestRoute(identity openAIConnectionIdentity, req ModelGatewayRequest) openAIThreadRoute {
+	return openAIThreadRoute{identity, req.ThreadID.String()}
+}
+func (p *openAIResponsesPool) selection(route openAIThreadRoute) string {
+	if p == nil || route.ThreadID == "" {
+		return ""
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if selection := p.selections[route]; selection != nil {
+		return selection.reason
+	}
+	return ""
+}
+func (p *openAIResponsesPool) routeSelection(ctx context.Context, route openAIThreadRoute) *openAITransportSelection {
+	if p == nil || route.ThreadID == "" {
+		return nil
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed || ctx.Err() != nil {
+		return nil
+	}
+	if p.selections[route] == nil {
+		p.selections[route] = &openAITransportSelection{}
+	}
+	return p.selections[route]
+}
+func (p *openAIResponsesPool) selectSSE(route openAIThreadRoute, selection *openAITransportSelection, reason string) string {
+	if p == nil || selection == nil {
+		return ""
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed || p.selections[route] != selection {
+		return ""
+	}
+	if selection.reason == "" {
+		selection.reason = reason
+		p.signalLocked()
+	}
+	return selection.reason
+}
+func (p *openAIResponsesPool) releaseThread(threadID string) {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for route := range p.selections {
+		if route.ThreadID == threadID {
+			delete(p.selections, route)
+		}
+	}
+	for key, e := range p.entries {
+		if e.threadID == threadID {
+			p.dropLocked(key, e)
+		}
+	}
+}
+func (p *openAIResponsesPool) closeConnections() {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for key, e := range p.entries {
+		p.dropLocked(key, e)
+	}
 }

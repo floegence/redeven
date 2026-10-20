@@ -690,6 +690,7 @@ export type FlowerSurfaceCopy = Readonly<{
     }>;
     providerRetryWaiting: (seconds: number, retry: number, max: number) => string;
     providerRetryRegenerating: (seconds: number, retry: number, max: number) => string;
+ transportProgress: Readonly<{ switching: string; https: string }>;
     outputProgress: Readonly<{
       tokens: (count: number) => string;
       elapsed: (seconds: number) => string;
@@ -1169,6 +1170,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     },
     providerRetryWaiting: (seconds, retry, max) => `Model service unavailable. Retry in ${seconds}s · ${retry}/${max}`,
     providerRetryRegenerating: (seconds, retry, max) => `Connection interrupted. Regenerating in ${seconds}s · ${retry}/${max}`,
+    transportProgress: { switching: "Connection interrupted. The next attempt will use HTTPS.", https: "Using HTTPS" },
     outputProgress: {
       tokens: (count) => `${count} tokens`,
       elapsed: (seconds) => `${seconds} s`,

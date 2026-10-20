@@ -562,6 +562,10 @@
       "modelStatusRetrying": "正在重試模型請求...",
       "providerRetryWaiting": "模型服務暫時無法使用，{seconds} 秒後重試 · {retry}/{max}",
       "providerRetryRegenerating": "連線中斷，{seconds} 秒後重新產生 · {retry}/{max}",
+      "transportProgress": {
+        "switching": "連線中斷，下一次將使用 HTTPS。",
+        "https": "正在使用 HTTPS"
+      },
       "modelStatusFinalizing": "正在整理回覆...",
       "outputTokens": "{count} tokens",
       "waitingForModelContinuation": "等待模型繼續",
@@ -1275,7 +1279,10 @@
       "modelCatalogAutoUpdateLabel": "自動更新模型供應商的模型清單",
       "modelCatalogAutoUpdateDisclosure": "開啟後，Redeven 會定期向已啟用的模型供應商 API 請求模型清單，OpenRouter 除外。",
       "dialogOpenRouterDiscovery": "新增 OpenRouter 時，填妥 API Key 或位址並離開輸入欄位後，Redeven 會請求其模型清單，即使自動更新已關閉。之後僅透過手動同步更新。",
-      "dialogOllamaDiscovery": "新增 Ollama 時，Redeven 會從預設位址取得模型清單；修改位址或 API Key 並離開輸入欄位後會再次取得，即使自動更新已關閉。"
+      "dialogOllamaDiscovery": "新增 Ollama 時，Redeven 會從預設位址取得模型清單；修改位址或 API Key 並離開輸入欄位後會再次取得，即使自動更新已關閉。",
+      "dialogChatGPTRemoveAccount": "刪除帳號",
+      "dialogChatGPTRemoveDescription": "要從此裝置刪除這個已登出的帳號嗎？模型供應商設定與對話都會保留。再次使用時，請重新登入或選擇其他已儲存的帳號。",
+      "dialogChatGPTRemoveFailed": "無法刪除此帳號。請確認已完成登出，然後重試。"
     },
     "reasoningControl": {
       "default": "預設",

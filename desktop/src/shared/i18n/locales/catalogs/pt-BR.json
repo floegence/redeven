@@ -562,6 +562,10 @@
       "modelStatusRetrying": "Tentando novamente a solicitação ao modelo...",
       "providerRetryWaiting": "Serviço do modelo indisponível. Nova tentativa em {seconds} s · {retry}/{max}",
       "providerRetryRegenerating": "Conexão interrompida. Nova geração em {seconds} s · {retry}/{max}",
+      "transportProgress": {
+        "switching": "Conexão interrompida. A próxima tentativa usará HTTPS.",
+        "https": "Usando HTTPS"
+      },
       "modelStatusFinalizing": "Finalizando resposta...",
       "outputTokens": "{count} tokens",
       "waitingForModelContinuation": "Aguardando o modelo continuar",
@@ -1275,7 +1279,10 @@
       "modelCatalogAutoUpdateLabel": "Atualizar automaticamente as listas de modelos dos provedores",
       "modelCatalogAutoUpdateDisclosure": "Quando ativada, esta opção faz o Redeven solicitar periodicamente listas de modelos às APIs dos provedores de modelos habilitados, exceto o OpenRouter.",
       "dialogOpenRouterDiscovery": "Ao adicionar o OpenRouter, o Redeven solicita a lista de modelos quando você termina de inserir a chave de API ou o endereço e sai do campo. Isso também ocorre com as atualizações automáticas desativadas. As próximas atualizações são feitas apenas por sincronização manual.",
-      "dialogOllamaDiscovery": "Ao adicionar o Ollama, o Redeven solicita os modelos no endereço padrão. Ele solicita novamente após você alterar o endereço ou a chave de API e sair do campo. Isso também ocorre com as atualizações automáticas desativadas."
+      "dialogOllamaDiscovery": "Ao adicionar o Ollama, o Redeven solicita os modelos no endereço padrão. Ele solicita novamente após você alterar o endereço ou a chave de API e sair do campo. Isso também ocorre com as atualizações automáticas desativadas.",
+      "dialogChatGPTRemoveAccount": "Remover conta",
+      "dialogChatGPTRemoveDescription": "Remover esta conta desconectada deste dispositivo? As configurações do provedor e as conversas serão mantidas. Para usá-la novamente, entre ou escolha outra conta salva.",
+      "dialogChatGPTRemoveFailed": "Não foi possível remover esta conta. Verifique se a saída foi concluída e tente novamente."
     },
     "reasoningControl": {
       "default": "Padrão",

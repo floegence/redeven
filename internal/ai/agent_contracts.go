@@ -14,6 +14,7 @@ import (
 type StreamEventType string
 
 const (
+	StreamEventTransport     StreamEventType = "transport"
 	StreamEventHostedTool    StreamEventType = "hosted_tool"
 	StreamEventTextDelta     StreamEventType = "text_delta"
 	StreamEventToolCallStart StreamEventType = "tool_call_start"
@@ -46,13 +47,14 @@ type PartialUsage struct {
 }
 
 type StreamEvent struct {
-	OutputPart      *flprovider.OutputPart `json:"output_part,omitempty"`
-	HostedToolEvent *flprovider.Event      `json:"-"`
-	Type            StreamEventType        `json:"type"`
-	Text            string                 `json:"text,omitempty"`
-	ToolCall        *PartialToolCall       `json:"tool_call,omitempty"`
-	Usage           *PartialUsage          `json:"usage,omitempty"`
-	FinishHint      string                 `json:"finish_hint,omitempty"`
+	Transport       *flprovider.TransportObservation `json:"transport,omitempty"`
+	OutputPart      *flprovider.OutputPart           `json:"output_part,omitempty"`
+	HostedToolEvent *flprovider.Event                `json:"-"`
+	Type            StreamEventType                  `json:"type"`
+	Text            string                           `json:"text,omitempty"`
+	ToolCall        *PartialToolCall                 `json:"tool_call,omitempty"`
+	Usage           *PartialUsage                    `json:"usage,omitempty"`
+	FinishHint      string                           `json:"finish_hint,omitempty"`
 }
 
 type ContentPart struct {
