@@ -252,6 +252,12 @@ it('retains the compatible model after an image-context rejection and allows ano
   const surface = renderSurfaceWithAdapter({ ...adapter(), loadSettings: async () => snapshot, listThreads: async () => [seed], loadThread: async () => liveBootstrap(seed, 1), setThreadModel });
   await waitFor(() => Boolean(surface.querySelector('[data-thread-id="thread-1"] button')));
   surface.querySelector<HTMLButtonElement>('[data-thread-id="thread-1"] button')!.click();
+  await waitFor(() => {
+    const main = surface.querySelector('main');
+    return main?.getAttribute('data-flower-selected-thread-id') === seed.thread_id
+      && !main.hasAttribute('data-flower-pending-thread-id')
+      && main.getAttribute('data-flower-selected-thread-loading') === 'false';
+  });
   await waitFor(() => surface.querySelector('.flower-model-reasoning-model-label')?.textContent?.includes('gpt-5.2') === true);
   const choose = async (name: string) => {
     surface.querySelector<HTMLButtonElement>('.flower-model-reasoning-model-trigger')!.click();
