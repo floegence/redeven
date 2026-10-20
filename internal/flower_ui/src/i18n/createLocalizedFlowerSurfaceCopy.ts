@@ -695,6 +695,8 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         percent: (percent) => t(i18n, k('chat.contextIndicatorPercent'), { percent }),
       },
       compactionDivider: {
+        retry: t(i18n, k('chat.compactionDividerRetry')),
+        retrying: t(i18n, k('chat.compactionDividerRetrying')),
         compacting: t(i18n, k('chat.compactionDividerCompacting')),
         compacted: t(i18n, k('chat.compactionDividerCompacted')),
         failed: t(i18n, k('chat.compactionDividerFailed')),

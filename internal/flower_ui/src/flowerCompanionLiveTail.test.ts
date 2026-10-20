@@ -11,6 +11,7 @@ import type { FlowerLiveProgressKind } from './flowerLiveProgress';
 
 const labels: Record<FlowerLiveProgressKind, string> = {
   preparing: 'Preparing...',
+  compacting: 'Compacting context',
   waiting_response: 'Waiting for model response...',
   streaming: 'Thinking...',
   retrying: 'Retrying...',

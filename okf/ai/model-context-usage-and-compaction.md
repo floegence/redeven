@@ -3,11 +3,11 @@ type: AI Runtime Contract
 title: Model context usage and compaction
 description: Independent manual compaction, automatic continuation, and canonical usage presentation.
 tags: [ai, models, context, compaction]
-timestamp: 2026-10-19T00:00:00Z
+timestamp: 2026-10-20T00:00:00Z
 ---
 # Summary
 
-Published Floret v7.68.2 owns context compaction, cancellation, canonical installation, restart recovery, and usage. Redeven authorizes an independent manual operation and presents the canonical result. Manual compaction ends after installation; automatic compaction continues the current task. Failure, cancellation before installation, and noop retain effective context.
+Published Floret v7.73.1 owns context compaction, cancellation, canonical installation, restart recovery, and usage. Redeven authorizes an independent manual operation and presents the canonical result. Manual compaction ends after installation; automatic compaction continues the current task. Failure, cancellation before installation, and noop retain effective context.
 
 # Contract
 
@@ -16,6 +16,10 @@ Published Floret v7.68.2 owns context compaction, cancellation, canonical instal
 `POST /_redeven_proxy/api/ai/threads/{id}/context/compact` accepts only `storage_generation` and `client_request_id`. The handler verifies endpoint authority, generation, and the frozen model configuration, then invokes optional public `ThreadContextCompactor.CompactContext`. Admission returns HTTP 202 before model preparation or provider work. Floret admits only idle threads with no queued input or unresolved interaction; its explicit `context_compaction` turn carries real TurnID and RunID without a fabricated user message.
 
 The command menu, button, and standalone `/compact` use that one action, including embedded canvas conversations. Enter, the selected suggestion, and the primary action resolve an incomplete prefix such as `/com` to the same command. Ordinary Send rejects standalone `/compact`, even with context or attachments. Admission preserves draft attachments, file references, canvas selection, and edited text. Acceptance clears unchanged complete command text or its submitted prefix; the suggestion menu follows the remaining draft and closes when that text is cleared. Rejection retains the draft, and composition or Shift+Enter does not execute a command. Navigation and editing stay available. Transport uncertainty retains the same request key in the short-lived transport outbox; replays use the dedicated route. A failed or cancelled operation retries with a new key through the same capability. Ordinary Retry cannot reinterpret the operation as the earlier conversation.
+
+The latest failed or cancelled manual operation exposes an icon-only Retry compression button beside its status in one centered row. The button uses a pointer cursor and a localized tooltip on hover or focus. Status details and retry remain separate keyboard controls. The divider and preparation-failure card share canonical preflight, selection and permission checks, then the existing admission/outbox. Only the divider carries the primary retry when it exists. Pending preflight, preparation and dispatch show Retrying compression; unknown delivery releases that busy label but blocks a new command until existing outbox recovery resolves it. Terminal retry uses a new request key; unknown delivery retains the original key. Every exit releases preparation ownership, with navigation aborting superseded waits. Active progress uses the current canonical compaction rather than an ordinary preparing label; canonical automatic recovery retains its countdown priority.
+
+Request deadlines and recovery exhaustion are Provider failures while the owning execution remains active. Explicit cancellation and atomic installation retain upstream authority. Historical mistaken cancellation markers stay unchanged; no error-string repair or host-owned migration is performed.
 
 Floret installs the summary, model-context boundary, and manual terminal result in one transaction. Installation and cancellation have one transaction winner. Successful installation invalidates provider continuation and confirmed input usage; the installed estimate serves pressure decisions; the overview remains unavailable until the next valid request confirms input usage. Noop does not alter context, generation, or continuation. Manual requests do not require the automatic threshold, but still require context above the 50,000-token target, a complete cut, and useful savings. There is no force mode.
 

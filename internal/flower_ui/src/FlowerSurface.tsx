@@ -6839,6 +6839,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const executeCompactContextCommand = async (target = selectedThread(), stillTargeted = () => true) => {
+    const mutationAllowed = () => props.adapter.canMutate !== false;
     const threadID = trimString(target?.thread_id);
     const child = trimString(target?.parent_thread_id);
     const fromComposer = threadID === selectedThreadID();
@@ -6850,7 +6851,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       && (fromComposer ? selectedThreadID() === threadID
         : activeSubagentID() === threadID && activeSubagentDetail()?.generation === childGeneration);
     if (!threadID) { notifyComposerError(copy().chat.compactContextEmpty); return; }
-    if (props.adapter.canMutate === false || (fromComposer && (threadLoadError() || selectedThreadReadOnly()))) return;
+    if (!mutationAllowed() || (fromComposer && (threadLoadError() || selectedThreadReadOnly()))) return;
     if (!props.adapter.compactThreadContext) { notifyComposerError(copy().chat.compactContextUnavailable); return; }
     const thread = target;
     if (thread?.active_run_id || thread?.queued_turn_count || thread?.input_request || thread?.approval_pending) {
@@ -6870,10 +6871,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const frozen = session.snapshot();
     const frozenCommand = parseFlowerSlashCommand(frozen.value.text);
     const requestID = createFlowerClientRequestID();
+    const selectionSignal = !fromComposer && subagentDetailReadController
+      ? AbortSignal.any([navigationReadController.signal, subagentDetailReadController.signal]) : navigationReadController.signal;
     try {
       if (outboxResendInFlight.has(requestID)) return;
-      const storageGeneration = await withFlowerRequestDeadline(() => props.adapter.resolveStorageGeneration?.() ?? Promise.resolve(''), copy().settings.dialog.catalog.retryTimedOut);
-      if (!targetCurrent() || !stillTargeted()) return;
+      const storageGeneration = await withFlowerRequestDeadline(() => props.adapter.resolveStorageGeneration?.() ?? Promise.resolve(''), copy().settings.dialog.catalog.retryTimedOut, selectionSignal);
+      if (!targetCurrent() || !stillTargeted() || !mutationAllowed()) return;
       outboxOperations.set(requestID, { adapter: props.adapter });
       if (fromComposer) pendingAdmissionHandoffs.set(requestID, { sessionKey, selectionSequence: threadLoadSequence, settle: () => {
         if (session.snapshot().text_revision === frozen.text_revision && (frozenCommand.kind === 'intent' || frozenCommand.kind === 'suggest')) updateComposerSessionText(sessionKey, '');
@@ -6885,7 +6888,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         attachmentLabels: [], createdAtMs: Date.now(), delivery: 'pending',
       }));
     } catch (error) {
-      notifyComposerError(getErrorMessage(error));
+      if (targetCurrent() && stillTargeted()) notifyComposerError(getErrorMessage(error));
     } finally {
       launchChatTurnInFlight.delete(sessionKey);
       setPreparingSendRevision(revision => revision + 1);
@@ -7375,13 +7378,94 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
   };
 
+  const latestExecutionCompaction = (thread: FlowerThreadSnapshot | null | undefined) =>
+    thread?.context_compactions?.filter(item => item.run_id === thread.current_execution?.run_id)
+      .reduce<NonNullable<FlowerThreadSnapshot['context_compactions']>[number] | undefined>((last, item) =>
+        !last || item.canonical_ordinal >= last.canonical_ordinal ? item : last, undefined);
+  const isCompactionRecovery = (thread: FlowerThreadSnapshot | null | undefined) => {
+    if (!thread || thread.current_execution?.turn_kind !== 'context_compaction' || thread.active_run_id) return false;
+    const operation = latestExecutionCompaction(thread);
+    return operation ? operation.status === 'failed' || operation.status === 'cancelled'
+      : thread.status === 'failed' || thread.status === 'canceled';
+  };
+  const compactionRecoveryPending = (thread: FlowerThreadSnapshot | null | undefined) => {
+    preparingSendRevision();
+    outboxRetryTick();
+    const threadID = trimString(thread?.thread_id);
+    return retryingThreads().has(threadID) || launchChatTurnInFlight.has(threadID)
+      || (threadID === selectedThreadID() && launchChatTurnInFlight.has(currentComposerSessionKey()))
+      || transportOutbox().forThread(threadID).some(entry => !entry.terminalError
+        && (entry.delivery === 'pending' || outboxResendInFlight.has(entry.requestId)));
+  };
+  const threadRecoveryBlocked = (thread: FlowerThreadSnapshot | null | undefined, ownsPreflight = false) =>
+    !thread || !settingsReady() || props.adapter.canMutate === false
+    || (!thread.parent_thread_id && Boolean(trimString(thread.read_only_reason)))
+    || thread.error?.code === 'floret_effect_outcome_unknown'
+    || Boolean(thread.active_run_id || thread.input_request || thread.approval_pending || thread.queued_turn_count)
+    || ['running', 'waiting_approval', 'waiting_user'].includes(thread.status)
+    || transportOutbox().forThread(thread.thread_id).some(entry => !entry.terminalError && entry.delivery !== 'accepted')
+    || (!ownsPreflight && compactionRecoveryPending(thread));
+  const latestCompactionRecovery = (thread: FlowerThreadSnapshot | null | undefined) => {
+    if (!isCompactionRecovery(thread)) return undefined;
+    const latest = latestExecutionCompaction(thread);
+    return latest && (latest.status === 'failed' || latest.status === 'cancelled') ? latest : undefined;
+  };
+  const retryThreadContinuation = async (targetThread: Accessor<FlowerThreadSnapshot | null | undefined>, expectedCompactionRunID?: string) => {
+    const threadID = trimString(targetThread()?.thread_id);
+    if (!threadID || threadRecoveryBlocked(targetThread())) return;
+    setRetryingThreads(previous => new Set([...previous, threadID]));
+    const requestEpoch = liveTransport.connectionEpoch();
+    const selectionSequence = threadLoadSequence;
+    const childSelection = activeSubagentDetail();
+    const child = childSelection?.childThreadID === threadID ? childSelection : null;
+    const selectionSignal = child && subagentDetailReadController
+      ? AbortSignal.any([navigationReadController.signal, subagentDetailReadController.signal]) : navigationReadController.signal;
+    const stillTargeted = () => !surfaceDisposed && requestEpoch === liveTransport.connectionEpoch()
+        && selectionSequence === threadLoadSequence
+        && (child ? activeSubagentDetail()?.childThreadID === threadID && activeSubagentDetail()?.parentThreadID === child.parentThreadID && activeSubagentDetail()?.generation === child.generation
+          : selectedThreadID() === threadID);
+    try {
+      let current: FlowerThreadSnapshot | null;
+      if (child) {
+        const detail = await withFlowerRequestDeadline(() => props.adapter.loadSubagentDetail(child.parentThreadID, threadID), copy().settings.dialog.catalog.retryTimedOut, selectionSignal);
+        if (!stillTargeted()) return;
+        if (detail.summary.thread_id !== threadID || detail.summary.parent_thread_id !== child.parentThreadID || detail.current.thread_id !== threadID) throw new Error('Subagent recovery returned a different thread.');
+        current = projectSubagentDetailThread(detail);
+        acceptActiveSubagentCurrent(child.parentThreadID, detail.current, detail.summary, detail.model_context, detail.context_usage, detail.context_compactions, detail.timeline_decorations);
+      } else {
+        current = await requestThreadDetail(threadID, 'user_action', true);
+      }
+      if (!current || !stillTargeted() || (current.status !== 'failed' && !isCompactionRecovery(current)) || current.error?.code === 'floret_effect_outcome_unknown'
+        || (expectedCompactionRunID !== undefined && (!isCompactionRecovery(current) || current.current_execution?.run_id !== expectedCompactionRunID))
+        || threadRecoveryBlocked(current, true)) return;
+      if (current.current_execution?.turn_kind === 'context_compaction') {
+        if (!isCompactionRecovery(current)) return;
+        await executeCompactContextCommand(current, () => stillTargeted()
+          && !threadRecoveryBlocked(targetThread(), true)
+          && targetThread()?.current_execution?.run_id === current.current_execution?.run_id);
+        return;
+      }
+      await withFlowerRequestDeadline(() => props.adapter.retryThread(threadID), copy().settings.dialog.catalog.retryTimedOut, selectionSignal);
+      if (!stillTargeted()) return;
+      if (child) {
+        await refreshActiveSubagentDetail();
+      } else await requestThreadDetail(threadID, 'user_action', true, true);
+    } catch (error) {
+      if (selectionSignal.aborted) return;
+      reportThreadDetailDiagnostic(threadID, 'request_or_mapping', 'user_action', error);
+      if (stillTargeted()) notifyThreadActionError(getErrorMessage(error));
+    } finally {
+      setRetryingThreads(previous => { const next = new Set(previous); next.delete(threadID); return next; });
+    }
+  };
+
   const runErrorNotice = (error: FlowerThreadSnapshot['error'], targetThread: Accessor<FlowerThreadSnapshot | null | undefined>) => {
     const code = trimString(error?.code);
     const correctionFailure = code === 'floret_tool_argument_correction_exhausted';
     const contextFailure = code === 'context_budget_invalid' || code === 'context_fixed_overhead' || code === 'context_compaction_limit';
     const retryPending = () => retryingThreads().has(trimString(targetThread()?.thread_id));
-    const retryBlocked = () => !settingsReady() || props.adapter.canMutate === false || (!targetThread()?.parent_thread_id && Boolean(trimString(targetThread()?.read_only_reason)))
-      || code === 'floret_effect_outcome_unknown' || retryPending() || ['running', 'waiting_approval', 'waiting_user'].includes(targetThread()?.status ?? '');
+    const retryBlocked = () => threadRecoveryBlocked(targetThread())
+      || (isCompactionRecovery(targetThread()) && !props.adapter.compactThreadContext);
     const configureBlocked = () => props.adapter.canMutate === false || configuringProviderThreadID() === trimString(targetThread()?.thread_id);
     const [detailsCopied, setDetailsCopied] = createSignal(false);
     const stoppedUnknown = () => code === 'floret_effect_outcome_unknown' && targetThread()?.cancellation?.source === 'user_stop';
@@ -7399,47 +7483,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       || code === 'provider_unreachable'
       || code === 'provider_stream_interrupted'
       || code === 'model_gateway_contract_failed';
-    const retryContinuation = async () => {
-      const threadID = trimString(targetThread()?.thread_id);
-      if (!threadID || retryBlocked()) return;
-      setRetryingThreads(previous => new Set([...previous, threadID]));
-      const requestEpoch = liveTransport.connectionEpoch();
-      const selectionSequence = threadLoadSequence;
-      const childSelection = activeSubagentDetail();
-      const child = childSelection?.childThreadID === threadID ? childSelection : null;
-      const stillTargeted = () => !surfaceDisposed && requestEpoch === liveTransport.connectionEpoch()
-          && selectionSequence === threadLoadSequence
-          && (child ? activeSubagentDetail()?.childThreadID === threadID && activeSubagentDetail()?.parentThreadID === child.parentThreadID && activeSubagentDetail()?.generation === child.generation
-            : selectedThreadID() === threadID);
-      try {
-        let current: FlowerThreadSnapshot | null;
-        if (child) {
-          const detail = await withFlowerRequestDeadline(() => props.adapter.loadSubagentDetail(child.parentThreadID, threadID), copy().settings.dialog.catalog.retryTimedOut);
-          if (!stillTargeted()) return;
-          if (detail.summary.thread_id !== threadID || detail.summary.parent_thread_id !== child.parentThreadID || detail.current.thread_id !== threadID) throw new Error('Subagent recovery returned a different thread.');
-          current = projectSubagentDetailThread(detail);
-          acceptActiveSubagentCurrent(child.parentThreadID, detail.current, detail.summary, detail.model_context, detail.context_usage, detail.context_compactions, detail.timeline_decorations);
-        } else {
-          current = await requestThreadDetail(threadID, 'user_action', true);
-        }
-        if (!current || !stillTargeted() || current.status !== 'failed' || current.error?.code === 'floret_effect_outcome_unknown'
-          || !settingsReady() || props.adapter.canMutate === false || (!child && trimString(current.read_only_reason))) return;
-        if (current.current_execution?.turn_kind === 'context_compaction') {
-          await executeCompactContextCommand(current, stillTargeted);
-          return;
-        }
-        await withFlowerRequestDeadline(() => props.adapter.retryThread(threadID), copy().settings.dialog.catalog.retryTimedOut);
-        if (!stillTargeted()) return;
-        if (child) {
-          await refreshActiveSubagentDetail();
-        } else await requestThreadDetail(threadID, 'user_action', true, true);
-      } catch (error) {
-        reportThreadDetailDiagnostic(threadID, 'request_or_mapping', 'user_action', error);
-        if (stillTargeted()) notifyThreadActionError(getErrorMessage(error));
-      } finally {
-        setRetryingThreads(previous => { const next = new Set(previous); next.delete(threadID); return next; });
-      }
-    };
+    const retryContinuation = () => retryThreadContinuation(targetThread, isCompactionRecovery(targetThread()) ? targetThread()?.current_execution?.run_id : undefined);
     const inspectPending = () => retryPending() || transportOutbox().forThread(trimString(targetThread()?.thread_id)).some(entry => entry.delivery !== 'accepted');
     const inspectBlocked = () => !settingsReady() || props.adapter.canMutate === false || inspectPending()
       || (Boolean(targetThread()?.parent_thread_id) && !subagentDetail()?.summary.can_send_input)
@@ -7499,37 +7543,39 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }}><StableText reserve={[copy().chat.messageCopied, copy().chat.runErrorCopyDetails]}>{detailsCopied() ? copy().chat.messageCopied : copy().chat.runErrorCopyDetails}</StableText></Button>
       </details>
     ) : undefined;
+    const hasCompactionRecoveryDivider = () => {
+      const operation = latestCompactionRecovery(targetThread());
+      return operation && targetThread()?.timeline_decorations?.some(item => item.compaction.operation_id === operation.operation_id);
+    };
+    const retryAction = () => <Show when={!hasCompactionRecoveryDivider()
+      && (targetThread()?.current_execution?.turn_kind !== 'context_compaction' || isCompactionRecovery(targetThread()))}>
+      <Button size="sm" variant="ghost" disabled={retryBlocked()}
+        onClick={() => void retryContinuation()}>{isCompactionRecovery(targetThread())
+          ? compactionRecoveryPending(targetThread()) ? copy().chat.compactionDivider.retrying : copy().chat.compactionDivider.retry
+          : copy().chat.retryReply}</Button>
+    </Show>;
     const action = () => code === 'floret_effect_outcome_unknown' ? (
       <Button size="sm" variant="ghost" disabled={inspectBlocked()} onClick={() => void inspectAndContinue()}>{copy().chat.inspectAndContinue}</Button>
     ) : correctionFailure ? (
       <>
-        <Button size="sm" variant="ghost" disabled={retryBlocked()} onClick={() => void retryContinuation()}>{copy().chat.retryReply}</Button>
+        {retryAction()}
         <Button size="sm" variant="ghost" disabled={configureBlocked()} onClick={() => void configureThreadProvider(targetThread())}>{copy().chat.runErrorActions.configureCurrentModel}</Button>
       </>
     ) : providerFailure ? (
       <>
         <Button size="sm" variant="ghost" disabled={configureBlocked()} onClick={() => void configureThreadProvider(targetThread())}>{copy().settings.dialog.catalog.searchConfigure}</Button>
-        <Button size="sm" variant="ghost" disabled={retryBlocked()} onClick={() => void retryContinuation()}>{copy().chat.retryReply}</Button>
+        {retryAction()}
         <Show when={code === 'chatgpt_usage_unavailable'}><a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" class="cursor-pointer whitespace-nowrap text-sm font-medium text-primary hover:underline">{copy().settings.dialog.chatGPT.manageUsage}</a></Show>
       </>
     ) : code === 'model_context_unavailable' || retryableRuntimeFailure ? (
-      <Button size="sm" variant="ghost" disabled={retryBlocked()} onClick={() => void retryContinuation()}>{copy().chat.retryReply}</Button>
+      retryAction()
     ) : contextFailure ? (
       <>
         <Button size="sm" variant="ghost" onClick={openSettings}>{copy().chat.runErrorActions.openSettings}</Button>
-        <Button size="sm" variant="ghost" disabled={retryBlocked()} onClick={() => void retryContinuation()}>{copy().chat.retryReply}</Button>
+        {retryAction()}
       </>
     ) : continuationFailure()
-      ? (
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={retryBlocked()}
-          onClick={() => void retryContinuation()}
-        >
-          {copy().chat.retryReply}
-        </Button>
-      )
+      ? retryAction()
       : actionable
       ? (
         <Button size="sm" variant="ghost" onClick={openSettings}>
@@ -7622,7 +7668,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const label = retry.reason === 'stream_interrupted' ? copy().chat.providerRetryRegenerating : copy().chat.providerRetryWaiting;
       return label(seconds, retry.retry, retry.max_retries);
     }
-    return modelStatusLabel(kind);
+    return kind === 'compacting' ? copy().chat.compactionDivider.compacting : modelStatusLabel(kind);
   }
   const formatMessageTime = (createdAtMs: number): string => {
     const value = Math.floor(Number(createdAtMs ?? 0));
@@ -11359,10 +11405,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const compactionDividerEntry = (entry: Accessor<Extract<FlowerTimelineEntry, { type: 'context_compaction' }>>, target: Accessor<FlowerThreadSnapshot | null | undefined>, visible: Accessor<boolean>) => {
     const decoration = createMemo(() => entry().decoration);
+    const retryable = () => latestCompactionRecovery(target())?.operation_id === decoration().compaction.operation_id
+      && props.adapter.canMutate !== false && Boolean(props.adapter.compactThreadContext)
+      && (Boolean(target()?.parent_thread_id) || !trimString(target()?.read_only_reason));
     return <FlowerContextCompactionDivider decoration={decoration()} copy={copy()} visible={visible()}
-      onRetry={target()?.current_execution?.turn_kind === 'context_compaction' && !target()?.active_run_id
-        && (decoration().compaction.status === 'failed' || decoration().compaction.status === 'cancelled')
-        && decoration().compaction.run_id === target()?.current_execution?.run_id ? () => void executeCompactContextCommand(target()) : undefined} />;
+      retrying={compactionRecoveryPending(target())} retryDisabled={threadRecoveryBlocked(target())}
+      onRetry={retryable() ? () => void retryThreadContinuation(target, decoration().compaction.run_id) : undefined} />;
   };
 
   const inputRequestEntry = (entry: Accessor<FlowerTimelineEntry>, thread: Accessor<FlowerThreadSnapshot | null | undefined>) => {

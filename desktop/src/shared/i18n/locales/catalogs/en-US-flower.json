@@ -466,6 +466,8 @@
     "contextIndicatorRecentCacheHitLabel": "Latest request cache hit rate",
     "contextIndicatorCacheHitLabel": "Session cache hit rate",
     "compactionDividerCompacting": "Context compression in progress...",
+    "compactionDividerRetry": "Retry compression",
+    "compactionDividerRetrying": "Retrying compression…",
     "compactionDividerCompacted": "Context compressed",
     "compactionDividerFailed": "Context compression failed",
     "compactionDividerCancelled": "Context compression cancelled",

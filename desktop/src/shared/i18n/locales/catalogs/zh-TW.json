@@ -611,6 +611,8 @@
       "contextIndicatorRecentCacheHitLabel": "最近請求快取命中率",
       "contextIndicatorCacheHitLabel": "對話累計快取命中率",
       "compactionDividerCompacting": "上下文壓縮中...",
+      "compactionDividerRetry": "重試壓縮",
+      "compactionDividerRetrying": "正在重試壓縮…",
       "compactionDividerCompacted": "上下文已壓縮",
       "compactionDividerFailed": "上下文壓縮失敗",
       "compactionDividerCancelled": "上下文壓縮已取消",

@@ -62,7 +62,7 @@ const adapter = createRuntimeFlowerSurfaceAdapter({
   launchTurn: unavailable, retryThread: unavailable, stopThread: unavailable, submitInput: unavailable,
 });
 const loadThread = adapter.loadThread;
-const qualified = { ...adapter, loadThread: async (threadID: string) => { try { return await loadThread(threadID); } catch (error) { console.error('qualification detail:', String(error)); throw error; } } };
+const qualified = { ...adapter, loadThread: async (threadID: string, signal: AbortSignal) => { try { return await loadThread(threadID, signal); } catch (error) { console.error('qualification detail:', String(error)); throw error; } } };
 const [notice, setNotice] = createSignal('');
 document.getElementById('root')!.style.height = '100vh';
 render(() => <FloeProvider>

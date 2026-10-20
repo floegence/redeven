@@ -727,6 +727,8 @@ export type FlowerSurfaceCopy = Readonly<{
       percent: (percent: number) => string;
     }>;
     compactionDivider: Readonly<{
+      retry: string;
+      retrying: string;
       compacting: string;
       compacted: string;
       failed: string;
@@ -1220,6 +1222,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       percent: (percent) => `${percent}%`,
     },
     compactionDivider: {
+      retry: 'Retry compression',
+      retrying: 'Retrying compression…',
       compacting: 'Compacting context',
       compacted: 'Context compacted',
       failed: 'Context compaction failed',

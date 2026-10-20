@@ -404,6 +404,8 @@ export const flowerSurfaceEnUS = {
     contextIndicatorUnavailable: 'Not available',
     contextIndicatorRecentCacheHitLabel: 'Latest request cache hit rate',
     contextIndicatorCacheHitLabel: 'Session cache hit rate',
+    compactionDividerRetry: 'Retry compression',
+    compactionDividerRetrying: 'Retrying compression…',
     compactionDividerCompacting: 'Context compression in progress...',
     compactionDividerCompacted: 'Context compressed',
     compactionDividerFailed: 'Context compression failed',

@@ -611,6 +611,8 @@
       "contextIndicatorRecentCacheHitLabel": "直近のリクエストのキャッシュヒット率",
       "contextIndicatorCacheHitLabel": "セッション全体のキャッシュヒット率",
       "compactionDividerCompacting": "コンテキスト圧縮中...",
+      "compactionDividerRetry": "圧縮を再試行",
+      "compactionDividerRetrying": "圧縮を再試行中…",
       "compactionDividerCompacted": "コンテキストを圧縮しました",
       "compactionDividerFailed": "コンテキスト圧縮に失敗",
       "compactionDividerCancelled": "コンテキスト圧縮をキャンセルしました",

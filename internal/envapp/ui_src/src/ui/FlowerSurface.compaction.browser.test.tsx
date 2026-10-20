@@ -2,7 +2,7 @@ import '../index.css';
 import './flower-feature.css';
 import { page, userEvent } from 'vitest/browser';
 import { expect, it, vi } from 'vitest';
-import type { FlowerRuntimeCurrentView } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerRuntimeCurrentView, FlowerThreadSnapshot } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { createFlowerComposerDraftCoordinator } from '../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
 import { withModelDirectoryFixture } from '../../../../flower_ui/testing/modelDirectoryFixture';
 import { flowerTurnAdmissionError } from '../../../../flower_ui/src/flowerTurnAdmission';
@@ -93,7 +93,8 @@ it('routes canvas compaction independently and preserves edited draft and canvas
     engaged: true, transcriptVisible: true,
   });
   surface.style.cssText = 'height:800px;width:980px';
-  await waitFor(() => Boolean(surface.querySelector('textarea')), 10000);
+  await waitFor(() => surface.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === 'thread-1'
+    && surface.querySelector('main')?.getAttribute('data-flower-selected-thread-loading') === 'false', 10000);
   const input = await enterCommand(surface, '/com');
   await waitFor(() => compact.mock.calls.length === 1);
   expect(base.launchTurn).not.toHaveBeenCalled();
@@ -191,4 +192,168 @@ it.each(['/compact', '/com'])('preserves file references and staged attachments 
   expect(session.snapshot().value.references).toEqual(references);
   expect(base.launchTurn).not.toHaveBeenCalled();
   expect(uploadAttachment).not.toHaveBeenCalled();
+});
+
+function failedCompaction(status: 'failed' | 'cancelled', divider = true) {
+  const operation = { operation_id: 'compact-old', turn_id: 'compact-turn', run_id: 'compact-run', canonical_ordinal: 2,
+    phase: 'complete' as const, status, error: 'provider request timeout (output_idle)', updated_at_ms: 2 };
+  const snapshot = thread({ status: status === 'cancelled' ? 'idle' : 'failed',
+    current_execution: { turn_id: 'compact-turn', run_id: 'compact-run', status: status === 'cancelled' ? 'idle' : 'failed', turn_kind: 'context_compaction' },
+    context_compactions: divider ? [operation] : [],
+    timeline_decorations: divider ? [{ decoration_id: 'compact-old', kind: 'context_compaction', ordinal: 2,
+      anchor: { target_kind: 'message', message_id: 'm1', edge: 'after' }, compaction: operation }] : [],
+    error: status === 'failed' ? { code: 'provider_request_timeout', message: 'Timed out' } : undefined,
+  });
+  return snapshot;
+}
+function compactionView(snapshot: FlowerThreadSnapshot) {
+  const value = liveBootstrap(snapshot);
+  return { ...value, context_compactions: snapshot.context_compactions, timeline_decorations: snapshot.timeline_decorations, current: { ...value.current, view_version: snapshot.status === 'success' ? 100 : 0, turn_kind: 'context_compaction' as const, turn_id: 'compact-turn', run_id: 'compact-run' } };
+}
+it.each(['failed', 'cancelled'] as const)('preflights %s compaction once and keeps retry beside its status', async status => {
+  const snapshot = failedCompaction(status);
+  const refresh = deferred<ReturnType<typeof compactionView>>();
+  let loads = 0;
+  let preflight = false;
+  const compact = vi.fn(async () => accepted());
+  const surface = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [snapshot],
+    loadThread: vi.fn(async () => preflight ? (loads++, refresh.promise) : compactionView(snapshot)),
+    compactThreadContext: compact }, { focusThreadRequest: focus });
+  await waitFor(() => Boolean(surface.querySelector('.flower-compaction-divider')), 10000);
+  const retry = surface.querySelector<HTMLButtonElement>('.flower-compaction-divider button')!;
+  expect(retry.getAttribute('aria-label')).toBe('Retry compression');
+  expect(retry.textContent).toBe('');
+  expect(retry.closest('.flower-compaction-divider-center')).toBe(surface.querySelector('.flower-compaction-divider-pill')?.parentElement);
+  preflight = true;
+  retry.click(); retry.click();
+  await waitFor(() => loads === 1);
+  expect(retry.disabled).toBe(true);
+  expect(retry.getAttribute('aria-label')).toBe('Retrying compression…');
+  expect(compact).not.toHaveBeenCalled();
+  expect(surface.querySelector<HTMLTextAreaElement>('textarea')?.disabled).toBe(false);
+  refresh.resolve(compactionView(snapshot));
+  await waitFor(() => compact.mock.calls.length === 1);
+});
+
+it.each(['permission', 'navigation', 'completed', 'read_failure'] as const)('releases compaction recovery after %s without submitting a stale request', async change => {
+  const snapshot = failedCompaction('failed');
+  const refreshed = deferred<ReturnType<typeof compactionView>>();
+  let preflight = false;
+  let canMutate = true;
+  const compact = vi.fn(async () => accepted());
+  const load = vi.fn(async (id: string) => id !== 'thread-1' ? liveBootstrap(thread({ thread_id: id }))
+    : preflight ? refreshed.promise : compactionView(snapshot));
+  const surface = renderSurfaceWithAdapterProps({ ...adapter(true), get canMutate() { return canMutate; },
+    listThreads: async () => [snapshot, thread({ thread_id: 'thread-2', title: 'Review branch' })], loadThread: load,
+    compactThreadContext: compact }, { focusThreadRequest: focus });
+  await waitFor(() => Boolean(surface.querySelector('.flower-compaction-divider-retry')), 10000);
+  const retry = surface.querySelector<HTMLButtonElement>('.flower-compaction-divider-retry')!;
+  preflight = true;
+  retry.click();
+  await waitFor(() => retry.disabled);
+  if (change === 'permission') canMutate = false;
+  if (change === 'navigation') {
+    await waitFor(() => Boolean(surface.querySelector('[data-thread-id="thread-2"] button')));
+    surface.querySelector<HTMLButtonElement>('[data-thread-id="thread-2"] button')!.click();
+    await waitFor(() => surface.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === 'thread-2');
+  }
+  if (change === 'read_failure') refreshed.reject(new Error('Read unavailable'));
+  else refreshed.resolve(compactionView(change === 'completed' ? { ...snapshot, status: 'success', error: undefined,
+    current_execution: undefined, context_compactions: snapshot.context_compactions?.map(item => ({ ...item, status: 'compacted' })) } : snapshot));
+  await waitFor(() => !surface.textContent?.includes('Retrying compression'));
+  expect(compact).not.toHaveBeenCalled();
+  expect(surface.querySelector<HTMLTextAreaElement>('textarea')?.disabled).toBe(false);
+});
+
+it('retains preparation-failure recovery without a divider and uses a fresh request for another terminal failure', async () => {
+  const snapshot = failedCompaction('failed', false);
+  const keys: string[] = [];
+  const compact = vi.fn(async (_id: string, input: { client_request_id: string; storage_generation: string }) => {
+    keys.push(input.client_request_id);
+    throw flowerTurnAdmissionError('rejected', new Error('Preparation unavailable'));
+  });
+  const base = adapter(true);
+  const surface = renderSurfaceWithAdapterProps({ ...base, listThreads: async () => [snapshot],
+    loadThread: async () => compactionView(snapshot), compactThreadContext: compact }, { focusThreadRequest: focus });
+  const retry = () => [...surface.querySelectorAll<HTMLButtonElement>('.flower-run-error button')]
+    .find(button => button.textContent === 'Retry compression');
+  await waitFor(() => Boolean(retry()), 10000);
+  expect(surface.querySelector('.flower-compaction-divider')).toBeNull();
+  retry()!.click();
+  await waitFor(() => keys.length === 1 && Boolean(retry()) && !retry()!.disabled);
+  retry()!.click();
+  await waitFor(() => keys.length === 2);
+  expect(keys[1]).not.toBe(keys[0]);
+  expect(base.retryThread).not.toHaveBeenCalled();
+});
+
+it('keeps completed compaction diagnostics without exposing a stale retry', async () => {
+  const failed = failedCompaction('failed');
+  const snapshot = { ...failed, status: 'success' as const,
+    current_execution: { ...failed.current_execution!, status: 'success' as const },
+    context_compactions: failed.context_compactions?.map(item => ({ ...item, status: 'compacted' as const })),
+    timeline_decorations: failed.timeline_decorations?.map(item => ({ ...item, compaction: { ...item.compaction, status: 'compacted' as const } })),
+  };
+  const surface = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [snapshot],
+    loadThread: async () => compactionView(snapshot) }, { focusThreadRequest: focus });
+  await waitFor(() => Boolean(surface.querySelector('.flower-compaction-divider')), 10000);
+  expect(surface.querySelector('.flower-compaction-divider-retry')).toBeNull();
+  expect([...surface.querySelectorAll<HTMLButtonElement>('.flower-run-error button')]
+    .some(button => ['Retry reply', 'Retry compression'].includes(button.textContent ?? ''))).toBe(false);
+});
+
+it('keeps uncertain retry delivery in the existing outbox until its original identity is resolved', async () => {
+  const snapshot = failedCompaction('cancelled');
+  const keys: string[] = [];
+  const compact = vi.fn(async (_id: string, input: { client_request_id: string; storage_generation: string }) => {
+    keys.push(input.client_request_id);
+    if (keys.length === 1) throw flowerTurnAdmissionError('unknown', new Error('Connection lost'));
+    return accepted();
+  });
+  const surface = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [snapshot],
+    loadThread: async () => compactionView(snapshot), compactThreadContext: compact }, { focusThreadRequest: focus });
+  await waitFor(() => Boolean(surface.querySelector('.flower-compaction-divider-retry')), 10000);
+  surface.querySelector<HTMLButtonElement>('.flower-compaction-divider-retry')!.click();
+  await waitFor(() => Boolean(surface.querySelector('[data-flower-transport-delivery="unknown"]')));
+  const retry = surface.querySelector<HTMLButtonElement>('.flower-compaction-divider-retry')!;
+  expect(retry.disabled).toBe(true);
+  expect(retry.getAttribute('aria-label')).toBe('Retry compression');
+  surface.querySelector<HTMLButtonElement>('[data-flower-transport-delivery="unknown"] [aria-label="Retry send"]')!.click();
+  await waitFor(() => keys.length === 2);
+  expect(keys[1]).toBe(keys[0]);
+});
+
+it.each([{ theme: 'light', width: 1100 }, { theme: 'dark', width: 1100 }, { theme: 'light', width: 360 }, { theme: 'dark', width: 360 }])('keeps independent status and retry controls accessible in $theme at $width pixels', async ({ theme, width }) => {
+  await page.viewport(width, 850);
+  document.documentElement.classList.toggle('dark', theme === 'dark');
+  document.documentElement.classList.toggle('light', theme === 'light');
+  try {
+    const snapshot = failedCompaction('cancelled');
+    const surface = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [snapshot],
+      loadThread: async () => compactionView(snapshot), compactThreadContext: async () => accepted() }, { focusThreadRequest: focus });
+    surface.style.cssText = 'height:800px;width:100%;position:relative';
+    await waitFor(() => Boolean(surface.querySelector('.flower-compaction-divider-retry')), 10000);
+    const divider = surface.querySelector<HTMLElement>('.flower-compaction-divider')!;
+    const status = divider.querySelector<HTMLElement>('.flower-compaction-divider-pill')!;
+    const retry = divider.querySelector<HTMLButtonElement>('button')!;
+    expect(status.contains(retry)).toBe(false);
+    await userEvent.hover(retry);
+    await waitFor(() => [...document.querySelectorAll('[role="tooltip"]')].some(tooltip => tooltip.textContent === 'Retry compression'));
+    await userEvent.unhover(retry);
+    await waitFor(() => !document.querySelector('[role="tooltip"]'));
+    status.focus();
+    await waitFor(() => Boolean(document.querySelector('[role="tooltip"]')));
+    await userEvent.keyboard('{Escape}{Tab}');
+    expect(document.activeElement).toBe(retry);
+    expect(getComputedStyle(retry).outlineStyle).not.toBe('none');
+    expect(divider.scrollWidth).toBeLessThanOrEqual(divider.clientWidth + 1);
+    const a = status.getBoundingClientRect(); const b = retry.getBoundingClientRect();
+    expect(Math.abs((a.top + a.bottom) / 2 - (b.top + b.bottom) / 2)).toBeLessThan(2);
+    expect(b.left).toBeGreaterThanOrEqual(a.right);
+    expect(b.left - a.right).toBeLessThan(8);
+    expect(getComputedStyle(retry).cursor).toBe('pointer');
+    await waitFor(() => [...document.querySelectorAll('[role="tooltip"]')].some(tooltip => tooltip.textContent === 'Retry compression'));
+    retry.blur();
+    await page.screenshot({ element: surface, path: '__screenshots__/compaction-retry-' + theme + '-' + width + '.png' });
+  } finally { document.documentElement.classList.remove('dark', 'light'); }
 });

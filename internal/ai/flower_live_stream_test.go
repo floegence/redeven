@@ -666,10 +666,27 @@ func TestFlowerWorkspaceSummaryFrameContainsSnapshotNotProjectionEvent(t *testin
 	if err := svc.publishCanonicalThreadSummary(ctx, meta.EndpointID, thread.ThreadID); err != nil {
 		t.Fatal(err)
 	}
-	frame := nextFlowerLiveStreamFrame(t, subscription)
+	// Thread creation may still publish its canonical current after subscription.
+	// Validate that prefix instead of assuming the requested summary is next.
+	summaryCtx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	var frame *FlowerLiveStreamFrame
 	var envelope FlowerLiveStreamEnvelope
-	if err := json.Unmarshal(frame.Data, &envelope); err != nil {
-		t.Fatal(err)
+	for {
+		frame, err = readFlowerLiveStreamEnvelope(summaryCtx, subscription)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(frame.Data, &envelope); err != nil {
+			t.Fatal(err)
+		}
+		if frame.Kind == FlowerLiveStreamSummaryBatch {
+			break
+		}
+		if frame.Kind != FlowerLiveStreamThreadBatch || envelope.Kind != frame.Kind || envelope.ThreadID != thread.ThreadID || envelope.Current == nil || envelope.Current.ThreadID.String() != thread.ThreadID || envelope.Current.Activity != flruntime.ThreadActivityIdle || len(envelope.Current.Turns) != 0 || len(envelope.Summaries) != 0 {
+			t.Fatalf("unexpected frame before requested summary: %s", frame.Data)
+		}
+		envelope = FlowerLiveStreamEnvelope{}
 	}
 	if frame.Kind != FlowerLiveStreamSummaryBatch || len(envelope.Summaries) != 1 {
 		t.Fatalf("summary frame=%s, want one summary snapshot", frame.Data)

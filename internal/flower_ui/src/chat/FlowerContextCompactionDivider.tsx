@@ -1,5 +1,5 @@
-import { Clock } from '@floegence/floe-webapp-core/icons';
-import { Button, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
+import { Clock, Refresh } from '@floegence/floe-webapp-core/icons';
+import { SurfaceFloatingLayer, Tooltip } from '@floegence/floe-webapp-core/ui';
 import { Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, onMount } from 'solid-js';
 
 import type { FlowerTimelineDecoration } from '../contracts/flowerSurfaceContracts';
@@ -16,6 +16,8 @@ export function FlowerContextCompactionDivider(props: {
   decoration: Extract<FlowerTimelineDecoration, { kind: 'context_compaction' }>;
   copy: FlowerSurfaceCopy;
   onRetry?: () => void;
+  retrying?: boolean;
+  retryDisabled?: boolean;
   visible?: boolean;
 }) {
   const visible = () => props.visible !== false;
@@ -23,12 +25,20 @@ export function FlowerContextCompactionDivider(props: {
   const detail = createMemo(() => compactionDividerDetail(compaction(), props.copy));
   const label = createMemo(() => compactionDividerLabel(compaction(), props.copy));
   const running = createMemo(() => compaction().status === 'compacting');
+  const retryLabel = () => props.retrying ? props.copy.chat.compactionDivider.retrying : props.copy.chat.compactionDivider.retry;
   const [tooltipOpen, setTooltipOpen] = createSignal(false);
   const tooltipID = `flower-compaction-divider-${createUniqueId()}`;
   const hasDetail = createMemo(() => detail().length > 0);
   createEffect(() => { if (!visible() || !hasDetail()) setTooltipOpen(false); });
   let container: HTMLDivElement | undefined;
   let trigger: HTMLDivElement | undefined;
+  let retryFocused = false;
+  createEffect(() => {
+    if (!props.onRetry && retryFocused) {
+      trigger?.focus({ preventScroll: true });
+      retryFocused = false;
+    }
+  });
   const [panel, setPanel] = createSignal<HTMLSpanElement>();
   const [owner, setOwner] = createSignal<HTMLElement>();
   const [layout, setLayout] = createSignal({ position: { x: 0, y: 0 }, size: { width: 320, height: 64 } });
@@ -70,34 +80,47 @@ export function FlowerContextCompactionDivider(props: {
       data-flower-decoration-id={props.decoration.decoration_id}
       data-flower-compaction-status={compaction().status}
     >
-      <div
-        ref={trigger}
-        class={running() ? 'flower-compaction-divider-pill flower-compaction-divider-pill-running' : 'flower-compaction-divider-pill'}
-        aria-describedby={tooltipOpen() && hasDetail() ? tooltipID : undefined}
-        role={hasDetail() ? 'button' : undefined}
-        tabIndex={hasDetail() ? 0 : undefined}
-        onPointerEnter={openTooltip}
-        onPointerLeave={closeTooltip}
-        onFocus={openTooltip}
-        onBlur={closeTooltip}
-        onClick={openTooltip}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape') {
-            closeTooltip();
-            return;
-          }
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            toggleTooltip();
-          }
-        }}
-      >
-        <Show when={running()} fallback={<Clock class="flower-compaction-divider-status-icon h-3.5 w-3.5" aria-hidden="true" />}>
-          <FlowerContextCompactionRunningIcon />
+      <div class="flower-compaction-divider-center">
+        <div
+          ref={trigger}
+          class={running() ? 'flower-compaction-divider-pill flower-compaction-divider-pill-running' : 'flower-compaction-divider-pill'}
+          aria-describedby={tooltipOpen() && hasDetail() ? tooltipID : undefined}
+          role={hasDetail() ? 'button' : undefined}
+          tabIndex={hasDetail() ? 0 : -1}
+          onPointerEnter={openTooltip}
+          onPointerLeave={closeTooltip}
+          onFocus={openTooltip}
+          onBlur={closeTooltip}
+          onClick={openTooltip}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              closeTooltip();
+              return;
+            }
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              toggleTooltip();
+            }
+          }}
+        >
+          <Show when={running()} fallback={<Clock class="flower-compaction-divider-status-icon h-3.5 w-3.5" aria-hidden="true" />}>
+            <FlowerContextCompactionRunningIcon />
+          </Show>
+          <span class="flower-compaction-divider-copy">
+            <span class="flower-compaction-divider-label">{label()}</span>
+          </span>
+        </div>
+        <Show when={props.onRetry}>
+          <Tooltip content={retryLabel()}>
+            <button type="button" class="flower-compaction-divider-retry" aria-label={retryLabel()}
+              disabled={props.retryDisabled || props.retrying} aria-busy={props.retrying || undefined}
+              onFocus={() => { retryFocused = true; }}
+              onBlur={() => { retryFocused = false; }}
+              onClick={() => props.onRetry?.()}>
+              <Refresh class="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </Tooltip>
         </Show>
-        <span class="flower-compaction-divider-copy">
-          <span class="flower-compaction-divider-label">{label()}</span>
-        </span>
       </div>
       <Show when={tooltipOpen() && hasDetail()}>
         <SurfaceFloatingLayer owner={owner()} boundary={owner()?.closest<HTMLElement>('.flower-subagent-detail-window') ?? undefined} position={layout().position} estimatedSize={layout().size} class="flower-compaction-tooltip-layer" data-flower-floating-layer="true">
@@ -111,9 +134,6 @@ export function FlowerContextCompactionDivider(props: {
             {detail()}
           </span>
         </SurfaceFloatingLayer>
-      </Show>
-      <Show when={props.onRetry}>
-        <Button size="sm" variant="ghost" onClick={() => props.onRetry?.()}>{props.copy.chat.compactContext}</Button>
       </Show>
     </div>
   );

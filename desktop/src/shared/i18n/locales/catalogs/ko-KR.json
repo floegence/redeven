@@ -611,6 +611,8 @@
       "contextIndicatorRecentCacheHitLabel": "최근 요청 캐시 적중률",
       "contextIndicatorCacheHitLabel": "세션 누적 캐시 적중률",
       "compactionDividerCompacting": "컨텍스트 압축 중...",
+      "compactionDividerRetry": "압축 다시 시도",
+      "compactionDividerRetrying": "압축 다시 시도 중…",
       "compactionDividerCompacted": "컨텍스트 압축됨",
       "compactionDividerFailed": "컨텍스트 압축 실패",
       "compactionDividerCancelled": "컨텍스트 압축 취소됨",

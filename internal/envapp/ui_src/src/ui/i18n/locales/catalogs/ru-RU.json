@@ -5632,6 +5632,8 @@
       "contextIndicatorUnavailable": "Недоступно",
       "contextIndicatorRecentCacheHitLabel": "Доля попаданий в кэш последнего запроса",
       "contextIndicatorCacheHitLabel": "Доля попаданий в кэш за сеанс",
+      "compactionDividerRetry": "Повторить сжатие",
+      "compactionDividerRetrying": "Повторное сжатие…",
       "compactionDividerCompacting": "Сжатие контекста...",
       "compactionDividerCompacted": "Контекст сжат",
       "compactionDividerFailed": "Не удалось сжать контекст",

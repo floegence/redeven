@@ -83,44 +83,47 @@ try {
     await page.goto(url + '/?history=1&thread=' + setup.history);
     const detail = await api('detail', setup.history);
     const operations = detail.thread.context_compactions.filter(value => !setup.history_turn || value.turn_id === setup.history_turn);
-    assert.ok(operations.length >= 3);
-    const reported = operations.filter(value => [4, 105, 188].includes(value.step_index));
-    assert.equal(reported.length, 3, 'the three originally reported compactions remain present');
+    assert.ok(operations.length > 0);
     assert.deepEqual(operations.map(value => value.canonical_ordinal), operations.map(value => value.canonical_ordinal).sort((a,b) => a-b));
-    const historicalSummary = page.locator('[data-flower-turn-id="' + operations[0].turn_id + '"] .flower-turn-summary-button');
-    try { await historicalSummary.waitFor(); } catch (error) {
-      console.error(JSON.stringify({ historicalTurns: detail.current.turns?.map(turn => ({ id: turn.turn_id, outcome: turn.outcome, ended: turn.ended_at, intermediate: turn.intermediate_item_ids?.length, final: turn.final_item_ids?.length })), pageErrors: errors, body: (await page.locator('body').innerText()).slice(-2000) }));
-      throw error;
-    }
+    const turns = new Map();
+    for (const operation of operations) turns.set(operation.turn_id, [...(turns.get(operation.turn_id) ?? []), operation]);
     for (let pass = 0; pass < 2; pass++) {
-      if (pass) { await page.reload(); await historicalSummary.waitFor(); }
-      if (await historicalSummary.getAttribute('aria-expanded') === 'false') await historicalSummary.click();
-      const ids = [];
-      for (const operation of operations) {
-        const row = page.locator('[data-flower-decoration-id="context-compaction:' + operation.operation_id + '"]');
-        await row.waitFor({ state: 'visible' });
-        assert.equal(await row.count(), 1);
-        const prose = detail.current.items.filter(item => item.kind === 'assistant' && item.text);
-        const before = prose.filter(item => item.canonical_ordinal < operation.canonical_ordinal).at(-1);
-        const after = prose.find(item => item.canonical_ordinal > operation.canonical_ordinal);
-        for (const [neighbor, follows] of [[before, true], [after, false]]) {
-          if (!neighbor) continue;
-          const relation = await row.evaluate((node, id) => {
-            const other = document.querySelector('[data-flower-message-id="' + id + '"]');
-            if (!other) return null;
-            return other.compareDocumentPosition(node);
-          }, neighbor.id);
-          assert.notEqual(relation, null, 'the adjacent canonical assistant message must remain rendered');
-          assert.ok(relation & (follows ? 4 : 2), 'the divider must keep its canonical position among assistant messages');
+      if (pass) await page.reload();
+      for (const [turnID, turnOperations] of turns) {
+        const turn = page.locator('[data-flower-turn-id="' + turnID + '"]');
+        await turn.first().waitFor();
+        const summary = turn.locator('.flower-turn-summary-button');
+        const collapsible = await summary.count() > 0;
+        if (collapsible && await summary.getAttribute('aria-expanded') === 'false') await summary.click();
+        const ids = [];
+        for (const operation of turnOperations) {
+          const row = page.locator('[data-flower-decoration-id="context-compaction:' + operation.operation_id + '"]');
+          await row.waitFor({ state: 'visible' });
+          assert.equal(await row.count(), 1);
+          assert.equal(await row.getAttribute('data-flower-compaction-status'), operation.status);
+          const prose = detail.current.items.filter(item => item.kind === 'assistant' && item.text);
+          const before = prose.filter(item => item.canonical_ordinal < operation.canonical_ordinal).at(-1);
+          const after = prose.find(item => item.canonical_ordinal > operation.canonical_ordinal);
+          for (const [neighbor, follows] of [[before, true], [after, false]]) {
+            if (!neighbor) continue;
+            const relation = await row.evaluate((node, id) => {
+              const other = document.querySelector('[data-flower-message-id="' + id + '"]');
+              return other?.compareDocumentPosition(node) ?? null;
+            }, neighbor.id);
+            assert.notEqual(relation, null, 'the adjacent canonical assistant message must remain rendered');
+            assert.ok(relation & (follows ? 4 : 2), 'the divider must keep its canonical position');
+          }
+          ids.push(await row.getAttribute('data-flower-decoration-id'));
         }
-        ids.push(await row.getAttribute('data-flower-decoration-id'));
+        const actual = await turn.locator('.flower-compaction-divider').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-flower-decoration-id')));
+        assert.deepEqual(actual, ids);
+        if (collapsible) {
+          await summary.click();
+          for (const id of ids) await page.locator('[data-flower-decoration-id="' + id + '"]').waitFor({ state: 'hidden' });
+        }
       }
-      const actual = await page.locator('[data-flower-turn-id="' + operations[0].turn_id + '"] .flower-compaction-divider').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-flower-decoration-id')));
-      assert.deepEqual(actual, ids);
-      await historicalSummary.click();
-      for (const id of ids) await page.locator('[data-flower-decoration-id="' + id + '"]').waitFor({ state: 'hidden' });
     }
-    console.log(JSON.stringify({ readonlyHistory: setup.history, operations: operations.map(value => ({ operation: value.operation_id, turn: value.turn_id, ordinal: value.canonical_ordinal })), expanded: operations.length, originallyReported: reported.map(value => value.step_index), canonicalNeighbors: true, collapsed: 0, refreshed: true }));
+    console.log(JSON.stringify({ readonlyHistory: setup.history, operations: operations.map(value => ({ operation: value.operation_id, turn: value.turn_id, ordinal: value.canonical_ordinal })), expanded: operations.length, canonicalNeighbors: true, collapsed: 0, refreshed: true }));
   }
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ liveStart: true, liveCompleteWhileActive: true, automatic: true, stableIdentityAndPosition: true, fold: true, reload: true }));

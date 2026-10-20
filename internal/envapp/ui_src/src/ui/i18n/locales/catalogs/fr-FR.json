@@ -5531,6 +5531,8 @@
       "contextIndicatorUnavailable": "Indisponible",
       "contextIndicatorRecentCacheHitLabel": "Taux de cache de la dernière requête",
       "contextIndicatorCacheHitLabel": "Taux de cache de la session",
+      "compactionDividerRetry": "Réessayer la compression",
+      "compactionDividerRetrying": "Nouvelle tentative de compression…",
       "compactionDividerCompacting": "Compression du contexte en cours...",
       "compactionDividerCompacted": "Contexte compressé",
       "compactionDividerFailed": "Échec de la compression du contexte",

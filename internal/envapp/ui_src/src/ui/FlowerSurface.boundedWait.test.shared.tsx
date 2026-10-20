@@ -38,6 +38,12 @@ async function mountChild(compaction = false) {
   const retryThread = vi.fn(async (_id: string): Promise<void> => { detail = subagentDetail({ summary: { ...child, status: 'running' }, current: runtimeCurrentView(thread({ thread_id: child.thread_id, status: 'running' }), 8) }); });
   const compactThreadContext = vi.fn(async (_id: string, _input: { client_request_id: string; storage_generation: string }): Promise<FlowerRuntimeCurrentView> => ({ thread_id: child.thread_id, view_version: 8, activity: 'active', turn_id: 'compact-child', run_id: 'compact-child-run', run_progress: { phase: 'preparing' }, turn_kind: 'context_compaction', items: [] }));
   const surface = renderSurfaceWithAdapterProps({ ...adapter(), listThreads: async () => [parent], loadThread: async () => liveBootstrap(parent), loadSubagentDetail, retryThread, compactThreadContext }, { focusThreadRequest: { request_id: 'child', thread_id: parent.thread_id } });
+  await openChildDetail(surface);
+  const retry = () => [...document.querySelectorAll<HTMLButtonElement>('.flower-subagent-detail-window .flower-run-error button')].find(button => button.textContent === (compaction ? 'Retry compression' : 'Retry reply'))!;
+  return { surface, child, parent, retry, retryThread, loadSubagentDetail, compactThreadContext };
+}
+
+async function openChildDetail(surface: HTMLElement) {
   await waitFor(() => surface.querySelector('button[aria-controls="flower-subagents-dropdown"]') !== null);
   surface.querySelector<HTMLButtonElement>('button[aria-controls="flower-subagents-dropdown"]')!.click();
   const settled = document.querySelector<HTMLButtonElement>('[data-flower-subagent-disclosure]');
@@ -45,15 +51,14 @@ async function mountChild(compaction = false) {
   await waitFor(() => document.querySelector('[data-flower-subagent-row]') !== null);
   document.querySelector<HTMLButtonElement>('[data-flower-subagent-row]')!.click();
   await waitFor(() => document.querySelector('.flower-subagent-detail-window .flower-run-error') !== null);
-  const retry = () => [...document.querySelectorAll<HTMLButtonElement>('.flower-subagent-detail-window .flower-run-error button')].find(button => button.textContent === 'Retry reply')!;
-  return { surface, child, parent, retry, retryThread, loadSubagentDetail, compactThreadContext };
 }
 
 it('retries only the failed child while its parent runs and releases controls after failure', async () => {
   const state = await mountChild();
   const pending = deferred<void>();
   state.retryThread.mockImplementationOnce(() => pending.promise);
-  state.retry().click(); state.retry().click();
+  const retry = state.retry();
+  retry.click(); retry.click();
   await waitFor(() => state.retryThread.mock.calls.length === 1);
   expect(state.retry().disabled).toBe(true);
   expect(state.retryThread).toHaveBeenCalledWith(state.child.thread_id);
@@ -69,7 +74,8 @@ it('retries only the failed child while its parent runs and releases controls af
 it('reuses the same child compaction identity after an uncertain transport result', async () => {
   const state = await mountChild(true);
   state.compactThreadContext.mockRejectedValueOnce(flowerTurnAdmissionError('unknown', new Error('connection lost')));
-  state.retry().click(); state.retry().click();
+  const retry = state.retry();
+  retry.click(); retry.click();
   await waitFor(() => state.compactThreadContext.mock.calls.length === 1);
   expect(state.retryThread).not.toHaveBeenCalled();
   expect(state.compactThreadContext.mock.calls[0][0]).toBe(state.child.thread_id);
@@ -229,6 +235,8 @@ it('ignores a late child recovery preflight after its detail window closes', asy
   const detailWindow = document.querySelector('.flower-subagent-detail-window')!;
   detailWindow.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click();
   await waitFor(() => document.querySelector('.flower-subagent-detail-window') === null);
+  await openChildDetail(state.surface);
+  await waitFor(() => !state.retry().disabled);
   pending.resolve(subagentDetail({ summary: state.child, current: runtimeCurrentView(thread({ thread_id: state.child.thread_id, status: 'failed', error: { code: 'floret_repeated_tool_calls', message: 'loop stopped' } }), 8) }));
   await Promise.resolve(); await Promise.resolve();
   expect(state.retryThread).not.toHaveBeenCalled();

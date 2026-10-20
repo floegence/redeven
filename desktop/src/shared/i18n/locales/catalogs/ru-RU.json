@@ -618,6 +618,8 @@
       "contextIndicatorRecentCacheHitLabel": "Доля попаданий в кэш последнего запроса",
       "contextIndicatorCacheHitLabel": "Доля попаданий в кэш за сеанс",
       "compactionDividerCompacting": "Сжатие контекста...",
+      "compactionDividerRetry": "Повторить сжатие",
+      "compactionDividerRetrying": "Повторное сжатие…",
       "compactionDividerCompacted": "Контекст сжат",
       "compactionDividerFailed": "Не удалось сжать контекст",
       "compactionDividerCancelled": "Сжатие контекста отменено",
