@@ -44,7 +44,7 @@ async function mount(surface: DesktopWelcomeSnapshot['surface'] = 'connect_envir
   });
   const startRuntimeFlowerStream = vi.fn(() => new Promise<never>(() => {}));
   const cancelRuntimeFlowerStream = vi.fn();
-  const settings = { load: vi.fn(), save: vi.fn(), cancel: vi.fn(), requestRuntimeFlower,
+  const settings = { load: vi.fn(), save: vi.fn(), cancel: vi.fn(), requestRuntimeFlower, cancelRuntimeFlowerRead: vi.fn(),
     startRuntimeFlowerStream, cancelRuntimeFlowerStream, subscribeRuntimeFlowerStream: () => () => {},
   } as unknown as DesktopWelcomeRuntime['settings'];
   const host = document.createElement('div');
@@ -83,7 +83,7 @@ it('keeps the canvas available during AI startup and loads its configured model 
   click('.tessiven-library-card > button');
   await vi.waitFor(() => expect(document.querySelector('.tessiven-canvas')).not.toBeNull());
   expect(document.querySelector('[data-flower-runtime-availability="preparing"]')).not.toBeNull();
-  const aiRequests = () => h.requestRuntimeFlower.mock.calls.filter(([request]) => !request.path.startsWith('/_redeven_proxy/api/tessiven/'));
+  const aiRequests = () => h.requestRuntimeFlower.mock.calls.filter(([request]) => request.path.startsWith('/_redeven_proxy/api/ai/') || request.path === '/_redeven_proxy/api/settings');
   expect(aiRequests()).toHaveLength(0);
   h.publish({ environments: h.snapshot.environments.map(entry => ({ ...entry, runtime_service: { ...entry.runtime_service!, ai_readiness: { state: 'ready' } } })) });
   await vi.waitFor(() => expect(document.querySelector('.flower-composer')?.textContent).toContain('DeepSeek'));
@@ -100,11 +100,11 @@ it('keeps the canvas available during AI startup and loads its configured model 
 
 it('opens Flower on the click while IPC and runtime preparation are pending', async () => {
   const h = await mount('connect_environment', 'inspecting');
-  expect(h.requestRuntimeFlower).not.toHaveBeenCalled();
+  expect(h.requestRuntimeFlower.mock.calls.map(([request]) => request.path)).toEqual(['/_redeven_proxy/api/fs/directory_favorites']);
   click('.redeven-flower-topbar-button');
   expect(document.querySelector('[data-flower-runtime-availability="preparing"]')).not.toBeNull();
   expect(flower()).toBeNull();
-  expect(h.requestRuntimeFlower).not.toHaveBeenCalled();
+  expect(h.requestRuntimeFlower.mock.calls.map(([request]) => request.path)).toEqual(['/_redeven_proxy/api/fs/directory_favorites']);
   expect(document.querySelector('.redeven-flower-back-button')).not.toBeNull();
   expect(h.performAction).not.toHaveBeenCalled();
   expect(h.getSnapshot).not.toHaveBeenCalled();
@@ -112,7 +112,7 @@ it('opens Flower on the click while IPC and runtime preparation are pending', as
 
 it('returns during AI startup and initializes the retained page only when the runtime publishes ready', async () => {
   const h = await mount('flower', 'inspecting');
-  expect(h.requestRuntimeFlower).not.toHaveBeenCalled();
+  expect(h.requestRuntimeFlower.mock.calls.map(([request]) => request.path)).toEqual(['/_redeven_proxy/api/fs/directory_favorites']);
   click('.redeven-flower-back-button');
   expect(document.querySelector('.redeven-flower-topbar-button')).not.toBeNull();
   h.publish({ environments: h.snapshot.environments.map(entry => ({ ...entry, runtime_service: { ...entry.runtime_service!, ai_readiness: { state: 'ready' } } })) });
@@ -191,6 +191,8 @@ it('keeps filesystem and model reads stable through health snapshots and refresh
   await settle();
   expect(flower()).toBe(mounted);
   const replacementReads = [
+    '/_redeven_proxy/api/fs/directory_favorites',
+    '/_redeven_proxy/api/ai/conversation_preferences',
     '/_redeven_proxy/api/fs/path_context',
     '/_redeven_proxy/api/settings',
     '/_redeven_proxy/api/ai/models?mode=baseline',
