@@ -269,6 +269,8 @@ settle the short-lived browser outbox; the two values are not interchangeable.
 
 The adapter may add product authorization, resource resolution, DTO mapping, and browser-safe presentation. It must not import Floret internals, read or migrate Floret storage, create a legacy run handler, infer lifecycle from error text or timestamps, or introduce a second event/retry/replay state machine. Product migrations may import retired queued inputs once, then remove staging rows.
 
+Tool correction exhaustion uses only Floret v7.72.0 typed ThreadTurnFailureToolArgumentCorrectionExhausted. The shared mapper owns list, detail and live updates, including historical failures. It exposes a safe product code and canonical identity allowlist. The obsolete logged max_tool_calls declaration is removed because it never enforced a limit.
+
 # Evidence
 
 - [Output-source integration fixture](../../internal/ai/flower_output_sources_integration_test.go) checks every intermediate HTTP-provider publication and canonical reopen; shared mapper and isolated browser tests consume its sanitized checkpoints.

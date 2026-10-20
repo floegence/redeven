@@ -29,7 +29,6 @@ const (
 	modelGatewayDefaultMaxOutputTokens      = 4096
 	modelGatewayDefaultContextWindowTokens  = 128000
 	providerContinuationKindOpenAIResponses = "openai_responses"
-	modelGatewayHardMaxToolCalls            = 200
 )
 
 const (

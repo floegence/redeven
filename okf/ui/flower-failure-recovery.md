@@ -14,7 +14,7 @@ Transport uncertainty never proves backend success or authorizes replay.
 Readiness timeouts use the shared bounded request helpers and expose a status
 refresh without replaying Prepare or Stop. Deterministic migration failures
 remain diagnostic/admin recovery states; supported compaction history is
-automatically migrated by published Floret v7.68.3. See
+automatically migrated by published Floret v7.72.0 through schema 28. See
 [historical compatibility](../ai/flower-upgrade-compatibility.md).
 
 # Contract
@@ -22,6 +22,8 @@ automatically migrated by published Floret v7.68.3. See
 Automatic stream recovery displays only canonical run_progress attempts and deadlines. Flower adds no retry timer or automatic Retry API call. Stop, navigation and confirmed output remain available. Success clears recovery naturally; exhaustion settles the turn and exposes manual Retry and current-source settings. Unknown request failures have neutral localized copy rather than claiming rejection; uncertain tool effects still prohibit Retry.
 
 [Goal reflection](../ai/flower-goals.md) uses the existing recoverable failure and explicit retry/continue path. Exhaustion retains the objective. Stop cancels further reflection; deletion cancels future checks without stopping execution. Unknown Goal mutations retain the exact retry payload and may be dismissed only as a local recovery copy.
+
+Tool argument correction exhaustion maps the published typed reason to floret_tool_argument_correction_exhausted through the shared failure mapper. One localized notice explains that rejected calls did not execute and confirmed results remain. Retry reply and Configure current model reuse existing recovery controls for roots and children. Child Send availability is not Retry authority: failed children may be explicitly retried after canonical preflight without resuming the parent. Configuration resolves the actual target model, remains reachable without child Send permission, and never submits Retry. Details expose only allowed classifications and canonical identities. Raw arguments and error-text inference never select a product reason.
 
 Provider failures expose Configure current provider, Retry reply and diagnostics.
 Typed model-request timeouts use localized recovery copy and the same actions;

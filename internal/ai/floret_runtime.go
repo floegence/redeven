@@ -121,7 +121,6 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 		"provider_type":                 providerType,
 		"parallel_tool_calls_wire_mode": string(resolveParallelToolCallsWireMode(providerType, strings.TrimSpace(providerCfg.BaseURL))),
 		"model":                         modelName,
-		"max_tool_calls":                modelGatewayHardMaxToolCalls,
 		"permission_type":               permissionTypeString(initialSurface.PermissionType),
 	})
 	r.recordRunDiagnostic("capability.contract.resolved", RealtimeStreamKindLifecycle, initialSurface.CapabilityContract.eventPayload())

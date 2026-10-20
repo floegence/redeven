@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
@@ -13,6 +14,34 @@ import (
 	flruntime "github.com/floegence/floret/v7/runtime"
 	openai "github.com/openai/openai-go/v3"
 )
+
+func TestToolArgumentCorrectionFailureUsesSafeTypedReason(t *testing.T) {
+	for _, failure := range []*flruntime.ThreadTurnFailure{
+		{Code: flruntime.ThreadTurnFailureToolDispatch, Message: "tool argument correction exhausted", Reason: "tool_argument_correction_exhausted"},
+		{Code: flruntime.ThreadTurnFailureControlError, Message: "control argument correction exhausted: Tool ask_user was called with invalid arguments: PRIVATE_COMMAND secret=PRIVATE_KEY. Rewrite the input to match the schema.", Reason: "tool_argument_correction_exhausted"},
+	} {
+		code, message := projectFloretTurnFailure(failure, runErrorCodeFloretEngineFailed)
+		if code != "floret_tool_argument_correction_exhausted" || !strings.Contains(message, "Rejected calls did not execute") {
+			t.Fatalf("code=%s message=%s", code, message)
+		}
+		detail := scopedFailureDetail(failure, "thread-safe", "turn-safe", "run-safe")
+		var fields map[string]string
+		if err := json.Unmarshal([]byte(detail), &fields); err != nil {
+			t.Fatal(err)
+		}
+		if len(fields) != 6 || fields["reason"] != string(failure.Reason) || fields["failure_code"] != string(failure.Code) || fields["thread_id"] != "thread-safe" || fields["turn_id"] != "turn-safe" || fields["run_id"] != "run-safe" {
+			t.Fatalf("detail=%s", detail)
+		}
+		if strings.Contains(message+detail, "PRIVATE") {
+			t.Fatal("raw validation details leaked")
+		}
+		failure.Reason = ""
+		generic, _ := projectFloretTurnFailure(failure, runErrorCodeFloretEngineFailed)
+		if generic == code {
+			t.Fatal("product guessed correction reason from raw text")
+		}
+	}
+}
 
 type timeoutNetError struct{}
 

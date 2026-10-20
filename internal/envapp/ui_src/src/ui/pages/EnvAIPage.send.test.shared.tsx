@@ -806,7 +806,7 @@ export function registerEnvAIPageSendTests() {
       const { host, dispose } = await renderPage();
       try {
         await selectHistoryThread(host);
-        expect(mocks.fetchLocalApiJSONMock).toHaveBeenCalledWith('/_redeven_proxy/api/ai/threads/thread-1', { method: 'GET' });
+        expect(mocks.fetchLocalApiJSONMock).toHaveBeenCalledWith('/_redeven_proxy/api/ai/threads/thread-1', { method: 'GET', signal: expect.any(AbortSignal) });
         expect(mocks.currentItemsMock).toHaveBeenCalledWith({ threadId: 'thread-1' });
         expect(host.textContent).toContain('Transcript for thread-1');
       } finally {

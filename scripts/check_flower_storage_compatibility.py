@@ -48,6 +48,14 @@ def main():
         assert set(manifest['files']) == {'history.sqlite', 'producer_test.go.txt'}, directory
         for name, expected in manifest['files'].items():
             assert sha((directory / name).read_bytes()) == expected, f'{directory}: historical writer bytes changed'
+    correction = ROOT / 'internal/ai/testdata/tool-correction-v7.69.1'
+    manifest = json.loads((correction / 'manifest.json').read_text())
+    assert manifest['writer_version'] == 'v7.69.1', correction
+    assert manifest['writer_commit'] == '74f1969bf22608db3241f271268ddd29b9874a2f', correction
+    assert {'ordinary_accumulated_correction_exhaustion', 'control_correction_exhaustion', 'confirmed_tool_results', 'fork', 'nested_fork'} <= set(manifest['scenarios']), correction
+    assert set(manifest['files']) == {'history.sqlite', 'producer_test.go.txt'}, correction
+    for name, expected in manifest['files'].items():
+        assert sha((correction / name).read_bytes()) == expected, f'{correction}: historical correction writer changed'
     frozen = ROOT / 'internal/ai/pendinginputlegacy'
     for file in frozen.glob('*.go'):
         if file.name.endswith('_test.go'):
@@ -58,7 +66,7 @@ def main():
     migration = (ROOT / 'internal/ai/pending_input_migration.go').read_text()
     for retired_dependency in ('session.Meta', 'decodeStrictJSON', 'normalizeAskFlowerContextActionEnvelope', 'normalizeToolTargetPolicy', 'floretContextProjectionForInput', 'floretTurnInputWithUploadLoader'):
         assert retired_dependency not in migration, f'migration depends on mutable decoder: {retired_dependency}'
-    print(f'Flower compatibility source checks passed ({len(manifests)} product and {len(compaction)} compaction writer fixtures).')
+    print(f'Flower compatibility source checks passed ({len(manifests)} product, {len(compaction)} compaction and 1 correction writer fixtures).')
 
 
 if __name__ == '__main__':

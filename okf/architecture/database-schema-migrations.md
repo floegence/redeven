@@ -34,7 +34,7 @@ State requiring a live external system is not manufactured inside a SQLite migra
 
 ## Upstream-owned stores
 
-Floret owns canonical thread storage and its schema lifecycle through the published Runtime APIs. Redeven supplies the configured path and consumes typed readiness or maintenance results; it does not query, patch, version, migrate, or implement SQL fallback for Floret tables.
+Floret owns canonical thread storage and its schema lifecycle through the published Runtime APIs. Redeven supplies the configured path and consumes typed readiness or maintenance results; it does not query, patch, version, migrate, or implement SQL fallback for Floret tables. Published v7.72.0 uses permanent domain schema 28; correction episodes are ephemeral and add no migration. Older writers must not reopen upgraded stores; incidents require forward owner fixes.
 
 ReDevPlugin similarly owns stores behind its released registry and host modules. Redeven may select a state root and retain opaque upstream identifiers in product coordination records, but it cannot inspect, duplicate, or migrate upstream content.
 

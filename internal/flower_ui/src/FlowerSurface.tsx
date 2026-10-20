@@ -2632,6 +2632,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       case 'floret_no_progress': return copy().chat.runErrors.noProgress;
       case 'floret_duplicate_tool_call_id': return copy().chat.runErrors.duplicateToolCallID;
       case 'floret_stop_hook_loop': return copy().chat.runErrors.stopHookLoop;
+      case 'floret_tool_argument_correction_exhausted': return copy().chat.runErrors.toolArgumentCorrectionExhausted;
       case 'floret_tool_dispatch_failed': return copy().chat.runErrors.toolDispatchFailed;
       case 'floret_storage_failed': return copy().chat.runErrors.storageFailed;
       case 'floret_authorization_failed': return copy().chat.runErrors.authorizationFailed;
@@ -5093,7 +5094,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [configuringProviderThreadID, setConfiguringProviderThreadID] = createSignal('');
   const configureThreadProvider = async (target: FlowerThreadSnapshot | null | undefined) => {
     const threadID = trimString(target?.thread_id);
-    if (!threadID || configuringProviderThreadID() === threadID) return;
+    if (!threadID || props.adapter.canMutate === false || configuringProviderThreadID() === threadID) return;
     const sequence = ++providerFocusSequence;
     const requestEpoch = liveTransport.connectionEpoch();
     setConfiguringProviderThreadID(threadID);
@@ -5101,6 +5102,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     try {
       let selectionSequence = threadLoadSequence;
       const stillTargeted = () => !surfaceDisposed && sequence === providerFocusSequence
+        && props.adapter.canMutate !== false
         && requestEpoch === liveTransport.connectionEpoch() && selectionSequence === threadLoadSequence
         && threadID === trimString(selectedThreadID());
       const child = activeSubagentDetail();
@@ -5119,7 +5121,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       await readDetail(openSettings);
       if (stillTargeted() && sidePanel() === 'settings') setProviderFocusRequest(request);
     } catch (error) {
-      if (!surfaceDisposed && sequence === providerFocusSequence) notifyThreadActionError(getErrorMessage(error));
+      if (!surfaceDisposed && sequence === providerFocusSequence && requestEpoch === liveTransport.connectionEpoch()
+        && threadID === trimString(selectedThreadID())) notifyThreadActionError(getErrorMessage(error));
     } finally {
       if (sequence === providerFocusSequence) setConfiguringProviderThreadID('');
     }
@@ -7328,9 +7331,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const runErrorNotice = (error: FlowerThreadSnapshot['error'], targetThread: Accessor<FlowerThreadSnapshot | null | undefined>) => {
     const code = trimString(error?.code);
+    const correctionFailure = code === 'floret_tool_argument_correction_exhausted';
     const contextFailure = code === 'context_budget_invalid' || code === 'context_fixed_overhead' || code === 'context_compaction_limit';
     const retryPending = () => retryingThreads().has(trimString(targetThread()?.thread_id));
-    const retryBlocked = () => props.adapter.canMutate === false || code === 'floret_effect_outcome_unknown' || retryPending() || ['running', 'waiting_approval', 'waiting_user'].includes(targetThread()?.status ?? '');
+    const retryBlocked = () => props.adapter.canMutate === false || (!targetThread()?.parent_thread_id && Boolean(trimString(targetThread()?.read_only_reason)))
+      || code === 'floret_effect_outcome_unknown' || retryPending() || ['running', 'waiting_approval', 'waiting_user'].includes(targetThread()?.status ?? '');
+    const configureBlocked = () => props.adapter.canMutate === false || configuringProviderThreadID() === trimString(targetThread()?.thread_id);
     const [detailsCopied, setDetailsCopied] = createSignal(false);
     const stoppedUnknown = () => code === 'floret_effect_outcome_unknown' && targetThread()?.cancellation?.source === 'user_stop';
     const continuationFailure = createMemo(() => {
@@ -7351,15 +7357,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const threadID = trimString(targetThread()?.thread_id);
       if (!threadID || retryBlocked()) return;
       setRetryingThreads(previous => new Set([...previous, threadID]));
-      try {
-        const requestEpoch = liveTransport.connectionEpoch();
-        const selectionSequence = threadLoadSequence;
-        const childSelection = activeSubagentDetail();
-        const child = childSelection?.childThreadID === threadID ? childSelection : null;
-        const stillTargeted = () => !surfaceDisposed && requestEpoch === liveTransport.connectionEpoch()
+      const requestEpoch = liveTransport.connectionEpoch();
+      const selectionSequence = threadLoadSequence;
+      const childSelection = activeSubagentDetail();
+      const child = childSelection?.childThreadID === threadID ? childSelection : null;
+      const stillTargeted = () => !surfaceDisposed && requestEpoch === liveTransport.connectionEpoch()
           && selectionSequence === threadLoadSequence
           && (child ? activeSubagentDetail()?.childThreadID === threadID && activeSubagentDetail()?.parentThreadID === child.parentThreadID && activeSubagentDetail()?.generation === child.generation
             : selectedThreadID() === threadID);
+      try {
         let current: FlowerThreadSnapshot | null;
         if (child) {
           const detail = await withFlowerRequestDeadline(() => props.adapter.loadSubagentDetail(child.parentThreadID, threadID), copy().settings.dialog.catalog.retryTimedOut);
@@ -7370,20 +7376,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         } else {
           current = await requestThreadDetail(threadID, 'user_action', true);
         }
-        if (!current || !stillTargeted() || current.status !== 'failed' || current.error?.code === 'floret_effect_outcome_unknown') return;
+        if (!current || !stillTargeted() || current.status !== 'failed' || current.error?.code === 'floret_effect_outcome_unknown'
+          || props.adapter.canMutate === false || (!child && trimString(current.read_only_reason))) return;
         if (current.current_execution?.turn_kind === 'context_compaction') {
           await executeCompactContextCommand(current, stillTargeted);
           return;
         }
         await withFlowerRequestDeadline(() => props.adapter.retryThread(threadID), copy().settings.dialog.catalog.retryTimedOut);
-        if (surfaceDisposed || requestEpoch !== liveTransport.connectionEpoch()) return;
+        if (!stillTargeted()) return;
         if (child) {
-          if (!stillTargeted()) return;
           await refreshActiveSubagentDetail();
         } else await requestThreadDetail(threadID, 'user_action', true, true);
       } catch (error) {
         reportThreadDetailDiagnostic(threadID, 'request_or_mapping', 'user_action', error);
-        notifyThreadActionError(getErrorMessage(error));
+        if (stillTargeted()) notifyThreadActionError(getErrorMessage(error));
       } finally {
         setRetryingThreads(previous => { const next = new Set(previous); next.delete(threadID); return next; });
       }
@@ -7449,9 +7455,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     ) : undefined;
     const action = () => code === 'floret_effect_outcome_unknown' ? (
       <Button size="sm" variant="ghost" disabled={inspectBlocked()} onClick={() => void inspectAndContinue()}>{copy().chat.inspectAndContinue}</Button>
+    ) : correctionFailure ? (
+      <>
+        <Button size="sm" variant="ghost" disabled={retryBlocked()} onClick={() => void retryContinuation()}>{copy().chat.retryReply}</Button>
+        <Button size="sm" variant="ghost" disabled={configureBlocked()} onClick={() => void configureThreadProvider(targetThread())}>{copy().chat.runErrorActions.configureCurrentModel}</Button>
+      </>
     ) : providerFailure ? (
       <>
-        <Button size="sm" variant="ghost" disabled={retryBlocked() || configuringProviderThreadID() === trimString(targetThread()?.thread_id)} onClick={() => void configureThreadProvider(targetThread())}>{copy().settings.dialog.catalog.searchConfigure}</Button>
+        <Button size="sm" variant="ghost" disabled={configureBlocked()} onClick={() => void configureThreadProvider(targetThread())}>{copy().settings.dialog.catalog.searchConfigure}</Button>
         <Button size="sm" variant="ghost" disabled={retryBlocked()} onClick={() => void retryContinuation()}>{copy().chat.retryReply}</Button>
         <Show when={code === 'chatgpt_usage_unavailable'}><a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" class="cursor-pointer whitespace-nowrap text-sm font-medium text-primary hover:underline">{copy().settings.dialog.chatGPT.manageUsage}</a></Show>
       </>
