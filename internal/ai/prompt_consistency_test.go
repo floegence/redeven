@@ -65,7 +65,12 @@ func TestFlowerPromptSeparatesResearchFromInteractiveFallback(t *testing.T) {
 func TestFlowerPromptScopesDelegationWithoutTodoInstructions(t *testing.T) {
 	prompt := buildPromptForToolSetTest(t, FlowerPermissionFullAccess, []ToolDef{{Name: "subagents"}, {Name: "write_todos"}})
 	assertPromptContains(t, prompt, "User and applicable repository restrictions take precedence over these delegation defaults")
-	assertPromptContains(t, prompt, "Forked or inherited history does not transfer child ownership")
+	for _, def := range builtInToolDefinitions() {
+		if def.Name == "subagents" {
+			assertPromptContains(t, def.Description, "direct children")
+			assertPromptContains(t, def.Description, "inherited history does not transfer ownership")
+		}
+	}
 	assertPromptNotContains(t, prompt, "# Todo Discipline")
 	assertPromptNotContains(t, prompt, "Use write_todos")
 	if strings.Count(prompt, "# Interaction Policy") != 1 {

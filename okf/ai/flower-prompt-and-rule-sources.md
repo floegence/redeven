@@ -88,7 +88,10 @@ GUI operation with text-page research requires user acceptance.
 
 System instructions keep product behavior and boundaries. Tool definitions keep
 purpose and non-obvious invocation semantics, without repeating general policy,
-schema types, enums or basic concepts. Custom API syntax and cursor, identity,
+schema types, enums or basic concepts. Shared time-range semantics appear once per
+filter schema; field names need no restatement. General observation policy stays
+in system instructions, while child ownership and result shapes stay in tool
+definitions. Custom API syntax and cursor, identity,
 effect and retry semantics remain explicit. Output instructions retain Redeven-specific
 media references, the exact `html preview` fence and preview isolation limits.
 Concise policies retain complete rule reading, user interaction, denial, Stop,
@@ -98,10 +101,10 @@ API examples. Short behavioral reminders keep greetings brief, preserve real
 choice interaction and continue observing finite commands in the current turn.
 
 The full built-in qualification surface has a deterministic 16,000-byte system
-budget. Regression tests also enforce this budget on actual provider requests
-after Floret adds Goal instructions, including live permission transitions, and
-bound serialized definitions to 40,000 bytes in the same Service fixture. These
-are regression guards, not tokenizer or total-request measurements.
+budget, including live permission transitions. The production Service fixture
+bounds final instructions after Floret Goal injection to 14,000 bytes and
+serialized definitions to 37,000 bytes. These are regression guards, not tokenizer
+or total-request measurements.
 Permission/profile/allowlist tests require guidance to match supplied tools.
 Definitions retain operational details; their full serialized cost is measured
 as tool overhead, not credited as system savings.

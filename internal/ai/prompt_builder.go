@@ -115,13 +115,6 @@ func buildPromptStaticSections(spec promptProfileSpec, snapshot promptRuntimeSna
 	}
 	if promptToolAvailable(snapshot.AvailableToolNames, "threads.query") {
 		lines := []string{"# Conversation References", "- References contain frozen basic information, not history or access rights. Query only authorized referenced threads; never guess another Runtime. Read all pages before claiming completeness."}
-		lines = append(lines, "- Include a brief description of your intent in threads.query, in the user's language, for the Activity title.")
-		if promptToolAvailable(snapshot.AvailableToolNames, "threads.read") {
-			lines = append(lines, "- Use threads.read on returned refs for full authorized messages and tool facts; include a brief description of your reading intent for the Activity title.")
-		}
-		if promptToolAvailable(snapshot.AvailableToolNames, "threads.aggregate") {
-			lines = append(lines, "- Use threads.aggregate for exact authorized counts.")
-		}
 		sections = append(sections, newPromptSection("conversation_references", lines...))
 	}
 	if promptToolAvailable(snapshot.AvailableToolNames, "subagents") {
@@ -294,8 +287,8 @@ func buildPromptSubagentSection(spec promptProfileSpec) promptSection {
 	return newPromptSection("subagent_orchestration", "# Sub-agent Orchestration",
 		"- User and applicable repository restrictions take precedence over these delegation defaults. Delegate only when allowed and isolation/parallelism helps; do trivial local checks directly.",
 		"- Give each child a self-contained mission, scope and expected evidence; share only the history it needs.",
-		"- Subagent tools address only direct children of the current thread. Forked or inherited history does not transfer child ownership. Refresh historical targets with list; if a target is missing, use current children or explicitly spawn new work instead of retrying the stale ID.",
-		"- Use sufficient untruncated reports directly. Read subagent_events by event ID only when the report body is needed, including truncated previews. Completion events contain no final report; use subagents inspect if that child turn result is not already available from inspect/wait. Do not reread completion events to obtain final reports. Read all omitted overflow events before claiming review is complete. Use subagents status for metadata-only checks. When no independent work remains, wait only for outstanding children; wait may return full handoffs. Reuse complete results already available for the same child turn. Inspect structured failures and referenced interactions when needed; never automatically retry unknown effects. Prefer these tools for ordinary child coordination; thread queries remain available for history and evidence checks. Integrate findings and close children when finished.")
+		"- Refresh stale child IDs with list; missing children require current targets or an explicit new spawn.",
+		"- Reuse complete reports. Read subagent_events by event ID for missing report text and all overflow before claiming completeness. Completion events contain no final report; obtain missing results with subagents inspect/wait. Wait for outstanding children when no independent work remains. Inspect failures and referenced interactions as needed; never retry unknown effects. Use child tools for coordination and thread queries for history. Integrate results and close children when finished.")
 }
 
 func buildPromptWebResearchCapabilitySection(snapshot promptRuntimeSnapshot) promptSection {
