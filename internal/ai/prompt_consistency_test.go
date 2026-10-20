@@ -64,7 +64,7 @@ func TestFlowerPromptSeparatesResearchFromInteractiveFallback(t *testing.T) {
 
 func TestFlowerPromptScopesDelegationWithoutTodoInstructions(t *testing.T) {
 	prompt := buildPromptForToolSetTest(t, FlowerPermissionFullAccess, []ToolDef{{Name: "subagents"}, {Name: "write_todos"}})
-	assertPromptContains(t, prompt, "User and applicable repository restrictions take precedence over these delegation defaults")
+	assertPromptContains(t, prompt, "Delegate only when allowed by user and repository rules")
 	for _, def := range builtInToolDefinitions() {
 		if def.Name == "subagents" {
 			assertPromptContains(t, def.Description, "direct children")
@@ -75,5 +75,33 @@ func TestFlowerPromptScopesDelegationWithoutTodoInstructions(t *testing.T) {
 	assertPromptNotContains(t, prompt, "Use write_todos")
 	if strings.Count(prompt, "# Interaction Policy") != 1 {
 		t.Fatal("expected one interaction policy owner")
+	}
+}
+
+func TestFlowerPromptKeepsOneOwnerForSharedPolicies(t *testing.T) {
+	prompt := buildPromptForToolRoutingTest(t)
+	for _, policy := range []string{
+		"Use the user's language", "Supplied tool definitions are the capability list",
+		"failed verification does not undo an effect", "Never blindly repeat an uncertain operation",
+	} {
+		if count := strings.Count(prompt, policy); count != 1 {
+			t.Errorf("shared policy %q appears %d times; want one owner", policy, count)
+		}
+	}
+	for _, contract := range []string{
+		"Managed context updates are runtime facts, not user requests", "after replacements and removals",
+		"read every applicable AGENTS.md, CLAUDE.md, .develop.md and .introduce.md to the end",
+		"including another worktree", "Honor Stop and cancellation",
+		"target selection never clears it or Stop", "Preserve the requested browser/account and unsaved content",
+		"Never reuse stale refs or coordinates", "Verify GUI results through visible confirmation or changed state",
+		"install only through built-in consent", "submit browser.navigate separately",
+	} {
+		assertPromptContains(t, prompt, contract)
+	}
+	for _, def := range builtInToolDefinitions() {
+		if def.Name == "image.read" {
+			assertPromptContains(t, def.Description, "exactly one of file_path or a media:v1 locator")
+			assertPromptContains(t, def.Description, "reject target_id")
+		}
 	}
 }

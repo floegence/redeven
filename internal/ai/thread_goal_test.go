@@ -218,8 +218,8 @@ func TestFlowerGoalReflectionUsesExistingContextAndExcludesDefaultTodo(t *testin
 			t.Fatalf("request %d missing Goal", i)
 		}
 		prompt, _ := request["instructions"].(string)
-		if len(prompt) > 14_000 {
-			t.Fatalf("final provider instructions=%d bytes; budget=14000", len(prompt))
+		if len(prompt) > 10_500 {
+			t.Fatalf("final provider instructions=%d bytes; budget=10500", len(prompt))
 		}
 		if strings.Contains(prompt, "Available tools for this request:") {
 			t.Fatal("host tool enumeration duplicates the final runtime tool definitions")
@@ -230,6 +230,9 @@ func TestFlowerGoalReflectionUsesExistingContextAndExcludesDefaultTodo(t *testin
 				t.Fatal(err)
 			}
 			t.Logf("final provider instructions=%d bytes tool definitions=%d bytes", len(prompt), len(definitions))
+			if total := len(prompt) + len(definitions); total > 47_500 {
+				t.Errorf("final instructions plus tool definitions=%d bytes; budget=47500", total)
+			}
 			if len(definitions) > 37_000 {
 				t.Errorf("final tool definitions=%d bytes; budget=37000", len(definitions))
 			}

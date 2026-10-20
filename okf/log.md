@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-19 — Consolidated Flower system instructions
+
+- Remove repeated language, image/schema tutorials, basic tool usage and per-surface recovery rules. Keep one shared recovery policy and retain product interaction boundaries; tighten system and combined request budgets without growing tool definitions. See [prompt contracts](ai/flower-prompt-and-rule-sources.md).
+
 ## 2026-10-19 — Preserve Flower tail following during live growth
 
 - Resume following when downward scrolling reaches the previous bottom during live growth. Retain follow intent as short content overflows, including no-op inputs and whitespace clicks; preserve explicit reading and disclosure anchors. See [activity interaction](ui/flower-activity-interaction.md).
