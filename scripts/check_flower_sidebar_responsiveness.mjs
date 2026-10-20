@@ -81,12 +81,22 @@ await session.run(async () => {
   await writeFile(path.join(output, 'selection-trace.json'), JSON.stringify({ traceEvents: trace }));
   await page.screenshot({ path: path.join(output, 'large-conversation.png') });
   const pins = [];
-  for (const width of [224, 272, 360]) {
+  for (const width of [220, 224, 272, 360]) {
     console.log('Sidebar pin qualification width: ' + width);
     await page.evaluate(width => document.querySelector('.flower-surface').style.setProperty('--flower-thread-rail-width', width + 'px'), width);
     for (let index = 0; index < 16; index++) {
       const id = ['sidebar-2', 'sidebar-3', 'sidebar-4', 'sidebar-5'][index % 4];
-      const result = await page.evaluate(async ({ id, index }) => {
+      const control = page.locator('[data-thread-id="' + id + '"] .flower-thread-card-pin-button');
+      await page.locator('.flower-component-thread-rail .flower-scroll').evaluate(element => { element.scrollTop = 0; });
+      await page.evaluate(() => new Promise(requestAnimationFrame));
+      await page.mouse.move(0, 0);
+      await page.locator('[data-thread-id="' + id + '"]').hover();
+      await page.evaluate(() => new Promise(requestAnimationFrame));
+      const bounds = await control.evaluate(button => button.getBoundingClientRect().toJSON());
+      assert.ok(bounds && bounds.width > 0 && bounds.height > 0, 'Pin action must occupy a visible hit target');
+      const point = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+      await page.mouse.move(point.x, point.y);
+      await page.evaluate(({ id, index }) => {
         const row = document.querySelector('[data-thread-id="' + id + '"]');
         const title = row.querySelector('.flower-thread-list-title');
         const wave = row.querySelector('.flower-thread-wave-bar');
@@ -96,33 +106,42 @@ await session.run(async () => {
         const beforePinned = button.getAttribute('aria-label');
         const initial = window.flowerSidebar.pinState();
         if (index === 7) window.flowerSidebar.failNextPin();
-        const focused = row.querySelector('.flower-thread-card-select-button');
-        focused.focus(); button.click();
-        if (index === 3) window.flowerSidebar.updateTitle(id);
-        let frames = 0;
-        const invalid = [];
-        let disabledFrames = 0;
-        const start = performance.now();
-        do {
-          await new Promise(requestAnimationFrame); frames++;
-          if (button.disabled) disabledFrames++;
-          for (const card of document.querySelectorAll('[data-flower-thread-card]')) {
-            const bounds = card.getBoundingClientRect();
-            if (bounds.bottom <= 0 || bounds.top >= innerHeight) continue;
-            const label = card.querySelector('.flower-thread-list-title');
-            const select = card.querySelector('.flower-thread-card-select-button');
-            for (const element of [label, select]) {
-              const rect = element.getBoundingClientRect(); const style = getComputedStyle(element);
-              if (!element.textContent.trim() || rect.width <= 0 || rect.height <= 0 || style.visibility !== 'visible' || style.opacity === '0') invalid.push(card.dataset.threadId);
+        const actionBounds = button.getBoundingClientRect();
+        if (actionBounds.width <= 0 || actionBounds.height <= 0
+          || getComputedStyle(button).display === 'none'
+          || getComputedStyle(button.parentElement).opacity !== '1'
+          || !button.contains(document.elementFromPoint(actionBounds.x + actionBounds.width / 2, actionBounds.y + actionBounds.height / 2))) {
+          throw new Error('Pin action must be visible and hit-testable before clicking: ' + JSON.stringify({ id, actionBounds }));
+        }
+        window.flowerPinSample = (async () => {
+          let frames = 0;
+          const invalid = [];
+          let disabledFrames = 0;
+          const start = performance.now();
+          do {
+            await new Promise(requestAnimationFrame); frames++;
+            if (button.disabled) disabledFrames++;
+            for (const card of document.querySelectorAll('[data-flower-thread-card]')) {
+              const bounds = card.getBoundingClientRect();
+              if (bounds.bottom <= 0 || bounds.top >= innerHeight) continue;
+              const label = card.querySelector('.flower-thread-list-title');
+              const select = card.querySelector('.flower-thread-card-select-button');
+              for (const element of [label, select]) {
+                const rect = element.getBoundingClientRect(); const style = getComputedStyle(element);
+                if (!element.textContent.trim() || rect.width <= 0 || rect.height <= 0 || style.visibility !== 'visible' || style.opacity === '0') invalid.push(card.dataset.threadId);
+              }
             }
-          }
-        } while ((window.flowerSidebar.pinState().pinSettled === initial.pinSettled
-          || window.flowerSidebar.pinState().listSettled === initial.listSettled || frames < 3) && performance.now() - start < 3000);
-        return { id, frames, invalid, disabledFrames, rowRetained: row === document.querySelector('[data-thread-id="' + id + '"]'),
-          titleRetained: title === row.querySelector('.flower-thread-list-title'), focusRetained: document.activeElement === focused,
-          animationRetained: !animation || animation === wave.getAnimations()[0] && animation.currentTime >= time,
-          settled: window.flowerSidebar.pinState().pinSettled > initial.pinSettled, rolledBack: index !== 7 || button.getAttribute('aria-label') === beforePinned };
+          } while ((window.flowerSidebar.pinState().pinSettled === initial.pinSettled
+            || window.flowerSidebar.pinState().listSettled === initial.listSettled || frames < 3) && performance.now() - start < 3000);
+          return { id, frames, invalid, disabledFrames, actionWidth: actionBounds.width, rowRetained: row === document.querySelector('[data-thread-id="' + id + '"]'),
+            titleRetained: title === row.querySelector('.flower-thread-list-title'), focusRetained: document.activeElement === button,
+            animationRetained: !animation || animation === wave.getAnimations()[0] && animation.currentTime >= time,
+            settled: window.flowerSidebar.pinState().pinSettled > initial.pinSettled, rolledBack: index !== 7 || button.getAttribute('aria-label') === beforePinned };
+        })();
       }, { id, index });
+      await page.mouse.click(point.x, point.y);
+      if (index === 3) await page.evaluate(id => window.flowerSidebar.updateTitle(id), id);
+      const result = await page.evaluate(() => window.flowerPinSample);
       assert.deepEqual(result.invalid, []);
       assert.equal(result.disabledFrames, 0, 'Pin actions remain available during confirmation');
       assert.ok(result.rowRetained && result.titleRetained && result.focusRetained && result.animationRetained && result.settled && result.rolledBack, JSON.stringify(result));
@@ -151,6 +170,7 @@ await session.run(async () => {
     });
     assert.ok(reorder.rowRetained && reorder.titleRetained);
     assert.ok(reorder.order.indexOf('sidebar-3') < reorder.order.indexOf('sidebar-4'));
+    await page.locator('[data-thread-id="sidebar-4"]').hover();
     await page.locator('.flower-component-thread-rail').screenshot({ path: path.join(output, 'rail-' + width + '.png') });
   }
   const rapid = await page.evaluate(async () => {

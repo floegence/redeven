@@ -45,6 +45,48 @@ function mount(seed = [item('first', 3), item('second', 2), item('third', 1)]) {
 }
 
 describe('Flower pinned conversation interaction', () => {
+  it.each([220, 224, 272, 360])('keeps direct pin actions visible and clickable at %ipx width', async (width) => {
+    const ui = mount([item('first', 3), item('second', 2), item('ordinary', 0)]);
+    ui.host.style.width = `${width}px`;
+    for (const root of [16, 20, 32]) {
+      document.documentElement.style.fontSize = `${root}px`;
+      await frame();
+      for (const id of ['first', 'ordinary']) {
+        const row = ui.row(id);
+        const title = row.querySelector<HTMLElement>('.flower-thread-list-title')!;
+        const pin = row.querySelector<HTMLButtonElement>('.flower-thread-card-pin-button')!;
+        const menu = row.querySelector<HTMLButtonElement>('.flower-thread-card-menu-button')!;
+        const titleWidth = title.getBoundingClientRect().width;
+        await userEvent.hover(row);
+        for (const control of [pin, menu]) {
+          const bounds = control.getBoundingClientRect();
+          expect(bounds.width, `visible action at ${width}px / root ${root}px`).toBeGreaterThan(0);
+          expect(bounds.height).toBeGreaterThan(0);
+          expect(bounds.right).toBeLessThanOrEqual(row.getBoundingClientRect().right);
+          expect(control.contains(document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2))).toBe(true);
+        }
+        expect(titleWidth, `${id} title at ${width}px / root ${root}px`).toBeGreaterThan(0);
+        expect(title.getBoundingClientRect().width).toBe(titleWidth);
+        expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
+        const before = ui.items().find(entry => entry.thread_id === id)!;
+        expect(pin.getAttribute('aria-label')).toBe(before.pinned ? copy.unpin : copy.pin);
+        ui.onMenuAction.mockClear();
+        await userEvent.click(pin);
+        expect(ui.onMenuAction).toHaveBeenCalledExactlyOnceWith('pin', before);
+        ui.setItems(ui.items().map(entry => entry.thread_id === id
+          ? { ...entry, pinned: !before.pinned, pin_rank: before.pinned ? 0 : 5 } : entry));
+        await frame();
+        expect(ui.row(id)).toBe(row);
+        expect(row.querySelector('.flower-thread-list-title')).toBe(title);
+        expect(row.querySelector('.flower-thread-card-pin-button')).toBe(pin);
+        expect(document.activeElement).toBe(pin);
+        expect(pin.getAttribute('aria-label')).toBe(before.pinned ? copy.pin : copy.unpin);
+        expect(pin.getBoundingClientRect().width).toBeGreaterThan(0);
+        expect(ui.onSelect).not.toHaveBeenCalled();
+      }
+    }
+  });
+
   it.each([224, 272, 360])('keeps title geometry and stable containment through pin group moves at %ipx', async (width) => {
     const ui = mount([item('first', 3), item('second', 2), item('ordinary', 0)]);
     ui.host.style.width = width + 'px';

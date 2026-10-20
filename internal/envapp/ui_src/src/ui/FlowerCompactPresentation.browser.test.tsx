@@ -22,7 +22,7 @@ it('shows complete timestamps on narrow rows without moving titles on hover', as
   await page.viewport(1100, 800);
   await media.emulateTouchInput(false);
   host = document.createElement('div');
-  host.className = 'flower-surface flower-component-shell';
+  host.className = 'flower-surface flower-component-shell flower-thread-rows';
   host.style.display = 'block';
   document.body.append(host);
   // Chinese relative times reproduce the clipped numeric prefixes in the product.
@@ -48,7 +48,7 @@ it('shows complete timestamps on narrow rows without moving titles on hover', as
         expect.soft(time.scrollWidth, `complete time at ${width}px / root ${root}px`).toBeLessThanOrEqual(time.clientWidth);
         expect.soft(time.getBoundingClientRect().right).toBeLessThanOrEqual(row.getBoundingClientRect().right);
         expect.soft(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
-        expect.soft(title.getBoundingClientRect().width).toBeGreaterThan(0);
+        expect.soft(title.getBoundingClientRect().width, `title at ${width}px / root ${root}px`).toBeGreaterThan(0);
         expect.soft(title.getBoundingClientRect().right).toBeLessThanOrEqual(time.getBoundingClientRect().left);
       }
     }
@@ -65,7 +65,7 @@ it.each([false, true])('keeps every sidebar entry on one line with touch=%s', as
   await page.viewport(1100, 800);
   await media.emulateTouchInput(touch);
   host = document.createElement('div');
-  host.className = 'flower-surface flower-component-shell';
+  host.className = 'flower-surface flower-component-shell flower-thread-rows';
   host.style.cssText = 'display:block;width:200px';
   document.body.append(host);
   const copy = DEFAULT_FLOWER_SURFACE_COPY.threadList;

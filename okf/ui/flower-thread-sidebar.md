@@ -115,8 +115,9 @@ times and dates retain their intrinsic width even on narrow rows; the title
 yields space instead of truncating the timestamp. Status and progress text keep
 their bounded width so longer translations cannot consume the whole row.
 Hover or keyboard focus reveals actions without shifting the title; attention
-remains visible through the existing indicator. Narrow rows keep pinning in the
-menu. Touch layouts show a status icon beside the always-visible menu, with 44px
+remains visible through the existing indicator. Narrow desktop rows retain both
+pin and menu buttons. Row-owned inherited values reveal actions after native DOM
+moves. Touch layouts show a status icon beside the menu, with 44px
 action targets. Busy and stopping progress replaces the timestamp on the same
 line and retains a polite screen-reader announcement.
 
