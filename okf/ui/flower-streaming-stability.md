@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower streaming stability
 description: Preserve interactive subtree identity and bound streaming rendering work in the shared Flower UI.
 tags: [flower, streaming, performance, interaction]
-timestamp: 2026-10-19T00:00:00Z
+timestamp: 2026-10-20T00:00:00Z
 ---
 
 # Summary
@@ -23,6 +23,16 @@ Title overlays remain stable when another thread's summary changes. Timeline
 validation and rendering reuse one projection, with cursor, decorations, input,
 queue, and error dependencies included. WeakMap caches release obsolete values
 with their owning messages and arrays.
+
+Current-view projection accepts context updates separately from the previous
+thread snapshot. It applies full-value structural sharing before timeline
+construction. Live-frame prevalidation and accepted application use this same
+entry, including child views. Omitted context fields preserve the last accepted
+value; allowed nulls and explicit empty arrays clear it. Real compaction state,
+anchor, order, and content changes are always projected and validated.
+Context-only workspace frames update existing cached detail through the same
+four-field projection without authoring runtime state. Equal current versions
+may carry context changes; older current versions cannot roll context back.
 
 `FlowerKeyedList` iterates domain identity and gives children accessors for current
 data. Queue identity includes ThreadID and queue_id. Approvals and questions use

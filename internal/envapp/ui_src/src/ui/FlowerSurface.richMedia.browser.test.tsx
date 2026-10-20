@@ -161,9 +161,10 @@ describe('Flower inline media', () => {
       },
     };
     const [surfaceAdapter, setSurfaceAdapter] = createSignal(initial);
+    const [filesystemScope, setFilesystemScope] = createSignal('media-scope-one');
     const host = document.createElement('div'); host.style.height = '850px'; document.body.append(host);
     const dispose = render(() => <FloeConfigProvider><LayoutProvider>
-      <FlowerSurface adapter={surfaceAdapter()} draftCoordinator={createFlowerComposerDraftCoordinator()} notify={notice => { throw new Error(notice.message); }} />
+      <FlowerSurface adapter={surfaceAdapter()} filesystemScopeKey={filesystemScope()} draftCoordinator={createFlowerComposerDraftCoordinator()} notify={notice => { throw new Error(notice.message); }} />
     </LayoutProvider></FloeConfigProvider>, host);
     onTestFinished(() => { dispose(); host.remove(); });
     await waitFor(() => Boolean(host.querySelector('[data-thread-id="first"] button')));
@@ -191,6 +192,13 @@ describe('Flower inline media', () => {
     setSurfaceAdapter({ ...initial, loadMessageFile: replacementLoad });
     await waitFor(() => replacementLoad.mock.calls.length > 0);
     expect(replacementLoad).toHaveBeenLastCalledWith(expect.objectContaining({ path: '/workspace/moved/frame.png' }));
+    await waitFor(() => Boolean(host.querySelector<HTMLImageElement>('.chat-media-image')?.naturalWidth));
+    host.querySelector<HTMLButtonElement>('.chat-media-image-button')!.click();
+    await waitFor(() => Boolean(document.querySelector('.chat-media-full-image')));
+    setFilesystemScope('media-scope-two');
+    await vi.waitFor(() => expect(replacementLoad).toHaveBeenCalledTimes(2));
+    await waitFor(() => document.querySelector('.chat-media-full-image') === null);
+    await waitFor(() => Boolean(host.querySelector<HTMLImageElement>('.chat-media-image')?.naturalWidth));
   }, 45000);
 
   it.each(['light', 'dark'] as const)('opens the existing file preview and containing folder from a chat image in %s mode', async (mode) => {

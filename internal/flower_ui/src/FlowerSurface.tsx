@@ -268,7 +268,7 @@ import {
   type FlowerCompanionThreadListItem,
 } from './flowerCompanionPresence';
 import { formatFilesystemPickerError, mapFilesystemPickerContext, mapFilesystemPickerEntries } from './filePicker/filesystemPicker';
-import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
+import { applyFlowerRuntimeContext, applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
 import { threadNeedsFileActivityTargets } from './fileActivityTargets';
 import { mapFlowerGoal } from './flowerLiveMapper';
 import { createFlowerScrollTailController, type FlowerScrollTailController } from './flowerScrollTail';
@@ -2227,28 +2227,44 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return context?.roots?.find((root) => root.id === context.defaultRootId)?.pathAbs ?? '';
   });
   const selectedThreadWorkingDirectory = createMemo(() => normalizeAbsolutePath(selectedThread()?.working_dir ?? ''));
-  const resolveMessageMedia = createMemo<NonNullable<MarkdownMediaProps['resolve']>>(() => {
-    filesystemScopeKey();
-    const adapter = props.adapter;
-    const threadID = selectedThreadID();
-    const workingDirectory = selectedThreadWorkingDirectory();
-    return (source, signal) => resolveFlowerMarkdownMedia(source, signal, {
-      adapter, threadID, workingDirectory, get copy() { return copy().chat.media; },
-      onActionError: error => notifyThreadActionError(getErrorMessage(error)),
+  const createThreadMedia = (thread: Accessor<FlowerThreadSnapshot | null | undefined>) => {
+    const threadID = createMemo(() => thread()?.thread_id ?? '');
+    const workingDirectory = createMemo(() => normalizeAbsolutePath(thread()?.working_dir ?? ''));
+    const valid = createMemo(() => {
+      const owner = threadID();
+      const parent = thread()?.parent_thread_id;
+      if (!owner) return false;
+      if (owner === selectedThreadID()) return true;
+      if (!parent) return false;
+      const active = activeSubagentDetail();
+      return parent === selectedThreadID() && active?.parentThreadID === parent && active.childThreadID === owner;
     });
-  });
-  const openMessageMediaLink = createMemo<NonNullable<MarkdownMediaProps['onOpenLink']>>(() => {
-    filesystemScopeKey();
-    const adapter = props.adapter;
-    const threadID = selectedThreadID();
-    const workingDirectory = selectedThreadWorkingDirectory();
-    return (source, href, signal) => {
-      if (!threadID) throw new Error(copy().chat.media.linkUnavailable);
-      return openHtmlPreviewLink(href, htmlPreviewSourceDirectory(source, workingDirectory), signal, {
-        adapter, get copy() { return copy().chat.media; },
-      });
-    };
-  });
+    return createMemo(() => {
+      filesystemScopeKey();
+      const adapter = props.adapter;
+      const owner = threadID();
+      const directory = workingDirectory();
+      const available = valid();
+      const assertCurrent = (signal: AbortSignal) => {
+        signal.throwIfAborted();
+        if (!available || owner !== threadID() || !valid()) throw new DOMException('Conversation changed', 'AbortError');
+      };
+      const resolve: NonNullable<MarkdownMediaProps['resolve']> = (source, signal) => {
+        assertCurrent(signal);
+        return resolveFlowerMarkdownMedia(source, signal, {
+          adapter, threadID: owner, workingDirectory: directory, get copy() { return copy().chat.media; },
+          onActionError: error => notifyThreadActionError(getErrorMessage(error)),
+        });
+      };
+      const openLink: NonNullable<MarkdownMediaProps['onOpenLink']> = (source, href, signal) => {
+        assertCurrent(signal);
+        return openHtmlPreviewLink(href, htmlPreviewSourceDirectory(source, directory), signal, {
+          adapter, get copy() { return copy().chat.media; },
+        });
+      };
+      return { resolve, openLink };
+    });
+  };
   const draftWorkingDirectory = createMemo(() => normalizeAbsolutePath(currentComposerSessionDraft().workingDirDraft ?? ''));
   const displayedWorkingDirectory = createMemo(() => {
     if (selectedThreadDetailPending()) return '';
@@ -4780,18 +4796,23 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           ? { reasoning_selection: provisionalSettings.reasoning_selection }
           : {}),
       } : {}),
-      ...(modelContext !== undefined ? { model_context: modelContext } : {}),
-      ...(contextUsage !== undefined ? { context_usage: contextUsage } : {}),
-      ...(contextCompactions ? { context_compactions: contextCompactions } : {}),
-      ...(timelineDecorations ? { timeline_decorations: timelineDecorations } : {}),
     };
     try {
-      const projected = applyFlowerRuntimeCurrentView(contextualBase, current);
+      const projected = applyFlowerRuntimeCurrentView(contextualBase, current, {
+        model_context: modelContext, context_usage: contextUsage,
+        context_compactions: contextCompactions, timeline_decorations: timelineDecorations,
+      });
       buildFlowerTimelineEntries(projected);
       const received = receiveThreadDetail({
         thread: projected,
         version: Math.max(1, Math.floor(Number(current.view_version) || 0)),
       }, source, current, false);
+      if (received.runtimeState === 'unchanged') {
+        applyThreadContext(threadID, {
+          model_context: modelContext, context_usage: contextUsage,
+          context_compactions: contextCompactions, timeline_decorations: timelineDecorations,
+        });
+      }
       if (received.runtimeState === 'accepted' && threadID === selectedThreadID()) {
         for (const operation of contextCompactions ?? []) {
           const prior = base.context_compactions?.find((item) => item.operation_id === operation.operation_id);
@@ -4830,6 +4851,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (source === 'live_current') throw error;
       return false;
     }
+  };
+
+  const applyThreadContext = (threadID: string, context: Parameters<typeof applyFlowerRuntimeContext>[1]) => {
+    const base = threadCache().views.get(threadID)?.thread;
+    if (!base || retiredThreadIDs.has(threadID)) return;
+    const projected = applyFlowerRuntimeContext(base, context);
+    buildFlowerTimelineEntries(projected);
+    if (projected === base) return;
+    setThreadCache(cache => cache.updateDetailAdjuncts(threadID, thread => applyFlowerRuntimeContext(thread, context)));
   };
 
   const acceptTurnLaunchReceipt = (receipt: FlowerTurnLaunchReceipt): boolean => {
@@ -5132,6 +5162,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       return;
     }
+    if (envelope.kind === 'thread.batch') {
+      applyThreadContext(trimString(envelope.thread_id), envelope);
+    }
     if (envelope.kind === 'viewer.read_state') {
       const threadID = trimString(envelope.thread_id);
       if (threadID && envelope.read_status && !retiredThreadIDs.has(threadID)) {
@@ -5172,7 +5205,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           if (!active?.detail || active.parentThreadID !== envelope.thread_id
             || active.childThreadID !== envelope.subagent_current.thread_id) return false;
           try {
-            const projected = projectSubagentDetailThread({ ...active.detail, current: envelope.subagent_current });
+            const projected = projectSubagentDetailThread(
+              { ...active.detail, current: envelope.subagent_current }, untrack(subagentDetailThread), envelope,
+            );
             if (!projected) return false;
             buildFlowerTimelineEntries(projected);
             return true;
@@ -5186,10 +5221,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         try {
           // Validate every complete input before it can replace a pending frame.
           // Application still runs the normal acceptance and security path.
-          const projected = applyFlowerRuntimeCurrentView({
-            ...base,
-            ...(envelope.timeline_decorations ? { timeline_decorations: envelope.timeline_decorations } : {}),
-          }, current);
+          const projected = applyFlowerRuntimeCurrentView(base, current, envelope);
           buildFlowerTimelineEntries(projected);
           return true;
         } catch {
@@ -5448,9 +5480,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       && trimString(summary.thread_id) === childThreadID
       ? summary
       : selected.detail?.summary ?? subagentSummaryFromItem(parentThreadID, selected.item);
-    if (!projectSubagentDetailThread({ summary: nextSummary, current })) {
+    const projected = projectSubagentDetailThread({ summary: nextSummary, current }, untrack(subagentDetailThread), {
+      model_context: modelContext, context_usage: contextUsage,
+      context_compactions: contextCompactions, timeline_decorations: timelineDecorations,
+    });
+    if (!projected) {
       throw new Error('Subagent current view is invalid.');
     }
+    buildFlowerTimelineEntries(projected);
     const reconciliation = transportOutbox().reconcile(current, { canConfirm: canConfirmOutboxEntry });
     for (const entry of reconciliation.admitted) outboxOperations.delete(entry.requestId);
     setTransportOutbox(reconciliation.outbox);
@@ -5458,15 +5495,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setActiveSubagentDetail((active) => {
       if (!active || active.parentThreadID !== parentThreadID || active.childThreadID !== childThreadID) return active;
       const currentVersion = Math.max(0, Math.floor(Number(active.detail?.current.view_version) || 0));
-      if (active.connectionEpoch === liveTransport.connectionEpoch() && viewVersion <= currentVersion) return active;
+      if (active.connectionEpoch === liveTransport.connectionEpoch() && (viewVersion < currentVersion
+        || viewVersion === currentVersion && modelContext === undefined && contextUsage === undefined
+          && contextCompactions === undefined && timelineDecorations === undefined)) return active;
       accepted = true;
       return {
         ...active,
-        detail: { summary: nextSummary, current,
-          model_context: modelContext === undefined ? active.detail?.model_context : modelContext,
-          context_usage: contextUsage === undefined ? active.detail?.context_usage : contextUsage,
-          context_compactions: contextCompactions === undefined ? active.detail?.context_compactions : contextCompactions,
-          timeline_decorations: timelineDecorations === undefined ? active.detail?.timeline_decorations : timelineDecorations,
+        detail: { summary: nextSummary, current: active.connectionEpoch === liveTransport.connectionEpoch()
+          && viewVersion === currentVersion ? active.detail!.current : current,
+          model_context: projected.model_context,
+          context_usage: projected.context_usage,
+          context_compactions: projected.context_compactions,
+          timeline_decorations: projected.timeline_decorations,
         },
         connectionEpoch: liveTransport.connectionEpoch(),
         error: '',
@@ -6665,6 +6705,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return selectedSubagentItems().find((item) => trimString(item.threadID) === active.childThreadID) ?? active.item;
   });
   const subagentDetailThread = createMemo<FlowerThreadSnapshot | null>((previous) => projectSubagentDetailThread(subagentDetail(), previous));
+  const selectedThreadMedia = createThreadMedia(selectedThread);
+  const subagentThreadMedia = createThreadMedia(subagentDetailThread);
   const subagentDetailRunProgress = createMemo(() => flowerRunProgress(subagentDetailThread()));
 
   const subagentDetailActiveStatus = createMemo<FlowerSubagentPanelStatus>(() => {
@@ -10360,22 +10402,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   );
 
   const ActivityDetailBlock: Component<{
-    threadID: string;
+    media: ReturnType<ReturnType<typeof createThreadMedia>>;
     block: FlowerNonTerminalDetailBlock;
   }> = (detailProps) => {
     const blockOfKind = <K extends FlowerNonTerminalDetailBlock['kind']>(_kind: K) =>
       () => detailProps.block as Extract<FlowerNonTerminalDetailBlock, { kind: K }>;
-    const resolveActivityMedia = createMemo<NonNullable<MarkdownMediaProps['resolve']>>(() => {
-      const threadID = detailProps.threadID;
-      const workingDirectory = selectedThreadWorkingDirectory();
-      return (source, signal) => {
-        if (threadID !== selectedThreadID()) throw new DOMException('Conversation changed', 'AbortError');
-        return resolveFlowerMarkdownMedia(source, signal, {
-          adapter: props.adapter, threadID, workingDirectory, get copy() { return copy().chat.media; },
-          onActionError: error => notifyThreadActionError(getErrorMessage(error)),
-        });
-      };
-    });
     return <Switch>
       <Match when={detailProps.block.kind === 'parent_report'}>
         <FlowerActivityRows block={{ kind: 'structured_rows', section: 'results', rows: [],
@@ -10415,7 +10446,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <FlowerActivityPreview block={blockOfKind('structured_rows')()} copy={copy().chat} />
         </Show>
       </Match>
-      <Match when={detailProps.block.kind === 'image'}><MarkdownMedia class="flower-activity-image-thumbnail" source={{ kind: 'image', src: blockOfKind('image')().resource_ref, title: blockOfKind('image')().name }} labels={{ ...copy().chat.media, unavailable: blockOfKind('image')().resource_ref.startsWith('computer://') ? copy().chat.computerScreenshotLoadFailed : copy().chat.media.unavailable }} resolve={resolveActivityMedia()} /></Match>
+      <Match when={detailProps.block.kind === 'image'}><MarkdownMedia class="flower-activity-image-thumbnail" source={{ kind: 'image', src: blockOfKind('image')().resource_ref, title: blockOfKind('image')().name }} labels={{ ...copy().chat.media, unavailable: blockOfKind('image')().resource_ref.startsWith('computer://') ? copy().chat.computerScreenshotLoadFailed : copy().chat.media.unavailable }} resolve={detailProps.media.resolve} loadTimeoutMs={15_000} /></Match>
       <Match when={detailProps.block.kind === 'subagents'}>{subagentsDetailBlock(blockOfKind('subagents'))}</Match>
       <Match when={detailProps.block.kind === 'web_search'}>{webSearchBlock(blockOfKind('web_search'))}</Match>
       <Match when={detailProps.block.kind === 'web_fetch'}>{webFetchBlock(blockOfKind('web_fetch'))}</Match>
@@ -10484,6 +10515,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     timeline: Accessor<FlowerActivityTimelineBlock>,
     item: Accessor<FlowerActivityItem>,
     viewportScope: FlowerScrollTailController,
+    media: ReturnType<typeof createThreadMedia>,
   ) => {
     const disclosureKey = createMemo(() => activityItemKey(messageID(), timeline(), item()));
     const presentation = createMemo<FlowerActivityPresentation>((previous) => retainEqualValue(previous, presentFlowerActivityItem(item(), {
@@ -10615,7 +10647,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             </span>
           </Show>
           <Show when={inlineSubagent()}>{(block) => (
-            <ActivityDetailBlock threadID={timeline().thread_id ?? ''} block={block() as FlowerNonTerminalDetailBlock} />
+            <ActivityDetailBlock media={media()} block={block() as FlowerNonTerminalDetailBlock} />
           )}</Show>
           <Show when={!subagentOperation() && presentation().meta}>
             {(meta) => <span class="flower-activity-inline-detail">{meta()}</span>}
@@ -10665,7 +10697,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         <Show when={subagentOperation() || compactReports()}>
           <For each={detailKeys().filter((key) => detailsByKey().get(key) !== inlineSubagent())}>{(key) => {
             const block = createMemo(() => detailsByKey().get(key)!);
-            return <ActivityDetailBlock threadID={timeline().thread_id ?? ''} block={block() as FlowerNonTerminalDetailBlock} />;
+            return <ActivityDetailBlock media={media()} block={block() as FlowerNonTerminalDetailBlock} />;
           }}</For>
         </Show>
         <Show when={disclosure.mounted()}>
@@ -10743,7 +10775,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                             )}
                           </Show>
                           <Show when={!terminalBlock()}>
-                            <ActivityDetailBlock threadID={timeline().thread_id ?? ''} block={block() as FlowerNonTerminalDetailBlock} />
+                            <ActivityDetailBlock media={media()} block={block() as FlowerNonTerminalDetailBlock} />
                           </Show>
                         </>
                       );
@@ -10764,6 +10796,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     block: Accessor<FlowerActivityTimelineBlock | null>,
     preview: Accessor<FlowerToolCallPreviewBlock | null>,
     viewportScope: FlowerScrollTailController,
+    media: ReturnType<typeof createThreadMedia>,
   ) => {
     const visibleItems = createMemo(() => block()?.items.filter(activityItemVisible) ?? []);
     const visibleItemsByKey = createMemo(() => new Map(visibleItems().map(item => [activityItemKey(messageID(), block()!, item), item])));
@@ -10777,7 +10810,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               const visibleItem = createMemo(() => visibleItemsByKey().get(itemKey) ?? null);
               return <div data-flower-tool-row-identity={itemKey}>
                 <Show when={visibleItem()} fallback={<Show when={preview()}>{argumentPreviewRow}</Show>}>
-                  {(item) => activityRow(messageID, blockIndex, () => block()!, item, viewportScope)}
+                  {(item) => activityRow(messageID, blockIndex, () => block()!, item, viewportScope, media)}
                 </Show>
               </div>;
             }}
@@ -10794,6 +10827,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     showCopyAction: Accessor<boolean>,
     copyText: Accessor<string>,
     thread: Accessor<FlowerThreadSnapshot | null | undefined>,
+    media: ReturnType<typeof createThreadMedia>,
   ) => {
     const markdown = createMemo(() => block().block_type === 'markdown');
     const thinking = createMemo(() => block().block_type === 'thinking');
@@ -10848,8 +10882,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           mediaLabels={message().role === 'assistant' ? copy().chat.media : undefined}
           mediaEnabled={message().role === 'assistant'}
           resolveSourceIcon={props.adapter.resolveSourceIcon}
-          resolveMedia={resolveMessageMedia()}
-          onOpenMediaLink={openMessageMediaLink()}
+          resolveMedia={media().resolve}
+          onOpenMediaLink={media().openLink}
           onOpenMediaLinkError={error => notifyThreadActionError(getErrorMessage(error))}
           copyCodeLabel={copy().chat.copyCode}
           codeCopiedLabel={copy().chat.codeCopied}
@@ -11051,6 +11085,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     assistantCopyBlockKey: Accessor<string>,
     viewportScope: FlowerScrollTailController,
     thread: Accessor<FlowerThreadSnapshot | null | undefined>,
+    media: ReturnType<typeof createThreadMedia>,
   ) => {
     const activity = createMemo(() => block().type === 'activity' || block().type === 'tool_preview' ? block() as Extract<FlowerRenderableMessageBlock, { type: 'activity' | 'tool_preview' }> : null);
     const content = createMemo(() => block().type === 'content' ? block() as Extract<FlowerRenderableMessageBlock, { type: 'content' }> : null);
@@ -11076,7 +11111,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 const showCopyAction = () => message().role === 'assistant'
                   && contentBlock().key === assistantCopyBlockKey();
                 const streaming = () => streamingBlockKey() === contentBlock().key;
-                return messageContentBubble(message, contentBlock, streaming, showCopyAction, copyText, thread);
+                return messageContentBubble(message, contentBlock, streaming, showCopyAction, copyText, thread, media);
               }}
           </Show>
         )}
@@ -11087,6 +11122,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           () => { const value = activityBlockValue(); return value.type === 'activity' ? value.block : null; },
           () => { const value = activityBlockValue(); return value.type === 'tool_preview' ? value.block : null; },
           viewportScope,
+          media,
         )}
       </Show>
     );
@@ -11096,6 +11132,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     entry: Accessor<Extract<FlowerTimelineEntry, { type: 'message' }>>,
     viewportScope: FlowerScrollTailController,
     thread: Accessor<FlowerThreadSnapshot | null | undefined>,
+    media: ReturnType<typeof createThreadMedia>,
   ) => {
     const message = createMemo(() => entry().message);
     const activeCursor = createMemo(() => (
@@ -11227,6 +11264,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           assistantCopyBlockKey,
                           viewportScope,
                           thread,
+                          media,
                         )}
                       </Show>
                     );
@@ -11238,7 +11276,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <div class="flower-message-block-stack flower-message-block-stack-user">
               <FlowerUserMessageBody
                 blocks={blocks()}
-                renderBlock={(block) => messageBlockView(message, block, streamingBlockKey, copyText, assistantCopyBlockKey, viewportScope, thread)}
+                renderBlock={(block) => messageBlockView(message, block, streamingBlockKey, copyText, assistantCopyBlockKey, viewportScope, thread, media)}
                 references={(
                   <Show when={contextDisplay()}>
                     {(display) => <FlowerChatContextChips
@@ -11426,13 +11464,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     entry: Accessor<FlowerTimelineEntry>,
     viewportScope: FlowerScrollTailController,
     thread: Accessor<FlowerThreadSnapshot | null | undefined>,
+    media: ReturnType<typeof createThreadMedia>,
     visible: Accessor<boolean> = () => true,
   ) => {
     switch (entry().type) {
       case 'message': {
         const message = () => (entry() as Extract<FlowerTimelineEntry, { type: 'message' }>).message;
         return <>
-          {messageEntry(() => entry() as Extract<FlowerTimelineEntry, { type: 'message' }>, viewportScope, thread)}
+          {messageEntry(() => entry() as Extract<FlowerTimelineEntry, { type: 'message' }>, viewportScope, thread, media)}
           <Show when={message().steering}>{(steering) => <div class="flower-steering-status" data-flower-steering-status={steering().status}>
             <span role="status">{subagentsCopy().input[steering().status]}</span>
             <Show when={steering().status === 'cancelled'}>
@@ -11773,13 +11812,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </section>
       </Show></>}
 
-      renderEntry={(entry) => timelineEntry(entry, subagentDetailScroll, subagentDetailThread)}
+      renderEntry={(entry) => timelineEntry(entry, subagentDetailScroll, subagentDetailThread, subagentThreadMedia)}
       contextIndicator={<Show when={subagentDetailThread()?.model_context}><FlowerComposerContextIndicator placement="below-start" usage={subagentDetailThread()?.context_usage ?? {}} modelContext={subagentDetailThread()?.model_context} copy={copy()} /></Show>}
       renderTimeline={() => <FlowerTurnTimeline thread={subagentDetailThread()} entries={subagentDetailTimelineEntries()}
         failureNoticeVisible={runErrorNoticeVisible(subagentDetailThread())}
         runtimeID={props.adapter.runtime.runtime_id} scope="subagent" choices={turnDisclosureChoices}
         scroll={subagentDetailScroll} reducedMotion={reducedMotionPreferred} copy={copy().chat.turnProcess}
-        renderEntry={(entry, visible) => timelineEntry(entry, subagentDetailScroll, subagentDetailThread, visible)} />}
+        renderEntry={(entry, visible) => timelineEntry(entry, subagentDetailScroll, subagentDetailThread, subagentThreadMedia, visible)} />}
       bindScroll={bindSubagentDetailViewport}
       onScroll={subagentDetailScroll.onScroll}
       onWheel={subagentDetailScroll.onWheel}
@@ -13489,7 +13528,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 failureNoticeVisible={runErrorNoticeVisible(selectedThread())}
                 runtimeID={props.adapter.runtime.runtime_id} scope="main" choices={turnDisclosureChoices}
                 scroll={transcriptScroll} reducedMotion={reducedMotionPreferred} copy={copy().chat.turnProcess}
-                renderEntry={(entry, visible) => timelineEntry(entry, transcriptScroll, selectedThread, visible)} />
+                renderEntry={(entry, visible) => timelineEntry(entry, transcriptScroll, selectedThread, selectedThreadMedia, visible)} />
               {threadLevelApprovalPanel()}
             </Show>
             <Show when={parentEventReading.recovering()}>

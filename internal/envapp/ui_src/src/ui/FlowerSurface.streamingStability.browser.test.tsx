@@ -87,6 +87,7 @@ describe('Flower streaming presentation stability', () => {
 // production-build performance runner; controls are not replaced with stubs.
 
 async function mountFixture(fixture: ReturnType<typeof streamingFixture>, overrides: Partial<FlowerSurfaceAdapter> = {}) {
+  await page.viewport(1280, 900);
   const runtime = renderSurfaceWithAdapter({ ...adapter(true), ...fixture.adapter, ...overrides });
   runtime.style.height = '780px';
   await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${fixture.thread.thread_id}"] button`)));
@@ -380,7 +381,10 @@ describe('Flower complete interaction subtree stability', () => {
     const selector = mode === 'approval' ? '[data-flower-bottom-mode="approval"]' : mode === 'input' ? '[data-flower-bottom-mode="input_request"]' : '#flower-subagents-dropdown';
     await waitFor(() => Boolean(document.querySelector(selector)));
     const panel = document.querySelector(selector)!;
-    if (mode === 'input') panel.querySelector<HTMLButtonElement>('[data-flower-input-answer-kind="custom"]')!.click();
+    if (mode === 'input') {
+      await vi.waitFor(() => expect(panel.querySelector('[data-flower-input-answer-kind="custom"]')).not.toBeNull(), { timeout: 5000 });
+      panel.querySelector<HTMLButtonElement>('[data-flower-input-answer-kind="custom"]')!.click();
+    }
     const input = panel.querySelector<HTMLTextAreaElement>('textarea');
     if (input) { input.value = 'Keep this answer'; input.dispatchEvent(new InputEvent('input', { bubbles: true })); }
     // The approval header also contains a hidden inspect placeholder. Focus

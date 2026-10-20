@@ -49,6 +49,39 @@ function detail(overrides: Partial<FlowerSubagentDetail> = {}): FlowerSubagentDe
 }
 
 describe('projectSubagentDetailThread', () => {
+  it('shares equal complete context and preserves omitted updates without leaking across children', () => {
+    const decoration = { decoration_id: 'child-compaction', kind: 'context_compaction' as const, ordinal: 1,
+      anchor: { target_kind: 'message' as const, message_id: 'assistant-turn-1', edge: 'after' as const },
+      compaction: { operation_id: 'child-compaction', turn_id: 'turn-1', canonical_ordinal: 1,
+        phase: 'complete' as const, status: 'compacted' as const, updated_at_ms: 1 } };
+    const context = { model_context: null, context_usage: null,
+      context_compactions: [decoration.compaction], timeline_decorations: [decoration] };
+    const source = detail(context);
+    const original = projectSubagentDetailThread(source)!;
+    let projected = original;
+    for (let version = 8; version <= 307; version++) {
+      projected = projectSubagentDetailThread({ ...source, current: { ...source.current, view_version: version } }, projected, structuredClone(context))!;
+      expect(projected.timeline_decorations).toBe(original.timeline_decorations);
+      expect(projected.context_compactions).toBe(original.context_compactions);
+      expect(projected.messages[0]).toBe(original.messages[0]);
+    }
+    const omitted = projectSubagentDetailThread(detail(), projected)!;
+    expect(omitted.timeline_decorations).toBe(original.timeline_decorations);
+    const changed = projectSubagentDetailThread(source, omitted, {
+      timeline_decorations: [{ ...decoration, compaction: { ...decoration.compaction, reason: 'Changed' } }],
+    })!;
+    expect(changed.timeline_decorations?.[0]?.compaction.reason).toBe('Changed');
+    const cleared = projectSubagentDetailThread(source, changed, {
+      model_context: null, context_usage: null, context_compactions: [], timeline_decorations: [],
+    })!;
+    expect(cleared.timeline_decorations).toEqual([]);
+    expect(cleared.context_compactions).toEqual([]);
+    const other = projectSubagentDetailThread(detail({ summary: { ...baseSummary, thread_id: 'child-2' },
+      current: { ...source.current, thread_id: 'child-2' } }), projected)!;
+    expect(other.timeline_decorations).toBeUndefined();
+    expect(other.context_compactions).toBeUndefined();
+    expect(other.working_dir).toBe('');
+  });
   it('retains child history across 300 live tail snapshots and refreshes real facts', () => {
     const source = detail();
     let previous = projectSubagentDetailThread(source);

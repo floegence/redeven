@@ -236,7 +236,7 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
           const source = readMarkdownMediaPlaceholder(node);
           if (!source) continue;
           if (!committed) { node.textContent = source.title || source.src || mediaLabels.html; continue; }
-          media.set(node, render(() => <MarkdownMedia source={source} labels={resolvedMediaLabels()} resolve={props.resolveMedia} onOpenLink={props.onOpenMediaLink} />, node));
+          media.set(node, render(() => <MarkdownMedia loadTimeoutMs={15_000} source={source} labels={resolvedMediaLabels()} resolve={props.resolveMedia} onOpenLink={props.onOpenMediaLink} />, node));
         }
       });
     });
@@ -259,7 +259,7 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
     decorateRegion(() => element, html);
     return <div ref={element} class="flower-chat-md-committed-segment" data-segment-key={segmentProps.segmentKey}>
       <Show when={segment()?.media} fallback={<div class="flower-chat-md-segment-html" innerHTML={html()} />}>
-        <MarkdownMedia source={source()} htmlState={segment()?.media?.state} labels={resolvedMediaLabels()} resolve={props.resolveMedia} onOpenLink={props.onOpenMediaLink} />
+        <MarkdownMedia loadTimeoutMs={15_000} source={source()} htmlState={segment()?.media?.state} labels={resolvedMediaLabels()} resolve={props.resolveMedia} onOpenLink={props.onOpenMediaLink} />
       </Show>
     </div>;
   };
