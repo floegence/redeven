@@ -1656,18 +1656,20 @@ describe('main routing', () => {
     expect(requestSrc).toContain('const record = flowerTarget.record;');
     expect(requestSrc).toContain('const url = new URL(path, runtimeFlowerBaseURL(record));');
     expect(requestSrc).toContain('runtimeFlowerMethodAllowed(path, method)');
+    expect(requestSrc).toContain('const response = await requestRuntimeFlowerWithAccess({');
     expect(requestSrc).toContain(
-      'let accessHeaders = withStagingCapability(await runtimeFlowerAccessHeaders(record, environment));',
+      'authorize: async () => withStagingCapability(await runtimeFlowerAccessHeaders(record, environment)),',
     );
     expect(requestSrc).toContain('runtimeFlowerInvalidJSONError(response, parsed)');
     expect(requestSrc).toContain("failureKind: 'transport_unknown'");
     expect(requestSrc).not.toContain('error.body');
     expect(requestSrc).toContain(
-      'accessHeaders = withStagingCapability(await runtimeFlowerAccessHeaders(record, environment));',
+      'invalidateAccess: () => { runtimeFlowerAccessCookies.delete(runtimeFlowerBaseURL(record)); },',
     );
     expect(requestSrc).toContain(
       'runtimeFlowerRequestHTTP(url, { ...request, method, path }, {',
     );
+    expect(requestSrc).toContain('headers, signal, timeoutMs: runtimeFlowerBootstrapTimeout(path, method),');
     expect(requestSrc).not.toContain('requestProviderDesktopSessionMaterial');
     expect(requestSrc).not.toContain('requestDesktopOpenSession');
 
