@@ -27,6 +27,7 @@ node --test scripts/computer_webtop_cleanup.test.mjs scripts/computer_webtop_acc
 node --test scripts/interaction_continuity_policy.test.mjs
 node --test scripts/check_staged_viewer_assets.test.mjs
 node --test scripts/check_floeterm_dependency_consistency.test.mjs
+node --test scripts/install_bootstrap_contract.test.mjs
 node scripts/check_floeterm_dependency_consistency.mjs
 ./scripts/ui_package_common_node_test.sh
 node scripts/check_go_version_consistency.mjs

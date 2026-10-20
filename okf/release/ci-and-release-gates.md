@@ -19,6 +19,10 @@ fails closed if any Windows asset appears.
 
 # Contract
 
+The [self-contained installer distribution](self-contained-installer.md)
+contract owns prebuilt installer pins, complete suite activation, and the
+separate guarded default-version promotion after immutable asset publication.
+
 ## Validation levels
 
 `AGENTS.md` owns concise global working rules and Git discipline, with an OKF

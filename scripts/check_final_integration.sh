@@ -105,6 +105,8 @@ check_go_formatting() {
 
 check_shell_syntax() {
   sh -n scripts/install.sh
+  sh -n scripts/installer_bootstrap.sh.in
+  bash -n scripts/build_installer_binary.sh
   sh -n scripts/generate_release_notes.sh
   bash -n scripts/test_generate_release_notes.sh
   bash -n scripts/lint_ui.sh
@@ -214,6 +216,8 @@ run_step "testing official Node archive acquisition" node --test scripts/resolve
 run_step "checking release artifact collector syntax" node --check scripts/collect_release_artifacts.mjs
 run_step "testing release artifact collector" node --test scripts/collect_release_artifacts.test.mjs
 run_step "testing public installer runtime contract" node --test scripts/install_redevplugin_contract.test.mjs
+run_step "testing self-contained installation bootstrap" node --test scripts/install_bootstrap_contract.test.mjs
+run_step "testing self-contained installer contracts" env GOWORK=off go test ./internal/installer ./cmd/redeven-installer
 run_step "testing ReDevPlugin release artifact verifier" ./scripts/check_redevplugin_release_artifacts.sh --self-test
 run_step "testing ReDevPlugin consumption gate" ./scripts/check_redevplugin_consumption_gate.sh --self-test
 run_step "testing ReDevPlugin artifact staging" ./scripts/stage_redevplugin_release_artifacts.sh --self-test

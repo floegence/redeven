@@ -33,6 +33,7 @@ const targetDefinitions = Object.freeze([
 ]);
 const markerName = '.redevplugin-release-artifacts-verified.json';
 const packageSharedFiles = Object.freeze([
+  'redeven-installer-contract.json',
   'LICENSE',
   'THIRD_PARTY_NOTICES.md',
   'okf_bundle.manifest.json',
@@ -121,8 +122,9 @@ function collect(downloadsDir, destDir, tag, testHooks = undefined) {
       const packageLabel = `package-${target.goos}-${target.goarch}`;
       const redevenTarball = `redeven_${target.goos}_${target.goarch}.tar.gz`;
       const gatewayTarball = `redeven-gateway_${target.goos}_${target.goarch}.tar.gz`;
+      const runtimeInstaller = `redeven-installer_${target.goos}_${target.goarch}`;
       const relinkTarballs = target.goos === 'linux' ? [`redeven_relink_linux_${target.goarch}.tar.gz`] : [];
-      const packageNames = [...packageSharedFiles, redevenTarball, gatewayTarball, ...relinkTarballs];
+      const packageNames = [...packageSharedFiles, redevenTarball, gatewayTarball, runtimeInstaller, ...relinkTarballs];
       requireClosedDirectory(packageDirectory, packageNames, packageLabel);
       sourceInventories.push([packageDirectory, packageNames, packageLabel]);
 
@@ -138,6 +140,7 @@ function collect(downloadsDir, destDir, tag, testHooks = undefined) {
       }
       addOutput(outputs, redevenTarball, stage(path.join(packageDirectory, redevenTarball)));
       addOutput(outputs, gatewayTarball, stage(path.join(packageDirectory, gatewayTarball)));
+      addOutput(outputs, runtimeInstaller, stage(path.join(packageDirectory, runtimeInstaller)));
       for (const name of relinkTarballs) addOutput(outputs, name, stage(path.join(packageDirectory, name)));
 
       const desktopDirectory = path.join(downloadsDir, `desktop-${target.goos}-${target.goarch}`);
@@ -368,6 +371,7 @@ function expectedReleaseOutputNames(version, stableRelease) {
     ...targetDefinitions.flatMap((target) => [
       `redeven_${target.goos}_${target.goarch}.tar.gz`,
       `redeven-gateway_${target.goos}_${target.goarch}.tar.gz`,
+      `redeven-installer_${target.goos}_${target.goarch}`,
       ...(target.goos === 'linux' ? [`redeven_relink_linux_${target.goarch}.tar.gz`] : []),
       ...target.extensions.flatMap((extension) => {
         const installer = `Redeven-Desktop-${version}-${target.desktopOS}-${target.desktopArch}.${extension}`;
@@ -397,6 +401,7 @@ function isManagedReleaseOutput(name) {
   return name === markerName || packageSharedFiles.includes(name) || /^redeven_(?:darwin|linux)_(?:amd64|arm64)\.tar\.gz$/u.test(name) ||
     /^redeven_relink_linux_(?:amd64|arm64)\.tar\.gz$/u.test(name) ||
     /^redeven-gateway_(?:darwin|linux)_(?:amd64|arm64)\.tar\.gz$/u.test(name) ||
+    /^redeven-installer_(?:darwin|linux)_(?:amd64|arm64)$/u.test(name) ||
     /^Redeven-Desktop-.+\.(?:deb|rpm|dmg)(?:\.redevplugin-verification\.json)?$/u.test(name) ||
     /^Redeven-Desktop-.+-mac-(?:x64|arm64)\.md$/u.test(name) ||
     /^latest-linux(?:-arm64)?\.yml$/u.test(name) ||

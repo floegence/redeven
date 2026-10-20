@@ -148,11 +148,22 @@ jobs:
             ./scripts/build_runtime_binary.sh "${build_args[@]}"
           done
 
+      - name: Build self-contained installer
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          ./scripts/build_installer_binary.sh \
+            --goos "$GOOS" --goarch "$GOARCH" \
+            --version "$GITHUB_REF_NAME" \
+            --output "dist/redeven-installer_${GOOS}_${GOARCH}"
+
       - name: Verify Linux runtime portability
         if: matrix.goos == 'linux'
         run: |
           set -euo pipefail
-          for binary in dist/redeven dist/redeven-gateway; do
+          for binary in dist/redeven dist/redeven-gateway dist/redeven-installer_*; do
             program_headers=$(readelf -l "$binary")
             dynamic_section=$(readelf -d "$binary")
             if [[ "$program_headers" == *INTERP* || "$dynamic_section" == *NEEDED* ]]; then
@@ -226,6 +237,8 @@ jobs:
           mkdir -p "$upload_dir"
           cp "dist/redeven_${GOOS}_${GOARCH}.tar.gz" "$upload_dir/"
           cp "dist/redeven-gateway_${GOOS}_${GOARCH}.tar.gz" "$upload_dir/"
+          cp "dist/redeven-installer_${GOOS}_${GOARCH}" "$upload_dir/"
+          cp internal/installer/distribution_contract.json "$upload_dir/redeven-installer-contract.json"
           cp dist/okf_bundle.manifest.json "$upload_dir/"
           cp dist/okf_bundle.sha256 "$upload_dir/"
           cp dist/LICENSE "$upload_dir/"
@@ -634,6 +647,9 @@ jobs:
             --tag "${GITHUB_REF_NAME}"
           cp scripts/safe_extract_tar.py dist/safe_extract_tar.py
 
+      - name: Render pinned installation entry from verified build inventory
+        run: node scripts/render_installer_bootstrap.mjs --dist dist --tag "${GITHUB_REF_NAME}"
+
       - name: Install cosign
         uses: sigstore/cosign-installer@874852de93c66509b01dc7cd80f7a5385182d017
 
@@ -662,8 +678,13 @@ jobs:
           cd dist
           checksum_assets=(
             redeven_*.tar.gz
+            redeven-installer_*
+            redeven-installer-contract.json
+            redeven-install.sh
             redeven-gateway_*.tar.gz
             redeven-runtime-compatibility_*.json
+            redeven-runtime-compatibility_*.sig
+            redeven-runtime-compatibility_*.pem
             Redeven-Desktop-*.deb
             Redeven-Desktop-*.rpm
             Redeven-Desktop-*.dmg
@@ -728,7 +749,9 @@ jobs:
           set -euo pipefail
 
           title="$(cat dist/RELEASE_TITLE.txt)"
-          release_flags=()
+          # Publishing assets must not advance GitHub's default version before
+          # the reviewed pinned entry is deployed and distribution is checked.
+          release_flags=(--latest=false)
           if [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+- ]]; then
             release_flags+=(--prerelease)
           fi
@@ -740,6 +763,9 @@ jobs:
 
           assets=(
             dist/redeven_*.tar.gz
+            dist/redeven-installer_*
+            dist/redeven-installer-contract.json
+            dist/redeven-install.sh
             dist/redeven-runtime-compatibility_*.json
             dist/redeven-runtime-compatibility_*.sig
             dist/redeven-runtime-compatibility_*.pem
