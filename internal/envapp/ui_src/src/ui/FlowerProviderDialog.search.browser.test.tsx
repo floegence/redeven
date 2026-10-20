@@ -205,12 +205,11 @@ for (const surface of ['desktop', 'env'] as const) for (const width of [1280, 39
   const tooltipBox = page.getByRole('tooltip').element().getBoundingClientRect();
   expect(tooltipBox.left).toBeGreaterThanOrEqual(0);
   expect(tooltipBox.right).toBeLessThanOrEqual(width);
+  if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: document.querySelector<HTMLElement>('.flower-provider-dialog')!, path: '__screenshots__/deepseek-settings-' + surface + '-' + width + '-help.png' });
   await userEvent.keyboard('{Escape}');
   await expect.element(page.getByRole('tooltip')).not.toBeInTheDocument();
   await expect.element(page.getByRole('dialog')).toBeVisible();
   search.querySelector<HTMLInputElement>('input')!.focus();
-  await expect.element(page.getByRole('tooltip')).toBeVisible();
-  await userEvent.keyboard('{Escape}');
   await expect.element(page.getByRole('tooltip')).not.toBeInTheDocument();
   await expect.element(page.getByRole('dialog')).toBeVisible();
   await userEvent.click(search.querySelector('button')!);
@@ -228,3 +227,64 @@ for (const surface of ['desktop', 'env'] as const) for (const width of [1280, 39
   if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: document.querySelector<HTMLElement>('.flower-provider-dialog')!, path: '__screenshots__/deepseek-settings-' + surface + '-' + width + '.png' });
  });
 }
+
+for (const surface of ['desktop', 'env'] as const) for (const width of [1280, 390]) {
+ it('limits help to information icons in ' + surface + ' at ' + width + 'px', async () => {
+  const { confirm, localized } = await mount(surface, width, 'en-US', false, true);
+  const search = document.querySelector<HTMLElement>('[data-flower-provider-search]')!;
+  const model = document.querySelector<HTMLElement>('[data-flower-model-search]')!;
+  const fetch = document.querySelector<HTMLElement>('[data-flower-provider-fetch]')!;
+  const fields = [
+   { field: search, label: search.querySelector('label')! },
+   { field: model, label: model.querySelector('label')! },
+   { field: fetch, label: fetch.querySelector('span.text-xs')! },
+  ];
+  for (const { field, label } of fields) {
+   await userEvent.hover(label);
+   await expect.element(page.getByRole('tooltip')).not.toBeInTheDocument();
+   const checkbox = field.querySelector<HTMLInputElement>('input');
+   if (checkbox) {
+    await userEvent.hover(field.querySelector('[data-floe-surface-part=indicator]')!);
+    checkbox.focus();
+    await expect.element(page.getByRole('tooltip')).not.toBeInTheDocument();
+    checkbox.blur();
+   }
+   const info = field.querySelector<HTMLButtonElement>('button:not([data-floe-dropdown-trigger])')!;
+   await userEvent.hover(info);
+   await expect.element(page.getByRole('tooltip')).toBeVisible();
+   await userEvent.hover(label);
+   await expect.element(page.getByRole('tooltip')).not.toBeInTheDocument();
+   info.focus();
+   await expect.element(page.getByRole('tooltip')).toBeVisible();
+   await userEvent.keyboard('{Escape}');
+   await expect.element(page.getByRole('tooltip')).not.toBeInTheDocument();
+   await expect.element(page.getByRole('dialog')).toBeVisible();
+  }
+  const reader = fetch.querySelector<HTMLElement>('[data-floe-dropdown-trigger]')!;
+  await userEvent.hover(reader);
+  await userEvent.click(reader);
+  await expect.element(page.getByRole('tooltip')).not.toBeInTheDocument();
+  await userEvent.keyboard('{Escape}');
+  await userEvent.click(search.querySelector('label')!);
+  await expect.element(page.getByRole('tooltip')).not.toBeInTheDocument();
+  await userEvent.click(page.getByRole('button', { name: localized.saveProvider, exact: true }));
+  expect(confirm.mock.calls[0][0].web_search).toMatchObject({ enabled: true });
+ });
+}
+
+it.each(SUPPORTED_LOCALES)('keeps provider help concise and endpoint-neutral in %s', async locale => {
+ const { localized } = await mount('env', 390, locale, false, true, true, { base_url: 'https://models.example.test/v1' });
+ const catalog = localized.catalog;
+ for (const hint of [catalog.searchProviderHint, catalog.searchModelHint, catalog.deepSeekSearchHint, catalog.deepSeekFetchHint, catalog.selectionHint]) {
+  expect(hint.length).toBeLessThanOrEqual(130);
+ }
+ expect(catalog.deepSeekCostHint.length).toBeLessThanOrEqual(65);
+ expect(catalog.deepSeekCostHint).not.toMatch(/[\d$€£¥]|USD|Markdown|Flash|Pro/);
+ for (const selector of ['[data-flower-provider-search]', '[data-flower-provider-fetch]']) {
+  await userEvent.click(document.querySelector(selector + ' button:not([data-floe-dropdown-trigger])')!);
+  await expect.element(page.getByRole('tooltip')).toBeVisible();
+  expect(page.getByRole('tooltip').element().textContent).toContain(catalog.deepSeekCostHint);
+  expect(page.getByRole('tooltip').element().textContent!.length).toBeLessThanOrEqual(200);
+  await userEvent.keyboard('{Escape}');
+ }
+});
