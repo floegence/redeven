@@ -21,13 +21,19 @@ type Assembly = {
 };
 
 const FRAGMENT_FIELDS = new Set(['envelope_id', 'fragment_index', 'fragment_count', 'total_bytes', 'data_base64']);
-const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u;
+const BASE64_INVALID = /[^A-Za-z0-9+/]/u;
+const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+const utf8Encoder = new TextEncoder();
 
-function decodeFrame(frame: FlowerLiveTransportFrame): Record<string, unknown> {
-  if (!frame || typeof frame.data !== 'string' || frame.data.length > FLOWER_LIVE_FRAME_BYTES
-    || new TextEncoder().encode(frame.data).length > FLOWER_LIVE_FRAME_BYTES) {
+function decodeFrame(frame: FlowerLiveTransportFrame): { value: Record<string, unknown>; bytes: number } {
+  if (!frame || typeof frame.data !== 'string' || frame.data.length > FLOWER_LIVE_FRAME_BYTES) {
     throw new FlowerLiveSyncError('Flower live stream returned an oversized or invalid frame.');
   }
+  // UTF-8 uses at most three bytes per UTF-16 code unit. Small frames need no
+  // temporary byte array; larger frames are measured once for both limits.
+  const bytes = frame.data.length * 3 <= FLOWER_LIVE_FRAGMENT_BYTES
+    ? frame.data.length * 3 : utf8Encoder.encode(frame.data).length;
+  if (bytes > FLOWER_LIVE_FRAME_BYTES) throw new FlowerLiveSyncError('Flower live stream returned an oversized or invalid frame.');
   let value: unknown;
   try {
     value = JSON.parse(frame.data);
@@ -44,7 +50,7 @@ function decodeFrame(frame: FlowerLiveTransportFrame): Record<string, unknown> {
   if (frame.event && frame.event !== 'message') {
     throw new FlowerLiveSyncError('Flower live stream returned an unsupported event.');
   }
-  return record;
+  return { value: record, bytes };
 }
 
 // Each connection owns one temporary assembly. Only a complete public
@@ -52,10 +58,10 @@ function decodeFrame(frame: FlowerLiveTransportFrame): Record<string, unknown> {
 export async function* assembleFlowerLiveEnvelopes(frames: AsyncIterable<FlowerLiveTransportFrame>): AsyncIterable<unknown> {
   let assembly: Assembly | undefined;
   for await (const frame of frames) {
-    const value = decodeFrame(frame);
+    const { value, bytes } = decodeFrame(frame);
     if (Object.hasOwn(value, 'schema_version')) {
       if (assembly) throw new FlowerLiveSyncError('Flower live stream interrupted an envelope.');
-      if (new TextEncoder().encode(frame.data).length > FLOWER_LIVE_FRAGMENT_BYTES) {
+      if (bytes > FLOWER_LIVE_FRAGMENT_BYTES) {
         throw new FlowerLiveSyncError('Flower live stream returned an oversized direct envelope.');
       }
       yield value;
@@ -68,8 +74,19 @@ export async function* assembleFlowerLiveEnvelopes(frames: AsyncIterable<FlowerL
       || typeof count !== 'number' || !Number.isSafeInteger(count) || count < 1
       || typeof total !== 'number' || !Number.isSafeInteger(total) || total < 1 || total > FLOWER_LIVE_ENVELOPE_BYTES
       || count !== Math.ceil(total / FLOWER_LIVE_FRAGMENT_BYTES) || index >= count
-      || typeof data !== 'string' || data.length > Math.ceil(FLOWER_LIVE_FRAGMENT_BYTES / 3) * 4 || !BASE64.test(data)) {
+      || typeof data !== 'string') {
       throw new FlowerLiveSyncError('Flower live stream returned an invalid fragment.');
+    }
+    const fragmentLength = Math.min(FLOWER_LIVE_FRAGMENT_BYTES, total - index * FLOWER_LIVE_FRAGMENT_BYTES);
+    const padding = (3 - fragmentLength % 3) % 3;
+    const payloadLength = data.length - padding;
+    // Exact length, alphabet, padding and zero unused bits establish canonical
+    // Base64 before atob. Avoid a backtracking grammar and a second encoding.
+    if (data.length !== Math.ceil(fragmentLength / 3) * 4
+      || BASE64_INVALID.test(data.slice(0, payloadLength))
+      || data.slice(payloadLength) !== '='.repeat(padding)
+      || (padding > 0 && (BASE64_ALPHABET.indexOf(data[payloadLength - 1]!) & (padding === 2 ? 15 : 3)) !== 0)) {
+      throw new FlowerLiveSyncError('Flower live stream returned an invalid fragment size or encoding.');
     }
     let decoded: string;
     try {
@@ -77,8 +94,7 @@ export async function* assembleFlowerLiveEnvelopes(frames: AsyncIterable<FlowerL
     } catch (cause) {
       throw new FlowerLiveSyncError('Flower live stream returned invalid Base64 data.', { cause });
     }
-    const fragmentLength = Math.min(FLOWER_LIVE_FRAGMENT_BYTES, total - index * FLOWER_LIVE_FRAGMENT_BYTES);
-    if (decoded.length !== fragmentLength || btoa(decoded) !== data) {
+    if (decoded.length !== fragmentLength) {
       throw new FlowerLiveSyncError('Flower live stream returned an invalid fragment size or encoding.');
     }
     if (!assembly) {

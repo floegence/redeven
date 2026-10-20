@@ -61,6 +61,22 @@ describe('Flower live wire assembly', () => {
     expect(await collect(flowerLiveWireFixture(envelope))).toEqual([envelope]);
   });
 
+  it.each([0, 1, 2])('accepts canonical Base64 with %i trailing bytes', async (remainder) => {
+    const envelope = { schema_version: 2, text: 'x'.repeat(32769 + remainder) };
+    expect(await collect(flowerLiveWireFixture(envelope))).toEqual([envelope]);
+  });
+
+  it.each(['Zg== ', 'Zg==\n', 'Z g==', 'Zg', 'Zg===', 'Zg=_', 'Zh==', 'Zm9=', 'Zg--'])('rejects noncanonical payload %j', async (data) => {
+    const frame = change(flowerLiveByteFixture(new Uint8Array([102]))[0]!, { data_base64: data });
+    await expect(collect([frame])).rejects.toBeInstanceOf(FlowerLiveSyncError);
+  });
+
+  it('enforces encoded byte limits for both direct envelopes and fragments', async () => {
+    await expect(collect([{ data: JSON.stringify({ schema_version: 2, text: '汉'.repeat(11000) }) }])).rejects.toBeInstanceOf(FlowerLiveSyncError);
+    const frame = flowerLiveWireFixture({ text: 'x'.repeat(40000) })[0]!;
+    await expect(collect([{ data: '汉'.repeat(22000) + frame.data }])).rejects.toBeInstanceOf(FlowerLiveSyncError);
+  });
+
   it('publishes one atomic envelope before the connection or provider work ends', async () => {
     const envelope = { schema_version: 2, kind: 'thread.batch', current: { text: 'partial thought '.repeat(6000), activity: 'active' } };
     const wire = flowerLiveWireFixture(envelope);

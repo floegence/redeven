@@ -283,7 +283,13 @@ function createCache(
     const contentRevision = current && runtimeState === 'stale' ? current.contentRevision
       : runtimeState === 'accepted' ? incomingContentRevision
         : Math.max(current?.contentRevision ?? 0, incomingContentRevision);
-    const state = navigationChanged || readChanged || contentRevision !== current?.contentRevision ? 'accepted' : aggregateAcceptance(runtimeState, activityState, settingsState, titleState);
+    // A same-version authoritative read can confirm a lifecycle already applied
+    // by native updates while a concurrently delivered summary still differs.
+    const summaryChanged = !options?.preserveSummary && runtimeState !== 'stale' && currentSummary
+      && incomingContentRevision >= threadSnapshotRevision(currentSummary)
+      && threadSettingsRevision(view.thread) >= threadSettingsRevision(currentSummary)
+      && threadRuntimeStateKey(view.thread as FlowerThreadSnapshot) !== threadRuntimeStateKey(currentSummary);
+    const state = summaryChanged || navigationChanged || readChanged || contentRevision !== current?.contentRevision ? 'accepted' : aggregateAcceptance(runtimeState, activityState, settingsState, titleState);
     if (state !== 'accepted') return {
       cache,
       state,

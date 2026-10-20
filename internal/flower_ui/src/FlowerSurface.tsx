@@ -3572,13 +3572,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       detail_activity_revision: threadSnapshotRevision(detail?.thread),
       summary_settings_revision: threadSettingsRevision(summary),
       settings_revision: threadSettingsRevision(detail?.thread),
+      content_revision: detail?.contentRevision,
+      summary_status: summary?.status,
+      detail_status: detail?.thread.status,
+      summary_run_id: summary?.active_run_id,
+      detail_run_id: detail?.thread.active_run_id,
       view_version: Math.max(0, Math.floor(Number(viewVersion || detail?.version) || 0)),
       ...(acceptance ? {
         runtime_state: acceptance.runtimeState,
         activity_state: acceptance.activityState,
         settings_state: acceptance.settingsState,
       } : {}),
-      error,
+      error: getErrorMessage(error),
     });
   };
 
@@ -3665,7 +3670,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const options = {
         current,
         preserveSummary: source === 'summary_update'
-          && threadSummaryNeedsDetail(summary, candidate.thread),
+          && (threadSnapshotRevision(summary) > (candidate.contentRevision ?? threadSnapshotRevision(candidate.thread))
+            || threadSettingsRevision(summary) > threadSettingsRevision(candidate.thread)),
       };
       result = canonicalTitle ? cache.receiveView(candidate, options) : cache.receiveCurrent(candidate, options);
     } catch (error) {

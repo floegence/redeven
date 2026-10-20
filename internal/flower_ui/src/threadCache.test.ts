@@ -612,6 +612,16 @@ describe('ThreadCache native baseline reads', () => {
     items: [{ id: 'answer', ordinal: 1, kind: 'assistant', text: 'text', live: true, turn_id: 'turn', run_id: 'run' }] };
   const update: FlowerRuntimeUpdate = { thread_id: 'a', base_version: 2, view_version: 3, turn_id: 'turn', run_id: 'run',
     facts: { activity: 'active', queue_count: 0, run_progress: { phase: 'streaming' } }, items: [{ kind: 'append', item_id: 'answer', append: { offset_bytes: 4, text: '!' } }] };
+  it('converges equal-revision summary lifecycle through an authoritative unchanged detail read', () => {
+    const stopped = { ...thread('a', 9, 'retained'), status: 'canceled' as const };
+    const current = { thread_id: 'a', view_version: 2, activity: 'idle' as const, last_outcome: 'cancelled' as const, items: [] };
+    let cache = createThreadCache().receiveView({ thread: stopped, version: 2 }, { current }).cache;
+    cache = cache.replaceSummary({ ...stopped, status: 'running', active_run_id: 'run' });
+    expect(threadSummaryNeedsDetail(cache.summaries.get('a'), cache.views.get('a')?.thread, 9)).toBe(true);
+    cache = cache.receiveView({ thread: stopped, version: 2 }, { current, preserveSummary: false }).cache;
+    expect(cache.summaries.get('a')?.status).toBe('canceled');
+    expect(threadSummaryNeedsDetail(cache.summaries.get('a'), cache.views.get('a')?.thread, 9)).toBe(false);
+  });
   it('updates indexed records and their version without replacing the workspace cache', () => {
     const baseline = createThreadCache().receiveView({ thread: thread('a', 1, ''), version: 2 }, { current }).cache;
     const detail = baseline.views.get('a');
