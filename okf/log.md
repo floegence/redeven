@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-19 — Focused provider help
+
+- Restrict [provider configuration](ui/flower-provider-configuration.md) tooltips to information icons. Shorten search and reader guidance in every locale, remove internal routing and lifecycle explanations, and retain only a possible-charge notice without endpoint-specific prices.
+
 ## 2026-10-19 — Historical Flower conversation compatibility
 
 - Adopt published Floret v7.68.3 canonical compaction identity migration; preserve historical conversation facts and explicit continuation without a host repair path. Bind packaging to exact-commit [historical qualification](ai/flower-upgrade-compatibility.md).

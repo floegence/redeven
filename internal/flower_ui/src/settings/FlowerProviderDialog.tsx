@@ -77,16 +77,16 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const providerFetchSource = () => store.draft?.web_fetch?.source ?? (providerSearch()?.enabled ? searchPolicy()?.default_fetch_source ?? 'direct' : 'direct');
   const recommended = (enabled: boolean) => enabled ? copy().catalog.searchRecommendedOn : copy().catalog.searchRecommendedOff;
   const FieldInfo = (info: { label: string; text: string | readonly string[]; alignEnd?: boolean; children?: JSX.Element }) => (
-    <Tooltip content={<div class="space-y-2"><For each={typeof info.text === 'string' ? [info.text] : info.text}>{text => <p>{text}</p>}</For></div>}
-      placement="bottom" delay={0} class={cn('!whitespace-normal w-64 max-w-[75vw] !translate-x-0', info.alignEnd ? '!left-auto !right-0' : '!left-0')}>
-      <span class="inline-flex min-w-0 items-center gap-1" on:keydown={event => {
-        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); (event.target as HTMLElement).blur(); }
-      }}>
-        {info.children}
+    <span class="relative inline-flex min-w-0 items-center gap-1 [&>div]:static">
+      {info.children}
+      <Tooltip content={<div><For each={typeof info.text === 'string' ? [info.text] : info.text}>{text => <p>{text}</p>}</For></div>}
+        placement="bottom" delay={0} class={cn('!whitespace-normal w-64 max-w-[75vw] !translate-x-0', info.alignEnd ? '!left-auto !right-0' : '!left-0')}>
         <button type="button" class="inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          aria-label={info.label} onClick={event => event.currentTarget.focus()}><Info class="h-3.5 w-3.5" aria-hidden="true" /></button>
-      </span>
-    </Tooltip>
+          aria-label={info.label} onClick={event => event.currentTarget.focus()} on:keydown={event => {
+            if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); event.currentTarget.blur(); }
+          }}><Info class="h-3.5 w-3.5" aria-hidden="true" /></button>
+      </Tooltip>
+    </span>
   );
   const canChangeType = () => props.mode === 'create' || props.allowTypeChange === true;
   const [query, setQuery] = createSignal('');
@@ -806,7 +806,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                   <div class="flower-provider-web-controls">
                     <div data-flower-provider-search>
                       <FieldInfo label={copy().webSearch} text={store.draft!.type === 'deepseek'
-                        ? [copy().catalog.searchProviderHint + ' ' + recommended(searchPolicy()?.default_enabled ?? false), copy().catalog.deepSeekSearchHint, copy().catalog.deepSeekCostHint]
+                        ? [copy().catalog.deepSeekSearchHint, copy().catalog.deepSeekCostHint]
                         : copy().catalog.searchProviderHint + ' ' + recommended(searchPolicy()?.default_enabled ?? false)}>
                         <Checkbox checked={providerSearch()?.enabled ?? false} disabled={!searchPolicy()?.editable} label={copy().webSearch} size="sm" onChange={enabled => updateProvider({ web_search: { enabled, source: providerSearch()?.source ?? 'native' } })} />
                       </FieldInfo>

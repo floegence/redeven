@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower provider configuration
 description: Configure provider access before choosing models, with stable navigation and explicit authentication states.
 tags: [ai, flower, settings, authentication]
-timestamp: 2026-10-14T00:00:00Z
+timestamp: 2026-10-19T00:00:00Z
 ---
 # Summary
 
@@ -21,20 +21,27 @@ not apply responses from a changed provider or trusted connection.
 
 Provider and model search switches use backend policies from the model directory.
 Both must be on; model preferences remain editable while provider search is off.
-An information icon beside each switch explains its recommendation, scope,
-next-Turn/manual-retry timing and possible remote rejection. Help opens on hover,
-keyboard focus or touch; Escape dismisses help without closing the dialog. Reset
-removes the model override. Search source changes and disablement preserve keys.
+Only the information icon beside a field opens help through hover, keyboard
+focus or touch. Labels, checkboxes and selectors never trigger it. Escape on the
+icon dismisses help without closing the dialog. Concise hints explain search
+dependencies and model recommendations; reset removes the model override.
+Search source changes and disablement preserve keys.
 The editor marks changed availability pending until a saved backend projection.
 DeepSeek search and page-reader controls share a compact row below credentials
-and wrap into separate rows on narrow screens. Routing, pricing, privacy and
-next-Turn behavior remain in the corresponding information tooltip. Page-reader
-help stays available while search is off. DeepSeek search defaults on, and an
+and wrap into separate rows on narrow screens. Search help names the configured
+connection and required service support. Reader help explains URL sharing and
+that some search results require DeepSeek reading. Both show only a brief
+possible-charge notice, with no fixed prices or official-endpoint assumptions.
+API routing and Turn lifecycle details belong to the search contract, not these
+tooltips. Page-reader help stays available while search is off. DeepSeek search defaults on, and an
 omitted page-reader choice follows the backend search policy: DeepSeek while
 search is on, Direct while off. Explicit reader choices survive search toggles,
 save and reopen. Model-selection guidance lives beside
 the Models heading. Required-field state, unavailable search and save failures
 remain visible; tooltips do not replace actionable feedback.
+DeepSeek has no search-source selector. Changing provider type clears
+inapplicable Fetch intent. Existing save, timeout, cancel, Escape, focus and
+return-to-chat behavior owns the interaction; no parallel dialog state exists.
 See [the search contract](../ai/model-web-search.md) for defaults and migration.
 
 Failure and manual retry behavior follows [Flower failure recovery](flower-failure-recovery.md).
@@ -197,14 +204,5 @@ catalog synchronization never selects newly discovered models automatically.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.selection.browser.test.tsx` - Stable scroll, model row identity, focus, discovery metadata, and parameter editing.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.capabilities.browser.test.tsx` - Compatible discovery, missing-field navigation, explicit tool support, save/reopen, hidden selections and narrow-screen behavior in Desktop and Env styles.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.credentials.browser.test.tsx` - Saved credential placeholders, focus, replacement, and empty-key guidance in actual Desktop and Env styles.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.search.browser.test.tsx` - Icon-only help, concise localized guidance, touch and keyboard recovery, responsive geometry and saved search/reader defaults.
 - `redeven:internal/envapp/ui_src/src/ui/pages/settings/FlowerSection.browser.test.tsx` - Global Env credential preservation and replacement request payloads.
-
-## DeepSeek web services
-
-The shared provider dialog shows fixed Flash Search API / Pro hosted search
-routing and no search-source selector for DeepSeek. A separate page-reader
-selector offers Direct (omitted default) or DeepSeek API, with explicit URL
-sharing, Markdown, pricing, and Turn timing guidance in every shipped locale.
-Search off retains the selected page reader. Changing provider type clears
-inapplicable Fetch intent. Existing save, timeout, cancel, Escape, focus and
-return-to-chat behavior owns the interaction; no parallel dialog state exists.
