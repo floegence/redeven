@@ -129,6 +129,33 @@ export default mergeConfig(viteConfig, defineConfig({
         ? { port: configuredBrowserPort }
         : undefined,
       commands: {
+        dragStreamingPreview: async ({ page }, ending: 'release' | 'cancel' | 'blur') => {
+          const frame = await frameForSelector(page, '[data-test-streaming-preview]');
+          const handle = frame.locator('[data-floe-floating-window-titlebar] h2');
+          const rect = await handle.boundingBox();
+          if (!rect) throw new Error('Streaming preview drag handle is unavailable');
+          const x = rect.x + rect.width / 2;
+          const y = rect.y + rect.height / 2;
+          await page.mouse.move(x, y);
+          await page.mouse.down();
+          const activeDuring = await frame.locator('html').getAttribute('data-floe-hot-interaction');
+          const positions: number[] = [];
+          for (let step = 1; step <= 24; step++) {
+            await page.mouse.move(x + step * 4, y + step * 2);
+            positions.push(await frame.locator('[data-floe-geometry-surface="floating-window"]').evaluate(async element => {
+              await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+              return element.getBoundingClientRect().left;
+            }));
+          }
+          if (ending === 'cancel') await frame.locator('[data-floe-geometry-surface="floating-window"]').evaluate(element => {
+            element.dispatchEvent(new PointerEvent('pointercancel', { bubbles: true, pointerId: 1, pointerType: 'mouse' }));
+          });
+          if (ending === 'blur') await frame.evaluate(() => window.dispatchEvent(new Event('blur')));
+          const activeBeforeRelease = await frame.locator('html').getAttribute('data-floe-hot-interaction');
+          await page.mouse.up();
+          await frame.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())));
+          return { activeDuring, activeBeforeRelease, activeAfter: await frame.locator('html').getAttribute('data-floe-hot-interaction'), positions };
+        },
         inspectFilePreviewDismissal: async ({ page }) => {
           const host = await frameForSelector(page, 'iframe.html-preview-frame');
           const previewElement = host.locator('iframe.html-preview-frame');

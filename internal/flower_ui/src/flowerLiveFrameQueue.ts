@@ -1,6 +1,8 @@
 import type { FlowerLiveStreamEnvelope, FlowerRuntimeCurrentItem } from './contracts/flowerSurfaceContracts';
 import { retainEqualValue } from './presentationIdentity';
 
+const INTERACTION_TEXT_REFRESH_MS = 75;
+
 /** Only text may differ; every other current and envelope field is compared. */
 export function flowerLiveTextAppend(previous: FlowerLiveStreamEnvelope, next: FlowerLiveStreamEnvelope): boolean {
   if (previous.kind !== 'thread.batch' || next.kind !== 'thread.batch') return false;
@@ -42,17 +44,27 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
   validateAppend: (envelope: FlowerLiveStreamEnvelope) => boolean;
   requestFrame: (callback: FrameRequestCallback) => number;
   cancelFrame: (id: number) => void;
+  interaction?: Readonly<{ root: HTMLElement; attribute: string }>;
 }>) {
   type Frame = Readonly<{ envelope: FlowerLiveStreamEnvelope; connectionEpoch: number }>;
   let previous: Frame | undefined;
   let pending: Frame | undefined;
   let frame: number | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let lastAppliedAt = 0;
+  let scheduleRevision = 0;
   let generation = 0;
   let disposed = false;
+  const cancelScheduled = () => {
+    scheduleRevision++;
+    if (frame !== undefined) options.cancelFrame(frame);
+    if (timer !== undefined) clearTimeout(timer);
+    frame = undefined;
+    timer = undefined;
+  };
   const clear = () => {
     generation++;
-    if (frame !== undefined) options.cancelFrame(frame);
-    frame = undefined;
+    cancelScheduled();
     pending = undefined;
     previous = undefined;
   };
@@ -64,15 +76,53 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
     else throw error;
   };
   const apply = (value: Frame) => {
-    if (current(value)) options.apply(value.envelope, value.connectionEpoch);
+    if (current(value)) {
+      options.apply(value.envelope, value.connectionEpoch);
+      lastAppliedAt = performance.now();
+    }
   };
   const flush = () => {
-    if (frame !== undefined) options.cancelFrame(frame);
-    frame = undefined;
+    cancelScheduled();
     const value = pending;
     pending = undefined;
     if (value) apply(value);
   };
+  const interactionActive = () => options.interaction?.root.getAttribute(options.interaction.attribute)
+    ?.split(/\s+/).some(kind => kind === 'drag' || kind === 'resize') === true;
+  const schedule = () => {
+    if (!pending || disposed || frame !== undefined || timer !== undefined) return;
+    const scheduledGeneration = generation;
+    const revision = ++scheduleRevision;
+    const connectionEpoch = pending.connectionEpoch;
+    const remaining = interactionActive() ? INTERACTION_TEXT_REFRESH_MS - (performance.now() - lastAppliedAt) : 0;
+    if (remaining > 0) {
+      timer = setTimeout(() => {
+        if (scheduledGeneration !== generation || revision !== scheduleRevision || disposed) return;
+        timer = undefined;
+        schedule();
+      }, remaining);
+      return;
+    }
+    frame = options.requestFrame(() => {
+      if (scheduledGeneration !== generation || revision !== scheduleRevision || disposed) return;
+      try {
+        // Interaction may start after a normal streaming frame was requested.
+        if (interactionActive() && performance.now() - lastAppliedAt < INTERACTION_TEXT_REFRESH_MS) {
+          frame = undefined;
+          schedule();
+        } else flush();
+      } catch (error) {
+        reportError(error, connectionEpoch);
+      }
+    });
+  };
+  const interactionObserver = options.interaction && typeof MutationObserver !== 'undefined'
+    ? new MutationObserver(() => {
+      if (!interactionActive()) { cancelScheduled(); schedule(); }
+    }) : undefined;
+  if (options.interaction) interactionObserver?.observe(options.interaction.root, {
+    attributes: true, attributeFilter: [options.interaction.attribute],
+  });
   return {
     push(envelope: FlowerLiveStreamEnvelope, connectionEpoch = options.connectionEpoch?.() ?? 0) {
       const value = { envelope, connectionEpoch };
@@ -83,10 +133,7 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
         if (previous && flowerLiveTextAppend(previous.envelope, envelope) && options.validateAppend(envelope)) {
           pending = value;
           previous = value;
-          if (frame === undefined) frame = options.requestFrame(() => {
-            if (currentGeneration !== generation || disposed) return;
-            try { flush(); } catch (error) { reportError(error, connectionEpoch); }
-          });
+          schedule();
           return;
         }
         flush();
@@ -98,6 +145,6 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
       }
     },
     boundary: clear,
-    dispose() { disposed = true; clear(); },
+    dispose() { disposed = true; interactionObserver?.disconnect(); clear(); },
   };
 }

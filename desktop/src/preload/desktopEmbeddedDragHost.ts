@@ -202,13 +202,13 @@ export function installDesktopEmbeddedDragHost(args: Readonly<{
 
   const clearOverlay = () => {
     if (state.overlayRoot?.isConnected) {
-      state.overlayRoot.replaceChildren();
+      if (state.overlayRoot.hasChildNodes()) state.overlayRoot.replaceChildren();
       return;
     }
     const overlayRoot = findOverlayRoot(doc);
     if (overlayRoot) {
       state.overlayRoot = overlayRoot;
-      overlayRoot.replaceChildren();
+      if (overlayRoot.hasChildNodes()) overlayRoot.replaceChildren();
       return;
     }
     state.overlayRoot = null;
@@ -251,6 +251,13 @@ export function installDesktopEmbeddedDragHost(args: Readonly<{
     if (!overlayRoot) {
       return;
     }
+    // Keep native drag nodes stable when iframe geometry has not changed.
+    if (overlayRoot.children.length === projected.length && projected.every((rect, index) => {
+      const element = overlayRoot.children[index] as HTMLElement;
+      return element.getAttribute('data-redeven-desktop-embedded-drag-region') === 'true'
+        && element.style.left === `${rect.left}px` && element.style.top === `${rect.top}px`
+        && element.style.width === `${rect.width}px` && element.style.height === `${rect.height}px`;
+    })) return;
 
     const fragments = projected.map((rect) => {
       const element = doc.createElement('div');
@@ -329,8 +336,18 @@ export function installDesktopEmbeddedDragHost(args: Readonly<{
 
   const mutationObserver = typeof MutationObserver === 'undefined'
     ? null
-    : new MutationObserver(() => {
-      scheduleRefresh();
+    : new MutationObserver((records) => {
+      // The host owns this subtree. Observing its own writes would rebuild the
+      // overlay on every animation frame even with no incoming snapshots.
+      const externalChange = records.some((record) => {
+        if (state.overlayRoot?.contains(record.target)) return false;
+        if (record.target === doc.getElementById(DESKTOP_EMBEDDED_DRAG_HOST_STYLE_ID)) return false;
+        if (record.type === 'childList' && record.removedNodes.length === 0
+          && Array.from(record.addedNodes).every(node => node === state.overlayRoot
+            || (node instanceof Element && node.id === DESKTOP_EMBEDDED_DRAG_HOST_STYLE_ID))) return false;
+        return true;
+      });
+      if (externalChange) scheduleRefresh();
     });
 
   if (doc.documentElement) {

@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower streaming stability
 description: Preserve interactive subtree identity and bound streaming rendering work in the shared Flower UI.
 tags: [flower, streaming, performance, interaction]
-timestamp: 2026-10-14T00:00:00Z
+timestamp: 2026-10-19T00:00:00Z
 ---
 
 # Summary
@@ -39,6 +39,46 @@ across groups, menu action nodes and wave animation phase across DOM moves;
 ordinary DOM identity alone does not preserve CSS animation progress. No new
 durable runtime state, public Floret contract, or second transport is
 introduced.
+
+## Bounded streaming work
+
+One transient frame buffer may combine strictly prefix-only text appends within
+the same live execution. Full envelope comparison excludes any other semantic
+change, and every candidate passes current-view and timeline validation. Queue,
+approval, tool, error, completion, and malformed input flush pending text before
+normal ordered handling. Reconnect cancels obsolete pending text. The buffer is
+neither a lifecycle owner nor a durable replay queue.
+
+The same buffer observes the published Floe hot-interaction attribute supplied by
+the Surface. During drag or resize, strictly text-only appends paint at most once
+per 75 ms plus the next available animation frame. Every complete candidate is
+still validated on receipt. Other envelope or runtime facts retain immediate
+ordered application; this policy does not delay progress, approvals, errors, or
+terminal transitions. Ending an interaction requests the latest pending text on
+the next frame, without replaying obsolete intermediate paints. Reconnect,
+disposal, and presentation failure cancel both timer and animation work. The
+transport, task execution, and canonical conversation owner continue normally.
+
+Markdown still lexes the complete current source. HTML reuse requires equal full
+tokens and reference definitions, and the cache retains only current tokens.
+Replacement and completion run the same parser contract. Copy controls are
+decorated only in changed HTML regions. Raw tails append to one Text node and
+replace that node's data when the source stops being a prefix extension.
+
+[Disclosure motion](flower-activity-interaction.md) retains short interaction
+feedback without animating steady streaming growth. Existing maximum detail
+height and internal scrolling remain. [Code highlighting](flower-code-highlighting.md)
+uses the published Floe Worker only for visible, committed code. Streaming tails
+retain their append-only path; no user-facing performance setting is introduced.
+
+# Boundaries
+
+This change stays in shared frontend presentation, tests, and documentation.
+Floret public APIs, durable records, live protocol shapes, validation, permissions,
+and action authorization retain their existing contracts. ThreadCache remains the
+only conversation cache; frame buffers and component caches are transient.
+
+# Evidence
 
 ## Streaming dependency audit
 
@@ -78,35 +118,6 @@ and its feedback subscription. A failed write reports the error without claiming
 success. Rendered nodes must not serve as conditional visibility values: updating
 the condition can dispose their subscriptions while an earlier node stays visible.
 
-## Bounded streaming work
-
-One transient frame buffer may combine strictly prefix-only text appends within
-the same live execution. Full envelope comparison excludes any other semantic
-change, and every candidate passes current-view and timeline validation. Queue,
-approval, tool, error, completion, malformed input, and reconnect boundaries flush
-pending text before normal ordered handling. The buffer is neither a lifecycle
-owner nor a durable replay queue.
-
-Markdown still lexes the complete current source. HTML reuse requires equal full
-tokens and reference definitions, and the cache retains only current tokens.
-Replacement and completion run the same parser contract. Copy controls are
-decorated only in changed HTML regions. Raw tails append to one Text node and
-replace that node's data when the source stops being a prefix extension.
-
-[Disclosure motion](flower-activity-interaction.md) retains short interaction
-feedback without animating steady streaming growth. Existing maximum detail
-height and internal scrolling remain. [Code highlighting](flower-code-highlighting.md)
-uses the published Floe Worker only for visible, committed code. Streaming tails
-retain their append-only path; no user-facing performance setting is introduced.
-
-# Boundaries
-
-This change stays in shared frontend presentation, tests, and documentation.
-Floret public APIs, durable records, live protocol shapes, validation, permissions,
-and action authorization retain their existing contracts. ThreadCache remains the
-only conversation cache; frame buffers and component caches are transient.
-
-# Evidence
 
 ## Reproducible acceptance
 
@@ -180,6 +191,8 @@ pre-push gate; the focused and timing results do not replace that gate.
 - [Markdown streaming stability](../../internal/envapp/ui_src/src/ui/FlowerMarkdown.streamingStability.browser.test.tsx)
 - [Message copy interaction](../../internal/envapp/ui_src/src/ui/FlowerSurface.messageCopy.browser.test.tsx)
 - [Frame boundary validation](../../internal/flower_ui/src/flowerLiveFrameQueue.test.ts)
+- [Interaction scheduling regression](../../internal/flower_ui/src/flowerLiveFrameQueue.interaction.test.ts) - Per-input validation, bounded text paints, immediate semantic boundaries, release, reconnect, disposal and epoch-aware failures.
+- [Streaming floating-window browser regression](../../internal/envapp/ui_src/src/ui/FlowerSurface.floatingInteraction.browser.test.tsx) - Native pointer drag during 125 Hz text input, release/cancel/blur convergence, retained preview edits, selection and scroll. This checks work reduction and continuous geometry progress, not a production frame-rate guarantee.
 - [Production performance runner](../../scripts/check_flower_streaming_performance.mjs)
 - [Activity interaction contract](flower-activity-interaction.md)
 - [Live timeline authority](flower-live-timeline.md)

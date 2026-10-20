@@ -371,14 +371,17 @@ function nodeTouchesDragRegionAnchor(
     return true;
   }
 
-  return anchors.some((anchor) => anchor.contains(node));
+  return anchors.some((anchor) => anchor === node
+    || (rootStillMatchesDragRootSelector(anchor) && anchor.contains(node)));
 }
 
 function mutationTouchesDragRegion(
   record: MutationRecord,
   anchors: readonly HTMLElement[],
 ): boolean {
-  if (nodeTouchesDragRegionAnchor(record.target, anchors)) {
+  // A global blocker excludes its entire box. Its ordinary content is not
+  // membership; ResizeObserver already tracks changes to the box itself.
+  if (anchors.some(anchor => rootStillMatchesDragRootSelector(anchor) && anchor.contains(record.target))) {
     return true;
   }
 
@@ -396,6 +399,7 @@ function mutationTouchesDragRegion(
     if (node.querySelector(DESKTOP_EMBEDDED_DRAG_REGION_MUTATION_SELECTOR)) {
       return true;
     }
+    if (anchors.some(anchor => node.contains(anchor))) return true;
   }
 
   return false;
@@ -406,6 +410,8 @@ function mutationDragRegionRefreshKind(
   anchors: readonly HTMLElement[],
 ): DesktopEmbeddedDragRegionRefreshKind | null {
   if (record.type === 'attributes') {
+    if (record.attributeName === 'style' && record.target instanceof Element
+      && anchors.some(anchor => record.target.contains(anchor))) return 'geometry';
     if (!nodeTouchesDragRegionAnchor(record.target, anchors)) {
       return null;
     }

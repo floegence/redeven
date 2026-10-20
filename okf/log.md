@@ -14,6 +14,11 @@
 
 - Adopt published Floret v7.69.0 required-first tool schema rendering before request freezing; preserve strict nullability, body-first previews, navigation and historical recovery.
 
+## 2026-10-19 — Floating-window responsiveness during streaming
+
+- Stop the Desktop drag overlay from observing its own writes; retain unchanged regions and ignore ordinary content inside whole-box no-drag blockers. See [floating layers](ui/env-app-floating-layer-order.md).
+- Bound strictly text-only Flower paints during drag/resize to 75 ms, validate every input, and converge on release while preserving immediate semantic transitions. See [streaming stability](ui/flower-streaming-stability.md).
+
 ## 2026-10-19 — Present Flower selection before transcript work
 
 - Reserve rendering and compositor frames for [sidebar selection](ui/flower-thread-sidebar.md), remove the selected-background transition, and keep navigation status mounted. Block old conversation interactions at a stable capture boundary instead of restyling the full transcript with native inert. Qualify hovered selection with 4,010 timeline items and trace screenshots before content commit.

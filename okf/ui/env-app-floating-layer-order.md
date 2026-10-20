@@ -3,7 +3,7 @@ type: UI Contract
 title: Env App floating layer order
 description: One product-owned stacking contract orders movable windows, Flower, plugin surfaces, blocking modals, and command UI.
 tags: [ui, floating-windows, flower, plugins, dialogs, focus]
-timestamp: 2026-10-12T00:00:00Z
+timestamp: 2026-10-19T00:00:00Z
 ---
 # Summary
 
@@ -15,6 +15,23 @@ reachable window controls and local content scrolling; temporary bounds do not
 replace the live preferred geometry.
 
 # Contract
+
+## Drag-region synchronization
+
+Desktop's embedded host projects iframe-relative native drag regions. Its
+observer ignores its own overlay and style writes, and unchanged projected
+rectangles retain their DOM nodes. A settled snapshot must not schedule another
+animation frame by rebuilding itself. Frame replacement, source changes, resize,
+and externally removed overlay roots retain normal refresh and stale-region
+clearing.
+
+Env App observes global no-drag blockers as complete boxes. Ordinary content
+changes within a blocker do not rescan drag membership or read its geometry.
+ResizeObserver owns box-size changes; blocker/ancestor style changes, marker
+changes, root controls, insertion and removal still refresh the relevant regions.
+The [streaming contract](flower-streaming-stability.md#bounded-streaming-work)
+owns Flower's bounded text painting during the published Floe drag/resize
+interaction. Native pointer and floating geometry ownership remain upstream.
 
 ## Global bands
 
@@ -89,6 +106,9 @@ The Flower companion remains above ordinary movable windows while expanded; its 
 This contract governs cross-surface Env App stacking and the Activity-versus-Workbench Dialog boundary. Workbench projected overlays and menus remain surface-local, and reusable floe-webapp or Flower components do not own Redeven's numeric product policy or display-mode decision. New global UI must select an existing band or update this contract and its browser hit-testing evidence; arbitrary escape values, document-level dismissal patches, per-Dialog placement branches, and component-specific global counters are forbidden.
 
 # Evidence
+
+- `redeven:desktop/src/preload/desktopEmbeddedDragHost.test.ts` - No self-triggered frame after overlay creation or clearing, stable region identity, frame replacement and externally removed overlay recovery.
+- `redeven:internal/envapp/ui_src/src/ui/services/desktopEmbeddedDragRegions.test.ts` - No refresh for ordinary blocker content; retained resize, geometry, marker and membership updates.
 
 - `redeven:internal/envapp/ui_src/scripts/checkMobileNavigation.mjs` - Replays native document panning, stale visual offsets, and transient keyboard heights while checking fixed header size, composer bounds, retained editor, and selection.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.composerFocus.browser.test.tsx` - Checks completed padding activation, cancelled gestures, and retained selection.

@@ -210,6 +210,50 @@ describe('desktopEmbeddedDragHost preload', () => {
     host.dispose();
   });
 
+  it('settles after overlay writes and retains unchanged regions', async () => {
+    document.body.innerHTML = '<iframe id="app_frame"></iframe>';
+    const frame = document.getElementById('app_frame') as HTMLIFrameElement;
+    stubRect(frame, { left: 0, top: 0, width: 320, height: 200 });
+    const rectReads = vi.spyOn(frame, 'getBoundingClientRect');
+    const callbacks = new Map<number, FrameRequestCallback>();
+    let id = 0;
+    const currentWindow = {
+      requestAnimationFrame: (callback: FrameRequestCallback) => { callbacks.set(++id, callback); return id; },
+      cancelAnimationFrame: (key: number) => { callbacks.delete(key); },
+      addEventListener: vi.fn(), removeEventListener: vi.fn(),
+    } as unknown as Window;
+    const { installDesktopEmbeddedDragHost } = await import('./desktopEmbeddedDragHost');
+    const host = installDesktopEmbeddedDragHost({ currentWindow, createResizeObserver: () => null });
+    const snapshot = { version: 1 as const, regions: [{ x: 80, y: 0, width: 160, height: 40 }] };
+    const flush = async () => {
+      await Promise.resolve();
+      const work = [...callbacks.values()];
+      callbacks.clear();
+      work.forEach(callback => callback(0));
+      await Promise.resolve();
+    };
+    try {
+      host.bridge.setSnapshot(snapshot);
+      await flush();
+      const overlay = document.querySelector('[data-redeven-desktop-embedded-drag-overlay="true"]')!;
+      const region = overlay.firstElementChild;
+      expect(region).toBeTruthy();
+      expect(callbacks.size).toBe(0);
+      expect(rectReads).toHaveBeenCalledTimes(1);
+      host.bridge.setSnapshot(snapshot);
+      await flush();
+      expect(overlay.firstElementChild).toBe(region);
+      expect(callbacks.size).toBe(0);
+      overlay.remove();
+      await flush();
+      expect(document.querySelector('[data-redeven-desktop-embedded-drag-region="true"]')).toBeTruthy();
+      expect(callbacks.size).toBe(0);
+      host.clear();
+      await flush();
+      expect(callbacks.size).toBe(0);
+    } finally { host.dispose(); }
+  });
+
   it('exposes the desktop embedded drag bridge and renders overlays above the iframe', async () => {
     document.body.innerHTML = '<iframe id="app_frame"></iframe>';
     const frame = document.getElementById('app_frame') as HTMLIFrameElement;
