@@ -569,10 +569,6 @@
       "modelStatusRetrying": "Повтор запроса к модели...",
       "providerRetryWaiting": "Сервис модели недоступен. Повтор через {seconds} с · {retry}/{max}",
       "providerRetryRegenerating": "Соединение прервано. Повторная генерация через {seconds} с · {retry}/{max}",
-      "transportProgress": {
-        "switching": "Соединение прервано. Следующая попытка будет выполнена через HTTPS.",
-        "https": "Используется HTTPS"
-      },
       "modelStatusFinalizing": "Завершение ответа...",
       "outputTokens": "{count} ток.",
       "waitingForModelContinuation": "Ожидание продолжения ответа модели",

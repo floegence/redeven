@@ -564,10 +564,6 @@
       "modelStatusRetrying": "正在重试模型请求...",
       "providerRetryWaiting": "模型服务暂时不可用，{seconds} 秒后重试 · {retry}/{max}",
       "providerRetryRegenerating": "连接中断，{seconds} 秒后重新生成 · {retry}/{max}",
-      "transportProgress": {
-        "switching": "连接中断，下一次将使用 HTTPS。",
-        "https": "正在使用 HTTPS"
-      },
       "modelStatusFinalizing": "正在整理回复...",
       "outputTokens": "{count} tokens",
       "waitingForModelContinuation": "等待模型继续",

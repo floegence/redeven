@@ -49,7 +49,8 @@ it.each([[1100, 'stop'], [420, 'stop'], [1100, 'success'], [1100, 'failure'], [4
   await waitFor(() => indicator()?.textContent?.includes('Regenerating') ?? false);
   expect(surface.textContent).not.toContain('Failed draft fragment');
   expect(indicator()?.textContent).toContain('1/4');
-  expect(indicator()?.textContent).toContain('The next attempt will use HTTPS');
+  expect(indicator()?.textContent).not.toMatch(/HTTPS|WebSocket|SSE/);
+  expect(indicator()?.querySelector('[data-flower-transport]')).toBeNull();
   const firstLabel = indicator()!.textContent;
   await vi.waitFor(() => expect(indicator()!.textContent).not.toBe(firstLabel), { timeout: 2500 });
   expect(surface.querySelectorAll('.flower-error-card')).toHaveLength(0);
@@ -75,7 +76,9 @@ it.each([[1100, 'stop'], [420, 'stop'], [1100, 'success'], [1100, 'failure'], [4
     await waitFor(() => stopThread.mock.calls.length === 1);
   } else if (outcome === 'success') {
     await push({ ...selected, run_progress: { run_id: runID, turn_id: turnID, phase: 'waiting_response', transport: { ...transport, attempt_id: 'attempt-new', attempt_epoch: 2, transport: 'http_sse', phase: 'sending' } } });
-    await waitFor(() => reopened.textContent?.includes('Using HTTPS') ?? false);
+    await waitFor(() => reopened.querySelector('[data-flower-progress-kind="waiting_response"]') != null);
+    expect(reopened.querySelector('.flower-model-status-indicator')?.textContent).not.toMatch(/HTTPS|WebSocket|SSE/);
+    expect(reopened.querySelector('[data-flower-transport]')).toBeNull();
     expect(reopened.querySelector<HTMLButtonElement>('.flower-composer-submit')?.disabled).toBe(false);
     await push({ ...selected, status: 'success', active_run_id: undefined, run_progress: null, messages: [{ id: 'recovered', role: 'assistant', turn_id: turnID, run_id: runID, status: 'complete', content: 'Recovered answer', created_at_ms: 2 }] });
     await waitFor(() => reopened.textContent?.includes('Recovered answer') ?? false);
@@ -132,7 +135,8 @@ it('shows the same retry deadline in a narrow SubAgent window', async () => {
   document.querySelector<HTMLButtonElement>('[data-flower-subagent-row]')!.click();
   const progress = () => document.querySelector<HTMLElement>('.flower-subagent-detail-progress [data-flower-progress-kind="retrying"]');
   await waitFor(() => progress()?.textContent?.includes('2/4') ?? false);
-  expect(progress()?.textContent).toContain('The next attempt will use HTTPS');
+  expect(progress()?.textContent).not.toMatch(/HTTPS|WebSocket|SSE/);
+  expect(progress()?.querySelector('[data-flower-transport]')).toBeNull();
   const label = progress()!.textContent;
   await vi.waitFor(() => expect(progress()!.textContent).not.toBe(label), { timeout: 2500 });
   await page.viewport(540, 850);

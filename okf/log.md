@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-20 — Quiet provider transport recovery
+
+- Keep protocol selection and fallback in diagnostics. Remove transport-switch notices from conversation progress across Desktop, Env App and SubAgent views, including unused translations and styles. Preserve normal retry feedback and Stop. See [request recovery](ai/model-request-recovery.md).
+
 ## 2026-10-20 — Unified ChatGPT transport recovery
 
 - Adopt published Floret v7.73.0 attempt-bound transport observation and replay measurement boundaries. Pin recoverable ChatGPT WebSocket failures to full-input SSE through Engine-owned retries; unify sanitized diagnostics, Desktop RPC v4/epoch 68 and localized current-view feedback. Separate [request recovery](ai/model-request-recovery.md) from [provider history](ai/model-provider-surface-and-history.md), with [request reuse](ai/model-request-reuse.md) retaining transport ownership.
