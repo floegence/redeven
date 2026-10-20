@@ -18,6 +18,8 @@
 
 ## 2026-10-20 — Stable Flower media ownership
 
+- Adopt published Floret v7.70.0 and schema 28; map attempt-bound Responses measurement with HTTP/connection inclusion evidence and frozen suffix replay, retaining upstream pressure and recovery ownership.
+
 - Use published Floe 0.86.47 media request ownership, bounded reads and Retry. Bind media to each rendered thread and retain equal complete context updates before timeline projection. See [inline media](ui/flower-inline-media.md) and [streaming stability](ui/flower-streaming-stability.md).
 
 ## 2026-10-19 — Concise Flower tool definitions

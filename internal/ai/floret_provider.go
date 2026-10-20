@@ -318,6 +318,11 @@ func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, provider
 			sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventToolCalls, ToolCalls: toolCalls})
 		}
 		usage := floretUsageFromFlower(result.Usage)
+		if result.Measurement != nil {
+			evidence := *result.Measurement
+			evidence.AttemptID = providerReq.AttemptID
+			usage.Measurement = &evidence
+		}
 		if usage.Available {
 			sendFloretProviderEvent(ctx, out, flprovider.Event{Type: flprovider.EventUsage, Usage: usage})
 		}
@@ -328,6 +333,7 @@ func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, provider
 		}
 		terminal := flprovider.Event{
 			Type:          flprovider.EventDone,
+			ResponseID:    result.ResponseID,
 			Reason:        normalizeReplyFinishReason(result.FinishReason),
 			ResponseState: responseState,
 		}
@@ -778,7 +784,8 @@ func flowerProviderStateToFloret(state *ModelGatewayState) (*flprovider.State, e
 
 func floretUsageFromFlower(usage TurnUsage) flprovider.Usage {
 	out := flprovider.Usage{
-		InputTokensReported: usage.InputTokensReported, InputTokenScope: usage.InputTokenScope,
+		OutputTokensReported: usage.OutputTokensReported,
+		InputTokensReported:  usage.InputTokensReported, InputTokenScope: usage.InputTokenScope,
 		TotalTokens: usage.TotalTokens, TotalTokensReported: usage.TotalTokensReported, OutputIncludesReasoning: usage.OutputIncludesReasoning,
 		Source: "native", Available: usage.Available || usage.TotalTokensReported || usage.TotalTokens > 0 || usage.InputTokens > 0 || usage.OutputTokens > 0 || usage.ReasoningTokens > 0 || usage.CacheReadTokens > 0 || usage.CacheWriteTokens > 0,
 		InputTokens:      usage.InputTokens,
@@ -865,4 +872,17 @@ func (p *preparedFloretModelRequest) WithMaxOutputTokens(ctx context.Context, li
 		result.fingerprint = fmt.Sprintf("sha256:%x", sha256.Sum256(payload))
 	}
 	return result, nil
+}
+
+func (p *preparedFloretModelRequest) InputMeasurementPrefix() flprovider.MeasurementPrefix {
+	if measured, ok := p.transport.(flprovider.PreparedRequestMeasurement); ok {
+		return measured.InputMeasurementPrefix()
+	}
+	return flprovider.MeasurementPrefix{}
+}
+func (p *preparedFloretModelRequest) MeasurementSuffix(prefix flprovider.MeasurementPrefix) ([]byte, bool) {
+	if measured, ok := p.transport.(flprovider.PreparedRequestMeasurement); ok {
+		return measured.MeasurementSuffix(prefix)
+	}
+	return nil, false
 }

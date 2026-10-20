@@ -23,9 +23,12 @@ func TestDeleteThreadRetriesProductCleanupAfterCanonicalDelete(t *testing.T) {
 	cfg := &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{
 		ID: "openai", Type: "openai", BaseURL: "https://api.openai.com/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
 	}}}
+	// Inject schema failures before activation; startup maintenance writes must
+	// not race this test-owned SQLite connection. Deletion is a canonical
+	// storage operation and does not require provider execution.
 	svc, err := NewService(Options{
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: stateDir, AgentHomeDir: stateDir,
-		Shell: "/bin/bash", Config: cfg, PersistOpTimeout: time.Second,
+		Shell: "/bin/bash", Config: cfg, PersistOpTimeout: time.Second, DeferExecution: true,
 	})
 	if err != nil {
 		t.Fatal(err)

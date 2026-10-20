@@ -40,6 +40,31 @@ Historical tool calls and results remain canonical facts even when their definit
 
 Published Floret v7.26.0 owns `EstimateRenderedRequest` for local Responses, Chat Completions, Gemini signatures, Moonshot, and Anthropic. Each adapter freezes its final SDK-rendered input once, and estimation plus dispatch use those same bytes. Verified model mappings select official vocabularies; unknown models use an explicit multilingual BPE proxy. Image parts use model and dimension budgets, opaque files retain conservative budgets, and Desktop/platform transports omit runtime IDs, routing, and product tool metadata. DeepSeek uses the official V4 tokenizer with 10% text headroom and documented image budgets; calibration invalidates when history, execution surface, model, compaction lineage, or estimator changes. These remain estimates because server rendering can differ; Redeven adds no network preflight or calibration ledger.
 
+## Native request measurement
+
+Published Floret v7.70.0 owns one pressure calculation: a qualified native prefix
+plus an estimate of only the remaining frozen input, or the complete estimate
+when proof does not match. The 90% threshold and public output reservation
+semantics remain upstream. Schema 27 -> 28 is migrated only by Floret.
+
+Redeven maps successful official Responses facts through optional
+PreparedRequestMeasurement and RequestMeasurement. Input scope remains
+provider_execution; protocol coverage evidence does not rename billing scope.
+HTTP uses this response's x-reasoning-included header, while WebSocket uses only
+the owning connection's handshake and unique lifetime identity. Unknown gateways,
+hosted execution, automatic truncation and hidden continuation do not qualify.
+Account, API credential and connection changes invalidate matching prefixes.
+Encrypted reasoning has no ciphertext-to-token conversion. A complete ChatGPT
+native replay may establish a conservative input-plus-output boundary only when
+output usage is explicitly present and opaque replay inclusion is proven.
+
+Frozen suffix mapping reads no attachments, refreshes no context and performs no
+network counting. Output refits and transport retries preserve the same frozen
+input; failed or cancelled attempts never supply committed response evidence.
+Floret alone checks attempt identity, commits output, persists and revalidates
+measurements, selects pressure and executes bounded compaction/recovery. Redeven
+adds no pressure policy, lifecycle state or durable measurement copy.
+
 ## Temporary provider failures
 
 Published Floret v7.58.0 shares provider.RetryAdviceForError across direct and Desktop paths. Wrapped ordinary EOF and unexpected EOF are interrupted streams only at the provider boundary. Adapters supply HTTP/stream/close-code facts; Engine owns bounded replay, cancellation, attempt identity and draft retirement. Explicit outer advice, even empty or Forbidden, stays authoritative. SDK retries remain disabled; no generic adapter resend or HTTPS fallback is added.

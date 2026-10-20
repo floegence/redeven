@@ -115,6 +115,7 @@ func configureChatGPTAdapter(adapter ModelGateway, p config.AIProvider, client *
 	}
 	if gateway, ok := adapter.(*openAIProvider); ok {
 		gateway.chatGPT = true
+		gateway.measurementCredential = ""
 		gateway.chatGPTToken = func(ctx context.Context) (string, error) { return client.AccessToken(ctx, p.AccountID) }
 		gateway.chatGPTFailure = func(ctx context.Context, token string, err error) {
 			client.ObserveRequestFailure(ctx, p.AccountID, token, err)

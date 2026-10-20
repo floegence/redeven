@@ -31,6 +31,7 @@ type PartialToolCall struct {
 }
 
 type PartialUsage struct {
+	OutputTokensReported    bool   `json:"output_tokens_reported,omitempty"`
 	InputTokensReported     bool   `json:"input_tokens_reported,omitempty"`
 	InputTokenScope         string `json:"input_token_scope,omitempty"`
 	OutputIncludesReasoning bool   `json:"output_includes_reasoning,omitempty"`
@@ -161,6 +162,7 @@ type SourceRef struct {
 }
 
 type TurnUsage struct {
+	OutputTokensReported    bool   `json:"output_tokens_reported,omitempty"`
 	InputTokensReported     bool   `json:"input_tokens_reported,omitempty"`
 	InputTokenScope         string `json:"input_token_scope,omitempty"`
 	OutputIncludesReasoning bool   `json:"output_includes_reasoning,omitempty"`
@@ -182,16 +184,18 @@ type ModelGatewayState struct {
 }
 
 type ModelGatewayResult struct {
-	FinishReason    string             `json:"finish_reason"`
-	Text            string             `json:"text,omitempty"`
-	Reasoning       string             `json:"reasoning,omitempty"`
-	ToolCalls       []ToolCall         `json:"tool_calls,omitempty"`
-	Sources         []SourceRef        `json:"sources,omitempty"`
-	Usage           TurnUsage          `json:"usage,omitempty"`
-	ProviderState   *ModelGatewayState `json:"provider_state,omitempty"`
-	RawProviderDiag map[string]any     `json:"raw_provider_diag,omitempty"`
-	StreamEvents    []StreamEvent      `json:"stream_events,omitempty"`
-	ToolResults     []ToolResult       `json:"tool_results,omitempty"`
+	Measurement     *flprovider.RequestMeasurement `json:"-"`
+	ResponseID      string                         `json:"-"`
+	FinishReason    string                         `json:"finish_reason"`
+	Text            string                         `json:"text,omitempty"`
+	Reasoning       string                         `json:"reasoning,omitempty"`
+	ToolCalls       []ToolCall                     `json:"tool_calls,omitempty"`
+	Sources         []SourceRef                    `json:"sources,omitempty"`
+	Usage           TurnUsage                      `json:"usage,omitempty"`
+	ProviderState   *ModelGatewayState             `json:"provider_state,omitempty"`
+	RawProviderDiag map[string]any                 `json:"raw_provider_diag,omitempty"`
+	StreamEvents    []StreamEvent                  `json:"stream_events,omitempty"`
+	ToolResults     []ToolResult                   `json:"tool_results,omitempty"`
 }
 
 // ModelGateway streams one provider request for a Floret hosted turn.
