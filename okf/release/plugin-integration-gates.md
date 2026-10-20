@@ -45,6 +45,14 @@ non-blank root output, and zero console, page, request, or HTTP failures.
 Offline projection keeps installed plugins visible
 and reports one retryable catalog-unavailable state.
 
+WebGL qualification runs `PluginWebGL.browser.test.tsx` through the Env App
+browser runner with a task-owned `REDEVEN_VITEST_BROWSER_PORT`. It bundles
+plugin-author code against the published SDK, opens it through the authenticated
+product client and placement coordinator, reads real WebGL 1/2 pixels, observes
+visible/hidden lifecycle, and verifies exact-surface revocation and iframe
+removal before reopening. The fixture emulates Host HTTP responses only; it
+does not replace the SDK sandbox, canvas transfer, bridge, or placement adapter.
+
 Browser-facing reads use the released POST query contract and retain exact
 Origin, CSRF, action, and query-effect authorization. Session disconnect uses
 the released durable four-hash fence and drain; Redeven awaits exact teardown

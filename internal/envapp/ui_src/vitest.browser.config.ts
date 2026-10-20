@@ -5,6 +5,7 @@ import { PNG } from 'pngjs';
 import { createHash } from 'node:crypto';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { build } from 'esbuild';
 import type { CDPSession, Frame, Page } from 'playwright';
 import viteConfig from './vite.config';
 import { dragViewerHandle, qualifyComputerLauncherTouch, qualifyComputerViewer, qualifyComputerViewerSurface } from './scripts/computerViewerInteraction.mjs';
@@ -129,6 +130,13 @@ export default mergeConfig(viteConfig, defineConfig({
         ? { port: configuredBrowserPort }
         : undefined,
       commands: {
+        buildPluginWebGLWorker: async () => {
+          const result = await build({
+            entryPoints: [path.resolve(import.meta.dirname, 'src/test/pluginWebGLWorker.fixture.ts')],
+            bundle: true, write: false, platform: 'browser', format: 'iife', target: 'es2022',
+          });
+          return result.outputFiles[0].text;
+        },
         dragStreamingPreview: async ({ page }, ending: 'release' | 'cancel' | 'blur') => {
           const frame = await frameForSelector(page, '[data-test-streaming-preview]');
           const handle = frame.locator('[data-floe-floating-window-titlebar] h2');

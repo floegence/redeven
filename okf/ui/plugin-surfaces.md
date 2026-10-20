@@ -201,6 +201,15 @@ Each Activity window owns one fresh `PluginSurfaceSlot` and opens it only throug
 worker readiness, and first-commit boundary. Redeven creates no iframe,
 bootstrap, asset session, or bridge.
 
+Plugin canvases use the released SDK's `openCanvas` transfer and support native
+`2d`, `webgl`, and `webgl2` contexts in the sandboxed Worker. Allowed contexts
+can return `null` when unavailable; plugin authors own accessible availability
+messages, visibility-aware animation, context restoration, and graphics resource
+cleanup. The SDK keeps its opaque origin, mediated assets, sealed APIs, and
+canvas dimension/count/pixel budgets. Those pixel budgets do not bound GPU
+texture/buffer memory or shader time. Redeven adds no graphics bridge, GPU flags,
+or canvas implementation.
+
 Short openings keep the content area steady. Delayed SDK progress shows a
 localized preparation, connection, access, startup, or content-loading status.
 Closing has its own quiet placement-owned status layer. An opening or bridge
@@ -303,6 +312,7 @@ or call business adapters directly.
 
 # Evidence
 
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginWebGL.browser.test.tsx` - Uses the published SDK and authenticated product placement adapter to verify WebGL 1/2 pixels, visibility, exact close, and reopening.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.navigation.browser.test.tsx` - Verifies the published Dock order, trailing actions and saved pins, pointer activation, and keyboard activation.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1` - Owns inventory, client lifetime, lifecycle commands, and cross-placement serialization.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginPanel.tsx:1` - Carries exact inventory keys into launch, drag, and mode-specific pin menus.
