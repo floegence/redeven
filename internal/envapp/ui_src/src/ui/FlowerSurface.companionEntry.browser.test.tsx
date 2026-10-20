@@ -30,7 +30,7 @@ function choiceThread(mode: 'select' | 'select_or_write' = 'select_or_write'): F
   });
 }
 
-function mountCompanion(selected: FlowerThreadSnapshot, summary?: FlowerSurfaceProps['companionSummary']) {
+function mountCompanion(selected: FlowerThreadSnapshot, summary?: FlowerSurfaceProps['companionSummary'], settingsLoader?: import('../../../../flower_ui/src/contracts/flowerSurfaceContracts').FlowerSurfaceAdapter['loadSettings']) {
   const idle = thread({ thread_id: 'thread-idle' });
   const threads = [selected, idle];
   const events: FlowerLiveStreamEnvelope[] = [];
@@ -45,7 +45,7 @@ function mountCompanion(selected: FlowerThreadSnapshot, summary?: FlowerSurfaceP
   };
   const surfaceAdapter = {
     ...adapter(true),
-    loadSettings: async () => withModelDirectoryFixture(await adapter(true).loadSettings()),
+    loadSettings: settingsLoader ?? (async () => withModelDirectoryFixture(await adapter(true).loadSettings())),
     loadModelDirectory: async () => withModelDirectoryFixture(await adapter(true).loadSettings()).model_directory!,
     listThreads: vi.fn(async () => threads),
     loadThread: vi.fn(async (id: string) => views.get(id)!),
@@ -106,7 +106,7 @@ function mountCompanion(selected: FlowerThreadSnapshot, summary?: FlowerSurfaceP
 type Fixture = ReturnType<typeof mountCompanion>;
 it('clears recalled history before Escape dismisses the companion', async () => {
   const fixture = mountCompanion(thread());
-  await waitFor(() => (fixture.mount.querySelector('.flower-composer textarea')?.getBoundingClientRect().width ?? 0) > 100);
+  await waitFor(() => Boolean(fixture.mount.querySelector('[data-companion-frame-ready="true"]')));
   fixture.setOpen(true);
   await waitFor(() => fixture.phase() === 'expanded' && fixture.mount.querySelector('main')?.dataset.flowerSelectedThreadLoading === 'false'
     && Boolean(fixture.mount.querySelector('.flower-composer textarea')));
@@ -391,15 +391,20 @@ describe('Flower companion entry with the published shell', () => {
   it('restores the ordinary editor without reopening and preserves drafts ahead of status', async () => {
     const fixture = mountCompanion(thread({ thread_id: 'thread-chat' }));
     await waitFor(() => fixture.mount.querySelector('main')?.dataset.flowerSelectedThreadLoading === 'false');
-    const editor = fixture.mount.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
-    await userEvent.click(editor);
+    await waitFor(() => Boolean(fixture.mount.querySelector('[data-companion-frame-ready="true"]')));
+    fixture.setOpen(true);
     await waitFor(() => fixture.phase() === 'expanded');
+    const editor = fixture.mount.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
+    await waitFor(() => fixture.mount.querySelector('main')?.dataset.flowerSelectedThreadId === 'thread-chat'
+      && fixture.mount.querySelector('main')?.dataset.flowerSelectedThreadLoading === 'false');
     await userEvent.fill(editor, 'Keep this draft');
     editor.setSelectionRange(2, 6);
     fixture.setSummary({ visualText: 'Other work', accessibleText: 'Other work', running: true,
       priorityStatus: 'running', targetThreadID: 'thread-idle' });
     await closeWithEscape(fixture);
-    expect(document.activeElement === editor).toBe(true);
+    await expect.poll(() => document.activeElement === editor).toBe(true);
+    expect(editor.getBoundingClientRect().width).toBeGreaterThan(100);
+    expect(editor.getBoundingClientRect().height).toBeGreaterThan(10);
     expect(fixture.open()).toBe(false);
     expect(editor.value).toBe('Keep this draft');
     expect([editor.selectionStart, editor.selectionEnd]).toEqual([2, 6]);
@@ -586,4 +591,31 @@ describe('Flower companion entry with the published shell', () => {
     expect(fixture.surfaceAdapter.submitInput).not.toHaveBeenCalled();
     editor.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
   });
+});
+
+
+it.each(['idle', 'running'] as const)('keeps compact settings recovery and the %s composer inside the published shell', async status => {
+  const loadSettings = vi.fn().mockRejectedValueOnce(new Error('Settings unavailable')).mockImplementation(async () => withModelDirectoryFixture(await adapter(true).loadSettings()));
+  const fixture = mountCompanion(thread({ status }), undefined, loadSettings);
+  await waitFor(() => Boolean(fixture.mount.querySelector('[data-companion-frame-ready="true"]'))
+    && fixture.mount.querySelector('main')?.dataset.flowerSelectedThreadLoading === 'false');
+  const notice = fixture.mount.querySelector<HTMLElement>('.flower-settings-read-status')!;
+  const retry = notice.querySelector<HTMLButtonElement>('button')!;
+  const shell = fixture.mount.querySelector<HTMLElement>('[data-floe-bottom-bar-companion]')!;
+  await expect.poll(() => retry.getBoundingClientRect().width).toBeGreaterThan(20);
+  const frame = shell.getBoundingClientRect(), button = retry.getBoundingClientRect();
+  expect(button.left).toBeGreaterThanOrEqual(frame.left);
+  expect(button.right).toBeLessThanOrEqual(frame.right);
+  expect(button.top).toBeGreaterThanOrEqual(frame.top);
+  expect(button.bottom).toBeLessThanOrEqual(frame.bottom);
+  if (status === 'running') {
+    const stop = fixture.mount.querySelector<HTMLButtonElement>('[data-flower-primary-action="stop"]')!;
+    expect(stop.disabled).toBe(false);
+    expect(stop.getBoundingClientRect().right).toBeLessThanOrEqual(frame.right);
+  }
+  await userEvent.click(retry);
+  await waitFor(() => !fixture.mount.querySelector('.flower-settings-read-status'));
+  expect(fixture.open()).toBe(false);
+  expect(loadSettings).toHaveBeenCalledTimes(2);
+  expect(fixture.surfaceAdapter.launchTurn).not.toHaveBeenCalled();
 });

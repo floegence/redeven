@@ -1,3 +1,4 @@
+import { withFlowerReadDeadline } from '../../../../../flower_ui/src/requestDeadline';
 import { createFlowerConversationPreferenceClient } from '../../../../../flower_ui/src/conversationPreferences';
 import type { FlowerConversationPreferences } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { createFlowerSourceIconResolver } from '../../../../../flower_ui/src/chat/markdown/flowerSourceIcons';
@@ -79,13 +80,14 @@ import {
 } from '../../../../../flower_host_ui/src/flowerAttachmentStaging';
 type EnvLocalFlowerSurfaceAdapterOptions = Readonly<{
   envPublicID: string;
+  signal?: AbortSignal;
   revealHostApplication?: (applicationID: string) => void;
   envLabel: string;
   desktopSessionTargetRoute?: 'local_host' | 'remote_desktop';
   rpc: RedevenV1Rpc;
   canMutate?: boolean;
   canManageExtensions?: () => boolean;
-  settingsRevision?: () => number;
+  settingsRevision?: () => string | number;
   modelReadResource?: FlowerModelReadResource;
   isAvailable?: () => boolean;
   copy?: EnvLocalFlowerSurfaceAdapterCopy;
@@ -340,13 +342,13 @@ function parseCanonicalReferenceOpenTarget(raw: unknown): FlowerCanonicalReferen
 
 function adapterCopy(options: EnvLocalFlowerSurfaceAdapterOptions): EnvLocalFlowerSurfaceAdapterCopy {
   return {
-    currentEnvironment: options.copy?.currentEnvironment ?? 'This environment',
-    usingCurrentEnvironment: options.copy?.usingCurrentEnvironment ?? 'Using this environment',
-    environmentLocalSubtitle: options.copy?.environmentLocalSubtitle ?? 'Environment-local Flower',
-    missingThreadID: options.copy?.missingThreadID ?? 'Missing thread id.',
-    enterMessageBeforeSending: options.copy?.enterMessageBeforeSending ?? 'Enter a message before sending.',
-    selectModelBeforeChat: options.copy?.selectModelBeforeChat ?? 'Select a Flower model before starting a chat.',
-    failedToCreateChat: options.copy?.failedToCreateChat ?? 'Failed to create Flower chat.',
+    get currentEnvironment() { return options.copy?.currentEnvironment ?? 'This environment'; },
+    get usingCurrentEnvironment() { return options.copy?.usingCurrentEnvironment ?? 'Using this environment'; },
+    get environmentLocalSubtitle() { return options.copy?.environmentLocalSubtitle ?? 'Environment-local Flower'; },
+    get missingThreadID() { return options.copy?.missingThreadID ?? 'Missing thread id.'; },
+    get enterMessageBeforeSending() { return options.copy?.enterMessageBeforeSending ?? 'Enter a message before sending.'; },
+    get selectModelBeforeChat() { return options.copy?.selectModelBeforeChat ?? 'Select a Flower model before starting a chat.'; },
+    get failedToCreateChat() { return options.copy?.failedToCreateChat ?? 'Failed to create Flower chat.'; },
   };
 }
 
@@ -449,14 +451,12 @@ async function draftToModelProfile(draft: FlowerSettingsDraft): Promise<AIModelP
 }
 
 function envLiveMapperOptions(options: EnvLocalFlowerSurfaceAdapterOptions) {
-  const copy = adapterCopy(options);
   const envID = trim(options.envPublicID) || 'current';
-  const envLabel = trim(options.envLabel) || copy.currentEnvironment;
   return {
     runtimeID: flowerRuntimeIDForEnvironment(envID),
     runtimeKind: 'env_local' as const,
-    sourceLabel: envLabel,
-    targetLabels: [envLabel],
+    get sourceLabel() { return trim(options.envLabel) || adapterCopy(options).currentEnvironment; },
+    get targetLabels() { return [trim(options.envLabel) || adapterCopy(options).currentEnvironment]; },
     originEnvPublicID: envID,
   };
 }
@@ -556,26 +556,29 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
   const resource = options.modelReadResource ?? createEnvFlowerModelReadResource(() => String(options.settingsRevision?.() ?? 0));
   const directoryForSurface = (directory: FlowerModelDirectory) => visibleDirectory(directory, options.desktopSessionTargetRoute === 'remote_desktop');
   const preferences = createFlowerConversationPreferenceClient({
-    load: () => fetchLocalApiJSON<FlowerConversationPreferences>('/_redeven_proxy/api/ai/conversation_preferences', { method: 'GET' }),
+    load: signal => fetchLocalApiJSON<FlowerConversationPreferences>('/_redeven_proxy/api/ai/conversation_preferences', { method: 'GET', signal }),
     patch: patch => fetchLocalApiJSON<FlowerConversationPreferences>('/_redeven_proxy/api/ai/conversation_preferences', { method: 'PATCH', body: JSON.stringify(patch) }),
-  });
-  const loadSettings = async (refresh = false) => {
-    const [settings, conversation_preferences] = await Promise.all([resource.loadSettings(refresh), preferences.load()]);
+  }, { signal: options.signal, canMutate: () => options.canMutate !== false });
+  const loadSettings: FlowerSurfaceAdapter['loadSettings'] = async (refresh = false, signal) => withFlowerReadDeadline(async readSignal => {
+    options.signal?.throwIfAborted();
+    const [settings, conversation_preferences] = await Promise.all([resource.loadSettings(refresh), preferences.load(readSignal)]);
+    options.signal?.throwIfAborted();
     const snapshot = { ...settings, conversation_preferences };
     if (options.isAvailable?.() === false) throw new DOMException('Flower settings load cancelled.', 'AbortError');
     const guarded = restrictChatGPTForRemoteDesktop(snapshot, options.desktopSessionTargetRoute === 'remote_desktop');
     return guarded.model_directory ? withFlowerModelDirectory(guarded, directoryForSurface(guarded.model_directory)) : guarded;
-  };
+  }, 'Flower settings read timed out.', signal && options.signal ? AbortSignal.any([signal, options.signal]) : signal ?? options.signal);
 
   return createRuntimeFlowerSurfaceAdapter({
+    signal: options.signal,
     runtime: {
       runtime_id: flowerRuntimeIDForEnvironment(options.envPublicID),
       runtime_kind: 'env_local',
       carrier_kind: 'runtime',
-      display_name: trim(options.envLabel) || copy.currentEnvironment,
-      subtitle: copy.environmentLocalSubtitle,
+      get display_name() { return trim(options.envLabel) || copy.currentEnvironment; },
+      get subtitle() { return copy.environmentLocalSubtitle; },
     },
-    canMutate: options.canMutate !== false,
+    get canMutate() { return options.canMutate !== false; },
     transport: {
       listThreads: () => fetchLocalApiJSON('/_redeven_proxy/api/ai/threads?limit=200', { method: 'GET' }),
       loadThread: (threadID, signal) => fetchLocalApiJSON<unknown>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}`, { method: 'GET', signal }),
@@ -679,6 +682,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       const result = await fetchLocalApiJSON<Awaited<ReturnType<NonNullable<FlowerSurfaceAdapter['chatGPTAuth']>>>>(`/_redeven_proxy/api/ai/auth/chatgpt/${action}`, { method: 'POST', body: JSON.stringify(input) });
       if (action === 'sign-out' || action === 'retry') {
         resource.invalidate();
+        options.signal?.throwIfAborted();
         if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
       }
       return result;
@@ -688,6 +692,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       await updateDefaultAIPermission(normalizePermissionType(permissionType));
       resource.invalidate();
       const snapshot = await loadSettings();
+      options.signal?.throwIfAborted();
       if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
       return snapshot;
     },
@@ -700,6 +705,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       });
       resource.invalidate();
       const snapshot = await loadSettings();
+      options.signal?.throwIfAborted();
       if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
       return snapshot;
     },
@@ -710,6 +716,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       });
       resource.invalidate();
       const snapshot = await loadSettings();
+      options.signal?.throwIfAborted();
       if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
       return snapshot;
     },
@@ -731,11 +738,14 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         const apiKey = trim(provider.web_search_api_key);
         return apiKey ? [{ provider_id: providerID, api_key: apiKey }] : [];
       });
+      const modelProfile = await draftToModelProfile(draft);
+      options.signal?.throwIfAborted();
+      if (options.canMutate === false) throw new DOMException('Flower access is read-only.', 'NotAllowedError');
       const result = await fetchLocalApiJSON<{ account_sign_outs?: FlowerSettingsSnapshot['account_sign_outs'] }>('/_redeven_proxy/api/ai/provider_bundle', {
         method: 'PUT',
         body: JSON.stringify({
           auth_schema_version: 1,
-          model_profile: await draftToModelProfile(draft),
+          model_profile: modelProfile,
           provider_api_key_patches: providerAPIKeyPatches,
           web_search_provider_key_patches: webSearchKeyPatches,
         }),
@@ -745,6 +755,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     },
     saveConversationPreferences: async patch => {
       const saved = await preferences.save(patch);
+      options.signal?.throwIfAborted();
       if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
       return saved;
     },
@@ -754,6 +765,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       await preferences.save({ model_id: mid });
       resource.invalidate();
       const snapshot = await loadSettings();
+      options.signal?.throwIfAborted();
       if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
       return snapshot;
     },
@@ -852,6 +864,8 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         turnModelID = turnModelID || trim(snapshot?.conversation_preferences?.model_id) || trim(snapshot?.model_directory?.current_model_id) || trim(snapshot?.model_profile?.current_model_id);
         if (!turnModelID) throw new Error(copy.selectModelBeforeChat);
       }
+      options.signal?.throwIfAborted();
+      if (options.canMutate === false) throw new DOMException('Flower access is read-only.', 'NotAllowedError');
       const stagingHeaders = stagingScope ? flowerAttachmentStagingHeaders(stagingScope) : undefined;
       const requestBody = buildFlowerTurnHTTPBody({
         launch: input,
@@ -970,8 +984,8 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         current: response.current,
       } satisfies FlowerSubmitInputReceipt;
     },
-    missingThreadID: copy.missingThreadID,
-    failedToCreateThread: copy.failedToCreateChat,
+    get missingThreadID() { return copy.missingThreadID; },
+    get failedToCreateThread() { return copy.failedToCreateChat; },
     ...(options.openMessageFile ? { openMessageFile: options.openMessageFile } : {}),
     ...(options.openMessageURL ? { openMessageURL: options.openMessageURL } : {}),
     resolveCanonicalReference,

@@ -17,19 +17,25 @@ import {
 import type { FlowerThreadSwitcherCopy } from '../../../../flower_ui/src/threads/FlowerThreadSwitcher';
 
 const FlowerSurface: Component<Omit<FlowerSurfaceProps, 'draftCoordinator'>> = (props) => {
-  return <FlowerSurfaceComponent {...props} adapter={fixtureAdapter(props.adapter)} draftCoordinator={createFlowerComposerDraftCoordinator()} />;
+  const adapter = fixtureAdapter(props.adapter);
+  return <FlowerSurfaceComponent {...props} adapter={adapter} draftCoordinator={createFlowerComposerDraftCoordinator()} />;
 };
 
+const fixtureAdapters = new WeakMap<TestFlowerSurfaceAdapter, FlowerSurfaceAdapter>();
 function fixtureAdapter(adapter: TestFlowerSurfaceAdapter): FlowerSurfaceAdapter {
-  return {
+  const existing = fixtureAdapters.get(adapter);
+  if (existing) return existing;
+  const fixture: FlowerSurfaceAdapter = {
     ...adapter,
     connectLiveStream: adapter.connectLiveStream ?? ((input) => testLiveStreamFromLegacyFixture(adapter, input)),
-    loadSettings: async refresh => withModelDirectoryFixture(await adapter.loadSettings(refresh)),
+    loadSettings: async (refresh, signal) => withModelDirectoryFixture(await adapter.loadSettings(refresh, signal)),
     loadModelDirectory: adapter.loadModelDirectory ?? (async () => withModelDirectoryFixture(await adapter.loadSettings()).model_directory!),
     saveDefaultPermission: async (permission) => withModelDirectoryFixture(await adapter.saveDefaultPermission(permission)),
     saveModelProfile: async (profile) => withModelDirectoryFixture(await adapter.saveModelProfile(profile)),
     persistDefaultModel: async (modelID) => withModelDirectoryFixture(await adapter.persistDefaultModel(modelID)),
   };
+  fixtureAdapters.set(adapter, fixture);
+  return fixture;
 }
 
 const TestProviders: Component<{ children: JSX.Element; mobileQuery?: string }> = (props) => {

@@ -1,3 +1,4 @@
+import { withFlowerReadDeadline, withFlowerRequestDeadline } from './requestDeadline';
 import type {
   FlowerConversationPreferencePatch,
   FlowerConversationPreferences,
@@ -31,21 +32,29 @@ export async function prepareFlowerNewConversationInput(
  * Never retry a conflicting write automatically or copy effective thread values.
  */
 export function createFlowerConversationPreferenceClient(transport: Readonly<{
-  load: () => Promise<FlowerConversationPreferences>;
+  load: (signal?: AbortSignal) => Promise<FlowerConversationPreferences>;
   patch: (patch: FlowerConversationPreferencePatch & Readonly<{ expected_revision: number }>) => Promise<FlowerConversationPreferences>;
-}>) {
+}>, options: Readonly<{ signal?: AbortSignal; canMutate?: () => boolean }> = {}) {
+  const assertWritable = () => {
+    options.signal?.throwIfAborted();
+    if (options.canMutate?.() === false) throw new DOMException('Flower access is read-only.', 'NotAllowedError');
+  };
   let writes: Promise<unknown> = Promise.resolve();
   return {
-    load: async (): Promise<FlowerConversationPreferences> => {
+    load: (signal?: AbortSignal): Promise<FlowerConversationPreferences> => withFlowerReadDeadline(async readSignal => {
       await writes;
-      return transport.load();
-    },
+      readSignal.throwIfAborted();
+      options.signal?.throwIfAborted();
+      return transport.load(readSignal);
+    }, 'Flower preferences read timed out.', signal && options.signal ? AbortSignal.any([signal, options.signal]) : signal ?? options.signal),
     save: (patch: FlowerConversationPreferencePatch): Promise<FlowerConversationPreferences> => {
       const captured = structuredClone(patch);
-      const result = writes.then(async () => {
-        const current = await transport.load();
+      const result = writes.then(() => withFlowerRequestDeadline(async () => {
+        assertWritable();
+        const current = await withFlowerReadDeadline(signal => transport.load(signal), 'Flower preferences read timed out.', options.signal);
+        assertWritable();
         return transport.patch({ ...captured, expected_revision: current.revision });
-      });
+      }, 'Flower preferences save timed out. Check settings before retrying.', options.signal));
       writes = result.catch(() => undefined);
       return result;
     },

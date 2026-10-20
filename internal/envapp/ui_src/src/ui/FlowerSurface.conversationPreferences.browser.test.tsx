@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { modelDirectoryFixture } from '../../../../flower_ui/testing/modelDirectoryFixture';
 import { createFlowerComposerDraftCoordinator } from '../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
 import type { FlowerConversationPreferencePatch, FlowerConversationPreferences, FlowerReasoningCapability } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
-import { adapter, deferred, disposeRenderedSurface, flush, liveBootstrap, renderSurfaceWithAdapterProps, renderSurfaceWithDraftCoordinator, settingsSnapshot, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+import { adapter, deferred, disposeRenderedSurface, liveBootstrap, renderSurfaceWithAdapterProps, renderSurfaceWithDraftCoordinator, settingsSnapshot, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
 const modelA = 'openai/gpt-5.2';
 const modelB = 'openai/gpt-5.2-pro';
@@ -120,7 +120,7 @@ describe('Flower personal new-conversation preferences', () => {
     expect(f.save).toHaveBeenCalledTimes(1);
   });
 
-  it('does not let a stale settings refresh erase a newer confirmed preference', async () => {
+  it('blocks preference edits until the current settings revision is confirmed', async () => {
     const f = fixture();
     const old = await f.base.loadSettings();
     const stale = deferred<typeof old>();
@@ -130,12 +130,16 @@ describe('Flower personal new-conversation preferences', () => {
     await waitFor(() => reasoningControl(surface)?.textContent?.includes('High') === true);
     setRevision(1);
     await waitFor(() => f.base.loadSettings.mock.calls.length === 2);
+    expect(modelControl(surface)!.disabled).toBe(true);
+    modelControl(surface)!.click();
+    expect(document.querySelector('.flower-model-menu-item')).toBeNull();
+    expect(f.save).not.toHaveBeenCalled();
+    stale.resolve(old);
+    await waitFor(() => !modelControl(surface)!.disabled);
     modelControl(surface)!.click();
     await waitFor(() => Boolean(document.querySelector('.flower-model-menu-item')));
     Array.from(document.querySelectorAll<HTMLButtonElement>('.flower-model-menu-item')).find(item => item.textContent?.includes('gpt-5.2-pro'))!.click();
     await waitFor(() => f.save.mock.calls.length === 1 && f.preferences().model_id === modelB);
-    stale.resolve(old);
-    await flush();
     newChat(surface);
     await waitFor(() => reasoningControl(surface)?.textContent?.includes('Off') === true);
     expect(modelControl(surface)?.textContent).toContain('gpt-5.2-pro');

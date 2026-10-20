@@ -129,6 +129,7 @@ describe('Env App cache identity and presentation binding', () => {
     expect(first.data()).toEqual(['live']);
     expect(first.identity()).toBe(owner);
     expect(access().scope).toBeUndefined();
+    expect(access().authenticatedScope).toBe('6'.repeat(64));
     warning.mockRestore();
   });
 

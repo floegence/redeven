@@ -14,7 +14,10 @@ describe('Flower canonical title synchronization', () => {
     const detail = deferred<ReturnType<typeof liveBootstrap>>();
     const publishTitle = deferred<void>();
     const publishBody = deferred<void>();
-    const loadThread = vi.fn(() => detail.promise);
+    // A current frame owns runtime presentation, not the full-history revision.
+    // Its arrival before bootstrap therefore requires one canonical detail read.
+    const loadThread = vi.fn().mockImplementationOnce(() => detail.promise)
+      .mockResolvedValue(liveBootstrap(completed, 2));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true), listThreads: vi.fn(async () => [initial]), loadThread, renameThread: vi.fn(),
       connectLiveStream: async function* ({ signal }) {

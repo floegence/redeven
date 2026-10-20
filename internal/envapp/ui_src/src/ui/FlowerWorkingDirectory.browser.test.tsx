@@ -32,6 +32,8 @@ async function fixture(width: number, dark = false, projected = false, presentat
   await waitFor(() => presentation === 'companion'
     ? Boolean(surface.querySelector('.flower-chat-header'))
     : surface.querySelector<HTMLButtonElement>('.flower-working-directory-select')?.title.includes(directory) === true);
+  await waitFor(() => !surface.querySelector('.flower-settings-read-status'));
+  if (presentation === 'full') await waitFor(() => surface.querySelector<HTMLButtonElement>('.flower-working-directory-select')?.disabled === false);
   expect(surface.querySelector('[data-flower-interaction-mode]')?.getAttribute('data-flower-interaction-mode')).toBe('desktop');
   await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
   return { surface, openFiles };
@@ -111,7 +113,7 @@ describe('Flower working directory presentation', () => {
     const probe = document.createElement('span');
     probe.style.color = dark ? 'var(--color-blue-400)' : 'var(--color-blue-600)';
     select.parentElement!.appendChild(probe);
-    expect(getComputedStyle(select).color).toBe(getComputedStyle(probe).color);
+    await expect.poll(() => getComputedStyle(select).color).toBe(getComputedStyle(probe).color);
     expect(getComputedStyle(select).color).not.toBe(getComputedStyle(label).color);
     expect(getComputedStyle(select).cursor).toBe('pointer');
     expect(getComputedStyle(select).backgroundColor).toBe('rgba(0, 0, 0, 0)');

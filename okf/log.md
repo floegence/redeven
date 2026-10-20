@@ -8,6 +8,12 @@
 
 - Preserve account summary geometry and owned focus through logout; collapse the picker once without loading flicker. Add confirmed local removal of signed-out registrations, retaining provider settings and conversations and rejecting late returning callbacks. See [ChatGPT authentication](ui/flower-provider-chatgpt-authentication.md), [provider configuration](ui/flower-provider-configuration.md) and [account lifecycle](ai/chatgpt-account-lifecycle.md).
 
+## 2026-10-20 — Stable Flower settings lifetime
+
+- Define one authenticated adapter lifetime, live permissions, bounded settings reads and explicit recoverable loading/error states in the [startup contract](architecture/flower-startup-presentation.md).
+- Document preference queue deadlines, current-generation acceptance and uncertain-write behavior in [personal preferences](ui/flower-conversation-preferences.md).
+
+
 ## 2026-10-20 — Bounded tool correction and explicit recovery
 
 - Consume published Floret v7.72.0, keep schema 28 and map one safe typed correction-exhaustion reason across current and historical views. Preserve strict validation and confirmed results; expose target-specific Retry and current-model configuration with bounded requests and stale-response guards. See [failure recovery](ui/flower-failure-recovery.md) and [historical qualification](ai/flower-upgrade-compatibility.md).

@@ -12,7 +12,7 @@ import { flowerMessageTextForCopy } from './chat/markdown/flowerCitations';
 import { flowerDraftReferenceIdentity, flowerDraftReferenceContextItem, flowerDraftReferenceDescription } from './composer/flowerDraftReferenceModel';
 import type { ThreadReferenceSnapshot } from './contextActionWire';
 import { withFlowerModelDirectory } from './modelDirectory';
-import { FlowerRequestDeadlineError, withFlowerRequestDeadline, withFlowerReadDeadline } from './requestDeadline';
+import { FlowerReadDeadlineError, FlowerRequestDeadlineError, withFlowerRequestDeadline, withFlowerReadDeadline } from './requestDeadline';
 import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
 import { flowerMenuModels } from './modelMenu';
 import { flowerDirectoryDesktopStatus } from './modelDirectory';
@@ -660,7 +660,7 @@ export type FlowerSurfaceProps = Readonly<{
   copy?: FlowerSurfaceCopy;
   draftCoordinator: FlowerComposerDraftCoordinator;
   /** External settings version used to refresh environment defaults in place. */
-  settingsRevision?: Accessor<number>;
+  settingsRevision?: Accessor<string | number>;
   warmup?: FlowerSurfaceWarmupState | null;
   focusThreadRequest?: FlowerThreadFocusRequest | null;
   focusComposerRequest?: number;
@@ -836,11 +836,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     tone: 'success',
     message,
   });
-  const [loadError, setLoadError] = createSignal('');
+  const [settingsState, setSettingsState] = createSignal<Readonly<{ status: 'loading' | 'ready' | 'error'; error?: string }>>({ status: 'loading' });
+  const settingsError = () => settingsState().error ?? '';
+  const settingsReady = () => settingsState().status === 'ready';
   const [saveError, setSaveError] = createSignal('');
   const [savedAt, setSavedAt] = createSignal<number | null>(null);
   const [snapshot, setSnapshot] = createSignal<FlowerSettingsSnapshot | null>(null);
-  const settingsLoading = () => !snapshot() && !loadError();
+  const settingsLoading = () => settingsState().status === 'loading';
 	const [threadCache, setThreadCache] = createSignal(createThreadCache());
   const outboxExpirationChanged = () => setOutboxRetryTick(tick => tick + 1);
   const [transportOutbox, setTransportOutbox] = createSignal(createTransportOutbox({ onExpired: outboxExpirationChanged }));
@@ -1365,7 +1367,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         if (!readPresentationVisible()) return;
 			if (sequence !== threadLoadSequence || selectedThreadID() !== tid || !threadCache().views.has(tid)) return;
         if (threadLoadError() || threadDetailLoadingIDs().has(tid) || pendingThreadSelection()) return;
-        if (threadCache().views.get(tid)?.contentRevision !== contentRevision || loadError()) return;
+        if (threadCache().views.get(tid)?.contentRevision !== contentRevision) return;
         setPresentedSelection({ threadID: tid, sequence, contentRevision });
       }, 0);
     });
@@ -1385,12 +1387,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       readPresentationVisible(),
       threadDetailLoadingIDs().has(selectedThreadID()),
       pendingThreadSelection(),
-      loadError(),
     ] as const,
-			([threadID, detailReady, error, , engaged, loading, pending, bootstrapError]) => {
+			([threadID, detailReady, error, , engaged, loading, pending]) => {
       cancelPresentedSelectionSchedule();
       setPresentedSelection(null);
-				if (!engaged || !threadID || !detailReady || error || loading || pending || bootstrapError) return;
+				if (!engaged || !threadID || !detailReady || error || loading || pending) return;
       schedulePresentedSelection(threadID, threadLoadSequence, detailReady);
     },
     { defer: false },
@@ -1911,7 +1912,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       deleteStaged: props.adapter.deleteStagedAttachment,
       readStagedLongText: props.adapter.readStagedLongText,
     }));
+    controller.setTransport({
+      get upload() { return props.adapter.uploadAttachment; },
+      get deleteStaged() { return props.adapter.deleteStagedAttachment; },
+      get readStagedLongText() { return props.adapter.readStagedLongText; },
+    });
     if (existing === controller) return controller;
+    controller.setSuspended(surfaceReadOnly() || !settingsReady());
     attachmentControllerUnsubscribers.get(sessionKey)?.();
     attachmentControllers.set(sessionKey, controller);
     attachmentControllerUnsubscribers.set(sessionKey, controller.subscribe(() => {
@@ -1960,7 +1967,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     && (!selectedThreadID() || typeof props.adapter.setThreadPermissionType === 'function')
   ));
   const composerPermissionInteractive = createMemo(() => (
-    composerPermissionAvailable()
+    settingsReady()
+    && composerPermissionAvailable()
     && !permissionPatchPending()
   ));
   type ComposerDraftOperation = Readonly<{
@@ -2139,6 +2147,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   onCleanup(() => {
     surfaceDisposed = true;
+    for (const controller of attachmentControllers.values()) controller.setSuspended(true);
     releaseNavigationReads();
     detailLoader.dispose();
     referenceReadController?.abort();
@@ -2261,7 +2270,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     basenameFromAbsolutePath(displayedWorkingDirectory(), copy().threadList.workingDirectoryLabel)
   ));
   const canPickWorkingDirectory = createMemo(() => (
-    !selectedThreadID()
+    settingsReady()
+    && !surfaceReadOnly()
+    && !selectedThreadID()
     && workingDirectoryPickerAvailable()
     && !surfaceWarmupActive()
   ));
@@ -2309,7 +2320,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const modelErrorMessage = (error: unknown) => (
     error && typeof error === 'object' && 'code' in error && error.code === 'thread_image_model_unsupported'
       ? copy().settings.imageModelRequired
-      : getErrorMessage(error) || copy().settings.autoSave.saveFailed
+      : (error instanceof FlowerRequestDeadlineError ? copy().settings.dialog.catalog.settingsSaveTimedOut : error instanceof FlowerReadDeadlineError ? copy().chat.syncTimeout : getErrorMessage(error)) || copy().settings.autoSave.saveFailed
   );
   const handleModelTriggerKeyDown = (event: KeyboardEvent) => {
     if (event.key === 'Enter' || event.key === ' ' || event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -2336,9 +2347,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setPermissionMenuOpen(true);
     queueMicrotask(() => focusPermissionMenuItem(permissionMenuActiveIndex()));
   };
-  const preferenceAdapterCurrent = (adapter: FlowerSurfaceAdapter) => !surfaceDisposed
-    && props.adapter.runtime.runtime_id === adapter.runtime.runtime_id
-    && props.adapter.launchTurn === adapter.launchTurn;
+  createEffect(() => {
+    const suspended = surfaceReadOnly() || !settingsReady();
+    for (const controller of attachmentControllers.values()) controller.setSuspended(suspended);
+  });
+  const preferenceAdapterCurrent = (adapter: FlowerSurfaceAdapter) => !surfaceDisposed && props.adapter === adapter;
   const acceptSettingsSnapshot = (adapter: FlowerSurfaceAdapter, next: FlowerSettingsSnapshot) => {
     if (!preferenceAdapterCurrent(adapter)) return;
     setSnapshot(current => (current?.conversation_preferences?.revision ?? -1) > (next.conversation_preferences?.revision ?? -1)
@@ -2352,8 +2365,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const rememberConversationPreference = async (adapter: FlowerSurfaceAdapter, patch: FlowerConversationPreferencePatch) => {
     if (!adapter.saveConversationPreferences) return;
+    const generation = settingsRefreshGeneration;
     const preferences = await adapter.saveConversationPreferences(patch);
-    acceptConversationPreferences(adapter, preferences);
+    if (generation === settingsRefreshGeneration) acceptConversationPreferences(adapter, preferences);
     return preferences;
   };
   const updateComposerModelID = async (modelID: string) => {
@@ -2396,7 +2410,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }
       } catch (error) {
         if (preferenceAdapterCurrent(adapter)) {
-          notifyFutureDefaultModelError(getErrorMessage(error) || copy().settings.autoSave.saveFailed);
+          notifyFutureDefaultModelError(modelErrorMessage(error));
         }
       }
     } catch (error) {
@@ -2418,7 +2432,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       try {
         await rememberConversationPreference(adapter, { reasoning: { model_id: modelID, selection: normalized } });
       } catch (error) {
-        if (preferenceAdapterCurrent(adapter)) notifyConversationPreferenceError(getErrorMessage(error) || copy().settings.autoSave.saveFailed);
+        if (preferenceAdapterCurrent(adapter)) notifyConversationPreferenceError(modelErrorMessage(error));
       }
       return;
     }
@@ -2438,11 +2452,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       try {
         await rememberConversationPreference(adapter, { reasoning: { model_id: modelID, selection: normalized } });
       } catch (error) {
-        if (preferenceAdapterCurrent(adapter)) notifyConversationPreferenceError(getErrorMessage(error) || copy().settings.autoSave.saveFailed);
+        if (preferenceAdapterCurrent(adapter)) notifyConversationPreferenceError(modelErrorMessage(error));
       }
     } catch (error) {
       if (preferenceAdapterCurrent(adapter) && selectedThreadDetailMatches(threadID)) {
-        notifyComposerError(getErrorMessage(error) || copy().settings.autoSave.saveFailed);
+        notifyComposerError(modelErrorMessage(error));
       }
     } finally {
       setPendingReasoningThreadIDs(current => {
@@ -2801,7 +2815,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   createEffect(() => {
     const presence = projectFlowerCompanionPresence(
       companionThreadItems(),
-      !loadError(),
+      true,
       companionRunReceipt(),
     );
     const signature = JSON.stringify(presence);
@@ -3079,12 +3093,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return threadID ? pending.threadID === threadID : pending.threadID === pendingDraftKey();
   });
   const composerModelInteractive = createMemo(() => (
-    selectedThreadPreferenceEditable()
+    settingsReady()
+    && selectedThreadPreferenceEditable()
     && !pendingReasoningThreadIDs().has(trimString(selectedThreadID()))
     && (!selectedThreadID() || typeof props.adapter.setThreadModel === 'function')
   ));
   const composerReasoningInteractive = createMemo(() => (
-    composerReasoningEnabled()
+    settingsReady()
+    && composerReasoningEnabled()
     && !composerReasoningLoading()
     && !pendingReasoningThreadIDs().has(trimString(selectedThreadID()))
     && !modelPatchPending()
@@ -3646,7 +3662,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setThreadCache(nextCache);
       if (runtimeState === 'accepted' && current) reconcileInputDraft(threadID, retained.input_request);
       if (selectionTransferred) {
-        setLoadError('');
         setThreadLoadError('');
         setSidePanel('chat');
       }
@@ -3819,7 +3834,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
   const queuedTurnSendBlocked = (threadID: string): boolean => {
-    return !!pendingThreadSelection()
+    return !settingsReady()
+      || !!pendingThreadSelection()
       || selectedThreadReadOnly()
       || selectedThreadStopPending()
       || queuedTurnSendPending(threadID)
@@ -3944,7 +3960,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const presented = presentedSelection();
     const thread = selectedThread();
     if (!presented || !thread || !readPresentationVisible()
-      || loadError() || threadLoadError() || pendingThreadSelection()
+      || threadLoadError() || pendingThreadSelection()
       || threadDetailLoadingIDs().has(thread.thread_id) || presented.threadID !== selectedThreadID()
       || presented.sequence !== threadLoadSequence
       || presented.contentRevision !== threadCache().views.get(thread.thread_id)?.contentRevision) return;
@@ -4323,7 +4339,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return false;
       }
       setThreadListState('ready');
-      setLoadError('');
       const selectedID = selectedThreadID();
       const selectedSummary = next.find((thread) => thread.thread_id === selectedID) ?? null;
       const selectedDetailCurrent = !selectedID || threadCache().views.has(selectedID);
@@ -4374,27 +4389,36 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   let settingsRefreshRequest: Promise<void> | null = null;
   let settingsRefreshGeneration = 0;
+  let settingsReadController: AbortController | undefined;
   const refreshSettingsForRevision = (invalidateInFlight = false): Promise<void> => {
-    if (invalidateInFlight) { settingsRefreshGeneration += 1; settingsRefreshRequest = null; }
+    if (surfaceDisposed) return Promise.resolve();
+    if (invalidateInFlight) {
+      settingsRefreshGeneration += 1;
+      settingsReadController?.abort();
+      settingsRefreshRequest = null;
+    }
     if (settingsRefreshRequest) return settingsRefreshRequest;
-    const request = (async () => {
-      if (surfaceDisposed) return;
-      const generation = settingsRefreshGeneration;
-      const adapter = props.adapter;
-      try {
-        const next = await adapter.loadSettings(invalidateInFlight);
-        if (!preferenceAdapterCurrent(adapter)) return;
-        if (generation !== settingsRefreshGeneration) return refreshSettingsForRevision();
-        acceptSettingsSnapshot(adapter, next);
-        if (next.model_directory) setModelDirectory(next.model_directory);
-        setLoadError('');
-      } catch (error) {
-        if (surfaceDisposed) return;
-        if (generation !== settingsRefreshGeneration) return refreshSettingsForRevision();
-        setLoadError(getErrorMessage(error));
-        throw error;
+    const generation = settingsRefreshGeneration;
+    const adapter = props.adapter;
+    const controller = new AbortController();
+    settingsReadController = controller;
+    const current = () => preferenceAdapterCurrent(adapter) && generation === settingsRefreshGeneration && !controller.signal.aborted;
+    setSettingsState({ status: 'loading' });
+    const request = withFlowerReadDeadline(signal => adapter.loadSettings(invalidateInFlight, signal), copy().chat.syncTimeout, controller.signal).then(next => {
+      if (!current()) return;
+      acceptSettingsSnapshot(adapter, next);
+      if (next.model_directory) setModelDirectory(next.model_directory);
+      setSettingsState({ status: 'ready' });
+    }).catch(error => {
+      if (!current()) return;
+      setSettingsState({ status: 'error', error: error instanceof FlowerReadDeadlineError ? copy().chat.syncTimeout : getErrorMessage(error) || copy().chat.loadErrorTitle });
+      throw error;
+    }).finally(() => {
+      if (settingsRefreshRequest === request) {
+        settingsRefreshRequest = null;
+        settingsReadController = undefined;
       }
-    })().finally(() => { if (settingsRefreshRequest === request) settingsRefreshRequest = null; });
+    });
     settingsRefreshRequest = request;
     return request;
   };
@@ -4403,9 +4427,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const refreshAccounts = (): Promise<void> => {
     if (accountRefresh) return accountRefresh;
     if (!props.adapter.loadChatGPTAccounts || !snapshot()?.auth_capabilities?.openai_chatgpt.available) return Promise.resolve();
+    const adapter = props.adapter;
+    const generation = settingsRefreshGeneration;
     const binding = snapshot()?.auth_capabilities?.openai_chatgpt.binding_id;
     const request = props.adapter.loadChatGPTAccounts().then(result => {
-      if (!surfaceDisposed && snapshot()?.auth_capabilities?.openai_chatgpt.available === true && binding === snapshot()?.auth_capabilities?.openai_chatgpt.binding_id) {
+      if (preferenceAdapterCurrent(adapter) && generation === settingsRefreshGeneration && snapshot()?.auth_capabilities?.openai_chatgpt.available === true && binding === snapshot()?.auth_capabilities?.openai_chatgpt.binding_id) {
         setSnapshot(previous => {
           if (!previous || JSON.stringify([previous.chatgpt_accounts, previous.saved_chatgpt_accounts, previous.account_sign_outs]) === JSON.stringify([result.accounts, result.saved_accounts, result.account_sign_outs])) return previous;
           return { ...previous, chatgpt_accounts: result.accounts, saved_chatgpt_accounts: result.saved_accounts, account_sign_outs: result.account_sign_outs };
@@ -4420,7 +4446,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     try { return await props.adapter.chatGPTAuth(action, input); }
     finally { if (action !== 'status' && action !== 'start') void refreshAccounts(); }
   };
-  const refreshDirectory = () => props.adapter.loadModelDirectory?.(true).then(directory => { if (!surfaceDisposed) { setModelDirectory(directory); setSnapshot(previous => previous ? withFlowerModelDirectory(previous, directory) : previous); } }).catch(() => undefined);
+  const refreshDirectory = () => {
+    const adapter = props.adapter;
+    const generation = settingsRefreshGeneration;
+    return adapter.loadModelDirectory?.(true).then(directory => {
+      if (!preferenceAdapterCurrent(adapter) || generation !== settingsRefreshGeneration) return;
+      setModelDirectory(directory);
+      setSnapshot(previous => previous ? withFlowerModelDirectory(previous, directory) : previous);
+    }).catch(() => undefined);
+  };
   const loadSurface = async () => {
     void refreshThreads();
     void resolveHandlerDecision().catch(() => undefined);
@@ -4441,14 +4475,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   onMount(() => {
     setThreadRailWidth(loadThreadRailWidth());
-    const unsubscribe = props.adapter.subscribeModelDirectory?.(directory => { if (!surfaceDisposed) { setModelDirectory(directory); setSnapshot(previous => previous ? withFlowerModelDirectory(previous, directory) : previous); } });
+    const adapter = props.adapter;
+    const unsubscribe = adapter.subscribeModelDirectory?.(directory => { if (preferenceAdapterCurrent(adapter)) { setModelDirectory(directory); setSnapshot(previous => previous ? withFlowerModelDirectory(previous, directory) : previous); } });
     onCleanup(() => unsubscribe?.());
     void loadSurface();
   });
 
   onCleanup(() => {
     settingsRefreshGeneration += 1;
+    settingsReadController?.abort();
     settingsRefreshRequest = null;
+    accountRefresh = null;
+    setSettingsSaving(false);
   });
 
   createEffect(() => {
@@ -4504,7 +4542,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               || !foregroundEngagementRequested()
               || sequence !== threadLoadSequence
               || selectedThreadID() !== threadID
-              || !!loadError()
               || !!threadLoadError()
             ) return;
             setEngagementBootstrapReady(true);
@@ -4684,7 +4721,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       outboxOperations.delete(requestID);
       if (transferDraftScope) {
         setThreadCache((cache) => cache.select(threadID));
-        setLoadError('');
         setThreadLoadError('');
         setSidePanel('chat');
       }
@@ -5034,12 +5070,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
 
   const saveSettingsMutation = async (mutation: () => Promise<FlowerSettingsSnapshot>) => {
+    if (!settingsReady() || surfaceReadOnly() || settingsSaving()) throw new DOMException('Flower settings are unavailable.', 'NotAllowedError');
     setSaveError('');
     setSettingsSaving(true);
     const adapter = props.adapter;
+    const generation = settingsRefreshGeneration;
+    const current = () => preferenceAdapterCurrent(adapter) && generation === settingsRefreshGeneration;
     try {
       const next = await withFlowerRequestDeadline(mutation, copy().settings.dialog.catalog.settingsSaveTimedOut);
-      if (!preferenceAdapterCurrent(adapter)) return next;
+      if (!current()) return next;
       acceptSettingsSnapshot(adapter, next);
       if (next.model_directory) setModelDirectory(next.model_directory);
       void refreshDirectory();
@@ -5047,10 +5086,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return next;
     } catch (error) {
       const message = getErrorMessage(error);
-      setSaveError(message);
-      throw new Error(message);
+      if (current()) setSaveError(message);
+      throw error;
     } finally {
-      setSettingsSaving(false);
+      if (preferenceAdapterCurrent(adapter)) setSettingsSaving(false);
     }
   };
 
@@ -5134,7 +5173,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     closeSubagentOverlays();
     setSidePanel('settings');
     setSettingsOpened(true);
-    return refreshSettingsForRevision(true).catch(() => undefined);
+    return (settingsRefreshRequest ?? refreshSettingsForRevision(true)).catch(() => undefined);
   };
 
   createEffect(() => {
@@ -5151,7 +5190,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       await props.adapter.recoverModelSource?.();
       const [directory] = await Promise.all([
         props.adapter.loadModelDirectory?.(true),
-        loadError() ? refreshSettingsForRevision() : undefined,
+        settingsError() ? refreshSettingsForRevision() : undefined,
       ]);
       if (directory && !surfaceDisposed) setModelDirectory(directory);
     } catch (error) {
@@ -5408,8 +5447,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       notifyComposerError(attachmentCopy().invalidText);
       return;
     }
-    if (!snapshot()) {
-      notifyComposerError(copy().chat.loadingSettings);
+    if (!settingsReady()) {
+      notifyComposerError(settingsError() || copy().chat.loadingSettings);
       return;
     }
     if (!readyForChat()) {
@@ -5651,7 +5690,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return;
       }
       consumedAttachmentLocalIDs = readyItems.map((item) => item.local_id);
-      if (!submissionCurrent()) return;
+      if (!submissionCurrent() || !settingsReady() || surfaceReadOnly()) return;
       transcriptScroll.startFollowing();
       try {
         const referenceItems: ContextActionEnvelope['context'] = frozenReferences.map(flowerDraftReferenceContextItem);
@@ -6747,7 +6786,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (transfer) {
         beginThreadDetailDisplayCycle(result.thread_id);
         setThreadCache(cache => cache.select(result.thread_id));
-        setLoadError(''); setThreadLoadError(''); setSidePanel('chat');
+        setThreadLoadError(''); setSidePanel('chat');
       }
       if (requestEpoch === liveTransport.connectionEpoch()) applyRuntimeCurrent(result.current, undefined, undefined, undefined, 'user_action', entry.provisionalThreadSettings);
       const editorScope = handoff?.sessionKey ?? entry.threadId;
@@ -6777,6 +6816,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     void requestThreadDetail(result.thread_id, 'user_action', true).catch(() => undefined);
   };
   const executeComposerCommand = (suggested?: '/compact' | '/goal') => {
+    if (!settingsReady()) return;
     if (goalCommand()) {
       const text = goalCommand()!.text.trim();
       if (text) void enqueueGoal(text === 'clear' ? 'delete' : 'set', text === 'clear' ? '' : text, true);
@@ -7334,7 +7374,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const correctionFailure = code === 'floret_tool_argument_correction_exhausted';
     const contextFailure = code === 'context_budget_invalid' || code === 'context_fixed_overhead' || code === 'context_compaction_limit';
     const retryPending = () => retryingThreads().has(trimString(targetThread()?.thread_id));
-    const retryBlocked = () => props.adapter.canMutate === false || (!targetThread()?.parent_thread_id && Boolean(trimString(targetThread()?.read_only_reason)))
+    const retryBlocked = () => !settingsReady() || props.adapter.canMutate === false || (!targetThread()?.parent_thread_id && Boolean(trimString(targetThread()?.read_only_reason)))
       || code === 'floret_effect_outcome_unknown' || retryPending() || ['running', 'waiting_approval', 'waiting_user'].includes(targetThread()?.status ?? '');
     const configureBlocked = () => props.adapter.canMutate === false || configuringProviderThreadID() === trimString(targetThread()?.thread_id);
     const [detailsCopied, setDetailsCopied] = createSignal(false);
@@ -7377,7 +7417,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           current = await requestThreadDetail(threadID, 'user_action', true);
         }
         if (!current || !stillTargeted() || current.status !== 'failed' || current.error?.code === 'floret_effect_outcome_unknown'
-          || props.adapter.canMutate === false || (!child && trimString(current.read_only_reason))) return;
+          || !settingsReady() || props.adapter.canMutate === false || (!child && trimString(current.read_only_reason))) return;
         if (current.current_execution?.turn_kind === 'context_compaction') {
           await executeCompactContextCommand(current, stillTargeted);
           return;
@@ -7395,7 +7435,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
     };
     const inspectPending = () => retryPending() || transportOutbox().forThread(trimString(targetThread()?.thread_id)).some(entry => entry.delivery !== 'accepted');
-    const inspectBlocked = () => props.adapter.canMutate === false || inspectPending()
+    const inspectBlocked = () => !settingsReady() || props.adapter.canMutate === false || inspectPending()
       || (Boolean(targetThread()?.parent_thread_id) && !subagentDetail()?.summary.can_send_input)
       || !props.adapter.launchTurn || (!targetThread()?.parent_thread_id && Boolean(trimString(targetThread()?.read_only_reason)))
       || ['running', 'waiting_approval', 'waiting_user'].includes(targetThread()?.status ?? '')
@@ -8824,7 +8864,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const composerPrimaryActionIcon = createMemo(() => composerPrimaryActionIsStop() ? FlowerStopIcon : composerPrimaryActionIsCommand() ? Clock : ArrowUp);
   const composerPrimaryActionLabel = createMemo(() => composerPrimaryActionIsStop() ? selectedThreadStopLabel() : composerSendPreparing() ? copy().chat.preparingSend : selectedComposerPendingSend() ? copy().chat.pendingSending : composerPrimaryActionIsCommand() ? (composerSlashCommand().kind === 'intent' && (composerSlashCommand() as { command?: string }).command === '/goal' ? copy().chat.goalTitle : copy().chat.compactContext) : copy().chat.send);
   const composerPrimaryActionDisabled = createMemo(() => {
-    if (goalCommand()) return !goalCommand()!.text.trim() || goalPending() || !props.adapter.manageGoal || props.adapter.canMutate === false || selectedThreadReadOnly();
+    if (goalCommand()) return !settingsReady() || !goalCommand()!.text.trim() || goalPending() || !props.adapter.manageGoal || props.adapter.canMutate === false || selectedThreadReadOnly();
     if (composerTakingBackQueuedTurn()) return true;
     if (composerReferenceMutationCount() > 0) return true;
     if (longTextPreparing()) return false;
@@ -8837,6 +8877,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (threadLoadError() && selectedThreadID() && !composerPrimaryActionIsStop()) return true;
     if (composerSlashCommand().kind === 'invalid') return true;
     if (!selectedThreadID() && goalPending()) return true;
+    if (!composerPrimaryActionIsStop() && !settingsReady()) return true;
     if (composerPrimaryActionIsCommand()) {
       const parsed = composerSlashCommand();
       if (parsed.kind === 'intent' && parsed.command === '/goal') return !props.adapter.manageGoal;
@@ -13437,6 +13478,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       <Show when={attentionNavigation() && selectedThreadID() === attentionNavigation()?.childThreadID}>
         <div class="flower-error-actions"><Button size="sm" variant="ghost" onClick={() => { const navigation = attentionNavigation(); if (navigation) { selectThread(navigation.parentThreadID); setAttentionNavigation(null); } }}>{copy().chat.subagentReturnParent}</Button></div>
       </Show>
+      {settingsReadNotice()}
       <div class="flower-chat-main" data-flower-action-layout={bottomActionMode()} data-setup-welcome={showSetupWelcome() && !companionCollapsed() ? 'true' : undefined}>
         <div
           ref={(node) => {
@@ -13467,9 +13509,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           }}
         >
           <div class="flower-transcript-stack">
-            <Show when={loadError()}>
-              {(message) => errorNotice(copy().chat.loadErrorTitle, message(), <Button size="sm" variant="ghost" icon={Refresh} onClick={() => void refreshSettingsForRevision().then(() => refreshDirectory()).catch(() => undefined)}>{copy().chat.handlerRetry}</Button>)}
-            </Show>
             <Show when={livePresentationConfirmed() && selectedThreadTerminalSyncing() && !threadLoadError()}>
               {threadSyncingLatestState()}
             </Show>
@@ -13573,11 +13612,24 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       </aside>
   ));
 
+  const settingsReadNotice = () => (
+    <Show when={!settingsReady()}>
+      <div class="flower-settings-read-status" role={settingsError() ? 'alert' : 'status'} aria-busy={settingsLoading()}>
+        <span>{settingsError() || copy().chat.loadingSettings}</span>
+        <Show when={settingsError()}>
+          <Button size="sm" variant="ghost" icon={Refresh} disabled={settingsLoading()} onClick={() => void refreshSettingsForRevision().catch(() => undefined)}>{copy().chat.handlerRetry}</Button>
+        </Show>
+      </div>
+    </Show>
+  );
+
   const SettingsContent = createRetainedContent(() => (
     <div class="min-h-0" data-flower-panel="settings" hidden={!settingsDialogPresent() && sidePanel() !== 'settings'}
       inert={!settingsDialogPresent()} aria-hidden={!settingsDialogPresent()}>
       <Show when={settingsOpened()}>
+        {settingsReadNotice()}
         <Suspense fallback={<div class="p-4 flower-body-copy text-muted-foreground" role="status">{copy().chat.loadingSettings}</div>}>
+          <div inert={!settingsReady() || surfaceReadOnly()} aria-busy={settingsLoading()}>
           <FlowerSettingsSurface
             onDiscoverModels={props.adapter.discoverProviderModels}
             chatGPTAuth={props.adapter.chatGPTAuth ? accountAction : undefined}
@@ -13601,6 +13653,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             dialog
             headerTrailingActions={sidePanel() === 'settings' ? props.headerTrailingActions : undefined}
           />
+          </div>
         </Suspense>
       </Show>
     </div>
@@ -13937,7 +13990,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             updateComposerSessionDraft(sessionKey, draft => draft.workingDirDraft === realPath
               ? { ...draft, workingDirDraft: preferences.working_dir } : draft);
           }).catch(error => {
-            if (preferenceAdapterCurrent(adapter)) notifyConversationPreferenceError(getErrorMessage(error) || copy().settings.autoSave.saveFailed);
+            if (preferenceAdapterCurrent(adapter)) notifyConversationPreferenceError(modelErrorMessage(error));
           });
         }}
       />

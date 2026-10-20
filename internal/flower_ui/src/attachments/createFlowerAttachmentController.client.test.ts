@@ -483,3 +483,24 @@ it('retains admitted queue attachments across scope changes and removes only the
   controller.cancel('admitted'); await controller.waitForIdle();
   expect(controller.snapshot().items).toEqual([]); expect(upload).not.toHaveBeenCalled(); expect(deleteStaged).not.toHaveBeenCalled();
 });
+
+
+it('rebinds retained draft uploads and removal after readiness returns without losing local files', async () => {
+  const first = vi.fn(async (input) => staged({ id: 'old-upload', file: input.file }));
+  const next = vi.fn(async (input) => staged({ id: 'new-upload', file: input.file }));
+  const remove = vi.fn(async () => {});
+  const controller = createFlowerAttachmentController({ capability: capability(), stagingScope, upload: first });
+  controller.setSuspended(true);
+  const file = new File(['retained'], 'notes.txt', { type: 'text/plain' });
+  const [id] = controller.addFiles([file], 'file');
+  controller.setTransport({ upload: next, deleteStaged: remove });
+  expect(controller.localFiles()).toEqual([{ local_id: id, file }]);
+  controller.setSuspended(false);
+  await controller.waitForIdle();
+  expect(first).not.toHaveBeenCalled();
+  expect(next).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ file, staging_scope: stagingScope }));
+  expect(controller.snapshot().items[0].status).toBe('staged_ready');
+  controller.cancel(id);
+  expect(remove).toHaveBeenCalledExactlyOnceWith('new-upload', stagingScope);
+  controller.dispose();
+});

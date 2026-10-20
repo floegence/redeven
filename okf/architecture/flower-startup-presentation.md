@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Flower startup and recovery presentation
 description: Keep navigation and drafts available while the single readiness owner prepares, stops or restores Flower.
 tags: [flower, startup, readiness, recovery, ui]
-timestamp: 2026-10-17T00:00:00Z
+timestamp: 2026-10-20T00:00:00Z
 ---
 # Summary
 
@@ -24,6 +24,40 @@ errors and caches. Returning to an operational state creates one clean surface
 from server data. The Shell-owned composer draft coordinator stays outside this
 boundary, so unsent drafts survive. No Flower-local readiness state machine,
 poller, or 503 suppression path exists.
+
+Within that readiness boundary, one adapter and Surface share an authenticated
+environment lifetime. Environment object refresh, display-name changes, locale,
+layout and resource-request generations do not replace the adapter. Display and
+permission getters stay live. Unconfirmed, failed or revoked permissions cannot
+authorize new mutations; renewed authority reopens the same controls. Access
+regrant and readiness recovery preserve drafts, references and attachment state.
+A different environment, access source or confirmed authenticated user ends the
+old lifetime and clears its draft scopes rather than transferring attachment
+authority. Request generations invalidate reads, never define user identity.
+
+Settings have one read owner and explicit loading, ready and error states. Initial
+load, external revision, opening settings and manual Retry enter that same path.
+Configuration and personal preferences must both complete within the existing
+15-second deadline. A settings-version/resource-generation tuple prevents
+revision collisions. Only the current adapter and read generation may publish
+success or failure. Supersession and unmount release pending reads and subscriptions;
+old completions cannot clear current errors or loading. No completion recursively
+starts another read.
+
+Until the current revision is confirmed, the draft and history remain usable,
+while settings-dependent sending and preference editing stay disabled through
+buttons, Enter, shortcuts and commands. Existing snapshots remain visible but
+cannot authorize sending. Failure exposes the same accessible Retry in full,
+companion, embedded and settings presentations, including a collapsed companion.
+Shell uses the confirmed authenticated cache scope independently of its persistent
+or live-only storage owner to detect user changes. Revalidation keeps the last
+confirmed identity while blocking unconfirmed operations.
+
+Recovery never sends or takes focus automatically. Settings can always close;
+Stop, approval and preparation cancellation retain their independent authority.
+History refresh, selection and Turn acceptance cannot clear settings failure.
+Collapsed companion recovery shares the same status, keeps Retry inside its
+compact frame, and retains the visible editor and independently authorized Stop.
 
 The boundary never disables or hides the shell, Workbench, terminal, files,
 Settings, or a shared ancestor. Only the visible Flower placement may move or
@@ -98,3 +132,6 @@ See the [owner and generation contract](ai-readiness-lifecycle.md) and
 - `redeven:internal/envapp/ui_src/src/ui/flower/AIReadinessBoundary.browser.test.tsx:1` - Browser interaction, reflow and recovery coverage.
 - `redeven:desktop/src/welcome/flower/DesktopFlowerRuntimeBoundary.client.test.tsx:1` - Stop deduplication, explicit retry, failure and draft continuity.
 - `redeven:desktop/src/main/runtimeFlowerRoutes.test.ts:1` - Exact authenticated readiness route and method boundaries.
+
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.settingsLifecycle.test.shared.tsx` - Revision ordering, timeout, visible retry, draft continuity and independent Stop.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvAIPage.send.test.shared.tsx` - Delayed initialization survives repeated environment refresh and submits one Turn.

@@ -1021,6 +1021,26 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       ? protocol.session?.() : null,
     retryPermissions: () => { void refetchEnv(); },
   });
+  let flowerIdentity = '';
+  let flowerConfirmedUserScope: string | undefined;
+  let flowerUserRevision = 0;
+  const flowerScopeKey = createMemo((previous: string | undefined) => {
+    const identity = JSON.stringify([envId(), desktopSessionContext?.renderer_storage_scope_id, desktopSessionContext?.session_source, isLocalMode() ? 'local' : 'controlplane']);
+    if (identity !== flowerIdentity) {
+      flowerIdentity = identity;
+      flowerConfirmedUserScope = undefined;
+      flowerUserRevision = 0;
+    }
+    const scope = resourceCacheAccess().authenticatedScope;
+    if (scope) {
+      if (flowerConfirmedUserScope && flowerConfirmedUserScope !== scope) flowerUserRevision += 1;
+      flowerConfirmedUserScope = scope;
+    }
+    const next = JSON.stringify([identity, flowerUserRevision]);
+    if (previous !== undefined && previous !== next) untrack(() => flowerDraftCoordinator.reset());
+    return next;
+  });
+
   const activityContentAvailable = () => !accessGateVisible() || recoveryVisible()
     || (!accessLocked() && resourceCacheAccess().owner !== undefined);
 
@@ -5294,6 +5314,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     <EnvContext.Provider
       value={{
         resourceCacheAccess,
+        flowerScopeKey,
         flowerDraftCoordinator,
         aiReadinessController,
         flowerModelReadResource,

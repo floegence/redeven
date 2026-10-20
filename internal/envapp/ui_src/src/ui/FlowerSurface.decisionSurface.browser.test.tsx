@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import flowerFeatureStyles from './flower-feature.css?inline';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import decisionFixtures from '../../../../flower_ui/src/testdata/decisionCurrentViews.json';
-import type { FlowerRuntimeCurrentView } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerLiveStreamEnvelope, FlowerRuntimeCurrentView } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
 import { createFlowerComposerDraftCoordinator } from '../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
 import {
@@ -25,6 +25,29 @@ import {
   thread,
   waitFor,
 } from './FlowerSurface.navigation.testHarness';
+
+function decisionLiveStream(summaries: () => ReturnType<typeof thread>[]) {
+  const queue: FlowerLiveStreamEnvelope[] = [];
+  let wake: (() => void) | undefined;
+  return {
+    publish(current: FlowerRuntimeCurrentView) {
+      queue.push({ schema_version: 1, kind: 'thread.batch', thread_id: current.thread_id, current });
+      wake?.();
+    },
+    async *connect({ signal }: { signal: AbortSignal }) {
+      yield { schema_version: 1 as const, kind: 'ready' as const, summaries: summaries() };
+      const abort = () => wake?.();
+      signal.addEventListener('abort', abort, { once: true });
+      try {
+        while (!signal.aborted) {
+          const event = queue.shift();
+          if (event) yield event;
+          else await new Promise<void>(resolve => { wake = resolve; });
+        }
+      } finally { signal.removeEventListener('abort', abort); }
+    },
+  };
+}
 
 describe('Flower bottom decision surface', () => {
   beforeEach(async () => {
@@ -544,7 +567,8 @@ describe('Flower bottom decision surface', () => {
     expect(surface.querySelector('.flower-composer-footer')).toBeNull();
     expect(surface.querySelector('.flower-composer-controls-viewport')).toBeNull();
     expect(surface.querySelector('[data-flower-composer-control="working_dir"]')).toBeNull();
-    expect(surface.querySelector('.flower-permission-selector')).toBeNull();
+    expect(surface.querySelector('button.flower-permission-trigger')).toBeNull();
+    expect(surface.querySelector('.flower-permission-selector')).not.toBeNull();
     expect(surface.querySelector('[data-flower-composer-control="model_reasoning"]')).toBeNull();
     expect(surface.querySelector('.flower-composer-context-indicator')).toBeNull();
     const stop = surface.querySelector<HTMLButtonElement>('.flower-composer-stop-thread');
@@ -566,7 +590,7 @@ describe('Flower bottom decision surface', () => {
     const footer = surface.querySelector('.flower-approval-queue-footer') as HTMLElement;
     const batchCapsule = footer.querySelector('[data-flower-approval-decision-group="true"]') as HTMLElement;
     const batchStop = footer.querySelector('.flower-composer-stop-thread') as HTMLButtonElement;
-    expect(footer.firstElementChild).toBe(batchStop);
+    expect(footer.firstElementChild?.contains(batchStop)).toBe(true);
     expect(footer.lastElementChild).toBe(batchCapsule);
     const observedModes: string[] = [];
     const observer = new MutationObserver(() => {
@@ -948,11 +972,7 @@ describe('Flower bottom decision surface', () => {
     const surface = runtime.querySelector('[data-flower-bottom-mode="approval"]') as HTMLElement;
     expect(surface.querySelector('.flower-approval-intro')).toBeNull();
     expect(surface.querySelector('.flower-approval-command-text')?.textContent).toBe(command);
-    const details = surface.querySelector<HTMLDetailsElement>('.flower-approval-details')!;
-    expect(details.open).toBe(false);
-    details.querySelector('summary')!.click();
-    expect(details.open).toBe(true);
-    expect(details.textContent).toContain('/workspace/redeven');
+    expect(surface.querySelector('.flower-approval-context')?.textContent).toContain('/workspace/redeven');
     expect(surface.querySelector('.flower-approval-command-text')?.closest('details')).toBeNull();
 
   });
@@ -1015,7 +1035,7 @@ describe('Flower bottom decision surface', () => {
     const stop = runtime.querySelector('.flower-composer-stop-thread') as HTMLButtonElement;
     const actions = capsule.parentElement as HTMLElement;
     expect(actions.classList.contains('flower-approval-actions')).toBe(true);
-    expect(stop.parentElement?.classList.contains('flower-approval-queue-footer')).toBe(true);
+    expect(stop.closest('.flower-approval-queue-footer')).not.toBeNull();
     expect(capsule.querySelectorAll(':scope > button.flower-composer-approval-decision')).toHaveLength(2);
     expect(capsule.querySelectorAll(':scope > .flower-approval-decision-divider')).toHaveLength(0);
     stop.focus();
@@ -1119,9 +1139,9 @@ describe('Flower bottom decision surface', () => {
       permission_type: 'approval_required',
       approval_actions: [],
     });
-    const approvalThread = { ...chatThread, status: 'waiting_approval' as const, approval_actions: [action] };
+    const approvalThread = { ...chatThread, status: 'waiting_approval' as const, active_run_id: action.run_id, approval_actions: [action] };
     let approvalVisible = false;
-    let eventDelivered = false;
+    const live = decisionLiveStream(() => [chatThread]);
     const submitApproval = vi.fn(async (input) => {
       approvalVisible = false;
       return approvalCommandResult(input.thread_id, input.interaction_id, input.approved, 23);
@@ -1131,15 +1151,13 @@ describe('Flower bottom decision surface', () => {
       listThreads: vi.fn(async () => [approvalVisible ? approvalThread : chatThread]),
       loadThread: vi.fn(async () => liveBootstrap(approvalVisible ? approvalThread : chatThread, approvalVisible ? 22 : 21)),
       setThreadPermissionType: vi.fn(async () => liveBootstrap(chatThread, 21)),
-      listThreadLiveEvents: vi.fn(async () => {
-        if (!approvalVisible || eventDelivered) return { stream_generation: 1, events: [], next_cursor: 0, retained_from_seq: 1 };
-        eventDelivered = true;
-        return { stream_generation: 1, events: [{ seq: 1 }], next_cursor: 1, retained_from_seq: 1 };
-      }),
+      connectLiveStream: live.connect,
       submitApproval,
     });
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${chatThread.thread_id}"] button`)));
     (runtime.querySelector(`[data-thread-id="${chatThread.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('main')?.dataset.flowerSelectedThreadId === chatThread.thread_id
+      && runtime.querySelector('main')?.dataset.flowerSelectedThreadLoading === 'false');
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-bottom-mode="chat"]')));
     const permissionTrigger = runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement;
     permissionTrigger.click();
@@ -1147,6 +1165,7 @@ describe('Flower bottom decision surface', () => {
     const selectedPermission = runtime.querySelector('.flower-permission-menu-item-active') as HTMLButtonElement;
     expect(getComputedStyle(selectedPermission).borderLeftWidth).toBe('0px');
     approvalVisible = true;
+    live.publish(liveBootstrap(approvalThread, 22).current);
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-bottom-mode="approval"]')), 2000);
     expect(runtime.querySelector('.flower-permission-menu')).toBeNull();
     const allow = Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'))
@@ -1180,6 +1199,8 @@ describe('Flower bottom decision surface', () => {
     });
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${runningThread.thread_id}"] button`)));
     (runtime.querySelector(`[data-thread-id="${runningThread.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('main')?.dataset.flowerSelectedThreadId === runningThread.thread_id
+      && runtime.querySelector('main')?.dataset.flowerSelectedThreadLoading === 'false');
     await waitFor(() => Boolean(runtime.querySelector('.flower-permission-trigger')));
     const trigger = () => runtime.querySelector<HTMLButtonElement>('.flower-permission-trigger')!;
     expect(trigger().disabled).toBe(false);
@@ -1221,25 +1242,24 @@ describe('Flower bottom decision surface', () => {
     const waiting = applyFlowerRuntimeCurrentView(running, current);
     const response = deferred<ReturnType<typeof liveBootstrap>>();
     let interactionVisible = false;
-    let eventDelivered = false;
+    const live = decisionLiveStream(() => [running]);
     const base = adapter(true);
     const runtime = renderSurfaceWithAdapter({
       ...base, listThreads: vi.fn(async () => [interactionVisible ? waiting : running]),
       loadThread: vi.fn(async () => interactionVisible ? { thread: waiting, current } : liveBootstrap(running, current.view_version - 1)),
       setThreadPermissionType: vi.fn(() => response.promise),
-      listThreadLiveEvents: vi.fn(async () => {
-        if (!interactionVisible || eventDelivered) return { stream_generation: 1, events: [], next_cursor: 0, retained_from_seq: 1 };
-        eventDelivered = true;
-        return { stream_generation: 1, events: [{ seq: 1 }], next_cursor: 1, retained_from_seq: 1 };
-      }),
+      connectLiveStream: live.connect,
     });
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${running.thread_id}"] button`)));
     (runtime.querySelector(`[data-thread-id="${running.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('main')?.dataset.flowerSelectedThreadId === running.thread_id
+      && runtime.querySelector('main')?.dataset.flowerSelectedThreadLoading === 'false');
     await waitFor(() => Boolean(runtime.querySelector('.flower-permission-trigger')));
     (runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-permission-menu')));
     (runtime.querySelector('.flower-permission-menu-item[data-permission-type="full_access"]') as HTMLButtonElement).click();
     interactionVisible = true;
+    live.publish(current);
     await waitFor(() => Boolean(runtime.querySelector('.flower-decision-surface')), 2000);
     const surface = runtime.querySelector('.flower-decision-surface')!;
     await flush();

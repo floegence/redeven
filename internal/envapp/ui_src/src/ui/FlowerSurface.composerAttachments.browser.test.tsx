@@ -140,7 +140,7 @@ describe('Flower composer attachment browser presentation', () => {
     });
     reloaded.style.cssText = 'width:100%;height:820px';
     const message = await expectCompleteMessage(reloaded);
-    expect(surfaceAdapter.loadThread).toHaveBeenCalledWith(conversation.thread_id);
+    expect(surfaceAdapter.loadThread).toHaveBeenCalledWith(conversation.thread_id, expect.any(AbortSignal));
     message.setAttribute('data-testid', 'mixed-sent-message');
     await page.screenshot({ element: page.getByTestId('mixed-sent-message'), path: `./__screenshots__/flower-mixed-sent-${withFile ? 'image-file' : 'image'}.png` });
     await page.viewport(375, 900);
