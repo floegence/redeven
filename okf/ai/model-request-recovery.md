@@ -51,6 +51,8 @@ Flower reads ThreadRunProgress.Transport and ThreadRunProgress.Retry from the au
 Published Floret v7.51.2 classifies the exact `basispoints_tool_arguments_stalled` code as a stream interruption, including HTTP 200 stream errors. Redeven consumes that category for live and historical failure presentation without duplicating the code list or restarting a terminal turn. The sanitized upstream message remains the primary displayed error; its machine code, transport status and request ID remain copyable diagnostics. Permanent errors and server retry prohibitions keep their existing priority.
 
 
+Published Floret v7.73.1 distinguishes a physical request deadline from execution cancellation throughout compaction lifecycle, debug events and turn settlement. Timeout errors keep their public errors.Is/errors.As contract and structured details. Summary recovery replays frozen input under one logical request with new physical attempt identities; exhaustion fails without a checkpoint, and Stop remains authoritative before installation. Redeven neither repairs old cancellation records nor owns a second retry loop.
+
 # Boundaries
 
 [Provider history](model-provider-surface-and-history.md) remains canonical. [Request reuse](model-request-reuse.md) owns in-memory transport selection and socket cleanup; [request measurement](model-request-measurement.md) owns protocol coverage evidence. Recovery never creates a product retry loop, durable transport ledger or automatic replay of uncertain tool effects.

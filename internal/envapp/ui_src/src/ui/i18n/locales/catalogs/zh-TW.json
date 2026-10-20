@@ -5531,6 +5531,8 @@
       "contextIndicatorUnavailable": "暫無資料",
       "contextIndicatorRecentCacheHitLabel": "最近請求快取命中率",
       "contextIndicatorCacheHitLabel": "對話累計快取命中率",
+      "compactionDividerRetry": "重試壓縮",
+      "compactionDividerRetrying": "正在重試壓縮…",
       "compactionDividerCompacting": "上下文壓縮中...",
       "compactionDividerCompacted": "上下文已壓縮",
       "compactionDividerFailed": "上下文壓縮失敗",

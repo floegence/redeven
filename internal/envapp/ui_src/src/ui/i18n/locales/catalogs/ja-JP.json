@@ -5531,6 +5531,8 @@
       "contextIndicatorUnavailable": "利用不可",
       "contextIndicatorRecentCacheHitLabel": "直近のリクエストのキャッシュヒット率",
       "contextIndicatorCacheHitLabel": "セッション全体のキャッシュヒット率",
+      "compactionDividerRetry": "圧縮を再試行",
+      "compactionDividerRetrying": "圧縮を再試行中…",
       "compactionDividerCompacting": "コンテキスト圧縮中...",
       "compactionDividerCompacted": "コンテキストを圧縮しました",
       "compactionDividerFailed": "コンテキスト圧縮に失敗",

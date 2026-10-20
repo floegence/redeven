@@ -611,6 +611,8 @@
       "contextIndicatorRecentCacheHitLabel": "Cache-Trefferquote der letzten Anfrage",
       "contextIndicatorCacheHitLabel": "Cache-Trefferquote der Sitzung",
       "compactionDividerCompacting": "Kontext wird komprimiert...",
+      "compactionDividerRetry": "Komprimierung wiederholen",
+      "compactionDividerRetrying": "Komprimierung wird wiederholt…",
       "compactionDividerCompacted": "Kontext komprimiert",
       "compactionDividerFailed": "Kontextkomprimierung fehlgeschlagen",
       "compactionDividerCancelled": "Kontextkomprimierung abgebrochen",

@@ -5531,6 +5531,8 @@
       "contextIndicatorUnavailable": "No disponible",
       "contextIndicatorRecentCacheHitLabel": "Tasa de aciertos de caché de la última solicitud",
       "contextIndicatorCacheHitLabel": "Tasa de aciertos de caché de la sesión",
+      "compactionDividerRetry": "Reintentar compresión",
+      "compactionDividerRetrying": "Reintentando compresión…",
       "compactionDividerCompacting": "Compresión de contexto en curso...",
       "compactionDividerCompacted": "Contexto comprimido",
       "compactionDividerFailed": "Falló la compresión de contexto",

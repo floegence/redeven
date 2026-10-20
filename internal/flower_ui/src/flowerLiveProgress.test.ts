@@ -60,3 +60,12 @@ it('derives retry countdown from the absolute server deadline across reopen', ()
   expect(flowerRetrySeconds(deadline, Date.parse('2026-10-15T16:00:02.900Z'))).toBe(1);
   expect(flowerRetrySeconds(deadline, Date.parse('2026-10-15T16:00:04Z'))).toBe(0);
 });
+
+it('uses canonical active compaction progress and preserves retry and completion phases', () => {
+  const operation = { operation_id: 'compact', turn_id: 'turn-live', run_id: 'run-live', canonical_ordinal: 2,
+    phase: 'start' as const, status: 'compacting' as const, updated_at_ms: 1 };
+  expect(flowerRunProgress(thread({ context_compactions: [operation] }))?.kind).toBe('compacting');
+  expect(flowerRunProgress(thread({ context_compactions: [{ ...operation, run_id: 'run-old' }] }))?.kind).toBe('waiting_response');
+  expect(flowerRunProgress(thread({ context_compactions: [{ ...operation, status: 'compacted', phase: 'complete' }] }))?.kind).toBe('waiting_response');
+  expect(flowerRunProgress(thread({ context_compactions: [operation], run_progress: { phase: 'retrying', turn_id: 'turn-live', run_id: 'run-live' } }))?.kind).toBe('retrying');
+});

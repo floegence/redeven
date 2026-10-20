@@ -6,7 +6,7 @@ import type {
 } from './contracts/flowerSurfaceContracts';
 import { trimString } from './flowerSurfaceModel';
 
-export type FlowerLiveProgressKind = FlowerRunProgressPhase;
+export type FlowerLiveProgressKind = FlowerRunProgressPhase | 'compacting';
 
 export type FlowerLiveProgress = Readonly<{
   kind: FlowerLiveProgressKind;
@@ -28,7 +28,8 @@ export function flowerRunProgress(
     throw new Error('Flower contract error: run progress does not match the active run identity.');
   }
   return {
-    kind: thread.run_progress.phase,
+    kind: thread.run_progress.phase !== 'retrying' && thread.context_compactions?.some(item =>
+      item.run_id === runID && item.status === 'compacting') ? 'compacting' : thread.run_progress.phase,
     request: thread.run_progress.request,
     transport: thread.run_progress.transport,
     runID,

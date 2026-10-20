@@ -611,6 +611,8 @@
       "contextIndicatorRecentCacheHitLabel": "Taux de cache de la dernière requête",
       "contextIndicatorCacheHitLabel": "Taux de cache de la session",
       "compactionDividerCompacting": "Compression du contexte en cours...",
+      "compactionDividerRetry": "Réessayer la compression",
+      "compactionDividerRetrying": "Nouvelle tentative de compression…",
       "compactionDividerCompacted": "Contexte compressé",
       "compactionDividerFailed": "Échec de la compression du contexte",
       "compactionDividerCancelled": "Compression du contexte annulée",

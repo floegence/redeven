@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower failure recovery
 description: One turn-level failure owner and bounded manual recovery without replaying uncertain effects.
 tags: [ai, flower, recovery, interaction]
-timestamp: 2026-10-18T00:00:00Z
+timestamp: 2026-10-20T00:00:00Z
 ---
 # Summary
 
@@ -43,7 +43,7 @@ boundary. Manual retry uses the same deadline without dispatching another
 command automatically.
 
 Manual retry first reads canonical thread detail and proceeds only while the
-selected thread is still failed. Historical typed engine failures expose the
+selected thread is still failed, or the same manual compaction is canonically failed or cancelled. Historical typed engine failures expose the
 same action; unknown effect outcomes never do. Floret validates the checkpoint
 and owns reuse of confirmed tool results. A failed or timed-out retry releases
 the button without starting queued work; another attempt confirms current
@@ -57,6 +57,8 @@ speculative explanation. Details include only allowed reason codes and canonical
 ThreadID/TurnID/RunID; raw requests, arguments, credentials and upstream error
 bodies never cross this boundary. A previous declined tool cannot hide a later
 independent failure.
+
+Manual compaction recovery has one handler for the latest status divider and the preparation-failure card. The status and compact refresh action are independent siblings in one responsive center group. Busy, disabled and Retrying compression derive from existing preparation and outbox ownership. Unknown delivery leaves the existing outbox recovery reachable and cannot create a second request. Canonical completion, permission changes, stale selection and read failure prevent stale dispatch; bounded waits release controls. The failure card supplies recovery only when there is no corresponding divider. Child Send permission remains distinct from explicit terminal recovery authority.
 
 Root and child failure cards share target-specific recovery. Child provider
 configuration opens the shared chat reader for that child before resolving its

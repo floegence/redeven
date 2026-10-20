@@ -4002,6 +4002,46 @@
   user-select: text;
 }
 
+.flower-compaction-divider-center {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: nowrap;
+  gap: 0.25rem;
+}
+
+.flower-compaction-divider-retry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 0.35rem;
+  background: transparent;
+  padding: 0;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+
+.flower-compaction-divider-retry:hover:not(:disabled) {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.flower-compaction-divider-retry:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.flower-compaction-divider-retry:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
 .flower-projection-unavailable {
   display: grid;
   width: 100%;

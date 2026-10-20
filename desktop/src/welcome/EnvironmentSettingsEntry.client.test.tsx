@@ -244,6 +244,11 @@ function accessEditor() {
   }
   return document.getElementById('local-ui-port') as HTMLInputElement;
 }
+async function waitForAccessEditor() {
+  await vi.waitFor(() => {
+    expect(document.getElementById('local-ui-port') || [...document.querySelectorAll('button')].find(entry => controlText(entry) === 'Change access')).toBeTruthy();
+  });
+}
 function input(id: string, value: string) {
   if (id === 'local-ui-port') accessEditor();
   const field = document.getElementById(id) as HTMLInputElement;
@@ -280,7 +285,7 @@ async function restartHarness() {
   const publish = (status: 'running' | 'succeeded' | 'failed' | 'canceled' = 'running') => {
     h.publish({ ...h.snapshot, action_progress: [restartProgress(jobs.at(-1)!.request, status)] });
   };
-  const open = async () => { button('Settings for Fixture SSH').click(); await settle(); button('Access & security').click(); await settle(); };
+  const open = async () => { button('Settings for Fixture SSH').click(); await settle(); button('Access & security').click(); await waitForAccessEditor(); };
   const submit = async () => { await open(); input('local-ui-port', '25000'); button('Save and restart').click(); await settle(); };
   return { ...h, get snapshot() { return h.snapshot; }, open, submit, jobs, progress: publish };
 }
@@ -306,7 +311,7 @@ describe('settings restart handoff', () => {
       }] });
       return restart.promise;
     });
-    button('Settings for Fixture SSH').click(); await settle(); button('Access & security').click(); await settle();
+    button('Settings for Fixture SSH').click(); await settle(); button('Access & security').click(); await waitForAccessEditor();
     input('local-ui-port', '25000'); button('Save and restart').click();
     await new Promise(resolve => setTimeout(resolve, 250));
     expect(document.querySelector('.redeven-environment-settings-dialog')).toBeNull();
@@ -338,8 +343,8 @@ describe('settings restart handoff', () => {
     h.publish({ ...h.snapshot, action_progress: [{ ...restartProgress(h.jobs[0].request, 'failed'), operation_key: 'old', started_at_unix_ms: 1 }] });
     await settle(); expect(progressPanel()?.textContent).not.toContain('Fixture restart failure');
     h.progress(); await settle();
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await finishMotion();
-    expect(progressPanel()).toBeNull();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await vi.waitFor(() => expect(progressPanel()).toBeNull());
     h.progress('succeeded'); h.jobs[0].resolve({ ok: true, outcome: 'restarted_environment_runtime' }); await settle();
     expect(progressPanel()).toBeNull();
     expect(h.performAction.mock.calls.some(([request]) => request.kind === 'cancel_launcher_operation')).toBe(false);
@@ -420,8 +425,8 @@ describe('settings restart handoff', () => {
   it('can reopen the saved restart result and its recovery navigation after dismissal', async () => {
     const h = await restartHarness(); await h.submit();
     h.progress('succeeded'); h.jobs[0].resolve({ ok: true, outcome: 'restarted_environment_runtime' }); await finishMotion();
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await finishMotion();
-    expect(progressPanel()).toBeNull();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await vi.waitFor(() => expect(progressPanel()).toBeNull());
     const trigger = document.querySelector<HTMLButtonElement>(`[data-owner-id="${id}"] .redeven-split-action-primary button`)!;
     trigger.click(); await settle();
     expect(trigger.getAttribute('aria-expanded')).toBe('true');
@@ -491,8 +496,11 @@ describe('settings entry asynchronous isolation', () => {
     const load = vi.fn().mockReturnValueOnce(old.promise).mockResolvedValue({ ok: false, error: 'Current target diagnostic' });
     await mount(load);
     button('Settings for Fixture SSH').click(); await settle();
-    button('Access & security').click(); await settle();
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Loading access settings');
+    button('Access & security').click();
+    await vi.waitFor(() => {
+      expect(load).toHaveBeenCalledTimes(1);
+      expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Loading access settings');
+    });
     await closeEditor();
     button(`Settings for ${label}`).click(); await settle();
     const dialog = document.querySelector('[role="dialog"]');
@@ -560,7 +568,7 @@ describe('settings entry asynchronous isolation', () => {
   });
   it('preserves an access draft while saving only a connection name', async () => {
     const h = await mount(async () => success);
-    button('Settings for Fixture SSH').click(); await settle(); button('Access & security').click(); await settle();
+    button('Settings for Fixture SSH').click(); await settle(); button('Access & security').click(); await waitForAccessEditor();
     input('local-ui-port', '25000'); button('Connection').click(); await settle(); input('ssh-settings-label', 'Renamed');
     h.performAction.mockImplementation(async () => {
       h.publish({ ...h.snapshot, environments: h.snapshot.environments.map(entry => entry.id === id ? { ...entry, label: 'Renamed' } : entry) });
@@ -622,7 +630,7 @@ describe('settings entry asynchronous isolation', () => {
     h.publish({ ...h.snapshot, environments: h.snapshot.environments.map(entry => entry.id === id ? {
       ...entry, runtime_operations: { ...entry.runtime_operations, restart: { ...entry.runtime_operations.restart, availability: 'available' } },
     } : entry) });
-    button('Settings for Fixture SSH').click(); await settle(); button('Access & security').click(); await settle();
+    button('Settings for Fixture SSH').click(); await settle(); button('Access & security').click(); await waitForAccessEditor();
     input('local-ui-port', '25000'); button('Save and restart').click(); await settle();
     await closeEditor(); button('Settings for Other SSH').click(); await settle();
     saved.resolve(success); await settle();
