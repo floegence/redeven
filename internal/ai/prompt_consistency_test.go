@@ -26,6 +26,7 @@ func TestFlowerPromptMatchesSelectedToolSurface(t *testing.T) {
 						t.Fatal(err)
 					}
 					prompt := surface.SystemPrompt
+					assertPromptNotContains(t, prompt, "Available tools for this request:")
 					for _, forbidden := range []string{"file.read", "Follow this workflow for every task", "# Mandatory Rules", "# Anti-Patterns", "# Common Workflows", "Do NOT repeat the same tool call with identical arguments", "Do NOT respond with only text when tools could answer", "rather than some sibling path"} {
 						assertPromptNotContains(t, prompt, forbidden)
 					}
@@ -56,7 +57,7 @@ func TestFlowerPromptMatchesSelectedToolSurface(t *testing.T) {
 
 func TestFlowerPromptSeparatesResearchFromInteractiveFallback(t *testing.T) {
 	prompt := buildPromptForToolSetTest(t, FlowerPermissionFullAccess, []ToolDef{{Name: "computer.screenshot"}, {Name: "web_fetch"}})
-	assertPromptContains(t, prompt, "For ordinary web research, use the available research tools directly")
+	assertPromptContains(t, prompt, "For ordinary web research, use supplied research capabilities")
 	assertPromptContains(t, prompt, "When replacing an explicitly requested interactive GUI task")
 	assertPromptNotContains(t, prompt, "Use web_fetch only when the user explicitly accepts")
 }

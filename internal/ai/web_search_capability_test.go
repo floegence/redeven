@@ -37,7 +37,7 @@ func TestDeepSeekGatewayRejectsHostedSearchBeforeDispatch(t *testing.T) {
 
 func TestHostedSearchPromptDoesNotDenyURLDiscovery(t *testing.T) {
 	section := buildPromptWebResearchCapabilitySection(promptRuntimeSnapshot{AvailableToolNames: "web_search, web_fetch"}).render()
-	if strings.Contains(section, "URL discovery is unavailable") || !strings.Contains(section, "Use web_search") {
+	if strings.Contains(section, "URL discovery is unavailable") || !strings.Contains(section, "Provider-hosted search is enabled; it is not a local function") {
 		t.Fatalf("hosted search contradicts prompt: %s", section)
 	}
 }

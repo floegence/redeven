@@ -25,6 +25,9 @@ preserving unfinished requirements. User deletion suppresses automatic recreatio
 for the same task; approvals, answers, retry, compaction and restart are not new
 tasks. Ordinary Fork inherits the Goal at its branch point and evolves independently.
 A delegated child manages its own mission Goal.
+Multi-stage work requiring verification normally uses a Goal; direct answers and
+short read-only checks normally do not. An existing unfinished Goal remains
+authoritative across continuation and context restoration.
 
 Explicit command submission delegates one atomic Goal update and idle-only Turn
 admission to Floret. New, idle, completed and user-stopped threads start work with
