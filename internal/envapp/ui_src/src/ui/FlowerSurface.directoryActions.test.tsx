@@ -35,7 +35,9 @@ async function fixture(overrides: Partial<FlowerSurfaceAdapter> = {}) {
   });
   await waitFor(() => Boolean(surface.querySelector('[data-thread-id="directory-a"] button')));
   (surface.querySelector('[data-thread-id="directory-a"] button') as HTMLButtonElement).click();
-  await waitFor(() => surface.querySelector('main')?.getAttribute('data-flower-selected-thread-loading') === 'false');
+  await waitFor(() => surface.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === a.thread_id
+    && !surface.querySelector('main')?.hasAttribute('data-flower-pending-thread-id')
+    && surface.querySelector('main')?.getAttribute('data-flower-selected-thread-loading') === 'false');
   return { surface, a, b, openFiles, openTerminal, loadThread };
 }
 
@@ -104,7 +106,9 @@ describe('Flower working directory actions', () => {
     });
     await waitFor(() => !!surface.querySelector('[data-thread-id="missing-directory"] button'));
     surface.querySelector<HTMLButtonElement>('[data-thread-id="missing-directory"] button')!.click();
-    await waitFor(() => surface.querySelector('main')?.getAttribute('data-flower-selected-thread-loading') === 'false');
+    await waitFor(() => surface.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === snapshot.thread_id
+      && !surface.querySelector('main')?.hasAttribute('data-flower-pending-thread-id')
+      && surface.querySelector('main')?.getAttribute('data-flower-selected-thread-loading') === 'false');
     const browse = surface.querySelector<HTMLButtonElement>('.flower-working-directory-browse')!;
     expect(browse.disabled).toBe(true);
     expect(browse.title).not.toContain('/home/test');
