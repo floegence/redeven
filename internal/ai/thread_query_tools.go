@@ -22,7 +22,7 @@ func builtInThreadQueryToolDefinitions() []ToolDef {
 		return map[string]any{"type": "object", "properties": properties, "additionalProperties": false}
 	}
 	text := object(map[string]any{"contains": str, "keywords": array, "any_keyword": map[string]any{"type": "boolean"}, "phrase": str, "case_sensitive": map[string]any{"type": "boolean"}})
-	instant := map[string]any{"type": "string", "format": "date-time", "description": "UTC RFC3339 instant; from inclusive, to exclusive"}
+	instant := map[string]any{"type": "string", "format": "date-time"}
 	timeRange := object(map[string]any{"from": instant, "to": instant})
 	fields := map[string]any{}
 	for _, key := range []string{"thread_ids", "parent_thread_ids", "turn_ids", "run_ids", "roles", "tool_names", "tool_kinds", "statuses", "activities", "outcomes"} {
@@ -35,6 +35,7 @@ func builtInThreadQueryToolDefinitions() []ToolDef {
 		fields[key] = timeRange
 	}
 	filter := object(fields)
+	filter["description"] = "Times use UTC RFC3339 ranges [from, to)."
 	queryKeys := []string{""}
 	for _, kind := range []threadquery.Object{threadquery.Threads, threadquery.Messages, threadquery.ToolCalls} {
 		for _, key := range threadQuerySortKeys("threads.query", kind) {
@@ -59,7 +60,7 @@ func builtInThreadQueryToolDefinitions() []ToolDef {
 		return ToolDef{Name: name, Description: description, InputSchema: toolSchemaRaw(schema), Visibility: ToolVisibilitySharedReadonly, Capabilities: []ToolCapabilityClass{ToolCapabilityReadonlyLocal}, Source: "builtin", Namespace: "builtin.threads", Priority: 100}
 	}
 	query := common(queryKeys, "By object: threads created/updated/title/thread_id; messages time/order; tool_calls time/completed/tool_name/elapsed. Omit or empty for the first key listed.")
-	query["sort"].(map[string]any)["properties"].(map[string]any)["descending"] = map[string]any{"type": "boolean", "default": true, "description": "Default true (descending)."}
+	query["sort"].(map[string]any)["properties"].(map[string]any)["descending"] = map[string]any{"type": "boolean", "default": true}
 	aggregate := common(append([]string{""}, threadQuerySortKeys("threads.aggregate", "")...), "Default key (group key); count sorts by group size.")
 	aggregate["group_by"] = map[string]any{"type": "string", "enum": []string{"", "thread", "role", "tool_name", "status", "day", "week", "month"}}
 	return []ToolDef{

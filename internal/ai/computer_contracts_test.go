@@ -69,7 +69,7 @@ func TestComputerNavigationDefinitionMatchesRuntimeAndPrompt(t *testing.T) {
 			t.Fatalf("navigation schema narrows native URLs: %+v", urlSchema)
 		}
 		prompt := renderPromptSections([]promptSection{buildPromptComputerUseCapabilitySection(promptRuntimeSnapshot{AvailableToolNames: "computer.screenshot,computer.targets,computer.select_target,computer.observe,computer.exec,browser.navigate"})})
-		for _, term := range []string{"file://", "Approval Required", "observe"} {
+		for _, term := range []string{"file://", "data:", "about:"} {
 			if !strings.Contains(strings.ToLower(definition.Description), strings.ToLower(term)) {
 				t.Fatalf("definition omits %q", term)
 			}

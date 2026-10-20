@@ -6,6 +6,8 @@
 
 ## 2026-10-19 — Concise Flower tool definitions
 
+- Further consolidate time-range descriptions, remove field-name restatements and keep observation/child guidance in one location; tighten final request budgets without changing tool inputs or execution.
+
 - Remove repeated policy, basic-concept explanations and schema restatements from host-owned tool descriptions. Retain custom APIs, cursor and effect semantics; measure the complete serialized definitions in the [prompt contract](ai/flower-prompt-and-rule-sources.md).
 
 ## 2026-10-19 — Yield tool output layout during floating interactions
