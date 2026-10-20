@@ -17,7 +17,9 @@ it never continues real user tasks. The short-detail P95 target is at least a
 selection feedback presented before transcript commit. These checks are local
 qualification, outside ordinary CI and hooks.
 
-# Measurement method
+# Contract
+
+## Measurement method
 
 Use the same machine, published dependencies, synthetic dataset and build mode
 for each comparison. Run Go with GOWORK=off. The paired backend benchmark uses
@@ -42,7 +44,18 @@ updates and abandoned reads; exact dispatch, completion and cancellation counts
 must match. All measurements and owned-process cleanup appear in session
 artifacts. Keep artifacts locally; never commit user databases or credentials.
 
-# Recorded results
+# Boundaries
+
+Measurements use synthetic conversations and copied released-writer fixtures.
+They do not authorize continuing real user tasks or establish production latency.
+Backend point-read timings and the loopback transport fixture are separate
+experiments; their durations must not be added. Large-transcript layout retains
+its own measured cost. These explicit qualification suites stay outside ordinary
+CI and hooks.
+
+# Evidence
+
+## Recorded results
 
 Apple M5 Pro, macOS arm64, Go 1.27.2, Node 26.7.0; synthetic paired samples:
 
@@ -74,7 +87,7 @@ to a different real dataset. No claim converts those observations to the
 synthetic after values. The structural no-root-list regression and paired
 scaling comparison establish the removed unrelated-history work.
 
-# Reproduction and regression
+## Reproduction and regression
 
 Run explicitly from the repository root:
 
@@ -97,7 +110,7 @@ latest main and qualify overlapping Goal, read-state and scroll behavior before
 push. Private baseline frames are explicitly validated before shared-frame
 assertions; tests never discard arbitrary frames to pass.
 
-# Evidence
+## Source evidence
 
 - [Point summary regression](../../internal/ai/threads_list_summary_test.go)
 - [Paired backend benchmark](../../internal/ai/thread_detail_performance_test.go)

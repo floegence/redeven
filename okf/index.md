@@ -11,6 +11,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Flower startup and recovery presentation](architecture/flower-startup-presentation.md) - Keep drafts, navigation, stop and retry usable throughout preparation.
 - [Flower startup performance acceptance](operations/flower-startup-performance.md) - Record published-module and complete product startup, memory, disk and query measurements.
 - [Flower conversation switch qualification](operations/flower-thread-switch-qualification.md) - Reproduce point-read scaling, cancellable demand and actual sidebar feedback with synthetic data.
+- [Flower conversation selection and detail reads](ui/flower-thread-selection.md) — Deferred navigation, shared reads, cancellation and recovery.
 
 - [Control-plane capacity qualification](operations/controlplane-capacity-qualification.md) - Measure enrolled control sessions, dynamic heartbeat policy, and real Gateway recovery on independent load hosts.
 

@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-19 — Focused Flower selection and detail-read contract
+
+- Separate selection, bounded detail demand and cancellation from sidebar row and pin presentation; keep qualification contracts, boundaries and measurements explicit. See [selection and detail reads](ui/flower-thread-selection.md).
+
 ## 2026-10-19 — Consolidated Flower system instructions
 
 - Remove repeated language, image/schema tutorials, basic tool usage and per-surface recovery rules. Keep one shared recovery policy and retain product interaction boundaries; tighten system and combined request budgets without growing tool definitions. See [prompt contracts](ai/flower-prompt-and-rule-sources.md).
