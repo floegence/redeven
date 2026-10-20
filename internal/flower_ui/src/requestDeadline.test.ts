@@ -60,3 +60,11 @@ it('releases superseded reads immediately and never starts an already aborted re
   expect(operation).not.toHaveBeenCalled();
   expect(vi.getTimerCount()).toBe(0);
 });
+
+it('aborts the transport on timeout while retaining the timeout classification', async () => {
+  vi.useFakeTimers(); let signal!: AbortSignal;
+  const pending = withFlowerReadDeadline(value => { signal = value; return new Promise(() => {}); }, 'read timeout');
+  const rejected = expect(pending).rejects.toThrow('read timeout');
+  await vi.advanceTimersByTimeAsync(15_000); await rejected;
+  expect(signal.aborted).toBe(true); expect(vi.getTimerCount()).toBe(0);
+});

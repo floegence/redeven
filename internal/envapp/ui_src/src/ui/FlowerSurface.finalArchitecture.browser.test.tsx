@@ -2182,12 +2182,7 @@ describe('Flower final thread cache and workspace transport', () => {
         message: 'private invalid control payload',
       },
     });
-    const retryThread = vi.fn(async () => liveBootstrap(thread({
-      ...failed,
-      status: 'running',
-      error: undefined,
-      active_run_id: 'run-retry',
-    })));
+    const retryThread = vi.fn(async () => {});
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [failed]),

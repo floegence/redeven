@@ -475,6 +475,7 @@ func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderC
 	}
 	defer live.Close()
 	_ = nextFlowerLiveStreamFrame(t, live)
+	assertFlowerViewerReadBaseline(t, live, thread.ThreadID)
 	baseline := nextFlowerLiveStreamFrame(t, live)
 	var baselineEnvelope FlowerLiveStreamEnvelope
 	if err := json.Unmarshal(baseline.Data, &baselineEnvelope); err != nil {

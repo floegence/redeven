@@ -1,3 +1,4 @@
+export const CANCEL_RUNTIME_FLOWER_READ_CHANNEL = 'redeven-desktop:runtime-flower-read-cancel';
 export const REQUEST_RUNTIME_FLOWER_CHANNEL = 'redeven-desktop:runtime-flower-request';
 export const START_RUNTIME_FLOWER_STREAM_CHANNEL = 'redeven-desktop:runtime-flower-stream-start';
 export const CANCEL_RUNTIME_FLOWER_STREAM_CHANNEL = 'redeven-desktop:runtime-flower-stream-cancel';
@@ -11,6 +12,7 @@ export const RUNTIME_FLOWER_TOOL_IMAGE_PATH = /^\/_redeven_proxy\/api\/ai\/threa
 export type RuntimeFlowerRequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export type RuntimeFlowerRequest = Readonly<{
+  read_id?: string;
   method: RuntimeFlowerRequestMethod;
   path: string;
   body?: unknown;
@@ -103,4 +105,13 @@ export function normalizeRuntimeFlowerStreamEvent(value: unknown): RuntimeFlower
     return message ? { stream_id: streamID, kind: 'error', message: message.slice(0, 1_000) } : null;
   }
   return null;
+}
+
+export function normalizeRuntimeFlowerReadID(value: unknown): string | null {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{1,100}$/u.test(value) ? value : null;
+}
+
+export function isRuntimeFlowerDetailRead(request: RuntimeFlowerRequest): boolean {
+  return request.method === 'GET' && /^\/_redeven_proxy\/api\/ai\/threads\/[A-Za-z0-9_-]+$/u.test(request.path)
+    && request.body === undefined && request.staging_scope_id === undefined && request.staging_capability === undefined;
 }

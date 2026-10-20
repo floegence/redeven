@@ -63,6 +63,8 @@ describe('bootstrapDesktopSettingsBridge', () => {
       path: '/_redeven_proxy/api/ai/flower/stream?thread_id=thread-1',
     });
     bridge.cancelRuntimeFlowerStream('stream-1');
+    bridge.cancelRuntimeFlowerRead('read-1');
+    expect(ipcRendererSend).toHaveBeenCalledWith('redeven-desktop:runtime-flower-read-cancel', 'read-1');
     const digest = 'a'.repeat(64);
     await bridge.prepareRuntimeFlowerAttachment({
       operation_id: 'operation-1', upload_request_id: 'upload-1', staging_scope_id: 'staging-1', staging_capability: 'secret-1', source: 'uploaded_file',
@@ -109,6 +111,7 @@ describe('bootstrapDesktopSettingsBridge', () => {
     expect(Object.keys(bridge).sort()).toEqual([
       'cancel',
       'cancelRuntimeFlowerAttachment',
+      'cancelRuntimeFlowerRead',
       'cancelRuntimeFlowerStream',
       'certificate',
       'commitRuntimeFlowerAttachment',

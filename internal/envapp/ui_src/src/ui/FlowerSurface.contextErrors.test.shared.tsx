@@ -13,10 +13,11 @@ describe('Flower context failure recovery', () => {
     ['context_compaction_limit', 'The conversation still exceeds'],
   ])('explains %s and exposes deliberate recovery without automatic retry', async (code, guidance) => {
     const failed = thread({ status: 'failed', error: { code, message: 'raw engine message', detail } });
+    let current = liveBootstrap(failed);
     const pending = deferred<ReturnType<typeof liveBootstrap>>();
-    const retryThread = vi.fn(() => pending.promise);
+    const retryThread = vi.fn(async () => { current = await pending.promise; });
     const surface = renderSurfaceWithAdapter({
-      ...adapter(true), listThreads: vi.fn(async () => [failed]), loadThread: vi.fn(async () => liveBootstrap(failed)), retryThread,
+      ...adapter(true), listThreads: vi.fn(async () => [failed]), loadThread: vi.fn(async () => current), retryThread,
     });
     await waitFor(() => Boolean(surface.querySelector('[data-thread-id="thread-1"] button')));
     surface.querySelector<HTMLButtonElement>('[data-thread-id="thread-1"] button')!.click();
@@ -73,12 +74,13 @@ describe('Flower provider failure recovery', () => {
   ])('shows concise %s guidance and copyable diagnostics', async (code, guidance, action) => {
     const diagnosticDetail = code === 'provider_upstream_rate_limited' ? upstreamDetail : providerDetail;
     const failed = thread({ status: 'failed', error: { code, message: 'raw provider text must stay private', detail: diagnosticDetail } });
-    const retryThread = vi.fn(async () => liveBootstrap(thread({ status: 'idle', error: undefined }), 2));
+    let current = liveBootstrap(failed);
+    const retryThread = vi.fn(async () => { current = liveBootstrap(thread({ status: 'idle', error: undefined }), 2); });
     const writeText = vi.fn(async () => undefined);
     const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     try {
-      const surface = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [failed]), loadThread: vi.fn(async () => liveBootstrap(failed)), retryThread });
+      const surface = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [failed]), loadThread: vi.fn(async () => current), retryThread });
       await waitFor(() => Boolean(surface.querySelector('[data-thread-id="thread-1"] button')));
       surface.querySelector<HTMLButtonElement>('[data-thread-id="thread-1"] button')!.click();
       await waitFor(() => Boolean(surface.querySelector('.flower-error-card')));
@@ -106,9 +108,10 @@ describe('Flower provider failure recovery', () => {
     const i18n = createTestI18nHelpers(locale);
     const copy = createLocalizedFlowerSurfaceCopy({ locale, t: (key, params) => i18n.t(key as EnvAppTranslationKey, params), tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params) });
     const failed = thread({ status: 'failed', error: { code: 'provider_upstream_rate_limited', message: 'raw provider text', detail: upstreamDetail } });
+    let current = liveBootstrap(failed);
     const pending = deferred<ReturnType<typeof liveBootstrap>>();
-    const retryThread = vi.fn(() => pending.promise);
-    const surface = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [failed]), loadThread: vi.fn(async () => liveBootstrap(failed)), retryThread }, { copy, focusThreadRequest: { request_id: 'upstream-limit', thread_id: failed.thread_id } });
+    const retryThread = vi.fn(async () => { current = await pending.promise; });
+    const surface = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [failed]), loadThread: vi.fn(async () => current), retryThread }, { copy, focusThreadRequest: { request_id: 'upstream-limit', thread_id: failed.thread_id } });
     await waitFor(() => Boolean(surface.querySelector('.flower-error-card')));
     const card = surface.querySelector<HTMLElement>('.flower-error-card')!;
     expect(card.querySelector('.flower-error-message')?.textContent).toContain(reason);
@@ -135,8 +138,9 @@ describe('Flower upstream error messages', () => {
     const reason = 'The model is overloaded. Please retry shortly.';
     const diagnostic = JSON.stringify({ provider: 'openai', http_status: 500, message: reason, response_shape: 'standard_error' });
     const failed = thread({ status: 'failed', error: { code: 'provider_server_error', message: 'controlled fallback', detail: diagnostic } });
-    const retryThread = vi.fn(async () => liveBootstrap(thread({ status: 'idle', error: undefined }), 2));
-    const surface = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [failed]), loadThread: vi.fn(async () => liveBootstrap(failed)), retryThread }, { copy, focusThreadRequest: { request_id: 'server-error', thread_id: failed.thread_id } });
+    let current = liveBootstrap(failed);
+    const retryThread = vi.fn(async () => { current = liveBootstrap(thread({ status: 'idle', error: undefined }), 2); });
+    const surface = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [failed]), loadThread: vi.fn(async () => current), retryThread }, { copy, focusThreadRequest: { request_id: 'server-error', thread_id: failed.thread_id } });
     await waitFor(() => Boolean(surface.querySelector('.flower-error-card')));
     const card = surface.querySelector<HTMLElement>('.flower-error-card')!;
     expect(card.querySelector('.flower-error-message')?.textContent).toBe(reason);

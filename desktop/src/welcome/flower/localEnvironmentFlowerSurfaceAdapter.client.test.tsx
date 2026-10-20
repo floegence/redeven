@@ -136,6 +136,7 @@ function bridgeFor(handler: (request: RuntimeFlowerRequest) => unknown | Promise
 
 function attachmentBridgeStubs() {
   return {
+    cancelRuntimeFlowerRead: vi.fn(),
     load: vi.fn(async () => ({ ok: false as const, error: 'No access fixture' })),
     startRuntimeFlowerStream: vi.fn(async () => ({ ok: true as const, status: 200, content_type: 'text/event-stream' })),
     cancelRuntimeFlowerStream: vi.fn(),
@@ -1224,10 +1225,9 @@ describe('Local Environment Flower surface adapter', () => {
 
     const detail = await adapter.retryThread(' thread-1 ');
 
-    expect(detail.thread.status).toBe('running');
+    expect(detail).toBeUndefined();
     expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
       'POST /_redeven_proxy/api/ai/threads/thread-1/retry',
-      'GET /_redeven_proxy/api/ai/threads/thread-1',
     ]);
     expect(calls[0].body).toEqual({});
   });
@@ -1250,14 +1250,11 @@ describe('Local Environment Flower surface adapter', () => {
     await adapter.deleteQueuedTurn?.('thread /1', 'queue /2');
     const bootstrap = await adapter.sendQueuedTurnNow?.('thread /1', 'queue /3');
 
-    expect(bootstrap?.thread.queued_turns).toEqual([]);
+    expect(bootstrap).toBeUndefined();
     expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
       'PATCH /_redeven_proxy/api/ai/threads/thread%20%2F1/queue/order',
-      'GET /_redeven_proxy/api/ai/threads/thread%20%2F1',
       'DELETE /_redeven_proxy/api/ai/threads/thread%20%2F1/queue/queue%20%2F2',
-      'GET /_redeven_proxy/api/ai/threads/thread%20%2F1',
       'POST /_redeven_proxy/api/ai/threads/thread%20%2F1/queue/queue%20%2F3/send-now',
-      'GET /_redeven_proxy/api/ai/threads/thread%20%2F1',
     ]);
     expect(calls[0].body).toEqual({ ordered_queue_ids: ['queue /2', 'queue /3'] });
   });
@@ -1346,7 +1343,7 @@ describe('Local Environment Flower surface adapter', () => {
     });
     const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
 
-    const snapshot = await adapter.loadThread('thread-1');
+    const snapshot = await adapter.loadThread('thread-1', new AbortController().signal);
 
     expect(snapshot.thread.status).toBe('running');
     expect(snapshot.thread.messages[0]).toMatchObject({
@@ -1733,4 +1730,32 @@ it('loads saved tool previews through the exact scoped Desktop route', async () 
   });
   const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
   await expect(adapter.loadToolPreview!({ thread_id: 'thread-1', turn_id: 'turn-1', run_id: 'run-1', tool_call_id: 'call-1' })).resolves.toEqual(preview);
+});
+
+it('cancels only the active detail IPC and ignores a late unmappable response', async () => {
+  let finish!: (result: { ok: true; data: unknown }) => void;
+  const bridge = bridgeFor(() => { throw new Error('unexpected mapping'); });
+  const request = vi.fn((_input: RuntimeFlowerRequest) => new Promise<{ ok: true; data: unknown }>(resolve => { finish = resolve; }));
+  const cancel = vi.fn();
+  const adapter = createLocalEnvironmentFlowerSurfaceAdapter({ ...bridge, requestRuntimeFlower: request, cancelRuntimeFlowerRead: cancel });
+  const controller = new AbortController();
+  const result = adapter.loadThread('thread-1', controller.signal);
+  const rejected = expect(result).rejects.toMatchObject({ name: 'AbortError' });
+  expect(request).toHaveBeenCalledOnce();
+  const readID = request.mock.calls[0]![0].read_id;
+  expect(readID).toEqual(expect.any(String));
+  controller.abort();
+  await rejected;
+  expect(cancel).toHaveBeenCalledExactlyOnceWith(readID);
+  finish({ ok: true, data: { invalid: 'late response must not be mapped' } });
+  await Promise.resolve();
+  expect(cancel).toHaveBeenCalledTimes(1);
+});
+
+it('does not dispatch a detail read that was already cancelled', async () => {
+  const bridge = bridgeFor(() => ({}));
+  const controller = new AbortController(); controller.abort();
+  await expect(createLocalEnvironmentFlowerSurfaceAdapter(bridge).loadThread('thread-1', controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
+  expect(bridge.requestRuntimeFlower).not.toHaveBeenCalled();
+  expect(bridge.cancelRuntimeFlowerRead).not.toHaveBeenCalled();
 });

@@ -72,7 +72,7 @@ export function streamingFixture(messageCount = 72, toolCount = 20) {
       }
       finally { signal.removeEventListener('abort', abort); }
     },
-    deleteQueuedTurn: async (_threadID, queueID) => { calls.delete += 1; current = { ...current, view_version: current.view_version + 1, queue: current.queue?.filter((item) => item.id !== queueID) }; return { thread: applyFlowerRuntimeCurrentView(thread, current), current }; },
+    deleteQueuedTurn: async (_threadID, queueID) => { calls.delete += 1; current = { ...current, view_version: current.view_version + 1, queue: current.queue?.filter((item) => item.id !== queueID) }; },
     openMessageFile: async () => { calls.preview += 1; },
     readTerminalProcess: async () => { calls.terminal += 1; return new Promise(() => undefined); },
   };

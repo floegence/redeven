@@ -1,3 +1,4 @@
+import { createRuntimeFlowerReadOwner, awaitRuntimeFlowerRead } from './runtimeFlowerReadOwner';
 import { retainDesktopRuntimePlatformFacts } from './desktopRuntimePlatformFacts';
 import { ManagedWebEntranceNavigation, redactManagedEntranceAddress, applyManagedWebEntrance } from './managedWebEntranceNavigation';
 import { completeTessivenRuntimeHandoff } from './tessivenRuntimeHandoff';
@@ -295,6 +296,7 @@ import {
   runtimeFlowerComputerFrame,
   runtimeFlowerToolImage,
   runtimeFlowerMessageFile,
+  requestRuntimeFlowerWithAccess,
 	runtimeFlowerInvalidJSONError,
   type RuntimeFlowerHTTPResponse,
 } from './runtimeFlowerHTTP';
@@ -517,6 +519,7 @@ import {
 import {
   CANCEL_RUNTIME_FLOWER_STREAM_CHANNEL,
   REQUEST_RUNTIME_FLOWER_CHANNEL,
+  CANCEL_RUNTIME_FLOWER_READ_CHANNEL,
   RUNTIME_FLOWER_COMPUTER_MEDIA_PATH,
   RUNTIME_FLOWER_TOOL_IMAGE_PATH,
   RUNTIME_FLOWER_STREAM_EVENT_CHANNEL,
@@ -11650,25 +11653,34 @@ async function openTessivenManagedService(source: RuntimeFlowerTarget, data: unk
   return true;
 }
 
-async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<RuntimeFlowerRequestResult> {
+const runtimeFlowerReads = createRuntimeFlowerReadOwner();
+
+async function requestRuntimeFlower(request: RuntimeFlowerRequest, signal?: AbortSignal): Promise<RuntimeFlowerRequestResult> {
   const method = runtimeFlowerMethod(request.method);
   const path = runtimeFlowerPath(request.path);
   if (!runtimeFlowerMethodAllowed(path, method)) {
     throw new Error('Flower runtime request method is not allowed for this path.');
   }
+  signal?.throwIfAborted();
   const browserInstallation = path === '/_redeven_proxy/api/ai/computer/managed/browser';
   const sourceIcon = new URL(path, 'http://runtime-flower.local').pathname === '/_redeven_proxy/api/flower/source-icon';
-  const flowerTarget = browserInstallation || sourceIcon ? await runningBrowserFlowerTarget() : await withRuntimeFlowerTimeout(
+  const flowerTarget = browserInstallation || sourceIcon ? await runningBrowserFlowerTarget() : await awaitRuntimeFlowerRead(withRuntimeFlowerTimeout(
     ensureRuntimeFlowerRecord(!isTessivenRuntimePath(path) && !isRuntimeFlowerReadinessPath(path)),
     RUNTIME_FLOWER_READINESS_TIMEOUT_MS,
     'runtime_flower_readiness_timeout',
     'Desktop could not prepare the Runtime for Flower in time.',
-  );
+  ), signal);
+  signal?.throwIfAborted();
   if (!flowerTarget || (request.environment_id && request.environment_id !== flowerTarget.record.environment_id)) {
     throw new Error('The browser installation environment session has ended.');
   }
-  const lease = await retainRuntimeFlowerTarget(flowerTarget, 'flower-request', !sourceIcon && !isTessivenRuntimePath(path) && !isRuntimeFlowerReadinessPath(path));
+  const leaseRequest = retainRuntimeFlowerTarget(flowerTarget, 'flower-request', !sourceIcon && !isTessivenRuntimePath(path) && !isRuntimeFlowerReadinessPath(path));
+  const lease = await awaitRuntimeFlowerRead(leaseRequest, signal).catch(error => {
+    if (signal?.aborted) void leaseRequest.then(late => late?.release()).catch(() => console.warn('Flower cancelled read could not release its late Runtime lease.'));
+    throw error;
+  });
   try {
+  signal?.throwIfAborted();
   const record = flowerTarget.record;
   const url = new URL(path, runtimeFlowerBaseURL(record));
   const environment = flowerTarget.local_environment;
@@ -11703,28 +11715,19 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
       ...(!isStagingRelease ? { 'Upload-Staging-Scope-ID': stagingScopeID } : {}),
     } : {}),
   });
-  let accessHeaders = withStagingCapability(await runtimeFlowerAccessHeaders(record, environment));
-  let response: RuntimeFlowerHTTPResponse;
-  try {
-    response = await runtimeFlowerRequestHTTP(url, { ...request, method, path }, {
-      headers: accessHeaders,
-      timeoutMs: runtimeFlowerBootstrapTimeout(path, method),
-    });
-  } catch (error) {
-    throw new RuntimeFlowerTransportError(error);
-  }
-  if (response.status === 423) {
-    runtimeFlowerAccessCookies.delete(runtimeFlowerBaseURL(record));
-    accessHeaders = withStagingCapability(await runtimeFlowerAccessHeaders(record, environment));
-    try {
-      response = await runtimeFlowerRequestHTTP(url, { ...request, method, path }, {
-        headers: accessHeaders,
-        timeoutMs: runtimeFlowerBootstrapTimeout(path, method),
-      });
-    } catch (error) {
-      throw new RuntimeFlowerTransportError(error);
-    }
-  }
+  const response = await requestRuntimeFlowerWithAccess({
+    signal,
+    authorize: async () => withStagingCapability(await runtimeFlowerAccessHeaders(record, environment)),
+    invalidateAccess: () => { runtimeFlowerAccessCookies.delete(runtimeFlowerBaseURL(record)); },
+    request: async headers => {
+      try {
+        return await runtimeFlowerRequestHTTP(url, { ...request, method, path }, {
+          headers, signal, timeoutMs: runtimeFlowerBootstrapTimeout(path, method),
+        });
+      } catch (error) { throw new RuntimeFlowerTransportError(error); }
+    },
+  });
+  signal?.throwIfAborted();
   if (method === 'GET' && /^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+$/u.test(requestPathname) && url.searchParams.get('preview') === '1' && response.status === 200) {
     return { ok: true, data: runtimeFlowerMessageAttachment(response) };
   }
@@ -19836,9 +19839,9 @@ if (!app.requestSingleInstanceLock()) {
         }));
     } catch (error) { return environmentSettingsFailure(error); }
   });
-  ipcMain.handle(REQUEST_RUNTIME_FLOWER_CHANNEL, async (_event, request: RuntimeFlowerRequest): Promise<RuntimeFlowerRequestResult> => {
+  ipcMain.handle(REQUEST_RUNTIME_FLOWER_CHANNEL, async (event, request: RuntimeFlowerRequest): Promise<RuntimeFlowerRequestResult> => {
     try {
-      return await requestRuntimeFlower(request);
+      return await runtimeFlowerReads.run(event.sender, request, signal => requestRuntimeFlower(request, signal), event.senderFrame ? event.senderFrame.processId + ':' + event.senderFrame.frameToken : '');
     } catch (error) {
       return {
         ok: false,
@@ -19846,6 +19849,9 @@ if (!app.requestSingleInstanceLock()) {
         failureKind: error instanceof RuntimeFlowerTransportError ? 'transport_unknown' : 'local',
       };
     }
+  });
+  ipcMain.on(CANCEL_RUNTIME_FLOWER_READ_CHANNEL, (event, readID) => {
+    runtimeFlowerReads.cancel(event.sender, readID, event.senderFrame ? event.senderFrame.processId + ':' + event.senderFrame.frameToken : '');
   });
   ipcMain.handle(START_RUNTIME_FLOWER_STREAM_CHANNEL, async (event, request): Promise<RuntimeFlowerStreamStartResult> => (
     startRuntimeFlowerStream(event.sender, request)

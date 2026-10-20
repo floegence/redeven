@@ -423,7 +423,7 @@ describe('Env local Flower surface adapter', () => {
     expect(fs.list).toHaveBeenCalledExactlyOnceWith({ path: '/Volumes/team', showHidden: true });
   });
 
-	it('deletes a canonical queued turn through the queue route before reloading detail', async () => {
+	it('deletes a canonical queued turn through the queue route without a hidden read', async () => {
 		fetchMock
 			.mockResolvedValueOnce(jsonResponse({ ok: true }))
 			.mockResolvedValueOnce(jsonResponse(liveBootstrap('thread/delete', 'running')));
@@ -439,10 +439,7 @@ describe('Env local Flower surface adapter', () => {
 			'/_redeven_proxy/api/ai/threads/thread%2Fdelete/queue/queue%2Fmiddle',
 			expect.objectContaining({ method: 'DELETE' }),
 		);
-			expect(fetchMock).toHaveBeenNthCalledWith(2,
-				'/_redeven_proxy/api/ai/threads/thread%2Fdelete',
-			expect.objectContaining({ method: 'GET' }),
-		);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 
   it('prepares resources before conditionally taking a queued message back', async () => {
@@ -459,7 +456,7 @@ describe('Env local Flower surface adapter', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/_redeven_proxy/api/ai/threads/thread%2Fdraft/queue/queue%2Ffirst/take-back', expect.objectContaining({ method: 'POST', body: JSON.stringify({ expected_input_fingerprint: fingerprint }) }));
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
-	it('sends one canonical queued turn now through the send-now route before reloading detail', async () => {
+	it('sends one canonical queued turn now through the send-now route without a hidden read', async () => {
 		fetchMock
 			.mockResolvedValueOnce(jsonResponse({ ok: true }))
 			.mockResolvedValueOnce(jsonResponse(liveBootstrap('thread/send-now', 'running')));
@@ -475,10 +472,7 @@ describe('Env local Flower surface adapter', () => {
 			'/_redeven_proxy/api/ai/threads/thread%2Fsend-now/queue/queue%2Ffirst/send-now',
 			expect.objectContaining({ method: 'POST' }),
 		);
-		expect(fetchMock).toHaveBeenNthCalledWith(2,
-			'/_redeven_proxy/api/ai/threads/thread%2Fsend-now',
-			expect.objectContaining({ method: 'GET' }),
-		);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 
 	it('does not retain the legacy live polling transport', () => {
@@ -1201,7 +1195,7 @@ describe('Env local Flower surface adapter', () => {
       rpc: { ai: {} } as any,
     });
 
-    const mapped = await adapter.loadThread('thread_context');
+    const mapped = await adapter.loadThread('thread_context', new AbortController().signal);
 
     expect(mapped.current.view_version).toBe(11);
     expect(mapped.thread.status).toBe('running');
@@ -1258,11 +1252,8 @@ describe('Env local Flower surface adapter', () => {
       '/_redeven_proxy/api/ai/threads/thread_retry/retry',
       expect.objectContaining({ method: 'POST', body: '{}' }),
     );
-    expect(fetchMock).toHaveBeenNthCalledWith(2,
-      '/_redeven_proxy/api/ai/threads/thread_retry',
-      expect.objectContaining({ method: 'GET' }),
-    );
-    expect(bootstrap.thread.status).toBe('running');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(bootstrap).toBeUndefined();
   });
 
   it('deletes a thread with force through the synchronous contract', async () => {

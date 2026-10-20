@@ -20,7 +20,7 @@ it.each([[1100, 'stop'], [420, 'stop'], [1100, 'success'], [1100, 'failure'], [4
   let version = 1;
   const other = thread({ thread_id: 'other-thread', title: 'Other chat during recovery' });
   const [focus, setFocus] = createSignal({ request_id: 'focus-retry', thread_id: threadID });
-  const retryThread = vi.fn(async () => liveBootstrap(selected, version));
+  const retryThread = vi.fn(async () => undefined);
   const base = { ...adapter(true), retryThread, listThreads: vi.fn(async () => [selected, other]), loadThread: vi.fn(async (id: string) => liveBootstrap(id === other.thread_id ? other : selected, version)),
     async *connectLiveStream({ signal }: { signal: AbortSignal }) {
       yield { schema_version: 1 as const, kind: 'ready' as const, summaries: [selected] };

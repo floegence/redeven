@@ -1026,7 +1026,7 @@ describe('FlowerSurface navigation', () => {
     const latestA = deferred<ReturnType<typeof liveBootstrap>>();
     const lateB = deferred<ReturnType<typeof liveBootstrap>>();
     let aLoads = 0;
-    const loadThread = vi.fn((threadID: string) => {
+    const loadThread = vi.fn((threadID: string, _signal: AbortSignal) => {
       if (threadID === summaryA.thread_id) {
         aLoads += 1;
         return aLoads === 1 ? staleA.promise : latestA.promise;
@@ -1049,6 +1049,7 @@ describe('FlowerSurface navigation', () => {
     await waitFor(() => loadThread.mock.calls.some(([threadID]) => threadID === summaryA.thread_id));
 
     button(summaryB.thread_id).click();
+    expect(loadThread.mock.calls[0]![1].aborted).toBe(true);
     await flush();
     button(summaryA.thread_id).click();
     staleA.resolve(liveBootstrap(thread({
@@ -1114,15 +1115,16 @@ describe('FlowerSurface navigation', () => {
       queued_turn_count: 2,
       queued_turns: [first, second],
     });
-    const reorderQueuedTurns = vi.fn(async (_threadID: string, orderedQueueIDs: readonly string[]) => liveBootstrap(thread({
+    let current = liveBootstrap(queuedThread, 1);
+    const reorderQueuedTurns = vi.fn(async (_threadID: string, orderedQueueIDs: readonly string[]) => { current = liveBootstrap(thread({
       ...queuedThread,
       queued_turns: orderedQueueIDs.map((queueID) => queueID === first.queue_id ? first : second),
       updated_at_ms: queuedThread.updated_at_ms + 1,
-    }), 2));
+    }), 2); });
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [queuedThread]),
-      loadThread: vi.fn(async () => liveBootstrap(queuedThread, 1)),
+      loadThread: vi.fn(async () => current),
       reorderQueuedTurns,
     });
 
@@ -1286,7 +1288,7 @@ describe('FlowerSurface navigation', () => {
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
 
     await waitFor(() => loadThread.mock.calls.length === 1);
-    expect(loadThread).toHaveBeenCalledWith(threadID);
+    expect(loadThread).toHaveBeenCalledWith(threadID, expect.any(AbortSignal));
     await waitFor(() => runtime.querySelector(`[data-flower-message-id="user:${acceptedRequestID}"]`) !== null);
     expect(runtime.querySelector(`[data-thread-id="${threadID}"]`)).not.toBeNull();
     expect(runtime.querySelector('[data-flower-transport-outbox-id]')).toBeNull();
@@ -1596,9 +1598,10 @@ describe('FlowerSurface navigation', () => {
     const failed = thread({ thread_id: 'thread-context-source', status: 'failed',
       error: { code: 'model_context_unavailable', message: 'collection failed', detail: 'Skill catalog source cannot be read.' } });
     const another = thread({ thread_id: 'thread-context-other', title: 'Another conversation' });
-    const retryThread = vi.fn(async () => liveBootstrap(thread({ ...failed, status: 'success', error: undefined })));
+    let current = liveBootstrap(failed);
+    const retryThread = vi.fn(async () => { current = liveBootstrap(thread({ ...failed, status: 'success', error: undefined }), 2); });
     const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [failed, another]),
-      loadThread: vi.fn(async (id: string) => liveBootstrap(id === failed.thread_id ? failed : another)), retryThread });
+      loadThread: vi.fn(async (id: string) => id === failed.thread_id ? current : liveBootstrap(another)), retryThread });
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-context-source"] button')));
     (runtime.querySelector('[data-thread-id="thread-context-source"] button') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-error-card')));

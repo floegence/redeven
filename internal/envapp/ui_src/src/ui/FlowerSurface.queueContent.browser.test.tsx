@@ -26,7 +26,7 @@ function view(version = 2): FlowerThreadView {
 const capability: FlowerAttachmentCapability = { model_id: 'openai/gpt-5.2', revision: 'queue-capability', enabled: true, supports_long_text: true, max_attachments: 10, max_file_size_bytes: 1_000_000, max_total_size_bytes: 2_000_000, routes: { 'image/png': 'native_full_content', 'text/plain': 'tool_read' } };
 async function mount(extra: Partial<FlowerSurfaceAdapter> = {}) {
  await page.viewport(900, 800);
- const surface = renderSurfaceWithAdapter({ ...adapter(true), loadSettings: async () => withModelDirectoryFixture(await adapter(true).loadSettings()), listThreads: vi.fn(async () => [initial]), loadThread: vi.fn(async () => view()), loadAttachmentCapability: vi.fn(async () => capability), createAttachmentStagingScope: vi.fn(async () => ({ staging_scope_id: 'scope', target_id: 'local', capability: 'capability', expires_at_unix_ms: Date.now() + 60_000 })), uploadAttachment: vi.fn(async input => ({ attachment_id: `new-${input.file.name}`, name: input.file.name, mime_type: input.file.type, size_bytes: input.file.size, digest_sha256: 'b'.repeat(64), locator: 'staged', source: 'file' as const, capability_revision: capability.revision })), ...extra });
+ const surface = renderSurfaceWithAdapter({ ...adapter(true), loadSettings: async () => withModelDirectoryFixture(await adapter(true).loadSettings()), listThreads: vi.fn(async () => [initial]), loadThread: vi.fn(async () => view()), loadAttachmentCapability: vi.fn(async () => capability), createAttachmentStagingScope: vi.fn(async targetID => ({ staging_scope_id: 'scope', target_id: targetID!, capability: 'capability', expires_at_unix_ms: Date.now() + 60_000 })), uploadAttachment: vi.fn(async input => ({ attachment_id: `new-${input.file.name}`, name: input.file.name, mime_type: input.file.type, size_bytes: input.file.size, digest_sha256: 'b'.repeat(64), locator: 'staged', source: 'file' as const, capability_revision: capability.revision })), ...extra });
  await waitFor(() => !!surface.querySelector('[data-thread-id="queue-content"] button'));
  (surface.querySelector('[data-thread-id="queue-content"] button') as HTMLButtonElement).click();
  await waitFor(() => !!surface.querySelector('[data-flower-queued-attachment="image-1"]'));
@@ -70,7 +70,7 @@ describe('Flower queued content', () => {
   ], attachments: [{ attachment_id: 'restored-image', name: 'diagram.png', mime_type: 'image/png', size_bytes: 4, digest_sha256: 'b'.repeat(64), locator: 'staged', source: 'file' as const, capability_revision: capability.revision }] };
   const takeBack = vi.fn<NonNullable<FlowerSurfaceAdapter['takeBackQueuedTurn']>>(async () => ({ ...view(3).current!, queue: [] }));
   const prepare = vi.fn(async () => prepared);
-  const edit = vi.fn(async () => view(3));
+  const edit = vi.fn(async () => {});
   const launch = vi.fn<FlowerSurfaceAdapter['launchTurn']>(async input => ({ client_request_id: input.client_request_id, thread_id: 'queue-content' }));
   const surface = await mount({ prepareQueuedTurnDraft: prepare, takeBackQueuedTurn: takeBack, editQueuedTurn: edit, launchTurn: launch });
   setText(surface, 'Next ordinary draft');
