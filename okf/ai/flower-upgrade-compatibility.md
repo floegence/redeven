@@ -64,7 +64,7 @@ Floret release adoption also passes its public v7 compatibility and independent
 published-module consumer checks before Redeven consumes the version.
 Published v7.68.3 atomically migrates proven compaction identities through
 schema 26 to 27 and upgrades provider-context lineage to v11 without modifying
-old requests. Redeven never interprets or repairs those opaque records.
+old requests. Published v7.72.0 retains that lineage and schema 27-to-28 request-bound measurement migration. The immutable tool-correction-v7.69.1 fixture retains exact ordinary/control failures, confirmed results, Fork and nested Fork. Product qualification verifies safe list/detail/live classification, restart, explicit Retry, new input and Fork through published APIs. Redeven never interprets or repairs those opaque records.
 
 Historical compatibility is a hard release requirement. Dispatch
 `flower-history-qualification.yml` for the exact final main commit before
@@ -82,6 +82,8 @@ experimental formats. Source-only CI validates provenance; the dedicated exact
 commit qualification owns execution and product continuation evidence.
 
 # Evidence
+
+- `redeven:internal/ai/tool_correction_history_compatibility_test.go` - Exact v7.69.1 failures through product classification, explicit Retry, Send, Fork and restart.
 
 - `redeven:internal/ai/testdata/upgrade/10ce4c152/manifest.json` - Locked compatibility baseline.
 - `redeven:internal/ai/testdata/upgrade/10ce4c152-lifecycle/manifest.json` - Real lifecycle and committed-WAL writer provenance.

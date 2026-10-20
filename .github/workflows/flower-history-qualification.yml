@@ -26,5 +26,5 @@ jobs:
       - name: Qualify product upgrade, continuation, restart and recovery
         run: >-
           go test ./internal/ai
-          -run 'TestFlowerEveryHistoricalWriterUpgradesAndContinues|TestFlowerReleasedCompactionWritersUpgradeAndContinue|TestFlowerRestoreLifecycleFixtureCannotResumeOldWork'
+          -run 'TestFlowerEveryHistoricalWriterUpgradesAndContinues|TestFlowerReleasedCompactionWritersUpgradeAndContinue|TestFlowerRestoreLifecycleFixtureCannotResumeOldWork|TestFlowerReleasedCorrectionFailuresUpgradeAndRecover'
           -count=1 -timeout=10m

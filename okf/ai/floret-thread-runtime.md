@@ -16,7 +16,7 @@ Floret v7 `ThreadService` is the sole owner of active and canonical thread lifec
 
 Optional ThreadGoalController and WithAgentGoals provide [canonical Goals](flower-goals.md). Product handlers authorize and map; they never maintain a second Goal state or completion loop.
 
-Redeven consumes published Floret v7.60.3. Its additive
+Redeven consumes published Floret v7.72.0. Its additive
 OutputPolicy.ArchiveAboveBytes archives complete large tool text independently
 of visible truncation. Completed error results may request input while preserving
 error status. Floret owns batch settlement, waiting, Respond and restart; Redeven
@@ -27,9 +27,11 @@ historical validators remain success-only for tool input. Redeven treats all
 Floret records as opaque and performs no product-side rewrite or migration.
 The 20-to-21 edge admits explicit unconfirmed tool results without changing
 historical failures. The subsequent 21-to-22 accounting edge is also retained;
-the 22-to-23 Goal edge and 23-to-24 character-attribution edge are retained; the current schema is 24 and older writers reject upgraded stores. All edges
+the 22-to-23 Goal edge and 23-to-24 character-attribution edge are retained; the 24-to-25 output-source, 25-to-26 compaction-evidence, 26-to-27 compaction-boundary and 27-to-28 request-bound measurement-boundary edges are retained. The current schema is 28 and older writers reject upgraded stores. All edges
 run through the published upstream startup transaction.
 
+
+Floret v7.72.0 owns one in-memory correction episode per Run. Each invalid tool batch counts once; valid siblings settle without resetting it. A committed validation-clean tool batch resets correction. Three consecutive invalid batches fail after preserving sibling results and before opening an interaction. Text, transport retry, compaction and steering do not reset correction. Strict schemas remain authoritative and rejected calls never authorize or dispatch. The typed reason covers ordinary/control failures and exact released v7.69.1 history without rewriting stored facts. See [failure recovery](../ui/flower-failure-recovery.md).
 
 Published Floret v7.50.0 adds optional `ThreadWaiter` and typed canonical
 failure reasons without changing required ThreadService methods or schema 19.
@@ -79,7 +81,7 @@ Conflicted decisions refresh canonical detail and remain user-controlled; effect
 
 Independent context compaction uses the optional public capability without widening ThreadService. Floret owns typed control-turn admission, atomic installation, terminal results, replay, and recovery. See [Model context usage and compaction](model-context-usage-and-compaction.md) for command and presentation contracts.
 
-Redeven consumes published Floret v7.42.0, preserving typed Provider failures
+The published runtime preserves typed Provider failures
 when a request times out while execution remains active, and graceful-stop ownership
 when a projection write is canceled. The stop owner settles pending approvals,
 tool results, and the terminal together; a canceled write must not enter competing

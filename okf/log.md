@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-20 — Bounded tool correction and explicit recovery
+
+- Consume published Floret v7.72.0, keep schema 28 and map one safe typed correction-exhaustion reason across current and historical views. Preserve strict validation and confirmed results; expose target-specific Retry and current-model configuration with bounded requests and stale-response guards. See [failure recovery](ui/flower-failure-recovery.md) and [historical qualification](ai/flower-upgrade-compatibility.md).
+
 ## 2026-10-19 — Focused Flower selection and detail-read contract
 
 - Separate selection, bounded detail demand and cancellation from sidebar row and pin presentation; keep qualification contracts, boundaries and measurements explicit. See [selection and detail reads](ui/flower-thread-selection.md).

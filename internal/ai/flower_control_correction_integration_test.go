@@ -127,7 +127,7 @@ func TestFlowerDeepSeekCorrectsStringArrayBeforeShowingQuestion(t *testing.T) {
 				t.Fatalf("generated text was lost: %s", raw)
 			}
 			if exhaust {
-				if calls.Load() != 3 || settled.RunStatus != "failed" || settled.RunErrorCode != runErrorCodeFloretControlContract || settled.WaitingPrompt != nil {
+				if calls.Load() != 3 || settled.RunStatus != "failed" || settled.RunErrorCode != runErrorCodeToolArgumentCorrection || settled.WaitingPrompt != nil {
 					t.Fatalf("correction budget/result: calls=%d view=%#v", calls.Load(), settled)
 				}
 				return

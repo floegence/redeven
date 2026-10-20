@@ -604,6 +604,7 @@ export type FlowerSurfaceCopy = Readonly<{
       addAPIKey: string;
       switchModel: string;
       openSettings: string;
+      configureCurrentModel: string;
     }>;
     subagentWaitDescription: string;
     subagentWaitQuestion: string;
@@ -633,6 +634,7 @@ export type FlowerSurfaceCopy = Readonly<{
       noProgress: string;
       duplicateToolCallID: string;
       stopHookLoop: string;
+      toolArgumentCorrectionExhausted: string;
       toolDispatchFailed: string;
       storageFailed: string;
       authorizationFailed: string;
@@ -1073,6 +1075,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       addAPIKey: 'Add API key',
       switchModel: 'Switch model',
       openSettings: 'Open settings',
+      configureCurrentModel: 'Configure current model',
     },
     subagentWaitDescription: "A child thread needs approval or input. Open it to handle the request, then return and explicitly continue this parent. You can also continue using available results or stop.",
     subagentHandleRequest: "Handle request",
@@ -1102,6 +1105,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       noProgress: "The agent made no progress, so this turn was stopped. Saved results are preserved. Add guidance or retry.",
       duplicateToolCallID: "The model returned duplicate tool call IDs. Saved results are preserved. Retry or choose another model.",
       stopHookLoop: "A stop hook repeatedly requested continuation. Saved results are preserved. Check the hook configuration before retrying.",
+      toolArgumentCorrectionExhausted: "The model repeatedly generated calls that do not match the tool specifications, so this turn was stopped. Rejected calls did not execute; confirmed results are preserved.",
       toolDispatchFailed: "A tool could not execute. Confirmed results are preserved. Check the tool and retry.",
       storageFailed: "Conversation storage failed. Check available disk space and storage access before retrying.",
       authorizationFailed: "Tool authorization could not be verified. Check permissions and retry.",

@@ -45,6 +45,7 @@ const (
 	runErrorCodeNoProgress                  = "floret_no_progress"
 	runErrorCodeDuplicateCallID             = "floret_duplicate_tool_call_id"
 	runErrorCodeStopHookLoop                = "floret_stop_hook_loop"
+	runErrorCodeToolArgumentCorrection      = "floret_tool_argument_correction_exhausted"
 	runErrorCodeToolDispatch                = "floret_tool_dispatch_failed"
 	runErrorCodeStorage                     = "floret_storage_failed"
 	runErrorCodeAuthorization               = "floret_authorization_failed"
@@ -111,6 +112,8 @@ func userFacingRunError(code string, fallback string) string {
 		return "The model returned duplicate tool call IDs. Saved results are preserved. Retry or choose another model."
 	case runErrorCodeStopHookLoop:
 		return "A stop hook repeatedly requested continuation. Saved results are preserved. Check the hook configuration before retrying."
+	case runErrorCodeToolArgumentCorrection:
+		return "The model repeatedly generated calls that do not match the tool specifications, so this turn was stopped. Rejected calls did not execute; confirmed results are preserved."
 	case runErrorCodeToolDispatch:
 		return "A tool could not execute. Confirmed results are preserved. Check the tool and retry."
 	case runErrorCodeStorage:
@@ -385,6 +388,8 @@ func floretLoopFailureCode(failure *flruntime.ThreadTurnFailure) string {
 		return ""
 	}
 	switch failure.Reason {
+	case flruntime.ThreadTurnFailureToolArgumentCorrectionExhausted:
+		return runErrorCodeToolArgumentCorrection
 	case flruntime.ThreadTurnFailureRepeatedToolCalls:
 		return runErrorCodeRepeatedTools
 	case flruntime.ThreadTurnFailureNoProgress:
