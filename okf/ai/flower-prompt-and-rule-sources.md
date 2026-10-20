@@ -52,6 +52,8 @@ Without that capability, the main assistant
 finishes with the blocker and recovery condition; a child reports to its parent.
 There is no host waiting state or duplicate question before tool approval.
 Ordinary discussion and optional feedback can use prose.
+The host retains Floret's question-tool description; Responses requests preserve
+every supplied function description alongside its schema.
 
 A running command is observed through its existing process identity and cursor;
 repeated observations are valid when state may change. Timeouts do not establish

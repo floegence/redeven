@@ -206,6 +206,12 @@ func TestFlowerGoalReflectionUsesExistingContextAndExcludesDefaultTodo(t *testin
 			if tool["name"] == "write_todos" {
 				t.Fatal("Todo re-enabled in actual provider request")
 			}
+			if tool["name"] == "ask_user" {
+				description, _ := tool["description"].(string)
+				if !strings.Contains(description, "Ordinary discussion and optional feedback may use prose") {
+					t.Fatalf("final question definition contradicts interaction policy: %s", description)
+				}
+			}
 			foundGoal = foundGoal || tool["name"] == "goal"
 		}
 		if !foundGoal {

@@ -24,6 +24,7 @@ func TestBuildOpenAITools_RespectsStrictFlag(t *testing.T) {
 	defs := []ToolDef{
 		{
 			Name:        "ask_user",
+			Description: "Ask when execution needs user input.",
 			Strict:      true,
 			InputSchema: json.RawMessage(`{"type":"object","properties":{"question":{"type":"string"}},"required":["question"],"additionalProperties":false}`),
 		},
@@ -47,6 +48,22 @@ func TestBuildOpenAITools_RespectsStrictFlag(t *testing.T) {
 	}
 	if !toolsCompat[0].OfFunction.Strict.Valid() || toolsCompat[0].OfFunction.Strict.Value {
 		t.Fatalf("expected strict=false for compatible mode")
+	}
+	for _, tools := range [][]oresponses.ToolUnionParam{toolsStrict, toolsCompat} {
+		raw, err := json.Marshal(tools)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var wire []struct {
+			Name        string `json:"name"`
+			Description string `json:"description"`
+		}
+		if err := json.Unmarshal(raw, &wire); err != nil {
+			t.Fatal(err)
+		}
+		if len(wire) != 1 || wire[0].Name != defs[0].Name || wire[0].Description != defs[0].Description {
+			t.Fatalf("tool description lost in provider request: %s", raw)
+		}
 	}
 }
 

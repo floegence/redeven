@@ -1874,7 +1874,9 @@ func buildOpenAITools(defs []ToolDef, strict bool, aliases providerToolAliases) 
 			_ = json.Unmarshal(def.InputSchema, &schema)
 		}
 		alias := aliases.wireName(def.Name)
-		out = append(out, oresponses.ToolParamOfFunction(alias, schema, strict && def.Strict))
+		tool := oresponses.ToolParamOfFunction(alias, schema, strict && def.Strict)
+		tool.OfFunction.Description = openai.String(strings.TrimSpace(def.Description))
+		out = append(out, tool)
 	}
 	return out
 }
