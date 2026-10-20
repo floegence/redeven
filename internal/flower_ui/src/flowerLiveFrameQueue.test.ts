@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createFlowerLiveFrameQueue, flowerLiveTextAppend } from './flowerLiveFrameQueue';
+import { createFlowerLiveFrameQueue, flowerLivePresentationAppend } from './flowerLiveFrameQueue';
 import type { FlowerLiveStreamEnvelope } from './contracts/flowerSurfaceContracts';
 
 const envelope = (version: number, text = 'x'.repeat(version)): FlowerLiveStreamEnvelope => ({
@@ -9,14 +9,50 @@ const envelope = (version: number, text = 'x'.repeat(version)): FlowerLiveStream
 });
 
 describe('live frame queue', () => {
+  it('coalesces complete display progress while preserving every attempt, lifecycle and unknown-field boundary', () => {
+    const progress = (version: number): FlowerLiveStreamEnvelope => ({ ...envelope(version), current: { ...envelope(version).current!,
+      sampled_at_ms: 1000 + version, run_progress: { phase: 'streaming', request: { logical_request_id: 'request', attempt_id: 'attempt', attempt_epoch: 1,
+        started_at: '2026-10-19T00:00:00Z', first_output_at: '2026-10-19T00:00:01Z', estimated_output_tokens: version } },
+      tool_call_previews: [{ thread_id: 'thread', turn_id: 'turn', run_id: 'run', logical_request_id: 'request', attempt_id: 'attempt',
+        attempt_epoch: 1, call_id: 'call', name: 'terminal.exec', arguments_complete: false, preview: { display_name: 'build', additions: version } }],
+    } });
+    const first = progress(1); const next = progress(2);
+    expect(flowerLivePresentationAppend(first, next)).toBe(true);
+    const request = next.current!.run_progress!.request!;
+    const changes = [
+      { ...next.current!, sampled_at_ms: 1 },
+      { ...next.current!, cancellation: { thread_id: 'thread', turn_id: 'turn', run_id: 'run', source: 'user', mode: 'immediate' as const, requested_at: 'now' } },
+      ...[
+        { ...request, attempt_id: 'replacement' }, { ...request, logical_request_id: 'replacement' }, { ...request, attempt_epoch: 2 },
+        { ...request, first_output_at: '2026-10-19T00:00:02Z' }, { ...request, estimated_output_tokens: 0 },
+        { ...request, future_field: true },
+      ].map(request => ({ ...next.current!, run_progress: { ...next.current!.run_progress!, request } })),
+      { ...next.current!, run_progress: { ...next.current!.run_progress!, phase: 'tool_execution' as const } },
+      ...[
+        { arguments_complete: true }, { call_id: 'other' }, { name: 'file.write' }, { attempt_epoch: 2 }, { preview: null },
+        { preview: { ...next.current!.tool_call_previews![0]!.preview!, future_field: true } },
+      ].map(patch => ({ ...next.current!, tool_call_previews: next.current!.tool_call_previews!.map(call => ({ ...call, ...patch })) })),
+      { ...next.current!, tool_call_previews: [] },
+    ];
+    for (const current of changes) expect(flowerLivePresentationAppend(first, { ...next, current })).toBe(false);
+    const child = ({ current, ...outer }: FlowerLiveStreamEnvelope): FlowerLiveStreamEnvelope => ({ ...outer, thread_id: 'parent', subagent_current: current });
+    expect(flowerLivePresentationAppend(child(first), child(next))).toBe(true);
+    const apply = vi.fn(); const validateAppend = vi.fn(() => false);
+    const queue = createFlowerLiveFrameQueue({ apply, validateAppend, requestFrame: vi.fn(), cancelFrame: vi.fn() });
+    queue.push(first); queue.push(next);
+    expect(validateAppend).toHaveBeenCalledOnce();
+    expect(apply.mock.calls.map(([value]) => value)).toEqual([first, next]);
+    queue.dispose();
+  });
+
   it('coalesces identical complete context snapshots and flushes clears or compaction changes immediately', () => {
     const snapshot = { model_context: null, context_usage: {}, context_compactions: [], timeline_decorations: [] };
-    expect(flowerLiveTextAppend({ ...envelope(1), ...snapshot }, { ...envelope(2), ...snapshot })).toBe(true);
-    expect(flowerLiveTextAppend({ ...envelope(1), ...snapshot }, { ...envelope(2), ...snapshot, context_usage: null })).toBe(false);
+    expect(flowerLivePresentationAppend({ ...envelope(1), ...snapshot }, { ...envelope(2), ...snapshot })).toBe(true);
+    expect(flowerLivePresentationAppend({ ...envelope(1), ...snapshot }, { ...envelope(2), ...snapshot, context_usage: null })).toBe(false);
     const compact = { operation_id: 'operation', turn_id: 'turn', canonical_ordinal: 7, phase: 'start' as const, status: 'compacting' as const, updated_at_ms: 1 };
     const first = { ...envelope(1), ...snapshot, context_compactions: [compact] };
     const completed = { ...envelope(2), ...snapshot, context_compactions: [{ ...compact, phase: 'complete' as const, status: 'compacted' as const }] };
-    expect(flowerLiveTextAppend(first, completed)).toBe(false);
+    expect(flowerLivePresentationAppend(first, completed)).toBe(false);
     const apply = vi.fn();
     const queue = createFlowerLiveFrameQueue({ apply, validateAppend: () => true, requestFrame: () => 1, cancelFrame: vi.fn() });
     queue.push(first); queue.push(completed);
@@ -29,11 +65,11 @@ describe('live frame queue', () => {
       const { current, ...outer } = envelope(version);
       return { ...outer, thread_id: 'parent', subagent_current: current };
     };
-    expect(flowerLiveTextAppend(child(1), child(2))).toBe(true);
-    expect(flowerLiveTextAppend(child(1), { ...child(2), thread_id: 'other-parent' })).toBe(false);
-    expect(flowerLiveTextAppend(child(1), { ...child(2), subagent_current: { ...child(2).subagent_current!, thread_id: 'other-child' } })).toBe(false);
-    expect(flowerLiveTextAppend(child(1), envelope(2))).toBe(false);
-    expect(flowerLiveTextAppend(child(1), { ...child(2), current: envelope(2).current })).toBe(false);
+    expect(flowerLivePresentationAppend(child(1), child(2))).toBe(true);
+    expect(flowerLivePresentationAppend(child(1), { ...child(2), thread_id: 'other-parent' })).toBe(false);
+    expect(flowerLivePresentationAppend(child(1), { ...child(2), subagent_current: { ...child(2).subagent_current!, thread_id: 'other-child' } })).toBe(false);
+    expect(flowerLivePresentationAppend(child(1), envelope(2))).toBe(false);
+    expect(flowerLivePresentationAppend(child(1), { ...child(2), current: envelope(2).current })).toBe(false);
     const apply = vi.fn(); let scheduled: FrameRequestCallback | undefined;
     const validateAppend = vi.fn(() => true);
     const queue = createFlowerLiveFrameQueue({ apply, validateAppend,
@@ -125,7 +161,7 @@ describe('live frame queue', () => {
       { ...next, current: { ...next.current!, interactions: [{ id: 'approval', turn_id: 'turn', run_id: 'run', kind: 'approval' as const }] } },
       envelope(2, 'replacement'),
     ];
-    for (const changed of changes) expect(flowerLiveTextAppend(first, changed)).toBe(false);
+    for (const changed of changes) expect(flowerLivePresentationAppend(first, changed)).toBe(false);
     const apply = vi.fn(); const queue = createFlowerLiveFrameQueue({ apply, validateAppend: () => false, requestFrame: vi.fn(), cancelFrame: vi.fn() });
     queue.push(first); queue.push(next);
     expect(apply.mock.calls.map(([value]) => value)).toEqual([first, next]);

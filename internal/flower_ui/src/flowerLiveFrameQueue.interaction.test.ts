@@ -37,6 +37,32 @@ function fixture() {
 afterEach(() => vi.useRealTimers());
 
 describe('live text interaction scheduling', () => {
+  it('bounds same-attempt tool argument preview and progress paints without delaying invocation', async () => {
+    const f = fixture();
+    const preview = (version: number): FlowerLiveStreamEnvelope => ({ ...envelope(version), current: { ...envelope(version).current!,
+      sampled_at_ms: 1000 + version, items: [],
+      run_progress: { phase: 'streaming', request: { logical_request_id: 'request', attempt_id: 'attempt', attempt_epoch: 1,
+        started_at: '2026-10-19T00:00:00Z', first_output_at: '2026-10-19T00:00:01Z',
+        last_progress_at: new Date(1000 + version).toISOString(), estimated_output_tokens: version } },
+      tool_call_previews: [{ thread_id: 'thread', turn_id: 'turn', run_id: 'run', logical_request_id: 'request', attempt_id: 'attempt',
+        attempt_epoch: 1, call_id: 'call', name: 'terminal.exec', arguments_complete: false, preview: { additions: version } }],
+    } });
+    try {
+      f.root.setAttribute(FLOE_HOT_INTERACTION_ATTR, 'drag');
+      f.queue.push(preview(1));
+      for (let version = 2; version <= 301; version++) f.queue.push(preview(version));
+      expect(f.validateAppend).toHaveBeenCalledTimes(300);
+      expect(f.apply).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(75); f.frame();
+      expect(f.apply).toHaveBeenLastCalledWith(preview(301), 1);
+      f.queue.push(preview(302));
+      const next = preview(303);
+      const ready = { ...next, current: { ...next.current!, tool_call_previews: next.current!.tool_call_previews!.map(call => ({ ...call, arguments_complete: true })) } };
+      f.queue.push(ready);
+      expect(f.apply.mock.calls.map(([value]) => value.current.view_version)).toEqual([1, 301, 302, 303]);
+    } finally { f.queue.dispose(); }
+  });
+
   it.each(['drag', 'resize'])('bounds %s text paints while validating every append and converges on release', async kind => {
     const f = fixture();
     try {

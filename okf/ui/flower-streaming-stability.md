@@ -52,22 +52,35 @@ introduced.
 
 ## Bounded streaming work
 
-One transient frame buffer may combine strictly prefix-only text appends within
-the same live execution. Full envelope comparison excludes any other semantic
-change, and every candidate passes current-view and timeline validation. Queue,
-approval, tool, error, completion, and malformed input flush pending text before
-normal ordered handling. Reconnect cancels obsolete pending text. The buffer is
-neither a lifecycle owner nor a durable replay queue.
+One transient frame buffer may combine prefix-only text, increasing token and
+progress samples, and incomplete tool argument display previews within the same
+live execution and provider attempt. Full envelope comparison excludes other
+changes, and every complete candidate passes current-view and timeline validation.
+Request/attempt identity, first output, phase, invocation, argument completion,
+queue, approval, cancellation, error, completion, and unknown-field changes flush
+pending presentation before normal ordered handling. Reconnect cancels obsolete
+pending presentation. The buffer is neither a lifecycle owner nor a durable
+replay queue.
 
 The same buffer observes the published Floe hot-interaction attribute supplied by
-the Surface. During drag or resize, strictly text-only appends paint at most once
+the Surface. During drag or resize, these presentation updates paint at most once
 per 75 ms plus the next available animation frame. Every complete candidate is
 still validated on receipt. Other envelope or runtime facts retain immediate
-ordered application; this policy does not delay progress, approvals, errors, or
-terminal transitions. Ending an interaction requests the latest pending text on
+ordered application. Ending an interaction requests the latest pending state on
 the next frame, without replaying obsolete intermediate paints. Reconnect,
 disposal, and presentation failure cancel both timer and animation work. The
 transport, task execution, and canonical conversation owner continue normally.
+
+Terminal process reads use a separate output path. The existing terminal viewport
+controller owns both text painting and follow-to-bottom geometry in one frame.
+It appends to one retained Text node instead of rewriting the full output on every
+read. While drag/resize owns the pointer, running output continues through the
+same sequence-checked store and cursor, but text/layout waits until release,
+cancel, or blur. Only the latest complete output string is retained for painting;
+there is no replay queue, lost delta, or new polling owner. Canonical terminal
+states, terminal read completion, and errors flush output immediately; status,
+Stop, and approvals keep their existing update path. Initial completed output
+remains available on disclosure. Disposal cancels pending frames and observation.
 
 Markdown still lexes the complete current source. HTML reuse requires equal full
 tokens and reference definitions, and the cache retains only current tokens.
@@ -201,8 +214,9 @@ pre-push gate; the focused and timing results do not replace that gate.
 - [Markdown streaming stability](../../internal/envapp/ui_src/src/ui/FlowerMarkdown.streamingStability.browser.test.tsx)
 - [Message copy interaction](../../internal/envapp/ui_src/src/ui/FlowerSurface.messageCopy.browser.test.tsx)
 - [Frame boundary validation](../../internal/flower_ui/src/flowerLiveFrameQueue.test.ts)
-- [Interaction scheduling regression](../../internal/flower_ui/src/flowerLiveFrameQueue.interaction.test.ts) - Per-input validation, bounded text paints, immediate semantic boundaries, release, reconnect, disposal and epoch-aware failures.
-- [Streaming floating-window browser regression](../../internal/envapp/ui_src/src/ui/FlowerSurface.floatingInteraction.browser.test.tsx) - Native pointer drag during 125 Hz text input, release/cancel/blur convergence, retained preview edits, selection and scroll. This checks work reduction and continuous geometry progress, not a production frame-rate guarantee.
+- [Interaction scheduling regression](../../internal/flower_ui/src/flowerLiveFrameQueue.interaction.test.ts) - Per-input validation, bounded text/progress/argument-preview paints, immediate semantic boundaries, release, reconnect, disposal and epoch-aware failures.
+- [Streaming floating-window browser regression](../../internal/envapp/ui_src/src/ui/FlowerSurface.floatingInteraction.browser.test.tsx) - Native pointer drag during 125 Hz text and tool-preview input, release/cancel/blur convergence, retained preview edits, selection and scroll. This checks work reduction and continuous geometry progress, not a production frame-rate guarantee.
+- [Terminal interaction scheduling](../../internal/flower_ui/src/flowerTerminalOutput.interaction.test.ts) and [native output drag regression](../../internal/envapp/ui_src/src/ui/FlowerSurface.toolOutputInteraction.browser.test.tsx) - Large sequenced command chunks continue arriving during drag without output mutations; output converges afterward with its Text node and preview edit retained.
 - [Production performance runner](../../scripts/check_flower_streaming_performance.mjs)
 - [Activity interaction contract](flower-activity-interaction.md)
 - [Live timeline authority](flower-live-timeline.md)

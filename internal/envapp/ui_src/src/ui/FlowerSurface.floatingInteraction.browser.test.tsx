@@ -8,9 +8,20 @@ import { PersistentFloatingWindow } from './widgets/PersistentFloatingWindow';
 import { streamingFixture } from '../../../../flower_ui/testing/streamingFixture';
 import { renderSurfaceWithAdapter, waitFor } from './FlowerSurface.navigation.testHarness';
 
-it.each(['release', 'cancel', 'blur'] as const)('keeps a preview responsive during text streaming and converges after %s', async ending => {
+it.each((['release', 'cancel', 'blur'] as const).flatMap(ending =>
+  (['text', 'tool-preview'] as const).map(source => ({ ending, source }))))('keeps a preview responsive during $source streaming and converges after $ending', async ({ ending, source }) => {
   await page.viewport(1280, 900);
   const fixture = streamingFixture(72, 20);
+  if (source === 'tool-preview') {
+    const current = fixture.current();
+    fixture.replace({ ...current, view_version: 2, sampled_at_ms: Date.now(),
+      run_progress: { phase: 'streaming', request: { logical_request_id: 'request', attempt_id: 'attempt', attempt_epoch: 1,
+        started_at: new Date().toISOString(), first_output_at: new Date().toISOString(), estimated_output_tokens: 1 } },
+      tool_call_previews: [{ thread_id: current.thread_id, turn_id: current.turn_id!, run_id: current.run_id!, logical_request_id: 'request',
+        attempt_id: 'attempt', attempt_epoch: 1, call_id: 'preview', name: 'apply_patch', arguments_complete: false,
+        preview: { display_name: 'build.ts', additions: 1 } }],
+    });
+  }
   const runtime = renderSurfaceWithAdapter(fixture.adapter);
   runtime.style.height = '780px';
   await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${fixture.thread.thread_id}"] button`)));
@@ -21,7 +32,7 @@ it.each(['release', 'cancel', 'blur'] as const)('keeps a preview responsive duri
   const host = document.createElement('div'); document.body.appendChild(host);
   const dispose = render(() => <FloeConfigProvider><LayoutProvider>
     <PersistentFloatingWindow open onOpenChange={() => undefined} title="Streaming preview"
-      persistenceKey={`streaming-preview-${ending}`} defaultPosition={{ x: 100, y: 120 }} defaultSize={{ width: 420, height: 300 }}>
+      persistenceKey={`streaming-preview-${source}-${ending}`} defaultPosition={{ x: 100, y: 120 }} defaultSize={{ width: 420, height: 300 }}>
       <div data-test-streaming-preview><textarea aria-label="Preview draft" value="Preserved preview edit" />
         <div data-test-preview-scroll style={{ height: '100px', overflow: 'auto' }}>
           <div style={{ height: '1000px' }}>Scrollable preview content</div>
@@ -52,10 +63,13 @@ it.each(['release', 'cancel', 'blur'] as const)('keeps a preview responsive duri
   fixture.append(' Final release text.');
   await waitFor(() => tail.textContent?.includes('Final release text.') === true);
   expect(tail.textContent).toContain(`chunk-${inputs}`);
+  if (source === 'tool-preview') {
+    expect(runtime.querySelector('[data-flower-argument-generation]')?.textContent).toContain(`+${fixture.current().tool_call_previews![0]!.preview!.additions}`);
+  }
   expect(document.querySelector('[aria-label="Preview draft"]')).toBe(editor);
   expect(editor.value).toBe('User edit stays intact');
   expect(editor.selectionStart).toBe(2); expect(editor.selectionEnd).toBe(8);
   expect(scroll.scrollTop).toBe(120);
   expect(fixture.calls.connections).toBe(1);
-  console.info('streaming-preview', { ending, inputs, textPaints: painted.size, movedFrames: new Set(result.positions).size });
+  console.info('streaming-preview', { ending, source, inputs, textPaints: painted.size, movedFrames: new Set(result.positions).size });
 });
