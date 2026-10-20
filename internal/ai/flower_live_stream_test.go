@@ -1417,16 +1417,16 @@ func TestFlowerCurrentComparisonRetainsContextBoundariesAndTextCoalescing(t *tes
 	frame := func(view flruntime.ThreadView) FlowerLiveStreamEnvelope {
 		return FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: view.ThreadID.String(), Current: &view}
 	}
-	first := compareFlowerLiveCurrent(frame(current))
+	first := newFlowerLiveEncodedBatch(frame(current)).current
 	current.ViewVersion = 2
 	current.Items = append([]flruntime.ThreadItem(nil), current.Items...)
 	current.Items[0].Text = "first second"
-	second := compareFlowerLiveCurrent(frame(current))
+	second := newFlowerLiveEncodedBatch(frame(current)).current
 	if !first.independent || !second.independent || first.fingerprint != second.fingerprint {
 		t.Fatal("equal full snapshots defeated coalescing")
 	}
 	current.Context = &flruntime.ThreadContextSnapshot{UsageTotals: &flruntime.ThreadTokenUsageTotals{InputTokens: 1}}
-	changed := compareFlowerLiveCurrent(frame(current))
+	changed := newFlowerLiveEncodedBatch(frame(current)).current
 	if changed.fingerprint == second.fingerprint {
 		t.Fatal("context change did not create a barrier")
 	}

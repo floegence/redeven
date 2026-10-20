@@ -151,8 +151,13 @@ actual ThreadID and parent route must match. A newer current removes its older
 unsent predecessor across independent other-thread
 currents, then appends at the FIFO tail. Same-thread semantic changes and
 auxiliary envelopes are barriers. Encoding freezes the eligible text and a
-fingerprint of every other public field once, outside subscriber fanout; queue
-operations never decode full snapshots. Started envelopes are immutable. Tool,
+fingerprint of every other public field once, outside subscriber fanout. The
+comparison reuses that exact already-sanitized envelope: historical items stay
+opaque JSON, and only eligible live text, progress, preview counts, version, and
+sample time are normalized. It never runs a second historical activity redaction
+pass. Unknown public fields remain part of the fingerprint, and the complete
+transmitted snapshot is unchanged. Queue operations never decode full snapshots.
+Started envelopes are immutable. Tool,
 interaction, identity, lifecycle and terminal changes preserve order; slow
 observers cannot block Flower execution.
 
@@ -254,6 +259,10 @@ and short ThreadID. Display labels never become canonical titles.
 `LiveTransport` and `ThreadCache` are bounded observation state, not a durable event log or lifecycle mirror. A disconnect, byte-budget closure, or stale version discards local authority and triggers baseline refresh; the browser cannot replay, settle, reorder, or synthesize canonical thread state.
 
 # Evidence
+
+- `internal/ai/flower_live_encoding_test.go`: allocation ceiling, complete public projection equivalence, root/child context and unknown-field barriers.
+- `internal/ai/flower_live_encoding_benchmark_test.go`: valid terminal-payload workloads with 20 and 200 completed activities.
+
 
 - `redeven:internal/ai/flower_live_stream.go` - Workspace baseline and current-state stream.
 - `redeven:internal/ai/flower_runtime_current_publisher.go` - Single current-view cadence and structural-boundary publisher.

@@ -624,10 +624,10 @@ func newFlowerLiveEncodedBatch(envelope FlowerLiveStreamEnvelope) *flowerLiveEnc
 			},
 		}
 	}
-	return &flowerLiveEncodedBatch{kind: envelope.Kind, data: data, id: rand.Text(), current: compareFlowerLiveCurrent(envelope)}
+	return &flowerLiveEncodedBatch{kind: envelope.Kind, data: data, id: rand.Text(), current: compareFlowerLiveEncodedCurrent(envelope, data)}
 }
 
-func compareFlowerLiveCurrent(envelope FlowerLiveStreamEnvelope) *flowerLiveCurrentComparison {
+func compareFlowerLiveEncodedCurrent(envelope FlowerLiveStreamEnvelope, encoded []byte) *flowerLiveCurrentComparison {
 	if envelope.Kind != FlowerLiveStreamThreadBatch || (envelope.Current == nil) == (envelope.SubagentCurrent == nil) {
 		return nil
 	}
@@ -687,18 +687,79 @@ func compareFlowerLiveCurrent(envelope FlowerLiveStreamEnvelope) *flowerLiveCurr
 		// Keep the eligible positions distinct from absent/empty text fields.
 		normalized.Items[index].Text = "\x00"
 	}
-	if comparison.subagent {
-		envelope.SubagentCurrent = &normalized
-	} else {
-		envelope.Current = &normalized
-	}
-	data, err := marshalFlowerLiveEnvelopeAt(envelope, time.Time{})
+	// Reuse the exact public envelope. Historical items remain opaque JSON;
+	// comparing an unsent snapshot must not repeat per-item redaction or decode
+	// every historical tool payload into a second object graph.
+	data, err := flowerLiveComparisonJSON(encoded, current, normalized, comparison.subagent)
 	if err != nil {
 		comparison.texts = nil
 		return comparison
 	}
 	comparison.fingerprint = sha256.Sum256(data)
 	return comparison
+}
+
+func flowerLiveComparisonJSON(encoded []byte, current *flruntime.ThreadView, normalized flruntime.ThreadView, subagent bool) ([]byte, error) {
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &envelope); err != nil {
+		return nil, err
+	}
+	key := "current"
+	if subagent {
+		key = "subagent_current"
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(envelope[key], &fields); err != nil {
+		return nil, err
+	}
+	fields["view_version"] = json.RawMessage("0")
+	delete(fields, "sampled_at_ms")
+	if current.RunProgress != nil && current.RunProgress.Request != nil {
+		data, err := json.Marshal(normalized.RunProgress)
+		if err != nil {
+			return nil, err
+		}
+		fields["run_progress"] = data
+	}
+	if len(current.ToolCallPreviews) > 0 {
+		data, err := json.Marshal(normalized.ToolCallPreviews)
+		if err != nil {
+			return nil, err
+		}
+		fields["tool_call_previews"] = data
+	}
+	if len(current.Items) > 0 {
+		var items []json.RawMessage
+		if err := json.Unmarshal(fields["items"], &items); err != nil {
+			return nil, err
+		}
+		for index, item := range current.Items {
+			if item.Text == normalized.Items[index].Text {
+				continue
+			}
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal(items[index], &fields); err != nil {
+				return nil, err
+			}
+			fields["text"] = json.RawMessage("\"\\u0000\"")
+			data, err := json.Marshal(fields)
+			if err != nil {
+				return nil, err
+			}
+			items[index] = data
+		}
+		data, err := json.Marshal(items)
+		if err != nil {
+			return nil, err
+		}
+		fields["items"] = data
+	}
+	data, err := json.Marshal(fields)
+	if err != nil {
+		return nil, err
+	}
+	envelope[key] = data
+	return json.Marshal(envelope)
 }
 
 func flowerLiveCurrentEncodingContext(current *flruntime.ThreadView) *flowerLiveCurrentEncodingDiagnostics {
