@@ -349,7 +349,7 @@ func (c *Client) callback(ctx context.Context, a *attempt, w http.ResponseWriter
 	if err != nil && received.RefreshToken != "" {
 		// A canceled or rejected exchange must not leave a newly minted session
 		// active. Cleanup is independent of the abandoned browser request.
-		confirmed := c.discardSignIn(account, received)
+		confirmed := c.discardSignIn(account, received, a.returning.Subject == "")
 		if !confirmed {
 			err = Failure("revocation_unconfirmed")
 		}
@@ -378,11 +378,11 @@ func (c *Client) callback(ctx context.Context, a *attempt, w http.ResponseWriter
 // A verified new registration can reuse the existing durable logout journal.
 // It is never installed as usable after cancellation; a crash during revocation
 // leaves signing_out for startup recovery. Existing sessions are not overwritten.
-func (c *Client) discardSignIn(account, received settings.ChatGPTAccount) bool {
+func (c *Client) discardSignIn(account, received settings.ChatGPTAccount, newRegistration bool) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	journaled := false
-	if account.Subject != "" {
+	if newRegistration && account.Subject != "" {
 		unlock, err := c.Store.LockChatGPTAccountOperation(ctx, account.ID())
 		if err == nil {
 			accounts, readErr := c.Store.ChatGPTAccounts(ctx)
@@ -415,6 +415,12 @@ func (c *Client) completeSignIn(ctx context.Context, a *attempt, account setting
 	c.mu.Unlock()
 	if !active {
 		return Failure("authorization_cancelled")
+	}
+	if a.returning.Subject != "" {
+		_, exists, err := c.Store.ChatGPTAccount(account.ID())
+		if err != nil || !exists {
+			return Failure("authorization_required")
+		}
 	}
 	if a.returning.Subject == "" {
 		accounts, err := c.Store.ChatGPTAccounts(ctx)
@@ -485,6 +491,18 @@ func (c *Client) Status(id string) (AccountStatus, error) {
 	}
 	return c.accountStatus(a), nil
 }
+
+// RemoveAccount forgets local signed-out history without changing provider
+// configuration. Existing bindings require fresh authorization on their next use.
+func (c *Client) RemoveAccount(ctx context.Context, id string) error {
+	if err := c.Store.RemoveSignedOutChatGPTAccount(ctx, id); err != nil {
+		return Failure("account_removal_failed")
+	}
+	c.resetMemory(id)
+	c.changed(id)
+	return nil
+}
+
 func (c *Client) Acknowledge(ctx context.Context, id string) error {
 	return c.Store.UpdateChatGPTAccount(ctx, id, func(a *settings.ChatGPTAccount) error { a.WelcomeAcknowledged = true; return nil })
 }

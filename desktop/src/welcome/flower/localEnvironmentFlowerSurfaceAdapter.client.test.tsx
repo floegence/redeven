@@ -151,6 +151,15 @@ function attachmentBridgeStubs() {
 }
 
 describe('Local Environment Flower surface adapter', () => {
+  it('removes one local ChatGPT registration and refreshes the settings surface', async () => {
+    const requests: RuntimeFlowerRequest[] = [];
+    const bridge = bridgeFor(request => { requests.push(request); return {}; });
+    const onSettingsChanged = vi.fn();
+    const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge, { onSettingsChanged });
+    await adapter.chatGPTAuth!('remove', { scope_id: 'dialog', account_id: 'signed-out-account' });
+    expect(requests).toEqual([expect.objectContaining({ method: 'POST', path: '/_redeven_proxy/api/ai/auth/chatgpt/remove', body: { scope_id: 'dialog', account_id: 'signed-out-account' } })]);
+    expect(onSettingsChanged).toHaveBeenCalledOnce();
+  });
   it('round-trips Responses continuation through settings and provider bundles', () => {
     const base = settingsResponse();
     const settings: AgentSettingsResponse = { ...base, ai: { ...base.ai, providers: [

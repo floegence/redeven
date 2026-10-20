@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-20 — Stable ChatGPT sign-out and explicit account removal
+
+- Preserve account summary geometry and owned focus through logout; collapse the picker once without loading flicker. Add confirmed local removal of signed-out registrations, retaining provider settings and conversations and rejecting late returning callbacks. See [provider configuration](ui/flower-provider-configuration.md) and [account lifecycle](ai/chatgpt-account-lifecycle.md).
+
 ## 2026-10-20 — Bounded tool correction and explicit recovery
 
 - Consume published Floret v7.72.0, keep schema 28 and map one safe typed correction-exhaustion reason across current and historical views. Preserve strict validation and confirmed results; expose target-specific Retry and current-model configuration with bounded requests and stale-response guards. See [failure recovery](ui/flower-failure-recovery.md) and [historical qualification](ai/flower-upgrade-compatibility.md).

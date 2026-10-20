@@ -11,6 +11,64 @@ import (
 	"time"
 )
 
+func TestRemoveSignedOutChatGPTAccountPreservesOtherSecrets(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "secrets.json")
+	store := NewSecretsStore(path)
+	if err := store.SetAIProviderAPIKey("kept-provider", "kept-key"); err != nil {
+		t.Fatal(err)
+	}
+	account := ChatGPTAccount{Issuer: "https://auth.openai.com", Subject: "removed", Email: "removed@example.com", ClientID: "issued", Lifecycle: "signed_out"}
+	other := account
+	other.Subject = "kept"
+	for _, item := range []ChatGPTAccount{account, other} {
+		if err := store.UpdateChatGPTAccount(t.Context(), item.ID(), func(p *ChatGPTAccount) error { *p = item; return nil }); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, mutate := range []func(*ChatGPTAccount){
+		func(a *ChatGPTAccount) { a.Lifecycle = "signing_out" },
+		func(a *ChatGPTAccount) { a.Lifecycle = "" },
+		func(a *ChatGPTAccount) { a.AccessToken = "token" },
+		func(a *ChatGPTAccount) { a.RefreshToken = "token" },
+		func(a *ChatGPTAccount) { a.IDToken = "token" },
+	} {
+		unsafe := account
+		mutate(&unsafe)
+		if err := store.UpdateChatGPTAccount(t.Context(), unsafe.ID(), func(p *ChatGPTAccount) error { *p = unsafe; return nil }); err != nil {
+			t.Fatal(err)
+		}
+		before, _ := os.ReadFile(path)
+		if err := store.RemoveSignedOutChatGPTAccount(t.Context(), account.ID()); err == nil {
+			t.Fatal("removed an account before complete local cleanup")
+		}
+		after, _ := os.ReadFile(path)
+		if string(before) != string(after) {
+			t.Fatal("rejected removal mutated secrets")
+		}
+	}
+	if err := store.UpdateChatGPTAccount(t.Context(), account.ID(), func(p *ChatGPTAccount) error { *p = account; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := store.RemoveSignedOutChatGPTAccount(ctx, account.ID()); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled removal: %v", err)
+	}
+	for range 2 {
+		if err := store.RemoveSignedOutChatGPTAccount(t.Context(), account.ID()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reopened := NewSecretsStore(path)
+	accounts, err := reopened.ChatGPTAccounts(t.Context())
+	if err != nil || len(accounts) != 1 || accounts[other.ID()].Email != other.Email {
+		t.Fatalf("unexpected remaining accounts: %+v, %v", accounts, err)
+	}
+	if key, ok, err := reopened.GetAIProviderAPIKey("kept-provider"); err != nil || !ok || key != "kept-key" {
+		t.Fatal("removal lost an API key")
+	}
+}
+
 func TestChatGPTSecretsMigrationAndAtomicFailure(t *testing.T) {
 	for _, version := range []int{0, 1, 2, 3, 4} {
 		t.Run(string(rune('0'+version)), func(t *testing.T) {

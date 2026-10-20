@@ -251,6 +251,12 @@
   opacity: 0.5;
 }
 
+.flower-provider-account-picker { overflow: hidden; }
+.flower-provider-account-status { display: grid; }
+.flower-provider-account-status > span { grid-area: 1 / 1; min-width: 0; }
+.flower-provider-account-status-reserve { visibility: hidden; pointer-events: none; user-select: none; }
+.flower-provider-account-status-reserve::before { content: attr(data-text); }
+
 .flower-provider-account-group {
   grid-column: 1 / -1;
   min-width: 0;
@@ -279,15 +285,15 @@
 .flower-provider-account-usage:hover { text-decoration: underline; text-underline-offset: 4px; }
 .flower-provider-account-usage:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .flower-provider-account-secondary { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-left: auto; }
-.flower-provider-account[data-connected] { gap: 0.75rem; padding: 0.875rem 1rem; background: var(--card); }
-.flower-provider-account[data-connected] .flower-provider-account-heading { grid-template-columns: 2.25rem minmax(0, 1fr) auto; align-items: center; gap: 0.75rem; }
-.flower-provider-account[data-connected] .flower-provider-account-symbol { width: 2.25rem; height: 2.25rem; border: 0; border-radius: 0; background: transparent; }
-.flower-provider-account[data-connected] .flower-provider-account-description { margin-top: 0.1875rem; font-size: 0.75rem; line-height: 1.5; }
-.flower-provider-account[data-connected] .flower-provider-account-actions { padding: 0.625rem 0 0; border-top: 1px solid var(--flower-provider-divider); gap: 0.375rem; }
-.flower-provider-account[data-connected] .flower-provider-account-primary { width: auto; min-height: 2rem; margin-left: auto; padding: 0.375rem 0.625rem; font-size: 0.75rem; }
-.flower-provider-account[data-connected] .flower-provider-account-usage { min-height: 2rem; padding-inline: 0; color: var(--foreground); }
-.flower-provider-account[data-connected] .flower-provider-account-secondary { width: auto; margin-left: 0; padding-top: 0; border: 0; }
-.flower-provider-account[data-connected] .flower-provider-account-secondary > button { min-height: 2rem; padding-inline: 0.625rem; font-size: 0.75rem; }
+.flower-provider-account[data-summary] { gap: 0.75rem; padding: 0.875rem 1rem; background: var(--card); }
+.flower-provider-account[data-summary] .flower-provider-account-heading { grid-template-columns: 2.25rem minmax(0, 1fr) auto; align-items: center; gap: 0.75rem; }
+.flower-provider-account[data-summary] .flower-provider-account-symbol { width: 2.25rem; height: 2.25rem; border: 0; border-radius: 0; background: transparent; }
+.flower-provider-account[data-summary] .flower-provider-account-description { margin-top: 0.1875rem; font-size: 0.75rem; line-height: 1.5; }
+.flower-provider-account[data-summary] .flower-provider-account-actions { padding: 0.625rem 0 0; border-top: 1px solid var(--flower-provider-divider); gap: 0.375rem; }
+.flower-provider-account[data-summary] .flower-provider-account-primary { width: auto; min-height: 2rem; margin-left: auto; padding: 0.375rem 0.625rem; font-size: 0.75rem; }
+.flower-provider-account[data-summary] .flower-provider-account-usage { min-height: 2rem; padding-inline: 0; color: var(--foreground); }
+.flower-provider-account[data-summary] .flower-provider-account-secondary { width: auto; margin-left: 0; padding-top: 0; border: 0; }
+.flower-provider-account[data-summary] .flower-provider-account-secondary > button { min-height: 2rem; padding-inline: 0.625rem; font-size: 0.75rem; }
 .flower-provider-account-notice { min-width: 0; overflow: hidden; }
 .flower-provider-account-notice-body { padding-top: 0.75rem; }
 .flower-provider-account-welcome { display: grid; grid-template-columns: 1rem minmax(0, 1fr) auto; align-items: center; gap: 0.75rem; padding: 0.875rem 1rem; border-radius: 0.5rem; background: color-mix(in srgb, var(--muted) 45%, var(--card)); }
@@ -469,12 +475,12 @@
   .flower-provider-account-actions { padding-left: 0; }
   .flower-provider-account-secondary { width: 100%; margin-left: 0; padding-top: 0.5rem; border-top: 1px solid var(--flower-provider-divider); }
   .flower-provider-account-primary { width: 100%; }
-  .flower-provider-account[data-connected] .flower-provider-account-heading { grid-template-columns: 2.25rem minmax(0, 1fr); }
-  .flower-provider-account[data-connected] .flower-provider-account-connected { justify-self: start; }
-  .flower-provider-account[data-connected] .flower-provider-account-primary { margin-left: 0; }
-  .flower-provider-account[data-connected] .flower-provider-account-primary,
-  .flower-provider-account[data-connected] .flower-provider-account-secondary > button,
-  .flower-provider-account[data-connected] .flower-provider-account-usage { min-height: 2.75rem; }
+  .flower-provider-account[data-summary] .flower-provider-account-heading { grid-template-columns: 2.25rem minmax(0, 1fr); }
+  .flower-provider-account[data-summary] .flower-provider-account-connected { justify-self: start; }
+  .flower-provider-account[data-summary] .flower-provider-account-primary { margin-left: 0; }
+  .flower-provider-account[data-summary] .flower-provider-account-primary,
+  .flower-provider-account[data-summary] .flower-provider-account-secondary > button,
+  .flower-provider-account[data-summary] .flower-provider-account-usage { min-height: 2.75rem; }
   .flower-provider-account-welcome { grid-template-columns: 1rem minmax(0, 1fr); align-items: start; gap: 0.5rem 0.625rem; padding: 0.75rem; }
   .flower-provider-account-welcome-icon { margin-top: 0.1875rem; }
   .flower-provider-account-welcome .flower-provider-account-confirm { grid-column: 2; justify-self: end; min-height: 2.75rem; }

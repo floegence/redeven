@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower provider configuration
 description: Configure provider access before choosing models, with stable navigation and explicit authentication states.
 tags: [ai, flower, settings, authentication]
-timestamp: 2026-10-19T00:00:00Z
+timestamp: 2026-10-20T00:00:00Z
 ---
 # Summary
 
@@ -137,6 +137,11 @@ direct reauthorization action without adding it to the signed-in dropdown or
 switching to another account. Successful local sign-out removes its picker entry
 immediately; cleanup and remote-revocation failures remain actionable. Distinct
 previous connections remain available only in the explicit recovery chooser.
+Signed-out account cards and the recovery chooser offer explicit Remove account
+with an identity-bearing confirmation. Removal forgets the local registration
+immediately and preserves provider settings, model choices and conversations.
+Reopening a provider whose registration was removed requires a new sign-in or
+an explicit saved-account choice. Failure keeps the confirmation and retry action.
 
 Same-email registrations have distinct stable connection labels derived from
 opaque account IDs when their emails collide in the displayed list; the UI never
@@ -165,6 +170,12 @@ its confirmation aligns with its copy, retains keyboard access, and collapses
 without an abrupt layout jump. Closing notice content becomes inert immediately,
 and reduced-motion preferences skip the animation. Failures keep the recovery
 action in the account panel.
+Sign-out retains the compact account summary and toolbar geometry through pending
+and terminal states; localized status and action labels reserve their full size.
+The signed-in picker collapses once with the shared disclosure motion and becomes
+inert immediately. Background reads of known accounts never remount a loading
+picker. Reduced motion skips collapse; completion restores only owned focus after
+the refreshed actions become available and never steals focus from model editing.
 The primary action retains its DOM identity across these states. Starting sign-in
 from an account action moves focus to its available cancellation control.
 Completion, cancellation, or acknowledgement returns owned focus to the primary

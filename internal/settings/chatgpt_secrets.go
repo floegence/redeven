@@ -228,6 +228,37 @@ func (s *SecretsStore) ChatGPTAccounts(ctx context.Context) (map[string]ChatGPTA
 	return out, nil
 }
 
+// RemoveSignedOutChatGPTAccount forgets only a registration whose local tokens
+// have already been cleared. The operation lock also excludes credential rotation.
+func (s *SecretsStore) RemoveSignedOutChatGPTAccount(ctx context.Context, id string) error {
+	unlockOperation, err := s.LockChatGPTAccountOperation(ctx, id)
+	if err != nil {
+		return err
+	}
+	defer unlockOperation()
+	unlock, err := s.lock(ctx)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	sf, err := s.loadLocked()
+	if err != nil {
+		return err
+	}
+	if sf.ChatGPT == nil {
+		return nil
+	}
+	account, exists := sf.ChatGPT.Accounts[id]
+	if !exists {
+		return nil
+	}
+	if account.Lifecycle != "signed_out" || account.AccessToken != "" || account.RefreshToken != "" || account.IDToken != "" {
+		return errors.New("ChatGPT account must be signed out before removal")
+	}
+	delete(sf.ChatGPT.Accounts, id)
+	return s.saveLocked(sf)
+}
+
 // InstallChatGPTAccounts atomically commits verified sign-ins.
 // Callers serialize each account's operation before entering this short lock.
 func (s *SecretsStore) InstallChatGPTAccounts(ctx context.Context, accounts []ChatGPTAccount) error {

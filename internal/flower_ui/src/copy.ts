@@ -204,6 +204,9 @@ export type FlowerProviderDialogCopy = Readonly<{
   chatGPT: Readonly<{
     changeAccount: string;
     signInAgain: string;
+    removeAccount: string;
+    removeDescription: string;
+    removeFailed: string;
     signInAgainHint: string;
     signInAgainDescription: string;
     loadingAccounts: string;
@@ -1722,6 +1725,9 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
         reviewRequired: "ChatGPT rejected this connection. Review the connection or authorize it again.",
         storageUnavailable: "Credentials could not be saved safely. Repair local account storage and retry.",
         signingOut: "Signing out…",
+        removeAccount: "Remove account",
+        removeDescription: "Remove this signed-out account from this device? Provider settings and conversations are kept. To use this account again, sign in or choose another saved account.",
+        removeFailed: "Could not remove this account. Check that sign-out has completed, then retry.",
         signedOut: "Signed out on this device.",
         cleanupFailed: "Account use has stopped, but local credentials have not been cleared. Repair storage and retry sign-out.",
         signOutStatusUnavailable: "Sign-out status could not be read. Check the connection and retry to confirm the result.",

@@ -15,6 +15,103 @@ import type { RedevenLocale } from './i18n/localeMeta';
 
 let dispose: (() => void) | undefined;
 let host: HTMLDivElement;
+
+it('keeps the sign-out panel stable through runtime progress and delayed refresh', async () => {
+  const saved: FlowerChatGPTAccount = { account_id: 'logout', email: 'person@example.com', state: 'ready', welcome_acknowledged: true };
+  let finish!: (result: Awaited<ReturnType<FlowerChatGPTAuth>>) => void;
+  let finishRefresh!: (result: Awaited<ReturnType<NonNullable<FlowerSurfaceAdapter['loadChatGPTAccounts']>>>) => void;
+  let reads = 0;
+  const auth = vi.fn<FlowerChatGPTAuth>(async () => new Promise(resolve => { finish = resolve; }));
+  const draft: FlowerProviderDraft = { id: 'openai', type: 'openai', auth_method: 'chatgpt', account_id: saved.account_id, chatgpt_account: saved, models: [{ model_name: 'gpt-6.1-sol' }] };
+  const { copy, setRegistry } = await mount(true, 'en-US', 1280, false, draft, auth, undefined, async () => ++reads === 1
+    ? { accounts: {}, saved_accounts: [saved] } : new Promise(resolve => { finishRefresh = resolve; }));
+  await expect.element(page.getByRole('button', { name: copy.chatGPT.savedAccounts, exact: true })).toBeEnabled();
+  const panel = document.querySelector<HTMLElement>('.flower-provider-account')!;
+  const primary = panel.querySelector<HTMLButtonElement>('.flower-provider-account-primary')!;
+  const geometry = () => [panel.getBoundingClientRect().height, primary.getBoundingClientRect().top - panel.getBoundingClientRect().top];
+  const initial = geometry();
+  await userEvent.click(page.getByRole('button', { name: copy.chatGPT.signOut, exact: true }));
+  setRegistry([{ ...saved, state: 'signing_out' }]);
+  await expect.element(page.getByRole('button', { name: copy.chatGPT.signingOut, exact: true })).toBeDisabled();
+  expect(geometry()).toEqual(initial);
+  finish({ local_cleanup_complete: true, revocation_confirmed: true });
+  await expect.element(page.getByText(copy.chatGPT.signedOut, { exact: true })).toBeVisible();
+  await expect.poll(() => typeof finishRefresh).toBe('function');
+  await expect.poll(() => document.querySelectorAll('.flower-provider-account-group [aria-haspopup]').length).toBe(0);
+  expect(geometry()).toEqual(initial);
+  const settledTop = panel.getBoundingClientRect().top;
+  const search = page.getByRole('textbox', { name: copy.catalog.search, exact: true }).element() as HTMLInputElement;
+  search.focus({ preventScroll: true });
+  finishRefresh({ accounts: {}, saved_accounts: [{ ...saved, state: 'signed_out', revocation_confirmed: true }] });
+  await expect.element(page.getByRole('button', { name: copy.chatGPT.continue, exact: true })).toBeEnabled();
+  expect(geometry()).toEqual(initial);
+  expect(panel.getBoundingClientRect().top).toBe(settledTop);
+  expect(panel.querySelector('.flower-provider-account-primary')).toBe(primary);
+  expect(document.activeElement).toBe(search);
+});
+
+it('confirms removal of signed-out history, preserves model choices, and retries failures', async () => {
+  const saved: FlowerChatGPTAccount = { account_id: 'forgotten', email: 'person@example.com', state: 'signed_out', welcome_acknowledged: true, revocation_confirmed: true };
+  const other: FlowerChatGPTAccount = { ...saved, account_id: 'other', email: 'other@example.com', state: 'ready' };
+  let registry = [saved, other];
+  let removeAttempts = 0;
+  const auth = vi.fn<FlowerChatGPTAuth>(async action => {
+    if (action === 'remove') {
+      if (++removeAttempts === 1) throw new Error('storage unavailable');
+      registry = [other];
+    }
+    return {};
+  });
+  const draft: FlowerProviderDraft = { id: 'openai', type: 'openai', auth_method: 'chatgpt', account_id: saved.account_id, chatgpt_account: saved, models: [{ model_name: 'gpt-6.1-sol' }] };
+  const { copy, onConfirm, setOpen } = await mount(true, 'zh-CN', 390, false, draft, auth, undefined, async () => ({ accounts: {}, saved_accounts: registry }));
+  const remove = page.getByRole('button', { name: copy.chatGPT.removeAccount, exact: true });
+  await expect.element(remove).toBeEnabled();
+  await userEvent.click(remove);
+  const confirmation = page.getByRole('dialog', { name: copy.chatGPT.removeAccount, exact: true });
+  await expect.element(confirmation).toHaveTextContent(saved.email);
+  expect(auth).not.toHaveBeenCalled();
+  await userEvent.click(confirmation.getByRole('button', { name: copy.chatGPT.cancel, exact: true }));
+  expect(auth).not.toHaveBeenCalled();
+  await userEvent.click(remove);
+  await userEvent.click(confirmation.getByRole('button', { name: copy.chatGPT.removeAccount, exact: true }));
+  await expect.element(confirmation.getByRole('alert')).toHaveTextContent(copy.chatGPT.removeFailed);
+  await userEvent.click(confirmation.getByRole('button', { name: copy.chatGPT.removeAccount, exact: true }));
+  await expect.poll(() => document.querySelectorAll('.flower-provider-account h4')[0]?.textContent).toBe(copy.chatGPT.connectTitle);
+  expect(auth.mock.calls.every(([action, input]) => action === 'remove' && input.account_id === saved.account_id)).toBe(true);
+  await userEvent.click(page.getByRole('button', { name: copy.chatGPT.savedAccounts, exact: true }));
+  await userEvent.click(page.getByRole('menuitem', { name: other.email, exact: true }));
+  expect(document.querySelector<HTMLInputElement>('.flower-provider-models input[type=checkbox]')!.checked).toBe(true);
+  expect(onConfirm).not.toHaveBeenCalled();
+  setOpen(false); setOpen(true);
+  await expect.element(page.getByRole('button', { name: copy.chatGPT.continue, exact: true })).toBeEnabled();
+});
+
+it('removes an unbound historical account through the explicit recovery chooser', async () => {
+  const saved: FlowerChatGPTAccount = { account_id: 'history', email: 'history@example.com', state: 'signed_out', welcome_acknowledged: true };
+  let registry = [saved];
+  const auth = vi.fn<FlowerChatGPTAuth>(async action => { if (action === 'remove') registry = []; return {}; });
+  const { copy } = await mount(true, 'en-US', 1000, false, undefined, auth, undefined, async () => ({ accounts: {}, saved_accounts: registry }));
+  await userEvent.click(page.getByRole('button', { name: copy.chatGPT.signInAgain, exact: true }));
+  const recovery = page.getByRole('dialog', { name: copy.chatGPT.signInAgain, exact: true });
+  await userEvent.click(recovery.getByRole('button', { name: copy.chatGPT.removeAccount, exact: true }));
+  const confirmation = page.getByRole('dialog', { name: copy.chatGPT.removeAccount, exact: true });
+  await expect.element(confirmation).toHaveTextContent(saved.email);
+  await userEvent.click(confirmation.getByRole('button', { name: copy.chatGPT.removeAccount, exact: true }));
+  await expect.element(page.getByRole('button', { name: copy.chatGPT.continue, exact: true })).toBeEnabled();
+  expect(auth.mock.calls).toEqual([['remove', expect.objectContaining({ account_id: saved.account_id })]]);
+  await expect.poll(() => document.querySelectorAll('[role=dialog]').length).toBe(1);
+});
+
+it('starts a fresh sign-in when another local surface removed the bound registration', async () => {
+  const saved: FlowerChatGPTAccount = { account_id: 'removed-elsewhere', email: 'person@example.com', state: 'signed_out', welcome_acknowledged: true };
+  const auth = vi.fn<FlowerChatGPTAuth>(async () => ({ id: 'fresh', state: 'waiting' }));
+  const draft: FlowerProviderDraft = { id: 'openai', type: 'openai', auth_method: 'chatgpt', account_id: saved.account_id, chatgpt_account: saved, models: [{ model_name: 'gpt-6.1-sol' }] };
+  const { copy, setAccount, setRegistry } = await mount(true, 'en-US', 1000, false, draft, auth, undefined, async () => ({ accounts: {}, saved_accounts: [saved] }));
+  setRegistry([]);
+  setAccount({ account_id: saved.account_id, email: '', state: 'authorization_required', welcome_acknowledged: false });
+  await userEvent.click(page.getByRole('button', { name: copy.chatGPT.continue, exact: true }));
+  expect(auth.mock.calls.find(([action]) => action === 'start')?.[1].account_id).toBeUndefined();
+});
 afterEach(() => { dispose?.(); host?.remove(); document.documentElement.classList.remove('dark'); });
 
 async function mount(local: boolean, locale: RedevenLocale, width: number, dark: boolean, provider?: FlowerProviderDraft, auth?: FlowerChatGPTAuth, mode?: 'create' | 'edit', loadAccounts?: FlowerSurfaceAdapter['loadChatGPTAccounts']) {
@@ -189,7 +286,7 @@ it('switches a recovery binding only after verified success and keeps the origin
   finish({ state: 'ready', account: recovered });
   await expect.element(picker).toHaveTextContent(previous.email);
   expect(document.activeElement).toBe(search.element());
-  expect(document.querySelector<HTMLInputElement>('input[type=checkbox]')!.checked).toBe(true);
+  expect(document.querySelector<HTMLInputElement>('.flower-provider-models input[type=checkbox]')!.checked).toBe(true);
   expect(onConfirm).not.toHaveBeenCalled();
   setOpen(false); setOpen(true);
   await expect.element(picker).toHaveTextContent(active.email);
@@ -233,7 +330,7 @@ it('removes a signed-out account from the picker immediately without changing it
   await userEvent.click(page.getByRole('button', { name: copy.chatGPT.signOut, exact: true }));
   await expect.element(page.getByText(copy.chatGPT.signedOut, { exact: true })).toBeVisible();
   await expect.element(page.getByRole('button', { name: copy.chatGPT.savedAccounts, exact: true })).toHaveTextContent(copy.chatGPT.chooseAccount);
-  expect(document.querySelector<HTMLInputElement>('input[type=checkbox]')!.checked).toBe(true);
+  expect(document.querySelector<HTMLInputElement>('.flower-provider-models input[type=checkbox]')!.checked).toBe(true);
   expect(onConfirm).not.toHaveBeenCalled();
 });
 
@@ -304,7 +401,7 @@ it('keeps draft selection, search and focus when a verified replacement account 
   finish({ id: 'new-attempt', state: 'ready', account: { account_id: 'new', email: 'new@example.com', state: 'ready', welcome_acknowledged: false } });
   await expect.element(page.getByText('new@example.com', { exact: true })).toBeVisible();
   expect(search.value).toBe('gpt'); expect(document.activeElement).toBe(search);
-  expect(document.querySelector<HTMLInputElement>('input[aria-label="GPT-6.1 Sol"]')?.checked ?? document.querySelector<HTMLInputElement>('input[type=checkbox]')?.checked).toBe(true);
+  expect(document.querySelector<HTMLInputElement>('input[aria-label="GPT-6.1 Sol"]')?.checked ?? document.querySelector<HTMLInputElement>('.flower-provider-models input[type=checkbox]')?.checked).toBe(true);
   expect(document.body.textContent).toContain(copy.chatGPT.welcome);
   await userEvent.click(page.getByRole('button', { name: copy.chatGPT.welcomeConfirm, exact: true }));
   expect(document.body.textContent).not.toContain(copy.chatGPT.welcomeTitle);
@@ -367,7 +464,7 @@ it('updates account facts without replacing the model selection or search', asyn
   (search.element() as HTMLInputElement).focus();
   setAccount({ ...draft.chatgpt_account!, state: 'temporarily_unavailable', error_code: 'rate_limited' });
   await expect.element(page.getByText(copy.chatGPT.temporarilyUnavailable, { exact: true })).toBeVisible();
-  expect((document.querySelector<HTMLInputElement>('input[type=checkbox]')!).checked).toBe(true);
+  expect((document.querySelector<HTMLInputElement>('.flower-provider-models input[type=checkbox]')!).checked).toBe(true);
   expect((search.element() as HTMLInputElement).value).toBe('gpt');
   expect(document.activeElement).toBe(search.element());
   const dialog = document.querySelector<HTMLElement>('.flower-provider-dialog')!;
@@ -479,7 +576,7 @@ it('observes canonical renewal and logout of a newly saved unbound account witho
   await expect.element(page.getByText(copy.chatGPT.renewing, { exact: true })).toBeVisible();
   setRegistry([{ ...saved, state: 'signed_out', revocation_confirmed: true }]);
   await expect.element(page.getByText(copy.chatGPT.signedOut, { exact: true })).toBeVisible();
-  expect(document.querySelector<HTMLInputElement>('input[type=checkbox]')!.checked).toBe(true);
+  expect(document.querySelector<HTMLInputElement>('.flower-provider-models input[type=checkbox]')!.checked).toBe(true);
   const panel = document.getElementById('flower-provider-type-openai')!;
   expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
 });

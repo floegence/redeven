@@ -206,6 +206,13 @@ func (g *Server) handleChatGPTAuth(w http.ResponseWriter, r *http.Request) {
 	case "/_redeven_proxy/api/ai/auth/chatgpt/cancel":
 		g.chatGPT.Cancel(owner, body.AttemptID)
 		out = struct{}{}
+	case "/_redeven_proxy/api/ai/auth/chatgpt/remove":
+		if body.AccountID == "" {
+			err = chatgpt.Failure("invalid_authorization_request")
+			break
+		}
+		err = g.chatGPT.RemoveAccount(r.Context(), body.AccountID)
+		out = struct{}{}
 	case "/_redeven_proxy/api/ai/auth/chatgpt/sign-out", "/_redeven_proxy/api/ai/auth/chatgpt/acknowledge", "/_redeven_proxy/api/ai/auth/chatgpt/retry":
 		// Account actions belong to the canonical local registry, independently
 		// of connection configuration or its current availability.

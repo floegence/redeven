@@ -158,6 +158,11 @@ describe('Local account lifecycle routes', () => {
     expect(runtimeFlowerMethodAllowed(accounts, 'POST')).toBe(false);
     expect(runtimeFlowerMethodAllowed(retry, 'POST')).toBe(true);
     expect(runtimeFlowerMethodAllowed(retry, 'GET')).toBe(false);
+    const remove = '/_redeven_proxy/api/ai/auth/chatgpt/remove';
+    expect(runtimeFlowerPath(remove)).toBe(remove);
+    expect(runtimeFlowerMethodAllowed(remove, 'POST')).toBe(true);
+    expect(runtimeFlowerMethodAllowed(remove, 'DELETE')).toBe(false);
+    expect(runtimeFlowerMethodAllowed(remove, 'GET')).toBe(false);
     for (const path of [accounts + '?token=x', accounts + '/x', retry + '?account_id=x']) expect(() => runtimeFlowerPath(path)).toThrow();
   });
 });

@@ -53,6 +53,51 @@ func TestSavedRegistrationSelectableAfterFinalConnectionRemoval(t *testing.T) {
 	}
 }
 
+func TestRemoveSignedOutRegistrationRequiresLocalAccessAndPreservesBindings(t *testing.T) {
+	for _, local := range []bool{true, false} {
+		meta := session.Meta{CanRead: true, CanAdmin: true}
+		if local {
+			meta.LocalHostAccess = "verified"
+		}
+		path := writeTestConfigWithAI(t)
+		srv, err := New(Options{Backend: &stubBackend{}, DistFS: fstest.MapFS{"env/index.html": {Data: []byte("env")}}, ListenAddr: "127.0.0.1:0", ConfigPath: path, ResolveSessionMeta: resolveMetaForTest("remove", meta)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		account := settings.ChatGPTAccount{Issuer: "https://auth.openai.com", Subject: "subject", ClientID: "issued", Email: "person@example.com", AccessToken: "secret"}
+		if err := srv.secrets.UpdateChatGPTAccount(t.Context(), account.ID(), func(p *settings.ChatGPTAccount) error { *p = account; return nil }); err != nil {
+			t.Fatal(err)
+		}
+		remove := func() int {
+			return performServerRequest(srv, http.MethodPost, "/_redeven_proxy/api/ai/auth/chatgpt/remove", envOriginWithChannel("remove"), `{"scope_id":"dialog","account_id":"`+account.ID()+`"}`).Code
+		}
+		if code := remove(); local && code != http.StatusBadRequest || !local && code != http.StatusForbidden {
+			t.Fatalf("unexpected unsafe removal status: %d", code)
+		}
+		if err := srv.secrets.UpdateChatGPTAccount(t.Context(), account.ID(), func(p *settings.ChatGPTAccount) error { p.AccessToken = ""; p.Lifecycle = "signed_out"; return nil }); err != nil {
+			t.Fatal(err)
+		}
+		_, err = config.Update(path, func(cfg *config.Config) error {
+			cfg.AI.Providers = append(cfg.AI.Providers, config.AIProvider{ID: "bound-account", Type: "openai", AuthMethod: config.AIAuthChatGPT, AccountID: account.ID(), ModelSelection: &config.AIModelSelection{SelectedModels: []string{}}})
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if code := remove(); local && code != http.StatusOK || !local && code != http.StatusForbidden {
+			t.Fatalf("unexpected removal status: %d", code)
+		}
+		_, exists, err := srv.secrets.ChatGPTAccount(account.ID())
+		if err != nil || exists == local {
+			t.Fatalf("wrong registration existence: %v, %v", exists, err)
+		}
+		cfg, err := config.Load(path)
+		if err != nil || cfg.AI.Providers[len(cfg.AI.Providers)-1].AccountID != account.ID() {
+			t.Fatal("removal changed provider configuration")
+		}
+	}
+}
+
 func TestSavedUnboundAccountsHaveDistinctIdentityAndLocalManagement(t *testing.T) {
 	for _, local := range []bool{true, false} {
 		t.Run(map[bool]string{true: "local", false: "remote"}[local], func(t *testing.T) {
