@@ -21,9 +21,10 @@ fails closed if any Windows asset appears.
 
 ## Validation levels
 
-`AGENTS.md` owns concise global working rules, Git discipline, and mandatory
-links to domain contracts in this corpus. Domain-specific behavior stays in its
-own concept rather than being duplicated in repository instructions. The
+`AGENTS.md` owns concise global working rules and Git discipline, with an OKF
+index entrypoint for consultation when additional context is needed. It does
+not prescribe a mandatory reading list before changes. Domain-specific behavior
+stays in its own concept rather than being duplicated in repository instructions. The
 repository-instruction tests in `scripts/quick_ci_policy.test.mjs` enforce a
 100-line limit, including headings and blank lines, and verify the OKF index
 and linked contract files. Fast commit checks, ordinary source CI, and the
