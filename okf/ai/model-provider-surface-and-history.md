@@ -42,28 +42,7 @@ Published Floret v7.26.0 owns `EstimateRenderedRequest` for local Responses, Cha
 
 ## Native request measurement
 
-Published Floret v7.70.0 owns one pressure calculation: a qualified native prefix
-plus an estimate of only the remaining frozen input, or the complete estimate
-when proof does not match. The 90% threshold and public output reservation
-semantics remain upstream. Schema 27 -> 28 is migrated only by Floret.
-
-Redeven maps successful official Responses facts through optional
-PreparedRequestMeasurement and RequestMeasurement. Input scope remains
-provider_execution; protocol coverage evidence does not rename billing scope.
-HTTP uses this response's x-reasoning-included header, while WebSocket uses only
-the owning connection's handshake and unique lifetime identity. Unknown gateways,
-hosted execution, automatic truncation and hidden continuation do not qualify.
-Account, API credential and connection changes invalidate matching prefixes.
-Encrypted reasoning has no ciphertext-to-token conversion. A complete ChatGPT
-native replay may establish a conservative input-plus-output boundary only when
-output usage is explicitly present and opaque replay inclusion is proven.
-
-Frozen suffix mapping reads no attachments, refreshes no context and performs no
-network counting. Output refits and transport retries preserve the same frozen
-input; failed or cancelled attempts never supply committed response evidence.
-Floret alone checks attempt identity, commits output, persists and revalidates
-measurements, selects pressure and executes bounded compaction/recovery. Redeven
-adds no pressure policy, lifecycle state or durable measurement copy.
+Published Floret v7.70.0 owns [native request measurement](model-request-measurement.md), frozen-prefix pressure and schema 28. Redeven maps protocol facts without a second pressure policy or measurement store.
 
 ## Temporary provider failures
 

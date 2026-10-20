@@ -10,7 +10,7 @@
 
 ## 2026-10-19 — Native measured compaction pressure
 
-- Adopt published Floret v7.70.0 and schema 28; map attempt-bound Responses measurement with HTTP/connection inclusion evidence and frozen suffix replay, retaining upstream pressure and recovery ownership. See [native request measurement](ai/model-provider-surface-and-history.md#native-request-measurement).
+- Adopt published Floret v7.70.0 and schema 28; map attempt-bound Responses measurement with HTTP/connection inclusion evidence and frozen suffix replay, retaining upstream pressure and recovery ownership. See [native request measurement](ai/model-request-measurement.md).
 
 ## 2026-10-19 — Preserve Flower tail following during live growth
 
