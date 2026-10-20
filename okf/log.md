@@ -2,7 +2,7 @@
 
 ## 2026-10-20 — Unified ChatGPT transport recovery
 
-- Adopt published Floret v7.73.0 attempt-bound transport observation and replay measurement boundaries. Pin recoverable ChatGPT WebSocket failures to full-input SSE through Engine-owned retries; unify sanitized diagnostics, Desktop RPC v4/epoch 68 and localized current-view feedback. See [request reuse](ai/model-request-reuse.md) and [provider history](ai/model-provider-surface-and-history.md).
+- Adopt published Floret v7.73.0 attempt-bound transport observation and replay measurement boundaries. Pin recoverable ChatGPT WebSocket failures to full-input SSE through Engine-owned retries; unify sanitized diagnostics, Desktop RPC v4/epoch 68 and localized current-view feedback. Separate [request recovery](ai/model-request-recovery.md) from [provider history](ai/model-provider-surface-and-history.md), with [request reuse](ai/model-request-reuse.md) retaining transport ownership.
 
 ## 2026-10-20 — Stable ChatGPT sign-out and explicit account removal
 
