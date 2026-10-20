@@ -200,6 +200,7 @@ main() {
         src/ui/FlowerSurface.finalArchitecture.browser.test.tsx \
         src/ui/FlowerSurface.streamingStability.browser.test.tsx \
         src/ui/FlowerSurface.liveRecovery.browser.test.tsx \
+        src/ui/FlowerSurface.goal.browser.test.tsx \
         src/ui/FlowerSurface.turnProcess.browser.test.tsx \
         src/ui/FlowerSurface.thinkingDisclosure.browser.test.tsx \
         src/ui/FlowerMarkdown.streamingStability.browser.test.tsx \

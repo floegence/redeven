@@ -2,7 +2,7 @@ import { render } from 'solid-js/web';
 import { DesktopWelcomeShell, type DesktopWelcomeRuntime } from '../../src/welcome/App';
 import type { DesktopWelcomeSnapshot } from '../../src/shared/desktopLauncherIPC';
 import type { RuntimeFlowerStreamEvent } from '../../src/shared/runtimeFlowerIPC';
-import type { FlowerRuntimeCurrentView } from '../../../internal/flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerGoal, FlowerGoalInput, FlowerRuntimeCurrentView } from '../../../internal/flower_ui/src/contracts/flowerSurfaceContracts';
 import { flowerLiveWireFixture } from '../../../internal/flower_ui/src/test/flowerLiveWireFixture';
 import '../../src/welcome/index.css';
 import { INTERFACE_DENSITY_MARKDOWN } from '../../../internal/envapp/ui_src/src/ui/FlowerSurface.interfaceDensity.fixture';
@@ -15,6 +15,11 @@ declare global {
       streams: number;
       cancellations: number;
       prematureRequests: number;
+      goalReads: number;
+      goalRequests: FlowerGoalInput[];
+      holdGoalReads: boolean;
+      releaseGoalRead: (fail?: boolean) => void;
+      publishGoal: (text: string, live?: boolean) => void;
       releaseRuntime: () => void;
       refreshHealth: () => void;
       publishHTML: (text: string, generating: boolean) => void;
@@ -29,10 +34,22 @@ let receive: ((value: DesktopWelcomeSnapshot) => void) | undefined;
 let receiveStream: ((event: RuntimeFlowerStreamEvent) => void) | undefined;
 let receiveStreamID = '';
 let aiReady = false;
+const goalMode = new URLSearchParams(location.search).has('goal');
+let goal: FlowerGoal = { version: 1, text: 'Confirm the release and preserve every requirement.', actor: 'user', status: 'active' };
+let releaseGoalRead: ((fail: boolean) => void) | undefined;
 const unavailable = () => ({ ok: false as const, error: { code: 'AI_SERVICE_UNAVAILABLE', status: 503,
   message: 'AI service is unavailable', data: { readiness: { state: 'inspecting', retryable: false, safe_to_retry: false } } } });
 const fixture = window.navigationFixture = {
   requests: [] as string[], streams: 0, cancellations: 0, prematureRequests: 0, dispose: () => {},
+  goalReads: 0, goalRequests: [] as FlowerGoalInput[], holdGoalReads: false,
+  releaseGoalRead(fail = false) { releaseGoalRead?.(fail); releaseGoalRead = undefined; },
+  publishGoal(text: string, live = true) {
+    goal = { version: goal.version + 1, text, status: 'active', actor: 'model' };
+    thread.goal = goal;
+    current = { ...current, view_version: current.view_version + 1, goal };
+    if (live) for (const frame of flowerLiveWireFixture({ schema_version: 1, kind: 'thread.batch', thread_id: thread.thread_id, current }, 'goal-' + current.view_version))
+      receiveStream?.({ stream_id: receiveStreamID, kind: 'chunk', chunk: new TextEncoder().encode('data: ' + frame.data + '\n\n') });
+  },
   releaseRuntime() {
     aiReady = true;
     fixture.publish({ environments: snapshot.environments.map(entry => ({ ...entry,
@@ -59,7 +76,7 @@ const fixture = window.navigationFixture = {
 };
 const thread = {
   thread_id: 'navigation-thread', title: 'Keep this conversation', title_status: 'ready', title_generation: 1,
-  model_id: 'fixture/model', run_status: 'idle', working_dir: '/workspace',
+  model_id: 'fixture/model', run_status: 'idle', working_dir: '/workspace', goal: goalMode ? goal : undefined,
   created_at_unix_ms: 1, updated_at_unix_ms: 2, last_message_at_unix_ms: 2,
   read_status: { is_unread: false, snapshot: { activity_revision: 1 }, read_state: { last_seen_activity_revision: 1 } },
 };
@@ -85,7 +102,26 @@ const settings: DesktopWelcomeRuntime['settings'] = {
     if (route.startsWith('ai/') && !aiReady) { fixture.prematureRequests++; return unavailable(); }
     if (route === 'ai/models') return { ok: true, data: { current_model: 'fixture/model', models: [{ id: 'fixture/model' }] } };
     if (route === 'ai/threads') return { ok: true, data: { threads: [thread] } };
-    if (route === `ai/threads/${thread.thread_id}`) return { ok: true, data: { thread, current } };
+    if (route === 'ai/storage-generation') return { ok: true, data: { storage_generation: 'a'.repeat(32) } };
+    if (route === 'ai/thread-goal' && goalMode) {
+      const input = request.body as FlowerGoalInput;
+      fixture.goalRequests.push(input);
+      const conflict = input.expected_version !== goal.version;
+      if (!conflict) {
+        goal = { version: goal.version + 1, ...(input.operation !== 'delete' ? { text: input.text } : {}), status: input.operation === 'delete' ? 'absent' : 'active', actor: 'user' };
+        thread.goal = goal;
+        current = { ...current, view_version: current.view_version + 1, goal };
+      }
+      return { ok: true, data: { client_request_id: input.client_request_id, thread_id: thread.thread_id, goal, current, conflict } };
+    }
+    if (route === `ai/threads/${thread.thread_id}`) {
+      fixture.goalReads++;
+      if (fixture.holdGoalReads) {
+        const failed = await new Promise<boolean>(resolve => { releaseGoalRead = resolve; });
+        if (failed) return { ok: false, error: { code: 'fixture_read_failed', message: 'Goal confirmation is unavailable.' } };
+      }
+      return { ok: true, data: { thread, current: { ...current, ...(goalMode ? { goal } : {}) } } };
+    }
     if (route === `ai/threads/${thread.thread_id}/read`) return { ok: true, data: thread.read_status };
     if (route === `ai/threads/${thread.thread_id}/computer-media/browser-main/${'a'.repeat(64)}`) {
       const canvas = document.createElement('canvas'); canvas.width = 960; canvas.height = 440;

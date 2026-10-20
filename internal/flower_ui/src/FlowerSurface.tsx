@@ -38,7 +38,7 @@ import { FlowerProviderBrandIcon } from './settings/FlowerProviderBrandIcon';
 import { WebSearchActivity } from './WebSearchActivity';
 import type { Accessor, Component, JSX } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
-import { For, Match, Show, Suspense, Switch, batch, createEffect, createMemo, createResource, createSignal, lazy, on, onCleanup, onMount, untrack } from 'solid-js';
+import { For, Match, Show, Suspense, Switch, batch, createEffect, createMemo, createResource, createSignal, createUniqueId, lazy, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn, useMobileLayout, createAdaptiveSidebar, createRetainedContent } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
 import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, Globe, GripVertical, Link, Menu, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Search, Send, Settings, Shield, Terminal, Trash, X, XCircle, Zap } from '@floegence/floe-webapp-core/icons';
@@ -407,6 +407,9 @@ type PendingAdmissionHandoff = Readonly<{
   sessionKey: string;
   selectionSequence: number;
   scopeBinding?: { transferred: boolean; threadID?: string };
+  goalEdit?: FlowerComposerDraftValue['goal_edit'];
+  goalPopupAttempt?: number;
+  goalFromCommand?: boolean;
   settle: (threadID: string, transferDraftScope: boolean) => void;
 }>;
 
@@ -2668,6 +2671,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const threadItemCache = new Map<string, { item: ReturnType<typeof projectFlowerThreadListItem>; sig: string }>();
   type ThreadDetailSource =
     | 'initial_load'
+    | 'goal_popup'
     | 'user_action'
     | 'background_refresh'
     | 'summary_update'
@@ -3927,9 +3931,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     source: ThreadDetailSource,
     force = false,
     background = false,
+    stillRequested: () => boolean = () => true,
   ): Promise<FlowerThreadSnapshot | null> => {
     const tid = trimString(threadID);
-    if (!tid || retiredThreadIDs.has(tid) || (!background && (pendingThreadSelection() || tid !== selectedThreadID()))) return Promise.resolve(null);
+    if (!stillRequested() || !tid || retiredThreadIDs.has(tid) || (!background && (pendingThreadSelection() || tid !== selectedThreadID()))) return Promise.resolve(null);
     const state = threadDetailLoadState(tid);
     const cached = threadCache().views.get(tid);
     const detail = cached?.thread;
@@ -3947,6 +3952,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     };
     if (!force && state.failedTarget && !threadDetailTargetAdvanced(target, state.failedTarget)) return Promise.resolve(null);
     if (state.inFlight && state.inFlightTarget) {
+      // Confirm a read started after opening, rather than an older in-flight read.
+      if (source === 'goal_popup') return state.inFlight.then(() => requestThreadDetail(tid, source, true, background, stillRequested));
       if (threadDetailTargetAdvanced(target, state.inFlightTarget)) {
         queueLatestThreadDetailTarget(state, target);
         return state.inFlight.then(() => requestThreadDetail(tid, source, force, background));
@@ -3954,7 +3961,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return state.inFlight;
     }
 
-    setThreadDetailLoading(tid, true);
+    if (source !== 'goal_popup') setThreadDetailLoading(tid, true);
     state.inFlightTarget = target;
     const requestEpoch = liveTransport.connectionEpoch();
     const readController = new AbortController();
@@ -3999,9 +4006,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return result.thread;
       } catch (error) {
         if (readController.signal.aborted || requestEpoch !== liveTransport.connectionEpoch()) return null;
-        if (target.cycle === state.cycle) state.failedTarget = target;
+        if (source !== 'goal_popup' && target.cycle === state.cycle) state.failedTarget = target;
         reportThreadDetailDiagnostic(tid, 'request_or_mapping', source, error);
-        if (target.cycle === state.cycle && selectedThreadID() === tid) {
+        if (source !== 'goal_popup' && target.cycle === state.cycle && selectedThreadID() === tid) {
           setThreadLoadError(threadDetailUserError(error));
         }
         return null;
@@ -6728,35 +6735,120 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return event.key === 'Enter' && !event.shiftKey;
   };
 
-  type GoalEditor = Readonly<{ sessionKey: string; text: string; version: number; error?: string }>;
+  type GoalEdit = NonNullable<FlowerComposerDraftValue['goal_edit']>;
   const goalCommand = createMemo(() => reactiveDraftSnapshotFor(currentComposerSessionKey()).value.goal_command);
   const [goalPopupScope, setGoalPopupScope] = createSignal('');
-  const goalPopupOpen = () => goalPopupScope() === currentComposerSessionKey();
-  const goalEditor = createMemo<GoalEditor | null>(() => {
-    const sessionKey = currentComposerSessionKey();
-    const edit = reactiveDraftSnapshotFor(sessionKey).value.goal_edit;
-    return edit ? { ...edit, sessionKey } : null;
-  });
-  const storeGoalEditor = (sessionKey: string, editor: Omit<GoalEditor, 'sessionKey'> | null) => {
+  const goalPopupOpen = () => Boolean(goalPopupScope()) && goalPopupScope() === currentComposerSessionKey();
+  const goalEditor = createMemo(() => reactiveDraftSnapshotFor(currentComposerSessionKey()).value.goal_edit);
+  // A discarded draft cannot inherit a pending edit's successful write version.
+  const goalEditOrigins = new WeakMap<GoalEdit, GoalEdit>();
+  const goalEditOrigin = (edit: GoalEdit) => goalEditOrigins.get(edit) ?? edit;
+  const storeGoalEditor = (sessionKey: string, editor: GoalEdit | null, previous?: GoalEdit) => {
+    if (editor && previous) goalEditOrigins.set(editor, goalEditOrigin(previous));
     draftSessionFor(sessionKey).mutate(value => ({ ...value, goal_edit: editor ?? undefined }));
   };
   const [goalPreparingScopes, setGoalPreparingScopes] = createSignal<readonly string[]>([]);
   const selectedGoal = createMemo(() => selectedThread()?.goal);
+  const [goalPopupLoad, setGoalPopupLoad] = createSignal<'loading' | 'ready' | 'error'>('loading');
+  const [goalRequestedView, setGoalPopupView] = createSignal<'current' | 'draft'>('current');
+  const goalPopupView = () => goalEditor() ? goalRequestedView() : 'current';
+  const [goalEditing, setGoalEditing] = createSignal(false);
+  const [goalReviewedVersion, setGoalReviewedVersion] = createSignal<number>();
+  const [goalCurrentVersionSeen, setGoalCurrentVersionSeen] = createSignal<number>();
+  const [goalDeleteConflict, setGoalDeleteConflict] = createSignal(false);
+  const [goalComposing, setGoalComposing] = createSignal(false);
+  const goalDraftStale = () => Boolean(goalEditor() && goalEditor()!.version !== (selectedGoal()?.version ?? 0));
+  const goalVersionReviewed = () => !goalDraftStale() || goalReviewedVersion() === (selectedGoal()?.version ?? 0);
+  const goalCanSave = () => goalPopupLoad() === 'ready' && goalEditing() && Boolean(goalEditor()?.text.trim()) && goalVersionReviewed();
+  const goalPopupID = createUniqueId();
+  let goalPopupAttempt = 0;
+  let goalPopupEpoch = 0;
+  const goalDraftSelections = new Map<string, { start: number; end: number; direction: 'forward' | 'backward' | 'none'; scroll: number }>();
   let goalInputRef: HTMLTextAreaElement | undefined;
   let goalTriggerRef: HTMLButtonElement | undefined;
   let goalPanelRef: HTMLDivElement | undefined;
   const [goalPopupPosition, setGoalPopupPosition] = createSignal({ x: 8, y: 8 });
   const [goalPopupSize, setGoalPopupSize] = createSignal({ width: 352, height: 220 });
+  const rememberGoalSelection = () => {
+    if (goalPopupView() !== 'draft' || !goalInputRef) return;
+    goalDraftSelections.set(goalPopupScope(), { start: goalInputRef.selectionStart, end: goalInputRef.selectionEnd,
+      direction: goalInputRef.selectionDirection, scroll: goalInputRef.scrollTop });
+  };
+  const showGoalView = (view: 'current' | 'draft', edit = false) => {
+    if (goalComposing()) return;
+    rememberGoalSelection();
+    setGoalPopupView(view);
+    setGoalEditing(edit);
+    const attempt = goalPopupAttempt;
+    requestAnimationFrame(() => {
+      if (surfaceDisposed || attempt !== goalPopupAttempt || !goalPopupOpen() || !goalInputRef) return;
+      const selection = goalDraftSelections.get(currentComposerSessionKey());
+      if (view === 'draft' && selection) {
+        goalInputRef.setSelectionRange(selection.start, selection.end, selection.direction);
+        goalInputRef.scrollTop = selection.scroll;
+      } else goalInputRef.scrollTop = 0;
+      if (edit) goalInputRef.focus();
+    });
+  };
   const closeGoalEditor = (discard = false, restoreFocus = true) => {
+    rememberGoalSelection();
     if (discard) storeGoalEditor(currentComposerSessionKey(), null);
+    goalPopupAttempt++;
     setGoalPopupScope('');
+    setGoalComposing(false);
     if (restoreFocus) (goalTriggerRef ?? composerRef)?.focus();
   };
-  const openGoalEditor = () => {
-    if (!goalEditor()) storeGoalEditor(currentComposerSessionKey(), { text: selectedGoal()?.text ?? '', version: selectedGoal()?.version ?? 0 });
-    setGoalPopupScope(currentComposerSessionKey());
-    requestAnimationFrame(() => { if (!surfaceDisposed) goalInputRef?.focus(); });
+  const confirmGoalPopup = async () => {
+    const attempt = ++goalPopupAttempt;
+    const sessionKey = currentComposerSessionKey();
+    const threadID = selectedThreadID();
+    goalPopupEpoch = liveTransport.connectionEpoch();
+    const epoch = goalPopupEpoch;
+    const sequence = threadLoadSequence;
+    setGoalPopupLoad('loading');
+    setGoalReviewedVersion(undefined);
+    const result = await requestThreadDetail(threadID, 'goal_popup', true, false,
+      () => !surfaceDisposed && attempt === goalPopupAttempt && goalPopupOpen() && sequence === threadLoadSequence && epoch === liveTransport.connectionEpoch());
+    if (surfaceDisposed || attempt !== goalPopupAttempt || !goalPopupOpen() || sessionKey !== currentComposerSessionKey()
+      || sequence !== threadLoadSequence || epoch !== liveTransport.connectionEpoch()) return;
+    setGoalPopupLoad(result ? 'ready' : 'error');
+    if (result) {
+      const editable = !goalEditor();
+      setGoalEditing(editable);
+      requestAnimationFrame(() => {
+        if (!surfaceDisposed && attempt === goalPopupAttempt && goalPopupOpen() && editable) goalInputRef?.focus();
+      });
+    }
   };
+  const openGoalEditor = () => {
+    goalPopupEpoch = liveTransport.connectionEpoch();
+    setGoalPopupLoad('loading');
+    setGoalPopupView('current');
+    setGoalEditing(false);
+    setGoalDeleteConflict(false);
+    setGoalCurrentVersionSeen(undefined);
+    setGoalPopupScope(currentComposerSessionKey());
+    void confirmGoalPopup();
+    const attempt = goalPopupAttempt;
+    requestAnimationFrame(() => {
+      if (!surfaceDisposed && attempt === goalPopupAttempt && goalPopupOpen() && document.activeElement === goalTriggerRef)
+        goalPanelRef?.querySelector<HTMLButtonElement>('.flower-goal-popup-controls button:last-child')?.focus();
+    });
+  };
+  const continueGoalEditing = () => {
+    if (goalPopupLoad() !== 'ready' || goalDraftStale() && goalPopupView() !== 'current') return;
+    setGoalReviewedVersion(selectedGoal()?.version ?? 0);
+    showGoalView('draft', true);
+  };
+  const discardGoalDraft = () => {
+    storeGoalEditor(currentComposerSessionKey(), null);
+    goalDraftSelections.delete(currentComposerSessionKey());
+    setGoalReviewedVersion(undefined);
+    showGoalView('current', goalPopupLoad() === 'ready');
+  };
+  createEffect(() => {
+    if (goalPopupOpen() && goalPopupLoad() === 'ready' && goalPopupView() === 'current') setGoalCurrentVersionSeen(selectedGoal()?.version ?? 0);
+  });
   const enterGoalCommand = (text = '') => {
     draftSessionFor(currentComposerSessionKey()).mutate(value => ({ ...value, goal_command: { text } }));
     requestAnimationFrame(() => { if (!surfaceDisposed) composerRef?.focus(); });
@@ -6766,7 +6858,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     requestAnimationFrame(() => { if (!surfaceDisposed) composerRef?.focus(); });
   };
   createEffect(() => {
-    if (goalPopupScope() && (goalPopupScope() !== currentComposerSessionKey() || !selectedGoal()?.text)) setGoalPopupScope('');
+    const epoch = liveSyncState().connectionEpoch;
+    if (goalPopupScope() && (goalPopupScope() !== currentComposerSessionKey() || epoch !== goalPopupEpoch || !selectedGoal()?.text && !goalEditor())) closeGoalEditor(false, false);
   });
   createEffect(() => {
     if (!goalPopupOpen()) return;
@@ -6788,9 +6881,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       closeGoalEditor(false, false);
     };
     const keydown = (event: KeyboardEvent) => {
+      if (event.isComposing || goalComposing()) return;
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeGoalEditor(); }
       if (event.key === 'Tab' && goalPanelRef) {
-        const items = [...goalPanelRef.querySelectorAll<HTMLElement>('button:not(:disabled), textarea:not(:disabled)')];
+        const items = [...goalPanelRef.querySelectorAll<HTMLElement>('button:not(:disabled):not([tabindex="-1"]), textarea:not(:disabled)')];
         if (event.shiftKey && document.activeElement === items[0] || !event.shiftKey && document.activeElement === items.at(-1)) { event.preventDefault(); closeGoalEditor(); }
       }
     };
@@ -6821,8 +6915,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     const selectionSequence = threadLoadSequence;
     const requestID = createFlowerClientRequestID();
-    const editor = goalEditor();
-    const expectedVersion = !fromCommand && editor?.sessionKey === sessionKey ? editor.version : selectedGoal()?.version ?? 0;
+    const editor = frozen.value.goal_edit;
+    if (!fromCommand && (goalPopupLoad() !== 'ready' || goalComposing() || operation === 'set' && !goalCanSave())) return;
+    const expectedVersion = !fromCommand && operation === 'delete' ? goalCurrentVersionSeen()
+      : !fromCommand && editor ? (goalDraftStale() ? goalReviewedVersion()! : editor.version) : selectedGoal()?.version ?? 0;
+    if (expectedVersion === undefined) return;
+    const popupAttempt = !fromCommand ? goalPopupAttempt : undefined;
     const reasoning = serializeFlowerReasoningSelection(composerLaunchReasoningSelection());
     const newSettings = { model_id: selectedComposerModelID(), working_dir: displayedWorkingDirectory(),
       permission_type: composerPermissionType() || defaultComposerPermissionType(),
@@ -6835,10 +6933,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         ...(threadID ? { thread_id: threadID } : { new_thread: newSettings }),
         operation: operation === 'set' && fromCommand ? 'submit' : operation, expected_version: expectedVersion, ...(operation === 'set' ? { text } : {}) };
       outboxOperations.set(requestID, { adapter });
-      pendingAdmissionHandoffs.set(requestID, { sessionKey, selectionSequence, settle: (canonicalThreadID) => {
+      pendingAdmissionHandoffs.set(requestID, { sessionKey, selectionSequence, goalEdit: editor, goalPopupAttempt: popupAttempt, goalFromCommand: fromCommand, settle: (canonicalThreadID) => {
         if (fromCommand && frozen.value.goal_command && session.snapshot().value.goal_command === frozen.value.goal_command) session.mutate(value => ({ ...value, goal_command: undefined }));
         else if (fromCommand && !frozen.value.goal_command && session.snapshot().text_revision === frozen.text_revision) updateComposerSessionText(sessionKey, '');
-        if (!fromCommand && session.snapshot().value.goal_edit === frozen.value.goal_edit) session.mutate(value => ({ ...value, goal_edit: undefined }));
+        if (!fromCommand && operation === 'set' && session.snapshot().value.goal_edit === frozen.value.goal_edit) session.mutate(value => ({ ...value, goal_edit: undefined }));
         if (isPendingDraftKey(sessionKey)) {
           draftCoordinator.moveScope(sessionKey, canonicalThreadID);
           if (sessionKey.startsWith(PENDING_NEW_THREAD_ID + ':')) embeddedThreads.set(sessionKey, canonicalThreadID);
@@ -6881,16 +6979,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const retainedText = editor?.text ?? entry.goalInput?.text ?? result.goal.text ?? '';
       if (result.conflict) {
         const command = draftSessionFor(result.thread_id).snapshot().value.goal_command;
-        if (entry.goalInput?.operation === 'submit' || command) {
+        if (entry.goalInput?.operation === 'submit' || handoff?.goalFromCommand) {
           draftSessionFor(result.thread_id).mutate(value => ({ ...value, goal_command: { text: command?.text ?? entry.goalInput?.text ?? '', error: copy().chat.goalConflict } }));
         } else {
-          storeGoalEditor(result.thread_id, { text: retainedText, error: copy().chat.goalConflict, version: currentGoal.version });
-          if (selectedThreadID() === result.thread_id) openGoalEditor();
+          if (entry.goalInput?.operation === 'set' && !editor && !handoff) storeGoalEditor(result.thread_id, { text: retainedText, version: entry.goalInput.expected_version });
+          if (selectedThreadID() === result.thread_id && goalPopupOpen() && handoff?.goalPopupAttempt === goalPopupAttempt) {
+            setGoalReviewedVersion(undefined);
+            if (entry.goalInput?.operation === 'delete') setGoalDeleteConflict(true);
+          }
         }
-      } else if (editor) {
-        storeGoalEditor(result.thread_id, { ...editor, version: currentGoal.version });
+      } else if (entry.goalInput?.operation === 'set' && editor && handoff?.goalEdit
+        && goalEditOrigin(editor) === goalEditOrigin(handoff.goalEdit) && editor.version === handoff.goalEdit.version) {
+        storeGoalEditor(result.thread_id, { ...editor, version: goal.version }, editor);
       }
-      if (!result.conflict && !draftSessionFor(result.thread_id).snapshot().value.goal_edit && selectedThreadID() === result.thread_id) setGoalPopupScope('');
+      if (!result.conflict && !draftSessionFor(result.thread_id).snapshot().value.goal_edit && selectedThreadID() === result.thread_id && goalPopupOpen() && handoff?.goalPopupAttempt === goalPopupAttempt) closeGoalEditor(false, false);
       pendingAdmissionHandoffs.delete(entry.requestId);
       outboxOperations.delete(entry.requestId);
       setTransportOutbox(outbox => outbox.drop(entry.requestId));
@@ -12692,9 +12794,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   );
 
   const goalControls = () => (
-    <Show when={selectedGoal()?.text}>
+    <Show when={selectedGoal()?.text || goalEditor()}>
       <button ref={goalTriggerRef} type="button" class="flower-goal-tag" aria-label={copy().chat.goalTitle}
-        title={selectedGoal()?.text} aria-haspopup="dialog" aria-expanded={goalPopupOpen()}
+        title={selectedGoal()?.text || copy().chat.goalDraft} aria-haspopup="dialog" aria-expanded={goalPopupOpen()}
         data-goal-status={selectedGoal()?.status} onClick={() => goalPopupOpen() ? closeGoalEditor() : openGoalEditor()}>
         <FlowerGoalIcon size={13} strokeWidth={1.65} aria-hidden="true" />{copy().chat.goalTitle}
         <Show when={selectedGoal()?.reviewing}><span class="flower-visually-hidden" role="status">{copy().chat.goalReviewing}</span></Show>
@@ -12704,19 +12806,77 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <div ref={goalPanelRef} role="dialog" aria-label={copy().chat.goalTitle} class="flower-goal-popup" data-floe-surface="floating">
             <div class="flower-goal-popup-header"><span class="flower-goal-popup-title"><FlowerGoalIcon size={15} strokeWidth={1.65} aria-hidden="true" />{copy().chat.goalTitle}</span>
               <div class="flower-goal-popup-controls">
-                <button type="button" aria-label={copy().chat.goalDelete} title={copy().chat.goalDelete} disabled={goalPending() || props.adapter.canMutate === false || selectedThreadReadOnly()} onClick={() => void enqueueGoal('delete', '')}><Trash class="h-3.5 w-3.5" /></button>
+                <button type="button" aria-label={copy().chat.goalDelete} title={copy().chat.goalDelete} disabled={goalPopupLoad() !== 'ready' || goalCurrentVersionSeen() === undefined || !selectedGoal()?.text || goalPending() || goalComposing() || props.adapter.canMutate === false || selectedThreadReadOnly()} onClick={() => void enqueueGoal('delete', '')}><Trash class="h-3.5 w-3.5" /></button>
                 <button type="button" aria-label={copy().computer.close} title={copy().computer.close} onClick={() => closeGoalEditor()}><X class="h-3.5 w-3.5" /></button>
               </div>
             </div>
-            <Show when={goalEditor()?.error}><p class="flower-goal-error" role="alert">{goalEditor()?.error}</p><p class="flower-goal-current">{selectedGoal()?.text}</p></Show>
-            <textarea ref={goalInputRef} aria-label={copy().chat.goalTitle} value={goalEditor()?.text ?? selectedGoal()?.text ?? ''} rows={4}
-              class="flower-goal-input" disabled={props.adapter.canMutate === false || selectedThreadReadOnly()}
-              onInput={event => { const editor = goalEditor(); if (editor) storeGoalEditor(editor.sessionKey, { ...editor, text: event.currentTarget.value }); }}
-              onKeyDown={event => { if (!event.isComposing && event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); if (goalEditor()?.error || goalEditor()?.text !== selectedGoal()?.text) void enqueueGoal('set', goalEditor()?.text ?? ''); } }} />
-            <Show when={goalEditor()?.text !== selectedGoal()?.text || goalEditor()?.error}>
+            <Show when={goalEditor() && goalPopupLoad() !== 'loading'}>
+              <div class="flower-goal-tabs" role="tablist" aria-label={copy().chat.goalTitle}>
+                <For each={['current', 'draft'] as const}>{view => (
+                  <button type="button" role="tab" id={goalPopupID + '-' + view} data-goal-view={view} aria-controls={goalPopupID}
+                    aria-selected={goalPopupView() === view} tabIndex={goalPopupView() === view ? 0 : -1}
+                    disabled={goalComposing()} onClick={() => showGoalView(view)}
+                    onKeyDown={event => {
+                      if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+                        event.preventDefault();
+                        const next = event.key === 'Home' ? 'current' : event.key === 'End' ? 'draft' : view === 'current' ? 'draft' : 'current';
+                        showGoalView(next);
+                        event.currentTarget.parentElement?.querySelector<HTMLButtonElement>('[data-goal-view="' + next + '"]')?.focus();
+                      }
+                    }}>
+                    {view === 'current' ? copy().chat.goalCurrent : copy().chat.goalDraft}
+                    <Show when={view === 'draft'}><span class="flower-goal-unsaved">{copy().chat.goalUnsaved}</span></Show>
+                  </button>
+                )}</For>
+              </div>
+            </Show>
+            <div id={goalPopupID} role={goalEditor() && goalPopupLoad() !== 'loading' ? 'tabpanel' : undefined} aria-labelledby={goalEditor() && goalPopupLoad() !== 'loading' ? goalPopupID + '-' + goalPopupView() : undefined} class="flower-goal-body" aria-busy={goalPopupLoad() === 'loading'}>
+              <Show when={goalPopupLoad() === 'loading'}>
+                <p class="flower-goal-loading" role="status"><StableText reserve={[copy().chat.goalConfirming]}>{copy().chat.goalConfirming}</StableText></p>
+              </Show>
+              <Show when={goalPopupLoad() === 'error'}><p class="flower-goal-notice" role="alert">{copy().chat.goalConfirmFailed}</p></Show>
+              <Show when={goalPopupLoad() === 'ready' || goalPopupLoad() === 'error' && goalPopupView() === 'draft' && goalEditor()}>
+                <Show when={goalPopupLoad() === 'ready' && (goalDraftStale() || goalDeleteConflict())}>
+                  <p class="flower-goal-notice" role="status">{copy().chat.goalUpdated}</p>
+                </Show>
+                <Show when={goalPopupView() === 'draft' || selectedGoal()?.text} fallback={<p class="flower-goal-notice">{copy().chat.goalMissing}</p>}>
+                  <textarea ref={goalInputRef} aria-label={goalPopupView() === 'draft' ? copy().chat.goalDraft : copy().chat.goalTitle}
+                    value={goalPopupView() === 'draft' ? goalEditor()?.text ?? '' : selectedGoal()?.text ?? ''} rows={4}
+                    class="flower-goal-input" readOnly={!goalEditing() && Boolean(goalEditor()) || goalPopupLoad() !== 'ready' || props.adapter.canMutate === false || selectedThreadReadOnly()}
+                    onCompositionStart={() => setGoalComposing(true)} onCompositionEnd={() => setGoalComposing(false)}
+                    onInput={event => {
+                      if (!goalEditing() && goalEditor() || goalPopupLoad() !== 'ready') return;
+                      const editor = goalEditor();
+                      if (!editor && event.currentTarget.value === (selectedGoal()?.text ?? '')) return;
+                      batch(() => {
+                        storeGoalEditor(currentComposerSessionKey(), { text: event.currentTarget.value, version: editor?.version ?? selectedGoal()?.version ?? 0 }, editor);
+                        setGoalEditing(true);
+                        setGoalPopupView('draft');
+                      });
+                    }}
+                    onKeyDown={event => {
+                      if (!event.isComposing && event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                        event.preventDefault();
+                        if (goalCanSave()) void enqueueGoal('set', goalEditor()?.text ?? '');
+                      }
+                    }} />
+                </Show>
+              </Show>
+            </div>
+            <Show when={goalPopupLoad() === 'error' || goalEditor() && goalPopupLoad() === 'ready'}>
               <div class="flower-goal-actions">
-                <Button size="xs" variant="ghost" onClick={() => closeGoalEditor(true)}>{copy().threadList.cancel}</Button>
-                <Button size="xs" disabled={goalPending() || !goalEditor()?.text.trim() || props.adapter.canMutate === false || selectedThreadReadOnly()} onClick={() => void enqueueGoal('set', goalEditor()?.text ?? '')}>{copy().chat.goalSave}</Button>
+                <Show when={goalEditor()}><Button size="xs" class="flower-goal-discard" variant="ghost" disabled={goalComposing()} onClick={discardGoalDraft}>{copy().chat.goalDiscardDraft}</Button></Show>
+                <Show when={goalPopupLoad() === 'error'} fallback={
+                  <Show when={goalPopupView() === 'current' || !goalEditing() && !goalDraftStale()} fallback={
+                    <Show when={goalEditing() && goalVersionReviewed()} fallback={<Button size="xs" class="flower-goal-primary" onClick={() => showGoalView('current')}>{copy().chat.goalViewCurrent}</Button>}>
+                      <Button size="xs" class="flower-goal-primary" aria-label={goalDraftStale() ? copy().chat.goalReplace : copy().chat.goalSave} disabled={!goalCanSave() || goalPending() || goalComposing() || props.adapter.canMutate === false || selectedThreadReadOnly()} onClick={() => void enqueueGoal('set', goalEditor()?.text ?? '')}>
+                        <StableText reserve={[copy().chat.goalSave, copy().chat.goalReplace]}>{goalDraftStale() ? copy().chat.goalReplace : copy().chat.goalSave}</StableText>
+                      </Button>
+                    </Show>
+                  }>
+                    <Button size="xs" class="flower-goal-primary" disabled={goalComposing() || props.adapter.canMutate === false || selectedThreadReadOnly()} onClick={continueGoalEditing}>{copy().chat.goalContinueEditing}</Button>
+                  </Show>
+                }><Button size="xs" class="flower-goal-primary" onClick={() => void confirmGoalPopup()}>{copy().chat.goalRetry}</Button></Show>
               </div>
             </Show>
           </div>
