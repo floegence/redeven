@@ -217,7 +217,7 @@ func buildPromptFileToolsSection(snapshot promptRuntimeSnapshot) promptSection {
 	}
 	if promptToolAvailable(snapshot.AvailableToolNames, "file.edit") || promptToolAvailable(snapshot.AvailableToolNames, "file.write") {
 		lines = append(lines, "- Prefer the supplied file-editing tools over shell overwrites for normal file changes.")
-		lines = append(lines, "- For file.edit and file.write, emit file_path before old_string, new_string or content so the user can see the target while changes are being prepared.")
+		lines = append(lines, "- When generating tool arguments, follow the property declaration order in the tool schema so users can see the target while work is being prepared.")
 	}
 	if promptToolAvailable(snapshot.AvailableToolNames, "apply_patch") {
 		lines = append(lines, "- Prefer apply_patch for patch-shaped edits within its working directory. For another authorized worktree use absolute-path file tools; do not edit the original project as a substitute. After rejection reread and regenerate; inspect partial changes. Do not fall back to shell overwrites for normal edits.")

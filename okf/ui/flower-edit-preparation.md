@@ -15,7 +15,16 @@ execution.
 
 # Contract
 
-File edit/write instructions ask the model to emit `file_path` before body fields.
+Tool schemas are the single declaration-order authority. Published Floret v7.69.0
+renders root properties in existing required-array order, then remaining names
+alphabetically. Redeven strict conversion preserves that order while retaining
+nullable and omitted-argument restoration. Final SDK encoding, aliases and
+namespaces complete before the shared upstream renderer orders and freezes
+the request for estimation, fingerprinting, dispatch and transport retries.
+The generic prompt asks the model to follow schema declaration order. For
+file.write the path precedes content; for file.edit it precedes old_string,
+new_string and optional replace_all. Models may still emit another valid order;
+body-first calls keep updating counts and acquire their names when paths arrive.
 Flower shows the name as soon as that complete JSON string arrives, without
 guessing from an unfinished path. For `apply_patch`, Redeven observes complete
 canonical Add/Update/Delete headers and optional Move headers before the body

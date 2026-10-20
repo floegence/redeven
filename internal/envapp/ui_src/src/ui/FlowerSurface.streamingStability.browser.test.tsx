@@ -166,11 +166,12 @@ describe('Flower complete interaction subtree stability', () => {
     await waitFor(() => Boolean(runtime.querySelector('.flower-model-status-metric')?.textContent?.includes('4 s')));
     const indicator = runtime.querySelector('.flower-model-status-indicator');
     const streamingProgress = { phase: 'streaming' as const, request: { ...request, first_output_at: new Date().toISOString(), estimated_output_tokens: 128 } };
-    fixture.replace({ ...base, view_version: 3, sampled_at_ms: Date.now(), run_progress: streamingProgress, tool_call_previews: [{ ...call, preview: {} }] });
+    fixture.replace({ ...base, view_version: 3, sampled_at_ms: Date.now(), run_progress: streamingProgress, tool_call_previews: [{ ...call, preview: { additions: 4096 } }] });
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-argument-generation]')));
     const row = runtime.querySelector('[data-flower-tool-row-identity]')!;
     const icon = row.querySelector('.flower-tool-icon')!;
     expect(row.querySelector('.flower-activity-inline-title-target')).toBeNull();
+    expect(row.textContent).toContain('+4096');
     fixture.replace({ ...base, view_version: 4, sampled_at_ms: Date.now(), run_progress: streamingProgress, tool_call_previews: [call] });
     await waitFor(() => row.querySelector('.flower-activity-inline-title-target')?.textContent === 'example.ts');
     expect(runtime.querySelector('[data-flower-tool-row-identity]')).toBe(row);
@@ -235,6 +236,40 @@ describe('Flower complete interaction subtree stability', () => {
     expect(runtime.querySelector('[data-flower-tool-row-identity]')).toBe(row);
     expect(runtime.querySelectorAll('[data-flower-tool-row-identity]')).toHaveLength(1);
     expect(row.querySelector('.flower-tool-icon')!.getAnimations({ subtree: true })).toHaveLength(0);
+  });
+
+  it.each(['before path', 'body', 'approval'])('settles Stop during edit %s without blocking navigation', async (phase) => {
+    await page.viewport(1280, 900);
+    const fixture = streamingFixture(8, 0);
+    const base = fixture.current();
+    const call = { thread_id: base.thread_id, turn_id: base.turn_id!, run_id: base.run_id!, logical_request_id: 'stop-edit-request', attempt_id: 'stop-edit-attempt', attempt_epoch: 1,
+      call_id: 'stop-edit', name: 'file.write', arguments_complete: phase === 'approval', preview: phase === 'before path' ? { additions: 4096 } : { display_name: 'example.ts', additions: 4096 } };
+    const tool = { id: 'stop-edit-tool', turn_id: base.turn_id!, run_id: base.run_id!, ordinal: base.items!.length + 1, kind: 'tool' as const,
+      activity: { item_id: 'stop-edit-tool', tool_id: call.call_id, tool_name: call.name, kind: 'tool', status: 'waiting', severity: 'normal',
+        presentation: { renderer: 'file', payload: { operation: 'write', display_name: 'example.ts' } } } };
+    fixture.replace({ ...base, view_version: 2, queue: [], run_progress: phase === 'approval' ? null : { phase: 'streaming' }, tool_call_previews: [call],
+      ...(phase === 'approval' ? { attention: { approval_count: 1 }, items: [...base.items!, tool], interactions: [{ id: 'stop-edit-approval', turn_id: base.turn_id!, run_id: base.run_id!, kind: 'approval', tool_call_id: call.call_id,
+        approval: { tool_call_id: call.call_id, tool_name: call.name, label: 'Write example.ts' } }] } : {}) });
+    const stop = vi.fn(async () => {
+      const current = fixture.current();
+      fixture.replace({ ...current, view_version: current.view_version + 1, activity: 'idle', last_outcome: 'cancelled', run_progress: null, tool_call_previews: [], attention: { approval_count: 0 }, interactions: [],
+        items: phase === 'approval' ? [...base.items!, { ...tool, activity: { ...tool.activity, status: 'canceled' } }] : base.items });
+    });
+    const runtime = await mountFixture(fixture, { stopThread: stop });
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-tool-row-identity]')));
+    const navigation = runtime.querySelector<HTMLButtonElement>(`[data-thread-id="${fixture.thread.thread_id}"] button`)!;
+    expect(navigation.disabled).toBe(false);
+    const button = runtime.querySelector<HTMLButtonElement>(phase === 'approval' ? '.flower-composer-stop-thread' : '[data-flower-primary-action="stop"]')!;
+    expect(button.disabled).toBe(false);
+    await userEvent.click(button);
+    await waitFor(() => stop.mock.calls.length === 1);
+    await waitFor(() => !runtime.querySelector('[data-flower-argument-generation]'));
+    await waitFor(() => !runtime.querySelector('[data-flower-bottom-mode="approval"]'));
+    expect(runtime.querySelector<HTMLTextAreaElement>('textarea')?.disabled).toBe(false);
+    expect(navigation.disabled).toBe(false);
+    fixture.reconnect(1);
+    await waitFor(() => fixture.calls.connections >= 2);
+    expect(runtime.querySelector('[data-flower-argument-generation]')).toBeNull();
   });
 
   it('keeps queue drag ownership and row nodes through 300 updates and a real reorder', async () => {

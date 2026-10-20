@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-19 — Ordered tool schema rendering
+
+- Adopt published Floret v7.69.0 required-first tool schema rendering before request freezing; preserve strict nullability, body-first previews, navigation and historical recovery.
+
 ## 2026-10-19 — Present Flower selection before transcript work
 
 - Reserve rendering and compositor frames for [sidebar selection](ui/flower-thread-sidebar.md), remove the selected-background transition, and keep navigation status mounted. Block old conversation interactions at a stable capture boundary instead of restyling the full transcript with native inert. Qualify hovered selection with 4,010 timeline items and trace screenshots before content commit.

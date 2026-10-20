@@ -37833,15 +37833,15 @@
         "title": "Flower file edit preparation",
         "type": "UI Contract"
       },
-      "body_length": 2172,
+      "body_length": 2866,
       "summary": "Flower shows candidate filenames while file-editing arguments are being prepared.\nThe existing Floret argument preview is display-only; actual tool results remain\nthe authority for completed changes. Progressive names keep long preparations\nunderstandable while one stable activity row continues through approval and\nexecution.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "File edit/write instructions ask the model to emit `file_path` before body fields.\nFlower shows the name as soon as that complete JSON string arrives, without\nguessing from an unfinished path. For `apply_patch`, Redeven observes complete\ncanonical Add/Update/Delete headers and optional Move headers before the body\nfinishes. Names accumulate in patch order with duplicates removed; rename names\nshow both endpoints. The bounded display name uses an explicit ellipsis for\nomitted names. Long names truncate inside the responsive title and remain\navailable in its tooltip.\n\nNew names are immediate publication boundaries; growing line counts still\ncoalesce. Preparation retains the existing row identity through approval and\nexecution, where a patch without result details keeps its candidate name.\nActual result names and counts replace previews on settlement.",
-          "char_count": 860
+          "body": "Tool schemas are the single declaration-order authority. Published Floret v7.69.0\nrenders root properties in existing required-array order, then remaining names\nalphabetically. Redeven strict conversion preserves that order while retaining\nnullable and omitted-argument restoration. Final SDK encoding, aliases and\nnamespaces complete before the shared upstream renderer orders and freezes\nthe request for estimation, fingerprinting, dispatch and transport retries.\nThe generic prompt asks the model to follow schema declaration order. For\nfile.write the path precedes content; for file.edit it precedes old_string,\nnew_string and optional replace_all. Models may still emit another valid order;\nbody-first calls keep updating counts and acquire their names when paths arrive.\nFlower shows the name as soon as that complete JSON string arrives, without\nguessing from an unfinished path. For `apply_patch`, Redeven observes complete\ncanonical Add/Update/Delete headers and optional Move headers before the body\nfinishes. Names accumulate in patch order with duplicates removed; rename names\nshow both endpoints. The bounded display name uses an explicit ellipsis for\nomitted names. Long names truncate inside the responsive title and remain\navailable in its tooltip.\n\nNew names are immediate publication boundaries; growing line counts still\ncoalesce. Preparation retains the existing row identity through approval and\nexecution, where a patch without result details keeps its candidate name.\nActual result names and counts replace previews on settlement.",
+          "char_count": 1554
         },
         {
           "id": "boundaries",
@@ -44705,5 +44705,5 @@
       ]
     }
   ],
-  "source_sha256": "e00fae2f70bdb83277ed55d43b814b751e1f57ed352ade874368610087cab8aa"
+  "source_sha256": "f9d0ddd3e014047d014cca2a396fce65fa5753b705ef4d931808c07ce7d9dc3d"
 }
