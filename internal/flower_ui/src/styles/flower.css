@@ -7780,6 +7780,8 @@ button.flower-composer-context-source:focus-visible,
 
 .flower-thread-card-active,
 .flower-thread-card-active:hover {
+  /* Selection must finish before deferred transcript work can block animation. */
+  transition: none;
   background: var(--flower-thread-rail-accent-strong);
 }
 
@@ -12529,7 +12531,7 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-goal-review-evidence { color: var(--muted-foreground); }
 
 /* Keep the previous title and body together while the rail acknowledges navigation. */
-.flower-component-main[data-flower-navigation-pending="true"] {
+.flower-component-main {
   position: relative;
 }
 
@@ -12552,3 +12554,5 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
   pointer-events: none;
   transform: translateX(-50%);
 }
+
+.flower-thread-navigation-status[hidden] { display: none; }

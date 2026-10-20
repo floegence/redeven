@@ -248,7 +248,7 @@ describe('Flower workspace synchronization recovery', () => {
     });
     await waitFor(() => Boolean(surface.querySelector(`[data-thread-id="${selected.thread_id}"] button`)));
     selectThread(surface, selected.thread_id);
-    await waitFor(() => Boolean(surface.querySelector('.flower-composer textarea')));
+    await waitFor(() => surface.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === selected.thread_id && !surface.querySelector('main')?.hasAttribute('data-flower-pending-thread-id') && Boolean(surface.querySelector('.flower-composer textarea')));
     const editor = surface.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
     editor.value = 'Keep this recovery draft';
     editor.dispatchEvent(new InputEvent('input', { bubbles: true }));

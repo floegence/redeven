@@ -37,14 +37,34 @@ function mount(seed = [item('first', 3), item('second', 2), item('third', 1)]) {
   const onSelect = vi.fn();
   const onMenuAction = vi.fn();
   const [pinBusy, setPinBusy] = createSignal(false);
-  disposers.push(render(() => <FlowerThreadList items={items()} query={query()} activeThreadID="first" copy={copy}
+  const [active, setActive] = createSignal('first');
+  disposers.push(render(() => <FlowerThreadList items={items()} query={query()} activeThreadID={active()} copy={copy}
     onQueryChange={setQuery} onSelect={onSelect} onRefresh={() => undefined} onMovePinned={onMove} canPin canRename pinBusy={pinBusy()} onMenuAction={onMenuAction} />, host));
-  return { host, items, setItems, setQuery, setPinBusy, onMove, onSelect, onMenuAction,
+  return { host, items, setItems, setQuery, setPinBusy, setActive, onMove, onSelect, onMenuAction,
     row: (id: string) => host.querySelector<HTMLElement>(`[data-thread-id="${id}"]`)!,
     order: () => Array.from(host.querySelectorAll<HTMLElement>('[data-thread-id]')).map((row) => row.dataset.threadId) };
 }
 
 describe('Flower pinned conversation interaction', () => {
+  it('applies the complete selection background immediately under the pointer', async () => {
+    const ui = mount();
+    const row = ui.row('second');
+    await userEvent.hover(row);
+    await frame();
+    const hover = getComputedStyle(row).backgroundColor;
+    ui.setActive('second');
+    const selected = getComputedStyle(row).backgroundColor;
+    expect(selected).not.toBe(hover);
+    expect(getComputedStyle(row).transitionDuration).toBe('0s');
+    expect(row.getAnimations().filter(animation => 'transitionProperty' in animation
+      && animation.transitionProperty === 'background-color')).toHaveLength(0);
+    await frame(3);
+    expect(getComputedStyle(row).backgroundColor).toBe(selected);
+    ui.setActive('third');
+    ui.setActive('second');
+    expect(getComputedStyle(row).backgroundColor).toBe(selected);
+  });
+
   it.each([220, 224, 272, 360])('keeps direct pin actions visible and clickable at %ipx width', async (width) => {
     const ui = mount([item('first', 3), item('second', 2), item('ordinary', 0)]);
     ui.host.style.width = `${width}px`;

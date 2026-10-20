@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-19 — Present Flower selection before transcript work
+
+- Reserve rendering and compositor frames for [sidebar selection](ui/flower-thread-sidebar.md), remove the selected-background transition, and keep navigation status mounted. Block old conversation interactions at a stable capture boundary instead of restyling the full transcript with native inert. Qualify hovered selection with 4,010 timeline items and trace screenshots before content commit.
+
 ## 2026-10-19 — Focused provider help
 
 - Restrict [provider configuration](ui/flower-provider-configuration.md) tooltips to information icons. Shorten search and reader guidance in every locale, remove internal routing and lifecycle explanations, and retain only a possible-charge notice without endpoint-specific prices.
