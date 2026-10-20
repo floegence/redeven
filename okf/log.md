@@ -27,7 +27,7 @@
 
 ## 2026-10-19 — Monotonic Flower read state
 
-- Unify [read-state merging](ui/flower-live-timeline.md) across shared activity and private confirmation, bind reads to rendered body revisions, and retain presentation through navigation. Replace selection-bound attempts with silent background retries and restore private baselines on reconnect without changing durable history.
+- Unify [read-state merging](ui/flower-read-state.md) across shared activity and private confirmation, bind reads to rendered body revisions, and retain presentation through navigation. Replace selection-bound attempts with silent background retries and restore private baselines on reconnect without changing durable history.
 
 ## 2026-10-19 — Append newly pinned conversations
 

@@ -248,6 +248,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Ask Flower window boundaries](ui/ask-flower-window.md) - Keep contextual launchers below headers and preserve manual resizing without maximization.
 - [Flower companion composer and motion](ui/flower-companion-composer.md) - Keep one native editor, anchor its toolbar below text, and dissolve closing detail without a compact-entry jump.
 - [Flower companion presence](ui/flower-companion-presence.md) - Present live work, pending actions, and new completion feedback without displacing drafts or creating a second observation stream.
+- [Flower read state](ui/flower-read-state.md) - Keep read indicators monotonic, acknowledge rendered content and recover silently from synchronization failures.
 - [Flower live timeline](ui/flower-live-timeline.md) - Canonical live thread timeline projection, replacement events, and cursor ownership.
 - [Flower file edit preparation](ui/flower-edit-preparation.md) - Candidate filenames during argument streaming, immediate publication, and actual-result takeover.
 - [Flower timeline ordering](ui/flower-timeline-ordering.md) - Consume canonical turn pages, projections, decorations, cursors, and replacement events.
