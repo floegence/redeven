@@ -230,28 +230,6 @@ func publishSuite(ctx context.Context, root, staging, digest string, hashes map[
 	return target, nil
 }
 
-func pruneSuites(root, desired, previous string) error {
-	parent := filepath.Join(root, suiteDirectory)
-	entries, err := os.ReadDir(parent)
-	if err != nil {
-		return err
-	}
-	// Validate the whole inventory before deleting anything.
-	for _, entry := range entries {
-		if !validDigest(entry.Name()) || !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
-			return errors.New("runtime suite inventory contains an unsupported entry")
-		}
-	}
-	for _, entry := range entries {
-		if entry.Name() != desired && entry.Name() != previous {
-			if err := os.RemoveAll(filepath.Join(parent, entry.Name())); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
 func activateSuite(ctx context.Context, root, digest string, previous activation, hashes map[string]string, version string) error {
 	current, err := inspectActivation(root)
 	if err != nil {
@@ -260,9 +238,9 @@ func activateSuite(ctx context.Context, root, digest string, previous activation
 	if !sameActivation(previous, current) {
 		return errors.New("activation changed while the new runtime suite was prepared")
 	}
-	if err := pruneSuites(root, digest, previous.hash); err != nil {
-		return err
-	}
+	// An older process can still resolve resources from any prior suite after
+	// multiple installations. The installer does not own process lifetime and
+	// must not infer that an unselected content-addressed suite is unused.
 	transaction, err := os.MkdirTemp(root, ".redeven-runtime-activate.")
 	if err != nil {
 		return err

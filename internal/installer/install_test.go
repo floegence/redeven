@@ -13,10 +13,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func runtimeFixture(version string) map[string][]byte {
@@ -104,6 +106,59 @@ func stageFixture(t *testing.T, root, version string, contents map[string][]byte
 		t.Fatal(err)
 	}
 	return sum, hashes
+}
+
+func TestConsecutiveActivationsPreserveRunningSuite(t *testing.T) {
+	root := t.TempDir()
+	files := runtimeFixture("v1.2.1")
+	files["LICENSE"] = []byte("original running suite resource\n")
+	files["redeven"] = []byte("#!/bin/sh\nif [ \"$1\" = version ]; then printf 'redeven v1.2.1 (fixture) test\\n'; exit 0; fi\nIFS= read -r signal\nwhile IFS= read -r line; do printf '%s\\n' \"$line\"; done < \"${0%/*}/REDEVEN_LICENSE\"\n")
+	first, hashes := stageFixture(t, root, "v1.2.1", files)
+	if err := activateSuite(t.Context(), root, first, activation{}, hashes, "v1.2.1"); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	command := exec.CommandContext(ctx, filepath.Join(root, suiteDirectory, first, "redeven"), "read-resource")
+	command.WaitDelay = time.Second
+	var output bytes.Buffer
+	command.Stdout, command.Stderr = &output, &output
+	input, err := command.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer input.Close()
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if command.ProcessState == nil {
+			_ = command.Process.Kill()
+			_ = command.Wait()
+		}
+	})
+	for _, version := range []string{"v1.2.2", "v1.2.3"} {
+		previous, err := inspectActivation(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		next, nextHashes := stageFixture(t, root, version, runtimeFixture(version))
+		if err := activateSuite(t.Context(), root, next, previous, nextHashes, version); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := io.WriteString(input, "continue\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := input.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := command.Wait(); err != nil {
+		t.Fatalf("an older running Runtime lost its complete suite after consecutive installations: %v: %s", err, output.String())
+	}
+	if output.String() != string(files["LICENSE"]) {
+		t.Fatalf("running suite resource changed: %q", output.String())
+	}
 }
 
 func TestSuiteActivationRetentionAndConcurrentChange(t *testing.T) {
@@ -273,6 +328,22 @@ func TestInstallerFullControllerTransactionWithoutDeveloperTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(config.InstallDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(config.InstallDir, "redeven"), runtimeFixture("v1.2.2")["redeven"], 0755); err != nil {
+		t.Fatal(err)
+	}
+	legacy := map[string][]byte{}
+	for _, role := range runtimeFiles {
+		if role.name == "redeven" || role.name == "computer.zip" {
+			continue
+		}
+		legacy[role.name] = []byte("still-used legacy resource: " + role.name)
+		if err := os.WriteFile(filepath.Join(config.InstallDir, role.name), legacy[role.name], role.mode); err != nil {
+			t.Fatal(err)
+		}
+	}
 	t.Setenv("PATH", "/usr/bin:/bin")
 	// This test isolates the install controller. Real signature verification is
 	// independently exercised against immutable official release materials.
@@ -290,6 +361,12 @@ func TestInstallerFullControllerTransactionWithoutDeveloperTools(t *testing.T) {
 	for _, source := range runtimeFiles {
 		if _, err := os.Stat(filepath.Join(config.InstallDir, suiteDirectory, digest, source.name)); err != nil {
 			t.Fatal("installed suite lost a component:", err)
+		}
+	}
+	for name, expected := range legacy {
+		actual, err := os.ReadFile(filepath.Join(config.InstallDir, name))
+		if err != nil || !bytes.Equal(actual, expected) {
+			t.Fatalf("migration changed legacy resources that an older process can still use: %s: %v", name, err)
 		}
 	}
 }
