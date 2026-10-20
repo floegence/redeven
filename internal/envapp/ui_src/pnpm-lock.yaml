@@ -59,11 +59,11 @@ importers:
         specifier: https://github.com/floegence/redeven-service-templates/releases/download/v0.7.0/floegence-redeven-service-templates-0.7.0.tgz
         version: https://github.com/floegence/redeven-service-templates/releases/download/v0.7.0/floegence-redeven-service-templates-0.7.0.tgz
       '@floegence/redevplugin-contracts':
-        specifier: 3.0.35
-        version: 3.0.35
+        specifier: 3.0.36
+        version: 3.0.36
       '@floegence/redevplugin-ui':
-        specifier: 3.0.35
-        version: 3.0.35
+        specifier: 3.0.36
+        version: 3.0.36
       '@fontsource-variable/inter':
         specifier: 5.2.8
         version: 5.2.8
@@ -612,11 +612,11 @@ packages:
     version: 0.7.0
     engines: {node: '>=26.0.0 <27'}
 
-  '@floegence/redevplugin-contracts@3.0.35':
-    resolution: {integrity: sha512-MFhvvRqvrkSJdu8hyA8ScjwcV/Q2bm4/rYod7RahyT2/DsLTG0WXkCXS3g8RjriXbLOH5UHovJpYtOvc7jUi3Q==}
+  '@floegence/redevplugin-contracts@3.0.36':
+    resolution: {integrity: sha512-SOmymmWMimdyuQOFdRAwt3bJt/tqHtoO8nCG55aZLkM3lL8r5L3t0e5QPJu6YwmiqIPrYCX093zevCJ4gjl9GQ==}
 
-  '@floegence/redevplugin-ui@3.0.35':
-    resolution: {integrity: sha512-AN8HjU8uLGqChJytyU7m6RqyAI5Jjy6Urtvq4E8QcQnNBjDvtbDa37AYN9zqHZP/7WLncsovYx50Gyxgbfxs+w==}
+  '@floegence/redevplugin-ui@3.0.36':
+    resolution: {integrity: sha512-HAhSoOovRtShQ5/AU9BngtGkQZALpG/LTW/kpGSRBJ0ytPipyM89wQp87+WmNA+Bm5YmVm60zQZYYNW2azAm2w==}
 
   '@fontsource-variable/inter@5.2.8':
     resolution: {integrity: sha512-kOfP2D+ykbcX/P3IFnokOhVRNoTozo5/JxhAIVYLpea/UBmCQ/YWPBfWIDuBImXX/15KH+eKh4xpEUyS2sQQGQ==}
@@ -3352,11 +3352,11 @@ snapshots:
 
   '@floegence/redeven-service-templates@https://github.com/floegence/redeven-service-templates/releases/download/v0.7.0/floegence-redeven-service-templates-0.7.0.tgz': {}
 
-  '@floegence/redevplugin-contracts@3.0.35': {}
+  '@floegence/redevplugin-contracts@3.0.36': {}
 
-  '@floegence/redevplugin-ui@3.0.35':
+  '@floegence/redevplugin-ui@3.0.36':
     dependencies:
-      '@floegence/redevplugin-contracts': 3.0.35
+      '@floegence/redevplugin-contracts': 3.0.36
       '@noble/hashes': 2.4.0
 
   '@fontsource-variable/inter@5.2.8': {}
