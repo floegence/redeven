@@ -63,14 +63,26 @@ const adapter = createRuntimeFlowerSurfaceAdapter({
 });
 const loadThread = adapter.loadThread;
 const qualified = { ...adapter, loadThread: async (threadID: string, signal: AbortSignal) => { try { return await loadThread(threadID, signal); } catch (error) { console.error('qualification detail:', String(error)); throw error; } } };
-const [notice, setNotice] = createSignal('');
-const [visible, setVisible] = createSignal(true);
-const draftCoordinator = createFlowerComposerDraftCoordinator();
-Object.assign(window, { flowerQualification: { setVisible } });
-document.getElementById('root')!.style.height = '100vh';
-render(() => <FloeProvider>
-  <Show when={notice()}><div role="status">{notice()}</div></Show>
-  <Show when={visible()}><FlowerSurface adapter={qualified} notify={message => setNotice(message.message)}
-    draftCoordinator={draftCoordinator}
-    focusThreadRequest={{ request_id: 'qualification', thread_id: id }} /></Show>
-</FloeProvider>, document.getElementById('root')!);
+let disposeSurface: (() => void) | undefined;
+let releaseDrafts: (() => void) | undefined;
+function mountSurface(threadID = id) {
+  disposeSurface?.();
+  releaseDrafts?.();
+  const [notice, setNotice] = createSignal('');
+  const [visible, setVisible] = createSignal(true);
+  const draftCoordinator = createFlowerComposerDraftCoordinator();
+  releaseDrafts = () => draftCoordinator.dispose();
+  Object.assign(window, { flowerQualification: {
+    setVisible,
+    reset: mountSurface,
+    dispose: () => { disposeSurface?.(); disposeSurface = undefined; releaseDrafts?.(); releaseDrafts = undefined; },
+  } });
+  document.getElementById('root')!.style.height = '100vh';
+  disposeSurface = render(() => <FloeProvider>
+    <Show when={notice()}><div role="status">{notice()}</div></Show>
+    <Show when={visible()}><FlowerSurface adapter={qualified} notify={message => setNotice(message.message)}
+      draftCoordinator={draftCoordinator}
+      focusThreadRequest={{ request_id: 'qualification', thread_id: threadID }} /></Show>
+  </FloeProvider>, document.getElementById('root')!);
+}
+mountSurface();
