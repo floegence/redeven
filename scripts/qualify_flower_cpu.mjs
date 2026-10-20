@@ -71,6 +71,10 @@ if (process.argv.includes('--build')) {
       diagnosticReads.push(Promise.all(message.args().map(argument => argument.jsonValue().catch(() => undefined)))
         .then(arguments_ => consoleErrors.push({ message: message.text(), arguments: arguments_ })));
     });
+    const assertConverged = async () => {
+      await Promise.all(diagnosticReads);
+      assert.ok(!consoleErrors.some(error => error.message.startsWith('Flower thread detail convergence failed.')), 'thread detail must converge without synchronization errors');
+    };
     await page.locator('.flower-composer textarea').waitFor({ timeout: 30000 });
     await page.locator('[data-flower-message-id]').first().waitFor({ timeout: 30000 });
     await page.evaluate(({ idle }) => {
@@ -163,14 +167,18 @@ if (process.argv.includes('--build')) {
           await cdp.send('HeapProfiler.collectGarbage');
           const renderer = Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map(metric => [metric.name, metric.value]));
           samples.push({ cycle: ++cycle, at: Date.now(), cpu, runtime: await api('stats', '&gc=1'), released, renderer, processes: await metrics() });
-          evidence = { seconds, cycle, samples, errors };
+          await Promise.all(diagnosticReads);
+          evidence = { seconds, cycle, samples, errors, consoleErrors };
           await writeFile(output, JSON.stringify(evidence, null, 2) + String.fromCharCode(10));
+          await assertConverged();
           await page.waitForTimeout(Math.min(Math.max(0, 60000 - (performance.now() - cycleStart)), Math.max(0, deadline - performance.now())));
         }
         const early = samples.slice(2, 7), late = samples.slice(-5);
         const median = values => values.sort((a, b) => a - b)[Math.floor(values.length / 2)];
         const growth = key => median(late.map(value => key(value))) / median(early.map(value => key(value)));
+        await assertConverged();
         evidence = { seconds, cycle, samples, errors, heapGrowth: growth(value => value.renderer.JSHeapUsedSize), runtimeHeapGrowth: growth(value => value.runtime.heap_bytes), runtimeCPUGrowth: growth(value => value.cpu.runtime), appCPUGrowth: growth(value => value.cpu.app), nodeGrowth: growth(value => value.renderer.Nodes), listenerGrowth: growth(value => value.renderer.JSEventListeners) };
+        evidence.consoleErrors = consoleErrors;
         await writeFile(output, JSON.stringify(evidence, null, 2) + String.fromCharCode(10));
         assert.ok(samples.length >= 30 && seconds >= 1800, 'stability qualification requires at least thirty minutes and cycles');
         assert.ok(evidence.heapGrowth <= 1.1 && evidence.nodeGrowth <= 1.1 && evidence.listenerGrowth <= 1.1, 'fixed working set must not accumulate renderer resources');
@@ -213,6 +221,8 @@ if (process.argv.includes('--build')) {
       await writeFile(output, JSON.stringify(evidence, null, 2) + '\n');
       await api('stop');
       if (idle) {
+        await assertConverged();
+        evidence.consoleErrors = consoleErrors;
         evidence.combinedCPU = evidence.runtimeCPU + evidence.appCPU;
         await writeFile(output, JSON.stringify(evidence, null, 2) + '\n');
         assert.deepEqual(errors, []);
@@ -307,7 +317,7 @@ if (process.argv.includes('--build')) {
         assert.ok(evidence.longTasks.every(value => value < 100), 'main thread long task limit');
       }
       assert.deepEqual(errors, []);
-      assert.ok(!consoleErrors.some(error => error.message.startsWith('Flower thread detail convergence failed.')), 'thread detail must converge without synchronization errors');
+      await assertConverged();
       assert.ok(configured.threads.every(id => after.stats.thread_updates[id] - before.stats.thread_updates[id] >= seconds * hz * .95), 'every configured thread must maintain its requested update rate during measurement');
       assert.ok(after.stats.produced - before.stats.produced >= seconds * hz * threads * .95, 'provider must maintain its requested update rate');
     } catch (error) {
