@@ -80,7 +80,7 @@ Compatibility depends on these published transport and terminal interfaces stayi
 - `redeven:scripts/build_runtime_binary.sh:1` - One target-aware native-CGO builder owns Desktop bundle and SSH source Runtime compilation.
 - `redeven:internal/terminal/manager_test.go` - Tests cover authorized terminal metadata notification broadcast, snapshot mapping, normalization, and payload isolation.
 - `redeven:internal/terminal/lifecycle.go:190` - Concurrent delete callers join one session-scoped in-flight cleanup operation.
-- `redeven:AGENTS.md:173` - Repository rules require published upstream releases instead of local sibling checkouts.
+- `redeven:AGENTS.md` - Repository rules require published upstream releases instead of local sibling checkouts.
 - `redeven:internal/envapp/ui_src/src/ui/security/localTransportSecurity.ts:20` - Local direct startup admits either public HTTPS or exact `desktop_private_bridge_v2` numeric-loopback HTTP provenance, with no inferred fallback.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1455` - Remote tunnel reconnects explicitly require TLS.
 - `redeven:internal/localui/localui.go:1517` - Local UI Direct sessions configure outbound record chunking and Yamux limits.
