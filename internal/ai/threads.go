@@ -764,16 +764,11 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 }
 
 func threadSummaryFromRuntime(ctx context.Context, runtime flruntime.ThreadService, threadID identity.ThreadID) (flruntime.ThreadSummary, error) {
-	summaries, err := runtime.List(ctxOrBackground(ctx), flruntime.ThreadScope{})
-	if err != nil {
-		return flruntime.ThreadSummary{}, err
+	reader, ok := runtime.(flruntime.ThreadSummaryReader)
+	if !ok {
+		return flruntime.ThreadSummary{}, errors.New("published Floret thread summary reader is unavailable")
 	}
-	for _, summary := range summaries {
-		if summary.ID == threadID {
-			return summary, nil
-		}
-	}
-	return flruntime.ThreadSummary{}, fmt.Errorf("canonical Floret summary is missing for thread %q", threadID)
+	return reader.Summary(ctxOrBackground(ctx), threadID)
 }
 
 // threadViewFromRuntimeCurrent shares settings, lifecycle, and activity projection
