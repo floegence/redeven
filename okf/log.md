@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-20 — Compact favorite directory locations
+
+- Place Files favorites beside Home and Computer with standard folder icons, single-line tail-preserving paths, full-path tooltips and separate directory menus. Retain filtering, scrolling and keyboard navigation. See [directory favorites](ui/directory-favorites.md).
+
 ## 2026-10-20 — Shared directory favorites
 
 - Expand Flower recent directories to ten and share controlled directory favorites across Files, Flower, Git and directory/file pickers. Document Runtime-owned scoped SQLite metadata, authenticated item mutations, client lifetime and epoch 69. See [directory favorites](ui/directory-favorites.md) and [filesystem navigation](ui/filesystem-picker-navigation.md).

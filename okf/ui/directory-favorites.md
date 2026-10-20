@@ -58,6 +58,17 @@ changes. Stars and navigation buttons are siblings, with full-path accessible la
 keyboard menu access, Escape/focus restoration and visible touch actions. Favorites
 filter only the current list and scroll in bounded local viewports.
 
+Files places favorites immediately after Home and Computer in the same sidebar
+locations group, before the directory tree. Each shortcut uses the standard
+FileItemIcon folder and compact single-line root-row spacing. The parent path
+shrinks with an ellipsis before the final directory name; an unusually long final
+name truncates only when it cannot fit by itself. Hover and keyboard focus show
+the complete absolute path in a tooltip. Full-path accessible labels, current-path
+highlighting, keyboard navigation, bounded scrolling and list filtering remain
+available. A separate More button opens the captured directory menu, including
+removal, on touch and pointer devices without navigating. No separate title card,
+second path line or persistent favorite star occupies the sidebar.
+
 ## Compatibility
 
 Runtime compatibility epoch 69 requires this exact authenticated resource and Desktop
@@ -80,5 +91,7 @@ owns authenticated snapshots and refresh. Floret does not participate in this fe
 - redeven:internal/codeapp/appserver/directory_favorites_api_test.go — path, symlink, identity and read-permission checks.
 - redeven:internal/flower_ui/src/filePicker/directoryFavorites.ts — shared snapshots, revision fencing, pending actions and disposal.
 - redeven:internal/envapp/ui_src/src/ui/services/sessionHTTP.ts — authenticated Env App lifetime.
+- redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserSidebarTree.tsx — shared root and favorite locations group.
+- redeven:internal/envapp/ui_src/src/ui/widgets/DirectoryFavoritesSection.browser.test.tsx — compact rows, tail visibility, tooltip, menus and scrolling.
 - redeven:desktop/src/welcome/App.tsx — shared target-Runtime owner for Desktop Flower surfaces.
 - redeven:desktop/src/main/runtimeFlowerRoutes.ts — exact method and resource admission.
