@@ -197,69 +197,76 @@ main() {
       ui_pkg_log ""
       ui_pkg_log "Flower UI: Chromium interaction contracts..."
       (cd "$ROOT_DIR" && REDEVEN_FORK_PARENT_EVENTS_UI=1 GOWORK=off go test ./internal/ai -run '^TestFlowerForkParentEventsUI$' -count=1)
-      ui_pkg_run_pnpm run test:browser -- \
-        src/ui/FlowerContextCompactionDivider.browser.test.tsx \
-        src/ui/EnvAppShell.flowerCompanion.browser.test.tsx \
-        src/ui/flowerCompanionTailMotion.browser.test.tsx \
-        src/ui/FlowerSurface.toolPresentation.browser.test.tsx \
-        src/ui/FlowerSurface.finalArchitecture.browser.test.tsx \
-        src/ui/FlowerSurface.streamingStability.browser.test.tsx \
-        src/ui/FlowerSurface.liveRecovery.browser.test.tsx \
-        src/ui/FlowerSurface.goal.browser.test.tsx \
-        src/ui/FlowerSurface.turnProcess.browser.test.tsx \
-        src/ui/FlowerSurface.thinkingDisclosure.browser.test.tsx \
-        src/ui/FlowerMarkdown.streamingStability.browser.test.tsx \
-        src/ui/FlowerMarkdown.readingThemes.browser.test.tsx \
-        src/ui/FlowerMarkdown.citations.browser.test.tsx \
-        src/ui/FlowerMarkdown.tables.browser.test.tsx \
-        src/ui/FlowerMarkdown.emphasis.browser.test.tsx \
-        src/ui/FlowerMarkdown.highlight.browser.test.tsx \
-        src/ui/FlowerStatusAndThreadMenu.browser.test.tsx \
-        src/ui/FlowerCompactPresentation.browser.test.tsx \
-        src/ui/FlowerDirectoryMenus.browser.test.tsx \
-        src/ui/FlowerWorkingDirectory.browser.test.tsx \
-        src/ui/FlowerSurface.directoryPicker.browser.test.tsx \
-        src/ui/FlowerSurface.fork.browser.test.tsx \
-        src/ui/FlowerSurface.canonicalReferences.browser.test.tsx \
-        src/ui/FlowerSurface.composerAttachments.browser.test.tsx \
-        src/ui/FlowerSurface.composerReferences.browser.test.tsx \
-        src/ui/FlowerSurface.threadReferences.browser.test.tsx \
-        src/ui/FlowerSurface.inputHistory.browser.test.tsx \
-        src/ui/FlowerSurface.companionEntry.browser.test.tsx \
-        src/ui/FlowerSurface.decisionSurface.browser.test.tsx \
-        src/ui/FlowerSurface.inputSubmission.browser.test.tsx \
-        src/ui/FlowerSurface.inputResponse.browser.test.tsx \
-        src/ui/FlowerSurface.queuedSendNow.browser.test.tsx \
-        src/ui/FlowerSurface.setupGuide.browser.test.tsx \
-        src/ui/FlowerSurface.providerReadiness.browser.test.tsx \
-        src/ui/FlowerSurface.providerRetry.browser.test.tsx \
-        src/ui/FlowerSurface.providerRecovery.browser.test.tsx \
-        src/ui/FlowerSurface.modelMenu.browser.test.tsx \
-        src/ui/FlowerProviderDialog.selection.browser.test.tsx \
-        src/ui/FlowerProviderDialog.continuation.browser.test.tsx \
-        src/ui/FlowerSurface.settingsLifecycle.browser.test.tsx \
-        src/ui/FlowerSurface.conversationPreferences.browser.test.tsx \
-        src/ui/pages/EnvAIPage.send.browser.test.tsx \
-        src/ui/FlowerSurface.settings.browser.test.tsx \
-        src/ui/FlowerSettingsSurface.presentation.browser.test.tsx \
-        src/ui/FlowerSurface.subagentDisclosure.browser.test.tsx \
-        src/ui/FlowerSurface.activityTiming.browser.test.tsx \
-        src/ui/FlowerSurface.subagentAppearance.browser.test.tsx \
-        src/ui/FlowerSurface.parentEvents.browser.test.tsx \
-        src/ui/FlowerSurface.subagentHeader.browser.test.tsx \
-        src/ui/FlowerSurface.reasoningSelection.browser.test.tsx \
-        src/ui/FlowerSurface.terminalActivity.browser.test.tsx \
-        src/ui/FlowerSurface.toolFailures.browser.test.tsx \
-        src/ui/FlowerSurface.webSearch.browser.test.tsx \
-        src/ui/flower/WebSearchActivity.browser.test.tsx \
-        src/ui/FlowerSurface.disclosureInteraction.browser.test.tsx \
-        src/ui/widgets/FlowerTurnLauncherWindow.browser.test.tsx \
-        src/ui/widgets/TerminalSessionRuntime.semantic.browser.test.tsx \
-        src/ui/plugins/PluginManagement.browser.test.tsx \
-        src/ui/flower/AIReadinessBoundary.browser.test.tsx \
-        src/ui/pages/settings/FlowerStorageSettings.browser.test.tsx \
-        src/ui/FlowerSurface.storageRecovery.browser.test.tsx \
+      # Restart Chromium between bounded groups so large suites do not retain
+      # every transformed module and mock graph in one browser process.
+      local browser_tests=(
+        src/ui/FlowerContextCompactionDivider.browser.test.tsx
+        src/ui/EnvAppShell.flowerCompanion.browser.test.tsx
+        src/ui/flowerCompanionTailMotion.browser.test.tsx
+        src/ui/FlowerSurface.toolPresentation.browser.test.tsx
+        src/ui/FlowerSurface.finalArchitecture.browser.test.tsx
+        src/ui/FlowerSurface.streamingStability.browser.test.tsx
+        src/ui/FlowerSurface.liveRecovery.browser.test.tsx
+        src/ui/FlowerSurface.goal.browser.test.tsx
+        src/ui/FlowerSurface.turnProcess.browser.test.tsx
+        src/ui/FlowerSurface.thinkingDisclosure.browser.test.tsx
+        src/ui/FlowerMarkdown.streamingStability.browser.test.tsx
+        src/ui/FlowerMarkdown.readingThemes.browser.test.tsx
+        src/ui/FlowerMarkdown.citations.browser.test.tsx
+        src/ui/FlowerMarkdown.tables.browser.test.tsx
+        src/ui/FlowerMarkdown.emphasis.browser.test.tsx
+        src/ui/FlowerMarkdown.highlight.browser.test.tsx
+        src/ui/FlowerStatusAndThreadMenu.browser.test.tsx
+        src/ui/FlowerCompactPresentation.browser.test.tsx
+        src/ui/FlowerDirectoryMenus.browser.test.tsx
+        src/ui/FlowerWorkingDirectory.browser.test.tsx
+        src/ui/FlowerSurface.directoryPicker.browser.test.tsx
+        src/ui/FlowerSurface.fork.browser.test.tsx
+        src/ui/FlowerSurface.canonicalReferences.browser.test.tsx
+        src/ui/FlowerSurface.composerAttachments.browser.test.tsx
+        src/ui/FlowerSurface.composerReferences.browser.test.tsx
+        src/ui/FlowerSurface.threadReferences.browser.test.tsx
+        src/ui/FlowerSurface.inputHistory.browser.test.tsx
+        src/ui/FlowerSurface.companionEntry.browser.test.tsx
+        src/ui/FlowerSurface.decisionSurface.browser.test.tsx
+        src/ui/FlowerSurface.inputSubmission.browser.test.tsx
+        src/ui/FlowerSurface.inputResponse.browser.test.tsx
+        src/ui/FlowerSurface.queuedSendNow.browser.test.tsx
+        src/ui/FlowerSurface.setupGuide.browser.test.tsx
+        src/ui/FlowerSurface.providerReadiness.browser.test.tsx
+        src/ui/FlowerSurface.providerRetry.browser.test.tsx
+        src/ui/FlowerSurface.providerRecovery.browser.test.tsx
+        src/ui/FlowerSurface.modelMenu.browser.test.tsx
+        src/ui/FlowerProviderDialog.selection.browser.test.tsx
+        src/ui/FlowerProviderDialog.continuation.browser.test.tsx
+        src/ui/FlowerSurface.settingsLifecycle.browser.test.tsx
+        src/ui/FlowerSurface.conversationPreferences.browser.test.tsx
+        src/ui/pages/EnvAIPage.send.browser.test.tsx
+        src/ui/FlowerSurface.settings.browser.test.tsx
+        src/ui/FlowerSettingsSurface.presentation.browser.test.tsx
+        src/ui/FlowerSurface.subagentDisclosure.browser.test.tsx
+        src/ui/FlowerSurface.activityTiming.browser.test.tsx
+        src/ui/FlowerSurface.subagentAppearance.browser.test.tsx
+        src/ui/FlowerSurface.parentEvents.browser.test.tsx
+        src/ui/FlowerSurface.subagentHeader.browser.test.tsx
+        src/ui/FlowerSurface.reasoningSelection.browser.test.tsx
+        src/ui/FlowerSurface.terminalActivity.browser.test.tsx
+        src/ui/FlowerSurface.toolFailures.browser.test.tsx
+        src/ui/FlowerSurface.webSearch.browser.test.tsx
+        src/ui/flower/WebSearchActivity.browser.test.tsx
+        src/ui/FlowerSurface.disclosureInteraction.browser.test.tsx
+        src/ui/widgets/FlowerTurnLauncherWindow.browser.test.tsx
+        src/ui/widgets/TerminalSessionRuntime.semantic.browser.test.tsx
+        src/ui/plugins/PluginManagement.browser.test.tsx
+        src/ui/flower/AIReadinessBoundary.browser.test.tsx
+        src/ui/pages/settings/FlowerStorageSettings.browser.test.tsx
+        src/ui/FlowerSurface.storageRecovery.browser.test.tsx
         src/ui/flower/SubagentDetailWindow.boundary.browser.test.tsx
+      )
+      local browser_offset
+      for ((browser_offset = 0; browser_offset < ${#browser_tests[@]}; browser_offset += 12)); do
+        ui_pkg_run_pnpm run test:browser -- "${browser_tests[@]:browser_offset:12}"
+      done
     fi
   )
 
