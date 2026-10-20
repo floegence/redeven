@@ -44,6 +44,9 @@ if (process.argv.includes('--build')) {
     assert.ok(response.ok, await response.clone().text()); return response.json();
   };
   const setup = await api('setup');
+  assert.equal(setup.history_verified, true, 'canonical seed history must be verified before measurement');
+  assert.equal(setup.history_messages, 2 * setup.history_turns);
+  assert.equal(setup.history_completed_activities, 2 * setup.history_turns);
   const workload = argument('mode', 'mixed');
   const initialBytes = Number(argument('initial-bytes', '0'));
   const idle = process.argv.includes('--idle');
@@ -197,6 +200,10 @@ if (process.argv.includes('--build')) {
       const percentile = (values, p) => values.sort((a,b) => a-b)[Math.min(values.length - 1, Math.floor(values.length * p))] ?? 0;
       evidence = { threads, hz, seconds: elapsed, warmup, setup, before, after, processes, runtimeCPU: 100 * (after.runtime - before.runtime) / elapsed, rendererCPU: processes.filter(item => item.type === 'Tab').reduce((sum, item) => sum + item.percent, 0), appCPU: processes.reduce((sum, item) => sum + item.percent, 0), frames: { count: uiMetrics.frames.length, p95: percentile(uiMetrics.frames, .95) }, input: { count: uiMetrics.inputs.length, p95: percentile(uiMetrics.inputs, .95) }, click: { count: uiMetrics.clicks.length, p95: percentile(uiMetrics.clicks, .95) }, longTasks: uiMetrics.longTasks, errors };
       evidence.streamingDOM = streamingDOM;
+      evidence.combinedCPU = evidence.runtimeCPU + evidence.appCPU;
+      evidence.allocationBytes = after.stats.alloc_bytes - before.stats.alloc_bytes;
+      evidence.wireBytes = after.stats.wire_bytes - before.stats.wire_bytes;
+      await writeFile(output, JSON.stringify(evidence, null, 2) + '\n');
       await api('stop');
       if (idle) {
         evidence.combinedCPU = evidence.runtimeCPU + evidence.appCPU;
@@ -210,18 +217,24 @@ if (process.argv.includes('--build')) {
       assert.ok(canonical.every(run => run.exact_text && run.exact_reasoning), 'canonical content must equal every provider delta');
       const visible = canonical[0];
       const outputDelays = uiMetrics.outputs.flatMap(item => visible.timings[item.index] >= before.wallTime ? [item.at - visible.timings[item.index]] : []);
-      evidence.output = { count: outputDelays.length, p95: percentile(outputDelays, .95) };
+      const observedIndices = new Set(uiMetrics.outputs.map(item => item.index));
+      const expectedIndices = [...visible.text.matchAll(/word(\d{6})/g)].map(match => Number(match[1]))
+        .filter(index => visible.timings[index] >= before.wallTime && visible.timings[index] <= before.wallTime + elapsed * 1000 - 150);
+      const observedCount = expectedIndices.filter(index => observedIndices.has(index)).length;
+      evidence.output = { count: outputDelays.length, p95: percentile(outputDelays, .95), expectedCount: expectedIndices.length, observedCount, coverage: observedCount / expectedIndices.length };
       evidence.display = await page.evaluate(() => ({ textChunks: document.querySelectorAll('.flower-chat-md-text-chunk').length, codeChunks: document.querySelectorAll('.flower-chat-md-code-chunk').length, text: document.querySelector('.flower-transcript-stack')?.textContent?.slice(-2000), selected: document.querySelector('main')?.getAttribute('data-flower-selected-thread-id'), rows: [...document.querySelectorAll('[data-flower-message-id]')].slice(-10).map(node => ({ id: node.getAttribute('data-flower-message-id'), text: node.textContent?.slice(-160) })) }));
       // Inspect after timing; compare every generated item with full parsing.
       const generatedTurn = visible.items.find(item => item.turn_id)?.turn_id;
       const turnSelector = '.flower-turn-row[data-flower-turn-id=' + JSON.stringify(generatedTurn) + ']';
       const summary = page.locator(turnSelector + ' .flower-turn-summary-button').first();
+      await page.waitForTimeout(500);
       if (await summary.count() && await summary.getAttribute('aria-expanded') === 'false') await summary.click();
       const { createMarkdownParser } = await import(pathToFileURL(path.join(ui, 'node_modules/@floegence/floe-webapp-core/dist/markdown.js')));
       const { JSDOM } = require('jsdom');
       const markdown = createMarkdownParser({ gfm: true, breaks: false, pedantic: false });
       evidence.rendered = [];
       for (const item of visible.items.filter(item => item.kind === 'assistant' || item.kind === 'thinking')) {
+        if (await summary.count() && await summary.getAttribute('aria-expanded') === 'false') await summary.click();
         const row = page.locator('[data-flower-message-id=' + JSON.stringify(item.id) + ']').first();
         await row.waitFor({ timeout: 15000 });
         const toggle = row.locator('.flower-thinking-toggle');
@@ -234,8 +247,11 @@ if (process.argv.includes('--build')) {
           return clone.textContent;
         }).join(''));
         const expected = item.kind === 'thinking' ? item.text ?? '' : new JSDOM(String(markdown.parse(item.text ?? ''))).window.document.body.textContent ?? '';
-        const normalize = value => value.replace(/\s+/gu, '');
-        evidence.rendered.push({ id: item.id, kind: item.kind, actual: hash(normalize(actual)), expected: hash(normalize(expected)), exact: normalize(actual) === normalize(expected) });
+        const normalize = value => item.kind === 'thinking' ? value : value.replace(/\s+/gu, ' ').trim();
+        const actualCode = await row.locator(contentSelector + ' pre > code').allTextContents();
+        const expectedCode = [];
+        if (item.kind !== 'thinking') markdown.walkTokens(markdown.lexer(item.text ?? ''), token => { if (token.type === 'code') expectedCode.push(token.text); });
+        evidence.rendered.push({ id: item.id, kind: item.kind, actual: hash(normalize(actual)), expected: hash(normalize(expected)), exact: normalize(actual) === normalize(expected) && JSON.stringify(actualCode) === JSON.stringify(expectedCode), codeBlocks: actualCode.length });
       }
       evidence.content = canonical.map(({ timings, text, reasoning, items, ...run }) => ({ ...run, textCharacters: text.length, reasoningCharacters: reasoning.length, itemCount: items.length }));
       evidence.configured = configured;
@@ -268,6 +284,7 @@ if (process.argv.includes('--build')) {
       evidence.workload = workload;
       evidence.initialBytes = initialBytes;
       await writeFile(output, JSON.stringify(evidence, null, 2) + '\n');
+      assert.ok(evidence.output.coverage >= .95, 'output latency must observe at least 95% of foreground text markers');
       if (process.argv.includes('--candidate-gates')) {
         // Absolute CPU budgets describe the 40 Hz standard workload. Stress
         // retains exact content, provider rate, responsiveness and long-task gates.

@@ -41020,7 +41020,7 @@
         "title": "Flower streaming stability",
         "type": "UI Contract"
       },
-      "body_length": 9053,
+      "body_length": 9752,
       "summary": "Flower renders actor-native changes through the indexed ThreadCache and the published Floe incremental Markdown parser. Ordinary growth changes the affected text/DOM region only. Stable history, code colors, copy controls, focus, selection and disclosure choices remain intact. A semantic change must remain visible; malformed updates recover through the single [live-state boundary](flower-live-timeline.md), never by omitting output or substituting a second lifecycle.",
       "sections": [
         {
@@ -41041,8 +41041,8 @@
           "id": "acceptance",
           "title": "Acceptance",
           "level": 1,
-          "body": "The opt-in real-Service qualifier builds the production renderer, freezes historical content and provider cadence, and records cumulative runtime plus all Electron process CPU, frame/input/click/output latency, allocations and wire bytes. It verifies canonical provider content and rendered content after timing. Baseline and candidate alternate for at least 120 seconds per measured round, without simultaneous builds or screen recording. All attempts and failures remain evidence; a short smoke or encoding microbenchmark alone is not acceptance.\n\nQualification includes one/seven threads, tenfold history, 200 Hz growth, 1 MiB paragraph/code, idle and fixed-workset resource stability. The task's explicit CPU, latency, allocation, transfer and long-task thresholds are hard gates, separate from ordinary CI and the bounded main pre-push gate.",
-          "char_count": 846
+          "body": "The opt-in real-Service qualifier builds the production renderer, freezes historical content and provider cadence, and records cumulative runtime plus all Electron process CPU, frame/input/click/output latency, allocations and wire bytes. It verifies canonical provider content and rendered content after timing. Baseline and candidate alternate for at least 120 seconds per measured round, without simultaneous builds or screen recording. All attempts and failures remain evidence; a short smoke or encoding microbenchmark alone is not acceptance.\n\nEach fixture starts with a fresh empty state directory. Before becoming ready, it verifies every historical turn's successful canonical outcome and final boundary, exact user/assistant content, and two successful Activity records. Idle alone never proves a seed succeeded. Reusing old state or a failed seed aborts qualification instead of silently measuring a smaller workload. Baseline and candidate compile the identical qualification fixture against their frozen production sources. The renderer comparison retains word separation, compares reasoning literally and checks code against full-parser tokens. Output-latency evidence must observe at least 95 percent of eligible foreground markers.\n\nQualification includes one/seven threads, tenfold history, 200 Hz growth, 1 MiB paragraph/code, idle and fixed-workset resource stability. The task's explicit CPU, latency, allocation, transfer and long-task thresholds are hard gates, separate from ordinary CI and the bounded main pre-push gate.",
+          "char_count": 1545
         }
       ],
       "snippet": "Flower renders actor-native changes through the indexed ThreadCache and the published Floe incremental Markdown parser. Ordinary growth changes the affected text/DOM region only. Stable history, code colors, copy controls, focus, selection ",
@@ -46010,5 +46010,5 @@
       ]
     }
   ],
-  "source_sha256": "080095973aaa59fa0d3b0995264b8d3747859dacfb1f6f7734d019aeb806673c"
+  "source_sha256": "de6e22ae5c3775fa38946fc5bf9c2cbbb96fe73e023b4cef5e14be163190897b"
 }
