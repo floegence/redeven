@@ -82,6 +82,39 @@ pin commands. Reordering does not select a conversation, acknowledge reads, load
 its transcript or reconnect transport. Ordinary conversations remain ordered by
 creation time descending, then ThreadID ascending.
 
+## Detail read ownership
+
+Published Floret v7.69.1 already supplies ThreadSummaryReader.Summary. Point
+reads and live summary publication use that exact authorized ThreadID; root List
+belongs only to inventory, and child lists retain ParentID. Flower does not own
+another summary projection, persisted detail cache, or migration.
+
+[threadDetailLoader](../../internal/flower_ui/src/threadDetailLoader.ts) owns
+only ephemeral demand. ThreadCache remains the sole owner of accepted detail
+and committed selection, bounded to twelve detail entries. Each ThreadID has
+one active read and one merged successor target. Targets include connection
+epoch, activity/settings revisions, runtime status and explicit invalidation.
+One drain dispatches successors; identical failed targets wait for an advanced
+target or explicit Retry. Released idle records are pruned with cache retention.
+
+Navigation releases its demand at selection intent. Command confirmations and
+reference preflights share a request only when its target is fresh enough.
+Confirmation invalidates after the command acknowledgement, so an earlier GET
+cannot satisfy it. Releasing one consumer cannot cancel another; releasing the
+last aborts the read. The 15-second read deadline aborts transport and releases
+UI ownership. Epoch reset, deletion and disposal settle every waiter and reject
+late publication. Commands keep their separate 120-second uncertain-result
+contract. A confirmed command followed by a failed refresh stays confirmed;
+Retry refreshes detail without replaying the command or restoring consumed input.
+Adapters do not hide post-command GETs.
+
+Cached history remains visible during refresh and after failure, with a Retry
+exit. Cold reads end as content or a retryable error. Four visible feedback
+frames still precede content commit. Hidden documents commit through a timer;
+visibility changes reschedule the same cancellable, idempotent commit. Reference
+preview closure releases its preflight and prevents late navigation. Neither
+selection nor detail cancellation reconnects the workspace stream.
+
 ## Reference action
 
 The same ThreadID-owned menu serves right-click, More and Shift+F10. Reference
@@ -211,6 +244,10 @@ through existing title/revision rules to avoid repeated transcript invalidation.
 The [storage contract](../ai/flower-storage-ownership-and-migrations.md) owns
 automatic schema upgrades. The [streaming stability contract](flower-streaming-stability.md)
 owns the broader interaction and runtime boundaries.
+
+Read confirmation and loaded-content revisions follow the canonical
+[read-state contract](flower-read-state.md). A successful detail fetch alone
+does not acknowledge unseen content.
 
 # Evidence
 

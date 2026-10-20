@@ -8,6 +8,10 @@
 
 - Resume following when downward scrolling reaches the previous bottom during live growth. Retain follow intent as short content overflows, including no-op inputs and whitespace clicks; preserve explicit reading and disclosure anchors. See [activity interaction](ui/flower-activity-interaction.md).
 
+## 2026-10-19 — Bounded Flower conversation detail reads
+
+- Consume published Floret point summaries, remove hidden command reloads, and use one ephemeral detail demand owner with transport cancellation and explicit recovery. Preserve the [sidebar feedback boundary](ui/flower-thread-sidebar.md) and [Desktop document isolation](desktop/desktop-runtime-bridge.md).
+
 ## 2026-10-20 — Stable Flower media ownership
 
 - Use published Floe 0.86.47 media request ownership, bounded reads and Retry. Bind media to each rendered thread and retain equal complete context updates before timeline projection. See [inline media](ui/flower-inline-media.md) and [streaming stability](ui/flower-streaming-stability.md).

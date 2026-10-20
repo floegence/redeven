@@ -4,6 +4,7 @@ import { FlowerSurface } from '../../src/FlowerSurface';
 import { createFlowerComposerDraftCoordinator } from '../../src/composer/createFlowerComposerDraftCoordinator';
 import { applyFlowerRuntimeCurrentView } from '../../src/runtimeCurrentView';
 import { streamingFixture } from '../streamingFixture';
+import { qualifyDetailReads } from './detailReads';
 import type { FlowerThreadPinMetadata, FlowerThreadSnapshot } from '../../src/contracts/flowerSurfaceContracts';
 import '../../../../desktop/src/welcome/index.css';
 
@@ -97,6 +98,7 @@ async function until(condition: () => boolean) {
   while (!condition()) { if (performance.now() > deadline) throw new Error('Sidebar fixture timed out'); await pause(10); }
 }
 const sidebar = {
+  qualifyDetailReads,
   smallID, bigID, hugeID,
   pinState: () => ({ pinStarted, pinSettled, listStarted, listSettled, pinCalls: [...pinCalls] }),
   setDelays(pin: number, list: number) { pinDelay = pin; listDelay = list; },
