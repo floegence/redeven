@@ -145,15 +145,16 @@ Presentation never supplies execution input or authorization.
 
 ## Viewport and gesture ownership
 
-The existing per-viewport scroll controller owns all transcript position writes.
-Physical near-bottom distance is measured independently from follow intent.
-Layout scroll events, focus changes, animation, and content growth cannot resume
-following. Return-to-latest and a verified user scroll toward the bottom may
-resume it; opening a task and sending new work retain their explicit positioning
-behavior. Wheel, touch, scrollbar, and scrolling-key inputs belong to the nearest
-actual viewport. Nested terminal and detail scrolling cannot resume the outer
-transcript. A gesture with changed layout dimensions cannot classify layout
-clamping as a user return to the bottom.
+One controller per viewport owns transcript position. Follow intent is separate
+from near-bottom geometry and persists while short content fits, including
+no-op scroll input. Overflow starts following without a click. Layout, focus,
+animation and growth never resume a reading pause. Return-to-latest,
+opening a task and sending work keep explicit positioning. Input belongs to
+the nearest real viewport; nested output never resumes the outer transcript.
+Verified downward movement resumes at the current or previous bottom when
+live growth races its scroll event. Only an unchanged or non-contracting range
+proves forward user movement. Shrink clamping, upward input and partial downward
+reading stay paused. Whitespace clicks restore prior follow intent.
 
 Pressing a disclosure cancels queued and smooth following immediately and
 anchors its title. Native click alone changes the manual choice. The controller
