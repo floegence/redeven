@@ -3990,11 +3990,12 @@
 }
 
 .flower-compaction-divider {
-  display: grid;
+  display: flex;
   width: 100%;
   min-width: 0;
-  grid-template-columns: minmax(1.5rem, 1fr) auto minmax(1.5rem, 1fr);
   align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
   gap: 0.55rem;
   padding: 0.15rem 0;
   color: color-mix(in srgb, var(--muted-foreground) 76%, var(--foreground) 24%);
@@ -4034,24 +4035,6 @@
   font-weight: 600;
 }
 
-.flower-compaction-divider-rule {
-  height: 1px;
-  min-width: 0;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--flower-chat-surface-border) 80%, transparent)
-  );
-}
-
-.flower-compaction-divider-rule:last-child {
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--flower-chat-surface-border) 80%, transparent),
-    transparent
-  );
-}
-
 .flower-runtime-restart-divider {
   display: grid;
   width: 100%;
@@ -4088,12 +4071,11 @@
   max-width: min(100%, 34rem);
   align-items: center;
   gap: 0.4rem;
-  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 72%, transparent);
+  border: 0;
   border-radius: 9999px;
   background: var(--muted);
   padding: 0.35rem 0.65rem;
-  box-shadow:
-    none;
+  box-shadow: none;
   overflow: visible;
   white-space: nowrap;
 }
@@ -4108,8 +4090,7 @@
 }
 
 .flower-compaction-divider-pill-running {
-  border-color: color-mix(in srgb, var(--primary) 30%, var(--flower-chat-surface-border) 70%);
-  background: color-mix(in srgb, var(--primary) 8%, var(--flower-chat-surface-elevated) 92%);
+  background: color-mix(in srgb, var(--primary) 10%, var(--flower-chat-surface-elevated) 90%);
   color: color-mix(in srgb, var(--primary) 68%, var(--foreground) 18%);
 }
 
@@ -4207,14 +4188,9 @@
   opacity: 1;
 }
 
-.flower-compaction-divider[data-flower-compaction-status='compacting'] .flower-compaction-divider-pill {
-  border-color: color-mix(in srgb, var(--primary) 28%, var(--flower-chat-surface-border) 72%);
-  background: color-mix(in srgb, var(--primary) 10%, var(--flower-chat-surface-elevated) 90%);
-}
-
 .flower-compaction-divider[data-flower-compaction-status='failed'] .flower-compaction-divider-pill {
-  border-color: color-mix(in srgb, var(--destructive) 26%, var(--flower-chat-surface-border));
-  color: color-mix(in srgb, var(--destructive) 76%, var(--foreground) 24%);
+  background: color-mix(in srgb, var(--error) 8%, var(--flower-chat-surface-elevated) 92%);
+  color: color-mix(in srgb, var(--error) 76%, var(--foreground) 24%);
 }
 
 

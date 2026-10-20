@@ -251,8 +251,10 @@ describe('Flower progress indicator', () => {
     const labelRule = cssRule(css, '.flower-compaction-divider-label');
     const tooltipRule = cssRule(css, '.flower-compaction-divider-tooltip');
 
-    expect(dividerRule).toContain('display: grid');
-    expect(dividerRule).toContain('grid-template-columns: minmax(1.5rem, 1fr) auto minmax(1.5rem, 1fr)');
+    expect(dividerRule).toContain('display: flex');
+    expect(dividerRule).toContain('justify-content: center');
+    expect(dividerRule).toContain('flex-wrap: wrap');
+    expect(css).not.toContain('.flower-compaction-divider-rule');
     expect(dividerRule).toContain('user-select: text');
     expect(dividerRule).not.toContain('pointer-events: none');
     expect(dividerRule).not.toContain('cursor: pointer');
@@ -261,6 +263,8 @@ describe('Flower progress indicator', () => {
     expect(pillRule).toContain('max-width: min(100%, 34rem)');
     expect(pillRule).toContain('overflow: visible');
     expect(pillRule).toContain('white-space: nowrap');
+    expect(pillRule).toContain('border: 0');
+    expect(pillRule).toContain('background: var(--muted)');
     expect(copyRule).toContain('display: inline-flex');
     expect(copyRule).toContain('align-items: center');
     expect(copyRule).not.toContain('flex-direction: column');
@@ -307,7 +311,7 @@ describe('Flower progress indicator', () => {
     expect(cssRule(css, '.flower-composer-command-item:hover,\n.flower-composer-command-item:focus-visible')).not.toContain('transform:');
     expect(descriptionRule).toContain('font-size: 0.74rem');
     expect(descriptionRule).toContain('white-space: nowrap');
-    expect(dividerRunningRule).toContain('border-color: color-mix(in srgb, var(--primary) 30%, var(--flower-chat-surface-border) 70%)');
+    expect(dividerRunningRule).toContain('background: color-mix(in srgb, var(--primary) 10%, var(--flower-chat-surface-elevated) 90%)');
     expect(dividerIconRule).toContain('display: inline-block');
     expect(dividerIconRule).toContain('border-radius: 9999px');
     expect(dividerIconRule).toContain('border: 1.5px solid currentColor');
@@ -319,7 +323,7 @@ describe('Flower progress indicator', () => {
     expect(dividerIconHourRule).toContain('animation: flower-waiting-clock-hour 12s linear infinite');
     expect(css).not.toContain('flower-compaction-divider-clock-tick');
     expect(css).not.toContain('flower-compaction-divider-shimmer');
-    expect(pillRule).toContain('box-shadow');
+    expect(pillRule).toContain('box-shadow: none');
   });
 
   it('keeps the composer action button shape unified for send and stop', () => {

@@ -70,7 +70,6 @@ export function FlowerContextCompactionDivider(props: {
       data-flower-decoration-id={props.decoration.decoration_id}
       data-flower-compaction-status={compaction().status}
     >
-      <div class="flower-compaction-divider-rule" aria-hidden="true" />
       <div
         ref={trigger}
         class={running() ? 'flower-compaction-divider-pill flower-compaction-divider-pill-running' : 'flower-compaction-divider-pill'}
@@ -100,7 +99,6 @@ export function FlowerContextCompactionDivider(props: {
           <span class="flower-compaction-divider-label">{label()}</span>
         </span>
       </div>
-      <div class="flower-compaction-divider-rule" aria-hidden="true" />
       <Show when={tooltipOpen() && hasDetail()}>
         <SurfaceFloatingLayer owner={owner()} boundary={owner()?.closest<HTMLElement>('.flower-subagent-detail-window') ?? undefined} position={layout().position} estimatedSize={layout().size} class="flower-compaction-tooltip-layer" data-flower-floating-layer="true">
           <span
