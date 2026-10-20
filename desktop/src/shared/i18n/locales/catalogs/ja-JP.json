@@ -136,7 +136,14 @@
       "permissionDenied": "このディレクトリを読み取る権限がありません。",
       "hostPermissionDenied": "オペレーティングシステムがこのディレクトリへのアクセスを拒否しました。",
       "notDirectory": "このパスはディレクトリではありません。",
-      "connectionFailed": "環境に接続できません。接続を確認して再試行してください。"
+      "connectionFailed": "環境に接続できません。接続を確認して再試行してください。",
+      "favorites": "お気に入り",
+      "favoriteDirectory": "ディレクトリをお気に入りに追加",
+      "unfavoriteDirectory": "お気に入りから削除",
+      "favoritesEmpty": "ディレクトリの星を押すと、ここに追加されます。",
+      "favoritesFilter": "名前またはパスで絞り込む",
+      "favoritesNoMatches": "一致するお気に入りはありません",
+      "favoritesLoadFailed": "お気に入りを読み込めませんでした"
     },
     "runtime": {
       "localEnvironment": "ローカル環境",

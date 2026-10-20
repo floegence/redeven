@@ -1,4 +1,5 @@
 import type { ContextActionContextItem } from '../contextActionWire';
+import type { DirectoryFavorites } from '@floegence/floe-webapp-core/ui';
 export type FlowerProviderType =
   | 'openai'
   | 'anthropic'
@@ -1678,6 +1679,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   loadToolPreview?: (input: FlowerToolPreviewRequest) => Promise<FlowerToolPreview>;
   readTerminalProcess?: (input: FlowerTerminalProcessReadRequest) => Promise<FlowerTerminalProcessSnapshot>;
   getWorkingDirectoryPathContext?: () => Promise<FlowerWorkingDirectoryPathContext>;
+  directoryFavorites?: (failureMessage: () => string) => DirectoryFavorites | undefined;
   listWorkingDirectoryEntries?: (input: FlowerWorkingDirectoryListInput) => Promise<readonly FlowerWorkingDirectoryEntry[]>;
   openCanonicalReference?: (request: FlowerCanonicalReferenceOpenRequest) => Promise<void>;
   resolveCanonicalReference?: (request: FlowerCanonicalReferenceOpenRequest) => Promise<Readonly<{ kind: 'file' | 'directory'; label: string; path: string }>>;

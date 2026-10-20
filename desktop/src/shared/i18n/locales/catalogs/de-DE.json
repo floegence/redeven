@@ -136,7 +136,14 @@
       "permissionDenied": "Du hast keine Berechtigung, dieses Verzeichnis zu lesen.",
       "hostPermissionDenied": "Das Betriebssystem hat den Zugriff auf dieses Verzeichnis verweigert.",
       "notDirectory": "Dieser Pfad ist kein Verzeichnis.",
-      "connectionFailed": "Die Umgebung ist nicht erreichbar. Prüfe die Verbindung und versuche es erneut."
+      "connectionFailed": "Die Umgebung ist nicht erreichbar. Prüfe die Verbindung und versuche es erneut.",
+      "favorites": "Favoriten",
+      "favoriteDirectory": "Ordner zu Favoriten hinzufügen",
+      "unfavoriteDirectory": "Ordner aus Favoriten entfernen",
+      "favoritesEmpty": "Markieren Sie einen Ordner mit dem Stern, um ihn hier abzulegen.",
+      "favoritesFilter": "Favoriten nach Name oder Pfad filtern",
+      "favoritesNoMatches": "Keine passenden Favoriten",
+      "favoritesLoadFailed": "Favoriten konnten nicht geladen werden"
     },
     "runtime": {
       "localEnvironment": "Lokale Umgebung",

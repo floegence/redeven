@@ -1,3 +1,4 @@
+import { useGitDirectoryFavorites } from './gitDirectoryFavorites';
 import { For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Copy, FileText, Folder, History, Terminal } from '@floegence/floe-webapp-core/icons';
@@ -271,6 +272,7 @@ export interface GitCommitGraphProps {
 
 export function GitCommitGraph(props: GitCommitGraphProps) {
   const i18n = useI18n();
+  const directoryFavorites = useGitDirectoryFavorites();
   let containerElement: HTMLDivElement | undefined;
   const [containerWidth, setContainerWidth] = createSignal(FALLBACK_CONTAINER_WIDTH);
   type CommitContextTarget = Readonly<{ commit: GitCommitSummary; repoRootPath: string }>;
@@ -320,6 +322,8 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
   const contextMenuItems = (target: CommitContextTarget): GitContextMenuActionItem[] => {
     const { commit } = target;
     const items: GitContextMenuActionItem[] = [];
+    const favorite = directoryFavorites.item(target.repoRootPath ?? '', target);
+    if (favorite) items.push(favorite);
     if (props.onAskFlower && target.repoRootPath) {
       items.push({
         id: 'ask-flower', kind: 'action', group: 'assistant', rank: 10,
@@ -397,6 +401,7 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
       data-commit-graph
       class={cn('min-w-0 overflow-hidden rounded-md border', redevenSurfaceRoleClass('panel'), redevenDividerRoleClass(), props.class)}
     >
+      <directoryFavorites.Feedback />
       <div class="relative">
         <svg
           data-commit-graph-rails

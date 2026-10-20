@@ -1170,7 +1170,14 @@
     "permissionDenied": "You do not have permission to read this directory.",
     "hostPermissionDenied": "The operating system denied access to this directory.",
     "notDirectory": "This path is not a directory.",
-    "connectionFailed": "Could not reach the environment. Check the connection and retry."
+    "connectionFailed": "Could not reach the environment. Check the connection and retry.",
+    "favorites": "Favorites",
+    "favoriteDirectory": "Add directory to favorites",
+    "unfavoriteDirectory": "Remove directory from favorites",
+    "favoritesEmpty": "Star a directory to keep it here.",
+    "favoritesFilter": "Filter favorites by name or path",
+    "favoritesNoMatches": "No matching favorites",
+    "favoritesLoadFailed": "Could not load favorites"
   },
   "reasoningControl": {
     "default": "Default",

@@ -1,6 +1,9 @@
 import '../../index.css';
 import { FloeConfigProvider, LayoutProvider, NotificationProvider } from '@floegence/floe-webapp-core';
-import { createSignal } from 'solid-js';
+import { createSignal, Show } from 'solid-js';
+import { DirectoryPicker } from '@floegence/floe-webapp-core/ui';
+import { useEnvFilesystemPicker } from '../services/filesystemPicker';
+import { bindSessionHTTP, envDirectoryFavorites } from '../services/sessionHTTP';
 import { render } from 'solid-js/web';
 import { page, userEvent } from 'vitest/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -27,6 +30,12 @@ vi.mock('../protocol/redeven_v1', async () => ({
 }));
 
 let dispose: (() => void) | undefined;
+let releaseFavorites: (() => void) | undefined;
+function FavoritePickerFixture() {
+  const picker = useEnvFilesystemPicker();
+  const [open, setOpen] = createSignal(false);
+  return <><button data-testid="open-favorites-picker" onClick={() => setOpen(true)}>Choose directory</button><DirectoryPicker {...picker} open={open()} onOpenChange={setOpen} initialPath={home} onSelect={() => {}} /></>;
+}
 beforeEach(() => {
   transport.session = {};
   transport.list.mockReset().mockImplementation(async ({ path }: { path: string }) => {
@@ -47,9 +56,9 @@ beforeEach(() => {
   transport.repo.mockReset().mockResolvedValue({ available: false, gitAvailable: false });
   transport.capabilities.mockReset().mockResolvedValue({});
 });
-afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.restoreAllMocks(); });
+afterEach(() => { releaseFavorites?.(); releaseFavorites = undefined; dispose?.(); document.body.replaceChildren(); vi.restoreAllMocks(); });
 
-async function mountFiles(initialPath: string, placement: 'activity' | 'workbench' = 'activity', options: { storage?: Map<string, string>; restore?: boolean; unavailable?: boolean } = {}) {
+async function mountFiles(initialPath: string, placement: 'activity' | 'workbench' = 'activity', options: { storage?: Map<string, string>; restore?: boolean; unavailable?: boolean; picker?: boolean } = {}) {
   await page.viewport(1440, 900);
   const storage = options.storage ?? new Map<string, string>();
   const host = document.createElement('div');
@@ -76,6 +85,7 @@ async function mountFiles(initialPath: string, placement: 'activity' | 'workbenc
             <RemoteFileBrowser initialPathOverride={options.restore ? undefined : initialPath} widgetId={placement === 'workbench' ? 'paths-widget' : undefined}
               onCommittedPathChange={(path, rootId) => { setCommitted(path); setRoot(rootId ?? ''); }} onTitleChange={setTitle} />
           </div>
+          <Show when={options.picker}><FavoritePickerFixture /></Show>
           <output data-testid="committed-path">{committed()}</output>
           <output data-testid="committed-root">{root()}</output>
           <output data-testid="files-title">{title()}</output>
@@ -102,6 +112,88 @@ async function mountFiles(initialPath: string, placement: 'activity' | 'workbenc
   transport.list.mockClear();
   return { host, storage, savedPaths, committedPath, enter };
 }
+
+describe('Files directory favorites across published pickers', () => {
+  it.each(['activity', 'workbench'] as const)('shares folder, tree, background and toolbar actions in %s', async placement => {
+    let paths: string[] = [];
+    let revision = 0;
+    const fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'PUT' || init?.method === 'DELETE') {
+        const {path} = JSON.parse(String(init.body)) as {path: string};
+        const favorite = init.method === 'PUT';
+        if (paths.includes(path) !== favorite) {
+          paths = favorite ? [path, ...paths] : paths.filter(item => item !== path);
+          revision++;
+        }
+      }
+      return new Response(JSON.stringify({ok:true,data:{paths,revision}}));
+    });
+    releaseFavorites = bindSessionHTTP({fetch, events: async function*(){}});
+    const list = transport.list.getMockImplementation()!;
+    transport.list.mockImplementation(async (input: {path:string}) => {
+      const response = await list(input);
+      return input.path === target ? {entries:[...response.entries,{name:'readme.txt',path:target + '/readme.txt',isDirectory:false}]} : response;
+    });
+    const f = await mountFiles(target, placement, {picker:true});
+    const favorites = envDirectoryFavorites(() => 'Failed')!;
+    await favorites.onRefresh!();
+    const childPath = target + '/child';
+    const openMenu = async (element: HTMLElement) => {
+      element.dispatchEvent(new MouseEvent('contextmenu', {bubbles:true,cancelable:true,button:2,clientX:200,clientY:260}));
+      await expect.poll(() => document.querySelector('[data-file-menu-item="directory-favorite"]')).not.toBeNull();
+    };
+    const chooseFavorite = async () => {
+      document.querySelector<HTMLElement>('[data-file-menu-item="directory-favorite"]')!.click();
+      await expect.poll(() => favorites.pendingPaths?.length).toBe(0);
+    };
+    for (const view of ['List','Grid']) {
+      [...f.host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === view)!.click();
+      await openMenu(f.host.querySelector<HTMLElement>('[data-file-browser-item-path="' + childPath + '"]')!);
+      await chooseFavorite();
+      await expect.poll(() => favorites.paths.includes(childPath)).toBe(view === 'List');
+      expect(f.committedPath()).toBe(target);
+    }
+    const treeParent = f.host.querySelector<HTMLElement>('[data-tree-row-path="' + target + '"]')!;
+    treeParent.parentElement!.querySelector<HTMLButtonElement>('button[aria-expanded]')!.click();
+    await expect.poll(() => f.host.querySelector('[data-tree-row-path="' + childPath + '"]')).not.toBeNull();
+    await openMenu(f.host.querySelector<HTMLElement>('[data-tree-row-path="' + childPath + '"]')!);
+    await chooseFavorite();
+    await expect.poll(() => favorites.paths).toContain(childPath);
+    await openMenu(f.host.querySelector<HTMLElement>('[data-testid="file-browser-content-scroll-region"]')!);
+    await chooseFavorite();
+    await expect.poll(() => favorites.paths).toEqual([target,childPath]);
+    const root = f.host.querySelector<HTMLElement>('[data-filesystem-root-path="/"]')!;
+    await openMenu(root);
+    expect(document.querySelector('[data-file-menu-item="delete"]')).toBeNull();
+    await chooseFavorite();
+    await expect.poll(() => favorites.paths).toEqual(['/',target,childPath]);
+    const rootButton = root.querySelector<HTMLButtonElement>('button')!;
+    rootButton.focus(); rootButton.dispatchEvent(new KeyboardEvent('keydown',{bubbles:true,cancelable:true,key:'F10',shiftKey:true}));
+    await expect.poll(() => document.querySelector('[data-file-menu-item="directory-favorite"]')).not.toBeNull();
+    await chooseFavorite();
+    await expect.poll(() => favorites.paths).toEqual([target,childPath]);
+    const file = f.host.querySelector<HTMLElement>('[data-file-browser-item-path="' + target + '/readme.txt"]')!;
+    file.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,button:2,clientX:200,clientY:260}));
+    await expect.poll(() => document.querySelector('[role="menu"]')).not.toBeNull();
+    expect(document.querySelector('[data-file-menu-item="directory-favorite"]')).toBeNull();
+    document.querySelector<HTMLElement>('[role="menu"]')!.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+    const currentStar = [...f.host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.getAttribute('aria-label') === 'Remove directory from favorites: ' + target)!;
+    expect(currentStar).toBeTruthy();
+    currentStar.click();
+    await expect.poll(() => favorites.paths).toEqual([childPath]);
+    f.host.querySelector<HTMLButtonElement>('[data-testid="open-favorites-picker"]')!.click();
+    await page.getByRole('tab', {name:'Favorites',exact:true}).click();
+    await expect.poll(() => document.querySelector('[data-picker-favorite-path="' + childPath + '"]')).not.toBeNull();
+    const selectedBefore = f.committedPath();
+    document.querySelector<HTMLButtonElement>('[data-picker-favorite-path="' + childPath + '"]')!.click();
+    await expect.poll(() => transport.list.mock.calls.some(([input]) => input.path === childPath)).toBe(true);
+    expect(f.committedPath()).toBe(selectedBefore);
+    await page.getByRole('button',{name:'Cancel',exact:true}).click();
+    const sidebar = f.host.querySelector<HTMLElement>('section[aria-label="Favorites"]')!;
+    sidebar.querySelector<HTMLButtonElement>('button[title="' + childPath + '"]')!.click();
+    await expect.poll(f.committedPath).toBe(childPath);
+  });
+});
 
 describe('Files path entry through the published components and runtime navigation', () => {
   it.each(['activity', 'workbench'] as const)('keeps long recovery paths and actions reachable in a narrow %s surface', async (placement) => {

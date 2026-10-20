@@ -1,3 +1,4 @@
+import { useGitDirectoryFavorites } from './gitDirectoryFavorites';
 import { For, Show, createEffect, onCleanup } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
 import { cn } from '@floegence/floe-webapp-core';
@@ -186,6 +187,7 @@ function resolveWorkspaceSectionIcon(section: GitWorkspaceViewSection): import('
 
 export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
   const i18n = useI18n();
+  const directoryFavorites = useGitDirectoryFavorites();
   type BranchContextTarget = Readonly<{ branch: GitBranchSummary; repoRootPath: string }>;
   const branchContextMenu = createGitEntityContextMenuController<BranchContextTarget>({
     snapshotTarget: (target) => ({ repoRootPath: target.repoRootPath, branch: { ...target.branch } }),
@@ -226,6 +228,8 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
           : !branch.current && !branch.worktreePath
             ? i18n.t('git.branches.openBranchInWorktreeFirst')
             : i18n.t('git.branches.worktreeUnavailable');
+    const favorite = directoryFavorites.item(directoryRequest?.path ?? '', target);
+    if (favorite) items.push(favorite);
     if (props.onAskFlower && target.repoRootPath) {
       items.push({
         id: 'ask-flower', kind: 'action', group: 'assistant', rank: 10,
@@ -465,6 +469,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
 
   return (
     <div class={cn('flex h-full min-h-0 flex-col', props.class)}>
+      <directoryFavorites.Feedback />
       <div
         ref={(element) => {
           scrollRegionElement = element;

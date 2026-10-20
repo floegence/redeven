@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, onCleanup } from 'solid-js';
 import { cn, useFileBrowserDrag } from '@floegence/floe-webapp-core';
-import { ChevronRight } from '@floegence/floe-webapp-core/icons';
+import { ChevronRight, MoreHorizontal } from '@floegence/floe-webapp-core/icons';
 import { FileItemIcon, createLongPressContextMenuHandlers, useFileBrowser, type FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type { NormalizedFilesystemRoot } from '../utils/filesystemRoots';
 import { matchFilesystemRoot } from '../utils/filesystemRoots';
@@ -19,6 +19,19 @@ const treeRowPadding = (depth: number) => `${TREE_ROW_BASE_PADDING + Math.min(de
 
 const FILE_TREE_TINY_BADGE_CLASS = 'rounded-full border border-border/40 bg-background/80 px-1 py-0 text-[8px] font-medium leading-4 text-muted-foreground';
 const FILE_TREE_TINY_ACCENT_BADGE_CLASS = 'rounded-full border border-primary/20 bg-primary/[0.05] px-1 py-0 text-[8px] font-medium leading-4 text-primary/80';
+
+function showDirectoryMenu(browser: ReturnType<typeof useFileBrowser>, path: string, event: MouseEvent | KeyboardEvent, item?: FileItem) {
+  event.preventDefault(); event.stopPropagation();
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+  const pointer = event instanceof MouseEvent && event.type === 'contextmenu';
+  const captured = item ? {...item, path} : undefined;
+  browser.showContextMenu({
+    x: pointer ? event.clientX : rect.left, y: pointer ? event.clientY : rect.bottom,
+    items: captured ? [captured] : [], targetKind: captured ? 'item' : 'directory-background',
+    source: captured ? 'tree' : 'background', directory: {path,item:captured},
+  });
+}
+function isMenuKey(event: KeyboardEvent) { return event.key === 'ContextMenu' || event.shiftKey && event.key === 'F10'; }
 
 function getPathSegments(path: string): string[] {
   return path.split('/').filter(Boolean);
@@ -45,6 +58,7 @@ function buildFolderIndex(items: FileItem[], index: Map<string, FileItem> = new 
 export interface FileBrowserSidebarTreeProps {
   instanceId: string;
   enableDragDrop?: boolean;
+  directoryFavoritesAvailable?: boolean;
   sidebarOpen?: boolean;
   scrollContainer?: () => HTMLElement | null;
   pendingNavigationPath?: string;
@@ -106,21 +120,7 @@ function FileBrowserSidebarTreeRow(props: FileBrowserSidebarTreeRowProps) {
     browser.navigateTo(props.item);
   };
 
-  const handleContextMenu = (event: MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-    browser.showContextMenu({
-      x: event.clientX,
-      y: event.clientY,
-      items: [props.item],
-      targetKind: 'item',
-      source: 'tree',
-      directory: {
-        path: props.item.path,
-        item: props.item,
-      },
-    });
-  };
+  const handleContextMenu = (event: MouseEvent) => showDirectoryMenu(browser, props.item.path, event, props.item);
 
   const handlePointerEnter = (event: PointerEvent) => {
     if (!props.enableDragDrop || !drag) return;
@@ -180,6 +180,7 @@ function FileBrowserSidebarTreeRow(props: FileBrowserSidebarTreeRowProps) {
           title={props.item.path}
           onClick={handleNavigate}
           onContextMenu={handleContextMenu}
+          onKeyDown={event => {if (isMenuKey(event)) showDirectoryMenu(browser, props.item.path, event, props.item);}}
           onPointerDown={longPress.onPointerDown}
           onPointerMove={longPress.onPointerMove}
           onPointerUp={longPress.onPointerUp}
@@ -365,6 +366,7 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
                   {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
                   data-filesystem-root-id={root.id}
                   data-filesystem-root-path={root.pathAbs}
+                  onContextMenu={event => showDirectoryMenu(browser, root.pathAbs, event)}
                   class={cn(
                     FILE_TREE_ROOT_ROW_CLASS,
                     isActive() ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium' : 'text-foreground hover:bg-sidebar-accent/60',
@@ -376,12 +378,16 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
                     title={root.pathAbs}
                     aria-current={isActive() ? 'page' : undefined}
                     onClick={() => props.onRootSelect?.(root.pathAbs)}
+                    onKeyDown={event => {if (isMenuKey(event)) showDirectoryMenu(browser, root.pathAbs, event);}}
                   >
                     <span class="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground">
                       <FileItemIcon size={14} item={{ name: root.label, type: 'folder' }} class="h-3.5 w-3.5" />
                     </span>
                     <span class="min-w-0 flex-1 truncate">{root.label}</span>
                   </button>
+                  <Show when={props.directoryFavoritesAvailable}><button type="button" aria-label={i18n.t('common.actions.more') + ': ' + root.pathAbs}
+                    class="shrink-0 cursor-pointer rounded p-1 text-muted-foreground hover:bg-sidebar-accent focus-visible:ring-1 focus-visible:ring-sidebar-ring"
+                    onClick={event => showDirectoryMenu(browser, root.pathAbs, event)}><MoreHorizontal class="h-3.5 w-3.5" /></button></Show>
                   <span
                     data-filesystem-root-write-badge={root.id}
                     class={cn(

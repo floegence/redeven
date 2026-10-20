@@ -5063,7 +5063,14 @@
       "permissionDenied": "Você não tem permissão para ler este diretório.",
       "hostPermissionDenied": "O sistema operacional negou acesso a este diretório.",
       "notDirectory": "Este caminho não é um diretório.",
-      "connectionFailed": "Não foi possível conectar ao ambiente. Verifique a conexão e tente novamente."
+      "connectionFailed": "Não foi possível conectar ao ambiente. Verifique a conexão e tente novamente.",
+      "favorites": "Favoritos",
+      "favoriteDirectory": "Adicionar pasta aos favoritos",
+      "unfavoriteDirectory": "Remover pasta dos favoritos",
+      "favoritesEmpty": "Marque uma pasta com a estrela para salvá-la aqui.",
+      "favoritesFilter": "Filtrar favoritos por nome ou caminho",
+      "favoritesNoMatches": "Nenhum favorito correspondente",
+      "favoritesLoadFailed": "Não foi possível carregar os favoritos"
     },
     "runtime": {
       "localEnvironment": "Ambiente local",

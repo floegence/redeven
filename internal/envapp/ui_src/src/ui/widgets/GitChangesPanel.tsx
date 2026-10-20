@@ -1,3 +1,4 @@
+import { useGitDirectoryFavorites } from './gitDirectoryFavorites';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { AlertTriangle, CheckCircle, Copy, Eye, FileText, Folder, Minus, MoreHorizontal, Package, Plus, Search, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import { GitFileLabel } from './GitFileLabel';
@@ -421,6 +422,7 @@ function parentGitPath(relativePath: string): string {
 }
 
 export function GitChangesPanel(props: GitChangesPanelProps) {
+  const directoryFavorites = useGitDirectoryFavorites();
   let diffNavigation: GitDiffNavigation | undefined;
   const i18n = useI18n();
   const [commitDialogOpen, setCommitDialogOpen] = createSignal(false);
@@ -791,6 +793,10 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
       });
     }
 
+    if (directoryRequest && (!item || isGitWorkspaceDirectoryEntry(item))) {
+      const favorite = directoryFavorites.item(directoryRequest.path, target);
+      if (favorite) addAction(favorite);
+    }
     if (directoryRequest && props.onOpenInTerminal) {
       addAction({
         id: 'open-in-terminal',
@@ -1082,6 +1088,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
 
   return (
     <div class="flex h-full min-h-0 flex-col">
+      <directoryFavorites.Feedback />
       <div class="sr-only">
         <span class="git-tone-dot git-tone-dot--warning" aria-hidden="true" />
         <div class="tracking-[0.16em]">{i18n.t('git.changes.workspace')}</div>

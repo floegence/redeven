@@ -1,4 +1,8 @@
 import { readApiJSONResponse } from './localApi';
+import { createSignal } from 'solid-js';
+import { createDirectoryFavoritesClient, type DirectoryFavoritesSnapshot } from '../../../../../flower_ui/src/filePicker/directoryFavorites';
+const [directoryFavorites, setDirectoryFavorites] = createSignal<ReturnType<typeof createDirectoryFavoritesClient>>();
+export function envDirectoryFavorites(errorMessage: () => string) { return directoryFavorites()?.view(errorMessage); }
 import type { AcquisitionConnectionLifecycle, FetchServerSentEventsOptions, ServerSentEvent } from '@floegence/floe-webapp-boot';
 
 // The Shell's connection lifecycle owns transport and cancellation. This binding
@@ -7,6 +11,14 @@ type SessionHTTP = Pick<AcquisitionConnectionLifecycle, 'fetch' | 'events'>;
 let current: SessionHTTP | undefined;
 
 export function bindSessionHTTP(transport: SessionHTTP): () => void {
+  directoryFavorites()?.dispose();
+  const favorites = createDirectoryFavoritesClient(async (method, path, signal) => {
+    const response = await transport.fetch('/_redeven_proxy/api/fs/directory_favorites', {
+      method, signal, ...(path === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) }),
+    });
+    return (await readApiJSONResponse<DirectoryFavoritesSnapshot>(response)).data;
+  });
+  setDirectoryFavorites(favorites);
   current = transport;
   // Desktop uses this exact environment lifecycle for both local and E2EE requests.
   const entranceRequests = new Map<string, AbortController>();
@@ -24,6 +36,8 @@ export function bindSessionHTTP(transport: SessionHTTP): () => void {
     } finally { entranceRequests.delete(request.request_id); }
   });
   return () => {
+    favorites.dispose();
+    if (directoryFavorites() === favorites) setDirectoryFavorites(undefined);
     releaseEntrance?.();
     for (const controller of entranceRequests.values()) controller.abort();
     entranceRequests.clear();

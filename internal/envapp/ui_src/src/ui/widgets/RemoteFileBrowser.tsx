@@ -1,3 +1,5 @@
+import { directoryFavoriteAction } from '../../../../../flower_ui/src/filePicker/directoryFavorites';
+import { Star } from '@floegence/floe-webapp-core/icons';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
 import { classifyFilesystemPathError } from '../../../../../flower_ui/src/filePicker/filesystemPicker';
 import { useEnvFilesystemPicker } from '../services/filesystemPicker';
@@ -5413,9 +5415,15 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     ],
   });
 
+  const favoriteMenuActions = new WeakMap<ContextMenuEvent, ReturnType<typeof directoryFavoriteAction>>();
   const resolveOverrideContextMenuItems = (event: ContextMenuEvent | null): ContextMenuItem[] => {
     const scope = resolveContextMenuScope(event);
     if (!event || !scope) return [];
+    const targetPath = scope === 'single-folder' ? event.items[0]?.path : event.directory?.path;
+    if (!favoriteMenuActions.has(event)) favoriteMenuActions.set(event, untrack(() => directoryFavoriteAction(targetPath ?? '', filesystemPicker.directoryFavorites, filesystemPicker.copy as import('@floegence/floe-webapp-core/ui').PickerCopy, error => notification.error(i18n.t('flowerSurface.filesystemPicker.favoritesLoadFailed'), error instanceof Error ? error.message : String(error)))));
+    const action = favoriteMenuActions.get(event);
+    const favoriteItem: ContextMenuItem[] = action ? [{ id: 'directory-favorite', label: action.label, icon: Star, type: 'custom', get disabled() { return action.disabled; }, onAction: action.run }] : [];
+
 
     if (scope === 'directory-background') {
       const canMutate = canMutateContext(event);
@@ -5430,7 +5438,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         backgroundItems.push(buildOpenInTerminalMenuItem());
       }
       backgroundItems.push(buildNewContextMenuItem(false, !canMutate));
-      return sortContextActionMenuItems(backgroundItems);
+      return [...sortContextActionMenuItems(backgroundItems), ...favoriteItem];
     }
 
     if (scope === 'single-folder') {
@@ -5448,6 +5456,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       folderItems.push(buildNewContextMenuItem(true, !canMutate));
       return [
         ...sortContextActionMenuItems(folderItems),
+        ...favoriteItem,
         ...filterSecondaryContextMenuItems(singleSelectSecondaryContextMenuItemIds).map((item) => (
           item.id === 'duplicate' || item.id === 'rename' || item.id === 'delete' ? { ...item, disabled: !canMutate } : item
         )),

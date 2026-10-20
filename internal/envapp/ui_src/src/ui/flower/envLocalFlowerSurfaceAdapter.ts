@@ -15,7 +15,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { createFlowerModelReadResource, readFlowerModelDirectory, withFlowerModelDirectory, type FlowerModelReadResource } from '../../../../../flower_ui/src/modelDirectory';
 import type { RedevenV1Rpc } from '../protocol/redeven_v1';
-import { readSessionEvents } from '../services/sessionHTTP';
+import { readSessionEvents, envDirectoryFavorites } from '../services/sessionHTTP';
 import {
   fetchLocalApiJSON,
   fetchLocalApiJSONResponse,
@@ -769,6 +769,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
       return snapshot;
     },
+    directoryFavorites: envDirectoryFavorites,
     getWorkingDirectoryPathContext: () => options.rpc.fs.getPathContext(),
     listWorkingDirectoryEntries: async (input) => {
       const response = await options.rpc.fs.list({

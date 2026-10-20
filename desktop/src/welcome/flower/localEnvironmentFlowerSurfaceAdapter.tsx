@@ -1,3 +1,4 @@
+import { createDirectoryFavoritesClient } from '../../../../internal/flower_ui/src/filePicker/directoryFavorites';
 import { withFlowerReadDeadline } from '../../../../internal/flower_ui/src/requestDeadline';
 import { createFlowerConversationPreferenceClient, prepareFlowerNewConversationInput } from '../../../../internal/flower_ui/src/conversationPreferences';
 import type { FlowerConversationPreferences } from '../../../../internal/flower_ui/src/contracts/flowerSurfaceContracts';
@@ -120,6 +121,7 @@ export type LocalEnvironmentFlowerSurfaceAdapterOptions = Readonly<{
   signal?: AbortSignal;
   openMessageURL?: FlowerSurfaceAdapter['openMessageURL'];
   runtimeEnvironmentID?: string;
+  directoryFavoritesClient?: ReturnType<typeof createDirectoryFavoritesClient>;
   modelReadResource?: FlowerModelReadResource;
   runtimeDisplayName?: string;
   runtimeSubtitle?: string;
@@ -758,6 +760,11 @@ export async function launchLocalEnvironmentFlowerTurn(
   return normalizeFlowerTurnLaunchReceipt(response, { clientRequestID, existingThreadID });
 }
 
+export function createDesktopDirectoryFavoritesClient(bridge: DesktopSettingsBridge, environmentID?: string) {
+  return createDirectoryFavoritesClient((method, path, signal) => runtimeJSON(bridge, method,
+    '/_redeven_proxy/api/fs/directory_favorites', path === undefined ? undefined : { path }, undefined, environmentID, signal));
+}
+
 export function createLocalEnvironmentFlowerSurfaceAdapter(
   bridge: DesktopSettingsBridge,
   options: LocalEnvironmentFlowerSurfaceAdapterOptions = {},
@@ -773,6 +780,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
   }, 'Flower settings read timed out.', signal && options.signal ? AbortSignal.any([signal, options.signal]) : signal ?? options.signal);
   const reloadSettings = () => { resource.invalidate(); return loadSettings(); };
   return createRuntimeFlowerSurfaceAdapter({
+    directoryFavorites: failureMessage => options.directoryFavoritesClient?.view(failureMessage),
     signal: options.signal,
     runtime: {
       runtime_id: LOCAL_ENVIRONMENT_RUNTIME_ID,

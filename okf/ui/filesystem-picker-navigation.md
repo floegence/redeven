@@ -3,7 +3,7 @@ type: UI Contract
 title: Absolute filesystem directory selection
 description: Select authorized directories through one navigation core in Flower, Spaces, and other filesystem pickers.
 tags: [ui, filesystem, flower, spaces, workbench]
-timestamp: 2026-09-21T00:00:00Z
+timestamp: 2026-10-20T00:00:00Z
 ---
 # Summary
 
@@ -114,7 +114,7 @@ confirmation. Its default Recently used tab sits beside the root tabs and shares
 their content area; choosing a suggestion opens directory browsing with path-input
 focus. Suggestions derive from current workspace root conversation summaries,
 sorted by latest update and deduplicated by absolute
-path; pinned order does not change recency. The list contains at most three
+path; pinned order does not change recency. The list contains at most ten
 directories and disappears when empty. No separate browser history or cross-host
 path store is introduced. The published picker's `suggestedPaths` entry points
 display directory names and full-path hints, and navigate through the same
@@ -141,6 +141,24 @@ selection counts, and operation authorization. Extraction still checks destinati
 write permission. The shared picker owns navigation only. Its actual scroll
 viewports carry Workbench local-scroll markers; existing modal, keyboard, and
 focus ownership remains with the host and published presentation components.
+
+## Shared directory favorites
+
+All Env App and Desktop directory and file pickers receive the published controlled
+favorites contract. The Favorites tab remains available when empty, supports local
+path/name filtering, and uses the same authorized navigation and validation as
+ordinary browsing. Shortcut views cannot confirm an earlier selected directory.
+File selection, save filenames, Space metadata, extraction write checks and terminal
+execution checks retain their existing owners. Folder rows, recent rows and the
+validated current directory expose separate star actions, plus captured-target
+context menus. Lists scroll inside their declared Workbench viewport.
+
+Files displays a compact favorites group before its tree and a current-directory
+star. Folder, root and background menus, Flower working-directory menus and existing
+Git directory actions use the same client. Stars change navigation metadata only;
+they never mutate a draft or the new-conversation default. See
+[directory favorites](directory-favorites.md) for authentication, persistence,
+refresh and failure contracts.
 
 # Boundaries
 

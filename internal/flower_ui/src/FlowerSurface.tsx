@@ -18,6 +18,7 @@ import { flowerMenuModels } from './modelMenu';
 import { flowerDirectoryDesktopStatus } from './modelDirectory';
 import {
   Input,
+  DirectoryFavoriteButton,
   StableText,
   Button,
   ConfirmDialog,
@@ -2198,7 +2199,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const recent = threads()
       .filter((thread) => !thread.parent_thread_id)
       .sort((left, right) => right.updated_at_ms - left.updated_at_ms || right.created_at_ms - left.created_at_ms);
-    return [...new Set(recent.map((thread) => normalizeAbsolutePath(thread.working_dir)).filter(Boolean))].slice(0, 3);
+    return [...new Set(recent.map((thread) => normalizeAbsolutePath(thread.working_dir)).filter(Boolean))].slice(0, 10);
   });
   let filesystemRevision = 0;
   const filesystemScopeKey = createMemo(() => {
@@ -4065,6 +4066,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const directoryMenuAvailability = createMemo<FlowerDirectoryMenuAvailability>(() => {
     const state = props.adapter.workingDirectoryActionAvailability?.();
     return {
+      favorites: props.adapter.directoryFavorites?.(() => copy().filesystemPicker.favoritesLoadFailed),
+      favoriteLabel: copy().filesystemPicker.favoriteDirectory,
+      unfavoriteLabel: copy().filesystemPicker.unfavoriteDirectory,
+      onFavoriteError: error => notifyThreadActionError(getErrorMessage(error)),
       ...(props.adapter.openWorkingDirectoryInFileBrowser ? { browse: state?.browse ?? { enabled: true } } : {}),
       ...(props.adapter.openWorkingDirectoryInTerminal ? { terminal: state?.terminal ?? { enabled: true } } : {}),
     };
@@ -4100,6 +4105,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const target = { thread_id: request.thread_id, path };
     try {
       if (!path || !request.thread_id) throw new Error(copy().threadList.workingDirectoryUnavailable);
+      if (action === 'favorite_workdir') { restoreThreadMenuFocus(restore); return; }
       if (action === 'copy_workdir') {
         await writeClipboardText(path, copy().threadList.workingDirectoryLabel);
         restoreThreadMenuFocus(restore);
@@ -4164,7 +4170,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const handleThreadMenuAction = async (action: FlowerThreadMenuAction, item: FlowerThreadListItem, restore?: HTMLElement, sourceItemID?: string) => {
     if (action === 'reference') { addThreadReference(item); return; }
     if (action === 'pin') { toggleThreadPin(item); restoreThreadMenuFocus(restore); return; }
-    if (action === 'browse_workdir' || action === 'terminal_workdir' || action === 'copy_workdir') {
+    if (action === 'browse_workdir' || action === 'terminal_workdir' || action === 'copy_workdir' || action === 'favorite_workdir') {
       await handleDirectoryMenuAction(action, { thread_id: item.thread_id, path: item.working_dir }, restore);
       return;
     }
@@ -11905,6 +11911,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     expanded={workingDirectoryPickerOpen()}
                     onClick={openWorkingDirectoryPicker}
                   />
+                  <Show when={directoryMenuAvailability().favorites && displayedWorkingDirectory()}><DirectoryFavoriteButton path={displayedWorkingDirectory()} favorites={directoryMenuAvailability().favorites!} copy={copy().filesystemPicker} onError={notifyThreadActionError} /></Show>
                 </div>
               </Show>
             )}
@@ -13293,6 +13300,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 void browseWorkingDirectory({ path, ...(threadID ? { thread_id: threadID } : {}) }, event.currentTarget);
               }}
             /></Show>
+            <Show when={directoryMenuAvailability().favorites && displayedWorkingDirectory()}><DirectoryFavoriteButton path={displayedWorkingDirectory()} favorites={directoryMenuAvailability().favorites!} copy={copy().filesystemPicker} onError={notifyThreadActionError} /></Show>
             <For each={headerActionDefinitions}>{action => <Show when={action.visible()}><Switch fallback={
               <button type="button" class="flower-header-icon-button" aria-label={action.label()} title={action.label()}
                 disabled={action.disabled?.()} aria-haspopup={action.id === 'connections' ? 'dialog' : undefined}
@@ -13962,6 +13970,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         scopeKey={filesystemScopeKey()}
         scrollViewportProps={props.filesystemScrollViewportProps}
         initialPath={draftWorkingDirectory() || undefined}
+        directoryFavorites={props.adapter.directoryFavorites?.(() => copy().filesystemPicker.favoritesLoadFailed)}
         suggestedPaths={recentWorkingDirectories()}
         suggestedPathsLabel={copy().chat.workingDirPickerRecent}
         loadPathContext={async () => {

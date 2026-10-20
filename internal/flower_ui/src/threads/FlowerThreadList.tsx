@@ -17,7 +17,7 @@ import { filterFlowerThreadItems, flowerThreadIndicator, groupFlowerThreadItems,
 import { canForkThreadItem, canPinThreadItem, canRenameThreadItem, canStopThreadItem } from './threadListActions';
 
 type TimeGroup = FlowerThreadTimeGroup;
-export type FlowerThreadMenuAction = 'reference' | 'copy_thread_id' | 'fork' | 'copy_workdir' | 'stop' | 'pin' | 'rename' | 'delete' | 'browse_workdir' | 'terminal_workdir' | 'move_up' | 'move_down';
+export type FlowerThreadMenuAction = 'reference' | 'copy_thread_id' | 'fork' | 'copy_workdir' | 'favorite_workdir' | 'stop' | 'pin' | 'rename' | 'delete' | 'browse_workdir' | 'terminal_workdir' | 'move_up' | 'move_down';
 export type { FlowerThreadGroup };
 
 type FlowerThreadRenderGroup = Readonly<{

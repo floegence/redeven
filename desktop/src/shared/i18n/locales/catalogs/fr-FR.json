@@ -136,7 +136,14 @@
       "permissionDenied": "Vous n’avez pas l’autorisation de lire ce répertoire.",
       "hostPermissionDenied": "Le système d’exploitation a refusé l’accès à ce répertoire.",
       "notDirectory": "Ce chemin ne désigne pas un répertoire.",
-      "connectionFailed": "Impossible de joindre l’environnement. Vérifiez la connexion et réessayez."
+      "connectionFailed": "Impossible de joindre l’environnement. Vérifiez la connexion et réessayez.",
+      "favorites": "Favoris",
+      "favoriteDirectory": "Ajouter le dossier aux favoris",
+      "unfavoriteDirectory": "Retirer le dossier des favoris",
+      "favoritesEmpty": "Cliquez sur l’étoile d’un dossier pour le retrouver ici.",
+      "favoritesFilter": "Filtrer les favoris par nom ou chemin",
+      "favoritesNoMatches": "Aucun favori correspondant",
+      "favoritesLoadFailed": "Impossible de charger les favoris"
     },
     "runtime": {
       "localEnvironment": "Environnement local",

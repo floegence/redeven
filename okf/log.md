@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-20 — Shared directory favorites
+
+- Expand Flower recent directories to ten and share controlled directory favorites across Files, Flower, Git and directory/file pickers. Document Runtime-owned scoped SQLite metadata, authenticated item mutations, client lifetime and epoch 69. See [directory favorites](ui/directory-favorites.md) and [filesystem navigation](ui/filesystem-picker-navigation.md).
+
 ## 2026-10-20 — Quiet provider transport recovery
 
 - Keep protocol selection and fallback in diagnostics. Remove transport-switch notices from conversation progress across Desktop, Env App and SubAgent views, including unused translations and styles. Preserve normal retry feedback and Stop. See [request recovery](ai/model-request-recovery.md).

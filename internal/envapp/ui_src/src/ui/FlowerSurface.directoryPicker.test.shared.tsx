@@ -1,3 +1,5 @@
+import type { DirectoryFavorites } from '@floegence/floe-webapp-core/ui';
+import { createDirectoryFavoritesClient } from '../../../../flower_ui/src/filePicker/directoryFavorites';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { adapter, flush, renderSurfaceWithDraftCoordinator, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 import { createFlowerComposerDraftCoordinator } from '../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
@@ -18,8 +20,8 @@ const context = { agentHomePathAbs: home, homePathAbs: home, defaultRootId: 'hom
   { id: 'computer', label: 'Computer', pathAbs: '/', kind: 'computer', permissions: { read: true, write: false } },
 ] };
 function button(label: string) { return Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent?.trim() === label)!; }
-async function setup(pathContext = context, history: ReturnType<typeof thread>[] = []) {
-  const a = { ...adapter(), listThreads: vi.fn(async () => history), openWorkingDirectoryInFileBrowser: vi.fn(async () => undefined), getWorkingDirectoryPathContext: vi.fn(async () => pathContext), listWorkingDirectoryEntries: vi.fn(async (_input: { path: string; showHidden?: boolean }) => []) };
+async function setup(pathContext = context, history: ReturnType<typeof thread>[] = [], favorites?: DirectoryFavorites) {
+  const a = { ...adapter(), directoryFavorites: favorites ? () => favorites : undefined, listThreads: vi.fn(async () => history), openWorkingDirectoryInFileBrowser: vi.fn(async () => undefined), getWorkingDirectoryPathContext: vi.fn(async () => pathContext), listWorkingDirectoryEntries: vi.fn(async (_input: { path: string; showHidden?: boolean }) => []) };
   const drafts = createFlowerComposerDraftCoordinator();
   const host = renderSurfaceWithDraftCoordinator(a, drafts);
   await waitFor(() => host.querySelector<HTMLElement>('.flower-working-directory-select')?.title.includes(pathContext.roots.find((root) => root.id === pathContext.defaultRootId)!.pathAbs) === true);
@@ -43,6 +45,37 @@ async function setup(pathContext = context, history: ReturnType<typeof thread>[]
   return { a, host, open, navigate, send };
 }
 describe('Flower published absolute directory picker', () => {
+  it('shares stars and shortcuts without changing the draft until confirmation', async () => {
+    let paths: string[] = [target]; let revision = 1;
+    const client = createDirectoryFavoritesClient(async (method, path) => {
+      if (method !== 'GET' && path) {
+        paths = method === 'PUT' ? [path, ...paths.filter(item => item !== path)] : paths.filter(item => item !== path);
+        revision++;
+      }
+      return {paths,revision};
+    });
+    const favorites = client.view(() => 'Favorites failed');
+    try {
+      await client.refresh();
+      const f = await setup(context, [], favorites);
+      const star = f.host.querySelector<HTMLButtonElement>('button[aria-label="Add directory to favorites: ' + home + '"]')!;
+      expect(star).toBeTruthy(); star.click();
+      await waitFor(() => favorites.paths.includes(home));
+      expect(f.host.querySelector('.flower-working-directory-select')?.getAttribute('title')).toContain(home);
+      await f.open(); button('Favorites').click(); await flush();
+      expect(button('Select').disabled).toBe(true);
+      const shortcut = document.querySelector<HTMLButtonElement>('[data-picker-favorite-path="' + target + '"]')!;
+      expect(shortcut).toBeTruthy(); shortcut.click();
+      await waitFor(() => !button('Select').disabled);
+      button('Cancel').click(); await flush();
+      expect(f.host.querySelector('.flower-working-directory-select')?.getAttribute('title')).toContain(home);
+      await f.send();
+      expect(f.a.launchTurn).toHaveBeenCalledWith(expect.objectContaining({working_dir:home}));
+      expect(favorites.paths).toEqual([home,target]);
+    } finally {client.dispose();}
+  });
+
+
   it('recommends unique recent conversation directories and validates them before draft confirmation', async () => {
     const f = await setup(context, [
       thread({ thread_id: 'older-pinned', working_dir: '/Volumes/older', updated_at_ms: 1, pinned_at_ms: 500 }),
@@ -55,7 +88,7 @@ describe('Flower published absolute directory picker', () => {
     ]);
     await f.open();
     const recents = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-picker-suggested-path]'));
-    expect(recents.map(item => item.title)).toEqual([target, '/Volumes/other/project', '/Volumes/third']);
+    expect(recents.map(item => item.title)).toEqual([target, '/Volumes/other/project', '/Volumes/third', '/Volumes/older']);
     expect(button('Recently used').getAttribute('aria-selected')).toBe('true');
     expect(button('Home').closest('[role="tablist"]')).toBe(button('Recently used').parentElement);
     expect(document.querySelector('input[aria-label="Directory path"]')).toBeNull();
@@ -72,6 +105,17 @@ describe('Flower published absolute directory picker', () => {
     button('Select').click(); await flush();
     await f.send();
     expect(f.a.launchTurn).toHaveBeenCalledWith(expect.objectContaining({ working_dir: target }));
+  });
+
+  it('retains ten unique root conversation directories and truncates the eleventh', async () => {
+    const history = Array.from({ length: 11 }, (_, index) => thread({ thread_id: 'recent-' + index, working_dir: '/srv/project-' + index, updated_at_ms: 100 - index }));
+    history.push(thread({ thread_id: 'duplicate', working_dir: '/srv/project-0/', updated_at_ms: 200 }));
+    history.push(thread({ thread_id: 'child', parent_thread_id: 'recent-0', working_dir: '/srv/child', updated_at_ms: 300 }));
+    const f = await setup(context, history); await f.open();
+    const recents = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-picker-suggested-path]'));
+    expect(recents.map(item => item.title)).toEqual(Array.from({ length: 10 }, (_, index) => '/srv/project-' + index));
+    recents[0].focus(); recents[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
+    expect(document.activeElement).toBe(recents[9]);
   });
 
   it('shows no recent tab when this environment has no conversation history', async () => {

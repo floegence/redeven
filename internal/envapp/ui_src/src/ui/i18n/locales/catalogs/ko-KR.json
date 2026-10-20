@@ -5063,7 +5063,14 @@
       "permissionDenied": "이 디렉터리를 읽을 권한이 없습니다.",
       "hostPermissionDenied": "운영 체제가 이 디렉터리에 대한 접근을 거부했습니다.",
       "notDirectory": "이 경로는 디렉터리가 아닙니다.",
-      "connectionFailed": "환경에 연결할 수 없습니다. 연결을 확인하고 다시 시도하세요."
+      "connectionFailed": "환경에 연결할 수 없습니다. 연결을 확인하고 다시 시도하세요.",
+      "favorites": "즐겨찾기",
+      "favoriteDirectory": "디렉터리를 즐겨찾기에 추가",
+      "unfavoriteDirectory": "즐겨찾기에서 디렉터리 제거",
+      "favoritesEmpty": "디렉터리 옆 별표를 눌러 여기에 추가하세요.",
+      "favoritesFilter": "이름 또는 경로로 즐겨찾기 필터링",
+      "favoritesNoMatches": "일치하는 즐겨찾기가 없습니다",
+      "favoritesLoadFailed": "즐겨찾기를 불러올 수 없습니다"
     },
     "runtime": {
       "localEnvironment": "로컬 환경",

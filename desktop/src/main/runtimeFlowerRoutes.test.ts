@@ -4,6 +4,14 @@ import { isRuntimeFlowerReadinessPath, runtimeFlowerMethodAllowed, runtimeFlower
 
 const base = '/_redeven_proxy/api/ai/computer';
 
+it('allows only exact scoped directory favorites item operations', () => {
+  const path = '/_redeven_proxy/api/fs/directory_favorites';
+  expect(runtimeFlowerPath(path)).toBe(path);
+  for (const method of ['GET', 'PUT', 'DELETE'] as const) expect(runtimeFlowerMethodAllowed(path, method)).toBe(true);
+  for (const method of ['POST', 'PATCH'] as const) expect(runtimeFlowerMethodAllowed(path, method)).toBe(false);
+  for (const suffix of ['?user=other', '?environment=other', '/child']) expect(() => runtimeFlowerPath(path + suffix)).toThrow();
+});
+
 it('allows only scoped GET/PATCH for personal conversation preferences without caller identity queries', () => {
   const path = '/_redeven_proxy/api/ai/conversation_preferences';
   expect(runtimeFlowerPath(path)).toBe(path);

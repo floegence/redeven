@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   createLocalEnvironmentFlowerSurfaceAdapter,
+  createDesktopDirectoryFavoritesClient,
   launchLocalEnvironmentFlowerTurn,
   prepareLocalEnvironmentFlowerTurnInput,
   mapFlowerSettingsDraftToRuntimeBundle,
@@ -1767,4 +1768,29 @@ it('does not dispatch a detail read that was already cancelled', async () => {
   await expect(createLocalEnvironmentFlowerSurfaceAdapter(bridge).loadThread('thread-1', controller.signal)).rejects.toMatchObject({ name: 'AbortError' });
   expect(bridge.requestRuntimeFlower).not.toHaveBeenCalled();
   expect(bridge.cancelRuntimeFlowerRead).not.toHaveBeenCalled();
+});
+
+describe('Desktop directory favorite transport', () => {
+  it('shares both Flower surfaces and retains the captured target Runtime', async () => {
+    const bridge = bridgeFor(request => {
+      expect(request.path).toBe('/_redeven_proxy/api/fs/directory_favorites');
+      expect(request.environment_id).toBe('environment_1');
+      return {paths:request.method === 'PUT' ? ['/work/project'] : [],revision:request.method === 'PUT' ? 1 : 0};
+    });
+    const client = createDesktopDirectoryFavoritesClient(bridge,'environment_1');
+    try {
+      const one = createLocalEnvironmentFlowerSurfaceAdapter(bridge,{runtimeEnvironmentID:'environment_1',directoryFavoritesClient:client});
+      const two = createLocalEnvironmentFlowerSurfaceAdapter(bridge,{runtimeEnvironmentID:'environment_1',directoryFavoritesClient:client});
+      const first = one.directoryFavorites!(() => 'Failed')!;
+      const second = two.directoryFavorites!(() => 'Failed')!;
+      await first.onRefresh!();
+      await first.onSetFavorite!('/work/project',true);
+      expect(second.paths).toEqual(['/work/project']);
+      expect(bridge.requestRuntimeFlower).toHaveBeenCalledWith(expect.objectContaining({
+        method:'PUT',path:'/_redeven_proxy/api/fs/directory_favorites',environment_id:'environment_1',body:{path:'/work/project'},
+      }));
+      client.dispose();
+      await expect(second.onSetFavorite!('/work/old',true)).rejects.toMatchObject({name:'AbortError'});
+    } finally {client.dispose();}
+  });
 });

@@ -136,7 +136,14 @@
       "permissionDenied": "你沒有讀取此目錄的權限。",
       "hostPermissionDenied": "作業系統拒絕存取此目錄。",
       "notDirectory": "此路徑不是目錄。",
-      "connectionFailed": "無法連線至環境，請檢查連線後重試。"
+      "connectionFailed": "無法連線至環境，請檢查連線後重試。",
+      "favorites": "收藏",
+      "favoriteDirectory": "收藏目錄",
+      "unfavoriteDirectory": "取消收藏目錄",
+      "favoritesEmpty": "點選目錄旁的星號，即可加入收藏。",
+      "favoritesFilter": "依名稱或路徑篩選收藏",
+      "favoritesNoMatches": "沒有符合的收藏項目",
+      "favoritesLoadFailed": "無法載入收藏"
     },
     "runtime": {
       "localEnvironment": "本機環境",

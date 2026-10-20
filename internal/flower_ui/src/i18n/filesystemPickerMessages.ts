@@ -1,6 +1,14 @@
 import type { FilesystemPickerCopy } from "../filePicker/filesystemPicker";
 
 export const filesystemPickerEnUS = {
+  "favorites": "Favorites",
+  "favoriteDirectory": "Add directory to favorites",
+  "unfavoriteDirectory": "Remove directory from favorites",
+  "favoritesEmpty": "Star a directory to keep it here.",
+  "favoritesFilter": "Filter favorites by name or path",
+  "favoritesNoMatches": "No matching favorites",
+  "favoritesLoadFailed": "Could not load favorites",
+
   "path": "Directory path",
   "go": "Go",
   "roots": "Locations",
@@ -34,6 +42,13 @@ export const filesystemPickerEnUS = {
 
 export function createLocalizedFilesystemPickerCopy(i18n: { t: (key: string, params?: Readonly<Record<string, string | number>>) => string }): FilesystemPickerCopy {
   return {
+    favorites: i18n.t('flowerSurface.filesystemPicker.favorites'),
+    favoriteDirectory: i18n.t('flowerSurface.filesystemPicker.favoriteDirectory'),
+    unfavoriteDirectory: i18n.t('flowerSurface.filesystemPicker.unfavoriteDirectory'),
+    favoritesEmpty: i18n.t('flowerSurface.filesystemPicker.favoritesEmpty'),
+    favoritesFilter: i18n.t('flowerSurface.filesystemPicker.favoritesFilter'),
+    favoritesNoMatches: i18n.t('flowerSurface.filesystemPicker.favoritesNoMatches'),
+    favoritesLoadFailed: i18n.t('flowerSurface.filesystemPicker.favoritesLoadFailed'),
     path: i18n.t('flowerSurface.filesystemPicker.path'),
     go: i18n.t('flowerSurface.filesystemPicker.go'),
     roots: i18n.t('flowerSurface.filesystemPicker.roots'),

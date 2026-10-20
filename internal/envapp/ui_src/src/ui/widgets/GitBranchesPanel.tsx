@@ -1,3 +1,4 @@
+import { useGitDirectoryFavorites } from './gitDirectoryFavorites';
 import { StableText } from '@floegence/floe-webapp-core/ui';
 import {
   For,
@@ -857,6 +858,7 @@ function BranchStatusUnavailableSurface(props: {
 }
 
 function BranchStatusTable(props: BranchStatusTableProps) {
+  const directoryFavorites = useGitDirectoryFavorites();
   const navigation = useGitDiffNavigation();
   const openDiff: NonNullable<typeof props.onOpenDiff> = (...args) => { props.onOpenDiff?.(...args); navigation?.openDetail(); };
   const i18n = useI18n();
@@ -911,6 +913,10 @@ function BranchStatusTable(props: BranchStatusTableProps) {
           item,
         }),
       });
+    }
+    if (directory && browseRequest) {
+      const favorite = directoryFavorites.item(browseRequest.path, context);
+      if (favorite) actions.push(favorite);
     }
     if (directory && props.onOpenDirectory) {
       actions.push({
@@ -1041,6 +1047,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
 
   return (
     <GitTableFrame class="flex min-h-0 flex-1 flex-col">
+      <directoryFavorites.Feedback />
       <GitVirtualTable
         items={props.items}
         tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} git-diff-file-table git-diff-file-table--status`}
@@ -1984,6 +1991,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
 }
 
 export function GitBranchesPanel(props: GitBranchesPanelProps) {
+  const directoryFavorites = useGitDirectoryFavorites();
   const rpc = useRedevenRpc();
   const notification = useNotification();
   const i18n = useI18n();
@@ -2595,6 +2603,8 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
             ? i18n.t('git.branches.openBranchInWorktreeFirst')
             : i18n.t('git.branches.worktreeUnavailable');
     const actions: GitContextMenuActionItem[] = [];
+    const favorite = directoryRequest ? directoryFavorites.item(directoryRequest.path, target) : undefined;
+    if (favorite) actions.push(favorite);
     if (props.onAskFlower) {
       actions.push({
         id: "ask-flower",
@@ -2739,6 +2749,8 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       directoryPath: target.directoryPath,
     });
     const items: GitContextMenuActionItem[] = [];
+    const favorite = directoryRequest ? directoryFavorites.item(directoryRequest.path, target) : undefined;
+    if (favorite) items.push(favorite);
     if (props.onAskFlower) {
       items.push({
         id: 'ask-flower', kind: 'action', group: 'assistant', rank: 10,
@@ -3531,6 +3543,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
 
   return (
     <div class="flex h-full min-h-0 flex-col overflow-hidden">
+      <directoryFavorites.Feedback />
       <Show
         when={!branchPanelBlockingLoading()}
         fallback={

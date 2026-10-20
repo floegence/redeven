@@ -136,7 +136,14 @@
       "permissionDenied": "No tienes permiso para leer este directorio.",
       "hostPermissionDenied": "El sistema operativo denegó el acceso a este directorio.",
       "notDirectory": "Esta ruta no es un directorio.",
-      "connectionFailed": "No se pudo conectar con el entorno. Comprueba la conexión y reintenta."
+      "connectionFailed": "No se pudo conectar con el entorno. Comprueba la conexión y reintenta.",
+      "favorites": "Favoritos",
+      "favoriteDirectory": "Añadir carpeta a favoritos",
+      "unfavoriteDirectory": "Quitar carpeta de favoritos",
+      "favoritesEmpty": "Marca una carpeta con la estrella para guardarla aquí.",
+      "favoritesFilter": "Filtrar favoritos por nombre o ruta",
+      "favoritesNoMatches": "No hay favoritos que coincidan",
+      "favoritesLoadFailed": "No se pudieron cargar los favoritos"
     },
     "runtime": {
       "localEnvironment": "Entorno local",
