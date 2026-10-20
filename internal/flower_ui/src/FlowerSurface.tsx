@@ -9823,7 +9823,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const [commandCopied, setCommandCopied] = createSignal(false);
     const [liveLastSeq, setLiveLastSeq] = createSignal(terminal().last_seq);
     const [liveError, setLiveError] = createSignal('');
-    const outputViewport = createTerminalOutputViewportController();
+    const outputViewport = createTerminalOutputViewportController({
+      interaction: { root: document.documentElement, attribute: FLOE_HOT_INTERACTION_ATTR },
+    });
     let commandCopyResetTimer: number | undefined;
     const command = () => trimString(terminal().command);
     const commandPanelID = () => `flower-terminal-command-${flowerActivityIdentity({
@@ -9862,6 +9864,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       truncated: terminal().truncated,
     });
     const [liveOutput, setLiveOutput] = createSignal(initialOutput);
+    outputViewport.setOutput(initialOutput);
     const canReadLiveOutput = createMemo(() => (
       terminal().operation !== 'write' && terminal().operation !== 'read' &&
       !!props.adapter.readTerminalProcess &&
@@ -9946,7 +9949,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           setLiveError('');
           applyTerminalSnapshot(snapshot);
           const processStatus = normalizeTerminalSnapshotStatus(snapshot.status);
-          if (processStatus && processStatus !== 'running' && processStatus !== 'pending') return;
+          if (processStatus && processStatus !== 'running' && processStatus !== 'pending') {
+            outputViewport.setOutput(untrack(liveOutput), true);
+            return;
+          }
         } catch (error) {
           if (!disposed) setLiveError(getErrorMessage(error));
         }
@@ -9979,9 +9985,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }));
 
     createEffect(() => {
-      visibleOutput();
-      displayStatus();
-      outputViewport.notifyOutputChanged();
+      const status = displayStatus();
+      outputViewport.setOutput(visibleOutput(), (status !== 'running' && status !== 'pending')
+        || Boolean(liveError()) || detailProps.failureDetailPresent());
     });
 
     onCleanup(() => {
@@ -10064,7 +10070,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             onScroll={outputViewport.onScroll}
             onWheel={outputViewport.onWheel}
           >
-            <pre>{visibleOutput()}</pre>
+            <pre ref={outputViewport.bindOutput} />
           </div>
         </Show>
         <Show when={resultNotice()}>

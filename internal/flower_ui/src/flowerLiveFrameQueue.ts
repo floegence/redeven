@@ -1,10 +1,10 @@
 import type { FlowerLiveStreamEnvelope, FlowerRuntimeCurrentItem } from './contracts/flowerSurfaceContracts';
 import { retainEqualValue } from './presentationIdentity';
 
-const INTERACTION_TEXT_REFRESH_MS = 75;
+const INTERACTION_PRESENTATION_REFRESH_MS = 75;
 
-/** Only text may differ; every other current and envelope field is compared. */
-export function flowerLiveTextAppend(previous: FlowerLiveStreamEnvelope, next: FlowerLiveStreamEnvelope): boolean {
+/** Only growing text and same-attempt display progress may differ. */
+export function flowerLivePresentationAppend(previous: FlowerLiveStreamEnvelope, next: FlowerLiveStreamEnvelope): boolean {
   if (previous.kind !== 'thread.batch' || next.kind !== 'thread.batch') return false;
   if (Boolean(previous.current) === Boolean(previous.subagent_current)
     || Boolean(next.current) === Boolean(next.subagent_current)) return false;
@@ -31,8 +31,41 @@ export function flowerLiveTextAppend(previous: FlowerLiveStreamEnvelope, next: F
     changed = true;
     comparable.push({ ...newItem, text: oldItem.text });
   }
+  const normalized = { ...after, view_version: before.view_version, items: comparable };
+  const oldRequest = before.run_progress?.request;
+  const newRequest = after.run_progress?.request;
+  if (oldRequest && newRequest && newRequest.estimated_output_tokens >= oldRequest.estimated_output_tokens
+    && (newRequest.last_progress_at === oldRequest.last_progress_at
+      || Date.parse(newRequest.last_progress_at ?? '') >= Date.parse(oldRequest.last_progress_at ?? oldRequest.first_output_at ?? oldRequest.started_at))) {
+    changed ||= retainEqualValue(oldRequest, newRequest) !== oldRequest;
+    const request = { ...newRequest,
+      estimated_output_tokens: oldRequest.estimated_output_tokens, last_progress_at: oldRequest.last_progress_at,
+    };
+    // Preserve field presence: unknown fields and attempt/phase transitions still flush.
+    if (!Object.hasOwn(oldRequest, 'last_progress_at')) delete request.last_progress_at;
+    normalized.run_progress = { ...after.run_progress!, request };
+    if (typeof before.sampled_at_ms === 'number' && typeof after.sampled_at_ms === 'number'
+      && Number.isFinite(after.sampled_at_ms) && after.sampled_at_ms >= before.sampled_at_ms) {
+      changed ||= after.sampled_at_ms !== before.sampled_at_ms;
+      normalized.sampled_at_ms = before.sampled_at_ms;
+    }
+  }
+  if (before.tool_call_previews && after.tool_call_previews
+    && before.tool_call_previews.length === after.tool_call_previews.length) {
+    normalized.tool_call_previews = after.tool_call_previews.map((call, index) => {
+      const old = before.tool_call_previews![index]!;
+      if (old.arguments_complete || call.arguments_complete || !old.preview || !call.preview) return call;
+      const preview = { ...call.preview };
+      for (const key of ['display_name', 'additions', 'deletions'] as const) {
+        if (Object.hasOwn(old.preview, key)) Object.assign(preview, { [key]: old.preview[key] });
+        else delete preview[key];
+      }
+      changed ||= retainEqualValue(old.preview, call.preview) !== old.preview;
+      return { ...call, preview };
+    });
+  }
   return changed && retainEqualValue(previous, {
-    ...next, [field]: { ...after, view_version: before.view_version, items: comparable },
+    ...next, [field]: normalized,
   }) === previous;
 }
 
@@ -94,7 +127,7 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
     const scheduledGeneration = generation;
     const revision = ++scheduleRevision;
     const connectionEpoch = pending.connectionEpoch;
-    const remaining = interactionActive() ? INTERACTION_TEXT_REFRESH_MS - (performance.now() - lastAppliedAt) : 0;
+    const remaining = interactionActive() ? INTERACTION_PRESENTATION_REFRESH_MS - (performance.now() - lastAppliedAt) : 0;
     if (remaining > 0) {
       timer = setTimeout(() => {
         if (scheduledGeneration !== generation || revision !== scheduleRevision || disposed) return;
@@ -107,7 +140,7 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
       if (scheduledGeneration !== generation || revision !== scheduleRevision || disposed) return;
       try {
         // Interaction may start after a normal streaming frame was requested.
-        if (interactionActive() && performance.now() - lastAppliedAt < INTERACTION_TEXT_REFRESH_MS) {
+        if (interactionActive() && performance.now() - lastAppliedAt < INTERACTION_PRESENTATION_REFRESH_MS) {
           frame = undefined;
           schedule();
         } else flush();
@@ -130,7 +163,7 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
       if (previous && previous.connectionEpoch !== connectionEpoch) clear();
       const currentGeneration = generation;
       try {
-        if (previous && flowerLiveTextAppend(previous.envelope, envelope) && options.validateAppend(envelope)) {
+        if (previous && flowerLivePresentationAppend(previous.envelope, envelope) && options.validateAppend(envelope)) {
           pending = value;
           previous = value;
           schedule();

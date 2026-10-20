@@ -40,6 +40,8 @@ export const TERMINAL_OUTPUT_FOLLOW_THRESHOLD_PX = 24;
 
 export type TerminalOutputViewportController = Readonly<{
   bind: (node: HTMLElement) => void;
+  bindOutput: (node: HTMLElement) => void;
+  setOutput: (output: string, immediate?: boolean) => void;
   notifyOutputChanged: () => void;
   onScroll: () => void;
   onWheel: (event: Pick<WheelEvent, 'deltaY'>) => void;
@@ -52,6 +54,7 @@ export type TerminalOutputViewportControllerOptions = Readonly<{
   requestAnimationFrame?: (callback: FrameRequestCallback) => number;
   cancelAnimationFrame?: (handle: number) => void;
   onPresentationFrame?: () => void;
+  interaction?: Readonly<{ root: HTMLElement; attribute: string }>;
 }>;
 
 export function createTerminalOutputViewportController(
@@ -63,6 +66,13 @@ export function createTerminalOutputViewportController(
   let viewport: HTMLElement | undefined;
   let frame: number | undefined;
   let followsLatest = true;
+  let textNode: Text | undefined;
+  let output = '';
+  let immediate = false;
+  let disposed = false;
+  let pendingPresentation = false;
+  const interactionActive = () => options.interaction?.root.getAttribute(options.interaction.attribute)
+    ?.split(/\s+/).some(kind => kind === 'drag' || kind === 'resize') === true;
 
   const distanceToBottom = (): number => {
     if (!viewport) return 0;
@@ -74,22 +84,51 @@ export function createTerminalOutputViewportController(
     cancelFrame(frame);
     frame = undefined;
   };
-  const notifyOutputChanged = () => {
-    if (!viewport || frame !== undefined) return;
+  const paintOutput = () => {
+    if (!textNode || textNode.data === output) return;
+    if (output.startsWith(textNode.data)) textNode.appendData(output.slice(textNode.length));
+    else textNode.data = output;
+  };
+  const schedule = () => {
+    if (disposed || !pendingPresentation || !viewport || frame !== undefined || (interactionActive() && !immediate)) return;
     frame = requestFrame(() => {
       frame = undefined;
-      if (!viewport) return;
+      if (disposed || !viewport || (interactionActive() && !immediate)) return;
+      immediate = false;
+      pendingPresentation = false;
+      paintOutput();
       if (followsLatest) {
         viewport.scrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
       }
       options.onPresentationFrame?.();
     });
   };
+  const notifyOutputChanged = () => { pendingPresentation = true; schedule(); };
+  const observer = options.interaction && typeof MutationObserver !== 'undefined'
+    ? new MutationObserver(() => {
+      if (interactionActive() && !immediate) cancelScheduled();
+      else schedule();
+    }) : undefined;
+  if (options.interaction) observer?.observe(options.interaction.root, {
+    attributes: true, attributeFilter: [options.interaction.attribute],
+  });
 
   return {
     bind: (node) => {
       viewport = node;
       followsLatest = true;
+      notifyOutputChanged();
+    },
+    bindOutput: (node) => {
+      textNode = node.ownerDocument.createTextNode('');
+      node.appendChild(textNode);
+      if (!interactionActive() || immediate) paintOutput();
+      notifyOutputChanged();
+    },
+    setOutput: (value, urgent = false) => {
+      output = value;
+      immediate ||= urgent;
+      if (urgent && !disposed) paintOutput();
       notifyOutputChanged();
     },
     notifyOutputChanged,
@@ -103,8 +142,13 @@ export function createTerminalOutputViewportController(
     },
     followingLatest: () => followsLatest,
     dispose: () => {
+      disposed = true;
+      observer?.disconnect();
       cancelScheduled();
       viewport = undefined;
+      textNode = undefined;
+      output = '';
+      pendingPresentation = false;
     },
   };
 }

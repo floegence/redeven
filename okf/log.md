@@ -8,6 +8,11 @@
 
 - Remove repeated policy, basic-concept explanations and schema restatements from host-owned tool descriptions. Retain custom APIs, cursor and effect semantics; measure the complete serialized definitions in the [prompt contract](ai/flower-prompt-and-rule-sources.md).
 
+## 2026-10-19 — Yield tool output layout during floating interactions
+
+- Keep command output ingestion and sequence cursors live while the existing terminal viewport owner defers running text/layout during drag or resize; append to a retained Text node and flush terminal/error results immediately. See [streaming stability](ui/flower-streaming-stability.md).
+- Extend the same validated live frame buffer to same-attempt progress samples and incomplete argument display previews, preserving invocation, approval, cancellation, error and completion boundaries.
+
 ## 2026-10-19 — Single-source Flower execution guidance
 
 - Remove the host's duplicate tool enumeration and standalone search-scope section; distinguish local and hosted search, narrow structured questions, and measure final provider instructions after Goal injection. See [prompt contracts](ai/flower-prompt-and-rule-sources.md).
