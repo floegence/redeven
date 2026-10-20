@@ -2,13 +2,13 @@ import desktopCSS from '../../../../../desktop/src/welcome/index.css?inline';
 import envCSS from '../index.css?inline';
 import flowerCSS from './flower-feature.css?inline';
 import { FloeProvider, builtInShellThemePresets, useTheme } from '@floegence/floe-webapp-core';
-import { onMount } from 'solid-js';
+import { createSignal, onMount } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, expect, it, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import { FlowerProviderDialog } from '../../../../flower_ui/src/settings/FlowerProviderDialog';
 import { providerDefaultsFixture } from '../../../../flower_ui/testing/providerCatalogFixture';
-import type { FlowerChatGPTAuth, FlowerChatGPTAccount } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerChatGPTAuth, FlowerChatGPTAccount, FlowerSurfaceAdapter } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import { createLocalizedFlowerSurfaceCopy } from '../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
 import { createI18nHelpers } from './i18n/createI18n';
@@ -22,7 +22,8 @@ let style: HTMLStyleElement;
 const media = commands as unknown as { emulateMediaPreferences: (value: { reducedMotion: 'reduce' | 'no-preference' }) => Promise<void> };
 afterEach(async () => { dispose?.(); host?.remove(); style?.remove(); localStorage.clear(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference' }); });
 
-async function mount(surface: 'desktop' | 'env', theme = 'porcelain-light', auth?: FlowerChatGPTAuth, width = 1280, locale: RedevenLocale = 'en-US', account?: FlowerChatGPTAccount) {
+async function mount(surface: 'desktop' | 'env', theme = 'porcelain-light', auth?: FlowerChatGPTAuth, width = 1280, locale: RedevenLocale = 'en-US', account?: FlowerChatGPTAccount, loadAccounts?: FlowerSurfaceAdapter['loadChatGPTAccounts']) {
+  const [currentAccount, setAccount] = createSignal(account);
   await page.viewport(width, 900);
   const i18n = createI18nHelpers(locale, await loadEnvAppDictionary(locale));
   const localizedCopy = createLocalizedFlowerSurfaceCopy({ locale,
@@ -46,13 +47,52 @@ async function mount(surface: 'desktop' | 'env', theme = 'porcelain-light', auth
   const discover = vi.fn(async () => ({ models }));
   const onOpenChange = vi.fn();
   dispose = render(() => <FloeProvider config={{ theme: { shellPresets: builtInShellThemePresets, defaultSurfaceStyle: 'soft-neumorphic' } }}><Theme /><FlowerProviderDialog
-    open mode="create" copy={localizedCopy} providerDefaults={providerDefaultsFixture} provider={{ id: 'openai', type: 'openai', base_url: 'https://api.openai.com/v1', models: account ? [models[0]] : [], ...(account ? { auth_method: 'chatgpt' as const, account_id: account.account_id, catalog_models: models } : {}) }} chatGPTAvailable chatGPTBindingID="local" chatGPTAccount={account}
-    chatGPTAuth={auth ?? vi.fn(async () => ({ id: 'attempt', state: 'waiting' }))} loadChatGPTAccounts={async () => ({ accounts: {}, saved_accounts: account ? [account] : [] })} onDiscoverModels={discover}
+    open mode="create" copy={localizedCopy} providerDefaults={providerDefaultsFixture} provider={{ id: 'openai', type: 'openai', base_url: 'https://api.openai.com/v1', models: account ? [models[0]] : [], ...(account ? { auth_method: 'chatgpt' as const, account_id: account.account_id, catalog_models: models } : {}) }} chatGPTAvailable chatGPTBindingID="local" chatGPTAccount={currentAccount()}
+    chatGPTAuth={auth ?? vi.fn(async () => ({ id: 'attempt', state: 'waiting' }))} loadChatGPTAccounts={loadAccounts ?? (async () => ({ accounts: {}, saved_accounts: account ? [account] : [] }))} onDiscoverModels={discover}
     keyConfigured={false} webSearchKeyConfigured={false} onOpenChange={onOpenChange} onConfirm={vi.fn()} /></FloeProvider>, host);
   await expect.element(page.getByRole('dialog')).toBeVisible();
   await userEvent.click(document.querySelector<HTMLButtonElement>('[aria-controls=flower-provider-type-openai]')!);
   await expect.poll(() => document.querySelector('[role=dialog]')!.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running')).toBe(true);
-  return { discover, onOpenChange, copy: localizedCopy, dialog: document.querySelector<HTMLElement>('.flower-provider-dialog')! };
+  return { discover, onOpenChange, setAccount, copy: localizedCopy, dialog: document.querySelector<HTMLElement>('.flower-provider-dialog')! };
+}
+
+for (const surface of ['desktop', 'env'] as const) for (const [locale, width, reduced] of [['en-US', 1280, false], ['zh-CN', 390, false], ['de-DE', 320, true]] as const) {
+  it(`keeps logout geometry stable through a delayed registry read in ${surface} ${locale}`, async () => {
+    await media.emulateMediaPreferences({ reducedMotion: reduced ? 'reduce' : 'no-preference' });
+    const saved: FlowerChatGPTAccount = { account_id: 'logout', email: 'person@example.com', state: 'ready', welcome_acknowledged: true };
+    let finish!: (result: Awaited<ReturnType<FlowerChatGPTAuth>>) => void;
+    let finishRefresh!: (result: Awaited<ReturnType<NonNullable<FlowerSurfaceAdapter['loadChatGPTAccounts']>>>) => void;
+    let reads = 0;
+    const auth = vi.fn<FlowerChatGPTAuth>(async () => new Promise(resolve => { finish = resolve; }));
+    const { dialog, copy: localized, setAccount } = await mount(surface, 'porcelain-light', auth, width, locale, saved, async () => ++reads === 1
+      ? { accounts: {}, saved_accounts: [saved] } : new Promise(resolve => { finishRefresh = resolve; }));
+    const panel = dialog.querySelector<HTMLElement>('.flower-provider-account')!;
+    const primary = panel.querySelector<HTMLButtonElement>('.flower-provider-account-primary')!;
+    const geometry = () => [panel.getBoundingClientRect().height, primary.getBoundingClientRect().top - panel.getBoundingClientRect().top, primary.getBoundingClientRect().width];
+    const initial = geometry();
+    await userEvent.click(page.getByRole('button', { name: localized.chatGPT.signOut, exact: true }));
+    setAccount({ ...saved, state: 'signing_out' });
+    expect(geometry()).toEqual(initial);
+    const tops: number[] = [];
+    finish({ local_cleanup_complete: true, revocation_confirmed: true });
+    for (let frame = 0; frame < 14; frame++) {
+      await new Promise(requestAnimationFrame);
+      tops.push(panel.getBoundingClientRect().top);
+      expect(geometry()).toEqual(initial);
+    }
+    expect(tops.every((top, i) => i === 0 || top <= tops[i - 1] + 1)).toBe(true);
+    await expect.poll(() => typeof finishRefresh).toBe('function');
+    await expect.poll(() => dialog.querySelector('.flower-provider-account-picker')).toBeNull();
+    const settledTop = panel.getBoundingClientRect().top;
+    finishRefresh({ accounts: {}, saved_accounts: [{ ...saved, state: 'signed_out', revocation_confirmed: true }] });
+    await expect.element(page.getByRole('button', { name: localized.chatGPT.continue, exact: true })).toBeEnabled();
+    expect(geometry()).toEqual(initial);
+    expect(panel.getBoundingClientRect().top).toBe(settledTop);
+    expect(panel.querySelector('.flower-provider-account-primary')).toBe(primary);
+    await expect.poll(() => document.activeElement).toBe(primary);
+    expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth + 1);
+    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/flower-logout-${surface}-${locale}.png` });
+  });
 }
 
 function color(value: string) {

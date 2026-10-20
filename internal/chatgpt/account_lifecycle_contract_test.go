@@ -16,6 +16,34 @@ import (
 	"github.com/floegence/redeven/internal/settings"
 )
 
+func TestRemovedRegistrationRejectsLateReturningSignIn(t *testing.T) {
+	c, _, _, _ := testClient(t)
+	account := settings.ChatGPTAccount{Issuer: c.issuer, Subject: "subject", ClientID: "issued", Email: "person@example.com", Lifecycle: "signed_out", SessionRevision: 2}
+	if err := c.Store.UpdateChatGPTAccount(t.Context(), account.ID(), func(p *settings.ChatGPTAccount) error { *p = account; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	a := &attempt{returning: account, status: AttemptStatus{ID: "returning"}}
+	c.mu.Lock()
+	c.attempts[a.status.ID] = a
+	c.mu.Unlock()
+	if err := c.RemoveAccount(t.Context(), account.ID()); err != nil {
+		t.Fatal(err)
+	}
+	account.SessionRevision++
+	account.AccessToken = "new-token"
+	account.Lifecycle = ""
+	if err := c.completeSignIn(t.Context(), a, account); err == nil {
+		t.Fatal("late callback restored a removed registration")
+	}
+	if !c.discardSignIn(account, settings.ChatGPTAccount{}, false) {
+		t.Fatal("local-only cleanup failed")
+	}
+	_, exists, err := c.Store.ChatGPTAccount(account.ID())
+	if err != nil || exists {
+		t.Fatal("returning cleanup recreated removed registration")
+	}
+}
+
 func TestIssuedClientSurvivesCodeExchangeFailure(t *testing.T) {
 	c, address, _, _ := testClient(t)
 	failureServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

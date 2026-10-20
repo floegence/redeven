@@ -111,7 +111,7 @@ const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
   } },
   { path: RUNTIME_FLOWER_COMPUTER_MEDIA_PATH, methods: ['GET'] },
   { path: RUNTIME_FLOWER_TOOL_IMAGE_PATH, methods: ['GET'] },
-  { path: /^\/_redeven_proxy\/api\/ai\/auth\/chatgpt\/(start|status|cancel|sign-out|acknowledge|retry)$/u, methods: ['POST'] },
+  { path: /^\/_redeven_proxy\/api\/ai\/auth\/chatgpt\/(start|status|cancel|sign-out|remove|acknowledge|retry)$/u, methods: ['POST'] },
   { path: '/_redeven_proxy/api/ai/provider_bundle', methods: ['PUT'] },
   { path: '/_redeven_proxy/api/ai/current_model', methods: ['PUT'] },
   { path: '/_redeven_proxy/api/ai/auth/chatgpt/accounts', methods: ['GET'] },

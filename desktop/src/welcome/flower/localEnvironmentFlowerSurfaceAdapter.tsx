@@ -897,7 +897,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     loadChatGPTAccounts: () => runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/ai/auth/chatgpt/accounts'),
     chatGPTAuth: async (action, input) => {
       const result = await runtimeJSON<Awaited<ReturnType<NonNullable<FlowerSurfaceAdapter['chatGPTAuth']>>>>(bridge, 'POST', `/_redeven_proxy/api/ai/auth/chatgpt/${action}`, input);
-      if (action === 'sign-out' || action === 'retry') {
+      if (action === 'sign-out' || action === 'remove' || action === 'retry') {
         resource.invalidate();
         if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
       }

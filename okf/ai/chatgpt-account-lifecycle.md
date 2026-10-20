@@ -79,6 +79,14 @@ required by OpenAI. Opaque token metadata is never decoded for workspace labels.
 Saved unbound accounts support the same local sign-out, acknowledgement and
 retry actions through the shared
 [provider configuration UI](../ui/flower-provider-configuration.md).
+Explicit local removal forgets a signed-out registration only after atomic
+verification that access, refresh and ID tokens are empty. It shares the account
+operation lock with rotation and installation, preserves other secrets and
+provider bindings, and is idempotent for missing records. Bound providers then
+report authorization required. A returning OAuth callback cannot restore a
+removed registration, and rejected returning-session cleanup revokes received
+tokens without recreating forgotten history. Remote account management remains
+forbidden; an unconfirmed remote revocation stays visible before removal.
 
 The protected secrets file migrates contiguously from version 0 to 1 to 2 to 3,
 retaining API keys and verified registration; future schemas fail without mutation.
