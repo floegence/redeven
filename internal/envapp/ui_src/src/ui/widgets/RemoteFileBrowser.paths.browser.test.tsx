@@ -13,6 +13,8 @@ import { createDownloadManager } from '../downloads/createDownloadManager';
 import { FilePreviewContext } from './FilePreviewContext';
 import { createFilePreviewController } from './createFilePreviewController';
 import { RemoteFileBrowser } from './RemoteFileBrowser';
+import { I18nProvider, type RedevenLocale } from '../i18n';
+import { writeStoredLanguagePreference } from '../i18n/storage';
 
 const home = '/Users/tangjianyin';
 const target = '/Volumes/JianDisk/code/floegence/floebrowser-projection-lifecycle';
@@ -56,9 +58,10 @@ beforeEach(() => {
   transport.repo.mockReset().mockResolvedValue({ available: false, gitAvailable: false });
   transport.capabilities.mockReset().mockResolvedValue({});
 });
-afterEach(() => { releaseFavorites?.(); releaseFavorites = undefined; dispose?.(); document.body.replaceChildren(); vi.restoreAllMocks(); });
+afterEach(() => { releaseFavorites?.(); releaseFavorites = undefined; dispose?.(); document.body.replaceChildren(); vi.restoreAllMocks(); writeStoredLanguagePreference('en-US'); });
 
-async function mountFiles(initialPath: string, placement: 'activity' | 'workbench' = 'activity', options: { storage?: Map<string, string>; restore?: boolean; unavailable?: boolean; picker?: boolean } = {}) {
+async function mountFiles(initialPath: string, placement: 'activity' | 'workbench' = 'activity', options: { storage?: Map<string, string>; restore?: boolean; unavailable?: boolean; picker?: boolean; locale?: RedevenLocale } = {}) {
+  writeStoredLanguagePreference(options.locale ?? 'en-US');
   await page.viewport(1440, 900);
   const storage = options.storage ?? new Map<string, string>();
   const host = document.createElement('div');
@@ -74,7 +77,7 @@ async function mountFiles(initialPath: string, placement: 'activity' | 'workbenc
       settingsSeq: () => 0, viewMode: () => placement, filesSidebarOpen: () => true,
       setFilesSidebarOpen: () => {},
     } as unknown as EnvContextValue;
-    return <FloeConfigProvider config={{ storage: { namespace: 'files-path-test', adapter: {
+    return <I18nProvider><FloeConfigProvider config={{ storage: { namespace: 'files-path-test', adapter: {
       getItem: (key) => storage.get(key) ?? null,
       setItem: (key, value) => { storage.set(key, value); },
       removeItem: (key) => { storage.delete(key); },
@@ -91,7 +94,7 @@ async function mountFiles(initialPath: string, placement: 'activity' | 'workbenc
           <output data-testid="files-title">{title()}</output>
         </FilePreviewContext.Provider>
       </DownloadContext.Provider></EnvContext.Provider>
-    </NotificationProvider></LayoutProvider></FloeConfigProvider>;
+    </NotificationProvider></LayoutProvider></FloeConfigProvider></I18nProvider>;
   }, host);
   if (options.unavailable) {
     await expect.poll(() => host.querySelector('[data-testid="file-browser-navigation-failure"]')).not.toBeNull();
@@ -114,6 +117,48 @@ async function mountFiles(initialPath: string, placement: 'activity' | 'workbenc
 }
 
 describe('Files directory favorites across published pickers', () => {
+  it.each([
+    ['en-US', 'Favorite', 'Unfavorite'],
+    ['zh-CN', '收藏', '取消收藏'],
+    ['zh-TW', '收藏', '取消收藏'],
+    ['ja-JP', 'お気に入りに追加', 'お気に入りから削除'],
+    ['ko-KR', '즐겨찾기 추가', '즐겨찾기 해제'],
+    ['de-DE', 'Favorisieren', 'Favorit entfernen'],
+    ['es-ES', 'Añadir a favoritos', 'Quitar de favoritos'],
+    ['fr-FR', 'Ajouter aux favoris', 'Retirer des favoris'],
+    ['pt-BR', 'Favoritar', 'Desfavoritar'],
+    ['ru-RU', 'В избранное', 'Убрать из избранного'],
+  ] as const)('uses concise favorite actions in %s menus and star labels', async (locale, favorite, unfavorite) => {
+    let paths: string[] = [];
+    let revision = 0;
+    releaseFavorites = bindSessionHTTP({fetch: async (_input, init) => {
+      if (init?.method === 'PUT' || init?.method === 'DELETE') {
+        const { path } = JSON.parse(String(init.body)) as { path: string };
+        paths = init.method === 'PUT' ? [path] : [];
+        revision++;
+      }
+      return new Response(JSON.stringify({ok:true,data:{paths,revision}}));
+    }, events: async function*(){}});
+    const f = await mountFiles(target, 'activity', {locale});
+    const favorites = envDirectoryFavorites(() => 'Failed')!;
+    await favorites.onRefresh!();
+    const background = f.host.querySelector<HTMLElement>('[data-testid="file-browser-content-scroll-region"]')!;
+    const openMenu = async (label: string) => {
+      background.dispatchEvent(new MouseEvent('contextmenu', {bubbles:true,cancelable:true,button:2,clientX:200,clientY:260}));
+      await expect.poll(() => document.querySelector('[data-file-menu-item="directory-favorite"]')?.textContent?.trim()).toBe(label);
+    };
+    await openMenu(favorite);
+    document.querySelector<HTMLElement>('[data-file-menu-item="directory-favorite"]')!.click();
+    await expect.poll(() => favorites.paths).toEqual([target]);
+    const star = [...f.host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.getAttribute('aria-label') === unfavorite + ': ' + target)!;
+    expect(star).toBeTruthy();
+    expect(star.title).toBe(unfavorite);
+    await openMenu(unfavorite);
+    document.querySelector<HTMLElement>('[data-file-menu-item="directory-favorite"]')!.click();
+    await expect.poll(() => favorites.paths).toEqual([]);
+    await expect.poll(() => star.getAttribute('aria-label')).toBe(favorite + ': ' + target);
+  });
+
   it.each(['activity', 'workbench'] as const)('shares folder, tree, background and toolbar actions in %s', async placement => {
     let paths: string[] = [];
     let revision = 0;
@@ -177,7 +222,7 @@ describe('Files directory favorites across published pickers', () => {
     await expect.poll(() => document.querySelector('[role="menu"]')).not.toBeNull();
     expect(document.querySelector('[data-file-menu-item="directory-favorite"]')).toBeNull();
     document.querySelector<HTMLElement>('[role="menu"]')!.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
-    const currentStar = [...f.host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.getAttribute('aria-label') === 'Remove directory from favorites: ' + target)!;
+    const currentStar = [...f.host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.getAttribute('aria-label') === 'Unfavorite: ' + target)!;
     expect(currentStar).toBeTruthy();
     currentStar.click();
     await expect.poll(() => favorites.paths).toEqual([childPath]);

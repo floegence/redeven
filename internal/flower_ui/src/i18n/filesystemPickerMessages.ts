@@ -2,8 +2,8 @@ import type { FilesystemPickerCopy } from "../filePicker/filesystemPicker";
 
 export const filesystemPickerEnUS = {
   "favorites": "Favorites",
-  "favoriteDirectory": "Add directory to favorites",
-  "unfavoriteDirectory": "Remove directory from favorites",
+  "favoriteDirectory": "Favorite",
+  "unfavoriteDirectory": "Unfavorite",
   "favoritesEmpty": "Star a directory to keep it here.",
   "favoritesFilter": "Filter favorites by name or path",
   "favoritesNoMatches": "No matching favorites",
