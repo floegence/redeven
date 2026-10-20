@@ -405,7 +405,7 @@ it('shows unknown compaction with same-ID recovery while later ordinary input wa
   await waitFor(() => compact.mock.calls.length === 1);
   compactResults[0].reject(flowerTurnAdmissionError('unknown', new Error('No compaction response')));
   await waitFor(() => s.rows()[0]?.dataset.flowerTransportDelivery === 'unknown');
-  expect(s.rows()[0].textContent).toContain('Compact context');
+  expect(s.rows()[0].textContent).toContain('Compact and continue Goal');
   expect(s.rows()[0].querySelector('[aria-label="Refresh confirmation"]')).toBeTruthy();
   s.type('Next ordinary input'); s.submit();
   await waitFor(() => s.rows().length === 2);
@@ -417,7 +417,7 @@ it('shows unknown compaction with same-ID recovery while later ordinary input wa
   await waitFor(() => s.launch.mock.calls.length === 1);
   expect(s.launch.mock.calls[0][0].prompt).toBe('Next ordinary input');
   expect(s.rows()).toHaveLength(1);
-  expect(s.rows()[0].textContent).not.toContain('Compact context');
+  expect(s.rows()[0].textContent).not.toContain('Compact and continue Goal');
 });
 
 
