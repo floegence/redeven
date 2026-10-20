@@ -120,7 +120,7 @@ export const FlowerThreadSwitcher: Component<FlowerThreadSwitcherProps> = (props
   };
 
   const rowMeta = (item: FlowerCompanionThreadListItem, groupKind: FlowerThreadGroup['kind']): string => {
-    const indicator = flowerThreadIndicator(item, props.activeThreadID === item.thread_id, props.copy.threadList);
+    const indicator = flowerThreadIndicator(item, props.copy.threadList);
     if (indicator.actionRequired || indicator.visual === 'wave') return indicator.title;
     if (queuedTurnCount(item) > 0) return props.copy.queued;
     if (groupKind === 'pinned') return props.copy.threadList.pinnedBadge;
@@ -194,7 +194,7 @@ export const FlowerThreadSwitcher: Component<FlowerThreadSwitcherProps> = (props
                   </h3>
                   <For each={group.threads}>
                     {(item) => {
-                      const indicator = createMemo(() => flowerThreadIndicator(item, props.activeThreadID === item.thread_id, props.copy.threadList));
+                      const indicator = createMemo(() => flowerThreadIndicator(item, props.copy.threadList));
                       const queued = () => queuedTurnCount(item) > 0;
                       const highlighted = () => highlightedKey() === item.thread_id;
                       return (

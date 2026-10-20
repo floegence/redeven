@@ -335,7 +335,7 @@ describe('Flower final thread cache and workspace transport', () => {
 
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${parent.thread_id}"] button`)));
     (runtime.querySelector(`[data-thread-id="${parent.thread_id}"] button`) as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelector(`[data-thread-id="${parent.thread_id}"]`)?.getAttribute('data-flower-thread-active') === 'true');
+    await waitFor(() => runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === parent.thread_id && runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-loading') === 'false');
     stream.push({
       schema_version: 1,
       kind: 'thread.batch',
@@ -641,7 +641,7 @@ describe('Flower final thread cache and workspace transport', () => {
 
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${parent.thread_id}"] button`)));
     (runtime.querySelector(`[data-thread-id="${parent.thread_id}"] button`) as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelector(`[data-thread-id="${parent.thread_id}"]`)?.getAttribute('data-flower-thread-active') === 'true');
+    await waitFor(() => runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === parent.thread_id && runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-loading') === 'false');
     stream.push({
       schema_version: 1,
       kind: 'thread.batch',
@@ -1712,7 +1712,7 @@ describe('Flower final thread cache and workspace transport', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-summary-approval"]')));
     (runtime.querySelector('[data-thread-id="thread-summary-approval"] button') as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelector('[data-flower-thread-status="running"]') !== null);
+    await waitFor(() => surfaceAdapter.loadThread.mock.calls.length === 1 && runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-loading') === 'false' && runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === running.thread_id);
 
     latest = waiting;
     stream.push({ schema_version: 1, kind: 'summary.batch', summaries: [waiting] });
@@ -1756,7 +1756,7 @@ describe('Flower final thread cache and workspace transport', () => {
 
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${initial.thread_id}"] button`)));
     (runtime.querySelector(`[data-thread-id="${initial.thread_id}"] button`) as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type') === 'approval_required');
+    await waitFor(() => loadThread.mock.calls.length === 1 && runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-loading') === 'false' && runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type') === 'approval_required');
 
     latest = updated;
     stream.push({ schema_version: 1, kind: 'summary.batch', summaries: [updated] });
@@ -1784,7 +1784,7 @@ describe('Flower final thread cache and workspace transport', () => {
     const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [initial]), loadThread, connectLiveStream: stream.connect });
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${initial.thread_id}"] button`)));
     (runtime.querySelector(`[data-thread-id="${initial.thread_id}"] button`) as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type') === 'approval_required');
+    await waitFor(() => loadThread.mock.calls.length === 1 && runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-loading') === 'false' && runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type') === 'approval_required');
     stream.push({ schema_version: 1, kind: 'summary.batch', summaries: [intermediate] });
     await waitFor(() => loadThread.mock.calls.length === 2);
     stream.push({ schema_version: 1, kind: 'summary.batch', summaries: [latest] });
@@ -1820,7 +1820,7 @@ describe('Flower final thread cache and workspace transport', () => {
     const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [initial]), loadThread, connectLiveStream: stream.connect });
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${initial.thread_id}"] button`)));
     (runtime.querySelector(`[data-thread-id="${initial.thread_id}"] button`) as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('.flower-permission-trigger')));
+    await waitFor(() => loadThread.mock.calls.length === 1 && runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-loading') === 'false' && Boolean(runtime.querySelector('.flower-permission-trigger')));
     stream.push({ schema_version: 1, kind: 'summary.batch', summaries: [intermediate] });
     await waitFor(() => Boolean(runtime.querySelector('.flower-thread-sync-error')));
     stream.push({ schema_version: 1, kind: 'summary.batch', summaries: [intermediate] });
@@ -1885,7 +1885,7 @@ describe('Flower final thread cache and workspace transport', () => {
 
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${threadID}"] button`)));
     (runtime.querySelector(`[data-thread-id="${threadID}"] button`) as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelector('[data-flower-thread-status="running"]') !== null);
+    await waitFor(() => loadThread.mock.calls.length === 1 && runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-loading') === 'false' && runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === threadID);
 
     stream.push({
       schema_version: 1,

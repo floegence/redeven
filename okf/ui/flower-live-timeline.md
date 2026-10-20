@@ -22,7 +22,11 @@ stream.
 
 Canonical per-turn outcomes, timing and explicit final boundaries also belong exclusively to accepted detail. Summary updates strip `turns`; reconnect does not change outcomes or interface disclosure choices. The presentation boundary is [Flower terminal turn process disclosure](flower-turn-process-disclosure.md).
 
-Flower read state is a Redeven-owned per-user activity revision watermark. Requests contain only the displayed `activity_revision`; equal or older acknowledgements are valid and cannot advance beyond current activity, while a future revision is rejected. The browser keeps one per-thread, per-selection-cycle coordinator: one request may be in flight, only the greatest newer revision remains pending, and a failed revision is not retried until a newer revision or a new genuine presentation cycle. Signature, prompt, message-time, polling, timer, and error-class retry paths do not exist.
+Flower read state is a Redeven-owned per-user activity watermark. The server alone persists `last_seen_activity_revision`; acknowledgements contain only the revision of an actually rendered body, and future revisions are rejected. `ThreadCache` merges activity and confirmed-read watermarks independently and monotonically across HTTP lists, details, acknowledgements and private `viewer.read_state` events. Shared summaries carry activity only. Initial connection and reconnect restore the private baseline for the authorized user without putting personal read state in shared messages. A separate loaded-content revision prevents metadata or private confirmations from qualifying stale body content as current. HTTP detail reads activity before the canonical body so a concurrent commit cannot attach a newer acknowledgement revision to older content.
+
+One surface-lifetime read-sync owner retains the greatest presented revision per thread across selection changes. An after-paint token binds thread, selection cycle and loaded-content revision; only a foreground, visible, unobscured, successfully loaded chat can advance presentation. Scrolling to the bottom is not required. Sidebar, switcher and companion derive unread from activity exceeding both server confirmation and local presentation. Merely selecting a thread never suppresses unseen activity.
+
+Read synchronization never blocks interaction or adds notifications or manual controls. Each thread has one logical request with a 15-second timeout and coalesces only presented revisions. Transient failures retry silently at 500ms, 1s, 2s, 5s, 10s and at most 30s with jitter. Offline pauses sending; online and the existing reconnect/access recovery resume it. Access failures pause until recovery. Late replies still merge monotonically, without enlarging the submitted presentation range or taking over newer requests. Thread deletion, runtime identity change and disposal clear pending work. No storage format or historical watermark is reset.
 
 Stop is a command acknowledgement. Request feedback bridges acknowledgement to
 its live observation; the current view's canonical `Cancellation` plus active state
@@ -260,7 +264,8 @@ and short ThreadID. Display labels never become canonical titles.
 - `redeven:internal/ai/flower_runtime_current_publisher_test.go` - Deterministic progressive thinking, terminal flush, stale-version, and immutable-routing coverage.
 - `redeven:internal/flower_ui/src/flowerLiveWire.ts` - Strict connection-local atomic envelope assembly.
 - `redeven:internal/flower_ui/src/liveTransport.ts` - Single connection and epoch fencing.
-- `redeven:internal/flower_ui/src/threadCache.ts` - Summary/detail separation and bounded view cache.
+- `redeven:internal/flower_ui/src/threadCache.ts` - Summary/detail separation, independent monotonic read watermarks and bounded view cache.
+- `redeven:internal/flower_ui/src/threadReadSync.test.ts` - Deterministic background retry, timeout, access recovery, coalescing and late-callback regressions.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Selection, current-view application, and quiet reconnect integration.
 - `redeven:internal/flower_ui/src/runtimeCurrentView.ts` - Exact item and interaction identity validation with no current-run fallback.
 - `redeven:internal/flower_ui/src/runtimeCurrentView.test.ts` - Rejects null, missing, empty, and incomplete pending-input question contracts.

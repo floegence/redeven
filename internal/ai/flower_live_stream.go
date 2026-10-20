@@ -16,6 +16,7 @@ import (
 	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/threadreadstate"
 )
 
 const (
@@ -351,6 +352,32 @@ func (s *Service) SubscribeFlowerLiveStream(ctx context.Context, meta *session.M
 		SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamReady, Summaries: summaries, ObserverID: subscriber.observerID,
 	})
 	retained := retainInitial(ready)
+	if retained && s.ThreadReadState() != nil {
+		snapshots := make(map[string]threadreadstate.FlowerSnapshot, len(summaries))
+		for _, summary := range summaries {
+			snapshots[summary.ThreadID] = threadreadstate.FlowerSnapshot{ActivityRevision: summary.FlowerActivity.ActivityRevision}
+		}
+		records, err := s.ThreadReadState().EnsureFlower(ctxOrBackground(ctx), endpointID, userPublicID, snapshots)
+		if err != nil {
+			closeFlowerLiveSubscription(s, subscriber)
+			return nil, err
+		}
+		for _, summary := range summaries {
+			seen := records[summary.ThreadID].LastSeenActivityRevision
+			status := FlowerThreadReadView{
+				IsUnread:  summary.FlowerActivity.ActivityRevision > seen,
+				Snapshot:  summary.FlowerActivity,
+				ReadState: FlowerThreadReadRecord{LastSeenActivityRevision: seen},
+			}
+			retained = retainInitial(newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
+				SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamViewerReadState,
+				ThreadID: summary.ThreadID, ReadStatus: &status,
+			}))
+			if !retained {
+				break
+			}
+		}
+	}
 	if retained && s.threadRuntime != nil {
 		for _, summary := range summaries {
 			if !flowerLiveSummaryNeedsCurrentBaseline(summary) {

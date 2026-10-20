@@ -25,6 +25,10 @@
 - Record actual rule-discovery directories and reject failed scope probes through existing context recovery. Adopt published Floret v7.69.1 with compact [Goal guidance](ai/flower-goals.md), explicit schema-correction ownership and consistent question-tool scope without changing durable contracts.
 - Preserve tool descriptions in Responses requests and remove the host's duplicate question-tool description so supplied definitions reach the model consistently.
 
+## 2026-10-19 — Monotonic Flower read state
+
+- Unify [read-state merging](ui/flower-live-timeline.md) across shared activity and private confirmation, bind reads to rendered body revisions, and retain presentation through navigation. Replace selection-bound attempts with silent background retries and restore private baselines on reconnect without changing durable history.
+
 ## 2026-10-19 — Append newly pinned conversations
 
 - Append new pins to the [sidebar order](ui/flower-thread-sidebar.md), preserve manual ordering and retained timestamps, and return all changed ranks in one confirmation. Require [compatibility epoch 67](architecture/runtime-service-snapshot.md) for complete acknowledgements; keep controls available during writes and reads.

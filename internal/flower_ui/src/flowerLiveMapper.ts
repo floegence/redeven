@@ -1,3 +1,4 @@
+import type { FlowerThreadSummary } from './contracts/flowerSurfaceContracts';
 import { FLOWER_CONTEXT_CATEGORIES, type FlowerContextCharacterBreakdown } from './contracts/flowerSurfaceContracts';
 import { mapFlowerProviderRequestProgress } from './providerRequestProgress';
 import { mapFlowerCitationSources } from './chat/markdown/flowerCitations';
@@ -1009,14 +1010,12 @@ export function mapFlowerReadStatus(raw: unknown): FlowerThreadReadStatus {
   if (!readState) {
     throw new Error('Flower contract error: thread.read_status.read_state is required.');
   }
+  const activity = nonNegativeInteger(snapshot.activity_revision, 'thread.read_status.snapshot.activity_revision');
+  const seen = nonNegativeInteger(readState.last_seen_activity_revision, 'thread.read_status.read_state.last_seen_activity_revision');
   return {
-    is_unread: Boolean(record.is_unread),
-    snapshot: {
-      activity_revision: Math.max(0, Math.floor(Number(snapshot.activity_revision ?? 0))),
-    },
-    read_state: {
-      last_seen_activity_revision: Math.max(0, Math.floor(Number(readState.last_seen_activity_revision ?? 0))),
-    },
+    is_unread: activity > seen,
+    snapshot: { activity_revision: activity },
+    read_state: { last_seen_activity_revision: seen },
   };
 }
 
@@ -1326,6 +1325,10 @@ export function mapFlowerCancellation(raw: unknown, threadID: string, runID = ''
 }
 
 export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessage[], options: FlowerLiveThreadMapperOptions, readStatusRaw?: unknown): FlowerThreadSnapshot {
+  return { ...mapFlowerThreadSummary(raw, messages, options), read_status: mapFlowerReadStatus(readStatusRaw ?? recordValue(raw)?.read_status) };
+}
+
+export function mapFlowerThreadSummary(raw: unknown, messages: readonly FlowerChatMessage[], options: FlowerLiveThreadMapperOptions): FlowerThreadSummary {
   const record = recordValue(raw) ?? {};
   const threadID = trim(record.thread_id);
   const status = runStatus(record.run_status);
@@ -1353,7 +1356,7 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
   const approvalPendingCount = record.approval_pending_count === undefined
     ? undefined
     : nonNegativeInteger(record.approval_pending_count, 'thread.approval_pending_count');
-  const thread: FlowerThreadSnapshot = {
+  const thread: FlowerThreadSummary = {
     thread_id: threadID,
     ...threadTitleSnapshot({
       title: trim(record.title),
@@ -1391,7 +1394,6 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
     ...(timelineDecorations ? { timeline_decorations: timelineDecorations } : {}),
     ...(subagents !== undefined ? { subagents } : {}),
     ...(errorMessage ? { error: { message: errorMessage, ...(trim(record.run_error_detail) ? { detail: trim(record.run_error_detail) } : {}), ...(errorCode ? { code: errorCode } : {}) } } : {}),
-    read_status: mapFlowerReadStatus(readStatusRaw ?? record.read_status),
   };
   return thread;
 }

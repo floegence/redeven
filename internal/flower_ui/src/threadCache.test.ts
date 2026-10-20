@@ -32,6 +32,55 @@ function receive(
 }
 
 describe('ThreadCache', () => {
+  it('merges read confirmations independently of activity and body revisions', () => {
+    const unread = { ...thread('a', 7, 'body seven'), read_status: { is_unread: true, snapshot: { activity_revision: 7 }, read_state: { last_seen_activity_revision: 6 } } };
+    let cache = receive(createThreadCache(), { thread: unread, version: 7 });
+    const confirmed = { ...unread, read_status: { ...unread.read_status, is_unread: false, read_state: { last_seen_activity_revision: 7 } } };
+    cache = receive(cache, { thread: confirmed, version: 7 });
+    expect(cache.views.get('a')?.thread.read_status.read_state.last_seen_activity_revision).toBe(7);
+    cache = cache.replaceSummary(unread);
+    cache = receive(cache, { thread: unread, version: 6 });
+    expect(cache.summaries.get('a')?.read_status.is_unread).toBe(false);
+    expect(cache.views.get('a')?.thread.read_status.is_unread).toBe(false);
+    const newer = { ...unread, updated_at_ms: 9, read_status: { ...unread.read_status, snapshot: { activity_revision: 9 } } };
+    cache = cache.replaceSummary(newer);
+    cache = cache.applyReadStatus('a', confirmed.read_status);
+    expect(cache.summaries.get('a')?.read_status.snapshot.activity_revision).toBe(9);
+    expect(cache.summaries.get('a')?.read_status.is_unread).toBe(true);
+    expect(cache.views.get('a')?.contentRevision).toBe(7);
+    expect(threadSummaryNeedsDetail(cache.summaries.get('a'), cache.views.get('a')?.thread, cache.views.get('a')?.contentRevision)).toBe(true);
+  });
+
+  it('never treats a viewer event as newly loaded content', () => {
+    let cache = receive(createThreadCache(), view('a', 7, 'body seven'));
+    cache = cache.applyReadStatus('a', { is_unread: false, snapshot: { activity_revision: 9 }, read_state: { last_seen_activity_revision: 9 } });
+    expect(cache.summaries.get('a')?.read_status.snapshot.activity_revision).toBe(9);
+    expect(cache.views.get('a')?.contentRevision).toBe(7);
+    expect(threadSummaryNeedsDetail(cache.summaries.get('a'), cache.views.get('a')?.thread, cache.views.get('a')?.contentRevision)).toBe(true);
+  });
+
+  it('keeps shared activity independent of interleaved window confirmations', () => {
+    let cache = receive(createThreadCache(), view('a', 7, 'body seven'));
+    const { read_status: _readStatus, ...shared } = thread('a', 12, 'shared');
+    cache = cache.replaceSummary(shared);
+    for (const seen of [9, 7, 11, 8]) {
+      cache = cache.applyReadStatus('a', { is_unread: false, snapshot: { activity_revision: seen }, read_state: { last_seen_activity_revision: seen } });
+    }
+    expect(cache.summaries.get('a')?.read_status).toEqual({ is_unread: true, snapshot: { activity_revision: 12 }, read_state: { last_seen_activity_revision: 11 } });
+    expect(cache.views.get('a')?.contentRevision).toBe(7);
+    expect(cache.views.get('a')?.thread.messages[0]?.content).toBe('body seven');
+  });
+
+  it('binds content revision to the retained body across runtime replacement', () => {
+    let cache = receive(createThreadCache(), view('a', 7, 'body seven'));
+    cache = cache.invalidateRuntimeVersions();
+    cache = receive(cache, view('a', 1, 'replacement body'));
+    expect(cache.views.get('a')?.contentRevision).toBe(1);
+    expect(threadSummaryNeedsDetail(cache.summaries.get('a'), cache.views.get('a')?.thread, cache.views.get('a')?.contentRevision)).toBe(true);
+    cache = cache.receiveCurrent({ version: 2, thread: thread('a', 12, 'live body') }).cache;
+    expect(cache.views.get('a')?.contentRevision).toBe(1);
+  });
+
   it.each([15, 24])('retains the selected detail through %i reconnect baselines within the cache bound', (count) => {
     let cache = receive(createThreadCache(), view('selected', 27, 'Retained transcript')).select('selected');
     const summaries = [thread('selected', 1, ''), ...Array.from({ length: count - 1 }, (_, index) => thread(`background-${index}`, 1, ''))];
@@ -321,14 +370,14 @@ describe('ThreadCache', () => {
     expect(cache.views.get('a')?.thread.messages[0]?.content).toBe('detail-a');
   });
 
-  it('updates summary metadata without mutating the cached detail view', () => {
+  it('derives unread from watermarks instead of accepting boolean-only adjunct overrides', () => {
     let cache = receive(createThreadCache(), view('a', 4, 'detail-a'));
     cache = cache.updateSummaryAdjuncts('a', (current) => ({
       ...current,
       read_status: { ...current.read_status, is_unread: true },
     }));
 
-    expect(cache.summaries.get('a')?.read_status.is_unread).toBe(true);
+    expect(cache.summaries.get('a')?.read_status.is_unread).toBe(false);
     expect(cache.summaries.get('a')?.messages).toEqual([]);
     expect(cache.views.get('a')?.thread.read_status.is_unread).toBe(false);
     expect(cache.views.get('a')?.thread.messages[0]?.content).toBe('detail-a');
@@ -356,7 +405,7 @@ describe('ThreadCache', () => {
 
     expect(cache.views.get('a')?.thread.status).toBe('running');
     expect(cache.summaries.get('a')?.status).toBe('success');
-    expect(threadSummaryNeedsDetail(cache.summaries.get('a'), cache.views.get('a')?.thread)).toBe(true);
+    expect(threadSummaryNeedsDetail(cache.summaries.get('a'), cache.views.get('a')?.thread, cache.views.get('a')?.contentRevision)).toBe(true);
   });
 
   it('does not let accepted detail metadata regress a newer preserved summary', () => {

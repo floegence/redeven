@@ -22,6 +22,7 @@ import (
 	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/floret/v7/tools"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/threadreadstate"
 )
 
 func TestFlowerLiveEncodingFailureRetainsCauseAndLogsSafeCurrentContext(t *testing.T) {
@@ -831,6 +832,64 @@ func TestFlowerLiveThreadBatchDoesNotExposeViewerReadState(t *testing.T) {
 	}
 	if strings.Contains(string(frame.Data), "read_status") || strings.Contains(string(frame.Data), `"private"`) {
 		t.Fatalf("thread batch exposes viewer state: %s", frame.Data)
+	}
+}
+
+func TestFlowerLiveViewerReadBaselineIsPrivateAndRestoredOnReconnect(t *testing.T) {
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(t.Context(), meta, "Read baseline", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	activity := thread.FlowerActivity.ActivityRevision
+	if activity <= 1 {
+		t.Fatalf("invalid test activity: %d", activity)
+	}
+	if _, err := svc.ThreadReadState().AdvanceFlower(t.Context(), meta.EndpointID, meta.UserPublicID, thread.ThreadID, threadreadstate.FlowerSnapshot{ActivityRevision: activity - 1}); err != nil {
+		t.Fatal(err)
+	}
+	for _, reconnect := range []bool{false, true} {
+		subscription, err := svc.SubscribeFlowerLiveStream(t.Context(), meta, FlowerLiveStreamRequest{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ready := nextFlowerLiveStreamFrame(t, subscription)
+		if ready.Kind != FlowerLiveStreamReady || strings.Contains(string(ready.Data), "read_status") {
+			t.Fatalf("shared baseline leaks read state: %s", ready.Data)
+		}
+		frame := nextFlowerLiveStreamFrame(t, subscription)
+		var envelope FlowerLiveStreamEnvelope
+		if err := json.Unmarshal(frame.Data, &envelope); err != nil {
+			t.Fatal(err)
+		}
+		expected := activity - 1
+		if reconnect {
+			expected = activity
+		}
+		if envelope.Kind != FlowerLiveStreamViewerReadState || envelope.ThreadID != thread.ThreadID || envelope.ReadStatus == nil || envelope.ReadStatus.ReadState.LastSeenActivityRevision != expected || envelope.ReadStatus.IsUnread == reconnect {
+			t.Fatalf("private baseline reconnect=%t: %s", reconnect, frame.Data)
+		}
+		subscription.Close()
+		if _, err := svc.ThreadReadState().AdvanceFlower(t.Context(), meta.EndpointID, meta.UserPublicID, thread.ThreadID, threadreadstate.FlowerSnapshot{ActivityRevision: activity}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	other := *meta
+	other.UserPublicID = "other_read_baseline_user"
+	subscription, err := svc.SubscribeFlowerLiveStream(t.Context(), &other, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer subscription.Close()
+	_ = nextFlowerLiveStreamFrame(t, subscription)
+	frame := nextFlowerLiveStreamFrame(t, subscription)
+	var envelope FlowerLiveStreamEnvelope
+	if err := json.Unmarshal(frame.Data, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope.ReadStatus == nil || envelope.ReadStatus.ReadState.LastSeenActivityRevision != activity || envelope.ReadStatus.IsUnread {
+		t.Fatalf("new user baseline changed initialization policy: %s", frame.Data)
 	}
 }
 

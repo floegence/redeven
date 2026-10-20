@@ -32,7 +32,7 @@ import type {
   FlowerToolPreviewRequest,
   FlowerThreadActivitySnapshot,
   FlowerThreadReadStatus,
-  FlowerThreadSnapshot,
+  FlowerThreadSnapshot, FlowerThreadSummary,
   FlowerThreadView,
   FlowerThreadPinMetadata,
   FlowerThreadPinPosition,
@@ -44,7 +44,7 @@ import {
   mapFlowerContextCompactions,
   mapFlowerReadStatus,
   mapFlowerSubagents,
-  mapFlowerThread,
+  mapFlowerThread, mapFlowerThreadSummary,
   mapFlowerTimelineDecorations,
   mapContextUsage,
   mapModelContext,
@@ -208,16 +208,10 @@ function mapRuntimeThread(thread: ThreadView, options: RuntimeFlowerSurfaceAdapt
 	return mapFlowerThread(thread, [], options.mapperOptions, thread.read_status);
 }
 
-function mapRuntimeSummaryThread(thread: ThreadView, options: RuntimeFlowerSurfaceAdapterOptions): FlowerThreadSnapshot {
-	const updatedAt = Math.max(0, Math.floor(Number(thread.updated_at_unix_ms ?? 0)));
+function mapRuntimeSummaryThread(thread: ThreadView, options: RuntimeFlowerSurfaceAdapterOptions): FlowerThreadSummary {
+  const updatedAt = Math.max(0, Math.floor(Number(thread.updated_at_unix_ms ?? 0)));
   const lastMessageAt = Math.max(0, Math.floor(Number(thread.last_message_at_unix_ms ?? updatedAt)));
-  const activityRevision = Math.max(updatedAt, lastMessageAt);
-  const readStatus = thread.read_status ?? {
-    is_unread: false,
-    snapshot: { activity_revision: activityRevision },
-    read_state: { last_seen_activity_revision: activityRevision },
-  };
-	return mapFlowerThread(thread, [], options.mapperOptions, readStatus);
+  return mapFlowerThreadSummary({ ...thread, updated_at_unix_ms: Math.max(updatedAt, lastMessageAt) }, [], options.mapperOptions);
 }
 
 function mapRuntimeThreadView(raw: unknown, options: RuntimeFlowerSurfaceAdapterOptions): FlowerThreadView {

@@ -500,15 +500,18 @@ func (s *Service) GetFlowerThreadDetail(ctx context.Context, meta *session.Meta,
 	if err != nil {
 		return nil, err
 	}
-	current, err := runtime.View(ctx, identity.ThreadID(strings.TrimSpace(threadID)))
+	// Read activity before the body so a concurrent update cannot attach a
+	// newer acknowledgement watermark to an older rendered view.
+	id := identity.ThreadID(strings.TrimSpace(threadID))
+	summary, err := threadSummaryFromRuntime(ctxOrBackground(ctx), runtime, id)
+	if err != nil {
+		return nil, err
+	}
+	current, err := runtime.View(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("read thread runtime view: %w", err)
 	}
 	current.Items, err = s.hydrateActivityTargets(ctx, meta, current.ThreadID.String(), current.Items)
-	if err != nil {
-		return nil, err
-	}
-	summary, err := threadSummaryFromRuntime(ctxOrBackground(ctx), runtime, current.ThreadID)
 	if err != nil {
 		return nil, err
 	}
