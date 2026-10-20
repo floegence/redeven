@@ -21,6 +21,14 @@ fails closed if any Windows asset appears.
 
 ## Validation levels
 
+`AGENTS.md` owns concise global working rules, Git discipline, and mandatory
+links to domain contracts in this corpus. Domain-specific behavior stays in its
+own concept rather than being duplicated in repository instructions. The
+repository-instruction tests in `scripts/quick_ci_policy.test.mjs` enforce a
+100-line limit, including headings and blank lines, and verify the OKF index
+and linked contract files. Fast commit checks, ordinary source CI, and the
+exact-main source gate run these checks without adding product qualification.
+
 Feature work runs focused checks for affected code and contracts. Pre-commit
 checks the staged diff, README localization contract, staged open-source
 hygiene, and third-party notices when dependency or attribution inputs change.
@@ -302,6 +310,8 @@ Integration experiments may exist only on an unmerged feature branch and may
 not become a fallback, shim, or local artifact path.
 
 # Evidence
+
+- `redeven:scripts/quick_ci_policy.test.mjs` - Enforces bounded source gates and the repository guide line budget and contract links.
 
 - `redeven:internal/envapp/ui_src/scripts/build.py` - Owns the complete Env App asset build under a checkout-local kernel lock.
 - `redeven:internal/envapp/ui_src/scripts/buildEnvApp.node-test.mjs` - Exercises overlapping builds, compression ownership, failure/signal release, and independent worktrees.

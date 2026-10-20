@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { globSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, globSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -41,6 +41,24 @@ test('Desktop artifact upload includes only installers, receipts, and Linux feed
     assert.deepEqual(uploaded, expected);
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("repository instructions stay within 100 physical lines", () => {
+  const source = readFileSync(new URL("../AGENTS.md", import.meta.url), "utf8");
+  const lines = source.split(/\r?\n/);
+  if (lines.at(-1) === "") lines.pop();
+  assert.ok(lines.length <= 100, "AGENTS.md has " + lines.length + " lines; move domain contracts to OKF");
+});
+
+test("repository instructions link to existing maintained knowledge", () => {
+  const guide = new URL("../AGENTS.md", import.meta.url);
+  const source = readFileSync(guide, "utf8");
+  const links = [...source.matchAll(/\[[^\]]+\]\(([^)]+)\)/g)].map(match => match[1]);
+  assert.ok(links.includes("okf/index.md"), "AGENTS.md must route domain work through the OKF index");
+  for (const link of links) {
+    assert.ok(link.startsWith("okf/"), "repository contract link must stay in OKF: " + link);
+    assert.ok(existsSync(new URL(link, guide)), "missing repository contract: " + link);
   }
 });
 

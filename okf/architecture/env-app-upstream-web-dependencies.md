@@ -107,7 +107,7 @@ coordinate is reviewed without relaxing the guard for other LGPL dependencies.
 - `redeven:internal/envapp/ui_src/src/ui/services/terminalPreferences.ts:1` - Persisted System/catalog selection preserves unknown values while resolving a released-theme fallback in memory.
 - `redeven:internal/envapp/ui_src/src/ui/services/controlplaneApi.ts:501` - Local and remote acquisition inject durable spend and exact current-origin target validation into Floe Webapp's public source.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:542` - One Floe `ProxyBootstrapOwner` enforces the exact Service Worker script, scope, control, and runtime generation.
-- `redeven:AGENTS.md:173` - Published Dependency Policy forbids local sibling wiring in package manifests and build aliases.
+- `redeven:AGENTS.md` - Published Dependency Policy forbids local sibling wiring in package manifests and build aliases.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/redevenWorkbenchWidgets.tsx:20` - Workbench feature bodies load through independent lazy boundaries.
 - `redeven:internal/envapp/ui_src/scripts/checkInitialBuildBudget.mjs:9` - Production builds enforce compressed JavaScript, CSS, and total initial-resource budgets.
 - `redeven:internal/envapp/ui_src/src/ui/services/debugConsoleCapture.ts:503` - Terminal attach capture uses an explicit content-free request projection.

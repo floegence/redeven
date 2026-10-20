@@ -91,7 +91,6 @@ Connection recovery must not be implemented independently inside Workbench widge
 - `redeven:internal/envapp/ui_src/src/ui/workbench/EnvWorkbenchPage.test.tsx` - Plugin controller coverage requires click activation to center the existing exact target and rejects duplicate creation from a repeated canvas drag.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/redevenWorkbenchWidgets.test.tsx` - Flower engagement remains derived from selected Workbench lifecycle while Floe supplies the locked-selection `hot` contract.
 - `redeven:internal/flower_ui/src/threads/FlowerThreadList.tsx:287` - Flower thread context menus render through the shared surface floating layer.
-- `redeven:AGENTS.md:651` - Repository rules define Workbench floating UI and coordinate ownership.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/redevenWorkbenchWidgets.tsx:20` - Workbench feature bodies use independent lazy imports while widget definitions remain stable.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:3480` - Workbench connection recovery is composed above the kept-alive page root.
 - `redeven:internal/envapp/ui_src/src/ui/reconnect/ConnectionRecoveryView.browser.test.tsx:157` - Chromium fixtures cover recovery states across themes, desktop and mobile viewports, long locales, and reduced motion.

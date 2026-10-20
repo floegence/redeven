@@ -66,5 +66,5 @@ requested approval remains waiting until Floret resolves it.
 
 # Evidence
 
-- `redeven:AGENTS.md:204` - AI behavior should be prompt-first and contract guided.
+- `redeven:AGENTS.md` - AI behavior should be prompt-first and contract guided.
 - `redeven:okf/ai/ai-tool-runtime.md:15` - Floret owns permission lifecycle and Redeven returns allow, ask, or deny before dispatch.
