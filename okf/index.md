@@ -326,6 +326,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Flower prompt and rule sources](ai/flower-prompt-and-rule-sources.md) - Align task, interaction and recovery guidance with current capabilities and complete authorized repository rules.
 - [AI model and context runtime](ai/model-context-runtime.md) - Separate model-source ownership, provider mapping, token limits, context, and compaction.
 - [Model provider surface and history](ai/model-provider-surface-and-history.md) - Keep provider-visible history, tool surfaces, and render lineage under one Floret owner.
+- [Model request recovery](ai/model-request-recovery.md) - Keep retry budgets and deadlines upstream while projecting attempt diagnostics and recoverable interaction.
 - [Model request measurement](ai/model-request-measurement.md) - Map native coverage evidence and frozen boundaries into upstream-owned compaction pressure.
 - [Model request reuse](ai/model-request-reuse.md) - Execute canonical cache/continuation decisions with bounded OpenAI connections and recent/cumulative usage.
 - [Model context usage and compaction](ai/model-context-usage-and-compaction.md) - Account usage, context pressure, compaction, and capacity failures through typed runtime facts.
