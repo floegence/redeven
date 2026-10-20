@@ -14,7 +14,7 @@ Transport uncertainty never proves backend success or authorizes replay.
 Readiness timeouts use the shared bounded request helpers and expose a status
 refresh without replaying Prepare or Stop. Deterministic migration failures
 remain diagnostic/admin recovery states; supported compaction history is
-automatically migrated by published Floret v7.72.0 through schema 28. See
+automatically migrated by published Floret v7.74.0 through schema 29. See
 [historical compatibility](../ai/flower-upgrade-compatibility.md).
 
 # Contract
@@ -115,3 +115,7 @@ operations remain separate from conversation recovery.
 
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.boundedWait.test.shared.tsx` - Child input/approval, explicit parent continuation, target-specific retry, compaction delivery and reconnect coverage.
 - `redeven:internal/ai/subagents_wait_test.go` - Typed wait mapping and complete four-report canonical retry without tool redispatch.
+
+## Explicit compaction intent
+
+Default manual compaction may continue an active Goal in the canonical goal_continuation turn. Its failures use ordinary upstream Retry and retain completed preparation and confirmed tools. Historical context_compaction failures retain their separate pure-compaction retry. Transport recovery resends the original request key and frozen intent; old outbox entries without intent remain pure. Stop, questions, approvals, navigation, settings, drafts and attachments retain their existing owners in root, child detail and embedded views. Summary installation does not settle continuing Goal work.

@@ -154,3 +154,49 @@ func compactQualificationThread(t *testing.T, ctx context.Context, svc *Service,
 		}
 	}
 }
+
+func TestCompactThreadContextFreezesGoalContinuationIntent(t *testing.T) {
+	svc := newRealtimeTestService(t, 0)
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(t.Context(), meta, "goal continuation", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = svc.threadRuntime.(flruntime.ThreadGoalController).SetGoal(t.Context(), flruntime.SetGoalInput{ThreadID: identity.ThreadID(thread.ThreadID), RequestKey: "goal", Text: "Finish verified work"}); err != nil {
+		t.Fatal(err)
+	}
+	entered, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	svc.resolveProviderKey = func(string) (string, bool, error) {
+		once.Do(func() { close(entered) })
+		<-release
+		return "sk-test", true, nil
+	}
+	defer close(release)
+	var req CompactThreadContextRequest
+	if err = json.Unmarshal([]byte(`{"client_request_id":"goal-compact","continue_goal":true}`), &req); err != nil {
+		t.Fatal(err)
+	}
+	view, err := svc.CompactThreadContext(t.Context(), meta, thread.ThreadID, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(view.TurnKind) != "goal_continuation" {
+		t.Fatalf("kind=%s", view.TurnKind)
+	}
+	select {
+	case <-entered:
+	case <-time.After(time.Second * 3):
+		t.Fatal("factory did not start")
+	}
+	replay, err := svc.CompactThreadContext(t.Context(), meta, thread.ThreadID, req)
+	if err != nil || replay.TurnID != view.TurnID {
+		t.Fatalf("replay=%+v err=%v", replay, err)
+	}
+	if err = json.Unmarshal([]byte(`{"client_request_id":"goal-compact","continue_goal":false}`), &req); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = svc.CompactThreadContext(t.Context(), meta, thread.ThreadID, req); err == nil {
+		t.Fatal("changed intent reused request identity")
+	}
+}

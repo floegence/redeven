@@ -2,6 +2,7 @@ package appserver
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -16,6 +17,12 @@ import (
 )
 
 func TestServerAIContextCompactionAdmissionBoundary(t *testing.T) {
+	for _, continueGoal := range []bool{false, true} {
+		t.Run(fmt.Sprint(continueGoal), func(t *testing.T) { testServerAIContextCompactionAdmissionBoundary(t, continueGoal) })
+	}
+}
+
+func testServerAIContextCompactionAdmissionBoundary(t *testing.T, continueGoal bool) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	state := t.TempDir()
 	entered, release := make(chan struct{}), make(chan struct{})
@@ -66,7 +73,7 @@ func TestServerAIContextCompactionAdmissionBoundary(t *testing.T) {
 	if calls.Load() != 0 {
 		t.Fatal("rejected request called factory")
 	}
-	body, _ := json.Marshal(ai.CompactThreadContextRequest{StorageGeneration: svc.StorageGeneration(), ClientRequestID: "http-compact"})
+	body, _ := json.Marshal(ai.CompactThreadContextRequest{StorageGeneration: svc.StorageGeneration(), ClientRequestID: "http-compact", ContinueGoal: continueGoal})
 	start := time.Now()
 	accepted := performServerRequest(server, http.MethodPost, path, origin, string(body))
 	if accepted.Code != http.StatusAccepted || time.Since(start) > time.Second {

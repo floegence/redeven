@@ -1072,3 +1072,16 @@ describe('canonical original and Fork process regression', () => {
     expect(() => applyFlowerRuntimeCurrentView({ ...summary(), thread_id: current.thread_id }, { ...current, items, turns })).toThrow(/canonical turn presentation/);
   });
 });
+
+
+it('projects goal continuation as active business work after compaction preparation', () => {
+  const next = applyFlowerRuntimeCurrentView(summary(), {
+    thread_id: 'thread-a', turn_id: 'continuation', run_id: 'work', turn_kind: 'goal_continuation', view_version: 9,
+    activity: 'active', items: [], turns: [{ turn_id: 'continuation', run_id: 'work', kind: 'goal_continuation',
+      started_at: '2026-10-20T12:00:00Z', elapsed_ms: 0, waiting_ms: 0, work_duration_ms: 0,
+      intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false }],
+    run_progress: { phase: 'preparing' },
+  });
+  expect(next.status).toBe('running');
+  expect(next.current_execution?.turn_kind).toBe('goal_continuation');
+});

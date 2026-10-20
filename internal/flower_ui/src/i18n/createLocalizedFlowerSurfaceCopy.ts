@@ -372,6 +372,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       commandMenuLabel: t(i18n, k('chat.commandMenuLabel')),
       commandCompactContext: t(i18n, k('chat.commandCompactContext')),
       compactContext: t(i18n, k('chat.compactContext')),
+      compactContextOnly: t(i18n, k('chat.compactContextOnly')),
       compactContextEmpty: t(i18n, k('chat.compactContextEmpty')),
       compactContextBusy: t(i18n, k('chat.compactContextBusy')),
       compactContextUnavailable: t(i18n, k('chat.compactContextUnavailable')),

@@ -1645,16 +1645,16 @@ it('reads the restored data generation through the Desktop runtime bridge', asyn
   expect(requestRuntimeFlower).toHaveBeenCalledWith(expect.objectContaining({ method: 'GET', path: '/_redeven_proxy/api/ai/storage-generation' }));
 });
 
-it('admits compaction through the dedicated runtime route without a conversation input', async () => {
+it.each([true, false, undefined])('admits compaction through the dedicated runtime route without a conversation input', async continueGoal => {
   const current = { thread_id: 'thread-compact', view_version: 2, activity: 'active', turn_kind: 'context_compaction' };
   const bridge = bridgeFor(request => {
     expect(request.path).toBe('/_redeven_proxy/api/ai/threads/thread-compact/context/compact');
     expect(request.method).toBe('POST');
-    expect(request.body).toEqual({ storage_generation: 'generation', client_request_id: 'compact-key' });
+    expect(request.body).toEqual({ storage_generation: 'generation', client_request_id: 'compact-key', ...(continueGoal === undefined ? {} : { continue_goal: continueGoal }) });
     return { current };
   });
   const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
-  expect(await adapter.compactThreadContext!('thread-compact', { storage_generation: 'generation', client_request_id: 'compact-key' })).toEqual(current);
+  expect(await adapter.compactThreadContext!('thread-compact', { storage_generation: 'generation', client_request_id: 'compact-key', ...(continueGoal === undefined ? {} : { continue_goal: continueGoal }) })).toEqual(current);
 });
 
 it('round-trips disabled providers without discarding their default or secret references', () => {

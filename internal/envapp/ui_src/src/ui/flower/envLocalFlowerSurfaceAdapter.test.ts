@@ -61,10 +61,10 @@ function jsonResponse(data: unknown): Response {
   } as Response;
 }
 
-function errorResponse(code: string, data: unknown): Response {
+function errorResponse(code: string, data: unknown, status = 500): Response {
   return {
     ok: false,
-    status: 500,
+    status,
     text: async () => JSON.stringify({
       ok: false,
       error: 'Thread delete failed.',
@@ -2346,20 +2346,20 @@ beforeEach(async () => {
 });
 afterEach(() => releaseTestTransport?.());
 
-it('uses the dedicated compact route with only operation identity and preserves unknown admission errors', async () => {
+it.each([true, false, undefined])('uses the dedicated compact route with only operation identity and preserves unknown admission errors', async continueGoal => {
   const current = { thread_id: 'thread-compact', view_version: 3, activity: 'active', turn_kind: 'context_compaction' };
   fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
     expect(url).toBe('/_redeven_proxy/api/ai/threads/thread-compact/context/compact');
     expect(init?.method).toBe('POST');
-    expect(JSON.parse(String(init?.body))).toEqual({ storage_generation: 'generation', client_request_id: 'compact-key' });
+    expect(JSON.parse(String(init?.body))).toEqual({ storage_generation: 'generation', client_request_id: 'compact-key', ...(continueGoal === undefined ? {} : { continue_goal: continueGoal }) });
     return jsonResponse({ ok: true, data: { current } });
   });
   const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env', envLabel: 'Environment', rpc: { ai: {} } as never });
-  expect(await adapter.compactThreadContext!('thread-compact', { storage_generation: 'generation', client_request_id: 'compact-key' })).toEqual(current);
+  expect(await adapter.compactThreadContext!('thread-compact', { storage_generation: 'generation', client_request_id: 'compact-key', ...(continueGoal === undefined ? {} : { continue_goal: continueGoal }) })).toEqual(current);
   fetchMock.mockRejectedValueOnce(new TypeError('Network disconnected'));
-  await expect(adapter.compactThreadContext!('thread-compact', { storage_generation: 'generation', client_request_id: 'compact-key' })).rejects.toMatchObject({ admission_kind: 'unknown' });
-  fetchMock.mockResolvedValueOnce(errorResponse('context_compaction_busy', null));
-  await expect(adapter.compactThreadContext!('thread-compact', { storage_generation: 'generation', client_request_id: 'compact-key' })).rejects.toMatchObject({ admission_kind: 'rejected', code: 'context_compaction_busy' });
+  await expect(adapter.compactThreadContext!('thread-compact', { storage_generation: 'generation', client_request_id: 'compact-key', ...(continueGoal === undefined ? {} : { continue_goal: continueGoal }) })).rejects.toMatchObject({ admission_kind: 'unknown' });
+  fetchMock.mockResolvedValueOnce(errorResponse('context_compaction_busy', null, 409));
+  await expect(adapter.compactThreadContext!('thread-compact', { storage_generation: 'generation', client_request_id: 'compact-key', ...(continueGoal === undefined ? {} : { continue_goal: continueGoal }) })).rejects.toMatchObject({ admission_kind: 'rejected', code: 'context_compaction_busy' });
 });
 
 it('maps a disabled provider without replacing its saved default', () => {

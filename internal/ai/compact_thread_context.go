@@ -13,6 +13,7 @@ import (
 type CompactThreadContextRequest struct {
 	StorageGeneration string `json:"storage_generation"`
 	ClientRequestID   string `json:"client_request_id"`
+	ContinueGoal      bool   `json:"continue_goal,omitempty"`
 }
 
 // CompactThreadContext freezes product configuration and authorizes admission.
@@ -55,7 +56,7 @@ func (s *Service) CompactThreadContext(ctx context.Context, meta *session.Meta, 
 		return flruntime.ThreadView{}, err
 	}
 	s.floretEffects.put(identity.ThreadID(threadID), req.ClientRequestID, floretEffectRequest{meta: *meta, req: frozen})
-	view, err := compactor.CompactContext(ctxOrBackground(ctx), flruntime.CompactContextInput{ThreadID: identity.ThreadID(threadID), RequestKey: flruntime.RequestKey(req.ClientRequestID)})
+	view, err := compactor.CompactContext(ctxOrBackground(ctx), flruntime.CompactContextInput{ThreadID: identity.ThreadID(threadID), RequestKey: flruntime.RequestKey(req.ClientRequestID), ContinueGoal: req.ContinueGoal})
 	if err != nil {
 		s.floretEffects.drop(identity.ThreadID(threadID), req.ClientRequestID)
 	} else {

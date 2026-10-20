@@ -550,6 +550,7 @@ export type FlowerSurfaceCopy = Readonly<{
     commandMenuLabel: string;
     commandCompactContext: string;
     compactContext: string;
+    compactContextOnly: string;
     compactContextEmpty: string;
     compactContextBusy: string;
     compactContextUnavailable: string;
@@ -1019,8 +1020,9 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     commandGoal: "Set a goal to start or update work",
     goalUnavailable: "Goal management is unavailable in this environment.",
     commandMenuLabel: 'Flower commands',
-    commandCompactContext: 'Compact this conversation context',
-    compactContext: 'Compact context',
+    commandCompactContext: 'Compact context and continue an unfinished Goal, if any',
+    compactContext: 'Compact and continue Goal',
+    compactContextOnly: 'Compact context only',
     compactContextEmpty: "Create or select a conversation before compacting context.",
     compactContextBusy: "Finish or stop the current work and resolve pending requests before compacting context.",
     compactContextUnavailable: "Context compaction is unavailable in this environment.",

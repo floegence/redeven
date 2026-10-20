@@ -424,7 +424,7 @@ const SIDEBAR_STABLE_LIVE_STATUSES = new Set<FlowerThreadStatus>(['running']);
 const PENDING_NEW_THREAD_ID = '__new_thread__';
 const FLOWER_PERMISSION_TYPES: readonly FlowerPermissionType[] = ['readonly', 'approval_required', 'full_access'];
 const FLOWER_COMPOSER_COMMAND_MENU_ID = 'flower-composer-command-menu';
-const flowerComposerCommandOptionID = (command: string) => command === '/goal' ? 'flower-composer-command-goal' : 'flower-composer-command-compact-context';
+const flowerComposerCommandOptionID = (command: string) => command === '/goal' ? 'flower-composer-command-goal' : command === 'compact-only' ? 'flower-composer-command-compact-only' : 'flower-composer-command-compact-context';
 const FLOWER_COMPOSER_CONTROL_ORDER: readonly FlowerComposerControlID[] = ['permission', 'model_reasoning', 'read_only'];
 const FLOWER_COMPOSER_CONTROL_OVERFLOW_ORDER: readonly FlowerComposerControlID[] = ['model_reasoning', 'read_only', 'permission'];
 const FLOWER_COMPOSER_CONTROL_GAP_PX = 6;
@@ -4831,7 +4831,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           return;
         }
         const receipt = entry.operation === 'context_compaction'
-          ? await withFlowerRequestDeadline(() => adapter.compactThreadContext!(entry.threadId, { storage_generation: entry.input.storage_generation ?? '', client_request_id: entry.requestId }), copy().settings.dialog.catalog.retryTimedOut).then(current => ({ client_request_id: entry.requestId, thread_id: entry.threadId, current }))
+          ? await withFlowerRequestDeadline(() => adapter.compactThreadContext!(entry.threadId, { storage_generation: entry.input.storage_generation ?? '', client_request_id: entry.requestId, continue_goal: entry.continueGoal === true }), copy().settings.dialog.catalog.retryTimedOut).then(current => ({ client_request_id: entry.requestId, thread_id: entry.threadId, current }))
           : await adapter.launchTurn!(input);
         if (surfaceDisposed) return;
         if (trimString(receipt.client_request_id) !== entry.requestId) {
@@ -6821,7 +6821,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
     void requestThreadDetail(result.thread_id, 'user_action', true).catch(() => undefined);
   };
-  const executeComposerCommand = (suggested?: '/compact' | '/goal') => {
+  const executeComposerCommand = (suggested?: '/compact' | '/goal' | 'compact-only') => {
     if (!settingsReady()) return;
     if (goalCommand()) {
       const text = goalCommand()!.text.trim();
@@ -6829,7 +6829,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return;
     }
     const command = composerSlashCommand();
-    const parsed = suggested || command.kind === 'suggest' ? parseFlowerSlashCommand(suggested ?? composerCommandSuggested()) : command;
+    const choice = suggested ?? composerCommandSuggested();
+    if (choice === 'compact-only') { void executeCompactContextCommand(selectedThread(), () => true, false); return; }
+    const parsed = suggested || command.kind === 'suggest' ? parseFlowerSlashCommand(choice) : command;
     if (parsed.kind !== 'intent') return;
     if (parsed.command === '/compact') { void executeCompactContextCommand(); return; }
     if (parsed.operation === 'open') {
@@ -6838,7 +6840,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     } else void enqueueGoal(parsed.operation, parsed.text ?? '', true);
   };
 
-  const executeCompactContextCommand = async (target = selectedThread(), stillTargeted = () => true) => {
+  const executeCompactContextCommand = async (target = selectedThread(), stillTargeted = () => true, continueGoal = true) => {
     const mutationAllowed = () => props.adapter.canMutate !== false;
     const threadID = trimString(target?.thread_id);
     const child = trimString(target?.parent_thread_id);
@@ -6882,7 +6884,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         if (session.snapshot().text_revision === frozen.text_revision && (frozenCommand.kind === 'intent' || frozenCommand.kind === 'suggest')) updateComposerSessionText(sessionKey, '');
       } });
       setTransportOutbox(outbox => outbox.put({
-        operation: 'context_compaction', requestId: requestID, threadId: threadID,
+        operation: 'context_compaction', continueGoal, requestId: requestID, threadId: threadID,
         ...(child ? { parentThreadId: child } : {}),
         input: { client_request_id: requestID, thread_id: threadID, storage_generation: storageGeneration, prompt: '' },
         attachmentLabels: [], createdAtMs: Date.now(), delivery: 'pending',
@@ -6975,10 +6977,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const command = composerSlashCommand();
     if (command.kind === 'intent' && shouldSubmitOnEnterKeydown(event)) {
       event.preventDefault();
-      executeComposerCommand();
+      executeComposerCommand(composerCommandMenuVisible() ? composerCommandSuggested() : undefined);
       return;
     }
-    if (command.kind === 'suggest') {
+    if (command.kind === 'suggest' || composerCommandMenuVisible()) {
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault();
         const choices = composerCommandChoices();
@@ -7221,7 +7223,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               created_at_ms: transport()?.createdAtMs ?? 0, context_action: transport()?.input.context_action,
             };
             const queueID = () => trimString(turn().queue_id);
-            const label = () => transport()?.operation === 'goal' ? copy().chat.goalTitle : transport()?.operation === 'context_compaction' ? copy().chat.compactContext
+            const label = () => transport()?.operation === 'goal' ? copy().chat.goalTitle : transport()?.operation === 'context_compaction' ? transport()?.continueGoal === true ? copy().chat.compactContext : copy().chat.compactContextOnly
               : transport()?.draftText || transport()?.input.prompt || transport()?.attachmentLabels.join(', ') || queuedTurnDisplayLabel(turn());
             const dragging = () => queuedTurnReorder()?.draggedQueueID === queueID();
             const failed = () => transport()?.delivery === 'failed' || Boolean(transport()?.terminalError && transport()?.delivery !== 'unknown' && transport()?.delivery !== 'accepted');
@@ -7442,7 +7444,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         if (!isCompactionRecovery(current)) return;
         await executeCompactContextCommand(current, () => stillTargeted()
           && !threadRecoveryBlocked(targetThread(), true)
-          && targetThread()?.current_execution?.run_id === current.current_execution?.run_id);
+          && targetThread()?.current_execution?.run_id === current.current_execution?.run_id, false);
         return;
       }
       await withFlowerRequestDeadline(() => props.adapter.retryThread(threadID), copy().settings.dialog.catalog.retryTimedOut, selectionSignal);
@@ -8885,15 +8887,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [composerCommandIndex, setComposerCommandIndex] = createSignal(0);
   const composerCommandChoices = createMemo(() => {
     const parsed = composerSlashCommand();
-    const query = parsed.kind === 'suggest' ? parsed.query : '';
-    return ([FLOWER_COMPACT_CONTEXT_COMMAND, FLOWER_GOAL_COMMAND] as const).filter(command => command.slice(1).startsWith(query) && (!(selectedInputRequest() || selectedComposerApprovalDisplayAction()) || command === FLOWER_GOAL_COMMAND));
+    const query = parsed.kind === 'suggest' ? parsed.query : parsed.kind === 'intent' ? parsed.command.slice(1) : '';
+    return ([FLOWER_COMPACT_CONTEXT_COMMAND, FLOWER_GOAL_COMMAND, 'compact-only'] as const).filter(command => (command === 'compact-only' ? 'compact' : command.slice(1)).startsWith(query) && (!(selectedInputRequest() || selectedComposerApprovalDisplayAction()) || command === FLOWER_GOAL_COMMAND));
   });
   createEffect(() => { composerChatDraftText(); setComposerCommandIndex(0); });
   const composerCommandSuggested = createMemo(() => composerCommandChoices()[composerCommandIndex()] ?? FLOWER_COMPACT_CONTEXT_COMMAND);
   const composerCommandMenuVisible = createMemo(() => (
     !composerReferenceMenuVisible()
     && composerFocused()
-    && composerSlashCommand().kind === 'suggest'
+    && (composerSlashCommand().kind === 'suggest' || composerSlashCommand().kind === 'intent' && 'command' in composerSlashCommand() && (composerSlashCommand() as { command: string }).command === '/compact')
   ));
   const composerPrimaryActionIsCommand = createMemo(() => {
     const command = composerSlashCommand();
@@ -8914,7 +8916,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       : 'send'
   ));
   const composerPrimaryActionIcon = createMemo(() => composerPrimaryActionIsStop() ? FlowerStopIcon : composerPrimaryActionIsCommand() ? Clock : ArrowUp);
-  const composerPrimaryActionLabel = createMemo(() => composerPrimaryActionIsStop() ? selectedThreadStopLabel() : composerSendPreparing() ? copy().chat.preparingSend : selectedComposerPendingSend() ? copy().chat.pendingSending : composerPrimaryActionIsCommand() ? (composerSlashCommand().kind === 'intent' && (composerSlashCommand() as { command?: string }).command === '/goal' ? copy().chat.goalTitle : copy().chat.compactContext) : copy().chat.send);
+  const composerPrimaryActionLabel = createMemo(() => composerPrimaryActionIsStop() ? selectedThreadStopLabel() : composerSendPreparing() ? copy().chat.preparingSend : selectedComposerPendingSend() ? copy().chat.pendingSending : composerPrimaryActionIsCommand() ? (composerSlashCommand().kind === 'intent' && (composerSlashCommand() as { command?: string }).command === '/goal' ? copy().chat.goalTitle : composerCommandSuggested() === 'compact-only' ? copy().chat.compactContextOnly : copy().chat.compactContext) : copy().chat.send);
   const composerPrimaryActionDisabled = createMemo(() => {
     if (goalCommand()) return !settingsReady() || !goalCommand()!.text.trim() || goalPending() || !props.adapter.manageGoal || props.adapter.canMutate === false || selectedThreadReadOnly();
     if (composerTakingBackQueuedTurn()) return true;
@@ -11778,7 +11780,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       </Show>
       <For each={transportOutbox().forThread(activeSubagentID())}>{entry => (
         <div class="flower-error-card" role="status" data-flower-child-compaction-delivery={entry.operation === 'context_compaction' ? entry.delivery : undefined} data-flower-child-send-delivery={entry.operation ? undefined : entry.delivery}>
-          <div class="flower-error-copy"><p>{entry.terminalError === 'storage_restored' ? entry.operation === 'context_compaction' ? copy().chat.compactionStorageRestored : copy().chat.restoredInputDescription : entry.delivery === 'unknown' ? copy().chat.sendUnknownDescription : entry.operation === 'context_compaction' ? copy().chat.compactContext : entry.input.prompt}</p>
+          <div class="flower-error-copy"><p>{entry.terminalError === 'storage_restored' ? entry.operation === 'context_compaction' ? copy().chat.compactionStorageRestored : copy().chat.restoredInputDescription : entry.delivery === 'unknown' ? copy().chat.sendUnknownDescription : entry.operation === 'context_compaction' ? entry.continueGoal === true ? copy().chat.compactContext : copy().chat.compactContextOnly : entry.input.prompt}</p>
             <div class="flower-queued-turn-actions">{outboxRecoveryActions(() => entry)}</div>
           </div>
         </div>
@@ -12821,6 +12823,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       id={flowerComposerCommandOptionID(command)}
                       type="button"
                       role="option"
+                      data-flower-compact-only={command === 'compact-only' ? '' : undefined}
                       aria-selected={composerCommandSuggested() === command}
                       class="flower-composer-command-item"
                       onPointerDown={(event) => event.preventDefault()}
@@ -12828,8 +12831,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       onClick={() => executeComposerCommand(command)}
                     >
                       <Show when={command === '/goal'} fallback={<Clock class="h-3.5 w-3.5" aria-hidden="true" />}><FlowerGoalIcon class="h-3.5 w-3.5" strokeWidth={1.65} aria-hidden="true" /></Show>
-                      <span class="flower-composer-command-token">{command}</span>
-                      <span class="flower-composer-command-description">{command === '/goal' ? copy().chat.commandGoal : copy().chat.commandCompactContext}</span>
+                      <Show when={command !== 'compact-only'}><span class="flower-composer-command-token">{command}</span></Show>
+                      <span class="flower-composer-command-description">{command === '/goal' ? copy().chat.commandGoal : command === 'compact-only' ? copy().chat.compactContextOnly : copy().chat.commandCompactContext}</span>
                     </button>}</For>
                   </div>
                 </Show>

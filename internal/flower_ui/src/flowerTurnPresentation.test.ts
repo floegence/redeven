@@ -20,6 +20,11 @@ const thinking: MessageEntry = {
 };
 
 describe('canonical turn process presentation', () => {
+  it('treats goal continuation as business work with the existing disclosure owner', () => {
+    expect(projectFlowerTurnProcess(entries, [turn({ kind: 'goal_continuation' })]).groups.get('turn')?.disclosure).toBe('automatic');
+    expect(projectFlowerTurnProcess([thinking], [turn({ kind: 'goal_continuation', outcome: 'failed' })]).groups.get('turn')?.disclosure).toBe('manual');
+  });
+
   it.each(['failed', 'cancelled', 'interrupted'] as const)('collapses historical %s work after a newer ordinary turn starts', outcome => {
     const old = turn({ outcome, final_item_ids: [], final_boundary_complete: false });
     const next = turn({ turn_id: 'next', run_id: 'next-run', outcome: undefined, ended_at: undefined });

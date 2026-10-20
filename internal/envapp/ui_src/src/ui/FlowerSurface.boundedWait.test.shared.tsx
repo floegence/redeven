@@ -29,17 +29,17 @@ it('keeps a real loop failure visible after a declined tool and exposes only saf
   }
 });
 
-async function mountChild(compaction = false) {
+async function mountChild(kind?: 'context_compaction' | 'goal_continuation') {
   const child = subagentSummary({ status: 'failed' });
   const parent = thread({ thread_id: child.parent_thread_id, status: 'running', subagents: [child] });
   const failed = thread({ thread_id: child.thread_id, status: 'failed', error: { code: 'floret_repeated_tool_calls', message: 'private failure' } });
-  let detail = subagentDetail({ summary: child, current: { ...runtimeCurrentView(failed, 7), run_id: "child-run", ...(compaction ? { turn_kind: 'context_compaction' as const } : {}) } });
+  let detail = subagentDetail({ summary: child, current: { ...runtimeCurrentView(failed, 7), run_id: "child-run", ...(kind ? { turn_kind: kind } : {}) } });
   const loadSubagentDetail = vi.fn(async () => detail);
   const retryThread = vi.fn(async (_id: string): Promise<void> => { detail = subagentDetail({ summary: { ...child, status: 'running' }, current: runtimeCurrentView(thread({ thread_id: child.thread_id, status: 'running' }), 8) }); });
   const compactThreadContext = vi.fn(async (_id: string, _input: { client_request_id: string; storage_generation: string }): Promise<FlowerRuntimeCurrentView> => ({ thread_id: child.thread_id, view_version: 8, activity: 'active', turn_id: 'compact-child', run_id: 'compact-child-run', run_progress: { phase: 'preparing' }, turn_kind: 'context_compaction', items: [] }));
   const surface = renderSurfaceWithAdapterProps({ ...adapter(), listThreads: async () => [parent], loadThread: async () => liveBootstrap(parent), loadSubagentDetail, retryThread, compactThreadContext }, { focusThreadRequest: { request_id: 'child', thread_id: parent.thread_id } });
   await openChildDetail(surface);
-  const retry = () => [...document.querySelectorAll<HTMLButtonElement>('.flower-subagent-detail-window .flower-run-error button')].find(button => button.textContent === (compaction ? 'Retry compression' : 'Retry reply'))!;
+  const retry = () => [...document.querySelectorAll<HTMLButtonElement>('.flower-subagent-detail-window .flower-run-error button')].find(button => button.textContent === (kind === 'context_compaction' ? 'Retry compression' : 'Retry reply'))!;
   return { surface, child, parent, retry, retryThread, loadSubagentDetail, compactThreadContext };
 }
 
@@ -71,14 +71,24 @@ it('retries only the failed child while its parent runs and releases controls af
   expect(state.surface.querySelector('.flower-composer-submit')?.getAttribute('aria-label')).toBe('Stop');
 });
 
+it('uses upstream Retry for a failed child goal continuation without a second compaction', async () => {
+  const state = await mountChild('goal_continuation');
+  state.retry().click();
+  await waitFor(() => state.retryThread.mock.calls.length === 1);
+  expect(state.retryThread).toHaveBeenCalledWith(state.child.thread_id);
+  expect(state.compactThreadContext).not.toHaveBeenCalled();
+  await waitFor(() => document.querySelector('.flower-subagent-detail-window .flower-run-error') === null);
+});
+
 it('reuses the same child compaction identity after an uncertain transport result', async () => {
-  const state = await mountChild(true);
+  const state = await mountChild('context_compaction');
   state.compactThreadContext.mockRejectedValueOnce(flowerTurnAdmissionError('unknown', new Error('connection lost')));
   const retry = state.retry();
   retry.click(); retry.click();
   await waitFor(() => state.compactThreadContext.mock.calls.length === 1);
   expect(state.retryThread).not.toHaveBeenCalled();
   expect(state.compactThreadContext.mock.calls[0][0]).toBe(state.child.thread_id);
+  expect(state.compactThreadContext.mock.calls[0][1]).toMatchObject({ continue_goal: false });
   await waitFor(() => document.querySelector('[data-flower-child-compaction-delivery="unknown"]') !== null);
   document.querySelector<HTMLButtonElement>('[data-flower-child-compaction-delivery="unknown"] button')!.click();
   await waitFor(() => state.compactThreadContext.mock.calls.length === 2);
@@ -171,7 +181,7 @@ it.each(['input', 'approval'] as const)('handles child %s in the shared composer
 });
 
 it('allows a child compaction invalidated by storage restore to be refreshed and removed', async () => {
-  const state = await mountChild(true);
+  const state = await mountChild('context_compaction');
   state.compactThreadContext.mockRejectedValueOnce(Object.assign(new Error('storage restored'), { code: 'AI_STORAGE_RESTORED' }));
   state.retry().click();
   await waitFor(() => document.querySelector('[data-flower-child-compaction-delivery="failed"]') !== null);
