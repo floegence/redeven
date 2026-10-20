@@ -49,6 +49,8 @@ Floret remains the runtime/persistence owner; Floe owns generic parsing; Redeven
 
 The opt-in real-Service qualifier builds the production renderer, freezes historical content and provider cadence, and records cumulative runtime plus all Electron process CPU, frame/input/click/output latency, allocations and wire bytes. It verifies canonical provider content and rendered content after timing. Baseline and candidate alternate for at least 120 seconds per measured round, without simultaneous builds or screen recording. All attempts and failures remain evidence; a short smoke or encoding microbenchmark alone is not acceptance.
 
+Each fixture starts with a fresh empty state directory. Before becoming ready, it verifies every historical turn's successful canonical outcome and final boundary, exact user/assistant content, and two successful Activity records. Idle alone never proves a seed succeeded. Reusing old state or a failed seed aborts qualification instead of silently measuring a smaller workload. Baseline and candidate compile the identical qualification fixture against their frozen production sources. The renderer comparison retains word separation, compares reasoning literally and checks code against full-parser tokens. Output-latency evidence must observe at least 95 percent of eligible foreground markers.
+
 Qualification includes one/seven threads, tenfold history, 200 Hz growth, 1 MiB paragraph/code, idle and fixed-workset resource stability. The task's explicit CPU, latency, allocation, transfer and long-task thresholds are hard gates, separate from ordinary CI and the bounded main pre-push gate.
 
 # Evidence

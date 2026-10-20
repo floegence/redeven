@@ -21,6 +21,7 @@ import (
 	flconfig "github.com/floegence/floret/v7/config"
 	"github.com/floegence/floret/v7/florettest"
 	"github.com/floegence/floret/v7/identity"
+	"github.com/floegence/floret/v7/observation"
 	flprovider "github.com/floegence/floret/v7/provider"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	fltools "github.com/floegence/floret/v7/tools"
@@ -36,6 +37,14 @@ func TestFlowerCPUQualification(t *testing.T) {
 	state := os.Getenv("REDEVEN_CPU_STATE")
 	if state == "" {
 		state = t.TempDir()
+	}
+	if err := os.MkdirAll(state, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if entries, readErr := os.ReadDir(state); readErr != nil {
+		t.Fatal(readErr)
+	} else if len(entries) != 0 {
+		t.Fatal("qualification requires a fresh empty state directory; preserve earlier evidence and choose a new directory")
 	}
 	configValue := &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Type: "openai", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}}
 	service, err := NewServiceContext(t.Context(), Options{StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", Config: configValue, DeferExecution: true, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
@@ -115,12 +124,19 @@ func TestFlowerCPUQualification(t *testing.T) {
 			serial := sequence.Add(1)
 			gateway := florettest.NewScriptedGateway(flprovider.Identity{Provider: "test", Model: "qualification", StateCompatibilityKey: "qualification:v1"}, flprovider.Capabilities{Reasoning: flprovider.ReasoningUnsupported},
 				florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: fmt.Sprintf("a-%d", serial), Name: "qualification_inspect", Args: "{}"}, {ID: fmt.Sprintf("b-%d", serial), Name: "qualification_inspect", Args: "{}"}}}, {Type: flprovider.EventDone, Reason: "tool_calls"}}},
-				florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventDelta, Text: fmt.Sprintf("Historical response %d.\n\n", serial) + strings.Repeat("Verified history with **Markdown** and 中文 content. ", 12)}, {Type: flprovider.EventDone, Reason: "stop"}}})
+				florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventDelta, Text: qualificationHistoryResponse(int(serial))}, {Type: flprovider.EventDone, Reason: "stop"}}})
 			if e := send(rootID, fmt.Sprintf("seed-%d", serial), makeAgent(gateway), fmt.Sprintf("Historical request %d", serial)); e != nil {
 				return e
 			}
 			if e := waitIdle(rootID); e != nil {
 				return e
+			}
+			view, e := service.threadRuntime.View(t.Context(), identity.ThreadID(rootID))
+			if e != nil {
+				return e
+			}
+			if e := verifyQualificationHistory(view, int(serial)); e != nil {
+				return fmt.Errorf("seed %d: %w", serial, e)
 			}
 		}
 		return nil
@@ -133,6 +149,10 @@ func TestFlowerCPUQualification(t *testing.T) {
 		t.Fatal(err)
 	}
 	ready.Store(true)
+	if os.Getenv("REDEVEN_CPU_SEED_ONLY") == "1" {
+		t.Logf("verified %d successful turns, %d messages, and %d completed Activities", historyTurns, 2*historyTurns, 2*historyTurns)
+		return
+	}
 	gateway := testFloretGatewayFunc(func(ctx context.Context, request flprovider.Request) (<-chan flprovider.Event, error) {
 		evidenceMu.Lock()
 		latestRuns[string(request.ThreadID)] = request.RunID
@@ -263,7 +283,7 @@ func TestFlowerCPUQualification(t *testing.T) {
 	mux.HandleFunc("/fixture", func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Query().Get("op") {
 		case "setup":
-			encode(w, map[string]any{"threads": ids, "pid": os.Getpid(), "state": state, "ready": ready.Load(), "generation": generations.Load(), "history_turns": historyTurns})
+			encode(w, map[string]any{"threads": ids, "pid": os.Getpid(), "state": state, "ready": ready.Load(), "generation": generations.Load(), "history_turns": historyTurns, "history_messages": 2 * historyTurns, "history_completed_activities": 2 * historyTurns, "history_verified": true})
 		case "list":
 			value, e := service.ListThreads(r.Context(), meta, 200, "")
 			if e != nil {
@@ -472,5 +492,99 @@ func TestFlowerCPUQualification(t *testing.T) {
 	case <-done:
 	case <-t.Context().Done():
 		t.Fatal(t.Context().Err())
+	}
+}
+
+// Qualification must verify actual canonical facts, not infer success from idle.
+// This read happens only while seeding, outside every measured interval.
+func verifyQualificationHistory(view flruntime.ThreadView, turns int) error {
+	if len(view.Turns) != turns {
+		return fmt.Errorf("historical turns=%d, want %d", len(view.Turns), turns)
+	}
+	byTurn := make(map[identity.TurnID][]flruntime.ThreadItem, turns)
+	for _, item := range view.Items {
+		byTurn[item.TurnID] = append(byTurn[item.TurnID], item)
+	}
+	for index, turn := range view.Turns {
+		if turn.Outcome == nil || *turn.Outcome != flruntime.TurnOutcomeCompleted || !turn.FinalBoundaryComplete {
+			return fmt.Errorf("historical turn %d did not complete successfully: %+v", index+1, turn)
+		}
+		users, assistants, activities := 0, 0, 0
+		for _, item := range byTurn[turn.TurnID] {
+			if item.Live {
+				return fmt.Errorf("historical turn %d contains live item %s", index+1, item.ID)
+			}
+			switch item.Kind {
+			case flruntime.ThreadItemUser:
+				users++
+				if item.Text != fmt.Sprintf("Historical request %d", index+1) {
+					return fmt.Errorf("historical turn %d has unexpected user content", index+1)
+				}
+			case flruntime.ThreadItemAssistant:
+				assistants++
+				if item.Text != qualificationHistoryResponse(index+1) {
+					return fmt.Errorf("historical turn %d has incomplete assistant content", index+1)
+				}
+			case flruntime.ThreadItemTool:
+				if item.Activity == nil || item.Activity.Status != "success" {
+					return fmt.Errorf("historical turn %d has incomplete activity %s", index+1, item.ID)
+				}
+				activities++
+			default:
+				return fmt.Errorf("historical turn %d has unexpected item kind %s", index+1, item.Kind)
+			}
+		}
+		if users != 1 || assistants != 1 || activities != 2 {
+			return fmt.Errorf("historical turn %d: users=%d assistants=%d completed activities=%d, want 1/1/2", index+1, users, assistants, activities)
+		}
+	}
+	return nil
+}
+
+func qualificationHistoryResponse(serial int) string {
+	return fmt.Sprintf("Historical response %d.\n\n", serial) + strings.Repeat("Verified history with **Markdown** and 中文 content. ", 12)
+}
+
+func TestQualificationHistoryRejectsIncompleteSeeds(t *testing.T) {
+	completed := flruntime.TurnOutcomeCompleted
+	valid := func() flruntime.ThreadView {
+		return flruntime.ThreadView{
+			Turns: []flruntime.ThreadTurn{{TurnID: "turn-1", Outcome: &completed, FinalBoundaryComplete: true}},
+			Items: []flruntime.ThreadItem{
+				{TurnID: "turn-1", Kind: flruntime.ThreadItemUser, Text: "Historical request 1"},
+				{TurnID: "turn-1", Kind: flruntime.ThreadItemTool, Activity: &observation.ActivityItem{Status: observation.ActivityStatusSuccess}},
+				{TurnID: "turn-1", Kind: flruntime.ThreadItemTool, Activity: &observation.ActivityItem{Status: observation.ActivityStatusSuccess}},
+				{TurnID: "turn-1", Kind: flruntime.ThreadItemAssistant, Text: qualificationHistoryResponse(1)},
+			},
+		}
+	}
+	if err := verifyQualificationHistory(valid(), 1); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name      string
+		breakView func(*flruntime.ThreadView)
+	}{
+		{"failed idle turn", func(view *flruntime.ThreadView) {
+			failed := flruntime.TurnOutcomeFailed
+			view.Turns[0].Outcome = &failed
+		}},
+		{"missing terminal outcome", func(view *flruntime.ThreadView) { view.Turns[0].Outcome = nil }},
+		{"missing final boundary", func(view *flruntime.ThreadView) { view.Turns[0].FinalBoundaryComplete = false }},
+		{"missing assistant", func(view *flruntime.ThreadView) { view.Items = view.Items[:3] }},
+		{"partial assistant", func(view *flruntime.ThreadView) { view.Items[3].Text = "partial" }},
+		{"incomplete activity", func(view *flruntime.ThreadView) { view.Items[1].Activity.Status = observation.ActivityStatusRunning }},
+		{"missing activity", func(view *flruntime.ThreadView) { view.Items[1].Activity = nil }},
+		{"live historical item", func(view *flruntime.ThreadView) { view.Items[3].Live = true }},
+		{"wrong turn identity", func(view *flruntime.ThreadView) { view.Items[3].TurnID = "other" }},
+		{"missing turn", func(view *flruntime.ThreadView) { view.Turns = nil }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			view := valid()
+			test.breakView(&view)
+			if err := verifyQualificationHistory(view, 1); err == nil {
+				t.Fatal("invalid history was accepted for qualification")
+			}
+		})
 	}
 }
