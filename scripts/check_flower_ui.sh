@@ -78,6 +78,7 @@ main() {
       src/ui/FlowerSurface.inputHistory.test.tsx \
       src/ui/FlowerSurface.desktopModelSource.e2e.test.tsx \
       src/ui/FlowerSurface.visibility.shared.test.tsx \
+      src/ui/FlowerThreadSwitcher.shared.test.tsx \
       src/ui/FlowerThreadCard.performance.test.tsx \
       src/ui/FlowerModelStatusIndicator.test.tsx \
       src/ui/FlowerProgressIndicator.test.tsx \
@@ -124,6 +125,7 @@ main() {
       internal/flower_ui/src/flowerToolMotion.test.ts \
       internal/flower_ui/src/webSearchCapability.test.ts \
       internal/flower_ui/src/threadCache.test.ts \
+      internal/flower_ui/src/threadReadSync.test.ts \
       internal/flower_ui/src/threadTitleSnapshot.test.ts \
       internal/flower_ui/src/flowerThreadTitle.test.ts \
       internal/flower_ui/src/transportOutbox.test.ts \

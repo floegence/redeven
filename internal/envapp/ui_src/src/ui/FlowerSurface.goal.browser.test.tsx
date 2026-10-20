@@ -39,6 +39,9 @@ function response(input: FlowerGoalInput, version = input.expected_version + 1, 
   const current: FlowerRuntimeCurrentView = { thread_id: input.thread_id || 'created-goal', view_version: version + 2, activity: 'idle', goal, items: [{ id: 'goal:' + version, ordinal: version, kind: 'goal', goal: { goal, operation: input.operation === 'delete' ? 'delete' : 'set', actor: 'user', at: '2026-10-18T00:00:00Z' } }] };
   return { client_request_id: input.client_request_id, thread_id: current.thread_id, current, goal, conflict };
 }
+function goalDetail(result: FlowerGoalResult): FlowerThreadView {
+  return { thread: applyFlowerRuntimeCurrentView(thread({ thread_id: result.thread_id }), result.current), current: result.current };
+}
 function composer(surface: HTMLElement) { return surface.querySelector<HTMLTextAreaElement>('textarea:not(.flower-goal-input)')!; }
 function edit(input: HTMLTextAreaElement, text: string) {
   input.value = text;
@@ -555,6 +558,8 @@ it('opens Goal from slash suggestions with keyboard and restores composer focus 
 
 it('submits through the canonical Goal endpoint and preserves attachment, reference and newer command drafts', async () => {
   const base = adapter(true); const pending = deferred<FlowerGoalResult>();
+  let currentDetail: FlowerThreadView | undefined;
+  const loadThread = vi.fn(async (threadID: string) => currentDetail?.thread.thread_id === threadID ? currentDetail : base.loadThread(threadID));
   const manageGoal = vi.fn((_input: FlowerGoalInput) => pending.promise);
   const coordinator = createFlowerComposerDraftCoordinator();
   const capability = { model_id: 'openai/gpt-5.2', revision: 'goal-capability', enabled: true, supports_long_text: true, max_attachments: 4, max_file_size_bytes: 1_000_000, max_total_size_bytes: 2_000_000, routes: { 'text/plain': 'tool_read' as const } };
@@ -569,7 +574,7 @@ it('submits through the canonical Goal endpoint and preserves attachment, refere
     expect(input.attachment_ids).toEqual(['attachment-1']);
     return base.launchTurn(input);
   });
-  const surface = renderSurfaceWithDraftCoordinator({ ...base, manageGoal, loadSettings: async () => withModelDirectoryFixture(await base.loadSettings()), loadAttachmentCapability: async () => capability, uploadAttachment, bindAttachmentStagingScope, launchTurn }, coordinator);
+  const surface = renderSurfaceWithDraftCoordinator({ ...base, loadThread, manageGoal, loadSettings: async () => withModelDirectoryFixture(await base.loadSettings()), loadAttachmentCapability: async () => capability, uploadAttachment, bindAttachmentStagingScope, launchTurn }, coordinator);
   await waitFor(() => Boolean(composer(surface)), 10000);
   await command(surface, '/goal Verify the deployment');
   await waitFor(() => manageGoal.mock.calls.length === 1);
@@ -577,7 +582,9 @@ it('submits through the canonical Goal endpoint and preserves attachment, refere
   expect(input.thread_id).toBeUndefined(); expect(input.new_thread).toBeDefined();
   expect(base.launchTurn).not.toHaveBeenCalled();
   edit(composer(surface), 'Newer draft');
-  pending.resolve(response(input));
+  const accepted = response(input);
+  currentDetail = goalDetail(accepted);
+  pending.resolve(accepted);
   await waitFor(() => surface.querySelector('.flower-goal-tag')?.getAttribute('title') === 'Verify the deployment');
   expect(input.operation).toBe('submit');
   expect(composer(surface).value).toBe('Newer draft');
@@ -644,8 +651,14 @@ it.each(['running', 'waiting_approval', 'waiting_user'] as const)('keeps Goal ed
 
 it('retains popup edits on dismiss and across restart while save remains edit-only', async () => {
   const base = adapter(true), coordinator = createFlowerComposerDraftCoordinator();
-  const manageGoal = vi.fn(async (input: FlowerGoalInput) => response(input));
-  const surface = renderSurfaceWithDraftCoordinator({ ...base, manageGoal }, coordinator);
+  let currentDetail: FlowerThreadView | undefined;
+  const loadThread = vi.fn(async (threadID: string) => currentDetail?.thread.thread_id === threadID ? currentDetail : base.loadThread(threadID));
+  const manageGoal = vi.fn(async (input: FlowerGoalInput) => {
+    const accepted = response(input);
+    currentDetail = goalDetail(accepted);
+    return accepted;
+  });
+  const surface = renderSurfaceWithDraftCoordinator({ ...base, loadThread, manageGoal }, coordinator);
   await waitFor(() => Boolean(composer(surface)), 10000);
   await command(surface, '/goal Original');
   await waitFor(() => Boolean(surface.querySelector('.flower-goal-tag')));

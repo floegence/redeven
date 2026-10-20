@@ -1,3 +1,4 @@
+import { createThreadReadSync } from './threadReadSync';
 import type { FlowerConversationPreferencePatch, FlowerConversationPreferences } from './contracts/flowerSurfaceContracts';
 import { ParentEventRow, createParentEventReading } from './parentEvents';
 import { FlowerAnswerActions } from './FlowerAnswerActions';
@@ -126,7 +127,6 @@ import type {
   FlowerGoalResult,
   FlowerTurnLaunchReceipt,
   FlowerRouterDecision,
-  FlowerThreadActivitySnapshot,
   FlowerThreadListItem,
   FlowerThreadReadStatus,
   FlowerThreadStatus,
@@ -1060,7 +1060,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [threadRailResizing, setThreadRailResizing] = createSignal(false);
   const [threadSwitcherOpen, setThreadSwitcherOpen] = createSignal(false);
   const [threadSwitcherQuery, setThreadSwitcherQuery] = createSignal('');
-  const [presentedSelection, setPresentedSelection] = createSignal<Readonly<{ threadID: string; sequence: number }> | null>(null);
+  const [presentedSelection, setPresentedSelection] = createSignal<Readonly<{ threadID: string; sequence: number; contentRevision: number }> | null>(null);
   const [documentVisible, setDocumentVisible] = createSignal(
     typeof document === 'undefined' || document.visibilityState !== 'hidden',
   );
@@ -1256,14 +1256,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       requestTranscriptAnimationFrame(focusNextAction);
     });
   };
-  type ThreadReadAcknowledgementState = {
-    sequence: number;
-    optimisticRevision: number;
-    inFlightRevision: number;
-    pendingRevision: number;
-    lastAttemptedRevision: number;
-  };
-  const threadReadAcknowledgements = new Map<string, ThreadReadAcknowledgementState>();
   let threadsRefreshRequest: Promise<boolean> | null = null;
   const retiredThreadIDs = new Set<string>();
   let copiedMessageResetTimer: number | undefined;
@@ -1371,19 +1363,22 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       presentedSelectionTimer = undefined;
     }
   };
-  const schedulePresentedSelection = (threadID: string, sequence: number) => {
+  const readPresentationVisible = () => effectiveEngagement() && sidePanel() === 'chat'
+    && !companionCollapsed() && !settingsDialogPresent();
+  const schedulePresentedSelection = (threadID: string, sequence: number, contentRevision = threadCache().views.get(threadID)?.contentRevision ?? 0) => {
     const tid = trimString(threadID);
     cancelPresentedSelectionSchedule();
     setPresentedSelection(null);
-    if (!tid || !effectiveEngagement() || sidePanel() !== 'chat') return;
+    if (!tid || !readPresentationVisible()) return;
     presentedSelectionFrame = requestTranscriptAnimationFrame(() => {
       presentedSelectionFrame = 0;
       presentedSelectionTimer = window.setTimeout(() => {
         presentedSelectionTimer = undefined;
-        if (!effectiveEngagement() || sidePanel() !== 'chat') return;
+        if (!readPresentationVisible()) return;
 			if (sequence !== threadLoadSequence || selectedThreadID() !== tid || !threadCache().views.has(tid)) return;
-        if (threadLoadError()) return;
-        setPresentedSelection({ threadID: tid, sequence });
+        if (threadLoadError() || threadDetailLoadingIDs().has(tid) || pendingThreadSelection()) return;
+        if (threadCache().views.get(tid)?.contentRevision !== contentRevision || loadError()) return;
+        setPresentedSelection({ threadID: tid, sequence, contentRevision });
       }, 0);
     });
   };
@@ -1402,16 +1397,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   createEffect(on(
     () => [
       selectedThreadID(),
-			threadCache().views.has(selectedThreadID()),
+			threadCache().views.get(selectedThreadID())?.contentRevision,
       threadLoadError(),
       sidePanel(),
-      effectiveEngagement(),
+      readPresentationVisible(),
+      threadDetailLoadingIDs().has(selectedThreadID()),
+      pendingThreadSelection(),
+      loadError(),
     ] as const,
-			([threadID, detailReady, error, , engaged]) => {
+			([threadID, detailReady, error, , engaged, loading, pending, bootstrapError]) => {
       cancelPresentedSelectionSchedule();
       setPresentedSelection(null);
-				if (!engaged || !threadID || !detailReady || error) return;
-      schedulePresentedSelection(threadID, threadLoadSequence);
+				if (!engaged || !threadID || !detailReady || error || loading || pending || bootstrapError) return;
+      schedulePresentedSelection(threadID, threadLoadSequence, detailReady);
     },
     { defer: false },
   ));
@@ -1509,7 +1507,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       : detail;
   });
 	const selectedThreadSummaryNeedsDetail = createMemo(() => (
-		threadSummaryNeedsDetail(selectedThreadSummary(), selectedThread() ?? undefined)
+		threadSummaryNeedsDetail(selectedThreadSummary(), selectedThread() ?? undefined, threadCache().views.get(selectedThreadID())?.contentRevision)
       || (Boolean(computerObserverID()) && threadCache().views.get(selectedThreadID())?.version === 0)
 	));
 	const selectedThreadTerminalSyncing = createMemo(() => {
@@ -2683,32 +2681,36 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     settingsState: ThreadViewAcceptance;
     thread: FlowerThreadSnapshot;
   }>;
-  const readStatusWithUnread = (thread: FlowerThreadSnapshot, isUnread: boolean): FlowerThreadSnapshot => (
-    thread.read_status.is_unread === isUnread
-      ? thread
-      : { ...thread, read_status: { ...thread.read_status, is_unread: isUnread } }
-  );
   const threadWithLocalReadVisibility = (thread: FlowerThreadSnapshot): FlowerThreadSnapshot => {
-    if (!thread.read_status.is_unread) return thread;
-    const state = threadReadAcknowledgements.get(thread.thread_id);
-    if (!state || state.optimisticRevision !== flowerThreadActivityRevision(thread.read_status.snapshot)) {
-      return thread;
-    }
-    return readStatusWithUnread(thread, false);
+    const unread = flowerThreadActivityRevision(thread.read_status.snapshot) > Math.max(
+      thread.read_status.read_state.last_seen_activity_revision, readSync.presentedRevision(thread.thread_id));
+    return thread.read_status.is_unread === unread ? thread
+      : { ...thread, read_status: { ...thread.read_status, is_unread: unread } };
   };
-  const threadWithReadStatus = <T extends { read_status: FlowerThreadReadStatus }>(thread: T, readStatus: FlowerThreadReadStatus): T => ({
-    ...thread,
-    read_status: readStatus,
-  });
   const applyThreadReadStatus = (threadID: string, readStatus: FlowerThreadReadStatus) => {
-    const tid = trimString(threadID);
-    if (!tid || retiredThreadIDs.has(tid)) return;
-    setThreadCache((cache) => (
-      cache
-        .updateSummaryAdjuncts(tid, (thread) => threadWithReadStatus(thread, readStatus))
-        .updateDetailAdjuncts(tid, (thread) => threadWithReadStatus(thread, readStatus))
-    ));
+    if (retiredThreadIDs.has(threadID)) return;
+    setThreadCache(cache => cache.applyReadStatus(threadID, readStatus));
+    readSync.confirm(threadID, readStatus);
   };
+  const readSync = createThreadReadSync({
+    send: (threadID, revision) => props.adapter.markThreadRead(threadID, { activity_revision: revision }),
+    apply: applyThreadReadStatus,
+    changed: () => setLocalReadVisibilityRevision(revision => revision + 1),
+  });
+  const [readSyncOnline, setReadSyncOnline] = createSignal(typeof navigator === 'undefined' || navigator.onLine !== false);
+  onMount(() => {
+    const online = () => { setReadSyncOnline(true); readSync.setAvailable(true, true); };
+    const offline = () => { setReadSyncOnline(false); readSync.setAvailable(false); };
+    window.addEventListener('online', online);
+    window.addEventListener('offline', offline);
+    onCleanup(() => { window.removeEventListener('online', online); window.removeEventListener('offline', offline); });
+  });
+  let readSyncRuntimeID = props.adapter.runtime.runtime_id;
+  createEffect(() => {
+    const runtimeID = props.adapter.runtime.runtime_id;
+    if (runtimeID !== readSyncRuntimeID) { readSync.reset(); readSyncRuntimeID = runtimeID; }
+    readSync.setAvailable(readSyncOnline());
+  });
   const threadItemSignature = (t: FlowerThreadSnapshot): string => {
     const visibleThread = threadWithLocalReadVisibility(t);
     const stableLiveSidebar = SIDEBAR_STABLE_LIVE_STATUSES.has(t.status);
@@ -2775,6 +2777,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
   const [retryNow, setRetryNow] = createSignal(Date.now());
   const companionThreadItems = createMemo<readonly FlowerCompanionThreadListItem[]>(() => {
+    localReadVisibilityRevision();
     companionRunRevision();
     const cache = threadCache();
     return projectThreadPins(threads()).map((summary) => {
@@ -3672,7 +3675,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       thread: retained,
     };
     const acceptedSummary = nextCache.summaries.get(threadID);
-    const detailConverged = !threadSummaryNeedsDetail(acceptedSummary, retained);
+    const detailConverged = !threadSummaryNeedsDetail(acceptedSummary, retained, result.cache.views.get(threadID)?.contentRevision);
     if (runtimeState === 'accepted' && (retained.cancellation || !flowerThreadHasActiveTurnEvidence(retained))) {
       updateThreadIDMembership(setUnconfirmedStops, threadID, false);
     }
@@ -3711,6 +3714,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     // the cache. Rendering must never be the first place malformed history is
     // discovered.
     buildFlowerTimelineEntries(live.thread);
+    readSync.setAvailable(readSyncOnline(), true);
     const navigation = attentionNavigation();
     return receiveThreadDetail({
       thread: { ...live.thread, ...(navigation?.childThreadID === live.thread.thread_id ? { parent_thread_id: navigation.parentThreadID } : {}) },
@@ -3939,7 +3943,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const cached = threadCache().views.get(tid);
     const detail = cached?.thread;
     const summary = threadCache().summaries.get(tid);
-    if (!force && cached?.version && detail && !threadSummaryNeedsDetail(summary, detail)) return Promise.resolve(null);
+    if (!force && cached?.version && detail && !threadSummaryNeedsDetail(summary, detail, cached.contentRevision)) return Promise.resolve(null);
 
     const target: ThreadDetailLoadTarget = {
       cycle: state.cycle,
@@ -3980,7 +3984,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         const result = receiveThreadView(live, source, requestEpoch);
         state.failedTarget = null;
         const latestSummary = threadCache().summaries.get(tid);
-        if (threadSummaryNeedsDetail(latestSummary, result.thread)) {
+        if (threadSummaryNeedsDetail(latestSummary, result.thread, threadCache().views.get(tid)?.contentRevision)) {
           const latestTarget: ThreadDetailLoadTarget = {
             ...target,
             activityRevision: threadSnapshotRevision(latestSummary),
@@ -4059,113 +4063,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
   };
 
-  const readAcknowledgementStateFor = (threadID: string, sequence: number): ThreadReadAcknowledgementState => {
-    const tid = trimString(threadID);
-    const current = threadReadAcknowledgements.get(tid);
-    if (current?.sequence === sequence) return current;
-    const next: ThreadReadAcknowledgementState = {
-      sequence,
-      optimisticRevision: 0,
-      inFlightRevision: 0,
-      pendingRevision: 0,
-      lastAttemptedRevision: 0,
-    };
-    threadReadAcknowledgements.set(tid, next);
-    return next;
-  };
-
-  const setOptimisticReadRevision = (state: ThreadReadAcknowledgementState, revision: number) => {
-    if (state.optimisticRevision === revision) return;
-    state.optimisticRevision = revision;
-    setLocalReadVisibilityRevision((current) => current + 1);
-  };
-
-  const clearOptimisticReadRevision = (state: ThreadReadAcknowledgementState, revision: number) => {
-    if (state.optimisticRevision === revision) {
-      state.optimisticRevision = 0;
-      setLocalReadVisibilityRevision((revision) => revision + 1);
-    }
-  };
-
-  const readAcknowledgementEligible = (threadID: string, sequence: number): boolean => {
-    const tid = trimString(threadID);
+  createEffect(() => {
     const presented = presentedSelection();
-    return Boolean(
-      tid
-      && effectiveEngagement()
-      && sidePanel() === 'chat'
-      && sequence === threadLoadSequence
-      && selectedThreadID() === tid
-			&& threadCache().views.has(tid)
-      && !loadError()
-      && !threadLoadError()
-      && presented?.threadID === tid
-      && presented.sequence === sequence,
-    );
-  };
-
-  const persistThreadRead = (threadID: string, snapshot: FlowerThreadActivitySnapshot, sequence: number) => {
-    const tid = trimString(threadID);
-    if (!tid || !readAcknowledgementEligible(tid, sequence)) return;
-    const revision = flowerThreadActivityRevision(snapshot);
-    if (revision <= 0) return;
-    const state = readAcknowledgementStateFor(tid, sequence);
-    if (revision <= state.lastAttemptedRevision || state.inFlightRevision === revision) return;
-    if (state.inFlightRevision > 0) {
-      if (revision > state.inFlightRevision && revision > state.pendingRevision) {
-        state.pendingRevision = revision;
-        setOptimisticReadRevision(state, revision);
-      }
-      return;
-    }
-    state.inFlightRevision = revision;
-    state.lastAttemptedRevision = revision;
-    setOptimisticReadRevision(state, revision);
-    void props.adapter.markThreadRead(tid, { activity_revision: revision })
-      .then((readStatus) => {
-        if (threadReadAcknowledgements.get(tid) !== state) return;
-        if (sequence === threadLoadSequence && selectedThreadID() === tid) {
-          applyThreadReadStatus(tid, readStatus);
-          if (readStatus.is_unread) {
-            const nextRevision = flowerThreadActivityRevision(readStatus.snapshot);
-            if (nextRevision > revision && nextRevision > state.pendingRevision) {
-              state.pendingRevision = nextRevision;
-              setOptimisticReadRevision(state, nextRevision);
-            }
-          }
-        }
-        clearOptimisticReadRevision(state, revision);
-      })
-      .catch(() => {
-        if (threadReadAcknowledgements.get(tid) !== state) return;
-        clearOptimisticReadRevision(state, revision);
-      })
-      .finally(() => {
-        if (threadReadAcknowledgements.get(tid) !== state) return;
-        state.inFlightRevision = 0;
-        const pendingRevision = state.pendingRevision;
-        state.pendingRevision = 0;
-        if (pendingRevision <= revision) return;
-        if (!readAcknowledgementEligible(tid, sequence)) return;
-        persistThreadRead(tid, { activity_revision: pendingRevision }, sequence);
-      });
-  };
-
-  createEffect(() => {
     const thread = selectedThread();
-    const sequence = threadLoadSequence;
-    if (!thread?.read_status.is_unread || !readAcknowledgementEligible(thread.thread_id, sequence)) return;
-    persistThreadRead(thread.thread_id, thread.read_status.snapshot, sequence);
-  });
-
-  let readAcknowledgementSelectionThreadID = '';
-  createEffect(() => {
-    const nextThreadID = trimString(selectedThreadID());
-    if (nextThreadID === readAcknowledgementSelectionThreadID) return;
-    if (readAcknowledgementSelectionThreadID) {
-      threadReadAcknowledgements.delete(readAcknowledgementSelectionThreadID);
-    }
-    readAcknowledgementSelectionThreadID = nextThreadID;
+    if (!presented || !thread || !readPresentationVisible()
+      || loadError() || threadLoadError() || pendingThreadSelection()
+      || threadDetailLoadingIDs().has(thread.thread_id) || presented.threadID !== selectedThreadID()
+      || presented.sequence !== threadLoadSequence
+      || presented.contentRevision !== threadCache().views.get(thread.thread_id)?.contentRevision) return;
+    readSync.present(thread.thread_id, presented.contentRevision, thread.read_status.read_state.last_seen_activity_revision);
   });
 
   const writeClipboardText = async (value: string, label: string) => {
@@ -4556,9 +4462,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         closeSubagentOverlays();
         setSelectedThreadID('');
       }
-      if (selectedID && selectedDetailCurrent && selectedSummary?.read_status.is_unread) {
-        persistThreadRead(selectedID, selectedSummary.read_status.snapshot, threadLoadSequence);
-      }
       setThreadCache((cache) => cache.replaceSummaries(next, attentionNavigation()?.childThreadID));
       const currentSelection = selectedThreadID();
       if (currentSelection && !next.some((thread) => thread.thread_id === currentSelection) && !threadCache().views.has(currentSelection) && attentionNavigation()?.childThreadID !== currentSelection) {
@@ -4777,7 +4680,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       model_id: selectedComposerModelID(),
       working_dir: draftWorkingDirectory(),
       created_at_ms: now,
-      updated_at_ms: now,
+      updated_at_ms: 0,
       status: 'idle' as const,
       source_label: props.adapter.runtime.display_name,
       target_labels: [],
@@ -4813,6 +4716,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const received = receiveThreadDetail({
         thread: projected,
         version: Math.max(1, Math.floor(Number(current.view_version) || 0)),
+        contentRevision: threadCache().views.get(threadID)?.contentRevision ?? 0,
       }, source, current, false);
       if (received.runtimeState === 'unchanged') {
         applyThreadContext(threadID, {
@@ -5101,7 +5005,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     if (envelope.kind === 'ready') { setComputerObserverID(envelope.observer_id ?? ''); setComputerLiveFrame(undefined); }
     if (envelope.kind === 'ready' || envelope.kind === 'summary.batch') {
-      if (envelope.kind === 'ready') flowerLiveReadyCount += 1;
+      if (envelope.kind === 'ready') { flowerLiveReadyCount += 1; readSync.setAvailable(readSyncOnline(), true); }
       const selectedID = selectedThreadID();
       const incoming = (envelope.summaries ?? [])
         .filter((summary) => !retiredThreadIDs.has(summary.thread_id));
@@ -5175,15 +5079,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (envelope.kind === 'viewer.read_state') {
       const threadID = trimString(envelope.thread_id);
       if (threadID && envelope.read_status && !retiredThreadIDs.has(threadID)) {
-        const state = threadReadAcknowledgements.get(threadID);
-        if (
-          state
-          && state.optimisticRevision > 0
-          && flowerThreadActivityRevision(envelope.read_status.snapshot) >= state.optimisticRevision
-        ) {
-          state.optimisticRevision = 0;
-          setLocalReadVisibilityRevision((revision) => revision + 1);
-        }
         applyThreadReadStatus(threadID, envelope.read_status);
       }
     }
@@ -6191,7 +6086,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
     threadDetailLoads.delete(tid);
     setThreadDetailLoading(tid, false);
-    threadReadAcknowledgements.delete(tid);
+    readSync.retire(tid);
     releaseAttachmentStagingScope(tid);
 
     setThreadCache((cache) => cache.evict(tid));
@@ -6364,7 +6259,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     clearSelectedThreadTailRevealSchedule();
     transcriptScroll.dispose();
     subagentDetailScroll.dispose();
-    threadReadAcknowledgements.clear();
+    readSync.dispose();
     if (copiedMessageResetTimer !== undefined) {
       window.clearTimeout(copiedMessageResetTimer);
       copiedMessageResetTimer = undefined;

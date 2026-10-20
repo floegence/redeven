@@ -619,8 +619,9 @@ describe('runtime Flower surface adapter read state', () => {
 		expect(frames).toHaveLength(1);
 		expect(frames[0]).toMatchObject({
 			kind: 'ready',
-			summaries: [{ thread_id: 'thread_failed', status: 'failed', messages: [], read_status: { is_unread: false } }],
+			summaries: [{ thread_id: 'thread_failed', status: 'failed', messages: [] }],
 		});
+    expect(frames[0]?.summaries?.[0]).not.toHaveProperty('read_status');
 	});
   it('keeps thread-list summaries transcript-free even when preview fields are present', async () => {
     const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({

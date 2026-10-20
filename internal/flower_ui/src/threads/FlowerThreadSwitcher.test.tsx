@@ -244,6 +244,13 @@ describe('FlowerThreadSwitcher', () => {
     expect(host.querySelector('button')?.className).toContain('cursor-pointer');
   });
 
+  it('retains unread attention on the selected thread until the shared projection clears it', () => {
+    const { host } = renderSwitcher([thread({ thread_id: 'recent', status: 'success', read_status: readStatus(true) })]);
+    const row = host.querySelector('[data-flower-thread-switcher-thread="recent"]');
+    expect(row?.getAttribute('aria-selected')).toBe('true');
+    expect(row?.querySelector('[aria-hidden="true"]')?.className).toContain('bg-primary/70');
+  });
+
   it('filters reactively and exposes the localized empty state', async () => {
     const { host } = renderSwitcher(items);
     const input = host.querySelector('input') as HTMLInputElement;

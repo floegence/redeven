@@ -1,12 +1,14 @@
 import type {
   FlowerThreadSnapshot,
+  FlowerThreadSummary,
+  FlowerThreadReadStatus,
 } from './contracts/flowerSurfaceContracts';
 import { mergeThreadTitle, threadTitleSnapshot, type ThreadTitleSnapshot } from './threadTitleSnapshot';
 import { retainEqualValue, retainThreadPresentation } from './presentationIdentity';
 import { retainThreadFileActivityTargets } from './fileActivityTargets';
 
 type ThreadDetail = Omit<FlowerThreadSnapshot, keyof ThreadTitleSnapshot>;
-type ThreadDetailView = Readonly<{ thread: ThreadDetail; version: number }>;
+type ThreadDetailView = Readonly<{ thread: ThreadDetail; version: number; contentRevision?: number }>;
 
 function detailOnly(thread: ThreadDetail): ThreadDetail {
   const { title: _title, title_status: _status, title_generation: _generation, ...detail } = thread as FlowerThreadSnapshot;
@@ -23,6 +25,7 @@ function adjunctOnly(thread: ThreadDetail): ThreadDetail {
 export type ThreadView = Readonly<{
   thread: FlowerThreadSnapshot;
   version: number;
+  contentRevision?: number;
 }>;
 
 export type ThreadViewAcceptance = 'accepted' | 'unchanged' | 'stale';
@@ -92,18 +95,26 @@ function mergeThreadActivity<T extends ThreadDetail>(
 ): T {
   return {
     ...runtime,
-    updated_at_ms: activity.updated_at_ms,
-    read_status: activity.read_status,
+    updated_at_ms: Math.max(runtime.updated_at_ms, activity.updated_at_ms),
+    read_status: mergeThreadReadStatus(runtime.read_status, activity.read_status),
   };
+}
+
+export function mergeThreadReadStatus(
+  current: FlowerThreadReadStatus | undefined,
+  candidate: FlowerThreadReadStatus | undefined,
+  activityRevision = 0,
+): FlowerThreadReadStatus {
+  const activity = Math.max(activityRevision, current?.snapshot.activity_revision ?? 0, candidate?.snapshot.activity_revision ?? 0);
+  const seen = Math.max(current?.read_state.last_seen_activity_revision ?? 0, candidate?.read_state.last_seen_activity_revision ?? 0);
+  return { is_unread: activity > seen, snapshot: { activity_revision: activity }, read_state: { last_seen_activity_revision: seen } };
 }
 
 function mergeNewerSummaryMetadata<T extends ThreadDetail>(
   base: T,
   candidate: ThreadDetail,
 ): T {
-  const withActivity = threadSnapshotRevision(candidate) > threadSnapshotRevision(base)
-    ? mergeThreadActivity(base, candidate)
-    : base;
+  const withActivity = mergeThreadActivity(base, candidate);
   const baseSettingsRevision = threadSettingsRevision(withActivity);
   const candidateSettingsRevision = threadSettingsRevision(candidate);
   return candidateSettingsRevision > baseSettingsRevision
@@ -127,7 +138,7 @@ export function threadSnapshotRevision(thread: ThreadDetail | undefined): number
   return Math.max(
     0,
     Math.floor(Number(thread.updated_at_ms) || 0),
-    Math.floor(Number(thread.read_status.snapshot.activity_revision) || 0),
+    Math.floor(Number(thread.read_status?.snapshot.activity_revision) || 0),
   );
 }
 
@@ -147,11 +158,12 @@ function threadRuntimeStateKey(thread: FlowerThreadSnapshot): string {
 export function threadSummaryNeedsDetail(
   summary: FlowerThreadSnapshot | undefined,
   detail: FlowerThreadSnapshot | undefined,
+  contentRevision = detail?.updated_at_ms ?? 0,
 ): boolean {
   if (!summary) return false;
   if (!detail) return true;
   const summaryRevision = threadSnapshotRevision(summary);
-  const detailRevision = threadSnapshotRevision(detail);
+  const detailRevision = contentRevision;
   if (summaryRevision > detailRevision) return true;
   const summarySettingsRevision = threadSettingsRevision(summary);
   const detailSettingsRevision = threadSettingsRevision(detail);
@@ -171,9 +183,9 @@ export type ThreadCache = {
   readonly views: ReadonlyMap<string, ThreadView>;
   select(id: string | null): ThreadCache;
   invalidateRuntimeVersions(): ThreadCache;
-  replaceSummary(summary: FlowerThreadSnapshot): ThreadCache;
-  replaceSummaries(summaries: readonly FlowerThreadSnapshot[], retainedSelectedID?: string): ThreadCache;
-  resetRootSummaries(summaries: readonly FlowerThreadSnapshot[], retainedSelectedID?: string): ThreadCache;
+  replaceSummary(summary: FlowerThreadSummary): ThreadCache;
+  replaceSummaries(summaries: readonly FlowerThreadSummary[], retainedSelectedID?: string): ThreadCache;
+  resetRootSummaries(summaries: readonly FlowerThreadSummary[], retainedSelectedID?: string): ThreadCache;
   receiveView(
     view: ThreadView,
     options?: Readonly<{ preserveSummary?: boolean }>,
@@ -182,6 +194,7 @@ export type ThreadCache = {
   updateDetailAdjuncts(id: string, update: (thread: ThreadDetail) => ThreadDetail): ThreadCache;
   updateSummaryAdjuncts(id: string, update: (thread: ThreadDetail) => ThreadDetail): ThreadCache;
   evict(id: string): ThreadCache;
+  applyReadStatus(id: string, status: FlowerThreadReadStatus): ThreadCache;
 };
 
 const MAX_VIEWS = 12;
@@ -205,11 +218,12 @@ function summaryOnly(thread: FlowerThreadSnapshot): FlowerThreadSnapshot {
 
 function receiveSummary(
   current: FlowerThreadSnapshot | undefined,
-  candidate: FlowerThreadSnapshot,
+  incoming: FlowerThreadSummary,
 ): FlowerThreadSnapshot {
+  const candidate: FlowerThreadSnapshot = { ...incoming, read_status: mergeThreadReadStatus(current?.read_status, incoming.read_status, Math.max(incoming.updated_at_ms, incoming.read_status?.snapshot.activity_revision ?? 0)) };
   const title = mergeThreadTitle(current, candidate);
   if (!current) return summaryOnly({ ...candidate, ...title });
-  const activityIsStale = threadSnapshotRevision(candidate) < threadSnapshotRevision(current);
+  const activityIsStale = Math.max(incoming.updated_at_ms, incoming.read_status?.snapshot.activity_revision ?? 0) < threadSnapshotRevision(current);
   return retainEqualValue(current, summaryOnly({ ...(activityIsStale
     ? mergeNewerSummaryMetadata(current, candidate)
     : mergeNewerSummaryMetadata(candidate, current)), ...title }));
@@ -218,12 +232,13 @@ function receiveSummary(
 // Title overlays are derived from immutable cache entries. Unrelated summary
 // updates must not manufacture new detail objects for every cached thread.
 const titledViews = new WeakMap<ThreadDetailView, ThreadView>();
-function titledView(view: ThreadDetailView, summary: ThreadTitleSnapshot): ThreadView {
+function titledView(view: ThreadDetailView, summary: FlowerThreadSnapshot): ThreadView {
   const previous = titledViews.get(view);
   if (previous && previous.thread.title === summary.title
     && previous.thread.title_status === summary.title_status
-    && previous.thread.title_generation === summary.title_generation) return previous;
-  const result = { ...view, thread: { ...view.thread, ...threadTitleSnapshot(summary) } };
+    && previous.thread.title_generation === summary.title_generation
+    && previous.thread.read_status === summary.read_status) return previous;
+  const result = { ...view, thread: { ...view.thread, ...threadTitleSnapshot(summary), read_status: summary.read_status } };
   titledViews.set(view, result);
   return result;
 }
@@ -254,7 +269,12 @@ function createCache(
     const acceptedTitle = title ? mergeThreadTitle(currentSummary, title) : threadTitleSnapshot(currentSummary ?? { title: '', title_status: 'unset', title_generation: 0 });
     const titleState = !currentSummary || acceptedTitle.title_generation !== currentSummary.title_generation
       || acceptedTitle.title_status !== currentSummary.title_status || acceptedTitle.title !== currentSummary.title ? 'accepted' : 'unchanged';
-    const state = navigationChanged ? 'accepted' : aggregateAcceptance(runtimeState, activityState, settingsState, titleState);
+    const readChanged = view.thread.read_status.read_state.last_seen_activity_revision > (currentSummary?.read_status.read_state.last_seen_activity_revision ?? 0);
+    const incomingContentRevision = view.contentRevision ?? threadSnapshotRevision(view.thread);
+    const contentRevision = current && runtimeState === 'stale' ? current.contentRevision
+      : runtimeState === 'accepted' ? incomingContentRevision
+        : Math.max(current?.contentRevision ?? 0, incomingContentRevision);
+    const state = navigationChanged || readChanged || contentRevision !== current?.contentRevision ? 'accepted' : aggregateAcceptance(runtimeState, activityState, settingsState, titleState);
     if (state !== 'accepted') return {
       cache,
       state,
@@ -267,8 +287,9 @@ function createCache(
     const settingsThread = current && settingsState !== 'accepted' ? current.thread : view.thread;
     const mergedView: ThreadDetailView = {
       version: runtimeView.version,
+      contentRevision,
       thread: retainThreadPresentation(current?.thread, mergeThreadSettings(
-        mergeThreadActivity(runtimeView.thread, activityThread),
+        mergeThreadActivity(mergeThreadActivity(runtimeView.thread, activityThread), view.thread),
         settingsThread,
       )),
     };
@@ -344,7 +365,7 @@ function createCache(
       return receive({ ...view, thread: detailOnly(view.thread) }, threadTitleSnapshot(view.thread), options);
     },
     receiveCurrent(view, options) {
-      return receive({ ...view, thread: detailOnly(view.thread) }, undefined, options);
+      return receive({ ...view, contentRevision: view.contentRevision ?? views.get(view.thread.thread_id)?.view.contentRevision ?? 0, thread: detailOnly(view.thread) }, undefined, options);
     },
     updateDetailAdjuncts(id, update) {
       const threadID = id.trim();
@@ -353,7 +374,7 @@ function createCache(
       const next = new Map(views);
       next.set(threadID, {
         ...current,
-        view: { ...current.view, thread: retainThreadPresentation(current.view.thread, adjunctOnly(update(current.view.thread))) },
+        view: { ...current.view, thread: retainThreadPresentation(current.view.thread, mergeThreadActivity(adjunctOnly(update(current.view.thread)), current.view.thread)) },
       });
       return createCache(selectedId, summaries, next, clock + 1);
     },
@@ -362,7 +383,7 @@ function createCache(
       if (!threadID) return this;
       const nextSummaries = new Map(summaries);
       const currentSummary = nextSummaries.get(threadID);
-      if (currentSummary) nextSummaries.set(threadID, summaryOnly({ ...adjunctOnly(update(detailOnly(currentSummary))), ...threadTitleSnapshot(currentSummary) }));
+      if (currentSummary) nextSummaries.set(threadID, summaryOnly({ ...mergeThreadActivity(adjunctOnly(update(detailOnly(currentSummary))), currentSummary), ...threadTitleSnapshot(currentSummary) }));
       if (!currentSummary) return this;
       // Adjunct updates never author titles or replace runtime detail.
       return createCache(selectedId, nextSummaries, views, clock + 1);
@@ -373,6 +394,13 @@ function createCache(
         ...entry, view: { ...entry.view, version: 0 },
       }]));
       return createCache(selectedId, summaries, next, clock);
+    },
+    applyReadStatus(id, status) {
+      const current = summaries.get(id);
+      if (!current) return this;
+      const next = new Map(summaries);
+      next.set(id, receiveSummary(current, { ...current, read_status: status }));
+      return createCache(selectedId, next, views, clock + 1);
     },
     evict(id) {
       const nextSummaries = new Map(summaries);

@@ -73,7 +73,7 @@ export type FlowerThreadCardProps = Readonly<{
 export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY.threadList;
   const title = () => props.item.title.trim();
-  const indicator = createMemo(() => flowerThreadIndicator(props.item, props.active, copy()));
+  const indicator = createMemo(() => flowerThreadIndicator(props.item, copy()));
   const itemCanRename = createMemo(() => canRenameThreadItem(props.item));
   const itemCanPin = createMemo(() => canPinThreadItem(props.item));
   const titleDraggable = () => Boolean(props.item.pinned && props.reorderable && props.onDragStart);

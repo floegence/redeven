@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import { createSignal, mergeProps } from 'solid-js';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
-import { adapter, deferred, liveBootstrap, mutableSettingsAdapter, renderSurfaceWithAdapterProps as renderSurface, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+import { adapter, deferred, liveBootstrap, mutableSettingsAdapter, readStatus, renderSurfaceWithAdapterProps as renderSurface, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
 import { REDEVEN_BROWSER_MOBILE_QUERY } from './mobileViewportPolicy';
 
@@ -333,4 +333,26 @@ it('lets the host toggle a retained mobile drawer and keeps search state through
   await vi.waitFor(() => expect(runtime.querySelector('.flower-mobile-thread-drawer')).not.toBeNull());
   await userEvent.keyboard('{Escape}');
   await vi.waitFor(() => expect(open()).toBe(false));
+});
+
+
+it('defers read acknowledgement while the mobile thread drawer covers a newly loaded body', async () => {
+  await page.viewport(393, 720);
+  const selected = thread({ thread_id: 'mobile-covered-read', title: 'Covered conversation', updated_at_ms: 7, status: 'success', read_status: readStatus(true, 7) });
+  const detail = deferred<ReturnType<typeof liveBootstrap>>();
+  const markThreadRead = vi.fn(async () => readStatus(false, 7));
+  const [open, setOpen] = createSignal(false);
+  const runtime = renderSurfaceWithAdapterProps({
+    ...adapter(true), listThreads: vi.fn(async () => [selected]), loadThread: vi.fn(() => detail.promise), markThreadRead,
+  }, { get mobileThreadsOpen() { return open(); }, onMobileThreadsOpenChange: setOpen, focusThreadRequest: { request_id: 'mobile-covered-read', thread_id: selected.thread_id } });
+  Object.assign(runtime.style, { height: '100%', width: '100%' });
+  await vi.waitFor(() => expect(runtime.querySelector('[data-flower-selected-thread-id]')?.getAttribute('data-flower-selected-thread-id')).toBe(selected.thread_id));
+  setOpen(true);
+  await vi.waitFor(() => expect(runtime.querySelector('.flower-mobile-thread-drawer')).not.toBeNull());
+  detail.resolve(liveBootstrap(selected, 7));
+  await vi.waitFor(() => expect(runtime.querySelector('[data-flower-selected-thread-loading]')?.getAttribute('data-flower-selected-thread-loading')).toBe('false'));
+  await new Promise(resolve => setTimeout(resolve, 100));
+  expect(markThreadRead).not.toHaveBeenCalled();
+  setOpen(false);
+  await vi.waitFor(() => expect(markThreadRead).toHaveBeenCalledExactlyOnceWith(selected.thread_id, { activity_revision: 7 }));
 });

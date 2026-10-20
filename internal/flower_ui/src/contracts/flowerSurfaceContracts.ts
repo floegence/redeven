@@ -756,6 +756,8 @@ export type FlowerQueuedTurnAttachment = Readonly<{
   url?: string;
 }>;
 
+export type FlowerThreadSummary = Omit<FlowerThreadSnapshot, 'read_status'> & { readonly read_status?: FlowerThreadReadStatus };
+
 export type FlowerThreadSnapshot = Readonly<{
   goal?: FlowerGoal;
   parent_events?: FlowerParentEventPage;
@@ -1075,7 +1077,7 @@ export type FlowerLiveStreamEnvelope = Readonly<{
   kind: 'ready' | 'summary.batch' | 'thread.batch' | 'viewer.read_state' | 'computer.frame' | 'computer.status' | 'model_directory.changed';
   observer_id?: string;
   thread_id?: string;
-  summaries?: readonly FlowerThreadSnapshot[];
+  summaries?: readonly FlowerThreadSummary[];
   /** Typed current-state replacement from Floret; never contains replay metadata. */
   current?: FlowerRuntimeCurrentView;
   /** Parent-scoped typed current-state replacement for one SubAgent thread. */

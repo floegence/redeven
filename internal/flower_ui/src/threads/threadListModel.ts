@@ -88,16 +88,15 @@ function threadCanShowUnreadDot(status: FlowerThreadStatus): boolean {
   return status === 'success' || status === 'failed' || status === 'canceled';
 }
 
-function threadShowsUnreadDot(item: FlowerThreadListItem, active: boolean): boolean {
-  return !active && item.read_status.is_unread === true && threadCanShowUnreadDot(item.status);
+function threadShowsUnreadDot(item: FlowerThreadListItem): boolean {
+  return item.read_status.is_unread === true && threadCanShowUnreadDot(item.status);
 }
 
 export function flowerThreadIndicator(
   item: FlowerThreadListItem,
-  active: boolean,
   copy: FlowerThreadListCopy = DEFAULT_FLOWER_SURFACE_COPY.threadList,
 ): FlowerThreadIndicator {
-  const showUnreadDot = threadShowsUnreadDot(item, active);
+  const showUnreadDot = threadShowsUnreadDot(item);
   const statusIndicator = (
     ariaStatus: string,
     visual: FlowerThreadIndicator['visual'],

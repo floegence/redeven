@@ -259,7 +259,7 @@ describe('FlowerSurface navigation', () => {
     expect(loadThread).toHaveBeenCalledTimes(2);
   });
 
-  it('attempts a failed read acknowledgement only once per displayed revision', async () => {
+  it('silently retries a displayed revision after switching conversations', async () => {
     const unreadThread = thread({
       thread_id: 'thread-read-ack-failure',
       status: 'success',
@@ -293,8 +293,7 @@ describe('FlowerSurface navigation', () => {
 
     (runtime.querySelector(`[data-thread-id="${otherThread.thread_id}"] button`) as HTMLButtonElement).click();
     await waitFor(() => runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === otherThread.thread_id);
-    expect(runtime.querySelector(`[data-thread-id="${unreadThread.thread_id}"]`)?.getAttribute('data-flower-thread-unread-dot')).toBe('true');
-    (runtime.querySelector(`[data-thread-id="${unreadThread.thread_id}"] button`) as HTMLButtonElement).click();
+    expect(runtime.querySelector(`[data-thread-id="${unreadThread.thread_id}"]`)?.getAttribute('data-flower-thread-unread-dot')).toBe('false');
     await waitFor(() => markThreadRead.mock.calls.length === 2);
 
     expect(markThreadRead.mock.calls.map((call) => call[1].activity_revision)).toEqual([7, 7]);
