@@ -25,6 +25,20 @@ This concept is the stable overview for the subject. Detailed contracts are main
 
 - [Desktop session and model source](desktop-session-model-source.md)
 
+Cancellable Flower detail GETs carry a read_id through the existing request IPC.
+[Runtime read ownership](../../desktop/src/main/runtimeFlowerReadOwner.ts) registers
+before asynchronous preparation and isolates cancellation by WebContents,
+renderer frame token and read identity. Only an exact thread-detail GET can
+carry it; commands cannot acquire read cancellation. Reload, renderer crash and
+destruction cancel the document's outstanding reads. Completion releases the
+registration and lifecycle listeners; later cancellation is a no-op.
+
+Runtime preparation and access authorization remain shared work. Cancellation
+releases only this waiter, and a late lease is released without starting HTTP.
+The same signal reaches HTTP headers and body, and is checked before and after
+423 authorization refresh. A cancelled challenge cannot dispatch a late retry.
+See [sidebar detail ownership](../ui/flower-thread-sidebar.md).
+
 Native Local Environment transport is independent from public Local UI addressing. Runtime writes `local_ui_bridge_url` and a fresh 256-bit `local_ui_bridge_token` into local socket status and the private `0600` Desktop launch report. Public `local_ui_url` and `local_ui_urls` describe actual HTTP or HTTPS client entries even while Desktop uses its bridge. WSL, SSH, and container hello responses carry public URLs separately from the private token over stdio. Native BrowserWindow loading, health verification, access unlock, and Desktop Flower requests use the validated HTTP loopback-IP root plus that token without falling back to a public interface. Electron injects the header only for requests and upgrades to its authorized bridge authority, after diagnostics capture the token-free request.
 
 Environment connection presentation and access settings follow [Desktop Environment connections](desktop-environment-connections.md). That contract owns address namespace, copy/browser/share actions, live settings state, and the distinction between reported access URLs and private session transport.

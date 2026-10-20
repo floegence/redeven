@@ -38,8 +38,21 @@ await session.run(async () => {
   await writeFile(path.join(dist, 'index.html'), '<!doctype html><html><head><meta charset="UTF-8">'
     + css.map(value => '<link rel="stylesheet" href="/assets/' + value + '">').join('')
     + '</head><body><div id="root"></div><script type="module" src="/sidebar.js"></script></body></html>');
+  const details = new Map();
   const server = http.createServer(async (request, response) => {
     const pathname = new URL(request.url, 'http://localhost').pathname;
+    if (pathname.startsWith('/qualification-detail/')) {
+      if (request.method === 'POST') {
+        const chunks = [];
+        for await (const chunk of request) chunks.push(chunk);
+        details.set(pathname, Buffer.concat(chunks));
+        response.writeHead(204).end();
+        return;
+      }
+      if (new URL(request.url, 'http://localhost').searchParams.has('delay')) await new Promise(resolve => setTimeout(resolve, 40));
+      if (!response.destroyed) { response.setHeader('Content-Type', 'application/json'); response.end(details.get(pathname)); }
+      return;
+    }
     const target = path.resolve(dist, '.' + (pathname === '/' ? '/index.html' : pathname));
     if (!target.startsWith(dist + path.sep)) { response.writeHead(403).end(); return; }
     try {
@@ -81,7 +94,6 @@ await session.run(async () => {
   const cdp = await app.context().newCDPSession(page);
   const trace = [];
   cdp.on('Tracing.dataCollected', event => trace.push(...event.value));
-  await cdp.send('Tracing.start', { categories: 'devtools.timeline,blink.user_timing,disabled-by-default-devtools.screenshot', transferMode: 'ReportEvents' });
   const painted = [];
   const pixel = (png, sample) => {
     const scale = png.width / sample.viewportWidth;
@@ -90,13 +102,15 @@ await session.run(async () => {
   };
   for (const id of pinsOnly ? [] : ['sidebar-small', 'sidebar-large', 'sidebar-small', 'sidebar-huge']) {
     await page.locator('[data-thread-id="' + id + '"]').hover();
+    // Chromium caps screenshots per trace. Bound each selection independently.
+    await cdp.send('Tracing.start', { categories: 'devtools.timeline,blink.user_timing,disabled-by-default-devtools.screenshot', transferMode: 'ReportEvents' });
     const result = await page.evaluate(id => window.flowerSidebar.select(id), id);
     const reference = PNG.sync.read(await page.screenshot());
+    const traceComplete = new Promise(resolve => cdp.once('Tracing.tracingComplete', resolve));
+    await cdp.send('Tracing.end'); await traceComplete;
     await writeFile(path.join(output, 'selection-reference-' + painted.length + '.png'), PNG.sync.write(reference));
     painted.push({ id, sample: result.sample, rgb: pixel(reference, result.sample) });
   }
-  const traceComplete = new Promise(resolve => cdp.once('Tracing.tracingComplete', resolve));
-  await cdp.send('Tracing.end'); await traceComplete;
   await writeFile(path.join(output, 'selection-trace.json'), JSON.stringify({ traceEvents: trace }));
   await writeFile(path.join(output, 'paint-samples.json'), JSON.stringify(painted, null, 2));
   const requests = trace.filter(event => event.name === 'sidebar-selection-requested');
@@ -280,13 +294,22 @@ await session.run(async () => {
       { id: 'sidebar-7', pinned: true }, { id: 'sidebar-6', pinned: false }]);
     await page.locator('.flower-component-thread-rail').screenshot({ path: path.join(output, 'rapid-pins.png') });
   }
+  const detailReads = pinsOnly ? null : await page.evaluate(() => window.flowerSidebar.qualifyDetailReads());
+  if (detailReads) {
+    assert.equal(detailReads.rapid.demands, 72);
+    assert.equal(detailReads.rapid.requests, 48);
+    assert.equal(detailReads.rapid.cancelled, 12);
+    assert.equal(detailReads.rapid.completed, 36);
+    assert.equal(detailReads.rapid.coalesced, 24);
+    await session.writeEvidence(path.join(output, 'detail-reads.json'), JSON.stringify(detailReads, null, 2));
+  }
   assert.deepEqual(pageErrors, []);
   const sorted = selections.slice(2).map(value => value.syncMs).sort((a, b) => a - b);
   const clickP95 = pinsOnly ? null : sorted[Math.ceil(sorted.length * 0.95) - 1];
   if (!pinsOnly) assert.ok(clickP95 < 8, 'Warm sidebar click P95 must stay below 8ms: ' + clickP95);
   const report = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
     sourceDiff: execFileSync('git', ['diff', '--stat'], { cwd: root, encoding: 'utf8' }).trim(),
-    version, clickP95, selections, painted, pins, rapid, frames: pins.reduce((sum, value) => sum + value.frames, 0),
+    version, clickP95, selections, painted, pins, rapid, detailReads, frames: pins.reduce((sum, value) => sum + value.frames, 0),
     traceScreenshots: trace.filter(value => value.name === 'Screenshot').length };
   await session.writeEvidence(path.join(output, 'metrics.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify({ output, electron: version.electron, chrome: version.chrome, clickP95, pinOperations: pins.length, sampledFrames: report.frames, traceScreenshots: report.traceScreenshots, rapid }));
