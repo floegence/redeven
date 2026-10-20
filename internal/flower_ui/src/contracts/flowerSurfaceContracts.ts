@@ -1613,7 +1613,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   chatGPTAuth?: FlowerChatGPTAuth;
   loadChatGPTAccounts?: () => Promise<Readonly<{ accounts: Readonly<Record<string, FlowerChatGPTAccount>>; saved_accounts: readonly FlowerChatGPTAccount[]; account_sign_outs?: readonly FlowerAccountSignOutResult[] }>>;
   discoverProviderModels?: FlowerModelCatalogDiscovery;
-  loadSettings: (refresh?: boolean) => Promise<FlowerSettingsSnapshot>;
+  loadSettings: (refresh?: boolean, signal?: AbortSignal) => Promise<FlowerSettingsSnapshot>;
   loadModelDirectory?: (refresh?: boolean) => Promise<FlowerModelDirectory>;
   subscribeModelDirectory?: (listener: (directory: FlowerModelDirectory) => void) => () => void;
   saveDefaultPermission: (permissionType: FlowerPermissionType) => Promise<FlowerSettingsSnapshot>;

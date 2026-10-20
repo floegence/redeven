@@ -41,7 +41,7 @@ import { DesktopFlowerRuntimeBoundary } from './flower/DesktopFlowerRuntimeBound
 import { runtimeFlowerBlocker } from '../shared/runtimeFlowerAccess';
 import { buildRuntimeConnectionRows, isShareableConnectionAddress, type DesktopShareableConnectionAddress, type AddressRecoveryTarget } from '../shared/desktopEnvironmentConnection';
 import type { DesktopCertificateRequest, DesktopCertificateReport } from '../shared/desktopCertificate';
-import { For, Show, batch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount, type JSX } from 'solid-js';
+import { For, Show, batch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, untrack, onMount, type JSX } from 'solid-js';
 import { Dynamic, Portal } from 'solid-js/web';
 import { Motion, Presence } from 'solid-motionone';
 import qrcode from 'qrcode-generator';
@@ -2956,6 +2956,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       ? snapshot().environments.find((entry) => entry.id === targetID || entry.managed_runtime_target_id === targetID)
       : localEnvironmentEntry();
     return environment;
+  });
+  const flowerIdentityKey = createMemo((previous: string | undefined) => {
+    const next = flowerRuntimeEnvironment()?.id || 'default';
+    if (previous !== undefined && previous !== next) untrack(() => flowerDraftCoordinator.reset());
+    return next;
   });
   const flowerFilesystemScopeKey = createMemo(() => {
     const environment = flowerRuntimeEnvironment();
@@ -6513,24 +6518,30 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         <Show when={tessivenVisited()}><div class="h-full min-h-0" style={{ display: tessivenVisible() ? undefined : 'none' }} data-desktop-page="tessiven" aria-hidden={!tessivenVisible() ? 'true' : undefined} inert={!tessivenVisible()}>
           <TessivenPage locale={languageSnapshot().resolved_locale} openRequest={tessivenOpenRequest()} transport={tessivenTransport} t={(key, values) => tessivenCopy()(key, values)} visible={tessivenVisible()} canWrite
             renderFlower={surface => {
-              const adapter = createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings, {
-                openMessageURL: openFlowerMessageURL,
-                get runtimeDisplayName() { return i18n().t('flowerSurface.runtime.localEnvironment'); },
-                get runtimeSubtitle() { return i18n().t('flowerSurface.runtime.subtitle'); },
-                onSettingsChanged: flowerSettingsChanged,
-                modelReadResource: flowerModelReadResource,
-              });
-              return <DesktopFlowerRuntimeBoundary embedded
+              return <Show keyed when={flowerIdentityKey()}>{environmentID => <DesktopFlowerRuntimeBoundary embedded
                 snapshot={environmentRuntimeServiceSnapshot(flowerRuntimeEnvironment())} i18n={i18n()}
                 onBack={() => void openEnvironmentCenterSurface()}
                 onRecover={recoverFlowerRuntime}
                 onStartupAction={performFlowerStartupAction}>
-                <FlowerSurface adapter={adapter} draftCoordinator={flowerDraftCoordinator} presentation="companion"
-                engaged={surface.engaged} transcriptVisible={surface.transcriptVisible}
-                embeddedConversation={surface.embeddedConversation} copy={flowerSurfaceCopy()}
-                filesystemScopeKey={flowerFilesystemScopeKey()} settingsRevision={flowerModelSettingsRevision}
-                notify={notice => showActionToast(notice.message, notice.tone, notice.title ? { title: notice.title } : {})} />
-              </DesktopFlowerRuntimeBoundary>;
+                {(() => {
+                  const lifetime = new AbortController();
+                  onCleanup(() => lifetime.abort());
+                  const adapter = createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings, {
+                    signal: lifetime.signal,
+                    runtimeEnvironmentID: environmentID === 'default' ? undefined : environmentID,
+                    openMessageURL: openFlowerMessageURL,
+                    get runtimeDisplayName() { return i18n().t('flowerSurface.runtime.localEnvironment'); },
+                    get runtimeSubtitle() { return i18n().t('flowerSurface.runtime.subtitle'); },
+                    onSettingsChanged: flowerSettingsChanged,
+                    modelReadResource: flowerModelReadResource,
+                  });
+                  return <FlowerSurface adapter={adapter} draftCoordinator={flowerDraftCoordinator} presentation="companion"
+                    engaged={surface.engaged} transcriptVisible={surface.transcriptVisible}
+                    embeddedConversation={surface.embeddedConversation} copy={flowerSurfaceCopy()}
+                    filesystemScopeKey={flowerFilesystemScopeKey()} settingsRevision={flowerModelSettingsRevision}
+                    notify={notice => showActionToast(notice.message, notice.tone, notice.title ? { title: notice.title } : {})} />;
+                })()}
+              </DesktopFlowerRuntimeBoundary>}</Show>;
             }}
             onOpenFlower={openFlowerConversation}
             onOpenService={async () => { throw new Error(tessivenCopy()('openUnavailable')); }}/>
@@ -6538,16 +6549,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         <Show when={flowerVisited()}>
           <div class="h-full min-h-0" style={{ display: flowerVisible() ? undefined : 'none' }}
             data-desktop-page="flower" aria-hidden={!flowerVisible() ? 'true' : undefined} inert={!flowerVisible()}>
-            <Show keyed when={flowerRuntimeEnvironment()?.id || 'default'}>
+            <Show keyed when={flowerIdentityKey()}>
               {(environmentID) => {
-                const adapter = createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings, {
-                  openMessageURL: openFlowerMessageURL,
-                  runtimeEnvironmentID: environmentID === 'default' ? undefined : environmentID,
-                  get runtimeDisplayName() { return i18n().t('flowerSurface.runtime.localEnvironment'); },
-                  get runtimeSubtitle() { return i18n().t('flowerSurface.runtime.subtitle'); },
-                  onSettingsChanged: flowerSettingsChanged,
-                  modelReadResource: flowerModelReadResource,
-                });
                 return (
                   <DesktopFlowerRuntimeBoundary
                     snapshot={environmentRuntimeServiceSnapshot(flowerRuntimeEnvironment())}
@@ -6556,38 +6559,51 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                     onRecover={recoverFlowerRuntime}
                     onStartupAction={performFlowerStartupAction}
                   >
-                    <FlowerSurface
-                      engaged={flowerVisible()}
-                      transcriptVisible={flowerVisible()}
-                      draftCoordinator={flowerDraftCoordinator}
-                      filesystemScopeKey={flowerFilesystemScopeKey()} settingsRevision={flowerModelSettingsRevision}
-                      adapter={adapter}
-                      notify={(notice) => {
-                        showActionToast(notice.message, notice.tone, {
-                          ...(notice.title ? { title: notice.title } : {}),
-                        });
-                      }}
-                      copy={flowerSurfaceCopy()}
-                      warmup={flowerWarmupState()}
-                      settingsFocusRequest={snapshot().flower_settings_focus_revision}
-                      focusThreadRequest={flowerVisible() ? flowerFocusThreadRequest() : null}
-                      sidebarLeadingAction={(
-                        <button
-                          type="button"
-                          class="flower-sidebar-leading-action"
-                          aria-label={i18n().t('shell.backToEnvironments')}
-                          title={i18n().t('shell.backToEnvironments')}
-                          onClick={() => void openEnvironmentCenterSurface()}
-                        >
-                          <ArrowLeft class="h-4 w-4" />
-                        </button>
-                      )}
-                      onFocusThreadRequestConsumed={(requestID) => {
-                        setFlowerFocusThreadRequest((current) => (
-                          current?.request_id === requestID ? null : current
-                        ));
-                      }}
-                    />
+                    {(() => {
+                      const lifetime = new AbortController();
+                      onCleanup(() => lifetime.abort());
+                      const adapter = createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings, {
+                        signal: lifetime.signal,
+                        openMessageURL: openFlowerMessageURL,
+                        runtimeEnvironmentID: environmentID === 'default' ? undefined : environmentID,
+                        get runtimeDisplayName() { return i18n().t('flowerSurface.runtime.localEnvironment'); },
+                        get runtimeSubtitle() { return i18n().t('flowerSurface.runtime.subtitle'); },
+                        onSettingsChanged: flowerSettingsChanged,
+                        modelReadResource: flowerModelReadResource,
+                      });
+                      return <FlowerSurface
+                        engaged={flowerVisible()}
+                        transcriptVisible={flowerVisible()}
+                        draftCoordinator={flowerDraftCoordinator}
+                        filesystemScopeKey={flowerFilesystemScopeKey()} settingsRevision={flowerModelSettingsRevision}
+                        adapter={adapter}
+                        notify={(notice) => {
+                          showActionToast(notice.message, notice.tone, {
+                            ...(notice.title ? { title: notice.title } : {}),
+                          });
+                        }}
+                        copy={flowerSurfaceCopy()}
+                        warmup={flowerWarmupState()}
+                        settingsFocusRequest={snapshot().flower_settings_focus_revision}
+                        focusThreadRequest={flowerVisible() ? flowerFocusThreadRequest() : null}
+                        sidebarLeadingAction={(
+                          <button
+                            type="button"
+                            class="flower-sidebar-leading-action"
+                            aria-label={i18n().t('shell.backToEnvironments')}
+                            title={i18n().t('shell.backToEnvironments')}
+                            onClick={() => void openEnvironmentCenterSurface()}
+                          >
+                            <ArrowLeft class="h-4 w-4" />
+                          </button>
+                        )}
+                        onFocusThreadRequestConsumed={(requestID) => {
+                          setFlowerFocusThreadRequest((current) => (
+                            current?.request_id === requestID ? null : current
+                          ));
+                        }}
+                      />;
+                    })()}
                   </DesktopFlowerRuntimeBoundary>
                 );
               }}

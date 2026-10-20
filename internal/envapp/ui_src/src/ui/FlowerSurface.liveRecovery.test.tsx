@@ -270,10 +270,9 @@ describe('Flower workspace synchronization recovery', () => {
     const late = deferred<void>();
     const attempts: FlowerLiveStreamConnectInput[] = [];
     const originalSetTimeout = globalThis.setTimeout;
-    let shortenFirstHandshake = true;
     const timer = vi.spyOn(globalThis, 'setTimeout').mockImplementation((handler, timeout, ...args) => {
-      const delay = shortenFirstHandshake && timeout === 15_000 ? 30 : timeout;
-      if (delay === 30) shortenFirstHandshake = false;
+      // Settings and stream reads share the same deadline; only unresolved waits expire.
+      const delay = timeout === 15_000 ? 30 : timeout;
       return originalSetTimeout(handler, delay, ...args);
     });
     onTestFinished(() => timer.mockRestore());

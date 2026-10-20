@@ -1,3 +1,4 @@
+import { withFlowerReadDeadline } from '../../../../internal/flower_ui/src/requestDeadline';
 import { createFlowerConversationPreferenceClient, prepareFlowerNewConversationInput } from '../../../../internal/flower_ui/src/conversationPreferences';
 import type { FlowerConversationPreferences } from '../../../../internal/flower_ui/src/contracts/flowerSurfaceContracts';
 import { createFlowerSourceIconResolver } from '../../../../internal/flower_ui/src/chat/markdown/flowerSourceIcons';
@@ -116,6 +117,7 @@ export type DesktopSettingsBridge = Readonly<{
 }>;
 
 export type LocalEnvironmentFlowerSurfaceAdapterOptions = Readonly<{
+  signal?: AbortSignal;
   openMessageURL?: FlowerSurfaceAdapter['openMessageURL'];
   runtimeEnvironmentID?: string;
   modelReadResource?: FlowerModelReadResource;
@@ -523,8 +525,8 @@ function decision(): FlowerRouterDecision {
 export function createDesktopFlowerModelReadResource(bridge: DesktopSettingsBridge, scope: () => string, runtimeEnvironmentID?: string): FlowerModelReadResource {
   return createFlowerModelReadResource({
     scope,
-    loadConfiguration: async () => mapRuntimeFlowerSettings(await runtimeJSON<AgentSettingsResponse>(bridge, 'GET', '/_redeven_proxy/api/settings', undefined, undefined, runtimeEnvironmentID)),
-    loadDirectory: async baseline => readFlowerModelDirectory(await runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/ai/models' + (baseline ? '?mode=baseline' : ''), undefined, undefined, runtimeEnvironmentID)),
+    loadConfiguration: async signal => mapRuntimeFlowerSettings(await runtimeJSON<AgentSettingsResponse>(bridge, 'GET', '/_redeven_proxy/api/settings', undefined, undefined, runtimeEnvironmentID, signal)),
+    loadDirectory: async (baseline, signal) => readFlowerModelDirectory(await runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/ai/models' + (baseline ? '?mode=baseline' : ''), undefined, undefined, runtimeEnvironmentID, signal)),
   });
 }
 
@@ -711,6 +713,7 @@ export async function launchLocalEnvironmentFlowerTurn(
   bridge: DesktopSettingsBridge,
   input: FlowerTurnLaunchInput,
   modelReadResource?: FlowerModelReadResource,
+  signal?: AbortSignal,
 ): Promise<FlowerTurnLaunchReceipt> {
   const prompt = input.prompt;
   const attachmentIDs = (input.attachment_ids ?? []).map(trim).filter(Boolean);
@@ -742,6 +745,7 @@ export async function launchLocalEnvironmentFlowerTurn(
     attachmentIDs,
     reasoningSelection: serializeFlowerReasoningSelection(input.reasoning_selection),
   });
+  signal?.throwIfAborted();
   const response = await runtimeJSON<FlowerTurnHTTPResponse>(
     bridge,
     'POST',
@@ -760,15 +764,16 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
 ): FlowerSurfaceAdapter {
   const resource = options.modelReadResource ?? createDesktopFlowerModelReadResource(bridge, () => options.runtimeEnvironmentID ?? 'default', options.runtimeEnvironmentID);
   const preferences = createFlowerConversationPreferenceClient({
-    load: () => runtimeJSON<FlowerConversationPreferences>(bridge, 'GET', '/_redeven_proxy/api/ai/conversation_preferences'),
-    patch: patch => runtimeJSON<FlowerConversationPreferences>(bridge, 'PATCH', '/_redeven_proxy/api/ai/conversation_preferences', patch),
-  });
-  const loadSettings = async (refresh = false) => {
-    const [settings, conversation_preferences] = await Promise.all([resource.loadSettings(refresh), preferences.load()]);
+    load: signal => runtimeJSON<FlowerConversationPreferences>(bridge, 'GET', '/_redeven_proxy/api/ai/conversation_preferences', undefined, undefined, options.runtimeEnvironmentID, signal),
+    patch: patch => runtimeJSON<FlowerConversationPreferences>(bridge, 'PATCH', '/_redeven_proxy/api/ai/conversation_preferences', patch, undefined, options.runtimeEnvironmentID),
+  }, { signal: options.signal });
+  const loadSettings: FlowerSurfaceAdapter['loadSettings'] = (refresh = false, signal) => withFlowerReadDeadline(async readSignal => {
+    const [settings, conversation_preferences] = await Promise.all([resource.loadSettings(refresh), preferences.load(readSignal)]);
     return { ...settings, conversation_preferences };
-  };
+  }, 'Flower settings read timed out.', signal && options.signal ? AbortSignal.any([signal, options.signal]) : signal ?? options.signal);
   const reloadSettings = () => { resource.invalidate(); return loadSettings(); };
   return createRuntimeFlowerSurfaceAdapter({
+    signal: options.signal,
     runtime: {
       runtime_id: LOCAL_ENVIRONMENT_RUNTIME_ID,
       runtime_kind: 'local_environment',
@@ -899,6 +904,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       const result = await runtimeJSON<Awaited<ReturnType<NonNullable<FlowerSurfaceAdapter['chatGPTAuth']>>>>(bridge, 'POST', `/_redeven_proxy/api/ai/auth/chatgpt/${action}`, input);
       if (action === 'sign-out' || action === 'remove' || action === 'retry') {
         resource.invalidate();
+        options.signal?.throwIfAborted();
         if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
       }
       return result;
@@ -981,6 +987,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     },
     saveConversationPreferences: async patch => {
       const saved = await preferences.save(patch);
+      options.signal?.throwIfAborted();
       if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
       return saved;
     },
@@ -989,6 +996,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       if (!mid) throw new Error('Missing model id.');
       await preferences.save({ model_id: mid });
       const snapshot = await reloadSettings();
+      options.signal?.throwIfAborted();
       if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
       return snapshot;
     },
@@ -1063,7 +1071,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       return result.storage_generation;
     },
     launchTurn: async (input: FlowerTurnLaunchInput) => {
-      return launchLocalEnvironmentFlowerTurn(bridge, input, resource);
+      return launchLocalEnvironmentFlowerTurn(bridge, input, resource, options.signal);
     },
     manageGoal: async (input) => {
       try {

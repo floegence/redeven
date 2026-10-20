@@ -74,6 +74,20 @@ async function mount(initial = current(), copy?: FlowerSurfaceCopy, overrides: P
   await waitFor(() => root.querySelector('.flower-chat-transcript')?.getAttribute('data-flower-tail-preparing') !== 'true');
   return { root, live };
 }
+// Reading protection requires a viewport that can actually leave the tail.
+async function inspectTranscript(root: HTMLElement) {
+  const viewport = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
+  viewport.style.height = '80px';
+  viewport.style.maxHeight = '80px';
+  viewport.style.flex = 'none';
+  await waitFor(() => viewport.scrollHeight > viewport.clientHeight + 20);
+  await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+  const target = root.querySelector<HTMLElement>('[data-flower-message-id="progress"]')!;
+  viewport.scrollTop = viewport.scrollHeight;
+  viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -40, bubbles: true }));
+  viewport.scrollTop += target.getBoundingClientRect().top - viewport.getBoundingClientRect().top;
+  viewport.dispatchEvent(new Event('scroll'));
+}
 const message = (root: HTMLElement, id: string) => root.querySelector<HTMLElement>(`[data-flower-message-id="${id}"]`)!;
 const summary = (root: HTMLElement) => root.querySelector<HTMLButtonElement>('.flower-turn-summary-button');
 const hidden = (root: HTMLElement, id: string) => message(root, id).closest('.flower-turn-row-viewport')?.getAttribute('aria-hidden') === 'true';
@@ -81,7 +95,8 @@ afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.
 
 describe('completed turn process disclosure', () => {
   it('keeps a compaction-only process recoverable and accepts context with its current version', async () => {
-    const { root, live } = await mount();
+    const initial = current(false, { items: current(false).items!.filter(item => ['user', 'final-a'].includes(item.id)) });
+    const { root, live } = await mount(initial);
     const terminal = current(true, {
       turns: [turn({ intermediate_item_ids: [] })],
       items: current(true).items!.filter(item => ['user', 'final-a', 'final-b'].includes(item.id)),
@@ -103,7 +118,7 @@ describe('completed turn process disclosure', () => {
     summary(root)!.click();
     await waitFor(() => row()?.closest('.flower-turn-row-viewport')?.getAttribute('aria-hidden') !== 'true');
     expect(row()!.closest('.flower-turn-row-viewport')?.hasAttribute('inert')).toBe(false);
-    send(1, []); send(2, []);
+    send(1, []); send(1, []);
     // A later accepted frame with omitted context preserves the prior snapshot.
     live.envelope({ schema_version: 1, kind: 'thread.batch', thread_id: 'process', current: { ...terminal, view_version: 3,
       items: terminal.items!.map(item => item.id === 'final-a' ? { ...item, text: 'Version three accepted.' } : item),
@@ -186,7 +201,7 @@ describe('completed turn process disclosure', () => {
       document.getSelection()!.removeAllRanges(); document.getSelection()!.addRange(range);
       expect(document.getSelection()?.toString()).toContain('Intermediate progress report.');
     } else if (protection === 'focus') { prose.tabIndex = 0; prose.focus(); }
-    else root.querySelector('.flower-chat-transcript')!.dispatchEvent(new WheelEvent('wheel', { deltaY: -10, bubbles: true }));
+    else await inspectTranscript(root);
     live.push(current(true, { view_version: 3 }));
     await waitFor(() => prose.closest('.flower-turn-row')?.getAttribute('data-flower-turn-process') === 'true');
     expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
@@ -297,7 +312,7 @@ describe('completed turn process disclosure', () => {
     else if (protection === 'menu') {
       row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
       const menu = document.createElement('div'); menu.setAttribute('role', 'menu'); root.append(menu);
-    } else root.querySelector('.flower-chat-transcript')!.dispatchEvent(new WheelEvent('wheel', { deltaY: -10, bubbles: true }));
+    } else await inspectTranscript(root);
     live.push(current(true, { view_version: 3, parent_events: parentProcessPage([{ ...pending, resolved: true }]) }));
     await waitFor(() => summary(root)?.textContent?.includes('1 subtask update') === true);
     expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
@@ -471,7 +486,7 @@ describe('completed turn process disclosure', () => {
     else if (protection === 'menu') {
       process.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
       const menu = document.createElement('div'); menu.setAttribute('role', 'menu'); root.append(menu);
-    } else if (protection === 'reading') root.querySelector('.flower-chat-transcript')!.dispatchEvent(new WheelEvent('wheel', { deltaY: -10, bubbles: true }));
+    } else if (protection === 'reading') await inspectTranscript(root);
     else { summary(root)!.click(); if (protection === 'manual-open') summary(root)!.click(); }
     live.push(continued(stopped));
     await waitFor(() => Boolean(message(root, 'next-user')));
@@ -564,7 +579,7 @@ describe('completed turn process disclosure', () => {
       process.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
       const menu = document.createElement('div'); menu.setAttribute('role', 'menu'); root.append(menu);
     } else {
-      root.querySelector<HTMLElement>('.flower-chat-transcript')!.dispatchEvent(new WheelEvent('wheel', { deltaY: -10, bubbles: true }));
+      await inspectTranscript(root);
     }
     live.push(current(true));
     await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'true');

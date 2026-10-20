@@ -2413,3 +2413,17 @@ it('loads saved tool previews through the exact scoped Env App route', async () 
   const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env', envLabel: 'Environment', rpc: { ai: {} } as never });
   await expect(adapter.loadToolPreview!({ thread_id: 'thread-1', turn_id: 'turn-1', run_id: 'run-1', tool_call_id: 'call-1' })).resolves.toEqual(preview);
 });
+
+it('keeps labels and localized errors live without replacing its adapter', async () => {
+  let label = 'First environment';
+  let subtitle = 'First subtitle';
+  let emptyPrompt = 'First empty prompt';
+  const adapter = createEnvLocalFlowerSurfaceAdapter({ envPublicID: 'env', get envLabel() { return label; }, rpc: { ai: {} } as never,
+    get copy() { return { currentEnvironment: label, usingCurrentEnvironment: label, missingThreadID: 'Missing thread id.', selectModelBeforeChat: 'Select a model.', failedToCreateChat: 'Failed to create chat.', environmentLocalSubtitle: subtitle, enterMessageBeforeSending: emptyPrompt }; } });
+  expect(adapter.runtime.display_name).toBe(label);
+  label = 'Renamed environment'; subtitle = 'Localized subtitle'; emptyPrompt = 'Localized empty prompt';
+  expect(adapter.runtime.display_name).toBe(label);
+  expect(adapter.runtime.subtitle).toBe(subtitle);
+  await expect(adapter.launchTurn({ client_request_id: 'empty', prompt: '' })).rejects.toThrow(emptyPrompt);
+  expect(fetchMock).not.toHaveBeenCalled();
+});

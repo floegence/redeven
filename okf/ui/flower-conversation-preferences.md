@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower personal conversation preferences
 description: Remember explicit model, directory, and model-owned reasoning choices without importing thread settings into future defaults.
 tags: [ai, flower, preferences, composer, persistence]
-timestamp: 2026-10-19T10:45:00Z
+timestamp: 2026-10-20T00:00:00Z
 ---
 # Summary
 
@@ -87,7 +87,17 @@ Each authenticated adapter orders captured field patches and loads the latest
 revision before writing. The product store atomically merges fields and uses
 compare-and-set revision; concurrent stale writes return HTTP 409 and are not
 automatically retried. Failed writes do not block later intentional choices.
-Response acceptance checks adapter identity, disposal, and monotonic revision.
+Reads, including waiting behind earlier writes, share the 15-second deadline.
+Writes use the existing 120-second response deadline; timeout releases the queue
+without replaying the uncertain write. The next intentional choice reads a fresh
+server revision. Lifetime disposal and permission withdrawal prevent queued work
+from dispatching. An already dispatched write can finish at the server; ending
+its local wait never claims that write was cancelled.
+
+Response acceptance checks adapter identity, disposal, read generation and
+monotonic preference revision. Settings-dependent editing remains disabled until
+the current complete settings read succeeds. See the [startup and settings
+recovery contract](../architecture/flower-startup-presentation.md).
 Thread/draft targets and model identities are captured before asynchronous work;
 a late response cannot retarget another draft or navigate the surface.
 

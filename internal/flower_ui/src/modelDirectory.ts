@@ -135,14 +135,12 @@ export function createFlowerModelReadResource(options: Readonly<{
     if (configuration) return Promise.resolve(directory ? withFlowerModelDirectory(configuration, directory) : configuration);
     if (settingsRequest) return settingsRequest;
     const revision = generation;
-    const requestScope = scope;
     // Read local availability independently; provider discovery never enters
     // this path and a slow directory cannot delay saved configuration.
     const request = read(options.loadConfiguration).then(value => {
       checkScope();
       if (revision !== generation) {
-        if (requestScope !== scope) throw new DOMException('Flower connection changed.', 'AbortError');
-        return loadSettings();
+        throw new DOMException('Flower settings read was superseded.', 'AbortError');
       }
       configuration = value;
       if (!directory && value.model_directory) {
@@ -150,10 +148,6 @@ export function createFlowerModelReadResource(options: Readonly<{
         for (const listener of listeners) listener(directory);
       }
       return directory ? withFlowerModelDirectory(value, directory) : value;
-    }).catch(error => {
-      checkScope();
-      if (revision !== generation && requestScope === scope) return loadSettings();
-      throw error;
     }).finally(() => { if (settingsRequest === request) settingsRequest = null; });
     void loadDirectory().catch(() => undefined);
     settingsRequest = request;

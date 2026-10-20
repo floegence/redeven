@@ -959,3 +959,37 @@ it('forwards canonical child input operations and hides them from read-only surf
   expect(operate).toHaveBeenCalledWith('parent', 'child', operation);
   expect(createRuntimeFlowerSurfaceAdapter({ ...options, canMutate: false }).operateSubagentInput).toBeUndefined();
 });
+
+it('keeps one adapter while permission changes and rejects captured commands after revocation or disposal', async () => {
+  let allowed = true;
+  const lifetime = new AbortController();
+  const launchTurn = vi.fn();
+  const patchThread = vi.fn();
+  const adapter = createRuntimeFlowerSurfaceAdapter({ ...adapterOptions({ patchThread }, { launchTurn }), signal: lifetime.signal, get canMutate() { return allowed; } });
+  const launch = adapter.launchTurn;
+  const rename = adapter.renameThread!;
+  allowed = false;
+  expect(adapter.canMutate).toBe(false);
+  expect(adapter.renameThread).toBeUndefined();
+  await expect(launch({ client_request_id: 'request', prompt: 'hello' })).rejects.toMatchObject({ name: 'NotAllowedError' });
+  await expect(rename('thread', 'title')).rejects.toMatchObject({ name: 'NotAllowedError' });
+  allowed = true;
+  expect(adapter.renameThread).toBe(rename);
+  lifetime.abort();
+  await expect(launch({ client_request_id: 'request', prompt: 'hello' })).rejects.toMatchObject({ name: 'AbortError' });
+  expect(launchTurn).not.toHaveBeenCalled();
+  expect(patchThread).not.toHaveBeenCalled();
+});
+
+
+it.each(['revoked', 'disposed'] as const)('does not retry a lost take-back response after authority is %s', async reason => {
+  let allowed = true;
+  const lifetime = new AbortController();
+  const takeBackQueuedTurn = vi.fn(async () => {
+    if (reason === 'revoked') allowed = false; else lifetime.abort();
+    throw new Error('Response lost');
+  });
+  const adapter = createRuntimeFlowerSurfaceAdapter({ ...adapterOptions({ prepareQueuedTurnDraft: vi.fn(), takeBackQueuedTurn }), signal: lifetime.signal, get canMutate() { return allowed; } });
+  await expect(adapter.takeBackQueuedTurn!('thread', 'queued', 'fingerprint')).rejects.toMatchObject({ admission_kind: 'unknown' });
+  expect(takeBackQueuedTurn).toHaveBeenCalledOnce();
+});

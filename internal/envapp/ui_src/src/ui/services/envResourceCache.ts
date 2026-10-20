@@ -27,6 +27,8 @@ export type EnvResourceCacheAccess = Readonly<{
   /** Fences requests; it is not the identity of the visible data. */
   generation: number;
   scope?: string;
+  /** Confirmed authenticated identity, independent of the cache storage owner. */
+  authenticatedScope?: string;
   owner?: ResourceOwner;
   error?: unknown;
   retry?: () => void;
@@ -71,12 +73,13 @@ export function createEnvResourceCacheAccess(options: {
   const retry = () => { options.retryPermissions?.(); setRetryRevision(value => value + 1); };
   const publish = (phase: EnvResourceCacheAccess['phase'], error?: unknown) => {
     const previous = untrack(state);
-    if (previous.phase === phase && previous.generation === generation && previous.owner === owner && previous.error === error) return;
+    const authenticatedScope = phase === 'ready' && lookup.phase === 'ready' ? lookup.scope : undefined;
+    if (previous.authenticatedScope === authenticatedScope && previous.phase === phase && previous.generation === generation && previous.owner === owner && previous.error === error) return;
     if (phase === 'revalidating' && previous.phase === 'ready') {
       if (previous.generation === generation) ++generation;
       owner?.cache.cancelRefreshes(owner.scope);
     }
-    setState({ phase, generation, owner, scope: owner?.persistent ? owner.scope : undefined, error, retry, revoke });
+    setState({ phase, generation, owner, authenticatedScope, scope: owner?.persistent ? owner.scope : undefined, error, retry, revoke });
   };
   const revoke = () => {
     ++generation;

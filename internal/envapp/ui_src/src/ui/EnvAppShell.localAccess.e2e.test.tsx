@@ -664,6 +664,8 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
   Shell: (props: any) => {
     const env = useContext(EnvContextMock as any) as {
       activeSurface?: () => string;
+      flowerScopeKey?: () => string;
+      flowerDraftCoordinator?: import('../../../../flower_ui/src').FlowerComposerDraftCoordinator;
       openSettings?: (section?: string, options?: { origin?: { kind: 'flower'; returnSurfaceId: 'ai' } }) => void;
       returnFromSettingsOrigin?: () => void;
       settingsOrigin?: () => { kind?: string } | null;
@@ -747,8 +749,11 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
         <div
           data-testid="mock-env-context-state"
           data-active-surface={env?.activeSurface?.() ?? ''}
+          data-flower-scope={env?.flowerScopeKey?.() ?? ''}
           data-settings-origin={env?.settingsOrigin?.()?.kind ?? ''}
         >
+          <button type="button" data-testid="seed-flower-draft" onClick={() => env?.flowerDraftCoordinator?.open('').mutate(value => ({ ...value, text: 'Retained draft' }))}>Seed draft</button>
+          <button type="button" data-testid="read-flower-draft" onClick={event => { event.currentTarget.textContent = env?.flowerDraftCoordinator?.read('').value.text || 'Empty draft'; }}>Read draft</button>
           <button
             type="button"
             data-testid="mock-context-open-flower-settings"
@@ -1720,6 +1725,40 @@ beforeEach(async () => {
 });
 
 describe('EnvAppShell environment entry affordances', () => {
+  it('retains the Flower scope and draft during revalidation and resets both for a confirmed different user', async () => {
+    cacheProbe.enabled = true;
+    localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    const host = document.createElement('div'); document.body.append(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    const key = () => host.querySelector<HTMLElement>('[data-testid="mock-env-context-state"]')?.dataset.flowerScope;
+    const readDraft = () => {
+      const button = host.querySelector<HTMLButtonElement>('[data-testid="read-flower-draft"]')!;
+      button.click(); return button.textContent;
+    };
+    try {
+      await flushUntil(() => cacheScopeMock.mock.calls.length > 0 && !!key(), 80);
+      await flushAsync();
+      const original = key();
+      host.querySelector<HTMLButtonElement>('[data-testid="seed-flower-draft"]')!.click();
+      expect(readDraft()).toBe('Retained draft');
+      const scope = deferred<{ scope_id: string }>();
+      cacheScopeMock.mockReturnValueOnce(scope.promise);
+      publishProtocolConnected('same-user-replacement'); await flushAsync();
+      expect(key()).toBe(original);
+      expect(readDraft()).toBe('Retained draft');
+      scope.resolve({ scope_id: 'a'.repeat(64) }); await flushAsync();
+      expect(key()).toBe(original);
+      expect(readDraft()).toBe('Retained draft');
+      cacheScopeMock.mockResolvedValueOnce({ scope_id: 'b'.repeat(64) });
+      publishProtocolConnected('different-user-replacement');
+      await flushUntil(() => key() !== original, 80);
+      expect(key()).not.toBe(original);
+      expect(readDraft()).toBe('Empty draft');
+    } finally { dispose(); host.remove(); }
+  });
+
   it('keeps mounted content while a replacement connection revalidates permission and scope', async () => {
     cacheProbe.enabled = true;
     localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');

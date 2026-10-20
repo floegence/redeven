@@ -261,7 +261,7 @@ it('refreshes canonical settings before opening recovery after an uncertain save
   expect(document.querySelector('.flower-provider-dialog')).toBeNull();
   reload.resolve(snapshot);
   await expect.element(page.getByRole('dialog', { name: copy.settings.dialog.editTitle, exact: true })).toBeVisible();
-  expect(loadSettings).toHaveBeenLastCalledWith(true);
+  expect(loadSettings).toHaveBeenLastCalledWith(true, expect.any(AbortSignal));
 });
 
 

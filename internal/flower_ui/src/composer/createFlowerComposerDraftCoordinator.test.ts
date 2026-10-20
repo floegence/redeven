@@ -295,3 +295,17 @@ it('preserves independent Goal command and ordinary input through handoff and re
  expect(restored.read('thread').value.text).toBe('Ordinary draft');
  coordinator.dispose();restored.dispose();
 });
+
+it('resets identity-owned drafts and attachment handles without disposing the coordinator', () => {
+  const coordinator = createFlowerComposerDraftCoordinator();
+  const old = coordinator.open('__new_thread__');
+  old.mutate(value => ({ ...value, text: 'Private draft', references: [{ local_id: 'file', kind: 'file', path: '/private', label: 'Private' }] }));
+  coordinator.reset();
+  expect(coordinator.read('__new_thread__').value.text).toBe('');
+  expect(coordinator.read('__new_thread__').value.references).toEqual([]);
+  old.mutate(value => ({ ...value, text: 'Late old update' }));
+  expect(coordinator.read('__new_thread__').value.text).toBe('');
+  coordinator.open('__new_thread__').mutate(value => ({ ...value, text: 'Current draft' }));
+  expect(coordinator.read('__new_thread__').value.text).toBe('Current draft');
+  coordinator.dispose();
+});

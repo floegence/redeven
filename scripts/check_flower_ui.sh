@@ -63,6 +63,7 @@ main() {
       src/ui/FlowerComposerContextIndicator.test.tsx \
       src/ui/FlowerContextCompactionDivider.test.tsx \
       src/ui/FlowerContextAccounting.test.ts \
+      src/ui/FlowerSurface.settingsLifecycle.test.tsx \
       src/ui/FlowerSurface.providerReadiness.test.tsx \
       src/ui/FlowerSurface.modelMenu.test.tsx \
       src/ui/FlowerSurface.approvalMode.test.tsx \
@@ -121,6 +122,8 @@ main() {
     ui_pkg_log ""
     ui_pkg_log "Flower UI: shared timeline projection contracts..."
     ui_pkg_run_pnpm exec vitest run --root "$ROOT_DIR" --config "$dir/vite.config.ts" --environment=node --maxWorkers=2 --testTimeout=10000 \
+      internal/flower_ui/src/requestDeadline.test.ts \
+      internal/flower_ui/src/conversationPreferences.test.ts \
       internal/flower_ui/src/providerRequestProgress.test.ts \
       internal/flower_ui/src/flowerToolMotion.test.ts \
       internal/flower_ui/src/webSearchCapability.test.ts \
@@ -234,6 +237,9 @@ main() {
         src/ui/FlowerSurface.modelMenu.browser.test.tsx \
         src/ui/FlowerProviderDialog.selection.browser.test.tsx \
         src/ui/FlowerProviderDialog.continuation.browser.test.tsx \
+        src/ui/FlowerSurface.settingsLifecycle.browser.test.tsx \
+        src/ui/FlowerSurface.conversationPreferences.browser.test.tsx \
+        src/ui/pages/EnvAIPage.send.browser.test.tsx \
         src/ui/FlowerSurface.settings.browser.test.tsx \
         src/ui/FlowerSettingsSurface.presentation.browser.test.tsx \
         src/ui/FlowerSurface.subagentDisclosure.browser.test.tsx \

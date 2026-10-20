@@ -1042,8 +1042,8 @@ describe('Local Environment Flower surface adapter', () => {
     const snapshot = await adapter.persistDefaultModel('default/gpt-5.4');
 
     expect(calls).toEqual([
-      { method: 'GET', path: '/_redeven_proxy/api/settings' },
-      { method: 'GET', path: '/_redeven_proxy/api/ai/models?mode=baseline' },
+      { method: 'GET', path: '/_redeven_proxy/api/settings', read_id: expect.any(String) },
+      { method: 'GET', path: '/_redeven_proxy/api/ai/models?mode=baseline', read_id: expect.any(String) },
     ]);
     expect(bridge.requestRuntimeFlower).toHaveBeenCalledWith({
       method: 'PATCH', path: '/_redeven_proxy/api/ai/conversation_preferences',

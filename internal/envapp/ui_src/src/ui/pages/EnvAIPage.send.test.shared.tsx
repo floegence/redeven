@@ -13,6 +13,10 @@ const mocks = vi.hoisted(() => {
     readinessSnapshot: () => Record<string, unknown>;
     setReadinessSnapshot: (snapshot: Record<string, unknown>) => void;
     settingsGate: Promise<void> | null;
+    environmentRevision: () => number;
+    setEnvironmentRevision: (value: number) => void;
+    resourcePhase: () => 'ready' | 'revalidating' | 'denied';
+    setResourcePhase: (value: 'ready' | 'revalidating' | 'denied') => void;
     resourceGeneration: () => number;
     setResourceGeneration: (value: number) => void;
   } = {
@@ -22,6 +26,10 @@ const mocks = vi.hoisted(() => {
     readinessSnapshot: () => ({ state: 'ready', reason_code: '', retryable: false, safe_to_retry: false }),
     setReadinessSnapshot: () => undefined,
     settingsGate: null,
+    environmentRevision: () => 0,
+    setEnvironmentRevision: () => undefined,
+    resourcePhase: () => 'ready',
+    setResourcePhase: () => undefined,
     resourceGeneration: () => 0,
     setResourceGeneration: () => undefined,
   };
@@ -373,18 +381,21 @@ vi.mock('../protocol/redeven_v1', () => ({
 vi.mock('./EnvContext', () => ({
   useEnvContext: () => ({
     settingsSeq: () => 0,
-    resourceCacheAccess: () => ({ generation: mocks.state.resourceGeneration() }),
+    resourceCacheAccess: () => ({ phase: mocks.state.resourcePhase(), generation: mocks.state.resourceGeneration() }),
     env_id: () => 'env-1',
-    env: () => ({
-      name: 'Demo Env',
-      permissions: {
-        can_read: true,
-        can_write: true,
-        can_execute: true,
-        can_admin: true,
-        is_owner: true,
-      },
-    }),
+    env: () => {
+      mocks.state.environmentRevision();
+      return {
+        name: 'Demo Env',
+        permissions: {
+          can_read: true,
+          can_write: true,
+          can_execute: true,
+          can_admin: true,
+          is_owner: true,
+        },
+      };
+    },
     aiReadinessController: {
       snapshot: () => mocks.state.readinessSnapshot(),
       loading: () => false,
@@ -588,6 +599,12 @@ export function registerEnvAIPageSendTests() {
       mocks.state.currentInteractions = [];
       mocks.state.omitReadState = false;
       mocks.state.settingsGate = null;
+      const [environmentRevision, setEnvironmentRevision] = createSignal(0);
+      mocks.state.environmentRevision = environmentRevision;
+      mocks.state.setEnvironmentRevision = setEnvironmentRevision;
+      const [resourcePhase, setResourcePhase] = createSignal<'ready' | 'revalidating' | 'denied'>('ready');
+      mocks.state.resourcePhase = resourcePhase;
+      mocks.state.setResourcePhase = setResourcePhase;
       const [resourceGeneration, setResourceGeneration] = createSignal(0);
       mocks.state.resourceGeneration = resourceGeneration;
       mocks.state.setResourceGeneration = setResourceGeneration;
@@ -699,6 +716,55 @@ export function registerEnvAIPageSendTests() {
         await flush();
         expect(document.querySelector('button.flower-model-reasoning-model-trigger')?.hasAttribute('aria-busy')).toBe(false);
       } finally { dispose(); mocks.fetchLocalApiJSONMock.mockImplementation(original); }
+    });
+
+    it.each([false, true])('accepts settings and sends after an environment refresh during bootstrap: %s', async (refreshEnvironment) => {
+      const settingsGate = deferred<void>();
+      mocks.state.settingsGate = settingsGate.promise;
+      const { host, dispose } = await renderPage(false);
+      try {
+        await vi.waitFor(() => expect(mocks.fetchLocalApiJSONMock.mock.calls.some(([url]) => url === '/_redeven_proxy/api/settings')).toBe(true));
+        const editorBeforeRefresh = host.querySelector('textarea');
+        if (refreshEnvironment) {
+          for (let revision = 1; revision <= 4; revision++) { mocks.state.setEnvironmentRevision(revision); await flush(); }
+        }
+        expect(host.querySelector('textarea')).toBe(editorBeforeRefresh);
+        await flush();
+        settingsGate.resolve();
+        await vi.waitFor(() => expect(host.querySelector('.flower-settings-read-status')).toBeNull());
+        const textarea = host.querySelector('textarea')!;
+        textarea.value = 'Bootstrap race diagnostic';
+        textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+        host.querySelector<HTMLButtonElement>('button.flower-composer-submit')!.click();
+        await vi.waitFor(() => expect(mocks.notificationMock.error.mock.calls).toEqual([]));
+        await vi.waitFor(() => expect(mocks.fetchLocalApiJSONMock.mock.calls.some(([url, init]) => url === '/_redeven_proxy/api/ai/turns' && init?.method === 'POST')).toBe(true));
+        expect(mocks.fetchLocalApiJSONMock.mock.calls.filter(([url, init]) => url === '/_redeven_proxy/api/ai/turns' && init?.method === 'POST')).toHaveLength(1);
+        expect(mocks.notificationMock.error).not.toHaveBeenCalled();
+      } finally {
+        settingsGate.resolve();
+        dispose();
+      }
+    });
+
+    it.each(['revalidating', 'denied'] as const)('blocks new sends during %s and restores the same draft and composer after confirmation', async phase => {
+      const { host, dispose } = await renderPage();
+      try {
+        const editor = host.querySelector<HTMLTextAreaElement>('textarea')!;
+        editor.value = 'Keep my current draft';
+        editor.dispatchEvent(new InputEvent('input', { bubbles: true }));
+        mocks.state.setResourcePhase(phase);
+        await flush();
+        expect(host.querySelector('textarea')).toBe(editor);
+        expect(host.querySelector<HTMLButtonElement>('.flower-composer-submit')!.disabled).toBe(true);
+        editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        expect(mocks.fetchLocalApiJSONMock.mock.calls.filter(([url, init]) => url.endsWith('/turns') && init?.method === 'POST')).toHaveLength(0);
+        mocks.state.setResourcePhase('ready');
+        await flush();
+        expect(host.querySelector('textarea')).toBe(editor);
+        expect(editor.value).toBe('Keep my current draft');
+        host.querySelector<HTMLButtonElement>('.flower-composer-submit')!.click();
+        await vi.waitFor(() => expect(mocks.fetchLocalApiJSONMock.mock.calls.filter(([url, init]) => url.endsWith('/turns') && init?.method === 'POST')).toHaveLength(1));
+      } finally { dispose(); }
     });
 
     it('renders the shared Flower layout with New chat, thread history, settings, and model visibility', async () => {

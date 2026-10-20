@@ -3,14 +3,19 @@
 export class FlowerRequestDeadlineError extends Error {}
 export class FlowerReadDeadlineError extends Error {}
 
-export async function withFlowerRequestDeadline<T>(operation: () => Promise<T>, timeoutMessage: string): Promise<T> {
+export async function withFlowerRequestDeadline<T>(operation: () => Promise<T>, timeoutMessage: string, signal?: AbortSignal): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let cancel: (() => void) | undefined;
   try {
-    return await Promise.race([operation(), new Promise<T>((_, reject) => {
+    signal?.throwIfAborted();
+    return await Promise.race([Promise.resolve().then(() => { signal?.throwIfAborted(); return operation(); }), new Promise<T>((_, reject) => {
+      cancel = () => reject(new DOMException('Command wait was superseded.', 'AbortError'));
+      signal?.addEventListener('abort', cancel, { once: true });
       timer = setTimeout(() => reject(new FlowerRequestDeadlineError(timeoutMessage)), 120_000);
     })]);
   } finally {
     if (timer !== undefined) clearTimeout(timer);
+    if (cancel) signal?.removeEventListener('abort', cancel);
   }
 }
 

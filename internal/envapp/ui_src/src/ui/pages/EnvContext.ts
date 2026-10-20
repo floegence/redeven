@@ -92,6 +92,7 @@ export type RevealHostApplicationRequest = { requestId: string; applicationID: s
 export type EnvContextValue = {
   resourceCacheAccess?: () => import('../services/envResourceCache').EnvResourceCacheAccess;
   flowerDraftCoordinator?: FlowerComposerDraftCoordinator;
+  flowerScopeKey?: () => string;
   flowerModelReadResource?: import('../../../../../flower_ui/src/modelDirectory').FlowerModelReadResource;
   aiReadinessController?: AIReadinessController;
   env_id: () => string;

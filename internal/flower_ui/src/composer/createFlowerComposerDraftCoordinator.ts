@@ -104,6 +104,7 @@ export type FlowerComposerDraftSession = Readonly<{
 }>;
 
 export type FlowerComposerDraftCoordinator = Readonly<{
+  reset: () => void;
   exportForRestart: () => readonly FlowerComposerRestartDraft[];
   restoreAfterRestart: (drafts: readonly FlowerComposerRestartDraft[]) => void;
   resumeAfterCanceledRestart: () => void;
@@ -334,6 +335,7 @@ export function createFlowerComposerDraftCoordinator(
     attachmentStagingScope: (scopeID) => activeStagingScope(stateFor(scopeID)),
     ensureAttachmentStagingScope: (rawScopeID, create, release) => {
       const handle = stateFor(rawScopeID);
+      handle.releaseStagingScope = release;
       const active = activeStagingScope(handle);
       if (active) return Promise.resolve(active);
       if (handle.stagingScopeOperation) return handle.stagingScopeOperation.promise;
@@ -414,6 +416,15 @@ export function createFlowerComposerDraftCoordinator(
       emit(target.cell);
       emit(from.cell);
       return target.cell.snapshot;
+    },
+    reset: () => {
+      assertActive();
+      for (const state of new Set(states.values())) {
+        releaseStagingScope(state);
+        state.attachmentController?.dispose();
+        state.cell.listeners.clear();
+      }
+      states.clear();
     },
     dispose: () => {
       if (disposed) return;

@@ -1,8 +1,9 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createFlowerConversationPreferenceClient, prepareFlowerNewConversationInput } from './conversationPreferences';
 import type { FlowerConversationPreferences, FlowerSettingsSnapshot } from './contracts/flowerSurfaceContracts';
 
 describe('Flower explicit preference writes', () => {
+  afterEach(() => vi.useRealTimers());
   it('freezes one-shot launch fields without mutating memory and leaves existing threads alone', async () => {
     const preferences: FlowerConversationPreferences = { revision: 1, model_id: 'provider/a', working_dir: '/remembered', reasoning_by_model: { 'provider/a': { level: 'default', budget_tokens: 4096 } } };
     let snapshot: FlowerSettingsSnapshot = { defaults: { permission_type: 'approval_required' }, model_profile: null, provider_secrets: [], conversation_preferences: preferences };
@@ -53,4 +54,70 @@ describe('Flower explicit preference writes', () => {
     await expect(client.save({ model_id: 'provider/b' })).resolves.toMatchObject({ model_id: 'provider/b' });
     expect(patch).toHaveBeenCalledTimes(2);
   });
+});
+
+it('bounds preference reads including time spent behind a write', async () => {
+  vi.useFakeTimers();
+  const client = createFlowerConversationPreferenceClient({
+    load: async () => ({ revision: 1, reasoning_by_model: {} }),
+    patch: () => new Promise(() => {}),
+  });
+  const write = client.save({ model_id: 'provider/a' });
+  const writeFailure = expect(write).rejects.toThrow('save timed out');
+  await vi.advanceTimersByTimeAsync(0);
+  const read = expect(client.load()).rejects.toThrow('read timed out');
+  await vi.advanceTimersByTimeAsync(15_000);
+  await read;
+  await vi.advanceTimersByTimeAsync(105_000);
+  await writeFailure;
+  expect(vi.getTimerCount()).toBe(0);
+  vi.useRealTimers();
+});
+
+it('releases timed out writes without replay and reads a fresh CAS revision for the next choice', async () => {
+  vi.useFakeTimers();
+  const patch = vi.fn().mockImplementationOnce(() => new Promise(() => {})).mockResolvedValueOnce({ revision: 3, model_id: 'provider/b', reasoning_by_model: {} });
+  let revision = 1;
+  const client = createFlowerConversationPreferenceClient({ load: async () => ({ revision, reasoning_by_model: {} }), patch });
+  const timedOut = expect(client.save({ model_id: 'provider/a' })).rejects.toThrow('save timed out');
+  await vi.advanceTimersByTimeAsync(120_000);
+  await timedOut;
+  revision = 2;
+  await expect(client.save({ model_id: 'provider/b' })).resolves.toMatchObject({ revision: 3 });
+  expect(patch.mock.calls).toEqual([[{ model_id: 'provider/a', expected_revision: 1 }], [{ model_id: 'provider/b', expected_revision: 2 }]]);
+  expect(vi.getTimerCount()).toBe(0);
+  vi.useRealTimers();
+});
+
+it.each(['dispose', 'revoke'])('never dispatches a queued preference write after %s', async reason => {
+  const lifetime = new AbortController();
+  let canMutate = true;
+  let finish!: (value: { revision: number; reasoning_by_model: Record<string, never> }) => void;
+  const load = vi.fn(() => new Promise<{ revision: number; reasoning_by_model: Record<string, never> }>(resolve => { finish = resolve; }));
+  const patch = vi.fn();
+  const client = createFlowerConversationPreferenceClient({ load, patch }, { signal: lifetime.signal, canMutate: () => canMutate });
+  const first = client.save({ model_id: 'provider/a' });
+  const second = client.save({ model_id: 'provider/b' });
+  const failures = [expect(first).rejects.toMatchObject({ name: reason === 'dispose' ? 'AbortError' : 'NotAllowedError' }), expect(second).rejects.toMatchObject({ name: reason === 'dispose' ? 'AbortError' : 'NotAllowedError' })];
+  await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(1));
+  if (reason === 'dispose') lifetime.abort(); else canMutate = false;
+  finish({ revision: 1, reasoning_by_model: {} });
+  await Promise.all(failures);
+  expect(patch).not.toHaveBeenCalled();
+  expect(load).toHaveBeenCalledTimes(1);
+});
+
+it('cancels an in-flight preference read when its lifetime ends even with a caller signal', async () => {
+  const lifetime = new AbortController();
+  const caller = new AbortController();
+  let readSignal: AbortSignal | undefined;
+  const client = createFlowerConversationPreferenceClient({
+    load: async signal => { readSignal = signal; return new Promise(() => {}); }, patch: vi.fn(),
+  }, { signal: lifetime.signal });
+  const failed = expect(client.load(caller.signal)).rejects.toMatchObject({ name: 'AbortError' });
+  await vi.waitFor(() => expect(readSignal).toBeDefined());
+  lifetime.abort();
+  await failed;
+  expect(readSignal!.aborted).toBe(true);
+  expect(caller.signal.aborted).toBe(false);
 });

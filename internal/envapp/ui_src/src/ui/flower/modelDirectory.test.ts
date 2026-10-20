@@ -61,7 +61,7 @@ describe('connection-owned local model reads', () => {
     expect((await resource.loadSettings(true)).defaults.permission_type).toBe('readonly');
     expect(configRead).toHaveBeenCalledTimes(2);
   });
-  it('reacquires an invalidated settings read and ignores the old late result', async () => {
+  it('releases an invalidated settings read without restarting its old owner', async () => {
     let finish!: (value: typeof configuration) => void;
     const configRead = vi.fn().mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })).mockResolvedValue(configuration);
     const resource = createFlowerModelReadResource({ scope: () => 'connection', loadConfiguration: configRead, loadDirectory: async () => directory });
@@ -69,7 +69,8 @@ describe('connection-owned local model reads', () => {
     await Promise.resolve(); await Promise.resolve();
     resource.invalidate();
     const current = resource.loadSettings();
-    expect(await old).toEqual(await current);
+    await expect(old).rejects.toMatchObject({ name: 'AbortError' });
+    await current;
     finish({ ...configuration, defaults: { permission_type: 'readonly' } } as typeof configuration);
     await Promise.resolve();
     expect((await resource.loadSettings()).defaults.permission_type).toBe('approval_required');

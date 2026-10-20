@@ -40,9 +40,12 @@ function fixture() {
   return { drafts, base };
 }
 const control = (surface: HTMLElement) => surface.querySelector<HTMLElement>('[data-flower-composer-control="model_reasoning"] .flower-reasoning-control-segment');
-async function select(surface: HTMLElement, id = 'thread-1') {
+async function select(surface: HTMLElement, id = 'thread-1', waitForDetail = true) {
   await waitFor(() => Boolean(surface.querySelector(`[data-thread-id="${id}"] button`)));
   surface.querySelector<HTMLButtonElement>(`[data-thread-id="${id}"] button`)!.click();
+  if (!waitForDetail) return;
+  await waitFor(() => surface.querySelector('main')?.dataset.flowerSelectedThreadId === id
+    && surface.querySelector('main')?.dataset.flowerSelectedThreadLoading === 'false');
 }
 
 beforeEach(async () => { await page.viewport(1280, 900); });
@@ -139,7 +142,7 @@ describe('Flower reasoning settings authority', () => {
     const detail = deferred<FlowerThreadView>();
     base.loadThread = vi.fn(() => detail.promise);
     const surface = renderSurfaceWithDraftCoordinator(base, drafts);
-    await select(surface);
+    await select(surface, 'thread-1', false);
     await waitFor(() => base.loadThread.mock.calls.length > 0);
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     expect(control(surface)?.textContent).toContain('Off');
@@ -258,10 +261,11 @@ describe('Flower reasoning settings authority', () => {
     }, drafts);
     await select(surface);
     const chooseHigh = async () => {
-      await waitFor(() => Boolean(control(surface)?.querySelector('button')));
+      await waitFor(() => control(surface)?.querySelector<HTMLButtonElement>('button')?.disabled === false);
       control(surface)!.querySelector('button')!.click();
-      Array.from(control(surface)!.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'))
-        .find((item) => item.textContent?.trim() === 'High')!.click();
+      const high = () => Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')).find(item => item.textContent?.trim() === 'High');
+      await waitFor(() => Boolean(high()));
+      high()!.click();
     };
     await chooseHigh();
     await waitFor(() => flowerSurfaceNotifications().some((notice) => notice.message === 'Unable to save reasoning'));

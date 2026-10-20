@@ -1702,7 +1702,7 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     trigger.focus();
     await userEvent.keyboard('{Enter}');
     await flushAsync();
-    const overlayRoot = document.querySelector('[data-floe-dialog-overlay-root]');
+    const overlayRoot = document.querySelector('[data-floe-dialog-overlay-root][data-floe-dialog-mode]');
     if (!(overlayRoot instanceof HTMLElement)) throw new Error('Activity page Dialog did not open.');
     expect(overlayRoot.dataset.floeDialogMode).toBe('global');
     expect(overlayRoot.style.zIndex).toBe('4000');
@@ -1723,7 +1723,7 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     });
     expect(activityDialogUnderlayActionMock).not.toHaveBeenCalled();
 
-    await expect.poll(() => document.querySelector('[data-floe-dialog-overlay-root]')).toBeNull();
+    await expect.poll(() => document.querySelector('[data-floe-dialog-overlay-root][data-floe-dialog-mode]')).toBeNull();
     await expect.poll(() => document.activeElement).toBe(trigger);
   });
 
@@ -1771,7 +1771,7 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     await userEvent.click(trigger);
     await flushAsync();
 
-    let overlayRoot = document.querySelector('[data-floe-dialog-overlay-root]');
+    let overlayRoot = document.querySelector('[data-floe-dialog-overlay-root][data-floe-dialog-mode]');
     if (!(overlayRoot instanceof HTMLElement)) throw new Error('Activity Flower dialog did not open.');
     expect(fixture.product.contains(overlayRoot)).toBe(false);
     expect(overlayRoot.dataset.floeDialogMode).toBe('global');
@@ -1792,7 +1792,7 @@ describe('EnvAppShell Activity Flower browser integration', () => {
       },
     });
     expect(activityDialogUnderlayActionMock).not.toHaveBeenCalled();
-    await expect.poll(() => document.querySelector('[data-floe-dialog-overlay-root]')).toBeNull();
+    await expect.poll(() => document.querySelector('[data-floe-dialog-overlay-root][data-floe-dialog-mode]')).toBeNull();
 
     const switchWorkbench = document.querySelector('[data-testid="activity-switch-workbench"]');
     if (!(switchWorkbench instanceof HTMLButtonElement)) throw new Error('Workbench switch did not mount.');
@@ -1801,7 +1801,7 @@ describe('EnvAppShell Activity Flower browser integration', () => {
 
     await userEvent.click(trigger);
     await flushAsync();
-    overlayRoot = document.querySelector('[data-floe-dialog-overlay-root]');
+    overlayRoot = document.querySelector('[data-floe-dialog-overlay-root][data-floe-dialog-mode]');
     if (!(overlayRoot instanceof HTMLElement)) throw new Error('Workbench Flower dialog did not open.');
     expect(fixture.product.contains(overlayRoot)).toBe(true);
     expect(overlayRoot.dataset.floeDialogMode).toBe('surface');
@@ -1813,12 +1813,12 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     }
     await userEvent.click(workbenchUnderlay);
     expect(workbenchDialogUnderlayActionMock).toHaveBeenCalledTimes(1);
-    expect(document.querySelector('[data-floe-dialog-overlay-root]')).toBe(overlayRoot);
+    expect(document.querySelector('[data-floe-dialog-overlay-root][data-floe-dialog-mode]')).toBe(overlayRoot);
 
     const localBackdrop = overlayRoot.querySelector('[data-floe-dialog-backdrop]');
     if (!(localBackdrop instanceof HTMLElement)) throw new Error('Workbench Dialog backdrop did not mount.');
     await userEvent.click(localBackdrop, { position: { x: 8, y: 8 } });
-    await expect.poll(() => document.querySelector('[data-floe-dialog-overlay-root]')).toBeNull();
+    await expect.poll(() => document.querySelector('[data-floe-dialog-overlay-root][data-floe-dialog-mode]')).toBeNull();
 
     await userEvent.click(trigger);
     await flushAsync();
@@ -1827,14 +1827,14 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     await userEvent.click(switchActivity);
     await flushAsync();
 
-    overlayRoot = document.querySelector('[data-floe-dialog-overlay-root]');
+    overlayRoot = document.querySelector('[data-floe-dialog-overlay-root][data-floe-dialog-mode]');
     if (!(overlayRoot instanceof HTMLElement)) throw new Error('Retained Flower dialog was lost.');
     expect(fixture.product.contains(overlayRoot)).toBe(false);
     expect(overlayRoot.dataset.floeDialogMode).toBe('global');
     expect(overlayRoot.style.zIndex).toBe('4000');
 
     await userEvent.keyboard('{Escape}');
-    await expect.poll(() => document.querySelector('[data-floe-dialog-overlay-root]')).toBeNull();
+    await expect.poll(() => document.querySelector('[data-floe-dialog-overlay-root][data-floe-dialog-mode]')).toBeNull();
   });
 
   it('mounts Flower directly into Workbench before Activity has rendered', async () => {

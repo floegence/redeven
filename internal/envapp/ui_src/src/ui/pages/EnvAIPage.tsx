@@ -1,4 +1,4 @@
-import { createMemo, type JSX } from 'solid-js';
+import { Show, createMemo, onCleanup, type JSX } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
 
 import { useEnvFilesystemPicker } from '../services/filesystemPicker';
@@ -87,7 +87,9 @@ export function EnvAIPage(props: EnvAIPageProps) {
   const i18n = useI18n();
   const notification = useNotification();
   const desktopSessionTargetRoute = readDesktopSessionContextSnapshot()?.target_route;
-  const modelReadRevision = () => (env.settingsSeq?.() ?? 0) + (env.resourceCacheAccess?.().generation ?? 0);
+  const modelReadRevision = () => JSON.stringify([env.settingsSeq?.() ?? 0, env.resourceCacheAccess?.().generation ?? 0]);
+  const scopeKey = () => env.flowerScopeKey?.() ?? trim(env.env_id());
+  const accessConfirmed = () => !env.resourceCacheAccess || (env.resourceCacheAccess().phase === 'ready' && !env.resourceCacheAccess().error);
   const readinessController = env.aiReadinessController ?? createAIReadinessController();
   const surfaceCopy = createMemo(() => createEnvFlowerSurfaceCopy(i18n, i18n.locale()));
   const companionCopy = createMemo<FlowerThreadSwitcherCopy | undefined>(() => (
@@ -95,24 +97,25 @@ export function EnvAIPage(props: EnvAIPageProps) {
       ? { ...props.companionCopy, threadList: surfaceCopy().threadList }
       : undefined
   ));
-  const adapter = createMemo(() => createEnvLocalFlowerSurfaceAdapter({
+  const createAdapter = (signal: AbortSignal) => createEnvLocalFlowerSurfaceAdapter({
+    signal,
     envPublicID: trim(env.env_id()),
-    envLabel: trim(env.env()?.name) || trim(env.env_id()) || i18n.t('flower.currentEnvironmentFallback'),
+    get envLabel() { return trim(env.env()?.name) || trim(env.env_id()) || i18n.t('flower.currentEnvironmentFallback'); },
     desktopSessionTargetRoute,
     rpc,
     settingsRevision: modelReadRevision,
     modelReadResource: env.flowerModelReadResource,
     isAvailable: () => {
       const state = readinessController.snapshot().state;
-      return state === 'ready' || state === 'degraded';
+      return !signal.aborted && (state === 'ready' || state === 'degraded');
     },
-    canManageExtensions: () => Boolean(env.env()?.permissions?.can_admin || env.env()?.permissions?.is_owner),
-    canMutate: Boolean(
+    canManageExtensions: () => accessConfirmed() && Boolean(env.env()?.permissions?.can_admin || env.env()?.permissions?.is_owner),
+    get canMutate() { return accessConfirmed() && Boolean(
       env.env()?.permissions?.can_read
       && env.env()?.permissions?.can_write
       && env.env()?.permissions?.can_execute,
-    ),
-    copy: {
+    ); },
+    get copy() { return {
       currentEnvironment: i18n.t('flowerChat.router.currentEnvSource'),
       usingCurrentEnvironment: i18n.t('flowerChat.router.currentEnvHandler'),
       environmentLocalSubtitle: i18n.t('flowerChat.router.envLocalSubtitle'),
@@ -120,7 +123,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
       enterMessageBeforeSending: i18n.t('flowerChat.router.enterMessageBeforeSending'),
       selectModelBeforeChat: i18n.t('flowerChat.router.selectModelBeforeChat'),
       failedToCreateChat: i18n.t('flowerChat.router.failedToCreateChat'),
-    },
+    }; },
     onSettingsChanged: env.bumpSettingsSeq,
     revealHostApplication: env.revealHostApplication,
     ...env.flowerWorkingDirectoryActions,
@@ -151,7 +154,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
         return i18n.t('flowerSettings.desktopModelBindingFailed');
       },
       localSettings: {
-        label: i18n.t('flowerSettings.desktopFlowerSettingsAction'),
+        get label() { return i18n.t('flowerSettings.desktopFlowerSettingsAction'); },
         run: async () => {
           if (!await openFlowerSettings()) {
             throw new Error(i18n.t('settings.connection.manageConnectionFailedMessage'));
@@ -159,19 +162,19 @@ export function EnvAIPage(props: EnvAIPageProps) {
         },
       },
       remoteSettings: {
-        label: i18n.t('flowerSettings.remoteFlowerSettingsAction'),
+        get label() { return i18n.t('flowerSettings.remoteFlowerSettingsAction'); },
         run: async () => {
           env.openSettings('ai', { origin: { kind: 'flower', returnSurfaceId: props.settingsReturnSurfaceId ?? 'ai' } });
         },
       },
       runtimeSettings: {
-        label: i18n.t('settings.runtimeTitle'),
+        get label() { return i18n.t('settings.runtimeTitle'); },
         run: async () => {
           env.openSettings('agent', { origin: { kind: 'flower', returnSurfaceId: props.settingsReturnSurfaceId ?? 'ai' } });
         },
       },
       connectionCenter: {
-        label: i18n.t('settings.connection.manageConnection'),
+        get label() { return i18n.t('settings.connection.manageConnection'); },
         run: async () => {
           if (!await openConnectionCenter()) {
             throw new Error(i18n.t('settings.connection.manageConnectionFailedMessage'));
@@ -179,7 +182,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
         },
       },
     } : undefined,
-  }));
+  });
 
   return (
     <AIReadinessBoundary
@@ -192,55 +195,60 @@ export function EnvAIPage(props: EnvAIPageProps) {
       canReviewIssues={Boolean(env.env()?.permissions?.can_admin || env.env()?.permissions?.is_owner)}
       canRetryGeneration={Boolean(env.env()?.permissions?.can_admin || env.env()?.permissions?.is_owner)}
       focusEnabled={props.engaged ?? true}
-      renderContent={() => <FlowerSurface
-        embeddedConversation={props.embeddedConversation}
-        captureNewConversationContext={props.captureNewConversationContext}
-        renderContextSnapshotPreview={FlowerContextSnapshotPreview}
-        adapter={adapter()}
-        filesystemScopeKey={filesystemPicker.scopeKey}
-        filesystemScrollViewportProps={filesystemPicker.scrollViewportProps}
-        approvalScrollViewportProps={REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
-        approvalReadingProps={REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_PROPS}
-        notify={(notice: FlowerSurfaceNotification) => {
-          const title = trim(notice.title) || (notice.tone === 'error'
-            ? i18n.t('flower.errorNotificationTitle')
-            : i18n.t('flower.notificationTitle'));
-          if (notice.tone === 'success') {
-            notification.success(title, notice.message);
-          } else if (notice.tone === 'info') {
-            notification.info(title, notice.message);
-          } else {
-            notification.error(title, notice.message);
-          }
-        }}
-        copy={surfaceCopy()}
-        draftCoordinator={props.draftCoordinator}
-        settingsRevision={modelReadRevision}
-        presentation={props.presentation}
-        engaged={props.engaged}
-        transcriptVisible={props.transcriptVisible}
-        companionPresenceOwner={props.companionPresenceOwner}
-        companionOpen={props.companionOpen}
-        companionRegionID={props.companionRegionID}
-        companionSummary={props.companionSummary}
-        companionActionLabel={props.companionActionLabel}
-        companionCopy={companionCopy()}
-        headerTrailingActions={props.headerTrailingActions}
-        onPresenceChange={props.onPresenceChange}
-        focusThreadRequest={props.embeddedConversation ? null : props.focusRequestScope === 'activity' ? props.focusThreadRequest : env.aiThreadFocusRequest()}
-        focusComposerRequest={props.focusComposerRequest}
-        mobileThreadsOpen={props.mobileThreadsOpen}
-        onMobileThreadsOpenChange={props.onMobileThreadsOpenChange}
-        onFocusThreadRequestConsumed={props.focusRequestScope === 'activity'
-          ? props.onFocusThreadRequestConsumed
-          : env.consumeAIThreadFocusRequest}
-        onCompanionOpenRequest={props.onCompanionOpenRequest}
-        onThreadSelectionEvent={createUIPresentationEventRecorder({
-          surface: 'flower',
-          source: (event) => event.metadata?.source ?? 'thread-list',
-        })}
-        class={`h-full min-h-0 ${props.class ?? ''}`}
-      />}
+      renderContent={() => <Show keyed when={scopeKey()}>{(_scope) => {
+        const lifetime = new AbortController();
+        onCleanup(() => lifetime.abort());
+        const adapter = createAdapter(lifetime.signal);
+        return <FlowerSurface
+          embeddedConversation={props.embeddedConversation}
+          captureNewConversationContext={props.captureNewConversationContext}
+          renderContextSnapshotPreview={FlowerContextSnapshotPreview}
+          adapter={adapter}
+          filesystemScopeKey={filesystemPicker.scopeKey}
+          filesystemScrollViewportProps={filesystemPicker.scrollViewportProps}
+          approvalScrollViewportProps={REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
+          approvalReadingProps={REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_PROPS}
+          notify={(notice: FlowerSurfaceNotification) => {
+            const title = trim(notice.title) || (notice.tone === 'error'
+              ? i18n.t('flower.errorNotificationTitle')
+              : i18n.t('flower.notificationTitle'));
+            if (notice.tone === 'success') {
+              notification.success(title, notice.message);
+            } else if (notice.tone === 'info') {
+              notification.info(title, notice.message);
+            } else {
+              notification.error(title, notice.message);
+            }
+          }}
+          copy={surfaceCopy()}
+          draftCoordinator={props.draftCoordinator}
+          settingsRevision={modelReadRevision}
+          presentation={props.presentation}
+          engaged={props.engaged}
+          transcriptVisible={props.transcriptVisible}
+          companionPresenceOwner={props.companionPresenceOwner}
+          companionOpen={props.companionOpen}
+          companionRegionID={props.companionRegionID}
+          companionSummary={props.companionSummary}
+          companionActionLabel={props.companionActionLabel}
+          companionCopy={companionCopy()}
+          headerTrailingActions={props.headerTrailingActions}
+          onPresenceChange={props.onPresenceChange}
+          focusThreadRequest={props.embeddedConversation ? null : props.focusRequestScope === 'activity' ? props.focusThreadRequest : env.aiThreadFocusRequest()}
+          focusComposerRequest={props.focusComposerRequest}
+          mobileThreadsOpen={props.mobileThreadsOpen}
+          onMobileThreadsOpenChange={props.onMobileThreadsOpenChange}
+          onFocusThreadRequestConsumed={props.focusRequestScope === 'activity'
+            ? props.onFocusThreadRequestConsumed
+            : env.consumeAIThreadFocusRequest}
+          onCompanionOpenRequest={props.onCompanionOpenRequest}
+          onThreadSelectionEvent={createUIPresentationEventRecorder({
+            surface: 'flower',
+            source: (event) => event.metadata?.source ?? 'thread-list',
+          })}
+          class={`h-full min-h-0 ${props.class ?? ''}`}
+        />;
+      }}</Show>}
     />
   );
 }
