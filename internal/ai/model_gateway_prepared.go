@@ -13,13 +13,16 @@ import (
 )
 
 type preparedModelWire struct {
-	mu          sync.Mutex
-	consumed    bool
-	outputField string
-	payload     []byte
-	estimate    flprovider.TokenEstimate
-	fingerprint string
-	execute     func(context.Context, []byte, func(StreamEvent)) (ModelGatewayResult, error)
+	measurementIdentity                   string
+	measurementFormat                     flprovider.RequestFormat
+	measurementProvider, measurementModel string
+	mu                                    sync.Mutex
+	consumed                              bool
+	outputField                           string
+	payload                               []byte
+	estimate                              flprovider.TokenEstimate
+	fingerprint                           string
+	execute                               func(context.Context, []byte, func(StreamEvent)) (ModelGatewayResult, error)
 }
 
 // Freeze the SDK-rendered body once. Estimation and dispatch use these exact
@@ -81,7 +84,7 @@ func (p *preparedModelWire) Close() error {
 func (p *preparedModelWire) replay(_ context.Context, _ flprovider.Request) (preparedModelGatewayTurn, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return &preparedModelWire{outputField: p.outputField, payload: bytes.Clone(p.payload), estimate: p.estimate, fingerprint: p.fingerprint, execute: p.execute}, nil
+	return &preparedModelWire{measurementIdentity: p.measurementIdentity, measurementFormat: p.measurementFormat, measurementProvider: p.measurementProvider, measurementModel: p.measurementModel, outputField: p.outputField, payload: bytes.Clone(p.payload), estimate: p.estimate, fingerprint: p.fingerprint, execute: p.execute}, nil
 }
 
 func (p *preparedModelWire) withMaxOutputTokens(ctx context.Context, limit int64) (preparedModelGatewayTurn, error) {
@@ -105,7 +108,7 @@ func (p *preparedModelWire) withMaxOutputTokens(ctx context.Context, limit int64
 	if err != nil {
 		return nil, err
 	}
-	return &preparedModelWire{outputField: p.outputField, payload: raw, estimate: p.estimate, fingerprint: fmt.Sprintf("sha256:%x", sha256.Sum256(raw)), execute: p.execute}, nil
+	return &preparedModelWire{measurementIdentity: p.measurementIdentity, measurementFormat: p.measurementFormat, measurementProvider: p.measurementProvider, measurementModel: p.measurementModel, outputField: p.outputField, payload: raw, estimate: p.estimate, fingerprint: fmt.Sprintf("sha256:%x", sha256.Sum256(raw)), execute: p.execute}, nil
 }
 
 func cloneModelTokenEstimate(value flprovider.TokenEstimate) flprovider.TokenEstimate {
@@ -116,4 +119,19 @@ func cloneModelTokenEstimate(value flprovider.TokenEstimate) flprovider.TokenEst
 		value.Breakdown.Details = &details
 	}
 	return value
+}
+
+func (p *preparedModelWire) renderedMeasurement() flprovider.RenderedRequest {
+	return flprovider.RenderedRequest{Provider: p.measurementProvider, Model: p.measurementModel, Format: p.measurementFormat, Payload: p.payload}
+}
+func (p *preparedModelWire) InputMeasurementPrefix() flprovider.MeasurementPrefix {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	prefix, _ := flprovider.RenderedMeasurementPrefix(p.renderedMeasurement(), p.measurementIdentity, "input")
+	return prefix
+}
+func (p *preparedModelWire) MeasurementSuffix(prefix flprovider.MeasurementPrefix) ([]byte, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return flprovider.RenderedMeasurementSuffix(p.renderedMeasurement(), p.measurementIdentity, prefix)
 }

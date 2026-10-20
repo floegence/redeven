@@ -3,6 +3,7 @@ package ai
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -60,6 +61,8 @@ type openAIResponsesPool struct {
 	idle, lifetime time.Duration
 }
 type openAIConnection struct {
+	measurementID                                   string
+	reasoningIncluded                               bool
 	conn                                            *responses.ResponseConnection
 	busy                                            bool
 	opened                                          time.Time
@@ -158,7 +161,7 @@ func (p *openAIResponsesPool) acquire(ctx context.Context, key openAIConnectionK
 				p.mu.Unlock()
 				return nil, errOpenAIPoolFull
 			}
-			e = &openAIConnection{opened: time.Now(), auth: sha256.Sum256([]byte(bearer))}
+			e = &openAIConnection{measurementID: rand.Text(), opened: time.Now(), auth: sha256.Sum256([]byte(bearer))}
 			p.entries[key] = e
 		}
 		if e.timer != nil {
@@ -440,6 +443,11 @@ func (p *openAIProvider) responsesStream(ctx context.Context, req ModelGatewayRe
 				} else if err = lease.install(conn, p.chatGPTWatch); err != nil {
 					lease.finish(false)
 					return nil, nil, "", err
+				}
+				if err == nil && handshake != nil {
+					p.responsesPool.mu.Lock()
+					lease.entry.reasoningIncluded = handshake.Header.Values("x-reasoning-included") != nil
+					p.responsesPool.mu.Unlock()
 				}
 			}
 			if fallback == "" {

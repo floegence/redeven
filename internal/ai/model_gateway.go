@@ -82,6 +82,7 @@ func resolveProviderWebSearchCapability(provider config.AIProvider, modelName st
 type openAIProvider struct {
 	responsesPool         *openAIResponsesPool
 	transportIdentity     openAIConnectionIdentity
+	measurementCredential string
 	officialOpenAI        bool
 	providerType          string
 	client                openai.Client
@@ -251,9 +252,16 @@ func (p *openAIProvider) prepareTurn(ctx context.Context, req ModelGatewayReques
 			return nil, err
 		}
 	}
-	return newPreparedModelWire(p.providerType, req.Model, flprovider.RequestFormatOpenAIResponses, params, req, aliases, func(ctx context.Context, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+	prepared, err := newPreparedModelWire(p.providerType, req.Model, flprovider.RequestFormatOpenAIResponses, params, req, aliases, func(ctx context.Context, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
 		return p.streamResponsesTurn(ctx, aliases, payload, onEvent, chatGPTStreamContext{Request: req, Records: records, Canonical: canonical})
 	})
+	if err != nil {
+		return nil, err
+	}
+	prepared.measurementIdentity = p.preparedMeasurementIdentity(req)
+	prepared.measurementFormat = flprovider.RequestFormatOpenAIResponses
+	prepared.measurementProvider, prepared.measurementModel = p.providerType, req.Model
+	return prepared, nil
 }
 
 func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases providerToolAliases, payload []byte, onEvent func(StreamEvent), chatGPTContext ...chatGPTStreamContext) (result ModelGatewayResult, resultErr error) {
@@ -578,6 +586,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 		return ModelGatewayResult{}, fmt.Errorf("normalize OpenAI response usage: %w", usageErr)
 	}
 	result.Usage = usage
+	result.ResponseID = completed.ID
 	if rid := strings.TrimSpace(completed.ID); rid != "" {
 		result.RawProviderDiag["response_id"] = rid
 		result.ProviderState = &ModelGatewayState{
@@ -697,6 +706,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 			return ModelGatewayResult{}, err
 		}
 	}
+	result.Measurement = p.responseMeasurement(payload, completed, result, lease, httpResponse)
 	result.RawProviderDiag["transport"] = "http"
 	if lease != nil {
 		result.RawProviderDiag["transport"] = "websocket"
@@ -2653,12 +2663,13 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 			opts = append(opts, ooption.WithBaseURL(strings.TrimSpace(baseURL)))
 		}
 		return &openAIProvider{
-			providerType:      providerType,
-			officialOpenAI:    isOfficialOpenAIEndpoint(providerType, baseURL),
-			transportIdentity: openAIConnectionIdentity{Provider: providerType, Endpoint: normalizedOpenAIEndpoint(baseURL)},
-			client:            openai.NewClient(opts...),
-			strictToolSchema:  strictToolSchema,
-			parallelTools:     parallelTools,
+			providerType:          providerType,
+			measurementCredential: openAIHash(strings.TrimSpace(apiKey)),
+			officialOpenAI:        isOfficialOpenAIEndpoint(providerType, baseURL),
+			transportIdentity:     openAIConnectionIdentity{Provider: providerType, Endpoint: normalizedOpenAIEndpoint(baseURL)},
+			client:                openai.NewClient(opts...),
+			strictToolSchema:      strictToolSchema,
+			parallelTools:         parallelTools,
 		}, nil
 	case "openai_compatible", "openrouter", "xai", "groq", "ollama", "google":
 		if providerType == "google" && strings.TrimSpace(baseURL) == "" {
@@ -2673,14 +2684,15 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 			opts = append(opts, ooption.WithBaseURL(strings.TrimSpace(baseURL)))
 		}
 		return &openAIProvider{
-			providerType:      providerType,
-			officialOpenAI:    isOfficialOpenAIEndpoint(providerType, baseURL),
-			transportIdentity: openAIConnectionIdentity{Provider: providerType, Endpoint: normalizedOpenAIEndpoint(baseURL)},
-			client:            openai.NewClient(opts...),
-			strictToolSchema:  strictToolSchema,
-			forceChat:         true,
-			gemini:            providerType == "google",
-			parallelTools:     parallelTools,
+			providerType:          providerType,
+			measurementCredential: openAIHash(strings.TrimSpace(apiKey)),
+			officialOpenAI:        isOfficialOpenAIEndpoint(providerType, baseURL),
+			transportIdentity:     openAIConnectionIdentity{Provider: providerType, Endpoint: normalizedOpenAIEndpoint(baseURL)},
+			client:                openai.NewClient(opts...),
+			strictToolSchema:      strictToolSchema,
+			forceChat:             true,
+			gemini:                providerType == "google",
+			parallelTools:         parallelTools,
 		}, nil
 	case "deepseek":
 		return &deepSeekProvider{baseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/"), apiKey: strings.TrimSpace(apiKey), strictTools: strictToolSchema}, nil
@@ -2690,13 +2702,14 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 			opts = append(opts, ooption.WithBaseURL(strings.TrimSpace(baseURL)))
 		}
 		return &openAIProvider{
-			providerType:      providerType,
-			officialOpenAI:    isOfficialOpenAIEndpoint(providerType, baseURL),
-			transportIdentity: openAIConnectionIdentity{Provider: providerType, Endpoint: normalizedOpenAIEndpoint(baseURL)},
-			client:            openai.NewClient(opts...),
-			strictToolSchema:  strictToolSchema,
-			forceChat:         true,
-			parallelTools:     parallelTools,
+			providerType:          providerType,
+			measurementCredential: openAIHash(strings.TrimSpace(apiKey)),
+			officialOpenAI:        isOfficialOpenAIEndpoint(providerType, baseURL),
+			transportIdentity:     openAIConnectionIdentity{Provider: providerType, Endpoint: normalizedOpenAIEndpoint(baseURL)},
+			client:                openai.NewClient(opts...),
+			strictToolSchema:      strictToolSchema,
+			forceChat:             true,
+			parallelTools:         parallelTools,
 		}, nil
 	case "qwen":
 		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey)), ooption.WithMaxRetries(0)}
@@ -2704,13 +2717,14 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 			opts = append(opts, ooption.WithBaseURL(strings.TrimSpace(baseURL)))
 		}
 		return &openAIProvider{
-			providerType:      providerType,
-			officialOpenAI:    isOfficialOpenAIEndpoint(providerType, baseURL),
-			transportIdentity: openAIConnectionIdentity{Provider: providerType, Endpoint: normalizedOpenAIEndpoint(baseURL)},
-			client:            openai.NewClient(opts...),
-			strictToolSchema:  strictToolSchema,
-			forceChat:         true,
-			parallelTools:     parallelTools,
+			providerType:          providerType,
+			measurementCredential: openAIHash(strings.TrimSpace(apiKey)),
+			officialOpenAI:        isOfficialOpenAIEndpoint(providerType, baseURL),
+			transportIdentity:     openAIConnectionIdentity{Provider: providerType, Endpoint: normalizedOpenAIEndpoint(baseURL)},
+			client:                openai.NewClient(opts...),
+			strictToolSchema:      strictToolSchema,
+			forceChat:             true,
+			parallelTools:         parallelTools,
 		}, nil
 	case "moonshot":
 		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey)), ooption.WithMaxRetries(0)}
