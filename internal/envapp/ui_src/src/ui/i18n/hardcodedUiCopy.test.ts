@@ -8,6 +8,7 @@ type Finding = Readonly<{
   kind:
     | 'text'
     | 'expression'
+    | 'notification'
     | 'title'
     | 'aria-label'
     | 'placeholder'
@@ -47,6 +48,46 @@ const VISIBLE_ATTRIBUTES = new Set([
 ]);
 
 const EXCEPTIONS: readonly Exception[] = [
+  { file: "../../../desktop/src/welcome/App.tsx", kind: "alt", text: "Redeven", reason: "Protected product name." },
+  { file: "../../../desktop/src/welcome/App.tsx", kind: "aria-label", text: "Tessiven", reason: "Protected product name." },
+  { file: "../../../desktop/src/welcome/App.tsx", kind: "title", text: "Tessiven", reason: "Protected product name." },
+  { file: "../../../desktop/src/welcome/App.tsx", kind: "text", text: "WSL 2", reason: "Standard protocol, platform, or measurement identifier." },
+  { file: "../../../desktop/src/welcome/App.tsx", kind: "text", text: "wsl.exe --install", reason: "Literal executable command, filesystem path, repository coordinate, branch, model ID, or input example." },
+  { file: "../../../desktop/src/welcome/App.tsx", kind: "expression", text: "WSL 1", reason: "Standard protocol, platform, or measurement identifier." },
+  { file: "../../../desktop/src/welcome/App.tsx", kind: "text", text: "URL", reason: "Standard protocol, platform, or measurement identifier." },
+  { file: "../../../desktop/src/welcome/App.tsx", kind: "text", text: "SSH", reason: "Standard protocol, platform, or measurement identifier." },
+  { file: "../../../desktop/src/welcome/App.tsx", kind: "placeholder", text: "http://192.168.1.11:24000/", reason: "Literal executable command, filesystem path, repository coordinate, branch, model ID, or input example." },
+  { file: "../../../desktop/src/welcome/App.tsx", kind: "expression", text: "/root/.redeven", reason: "Literal executable command, filesystem path, repository coordinate, branch, model ID, or input example." },
+  { file: "../../../desktop/src/welcome/App.tsx", kind: "placeholder", text: "https://github.com/floegence/redeven/releases", reason: "Literal executable command, filesystem path, repository coordinate, branch, model ID, or input example." },
+  { file: "../../../desktop/src/welcome/EnvironmentAccessWorkflow.tsx", kind: "expression", text: "HTTP", reason: "Standard protocol, platform, or measurement identifier." },
+  { file: "../../../desktop/src/welcome/GatewayMembersDialog.tsx", kind: "placeholder", text: "gateway.example, 192.168.1.10", reason: "Literal executable command, filesystem path, repository coordinate, branch, model ID, or input example." },
+  { file: "../../../desktop/src/welcome/RuntimeGatewayJoinPanel.tsx", kind: "placeholder", text: "https://gateway.example:7443", reason: "Literal executable command, filesystem path, repository coordinate, branch, model ID, or input example." },
+  { file: "../../../desktop/src/welcome/SSHEnvironmentSettingsForm.tsx", kind: "placeholder", text: "$HOME/.redeven", reason: "Literal executable command, filesystem path, repository coordinate, branch, model ID, or input example." },
+  { file: "../../../desktop/src/welcome/SSHEnvironmentSettingsForm.tsx", kind: "placeholder", text: "https://github.com/floegence/redeven/releases", reason: "Literal executable command, filesystem path, repository coordinate, branch, model ID, or input example." },
+  { file: "../../flower_ui/src/FlowerChromeConnection.tsx", kind: "expression", text: "Alt+Home", reason: "Literal keyboard shortcut." },
+  { file: "../../flower_ui/src/FlowerChromeReadiness.tsx", kind: "expression", text: "macOS", reason: "Operating system name." },
+  { file: "../../flower_ui/src/FlowerChromeReadiness.tsx", kind: "expression", text: "Linux", reason: "Operating system name." },
+  { file: "../../flower_ui/src/FlowerComputerConnections.tsx", kind: "expression", text: "macOS", reason: "Operating system name." },
+  { file: "../../flower_ui/src/FlowerComputerConnections.tsx", kind: "expression", text: "Linux", reason: "Operating system name." },
+  { file: "../../flower_ui/src/FlowerComputerConnections.tsx", kind: "placeholder", text: "http://127.0.0.1:9222", reason: "Literal executable command, filesystem path, repository coordinate, branch, model ID, or input example." },
+  { file: "../../flower_ui/src/FlowerComputerStage.tsx", kind: "text", text: "FPS", reason: "Standard protocol, platform, or measurement identifier." },
+  { file: "../../flower_ui/src/FlowerManagedBrowser.tsx", kind: "expression", text: "macOS", reason: "Operating system name." },
+  { file: "../../flower_ui/src/FlowerManagedBrowser.tsx", kind: "expression", text: "Linux", reason: "Operating system name." },
+  { file: "../../flower_ui/src/FlowerManagedBrowser.tsx", kind: "expression", text: "ARM64", reason: "Standard protocol, platform, or measurement identifier." },
+  { file: "../../flower_ui/src/FlowerSurface.tsx", kind: "text", text: "&hellip;", reason: "Ellipsis entity." },
+  { file: "../../flower_ui/src/FlowerSurface.tsx", kind: "text", text: "HTTP", reason: "Standard protocol, platform, or measurement identifier." },
+  { file: "../../flower_ui/src/FlowerSurface.tsx", kind: "text", text: "Tab", reason: "Literal keyboard shortcut." },
+  { file: "../../flower_ui/src/FlowerSurface.tsx", kind: "text", text: "/goal", reason: "Literal composer command." },
+  { file: "../../flower_ui/src/chat/FlowerEmptyState.tsx", kind: "text", text: "Enter", reason: "Literal keyboard shortcut." },
+  { file: "../../flower_ui/src/chat/FlowerEmptyState.tsx", kind: "text", text: "Shift+Enter", reason: "Literal keyboard shortcut." },
+  { file: "../../flower_ui/src/extensions/SkillsSection.tsx", kind: "placeholder", text: "https://github.com/openai/skills/tree/main/skills/.curated/skill-installer", reason: "Literal executable command, filesystem path, repository coordinate, branch, model ID, or input example." },
+  { file: "../../flower_ui/src/extensions/SkillsSection.tsx", kind: "placeholder", text: "openai/skills", reason: "Literal executable command, filesystem path, repository coordinate, branch, model ID, or input example." },
+  { file: "../../flower_ui/src/extensions/SkillsSection.tsx", kind: "placeholder", text: "main", reason: "Literal executable command, filesystem path, repository coordinate, branch, model ID, or input example." },
+  { file: "../../flower_ui/src/extensions/SkillsSection.tsx", kind: "placeholder", text: "incident-response", reason: "Literal executable command, filesystem path, repository coordinate, branch, model ID, or input example." },
+  { file: "../../flower_ui/src/settings/FlowerProviderDialog.tsx", kind: "placeholder", text: "model-name", reason: "Literal executable command, filesystem path, repository coordinate, branch, model ID, or input example." },
+  { file: "../../tessiven_ui/src/TessivenFlowerPanel.tsx", kind: "title", text: "Flower", reason: "Protected product name." },
+  { file: "../../tessiven_ui/src/TessivenPage.tsx", kind: "aria-label", text: "Tessiven", reason: "Protected product name." },
+  { file: "../../tessiven_ui/src/TessivenPage.tsx", kind: "expression", text: "Tessiven", reason: "Protected product name." },
   { file: 'src/ui/pages/EnvHostApplicationsPage.tsx', kind: 'expression', text: '/usr/bin/example', reason: 'Literal executable-path example.' },
   { file: 'src/ui/pages/EnvHostApplicationsPage.tsx', kind: 'expression', text: '/Applications/Example.app', reason: 'Literal macOS application bundle path example.' },
   { file: 'src/ui/pages/GitTemplateImport.tsx', kind: 'placeholder', text: 'https://github.com/owner/repository', reason: 'Literal GitHub HTTPS repository URL example.' },
@@ -151,10 +192,10 @@ function normalizeText(value: string): string {
   return value.replace(/\s+/gu, ' ').trim();
 }
 
-function isVisibleEnglish(value: string): boolean {
+function isVisibleCopy(value: string): boolean {
   const text = normalizeText(value);
   if (!text || /^(?:&(?:nbsp|ensp|emsp);)+$/u.test(text)) return false;
-  return /[A-Za-z]{2}/u.test(text);
+  return /[A-Za-z]{2}/u.test(text) || /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Cyrillic}]/u.test(text);
 }
 
 function sourceFiles(root: string): readonly string[] {
@@ -173,15 +214,14 @@ function sourceFiles(root: string): readonly string[] {
   return files;
 }
 
-function findingsForFile(file: string): readonly Finding[] {
-  const source = fs.readFileSync(file, 'utf8');
+function findingsForSource(file: string, source: string): readonly Finding[] {
   const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const relativeFile = path.relative(process.cwd(), file).split(path.sep).join('/');
   const findings: Finding[] = [];
 
   const add = (kind: Finding['kind'], value: string): void => {
     const text = normalizeText(value);
-    if (!isVisibleEnglish(text)) return;
+    if (!isVisibleCopy(text)) return;
     findings.push({ file: relativeFile, kind, text });
   };
 
@@ -217,6 +257,21 @@ function findingsForFile(file: string): readonly Finding[] {
   };
 
   const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const name = ts.isIdentifier(node.expression) ? node.expression.text
+        : ts.isPropertyAccessExpression(node.expression) ? node.expression.name.text : '';
+      if (/^(?:notify(?:Success|ComposerError|PermissionError|ModelError|FutureDefaultModelError|ThreadActionError)?|alert)$/u.test(name)) {
+        for (const argument of node.arguments) {
+          if (ts.isStringLiteral(argument) || ts.isNoSubstitutionTemplateLiteral(argument)) add('notification', argument.text);
+          if (ts.isObjectLiteralExpression(argument)) {
+            for (const property of argument.properties) {
+              if (ts.isPropertyAssignment(property) && ts.isIdentifier(property.name)
+                && ['title', 'message'].includes(property.name.text)) addVisibleExpression(property.initializer);
+            }
+          }
+        }
+      }
+    }
     if (ts.isJsxText(node)) add('text', node.text);
     if (ts.isJsxExpression(node) && node.expression && !ts.isJsxAttribute(node.parent)) addVisibleExpression(node.expression);
     if (
@@ -238,10 +293,29 @@ function findingsForFile(file: string): readonly Finding[] {
   return findings;
 }
 
+function findingsForFile(file: string): readonly Finding[] {
+  return findingsForSource(file, fs.readFileSync(file, 'utf8'));
+}
+
 describe('hardcoded UI copy AST guard', () => {
-  it('requires visible JSX English to use i18n or a precise explained exception', () => {
-    const sourceRoot = path.resolve(process.cwd(), 'src/ui');
-    const findings = sourceFiles(sourceRoot).flatMap(findingsForFile);
+  it('detects visible non-English copy, conditional fallbacks, and notifications', () => {
+    const findings = findingsForSource(path.resolve(process.cwd(), 'fixture.tsx'), [
+      '<button title="目录">{ready ? "Ready" : "等待"}{value ?? "Fallback"}</button>;',
+      'notify({ title: "Model failed", message: t("error") });',
+      'notifySuccess("Reasoning adjusted");',
+    ].join(String.fromCharCode(10)));
+    expect(findings.map(({ kind, text }) => ({ kind, text }))).toEqual([
+      { kind: 'title', text: '目录' },
+      { kind: 'expression', text: 'Ready' },
+      { kind: 'expression', text: '等待' },
+      { kind: 'expression', text: 'Fallback' },
+      { kind: 'expression', text: 'Model failed' },
+      { kind: 'notification', text: 'Reasoning adjusted' },
+    ]);
+  });
+  it('requires visible JSX interface copy to use i18n or a precise explained exception', () => {
+    const sourceRoots = ['src/ui', '../../../desktop/src', '../../flower_ui/src', '../../tessiven_ui/src'];
+    const findings = sourceRoots.flatMap(root => sourceFiles(path.resolve(process.cwd(), root))).flatMap(findingsForFile);
     const exceptionKeys = new Set(EXCEPTIONS.map(({ file, kind, text }) => `${file}\0${kind}\0${text}`));
     const findingKeys = new Set(findings.map(({ file, kind, text }) => `${file}\0${kind}\0${text}`));
     const violations = findings.filter(({ file, kind, text }) => !exceptionKeys.has(`${file}\0${kind}\0${text}`));

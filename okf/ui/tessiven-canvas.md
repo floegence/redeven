@@ -3,7 +3,7 @@ type: UI Contract
 title: Tessiven canvas
 description: Render progressively detailed service topology and exact object context.
 tags: [ui, tessiven, graph]
-timestamp: 2026-10-11T00:00:00Z
+timestamp: 2026-10-20T00:00:00Z
 quality_exception: Cross-surface canvas interaction contract for Activity, standalone windows, topology browsing, and exact object actions; document, Runtime, and Flower lifecycle remain separately owned.
 ---
 # Summary
@@ -210,7 +210,12 @@ constructors; scripts, layout assets and worker code remain bundled, with no
 remote script or frame source. This is WebKit document execution, not native
 code download or a native JIT.
 
-The host supplies saved-version data and theme through one update function.
+The host supplies saved-version data, theme, and an optional product locale
+through one update function. The native renderer uses the shared complete locale
+catalogs, resolving an omitted locale from WebView language preferences through
+the product locale resolver. Toolbar names, graph controls, and accessibility
+copy follow the same active language. Updating only the locale retains graph
+identity, selection, browse state, and viewport.
 Native hosts retain their zoom toolbar and minimap. Group expansion and hosted
 service filtering belong to the native More menu; there is no duplicate graph
 toolbar. A canvas/version-bound command bridge delegates to the shared graph,
@@ -265,6 +270,8 @@ No additional menu or local layout engine owns these rules.
 - `internal/flower_ui/src/FlowerSurface.tsx`
 - `internal/tessiven_ui/src/TessivenGraph.tsx`
 - `internal/tessiven_ui/src/native/entry.tsx`
+- `internal/tessiven_ui/src/native/NativeCanvas.tsx` - Shared locale catalogs and state-preserving native language updates.
+- `internal/envapp/ui_src/src/styles/tessiven-native-localization.browser.test.tsx` - All ten native renderer locales and stable control identity.
 - `internal/envapp/ui_src/scripts/buildNativeServiceCanvas.mjs`
 - `scripts/check_native_service_canvas.mjs` - Offline custom-scheme WebKit qualification for shared group controls, service scope, minimap geometry and explicit renderer failure.
 - `internal/tessiven_ui/src/TessivenServiceRelations.tsx`

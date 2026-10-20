@@ -20,6 +20,12 @@ function item(overrides: Partial<FlowerActivityItem>): FlowerActivityItem {
 }
 
 describe('subagent read boundaries', () => {
+  it('uses localized web operation titles for accessible activity labels', () => {
+    const webSearch = { ...DEFAULT_FLOWER_SURFACE_COPY.chat.webSearch, search: '搜索', openPage: '打开网页', findInPage: '在网页中查找' };
+    const result = presentFlowerActivityItem(item({ tool_name: 'web_search', renderer: 'web_search', payload: { operation: 'search', query: 'Runtime' } }), { webSearch });
+    expect(result.label).toBe('搜索 Runtime');
+    expect(result.label).not.toContain('Web Search');
+  });
   it.each(['running', 'failed', 'timed_out', 'completed'])('keeps a successful status check distinct from child %s', status => {
     const result = presentFlowerActivityItem(item({ tool_name: 'subagents', renderer: 'subagent_operation', payload: { action: 'status', targets: [{ thread_id: 'child', task_name: 'Audit', status }], requested_count: 1 } }));
     expect(result.label).toBe('Check subagent status');
@@ -1089,7 +1095,7 @@ describe('presentFlowerActivityItem', () => {
       results:[{title:'Release notes',url:'https://example.test/release',snippet:'The release is available.'}],
       sources:[{title:'Answer citation',url:'https://example.test/answer'}],
     }}));
-    expect(presentation.label).toBe('Web Search: Search latest release');
+    expect(presentation.label).toBe('Search latest release');
     expect(presentation.meta).toBe('1 source');
     expect(presentation.detailBlocks).toEqual([{kind:'web_operation',search:{
       results:[{title:'Release notes',url:'https://example.test/release',snippet:'The release is available.',source:''}],
@@ -1100,7 +1106,7 @@ describe('presentFlowerActivityItem', () => {
   it('does not invent query text or expandable details for an opaque search', () => {
     for (const tool_name of ['web_search','web.search']) {
       const p = presentFlowerActivityItem(item({tool_name,renderer:'web_search',label:'Web search',payload:{status:'success'}}));
-      expect(p.label).toBe('Web Search:');
+      expect(p.label).toBe('Search');
       expect(p.meta).toBe('');
       expect(p.detailBlocks).toEqual([]);
     }
@@ -1120,19 +1126,19 @@ describe('presentFlowerActivityItem', () => {
 
   it('names web operations and preserves actual query syntax and multi-query order', () => {
     const base = {tool_name:'web_search',renderer:'web_search' as const};
-    expect(presentFlowerActivityItem(item({...base,payload:{operation:'open_page',url:'https://example.test/weather'}})).label).toBe('Web Search: Open page https://example.test/weather');
-    expect(presentFlowerActivityItem(item({...base,payload:{operation:'find_in_page',url:'https://github.com/floegence/redeven',pattern:'Runtime'}})).label).toBe('Web Search: Find “Runtime” @site:github.com');
+    expect(presentFlowerActivityItem(item({...base,payload:{operation:'open_page',url:'https://example.test/weather'}})).label).toBe('Open page https://example.test/weather');
+    expect(presentFlowerActivityItem(item({...base,payload:{operation:'find_in_page',url:'https://github.com/floegence/redeven',pattern:'Runtime'}})).label).toBe('Find “Runtime” @site:github.com');
     const p = presentFlowerActivityItem(item({...base,status:'running',payload:{operation:'search',query:`site:github.com Runtime
 Go Runtime`}}));
-    expect(p.label).toBe('Web Search: Search site:github.com Runtime +1');
+    expect(p.label).toBe('Search site:github.com Runtime +1');
     expect(p.meta).toBe('Running');
   });
 
-  it('uses the exact localized find title without changing the Web Search prefix', () => {
+  it('uses the exact localized find title for the accessible label', () => {
     const p = presentFlowerActivityItem(item({tool_name:'web_search',renderer:'web_search',payload:{operation:'find_in_page',url:'https://github.com/floegence/redeven',pattern:'Runtime'}}), {
       webSearch: {...DEFAULT_FLOWER_SURFACE_COPY.chat.webSearch, findInPage:'查找'},
     });
-    expect(p.label).toBe('Web Search: 查找 “Runtime” @site:github.com');
+    expect(p.label).toBe('查找 “Runtime” @site:github.com');
   });
 
   it('preserves URL-only source order and snippets without synthesizing titles', () => {

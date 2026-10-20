@@ -58,6 +58,15 @@ path remains visible with localized recovery. A cached or previously validated
 selection is never an authorization token: creation and later operations can fail
 if policy, filesystem contents, or OS permissions change.
 
+## Live language changes
+
+Host-supplied Home and Root labels resolve through the active locale accessor.
+Changing language updates an already open picker's tabs, actions, input hints,
+and recovery copy together. Custom root labels remain runtime-provided names.
+The change retains the current path, input element, pending selection, composer
+draft, and runtime authorization; it never reloads context solely to translate a
+label. Both Desktop Flower and Env App use this shared product adapter.
+
 ## Product presentations
 
 Files uses the same released `parsePickerPath` and `formatPickerPath` functions
@@ -169,6 +178,8 @@ the current form intent only; the runtime checks authorization again when the
 product operation executes.
 
 # Evidence
+
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.localization.browser.test.tsx` - All ten locale presentations and live language changes without replacing picker or composer inputs.
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.tsx` - Published path parsing and formatting, absolute identity, and localized input recovery.
 - `redeven:internal/envapp/ui_src/src/ui/pages/FileBrowserPageLoading.tsx` - Shared workspace presentation before the Files module is ready.

@@ -21,7 +21,7 @@ export function useEnvFilesystemPicker(): PickerPanelProps {
     get directoryFavorites() { return favorites.directoryFavorites; },
     get scopeKey() { return scopeKey(); },
     get copy() { return copy(); },
-    loadPathContext: async () => mapFilesystemPickerContext(await rpc.fs.getPathContext(), copy()),
+    loadPathContext: async () => mapFilesystemPickerContext(await rpc.fs.getPathContext(), copy),
     loadDirectory: async (path, options) => mapFilesystemPickerEntries((await rpc.fs.list({ path, showHidden: options.showHidden })).entries),
     formatError: (error) => formatFilesystemPickerError(error, copy()),
     scrollViewportProps: { ...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS, class: 'overscroll-contain' },

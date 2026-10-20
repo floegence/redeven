@@ -487,7 +487,7 @@ function titleText(title: FlowerActivityTitle): string {
     case 'plain':
       return title.text;
     case 'web_search':
-      return ['Web Search:', title.text].filter(Boolean).join(' ');
+      return title.text;
     case 'web_fetch':
       return title.url ? `Web fetch · ${title.url}` : 'Web fetch';
   }
@@ -1261,7 +1261,7 @@ function presentationForWebSearch(item: FlowerActivityItem, copy?: FlowerActivit
   const titleParts = operation === 'open_page' ? [words.openPage, url]
     : operation === 'find_in_page' ? [words.findInPage, pattern ? `“${pattern}”` : '', safeURL ? `@site:${domain}` : url]
       : [operation === 'search' ? words.search : '', queryText];
-  const title: FlowerActivityTitle = {kind:'web_search', text:titleParts.filter(Boolean).join(' '), operation, url};
+  const title: FlowerActivityTitle = {kind:'web_search', text:titleParts.filter(Boolean).join(' ') || words.search, operation, url};
   const active = item.status === 'running' || item.status === 'pending' || item.status === 'waiting';
   const failed = item.status === 'error' || item.status === 'canceled' || item.status === 'declined';
   const status = (copy?.statuses ?? DEFAULT_FLOWER_SURFACE_COPY.chat.toolStatuses)[item.status];
@@ -1270,7 +1270,7 @@ function presentationForWebSearch(item: FlowerActivityItem, copy?: FlowerActivit
   const error = errorDetailBlockForItem(item, payload);
   if (results.length) detailBlocks.push({kind:'web_operation', search:{results}});
   if (error) detailBlocks.push(error);
-  return {label:titleText(title), title, meta, detailLines:[], detailBlocks};
+  return {label: titleText(title), title, meta, detailLines:[], detailBlocks};
 }
 
 export function safeWebFetchURL(value: string): string {

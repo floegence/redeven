@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-10-20 — Complete shared UI localization
+
+- Keep [filesystem picker](ui/filesystem-picker-navigation.md) system labels reactive across live language changes and localize Flower activity details, model metadata, and Desktop fallback copy. Extend the visible-copy guard across Desktop, Env App, Flower, and Tessiven, with complete ten-locale catalog and browser regressions.
+- Use the shared locale catalogs in the [native Tessiven renderer](ui/tessiven-canvas.md), allowing a host locale or WebView language preferences without resetting graph state.
+
 ## 2026-10-20 — Focused compaction knowledge contracts
 
 - Separate [execution and Goal continuation](ai/flower-context-compaction.md), [usage presentation](ai/model-context-usage-and-compaction.md), and [isolated qualification](operations/flower-compaction-qualification.md) without changing their contracts. Keep each concept focused and below the strict size limit.
@@ -7,6 +12,7 @@
 ## 2026-10-20 — Compact favorite directory locations
 
 - Place Files favorites beside Home and Computer with standard folder icons, single-line tail-preserving paths, full-path tooltips and separate directory menus. Retain filtering, scrolling and keyboard navigation. See [directory favorites](ui/directory-favorites.md).
+
 
 ## 2026-10-20 — Shared directory favorites
 

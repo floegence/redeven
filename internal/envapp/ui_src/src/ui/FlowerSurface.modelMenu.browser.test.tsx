@@ -10,6 +10,7 @@ import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
 import { createLocalizedFlowerSurfaceCopy, type FlowerSurfaceTranslator } from '../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
 import type { FlowerSettingsSnapshot } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { createTestI18nHelpers } from './i18n/locales/testDictionaries';
+import { SUPPORTED_LOCALES } from './i18n/localeMeta';
 import type { EnvAppTranslationKey } from './i18n/locales';
 import { expectSingleLineButtonLabels } from '../test/buttonLayoutAssertions';
 import { adapter, renderSurfaceWithAdapter, renderSurfaceWithAdapterProps, settingsSnapshot, waitFor } from './FlowerSurface.navigation.testHarness';
@@ -49,7 +50,7 @@ it.each([390, 1280])('keeps model search and management visible at %s px', async
   await page.screenshot({ element: menu, path: `__screenshots__/model-menu-${width}.png` });
 });
 
-it.each(['en-US', 'zh-CN', 'de-DE', 'ru-RU'] as const)('keeps the %s picker compact, readable, and keyboard usable across themed widths', async locale => {
+it.each(SUPPORTED_LOCALES)('keeps the %s picker compact, readable, and keyboard usable across themed widths', async locale => {
   const i18n = createTestI18nHelpers(locale);
   const translator: FlowerSurfaceTranslator = { locale, t: (key, params) => i18n.t(key as EnvAppTranslationKey, params), tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params) };
   const copy = createLocalizedFlowerSurfaceCopy(translator);
@@ -92,6 +93,10 @@ it.each(['en-US', 'zh-CN', 'de-DE', 'ru-RU'] as const)('keeps the %s picker comp
       expect(menu.scrollWidth).toBeLessThanOrEqual(menu.clientWidth);
       expectSingleLineButtonLabels(menu.querySelector('.flower-model-menu-footer')!);
       expect(menu.querySelectorAll('.flower-model-menu-group')).toHaveLength(2);
+      const metadata = menu.querySelector('.flower-model-menu-meta')?.textContent;
+      expect(metadata).toContain(copy.settings.dialog.contextSuffix);
+      expect(metadata).toContain(copy.settings.dialog.outputSuffix);
+      expect(metadata).toContain(copy.settings.dialog.imageInput);
       expect(menu.querySelector<HTMLButtonElement>('.flower-model-menu-item:disabled')?.textContent).toContain('qwen3.8:27b');
       const footer = menu.querySelector('.flower-model-menu-footer')!.getBoundingClientRect();
       const list = menu.querySelector('.flower-model-menu-list')!.getBoundingClientRect();
