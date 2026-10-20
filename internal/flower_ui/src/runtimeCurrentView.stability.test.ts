@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import outputSources from './testdata/outputSourceCurrentViews.json';
 import type { FlowerRuntimeCurrentView, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
-import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
+import { applyFlowerRuntimeContext, applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
 import { createThreadCache } from './threadCache';
 import { buildFlowerTimelineEntries } from './flowerTimelineProjection';
 
@@ -27,6 +27,43 @@ function current(version: number): FlowerRuntimeCurrentView {
 }
 
 describe('current view presentation stability', () => {
+  it('shares context-only values and preserves runtime detail through explicit clearing', () => {
+    const first = applyFlowerRuntimeCurrentView(summary(), current(4), { context_compactions: [], timeline_decorations: [] });
+    expect(applyFlowerRuntimeContext(first, {})).toBe(first);
+    expect(applyFlowerRuntimeContext(first, { context_compactions: [], timeline_decorations: [] })).toBe(first);
+    const changed = applyFlowerRuntimeContext(first, { model_context: null, context_usage: null });
+    expect(changed.model_context).toBeNull();
+    expect(changed.context_usage).toBeNull();
+    expect(changed.messages).toBe(first.messages);
+    expect(changed.run_progress).toBe(first.run_progress);
+    expect(applyFlowerRuntimeContext(changed, {})).toBe(changed);
+  });
+  it.each([false, true])('retains complete equal context arrays (nonempty: %s) and applies real clearing', nonempty => {
+    const decoration = { decoration_id: 'compaction', kind: 'context_compaction' as const, ordinal: 1,
+      anchor: { target_kind: 'message' as const, message_id: 'history', edge: 'after' as const },
+      compaction: { operation_id: 'compaction', turn_id: 'older-turn', canonical_ordinal: 1,
+        phase: 'complete' as const, status: 'compacted' as const, updated_at_ms: 1 } };
+    const context = { model_context: null, context_usage: null,
+      context_compactions: nonempty ? [decoration.compaction] : [], timeline_decorations: nonempty ? [decoration] : [] };
+    let thread = applyFlowerRuntimeCurrentView(summary(), current(1), context);
+    const original = thread;
+    const entries = buildFlowerTimelineEntries(thread);
+    for (let version = 2; version <= 301; version++) {
+      thread = applyFlowerRuntimeCurrentView(thread, current(version), structuredClone(context));
+      expect(thread.timeline_decorations).toBe(original.timeline_decorations);
+      expect(thread.context_compactions).toBe(original.context_compactions);
+      expect(thread.messages[0]).toBe(original.messages[0]);
+      expect(buildFlowerTimelineEntries(thread)[0]).toBe(entries[0]);
+    }
+    const changed = applyFlowerRuntimeCurrentView(thread, current(302), { timeline_decorations: [{ ...decoration, compaction: { ...decoration.compaction, reason: 'Changed' } }] });
+    expect(changed.timeline_decorations?.[0]?.compaction.reason).toBe('Changed');
+    expect(applyFlowerRuntimeCurrentView(changed, current(303)).timeline_decorations).toBe(changed.timeline_decorations);
+    const cleared = applyFlowerRuntimeCurrentView(changed, current(304), { timeline_decorations: [], context_compactions: [], model_context: null, context_usage: null });
+    expect(cleared.timeline_decorations).toEqual([]);
+    expect(cleared.context_compactions).toEqual([]);
+    expect(cleared.model_context).toBeNull();
+    expect(buildFlowerTimelineEntries(cleared).some(entry => entry.key.startsWith('timeline-decoration:'))).toBe(false);
+  });
   it('uses the validated timeline after cache acceptance without deriving it again', () => {
     let cache = createThreadCache();
     for (let version = 1; version <= 3; version += 1) {

@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower inline media
 description: Display assistant media through released Floe previews and authorized Runtime resources.
 tags: [flower, media, preview, security]
-timestamp: 2026-10-15T00:00:00Z
+timestamp: 2026-10-20T00:00:00Z
 ---
 
 # Summary
@@ -32,7 +32,7 @@ preview error without interrupting the conversation.
   and expansion while loading; executable and file actions appear only when
   ready. Failure offers an in-place Retry.
 - Local sources use absolute Runtime paths; relative paths resolve against the
-  selected thread's working directory. Local files always cross the authenticated
+  rendered thread's trusted working directory. Local files always cross the authenticated
   filesystem scope. They are never interpreted as application routes.
 - A screenshot uses the exact `computer://target/digest` reference returned by
   the tool. Loading uses the existing thread-authorized computer frame adapter.
@@ -85,10 +85,31 @@ preview error without interrupting the conversation.
   later reply text does not reload the ready iframe. Other unfinished media tails
   stay inert. Media near the
   viewport loads lazily. Disposal aborts pending observation and revokes blob URLs.
-- The resolver identity changes only with the adapter, filesystem scope, selected
-  thread, or working directory. Published Floe owns request cancellation and ignores reactive reads
+- The resolver identity changes only with the adapter, filesystem scope, rendered
+  ThreadID, view validity, or trusted working directory. Published Floe owns request cancellation and ignores reactive reads
   inside the resolver. Health snapshots, labels, and ordinary thread updates do
   not reload a ready preview; a real context change cancels stale work.
+
+## Request lifecycle and thread ownership
+
+One media entry at each rendered thread boundary serves both assistant Markdown
+and Activity images. Parent and open child views bind their own ThreadID. A child
+without a trusted working directory cannot resolve relative sources or HTML
+links against the parent's directory. Runtime membership and filesystem checks
+remain authoritative, including historical references and legitimate Forks.
+
+Floe compares all source values (`kind`, `src`, `html`, and `title`). Equal source
+objects and complete equal context arrays retain the decoded image, temporary
+URL, and open preview. A real source, adapter, scope, directory, thread, or view
+change invalidates the existing request and closes its preview.
+
+Every Flower media entry uses Floe's optional 15-second deadline across resolver
+and HTML loading. Timeout and decoding failures expose Retry and abort the same
+request that owns the temporary URL. Late responses cannot replace a newer
+request. Retry, folding, view removal, and disposal release their request resources.
+There is no media cache, automatic retry, or host-owned loading state machine.
+Window close and Escape return focus only from the closing window to its
+connected trigger, preserving navigation and composer focus.
 
 ## Resource and document boundaries
 

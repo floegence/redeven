@@ -13,7 +13,11 @@ function readStatus(thread: FlowerThreadSnapshot): FlowerThreadReadStatus {
   };
 }
 
-export function projectSubagentDetailThread(detail: FlowerSubagentDetail | null, previous?: FlowerThreadSnapshot | null): FlowerThreadSnapshot | null {
+export function projectSubagentDetailThread(
+  detail: FlowerSubagentDetail | null,
+  previous?: FlowerThreadSnapshot | null,
+  context: Parameters<typeof applyFlowerRuntimeCurrentView>[2] = detail ?? {},
+): FlowerThreadSnapshot | null {
   if (!detail) return null;
   const summary = detail.summary;
   const threadID = trimString(summary.thread_id);
@@ -43,6 +47,7 @@ export function projectSubagentDetailThread(detail: FlowerSubagentDetail | null,
       read_state: { last_seen_activity_revision: 1 },
     },
   };
-  const thread = applyFlowerRuntimeCurrentView({ ...base, messages: previous?.thread_id === threadID ? previous.messages : [], model_context: detail.model_context, context_usage: detail.context_usage, context_compactions: detail.context_compactions, timeline_decorations: detail.timeline_decorations }, detail.current);
+  const prior = previous?.thread_id === threadID ? previous : undefined;
+  const thread = applyFlowerRuntimeCurrentView({ ...prior, ...base, messages: prior?.messages ?? [] }, detail.current, context);
   return retainThreadPresentation(previous ?? undefined, { ...thread, read_status: readStatus(thread) });
 }

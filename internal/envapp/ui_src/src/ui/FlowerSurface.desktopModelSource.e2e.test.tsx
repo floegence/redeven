@@ -64,6 +64,9 @@ describe('Flower Desktop model source E2E', () => {
     const flashModelID = `desktop:model_${'2'.repeat(64)}`;
     const turnBodies: unknown[] = [];
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/ai/conversation_preferences' && init?.method === 'GET') {
+        return jsonResponse({ revision: 0, reasoning_by_model: {} });
+      }
       if (url === '/_redeven_proxy/api/settings' && init?.method === 'GET') {
         return jsonResponse({
           ai: null,

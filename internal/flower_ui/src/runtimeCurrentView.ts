@@ -408,9 +408,24 @@ function runtimeInputRequest(
   };
 }
 
+type FlowerRuntimeContext = Pick<FlowerThreadSnapshot, 'model_context' | 'context_usage' | 'context_compactions' | 'timeline_decorations'>;
+
+export function applyFlowerRuntimeContext<T extends Pick<FlowerThreadSnapshot, 'thread_id' | 'messages'> & Partial<FlowerThreadSnapshot>>(
+  base: T, context: FlowerRuntimeContext,
+): T {
+  return retainThreadPresentation(base, {
+    ...base,
+    ...(context.model_context !== undefined ? { model_context: context.model_context } : {}),
+    ...(context.context_usage !== undefined ? { context_usage: context.context_usage } : {}),
+    ...(context.context_compactions !== undefined ? { context_compactions: context.context_compactions } : {}),
+    ...(context.timeline_decorations !== undefined ? { timeline_decorations: context.timeline_decorations } : {}),
+  });
+}
+
 export function applyFlowerRuntimeCurrentView(
   base: FlowerThreadSnapshot,
   current: FlowerRuntimeCurrentView,
+  context: FlowerRuntimeContext = {},
 ): FlowerThreadSnapshot {
   const threadID = trim(current.thread_id);
   if (!threadID || threadID !== base.thread_id) {
@@ -492,7 +507,7 @@ export function applyFlowerRuntimeCurrentView(
       ? { code: trim(current.run_error_code) || 'floret_turn_failed', message: trim(current.error), ...(trim(current.run_error_detail) ? { detail: trim(current.run_error_detail) } : {}) }
       : undefined,
   };
-  return retainThreadPresentation(base, retainThreadFileActivityTargets(base, projected));
+  return retainThreadPresentation(base, retainThreadFileActivityTargets(base, applyFlowerRuntimeContext(projected, context)));
 }
 
 function validateFlowerRuntimeTurns(current: FlowerRuntimeCurrentView) {

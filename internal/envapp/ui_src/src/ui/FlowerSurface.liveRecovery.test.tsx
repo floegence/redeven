@@ -400,7 +400,7 @@ describe('Canonical managed facts on the existing workspace transport', () => {
  const sourceUsage = { confirmed: { available:true, measured:true, characters_available:true, phase: 'provider_usage', pressure_status: 'stable', updated_at_ms: 1, input_tokens: 100, context_window_tokens: 1000,
   characters: { source: 'prepared_characters_v1', unit: 'unicode_code_points', total_characters: (60), categories: [{ category: 'model_context', characters: 60, details: [{ key: 'skills', characters: 60 }] }] } } } as const;
 
- it('updates background detail without creating user messages or changing selection', async () => {
+ it.each([false, true])('updates background detail without changing selection (with current: %s)', async withCurrent => {
   const first = thread({ thread_id: 'facts-background-first', title: 'First conversation' });
   const second = thread({ thread_id: 'facts-background-second', title: 'Second conversation' });
   const publish = deferred<void>();
@@ -409,16 +409,22 @@ describe('Canonical managed facts on the existing workspace transport', () => {
   const connectLiveStream = vi.fn(async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
    yield { schema_version: 1, kind: 'ready', summaries: [first, second] };
    await publish.promise;
-   yield { schema_version: 1, kind: 'thread.batch', thread_id: second.thread_id, model_context: facts, context_usage: sourceUsage };
+   yield { schema_version: 1, kind: 'thread.batch', thread_id: second.thread_id,
+    ...(withCurrent ? { current: liveBootstrap(second).current } : {}), model_context: facts, context_usage: sourceUsage };
    await waitForAbort(input);
   });
   const surface = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [first, second]),
    loadThread: vi.fn(async (id: string) => liveBootstrap(id === first.thread_id ? first : second)), connectLiveStream });
   await waitFor(() => Boolean(surface.querySelector('[data-thread-id="facts-background-first"] button')));
   selectThread(surface, second.thread_id);
-  await waitFor(() => surface.querySelector('.flower-chat-title')?.textContent?.includes(second.title) ?? Boolean(surface.querySelector('.flower-composer textarea')));
+  await waitFor(() => surface.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === second.thread_id
+    && !surface.querySelector('main')?.hasAttribute('data-flower-pending-thread-id')
+    && surface.querySelector('main')?.getAttribute('data-flower-selected-thread-loading') === 'false');
   selectThread(surface, first.thread_id);
-  await flush(); publish.resolve(); await flush();
+  await waitFor(() => surface.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === first.thread_id
+    && !surface.querySelector('main')?.hasAttribute('data-flower-pending-thread-id')
+    && surface.querySelector('main')?.getAttribute('data-flower-selected-thread-loading') === 'false');
+  publish.resolve(); await flush();
   expect(surface.querySelector('.flower-model-context-details')?.textContent ?? '').not.toContain('Background catalog changed');
   selectThread(surface, second.thread_id);
   await waitFor(() => !surface.querySelector('.flower-thread-loading') && Boolean(surface.querySelector('[role="progressbar"]')));
@@ -437,12 +443,18 @@ describe('Canonical managed facts on the existing workspace transport', () => {
   const parent = thread({ thread_id: child.parent_thread_id, subagents: [child] });
   const detail = subagentDetail({ summary: child, current: { thread_id: child.thread_id, view_version: 4, activity: 'idle', items: [] } });
   const publish = deferred<void>();
+  const clear = deferred<void>();
+  const stale = deferred<void>();
   const facts = { snapshot: { sections: [{ key: 'skills', title: 'Skills', text: 'Current child catalog' }] }, entry_id: 'child-facts', path_depth: 1,
    turn_id: 'turn-child', run_id: 'run-child', updated_at: '2026-10-15T12:00:00Z', changed_keys: ['skills'], removed_keys: [] };
   const connectLiveStream = vi.fn(async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
    yield { schema_version: 1, kind: 'ready', summaries: [parent] };
    await publish.promise;
    yield { schema_version: 1, kind: 'thread.batch', thread_id: parent.thread_id, subagent_current: detail.current, model_context: facts, context_usage: sourceUsage };
+   await clear.promise;
+   yield { schema_version: 1, kind: 'thread.batch', thread_id: parent.thread_id, subagent_current: detail.current, model_context: null, context_usage: null, context_compactions: [], timeline_decorations: [] };
+   await stale.promise;
+   yield { schema_version: 1, kind: 'thread.batch', thread_id: parent.thread_id, subagent_current: { ...detail.current, view_version: 3 }, model_context: facts, context_usage: sourceUsage };
    await waitForAbort(input);
   });
   const loadThread = vi.fn(async () => liveBootstrap(parent));
@@ -466,6 +478,11 @@ describe('Canonical managed facts on the existing workspace transport', () => {
   await waitFor(() => panel.querySelector('[data-category="skills"]')?.textContent?.includes('60 chars') ?? false);
   expect(document.body.textContent).not.toContain('Current child catalog');
   expect(surface.querySelector('.flower-composer [data-category="skills"]')).toBeNull();
+  clear.resolve();
+  await waitFor(() => !document.querySelector('[data-flower-subagent-detail="open"] [role="progressbar"]'));
+  stale.resolve();
+  await flush(); await flush();
+  expect(document.querySelector('[data-flower-subagent-detail="open"] [role="progressbar"]')).toBeNull();
  });
 });
 

@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-20 — Stable Flower media ownership
+
+- Use published Floe 0.86.47 media request ownership, bounded reads and Retry. Bind media to each rendered thread and retain equal complete context updates before timeline projection. See [inline media](ui/flower-inline-media.md) and [streaming stability](ui/flower-streaming-stability.md).
+
 ## 2026-10-19 — Single-source Flower execution guidance
 
 - Remove the host's duplicate tool enumeration and standalone search-scope section; distinguish local and hosted search, narrow structured questions, and measure final provider instructions after Goal injection. See [prompt contracts](ai/flower-prompt-and-rule-sources.md).

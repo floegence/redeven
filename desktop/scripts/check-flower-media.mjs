@@ -382,6 +382,7 @@ await session.run(async () => {
         if (route.startsWith('/_redeven_proxy/api/ai/')) requests.push(`${request.method} ${route}`);
         let value;
         if (route.endsWith('/ai/threads')) value = { threads: [thread] };
+        else if (route.endsWith('/ai/conversation_preferences')) value = { revision: 0, reasoning_by_model: {} };
         else if (route.endsWith(`/ai/threads/${thread.thread_id}`)) value = { thread, current };
         else if (route.endsWith(`/ai/threads/${thread.thread_id}/read`)) value = thread.read_status;
         else if (route.endsWith('/ai/attachments/capabilities')) value = { model_id: thread.model_id, revision: '1', enabled: false };

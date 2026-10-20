@@ -2,6 +2,8 @@ import { render } from 'solid-js/web';
 import { Show, createEffect, createSignal } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFlowerComposerDraftCoordinator } from '../../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
+import { EnvAIPage } from './EnvAIPage';
+import { bindSessionHTTP } from '../services/sessionHTTP';
 
 const mocks = vi.hoisted(() => {
   const state: {
@@ -46,6 +48,9 @@ const mocks = vi.hoisted(() => {
     created_at: '1970-01-01T00:00:10Z',
   }]);
   const fetchLocalApiJSONMock = vi.fn(async (url: string, init?: RequestInit): Promise<Record<string, unknown>> => {
+    if (url === '/_redeven_proxy/api/ai/conversation_preferences') {
+      return { revision: 0, reasoning_by_model: {} };
+    }
     if (url === '/_redeven_proxy/api/ai/storage-generation' && init?.method === 'GET') {
       return { storage_generation: 'b'.repeat(32) };
     }
@@ -504,9 +509,16 @@ async function flush(): Promise<void> {
   await Promise.resolve();
 }
 
+async function selectHistoryThread(host: HTMLElement, threadID = 'thread-1') {
+  host.querySelector<HTMLButtonElement>(`[data-thread-id="${threadID}"] button`)!.click();
+  await vi.waitFor(() => {
+    expect(host.querySelector('main')?.getAttribute('data-flower-selected-thread-id')).toBe(threadID);
+    expect(host.querySelector('main')?.hasAttribute('data-flower-pending-thread-id')).toBe(false);
+    expect(host.querySelector('main')?.getAttribute('data-flower-selected-thread-loading')).toBe('false');
+  });
+}
+
 async function renderPage(waitForSurface = true) {
-  const { bindSessionHTTP } = await import('../services/sessionHTTP');
-  const mod = await import('./EnvAIPage');
   const host = document.createElement('div');
   const draftCoordinator = createFlowerComposerDraftCoordinator();
   document.body.appendChild(host);
@@ -526,7 +538,7 @@ async function renderPage(waitForSurface = true) {
     },
   });
   const disposeSurface = render(() => (
-    <mod.EnvAIPage
+    <EnvAIPage
       draftCoordinator={draftCoordinator}
     />
   ), host);
@@ -793,9 +805,7 @@ export function registerEnvAIPageSendTests() {
     it('loads typed thread detail when a history thread is selected', async () => {
       const { host, dispose } = await renderPage();
       try {
-        (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
-        await flush();
-        await flush();
+        await selectHistoryThread(host);
         expect(mocks.fetchLocalApiJSONMock).toHaveBeenCalledWith('/_redeven_proxy/api/ai/threads/thread-1', { method: 'GET' });
         expect(mocks.currentItemsMock).toHaveBeenCalledWith({ threadId: 'thread-1' });
         expect(host.textContent).toContain('Transcript for thread-1');
@@ -818,9 +828,7 @@ export function registerEnvAIPageSendTests() {
 
       const { host, dispose } = await renderPage();
       try {
-        (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
-        await flush();
-        await flush();
+        await selectHistoryThread(host);
         expect(host.textContent).toContain('Live answer recovered from the typed current view.');
         expect(host.textContent).not.toContain('Unable to recover');
       } finally {
@@ -852,9 +860,7 @@ export function registerEnvAIPageSendTests() {
       ]);
       const { host, dispose } = await renderPage();
       try {
-        (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
-        await flush();
-        await flush();
+        await selectHistoryThread(host);
         const transcriptText = host.textContent ?? '';
         expect(transcriptText.indexOf('I will inspect the Env workspace.')).toBeLessThan(transcriptText.indexOf('Run command'));
         expect(transcriptText.indexOf('Run command')).toBeLessThan(transcriptText.indexOf('Env workspace inspection is complete.'));
@@ -890,9 +896,7 @@ export function registerEnvAIPageSendTests() {
 
       const { host, dispose } = await renderPage();
       try {
-        (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
-        await flush();
-        await flush();
+        await selectHistoryThread(host);
         expect(host.textContent).not.toContain('Flower contract error');
         expect(host.textContent).toContain('Update todos');
         expect(host.textContent).toContain('Todo-backed answer is visible.');
@@ -916,9 +920,7 @@ export function registerEnvAIPageSendTests() {
       }]);
       const { host, dispose } = await renderPage();
       try {
-        (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
-        await flush();
-        await flush();
+        await selectHistoryThread(host);
         expect(host.textContent).toContain('Flower contract error: activity_item.presentation.target_refs[0].line must be a non-negative integer.');
       } finally {
         dispose();
@@ -944,9 +946,7 @@ export function registerEnvAIPageSendTests() {
       }]);
       const { host, dispose } = await renderPage();
       try {
-        (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
-        await flush();
-        await flush();
+        await selectHistoryThread(host);
         expect(host.textContent).toContain(`Flower contract error: activity_item.presentation.target_refs[0].${field} is not part of the activity target ref contract.`);
       } finally {
         dispose();
@@ -968,9 +968,7 @@ export function registerEnvAIPageSendTests() {
       }]);
       const { host, dispose } = await renderPage();
       try {
-        (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
-        await flush();
-        await flush();
+        await selectHistoryThread(host);
         expect(host.textContent).toContain(`Flower contract error: activity_item.presentation.payload.result.${field} is not part of the nested activity payload contract.`);
       } finally {
         dispose();
@@ -996,9 +994,7 @@ export function registerEnvAIPageSendTests() {
 
       const { host, dispose } = await renderPage();
       try {
-        (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
-        await flush();
-        await flush();
+        await selectHistoryThread(host);
         expect(host.textContent).toContain('Read');
         expect(host.textContent).toContain('app.ts');
         expect(host.textContent).not.toContain('#dcbdf9b8c27f');
@@ -1036,9 +1032,7 @@ export function registerEnvAIPageSendTests() {
 
       const { host, dispose } = await renderPage();
       try {
-        (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
-        await flush();
-        await flush();
+        await selectHistoryThread(host);
         expect(host.textContent).toContain('frontend-design');
         const disclosure = host.querySelector<HTMLButtonElement>('[data-flower-activity-item-id="tool-use-skill"] button.flower-activity-inline-button')!;
         expect(disclosure.getAttribute('aria-expanded')).toBe('false');
@@ -1076,9 +1070,7 @@ export function registerEnvAIPageSendTests() {
 
       const { host, dispose } = await renderPage();
       try {
-        (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
-        await flush();
-        await flush();
+        await selectHistoryThread(host);
         expect(host.textContent).toContain('Edit');
         expect(host.textContent).toContain('src/app.ts');
         (host.querySelector('[data-flower-activity-item-id="tool-patch"] .flower-activity-inline-button') as HTMLButtonElement).click();
@@ -1132,9 +1124,7 @@ export function registerEnvAIPageSendTests() {
       }];
       const { host, dispose } = await renderPage();
       try {
-        (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
-        await flush();
-        await flush();
+        await selectHistoryThread(host);
         expect(host.textContent).toContain('Flower contract error: current interaction requires exact id, turn_id, and run_id.');
         expect(host.querySelector('[data-flower-input-request-prompt]')).toBeNull();
       } finally {
