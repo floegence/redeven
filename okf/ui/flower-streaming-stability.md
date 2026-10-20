@@ -51,6 +51,10 @@ The opt-in real-Service qualifier builds the production renderer, freezes histor
 
 Each fixture starts with a fresh empty state directory. Before becoming ready, it verifies every historical turn's successful canonical outcome and final boundary, exact user/assistant content, and two successful Activity records. Idle alone never proves a seed succeeded. Reusing old state or a failed seed aborts qualification instead of silently measuring a smaller workload. Baseline and candidate compile the identical qualification fixture against their frozen production sources. The renderer comparison retains word separation, compares reasoning literally and checks code against full-parser tokens. Output-latency evidence must observe at least 95 percent of eligible foreground markers.
 
+Published Floret v7.74.1 releases deleted actor presentation and registry entries after joined execution/effects and committed canonical deletion. Previously captured actors stay fenced; cold lookups use canonical tombstones. Failed deletion retains recoverable state.
+
+Fixed-workset stability repeatedly mounts and disposes the surface in the same document, verifies draft preservation across close/reopen, and checks subscriber/buffer release before replacing forks. Independent document-navigation controls distinguish Electron native-context retention from product lifetime; their evidence is retained separately without subtracting CPU or weakening resource thresholds.
+
 Qualification includes one/seven threads, tenfold history, 200 Hz growth, 1 MiB paragraph/code, idle and fixed-workset resource stability. The task's explicit CPU, latency, allocation, transfer and long-task thresholds are hard gates, separate from ordinary CI and the bounded main pre-push gate.
 
 # Evidence

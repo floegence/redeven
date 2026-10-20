@@ -2201,3 +2201,5 @@ Runtime restart, and compact-panel recovery. See the
 
 - Adopt published Floret v7.74.0 and schema 29; retain canonical lifecycle and recovery ownership upstream.
 - Document default continuation, pure secondary action, frozen transport intent, legacy outbox behavior and distinct Retry semantics.
+
+- 2026-10-20: Adopt published Floret v7.74.1 deleted-actor resource release; qualify fixed-workset surface disposal independently from native browser navigation context retention.
