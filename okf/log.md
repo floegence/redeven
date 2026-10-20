@@ -2174,3 +2174,8 @@ Runtime restart, and compact-panel recovery. See the
 - Adopted published Floret v7.61.0 source positions and intermediate response references. Removed timestamp-based event insertion and client final-boundary inference. Added original/nested Fork regression and interaction coverage; preserve final and trailing partial replies, unresolved controls and reading protection.
 
 - 2026-10-19: Consume published Floret v7.68.2 compaction evidence and continuation cancellation ownership fixes, preserve missing historical diagnostics, and use the shared floating layer for Workbench-safe explanations.
+
+## 2026-10-20: Explicit compaction-driven Goal continuation
+
+- Adopt published Floret v7.74.0 and schema 29; retain canonical lifecycle and recovery ownership upstream.
+- Document default continuation, pure secondary action, frozen transport intent, legacy outbox behavior and distinct Retry semantics.

@@ -176,6 +176,10 @@ func TestFlowerWorkspaceStreamEncodesActivityUpdatesThroughFinalAnswer(t *testin
 			continue
 		}
 		current := envelope.Current
+		// The subscription may still hold the idle baseline captured before Send.
+		if current.ViewVersion < admitted.ViewVersion {
+			continue
+		}
 		snapshots++
 		if current.TurnID != admitted.TurnID || current.RunID != admitted.RunID {
 			t.Fatalf("current execution identity changed: current=%s/%s admitted=%s/%s", current.TurnID, current.RunID, admitted.TurnID, admitted.RunID)

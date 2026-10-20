@@ -545,7 +545,7 @@ it('opens Goal from slash suggestions with keyboard and restores composer focus 
   const surface = renderSurfaceWithAdapterProps({ ...base, manageGoal }, { focusThreadRequest: focus });
   await waitFor(() => Boolean(composer(surface)), 10000);
   const input = composer(surface); edit(input, '/'); input.focus();
-  await waitFor(() => surface.querySelectorAll('.flower-composer-command-item').length === 2);
+  await waitFor(() => surface.querySelectorAll('.flower-composer-command-item').length === 3);
   await userEvent.keyboard('{ArrowDown}{Enter}');
   await waitFor(() => Boolean(surface.querySelector('.flower-goal-command-chip')));
   await waitFor(() => document.activeElement === input);

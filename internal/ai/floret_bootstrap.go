@@ -163,7 +163,7 @@ func (s *Service) restoreFloretEffectRequest(ctx context.Context, request flrunt
 		CanWrite: true, CanExecute: true,
 	}
 	var canonicalInput RunInput
-	if request.TurnKind != flruntime.TurnKindContextCompaction {
+	if request.TurnKind == "" {
 		canonicalInput, err = canonicalRunInputFromFloret(request)
 		if err != nil {
 			return floretEffectRequest{}, err

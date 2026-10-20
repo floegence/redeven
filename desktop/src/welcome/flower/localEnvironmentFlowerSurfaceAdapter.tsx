@@ -1091,8 +1091,14 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       }
     },
     compactThreadContext: async (threadID, input) => {
-      const response = await runtimeJSON<{ current: FlowerRuntimeCurrentView }>(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/context/compact`, input);
-      return response.current;
+      try {
+        const response = await runtimeJSON<{ current: FlowerRuntimeCurrentView }>(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/context/compact`, input);
+        return response.current;
+      } catch (error) {
+        const rejected = error instanceof RuntimeFlowerResponseError && error.failureKind === 'response'
+          && (error.status ?? 500) < 500;
+        throw flowerTurnAdmissionError(rejected ? 'rejected' : 'unknown', error);
+      }
     },
     retryThread: async (threadID) => {
       const tid = trim(threadID);

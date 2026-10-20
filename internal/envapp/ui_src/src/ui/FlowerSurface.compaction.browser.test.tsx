@@ -1,5 +1,6 @@
 import '../index.css';
 import './flower-feature.css';
+import '../../../../tessiven_ui/src/tessiven.css';
 import { page, userEvent } from 'vitest/browser';
 import { expect, it, vi } from 'vitest';
 import type { FlowerRuntimeCurrentView, FlowerThreadSnapshot } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -22,7 +23,7 @@ async function enterCommand(surface: HTMLElement, command = '/compact') {
 
 it.each(['/', '/com', '/compac', '  /com  '])('clears accepted command prefix %j and closes its suggestions', async command => {
   const pending = deferred<FlowerRuntimeCurrentView>();
-  const compact = vi.fn(() => pending.promise);
+  const compact = vi.fn((_id: string, _input: { continue_goal?: boolean }) => pending.promise);
   const base = adapter(true);
   const surface = renderSurfaceWithAdapterProps({ ...base, compactThreadContext: compact }, { focusThreadRequest: focus });
   await waitFor(() => Boolean(surface.querySelector('textarea')), 10000);
@@ -32,6 +33,7 @@ it.each(['/', '/com', '/compac', '  /com  '])('clears accepted command prefix %j
   expect(input.value).toBe(command);
   input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }));
   expect(compact).toHaveBeenCalledTimes(1);
+  expect(compact.mock.calls[0]?.[1]).toMatchObject({ continue_goal: true });
   expect(base.launchTurn).not.toHaveBeenCalled();
   pending.resolve(accepted());
   await waitFor(() => input.value === '');
@@ -89,17 +91,27 @@ it('routes canvas compaction independently and preserves edited draft and canvas
   const surface = renderSurfaceWithAdapterProps({ ...base, compactThreadContext: compact }, {
     embeddedConversation: { scope: 'compaction-canvas', threadID: 'thread-1', contextAction: canvasContext,
       composerContext: <span data-testid="canvas-reference">Orders API</span>,
-      render: parts => <div class="flower-chat-main">{parts.conversation}{parts.composer}</div> },
+      render: parts => <div class="tessiven-flower-output" style={{ height: '100%' }}><div class="tessiven-flower-chat flower-surface flower-surface-companion">
+        <div class="flower-chat-main" data-flower-action-layout={parts.actionLayout()}>
+          <div class="tessiven-flower-conversation">{parts.conversation}</div>
+          <div class="tessiven-flower-composer">{parts.composer}</div>
+        </div>
+      </div></div> },
     engaged: true, transcriptVisible: true,
   });
-  surface.style.cssText = 'height:800px;width:980px';
-  await waitFor(() => surface.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === 'thread-1'
-    && surface.querySelector('main')?.getAttribute('data-flower-selected-thread-loading') === 'false', 10000);
+  surface.classList.add('tessiven-flower-canvas');
+  surface.style.cssText = 'height:800px;width:980px;position:relative';
+  await waitFor(() => Boolean(surface.querySelector('textarea')), 10000);
+  await waitFor(() => {
+    const owner = surface.querySelector<HTMLElement>('[data-flower-selected-thread-id]');
+    return owner?.dataset.flowerSelectedThreadId === 'thread-1' && owner.dataset.flowerSelectedThreadLoading === 'false' && !owner.dataset.flowerPendingThreadId;
+  }, 10000);
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   const input = await enterCommand(surface, '/com');
   await waitFor(() => compact.mock.calls.length === 1);
   expect(base.launchTurn).not.toHaveBeenCalled();
   expect(compact.mock.calls[0]![0]).toBe('thread-1');
-  expect(Object.keys(compact.mock.calls[0]![1]).sort()).toEqual(['client_request_id', 'storage_generation']);
+  expect(Object.keys(compact.mock.calls[0]![1]).sort()).toEqual(['client_request_id', 'continue_goal', 'storage_generation']);
   input.value = 'Keep this draft';
   input.dispatchEvent(new InputEvent('input', { bubbles: true, data: 'Keep this draft' }));
   pending.resolve(accepted());
@@ -107,12 +119,14 @@ it('routes canvas compaction independently and preserves edited draft and canvas
   expect(surface.querySelector('[data-testid="canvas-reference"]')?.textContent).toBe('Orders API');
   expect(input.disabled).toBe(false);
   expect(surface.querySelector('.flower-composer-command-menu')).toBeNull();
-  await page.screenshot({ element: surface, path: '__screenshots__/redeven-compaction-canvas.png' });
+  expect(input.getBoundingClientRect().width).toBeGreaterThan(100);
+  expect(input.getBoundingClientRect().height).toBeGreaterThan(20);
+  await page.screenshot({ element: input, path: '__screenshots__/redeven-compaction-canvas.png' });
 });
 
 it.each(['/compact', '/com'])('keeps navigation available and clears only accepted command %j', async command => {
   const pending = deferred<FlowerRuntimeCurrentView>();
-  const compact = vi.fn(() => pending.promise);
+  const compact = vi.fn((_id: string, _input: { continue_goal?: boolean }) => pending.promise);
   const surface = renderSurfaceWithAdapterProps({ ...adapter(true), loadThread: vi.fn(async (id: string) => liveBootstrap(thread({ thread_id: id, title: id === 'thread-2' ? 'Review branch' : 'Deploy plan', updated_at_ms: id === 'thread-2' ? 3 : 2 }))), compactThreadContext: compact }, { focusThreadRequest: focus });
   await waitFor(() => Boolean(surface.querySelector('textarea')), 10000);
   const input = await enterCommand(surface, command);
@@ -153,8 +167,10 @@ it.each(['/compact', '/com'])('preserves rejected command %j and never sends an 
 
 it('reuses the same request key after an uncertain command admission', async () => {
   const keys: string[] = [];
+  const intents: unknown[] = [];
   const compact = vi.fn(async (_id: string, input: { client_request_id: string; storage_generation: string }) => {
     keys.push(input.client_request_id);
+    intents.push((input as { continue_goal?: boolean }).continue_goal);
     if (keys.length === 1) throw flowerTurnAdmissionError('unknown', new Error('Response disconnected'));
     return accepted();
   });
@@ -168,6 +184,7 @@ it('reuses the same request key after an uncertain command admission', async () 
   retry!.click();
   await waitFor(() => keys.length === 2);
   expect(keys[1]).toBe(keys[0]);
+  expect(intents).toEqual([true, true]);
   expect(base.launchTurn).not.toHaveBeenCalled();
 });
 
@@ -356,4 +373,54 @@ it.each([{ theme: 'light', width: 1100 }, { theme: 'dark', width: 1100 }, { them
     retry.blur();
     await page.screenshot({ element: surface, path: '__screenshots__/compaction-retry-' + theme + '-' + width + '.png' });
   } finally { document.documentElement.classList.remove('dark', 'light'); }
+});
+
+it.each(['pointer', 'keyboard'])('offers pure compaction through the same command menu with %s', async method => {
+  const compact = vi.fn(async (_id: string, _input: { continue_goal?: boolean }) => accepted());
+  const base = adapter(true);
+  const surface = renderSurfaceWithAdapterProps({ ...base, compactThreadContext: compact }, { focusThreadRequest: focus });
+  await waitFor(() => Boolean(surface.querySelector('textarea')), 10000);
+  const input = surface.querySelector<HTMLTextAreaElement>('textarea')!;
+  input.value = '/compact';
+  input.dispatchEvent(new InputEvent('input', { bubbles: true, data: '/compact' }));
+  input.focus();
+  await waitFor(() => Boolean(surface.querySelector('[data-flower-compact-only]')));
+  expect(surface.textContent).toContain('continue an unfinished Goal');
+  if (method === 'pointer') await page.screenshot({ element: surface, path: '__screenshots__/redeven-compaction-command-menu.png' });
+  if (method === 'pointer') surface.querySelector<HTMLButtonElement>('[data-flower-compact-only]')!.click();
+  else await userEvent.keyboard('{ArrowDown}{Enter}');
+  await waitFor(() => compact.mock.calls.length === 1 && input.value === '');
+  expect(compact.mock.calls[0]![1].continue_goal).toBe(false);
+  expect(base.launchTurn).not.toHaveBeenCalled();
+});
+
+it('allows Escape to dismiss an exact compaction command without dispatch', async () => {
+  const compact = vi.fn(async () => accepted());
+  const surface = renderSurfaceWithAdapterProps({ ...adapter(true), compactThreadContext: compact }, { focusThreadRequest: focus });
+  await waitFor(() => Boolean(surface.querySelector('textarea')), 10000);
+  const input = surface.querySelector<HTMLTextAreaElement>('textarea')!;
+  input.value = '/compact'; input.dispatchEvent(new InputEvent('input', { bubbles: true })); input.focus();
+  await waitFor(() => Boolean(surface.querySelector('[data-flower-compact-only]')));
+  await userEvent.keyboard('{Escape}');
+  expect(input.value).toBe('');
+  expect(surface.querySelector('.flower-composer-command-menu')).toBeNull();
+  expect(compact).not.toHaveBeenCalled();
+});
+
+
+it('keeps admitted goal continuation working and exposes Stop without another send', async () => {
+  const base = adapter(true);
+  const stopThread = vi.fn(async () => undefined);
+  const compact = vi.fn(async () => ({ ...accepted(), turn_kind: 'goal_continuation' as const }));
+  const surface = renderSurfaceWithAdapterProps({ ...base, compactThreadContext: compact, stopThread }, { focusThreadRequest: focus });
+  await waitFor(() => Boolean(surface.querySelector('textarea')), 10000);
+  await enterCommand(surface);
+  await waitFor(() => surface.querySelector('[data-flower-selected-thread-status="running"]') !== null);
+  await waitFor(() => surface.querySelector('.flower-composer-submit')?.getAttribute('aria-label') === 'Stop');
+  expect(compact).toHaveBeenCalledTimes(1);
+  expect(base.launchTurn).not.toHaveBeenCalled();
+  expect(base.retryThread).not.toHaveBeenCalled();
+  surface.querySelector<HTMLButtonElement>('.flower-composer-submit')!.click();
+  await waitFor(() => stopThread.mock.calls.length === 1);
+  expect(stopThread).toHaveBeenCalledWith('thread-1');
 });

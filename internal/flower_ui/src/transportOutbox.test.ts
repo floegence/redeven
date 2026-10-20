@@ -9,6 +9,40 @@ afterEach(() => {
 });
 
 describe('TransportOutbox', () => {
+  it('persists compaction intent exactly and keeps older entries pure after restore', async () => {
+    const records = new Map<string, unknown>();
+    vi.stubGlobal('indexedDB', { open: () => {
+      const request = { result: {
+        objectStoreNames: { contains: () => true }, close: () => undefined,
+        transaction: () => {
+          const transaction = { oncomplete: null as null | (() => void), onerror: null, onabort: null,
+            objectStore: () => ({ put: (entry: { requestId: string }) => records.set(entry.requestId, structuredClone(entry)),
+              delete: (id: string) => records.delete(id), getAll: () => {
+                const read = { result: [...records.values()], onsuccess: null as null | (() => void) };
+                queueMicrotask(() => read.onsuccess?.()); return read;
+              } }) };
+          queueMicrotask(() => transaction.oncomplete?.()); return transaction;
+        },
+      }, onsuccess: null as null | (() => void) };
+      queueMicrotask(() => request.onsuccess?.()); return request;
+    } });
+    let outbox = createTransportOutbox();
+    for (const [id, intent] of [['continue', true], ['pure', false], ['legacy', undefined]] as const) {
+      outbox = outbox.put({ requestId: id, threadId: 'thread', operation: 'context_compaction',
+        ...(intent === undefined ? {} : { continueGoal: intent }),
+        input: { client_request_id: id, thread_id: 'thread', storage_generation: 'original', prompt: '' },
+        attachmentLabels: [], createdAtMs: Date.now(), delivery: 'unknown' });
+    }
+    await outbox.flushPersistence(); outbox.dispose();
+    const restored = await restoreTransportOutbox();
+    expect(restored.entries.get('continue')?.continueGoal).toBe(true);
+    expect(restored.entries.get('pure')?.continueGoal).toBe(false);
+    expect(restored.entries.get('legacy')?.continueGoal).toBeUndefined();
+    expect(restored.forThread('thread').map(entry => entry.continueGoal === true)).toEqual([true, false, false]);
+    expect(restored.entries.get('continue')?.input.storage_generation).toBe('original');
+    restored.dispose();
+  });
+
   it('restores captured preparation as recovery without pretending it was dispatched', async () => {
     const entry = { requestId: 'captured', threadId: 'thread-a', presentation: 'queue', preparation: 'pending',
       input: { client_request_id: 'captured', thread_id: 'thread-a', prompt: 'Keep this input' },

@@ -919,7 +919,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       } catch (error) {
         if (error instanceof LocalApiError) {
           const unusableSuccess = error.code === 'INVALID_JSON_RESPONSE' && error.status >= 200 && error.status < 300;
-          throw flowerTurnAdmissionError(unusableSuccess ? 'unknown' : 'rejected', error);
+          throw flowerTurnAdmissionError(unusableSuccess || error.status >= 500 ? 'unknown' : 'rejected', error);
         }
         throw flowerTurnAdmissionError('unknown', error, 'Flower response was not received.');
       }

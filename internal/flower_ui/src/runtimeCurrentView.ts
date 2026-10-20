@@ -525,7 +525,7 @@ function validateFlowerRuntimeTurns(current: FlowerRuntimeCurrentView) {
     const start = Date.parse(turn.started_at);
     const end = turn.ended_at === undefined ? undefined : Date.parse(turn.ended_at);
     if (!Number.isFinite(start) || end !== undefined && (!Number.isFinite(end) || end < start)) failure();
-    if (turn.kind !== undefined && turn.kind !== 'context_compaction') failure();
+    if (turn.kind !== undefined && turn.kind !== 'context_compaction' && turn.kind !== 'goal_continuation') failure();
     if (turn.outcome !== undefined && !['completed', 'failed', 'cancelled', 'interrupted'].includes(turn.outcome)) failure();
     if ((turn.outcome === undefined) !== (end === undefined)) failure();
     if (![turn.elapsed_ms, turn.waiting_ms, turn.work_duration_ms].every((value) => Number.isSafeInteger(value) && value >= 0)
