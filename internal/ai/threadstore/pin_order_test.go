@@ -58,21 +58,21 @@ func TestPinnedOrderPersistsRelativeMovesAcrossPages(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	before, _ := store.GetThreadSettings(t.Context(), "env", "thread_204")
+	before, _ := store.GetThreadSettings(t.Context(), "env", "thread_000")
 	legacyCursor := EncodeCursor(ThreadsCursor{ThreadID: before.ThreadID, PinnedAtUnixMs: before.PinnedAtUnixMs, SettingsCreatedAtUnixMs: before.SettingsCreatedAtUnixMs})
-	changes, err := store.MovePinnedThread(t.Context(), "env", "thread_204", "thread_000", "after")
+	changes, err := store.MovePinnedThread(t.Context(), "env", "thread_000", "thread_204", "after")
 	if err != nil || len(changes) != 205 {
 		t.Fatalf("move changes=%d error=%v", len(changes), err)
 	}
 	want := make([]string, 0, 205)
-	for i := 203; i >= 0; i-- {
+	for i := 1; i < 205; i++ {
 		want = append(want, fmt.Sprintf("thread_%03d", i))
 	}
-	want = append(want, "thread_204")
+	want = append(want, "thread_000")
 	if got := pinIDs(t, store, "env"); !reflect.DeepEqual(got, want) {
 		t.Fatalf("paged order differs: %v", got)
 	}
-	after, _ := store.GetThreadSettings(t.Context(), "env", "thread_204")
+	after, _ := store.GetThreadSettings(t.Context(), "env", "thread_000")
 	cursor, ok := DecodeCursor(legacyCursor)
 	if !ok {
 		t.Fatal("old cursor is no longer readable")
@@ -84,7 +84,7 @@ func TestPinnedOrderPersistsRelativeMovesAcrossPages(t *testing.T) {
 	if after.PinnedAtUnixMs != before.PinnedAtUnixMs || after.SettingsUpdatedAtUnixMs <= before.SettingsUpdatedAtUnixMs {
 		t.Fatal("move changed pin time or failed to advance settings revision")
 	}
-	if _, err := store.SetThreadPinned(t.Context(), "env", "thread_204", true); err != nil {
+	if _, err := store.SetThreadPinned(t.Context(), "env", "thread_000", true); err != nil {
 		t.Fatal(err)
 	}
 	if got := pinIDs(t, store, "env"); !reflect.DeepEqual(got, want) {
@@ -100,14 +100,14 @@ func TestPinnedOrderPersistsRelativeMovesAcrossPages(t *testing.T) {
 	if got := pinIDs(t, store, "env"); !reflect.DeepEqual(got, want) {
 		t.Fatal("reopen lost pinned order")
 	}
-	if _, err := store.SetThreadPinned(t.Context(), "env", "thread_204", false); err != nil {
+	if _, err := store.SetThreadPinned(t.Context(), "env", "thread_000", false); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.SetThreadPinned(t.Context(), "env", "thread_204", true); err != nil {
+	if _, err := store.SetThreadPinned(t.Context(), "env", "thread_000", true); err != nil {
 		t.Fatal(err)
 	}
-	if got := pinIDs(t, store, "env"); got[0] != "thread_204" {
-		t.Fatal("new pin was not placed first")
+	if got := pinIDs(t, store, "env"); got[len(got)-1] != "thread_000" {
+		t.Fatal("new pin was not appended")
 	}
 }
 
@@ -150,6 +150,127 @@ func TestPinnedMoveRejectsInvalidTargetsAndRollsBack(t *testing.T) {
 	}
 }
 
+func TestNewPinAppendsToManualOrderWithAtomicMetadata(t *testing.T) {
+	store := openStoreForTest(t)
+	for _, id := range []string{"a", "b", "c", "new"} {
+		createPinThread(t, store, "env", id, 1)
+		if id != "new" {
+			if _, err := store.SetThreadPinned(t.Context(), "env", id, true); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if _, err := store.MovePinnedThread(t.Context(), "env", "c", "a", "before"); err != nil {
+		t.Fatal(err)
+	}
+	before := make(map[string]*ThreadSettings)
+	for _, id := range []string{"a", "b", "c"} {
+		before[id], _ = store.GetThreadSettings(t.Context(), "env", id)
+	}
+	update, err := store.SetThreadPinned(t.Context(), "env", "new", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := pinIDs(t, store, "env"); !reflect.DeepEqual(got, []string{"c", "a", "b", "new"}) {
+		t.Fatalf("appended order: %v", got)
+	}
+	if update.Thread.ThreadID != "new" || update.Thread.PinRank != 1 || len(update.Pins) != 4 {
+		t.Fatalf("incomplete acknowledgement: %+v", update)
+	}
+	for _, pin := range update.Pins {
+		actual, err := store.GetThreadSettings(t.Context(), "env", pin.ThreadID)
+		if err != nil || pinMetadata(*actual) != pin {
+			t.Fatalf("acknowledgement differs from storage: %+v %v", pin, err)
+		}
+		if previous := before[pin.ThreadID]; previous != nil && (previous.PinnedAtUnixMs != pin.PinnedAtUnixMs || previous.SettingsUpdatedAtUnixMs >= pin.SettingsRevision) {
+			t.Fatal("retained pin time or revision changed incorrectly")
+		}
+	}
+	repeated, err := store.SetThreadPinned(t.Context(), "env", "new", true)
+	if err != nil || repeated.Thread != update.Thread || !reflect.DeepEqual(repeated.Pins, []ThreadPinMetadata{update.Thread}) {
+		t.Fatalf("repeat pin changed metadata: %+v %v", repeated, err)
+	}
+	createPinThread(t, store, "other", "foreign", 1)
+	if _, err := store.SetThreadPinned(t.Context(), "other", "foreign", true); err != nil {
+		t.Fatal(err)
+	}
+	if got := pinIDs(t, store, "env"); !reflect.DeepEqual(got, []string{"c", "a", "b", "new"}) {
+		t.Fatal("foreign pin changed endpoint order")
+	}
+}
+
+func TestAppendPinRollsBackRetainedRanksAndTarget(t *testing.T) {
+	for _, failID := range []string{"b", "new"} {
+		t.Run(failID, func(t *testing.T) {
+			store := openStoreForTest(t)
+			for _, id := range []string{"a", "b", "new"} {
+				createPinThread(t, store, "env", id, 1)
+				if id != "new" {
+					if _, err := store.SetThreadPinned(t.Context(), "env", id, true); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			before, _, err := store.ListThreadSettings(t.Context(), "env", 200, ThreadsCursor{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := store.db.Exec(fmt.Sprintf(`CREATE TRIGGER fail_append BEFORE UPDATE OF pin_rank ON ai_thread_settings WHEN NEW.thread_id = '%s' BEGIN SELECT RAISE(ABORT, 'injected append failure'); END`, failID)); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := store.SetThreadPinned(t.Context(), "env", "new", true); err == nil {
+				t.Fatal("append ignored write failure")
+			}
+			after, _, err := store.ListThreadSettings(t.Context(), "env", 200, ThreadsCursor{})
+			if err != nil || !reflect.DeepEqual(before, after) {
+				t.Fatalf("partial append escaped rollback: %v", err)
+			}
+		})
+	}
+}
+
+func TestInitiallyPinnedSettingsAppendToExistingOrder(t *testing.T) {
+	store := openStoreForTest(t)
+	for _, id := range []string{"first", "second"} {
+		if err := store.CreateThreadSettings(t.Context(), ThreadSettings{ThreadID: id, EndpointID: "env", PermissionType: "approval_required", PinnedAtUnixMs: 10}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := pinIDs(t, store, "env"); !reflect.DeepEqual(got, []string{"first", "second"}) {
+		t.Fatalf("initial pin order: %v", got)
+	}
+}
+
+func TestConcurrentNewPinsRetainExistingHeadAndUniqueRanks(t *testing.T) {
+	store := openStoreForTest(t)
+	createPinThread(t, store, "env", "retained", 1)
+	if _, err := store.SetThreadPinned(t.Context(), "env", "retained", true); err != nil {
+		t.Fatal(err)
+	}
+	for index := range 10 {
+		createPinThread(t, store, "env", fmt.Sprintf("new_%d", index), 1)
+	}
+	var group sync.WaitGroup
+	for index := range 10 {
+		group.Go(func() {
+			if _, err := store.SetThreadPinned(t.Context(), "env", fmt.Sprintf("new_%d", index), true); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	group.Wait()
+	ids := pinIDs(t, store, "env")
+	if len(ids) != 11 || ids[0] != "retained" {
+		t.Fatalf("concurrent append order: %v", ids)
+	}
+	for index, id := range ids {
+		item, err := store.GetThreadSettings(t.Context(), "env", id)
+		if err != nil || item.PinRank != int64(len(ids)-index) {
+			t.Fatalf("nonunique append rank: %+v %v", item, err)
+		}
+	}
+}
+
 func TestConcurrentPinMutationsKeepOneEndpointOrder(t *testing.T) {
 	store := openStoreForTest(t)
 	for _, id := range []string{"a", "b", "c"} {
@@ -169,7 +290,7 @@ func TestConcurrentPinMutationsKeepOneEndpointOrder(t *testing.T) {
 		}()
 	}
 	group.Wait()
-	if got := pinIDs(t, store, "env"); !reflect.DeepEqual(got, []string{"a", "c", "b"}) {
+	if got := pinIDs(t, store, "env"); !reflect.DeepEqual(got, []string{"b", "a", "c"}) {
 		t.Fatalf("concurrent relative moves = %v", got)
 	}
 }
@@ -216,7 +337,7 @@ func TestRelativeMoveSerializesWithUnpinAndDeletion(t *testing.T) {
 	}
 	close(start)
 	group.Wait()
-	if got := pinIDs(t, store, "env"); !reflect.DeepEqual(got, []string{"d", "a"}) {
+	if got := pinIDs(t, store, "env"); !reflect.DeepEqual(got, []string{"a", "d"}) {
 		t.Fatalf("concurrent order: %v", got)
 	}
 	unpinned, err := store.GetThreadSettings(t.Context(), "env", "c")

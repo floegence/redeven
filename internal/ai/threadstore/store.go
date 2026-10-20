@@ -455,9 +455,14 @@ func (s *Store) CreateThreadSettings(ctx context.Context, t ThreadSettings) erro
 	}
 	defer func() { _ = tx.Rollback() }()
 	if t.PinnedAtUnixMs > 0 && t.ParentThreadID == "" {
-		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(pin_rank), 0) + 1 FROM ai_thread_settings WHERE endpoint_id = ?`, t.EndpointID).Scan(&t.PinRank); err != nil {
+		ordered, err := readPinnedThreadOrderTx(ctx, tx, t.EndpointID)
+		if err != nil {
 			return err
 		}
+		if _, err := writePinnedThreadOrderTx(ctx, tx, t.EndpointID, ordered, 1); err != nil {
+			return err
+		}
+		t.PinRank = 1
 	} else {
 		t.PinRank = 0
 	}

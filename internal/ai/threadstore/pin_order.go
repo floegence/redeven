@@ -2,6 +2,7 @@ package threadstore
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"slices"
 	"strings"
@@ -18,11 +19,16 @@ type ThreadPinMetadata struct {
 	SettingsRevision int64  `json:"settings_revision"`
 }
 
+type ThreadPinUpdate struct {
+	Thread ThreadPinMetadata   `json:"thread"`
+	Pins   []ThreadPinMetadata `json:"pins"`
+}
+
 func pinMetadata(settings ThreadSettings) ThreadPinMetadata {
 	return ThreadPinMetadata{ThreadID: settings.ThreadID, PinnedAtUnixMs: settings.PinnedAtUnixMs, PinRank: settings.PinRank, SettingsRevision: settings.SettingsUpdatedAtUnixMs}
 }
 
-func (s *Store) SetThreadPinned(ctx context.Context, endpointID, threadID string, pinned bool) (*ThreadPinMetadata, error) {
+func (s *Store) SetThreadPinned(ctx context.Context, endpointID, threadID string, pinned bool) (*ThreadPinUpdate, error) {
 	if s == nil || s.db == nil {
 		return nil, errors.New("store not initialized")
 	}
@@ -37,13 +43,20 @@ func (s *Store) SetThreadPinned(ctx context.Context, endpointID, threadID string
 	if err := tx.QueryRowContext(ctx, `SELECT thread_id, pinned_at_unix_ms, pin_rank, settings_updated_at_unix_ms FROM ai_thread_settings WHERE endpoint_id = ? AND thread_id = ? AND parent_thread_id = ''`, endpointID, threadID).Scan(&settings.ThreadID, &settings.PinnedAtUnixMs, &settings.PinRank, &settings.SettingsUpdatedAtUnixMs); err != nil {
 		return nil, err
 	}
+	changes := make([]ThreadPinMetadata, 0)
 	if (settings.PinnedAtUnixMs > 0) != pinned {
 		settings.PinnedAtUnixMs, settings.PinRank = 0, 0
 		if pinned {
 			settings.PinnedAtUnixMs = time.Now().UnixMilli()
-			if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(pin_rank), 0) + 1 FROM ai_thread_settings WHERE endpoint_id = ?`, endpointID).Scan(&settings.PinRank); err != nil {
+			ordered, err := readPinnedThreadOrderTx(ctx, tx, endpointID)
+			if err != nil {
 				return nil, err
 			}
+			changes, err = writePinnedThreadOrderTx(ctx, tx, endpointID, ordered, 1)
+			if err != nil {
+				return nil, err
+			}
+			settings.PinRank = 1
 		}
 		revision, err := nextThreadSettingsRevisionTx(ctx, tx, endpointID, threadID)
 		if err != nil {
@@ -58,7 +71,7 @@ func (s *Store) SetThreadPinned(ctx context.Context, endpointID, threadID string
 		return nil, err
 	}
 	result := pinMetadata(settings)
-	return &result, nil
+	return &ThreadPinUpdate{Thread: result, Pins: append(changes, result)}, nil
 }
 
 // MovePinnedThread applies one relative move to the complete current endpoint
@@ -84,6 +97,34 @@ func (s *Store) MovePinnedThread(ctx context.Context, endpointID, threadID, anch
 			return nil, err
 		}
 	}
+	ordered, err := readPinnedThreadOrderTx(ctx, tx, endpointID)
+	if err != nil {
+		return nil, err
+	}
+
+	source := slices.IndexFunc(ordered, func(item ThreadSettings) bool { return item.ThreadID == threadID })
+	anchor := slices.IndexFunc(ordered, func(item ThreadSettings) bool { return item.ThreadID == anchorID })
+	if source < 0 || anchor < 0 {
+		return nil, ErrPinPositionConflict
+	}
+	moved := ordered[source]
+	ordered = slices.Delete(ordered, source, source+1)
+	anchor = slices.IndexFunc(ordered, func(item ThreadSettings) bool { return item.ThreadID == anchorID })
+	if placement == "after" {
+		anchor++
+	}
+	ordered = slices.Insert(ordered, anchor, moved)
+	changes, err := writePinnedThreadOrderTx(ctx, tx, endpointID, ordered, 0)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return changes, nil
+}
+
+func readPinnedThreadOrderTx(ctx context.Context, tx *sql.Tx, endpointID string) ([]ThreadSettings, error) {
 	rows, err := tx.QueryContext(ctx, `SELECT thread_id, pinned_at_unix_ms, pin_rank, settings_updated_at_unix_ms FROM ai_thread_settings WHERE endpoint_id = ? AND parent_thread_id = '' AND pinned_at_unix_ms > 0 ORDER BY pin_rank DESC, settings_created_at_unix_ms DESC, thread_id ASC`, endpointID)
 	if err != nil {
 		return nil, err
@@ -102,21 +143,14 @@ func (s *Store) MovePinnedThread(ctx context.Context, endpointID, threadID, anch
 	if err != nil {
 		return nil, err
 	}
-	source := slices.IndexFunc(ordered, func(item ThreadSettings) bool { return item.ThreadID == threadID })
-	anchor := slices.IndexFunc(ordered, func(item ThreadSettings) bool { return item.ThreadID == anchorID })
-	if source < 0 || anchor < 0 {
-		return nil, ErrPinPositionConflict
-	}
-	moved := ordered[source]
-	ordered = slices.Delete(ordered, source, source+1)
-	anchor = slices.IndexFunc(ordered, func(item ThreadSettings) bool { return item.ThreadID == anchorID })
-	if placement == "after" {
-		anchor++
-	}
-	ordered = slices.Insert(ordered, anchor, moved)
+	return ordered, nil
+}
+
+// tailSlots reserves space below the retained order for a newly pinned thread.
+func writePinnedThreadOrderTx(ctx context.Context, tx *sql.Tx, endpointID string, ordered []ThreadSettings, tailSlots int64) ([]ThreadPinMetadata, error) {
 	changes := make([]ThreadPinMetadata, 0)
 	for index, item := range ordered {
-		rank := int64(len(ordered) - index)
+		rank := int64(len(ordered)-index) + tailSlots
 		if item.PinRank == rank {
 			continue
 		}
@@ -129,9 +163,6 @@ func (s *Store) MovePinnedThread(ctx context.Context, endpointID, threadID, anch
 		}
 		item.PinRank, item.SettingsUpdatedAtUnixMs = rank, revision
 		changes = append(changes, pinMetadata(item))
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
 	}
 	return changes, nil
 }

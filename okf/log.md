@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-19 — Append newly pinned conversations
+
+- Append new pins to the [sidebar order](ui/flower-thread-sidebar.md), preserve manual ordering and retained timestamps, and return all changed ranks in one confirmation. Require [compatibility epoch 67](architecture/runtime-service-snapshot.md) for complete acknowledgements; keep controls available during writes and reads.
+
 ## 2026-10-19 — Ordered tool schema rendering
 
 - Adopt published Floret v7.69.0 required-first tool schema rendering before request freezing; preserve strict nullability, body-first previews, navigation and historical recovery.

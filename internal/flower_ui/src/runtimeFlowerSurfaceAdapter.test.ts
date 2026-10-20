@@ -240,15 +240,26 @@ describe('runtime Flower surface adapter read state', () => {
   });
   it('maps pin acknowledgements without loading thread detail and rejects incomplete metadata', async () => {
     const pin = { thread_id: 'thread', pinned_at_unix_ms: 10, pin_rank: 4, settings_revision: 20 };
-    const patchThread = vi.fn(async () => ({ thread: pin }));
+    const shifted = { thread_id: 'existing', pinned_at_unix_ms: 5, pin_rank: 5, settings_revision: 21 };
+    const patchThread = vi.fn(async () => ({ thread: pin, pins: [shifted, pin] }));
     const movePinnedThread = vi.fn(async () => ({ pins: [pin] }));
     const options = adapterOptions({ patchThread, movePinnedThread });
     const adapter = createRuntimeFlowerSurfaceAdapter(options);
     const expected = { thread_id: 'thread', pinned_at_ms: 10, pin_rank: 4, settings_revision: 20 };
-    expect(await adapter.setThreadPinned!('thread', true)).toEqual(expected);
+    expect(await adapter.setThreadPinned!('thread', true)).toEqual([
+      { thread_id: 'existing', pinned_at_ms: 5, pin_rank: 5, settings_revision: 21 }, expected,
+    ]);
     expect(await adapter.movePinnedThread!('thread', { anchor_thread_id: 'anchor', placement: 'after' })).toEqual([expected]);
     expect(options.transport.loadThread).not.toHaveBeenCalled();
-    patchThread.mockResolvedValueOnce({ thread: { ...pin, settings_revision: undefined } } as never);
+    patchThread.mockResolvedValueOnce({ thread: { ...pin, settings_revision: undefined }, pins: [pin] } as never);
+    await expect(adapter.setThreadPinned!('thread', true)).rejects.toThrow('Invalid pinned conversation metadata');
+    patchThread.mockResolvedValueOnce({ thread: pin } as never);
+    await expect(adapter.setThreadPinned!('thread', true)).rejects.toThrow('Invalid pinned conversation metadata');
+    patchThread.mockResolvedValueOnce({ thread: pin, pins: [shifted] } as never);
+    await expect(adapter.setThreadPinned!('thread', true)).rejects.toThrow('Invalid pinned conversation metadata');
+    patchThread.mockResolvedValueOnce({ thread: shifted, pins: [shifted, { ...pin, pinned_at_unix_ms: 5, pin_rank: 5, settings_revision: 21 }] });
+    await expect(adapter.setThreadPinned!('thread', true)).rejects.toThrow('Invalid pinned conversation metadata');
+    patchThread.mockResolvedValueOnce({ thread: pin, pins: [pin, pin] });
     await expect(adapter.setThreadPinned!('thread', true)).rejects.toThrow('Invalid pinned conversation metadata');
   });
 

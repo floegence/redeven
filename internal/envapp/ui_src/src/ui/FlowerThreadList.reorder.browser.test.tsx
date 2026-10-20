@@ -205,6 +205,18 @@ describe('Flower pinned conversation interaction', () => {
     expect(document.activeElement).toBe(trigger);
     expect(ui.onSelect).not.toHaveBeenCalled();
   });
+  it('keeps focus on a pin button when leaving another conversation menu', async () => {
+    const ui = mount();
+    ui.row('first').querySelector<HTMLButtonElement>('.flower-thread-card-menu-button')!.click();
+    await frame();
+    const pin = ui.row('second').querySelector<HTMLButtonElement>('.flower-thread-card-pin-button')!;
+    pin.focus(); pin.click();
+    await frame();
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(document.activeElement).toBe(pin);
+    expect(ui.onMenuAction).toHaveBeenCalledExactlyOnceWith('pin', ui.items()[1]);
+  });
+
   it('retains focus when a background reorder disables the focused move action', async () => {
     const ui = mount();
     await frame();

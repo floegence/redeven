@@ -215,7 +215,7 @@ type FlowerThreadContextMenuProps = Readonly<{
   directoryActions?: FlowerDirectoryMenuAvailability;
   resolveRestore: () => HTMLElement | undefined;
   onAction: (action: FlowerThreadMenuAction, item: FlowerThreadListItem) => void;
-  onClose: () => void;
+  onClose: (restoreFocus?: boolean) => void;
 }>;
 
 const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props) => {
@@ -462,11 +462,11 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
     return state ? resolveMenuRestore(state) : undefined;
   };
 
-  const closeMenu = () => {
+  const closeMenu = (restoreFocus = true) => {
     const state = menu();
     const restore = state ? resolveMenuRestore(state) : undefined;
     setMenu(null);
-    restore?.focus({ preventScroll: true });
+    if (restoreFocus) restore?.focus({ preventScroll: true });
   };
 
   createEffect(on(

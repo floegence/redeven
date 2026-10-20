@@ -9,7 +9,7 @@ export function FlowerContextMenu(props: Readonly<{
   label: string;
   height: number;
   resolveRestore: () => HTMLElement | undefined;
-  onClose: () => void;
+  onClose: (restoreFocus?: boolean) => void;
   children: JSX.Element;
 }>): JSX.Element {
   let menuRef: HTMLDivElement | undefined;
@@ -116,7 +116,9 @@ export function FlowerContextMenu(props: Readonly<{
               (replacement ?? menuRef)?.focus({ preventScroll: true });
               return;
             }
-            props.onClose();
+            // An explicit focus move owns its destination; dismissal must not
+            // reclaim the trigger after another control has already been used.
+            props.onClose(false);
           });
         }}
       >
