@@ -11,7 +11,6 @@ import {
   mapFlowerContextCompactions,
   mapFlowerTimelineDecorations,
 } from './flowerLiveMapper';
-import { messageBlockSignature } from './flowerTimelineProjection';
 
 describe('Canonical assistant citations in historical pages', () => {
   it('preserves block text, locations and metadata changes without a host source store', () => {
@@ -21,7 +20,8 @@ describe('Canonical assistant citations in historical pages', () => {
     const message = mapFlowerMessage(JSON.parse(JSON.stringify(wire)));
     expect(message.blocks?.[0]).toEqual(wire.blocks[0]);
     const renamed = mapFlowerMessage({ ...wire, blocks: [{ ...wire.blocks[0], sources: [{ ...source, title: 'Updated title' }] }] });
-    expect(messageBlockSignature(message.blocks![0])).not.toBe(messageBlockSignature(renamed.blocks![0]));
+    expect(renamed.blocks?.[0]).toEqual({ ...wire.blocks[0], sources: [{ ...source, title: 'Updated title' }] });
+    expect(message.blocks?.[0]).toEqual(wire.blocks[0]);
     expect(mapFlowerMessage({ ...wire, blocks: undefined, content: text, sources: [source] })).toMatchObject({ content: text, sources: [source] });
   });
 });

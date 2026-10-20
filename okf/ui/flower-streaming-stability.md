@@ -15,7 +15,7 @@ Flower renders actor-native changes through the indexed ThreadCache and the publ
 
 A snapshot initializes indexed item/message records once. Each native batch validates before one atomic commit. An append retains cache, view, message list and turn-list identity; affected message fields and their append source notify local consumers. Structural changes alone rebuild ordering/grouping. Copy and export read complete text at activation. Background threads do not create rich-text DOM, and unvisited threads retain only workspace summaries.
 
-HTTP replacement boundaries still retain equal presentation data and independently merge context/settings/title/read authorities. Such full reads are explicit boundaries, not part of ordinary native append. Message/queue/approval/control identity uses canonical IDs, never mutable text or array position. Actual removal transfers focus to an available adjacent action or composer unless navigation already moved it.
+Obsolete JSON signature helpers and their signature-only tests are removed; projection tests assert canonical public fields directly. HTTP replacement boundaries still retain equal presentation data and independently merge context/settings/title/read authorities. Such full reads are explicit boundaries, not part of ordinary native append. Message/queue/approval/control identity uses canonical IDs, never mutable text or array position. Actual removal transfers focus to an available adjacent action or composer unless navigation already moved it.
 
 ## One Markdown parser
 

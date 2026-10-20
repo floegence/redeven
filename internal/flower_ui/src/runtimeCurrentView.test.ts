@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FlowerRuntimeCurrentView, FlowerThreadSnapshot, FlowerToolCallPreview } from './contracts/flowerSurfaceContracts';
-import { buildFlowerTimelineEntries, flowerMessageSignature } from './flowerTimelineProjection';
+import { buildFlowerTimelineEntries } from './flowerTimelineProjection';
 import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
 import { createThreadCache } from './threadCache';
 import { canonicalProcessFixture } from './flowerCanonicalProcess.testFixture';
@@ -130,7 +130,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
     const after = applyFlowerRuntimeCurrentView(before, { ...view, view_version: 2, items: [{ ...view.items![0], sources }] });
     expect(after.messages[0].content).toBe(text);
     expect(after.messages[0].sources).toEqual(sources);
-    expect(flowerMessageSignature(after.messages[0])).not.toBe(flowerMessageSignature(before.messages[0]));
+    expect(before.messages[0].sources).toBeUndefined();
     const entry = buildFlowerTimelineEntries(after)[0];
     expect(entry.type).toBe('message');
     if (entry.type === 'message') expect(entry.blocks[0]).toMatchObject({ type: 'content', content: text, sources });
@@ -954,7 +954,7 @@ it('retains one user message identity while canonical steering settles', () => {
   expect(pending.messages).toHaveLength(1);
   expect(pending.messages[0]).toMatchObject({ id: 'steer-a', role: 'user', content: 'Change the scope', steering: { status: 'pending' } });
   expect(applied.messages[0]).toMatchObject({ id: 'steer-a', role: 'user', steering: { status: 'applied' } });
-  expect(flowerMessageSignature(pending.messages[0])).not.toBe(flowerMessageSignature(applied.messages[0]));
+  expect(pending.messages[0].steering).toEqual({ status: 'pending' });
 });
 
 describe('canonical parent event array contract', () => {
