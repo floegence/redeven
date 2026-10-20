@@ -562,10 +562,6 @@
       "modelStatusRetrying": "Reintentando solicitud al modelo...",
       "providerRetryWaiting": "Servicio del modelo no disponible. Reintento en {seconds} s · {retry}/{max}",
       "providerRetryRegenerating": "Conexión interrumpida. Regeneración en {seconds} s · {retry}/{max}",
-      "transportProgress": {
-        "switching": "Conexión interrumpida. El siguiente intento usará HTTPS.",
-        "https": "Usando HTTPS"
-      },
       "modelStatusFinalizing": "Finalizando respuesta...",
       "outputTokens": "{count} tokens",
       "waitingForModelContinuation": "Esperando a que el modelo continúe",

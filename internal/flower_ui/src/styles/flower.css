@@ -4316,13 +4316,6 @@
   white-space: nowrap;
 }
 
-.flower-model-status-metric[data-flower-transport] {
-  flex: 0 1 auto;
-  min-width: 0;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
 .flower-model-status-flower {
   display: inline-flex;
   width: 1rem;

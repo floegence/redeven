@@ -1476,7 +1476,6 @@
     "modelStatusRetrying": "Повтор запроса к модели...",
     "providerRetryWaiting": "Сервис модели недоступен. Повтор через {seconds} с · {retry}/{max}",
     "providerRetryRegenerating": "Соединение прервано. Повторная генерация через {seconds} с · {retry}/{max}",
-    "transportProgress": {"switching": "Соединение прервано. Следующая попытка будет выполнена через HTTPS.", "https": "Используется HTTPS"},
     "modelStatusFinalizing": "Завершение ответа...",
     "waitingForReasoning": "Ожидание reasoning",
     "reasoning": "Рассуждение"
@@ -5588,7 +5587,6 @@
       "modelStatusRetrying": "Повтор запроса к модели...",
       "providerRetryWaiting": "Сервис модели недоступен. Повтор через {seconds} с · {retry}/{max}",
       "providerRetryRegenerating": "Соединение прервано. Повторная генерация через {seconds} с · {retry}/{max}",
-      "transportProgress": {"switching": "Соединение прервано. Следующая попытка будет выполнена через HTTPS.", "https": "Используется HTTPS"},
       "modelStatusFinalizing": "Завершение ответа...",
       "contextIndicatorComposition": "Видимый ввод",
       "contextIndicatorMeasured": "Измерено",

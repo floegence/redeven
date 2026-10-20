@@ -562,10 +562,6 @@
       "modelStatusRetrying": "모델 요청을 다시 시도 중...",
       "providerRetryWaiting": "모델 서비스를 사용할 수 없습니다. {seconds}초 후 재시도 · {retry}/{max}",
       "providerRetryRegenerating": "연결이 끊겼습니다. {seconds}초 후 다시 생성 · {retry}/{max}",
-      "transportProgress": {
-        "switching": "연결이 끊겼습니다. 다음 시도에서는 HTTPS를 사용합니다.",
-        "https": "HTTPS 사용 중"
-      },
       "modelStatusFinalizing": "답변을 정리 중...",
       "outputTokens": "{count} 토큰",
       "waitingForModelContinuation": "모델의 응답 재개를 기다리는 중",

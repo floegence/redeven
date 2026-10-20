@@ -562,10 +562,6 @@
       "modelStatusRetrying": "モデルリクエストを再試行中...",
       "providerRetryWaiting": "モデルサービスを利用できません。{seconds}秒後に再試行 · {retry}/{max}",
       "providerRetryRegenerating": "接続が切断されました。{seconds}秒後に再生成 · {retry}/{max}",
-      "transportProgress": {
-        "switching": "接続が切断されました。次の試行では HTTPS を使用します。",
-        "https": "HTTPS を使用中"
-      },
       "modelStatusFinalizing": "返信を整理中...",
       "outputTokens": "{count} トークン",
       "waitingForModelContinuation": "モデルの応答再開を待機中",
