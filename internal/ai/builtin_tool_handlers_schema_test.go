@@ -39,11 +39,8 @@ func TestBuiltInToolDefinitions_ApplyPatchContractIsCanonical(t *testing.T) {
 	if applyPatch.Name == "" {
 		t.Fatal("apply_patch definition not found")
 	}
-	if !strings.Contains(applyPatch.Description, "Use ONLY the canonical Begin/End Patch format") {
+	if !strings.Contains(applyPatch.Description, "Begin/End Patch") {
 		t.Fatalf("description missing canonical patch contract: %q", applyPatch.Description)
-	}
-	if !strings.Contains(applyPatch.Description, "every content line must start with `+`") {
-		t.Fatalf("description missing add-file content-line prefix rule: %q", applyPatch.Description)
 	}
 	if strings.Contains(applyPatch.Description, "diff --git") {
 		t.Fatalf("description should not recommend unified diff: %q", applyPatch.Description)
@@ -68,7 +65,7 @@ func TestBuiltInToolDefinitions_ApplyPatchContractIsCanonical(t *testing.T) {
 	if !strings.Contains(description, "*** Update File:") || !strings.Contains(description, "@@") {
 		t.Fatalf("patch property description missing file op guidance: %q", description)
 	}
-	if !strings.Contains(description, "every new content line must begin with `+`") {
+	if !strings.Contains(description, "Prefix added lines with +") {
 		t.Fatalf("patch property description missing add-file content-line prefix rule: %q", description)
 	}
 }
@@ -116,8 +113,8 @@ func TestBuiltInToolDefinitions_TerminalSchemasAreCanonical(t *testing.T) {
 	if !ok || !strings.Contains(fmt.Sprint(stdinSchema["description"]), "does not close stdin or send EOF") {
 		t.Fatal("terminal.exec stdin must describe its interactive input boundary")
 	}
-	if !strings.Contains(terminalExec.Description, "wait for exit_code and verify requested effects") {
-		t.Fatal("terminal.exec must distinguish running input echo from completed work")
+	if !strings.Contains(terminalExec.Description, "exit_code") || !strings.Contains(terminalExec.Description, "running process_id") || !strings.Contains(fmt.Sprint(stdinSchema["description"]), "Echo alone is not command completion") {
+		t.Fatal("terminal.exec must distinguish completion, running processes and PTY echo")
 	}
 
 	var readSchema map[string]any
@@ -136,7 +133,7 @@ func TestBuiltInToolDefinitions_TerminalSchemasAreCanonical(t *testing.T) {
 		t.Fatalf("terminal.read description bounds=%#v, want 1..120", descriptionSchema)
 	}
 	description := strings.ToLower(fmt.Sprint(descriptionSchema["description"]))
-	if !strings.Contains(description, "user's language") || !strings.Contains(description, "new output") || !strings.Contains(description, "never use a generic label") {
+	if !strings.Contains(description, "user's language") || !strings.Contains(description, "command/task") {
 		t.Fatalf("terminal.read description guidance is incomplete: %q", description)
 	}
 	afterSeqSchema, ok := readProps["after_seq"].(map[string]any)
@@ -144,10 +141,7 @@ func TestBuiltInToolDefinitions_TerminalSchemasAreCanonical(t *testing.T) {
 		t.Fatalf("terminal.read schema missing after_seq: %#v", readProps)
 	}
 	afterSeqDescription := strings.ToLower(fmt.Sprint(afterSeqSchema["description"]))
-	if !strings.Contains(afterSeqDescription, "last output sequence already consumed") ||
-		!strings.Contains(afterSeqDescription, "previous result's last_seq exactly") ||
-		!strings.Contains(afterSeqDescription, "never invent") ||
-		!strings.Contains(afterSeqDescription, "never") || !strings.Contains(afterSeqDescription, "backward") {
+	if !strings.Contains(afterSeqDescription, "0 for the first read") || !strings.Contains(afterSeqDescription, "previous result's last_seq unchanged") {
 		t.Fatalf("terminal.read after_seq guidance is incomplete: %q", afterSeqDescription)
 	}
 	for _, removed := range []string{"wait_ms", "max_bytes"} {
@@ -161,14 +155,9 @@ func TestBuiltInToolDefinitions_TerminalSchemasAreCanonical(t *testing.T) {
 	}
 	toolDescription := strings.ToLower(terminalRead.Description)
 	for _, phrase := range []string{
-		"read only the new output produced after after_seq",
-		"never replays output already consumed",
-		"after_seq: 0 for the first read",
-		"previous result's last_seq unchanged",
-		"empty output means no new output",
-		"has_more is true",
-		"status is running and has_more is false",
-		"new output since after_seq",
+		"new output after after_seq",
+		"if has_more, read again",
+		"status=running remains active even with empty output",
 	} {
 		if !strings.Contains(toolDescription, phrase) {
 			t.Fatalf("terminal.read description missing %q: %q", phrase, terminalRead.Description)
@@ -191,16 +180,12 @@ func TestBuiltInToolDefinitions_TerminalSchemasAreCanonical(t *testing.T) {
 		t.Fatalf("terminal.terminate description bounds=%#v, want 1..120", terminateDescriptionSchema)
 	}
 	terminateDescription := strings.ToLower(fmt.Sprint(terminateDescriptionSchema["description"]))
-	if !strings.Contains(terminateDescription, "user's language") || !strings.Contains(terminateDescription, "command or task being stopped") || !strings.Contains(terminateDescription, "never use a generic label") {
+	if !strings.Contains(terminateDescription, "user's language") || !strings.Contains(terminateDescription, "command/task being stopped") {
 		t.Fatalf("terminal.terminate description guidance is incomplete: %q", terminateDescription)
 	}
 	terminateRequired, _ := terminateSchema["required"].([]any)
 	if !containsAnyString(terminateRequired, "process_id") || !containsAnyString(terminateRequired, "description") {
 		t.Fatalf("terminal.terminate required=%#v, want process_id and description", terminateRequired)
-	}
-	terminateToolDescription := strings.ToLower(terminalTerminate.Description)
-	if !strings.Contains(terminateToolDescription, "every call") || !strings.Contains(terminateToolDescription, "user's language") || !strings.Contains(terminateToolDescription, "command or task being stopped") {
-		t.Fatalf("terminal.terminate tool description is incomplete: %q", terminalTerminate.Description)
 	}
 }
 

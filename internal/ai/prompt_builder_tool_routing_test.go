@@ -220,8 +220,7 @@ func TestBuildLayeredSystemPrompt_RequiresHumanReadableSubagentNames(t *testing.
 	assertPromptContains(t, prompt, "Give each child a self-contained mission, scope and expected evidence")
 	for _, def := range builtInToolDefinitions() {
 		if def.Name == "subagents" {
-			assertPromptContains(t, def.Description, "Title Case")
-			assertPromptContains(t, def.Description, "Never use snake_case or kebab-case")
+			assertPromptContains(t, string(def.InputSchema), "1-5 English Title Case words")
 		}
 	}
 }

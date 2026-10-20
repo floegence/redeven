@@ -383,15 +383,14 @@ func subagentsToolInputSchema() map[string]any {
 			"task_name": map[string]any{
 				"type":        "string",
 				"maxLength":   140,
-				"description": "Short human-facing English name with 1-5 Title Case words, for example Safety Review or API Contract Review. Never use snake_case or kebab-case.",
+				"description": "1-5 English Title Case words.",
 			},
 			"task_description": map[string]any{"type": "string", "maxLength": 500},
 			"message":          map[string]any{"type": "string", "maxLength": 4000},
 			"agent_type":       map[string]any{"type": "string", "enum": []string{"explore", "worker", "reviewer"}},
 			"context_mode": map[string]any{
-				"type":        "string",
-				"enum":        []string{subagentContextModeMissionOnly, subagentContextModeFullHistory},
-				"description": "Controls whether the child starts with only the delegated mission or the parent's full thread history.",
+				"type": "string",
+				"enum": []string{subagentContextModeMissionOnly, subagentContextModeFullHistory},
 			},
 			"ids": map[string]any{
 				"type":  "array",
@@ -458,32 +457,31 @@ func redevenAskUserSignalInputSchema(base map[string]any) map[string]any {
 	schema["type"] = "object"
 	schema["properties"] = map[string]any{
 		"questions": map[string]any{
-			"type":        "array",
-			"minItems":    1,
-			"maxItems":    5,
-			"description": "Structured user-input questions. Each question must be fully specified with id, question, response_mode, and the required choice contract for that mode.",
+			"type":     "array",
+			"minItems": 1,
+			"maxItems": 5,
 			"items": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"id":                 map[string]any{"type": "string", "minLength": 1, "maxLength": 80, "description": "Stable question id, for example question_1."},
+					"id":                 map[string]any{"type": "string", "minLength": 1, "maxLength": 80},
 					"header":             map[string]any{"type": "string", "minLength": 1, "maxLength": 120},
 					"question":           map[string]any{"type": "string", "minLength": 1, "maxLength": 400},
 					"is_secret":          map[string]any{"type": "boolean"},
 					"response_mode":      map[string]any{"type": "string", "enum": []string{"select", "write", "select_or_write"}, "description": "select requires fixed choices and choices_exhaustive=true; write must omit choices; select_or_write requires fixed choices and choices_exhaustive=false."},
-					"choices_exhaustive": map[string]any{"type": "boolean", "description": "Required when choices are present. true only for exhaustive select; false for select_or_write with a custom text answer."},
-					"write_label":        map[string]any{"type": "string", "maxLength": 200, "description": "For select_or_write, the label for the custom text answer. For write, the direct input label."},
+					"choices_exhaustive": map[string]any{"type": "boolean", "description": "Required with choices; true for select, false for select_or_write."},
+					"write_label":        map[string]any{"type": "string", "maxLength": 200, "description": "Custom/direct text input label."},
 					"write_placeholder":  map[string]any{"type": "string", "maxLength": 160},
 					"choices": map[string]any{
 						"type":        "array",
 						"maxItems":    4,
-						"description": "Fixed select choices only. Do not include Other/None as a choice; use response_mode=select_or_write with choices_exhaustive=false when custom text is allowed.",
+						"description": "Fixed choices; custom text uses select_or_write instead of an Other choice.",
 						"items": map[string]any{
 							"type": "object",
 							"properties": map[string]any{
 								"choice_id":   map[string]any{"type": "string", "minLength": 1, "maxLength": 64},
 								"label":       map[string]any{"type": "string", "minLength": 1, "maxLength": 200},
 								"description": map[string]any{"type": "string", "maxLength": 240},
-								"kind":        map[string]any{"type": "string", "enum": []string{"select"}, "description": "Fixed options must use kind=select."},
+								"kind":        map[string]any{"type": "string", "enum": []string{"select"}},
 								"actions": map[string]any{
 									"type":     "array",
 									"maxItems": 4,
@@ -517,11 +515,10 @@ func redevenAskUserSignalInputSchema(base map[string]any) map[string]any {
 			},
 		},
 		"required_from_user": map[string]any{
-			"type":        "array",
-			"description": "An array of concrete inputs or decisions needed from the user, even for one item, for example [\"Choose a region\"]. Never use a scalar or unquoted prose.",
-			"minItems":    1,
-			"maxItems":    8,
-			"items":       map[string]any{"type": "string", "maxLength": 200},
+			"type":     "array",
+			"minItems": 1,
+			"maxItems": 8,
+			"items":    map[string]any{"type": "string", "maxLength": 200},
 		},
 		"evidence_refs": map[string]any{
 			"type":        "array",
@@ -537,7 +534,7 @@ func redevenAskUserSignalInputSchema(base map[string]any) map[string]any {
 
 func builtInToolDefinitions() []ToolDef {
 	toSchema := toolSchemaRaw
-	targetIDProperty := map[string]any{"type": "string", "description": "Optional target id used only when this thread explicitly routes builtin tools through a target executor. Under the normal local-runtime policy this field does not make the tool run remotely."}
+	targetIDProperty := map[string]any{"type": "string", "description": "Used only when this thread explicitly routes tools to a target executor; otherwise execution is local."}
 	withTargetID := func(properties map[string]any) map[string]any {
 		out := make(map[string]any, len(properties)+1)
 		for key, value := range properties {
@@ -549,7 +546,7 @@ func builtInToolDefinitions() []ToolDef {
 	defs := []ToolDef{
 		{
 			Name:             "attachment.read",
-			Description:      "Read one bounded page from a strict UTF-8 attachment already present in this canonical Flower thread. Use the attachment locator shown in the message manifest and continue with next_cursor until truncated is false.",
+			Description:      "Read a UTF-8 thread attachment by manifest locator. Continue with next_cursor while truncated.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"locator": map[string]any{"type": "string", "minLength": 1, "maxLength": 1024}, "cursor": map[string]any{"type": "string", "maxLength": 2048}, "max_bytes": map[string]any{"type": "integer", "minimum": 1}, "max_lines": map[string]any{"type": "integer", "minimum": 1}}, "required": []string{"locator"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
@@ -561,15 +558,15 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:         "image.read",
-			Description:  "Read an authorized PNG, JPEG, WebP or GIF image directly for visual inspection. Requires an image-capable model. Detects the actual format, preserves resolution within limits, and reads the first GIF frame. The immutable image snapshot remains in this thread history. Use exactly one of file_path or a media:v1 locator from canonical thread history. Locator rereads use the original snapshot and do not accept target_id. Do not start a browser or HTTP server to inspect a local image.",
-			InputSchema:  toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"locator": map[string]any{"type": "string", "pattern": "^media:v1:[a-f0-9]{64}$", "description": "Canonical image snapshot locator from threads.read or a compaction summary."}, "file_path": map[string]any{"type": "string", "minLength": 1, "description": "Image path relative to the working directory, or an authorized absolute path."}}), "additionalProperties": false}),
+			Description:  "Inspect a PNG, JPEG, WebP or first GIF frame. Supply exactly one of file_path or a media:v1 locator. Locator reads return the original thread snapshot and reject target_id.",
+			InputSchema:  toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"locator": map[string]any{"type": "string", "pattern": "^media:v1:[a-f0-9]{64}$", "description": "Snapshot locator from threads.read or compaction."}, "file_path": map[string]any{"type": "string", "minLength": 1, "description": "Working-directory-relative or authorized absolute image path."}}), "additionalProperties": false}),
 			Visibility:   ToolVisibilitySharedReadonly,
 			Capabilities: []ToolCapabilityClass{ToolCapabilityReadonlyLocal},
 			Source:       "builtin", Namespace: "builtin.image", Priority: 100,
 		},
 		{
 			Name:             "read_file",
-			Description:      "Safely read an authorized regular text file. Available only in readonly permission.",
+			Description:      "Read a regular text file.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}, "offset": map[string]any{"type": "integer", "minimum": 0}, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": maxFileReadLimit}}, "required": []string{"path"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
@@ -581,7 +578,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "read_files",
-			Description:      "Safely read multiple authorized regular text files with per-file status. Available only in readonly permission.",
+			Description:      "Read multiple text files with per-file status.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"paths": map[string]any{"type": "array", "minItems": 1, "maxItems": 50, "items": map[string]any{"type": "string"}}, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": maxFileReadLimit}}, "required": []string{"paths"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
@@ -593,7 +590,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "rgrep",
-			Description:      "Search authorized regular text files without shell execution. Available only in readonly permission.",
+			Description:      "Search text files without a shell.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string"}, "paths": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, "glob": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, "case_sensitive": map[string]any{"type": "boolean"}, "fixed_strings": map[string]any{"type": "boolean"}, "max_matches": map[string]any{"type": "integer", "minimum": 1, "maximum": 1000}, "context_lines": map[string]any{"type": "integer", "minimum": 0, "maximum": 10}}, "required": []string{"query"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
@@ -605,7 +602,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "find",
-			Description:      "Find authorized files and directories without shell execution. Available only in readonly permission.",
+			Description:      "Find files and directories without a shell.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"root": map[string]any{"type": "string"}, "name": map[string]any{"type": "string"}, "type": map[string]any{"type": "string", "enum": []string{"file", "dir", "directory", "symlink", "any"}}, "max_results": map[string]any{"type": "integer", "minimum": 1, "maximum": 1000}, "max_depth": map[string]any{"type": "integer", "minimum": 0, "maximum": 32}, "include_hidden": map[string]any{"type": "boolean"}}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
@@ -617,8 +614,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "file.edit",
-			Description:      "Edit an authorized text file by replacing an exact old_string with new_string. Use this as the primary deterministic in-place editing tool.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"file_path": map[string]any{"type": "string", "description": "Path to the file to edit. Relative paths resolve from the current working directory; absolute paths must be within the configured filesystem roots with the required permissions."}, "old_string": map[string]any{"type": "string", "minLength": 1, "description": "Exact text to replace."}, "new_string": map[string]any{"type": "string", "description": "Replacement text. It must differ from old_string."}, "replace_all": map[string]any{"type": "boolean", "description": "Replace every occurrence instead of requiring a single exact match."}}), "required": []string{"file_path", "old_string", "new_string"}, "additionalProperties": false}),
+			Description:      "Replace exact text in a file; requires a unique match unless replace_all.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"file_path": map[string]any{"type": "string", "description": "Working-directory-relative or authorized absolute path."}, "old_string": map[string]any{"type": "string", "minLength": 1}, "new_string": map[string]any{"type": "string", "description": "Must differ from old_string."}, "replace_all": map[string]any{"type": "boolean"}}), "required": []string{"file_path", "old_string", "new_string"}, "additionalProperties": false}),
 			Mutating:         true,
 			RequiresApproval: true,
 			Visibility:       ToolVisibilityStandard,
@@ -629,8 +626,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "file.write",
-			Description:      "Write the full content of an authorized text file. Use this to create files or replace an entire file deterministically.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"file_path": map[string]any{"type": "string", "description": "Path to the file to write. Relative paths resolve from the current working directory; absolute paths must be within the configured filesystem roots with the required permissions."}, "content": map[string]any{"type": "string", "description": "Full file content to write."}}), "required": []string{"file_path", "content"}, "additionalProperties": false}),
+			Description:      "Create or overwrite a text file with its full content.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"file_path": map[string]any{"type": "string", "description": "Working-directory-relative or authorized absolute path."}, "content": map[string]any{"type": "string"}}), "required": []string{"file_path", "content"}, "additionalProperties": false}),
 			Mutating:         true,
 			RequiresApproval: true,
 			Visibility:       ToolVisibilityStandard,
@@ -641,8 +638,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "apply_patch",
-			Description:      "Apply a canonical patch within the run working directory; patch paths cannot escape that directory. Use authorized absolute-path file tools for a sibling worktree. Use ONLY the canonical Begin/End Patch format with relative paths. The patch must be one document from `*** Begin Patch` to `*** End Patch` using `*** Add File:`, `*** Delete File:`, `*** Update File:`, optional `*** Move to:`, and `@@` hunks. In `*** Add File:` bodies, every content line must start with `+`.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"patch": map[string]any{"type": "string", "description": "Entire patch text in canonical Begin/End Patch format. Start with `*** Begin Patch`, end with `*** End Patch`, use relative paths, and include file operations such as `*** Update File:` plus `@@` hunks. For `*** Add File: path`, every new content line must begin with `+`, for example `+hello`."}}), "required": []string{"patch"}, "additionalProperties": false}),
+			Description:      "Apply a Begin/End Patch document. Relative paths cannot escape the run working directory.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"patch": map[string]any{"type": "string", "description": "*** Begin Patch / *** End Patch envelope; relative paths in *** Add File:, *** Delete File:, *** Update File:, optional *** Move to:, and @@ hunks. Prefix added lines with +."}}), "required": []string{"patch"}, "additionalProperties": false}),
 			Mutating:         true,
 			RequiresApproval: true,
 			Visibility:       ToolVisibilityStandard,
@@ -653,8 +650,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "terminal.exec",
-			Description:      "Start a PTY-backed shell command in the local AI runtime. Defaults to the run working directory. It waits briefly for yield_ms, returns final output if the process exits, or returns a running process_id for terminal.read, terminal.write, and terminal.terminate. For finite commands, wait for exit_code and verify requested effects before claiming success; terminal echo is not completion. The initial wait is not a hard timeout; use terminal.terminate to stop a running process. Do not treat thread target context as remote execution.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"command": map[string]any{"type": "string"}, "stdin": map[string]any{"type": "string", "maxLength": 200000, "description": "Initial interactive PTY input; does not close stdin or send EOF. Output may only be terminal echo. Use command or file tools for complete batch scripts."}, "cwd": map[string]any{"type": "string"}, "workdir": map[string]any{"type": "string"}, "yield_ms": map[string]any{"type": "integer", "minimum": 0, "maximum": 30000, "description": "Preferred initial wait in milliseconds before returning output or a running process_id. This is not a hard runtime timeout."}, "description": map[string]any{"type": "string", "maxLength": 200}}, "required": []string{"command"}, "additionalProperties": false}),
+			Description:      "Run a PTY shell locally; defaults to the run working directory. Returns exit_code or a running process_id for terminal.read/write/terminate.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"command": map[string]any{"type": "string"}, "stdin": map[string]any{"type": "string", "maxLength": 200000, "description": "Interactive PTY input; does not close stdin or send EOF. Echo alone is not command completion."}, "cwd": map[string]any{"type": "string"}, "workdir": map[string]any{"type": "string"}, "yield_ms": map[string]any{"type": "integer", "minimum": 0, "maximum": 30000, "description": "Initial wait, not a runtime timeout."}, "description": map[string]any{"type": "string", "maxLength": 200}}, "required": []string{"command"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
 			Visibility:       ToolVisibilityStandard,
@@ -665,8 +662,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "terminal.read",
-			Description:      "Read only the new output produced after after_seq by a running or completed terminal process started by terminal.exec. The output field is exactly the new output since after_seq; it never replays output already consumed by an earlier read. Use after_seq: 0 for the first read, then pass the previous result's last_seq unchanged as the next after_seq and never move the cursor backward. An empty output means no new output arrived during this read, not that earlier output disappeared. If has_more is true, read again immediately with last_seq. If status is running and has_more is false, the process is still running and you may read again when more output is needed. Every call must include a concise user-facing description in the user's language that names the command or task being checked and naturally distinguishes later checks. Never use a generic label such as 'Terminal output'.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string", "description": "The process_id returned by terminal.exec."}, "description": map[string]any{"type": "string", "minLength": 1, "maxLength": terminalDescriptionMaxRunes, "description": "Concise user-facing text in the user's language naming the command or task whose new output is being checked. For a later read, naturally say that new output is being checked again. Never use a generic label such as 'Terminal output'."}, "after_seq": map[string]any{"type": "integer", "minimum": 0, "description": "The last output sequence already consumed by the model. Use 0 for the first read, then copy the previous result's last_seq exactly. Never invent a value or move this cursor backward."}}, "required": []string{"process_id", "description", "after_seq"}, "additionalProperties": false}),
+			Description:      "Read new output after after_seq. If has_more, read again; status=running remains active even with empty output.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string"}, "description": map[string]any{"type": "string", "minLength": 1, "maxLength": terminalDescriptionMaxRunes, "description": "User-facing command/task description in the user's language."}, "after_seq": map[string]any{"type": "integer", "minimum": 0, "description": "0 for the first read; then the previous result's last_seq unchanged."}}, "required": []string{"process_id", "description", "after_seq"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
 			Visibility:       ToolVisibilityStandard,
@@ -677,8 +674,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "terminal.write",
-			Description:      "Send input to a running terminal process started by terminal.exec. Include trailing newlines when the shell program expects Enter. Every call must include concise user-facing text in the user's language describing why the input is being sent; never include the input itself in that description.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string", "description": "The process_id returned by terminal.exec."}, "input": map[string]any{"type": "string", "maxLength": 200000}, "description": map[string]any{"type": "string", "minLength": 1, "maxLength": terminalDescriptionMaxRunes, "description": "Concise user-facing text in the user's language explaining why input is being sent. Never include the input value, passwords, tokens, or other secrets."}}, "required": []string{"process_id", "input", "description"}, "additionalProperties": false}),
+			Description:      "Send PTY input; include a trailing newline to submit a line.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string"}, "input": map[string]any{"type": "string", "maxLength": 200000}, "description": map[string]any{"type": "string", "minLength": 1, "maxLength": terminalDescriptionMaxRunes, "description": "User-facing intent in the user's language; omit input values and secrets."}}, "required": []string{"process_id", "input", "description"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
 			Visibility:       ToolVisibilityStandard,
@@ -689,8 +686,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "terminal.terminate",
-			Description:      "Terminate a running terminal process started by terminal.exec. Every call must include concise user-facing text in the user's language that clearly names the command or task being stopped.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string", "description": "The process_id returned by terminal.exec."}, "description": map[string]any{"type": "string", "minLength": 1, "maxLength": terminalDescriptionMaxRunes, "description": "Concise user-facing text in the user's language clearly naming the command or task being stopped. Never use a generic label such as 'Terminate terminal'."}}, "required": []string{"process_id", "description"}, "additionalProperties": false}),
+			Description:      "Terminate a terminal process.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string"}, "description": map[string]any{"type": "string", "minLength": 1, "maxLength": terminalDescriptionMaxRunes, "description": "User-facing command/task being stopped, in the user's language."}}, "required": []string{"process_id", "description"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
 			Visibility:       ToolVisibilityStandard,
@@ -701,8 +698,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "okf.index",
-			Description:      "Browse the embedded Redeven OKF index as a structured directory of maintained repository knowledge. Use this before okf.search when the user asks broad Redeven-internal questions and you need to discover the available OKF areas. OKF covers Redeven-maintained architecture, protocols, runtime/Desktop/gateway behavior, Workbench contracts, release automation, AI tool/runtime contracts, and maintained OKF concepts. OKF does not access the internet and must not be used for current, recent, news, market/pricing, third-party documentation, external, or general web facts. Use okf.open after selecting a concept that needs detailed evidence.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"section": map[string]any{"type": "string", "description": "Optional index section title or slug to narrow the returned directory entries."}}, "additionalProperties": false}),
+			Description:      "Browse the embedded Redeven repository knowledge index.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"section": map[string]any{"type": "string", "description": "Section title or slug."}}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
 			Visibility:       ToolVisibilitySharedReadonly,
@@ -713,8 +710,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "okf.search",
-			Description:      "Search the embedded Redeven OKF bundle and return a bounded short structured list of matching concepts and relevant sections. Use this to discover which OKF concepts may answer a Redeven-internal architecture, protocol, runtime, Desktop, gateway, Workbench, release, AI tool, or maintained OKF question. Start with max_results=3 for broad questions; raise it only when more candidates are needed. has_more means additional candidate concepts exist beyond the returned short list; it is progressive disclosure, not content truncation. This tool returns summaries and query-aware snippets only: call okf.open before relying on a concept for detailed facts, boundaries, contracts, or user-facing conclusions. OKF does not access the internet and must not be used for current, recent, news, market/pricing, third-party documentation, external, or general web facts. Source-level conclusions must still be verified with file or terminal tools.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string", "description": "Search terms for Redeven-maintained OKF concepts."}, "max_results": map[string]any{"type": "integer", "minimum": 1, "maximum": 8, "description": "Maximum concept matches to return. Defaults to 3; use 3 for broad questions."}, "type": map[string]any{"type": "string", "description": "Optional exact OKF concept type filter, for example Runtime Contract, Gateway Contract, UI Contract, AI Tool Contract, Release Contract."}, "tags": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Optional tag filters. A concept matches when it has at least one requested tag."}}, "required": []string{"query"}, "additionalProperties": false}),
+			Description:      "Search embedded Redeven knowledge. Returns candidate summaries and snippets; open a concept with okf.open for details. has_more indicates additional candidates.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string"}, "max_results": map[string]any{"type": "integer", "minimum": 1, "maximum": 8, "description": "Default 3."}, "type": map[string]any{"type": "string", "description": "Exact concept type filter."}, "tags": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Matches any requested tag."}}, "required": []string{"query"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
 			Visibility:       ToolVisibilitySharedReadonly,
@@ -725,8 +722,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "okf.open",
-			Description:      "Open one embedded Redeven OKF concept by concept_id or path. Without section, return the concise Summary and available section catalog; with section, return only that section. Use this after okf.index or okf.search when a concept is relevant and you need exact maintained repository knowledge, boundaries, contracts, or workflow details. Request the evidence section only when source references are needed. Prefer opening the most relevant concept before making final claims based on OKF. OKF content is repository knowledge only; it does not access the internet, is not internet data, and does not replace source-code verification for implementation-level conclusions.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"concept_id": map[string]any{"type": "string", "description": "Concept id returned by okf.index or okf.search. Exactly one of concept_id or path is required."}, "path": map[string]any{"type": "string", "description": "OKF concept path such as ai/okf-search-tool.md. Exactly one of concept_id or path is required."}, "section": map[string]any{"type": "string", "description": "Optional section id or title. Omit it for Summary and the section catalog; use evidence only when source references are needed."}, "include_evidence": map[string]any{"type": "boolean", "description": "Include structured Evidence references in the response."}, "body_offset": map[string]any{"type": "integer", "minimum": 0, "description": "Optional rune offset into the selected section body."}, "body_limit": map[string]any{"type": "integer", "minimum": 1000, "maximum": 20000, "description": "Optional maximum body runes to return from the selected section. Defaults to 12000."}}, "additionalProperties": false}),
+			Description:      "Open exactly one concept_id or path. Omit section for Summary and the section catalog; otherwise read that section.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"concept_id": map[string]any{"type": "string", "description": "ID from okf.index/search."}, "path": map[string]any{"type": "string", "description": "OKF concept path."}, "section": map[string]any{"type": "string", "description": "Section id or title."}, "include_evidence": map[string]any{"type": "boolean", "description": "Include structured Evidence references."}, "body_offset": map[string]any{"type": "integer", "minimum": 0, "description": "Rune offset into the section."}, "body_limit": map[string]any{"type": "integer", "minimum": 1000, "maximum": 20000, "description": "Maximum section runes; default 12000."}}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
 			Visibility:       ToolVisibilitySharedReadonly,
@@ -737,7 +734,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:         "use_skill",
-			Description:  "Read the currently available skill instructions by name and record activation. Every explicit call returns the full current body, including repeated reads after context compaction.",
+			Description:  "Read current skill instructions by name and record activation. Repeated calls return the full body.",
 			InputSchema:  toSchema(map[string]any{"type": "object", "properties": map[string]any{"name": map[string]any{"type": "string"}, "reason": map[string]any{"type": "string"}}, "required": []string{"name"}, "additionalProperties": false}),
 			Mutating:     false,
 			Visibility:   ToolVisibilityStandard,
@@ -748,7 +745,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:         "subagents",
-			Description:  "Manage direct children of the current thread only. Forked or inherited history does not transfer child ownership; use list to refresh historical targets and never retry an unavailable target ID. Use spawn with a short 1-5 word English Title Case task_name such as Safety Review, required task_description, agent_type, and message to start a durable child thread. Never use snake_case or kebab-case names. Use status with explicit target or ids (at most 200 distinct direct children) for bounded metadata only: no report bodies or previews. Use inspect to read complete final reports from handoffs[].content and structured failures from items[].failure. Reuse results already available for the same child turn. Use wait only for outstanding children when there is no independent work; wait may return complete reports too. Use list to discover children, send_input to guide a child, and close/close_all to stop children. last_message_preview is only a preview.",
+			Description:  "Manage this thread's direct children; inherited history does not transfer ownership. spawn requires task_name, task_description, agent_type and message. list discovers children; status requires target or ids (at most 200) and returns metadata only. inspect/wait return full reports in handoffs[].content and failures in items[].failure. send_input guides children; close/close_all stops them.",
 			InputSchema:  toSchema(subagentsToolInputSchema()),
 			Mutating:     false,
 			Visibility:   ToolVisibilityDelegationControl,
