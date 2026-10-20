@@ -330,7 +330,9 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Model request recovery](ai/model-request-recovery.md) - Keep retry budgets and deadlines upstream while projecting attempt diagnostics and recoverable interaction.
 - [Model request measurement](ai/model-request-measurement.md) - Map native coverage evidence and frozen boundaries into upstream-owned compaction pressure.
 - [Model request reuse](ai/model-request-reuse.md) - Execute canonical cache/continuation decisions with bounded OpenAI connections and recent/cumulative usage.
+- [Flower context compaction and Goal continuation](ai/flower-context-compaction.md) - Preserve explicit intent and one upstream execution and recovery owner.
 - [Model context usage and compaction](ai/model-context-usage-and-compaction.md) - Account usage, context pressure, compaction, and capacity failures through typed runtime facts.
+- [Flower context compaction qualification](operations/flower-compaction-qualification.md) - Verify isolated deterministic, historical-copy and real-provider behavior.
 - [Flower Ollama context qualification](operations/flower-ollama-context-qualification.md) - Verify the selected installed model's real compaction, token accounting, live context, and restart recovery in isolated state.
 - [Flower context distribution qualification](operations/flower-context-distribution-qualification.md) - Compare frozen-request estimates with fixed native usage and preserve real task, compaction and presentation evidence.
 - [Flower Ollama task qualification](operations/flower-ollama-task-qualification.md) - Exercise real selected-model tasks, interruption, queue controls, approvals, restart, checkpoint retry, and child-agent handoffs.
