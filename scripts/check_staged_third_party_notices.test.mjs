@@ -59,6 +59,7 @@ console.log(process.env.REDEVEN_NOTICE_TEST_WRONG_VERSION === '1' ? 'go1.27.1' :
   // end-to-end staged-tree, commit-association and push-reuse coverage.
   write('.githooks/pre-commit', fs.readFileSync(path.join(sourceRoot, 'scripts/local_gate_commit_checks.sh')));
   write('scripts/desktop_test_session_policy.test.mjs', '');
+  write('scripts/quick_ci_policy.test.mjs', '');
   fs.chmodSync(path.join(root, '.githooks/pre-commit'), 0o755);
   const checker = path.join(sourceRoot, 'scripts/check_staged_third_party_notices.mjs');
   if (fs.existsSync(checker)) write('scripts/check_staged_third_party_notices.mjs', fs.readFileSync(checker));
