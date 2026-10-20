@@ -4,12 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/floegence/redeven/internal/processenv"
 )
+
+var ErrNotRepository = errors.New("not a git repository")
 
 // CommandContext builds a git command with stable non-interactive output settings.
 func CommandContext(ctx context.Context, repoRoot string, env []string, args ...string) (*exec.Cmd, error) {
@@ -81,18 +84,35 @@ func IsGitUnavailable(err error) bool {
 
 // ResolveTopLevel resolves the git worktree root for dir and preserves lookup errors.
 func ResolveTopLevel(ctx context.Context, dir string) (string, error) {
-	dir = filepath.Clean(strings.TrimSpace(dir))
+	dir = strings.TrimSpace(dir)
 	if dir == "" {
 		return "", errors.New("missing git directory")
 	}
-	out, err := RunCombinedOutput(ctx, dir, nil, "rev-parse", "--show-toplevel")
+	dir = filepath.Clean(dir)
+	cmd, err := CommandContext(ctx, dir, append(os.Environ(), "LC_ALL=C"), "rev-parse", "--show-toplevel")
 	if err != nil {
 		return "", err
 	}
-	root := filepath.Clean(strings.TrimSpace(string(out)))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		message := strings.TrimSpace(string(out))
+		var exitErr *exec.ExitError
+		notRepository := message == "fatal: not a git repository (or any of the parent directories): .git" ||
+			(strings.HasPrefix(message, "fatal: not a git repository (or any parent up to mount point ") &&
+				strings.HasSuffix(message, ")\nStopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set)."))
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 128 && notRepository {
+			return "", ErrNotRepository
+		}
+		return "", fmt.Errorf("git root discovery failed: %w: %s", err, message)
+	}
+	root := strings.TrimSpace(string(out))
 	if root == "" {
 		return "", errors.New("missing git top-level")
 	}
+	root = filepath.Clean(root)
 	if mapped := preferOriginalPathRoot(dir, root); mapped != "" {
 		return mapped, nil
 	}

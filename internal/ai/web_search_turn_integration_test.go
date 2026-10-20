@@ -164,7 +164,7 @@ func TestWebSearchTurnSurfaceReachesProvider(t *testing.T) {
 			if tc.name == "vision" && !strings.Contains(string(raw), `"type":"input_image"`) {
 				t.Fatal("unsupported search disabled Vision image input")
 			}
-			if !wantSearch && !strings.Contains(string(raw), "If dedicated search is unavailable") && !strings.Contains(string(raw), "URL discovery is unavailable") {
+			if !wantSearch && !strings.Contains(string(raw), "Use this route when search is unavailable") && !strings.Contains(string(raw), "URL discovery is unavailable") {
 				t.Fatalf("prompt/search mismatch: search=%v", wantSearch)
 			}
 			if len(titleBodies) == 0 {

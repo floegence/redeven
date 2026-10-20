@@ -3,7 +3,7 @@ type: AI Prompt Contract
 title: Flower prompt and rule sources
 description: Unify task, interaction and recovery instructions with actual capabilities and complete authorized rule sources.
 tags: [ai, flower, prompts, context]
-timestamp: 2026-10-16T00:00:00Z
+timestamp: 2026-10-19T00:00:00Z
 ---
 # Summary
 
@@ -20,12 +20,20 @@ Operational guidance comes from the selected `runToolSurface`, including actual
 control signals, rather than permission-mode guesses. Supplied material may be
 answered directly; current file, external, and execution claims require evidence.
 User and repository restrictions override generic delegation advice.
+The final supplied definitions are the capability list, including Floret's Goal
+tool. The host does not print a second enumeration before runtime injection.
+Definitions describe capabilities; current authorization still governs each call.
 
 Runtime context admits rule-source descriptors: absolute path, applicable
 directory, and readable status. Discovery uses the authorized filesystem Registry
 and checks symlinks; it does not inject rule bodies or previews. Supported names
 remain `AGENTS.md`, `CLAUDE.md`, `.develop.md`, and `.introduce.md`. Before a governed
 operation, Flower reads every applicable source to its end with current tools.
+The manifest names the directories actually scanned and distinguishes completed
+discovery with no sources from incomplete discovery. Git worktree roots bound the
+ancestor path; confirmed non-repositories scan only the working directory. Missing
+Git, failed root probes and invalid scope reject context admission through the
+existing recoverable failure path instead of publishing an empty source list.
 Another worktree or target directory requires discovery along its own repository
 ancestor path. Specific directory rules override ancestor defaults; incompatible
 same-scope rules use the interaction policy. Unreadable sources or missing reading
@@ -38,34 +46,41 @@ and workload lease, and permits a corrected input with the same request identity
 Earlier canonical context and provider checkpoints remain immutable. Skill
 catalogs are admission facts; current capabilities alone supply activation advice.
 
-When a decision requires the user and `ask_user` is supplied, Flower uses the
-structured canonical interaction. Without that capability, the main assistant
+When execution requires a user decision or the user requests guided questions,
+and `ask_user` is supplied, Flower uses the structured canonical interaction.
+Without that capability, the main assistant
 finishes with the blocker and recovery condition; a child reports to its parent.
 There is no host waiting state or duplicate question before tool approval.
+Ordinary discussion and optional feedback can use prose.
 
 A running command is observed through its existing process identity and cursor;
 repeated observations are valid when state may change. Timeouts do not establish
-that an effect never executed and do not independently authorize replay. An
+that an effect never executed and do not independently authorize replay. A
 returned uncertainty requires inspection before another action; unsettled
 runtime effects remain terminal. Denials cannot be bypassed with another tool.
-Schema correction, approval, cancellation and restart recovery remain Floret-owned.
-Default prompts contain no Todo discipline or current Todo state. [Goal reflection](flower-goals.md) is Floret-owned, uses stable instructions and appends typed current facts without depending on Todo.
-Finite running commands require another `terminal.read` in the same turn, not a
-promise to wait after completion. Uncertain effects cannot be blindly repeated. Evidence-based new actions
-retain normal authorization and repeated-call protection.
+The model corrects schema-invalid arguments from paired validation feedback;
+Floret prevents dispatch and bounds regeneration attempts. Approval, cancellation
+and restart recovery remain Floret-owned.
+[Goal reflection](flower-goals.md) is Floret-owned and appends typed current facts.
+Default prompts contain no Todo discipline. Finite commands require another
+`terminal.read` in the same turn. New actions retain normal authorization and
+repeated-call protection.
 
 The working directory is a relative-path default. Configured filesystem roots
 and their read/write permissions define authorization; task scope and repository
 rules determine relevant work. Authorized sibling worktrees use explicit terminal
 `cwd`/`workdir` and absolute file paths. `apply_patch` remains confined to the run
-working directory, so another worktree uses `file.edit` or `file.write` when
-supplied. The unreachable `file.read` definition and dispatch are removed;
-`read_file` keeps the shared bounded reader and complete typed pagination fields.
-Historical canonical file actions remain readable without restoring that tool.
+working directory, so another worktree uses supplied `file.edit` or `file.write`.
+`read_file` uses the shared bounded reader and typed pagination. Historical file
+actions remain readable without restoring removed tools.
 
-Ordinary research uses available research tools directly. User acceptance is
-required when substituting a text-page alternative for an explicitly requested
-interactive GUI operation. A blocked target cannot be fetched through a substitute.
+Ordinary research discovers sources, reads and verifies them, and cites exact
+verified URLs. Local `web.search` and provider-hosted search are distinct; hosted
+search is not a local function. `web_fetch` reads known public text sources. The
+browser route handles missing search, confirmed pre-execution search failure, or
+sources requiring rendering or interaction. Permission denial and URL blocking
+never authorize a substitute route. Replacing an explicitly requested interactive
+GUI operation with text-page research requires user acceptance.
 
 # Prompt Budget And Qualification
 
@@ -80,7 +95,9 @@ API examples. Short behavioral reminders keep greetings brief, preserve real
 choice interaction and continue observing finite commands in the current turn.
 
 The full built-in qualification surface has a deterministic 16,000-byte system
-budget. This is a regression guard, not a tokenizer or total-request measurement.
+budget. Regression tests also enforce this budget on actual provider requests
+after Floret adds Goal instructions, including live permission transitions. This
+is a regression guard, not a tokenizer or total-request measurement.
 Permission/profile/allowlist tests require guidance to match supplied tools.
 Definitions retain operational details; focused input-array and child-result
 clarifications are measured as tool overhead, not credited as system savings.
@@ -104,15 +121,11 @@ tokens. Baseline snapshots can be supplied through
 `REDEVEN_FLOWER_PROMPT_BASELINE_DIR` for the same fixtures and tool definitions;
 failures remain visible rather than being repaired by a test-owned retry loop.
 Freeze cases, oracles, prompt sources and repetition count before comparison.
-Run each version once under the same tool definitions; retain every result,
-including prior failures. Compare real multi-turn execution for both versions
-as well as single-response routing. A historical 119/120 result remains a
-failure record, never proof that a later candidate passes. Report system size
-and complete provider input separately, including cache-read tokens.
-This lane is strict and stochastic: a malformed provider function-call payload
-remains a failure even when other repetitions and production execution pass.
-Passing deterministic checks or isolated execution must not be described as
-passing the full paid lane. Prompt reduction does not guarantee provider syntax.
+Run each version once with identical tool definitions; retain every result and
+compare multi-turn execution as well as routing. Historical or partial passes
+never qualify a later candidate. Report system and full provider input separately.
+Malformed calls fail qualification. Deterministic tests or isolated execution do
+not establish a paid-lane pass.
 
 # Boundaries
 

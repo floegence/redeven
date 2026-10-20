@@ -330,6 +330,12 @@ func assertPermissionProviderSurface(t *testing.T, request map[string]any, mode 
 	if !strings.Contains(prompt, "Current permission mode for this request: "+mode) {
 		t.Errorf("provider prompt omitted current permission %s", mode)
 	}
+	if len(prompt) > 16_000 {
+		t.Errorf("final %s provider instructions=%d bytes; budget=16000", mode, len(prompt))
+	}
+	if strings.Contains(prompt, "Available tools for this request:") {
+		t.Error("host tool enumeration duplicates final provider definitions")
+	}
 	for _, name := range []string{"terminal.exec", "terminal.read", "terminal.write", "terminal.terminate", "file.edit", "file.write", "apply_patch", "read_file", "read_files", "rgrep"} {
 		if strings.Contains(prompt, "- Use "+name+" ") && !names[strings.ReplaceAll(name, ".", "_")] {
 			t.Errorf("provider prompt recommends unavailable %s", name)

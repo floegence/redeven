@@ -25,7 +25,7 @@ var promptRepoRuleCandidateNames = []string{
 
 type promptWorkspaceContext struct {
 	Environment    promptEnvironmentFacts
-	RepoRules      []promptRepoRuleFile
+	RepoRules      promptRepoRuleDiscovery
 	RepoRulesError error
 }
 
@@ -50,6 +50,11 @@ type promptRepoRuleFile struct {
 	Path      string
 	ScopeDir  string
 	ReadError string
+}
+
+type promptRepoRuleDiscovery struct {
+	Directories []string
+	Files       []promptRepoRuleFile
 }
 
 func collectPromptWorkspaceContext(ctx context.Context, r *run, permission FlowerPermissionType) promptWorkspaceContext {
@@ -86,39 +91,47 @@ func collectPromptEnvironmentFacts(r *run, permission FlowerPermissionType) prom
 	return out
 }
 
-func (r *run) collectPromptRepoRuleFiles(ctx context.Context, workingDir string) ([]promptRepoRuleFile, error) {
+func (r *run) collectPromptRepoRuleFiles(ctx context.Context, workingDir string) (promptRepoRuleDiscovery, error) {
+	discovery := promptRepoRuleDiscovery{}
 	if r == nil || strings.TrimSpace(workingDir) == "" {
-		return nil, nil
+		return discovery, errors.New("repository rule discovery requires a working directory")
 	}
 	scope, err := r.runPathScope()
 	if err != nil {
-		return nil, errors.New("repository rule discovery requires an authorized working directory")
+		return discovery, errors.New("repository rule discovery requires an authorized working directory")
 	}
 	// Git root discovery bounds applicable rule sources; workspace status is
 	// queried only through tools when the model needs it.
 	probeCtx, cancel := context.WithTimeout(ctx, promptRuleRootProbeTimeout)
-	repoRoot, _ := gitutil.ResolveTopLevel(probeCtx, workingDir)
+	repoRoot, probeErr := gitutil.ResolveTopLevel(probeCtx, workingDir)
 	cancel()
-	files := []promptRepoRuleFile{}
-	for _, dir := range promptRuleSearchDirs(workingDir, repoRoot) {
+	if probeErr != nil && !errors.Is(probeErr, gitutil.ErrNotRepository) {
+		return discovery, fmt.Errorf("cannot determine repository rule scope: %w", probeErr)
+	}
+	dirs, err := promptRuleSearchDirs(workingDir, repoRoot)
+	if err != nil {
+		return discovery, err
+	}
+	for _, dir := range dirs {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return discovery, err
 		}
 		resolvedDir, err := scope.Registry.Resolve(dir, filesystemscope.ResolveOptions{RequireExisting: true, RequireDir: true})
 		if err != nil {
-			return files, fmt.Errorf("cannot inspect repository rule directory %q within authorized filesystem roots", dir)
+			return discovery, fmt.Errorf("cannot inspect repository rule directory %q within authorized filesystem roots", dir)
 		}
 		entries, err := os.ReadDir(resolvedDir.RealAbs)
 		if err != nil {
-			return files, fmt.Errorf("repository rule directory %q is unreadable", dir)
+			return discovery, fmt.Errorf("repository rule directory %q is unreadable", dir)
 		}
+		discovery.Directories = append(discovery.Directories, dir)
 		names := make(map[string]bool, len(entries))
 		for _, entry := range entries {
 			names[entry.Name()] = true
 		}
 		for _, name := range promptRepoRuleCandidateNames {
 			if err := ctx.Err(); err != nil {
-				return nil, err
+				return discovery, err
 			}
 			if !names[name] {
 				continue
@@ -134,26 +147,26 @@ func (r *run) collectPromptRepoRuleFiles(ctx context.Context, workingDir string)
 			} else {
 				_ = handle.Close()
 			}
-			files = append(files, file)
+			discovery.Files = append(discovery.Files, file)
 		}
 	}
-	return files, nil
+	return discovery, nil
 }
 
-func promptRuleSearchDirs(workingDir string, repoRoot string) []string {
+func promptRuleSearchDirs(workingDir string, repoRoot string) ([]string, error) {
 	workingDir = strings.TrimSpace(workingDir)
 	repoRoot = strings.TrimSpace(repoRoot)
 	if workingDir == "" {
-		return []string{}
+		return nil, errors.New("repository rule discovery requires a working directory")
 	}
 	workingDir = filepath.Clean(workingDir)
 	if repoRoot == "" {
-		return []string{workingDir}
+		return []string{workingDir}, nil
 	}
 	repoRoot = filepath.Clean(repoRoot)
 	rel, err := filepath.Rel(repoRoot, workingDir)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return []string{workingDir}
+		return nil, errors.New("repository rule root does not contain the working directory")
 	}
 
 	reversed := []string{}
@@ -171,7 +184,7 @@ func promptRuleSearchDirs(workingDir string, repoRoot string) []string {
 	for i := len(reversed) - 1; i >= 0; i-- {
 		dirs = append(dirs, reversed[i])
 	}
-	return dirs
+	return dirs, nil
 }
 
 // collectModelContextSnapshot is the sole Flower runtime fact collector. Floret
@@ -190,7 +203,7 @@ func (r *run) collectModelContextSnapshot(ctx context.Context, permission Flower
 	if workspace.RepoRulesError != nil {
 		return nil, fmt.Errorf("%w: %v", flruntime.ErrModelContextUnavailable, workspace.RepoRulesError)
 	}
-	for _, file := range workspace.RepoRules {
+	for _, file := range workspace.RepoRules.Files {
 		if file.ReadError != "" {
 			return nil, fmt.Errorf("%w: repository rule source %q: %s", flruntime.ErrModelContextUnavailable, file.Path, file.ReadError)
 		}
@@ -268,9 +281,16 @@ func renderPromptEnvironmentFactsLines(env promptEnvironmentFacts) []string {
 	return lines
 }
 
-func renderPromptRepoRuleLines(files []promptRepoRuleFile, discoveryErr error) []string {
-	lines := []string{fmt.Sprintf("- Repository rule sources discovered: %d; contents not loaded", len(files))}
-	for _, file := range files {
+func renderPromptRepoRuleLines(discovery promptRepoRuleDiscovery, discoveryErr error) []string {
+	status := "complete"
+	if discoveryErr != nil || len(discovery.Directories) == 0 {
+		status = "incomplete"
+	}
+	lines := []string{fmt.Sprintf("- Rule discovery %s; scanned directories: %q; source contents not loaded", status, discovery.Directories)}
+	if len(discovery.Files) == 0 && status == "complete" {
+		lines = append(lines, "- No rule sources found in this scope. Discover applicable rules again for another target or worktree.")
+	}
+	for _, file := range discovery.Files {
 		status := "readable; contents not loaded"
 		if file.ReadError != "" {
 			status = "unreadable: " + file.ReadError

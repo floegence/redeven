@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	flruntime "github.com/floegence/floret/v7/runtime"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
+
+	flruntime "github.com/floegence/floret/v7/runtime"
 
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
@@ -34,8 +35,8 @@ func TestFlowerRuntimeContextListsAllRuleSourcesWithoutBodies(t *testing.T) {
 	r := newRun(runOptions{AgentHomeDir: root, WorkingDir: nested})
 	workspace := collectPromptWorkspaceContext(t.Context(), r, FlowerPermissionApprovalRequired)
 	text := strings.Join(renderPromptRepoRuleLines(workspace.RepoRules, workspace.RepoRulesError), "\n")
-	if len(workspace.RepoRules) != 12 {
-		t.Fatalf("discovered %d rule sources, want all 12", len(workspace.RepoRules))
+	if len(workspace.RepoRules.Files) != 12 {
+		t.Fatalf("discovered %d rule sources, want all 12", len(workspace.RepoRules.Files))
 	}
 	if !utf8.ValidString(text) || strings.Contains(text, "仓库规则") || strings.Contains(text, "excerpt") {
 		t.Fatal("rule manifest must contain complete UTF-8 source descriptors, without body previews")
@@ -98,7 +99,7 @@ func TestFlowerRuleSourcesReportUnreadableAndIncompleteDiscovery(t *testing.T) {
 	}
 	r := newRun(runOptions{AgentHomeDir: root, WorkingDir: root, FilesystemScope: flowerTestFilesystemScope(t, root)})
 	files, err := r.collectPromptRepoRuleFiles(t.Context(), root)
-	if err != nil || len(files) != 2 || files[0].ReadError == "" || files[1].ReadError == "" {
+	if err != nil || len(files.Files) != 2 || files.Files[0].ReadError == "" || files.Files[1].ReadError == "" {
 		t.Fatalf("unreadable sources lost: %+v, %v", files, err)
 	}
 	if os.Geteuid() != 0 {
@@ -108,7 +109,7 @@ func TestFlowerRuleSourcesReportUnreadableAndIncompleteDiscovery(t *testing.T) {
 		}
 		t.Cleanup(func() { _ = os.Chmod(path, 0o600) })
 		files, err = r.collectPromptRepoRuleFiles(t.Context(), root)
-		if err != nil || len(files) != 3 || files[2].ReadError == "" {
+		if err != nil || len(files.Files) != 3 || files.Files[2].ReadError == "" {
 			t.Fatalf("unreadable file was omitted or marked readable: %+v, %v", files, err)
 		}
 	}

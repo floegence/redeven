@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-10-19 — Single-source Flower execution guidance
+
+- Remove the host's duplicate tool enumeration and standalone search-scope section; distinguish local and hosted search, narrow structured questions, and measure final provider instructions after Goal injection. See [prompt contracts](ai/flower-prompt-and-rule-sources.md).
+- Record actual rule-discovery directories and reject failed scope probes through existing context recovery. Use published Floret guidance for compact [Goal guidance](ai/flower-goals.md) and explicit schema-correction ownership without changing durable contracts.
+
 ## 2026-10-19 — Append newly pinned conversations
 
 - Append new pins to the [sidebar order](ui/flower-thread-sidebar.md), preserve manual ordering and retained timestamps, and return all changed ranks in one confirmation. Require [compatibility epoch 67](architecture/runtime-service-snapshot.md) for complete acknowledgements; keep controls available during writes and reads.
@@ -11,6 +16,7 @@
 ## 2026-10-19 — Present Flower selection before transcript work
 
 - Reserve rendering and compositor frames for [sidebar selection](ui/flower-thread-sidebar.md), remove the selected-background transition, and keep navigation status mounted. Block old conversation interactions at a stable capture boundary instead of restyling the full transcript with native inert. Qualify hovered selection with 4,010 timeline items and trace screenshots before content commit.
+
 
 ## 2026-10-19 — Focused provider help
 

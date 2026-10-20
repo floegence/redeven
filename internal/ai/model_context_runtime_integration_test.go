@@ -2,7 +2,6 @@ package ai
 
 import (
 	"encoding/json"
-	flruntime "github.com/floegence/floret/v7/runtime"
 	"io"
 	"log/slog"
 	"net/http"
@@ -16,15 +15,13 @@ import (
 	"time"
 
 	"github.com/floegence/floret/v7/identity"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/config"
 )
 
 func TestModelContextRefreshAfterConfirmedToolAndSafeRetry(t *testing.T) {
-	for _, failCollection := range []bool{false, true} {
-		name := "refresh"
-		if failCollection {
-			name = "recover"
-		}
+	for _, name := range []string{"refresh", "recover_catalog", "recover_rule_scope"} {
+		failCollection := name != "refresh"
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
 			writeContextTestSkill(t, root, "INITIAL_RUNTIME_CATALOG")
@@ -53,10 +50,15 @@ func TestModelContextRefreshAfterConfirmedToolAndSafeRetry(t *testing.T) {
 				switch mainCalls.Add(1) {
 				case 1:
 					description := "UPDATED_RUNTIME_CATALOG"
-					if failCollection {
+					if name == "recover_catalog" {
 						description = strings.Repeat("x", 65000)
 					}
 					writeContextTestSkill(t, root, description)
+					if name == "recover_rule_scope" {
+						if err := os.WriteFile(filepath.Join(root, ".git"), []byte("corrupt git file"), 0o600); err != nil {
+							t.Error(err)
+						}
+					}
 					args, _ := json.Marshal(map[string]any{"command": "printf 'once\n' >> '" + effectPath + "'"})
 					item := map[string]any{"type": "function_call", "id": "fc_context_effect", "call_id": "call_context_effect", "name": "terminal_exec", "arguments": string(args)}
 					writeOpenAISSEJSON(w, flusher, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
@@ -99,6 +101,11 @@ func TestModelContextRefreshAfterConfirmedToolAndSafeRetry(t *testing.T) {
 					t.Fatalf("unadmitted facts reached provider: calls=%d", mainCalls.Load())
 				}
 				writeContextTestSkill(t, root, "REPAIRED_RUNTIME_CATALOG")
+				if name == "recover_rule_scope" {
+					if err := os.Remove(filepath.Join(root, ".git")); err != nil {
+						t.Fatal(err)
+					}
+				}
 				if _, err := svc.RetryThreadContinuation(t.Context(), meta, thread.ThreadID); err != nil {
 					t.Fatal(err)
 				}

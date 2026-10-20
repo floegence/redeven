@@ -66,17 +66,17 @@ func TestCollectPromptRepoRuleFiles_DiscoversScopedSources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(files) != 3 {
-		t.Fatalf("repo rule file count=%d, want 3", len(files))
+	if len(files.Files) != 3 {
+		t.Fatalf("repo rule file count=%d, want 3", len(files.Files))
 	}
-	if files[0].Path != filepath.Join(root, "AGENTS.md") {
-		t.Fatalf("first rule label=%q, want AGENTS.md", files[0].Path)
+	if files.Files[0].Path != filepath.Join(root, "AGENTS.md") {
+		t.Fatalf("first rule label=%q, want AGENTS.md", files.Files[0].Path)
 	}
-	if files[1].Path != filepath.Join(root, ".develop.md") || files[1].ReadError != "" {
-		t.Fatalf("expected readable .develop.md source, got %+v", files[1])
+	if files.Files[1].Path != filepath.Join(root, ".develop.md") || files.Files[1].ReadError != "" {
+		t.Fatalf("expected readable .develop.md source, got %+v", files.Files[1])
 	}
-	if files[2].Path != filepath.Join(root, "nested", "CLAUDE.md") {
-		t.Fatalf("third rule label=%q, want %q", files[2].Path, filepath.Join(root, "nested", "CLAUDE.md"))
+	if files.Files[2].Path != filepath.Join(root, "nested", "CLAUDE.md") {
+		t.Fatalf("third rule label=%q, want %q", files.Files[2].Path, filepath.Join(root, "nested", "CLAUDE.md"))
 	}
 }
 
@@ -94,12 +94,10 @@ func TestBuildPromptWorkspaceContextSection_RendersStructuredFacts(t *testing.T)
 			PermissionType:     FlowerPermissionApprovalRequired,
 			SubagentDelegation: true,
 		},
-		RepoRules: []promptRepoRuleFile{
-			{
-				Path:     "/workspace/repo/AGENTS.md",
-				ScopeDir: "/workspace/repo",
-			},
-		},
+		RepoRules: promptRepoRuleDiscovery{Directories: []string{"/workspace/repo"}, Files: []promptRepoRuleFile{{
+			Path:     "/workspace/repo/AGENTS.md",
+			ScopeDir: "/workspace/repo",
+		}}},
 	}
 	section := strings.Join(append(renderPromptEnvironmentFactsLines(workspace.Environment), renderPromptRepoRuleLines(workspace.RepoRules, nil)...), "\n")
 
