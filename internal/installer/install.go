@@ -2,7 +2,6 @@ package installer
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -135,7 +134,6 @@ func run(ctx context.Context, config Config, dependencies runDependencies) error
 	if err := activateSuite(ctx, config.InstallDir, digest, previous, hashes, version); err != nil {
 		return err
 	}
-	cleanupLegacySuite(config)
 	fmt.Fprintf(config.Output, "Redeven %s installed successfully.\nRuntime: %s\n", version, filepath.Join(config.InstallDir, "redeven"))
 	if err := configurePath(config); err != nil {
 		fmt.Fprintf(config.Output, "The runtime is installed, but PATH could not be configured automatically: %v\n", err)
@@ -144,24 +142,4 @@ func run(ctx context.Context, config Config, dependencies runDependencies) error
 		fmt.Fprintln(config.Output, "The installer has not started Runtime or created a background service.")
 	}
 	return nil
-}
-
-func cleanupLegacySuite(config Config) {
-	for _, role := range runtimeFiles {
-		if role.name == "redeven" || role.name == "computer.zip" {
-			continue
-		}
-		name := filepath.Join(config.InstallDir, role.name)
-		info, err := os.Lstat(name)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err != nil || info.IsDir() {
-			fmt.Fprintf(config.Output, "Warning: obsolete suite entry was left unchanged: %s\n", name)
-			continue
-		}
-		if err := os.Remove(name); err != nil {
-			fmt.Fprintf(config.Output, "Warning: could not remove obsolete suite entry %s: %v\n", name, err)
-		}
-	}
 }

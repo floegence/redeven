@@ -54,9 +54,16 @@ musl archives on both Linux targets; every new or reused authenticated executabl
 must run and report the exact required version before its link or Runtime is
 activated. A missing loader, execution failure, wrong version, oversized output
 or deadline failure leaves the previous Runtime activation unchanged. Activation detects
-concurrent changes, retains the selected and prior suites, and restores and
+concurrent changes, retains every published suite, and restores and
 checks the prior entry when post-switch verification fails. Errors distinguish
 an unchanged activation from a committed but unconfirmed change.
+
+Unselected suites and legacy flat-layout resource files are not automatically
+removed: a still-running older Runtime can need its original resources after
+one or multiple newer installations. The installer
+does not own process lifetime and cannot prove those suites unused. Disk usage
+therefore grows with distinct installed archives; removal requires a separate
+explicit decision after confirming no process or rollback still needs them.
 
 Fresh installs use a writable per-user directory without implicit sudo.
 PATH updates use idempotent managed bash, zsh or fish blocks; the current shell
@@ -105,6 +112,7 @@ this boundary without reviewing the upstream replacement and genuine fixtures.
 - `redeven:internal/installer/rekor.go:1` - Bounded, unchanged X.509 log input admission.
 - `redeven:internal/installer/install.go:1` - Verify-before-execute controller and upgrade ownership.
 - `redeven:internal/installer/suite.go:1` - Complete immutable suites, activation readback and restoration.
+- `redeven:internal/installer/install_test.go:1` - Consecutive activations preserve a live older process's resource access.
 - `redeven:internal/installer/distribution.go:1` - Signed compatibility and deployed-entry readiness.
 - `redeven:scripts/installer_bootstrap.sh.in:1` - Thin entry with fixed digests and no external verifier.
 - `redeven:scripts/render_installer_bootstrap.mjs:1` - Pins rendered from real build bytes.
