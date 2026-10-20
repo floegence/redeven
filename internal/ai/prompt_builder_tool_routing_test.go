@@ -233,7 +233,7 @@ func TestBuildLayeredSystemPromptUsesNaturalCompletion(t *testing.T) {
 	t.Parallel()
 
 	prompt := buildPromptForToolRoutingTest(t)
-	assertPromptContains(t, prompt, "Finish concisely with checks and material limits")
+	assertPromptContains(t, prompt, "Finish concisely with checks and limits")
 }
 
 func TestBuildLayeredSystemPromptRequiresAskUserForBlockingQuestions(t *testing.T) {

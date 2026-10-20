@@ -29,7 +29,9 @@ Runtime manifests list rule paths, scope and readability, never contents. Regist
 discovery checks symlinks and distinguishes complete empty results from failed
 scans. Identify the target repository/worktree, then completely read applicable
 `AGENTS.md`, `CLAUDE.md`, `.develop.md` and `.introduce.md` from root to target
-before other repository operations. Discovery and rule reads come first; exclude
+before other repository operations. End the rule-reading tool batch and await
+its results before proposing other repository calls. Discovery and rule reads
+come first; exclude
 unrelated worktrees. Supplied-text discussion does not initiate repository work.
 Git roots bound ancestor discovery; non-repositories scan their working directory.
 Failed probes reject admission. New worktrees require discovery. Specific rules
@@ -75,11 +77,11 @@ rule reading, approval, Stop, unknown effects, browser identity, observed GUI
 verification, finite-command continuation, media and isolated `html preview`.
 
 Byte budgets are deterministic guards, not tokenizer measurements: 11,000 for the
-built-in surface, 12,000 for permission transitions including Goal, and 9,849 for
+built-in surface, 12,000 for permission transitions including Goal, and 9,844 for
 the production fixture (definitions 37,000; combined 47,500). All 18 permission/
-profile/allowlist combinations shrink 40 UTF-8 bytes against `b65d82480`, retaining
+profile/allowlist combinations shrink 45 UTF-8 bytes against `b65d82480`, retaining
 definition hashes and matching tool guidance. The final Goal-injected fixture
-falls from 9,889 to 9,849 bytes; definitions remain 36,683 bytes.
+falls from 9,889 to 9,844 bytes; definitions remain 36,683 bytes.
 
 `scripts/check_flower_prompt_deepseek.sh` is an opt-in paid qualification lane. It
 reads the selected local DeepSeek provider and its effective `deepseek-flash`
@@ -87,41 +89,42 @@ configuration through production parsers, without modifying source state. It
 requires a fresh report directory and normally repeats 31 behavior cases three
 times. Model-proposed operations in those cases are not executed; synthetic
 receipts allow denial, unknown-effect and GUI recovery checks without effects.
-Every historical and returned call must satisfy the actual tool schema. The case
-manifest governs report completeness. Paired feedback, supplied code and explicit
+All historical and returned calls must satisfy the tool schema. The manifest governs completeness. Paired feedback, supplied code and explicit
 source-verification scenarios distinguish discussion from repository work; target
 and switched-worktree fixtures check rule-first scope. Unreadable rules block
 repository work while independent supplied-data analysis can finish.
 
-A separate production Service exercise checks fresh consultations with real Goal
-injection, requiring one provider step, no tools and no Goal creation. It performs
+Production Service checks fresh consultations with Goal injection:
+one provider step, no tools or Goal creation. It performs
 code repair and complete rule reading in a disposable project, waits through real terminal continuation,
 checks restart recall, resumes a structured answer and reads a file in readonly
 mode. It never controls the user's browser or launches subagents. Reports retain
-prompt/tool hashes, synthetic inputs, outputs, errors and usage; credentials stay
-outside reports. Missing configuration, skipped tests and absent reports fail
-qualification. DeepSeek total input includes both cache-miss and cache-read
+prompt/tool hashes, inputs, outputs, errors and usage, never credentials. Missing configuration, skips and absent reports fail qualification. DeepSeek total input includes both cache-miss and cache-read
 tokens. Baseline snapshots can be supplied through
 `REDEVEN_FLOWER_PROMPT_BASELINE_DIR` for the same fixtures and tool definitions;
 failures remain visible rather than being repaired by a test-owned retry loop.
 Freeze cases, oracles, prompt sources and repetition count before comparison.
 Run each version once with identical tool definitions; retain every result and
-compare multi-turn execution as well as routing. Historical or partial passes
-never qualify a later candidate. Report system and full provider input separately.
+compare multi-turn execution as well as routing. Partial passes never qualify a later candidate. Report system and full provider input separately.
 Malformed calls fail qualification. Deterministic tests or isolated execution do
 not establish a paid-lane pass.
 
-On 2026-10-20, the frozen 31-case comparison ran three repetitions on each
-version with identical inputs, histories and tool hashes: baseline passed 77/93,
-candidate 79/93. Both failed qualification. Rule discussion triggered repository
-inspection; rule-first cases scheduled other operations before reading completed.
-Both production Service runs answered feedback and supplied-code consultations
-without tools or Goals, but inspected the repository for workflow-rule discussion.
-Repair, terminal continuation, restart, structured input and readonly checks
-completed. Total measured synthetic input was 1,063,976 versus 1,076,333 tokens;
-byte savings do not establish provider-token savings or a behavioral improvement.
-An earlier retained run exposed two oracle defects (an absent Goal snapshot and
-valid parent-report routing); both were corrected before the paired comparison.
+On 2026-10-20, qualification retained all diagnostic failures. Two oracle defects
+(absent Goal snapshots and valid parent-report routing) were fixed before paired
+comparison; both terminal directory fields are accepted. The final shared text
+uses 1,953 bytes versus 1,998; personas, Goal guidance and tools are unchanged.
+
+The final frozen pair used the same 31 cases, three repetitions, inputs, histories
+and tool hashes. Baseline passed 78/93; candidate 86/93. Both failed qualification.
+Candidate failures were workflow discussion (3), explicit verification (1), target
+rules (2), and an existing terminal cursor (1). Both Service runs still inspected
+the repository for workflow-rule discussion; feedback and supplied-code
+consultations completed without tools or Goals. Repair, terminal continuation,
+restart, structured input and readonly checks completed. Total measured synthetic
+input was 1,087,395 versus 1,088,325 tokens. Byte savings and this sample do not
+prove provider-token savings or reliable behavioral improvement. Original local
+configuration hashes remained unchanged; temporary credentials and overlays were
+removed. These results do not qualify the candidate for release.
 
 # Boundaries
 
