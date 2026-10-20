@@ -388,6 +388,7 @@ func TestFlowerWorkspaceLargeBaselineRecoversAfterPartialDisconnect(t *testing.T
 		t.Fatal(err)
 	}
 	nextFlowerLiveStreamFrame(t, first)
+	assertFlowerViewerReadBaseline(t, first, thread.ThreadID)
 	if frame, err := first.Next(t.Context()); err != nil || frame.Kind != FlowerLiveStreamThreadBatch {
 		t.Fatalf("first baseline fragment=%v error=%v", frame, err)
 	}
@@ -403,6 +404,7 @@ func TestFlowerWorkspaceLargeBaselineRecoversAfterPartialDisconnect(t *testing.T
 	if ready := nextFlowerLiveStreamFrame(t, reconnected); ready.Kind != FlowerLiveStreamReady {
 		t.Fatal("reconnect did not start with ready")
 	}
+	assertFlowerViewerReadBaseline(t, reconnected, thread.ThreadID)
 	baseline := nextFlowerLiveStreamFrame(t, reconnected)
 	want, err := json.Marshal(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: thread.ThreadID, Current: &current})
 	if err != nil || len(want) < 1489792 || !bytes.Equal(baseline.Data, want) {

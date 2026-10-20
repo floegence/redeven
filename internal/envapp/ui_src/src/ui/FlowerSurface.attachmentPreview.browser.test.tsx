@@ -33,6 +33,7 @@ describe('Flower admitted attachment browser previews', () => {
     const unexpectedBridgeCall = () => { throw new Error('Unexpected Desktop bridge call.'); };
     const loader = createLocalEnvironmentFlowerSurfaceAdapter({
       requestRuntimeFlower,
+    cancelRuntimeFlowerRead: vi.fn(),
       load: unexpectedBridgeCall, save: unexpectedBridgeCall, cancel: unexpectedBridgeCall,
       startRuntimeFlowerStream: unexpectedBridgeCall, cancelRuntimeFlowerStream: unexpectedBridgeCall,
       subscribeRuntimeFlowerStream: unexpectedBridgeCall, prepareRuntimeFlowerAttachment: unexpectedBridgeCall,

@@ -19,11 +19,11 @@ type flowerDetailAdvancingRuntime struct {
 	revision int64
 }
 
-func (r *flowerDetailAdvancingRuntime) List(context.Context, flruntime.ThreadScope) ([]flruntime.ThreadSummary, error) {
+func (r *flowerDetailAdvancingRuntime) Summary(context.Context, identity.ThreadID) (flruntime.ThreadSummary, error) {
 	summary := r.summary
 	summary.UpdatedAt = time.UnixMilli(r.revision)
 	summary.LastItemAt = summary.UpdatedAt
-	return []flruntime.ThreadSummary{summary}, nil
+	return summary, nil
 }
 
 func (r *flowerDetailAdvancingRuntime) View(context.Context, identity.ThreadID) (flruntime.ThreadView, error) {

@@ -943,7 +943,7 @@ export function adapter(configured = true): TestFlowerSurfaceAdapter {
       const receipt = launchReceipt(input.thread_id ?? 'thread-1', 'turn-launch');
       return { ...receipt, client_request_id: input.client_request_id };
     }),
-    retryThread: vi.fn(async (threadID: string) => liveBootstrap(thread({ thread_id: threadID, status: 'running' }))),
+    retryThread: vi.fn(async (_threadID: string) => undefined),
     stopThread: vi.fn(async () => undefined),
     submitInput: vi.fn(async (input) => inputAdmissionReceipt(input.thread_id, input.prompt_id)),
     submitApproval: vi.fn(async (input) => approvalCommandResult(input.thread_id, input.interaction_id, input.approved)),

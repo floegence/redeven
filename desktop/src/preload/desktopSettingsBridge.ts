@@ -19,6 +19,8 @@ import {
 import {
   CANCEL_RUNTIME_FLOWER_STREAM_CHANNEL,
   REQUEST_RUNTIME_FLOWER_CHANNEL,
+  CANCEL_RUNTIME_FLOWER_READ_CHANNEL,
+  normalizeRuntimeFlowerReadID,
   RUNTIME_FLOWER_STREAM_EVENT_CHANNEL,
   START_RUNTIME_FLOWER_STREAM_CHANNEL,
   normalizeRuntimeFlowerStreamEvent,
@@ -66,6 +68,10 @@ export function bootstrapDesktopSettingsBridge(): void {
       ipcRenderer.invoke(SAVE_DESKTOP_SETTINGS_CHANNEL, { ...parseDesktopSettingsRequest(request), draft: request.draft }),
     requestRuntimeFlower: (request: RuntimeFlowerRequest): Promise<RuntimeFlowerRequestResult> =>
       ipcRenderer.invoke(REQUEST_RUNTIME_FLOWER_CHANNEL, request),
+    cancelRuntimeFlowerRead: (readID: unknown): void => {
+      const normalized = normalizeRuntimeFlowerReadID(readID);
+      if (normalized) ipcRenderer.send(CANCEL_RUNTIME_FLOWER_READ_CHANNEL, normalized);
+    },
     startRuntimeFlowerStream: async (request: unknown): Promise<RuntimeFlowerStreamStartResult> => {
       const normalized = normalizeRuntimeFlowerStreamRequest(request);
       if (!normalized) return { ok: false, error: { code: 'runtime_flower_invalid_stream', message: 'Invalid Flower stream request.' } };

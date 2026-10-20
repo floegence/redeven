@@ -39,7 +39,7 @@ it('configures the failed child provider and retains an explicit return to its p
   const state = await mountChildProviderRecovery();
   await userEvent.click(state.configure());
   await waitFor(() => document.querySelector('.flower-provider-dialog') !== null);
-  expect(state.loadThread).toHaveBeenCalledWith(state.child.thread_id);
+  expect(state.loadThread).toHaveBeenCalledWith(state.child.thread_id, expect.any(AbortSignal));
   expect(document.querySelector('.flower-provider-dialog')?.textContent).toContain('Child Provider');
   await waitFor(() => document.querySelector<HTMLInputElement>('.flower-provider-dialog input[placeholder="model-name"]')?.value === 'child-model');
   await userEvent.click(page.getByRole('button', { name: copy.settings.dialog.discard, exact: true }));
@@ -81,11 +81,12 @@ async function mount(options: { missingProvider?: boolean; code?: string; deepse
     sources: [{ id: 'openai', kind: 'runtime_config' as const, state: 'ready' as const }], search_policies: { openai: policy }, provider_search_policies: { openai: policy },
   } };
   const saveModelProfile = vi.fn(async (draft: FlowerSettingsDraft): Promise<FlowerSettingsSnapshot> => ({ ...snapshot, model_profile: draft.model_profile }));
-  const retryThread = vi.fn(async () => liveBootstrap(thread({ status: 'idle', error: undefined }), 2));
+  let current = liveBootstrap(failed);
+  const retryThread = vi.fn(async () => { current = liveBootstrap(thread({ status: 'idle', error: undefined }), 2); });
   const [focusThreadRequest, setFocusThreadRequest] = createSignal({ request_id: 'provider-recovery', thread_id: failed.thread_id });
   const other = thread({ thread_id: 'thread-2', title: 'Other chat' });
   const loadSettings = vi.fn(async () => snapshot);
-  const loadThread = vi.fn(async (id: string) => liveBootstrap(id === other.thread_id ? other : failed));
+  const loadThread = vi.fn(async (id: string) => id === other.thread_id ? liveBootstrap(other) : current);
   const surface = renderSurfaceWithAdapterProps({ ...adapter(), loadSettings, loadModelDirectory: vi.fn(async () => snapshot.model_directory!),
     saveModelProfile, retryThread, listThreads: vi.fn(async () => [failed, other]), loadThread },
   { get focusThreadRequest() { return focusThreadRequest(); } });
@@ -126,7 +127,7 @@ it.each(['provider_request_rejected', 'provider_stream_interrupted', 'provider_r
   saving.resolve({ ...snapshot, model_profile: draft.model_profile! });
   await waitFor(() => !document.querySelector('.flower-provider-dialog') && Boolean(surface.querySelector('.flower-error-card')));
    expect(retryThread).not.toHaveBeenCalled();
-  const pending = deferred<ReturnType<typeof liveBootstrap>>();
+  const pending = deferred<void>();
   retryThread.mockImplementationOnce(() => pending.promise);
   const retry = [...surface.querySelectorAll<HTMLButtonElement>('.flower-error-card button')].find(button => button.textContent === copy.chat.retryReply)!;
   retry.click(); retry.click();
@@ -235,7 +236,7 @@ it('releases failed canonical preflight and refuses a newly unknown effect', asy
 
 it.each(['floret_engine_failed', 'provider_stream_interrupted', 'provider_request_failed'])('releases a timed out %s retry, ignores its late result, and confirms canonical state before recovery', async (code) => {
   const { surface, retryThread, loadThread, setFocusThreadRequest } = await mount({ code });
-  const pending = deferred<ReturnType<typeof liveBootstrap>>();
+  const pending = deferred<void>();
   retryThread.mockImplementationOnce(() => pending.promise);
   let expire!: () => void;
   const nativeSetTimeout = globalThis.setTimeout;
@@ -248,7 +249,7 @@ it.each(['floret_engine_failed', 'provider_stream_interrupted', 'provider_reques
   await waitFor(() => retryThread.mock.calls.length === 1 && Boolean(expire));
   expire();
   await waitFor(() => !retry().disabled);
-  pending.resolve(liveBootstrap(thread({ status: 'idle', error: undefined }), 5));
+  pending.resolve();
   await Promise.resolve();
   expect(surface.querySelector('.flower-error-card')).not.toBeNull();
   loadThread.mockResolvedValueOnce(liveBootstrap(thread({ status: 'running', error: undefined }), 6));

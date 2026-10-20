@@ -23,15 +23,16 @@ describe('FlowerSurface queued turn reorder', () => {
       queued_turn_count: 2,
       queued_turns: [first, second],
     });
-    const reorderQueuedTurns = vi.fn(async (_threadID: string, orderedQueueIDs: readonly string[]) => liveBootstrap(thread({
+    let current = liveBootstrap(queuedThread, 1);
+    const reorderQueuedTurns = vi.fn(async (_threadID: string, orderedQueueIDs: readonly string[]) => { current = liveBootstrap(thread({
       ...queuedThread,
       queued_turns: orderedQueueIDs.map((queueID) => queueID === first.queue_id ? first : second),
       updated_at_ms: queuedThread.updated_at_ms + 1,
-    }), 2));
+    }), 2); });
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [queuedThread]),
-      loadThread: vi.fn(async () => liveBootstrap(queuedThread, 1)),
+      loadThread: vi.fn(async () => current),
       reorderQueuedTurns,
     });
 

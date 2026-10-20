@@ -14,21 +14,29 @@ export async function withFlowerRequestDeadline<T>(operation: () => Promise<T>, 
   }
 }
 
-// Reads release their UI owner after a bounded wait. An aborted wait does not
-// assert that a transport or a separately running mutation was cancelled.
-export async function withFlowerReadDeadline<T>(read: () => Promise<T>, timeoutMessage: string, signal?: AbortSignal): Promise<T> {
+// One read deadline owns both the bounded wait and transport cancellation.
+export async function withFlowerReadDeadline<T>(read: (signal: AbortSignal) => Promise<T>, timeoutMessage: string, signal?: AbortSignal): Promise<T> {
+  const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let cancel: (() => void) | undefined;
   try {
     if (signal?.aborted) throw new DOMException('Read was superseded.', 'AbortError');
     return await Promise.race([
       Promise.resolve().then(() => {
-        if (signal?.aborted) throw new DOMException('Read was superseded.', 'AbortError');
-        return read();
+        controller.signal.throwIfAborted();
+        return read(controller.signal);
       }),
       new Promise<T>((_, reject) => {
-        timer = setTimeout(() => reject(new FlowerReadDeadlineError(timeoutMessage)), 15_000);
-        cancel = () => reject(new DOMException('Read was superseded.', 'AbortError'));
+        timer = setTimeout(() => {
+          const error = new FlowerReadDeadlineError(timeoutMessage);
+          reject(error);
+          controller.abort(error);
+        }, 15_000);
+        cancel = () => {
+          const error = new DOMException('Read was superseded.', 'AbortError');
+          reject(error);
+          controller.abort(error);
+        };
         signal?.addEventListener('abort', cancel, { once: true });
       }),
     ]);

@@ -1,7 +1,7 @@
 import { expect, it, vi } from 'vitest';
 import { activityItem, activityTimeline, adapter, deferred, inputRequest, liveBootstrap, renderSurfaceWithAdapterProps, runtimeCurrentView, subagentDetail, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 import { flowerTurnAdmissionError } from '../../../../flower_ui/src/flowerTurnAdmission';
-import type { FlowerLiveStreamEnvelope, FlowerRuntimeCurrentView, FlowerThreadView } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerLiveStreamEnvelope, FlowerRuntimeCurrentView } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
 it('keeps a real loop failure visible after a declined tool and exposes only safe diagnostics', async () => {
   const detail = '{"reason":"repeated_tool_calls","thread_id":"thread-1","turn_id":"turn-1","run_id":"run-1"}';
@@ -33,9 +33,9 @@ async function mountChild(compaction = false) {
   const child = subagentSummary({ status: 'failed' });
   const parent = thread({ thread_id: child.parent_thread_id, status: 'running', subagents: [child] });
   const failed = thread({ thread_id: child.thread_id, status: 'failed', error: { code: 'floret_repeated_tool_calls', message: 'private failure' } });
-  const detail = subagentDetail({ summary: child, current: { ...runtimeCurrentView(failed, 7), run_id: "child-run", ...(compaction ? { turn_kind: 'context_compaction' as const } : {}) } });
+  let detail = subagentDetail({ summary: child, current: { ...runtimeCurrentView(failed, 7), run_id: "child-run", ...(compaction ? { turn_kind: 'context_compaction' as const } : {}) } });
   const loadSubagentDetail = vi.fn(async () => detail);
-  const retryThread = vi.fn(async (_id: string): Promise<FlowerThreadView> => liveBootstrap(thread({ thread_id: child.thread_id, status: 'running' }), 8));
+  const retryThread = vi.fn(async (_id: string): Promise<void> => { detail = subagentDetail({ summary: { ...child, status: 'running' }, current: runtimeCurrentView(thread({ thread_id: child.thread_id, status: 'running' }), 8) }); });
   const compactThreadContext = vi.fn(async (_id: string, _input: { client_request_id: string; storage_generation: string }): Promise<FlowerRuntimeCurrentView> => ({ thread_id: child.thread_id, view_version: 8, activity: 'active', turn_id: 'compact-child', run_id: 'compact-child-run', run_progress: { phase: 'preparing' }, turn_kind: 'context_compaction', items: [] }));
   const surface = renderSurfaceWithAdapterProps({ ...adapter(), listThreads: async () => [parent], loadThread: async () => liveBootstrap(parent), loadSubagentDetail, retryThread, compactThreadContext }, { focusThreadRequest: { request_id: 'child', thread_id: parent.thread_id } });
   await waitFor(() => surface.querySelector('button[aria-controls="flower-subagents-dropdown"]') !== null);
@@ -51,7 +51,7 @@ async function mountChild(compaction = false) {
 
 it('retries only the failed child while its parent runs and releases controls after failure', async () => {
   const state = await mountChild();
-  const pending = deferred<FlowerThreadView>();
+  const pending = deferred<void>();
   state.retryThread.mockImplementationOnce(() => pending.promise);
   state.retry().click(); state.retry().click();
   await waitFor(() => state.retryThread.mock.calls.length === 1);
@@ -133,6 +133,7 @@ it.each(['input', 'approval'] as const)('handles child %s in the shared composer
     { focusThreadRequest: { request_id: 'child-decision', thread_id: parent.thread_id } });
   await waitFor(() => surface.querySelector('.flower-attention-child') !== null);
   surface.querySelector<HTMLButtonElement>('.flower-attention-child')!.click();
+  await waitFor(() => surface.querySelector('[data-flower-selected-thread-id]')?.getAttribute('data-flower-selected-thread-id') === child.thread_id);
   if (kind === 'input') {
     await waitFor(() => surface.querySelector('.flower-input-request-choice') !== null);
     surface.querySelector<HTMLButtonElement>('.flower-input-request-choice')!.click();

@@ -114,7 +114,7 @@ type RuntimeApprovalSubmitInput = FlowerSubmitApprovalRequest;
 
 export type FlowerRuntimeTransport = Readonly<{
   listThreads(): Promise<ListThreadsResponse>;
-  loadThread(threadID: string): Promise<unknown>;
+  loadThread(threadID: string, signal: AbortSignal): Promise<unknown>;
   connectLiveStream?: (input: FlowerLiveStreamConnectInput) => AsyncIterable<FlowerLiveTransportFrame>;
   readParentEvents?(threadID: string, query: FlowerParentEventQuery): Promise<FlowerParentEventPage>;
   loadSubagentDetail(parentThreadID: string, childThreadID: string): Promise<LoadSubagentDetailResponse>;
@@ -321,13 +321,13 @@ function mapSubagentDetail(raw: LoadSubagentDetailResponse): FlowerSubagentDetai
 }
 
 export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceAdapterOptions): FlowerSurfaceAdapter {
-  const loadThread = async (threadID: string): Promise<FlowerThreadView> => {
+  const loadThread = async (threadID: string, signal: AbortSignal): Promise<FlowerThreadView> => {
     const tid = trim(threadID);
     if (!tid) throw new Error(missingThreadIDMessage(options));
-    return mapRuntimeThreadView(
-      await options.transport.loadThread(tid),
-      options,
-    );
+    signal.throwIfAborted();
+    const raw = await options.transport.loadThread(tid, signal);
+    signal.throwIfAborted();
+    return mapRuntimeThreadView(raw, options);
   };
 
   const markThreadRead = async (threadID: string, snapshot: FlowerThreadActivitySnapshot): Promise<FlowerThreadReadStatus> => {
@@ -448,7 +448,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
             throw new Error('Invalid Flower queued turn order.');
           }
           await options.transport.reorderQueuedTurns!(tid, queueIDs);
-          return loadThread(tid);
+          return;
         },
       } : {}),
       ...(options.transport.deleteQueuedTurn ? {
@@ -458,7 +458,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
           if (!tid) throw new Error(missingThreadIDMessage(options));
           if (!qid) throw new Error('Missing Flower queued turn id.');
           await options.transport.deleteQueuedTurn!(tid, qid);
-          return loadThread(tid);
+          return;
         },
       } : {}),
       ...(options.transport.prepareQueuedTurnDraft && options.transport.takeBackQueuedTurn ? {
@@ -481,14 +481,11 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
         editQueuedTurn: async (threadID: string, queueID: string, input: FlowerQueuedTurnEditInput) => {
           const tid = trim(threadID), qid = trim(queueID);
           if (!tid || !qid) throw new Error('Missing Flower queue edit identity.');
-          let commandConfirmed = false;
           try {
             await options.transport.editQueuedTurn!(tid, qid, input);
-            commandConfirmed = true;
-            return await loadThread(tid);
           } catch (error) {
             const failure = error as { status?: number; failureKind?: string };
-            const rejected = !commandConfirmed && (failure?.failureKind === 'response' || ((failure?.status ?? 0) >= 400 && (failure?.status ?? 0) < 500));
+            const rejected = failure?.failureKind === 'response' || ((failure?.status ?? 0) >= 400 && (failure?.status ?? 0) < 500);
             throw flowerTurnAdmissionError(rejected ? 'rejected' : 'unknown', error);
           }
         },
@@ -500,7 +497,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
           if (!tid) throw new Error(missingThreadIDMessage(options));
           if (!qid) throw new Error('Missing Flower queued turn id.');
           await options.transport.sendQueuedTurnNow!(tid, qid);
-          return loadThread(tid);
+          return;
         },
       } : {}),
       forkThread: async (threadID, input) => {
@@ -562,7 +559,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       const tid = trim(threadID);
       if (!tid) throw new Error(missingThreadIDMessage(options));
       await options.retryThread(tid);
-      return loadThread(tid);
+      return;
     },
     stopThread: async (threadID) => {
       const tid = trim(threadID);

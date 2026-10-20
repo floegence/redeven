@@ -285,7 +285,7 @@ describe('runtime Flower surface adapter read state', () => {
 		}));
 		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ loadThread }));
 
-		await expect(adapter.loadThread('thread_detail')).rejects.toThrow('Flower contract error: thread.read_status is required.');
+		await expect(adapter.loadThread('thread_detail', new AbortController().signal)).rejects.toThrow('Flower contract error: thread.read_status is required.');
 	});
 
 	it('loads product metadata and typed current view without polling', async () => {
@@ -318,7 +318,7 @@ describe('runtime Flower surface adapter read state', () => {
 		}));
 		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ loadThread }));
 
-		const detail = await adapter.loadThread('thread_detail');
+		const detail = await adapter.loadThread('thread_detail', new AbortController().signal);
 
 		expect(detail.thread.thread_id).toBe('thread_detail');
 		expect(detail.thread.title).toBe('Fallback title');
@@ -373,12 +373,9 @@ describe('runtime Flower surface adapter read state', () => {
 		}));
 		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ loadThread }, { retryThread }));
 
-		await expect(adapter.retryThread(' thread_1 ')).resolves.toMatchObject({
-			current: { view_version: 1 },
-			thread: { thread_id: 'thread_1', title: 'Retry' },
-		});
+		await expect(adapter.retryThread(' thread_1 ')).resolves.toBeUndefined();
 		expect(retryThread).toHaveBeenCalledWith('thread_1');
-		expect(loadThread).toHaveBeenCalledWith('thread_1');
+		expect(loadThread).not.toHaveBeenCalled();
 		await expect(adapter.retryThread('  ')).rejects.toThrow();
 	});
 
@@ -435,8 +432,8 @@ describe('runtime Flower surface adapter read state', () => {
 		const result = await adapter.deleteQueuedTurn?.(' thread_1 ', ' followup_middle ');
 
 		expect(deleteQueuedTurn).toHaveBeenCalledWith('thread_1', 'followup_middle');
-		expect(loadThread).toHaveBeenCalledWith('thread_1');
-		expect(result?.thread.thread_id).toBe('thread_1');
+		expect(loadThread).not.toHaveBeenCalled();
+		expect(result).toBeUndefined();
 	});
 
 	it('sends one canonical queued turn now and reconciles from the thread bootstrap', async () => {
@@ -456,8 +453,8 @@ describe('runtime Flower surface adapter read state', () => {
 		const result = await adapter.sendQueuedTurnNow?.(' thread_1 ', ' followup_first ');
 
 		expect(sendQueuedTurnNow).toHaveBeenCalledWith('thread_1', 'followup_first');
-		expect(loadThread).toHaveBeenCalledWith('thread_1');
-		expect(result?.thread.thread_id).toBe('thread_1');
+		expect(loadThread).not.toHaveBeenCalled();
+		expect(result).toBeUndefined();
 		await expect(adapter.sendQueuedTurnNow?.('  ', 'followup_first')).rejects.toThrow();
 		await expect(adapter.sendQueuedTurnNow?.('thread_1', '  ')).rejects.toThrow();
 		expect(sendQueuedTurnNow).toHaveBeenCalledTimes(1);
@@ -919,15 +916,16 @@ it.each([
   ['http rejection', Object.assign(new Error('conflict'), { status: 409 }), false, 'rejected'],
   ['desktop rejection', Object.assign(new Error('denied'), { failureKind: 'response' }), false, 'rejected'],
   ['lost transport', new Error('lost response'), false, 'unknown'],
-  ['confirmed edit with failed reload', Object.assign(new Error('reload denied'), { status: 403 }), true, 'unknown'],
+  ['confirmed edit without hidden reload', Object.assign(new Error('reload denied'), { status: 403 }), true, 'unknown'],
 ] as const)('classifies queue edits at the canonical confirmation boundary: %s', async (_name, error, confirmed, kind) => {
   const loadThread = vi.fn(async () => { throw error; });
   const editQueuedTurn = vi.fn(async () => { if (!confirmed) throw error; });
   const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ loadThread, editQueuedTurn }));
   const command = { client_request_id: 'edit-1', expected_input_fingerprint: 'a'.repeat(64), prompt: 'new text', retained_attachment_ids: ['image'], retained_reference_ids: ['file'] };
-  await expect(adapter.editQueuedTurn!(' thread ', ' queue ', command)).rejects.toMatchObject({ admission_kind: kind });
+  if (confirmed) await expect(adapter.editQueuedTurn!(' thread ', ' queue ', command)).resolves.toBeUndefined();
+  else await expect(adapter.editQueuedTurn!(' thread ', ' queue ', command)).rejects.toMatchObject({ admission_kind: kind });
   expect(editQueuedTurn).toHaveBeenCalledWith('thread', 'queue', command);
-  expect(loadThread).toHaveBeenCalledTimes(confirmed ? 1 : 0);
+  expect(loadThread).not.toHaveBeenCalled();
 });
 
 it('reconciles a lost take-back response with the exact same conditional removal', async () => {

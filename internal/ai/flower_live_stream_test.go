@@ -290,6 +290,7 @@ func TestFlowerWorkspaceStreamBaselinesAndBroadcastsCanonicalComputerStatus(t *t
 	if got := nextFlowerLiveStreamFrame(t, subscription).Kind; got != FlowerLiveStreamReady {
 		t.Fatalf("first baseline kind=%q, want ready", got)
 	}
+	assertFlowerViewerReadBaseline(t, subscription, thread.ThreadID)
 	if got := nextFlowerLiveStreamFrame(t, subscription).Kind; got != FlowerLiveStreamThreadBatch {
 		t.Fatalf("second baseline kind=%q, want thread.batch", got)
 	}
@@ -540,6 +541,7 @@ func TestFlowerWorkspaceStreamReceivesTypedRuntimeCurrentViewWithoutSelectingThr
 	if ready := nextFlowerLiveStreamFrame(t, subscription); ready.Kind != FlowerLiveStreamReady {
 		t.Fatalf("ready kind=%q", ready.Kind)
 	}
+	assertFlowerViewerReadBaseline(t, subscription, thread.ThreadID)
 	startedAt := time.Now()
 	result, err := svc.threadRuntime.Send(ctx, flruntime.SendInput{ThreadID: identity.ThreadID(thread.ThreadID), Input: flruntime.UserInput{Text: "continue in background"}, RequestKey: "request-workspace-current"})
 	if err != nil {
@@ -659,6 +661,7 @@ func TestFlowerWorkspaceSummaryFrameContainsSnapshotNotProjectionEvent(t *testin
 	if ready := nextFlowerLiveStreamFrame(t, subscription); ready.Kind != FlowerLiveStreamReady {
 		t.Fatalf("ready kind=%q", ready.Kind)
 	}
+	assertFlowerViewerReadBaseline(t, subscription, thread.ThreadID)
 
 	if err := svc.publishCanonicalThreadSummary(ctx, meta.EndpointID, thread.ThreadID); err != nil {
 		t.Fatal(err)
@@ -779,6 +782,7 @@ func TestFlowerWorkspaceReadyUsesTypedRuntimeViewWithoutProjectionMirror(t *test
 	if got := envelope.Summaries[0]; got.ThreadID != thread.ThreadID || got.RunStatus != string(RunStateRunning) {
 		t.Fatalf("ready summary=%#v, want typed running state", got)
 	}
+	assertFlowerViewerReadBaseline(t, subscription, thread.ThreadID)
 	currentFrame := nextFlowerLiveStreamFrame(t, subscription)
 	var currentEnvelope FlowerLiveStreamEnvelope
 	if err := json.Unmarshal(currentFrame.Data, &currentEnvelope); err != nil {
@@ -944,6 +948,19 @@ func TestFlowerLiveViewerReadStateIsSharedOnlyWithSameUser(t *testing.T) {
 	defer cancel()
 	if frame, err := other.Next(ctx); !errors.Is(err, context.DeadlineExceeded) || frame != nil {
 		t.Fatalf("other user received private frame=%#v error=%v", frame, err)
+	}
+}
+
+// Validate the private baseline before asserting the exact next shared frame.
+func assertFlowerViewerReadBaseline(t *testing.T, subscription *FlowerLiveStreamSubscription, threadID string) {
+	t.Helper()
+	frame := nextFlowerLiveStreamFrame(t, subscription)
+	var envelope FlowerLiveStreamEnvelope
+	if err := json.Unmarshal(frame.Data, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if frame.Kind != FlowerLiveStreamViewerReadState || envelope.ThreadID != threadID || envelope.ReadStatus == nil || envelope.ReadStatus.Snapshot.ActivityRevision <= 0 {
+		t.Fatalf("private read baseline=%s, want current read state for %q", frame.Data, threadID)
 	}
 }
 

@@ -559,7 +559,7 @@ it('opens Goal from slash suggestions with keyboard and restores composer focus 
 it('submits through the canonical Goal endpoint and preserves attachment, reference and newer command drafts', async () => {
   const base = adapter(true); const pending = deferred<FlowerGoalResult>();
   let currentDetail: FlowerThreadView | undefined;
-  const loadThread = vi.fn(async (threadID: string) => currentDetail?.thread.thread_id === threadID ? currentDetail : base.loadThread(threadID));
+  const loadThread = vi.fn(async (threadID: string, signal: AbortSignal) => currentDetail?.thread.thread_id === threadID ? currentDetail : base.loadThread(threadID, signal));
   const manageGoal = vi.fn((_input: FlowerGoalInput) => pending.promise);
   const coordinator = createFlowerComposerDraftCoordinator();
   const capability = { model_id: 'openai/gpt-5.2', revision: 'goal-capability', enabled: true, supports_long_text: true, max_attachments: 4, max_file_size_bytes: 1_000_000, max_total_size_bytes: 2_000_000, routes: { 'text/plain': 'tool_read' as const } };
@@ -652,7 +652,7 @@ it.each(['running', 'waiting_approval', 'waiting_user'] as const)('keeps Goal ed
 it('retains popup edits on dismiss and across restart while save remains edit-only', async () => {
   const base = adapter(true), coordinator = createFlowerComposerDraftCoordinator();
   let currentDetail: FlowerThreadView | undefined;
-  const loadThread = vi.fn(async (threadID: string) => currentDetail?.thread.thread_id === threadID ? currentDetail : base.loadThread(threadID));
+  const loadThread = vi.fn(async (threadID: string, signal: AbortSignal) => currentDetail?.thread.thread_id === threadID ? currentDetail : base.loadThread(threadID, signal));
   const manageGoal = vi.fn(async (input: FlowerGoalInput) => {
     const accepted = response(input);
     currentDetail = goalDetail(accepted);

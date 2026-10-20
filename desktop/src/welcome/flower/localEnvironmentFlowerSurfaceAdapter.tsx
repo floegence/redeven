@@ -102,6 +102,7 @@ export type DesktopSettingsBridge = Readonly<{
   save: (request: SaveDesktopSettingsRequest) => Promise<SaveDesktopSettingsResult>;
   retryDesktopModels?: () => Promise<boolean>;
   requestRuntimeFlower: (request: RuntimeFlowerRequest) => Promise<RuntimeFlowerRequestResult>;
+  cancelRuntimeFlowerRead: (readID: string) => void;
   startRuntimeFlowerStream: (request: RuntimeFlowerStreamRequest) => Promise<RuntimeFlowerStreamStartResult>;
   cancelRuntimeFlowerStream: (streamID: string) => void;
   subscribeRuntimeFlowerStream: (listener: (event: RuntimeFlowerStreamEvent) => void) => () => void;
@@ -257,8 +258,15 @@ async function runtimeJSON<T>(
   body?: unknown,
   stagingScope?: FlowerAttachmentStagingScope,
   environmentID?: string,
+  signal?: AbortSignal,
 ): Promise<T> {
-  const result = await bridge.requestRuntimeFlower({
+  signal?.throwIfAborted();
+  const readID = signal ? crypto.randomUUID() : undefined;
+  const cancel = () => { if (readID) bridge.cancelRuntimeFlowerRead(readID); };
+  let abortRead: (() => void) | undefined;
+  try {
+  const operation = bridge.requestRuntimeFlower({
+    ...(readID ? { read_id: readID } : {}),
     method,
     path,
     ...(body === undefined ? {} : { body }),
@@ -268,10 +276,15 @@ async function runtimeJSON<T>(
       staging_capability: stagingScope.capability,
     } : {}),
   });
-  if (!result.ok) {
-    throw runtimeFlowerError(result.error, result.failureKind);
-  }
+  const result = await (signal ? Promise.race([operation, new Promise<never>((_, reject) => {
+    abortRead = () => { cancel(); reject(new DOMException('Flower read was cancelled.', 'AbortError')); };
+    signal.addEventListener('abort', abortRead, { once: true });
+    if (signal.aborted) abortRead();
+  })]) : operation);
+  signal?.throwIfAborted();
+  if (!result.ok) throw runtimeFlowerError(result.error, result.failureKind);
   return result.data as T;
+  } finally { if (abortRead) signal?.removeEventListener('abort', abortRead); }
 }
 
 export function runtimeFlowerStreamFetch(
@@ -766,7 +779,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     transport: {
       readParentEvents: (threadID, query) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/subagent-events', query),
       listThreads: () => runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/ai/threads?limit=200'),
-		loadThread: (threadID) => runtimeJSON(bridge, 'GET', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}`),
+		loadThread: (threadID, signal) => runtimeJSON(bridge, 'GET', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}`, undefined, undefined, options.runtimeEnvironmentID, signal),
       connectLiveStream: async function* (input: FlowerLiveStreamConnectInput) {
         const path = '/_redeven_proxy/api/ai/flower/stream';
         const streamID = `flower-${globalThis.crypto.randomUUID()}`;

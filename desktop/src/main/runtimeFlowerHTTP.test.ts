@@ -1,7 +1,7 @@
 import http from 'node:http';
 import { once } from 'node:events';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
 	invalidateRuntimeFlowerAccessOnStatus,
@@ -15,6 +15,7 @@ import {
   runtimeFlowerComputerFrame,
   runtimeFlowerToolImage,
   runtimeFlowerMessageFile,
+  requestRuntimeFlowerWithAccess,
 } from './runtimeFlowerHTTP';
 import { RUNTIME_FLOWER_COMPUTER_MEDIA_PATH, RUNTIME_FLOWER_TOOL_IMAGE_PATH } from '../shared/runtimeFlowerIPC';
 
@@ -270,4 +271,39 @@ describe('runtimeFlowerPrivateBridgeHeaders', () => {
 			/Desktop startup report is missing private Local UI bridge authorization/u,
 		);
 	});
+});
+
+it.each(['headers', 'body'])('cancels a detail HTTP request during %s', async phase => {
+  let ready!: () => void;
+  const started = new Promise<void>(resolve => { ready = resolve; });
+  const server = http.createServer((_request, response) => {
+    if (phase === 'body') { response.writeHead(200, { 'Content-Type': 'application/json' }); response.write('{'); }
+    ready();
+  });
+  const port = await listen(server); const controller = new AbortController();
+  try {
+    const pending = requestRuntimeFlowerHTTP(new URL('http://127.0.0.1:' + port + '/'), { method: 'GET', path: '/' }, { signal: controller.signal });
+    const rejected = expect(pending).rejects.toThrow(/abort|cancel/i);
+    await started; controller.abort(); await rejected;
+  } finally { server.closeAllConnections(); await close(server); }
+});
+
+it('cancels a 423 authorization wait without dispatching a late retry', async () => {
+  const controller = new AbortController();
+  let finish!: (headers: Record<string, string>) => void;
+  const authorize = vi.fn().mockResolvedValueOnce({ Authorization: 'first' }).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const response = { status: 423, body: '{}', bytes: Buffer.from('{}'), headers: {} };
+  const request = vi.fn(async () => response);
+  const invalidateAccess = vi.fn();
+  const pending = requestRuntimeFlowerWithAccess({ signal: controller.signal, authorize, request, invalidateAccess });
+  const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+  await vi.waitFor(() => expect(authorize).toHaveBeenCalledTimes(2));
+  controller.abort(); await rejected;
+  finish({ Authorization: 'late' }); await Promise.resolve();
+  expect(request).toHaveBeenCalledTimes(1); expect(invalidateAccess).toHaveBeenCalledOnce();
+});
+it('releases shared preparation listeners when authorization fails or a read is already cancelled', async () => {
+  const controller = new AbortController(); controller.abort(); const authorize = vi.fn(); const request = vi.fn();
+  await expect(requestRuntimeFlowerWithAccess({ signal: controller.signal, authorize, request, invalidateAccess: vi.fn() })).rejects.toMatchObject({ name: 'AbortError' });
+  expect(authorize).not.toHaveBeenCalled(); expect(request).not.toHaveBeenCalled();
 });

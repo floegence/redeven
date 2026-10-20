@@ -3,7 +3,6 @@ import './flower-feature.css';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import type { FlowerLiveStreamEnvelope, FlowerRuntimeCurrentView, FlowerSurfaceAdapter } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
-import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import { streamingFixture } from '../../../../flower_ui/testing/streamingFixture';
 import { adapter, deferred, inputRequest, liveBootstrap, renderSurfaceWithAdapter, renderSurfaceWithAdapterProps, runtimeCurrentView, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
@@ -41,7 +40,7 @@ describe('Flower streaming presentation stability', () => {
     const live = liveStream();
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true), listThreads: vi.fn(async () => [seed]), loadThread: vi.fn(async () => liveBootstrap(seed, 1)), connectLiveStream: live.connect,
-      deleteQueuedTurn: vi.fn(async () => liveBootstrap(seed, 2)),
+      deleteQueuedTurn: vi.fn(async () => undefined),
     });
     runtime.style.height = '780px';
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="stream-stability"] button')));
@@ -279,7 +278,7 @@ describe('Flower complete interaction subtree stability', () => {
       const current = fixture.current();
       const reordered = { ...current, view_version: current.view_version + 1, queue: ids.map((id) => current.queue!.find((item) => item.id === id)!) };
       fixture.replace(reordered);
-      return { thread: applyFlowerRuntimeCurrentView(fixture.thread, reordered), current: reordered };
+
     });
     const runtime = await mountFixture(fixture, { reorderQueuedTurns: reorder });
     const rows = [...runtime.querySelectorAll<HTMLElement>('[data-flower-queued-turn-dock-id]')];
@@ -426,7 +425,7 @@ it.each([390, 1280])('keeps recovery controls usable during a model pause at %s 
     started_at: new Date(sampledAt - 20000).toISOString(), first_output_at: new Date(sampledAt - 19000).toISOString(),
     last_progress_at: new Date(sampledAt - 16000).toISOString(), estimated_output_tokens: 42 };
   fixture.replace({ ...base, view_version: 2, queue: [], sampled_at_ms: sampledAt, run_progress: { phase: 'streaming', request } });
-  const retry = vi.fn(async () => ({ thread: applyFlowerRuntimeCurrentView(fixture.thread, fixture.current()), current: fixture.current() }));
+  const retry = vi.fn(async () => undefined);
   const runtime = renderSurfaceWithAdapterProps({ ...adapter(true), ...fixture.adapter, retryThread: retry },
     { focusThreadRequest: { request_id: 'focus-paused', thread_id: fixture.thread.thread_id } });
   runtime.style.height = '780px';

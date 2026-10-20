@@ -36,14 +36,15 @@ function sentView(value: ReturnType<typeof queuedThread>, version = 2): FlowerTh
 
 function mount(
   initial: ReturnType<typeof queuedThread>,
-  sendNow: FlowerSurfaceAdapter['sendQueuedTurnNow'],
+  sendNow: (threadID: string, queueID: string) => Promise<FlowerThreadView>,
   overrides: Partial<FlowerSurfaceAdapter> = {},
 ) {
-  const calls = vi.fn(sendNow);
+  let current = liveBootstrap(initial, 1);
+  const calls = vi.fn(async (threadID: string, queueID: string) => { current = await sendNow(threadID, queueID); });
   const runtime = renderSurfaceWithAdapter({
     ...adapter(true),
     listThreads: vi.fn(async () => [initial]),
-    loadThread: vi.fn(async () => liveBootstrap(initial, 1)),
+    loadThread: vi.fn(async () => current),
     sendQueuedTurnNow: calls,
     ...overrides,
   });
@@ -116,7 +117,7 @@ describe('Flower queued send now', () => {
     const value = queuedThread();
     let resolve!: (view: FlowerThreadView) => void;
     const pending = new Promise<FlowerThreadView>(r => { resolve = r; });
-    const { runtime, calls } = mount(value, () => pending, { deleteQueuedTurn: vi.fn(async () => liveBootstrap(value, 2)) });
+    const { runtime, calls } = mount(value, () => pending, { deleteQueuedTurn: vi.fn(async () => {}) });
     await open(runtime);
     const first = sendButton(runtime);
     const second = sendButton(runtime, 'queued-second');
@@ -136,8 +137,8 @@ describe('Flower queued send now', () => {
     const value = queuedThread();
     let resolve!: (view: FlowerThreadView) => void;
     const pending = new Promise<FlowerThreadView>(r => { resolve = r; });
-    const reorder = vi.fn(async () => liveBootstrap(value, 2));
-    const remove = vi.fn(async () => liveBootstrap(value, 2));
+    const reorder = vi.fn(async () => {});
+    const remove = vi.fn(async () => {});
     const { runtime } = mount(value, () => pending, { reorderQueuedTurns: reorder, deleteQueuedTurn: remove });
     await open(runtime);
     const rows = [...runtime.querySelectorAll('[data-flower-queued-turn-dock-id]')];
@@ -255,7 +256,7 @@ describe('Flower queued send now', () => {
     let resolve!: (view: FlowerThreadView) => void;
     const response = new Promise<FlowerThreadView>(r => { resolve = r; });
     const original: FlowerSurfaceAdapter = { ...adapter(true), listThreads: vi.fn(async () => [value]), loadThread: vi.fn(async () => liveBootstrap(value, 1)),
-      sendQueuedTurnNow: vi.fn(() => response), connectLiveStream: canonicalStream(value, 1) };
+      sendQueuedTurnNow: vi.fn(async () => { await response; }), connectLiveStream: canonicalStream(value, 1) };
     const { runtime, replaceAdapter } = reactiveSurface(original);
     await open(runtime);
     sendButton(runtime).click();
@@ -267,13 +268,13 @@ describe('Flower queued send now', () => {
     expect(runtime.querySelector('[data-flower-queued-turn-dock-id="queued-first"]')?.textContent).toContain('New connection:');
   });
 
-  it('uses the frozen adapter for failure recovery after the user changes adapters', async () => {
+  it('does not refresh an obsolete connection after a command failure', async () => {
     const value = queuedThread('running');
     let reject!: (error: Error) => void;
     const response = new Promise<FlowerThreadView>((_resolve, r) => { reject = r; });
     const loadOriginal = vi.fn(async () => liveBootstrap(value, 1));
     const original: FlowerSurfaceAdapter = { ...adapter(true), listThreads: vi.fn(async () => [value]), loadThread: loadOriginal,
-      sendQueuedTurnNow: vi.fn(() => response), connectLiveStream: canonicalStream(value, 1) };
+      sendQueuedTurnNow: vi.fn(async () => { await response; }), connectLiveStream: canonicalStream(value, 1) };
     const { runtime, replaceAdapter } = reactiveSurface(original);
     await open(runtime);
     sendButton(runtime).click();
@@ -283,9 +284,22 @@ describe('Flower queued send now', () => {
     await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
     loadOriginal.mockClear(); loadNew.mockClear();
     reject(flowerTurnAdmissionError('unknown', new Error('Response lost after reconnect')));
-    await waitFor(() => loadOriginal.mock.calls.length === 1);
-    expect(loadOriginal).toHaveBeenCalledWith(value.thread_id);
+    await waitFor(() => !sendButton(runtime).hasAttribute('aria-busy'));
+    expect(loadOriginal).not.toHaveBeenCalled();
     expect(loadNew).not.toHaveBeenCalled();
     expect(runtime.querySelector('[data-flower-queued-turn-dock-id="queued-first"]')).not.toBeNull();
   });
+});
+
+it('keeps an acknowledged send settled when its detail refresh fails and retries only synchronization', async () => {
+  const value = queuedThread();
+  const loadThread = vi.fn().mockResolvedValueOnce(liveBootstrap(value, 1)).mockRejectedValueOnce(new Error('Detail temporarily unavailable')).mockResolvedValue(sentView(value, 2));
+  const sendQueuedTurnNow = vi.fn(async () => {});
+  const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: async () => [value], loadThread, sendQueuedTurnNow });
+  await open(runtime); sendButton(runtime).click();
+  await waitFor(() => sendQueuedTurnNow.mock.calls.length === 1 && Boolean(runtime.querySelector('.flower-thread-sync-error')));
+  expect(sendButton(runtime)).toBeEnabled();
+  runtime.querySelector<HTMLButtonElement>('.flower-thread-sync-error button')!.click();
+  await waitFor(() => runtime.querySelector('[data-flower-queued-turn-dock-id="queued-first"]') === null);
+  expect(sendQueuedTurnNow).toHaveBeenCalledTimes(1);
 });

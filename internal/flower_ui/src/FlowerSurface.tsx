@@ -1,4 +1,6 @@
 import { createThreadReadSync } from './threadReadSync';
+import { scheduleThreadSelectionCommit } from './threadSelectionSchedule';
+import { createThreadDetailLoader } from './threadDetailLoader';
 import type { FlowerConversationPreferencePatch, FlowerConversationPreferences } from './contracts/flowerSurfaceContracts';
 import { ParentEventRow, createParentEventReading } from './parentEvents';
 import { FlowerAnswerActions } from './FlowerAnswerActions';
@@ -863,7 +865,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [liveSyncState, setLiveSyncState] = createSignal<LiveTransportState>({ status: 'stopped', connectionEpoch: 0 });
   const livePresentationConfirmed = () => !props.adapter.connectLiveStream || liveSyncState().status === 'ready';
   const [unconfirmedStops, setUnconfirmedStops] = createSignal<ReadonlySet<string>>(new Set());
-  const readDetail = <T,>(read: () => Promise<T>, signal?: AbortSignal): Promise<T> => (
+  const readDetail = <T,>(read: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<T> => (
     withFlowerReadDeadline(read, copy().chat.syncTimeout, signal)
   );
   let subagentDetailReadController: AbortController | undefined;
@@ -1107,24 +1109,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let engagementBootstrapSequence = 0;
   let threadsRefreshSequence = 0;
   let flowerLiveReadyCount = 0;
-  type ThreadDetailLoadTarget = Readonly<{
-    cycle: number;
-    activityRevision: number;
-    settingsRevision: number;
-    sequence: number;
-    source: ThreadDetailSource;
-    force: boolean;
-    background: boolean;
-  }>;
-  type ThreadDetailLoadCoordinatorState = {
-    cycle: number;
-    failedTarget: ThreadDetailLoadTarget | null;
-    inFlightTarget: ThreadDetailLoadTarget | null;
-    inFlight: Promise<FlowerThreadSnapshot | null> | null;
-    readController?: AbortController;
-    pending: ThreadDetailLoadTarget | null;
+  let navigationReadController = new AbortController();
+  const releaseNavigationReads = () => {
+    navigationReadController.abort();
+    navigationReadController = new AbortController();
   };
-  const threadDetailLoads = new Map<string, ThreadDetailLoadCoordinatorState>();
   let startedFocusThreadRequestID = '';
   let startedFocusComposerRequest = 0;
   let composerRef: HTMLTextAreaElement | HTMLInputElement | undefined;
@@ -1180,7 +1169,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let threadSwitcherRef: HTMLDivElement | undefined;
   let selectedThreadTailRevealFrame = 0;
   let selectedThreadTailRevealTimer: number | undefined;
-  let deferredThreadSelectionFrame = 0;
+  let cancelSelectionCommit: (() => void) | undefined;
   const composerReferenceIndex = props.adapter.listWorkingDirectoryEntries
     ? createFlowerComposerReferenceIndex({
       listDirectory: (path) => props.adapter.listWorkingDirectoryEntries!({ path, showHidden: false }),
@@ -1188,7 +1177,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     })
     : null;
   onCleanup(() => composerReferenceIndex?.dispose());
-  let deferredThreadSelectionTimer: number | undefined;
   let deferredThreadSelectionToken = 0;
   let nextThreadSelectionTransactionID = 1;
   let threadSelectionTransaction: Readonly<{
@@ -1385,14 +1373,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const cancelDeferredThreadSelection = () => {
     setPendingThreadSelection('');
     deferredThreadSelectionToken += 1;
-    if (deferredThreadSelectionFrame) {
-      cancelTranscriptAnimationFrame(deferredThreadSelectionFrame);
-      deferredThreadSelectionFrame = 0;
-    }
-    if (deferredThreadSelectionTimer !== undefined) {
-      window.clearTimeout(deferredThreadSelectionTimer);
-      deferredThreadSelectionTimer = undefined;
-    }
+    cancelSelectionCommit?.();
+    cancelSelectionCommit = undefined;
   };
   createEffect(on(
     () => [
@@ -1760,11 +1742,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     };
     try {
       const scope = turn.attachments?.length ? await ensureAttachmentStagingScope(threadID) : undefined;
-      prepared = await adapter.prepareQueuedTurnDraft(threadID, turn.queue_id, { expected_input_fingerprint: turn.input_fingerprint, ...(scope ? { staging_scope: scope } : {}) });
+      prepared = await withFlowerRequestDeadline(() => adapter.prepareQueuedTurnDraft!(threadID, turn.queue_id, { expected_input_fingerprint: turn.input_fingerprint!, ...(scope ? { staging_scope: scope } : {}) }), copy().chat.syncTimeout);
       // Validate all references before removing the canonical message.
       flowerQueuedDraftReferences(prepared);
       if (surfaceDisposed) return;
-      const current = await adapter.takeBackQueuedTurn(threadID, turn.queue_id, turn.input_fingerprint);
+      const current = await withFlowerRequestDeadline(() => adapter.takeBackQueuedTurn!(threadID, turn.queue_id, turn.input_fingerprint!), copy().chat.syncTimeout);
       if (epoch === liveTransport.connectionEpoch()) applyRuntimeCurrent(current);
       restoreDraft();
     } catch (error) {
@@ -1772,7 +1754,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         restoreDraft();
         notifyThreadActionError(copy().chat.queueTakeBackUnknown);
       } else notifyThreadActionError(flowerTurnAdmissionFailureKind(error) === 'rejected' ? copy().chat.queueTakeBackConflict : getErrorMessage(error));
-      try { receiveThreadView(await adapter.loadThread(threadID), 'background_refresh', epoch); }
+      try { if (epoch === liveTransport.connectionEpoch()) await requestThreadDetail(threadID, 'background_refresh', true, true); }
       catch (refreshError) { reportThreadDetailDiagnostic(threadID, 'request_or_mapping', 'background_refresh', refreshError); }
     } finally {
       setQueueTakeBackPending(previous => { const next = new Map(previous); next.delete(threadID); return next; });
@@ -2157,9 +2139,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   onCleanup(() => {
     surfaceDisposed = true;
-    for (const state of threadDetailLoads.values()) state.readController?.abort();
+    releaseNavigationReads();
+    detailLoader.dispose();
+    referenceReadController?.abort();
     subagentDetailReadController?.abort();
-    threadDetailLoads.clear();
     composerAutosizeController?.dispose();
     composerAutosizeController = undefined;
     for (const unsubscribe of attachmentControllerUnsubscribers.values()) unsubscribe();
@@ -3798,9 +3781,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const sequence = ++queuedTurnReorderSequence;
     setQueuedTurnReorder(null);
     const requestEpoch = liveTransport.connectionEpoch();
-    void props.adapter.reorderQueuedTurns(reorder.threadID, reorder.orderedQueueIDs).then((live) => {
-      if (sequence !== queuedTurnReorderSequence) return;
-      receiveThreadView(live, 'user_action', requestEpoch);
+    void withFlowerRequestDeadline(() => props.adapter.reorderQueuedTurns!(reorder.threadID, reorder.orderedQueueIDs), copy().chat.syncTimeout).then(async () => {
+      if (sequence !== queuedTurnReorderSequence || requestEpoch !== liveTransport.connectionEpoch()) return;
+      await requestThreadDetail(reorder.threadID, 'user_action', true, true);
     }).catch((error) => {
       if (sequence !== queuedTurnReorderSequence) return;
       notifyThreadActionError(getErrorMessage(error));
@@ -3821,15 +3804,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       || queueTakeBackPending().has(threadID)
     ) return;
     setQueuedTurnReorder(null);
+    const requestEpoch = liveTransport.connectionEpoch();
     try {
-      const requestEpoch = liveTransport.connectionEpoch();
-      const live = await props.adapter.deleteQueuedTurn(threadID, queueID);
-      receiveThreadView(live, 'user_action', requestEpoch);
+      await withFlowerRequestDeadline(() => props.adapter.deleteQueuedTurn!(threadID, queueID), copy().chat.syncTimeout);
+      if (requestEpoch === liveTransport.connectionEpoch()) await requestThreadDetail(threadID, 'user_action', true, true);
     } catch (error) {
       try {
-        const requestEpoch = liveTransport.connectionEpoch();
-        const live = await props.adapter.loadThread(threadID);
-        receiveThreadView(live, 'background_refresh', requestEpoch);
+        if (requestEpoch === liveTransport.connectionEpoch()) await requestThreadDetail(threadID, 'background_refresh', true, true);
       } catch (recoveryError) {
         reportThreadDetailDiagnostic(threadID, 'request_or_mapping', 'background_refresh', recoveryError);
       }
@@ -3857,13 +3838,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     scrollTranscriptToBottom({ smooth: false });
     requestTranscriptAnimationFrame(() => scrollTranscriptToBottom({ smooth: false }));
     try {
-      const live = await adapter.sendQueuedTurnNow(threadID, queueID);
-      receiveThreadView(live, 'user_action', requestEpoch);
+      await withFlowerRequestDeadline(() => adapter.sendQueuedTurnNow!(threadID, queueID), copy().chat.syncTimeout);
+      if (requestEpoch === liveTransport.connectionEpoch()) await requestThreadDetail(threadID, 'user_action', true, true);
       if (requestEpoch === liveTransport.connectionEpoch() && selectedThreadID() === threadID) requestComposerFocus();
     } catch (error) {
       try {
-        const live = await adapter.loadThread(threadID);
-        receiveThreadView(live, 'background_refresh', requestEpoch);
+        if (requestEpoch === liveTransport.connectionEpoch()) await requestThreadDetail(threadID, 'background_refresh', true, true);
       } catch (recoveryError) {
         reportThreadDetailDiagnostic(threadID, 'request_or_mapping', 'background_refresh', recoveryError);
       }
@@ -3885,161 +3865,57 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
   };
 
-  const threadDetailLoadState = (threadID: string): ThreadDetailLoadCoordinatorState => {
-    const existing = threadDetailLoads.get(threadID);
-    if (existing) return existing;
-    const created: ThreadDetailLoadCoordinatorState = {
-      cycle: 0,
-      failedTarget: null,
-      inFlightTarget: null,
-      inFlight: null,
-      pending: null,
-    };
-    threadDetailLoads.set(threadID, created);
-    return created;
-  };
-
-  const beginThreadDetailDisplayCycle = (threadID: string) => {
-    const state = threadDetailLoadState(threadID);
-    state.cycle += 1;
-    state.failedTarget = null;
-    state.readController?.abort();
-  };
-
-  const threadDetailTargetAdvanced = (target: ThreadDetailLoadTarget, current: ThreadDetailLoadTarget) => (
-    target.cycle > current.cycle
-    || (target.cycle === current.cycle && (
-      target.activityRevision > current.activityRevision
-      || target.settingsRevision > current.settingsRevision
-      || (target.force && !current.force)
-    ))
-  );
-
-  const queueLatestThreadDetailTarget = (
-    state: ThreadDetailLoadCoordinatorState,
-    target: ThreadDetailLoadTarget,
-  ) => {
-    const current = state.pending;
-    if (!current || threadDetailTargetAdvanced(target, current)) {
-      state.pending = current && target.cycle === current.cycle ? {
-        ...target,
-        activityRevision: Math.max(target.activityRevision, current.activityRevision),
-        settingsRevision: Math.max(target.settingsRevision, current.settingsRevision),
-        force: target.force || current.force,
-      } : target;
-    }
-  };
-
+  const threadDetailRuntimeKey = (thread: FlowerThreadSnapshot | undefined) => thread
+    ? JSON.stringify([thread.status, thread.active_run_id, thread.approval_pending, thread.approval_pending_count]) : '';
+  const detailLoader = createThreadDetailLoader<FlowerThreadSnapshot>({
+    read: async (tid, target, signal) => {
+      const live = await readDetail(readSignal => props.adapter.loadThread(tid, readSignal), signal);
+      signal.throwIfAborted();
+      if (surfaceDisposed || retiredThreadIDs.has(tid) || target.epoch !== liveTransport.connectionEpoch()) {
+        throw new DOMException('Read was superseded.', 'AbortError');
+      }
+      const result = receiveThreadView(live, target.source as ThreadDetailSource, target.epoch);
+      const latest = threadCache().summaries.get(tid);
+      if (threadSummaryNeedsDetail(latest, result.thread, threadCache().views.get(tid)?.contentRevision)
+        && threadSnapshotRevision(latest) <= target.activityRevision
+        && threadSettingsRevision(latest) <= target.settingsRevision
+        && threadDetailRuntimeKey(latest) === target.runtimeKey) {
+        throw new Error('thread detail did not converge to the requested revision');
+      }
+      return result.thread;
+    },
+    onError: (tid, target, error) => {
+      if (surfaceDisposed || retiredThreadIDs.has(tid) || target.epoch !== liveTransport.connectionEpoch()) return;
+      reportThreadDetailDiagnostic(tid, 'request_or_mapping', target.source as ThreadDetailSource, error);
+      if (target.source !== 'goal_popup' && selectedThreadID() === tid && !pendingThreadSelection()) setThreadLoadError(threadDetailUserError(error));
+    },
+    onLoading: (tid, loading, target) => setThreadDetailLoading(tid, loading && target?.source !== 'goal_popup'),
+  });
+  createEffect(() => {
+    const cache = threadCache();
+    detailLoader.retain([...cache.views.keys(), ...(cache.selectedId ? [cache.selectedId] : [])]);
+  });
+  const beginThreadDetailDisplayCycle = (threadID: string) => detailLoader.invalidate(threadID);
   const requestThreadDetail = (
     threadID: string,
     source: ThreadDetailSource,
     force = false,
     background = false,
-    stillRequested: () => boolean = () => true,
+    demandSignal?: AbortSignal,
   ): Promise<FlowerThreadSnapshot | null> => {
     const tid = trimString(threadID);
-    if (!stillRequested() || !tid || retiredThreadIDs.has(tid) || (!background && (pendingThreadSelection() || tid !== selectedThreadID()))) return Promise.resolve(null);
-    const state = threadDetailLoadState(tid);
+    if (!tid || surfaceDisposed || retiredThreadIDs.has(tid)
+      || (!background && (pendingThreadSelection() || tid !== selectedThreadID()))) return Promise.resolve(null);
     const cached = threadCache().views.get(tid);
-    const detail = cached?.thread;
     const summary = threadCache().summaries.get(tid);
-    if (!force && cached?.version && detail && !threadSummaryNeedsDetail(summary, detail, cached.contentRevision)) return Promise.resolve(null);
-
-    const target: ThreadDetailLoadTarget = {
-      cycle: state.cycle,
-      activityRevision: threadSnapshotRevision(summary),
-      settingsRevision: threadSettingsRevision(summary),
-      sequence: threadLoadSequence,
-      source,
-      force,
-      background,
-    };
-    if (!force && state.failedTarget && !threadDetailTargetAdvanced(target, state.failedTarget)) return Promise.resolve(null);
-    if (state.inFlight && state.inFlightTarget) {
-      // Confirm a read started after opening, rather than an older in-flight read.
-      if (source === 'goal_popup') return state.inFlight.then(() => requestThreadDetail(tid, source, true, background, stillRequested));
-      if (threadDetailTargetAdvanced(target, state.inFlightTarget)) {
-        queueLatestThreadDetailTarget(state, target);
-        return state.inFlight.then(() => requestThreadDetail(tid, source, force, background));
-      }
-      return state.inFlight;
-    }
-
-    if (source !== 'goal_popup') setThreadDetailLoading(tid, true);
-    state.inFlightTarget = target;
-    const requestEpoch = liveTransport.connectionEpoch();
-    const readController = new AbortController();
-    state.readController = readController;
-    const request = (async () => {
-      try {
-        const live = await readDetail(() => props.adapter.loadThread(tid), readController.signal);
-        if (
-          surfaceDisposed
-          || retiredThreadIDs.has(tid)
-          || (!target.background && target.sequence !== threadLoadSequence)
-          || target.cycle !== state.cycle
-          || requestEpoch !== liveTransport.connectionEpoch()
-          || (!target.background && selectedThreadID() !== tid)
-        ) return null;
-        const result = receiveThreadView(live, source, requestEpoch);
-        state.failedTarget = null;
-        const latestSummary = threadCache().summaries.get(tid);
-        if (threadSummaryNeedsDetail(latestSummary, result.thread, threadCache().views.get(tid)?.contentRevision)) {
-          const latestTarget: ThreadDetailLoadTarget = {
-            ...target,
-            activityRevision: threadSnapshotRevision(latestSummary),
-            settingsRevision: threadSettingsRevision(latestSummary),
-            source: 'summary_update',
-            force: false,
-          };
-          if (threadDetailTargetAdvanced(latestTarget, target)) {
-            queueLatestThreadDetailTarget(state, latestTarget);
-          } else {
-            const error = new Error('thread detail did not converge to the requested revision');
-            reportThreadDetailDiagnostic(
-              tid,
-              'detail_not_converged',
-              source,
-              error,
-              live.current.view_version,
-              result,
-            );
-            throw error;
-          }
-        }
-        return result.thread;
-      } catch (error) {
-        if (readController.signal.aborted || requestEpoch !== liveTransport.connectionEpoch()) return null;
-        if (source !== 'goal_popup' && target.cycle === state.cycle) state.failedTarget = target;
-        reportThreadDetailDiagnostic(tid, 'request_or_mapping', source, error);
-        if (source !== 'goal_popup' && target.cycle === state.cycle && selectedThreadID() === tid) {
-          setThreadLoadError(threadDetailUserError(error));
-        }
-        return null;
-      } finally {
-        if (state.inFlightTarget === target) {
-          state.readController = undefined;
-          state.inFlight = null;
-          state.inFlightTarget = null;
-          const pending = state.pending;
-          state.pending = null;
-          setThreadDetailLoading(tid, false);
-          if (
-            pending
-            && pending.cycle === state.cycle
-            && (pending.background || pending.sequence === threadLoadSequence)
-            && (pending.background || selectedThreadID() === tid)
-            && !retiredThreadIDs.has(tid)
-          ) {
-            void requestThreadDetail(tid, pending.source, pending.force, pending.background);
-          }
-        }
-      }
-    })();
-    state.inFlight = request;
-    return request;
+    if (!force && cached?.version && !threadSummaryNeedsDetail(summary, cached.thread, cached.contentRevision)) return Promise.resolve(cached.thread);
+    if (force) detailLoader.invalidate(tid);
+    const signal = background ? demandSignal : demandSignal
+      ? AbortSignal.any([navigationReadController.signal, demandSignal]) : navigationReadController.signal;
+    const target = { epoch: liveTransport.connectionEpoch(), activityRevision: threadSnapshotRevision(summary),
+      settingsRevision: threadSettingsRevision(summary), runtimeKey: threadDetailRuntimeKey(summary), source };
+    return detailLoader.request(tid, target, signal);
   };
-
 
   createEffect(() => {
     const threadID = trimString(selectedThreadID());
@@ -4345,6 +4221,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     ) {
       return;
     }
+    releaseNavigationReads();
     const sequence = claimedSequence ?? ++threadLoadSequence;
     const detailAvailable = threadCache().views.has(tid);
     batch(() => {
@@ -4403,30 +4280,24 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return;
     }
     const token = deferredThreadSelectionToken;
-    // Chromium can present a main-thread frame one compositor frame later.
-    // Keep transcript work out of both the style/paint and presentation frames.
-    let framesRemaining = 4;
-    const afterFeedbackFrame = () => {
-      if (token !== deferredThreadSelectionToken) return;
-      if (--framesRemaining > 0) {
-        deferredThreadSelectionFrame = requestTranscriptAnimationFrame(afterFeedbackFrame);
-        return;
-      }
-      deferredThreadSelectionFrame = 0;
-      const transaction = threadSelectionTransaction;
-      if (transaction?.value === tid) emitThreadSelectionEvent(transaction, 'intent_presented');
-      deferredThreadSelectionTimer = window.setTimeout(() => {
-        deferredThreadSelectionTimer = undefined;
+    cancelSelectionCommit = scheduleThreadSelectionCommit({
+      document,
+      requestFrame: requestTranscriptAnimationFrame,
+      cancelFrame: cancelTranscriptAnimationFrame,
+      presented: () => {
+        if (token !== deferredThreadSelectionToken) return;
+        const transaction = threadSelectionTransaction;
+        if (transaction?.value === tid) emitThreadSelectionEvent(transaction, 'intent_presented');
+      },
+      commit: () => {
+        cancelSelectionCommit = undefined;
         if (token !== deferredThreadSelectionToken) return;
         const transaction = threadSelectionTransaction;
         if (transaction?.value === tid) emitThreadSelectionEvent(transaction, 'commit_started');
         void loadAndSelectThread(tid, false, claimedSequence, focusOwner);
-        if (transaction?.value === tid && threadSelectionTransaction === transaction) {
-          emitThreadSelectionEvent(transaction, 'committed');
-        }
-      }, 0);
-    };
-    deferredThreadSelectionFrame = requestTranscriptAnimationFrame(afterFeedbackFrame);
+        if (transaction?.value === tid && threadSelectionTransaction === transaction) emitThreadSelectionEvent(transaction, 'committed');
+      },
+    });
   };
 
   const focusThreadFromRequest = async (requestID: string, threadID: string) => {
@@ -5022,12 +4893,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         setThreadCache(cache => incoming.reduce((next, summary) => next.replaceSummary(summary), cache));
       }
       if (selectedID) {
-        if (envelope.kind === 'ready') beginThreadDetailDisplayCycle(selectedID);
         void requestThreadDetail(selectedID, 'summary_update', envelope.kind === 'ready');
       }
       if (envelope.kind === 'ready') {
         for (const threadID of unconfirmedStops()) {
-          if (threadID !== selectedID) { beginThreadDetailDisplayCycle(threadID); void requestThreadDetail(threadID, 'user_action', true, true); }
+          if (threadID !== selectedID) { void requestThreadDetail(threadID, 'user_action', true, true); }
         }
       }
       if (envelope.kind === 'ready' && flowerLiveReadyCount > 1 && activeSubagentDetail()) {
@@ -5139,7 +5009,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       onState: setLiveSyncState,
       onBoundary: () => {
         frames.boundary();
-        for (const state of threadDetailLoads.values()) state.readController?.abort();
+        releaseNavigationReads();
+        referenceReadController?.abort();
+        detailLoader.reset();
         subagentDetailReadController?.abort();
         setThreadCache(cache => cache.invalidateRuntimeVersions());
         if (untrack(privateControlRequested)) setComputerControlDisconnected(true);
@@ -5928,14 +5800,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const requestEpoch = liveTransport.connectionEpoch();
       try {
         if (unconfirmedStops().has(stoppingThreadID)) {
-          beginThreadDetailDisplayCycle(stoppingThreadID);
           const current = await requestThreadDetail(stoppingThreadID, 'user_action', true, true);
           if (!current || surfaceDisposed || requestEpoch !== liveTransport.connectionEpoch()
             || current.cancellation || !flowerThreadHasActiveTurnEvidence(current)) return;
         }
         await withFlowerRequestDeadline(() => props.adapter.stopThread(stoppingThreadID), copy().chat.stopUnconfirmed);
         if (surfaceDisposed || requestEpoch !== liveTransport.connectionEpoch()) return;
-        beginThreadDetailDisplayCycle(stoppingThreadID);
         const confirmed = await requestThreadDetail(stoppingThreadID, 'user_action', true, true);
         if (!confirmed || (!confirmed.cancellation && flowerThreadHasActiveTurnEvidence(confirmed))) {
           updateThreadIDMembership(setUnconfirmedStops, stoppingThreadID, true);
@@ -6029,6 +5899,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const resetCompose = () => {
+    releaseNavigationReads();
     setThreadNavigationOpen(false);
     const requestID = trimString(props.focusThreadRequest?.request_id);
     if (requestID) props.onFocusThreadRequestConsumed?.(requestID);
@@ -6084,7 +5955,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     threadsRefreshSequence += 1;
     if (retiringSelected) engagementBootstrapSequence += 1;
 
-    threadDetailLoads.delete(tid);
+    detailLoader.forget(tid);
     setThreadDetailLoading(tid, false);
     readSync.retire(tid);
     releaseAttachmentStagingScope(tid);
@@ -6175,6 +6046,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setThreadNavigationOpen(false);
     cancelDeferredThreadSelection();
     cancelThreadSelectionTransaction();
+    releaseNavigationReads();
     const claimedSequence = ++threadLoadSequence;
     if (tid === selectedThreadID() && threadCache().views.has(tid) && !threadLoadError()) {
       returnToChat();
@@ -6228,6 +6100,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         cancelPresentedSelectionSchedule();
         setPresentedSelection(null);
         closeSubagentOverlays();
+        releaseNavigationReads();
         setSelectedThreadID('');
         setThreadLoadError('');
         returnToChat();
@@ -6656,6 +6529,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const goalVersionReviewed = () => !goalDraftStale() || goalReviewedVersion() === (selectedGoal()?.version ?? 0);
   const goalCanSave = () => goalPopupLoad() === 'ready' && goalEditing() && Boolean(goalEditor()?.text.trim()) && goalVersionReviewed();
   const goalPopupID = createUniqueId();
+  let goalReadController: AbortController | undefined;
+  onCleanup(() => goalReadController?.abort());
   let goalPopupAttempt = 0;
   let goalPopupEpoch = 0;
   const goalDraftSelections = new Map<string, { start: number; end: number; direction: 'forward' | 'backward' | 'none'; scroll: number }>();
@@ -6686,6 +6561,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
   };
   const closeGoalEditor = (discard = false, restoreFocus = true) => {
+    goalReadController?.abort();
+    goalReadController = undefined;
     rememberGoalSelection();
     if (discard) storeGoalEditor(currentComposerSessionKey(), null);
     goalPopupAttempt++;
@@ -6694,6 +6571,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (restoreFocus) (goalTriggerRef ?? composerRef)?.focus();
   };
   const confirmGoalPopup = async () => {
+    goalReadController?.abort();
+    const controller = new AbortController();
+    goalReadController = controller;
     const attempt = ++goalPopupAttempt;
     const sessionKey = currentComposerSessionKey();
     const threadID = selectedThreadID();
@@ -6702,8 +6582,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const sequence = threadLoadSequence;
     setGoalPopupLoad('loading');
     setGoalReviewedVersion(undefined);
-    const result = await requestThreadDetail(threadID, 'goal_popup', true, false,
-      () => !surfaceDisposed && attempt === goalPopupAttempt && goalPopupOpen() && sequence === threadLoadSequence && epoch === liveTransport.connectionEpoch());
+    const result = await requestThreadDetail(threadID, 'goal_popup', true, false, controller.signal);
     if (surfaceDisposed || attempt !== goalPopupAttempt || !goalPopupOpen() || sessionKey !== currentComposerSessionKey()
       || sequence !== threadLoadSequence || epoch !== liveTransport.connectionEpoch()) return;
     setGoalPopupLoad(result ? 'ready' : 'error');
@@ -7489,7 +7368,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           current = projectSubagentDetailThread(detail);
           acceptActiveSubagentCurrent(child.parentThreadID, detail.current, detail.summary, detail.model_context, detail.context_usage, detail.context_compactions, detail.timeline_decorations);
         } else {
-          beginThreadDetailDisplayCycle(threadID);
           current = await requestThreadDetail(threadID, 'user_action', true);
         }
         if (!current || !stillTargeted() || current.status !== 'failed' || current.error?.code === 'floret_effect_outcome_unknown') return;
@@ -7497,11 +7375,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           await executeCompactContextCommand(current, stillTargeted);
           return;
         }
-        const live = await withFlowerRequestDeadline(() => props.adapter.retryThread(threadID), copy().settings.dialog.catalog.retryTimedOut);
-        if (!stillTargeted()) return;
-        if (live.thread.thread_id !== threadID || live.current.thread_id !== threadID) throw new Error('Retry returned a different thread.');
-        if (child) acceptActiveSubagentCurrent(child.parentThreadID, live.current);
-        else receiveThreadView(live, 'user_action', requestEpoch);
+        await withFlowerRequestDeadline(() => props.adapter.retryThread(threadID), copy().settings.dialog.catalog.retryTimedOut);
+        if (surfaceDisposed || requestEpoch !== liveTransport.connectionEpoch()) return;
+        if (child) {
+          if (!stillTargeted()) return;
+          await refreshActiveSubagentDetail();
+        } else await requestThreadDetail(threadID, 'user_action', true, true);
       } catch (error) {
         reportThreadDetailDiagnostic(threadID, 'request_or_mapping', 'user_action', error);
         notifyThreadActionError(getErrorMessage(error));
@@ -8481,12 +8360,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [referenceOpenBusy, setReferenceOpenBusy] = createSignal(false);
   const [referenceOpenError, setReferenceOpenError] = createSignal('');
   let referencePreviewGeneration = 0;
+  let referenceReadController: AbortController | undefined;
   const captureSnapshotPreviewFocus = () => {
+    referenceReadController?.abort();
+    referenceReadController = undefined;
     referencePreviewGeneration++;
     snapshotPreviewOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setReferenceOpenError(''); setReferenceOpenBusy(false);
   };
   const closeSnapshotPreview = () => {
+    referenceReadController?.abort();
+    referenceReadController = undefined;
     referencePreviewGeneration++;
     const restore = snapshotPreviewOpener;
     setComposerSnapshotPreviewID(''); setContextSnapshotPreview(null);
@@ -8514,12 +8398,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (referenceOpenBusy() || referencedThreadUnavailable(thread)) return;
     const generation = referencePreviewGeneration, selectedID = selectedThreadID();
     const epoch = liveTransport.connectionEpoch();
+    referenceReadController?.abort();
+    const controller = new AbortController();
+    referenceReadController = controller;
     setReferenceOpenBusy(true); setReferenceOpenError('');
     try {
-      const detail = await readDetail(() => props.adapter.loadThread(thread.thread_id), new AbortController().signal);
+      const detail = await requestThreadDetail(thread.thread_id, 'user_action', true, true, controller.signal);
       if (surfaceDisposed || generation !== referencePreviewGeneration || selectedID !== selectedThreadID() || epoch !== liveTransport.connectionEpoch()) return;
-      if (detail.thread.thread_id !== thread.thread_id || retiredThreadIDs.has(thread.thread_id)) throw new Error('Referenced conversation unavailable');
-      receiveThreadView(detail, 'user_action', epoch);
+      if (!detail || detail.thread_id !== thread.thread_id || retiredThreadIDs.has(thread.thread_id)) throw new Error('Referenced conversation unavailable');
       closeSnapshotPreview();
       await loadAndSelectThread(thread.thread_id);
     } catch {
@@ -9069,7 +8955,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     } catch (error) {
       if (requestEpoch !== liveTransport.connectionEpoch()) return;
       if (Number((error as { status?: number })?.status) === 409) {
-        beginThreadDetailDisplayCycle(threadID);
         void requestThreadDetail(threadID, 'user_action', true);
       }
       if (selectedThreadDetailMatches(threadID) && selectedInputRequest()?.prompt_id === request.prompt_id) {
@@ -9126,7 +9011,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     } catch (error) {
       if (isFlowerApprovalConflict(error)) {
         notifyThreadActionError(copy().chat.toolApprovalUnavailable);
-        beginThreadDetailDisplayCycle(threadID);
         void requestThreadDetail(threadID, 'user_action', true);
       }
       if (selectedThreadDetailMatches(threadID) && !isFlowerApprovalConflict(error)) {
@@ -9184,7 +9068,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     } catch (error) {
       if (isFlowerApprovalConflict(error)) {
         notifyThreadActionError(copy().chat.toolApprovalUnavailable);
-        beginThreadDetailDisplayCycle(threadID);
         void requestThreadDetail(threadID, 'user_action', true);
       }
       if (selectedThreadDetailMatches(threadID) && !isFlowerApprovalConflict(error)) {
@@ -11868,7 +11751,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const retrySelectedThreadDetail = () => {
     const threadID = trimString(selectedThreadID());
     if (!threadID || retiredThreadIDs.has(threadID)) return;
-    beginThreadDetailDisplayCycle(threadID);
     void requestThreadDetail(
       threadID,
       'user_action',
@@ -11890,7 +11772,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const resyncWorkspace = () => {
     if (props.adapter.connectLiveStream) { liveTransport.restart(); return; }
     for (const threadID of unconfirmedStops()) {
-      beginThreadDetailDisplayCycle(threadID);
       void requestThreadDetail(threadID, 'user_action', true, true);
     }
   };

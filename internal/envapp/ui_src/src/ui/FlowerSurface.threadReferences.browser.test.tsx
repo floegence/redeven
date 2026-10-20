@@ -20,6 +20,7 @@ function referenceAdapter() {
 }
 
 async function reference(surface: HTMLElement, threadID: string, mode: 'more' | 'right' | 'keyboard' = 'more') {
+  await waitFor(() => !surface.querySelector('[data-flower-pending-thread-id]') && surface.querySelector('[data-flower-selected-thread-loading]')?.getAttribute('data-flower-selected-thread-loading') === 'false');
   const row = surface.querySelector<HTMLElement>(`[data-thread-id="${threadID}"]`)!;
   if (mode === 'more') await userEvent.click(row.querySelector<HTMLButtonElement>('.flower-thread-card-menu-button')!);
   else if (mode === 'right') row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 40, clientY: 120 }));
@@ -48,7 +49,7 @@ describe('Flower thread references', () => {
       const surface = renderSurfaceWithAdapter(source);
       await waitFor(() => Boolean(surface.querySelector('[data-thread-id="thread-1"]')));
       await userEvent.click(surface.querySelector<HTMLButtonElement>('[data-thread-id="thread-1"] .flower-thread-card-select-button')!);
-      await waitFor(() => Boolean(surface.querySelector('textarea:not(:disabled)')));
+      await waitFor(() => Boolean(surface.querySelector('textarea:not(:disabled)')) && surface.querySelector('[data-flower-selected-thread-id]')?.getAttribute('data-flower-selected-thread-id') === 'thread-1' && surface.querySelector('[data-flower-selected-thread-loading]')?.getAttribute('data-flower-selected-thread-loading') === 'false');
       await userEvent.click(await reference(surface, 'thread-2', 'right'));
       const editor = surface.querySelector<HTMLTextAreaElement>('textarea')!;
       await userEvent.fill(editor, 'What did this conversation investigate?');
@@ -67,7 +68,7 @@ describe('Flower thread references', () => {
     const source = referenceAdapter(), surface = renderSurfaceWithAdapter(source);
     await waitFor(() => Boolean(surface.querySelector('[data-thread-id="thread-1"]')));
     await userEvent.click(surface.querySelector<HTMLButtonElement>('[data-thread-id="thread-1"] .flower-thread-card-select-button')!);
-    await waitFor(() => Boolean(surface.querySelector('textarea:not(:disabled)')));
+    await waitFor(() => Boolean(surface.querySelector('textarea:not(:disabled)')) && surface.querySelector('[data-flower-selected-thread-id]')?.getAttribute('data-flower-selected-thread-id') === 'thread-1' && surface.querySelector('[data-flower-selected-thread-loading]')?.getAttribute('data-flower-selected-thread-loading') === 'false');
     const editor = surface.querySelector<HTMLTextAreaElement>('textarea')!;
     await userEvent.fill(editor, 'Retained draft 中文');
     for (const mode of ['more', 'right', 'keyboard'] as const) await userEvent.click(await reference(surface, 'thread-2', mode));
@@ -198,13 +199,14 @@ describe('Flower thread references', () => {
     const source = referenceAdapter(), surface = renderSurfaceWithAdapter(source);
     await waitFor(() => Boolean(surface.querySelector('[data-thread-id="thread-1"]')));
     await userEvent.click(surface.querySelector<HTMLButtonElement>('[data-thread-id="thread-1"] .flower-thread-card-select-button')!);
-    await waitFor(() => Boolean(surface.querySelector('textarea:not(:disabled)')));
+    await waitFor(() => Boolean(surface.querySelector('textarea:not(:disabled)')) && surface.querySelector('[data-flower-selected-thread-id]')?.getAttribute('data-flower-selected-thread-id') === 'thread-1' && surface.querySelector('[data-flower-selected-thread-loading]')?.getAttribute('data-flower-selected-thread-loading') === 'false');
     await userEvent.fill(surface.querySelector<HTMLTextAreaElement>('textarea')!, 'Draft in original conversation');
     await userEvent.click(await reference(surface, 'thread-2'));
     await userEvent.click(surface.querySelector<HTMLButtonElement>('.flower-composer-reference-chip-preview')!);
     await userEvent.click(page.getByRole('button', { name: 'Open conversation', exact: true }));
     await waitFor(() => surface.querySelector('[data-thread-id="thread-2"]')?.getAttribute('data-flower-thread-active') === 'true');
-    expect(source.loadThread).toHaveBeenCalledWith('thread-2');
+    expect(source.loadThread).toHaveBeenCalledWith('thread-2', expect.any(AbortSignal));
+    await waitFor(() => surface.querySelector('[data-flower-selected-thread-id]')?.getAttribute('data-flower-selected-thread-id') === 'thread-2');
     expect(surface.querySelector('textarea')!.value).toBe('');
     await userEvent.click(surface.querySelector<HTMLButtonElement>('[data-thread-id="thread-1"] .flower-thread-card-select-button')!);
     await expect.poll(() => surface.querySelector('textarea')!.value).toBe('Draft in original conversation');
@@ -241,7 +243,7 @@ describe('Flower thread references', () => {
     const surface = renderSurfaceWithAdapter(source);
     await waitFor(() => Boolean(surface.querySelector('[data-thread-id="thread-1"]')));
     await userEvent.click(surface.querySelector<HTMLButtonElement>('[data-thread-id="thread-1"] .flower-thread-card-select-button')!);
-    await waitFor(() => Boolean(surface.querySelector('textarea:not(:disabled)')));
+    await waitFor(() => Boolean(surface.querySelector('textarea:not(:disabled)')) && surface.querySelector('[data-flower-selected-thread-id]')?.getAttribute('data-flower-selected-thread-id') === 'thread-1' && surface.querySelector('[data-flower-selected-thread-loading]')?.getAttribute('data-flower-selected-thread-loading') === 'false');
     await userEvent.click(await reference(surface, 'thread-2'));
     const editor = surface.querySelector<HTMLTextAreaElement>('textarea')!;
     await userEvent.fill(editor, 'Queued reference'); await userEvent.keyboard('{Enter}');
@@ -296,4 +298,31 @@ describe('Flower thread references', () => {
     await waitFor(() => vi.mocked(source.launchTurn).mock.calls.length === 1);
     expect(surface.querySelector('[data-thread-id="thread-1"]')?.getAttribute('data-flower-thread-active')).toBe('true');
   });
+});
+
+it('releases a reference preflight on close and cannot navigate from its late result', async () => {
+  await page.viewport(1280, 900);
+  const source = referenceAdapter();
+  const snapshot = { runtime_id: source.runtime.runtime_id, thread_id: 'thread-2', title: 'Captured source', status: 'idle', working_dir: '/workspace', created_at_ms: 1, updated_at_ms: 2, captured_at_ms: 3 };
+  const target = thread({ messages: [{ id: 'reference-owner', turn_id: 'turn-1', role: 'user', content: 'Inspect reference', status: 'complete', created_at_ms: 1,
+    references: [{ reference_id: 'thread-ref', kind: 'thread', referenced_thread_id: snapshot.thread_id, label: snapshot.title, text: JSON.stringify(snapshot) }] }] });
+  vi.mocked(source.listThreads).mockResolvedValue([target, thread({ thread_id: 'thread-2' })]);
+  const late = deferred<ReturnType<typeof liveBootstrap>>(); let signal!: AbortSignal;
+  const loadThread = vi.fn((id: string, readSignal: AbortSignal) => {
+    if (id === 'thread-2') { signal = readSignal; return late.promise; }
+    return Promise.resolve(liveBootstrap(target));
+  });
+  const surface = renderSurfaceWithAdapter({ ...source, loadThread });
+  await waitFor(() => Boolean(surface.querySelector('[data-thread-id="thread-1"]')));
+  await userEvent.click(surface.querySelector<HTMLButtonElement>('[data-thread-id="thread-1"] .flower-thread-card-select-button')!);
+  await waitFor(() => Boolean(surface.querySelector('[data-flower-chat-context-chip="true"]')));
+  await userEvent.click(surface.querySelector<HTMLButtonElement>('[data-flower-chat-context-chip="true"]')!);
+  await userEvent.click(page.getByRole('button', { name: 'Open conversation', exact: true }));
+  await waitFor(() => Boolean(signal));
+  await userEvent.keyboard('{Escape}');
+  expect(signal.aborted).toBe(true);
+  late.resolve(liveBootstrap(thread({ thread_id: 'thread-2', title: 'Late source' })));
+  await Promise.resolve(); await Promise.resolve();
+  expect(surface.querySelector('main')?.getAttribute('data-flower-selected-thread-id')).toBe('thread-1');
+  expect(document.querySelector('.flower-chat-context-preview-window')).toBeNull();
 });

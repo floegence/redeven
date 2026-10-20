@@ -1,3 +1,4 @@
+import { awaitRuntimeFlowerRead } from './runtimeFlowerReadOwner';
 import http, { type ClientRequest, type IncomingHttpHeaders, type IncomingMessage } from 'node:http';
 import https from 'node:https';
 import {
@@ -200,4 +201,25 @@ export function runtimeFlowerInvalidJSONError(
     message: 'Flower returned an invalid JSON response.',
     status: response.status,
   };
+}
+
+/** One access challenge may refresh authorization; cancellation never starts a retry. */
+export async function requestRuntimeFlowerWithAccess(input: Readonly<{
+  signal?: AbortSignal;
+  authorize: () => Promise<Readonly<Record<string, string>>>;
+  request: (headers: Readonly<Record<string, string>>) => Promise<RuntimeFlowerHTTPResponse>;
+  invalidateAccess: () => void;
+}>): Promise<RuntimeFlowerHTTPResponse> {
+  const request = async () => {
+    input.signal?.throwIfAborted();
+    const headers = await awaitRuntimeFlowerRead(input.authorize(), input.signal);
+    input.signal?.throwIfAborted();
+    const response = await input.request(headers);
+    input.signal?.throwIfAborted();
+    return response;
+  };
+  const response = await request();
+  if (response.status !== 423) return response;
+  input.invalidateAccess();
+  return request();
 }
