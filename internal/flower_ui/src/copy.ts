@@ -523,6 +523,18 @@ export type FlowerSurfaceCopy = Readonly<{
     goalDescription: string;
     goalEmpty: string;
     goalSave: string;
+    goalConfirming: string;
+    goalConfirmFailed: string;
+    goalCurrent: string;
+    goalDraft: string;
+    goalUnsaved: string;
+    goalUpdated: string;
+    goalMissing: string;
+    goalDiscardDraft: string;
+    goalContinueEditing: string;
+    goalViewCurrent: string;
+    goalReplace: string;
+    goalRetry: string;
     goalDelete: string;
     goalConflict: string;
     goalReviewing: string;
@@ -978,6 +990,18 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     goalDescription: "Describe the result you want. Changes apply to the next model request.",
     goalEmpty: "Set a goal",
     goalSave: "Save goal",
+    goalConfirming: "Checking the latest goal…",
+    goalConfirmFailed: "Could not confirm the latest goal. Try again.",
+    goalCurrent: "Current goal",
+    goalDraft: "My draft",
+    goalUnsaved: "Unsaved",
+    goalUpdated: "The current goal has changed",
+    goalMissing: "There is no current goal.",
+    goalDiscardDraft: "Discard draft",
+    goalContinueEditing: "Continue editing",
+    goalViewCurrent: "View current goal",
+    goalReplace: "Replace current goal",
+    goalRetry: "Try again",
     goalDelete: "Delete goal",
     goalConflict: "This goal changed. Your edit is preserved; review the current goal and submit again.",
     goalReviewing: "Checking goal",

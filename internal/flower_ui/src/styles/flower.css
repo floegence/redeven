@@ -12478,9 +12478,25 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-goal-popup-title > svg { color: var(--muted-foreground); }
 .flower-goal-popup-controls { display: flex; gap: 0.25rem; }
 .flower-goal-popup-controls button { display: grid; place-items: center; width: 1.5rem; height: 1.5rem; border-radius: 0.375rem; color: var(--muted-foreground); cursor: pointer; }
+.flower-goal-popup-controls svg { width: 0.875rem; height: 0.875rem; }
 .flower-goal-popup-controls button:hover { color: var(--foreground); background: var(--muted); }
 .flower-goal-popup-controls button:disabled { cursor: not-allowed; opacity: 0.5; }
-.flower-goal-input { width: 100%; min-height: 6rem; max-height: min(18rem, 40dvh); resize: vertical; border: 0; padding: 0; background: transparent; font-size: 0.8125rem; line-height: 1.65; overflow-wrap: anywhere; }
+.flower-goal-input { width: 100%; min-height: 5.5rem; field-sizing: content; max-height: min(18rem, 40dvh); resize: vertical; border: 0; padding: 0; background: transparent; font-size: 0.8125rem; line-height: 1.65; overflow-wrap: anywhere; }
+.flower-goal-body { min-height: 5.5rem; min-width: 0; }
+.flower-goal-loading { min-height: 5.5rem; display: flex; align-items: center; justify-content: center; margin: 0; color: var(--muted-foreground); font-size: 0.75rem; }
+.flower-goal-notice { margin: 0 0 0.5rem; color: var(--muted-foreground); font-size: 0.75rem; line-height: 1.5; }
+.flower-goal-tabs { display: flex; gap: 1.125rem; border-bottom: 1px solid var(--border); }
+.flower-goal-tabs button { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0 0 0.5rem; border-bottom: 1px solid transparent; color: var(--muted-foreground); font-size: 0.75rem; white-space: nowrap; cursor: pointer; }
+.flower-goal-tabs button[aria-selected='true'] { border-bottom-color: var(--foreground); color: var(--foreground); }
+.flower-goal-tabs button:disabled { cursor: default; }
+.flower-goal-unsaved { font-size: 0.625rem; color: var(--muted-foreground); }
+.flower-goal-actions button { min-height: 1.75rem; padding: 0.25rem 0.625rem; border-radius: 0.375rem; font-size: 0.6875rem; font-weight: 500; white-space: nowrap; cursor: pointer; }
+.flower-goal-actions .flower-goal-primary { margin-left: auto; background: var(--primary); color: var(--primary-foreground); }
+.flower-goal-actions .flower-goal-primary:hover { background: color-mix(in srgb, var(--primary) 88%, var(--foreground)); }
+.flower-goal-actions .flower-goal-discard { color: var(--muted-foreground); }
+.flower-goal-actions .flower-goal-discard:hover { background: var(--muted); color: var(--foreground); }
+.flower-goal-actions button:disabled { cursor: not-allowed; opacity: 0.5; }
+.flower-goal-actions button:focus-visible, .flower-goal-tabs button:focus-visible, .flower-goal-popup-controls button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .flower-goal-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.375rem; }
 .flower-goal-current, .flower-goal-history p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .flower-goal-current, .flower-goal-error { font-size: 0.75rem; line-height: 1.5; }

@@ -1091,6 +1091,7 @@ export function renderSurfaceWithAdapter(surfaceAdapter: TestFlowerSurfaceAdapte
 export function renderSurfaceWithDraftCoordinator(
   surfaceAdapter: TestFlowerSurfaceAdapter,
   draftCoordinator: FlowerComposerDraftCoordinator,
+  props: Pick<FlowerSurfaceProps, 'focusThreadRequest' | 'copy'> = {},
 ): HTMLDivElement {
   const runtime = document.createElement('div');
   document.body.appendChild(runtime);
@@ -1098,6 +1099,8 @@ export function renderSurfaceWithDraftCoordinator(
     <FlowerSurfaceComponent
       adapter={fixtureAdapter(surfaceAdapter)}
       draftCoordinator={draftCoordinator}
+      focusThreadRequest={props.focusThreadRequest}
+      copy={props.copy}
       notify={(notification) => notifications.push(notification)}
     />
   ), runtime);

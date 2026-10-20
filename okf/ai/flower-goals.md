@@ -3,7 +3,7 @@ type: AI Interaction Contract
 title: Flower thread Goals
 description: Manage one concise objective and reflect in the same execution context before natural completion.
 tags: [ai, flower, goals, recovery]
-timestamp: 2026-10-18T00:00:00Z
+timestamp: 2026-10-19T00:00:00Z
 ---
 # Summary
 
@@ -65,14 +65,31 @@ the chip close button and Backspace on empty input leave the mode. Ordinary text
 attachments, references and pending question answers remain in their draft scope.
 /goal clear remains the explicit delete command.
 
-Without a Goal, no Goal control is rendered. With one, a compact borderless,
-softly tinted rounded-rectangle badge with the shared target-and-arrow icon sits
-to the right of the progress indicator on the same row. It opens an anchored
-popup with the full editable text and delete control; save and cancel appear
-for edits.
-The popup uses a soft elevation shadow without a visible border or a surrounding
-input focus frame. Keyboard focus remains visible on individual controls.
-Escape and outside dismissal preserve unsaved text, while cancel discards it.
+A compact borderless, softly tinted Goal badge with the shared target-and-arrow
+icon sits beside progress. Without a Goal it remains available only for a retained
+local draft. Each popup opening confirms detail through the existing read
+coordinator before showing canonical text. Loading and retry stay local; failed
+confirmation never presents cached text as current or blocks input, Stop,
+approvals or navigation. The accepted ThreadCache view remains the only current
+Goal source, including when newer live state wins over an older read.
+
+Viewing, focus and dismissal create no draft. Only actual input creates goal_edit
+in ComposerDraftStore, with its original Goal version. Reopening starts on the
+confirmed current Goal. A retained draft has quiet Current goal / My draft tabs,
+an Unsaved label and explicit Continue editing and Discard draft actions.
+Current text is read-only while a draft exists. One body contains either current
+text or the draft; ordinary concurrent changes use one neutral status line.
+Replacement requires reviewing the current version and explicitly choosing
+Replace current goal. Another update invalidates that review without rebasing
+the draft. Delete uses the displayed current version and never consumes unsent
+edits. Missing or deleted Goals retain an explicit draft recovery entry; only an
+explicit submission may recreate a Goal.
+
+The anchored popup uses soft elevation, no visible border and no surrounding
+input focus frame. Controls retain keyboard focus indicators. Escape and outside
+dismissal preserve text; Discard draft clears local editing only. Keyboard tabs,
+selection, scroll and IME composition remain usable. Dismissed, superseded,
+disconnected and navigated-away callbacks cannot reopen or refocus the popup.
 Creation, updates, deletion and completion use one expandable icon row: action,
 single-line Goal preview and disclosure chevron. Set and update share the Goal-set
 label; completion is reported only by the canonical completion fact. Expansion
@@ -125,12 +142,18 @@ the exact request identity and content. A mutation or current-view failure after
 possible commit returns AI_GOAL_OUTCOME_UNKNOWN; server failures retain unknown
 outcome semantics in both transports. Removing its local recovery copy does not
 cancel a possibly committed server mutation. Version conflicts preserve edits and
-allow an explicit new submission against the returned version. Editor text belongs
+require explicit review before popup replacement against the displayed version.
+Editor text belongs
 to the thread's ComposerDraftStore scope, including switching and restart.
 Successful commands consume only the unchanged submitted draft revision; newer
 text, including edits that return to the same text, references and attachments
 remain intact. A conflict preserves command mode and resubmits as a command,
-while popup conflicts remain save-only edits. New-thread send and Goal creation
+while popup conflicts remain save-only edits. Popup success consumes only the
+captured draft object; later edits, including edit-away-and-back input, remain.
+A later edit may inherit only its own successful request's written Goal version,
+never a newer current Goal returned alongside it. Discarding an earlier draft
+breaks that relationship. Restart preserves existing drafts conservatively;
+there is no inferred deletion or second durable Goal lifecycle. New-thread send and Goal creation
 share preparation exclusion so a pending operation cannot create a second conversation.
 
 Creating a Goal moves the draft to the canonical thread without changing its

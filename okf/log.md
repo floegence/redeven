@@ -13,6 +13,10 @@
 - Keep command output ingestion and sequence cursors live while the existing terminal viewport owner defers running text/layout during drag or resize; append to a retained Text node and flush terminal/error results immediately. See [streaming stability](ui/flower-streaming-stability.md).
 - Extend the same validated live frame buffer to same-attempt progress samples and incomplete argument display previews, preserving invocation, approval, cancellation, error and completion boundaries.
 
+## 2026-10-19 — Confirm current Goals before draft recovery
+
+- Confirm [Goal popup](ai/flower-goals.md) content on every opening, create drafts only from user edits, and require explicit review for stale replacements. Preserve unsent edits, exact-request recovery and local failure handling with one body and quiet draft navigation.
+
 ## 2026-10-19 — Single-source Flower execution guidance
 
 - Remove the host's duplicate tool enumeration and standalone search-scope section; distinguish local and hosted search, narrow structured questions, and measure final provider instructions after Goal injection. See [prompt contracts](ai/flower-prompt-and-rule-sources.md).

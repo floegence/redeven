@@ -2,17 +2,37 @@ import '../index.css';
 import './flower-feature.css';
 import { page, userEvent } from 'vitest/browser';
 import { afterEach, expect, it, vi } from 'vitest';
-import type { FlowerGoal, FlowerGoalInput, FlowerGoalResult, FlowerRuntimeCurrentView } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerGoal, FlowerGoalInput, FlowerGoalResult, FlowerRuntimeCurrentView, FlowerLiveStreamEnvelope, FlowerThreadSnapshot, FlowerThreadView } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { createFlowerComposerDraftCoordinator } from '../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
 import { withModelDirectoryFixture } from '../../../../flower_ui/testing/modelDirectoryFixture';
 import { flowerTurnAdmissionError } from '../../../../flower_ui/src/flowerTurnAdmission';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import { createLocalizedFlowerSurfaceCopy } from '../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
-import { createTestI18nHelpers } from './i18n/locales/testDictionaries';
+import { dictionaries, createTestI18nHelpers } from './i18n/locales/testDictionaries';
 import type { EnvAppTranslationKey } from './i18n';
 import { adapter, deferred, inputRequest, liveBootstrap, thread, renderSurfaceWithAdapterProps, renderSurfaceWithDraftCoordinator, waitFor } from './FlowerSurface.navigation.testHarness';
 
 const focus = { request_id: 'goal-focus', thread_id: 'thread-1' };
+
+it('confirms a fresh Goal on every open without creating a viewing draft', async () => {
+  const base = adapter(true), coordinator = createFlowerComposerDraftCoordinator();
+  let snapshot = thread({ goal: { version: 1, text: 'Earlier goal', status: 'active', actor: 'user' } });
+  let version = 20;
+  const loadThread = vi.fn(async () => ({ ...liveBootstrap(snapshot, version), current: { ...liveBootstrap(snapshot, version).current, goal: snapshot.goal } }));
+  const surface = renderSurfaceWithDraftCoordinator({ ...base, listThreads: async () => [snapshot], loadThread }, coordinator, { focusThreadRequest: focus });
+  await waitFor(() => Boolean(surface.querySelector('.flower-goal-tag')), 10000);
+  const reads = loadThread.mock.calls.length;
+  await userEvent.click(surface.querySelector<HTMLButtonElement>('.flower-goal-tag')!);
+  await waitFor(() => Boolean(surface.querySelector('.flower-goal-input')));
+  expect(coordinator.read('thread-1').value.goal_edit).toBeUndefined();
+  expect(loadThread.mock.calls.length).toBeGreaterThan(reads);
+  await userEvent.keyboard('{Escape}');
+  snapshot = { ...snapshot, goal: { version: 2, text: 'Current goal', status: 'active', actor: 'model' } }; version++;
+  await userEvent.click(surface.querySelector<HTMLButtonElement>('.flower-goal-tag')!);
+  await waitFor(() => surface.querySelector<HTMLTextAreaElement>('.flower-goal-input')?.value === 'Current goal');
+  expect(coordinator.read('thread-1').value.goal_edit).toBeUndefined();
+  expect(JSON.stringify(coordinator.exportForRestart())).not.toContain('goal_edit');
+});
 afterEach(() => document.documentElement.classList.remove('dark'));
 function response(input: FlowerGoalInput, version = input.expected_version + 1, conflict = false): FlowerGoalResult {
   const goal: FlowerGoal = { version, text: input.operation !== 'delete' ? input.text : undefined, status: input.operation !== 'delete' ? 'active' : 'absent', actor: 'user' };
@@ -30,10 +50,401 @@ async function command(surface: HTMLElement, text: string) {
   return input;
 }
 function action(surface: HTMLElement, label: string) {
-  const button = [...surface.querySelectorAll<HTMLButtonElement>('.flower-goal-actions button')].find(item => item.textContent === label);
+  const button = [...surface.querySelectorAll<HTMLButtonElement>('.flower-goal-actions button')].find(item => (item.getAttribute('aria-label') ?? item.textContent) === label);
   if (!button) throw new Error('Goal action is unavailable: ' + label);
   return button;
 }
+
+function goalFixture(initialText = 'Current goal', initialVersion = 2) {
+  const base = adapter(true), coordinator = createFlowerComposerDraftCoordinator();
+  let snapshot = thread({ goal: { version: initialVersion, text: initialText, status: 'active', actor: 'user' } });
+  let viewVersion = 20;
+  let read: (() => Promise<FlowerThreadView>) | undefined;
+  const values: FlowerLiveStreamEnvelope[] = [];
+  let reconnectRequested = false;
+  let wake: (() => void) | undefined;
+  const view = () => ({ ...liveBootstrap(snapshot, viewVersion), current: { ...liveBootstrap(snapshot, viewVersion).current, goal: snapshot.goal } });
+  const publish = (goal: FlowerThreadSnapshot['goal']) => {
+    snapshot = { ...snapshot, goal }; viewVersion++;
+    values.push({ schema_version: 1, kind: 'thread.batch', thread_id: snapshot.thread_id, current: view().current }); wake?.();
+  };
+  const loadThread = vi.fn(async () => read ? read() : view());
+  const manageGoal = vi.fn(async (input: FlowerGoalInput): Promise<FlowerGoalResult> => {
+    const result = response(input);
+    snapshot = { ...snapshot, goal: result.goal }; viewVersion++;
+    return { ...result, current: view().current };
+  });
+  const surface = renderSurfaceWithDraftCoordinator({ ...base, listThreads: async () => [snapshot], loadThread, manageGoal,
+    connectLiveStream: async function* ({ signal }) {
+      yield { schema_version: 1, kind: 'ready', summaries: [snapshot] };
+      const abort = () => wake?.(); signal.addEventListener('abort', abort, { once: true });
+      try {
+        while (!signal.aborted) {
+          if (reconnectRequested) { reconnectRequested = false; throw new Error('Fixture connection changed'); }
+          const value = values.shift();
+          if (value) yield value;
+          else await new Promise<void>(resolve => { wake = resolve; });
+        }
+      } finally { signal.removeEventListener('abort', abort); }
+    },
+  }, coordinator, { focusThreadRequest: focus });
+  const open = async () => {
+    await waitFor(() => Boolean(surface.querySelector('.flower-goal-tag')), 10000);
+    await userEvent.click(surface.querySelector<HTMLButtonElement>('.flower-goal-tag')!);
+  };
+  const input = () => surface.querySelector<HTMLTextAreaElement>('.flower-goal-input')!;
+  return { surface, coordinator, loadThread, manageGoal, base, view, publish, open, input,
+    reconnect: () => { reconnectRequested = true; wake?.(); }, setRead: (next: typeof read) => { read = next; } };
+}
+
+it('hides cached text until confirmation and keeps failure and retry local', async () => {
+  const f = goalFixture(), pending = deferred<FlowerThreadView>();
+  await waitFor(() => Boolean(f.surface.querySelector('.flower-goal-tag')), 10000);
+  f.setRead(() => pending.promise);
+  await f.open();
+  expect(f.surface.querySelector('.flower-goal-loading')).not.toBeNull();
+  expect(f.input()).toBeNull();
+  expect(f.surface.querySelector<HTMLButtonElement>('[aria-label="Delete goal"]')!.disabled).toBe(true);
+  expect(composer(f.surface).disabled).toBe(false);
+  pending.reject(new Error('Offline'));
+  await waitFor(() => Boolean(f.surface.querySelector('.flower-goal-popup [role="alert"]')));
+  expect(f.input()).toBeNull();
+  expect(f.surface.querySelector('.flower-thread-sync-error')).toBeNull();
+  expect(composer(f.surface).disabled).toBe(false);
+  f.setRead(undefined);
+  await userEvent.click(action(f.surface, 'Try again'));
+  await waitFor(() => f.input()?.value === 'Current goal');
+  expect(f.coordinator.read('thread-1').value.goal_edit).toBeUndefined();
+});
+
+it('shows the latest Goal first and requires reviewing each replacement version', async () => {
+  const f = goalFixture();
+  await f.open(); await waitFor(() => Boolean(f.input()));
+  edit(f.input(), 'My retained draft');
+  const editBaseline = f.coordinator.read('thread-1').value.goal_edit;
+  await userEvent.keyboard('{Escape}');
+  f.publish({ version: 3, text: 'Updated remotely', status: 'active', actor: 'model' });
+  await waitFor(() => f.surface.querySelector('.flower-goal-tag')?.getAttribute('title') === 'Updated remotely');
+  await f.open(); await waitFor(() => f.input()?.value === 'Updated remotely');
+  expect(f.input().readOnly).toBe(true);
+  await userEvent.click(f.surface.querySelector<HTMLButtonElement>('[role="tab"][data-goal-view="draft"]')!);
+  expect(f.input().value).toBe('My retained draft');
+  expect(f.input().readOnly).toBe(true);
+  expect(f.coordinator.read('thread-1').value.goal_edit).toBe(editBaseline);
+  await userEvent.click(action(f.surface, 'View current goal'));
+  await userEvent.click(action(f.surface, 'Continue editing'));
+  expect(action(f.surface, 'Replace current goal').disabled).toBe(false);
+  f.publish({ version: 4, text: 'Changed again', status: 'active', actor: 'model' });
+  await waitFor(() => f.surface.querySelector('.flower-goal-tag')?.getAttribute('title') === 'Changed again');
+  expect(f.input().value).toBe('My retained draft');
+  expect(f.surface.querySelector('[aria-label="Replace current goal"]')).toBeNull();
+  expect(f.manageGoal).not.toHaveBeenCalled();
+  await userEvent.click(action(f.surface, 'View current goal'));
+  expect(f.input().value).toBe('Changed again');
+  await userEvent.click(action(f.surface, 'Continue editing'));
+  await userEvent.click(action(f.surface, 'Replace current goal'));
+  await waitFor(() => f.manageGoal.mock.calls.length === 1);
+  expect(f.manageGoal.mock.calls[0]![0]).toMatchObject({ operation: 'set', text: 'My retained draft', expected_version: 4 });
+  expect(f.base.launchTurn).not.toHaveBeenCalled();
+});
+
+it('retains one editor, selection, scroll and IME input through live changes and tab switches', async () => {
+  const f = goalFixture(); await f.open(); await waitFor(() => Boolean(f.input()));
+  f.publish({ version: 3, text: 'Live current text', status: 'active', actor: 'model' });
+  await waitFor(() => f.input()?.value === 'Live current text');
+  expect(f.coordinator.read('thread-1').value.goal_edit).toBeUndefined();
+  edit(f.input(), 'My draft\n'.repeat(40));
+  const input = f.input(); input.setSelectionRange(4, 11, 'backward'); input.scrollTop = 80;
+  const scroll = input.scrollTop;
+  input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+  f.publish({ version: 4, text: 'New model goal', status: 'active', actor: 'model' });
+  await waitFor(() => f.surface.querySelector('.flower-goal-tag')?.getAttribute('title') === 'New model goal');
+  expect(f.input()).toBe(input); expect(input.selectionStart).toBe(4); expect(input.selectionEnd).toBe(11);
+  input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Escape', isComposing: true }));
+  expect(f.surface.querySelector('.flower-goal-popup')).not.toBeNull();
+  input.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
+  await userEvent.click(action(f.surface, 'View current goal'));
+  await userEvent.click(action(f.surface, 'Continue editing'));
+  await waitFor(() => document.activeElement === input);
+  expect(f.input()).toBe(input); expect(input.selectionStart).toBe(4); expect(input.selectionEnd).toBe(11);
+  expect(input.selectionDirection).toBe('backward'); expect(input.scrollTop).toBe(scroll);
+});
+
+it('accepts a newer live view when an older confirmation returns and ignores dismissed reads', async () => {
+  const f = goalFixture(), pending = deferred<FlowerThreadView>();
+  await waitFor(() => Boolean(f.surface.querySelector('.flower-goal-tag')), 10000);
+  const old = f.view(); f.setRead(() => pending.promise);
+  await f.open(); await userEvent.keyboard('{Escape}');
+  const trigger = f.surface.querySelector<HTMLButtonElement>('.flower-goal-tag')!;
+  await f.open();
+  f.publish({ version: 3, text: 'Live is newer', status: 'active', actor: 'model' });
+  await waitFor(() => trigger.getAttribute('title') === 'Live is newer');
+  pending.resolve(old);
+  await waitFor(() => f.input()?.value === 'Live is newer');
+  await userEvent.keyboard('{Escape}');
+  expect(document.activeElement).toBe(trigger);
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  expect(f.surface.querySelector('.flower-goal-popup')).toBeNull();
+  expect(document.activeElement).toBe(trigger);
+});
+
+it('does not reopen on a late conflict or silently advance the preserved draft baseline', async () => {
+  const f = goalFixture(), pending = deferred<FlowerGoalResult>();
+  f.manageGoal.mockImplementationOnce(() => pending.promise);
+  await f.open(); await waitFor(() => Boolean(f.input())); edit(f.input(), 'Keep my edit');
+  await userEvent.click(action(f.surface, 'Save goal'));
+  await waitFor(() => f.manageGoal.mock.calls.length === 1);
+  await userEvent.keyboard('{Escape}');
+  const input = f.manageGoal.mock.calls[0]![0];
+  const conflict = response({ ...input, text: 'Remote conflict' }, 5, true);
+  pending.resolve({ ...conflict, current: { ...conflict.current, view_version: 30 } });
+  await waitFor(() => f.surface.querySelector('.flower-goal-tag')?.getAttribute('title') === 'Remote conflict');
+  expect(f.surface.querySelector('.flower-goal-popup')).toBeNull();
+  expect(f.coordinator.read('thread-1').value.goal_edit).toMatchObject({ text: 'Keep my edit', version: 2 });
+});
+
+it('preserves a later identical edit and inherits only its own confirmed write version', async () => {
+  const f = goalFixture(), pending = deferred<FlowerGoalResult>();
+  f.manageGoal.mockImplementationOnce(() => pending.promise);
+  await f.open(); await waitFor(() => Boolean(f.input())); edit(f.input(), 'Submitted edit');
+  await userEvent.click(action(f.surface, 'Save goal'));
+  await waitFor(() => f.manageGoal.mock.calls.length === 1);
+  edit(f.input(), 'Changed while pending'); edit(f.input(), 'Submitted edit');
+  const result = response(f.manageGoal.mock.calls[0]![0]);
+  pending.resolve({ ...result, current: { ...result.current, view_version: 30, goal: { version: 7, text: 'Later model goal', status: 'active', actor: 'model' } } });
+  await waitFor(() => f.surface.querySelector('.flower-goal-tag')?.getAttribute('title') === 'Later model goal');
+  expect(f.input().value).toBe('Submitted edit');
+  expect(f.coordinator.read('thread-1').value.goal_edit).toMatchObject({ text: 'Submitted edit', version: 3 });
+  expect(f.surface.querySelector('[aria-label="Save goal"]')).toBeNull();
+});
+
+it('deletes the reviewed current version while preserving an older draft and its recovery entry', async () => {
+  const f = goalFixture(); await f.open(); await waitFor(() => Boolean(f.input())); edit(f.input(), 'Recover this draft');
+  await userEvent.keyboard('{Escape}');
+  f.publish({ version: 5, text: 'Current to delete', status: 'active', actor: 'model' });
+  await waitFor(() => f.surface.querySelector('.flower-goal-tag')?.getAttribute('title') === 'Current to delete');
+  await f.open(); await waitFor(() => f.input()?.value === 'Current to delete');
+  await userEvent.click(f.surface.querySelector<HTMLButtonElement>('[aria-label="Delete goal"]')!);
+  await waitFor(() => f.manageGoal.mock.calls.length === 1);
+  expect(f.manageGoal.mock.calls[0]![0]).toMatchObject({ operation: 'delete', expected_version: 5 });
+  await waitFor(() => f.surface.querySelector('.flower-goal-popup')?.textContent?.includes('There is no current goal.') ?? false);
+  expect(f.coordinator.read('thread-1').value.goal_edit?.text).toBe('Recover this draft');
+  await userEvent.keyboard('{Escape}'); await f.open();
+  await waitFor(() => Boolean(f.surface.querySelector('[role="tablist"]')));
+  await userEvent.click(action(f.surface, 'Continue editing'));
+  expect(f.input().value).toBe('Recover this draft');
+  expect(f.manageGoal).toHaveBeenCalledTimes(1);
+  await userEvent.click(action(f.surface, 'Discard draft'));
+  expect(f.coordinator.read('thread-1').value.goal_edit).toBeUndefined();
+  expect(f.surface.querySelector('.flower-goal-tag')).toBeNull();
+});
+
+it('times out confirmation locally, preserves a recoverable draft and never displays a late result', async () => {
+  const f = goalFixture(), pending = deferred<FlowerThreadView>();
+  await f.open(); await waitFor(() => Boolean(f.input())); edit(f.input(), 'Keep this through timeout');
+  await userEvent.keyboard('{Escape}');
+  f.setRead(() => pending.promise);
+  // Advance only the existing read deadline; browser interaction timers remain real.
+  const timer = window.setTimeout.bind(window);
+  const deadline = vi.spyOn(window, 'setTimeout').mockImplementation(((handler: TimerHandler, delay?: number, ...args: unknown[]) =>
+    timer(handler, delay === 15000 ? 40 : delay, ...args)) as typeof window.setTimeout);
+  try {
+    await f.open();
+    await waitFor(() => Boolean(f.surface.querySelector('.flower-goal-popup [role="alert"]')));
+  } finally { deadline.mockRestore(); }
+  expect(composer(f.surface).disabled).toBe(false);
+  await userEvent.click(f.surface.querySelector<HTMLButtonElement>('[data-goal-view="draft"]')!);
+  expect(f.input().value).toBe('Keep this through timeout'); expect(f.input().readOnly).toBe(true);
+  pending.resolve(f.view());
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  expect(f.surface.querySelector('.flower-goal-popup [role="alert"]')).not.toBeNull();
+  expect(f.coordinator.read('thread-1').value.goal_edit?.text).toBe('Keep this through timeout');
+});
+
+it('preserves drafts after a delete conflict without creating a draft or retrying deletion', async () => {
+  const f = goalFixture();
+  f.manageGoal.mockImplementationOnce(async input => {
+    const conflict = response({ ...input, operation: 'set', text: 'Changed before delete' }, 4, true);
+    return { ...conflict, current: { ...conflict.current, view_version: 30 } };
+  });
+  await f.open(); await waitFor(() => Boolean(f.input()));
+  await userEvent.click(f.surface.querySelector<HTMLButtonElement>('[aria-label="Delete goal"]')!);
+  await waitFor(() => f.input()?.value === 'Changed before delete');
+  expect(f.manageGoal).toHaveBeenCalledTimes(1);
+  expect(f.coordinator.read('thread-1').value.goal_edit).toBeUndefined();
+  expect(f.surface.querySelector('.flower-goal-notice')?.textContent).toBe('The current goal has changed');
+  expect(f.base.stopThread).not.toHaveBeenCalled();
+});
+
+it('restores restart drafts explicitly and keeps draft selection isolated between threads', async () => {
+  const base = adapter(true), coordinator = createFlowerComposerDraftCoordinator();
+  const before = createFlowerComposerDraftCoordinator();
+  before.open('thread-1').mutate(value => ({ ...value, goal_edit: { text: 'Recovered draft', version: 1 } }));
+  coordinator.restoreAfterRestart(before.exportForRestart()); before.dispose();
+  const first = thread({ goal: { version: 3, text: 'First current', actor: 'user', status: 'active' } });
+  const second = thread({ thread_id: 'thread-2', title: 'Second conversation', goal: { version: 4, text: 'Second current', actor: 'model', status: 'active' } });
+  const pending = deferred<FlowerThreadView>(); let delayFirst = false;
+  const loadThread = vi.fn(async (id: string) => delayFirst && id === 'thread-1' ? pending.promise : ({ ...liveBootstrap(id === 'thread-1' ? first : second, 20), current: { ...liveBootstrap(id === 'thread-1' ? first : second, 20).current, goal: (id === 'thread-1' ? first : second).goal } }));
+  const surface = renderSurfaceWithDraftCoordinator({ ...base, listThreads: async () => [first, second], loadThread }, coordinator, { focusThreadRequest: focus });
+  await waitFor(() => Boolean(surface.querySelector('.flower-goal-tag')), 10000);
+  await userEvent.click(surface.querySelector<HTMLButtonElement>('.flower-goal-tag')!);
+  await waitFor(() => surface.querySelector<HTMLTextAreaElement>('.flower-goal-input')?.value === 'First current');
+  await userEvent.click(action(surface, 'Continue editing'));
+  expect(surface.querySelector<HTMLTextAreaElement>('.flower-goal-input')?.value).toBe('Recovered draft');
+  await userEvent.keyboard('{Escape}');
+  delayFirst = true;
+  await userEvent.click(surface.querySelector<HTMLButtonElement>('.flower-goal-tag')!);
+  await waitFor(() => Boolean(surface.querySelector('.flower-goal-loading')));
+  await userEvent.click(surface.querySelector<HTMLButtonElement>('.flower-mobile-navigation-button')!);
+  await waitFor(() => Boolean(surface.querySelector('[data-thread-id="thread-2"] button')));
+  await userEvent.click(surface.querySelector<HTMLButtonElement>('[data-thread-id="thread-2"] button')!);
+  await waitFor(() => surface.querySelector('.flower-goal-tag')?.getAttribute('title') === 'Second current');
+  pending.resolve({ ...liveBootstrap(first, 20), current: { ...liveBootstrap(first, 20).current, goal: first.goal } });
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  expect(surface.querySelector('.flower-goal-popup')).toBeNull();
+  expect(coordinator.read('thread-1').value.goal_edit?.text).toBe('Recovered draft');
+  expect(coordinator.read('thread-2').value.goal_edit).toBeUndefined();
+});
+
+it('does not consume a new draft after discard while the earlier save is pending', async () => {
+  const f = goalFixture(), pending = deferred<FlowerGoalResult>();
+  f.manageGoal.mockImplementationOnce(() => pending.promise);
+  await f.open(); await waitFor(() => Boolean(f.input())); edit(f.input(), 'Submitted');
+  await userEvent.click(action(f.surface, 'Save goal')); await waitFor(() => f.manageGoal.mock.calls.length === 1);
+  await userEvent.click(action(f.surface, 'Discard draft'));
+  edit(f.input(), 'Unrelated new draft');
+  const result = response(f.manageGoal.mock.calls[0]![0]);
+  pending.resolve({ ...result, current: { ...result.current, view_version: 30 } });
+  await waitFor(() => f.surface.querySelector('.flower-goal-tag')?.getAttribute('title') === 'Submitted');
+  expect(f.coordinator.read('thread-1').value.goal_edit).toMatchObject({ text: 'Unrelated new draft', version: 2 });
+});
+
+it('retries an unknown popup save with its frozen identity and preserves subsequent edits', async () => {
+  const f = goalFixture();
+  f.manageGoal.mockImplementationOnce(async () => { throw flowerTurnAdmissionError('unknown', new Error('Response lost')); });
+  await f.open(); await waitFor(() => Boolean(f.input())); edit(f.input(), 'Frozen request');
+  await userEvent.click(action(f.surface, 'Save goal'));
+  await waitFor(() => Boolean(f.surface.querySelector('[data-flower-transport-delivery="unknown"]')));
+  edit(f.input(), 'Edit after unknown outcome');
+  await userEvent.keyboard('{Escape}');
+  const retry = f.surface.querySelector<HTMLButtonElement>('[data-flower-transport-delivery="unknown"] [aria-label="Retry send"]')
+    ?? [...f.surface.querySelectorAll<HTMLButtonElement>('[data-flower-transport-delivery="unknown"] button')].find(button => button.textContent?.includes('Retry'));
+  await userEvent.click(retry!);
+  await waitFor(() => f.manageGoal.mock.calls.length === 2);
+  expect(f.manageGoal.mock.calls[1]![0]).toEqual(f.manageGoal.mock.calls[0]![0]);
+  await waitFor(() => f.coordinator.read('thread-1').value.goal_edit?.version === 3);
+  expect(f.coordinator.read('thread-1').value.goal_edit?.text).toBe('Edit after unknown outcome');
+  expect(f.base.launchTurn).not.toHaveBeenCalled();
+});
+
+it('keeps a newly reopened popup open when an earlier save succeeds', async () => {
+  const f = goalFixture(), pending = deferred<FlowerGoalResult>();
+  f.manageGoal.mockImplementationOnce(() => pending.promise);
+  await f.open(); await waitFor(() => Boolean(f.input())); edit(f.input(), 'Submitted before closing');
+  await userEvent.click(action(f.surface, 'Save goal')); await waitFor(() => f.manageGoal.mock.calls.length === 1);
+  await userEvent.keyboard('{Escape}'); await f.open(); await waitFor(() => Boolean(f.input()));
+  const result = response(f.manageGoal.mock.calls[0]![0]);
+  pending.resolve({ ...result, current: { ...result.current, view_version: 30 } });
+  await waitFor(() => f.input()?.value === 'Submitted before closing');
+  expect(f.surface.querySelector('.flower-goal-popup')).not.toBeNull();
+  expect(f.coordinator.read('thread-1').value.goal_edit).toBeUndefined();
+  expect(f.input().readOnly).toBe(false);
+});
+
+it('retains an unsent draft when the model removes the current Goal', async () => {
+  const f = goalFixture(); await f.open(); await waitFor(() => Boolean(f.input())); edit(f.input(), 'Still recoverable');
+  f.publish({ version: 3, status: 'absent', actor: 'model' });
+  await waitFor(() => Boolean(f.surface.querySelector('.flower-goal-notice')));
+  expect(f.input().value).toBe('Still recoverable'); expect(f.manageGoal).not.toHaveBeenCalled();
+  await userEvent.keyboard('{Escape}'); await f.open();
+  await waitFor(() => f.surface.querySelector('.flower-goal-popup')?.textContent?.includes('There is no current goal.') ?? false);
+  expect(f.coordinator.read('thread-1').value.goal_edit?.text).toBe('Still recoverable');
+  await userEvent.click(action(f.surface, 'Continue editing'));
+  expect(action(f.surface, 'Replace current goal').disabled).toBe(false);
+  expect(f.manageGoal).not.toHaveBeenCalled();
+});
+
+it('supports keyboard draft tabs and returns focus without modifying the draft', async () => {
+  const f = goalFixture(); await f.open(); await waitFor(() => Boolean(f.input())); edit(f.input(), 'Keyboard draft');
+  await userEvent.keyboard('{Escape}'); await f.open(); await waitFor(() => Boolean(f.input()));
+  const tabs = f.surface.querySelectorAll<HTMLButtonElement>('[role="tab"]'); tabs[0]!.focus();
+  await userEvent.keyboard('{ArrowRight}');
+  expect(document.activeElement).toBe(tabs[1]); expect(f.input().value).toBe('Keyboard draft');
+  await userEvent.keyboard('{Home}');
+  expect(document.activeElement).toBe(tabs[0]); expect(f.input().value).toBe('Current goal');
+  await userEvent.keyboard('{Escape}');
+  expect(document.activeElement).toBe(f.surface.querySelector('.flower-goal-tag'));
+  expect(f.coordinator.read('thread-1').value.goal_edit?.text).toBe('Keyboard draft');
+});
+
+it('invalidates confirmation on reconnection without reopening or losing a draft', async () => {
+  const f = goalFixture(), pending = deferred<FlowerThreadView>();
+  await f.open(); await waitFor(() => Boolean(f.input())); edit(f.input(), 'Retained across reconnect');
+  await userEvent.keyboard('{Escape}'); f.setRead(() => pending.promise);
+  await f.open(); await waitFor(() => Boolean(f.surface.querySelector('.flower-goal-loading')));
+  f.reconnect();
+  await waitFor(() => !f.surface.querySelector('.flower-goal-popup'), 10000);
+  pending.resolve(f.view());
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  expect(f.surface.querySelector('.flower-goal-popup')).toBeNull();
+  expect(f.coordinator.read('thread-1').value.goal_edit?.text).toBe('Retained across reconnect');
+});
+
+it.each(Object.keys(dictionaries) as (keyof typeof dictionaries)[])('keeps %s Goal popup states clear within narrow and wide surfaces', async locale => {
+  const i18n = createTestI18nHelpers(locale);
+  const copy = createLocalizedFlowerSurfaceCopy({ locale, t: (key, params) => i18n.t(key as EnvAppTranslationKey, params), tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params) });
+  const base = adapter(true), coordinator = createFlowerComposerDraftCoordinator();
+  let snapshot = thread({ goal: { version: 3, text: locale.startsWith('zh') ? '验证目标浮窗，保留所有编辑并确认最新内容。' : 'Verify the goal popup, preserve every edit and confirm the latest content.', actor: 'model', status: 'active' } });
+  let viewVersion = 20;
+  let read: (() => Promise<FlowerThreadView>) | undefined;
+  const loadThread = async () => read ? read() : { ...liveBootstrap(snapshot, viewVersion), current: { ...liveBootstrap(snapshot, viewVersion).current, goal: snapshot.goal } };
+  const surface = renderSurfaceWithDraftCoordinator({ ...base, listThreads: async () => [snapshot], loadThread }, coordinator, { focusThreadRequest: focus, copy });
+  surface.style.cssText = 'width:100%;height:800px;position:relative;';
+  const capture = async (state: string, theme: string, width: number) => {
+    const popup = document.querySelector<HTMLElement>('.flower-goal-popup')!;
+    await waitFor(() => popup.getBoundingClientRect().width > 0);
+    expect(popup.querySelectorAll('textarea').length).toBeLessThanOrEqual(1);
+    expect(popup.scrollWidth).toBeLessThanOrEqual(popup.clientWidth + 1);
+    for (const button of popup.querySelectorAll<HTMLButtonElement>('button')) {
+      expect(getComputedStyle(button).whiteSpace).toBe('nowrap');
+      expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth + 1);
+      expect(button.textContent).not.toContain('flowerSurface.');
+    }
+    expect(popup.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+    expect(popup.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth);
+    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1' && (locale === 'zh-CN' || locale === 'en-US'))
+      await page.screenshot({ element: popup, path: '__screenshots__/goal-' + locale + '-' + theme + '-' + width + '-' + state + '.png' });
+  };
+  await waitFor(() => Boolean(document.querySelector('.flower-goal-tag')), 10000);
+  for (const width of [1100, 390]) for (const theme of ['light', 'dark']) {
+    await page.viewport(width, 850); document.documentElement.classList.toggle('dark', theme === 'dark');
+    await userEvent.click(document.querySelector<HTMLButtonElement>('.flower-goal-tag')!);
+    await waitFor(() => Boolean(document.querySelector('.flower-goal-input')));
+    await capture('current', theme, width);
+    edit(document.querySelector<HTMLTextAreaElement>('.flower-goal-input')!, locale.startsWith('zh') ? '保留未保存的目标草稿，等待核对后提交。' : 'Keep this unsaved goal draft for explicit review.');
+    await capture('editing', theme, width);
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(document.querySelector<HTMLButtonElement>('.flower-goal-tag')!);
+    await waitFor(() => Boolean(document.querySelector('.flower-goal-input')));
+    await capture('draft-current', theme, width);
+    await userEvent.keyboard('{Escape}');
+    snapshot = { ...snapshot, goal: { ...snapshot.goal!, version: snapshot.goal!.version + 1 } }; viewVersion++;
+    await userEvent.click(document.querySelector<HTMLButtonElement>('.flower-goal-tag')!);
+    await waitFor(() => Boolean(document.querySelector('.flower-goal-notice')));
+    await userEvent.click(action(document.body, copy.chat.goalContinueEditing));
+    await capture('replace', theme, width);
+    await userEvent.keyboard('{Escape}');
+    const pending = deferred<FlowerThreadView>(); read = () => pending.promise;
+    await userEvent.click(document.querySelector<HTMLButtonElement>('.flower-goal-tag')!);
+    await capture('loading', theme, width);
+    pending.reject(new Error('Visual confirmation failure'));
+    await waitFor(() => Boolean(document.querySelector('.flower-goal-popup [role="alert"]')));
+    await capture('error', theme, width);
+    read = undefined;
+    await userEvent.click(action(document.body, copy.chat.goalDiscardDraft));
+    await userEvent.keyboard('{Escape}');
+  }
+});
 
 it.each([['en-US', 1100, 'light'], ['zh-CN', 390, 'light'], ['en-US', 1100, 'dark'], ['zh-CN', 390, 'dark']] as const)('presents %s Goal facts as a single icon row at %s px in %s mode', async (locale, width, theme) => {
   await page.viewport(width, 850);
@@ -244,6 +655,9 @@ it('retains popup edits on dismiss and across restart while save remains edit-on
   edit(surface.querySelector<HTMLTextAreaElement>('.flower-goal-input')!, 'My unsaved goal');
   await userEvent.keyboard('{Escape}');
   await userEvent.click(surface.querySelector<HTMLButtonElement>('.flower-goal-tag')!);
+  expect(surface.querySelector<HTMLTextAreaElement>('.flower-goal-input')!.value).toBe('Original');
+  expect(surface.querySelector<HTMLTextAreaElement>('.flower-goal-input')!.readOnly).toBe(true);
+  await userEvent.click(action(surface, 'Continue editing'));
   expect(surface.querySelector<HTMLTextAreaElement>('.flower-goal-input')!.value).toBe('My unsaved goal');
   const restored = createFlowerComposerDraftCoordinator();
   restored.restoreAfterRestart(coordinator.exportForRestart());
@@ -419,9 +833,12 @@ it('preserves popup conflict edits without converting a save into submission', a
   await userEvent.click(surface.querySelector<HTMLButtonElement>('.flower-goal-tag')!);
   edit(surface.querySelector<HTMLTextAreaElement>('.flower-goal-input')!, 'Preserved popup edit');
   await userEvent.click(action(surface, 'Save goal'));
-  await waitFor(() => Boolean(surface.querySelector('.flower-goal-popup [role="alert"]')));
+  await waitFor(() => Boolean(surface.querySelector('.flower-goal-popup .flower-goal-notice')));
   expect(surface.querySelector<HTMLTextAreaElement>('.flower-goal-input')?.value).toBe('Preserved popup edit');
-  await userEvent.click(action(surface, 'Save goal'));
+  await userEvent.click(action(surface, 'View current goal'));
+  expect(surface.querySelector<HTMLTextAreaElement>('.flower-goal-input')?.value).toBe('Changed remotely');
+  await userEvent.click(action(surface, 'Continue editing'));
+  await userEvent.click(action(surface, 'Replace current goal'));
   await waitFor(() => manageGoal.mock.calls.length === 3);
   expect(manageGoal.mock.calls[2]![0]).toMatchObject({ operation: 'set', text: 'Preserved popup edit', expected_version: 4 });
   expect(surface.querySelector('.flower-goal-command-chip')).toBeNull();
