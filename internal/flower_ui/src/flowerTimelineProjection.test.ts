@@ -8,7 +8,6 @@ import type {
   FlowerThreadSnapshot,
 } from './contracts/flowerSurfaceContracts';
 import {
-  activityTimelineSignature,
   buildFlowerTimelineEntries,
   flowerTimelineHasUserRejectedTool,
 } from './flowerTimelineProjection';
@@ -1184,13 +1183,19 @@ describe('buildFlowerTimelineEntries', () => {
     expect(first.blocks.map((block) => (block.type === 'content' ? block.content : 'activity'))).toEqual(['Structured answer.']);
   });
 
-  it('includes exact resource targets in activity signatures', () => {
-    const make = (path: string) => activityTimeline({ items: [activityItem({
-      tool_name: 'read_file', renderer: 'file', target_refs: [{kind:'file',label:'app.ts',path}],
-      payload: {operation:'read',display_name:'app.ts'},
-    })] });
-    expect(activityTimelineSignature(make('/one/app.ts'))).not.toBe(activityTimelineSignature(make('/two/app.ts')));
-    expect(activityTimelineSignature(make('/one/app.ts'))).toContain('/one/app.ts');
+  it('preserves exact resource targets in timeline presentation', () => {
+    for (const path of ['/one/app.ts', '/two/app.ts']) {
+      const timeline = activityTimeline({ items: [activityItem({
+        tool_name: 'read_file', renderer: 'file', target_refs: [{ kind: 'file', label: 'app.ts', path }],
+        payload: { operation: 'read', display_name: 'app.ts' },
+      })] });
+      const entries = buildFlowerTimelineEntries(thread({ messages: [{
+        id: 'file-target', role: 'assistant', content: '', status: 'complete', created_at_ms: 2, blocks: [timeline],
+      }] }));
+      const first = entries[0];
+      if (first?.type !== 'message' || first.blocks[0]?.type !== 'activity') throw new Error('expected activity presentation');
+      expect(first.blocks[0].block.items[0].target_refs).toEqual([{ kind: 'file', label: 'app.ts', path }]);
+    }
   });
 
   it('keeps nested payloads available without accepting host-only path fields', () => {
@@ -1203,10 +1208,13 @@ describe('buildFlowerTimelineEntries', () => {
       })],
     });
 
-    const signature = activityTimelineSignature(timeline);
-    expect(signature).toContain('completion-1');
-    expect(signature).toContain('summary');
-    expect(signature).not.toContain('cwd');
-    expect(signature).not.toContain('workdir');
+    const entries = buildFlowerTimelineEntries(thread({ messages: [{
+      id: 'nested-payload', role: 'assistant', content: '', status: 'complete', created_at_ms: 2, blocks: [timeline],
+    }] }));
+    const first = entries[0];
+    if (first?.type !== 'message' || first.blocks[0]?.type !== 'activity') throw new Error('expected activity presentation');
+    expect(first.blocks[0].block.items[0]).toMatchObject({
+      item_id: 'completion-1', payload: { result: { summary: 'done', details: 'ok' } },
+    });
   });
 });

@@ -14,7 +14,6 @@ import type {
 import { flowerActivityIdentity } from './flowerActivityIdentity';
 import { trimString } from './flowerSurfaceModel';
 import { flowerAttachmentDisplayKind, safeFlowerAttachmentURL } from './attachments/flowerAttachmentPresentation';
-import { inputResponseSignature } from './inputResponse';
 
 export type FlowerRenderableMessageBlock =
   | Readonly<{
@@ -98,73 +97,6 @@ export function flowerTimelineHasUserRejectedTool(entries: readonly FlowerTimeli
       && block.block.items.some((item) => item.approval_state === 'rejected' || item.status === 'declined')
     ))
   ));
-}
-
-export function activityTimelineSignature(timeline: FlowerActivityTimelineBlock): string {
-  return [
-    timeline.run_id ?? '',
-    timeline.turn_id ?? '',
-    timeline.summary.status,
-    timeline.summary.severity,
-    String(timeline.summary.total_items),
-    String(timeline.summary.duration_ms ?? ''),
-    timeline.summary.needs_attention ? 'attention' : '',
-    timeline.summary.attention_reasons?.join(',') ?? '',
-    Object.entries(timeline.summary.counts).sort(([left], [right]) => left.localeCompare(right)).map(([key, value]) => `${key}:${value}`).join('|'),
-    timeline.items.map((item) => [
-      item.item_id,
-      item.tool_id ?? '',
-      item.tool_name ?? '',
-      JSON.stringify(item.argument_preview ?? null),
-      item.kind,
-      item.status,
-      item.severity,
-      item.needs_attention ? 'attention' : '',
-      item.attention_reasons?.join(',') ?? '',
-      item.requires_approval ? 'approval' : '',
-      item.approval_state ?? '',
-      String(item.started_at_unix_ms ?? ''),
-      String(item.ended_at_unix_ms ?? ''),
-      item.label ?? '',
-      item.description ?? '',
-      item.renderer ?? '',
-      item.chips?.map((chip) => [chip.kind, chip.label, chip.value ?? '', chip.tone ?? ''].join(',')).join(';') ?? '',
-      item.target_refs?.map((ref) => [ref.kind, ref.label, ref.uri ?? '', ref.path ?? '', ref.resource_ref ?? '', String(ref.line ?? '')].join(',')).join(';') ?? '',
-      item.payload ? JSON.stringify(item.payload) : '',
-      item.metadata ? Object.entries(item.metadata).sort(([left], [right]) => left.localeCompare(right)).map(([key, value]) => `${key}:${value}`).join(',') : '',
-    ].join(':')).join('|'),
-  ].join('\x1e');
-}
-
-export function messageBlockSignature(block: NonNullable<FlowerChatMessage['blocks']>[number]): string {
-  if (block.type === 'tool-call-preview') return `tool-preview:${JSON.stringify(block.call)}`;
-  if (block.type === 'activity-timeline') return `activity:${activityTimelineSignature(block)}`;
-  if (block.type === 'input-response') return `input-response:${inputResponseSignature(block)}`;
-  if (block.type === 'image') return `image:${block.src}:${block.alt ?? ''}`;
-  if (block.type === 'file') return `file:${block.name}:${block.size}:${block.mimeType}:${block.url}`;
-  return `${block.type}:${block.content ?? ''}:${JSON.stringify(block.sources ?? [])}`;
-}
-
-export function flowerMessageSignature(message: FlowerChatMessage): string {
-  return [
-    message.id,
-    message.role,
-    message.content,
-    JSON.stringify(message.steering ?? null),
-    JSON.stringify(message.goal ?? null),
-    JSON.stringify(message.sources ?? []),
-    message.status,
-    String(message.created_at_ms),
-    String(message.canonical_ordinal ?? ''),
-    message.blocks?.map(messageBlockSignature).join('\x1d') ?? '',
-    message.references?.map((reference) => [
-      reference.reference_id,
-      reference.kind,
-      reference.label,
-      'text' in reference ? reference.text ?? '' : '',
-      reference.truncated ? 'truncated' : '',
-    ].join('\x1c')).join('\x1d') ?? '',
-  ].join('\x1e');
 }
 
 function activityRenderableKey(threadID: string, messageID: string, block: FlowerActivityTimelineBlock): string {
