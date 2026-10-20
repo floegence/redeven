@@ -28,7 +28,7 @@ import { FlowerComputerConnections, type FlowerRequestedComputerAccess } from '.
 import { computerAssistance } from './computerAssistance';
 import { computerFrameRate } from './computerViewer';
 import type { FlowerComputerFrameSource, FlowerComputerInputCommand, FlowerThreadPinMetadata, FlowerThreadPinPosition } from './contracts/flowerSurfaceContracts';
-import { secureRandomUUID } from '@floegence/floe-webapp-core';
+import { FLOE_HOT_INTERACTION_ATTR, secureRandomUUID } from '@floegence/floe-webapp-core';
 import { WebSearchCapabilityBadge } from './WebSearchCapabilityBadge';
 import { FlowerKeyedList } from './FlowerKeyedList';
 import { FlowerApprovalRow, FlowerApprovalDecisionActions } from './FlowerApprovalRow';
@@ -5165,6 +5165,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       connectionEpoch: liveTransport.connectionEpoch,
       requestFrame: requestTranscriptAnimationFrame,
       cancelFrame: cancelTranscriptAnimationFrame,
+      interaction: { root: document.documentElement, attribute: FLOE_HOT_INTERACTION_ATTR },
       validateAppend: (envelope) => {
         if (envelope.subagent_current) {
           const active = untrack(activeSubagentDetail);

@@ -762,6 +762,46 @@ describe('desktopEmbeddedDragRegions', () => {
     sync?.dispose();
   });
 
+  it('ignores blocker content while tracking its box, markers and ancestor geometry', async () => {
+    document.body.innerHTML = '<div data-floe-shell-slot="top-bar"></div><main><div id="blocker" data-redeven-desktop-titlebar-no-drag="true"><span>Initial</span></div></main>';
+    const topBar = document.querySelector('[data-floe-shell-slot="top-bar"]') as HTMLElement;
+    const blocker = document.getElementById('blocker')!;
+    stubRect(topBar, { x: 0, y: 0, width: 240, height: 40 });
+    stubRect(blocker, { x: 180, y: 0, width: 80, height: 40 });
+    const { currentWindow, frameCallbacks } = createFakeSyncWindow();
+    const setSnapshot = vi.fn();
+    currentWindow.redevenDesktopEmbeddedDragRegions = { setSnapshot, clear: vi.fn() };
+    let resize: ResizeObserverCallback | undefined;
+    const sync = installDesktopEmbeddedDragRegionSync({ currentWindow, createResizeObserver: callback => {
+      resize = callback;
+      return { observe: vi.fn(), disconnect: vi.fn() };
+    } });
+    flushNextFrame(frameCallbacks);
+    const readRect = vi.spyOn(blocker, 'getBoundingClientRect');
+    blocker.firstElementChild!.textContent = 'Streaming content';
+    blocker.appendChild(document.createElement('span'));
+    blocker.firstElementChild!.setAttribute('style', 'color: red');
+    await flushMutationObserver();
+    expect(frameCallbacks).toHaveLength(0);
+    expect(readRect).not.toHaveBeenCalled();
+    resize!([], {} as ResizeObserver);
+    flushNextFrame(frameCallbacks);
+    expect(readRect).toHaveBeenCalledOnce();
+    blocker.style.transform = 'translateX(1px)';
+    await flushMutationObserver();
+    expect(frameCallbacks).toHaveLength(1);
+    flushNextFrame(frameCallbacks);
+    blocker.parentElement!.style.transform = 'translateX(1px)';
+    await flushMutationObserver();
+    expect(frameCallbacks).toHaveLength(1);
+    flushNextFrame(frameCallbacks);
+    blocker.removeAttribute('data-redeven-desktop-titlebar-no-drag');
+    await flushMutationObserver();
+    flushNextFrame(frameCallbacks);
+    expect(setSnapshot).toHaveBeenLastCalledWith({ version: 1, regions: [{ x: 0, y: 0, width: 240, height: 40 }] });
+    sync?.dispose();
+  });
+
   it('unobserves removed drag targets without recreating the resize observer', () => {
     document.body.innerHTML = `
       <div data-floe-shell-slot="top-bar">
