@@ -7759,6 +7759,10 @@ button.flower-composer-context-source:focus-visible,
 
 .flower-thread-card,
 .flower-thread-warmup-card {
+  --flower-thread-actions-opacity: 0;
+  --flower-thread-actions-pointer-events: none;
+  --flower-thread-summary-opacity: 1;
+  --flower-thread-summary-pointer-events: auto;
   display: flex;
   flex: 0 0 auto;
   flex-wrap: nowrap;
@@ -7838,6 +7842,8 @@ button.flower-composer-context-source:focus-visible,
 }
 
 .flower-thread-card-summary {
+  opacity: var(--flower-thread-summary-opacity);
+  pointer-events: var(--flower-thread-summary-pointer-events);
   min-width: 0;
   padding-inline: 0.25rem;
   font-size: var(--floe-type-caption);
@@ -7857,20 +7863,17 @@ button.flower-composer-context-source:focus-visible,
 }
 
 .flower-thread-card-actions {
-  opacity: 0;
-  pointer-events: none;
+  opacity: var(--flower-thread-actions-opacity);
+  pointer-events: var(--flower-thread-actions-pointer-events);
 }
 
-.flower-thread-card:hover .flower-thread-card-actions,
-.flower-thread-card:focus-within .flower-thread-card-actions {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.flower-thread-card:hover .flower-thread-card-summary,
-.flower-thread-card:focus-within .flower-thread-card-summary {
-  opacity: 0;
-  pointer-events: none;
+.flower-thread-card:hover,
+.flower-thread-card:focus-within {
+  /* Inherited values keep retained-row hover feedback current after native DOM moves. */
+  --flower-thread-actions-opacity: 1;
+  --flower-thread-actions-pointer-events: auto;
+  --flower-thread-summary-opacity: 0;
+  --flower-thread-summary-pointer-events: none;
 }
 
 .flower-thread-rows > .flower-thread-group-label:not(:first-child) {
@@ -8074,9 +8077,10 @@ button.flower-composer-context-source:focus-visible,
 }
 
 @container flower-thread-row (max-width: 12.5rem) {
-  .flower-thread-card-action-badge,
-  .flower-thread-card-pin-button { display: none; }
-  .flower-thread-card-trailing { max-width: var(--floe-control-height-sm); }
+  .flower-thread-card-action-badge { display: none; }
+  .flower-thread-card-trailing { max-width: 40%; }
+  .flower-thread-card-pin-button,
+  .flower-thread-card-menu-button { width: min(var(--floe-control-height-sm), 20cqi); }
   .flower-thread-card-summary { padding-inline: 0.125rem; }
   .flower-thread-card-action-indicator { width: 1.375rem; padding: 0; gap: 0; }
 }
@@ -8201,8 +8205,6 @@ button.flower-composer-context-source:focus-visible,
   .flower-thread-card-pin-button { display: none; }
   .flower-thread-card-action-badge { display: none; }
   .flower-thread-card-actions { grid-area: 1 / 2; opacity: 1; pointer-events: auto; }
-  .flower-thread-card:hover .flower-thread-card-summary,
-  .flower-thread-card:focus-within .flower-thread-card-summary { opacity: 1; }
 
   .flower-thread-warmup-menu {
     grid-area: 1 / 2;
