@@ -38,6 +38,7 @@ import (
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/containerresource"
 	"github.com/floegence/redeven/internal/diagnostics"
+	"github.com/floegence/redeven/internal/directoryfavorites"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	runtimefs "github.com/floegence/redeven/internal/fs"
 	"github.com/floegence/redeven/internal/hostapps"
@@ -70,6 +71,7 @@ type Options struct {
 	ContainerResources   *containerresource.Service
 	AIServiceProvider    AIServiceProvider
 	BrowserRuntime       *ai.ComputerUseRuntime
+	DirectoryFavorites   *directoryfavorites.Store
 	Notes                *notes.Service
 	WorkbenchLayout      *workbenchlayout.Service
 	Tessiven             *tessiven.Service
@@ -232,21 +234,22 @@ type Server struct {
 	log         *slog.Logger
 	lifecycleMu sync.Mutex
 
-	backend           Backend
-	pf                PortForwardBackend
-	managed           managedwebservice.Backend
-	hostApps          hostapps.Backend
-	remoteDesktop     *remotedesktop.Manager
-	containers        *containerresource.Service
-	aiProvider        AIServiceProvider
-	browserRuntime    *ai.ComputerUseRuntime
-	notes             *notes.Service
-	layouts           *workbenchlayout.Service
-	tessiven          *tessiven.Service
-	tessivenResources *tessiven.ResourceBackend
-	term              workbenchTerminalSessionManager
-	audit             *auditlog.Store
-	diag              *diagnostics.Store
+	backend            Backend
+	pf                 PortForwardBackend
+	managed            managedwebservice.Backend
+	hostApps           hostapps.Backend
+	remoteDesktop      *remotedesktop.Manager
+	containers         *containerresource.Service
+	aiProvider         AIServiceProvider
+	browserRuntime     *ai.ComputerUseRuntime
+	directoryFavorites *directoryfavorites.Store
+	notes              *notes.Service
+	layouts            *workbenchlayout.Service
+	tessiven           *tessiven.Service
+	tessivenResources  *tessiven.ResourceBackend
+	term               workbenchTerminalSessionManager
+	audit              *auditlog.Store
+	diag               *diagnostics.Store
 
 	resolveSessionMeta   func(channelID string) (*session.Meta, bool)
 	acquirePluginSession func(channelID string) (*session.Meta, func(), bool)
@@ -450,6 +453,7 @@ func New(opts Options) (*Server, error) {
 		containers:            opts.ContainerResources,
 		aiProvider:            opts.AIServiceProvider,
 		browserRuntime:        opts.BrowserRuntime,
+		directoryFavorites:    opts.DirectoryFavorites,
 		notes:                 opts.Notes,
 		layouts:               opts.WorkbenchLayout,
 		tessiven:              opts.Tessiven,
@@ -2636,6 +2640,9 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if g.handleWorkbenchLayoutAPI(w, r) {
+		return
+	}
+	if g.handleDirectoryFavoritesAPI(w, r) {
 		return
 	}
 	if g.handleNotesAPI(w, r) {

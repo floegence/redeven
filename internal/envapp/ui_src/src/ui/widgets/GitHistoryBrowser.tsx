@@ -1,3 +1,4 @@
+import { useGitDirectoryFavorites } from './gitDirectoryFavorites';
 import {
   For,
   Show,
@@ -144,6 +145,7 @@ function CommitFilesCompactList(props: CommitFilesCompactListProps) {
 }
 
 export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
+  const directoryFavorites = useGitDirectoryFavorites();
   let diffNavigation: GitDiffNavigation | undefined;
   const i18n = useI18n();
   const protocol = useProtocol();
@@ -267,6 +269,8 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   const commitContextMenuItems = (target: CommitContextTarget): GitContextMenuActionItem[] => {
     const commit = target.commit;
     const items: GitContextMenuActionItem[] = [];
+    const favorite = directoryFavorites.item(target.repoRootPath ?? '', target);
+    if (favorite) items.push(favorite);
     if (props.onAskFlower && target.repoRootPath) {
       items.push({
         id: 'ask-flower', kind: 'action', group: 'assistant', rank: 10,
@@ -417,6 +421,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
 
   return (
     <div class={cn("git-history-browser relative flex h-full min-h-0 flex-col", props.class)}>
+      <directoryFavorites.Feedback />
       <Show
         when={repoAvailable()}
         fallback={(

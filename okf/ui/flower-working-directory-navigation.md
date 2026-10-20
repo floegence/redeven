@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower working directory navigation
 description: Select a new Flower draft directory and browse its files from the header, with shared conversation menu navigation.
 tags: [ui, flower, filesystem, terminal, workbench]
-timestamp: 2026-10-13T05:15:00Z
+timestamp: 2026-10-20T00:00:00Z
 ---
 # Summary
 
@@ -162,3 +162,11 @@ AI execution. These existing owners retain their respective boundaries:
   Header draft browsing, confirmation-only selection, and launch directory parity.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.desktopFloatingSurfaces.e2e.test.tsx` -
   Activity dispatch and Workbench placement through the real shell controllers.
+
+## Directory favorites
+
+Current-directory stars and captured conversation-directory menus use the same
+[personal directory favorites](directory-favorites.md) as Files and every picker.
+Favorite changes never create a conversation or update the draft/default directory.
+Recent suggestions remain ordered by root-conversation update time, independent
+of pins and favorites, with ten distinct absolute paths and an internal scroll viewport.

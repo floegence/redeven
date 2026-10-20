@@ -5,7 +5,7 @@ import { TessivenIcon } from '../../../../tessiven_ui/src/TessivenIcon';
 import { createActivityNavigation, activityTargetID, isBuiltinActivityPage, PENDING_ACTIVITY_PLUGIN_ID, type ActivityNavigation, type ActivityRestoreTarget } from './services/activityNavigation';
 import { EnvironmentAccessGate, type AccessGatePhase, type AccessGateFeedback } from './EnvironmentAccessGate';
 import { createEnvResourceCacheAccess, isResourceAuthorizationError } from './services/envResourceCache';
-import { isSessionEventAuthorizationError } from './services/sessionHTTP';
+import { envDirectoryFavorites, isSessionEventAuthorizationError } from './services/sessionHTTP';
 import { notifyEnvAppBootReady } from './services/envAppBootReady';
 import { ActivityPageLoading } from './primitives/ActivityPageLoading';
 import { EnvPageLoading } from './pages/EnvPageLoading';
@@ -566,6 +566,11 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     return theme.shellPresetForMode(mode)?.name === presetName;
   };
   const protocol = useProtocol();
+  createEffect(() => {
+    if (protocol.status() === 'connected' && protocol.session?.()) {
+      void envDirectoryFavorites(() => i18n.t('flowerSurface.filesystemPicker.favoritesLoadFailed'))?.onRefresh?.();
+    }
+  });
   let remoteProxyServiceWorkerControlled = false;
   const rpc = useRedevenRpc();
   const cmd = useCommand();

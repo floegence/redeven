@@ -23,6 +23,7 @@ import (
 	"github.com/floegence/redeven/internal/containerengine"
 	"github.com/floegence/redeven/internal/containerresource"
 	"github.com/floegence/redeven/internal/diagnostics"
+	"github.com/floegence/redeven/internal/directoryfavorites"
 	envui "github.com/floegence/redeven/internal/envapp/ui"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/hostapps"
@@ -106,20 +107,21 @@ type Service struct {
 	codePortMin int
 	codePortMax int
 
-	reg            *registry.Registry
-	pf             *portforward.Service
-	managed        *managedwebservice.Manager
-	hostApps       *hostapps.Manager
-	remoteDesktop  *remotedesktop.Manager
-	containers     *containerresource.Service
-	runner         *codeserver.Runner
-	runtime        *codeserver.RuntimeManager
-	notes          *notes.Service
-	layouts        *workbenchlayout.Service
-	tessiven       *tessiven.Service
-	tessivenBroker *tessiven.Broker
-	aiReady        *aiReadinessController
-	appSrv         *appserver.Server
+	reg                *registry.Registry
+	pf                 *portforward.Service
+	managed            *managedwebservice.Manager
+	hostApps           *hostapps.Manager
+	remoteDesktop      *remotedesktop.Manager
+	containers         *containerresource.Service
+	runner             *codeserver.Runner
+	runtime            *codeserver.RuntimeManager
+	directoryFavorites *directoryfavorites.Store
+	notes              *notes.Service
+	layouts            *workbenchlayout.Service
+	tessiven           *tessiven.Service
+	tessivenBroker     *tessiven.Broker
+	aiReady            *aiReadinessController
+	appSrv             *appserver.Server
 
 	pluginIntegration *redevpluginintegration.Integration
 
@@ -346,6 +348,20 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = aiReady.Close()
 		return nil, err
 	}
+	directoryFavorites, err := directoryfavorites.Open(filepath.Join(stateAbs, "apps", "filesystem", "directory-favorites.sqlite"))
+	if err != nil {
+		_ = reg.Close()
+		_ = pfSvc.Close()
+		_ = notesSvc.Close()
+		_ = aiReady.Close()
+		return nil, err
+	}
+	favoritesOwned := true
+	defer func() {
+		if favoritesOwned {
+			_ = directoryFavorites.Close()
+		}
+	}()
 	workbenchLayoutPath := filepath.Join(stateAbs, "apps", "workbench", "layout.sqlite")
 	workbenchLayoutSvc, err := workbenchlayout.Open(workbenchLayoutPath)
 	if err != nil {
@@ -430,6 +446,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		ContainerResources:    containerResourceSvc,
 		AIServiceProvider:     aiReady,
 		BrowserRuntime:        browserRuntime,
+		DirectoryFavorites:    directoryFavorites,
 		Notes:                 notesSvc,
 		WorkbenchLayout:       workbenchLayoutSvc,
 		Tessiven:              tessivenSvc,
@@ -476,6 +493,8 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	svc.remoteDesktop = remoteDesktop
 	desktopOwned = false
 	svc.appSrv = appSrv
+	svc.directoryFavorites = directoryFavorites
+	favoritesOwned = false
 	svc.notes = notesSvc
 	svc.layouts = workbenchLayoutSvc
 	svc.tessiven = tessivenSvc
@@ -524,6 +543,9 @@ func (s *Service) Close() error {
 	}
 	if s.pf != nil {
 		_ = s.pf.Close()
+	}
+	if s.directoryFavorites != nil {
+		_ = s.directoryFavorites.Close()
 	}
 	if s.notes != nil {
 		_ = s.notes.Close()

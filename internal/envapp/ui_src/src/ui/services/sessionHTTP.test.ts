@@ -31,3 +31,25 @@ describe('Desktop entrance preparation over the existing environment lifecycle',
   expect(signals.every(signal=>signal.aborted)).toBe(true);expect(fetch).toHaveBeenCalledTimes(2);
  });
 });
+
+describe('directory favorite authenticated lifetime', () => {
+ it('retires old views and responses when the connection binding changes', async () => {
+  const {envDirectoryFavorites}=await import('./sessionHTTP');
+  let finish!:(response:Response)=>void;
+  const oldFetch=vi.fn(()=>new Promise<Response>(resolve=>{finish=resolve;}));
+  const releaseOld=bindSessionHTTP({fetch:oldFetch,events:async function*(){}});
+  const oldView=envDirectoryFavorites(()=> 'Failed')!;
+  const pending=oldView.onRefresh!();
+  const fetch=vi.fn(async()=>new Response(JSON.stringify({ok:true,data:{paths:['/new-account'],revision:1}})));
+  const releaseNew=bindSessionHTTP({fetch,events:async function*(){}});
+  const view=envDirectoryFavorites(()=> 'Failed')!;
+  await view.onRefresh!();
+  finish(new Response(JSON.stringify({ok:true,data:{paths:['/old-account'],revision:100}})));
+  await pending;
+  expect(oldView.paths).toEqual([]); expect(oldView.editable).toBe(false);
+  expect(view.paths).toEqual(['/new-account']);
+  await expect(oldView.onSetFavorite!('/old-account',true)).rejects.toMatchObject({name:'AbortError'});
+  releaseOld();expect(envDirectoryFavorites(()=> 'Failed')?.paths).toEqual(['/new-account']);
+  releaseNew();expect(envDirectoryFavorites(()=> 'Failed')).toBeUndefined();
+ });
+});

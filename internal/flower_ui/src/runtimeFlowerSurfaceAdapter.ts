@@ -183,6 +183,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   retryThread: (threadID: string) => Promise<unknown>;
   stopThread: (threadID: string) => Promise<unknown>;
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerSubmitInputReceipt>;
+  directoryFavorites?: FlowerSurfaceAdapter['directoryFavorites'];
   getWorkingDirectoryPathContext?: () => Promise<FlowerWorkingDirectoryPathContext>;
   listWorkingDirectoryEntries?: (input: FlowerWorkingDirectoryListInput) => Promise<readonly FlowerWorkingDirectoryEntry[]>;
   openCanonicalReference?: (request: FlowerCanonicalReferenceOpenRequest) => Promise<void>;
@@ -604,6 +605,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
         });
       },
     } : {}),
+    ...(options.directoryFavorites ? { directoryFavorites: options.directoryFavorites } : {}),
     ...(options.getWorkingDirectoryPathContext ? { getWorkingDirectoryPathContext: options.getWorkingDirectoryPathContext } : {}),
     ...(options.listWorkingDirectoryEntries ? { listWorkingDirectoryEntries: options.listWorkingDirectoryEntries } : {}),
     ...(options.openCanonicalReference ? { openCanonicalReference: options.openCanonicalReference } : {}),

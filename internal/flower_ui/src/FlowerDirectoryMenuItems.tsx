@@ -1,10 +1,15 @@
-import { Show, createUniqueId, type JSX } from 'solid-js';
-import { Copy, FolderOpen, Terminal } from '@floegence/floe-webapp-core/icons';
+import { Show, createUniqueId, untrack, type JSX } from 'solid-js';
+import { Copy, FolderOpen, Terminal, Star } from '@floegence/floe-webapp-core/icons';
+import type { DirectoryFavorites } from '@floegence/floe-webapp-core/ui';
 import type { FlowerThreadListCopy } from './copy';
 import { normalizeAbsolutePath } from './filePicker/path';
 
-export type FlowerDirectoryMenuAction = 'browse_workdir' | 'terminal_workdir' | 'copy_workdir';
+export type FlowerDirectoryMenuAction = 'browse_workdir' | 'terminal_workdir' | 'copy_workdir' | 'favorite_workdir';
 export type FlowerDirectoryMenuAvailability = Readonly<{
+  favorites?: DirectoryFavorites;
+  favoriteLabel?: string;
+  unfavoriteLabel?: string;
+  onFavoriteError?: (error: unknown) => void;
   browse?: Readonly<{ enabled: boolean; reason?: string }>;
   terminal?: Readonly<{ enabled: boolean; reason?: string }>;
 }>;
@@ -15,6 +20,9 @@ export function FlowerDirectoryMenuItems(props: Readonly<{
   availability?: FlowerDirectoryMenuAvailability;
   onAction: (action: FlowerDirectoryMenuAction) => void;
 }>): JSX.Element {
+  const favorites = untrack(() => props.availability?.favorites);
+  const targetPath = untrack(() => normalizeAbsolutePath(props.path));
+  const favorite = untrack(() => !favorites?.paths.includes(targetPath));
   const path = () => normalizeAbsolutePath(props.path);
   const button = (action: FlowerDirectoryMenuAction, label: string, icon: JSX.Element, reason: () => string) => {
     const reasonID = createUniqueId();
@@ -53,6 +61,13 @@ export function FlowerDirectoryMenuItems(props: Readonly<{
         {button('terminal_workdir', props.copy.openTerminalInWorkingDirectory, <Terminal class="h-3.5 w-3.5" />, () => disabledReason('terminal'))}
       </Show>
       {button('copy_workdir', props.copy.copyWorkingDirectory, <Copy class="h-3.5 w-3.5" />, pathReason)}
+      <Show when={favorites?.editable && targetPath}>
+        <button type="button" role="menuitem" class="flower-thread-menu-item" disabled={favorites?.pendingPaths?.includes(targetPath)}
+          onClick={() => {
+            void favorites?.onSetFavorite?.(targetPath, favorite).catch(error => props.availability?.onFavoriteError?.(error));
+            props.onAction('favorite_workdir');
+          }}><Star class="h-3.5 w-3.5" /><span>{favorite ? props.availability?.favoriteLabel : props.availability?.unfavoriteLabel}</span></button>
+      </Show>
     </>
   );
 }

@@ -357,6 +357,7 @@ import { createRuntimeLifecycleStepAnimation } from './runtimeLifecycleStepAnima
 import { parseRuntimeMaintenanceMessage } from './runtimeMaintenanceMessage';
 import {
   createLocalEnvironmentFlowerSurfaceAdapter,
+  createDesktopDirectoryFavoritesClient,
   createDesktopFlowerModelReadResource,
   launchLocalEnvironmentFlowerTurn,
   prepareLocalEnvironmentFlowerTurnInput,
@@ -2965,6 +2966,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const flowerFilesystemScopeKey = createMemo(() => {
     const environment = flowerRuntimeEnvironment();
     return JSON.stringify([environment?.id, environment?.runtime_started_at_unix_ms, environment?.open_session_key]);
+  });
+  const flowerDirectoryFavorites = createMemo(() => {
+    flowerFilesystemScopeKey();
+    const environmentID = flowerIdentityKey();
+    const client = createDesktopDirectoryFavoritesClient(props.runtime.settings, environmentID === 'default' ? undefined : environmentID);
+    onCleanup(() => client.dispose());
+    void client.refresh();
+    return client;
   });
   const [flowerModelSettingsRevision, setFlowerModelSettingsRevision] = createSignal(0);
   const flowerModelReadResource = createDesktopFlowerModelReadResource(props.runtime.settings,
@@ -6527,6 +6536,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                   const lifetime = new AbortController();
                   onCleanup(() => lifetime.abort());
                   const adapter = createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings, {
+                    get directoryFavoritesClient() { return flowerDirectoryFavorites(); },
                     signal: lifetime.signal,
                     runtimeEnvironmentID: environmentID === 'default' ? undefined : environmentID,
                     openMessageURL: openFlowerMessageURL,
@@ -6563,6 +6573,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                       const lifetime = new AbortController();
                       onCleanup(() => lifetime.abort());
                       const adapter = createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings, {
+                        get directoryFavoritesClient() { return flowerDirectoryFavorites(); },
                         signal: lifetime.signal,
                         openMessageURL: openFlowerMessageURL,
                         runtimeEnvironmentID: environmentID === 'default' ? undefined : environmentID,

@@ -1,4 +1,7 @@
 import './file-workspace-header.css';
+import { DirectoryFavoritesSection } from './DirectoryFavoritesSection';
+import { useEnvDirectoryFavorites } from '../services/directoryFavorites';
+import { DirectoryFavoriteButton } from '@floegence/floe-webapp-core/ui';
 import { Show, createUniqueId, createEffect, createMemo, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { cn, useFileBrowserDrag, useResizeObserver } from '@floegence/floe-webapp-core';
 import { Files as FilesIcon, Search, ArrowUp } from '@floegence/floe-webapp-core/icons';
@@ -89,6 +92,7 @@ export interface FileBrowserWorkspaceProps {
 }
 
 interface FileWorkspaceHeaderProps {
+  favoriteDisabled?: boolean;
   initializing?: boolean;
   showMobileSidebarButton?: boolean;
   sidebarExpanded?: boolean;
@@ -110,6 +114,8 @@ interface FileWorkspaceHeaderProps {
 
 function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
   const browser = useFileBrowser();
+  const favoritePicker = useEnvDirectoryFavorites();
+  const [favoriteFailure, setFavoriteFailure] = createSignal('');
   const i18n = useI18n();
   const pathStatusId = createUniqueId();
   let toolbarLayoutRef: HTMLDivElement | undefined;
@@ -126,6 +132,7 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
 
   return (
     <div class={cn('file-workspace-header shrink-0 border-b px-2.5 py-1.5', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'))}>
+      <Show when={favoriteFailure()}><p role="alert" class="text-xs text-error">{favoriteFailure()}</p></Show>
       <div
         ref={toolbarLayoutRef}
         data-toolbar-layout={toolbarLayout()}
@@ -171,6 +178,7 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
               onSubmit={props.onSubmitPath}
               onCancel={props.onCancelPathEdit}
             />
+            <Show when={favoritePicker.directoryFavorites}>{favorites => <DirectoryFavoriteButton path={browser.currentPath()} favorites={favorites()} copy={favoritePicker.copy} disabled={props.favoriteDisabled || props.initializing} onError={setFavoriteFailure} />}</Show>
           </Show>
         </div>
 
@@ -265,6 +273,7 @@ function FileWorkspaceStatusBar(props: { initializing?: boolean }) {
 
 function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files' | 'initialPath' | 'persistenceKey' | 'resetKey'>) {
   const browser = useFileBrowser();
+  const favoritePicker = useEnvDirectoryFavorites();
   const unregister = props.registerPageStateReader?.(() => ({
     view: browser.viewMode(), sort: browser.sortConfig(), filter: browser.filterQueryApplied(),
     selected_paths: browser.getSelectedItemsList().slice(0, 16).map(item => item.path),
@@ -473,6 +482,10 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
       )}
       sidebarBody={(
         <div class="flex h-full min-h-0 flex-col gap-1.5">
+          <Show when={favoritePicker.directoryFavorites}>{favorites => <DirectoryFavoritesSection favorites={favorites()} copy={favoritePicker.copy}
+            onNavigate={path => { props.onRootSelect?.(path); }}
+            onContextMenu={(event, path) => { event.preventDefault(); event.stopPropagation(); const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+              browser.showContextMenu({ x: event instanceof MouseEvent ? event.clientX : rect.left, y: event instanceof MouseEvent ? event.clientY : rect.bottom, items: [], targetKind: 'directory-background', source: 'background', directory: { path } }); }} />}</Show>
           <div class="flex min-h-[18px] items-center justify-between px-0.5 text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground/60">
             <span>{i18n.t('files.folderTree')}</span>
             <span data-floe-reload-omit class="flex items-center gap-1">
@@ -503,6 +516,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
           >
             <Show when={!props.initializing}>
               <FileBrowserSidebarTree
+                directoryFavoritesAvailable={Boolean(favoritePicker.directoryFavorites)}
                 instanceId={props.instanceId}
                 enableDragDrop={dragEnabled()}
                 sidebarOpen={props.open}
@@ -526,6 +540,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
           class={cn('flex h-full min-h-0 flex-col focus:outline-none', redevenSurfaceRoleClass('main'))}
         >
           <FileWorkspaceHeader
+            favoriteDisabled={props.contentUnavailable}
             initializing={props.initializing}
             showMobileSidebarButton={navigation.overlay() || props.showMobileSidebarButton}
             sidebarExpanded={navigation.overlay() ? navigation.open() : undefined}
