@@ -63,7 +63,9 @@ await session.run(async () => {
   const version = await app.evaluate(() => process.versions);
   assert.equal(version.electron, JSON.parse(await readFile(path.join(root, 'desktop/package.json'))).devDependencies.electron);
   const selections = [];
-  for (let index = 0; index < 18; index++) {
+  const rapidOnly = process.argv.includes('--pin-rapid-only');
+  const pinsOnly = rapidOnly || process.argv.includes('--pins-only');
+  for (let index = 0; index < (pinsOnly ? 0 : 18); index++) {
     const id = index % 2 ? (index >= 14 ? 'sidebar-huge' : 'sidebar-large') : 'sidebar-small';
     await page.locator('[data-thread-id="' + id + '"]').hover();
     const result = await page.evaluate(id => window.flowerSidebar.select(id), id);
@@ -86,7 +88,7 @@ await session.run(async () => {
     const offset = (Math.floor(sample.y * scale) * png.width + Math.floor(sample.x * scale)) * 4;
     return [...png.data.subarray(offset, offset + 3)];
   };
-  for (const id of ['sidebar-small', 'sidebar-large', 'sidebar-small', 'sidebar-huge']) {
+  for (const id of pinsOnly ? [] : ['sidebar-small', 'sidebar-large', 'sidebar-small', 'sidebar-huge']) {
     await page.locator('[data-thread-id="' + id + '"]').hover();
     const result = await page.evaluate(id => window.flowerSidebar.select(id), id);
     const reference = PNG.sync.read(await page.screenshot());
@@ -120,7 +122,7 @@ await session.run(async () => {
   }
   await page.screenshot({ path: path.join(output, 'large-conversation.png') });
   const pins = [];
-  for (const width of process.argv.includes('--selection-only') ? [] : [220, 224, 272, 360]) {
+  for (const width of rapidOnly || process.argv.includes('--selection-only') ? [] : [220, 224, 272, 360]) {
     console.log('Sidebar pin qualification width: ' + width);
     await page.evaluate(width => document.querySelector('.flower-surface').style.setProperty('--flower-thread-rail-width', width + 'px'), width);
     for (let index = 0; index < 16; index++) {
@@ -143,6 +145,9 @@ await session.run(async () => {
         const time = animation?.currentTime;
         const button = row.querySelector('.flower-thread-card-pin-button');
         const beforePinned = button.getAttribute('aria-label');
+        const wasPinned = row.dataset.pinned === 'true';
+        const pinnedOrder = () => [...document.querySelectorAll('[data-thread-id][data-pinned="true"]')].map(item => item.dataset.threadId);
+        const appendOrder = JSON.stringify([...pinnedOrder(), id]);
         const initial = window.flowerSidebar.pinState();
         if (index === 7) window.flowerSidebar.failNextPin();
         const actionBounds = button.getBoundingClientRect();
@@ -152,14 +157,16 @@ await session.run(async () => {
           || !button.contains(document.elementFromPoint(actionBounds.x + actionBounds.width / 2, actionBounds.y + actionBounds.height / 2))) {
           throw new Error('Pin action must be visible and hit-testable before clicking: ' + JSON.stringify({ id, actionBounds }));
         }
-        window.flowerPinSample = (async () => {
+        window.flowerPinSample = new Promise(resolve => button.addEventListener('click', () => resolve((async () => {
           let frames = 0;
           const invalid = [];
           let disabledFrames = 0;
+          let appendOrderStable = true;
           const start = performance.now();
           do {
             await new Promise(requestAnimationFrame); frames++;
             if (button.disabled) disabledFrames++;
+            if (!wasPinned && index !== 7 && JSON.stringify(pinnedOrder()) !== appendOrder) appendOrderStable = false;
             for (const card of document.querySelectorAll('[data-flower-thread-card]')) {
               const bounds = card.getBoundingClientRect();
               if (bounds.bottom <= 0 || bounds.top >= innerHeight) continue;
@@ -172,17 +179,18 @@ await session.run(async () => {
             }
           } while ((window.flowerSidebar.pinState().pinSettled === initial.pinSettled
             || window.flowerSidebar.pinState().listSettled === initial.listSettled || frames < 3) && performance.now() - start < 3000);
-          return { id, frames, invalid, disabledFrames, actionWidth: actionBounds.width, rowRetained: row === document.querySelector('[data-thread-id="' + id + '"]'),
+          return { id, frames, invalid, disabledFrames, appendOrderStable, actionWidth: actionBounds.width, rowRetained: row === document.querySelector('[data-thread-id="' + id + '"]'),
             titleRetained: title === row.querySelector('.flower-thread-list-title'), focusRetained: document.activeElement === button,
             animationRetained: !animation || animation === wave.getAnimations()[0] && animation.currentTime >= time,
             settled: window.flowerSidebar.pinState().pinSettled > initial.pinSettled, rolledBack: index !== 7 || button.getAttribute('aria-label') === beforePinned };
-        })();
+        })()), { once: true }));
       }, { id, index });
       await page.mouse.click(point.x, point.y);
       if (index === 3) await page.evaluate(id => window.flowerSidebar.updateTitle(id), id);
       const result = await page.evaluate(() => window.flowerPinSample);
       assert.deepEqual(result.invalid, []);
       assert.equal(result.disabledFrames, 0, 'Pin actions remain available during confirmation');
+      assert.ok(result.appendOrderStable, 'New pins must remain at the tail through confirmation');
       assert.ok(result.rowRetained && result.titleRetained && result.focusRetained && result.animationRetained && result.settled && result.rolledBack, JSON.stringify(result));
       pins.push({ width, ...result });
       console.log('Sidebar pin operation passed: ' + width + '/' + index);
@@ -219,6 +227,11 @@ await session.run(async () => {
     const button = row.querySelector('.flower-thread-card-pin-button');
     const other = document.querySelector('[data-thread-id="sidebar-7"] .flower-thread-card-pin-button');
     const initial = window.flowerSidebar.pinState();
+    const focusEvents = [];
+    const recordFocus = event => focusEvents.push({ type: event.type, time: performance.now(),
+      target: event.target.className, thread: event.target.closest?.('[data-thread-id]')?.dataset.threadId });
+    document.addEventListener('focusin', recordFocus, true);
+    document.addEventListener('focusout', recordFocus, true);
     button.focus();
     const started = performance.now();
     button.click(); button.click(); button.click(); other.click();
@@ -244,16 +257,21 @@ await session.run(async () => {
       if (performance.now() - started > 7000) throw new Error('Rapid pin confirmation timed out');
     } while (window.flowerSidebar.pinState().pinStarted !== window.flowerSidebar.pinState().pinSettled
       || window.flowerSidebar.pinState().listStarted !== window.flowerSidebar.pinState().listSettled);
-    return { syncMs, immediate, writeDuringRead, frames, disabledFrames, invalidFrames,
+    document.removeEventListener('focusin', recordFocus, true);
+    document.removeEventListener('focusout', recordFocus, true);
+    return { syncMs, immediate, writeDuringRead, frames, disabledFrames, invalidFrames, focusEvents,
+      focusedClass: document.activeElement.className, focusedThread: document.activeElement.closest('[data-thread-id]')?.dataset.threadId,
       rowRetained: row === document.querySelector('[data-thread-id="sidebar-6"]'),
       titleRetained: title === row.querySelector('.flower-thread-list-title'), focusRetained: document.activeElement === button,
       finalPinned: row.dataset.pinned, otherPinned: other.closest('[data-thread-id]').dataset.pinned,
       requests: window.flowerSidebar.pinState().pinCalls.slice(initial.pinCalls.length) };
   });
   if (rapid) {
+    await writeFile(path.join(output, 'rapid-results.json'), JSON.stringify(rapid, null, 2));
+    console.log('Rapid pin diagnostics: ' + path.join(output, 'rapid-results.json'));
     assert.deepEqual(rapid.immediate, { pinned: 'true', otherPinned: 'true', disabled: false, requests: 1 });
     assert.ok(rapid.writeDuringRead, 'A delayed list read must not block another write');
-    assert.ok(rapid.rowRetained && rapid.titleRetained && rapid.focusRetained);
+    assert.ok(rapid.rowRetained && rapid.titleRetained && rapid.focusRetained, JSON.stringify(rapid));
     assert.equal(rapid.finalPinned, 'false');
     assert.equal(rapid.otherPinned, 'true');
     assert.equal(rapid.disabledFrames, 0);
@@ -264,8 +282,8 @@ await session.run(async () => {
   }
   assert.deepEqual(pageErrors, []);
   const sorted = selections.slice(2).map(value => value.syncMs).sort((a, b) => a - b);
-  const clickP95 = sorted[Math.ceil(sorted.length * 0.95) - 1];
-  assert.ok(clickP95 < 8, 'Warm sidebar click P95 must stay below 8ms: ' + clickP95);
+  const clickP95 = pinsOnly ? null : sorted[Math.ceil(sorted.length * 0.95) - 1];
+  if (!pinsOnly) assert.ok(clickP95 < 8, 'Warm sidebar click P95 must stay below 8ms: ' + clickP95);
   const report = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
     sourceDiff: execFileSync('git', ['diff', '--stat'], { cwd: root, encoding: 'utf8' }).trim(),
     version, clickP95, selections, painted, pins, rapid, frames: pins.reduce((sum, value) => sum + value.frames, 0),

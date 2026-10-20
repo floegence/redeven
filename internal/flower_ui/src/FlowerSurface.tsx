@@ -997,7 +997,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const forkRequests = new Map<string, Readonly<{ client_request_id: string; title: string; source_item_id?: string }>>();
   const [createdForkThreadID, setCreatedForkThreadID] = createSignal('');
   type ThreadPinCommand = Readonly<{ threadID: string } & (
-    | { kind: 'pin'; pinned: boolean; pinnedAt: number }
+    | { kind: 'pin'; pinned: boolean; wasPinned: boolean; pinnedAt: number }
     | { kind: 'move'; position: FlowerThreadPinPosition }
   )>;
   const [pinMutation, setPinMutation] = createSignal<ReadonlyMap<string, FlowerThreadPinMetadata>>(new Map());
@@ -1025,8 +1025,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const current = projected.get(command.threadID);
       if (!current) continue;
       if (command.kind === 'pin') {
-        if ((Number(current.pinned_at_ms) > 0) === command.pinned) continue;
-        const rank = command.pinned ? Math.max(0, ...[...projected.values()].map(thread => thread.pin_rank ?? 0)) + 1 : 0;
+        if ((Number(current.pinned_at_ms) > 0) === command.pinned && (!command.pinned || command.wasPinned)) continue;
+        if (command.pinned) {
+          const ordered = [...projected.values()].filter(thread => thread.thread_id !== command.threadID && Number(thread.pinned_at_ms) > 0).sort(comparePinnedFlowerThreads);
+          ordered.forEach((thread, index) => projected.set(thread.thread_id, { ...thread, pin_rank: ordered.length - index + 1 }));
+        }
+        const rank = command.pinned ? 1 : 0;
         projected.set(command.threadID, { ...current, pinned_at_ms: command.pinned ? command.pinnedAt : 0, pin_rank: rank });
         continue;
       }
@@ -3465,7 +3469,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         try {
           // Serialize relative moves and membership changes, never the UI or list read.
           const result = command.kind === 'pin'
-            ? [await props.adapter.setThreadPinned!(command.threadID, command.pinned)]
+            ? await props.adapter.setThreadPinned!(command.threadID, command.pinned)
             : await props.adapter.movePinnedThread!(command.threadID, command.position);
           if (generation !== pinMutationGeneration) return;
           saved = true;
@@ -3497,7 +3501,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const last = previous.at(-1);
       // Unsent adjacent toggles need only the latest requested membership.
       return command.kind === 'pin' && last?.kind === 'pin' && last !== activePinCommand && last.threadID === command.threadID
-        ? [...previous.slice(0, -1), command]
+        ? [...previous.slice(0, -1), { ...command, wasPinned: last.wasPinned }]
         : [...previous, command];
     });
     void drainThreadPins();
@@ -3506,7 +3510,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!props.adapter.setThreadPinned) return;
     const current = sidebarListItems().find(thread => thread.thread_id === item.thread_id);
     if (!current) return;
-    enqueueThreadPin({ kind: 'pin', threadID: item.thread_id, pinned: !current.pinned, pinnedAt: Date.now() });
+    enqueueThreadPin({ kind: 'pin', threadID: item.thread_id, pinned: !current.pinned, wasPinned: current.pinned, pinnedAt: Date.now() });
   };
   const movePinnedThread = (threadID: string, input: FlowerThreadPinPosition) => {
     if (!props.adapter.movePinnedThread) return;
@@ -4299,10 +4303,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     restore: HTMLElement;
     selection: string;
   }> | null>(null);
-  const closeTranscriptMenu = () => {
+  const closeTranscriptMenu = (restoreFocus = true) => {
     const restore = transcriptMenu()?.restore;
     setTranscriptMenu(null);
-    restore?.focus({ preventScroll: true });
+    if (restoreFocus) restore?.focus({ preventScroll: true });
   };
   const openTranscriptMenu = (event: MouseEvent | KeyboardEvent) => {
     if (event.defaultPrevented) return;

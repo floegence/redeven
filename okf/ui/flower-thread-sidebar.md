@@ -128,18 +128,19 @@ threads update through the same workspace stream without requiring selection.
 
 ## Pin ordering
 
-Retained rows move through Element.moveBefore where supported. The stable
-.flower-thread-rows owner provides inline-size containment for both real and
-skeleton rows; movable cards must not themselves be size containers. This avoids
-zero-size title/button layout after native moves in shipped Electron while
-preserving ThreadID-owned nodes, keyboard focus and live wave animations. The
-same named container query owns narrow-row status and action layout.
+The stable .flower-thread-rows owner provides inline-size containment for real
+and skeleton rows; movable cards cannot be size containers. This prevents
+zero-size titles after native moves in shipped Electron. Its named container
+query also owns narrow-row status and actions.
 
 Pinned root conversations have one order per endpoint, shared by Desktop, Env
 App and other windows in that environment. `pin_rank` descending is authoritative;
-`pinned_at_unix_ms` records when the pin was created. A new pin receives the maximum
-current rank plus one; unpinning clears both fields. Repeating an existing pin
-does not reset its timestamp or manually chosen position.
+`pinned_at_unix_ms` records when the pin was created. New pins append to the end;
+the same transaction reserves rank one and adjusts retained ranks without changing
+their relative order or pin timestamps. Unpinning clears both fields. Repeating
+an existing pin preserves its timestamp and manually chosen position. Pin
+confirmations include the target and every changed rank/revision, so pending
+appends converge without a list read. Epoch 67 requires this complete response.
 
 Dragging a pinned conversation's title starts native sorting without reserving
 space for a separate handle. Pinned and ordinary titles have the same inset.
@@ -179,12 +180,10 @@ the sidebar's short-lived pin presentation overlay.
 
 ## Stable presentation and convergence
 
-One sidebar row owner keys conversations only by ThreadID and group labels by
-independent keys. Title, time, status, pin rank and group membership are values,
-not identities. Existing rows and running wave elements survive group changes.
-The sidebar uses `Element.moveBefore` when available. Other engines preserve wave
-animation time and row focus around the same DOM move. This is local sidebar
-behavior rather than a general rendering framework.
+One sidebar row owner keys conversations by ThreadID and group labels by separate
+keys. Title, time, status, rank and group are values, not identities. Rows and wave
+elements survive group changes through `Element.moveBefore`; other engines
+preserve animation time and focus around the same move.
 
 The menu belongs to the list and reads current data by ThreadID. Its action
 components remain mounted during summary updates. Actual removal of a focused
@@ -192,6 +191,7 @@ action transfers focus within the menu. Explicit action selection, navigation,
 filter changes, thread removal, outside interaction, keyboard dismissal, resize,
 blur and sidebar visibility retain their normal closing behavior. Automatic
 layout/scroll events do not dismiss a menu; explicit rail scrolling does.
+Closing a menu after focus moves to another control preserves that new owner.
 
 `ThreadCache` owns canonical summaries. Pin, unpin, menu moves and dragging stay
 available during writes and reads. One in-memory queue serializes commands and

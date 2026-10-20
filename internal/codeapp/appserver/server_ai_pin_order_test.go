@@ -43,10 +43,19 @@ func TestServerPinnedConversationPosition(t *testing.T) {
 					PinRank  int64 `json:"pin_rank"`
 					Revision int64 `json:"settings_revision"`
 				} `json:"thread"`
+				Pins []struct {
+					ThreadID string `json:"thread_id"`
+					PinRank  int64  `json:"pin_rank"`
+				} `json:"pins"`
 			} `json:"data"`
 		}
-		if err := json.Unmarshal(pin.Body.Bytes(), &payload); err != nil || payload.Data.Thread.PinRank == 0 || payload.Data.Thread.Revision == 0 {
+		if err := json.Unmarshal(pin.Body.Bytes(), &payload); err != nil || payload.Data.Thread.PinRank != 1 || payload.Data.Thread.Revision == 0 || len(payload.Data.Pins) != len(ids) {
 			t.Fatalf("missing authoritative pin metadata: %s", pin.Body.String())
+		}
+		for index, changed := range payload.Data.Pins {
+			if changed.ThreadID != ids[index] || changed.PinRank != int64(len(ids)-index) {
+				t.Fatalf("pin acknowledgement did not append in order: %s", pin.Body.String())
+			}
 		}
 	}
 	path := "/_redeven_proxy/api/ai/threads/" + ids[0] + "/pin-position"
@@ -59,7 +68,7 @@ func TestServerPinnedConversationPosition(t *testing.T) {
 		t.Cleanup(observer.Close)
 		observers = append(observers, observer)
 	}
-	body := []byte(`{"anchor_thread_id":"` + ids[2] + `","placement":"before"}`)
+	body := []byte(`{"anchor_thread_id":"` + ids[2] + `","placement":"after"}`)
 	response := serveAIReadinessTestRequest(server, origin, http.MethodPatch, path, body)
 	if response.Code != 200 {
 		t.Fatalf("move=%d %s", response.Code, response.Body.String())
@@ -72,7 +81,7 @@ func TestServerPinnedConversationPosition(t *testing.T) {
 	for _, thread := range list.Threads {
 		actual = append(actual, thread.ThreadID)
 	}
-	if !reflect.DeepEqual(actual, []string{ids[0], ids[2], ids[1]}) {
+	if !reflect.DeepEqual(actual, []string{ids[1], ids[2], ids[0]}) {
 		t.Fatalf("moved order=%v", actual)
 	}
 	for _, observer := range observers {

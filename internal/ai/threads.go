@@ -873,7 +873,7 @@ func (s *Service) RenameThread(ctx context.Context, meta *session.Meta, threadID
 	return nil
 }
 
-func (s *Service) SetThreadPinned(ctx context.Context, meta *session.Meta, threadID string, pinned bool) (*ThreadView, error) {
+func (s *Service) SetThreadPinned(ctx context.Context, meta *session.Meta, threadID string, pinned bool) (*threadstore.ThreadPinUpdate, error) {
 	if s == nil {
 		return nil, errors.New("nil service")
 	}
@@ -900,10 +900,12 @@ func (s *Service) SetThreadPinned(ctx context.Context, meta *session.Meta, threa
 	}
 	// Summary delivery is owned by the lifecycle-bound publisher so metadata
 	// changes remain responsive without starting an untracked goroutine.
-	s.requestCanonicalThreadSummary(endpointID, threadID)
+	for _, pin := range pinnedState.Pins {
+		s.requestCanonicalThreadSummary(endpointID, pin.ThreadID)
+	}
 	// Pinning is product metadata, independent of the active run lifecycle.
 	// Return a receipt instead of waiting for a canonical transcript read.
-	return &ThreadView{ThreadID: threadID, PinnedAtUnixMs: pinnedState.PinnedAtUnixMs, PinRank: pinnedState.PinRank, SettingsRevision: pinnedState.SettingsRevision}, nil
+	return pinnedState, nil
 }
 
 // MovePinnedThread changes only Redeven navigation metadata, including during an active Turn.

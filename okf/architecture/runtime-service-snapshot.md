@@ -51,6 +51,14 @@ update flow before Flower configuration reads. Explicit user preferences and
 frozen Turn bindings retain their existing owners; Runtime protocol and storage
 schemas do not change. See [model web search](../ai/model-web-search.md).
 
+# Pin confirmation compatibility
+
+Epoch 67 requires complete changed pin metadata in Flower pin confirmations.
+New pins append to the endpoint's existing order; Desktop and Runtime must agree
+on the changed ranks and revisions before a confirmation is accepted. Older peers
+use the existing update flow. Product schema, Runtime protocol and Floret history
+remain unchanged. See [sidebar pin ordering](../ui/flower-thread-sidebar.md).
+
 # Evidence
 
 - `redeven:internal/runtimeservice/snapshot.go:1` - Runtime Service snapshot and independent protocol identifier.

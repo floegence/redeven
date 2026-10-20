@@ -63,8 +63,16 @@ render(() => <FloeProvider><FlowerSurface notify={() => undefined} draftCoordina
   },
   setThreadPinned: async (id, pinned) => {
     pinCalls.push({ id, pinned });
-    return (await confirmPins([{ thread_id: id, pinned_at_ms: pinned ? Date.now() : 0,
-      pin_rank: pinned ? Math.max(...summaries.map(value => value.pin_rank || 0)) + 1 : 0, settings_revision: summary(id).settings_revision! + 1 }]))[0];
+    const target = summary(id);
+    const retained = pinned && !target.pinned_at_ms
+      ? summaries.filter(value => value.pinned_at_ms).sort((a, b) => b.pin_rank! - a.pin_rank!)
+      : [];
+    return confirmPins([
+      ...retained.map((value, index) => ({ thread_id: value.thread_id, pinned_at_ms: value.pinned_at_ms!,
+        pin_rank: retained.length - index + 1, settings_revision: value.settings_revision! + 1 })),
+      { thread_id: id, pinned_at_ms: pinned ? target.pinned_at_ms || Date.now() : 0,
+        pin_rank: pinned ? target.pin_rank || 1 : 0, settings_revision: target.settings_revision! + 1 },
+    ]);
   },
   movePinnedThread: async (id, position) => confirmPins([
     { thread_id: id, pin_rank: summary(position.anchor_thread_id).pin_rank!, pinned_at_ms: summary(id).pinned_at_ms!, settings_revision: summary(id).settings_revision! + 1 },

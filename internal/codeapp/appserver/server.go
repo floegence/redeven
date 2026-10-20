@@ -5436,14 +5436,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 						writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
 						return
 					}
-					writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{
-						"thread": map[string]any{
-							"thread_id":         pinnedThread.ThreadID,
-							"pinned_at_unix_ms": pinnedThread.PinnedAtUnixMs,
-							"pin_rank":          pinnedThread.PinRank,
-							"settings_revision": pinnedThread.SettingsRevision,
-						},
-					}})
+					writeJSON(w, http.StatusOK, apiResp{OK: true, Data: pinnedThread})
 					return
 				}
 				if _, err := aiSvc.SetThreadPinned(r.Context(), meta, threadID, *body.Pinned); err != nil {

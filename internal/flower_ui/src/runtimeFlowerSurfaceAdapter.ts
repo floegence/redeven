@@ -98,7 +98,7 @@ type MarkThreadReadInput = Readonly<{
   }>;
 }>;
 
-export type RuntimeThreadPatchResponse = LoadThreadResponse | { thread: RuntimeThreadPinMetadata };
+export type RuntimeThreadPatchResponse = LoadThreadResponse | { thread: RuntimeThreadPinMetadata; pins: readonly RuntimeThreadPinMetadata[] };
 
 type ThreadPatchInput = Readonly<{
   title?: string;
@@ -400,7 +400,13 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
         const tid = trim(threadID);
         if (!tid) throw new Error(missingThreadIDMessage(options));
         const result = await options.transport.patchThread(tid, { pinned });
-        return mapThreadPinMetadata(result.thread);
+        if (!('pins' in result) || !Array.isArray(result.pins)) throw new Error('Invalid pinned conversation metadata.');
+        const pins = result.pins.map(mapThreadPinMetadata);
+        const target = mapThreadPinMetadata(result.thread);
+        if (target.thread_id !== tid || new Set(pins.map(pin => pin.thread_id)).size !== pins.length
+          || !pins.some(pin => pin.thread_id === tid && pin.pinned_at_ms === target.pinned_at_ms
+          && pin.pin_rank === target.pin_rank && pin.settings_revision === target.settings_revision)) throw new Error('Invalid pinned conversation metadata.');
+        return pins;
       },
       ...(options.transport.movePinnedThread ? {
         movePinnedThread: async (threadID: string, input: FlowerThreadPinPosition) => {
