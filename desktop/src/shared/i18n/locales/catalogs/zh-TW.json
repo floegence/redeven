@@ -1282,7 +1282,7 @@
       "dialogChatGPTSignOutStatusUnavailable": "無法讀取登出狀態。請檢查連線並重試，以確認結果。",
       "dialogChatGPTRemoveAccountOnSaveImpact": "儲存此次移除後，帳號將因沒有其他連線而登出。使用此帳號的所有任務將停止，包括此 執行環境 上的 {tasks} 個活動任務及其子任務。對話會保留。儲存前，帳號仍保持登入。",
       "dialogChatGPTRetry": "重試",
-      "dialogChatGPTDisconnectApps": "在 ChatGPT 設定中檢查已連結的應用程式",
+      "dialogChatGPTDisconnectApps": "檢查授權",
       "dialogChatGPTEligibilityRequired": "此帳號不符合共享 ChatGPT 方案的資格。請檢查方案及帳號權限。",
       "dialogChatGPTRegionUnavailable": "你所在的地區暫不支援共享 ChatGPT 方案。",
       "dialogChatGPTCancelSignOut": "保持登入",

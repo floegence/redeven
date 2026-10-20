@@ -6191,7 +6191,7 @@
       "dialogChatGPTSignOutStatusUnavailable": "Der Abmeldestatus konnte nicht gelesen werden. Prüfen Sie die Verbindung und versuchen Sie es erneut, um das Ergebnis zu bestätigen.",
       "dialogChatGPTRemoveAccountOnSaveImpact": "Beim Speichern dieser Entfernung wird das Konto abgemeldet, da keine anderen Verbindungen bestehen. Alle Aufgaben dieses Kontos werden gestoppt, einschließlich der {tasks} aktiven Aufgaben dieser Laufzeit und ihrer Unteraufgaben. Gespräche bleiben erhalten. Bis zum Speichern bleibt das Konto angemeldet.",
       "dialogChatGPTRetry": "Erneut versuchen",
-      "dialogChatGPTDisconnectApps": "Verbundene Apps in den ChatGPT-Einstellungen prüfen",
+      "dialogChatGPTDisconnectApps": "Zugriff prüfen",
       "dialogChatGPTEligibilityRequired": "Dein Konto ist nicht zur Freigabe des ChatGPT-Tarifs berechtigt. Prüfe deinen Tarif und die Kontoberechtigungen.",
       "dialogChatGPTRegionUnavailable": "Die Freigabe des ChatGPT-Tarifs ist in deiner Region nicht verfügbar.",
       "dialogChatGPTCancelSignOut": "Angemeldet bleiben",

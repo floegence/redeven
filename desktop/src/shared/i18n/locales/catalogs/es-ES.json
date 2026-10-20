@@ -1282,7 +1282,7 @@
       "dialogChatGPTSignOutStatusUnavailable": "No se pudo leer el estado del cierre de sesión. Comprueba la conexión y vuelve a intentarlo para confirmar el resultado.",
       "dialogChatGPTRemoveAccountOnSaveImpact": "Al guardar esta eliminación, se cerrará la sesión de la cuenta porque no tiene otras conexiones. Se detendrán todas sus tareas, incluidas las {tasks} tareas activas de este entorno de ejecución y sus subtareas. Las conversaciones se conservarán. La sesión seguirá abierta hasta que guardes.",
       "dialogChatGPTRetry": "Reintentar",
-      "dialogChatGPTDisconnectApps": "Revisar las aplicaciones conectadas en los ajustes de ChatGPT",
+      "dialogChatGPTDisconnectApps": "Revisar acceso",
       "dialogChatGPTEligibilityRequired": "Tu cuenta no cumple los requisitos para compartir su plan de ChatGPT. Revisa tu plan y los permisos de la cuenta.",
       "dialogChatGPTRegionUnavailable": "Compartir el plan de ChatGPT no está disponible en tu región.",
       "dialogChatGPTCancelSignOut": "Mantener la sesión",

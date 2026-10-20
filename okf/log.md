@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-20 — Concise ChatGPT account feedback
+
+- Keep [ChatGPT account feedback](ui/flower-provider-chatgpt-authentication.md) to identity, one status and an aligned toolbar. Move saved-sign-in guidance into contextual help, merge remote-revocation review into the usage slot, and avoid duplicate reauthorization for the current binding while retaining explicit removal and failure recovery.
+
 ## 2026-10-20 — Complete shared UI localization
 
 - Keep [filesystem picker](ui/filesystem-picker-navigation.md) system labels reactive across live language changes and localize Flower activity details, model metadata, and Desktop fallback copy. Extend the visible-copy guard across Desktop, Env App, Flower, and Tessiven, with complete ten-locale catalog and browser regressions.

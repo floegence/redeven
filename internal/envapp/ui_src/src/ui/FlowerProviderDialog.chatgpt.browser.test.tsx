@@ -112,6 +112,31 @@ it('starts a fresh sign-in when another local surface removed the bound registra
   await userEvent.click(page.getByRole('button', { name: copy.chatGPT.continue, exact: true }));
   expect(auth.mock.calls.find(([action]) => action === 'start')?.[1].account_id).toBeUndefined();
 });
+it('keeps signed-out feedback concise while retaining remote access review and account removal', async () => {
+  const saved: FlowerChatGPTAccount = { account_id: 'concise', email: 'person@example.com', state: 'ready', welcome_acknowledged: true };
+  const signedOut: FlowerChatGPTAccount = { ...saved, state: 'signed_out', revocation_confirmed: false };
+  const auth = vi.fn<FlowerChatGPTAuth>(async action => action === 'sign-out' ? { local_cleanup_complete: true, revocation_confirmed: false } : {});
+  const draft: FlowerProviderDraft = { id: 'openai', type: 'openai', auth_method: 'chatgpt', account_id: saved.account_id, chatgpt_account: saved, models: [{ model_name: 'gpt-6.1-sol' }] };
+  let reads = 0;
+  const { copy, setRegistry } = await mount(true, 'en-US', 1280, false, draft, auth, undefined, async () => ({ accounts: {}, saved_accounts: [++reads === 1 ? saved : signedOut] }));
+  await userEvent.click(page.getByRole('button', { name: copy.chatGPT.signOut, exact: true }));
+  const panel = document.querySelector<HTMLElement>('.flower-provider-account')!;
+  await expect.element(page.getByText(copy.chatGPT.signedOut, { exact: true })).toBeVisible();
+  expect(panel.querySelectorAll('[role=alert]')).toHaveLength(0);
+  expect(panel.textContent).not.toContain(copy.chatGPT.signInAgainHint);
+  expect(panel.textContent).not.toContain(copy.chatGPT.savedSignIn);
+  await expect.element(page.getByRole('button', { name: copy.chatGPT.signInAgain, exact: true })).not.toBeInTheDocument();
+  const review = page.getByRole('link', { name: copy.chatGPT.disconnectApps, exact: true });
+  await expect.element(review).toHaveAttribute('href', 'https://chatgpt.com/#settings');
+  (review.element() as HTMLAnchorElement).focus();
+  await expect.element(page.getByRole('tooltip')).toHaveTextContent(copy.chatGPT.revocationUnconfirmed);
+  setRegistry([{ ...saved, revocation_confirmed: true }]);
+  await expect.element(page.getByRole('tooltip')).not.toBeInTheDocument();
+  setRegistry([signedOut]);
+  await userEvent.click(page.getByRole('button', { name: copy.chatGPT.removeAccount, exact: true }));
+  const confirmation = page.getByRole('dialog', { name: copy.chatGPT.removeAccount, exact: true });
+  await expect.element(confirmation).toHaveTextContent(copy.chatGPT.revocationUnconfirmed);
+});
 afterEach(() => { dispose?.(); host?.remove(); document.documentElement.classList.remove('dark'); });
 
 async function mount(local: boolean, locale: RedevenLocale, width: number, dark: boolean, provider?: FlowerProviderDraft, auth?: FlowerChatGPTAuth, mode?: 'create' | 'edit', loadAccounts?: FlowerSurfaceAdapter['loadChatGPTAccounts']) {
@@ -483,7 +508,7 @@ it('confirms shared task impact and disables repeated sign-out while Runtime com
   await expect.poll(() => auth.mock.calls.length).toBe(1);
   await expect.element(page.getByRole('button', { name: copy.chatGPT.signingOut, exact: true })).toBeDisabled();
   finish({ local_cleanup_complete: true, revocation_confirmed: false });
-  await expect.element(page.getByText(copy.chatGPT.revocationUnconfirmed, { exact: true }).first()).toBeVisible();
+  await expect.element(page.getByText(copy.chatGPT.signedOut, { exact: true })).toBeVisible();
   await expect.element(page.getByRole('link', { name: copy.chatGPT.disconnectApps, exact: true })).toHaveAttribute('href', 'https://chatgpt.com/#settings');
 });
 
@@ -571,13 +596,16 @@ it('observes canonical renewal and logout of a newly saved unbound account witho
   const draft: FlowerProviderDraft = { id: 'openai', type: 'openai', auth_method: 'chatgpt', account_id: saved.account_id, chatgpt_account: saved, models: [{ model_name: 'gpt-6.1-sol', context_window: 1050000 }], model_selection: { selected_models: ['gpt-6.1-sol'] } };
   const { copy, setRegistry } = await mount(true, 'de-DE', 320, true, draft, undefined, undefined, async () => ({ accounts: {}, saved_accounts: [saved] }));
   await userEvent.click(page.getByRole('button', { name: copy.chatGPT.account, exact: true }));
-  await expect.element(page.getByText(copy.chatGPT.savedSignIn, { exact: true })).toBeVisible();
+  document.querySelector<HTMLElement>('.flower-provider-account-connected')!.focus();
+  await expect.element(page.getByRole('tooltip')).toHaveTextContent(copy.chatGPT.savedSignIn);
+  const panel = document.getElementById('flower-provider-type-openai')!;
+  expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
   setRegistry([{ ...saved, state: 'renewing' }]);
   await expect.element(page.getByText(copy.chatGPT.renewing, { exact: true })).toBeVisible();
+  await expect.element(page.getByRole('tooltip')).not.toBeInTheDocument();
   setRegistry([{ ...saved, state: 'signed_out', revocation_confirmed: true }]);
   await expect.element(page.getByText(copy.chatGPT.signedOut, { exact: true })).toBeVisible();
   expect(document.querySelector<HTMLInputElement>('.flower-provider-models input[type=checkbox]')!.checked).toBe(true);
-  const panel = document.getElementById('flower-provider-type-openai')!;
   expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
 });
 
