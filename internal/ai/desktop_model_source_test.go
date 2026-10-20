@@ -46,7 +46,7 @@ func TestDesktopModelSourceConnectionErrorRetryability(t *testing.T) {
 
 func TestDesktopModelSourceRejectsIncompatibleFramesWithoutWaiting(t *testing.T) {
 	for _, peer := range []string{"runtime", "executor"} {
-		for _, version := range []string{"", "redeven-desktop-model-source-rpc-v1", "redeven-desktop-model-source-rpc-v2"} {
+		for _, version := range []string{"", "redeven-desktop-model-source-rpc-v1", "redeven-desktop-model-source-rpc-v2", "redeven-desktop-model-source-rpc-v3"} {
 			t.Run(peer+"/"+version, func(t *testing.T) {
 				served := make(chan error, 1)
 				ready := make(chan struct{})

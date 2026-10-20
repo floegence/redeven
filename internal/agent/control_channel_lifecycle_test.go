@@ -4,18 +4,35 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"log"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	flowersec "github.com/floegence/flowersec/flowersec-go/v5"
+	"github.com/floegence/redeven/internal/config"
 )
 
 func TestControlChannelAcceptsPlatformTrustRoots(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.json")
 	cfg := cloudLinkRemoteConfig(t, configPath)
-	// Exhaustion reaches the credential source and waits under the same controller.
+	// A local untrusted endpoint exercises platform trust without external DNS
+	// or credentials. Its TLS failure remains under the controller retry owner.
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("untrusted platform TLS connection reached HTTP")
+	}))
+	server.Config.ErrorLog = log.New(io.Discard, "", 0)
+	server.StartTLS()
+	defer server.Close()
+	cfg.CloudOrigin, cfg.CloudAssociation.CloudOrigin = server.URL, server.URL
 	cfg.ControlArtifactPool.Entries = nil
+	if err := config.Save(configPath, cfg); err != nil {
+		t.Fatal(err)
+	}
 	if err := cfg.ValidateRemoteStrict(); err != nil {
 		t.Fatal(err)
 	}
@@ -27,6 +44,7 @@ func TestControlChannelAcceptsPlatformTrustRoots(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	a.onControlRetry = func(flowersec.ConnectionDiagnostic, time.Duration) { cancel() }
 	a.runControlLoop(ctx)
 	if !strings.Contains(logs.String(), "Flowersec is retrying") || strings.Contains(logs.String(), "control channel not started") {
 		t.Fatalf("control channel did not reach artifact acquisition with platform trust: %s", logs.String())

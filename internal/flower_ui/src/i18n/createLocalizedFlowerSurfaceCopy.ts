@@ -622,6 +622,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       },
       providerRetryWaiting: (seconds, retry, max) => t(i18n, k('chat.providerRetryWaiting'), { seconds, retry, max }),
       providerRetryRegenerating: (seconds, retry, max) => t(i18n, k('chat.providerRetryRegenerating'), { seconds, retry, max }),
+      transportProgress: { switching: t(i18n, k('chat.transportProgress.switching')), https: t(i18n, k('chat.transportProgress.https')) },
       outputProgress: {
         tokens: (count) => t(i18n, k('chat.outputTokens'), { count }),
         elapsed: (seconds) => t(i18n, k('chat.waitSeconds'), { seconds }),

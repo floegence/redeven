@@ -148,7 +148,7 @@ func TestPreparedOpaqueReasoningKeepsWireWithoutInflatingBudget(t *testing.T) {
 		encrypted := strings.Repeat("A", size)
 		params := map[string]any{"instructions": "System.", "input": []any{map[string]any{"type": "reasoning", "encrypted_content": encrypted}, map[string]any{"role": "user", "content": "Continue."}}}
 		var sent []byte
-		prepared, err := newPreparedModelWire("openai", "gpt-6.1-sol", flprovider.RequestFormatOpenAIResponses, params, ModelGatewayRequest{}, providerToolAliases{}, func(_ context.Context, raw []byte, _ func(StreamEvent)) (ModelGatewayResult, error) {
+		prepared, err := newPreparedModelWire("openai", "gpt-6.1-sol", flprovider.RequestFormatOpenAIResponses, params, ModelGatewayRequest{}, providerToolAliases{}, func(_ context.Context, _ ModelGatewayRequest, raw []byte, _ func(StreamEvent)) (ModelGatewayResult, error) {
 			sent = bytes.Clone(raw)
 			return ModelGatewayResult{Text: "done"}, nil
 		})

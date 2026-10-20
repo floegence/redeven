@@ -562,6 +562,10 @@
       "modelStatusRetrying": "Modellanfrage wird erneut versucht...",
       "providerRetryWaiting": "Modelldienst nicht verfügbar. Neuer Versuch in {seconds} s · {retry}/{max}",
       "providerRetryRegenerating": "Verbindung unterbrochen. Neue Generierung in {seconds} s · {retry}/{max}",
+      "transportProgress": {
+        "switching": "Verbindung unterbrochen. Der nächste Versuch verwendet HTTPS.",
+        "https": "HTTPS wird verwendet"
+      },
       "modelStatusFinalizing": "Antwort wird vorbereitet...",
       "outputTokens": "{count} Tokens",
       "waitingForModelContinuation": "Warten auf die Fortsetzung der Modellantwort",
@@ -1275,7 +1279,10 @@
       "modelCatalogAutoUpdateLabel": "Modelllisten der Anbieter automatisch aktualisieren",
       "modelCatalogAutoUpdateDisclosure": "Wenn aktiviert, ruft Redeven regelmäßig Modelllisten über die APIs aktivierter Modellanbieter ab. OpenRouter ist ausgenommen.",
       "dialogOpenRouterDiscovery": "Beim Hinzufügen von OpenRouter ruft Redeven die Modellliste ab, sobald Sie die Eingabe des API-Schlüssels oder der Adresse abschließen und das Eingabefeld verlassen. Dies gilt auch bei ausgeschalteten automatischen Updates. Spätere Updates erfolgen nur durch manuelle Synchronisierung.",
-      "dialogOllamaDiscovery": "Beim Hinzufügen von Ollama ruft Redeven Modelle von der Standardadresse ab. Nach Änderungen an Adresse oder API-Schlüssel wird die Liste erneut abgerufen, sobald Sie das Eingabefeld verlassen. Dies gilt auch bei ausgeschalteten automatischen Updates."
+      "dialogOllamaDiscovery": "Beim Hinzufügen von Ollama ruft Redeven Modelle von der Standardadresse ab. Nach Änderungen an Adresse oder API-Schlüssel wird die Liste erneut abgerufen, sobald Sie das Eingabefeld verlassen. Dies gilt auch bei ausgeschalteten automatischen Updates.",
+      "dialogChatGPTRemoveAccount": "Konto entfernen",
+      "dialogChatGPTRemoveDescription": "Dieses abgemeldete Konto von diesem Gerät entfernen? Anbietereinstellungen und Unterhaltungen bleiben erhalten. Melden Sie sich zur erneuten Nutzung an oder wählen Sie ein anderes gespeichertes Konto.",
+      "dialogChatGPTRemoveFailed": "Das Konto konnte nicht entfernt werden. Prüfen Sie, ob die Abmeldung abgeschlossen ist, und versuchen Sie es erneut."
     },
     "reasoningControl": {
       "default": "Standard",

@@ -221,3 +221,69 @@ func TestFloretPreparedMeasurementBindsActualAttemptAndTerminal(t *testing.T) {
 		t.Fatalf("bridge lost evidence: usage=%+v terminal=%+v", usage, terminal)
 	}
 }
+
+func TestPreparedRetryUsesActualSSEIdentityAndCurrentEvidence(t *testing.T) {
+	pool := newOpenAIResponsesPool()
+	defer pool.Close()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusUpgradeRequired)
+			return
+		}
+		var body map[string]json.RawMessage
+		if json.NewDecoder(r.Body).Decode(&body) != nil || body["previous_response_id"] != nil {
+			t.Error("SSE must carry complete frozen input")
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("x-reasoning-included", "true")
+		raw, _ := json.Marshal(testOpenAICompleted("sse-response"))
+		fmt.Fprintf(w, "data: %s\n\n", raw)
+	}))
+	defer server.Close()
+	base := testOpenAISocketProvider(t, server, pool)
+	adapter := newFloretProviderAdapter(base, "openai", "gpt-5.5", ProviderControls{}, TurnBudgets{}, "")
+	req := flprovider.Request{ThreadID: "thread", RunID: "run", PromptScopeID: "thread", AttemptID: "attempt-1", AttemptEpoch: 1, Step: 1, Messages: []flprovider.Message{{Role: "user", Text: "frozen input"}}}
+	prepared, err := adapter.Prepare(t.Context(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer prepared.Close()
+	stream, err := prepared.Stream(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	failed := false
+	for event := range stream {
+		failed = failed || event.Type == flprovider.EventError
+	}
+	if !failed {
+		t.Fatal("upgrade did not return to Engine")
+	}
+	next := req
+	next.AttemptID, next.AttemptEpoch = "attempt-2", 2
+	replay, err := prepared.(flprovider.PreparedRequestReplay).PrepareRetry(t.Context(), next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer replay.Close()
+	if replay.RenderedPayloadFingerprint() != prepared.RenderedPayloadFingerprint() {
+		t.Fatal("retry changed input")
+	}
+	prefix := replay.(flprovider.PreparedRequestMeasurement).InputMeasurementPrefix()
+	stream, err = replay.Stream(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var usage flprovider.Usage
+	for event := range stream {
+		if event.Type == flprovider.EventError {
+			t.Fatal(event.Err)
+		}
+		if event.Type == flprovider.EventUsage {
+			usage = event.Usage
+		}
+	}
+	if !usage.Available || usage.Measurement == nil || usage.Measurement.AttemptID != next.AttemptID || usage.Measurement.Input != prefix || !usage.Measurement.CompleteInput {
+		t.Fatalf("SSE retry lost attempt evidence: %+v", usage)
+	}
+}

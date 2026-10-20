@@ -619,7 +619,7 @@ export function runtimeCurrentView(
       : 'active',
     ...(threadValue.active_run_id ? { run_id: threadValue.active_run_id } : {}),
     ...(activeTurnID ? { turn_id: activeTurnID } : {}),
-    ...(threadValue.run_progress ? { run_progress: { phase: threadValue.run_progress.phase, ...(threadValue.run_progress.retry ? { retry: threadValue.run_progress.retry } : {}) } } : {}),
+    ...(threadValue.run_progress ? { run_progress: { phase: threadValue.run_progress.phase, ...(threadValue.run_progress.transport ? { transport: threadValue.run_progress.transport } : {}), ...(threadValue.run_progress.retry ? { retry: threadValue.run_progress.retry } : {}) } } : {}),
     ...(threadValue.status === 'success' ? { last_outcome: 'completed' as const } : {}),
     ...(threadValue.status === 'failed' ? { last_outcome: 'failed' as const } : {}),
     ...(threadValue.status === 'canceled' ? { last_outcome: 'cancelled' as const } : {}),

@@ -1,6 +1,6 @@
 import { validateParentEventPage } from './parentEventPage';
 import { flowerCurrentToolCallPreviews } from './toolCallPreview';
-import { mapFlowerProviderRequestProgress } from './providerRequestProgress';
+import { mapFlowerProviderRequestProgress, mapFlowerProviderTransportProgress } from './providerRequestProgress';
 import { mapFlowerCitationSources } from './chat/markdown/flowerCitations';
 import { mapFlowerGoal, mapFlowerGoalChange, mapFlowerCancellation } from './flowerLiveMapper';
 import type {
@@ -77,7 +77,7 @@ function runtimeRunProgress(current: FlowerRuntimeCurrentView, previous?: Flower
     throw new Error('Flower contract error: run progress requires exact run_id and turn_id.');
   }
   const retry = current.run_progress.retry;
-  return { run_id: runID, turn_id: turnID, phase: runtimeRunProgressPhase(current.run_progress.phase), ...(retry ? { retry } : {}),
+  return { run_id: runID, turn_id: turnID, phase: runtimeRunProgressPhase(current.run_progress.phase), ...(current.run_progress.transport ? { transport: mapFlowerProviderTransportProgress(current.run_progress.transport) } : {}), ...(retry ? { retry } : {}),
     ...(current.run_progress.request ? { request: mapFlowerProviderRequestProgress(current.run_progress.request, current.sampled_at_ms, previous?.request), sampled_at_ms: current.sampled_at_ms } : {}),
   };
 }

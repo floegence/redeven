@@ -564,6 +564,10 @@
       "modelStatusRetrying": "正在重试模型请求...",
       "providerRetryWaiting": "模型服务暂时不可用，{seconds} 秒后重试 · {retry}/{max}",
       "providerRetryRegenerating": "连接中断，{seconds} 秒后重新生成 · {retry}/{max}",
+      "transportProgress": {
+        "switching": "连接中断，下一次将使用 HTTPS。",
+        "https": "正在使用 HTTPS"
+      },
       "modelStatusFinalizing": "正在整理回复...",
       "outputTokens": "{count} tokens",
       "waitingForModelContinuation": "等待模型继续",
@@ -1275,7 +1279,10 @@
       "modelCatalogAutoUpdateLabel": "自动更新模型提供商的模型列表",
       "modelCatalogAutoUpdateDisclosure": "开启后，Redeven 会定期请求已启用的模型提供商接口以更新模型列表，OpenRouter 除外。",
       "dialogOpenRouterDiscovery": "添加 OpenRouter 时，填写完 API Key 或地址并离开输入框后，Redeven 会请求其模型列表，即使自动更新已关闭。之后仅通过手动同步更新。",
-      "dialogOllamaDiscovery": "添加 Ollama 时，Redeven 会从默认地址获取模型列表；修改地址或 API Key 并离开输入框后会再次获取，即使自动更新已关闭。"
+      "dialogOllamaDiscovery": "添加 Ollama 时，Redeven 会从默认地址获取模型列表；修改地址或 API Key 并离开输入框后会再次获取，即使自动更新已关闭。",
+      "dialogChatGPTRemoveAccount": "删除账号",
+      "dialogChatGPTRemoveDescription": "从此设备删除这个已退出的账号？模型提供商设置和对话会保留。再次使用时，请重新登录或选择其他已保存的账号。",
+      "dialogChatGPTRemoveFailed": "未能删除此账号。请确认已完成退出登录，然后重试。"
     },
     "reasoningControl": {
       "default": "默认",

@@ -15,6 +15,7 @@ export type FlowerLiveProgress = Readonly<{
   identity: string;
   retry?: FlowerRunProgress['retry'];
   request?: FlowerProviderRequestProgress;
+  transport?: FlowerRunProgress['transport'];
 }>;
 
 export function flowerRunProgress(
@@ -29,6 +30,7 @@ export function flowerRunProgress(
   return {
     kind: thread.run_progress.phase,
     request: thread.run_progress.request,
+    transport: thread.run_progress.transport,
     runID,
     turnID,
     identity: [thread.thread_id, runID].join('\x1f'),

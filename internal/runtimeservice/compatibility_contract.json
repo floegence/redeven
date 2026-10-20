@@ -3,11 +3,12 @@
   "release_review": {
     "release_version": "v0.13.13",
     "previous_release": "v0.13.12",
-    "reviewed_at": "2026-10-19",
-    "review_id": "self-contained-runtime-installer",
-    "summary": "The self-contained installer authenticates exact-tag release evidence and activates complete Runtime suites without receiving-host verification tools. Epoch 67 still pairs Desktop and Runtime with complete changed pin metadata in pin confirmations. Newly pinned conversations append without changing existing relative positions; conversation preferences, backend web defaults and product schema 11 retain their current contracts.",
-    "same_window_rationale": "The installer changes authenticated artifact acquisition and complete suite activation only; it does not change Runtime Service protocol messages, the current compatibility epoch, Desktop attach/start, Local UI health, startup reports, sys.ping, maintenance completion, or SSH bootstrap parameters. Exact-tag publisher verification and the stable activation root remain enforced. Epoch 67 is retained because pin confirmations require every changed rank and revision so optimistic tail appends converge without waiting for transcript or list reads. Older peers use the existing upgrade path. Runtime Service protocol v2, Floret history, public APIs and persistent product schema remain unchanged.",
+    "reviewed_at": "2026-10-20",
+    "review_id": "chatgpt-transport-recovery",
+    "summary": "Flower consumes Floret v7.73.0 transport progress through Desktop RPC v4 and compatibility epoch 68.",
+    "same_window_rationale": "Epoch 68 is required because Desktop RPC v4 carries typed transport progress and explicit thread resource release. Desktop, Env App, Runtime Service, attach/start, Local UI health, startup reports, sys.ping, maintenance and SSH bootstrap reject incompatible peers. Canonical conversations, permanent migrations and existing pin confirmation contracts remain unchanged.",
     "checked_surfaces": [
+      "Epoch 68: Desktop RPC v4 adds typed non-semantic transport observations and idempotent executor memory release. Flower current views expose Engine-issued attempt identity. Old peers require upgrade.",
       "Self-contained installer: exact-tag publisher/issuer, certificate and transparency evidence authenticate checksums before payload acquisition. Four closed platform archives retain the Runtime suite contract. New and reused pinned command-line tools must execute before atomic activation. Upgrade mode retains the stable install root and does not start, restart, or edit shell profiles; Runtime retains maintenance/re-exec ownership. Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap retain their current protocol and parameter contracts.",
       "Epoch 67: pin-only PATCH returns target metadata plus all changed pin ranks and settings revisions. Desktop and Env App require this complete confirmation. Pin, unpin and manual moves share one transactional endpoint order; retained timestamps, optimistic interaction, pagination, failure rollback and summary convergence remain covered. Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance and SSH bootstrap consume the canonical epoch and existing upgrade path. No Floret lifecycle or schema contract changes.",
       "Epoch 66: Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance and SSH runtime bootstrap consume the canonical epoch and existing upgrade flow. Flower GET/PATCH conversation_preferences require authenticated namespace/endpoint/user, strict field updates and revision conflicts. Env App, Desktop, standalone Ask Flower and Goal root admission use the shared defaults; thread loads, immutable Turns and retries never write memory. Product schema v10-to-v11 preserves existing data and rolls back failures; no Floret SQL authority or Runtime Service DTO is added.",
@@ -115,7 +116,7 @@
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v2",
-  "compatibility_epoch": 67,
+  "compatibility_epoch": 68,
   "upgrade_from_runtime_epochs": [
     9,
     10,
@@ -174,7 +175,8 @@
     63,
     64,
     65,
-    66
+    66,
+    67
   ],
   "minimum_desktop_version": "v0.13.0",
   "minimum_runtime_version": "v0.13.0"

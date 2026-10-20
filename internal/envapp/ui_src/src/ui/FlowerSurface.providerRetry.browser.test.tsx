@@ -42,12 +42,14 @@ it.each([[1100, 'stop'], [420, 'stop'], [1100, 'success'], [1100, 'failure'], [4
   surface.style.cssText = `width:${width}px;height:820px;position:relative`;
   await waitFor(() => surface.textContent?.includes('Failed draft fragment') ?? false);
   const nextAttemptAt = new Date(Date.now() + 3500).toISOString();
+  const transport = { logical_request_id: 'request', attempt_id: 'attempt-old', attempt_epoch: 1, transport: 'websocket' as const, phase: 'failed' as const, next_transport: 'http_sse' as const, reason: 'connection_lost' };
   const retry = { retry: 1, max_retries: 4, next_attempt_at: nextAttemptAt, reason: 'stream_interrupted', replaced_attempt_id: 'attempt-old', replaced_attempt_epoch: 1 };
-  await push({ ...selected, messages: [], run_progress: { run_id: runID, turn_id: turnID, phase: 'retrying', retry } });
+  await push({ ...selected, messages: [], run_progress: { run_id: runID, turn_id: turnID, phase: 'retrying', retry, transport } });
   const indicator = () => surface.querySelector<HTMLElement>('[data-flower-progress-kind="retrying"]');
   await waitFor(() => indicator()?.textContent?.includes('Regenerating') ?? false);
   expect(surface.textContent).not.toContain('Failed draft fragment');
   expect(indicator()?.textContent).toContain('1/4');
+  expect(indicator()?.textContent).toContain('The next attempt will use HTTPS');
   const firstLabel = indicator()!.textContent;
   await vi.waitFor(() => expect(indicator()!.textContent).not.toBe(firstLabel), { timeout: 2500 });
   expect(surface.querySelectorAll('.flower-error-card')).toHaveLength(0);
@@ -72,6 +74,9 @@ it.each([[1100, 'stop'], [420, 'stop'], [1100, 'success'], [1100, 'failure'], [4
     reopened.querySelector<HTMLButtonElement>('.flower-composer-submit')!.click();
     await waitFor(() => stopThread.mock.calls.length === 1);
   } else if (outcome === 'success') {
+    await push({ ...selected, run_progress: { run_id: runID, turn_id: turnID, phase: 'waiting_response', transport: { ...transport, attempt_id: 'attempt-new', attempt_epoch: 2, transport: 'http_sse', phase: 'sending' } } });
+    await waitFor(() => reopened.textContent?.includes('Using HTTPS') ?? false);
+    expect(reopened.querySelector<HTMLButtonElement>('.flower-composer-submit')?.disabled).toBe(false);
     await push({ ...selected, status: 'success', active_run_id: undefined, run_progress: null, messages: [{ id: 'recovered', role: 'assistant', turn_id: turnID, run_id: runID, status: 'complete', content: 'Recovered answer', created_at_ms: 2 }] });
     await waitFor(() => reopened.textContent?.includes('Recovered answer') ?? false);
     expect(reopened.querySelector('[data-flower-progress-kind="retrying"]')).toBeNull();
@@ -114,6 +119,7 @@ it('shows the same retry deadline in a narrow SubAgent window', async () => {
   });
   const base = subagentDetail({ summary: child });
   const detail = { ...base, current: { ...base.current, items: [], run_progress: { phase: 'retrying' as const,
+    transport: { logical_request_id: "child-request", attempt_id: "child-attempt", attempt_epoch: 1, transport: "websocket" as const, phase: "failed" as const, next_transport: "http_sse" as const, reason: "connection_lost" },
     retry: { retry: 2, max_retries: 4, next_attempt_at: new Date(Date.now() + 3500).toISOString(), reason: 'stream_interrupted' },
   } } };
   const runtime = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [parent]),
@@ -126,6 +132,7 @@ it('shows the same retry deadline in a narrow SubAgent window', async () => {
   document.querySelector<HTMLButtonElement>('[data-flower-subagent-row]')!.click();
   const progress = () => document.querySelector<HTMLElement>('.flower-subagent-detail-progress [data-flower-progress-kind="retrying"]');
   await waitFor(() => progress()?.textContent?.includes('2/4') ?? false);
+  expect(progress()?.textContent).toContain('The next attempt will use HTTPS');
   const label = progress()!.textContent;
   await vi.waitFor(() => expect(progress()!.textContent).not.toBe(label), { timeout: 2500 });
   await page.viewport(540, 850);

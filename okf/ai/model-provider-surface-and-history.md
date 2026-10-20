@@ -42,13 +42,13 @@ Published Floret v7.26.0 owns `EstimateRenderedRequest` for local Responses, Cha
 
 ## Native request measurement
 
-Published Floret v7.70.0 owns [native request measurement](model-request-measurement.md), frozen-prefix pressure and schema 28. Redeven maps protocol facts without a second pressure policy or measurement store.
+Published Floret v7.73.0 owns [native request measurement](model-request-measurement.md), frozen-prefix pressure and schema 28. Redeven maps protocol facts without a second pressure policy or measurement store.
 
 ## Temporary provider failures
 
-Published Floret v7.58.0 shares provider.RetryAdviceForError across direct and Desktop paths. Wrapped ordinary EOF and unexpected EOF are interrupted streams only at the provider boundary. Adapters supply HTTP/stream/close-code facts; Engine owns bounded replay, cancellation, attempt identity and draft retirement. Explicit outer advice, even empty or Forbidden, stays authoritative. SDK retries remain disabled; no generic adapter resend or HTTPS fallback is added.
+Published Floret v7.58.0 shares provider.RetryAdviceForError across direct and Desktop paths. Wrapped ordinary EOF and unexpected EOF are interrupted streams only at the provider boundary. Adapters supply HTTP/stream/close-code facts; Engine owns bounded replay, cancellation, attempt identity and draft retirement. Explicit outer advice, even empty or Forbidden, stays authoritative. SDK retries remain disabled; all retransmission remains Engine-owned.
 
-A failed WebSocket attempt discards its connection and continuation metadata before the next Engine attempt acquires a fresh connection. Completion ends reading before a later socket EOF. Only the existing unsupported-upgrade fallback and one pre-output stale-response full resend remain protocol repairs.
+A recoverable WebSocket failure discards connection-local continuation and pins the thread route to full-input SSE for subsequent Engine attempts. Unsupported upgrade and pre-output stale continuation follow the same path. Completion ends reading before later EOF. See [request reuse](model-request-reuse.md) for routing and cleanup.
 
 Diagnostics use transport_error for established transport failures and unknown when facts are absent. Empty means an actually read empty HTTP error body. Unknown failures use provider_request_failed, never a fabricated rejection. One envelope preserves actual provider identity, whitelisted protocol facts and private cause without nesting; prose classification exists only in historical read-only presentation. No provider, status or request ID is reconstructed from current settings or written back to old conversations.
 
@@ -79,7 +79,9 @@ WebSocket and Desktop transports propagate the upstream attempt context.
 
 Redeven disables SDK retries, maps structured HTTP/SSE/WebSocket facts into `provider.RetryAdvice`, and preserves the original cause and sanitized diagnostics. A consumed prepared request can replay only its immutable rendered bytes; attachments and mutable tool lists are never resolved again. Each real send receives Floret's new AttemptID/Epoch and passes admission again. The failed attempt's known usage remains billable; missing usage stays unknown. Only explicitly read-only hosted search is marked replay safe.
 
-Flower reads `ThreadRunProgress.Retry` from the authoritative current view. Main and companion surfaces display the absolute-deadline countdown and draft-replacement hint without admitting another turn. Stop stays available; manual retry appears only after terminal failure. No product retry loop, timer queue, or durable retry ledger exists.
+Floret v7.73.0 carries typed non-semantic transport observations bound by the Engine to the physical attempt. Transport progress does not extend semantic deadlines, add content or usage, or authorize tools. One sanitized attempt collector owns logs, final failure diagnostics and transport observations. Unknown values stay absent; request bodies, tokens, headers and peer close prose never enter it. Historical failure envelopes remain readable without rewriting records.
+
+Flower reads ThreadRunProgress.Transport and ThreadRunProgress.Retry from the authoritative current view. Main and companion surfaces display the absolute-deadline countdown and draft-replacement hint without admitting another turn. Stop stays available; manual retry appears only after terminal failure. It distinguishes a planned HTTPS switch from an active HTTPS attempt, hides the temporary hint after semantic output, and clears progress at terminal state. All shipped languages and main, narrow and SubAgent surfaces use the same current view. No product retry loop, timer queue, or durable retry ledger exists.
 
 Published Floret v7.51.2 classifies the exact `basispoints_tool_arguments_stalled` code as a stream interruption, including HTTP 200 stream errors. Redeven consumes that category for live and historical failure presentation without duplicating the code list or restarting a terminal turn. The sanitized upstream message remains the primary displayed error; its machine code, transport status and request ID remain copyable diagnostics. Permanent errors and server retry prohibitions keep their existing priority.
 

@@ -1456,6 +1456,7 @@
     "modelStatusRetrying": "モデルリクエストを再試行中...",
     "providerRetryWaiting": "モデルサービスを利用できません。{seconds}秒後に再試行 · {retry}/{max}",
     "providerRetryRegenerating": "接続が切断されました。{seconds}秒後に再生成 · {retry}/{max}",
+    "transportProgress": {"switching": "接続が切断されました。次の試行では HTTPS を使用します。", "https": "HTTPS を使用中"},
     "modelStatusFinalizing": "返信を整理中...",
     "waitingForReasoning": "reasoning を待機中",
     "reasoning": "推論"
@@ -5486,6 +5487,7 @@
       "modelStatusRetrying": "モデルリクエストを再試行中...",
       "providerRetryWaiting": "モデルサービスを利用できません。{seconds}秒後に再試行 · {retry}/{max}",
       "providerRetryRegenerating": "接続が切断されました。{seconds}秒後に再生成 · {retry}/{max}",
+      "transportProgress": {"switching": "接続が切断されました。次の試行では HTTPS を使用します。", "https": "HTTPS を使用中"},
       "modelStatusFinalizing": "返信を整理中...",
       "contextIndicatorComposition": "可視入力",
       "contextIndicatorMeasured": "実測値",

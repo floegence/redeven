@@ -11658,7 +11658,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       syncNotice={workspaceSyncNotice()}
       runProgress={<Show when={subagentDetailRunProgress()}>{(progress) => (
         <div class="flower-subagent-detail-progress">
-          <FlowerProgressIndicator progress={progress()} label={liveProgressLabel(progress().kind, progress().retry)} outputCopy={copy().chat.outputProgress} />
+          <FlowerProgressIndicator progress={progress()} label={liveProgressLabel(progress().kind, progress().retry)} outputCopy={copy().chat.outputProgress} transportCopy={copy().chat.transportProgress} />
         </div>
       )}</Show>}
       open={subagentDetailOpen()}
@@ -12676,7 +12676,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     <div class={cn('flower-model-status-lane', conversation && 'flower-model-status-lane--conversation')}>
       <Show when={selectedThreadStopPending()} fallback={<FlowerProgressIndicator
         progress={selectedRunProgress()}
-        outputCopy={copy().chat.outputProgress}
+        outputCopy={copy().chat.outputProgress} transportCopy={copy().chat.transportProgress}
         label={selectedRunProgress() ? liveProgressLabel(selectedRunProgress()!.kind, selectedRunProgress()!.retry)
           : ''}
       />}><span class="flower-turn-stopping text-xs text-muted-foreground" role="status" aria-live="polite">{copy().chat.stopping}</span></Show>

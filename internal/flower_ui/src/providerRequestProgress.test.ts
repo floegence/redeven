@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { flowerRequestStallSeconds, flowerRequestWaitSeconds, mapFlowerProviderRequestProgress } from './providerRequestProgress';
+import { flowerRequestStallSeconds, flowerRequestWaitSeconds, mapFlowerProviderRequestProgress, mapFlowerProviderTransportProgress } from './providerRequestProgress';
 
 const request = { logical_request_id: 'request', attempt_id: 'attempt', attempt_epoch: 1,
   started_at: '2026-10-15T00:00:00Z', estimated_output_tokens: 0 };
@@ -31,4 +31,12 @@ it('measures semantic output pauses across reconnects and resets on new progress
     const next = mapFlowerProviderRequestProgress({ ...request, attempt_id: 'next', attempt_epoch: 2 }, Date.parse(request.started_at), resumed);
     expect(flowerRequestStallSeconds(next, performance.now())).toBeNull();
   } finally { now.mockRestore(); }
+});
+
+it('accepts only typed attempt-bound transport observations', () => {
+  const transport = { logical_request_id: 'request', attempt_id: 'attempt', attempt_epoch: 1, transport: 'websocket', phase: 'failed', next_transport: 'http_sse', reason: 'connection_lost' };
+  expect(mapFlowerProviderTransportProgress(transport)).toEqual(transport);
+  for (const patch of [{ transport: 'ws' }, { phase: 'recovered' }, { reason: 'raw peer prose' }, { attempt_epoch: 0 }, { attempt_id: '' }, { next_transport: 'fallback' }]) {
+    expect(() => mapFlowerProviderTransportProgress({ ...transport, ...patch })).toThrow('invalid provider transport');
+  }
 });

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"sort"
@@ -251,12 +252,13 @@ func (p *openAIProvider) prepareTurn(ctx context.Context, req ModelGatewayReques
 			return nil, err
 		}
 	}
-	prepared, err := newPreparedModelWire(p.providerType, req.Model, flprovider.RequestFormatOpenAIResponses, params, req, aliases, func(ctx context.Context, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
-		return p.streamResponsesTurn(ctx, aliases, payload, onEvent, chatGPTStreamContext{Request: req, Records: records, Canonical: canonical})
+	prepared, err := newPreparedModelWire(p.providerType, req.Model, flprovider.RequestFormatOpenAIResponses, params, req, aliases, func(ctx context.Context, attempt ModelGatewayRequest, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+		return p.streamResponsesTurn(ctx, aliases, payload, onEvent, chatGPTStreamContext{Request: attempt, Records: records, Canonical: canonical})
 	})
 	if err != nil {
 		return nil, err
 	}
+	prepared.measurementForRequest = p.preparedMeasurementIdentity
 	prepared.measurementIdentity = p.preparedMeasurementIdentity(req)
 	prepared.measurementFormat = flprovider.RequestFormatOpenAIResponses
 	prepared.measurementProvider, prepared.measurementModel = p.providerType, req.Model
@@ -303,11 +305,16 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 	if len(chatGPTContext) == 1 {
 		native = chatGPTContext[0]
 	}
-	stream, lease, fallback, err := p.responsesStream(ctx, native.Request, bearer, payload, &httpResponse, options)
+	diag := newProviderAttemptDiagnostic(ctx, native.Request, payload, p, onEvent)
+
+	stream, lease, _, err := p.responsesStream(ctx, native.Request, bearer, payload, &httpResponse, options, diag)
 	if err != nil {
-		return ModelGatewayResult{}, providerRequestFailure(err, httpResponse, p.failureProviderType())
+		resultErr = providerRequestFailure(err, httpResponse, p.failureProviderType())
+		resultErr = diag.finish(ctx, httpResponse, &result, resultErr, p.failureProviderType())
+		return result, resultErr
 	}
 	defer func() {
+		resultErr = diag.finish(ctx, httpResponse, &result, resultErr, p.failureProviderType())
 		_ = stream.Close()
 		if lease != nil {
 			lease.finish(resultErr == nil)
@@ -423,6 +430,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 
 	for !gotCompleted && stream.Next() {
 		event := stream.Current()
+		diag.firstEvent(event.Type == "response.completed" || event.Type == "response.incomplete" || event.Type == "response.failed" || event.Type == "error")
 		if event.Response.JSON.Usage.Valid() {
 			usage, err := turnUsageFromOpenAIResponse(event.Response.Usage)
 			if err != nil {
@@ -558,7 +566,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 		return ModelGatewayResult{}, providerRequestFailure(err, httpResponse, p.failureProviderType())
 	}
 	if !gotCompleted {
-		return ModelGatewayResult{}, flprovider.WithRetryAdvice(errors.New("provider stream closed without terminal response"), flprovider.RetryAdvice{Category: flprovider.RetryStreamInterrupted})
+		return ModelGatewayResult{}, flprovider.WithRetryAdvice(io.ErrUnexpectedEOF, flprovider.RetryAdvice{Category: flprovider.RetryStreamInterrupted})
 	}
 	result = ModelGatewayResult{
 		FinishReason:    "unknown",
@@ -706,13 +714,10 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 		}
 	}
 	result.Measurement = p.responseMeasurement(payload, completed, result, lease, httpResponse)
-	result.RawProviderDiag["transport"] = "http"
-	if lease != nil {
-		result.RawProviderDiag["transport"] = "websocket"
+	if result.Measurement != nil {
+		result.Measurement.AttemptID = native.Request.AttemptID
 	}
-	if fallback != "" {
-		result.RawProviderDiag["transport_fallback"] = fallback
-	}
+
 	return result, nil
 }
 
@@ -785,7 +790,7 @@ func (p *openAIProvider) prepareChatTurn(ctx context.Context, req ModelGatewayRe
 	}
 
 	model := req.Model
-	return newPreparedModelWire(p.providerType, model, flprovider.RequestFormatOpenAIChat, params, req, aliases, func(ctx context.Context, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+	return newPreparedModelWire(p.providerType, model, flprovider.RequestFormatOpenAIChat, params, req, aliases, func(ctx context.Context, attempt ModelGatewayRequest, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
 		return p.streamPreparedChatTurn(ctx, model, capability, aliases, signatures, payload, onEvent)
 	})
 }
@@ -1061,7 +1066,7 @@ func (p *moonshotProvider) prepareTurn(ctx context.Context, req ModelGatewayRequ
 		params.Tools = tools
 	}
 
-	return newPreparedModelWire("moonshot", req.Model, flprovider.RequestFormatOpenAIChat, params, req, aliases, func(ctx context.Context, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+	return newPreparedModelWire("moonshot", req.Model, flprovider.RequestFormatOpenAIChat, params, req, aliases, func(ctx context.Context, attempt ModelGatewayRequest, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
 		return p.streamPreparedTurn(ctx, aliases, payload, onEvent)
 	})
 }
@@ -2173,7 +2178,7 @@ func (p *anthropicProvider) prepareTurn(ctx context.Context, req ModelGatewayReq
 		params.System = []anthropic.TextBlockParam{{Text: strings.TrimSpace(system)}}
 	}
 
-	return newPreparedModelWire("anthropic", req.Model, flprovider.RequestFormatAnthropic, params, req, providerToolAliases{}, func(ctx context.Context, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+	return newPreparedModelWire("anthropic", req.Model, flprovider.RequestFormatAnthropic, params, req, providerToolAliases{}, func(ctx context.Context, attempt ModelGatewayRequest, payload []byte, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
 		return p.streamPreparedTurn(ctx, payload, onEvent)
 	})
 }

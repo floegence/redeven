@@ -3,7 +3,7 @@ type: AI Runtime Contract
 title: Model request reuse
 description: Execute Engine-owned prompt-cache and continuation decisions without creating another history or retry owner.
 tags: [ai, providers, cache, usage]
-timestamp: 2026-10-15T00:00:00Z
+timestamp: 2026-10-20T00:00:00Z
 ---
 # Summary
 
@@ -11,7 +11,7 @@ Floret owns effective reuse decisions and canonical state. Redeven executes them
 
 # Contract
 
-Runtime/Desktop epoch 61 and model-source RPC v2 preserve Floret's effective request reuse policy. Missing or incompatible frame versions close the connection and release pending requests immediately. The Engine decides prompt-cache enablement/namespace, native-state permission and continuation preference. Adapters cannot broaden it. Queue acceptance, replay and reads use one validated canonical base, preserving native history across queue-only mutations and restart without ancestor fallback or a new schema migration.
+Runtime/Desktop epoch 68 and model-source RPC v4 preserve Floret's effective request reuse policy. Missing or incompatible frame versions close the connection and release pending requests immediately. The Engine decides prompt-cache enablement/namespace, native-state permission and continuation preference. Adapters cannot broaden it. Queue acceptance, replay and reads use one validated canonical base, preserving native history across queue-only mutations and restart without ancestor fallback or a new schema migration.
 
 Official OpenAI requests derive a bounded, non-secret cache key from that namespace and provider/account routing identity. ChatGPT authentication on the official Responses route defaults to WebSocket; other authentication and custom endpoints retain HTTP. Runtime Service and Desktop executor each own a bounded process-local pool (16 connections, five-minute idle expiry, 55-minute rotation between requests). Connections isolate provider, endpoint, account, model and prompt scope. A socket processes one request at a time; its last successful response is usable only when the next canonical PreviousState, complete rendered input prefix, native output order and fixed settings match. Otherwise it sends full input from the same prepared request. Full input always owns estimates and fingerprints.
 
@@ -27,14 +27,18 @@ The existing context tooltip shows the latest completed request and cumulative s
 
 # Boundaries
 
-HTTP and WebSocket use one Responses event consumer. An unsupported upgrade before command dispatch permits one HTTP fallback; an explicit stale-response rejection before generation permits one full-input resend. Authentication, rate-limit and invalid-request errors retain their classifications. Uncertain delivery or partial-output disconnect closes the socket and uses ordinary canonical failure/retry. Stop, timeout, logout, Desktop RPC disconnect and shutdown abort connections. Supplemental context closes the scope's reusable connection, sends no application cache/continuation hints and retains no native state. No network retry layer, persistent transport history or alternate UI waiting state exists.
+HTTP and WebSocket use one Responses event consumer and send at most one generation per attempt. Unsupported upgrade, recoverable connection failure, interrupted streams, missing completion and precise pre-output stale continuation return to the Engine's existing budget and backoff. The adapter atomically pins that thread route to full-input SSE before the next attempt; it never resends internally. Authentication, permission, quota, invalid requests, protocol corruption, explicit forbidden advice and Stop retain their boundaries. Completion ends reading before later EOF. A dedicated 15-second opening deadline takes the earlier parent deadline; semantic request deadlines remain upstream-owned.
+
+One executor-local manager owns sockets and thread route selection. Selection keys contain ThreadID, provider, normalized endpoint and auth/account; model and prompt scope belong only to socket isolation. The first switch reason survives subsequent turns, Retry, model changes, token rotation, idle socket expiry and Desktop control reconnect. New ThreadID/Fork and a fresh executor start with WebSocket. Oversized requests, pool capacity and disabled reuse preselect HTTP without pinning. A send admitted before a concurrent switch may finish; subsequent admission observes SSE. Pool locks never cover network writes. Thread deletion releases memory through an idempotent management RPC, without changing canonical state or queueing disconnected cleanup. Executor shutdown releases all state.
+
+A frozen replay rebinds actual AttemptID/Epoch and refreshes its measurement identity while preserving body, attachment snapshot, schema, estimate and fingerprint. Response usage remains billable when actual transport differs from preparation; mismatched proof cannot establish an exact context anchor. SSE never inherits socket continuation. Supplemental context closes the scope's reusable connection, sends no application cache/continuation hints and retains no native state. There is no persistent transport history or second retry owner.
 
 # Evidence
 
 - `redeven:internal/config/ai.go` - One effective continuation policy for every adapter initialization path.
 - `redeven:internal/ai/openai_continuation_test.go` - Wire requests preserve full history with continuation disabled.
 - `redeven:internal/flower_ui/src/settings/FlowerProviderDialog.tsx` - Conditional opt-in control and draft lifecycle.
-- `redeven:internal/ai/model_gateway_openai_connections.go` - Executor-owned pool, exact continuation checks and bounded transport fallback.
+- `redeven:internal/ai/model_gateway_openai_connections.go` - Executor-owned pool, exact continuation checks and sticky route selection.
 - `redeven:internal/ai/model_gateway_openai_connections_test.go` - Local WebSocket/SSE continuation, tool order, cancellation, isolation and executor shutdown tests.
 - `redeven:internal/ai/model_gateway_usage.go` - Disjoint input buckets and explicit invalid-usage failures.
 - `redeven:internal/ai/floret_events.go` - Shared canonical usage projection for live updates and refresh.

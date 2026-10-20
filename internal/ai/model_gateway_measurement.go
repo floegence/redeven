@@ -16,7 +16,7 @@ func (p *openAIProvider) httpMeasurementIdentity() string {
 	return "http:" + openAIHash([]any{p.transportIdentity, p.measurementCredential})
 }
 func (p *openAIProvider) preparedMeasurementIdentity(req ModelGatewayRequest) string {
-	if p.chatGPT && p.officialOpenAI && p.responsesPool != nil && (req.ReusePolicy == nil || req.ReusePolicy.ProviderStateAllowed) {
+	if p.chatGPT && p.officialOpenAI && p.responsesPool != nil && p.responsesPool.selection(openAIRequestRoute(p.transportIdentity, req)) == "" && (req.ReusePolicy == nil || req.ReusePolicy.ProviderStateAllowed) {
 		p.responsesPool.mu.Lock()
 		defer p.responsesPool.mu.Unlock()
 		e := p.responsesPool.entries[openAIConnectionKey{p.transportIdentity, req.Model, string(req.PromptScopeID)}]

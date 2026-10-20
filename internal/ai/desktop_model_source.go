@@ -34,7 +34,7 @@ import (
 
 const (
 	DesktopModelSourceProviderType      = "desktop_model_source"
-	DesktopModelSourceProtocolVersion   = "redeven-desktop-model-source-rpc-v3"
+	DesktopModelSourceProtocolVersion   = "redeven-desktop-model-source-rpc-v4"
 	DesktopModelSourceDefaultSource     = "desktop_local_environment"
 	desktopModelSourceModelIDPrefix     = "desktop:model_"
 	defaultDesktopModelSourceRPCTimeout = 30 * time.Second
@@ -877,6 +877,11 @@ func (c *desktopModelSourceRuntimeConn) call(ctx context.Context, method string,
 			switch strings.TrimSpace(frame.Type) {
 			case "event":
 				if frame.Event != nil && onEvent != nil {
+					if frame.Event.Transport != nil {
+						if err := frame.Event.Transport.Validate(); err != nil {
+							return failProtocol(fmt.Errorf("%w: invalid transport observation", errDesktopModelSourceProtocol))
+						}
+					}
 					if frame.Event.Usage != nil {
 						if err := validatePartialUsage(*frame.Event.Usage); err != nil {
 							return failProtocol(fmt.Errorf("%w: invalid usage event", errDesktopModelSourceProtocol))
@@ -1070,6 +1075,7 @@ func RunDesktopModelSourceConnector(ctx context.Context, opts DesktopModelSource
 		secretsPath: strings.TrimSpace(opts.SecretsPath),
 		session:     session,
 	}
+	defer executor.openAIConnectionPool().Close()
 	httpClient := opts.HTTPClient
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 15 * time.Second}
@@ -1224,13 +1230,8 @@ func (e *desktopModelSourceExecutor) serve(ctx context.Context, ws *websocket.Co
 	defer func() {
 		_ = ws.Close()
 		cancelAll()
-		pool.Close()
+		pool.closeConnections()
 		workers.Wait()
-		e.poolMu.Lock()
-		if e.responsesPool == pool {
-			e.responsesPool = nil
-		}
-		e.poolMu.Unlock()
 	}()
 
 	write := func(frame DesktopModelSourceRPCFrame) error {
@@ -1332,6 +1333,16 @@ func (e *desktopModelSourceExecutor) handleRequest(ctx context.Context, frame De
 		_ = write(DesktopModelSourceRPCFrame{Type: "result", ID: frame.ID, Result: raw})
 	}
 	switch frame.Method {
+	case "ai.thread.transport.release":
+		var input struct {
+			ThreadID string `json:"thread_id"`
+		}
+		if err := json.Unmarshal(frame.Params, &input); err != nil || strings.TrimSpace(input.ThreadID) == "" {
+			sendErr("INVALID_THREAD", errors.New("missing thread_id"))
+			return
+		}
+		e.openAIConnectionPool().releaseThread(input.ThreadID)
+		sendResult(struct{}{})
 	case "ai.status.get":
 		status, err := e.status()
 		if err != nil {
@@ -1883,4 +1894,23 @@ func (e *desktopModelSourceExecutor) openAIConnectionPool() *openAIResponsesPool
 		e.responsesPool = newOpenAIResponsesPool()
 	}
 	return e.responsesPool
+}
+
+// Deletion is authoritative in Floret. This best-effort management request only
+// releases executor memory; a disconnected peer has no durable cleanup queue.
+func (c *desktopModelSourceClient) releaseThreadTransport(ctx context.Context, threadID string) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	conn := c.conn
+	c.mu.Unlock()
+	if conn == nil {
+		return
+	}
+	releaseCtx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	_ = conn.call(releaseCtx, "ai.thread.transport.release", struct {
+		ThreadID string `json:"thread_id"`
+	}{threadID}, nil, nil)
 }
