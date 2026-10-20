@@ -194,10 +194,19 @@ if (process.argv.includes('--build')) {
       const before = { runtime: runtimeCPU(), app: await metrics(), stats: await api('stats'), time: performance.now(), wallTime: Date.now() };
       await page.evaluate(() => { window.flowerCPU.active = true; });
       const deadline = performance.now() + seconds * 1000;
+      const interactionErrors = [];
       while (performance.now() < deadline) {
         if (!idle) {
-          await page.locator('.flower-composer textarea').click();
-          await page.locator('.flower-composer textarea').fill('CPU qualification draft ' + Math.floor(performance.now()));
+          // An overloaded baseline must still yield a complete timed sample.
+          // Preserve native interaction failures and reject them after recording
+          // CPU/content evidence instead of aborting midway through measurement.
+          for (const action of ['click', 'input']) {
+            try {
+              const composer = page.locator('.flower-composer textarea');
+              if (action === 'click') await composer.click({ timeout: 1000 });
+              else await composer.fill('CPU qualification draft ' + Math.floor(performance.now()), { timeout: 1000 });
+            } catch (error) { interactionErrors.push({ action, at: Date.now(), error: String(error) }); }
+          }
         }
         await page.waitForTimeout(Math.min(5000, Math.max(0, deadline - performance.now())));
       }
@@ -215,6 +224,7 @@ if (process.argv.includes('--build')) {
       const percentile = (values, p) => values.sort((a,b) => a-b)[Math.min(values.length - 1, Math.floor(values.length * p))] ?? 0;
       evidence = { threads, hz, seconds: elapsed, warmup, setup, before, after, processes, runtimeCPU: 100 * (after.runtime - before.runtime) / elapsed, rendererCPU: processes.filter(item => item.type === 'Tab').reduce((sum, item) => sum + item.percent, 0), appCPU: processes.reduce((sum, item) => sum + item.percent, 0), frames: { count: uiMetrics.frames.length, p95: percentile(uiMetrics.frames, .95) }, input: { count: uiMetrics.inputs.length, p95: percentile(uiMetrics.inputs, .95) }, click: { count: uiMetrics.clicks.length, p95: percentile(uiMetrics.clicks, .95) }, longTasks: uiMetrics.longTasks, errors };
       evidence.streamingDOM = streamingDOM;
+      evidence.interactionErrors = interactionErrors;
       evidence.combinedCPU = evidence.runtimeCPU + evidence.appCPU;
       evidence.allocationBytes = after.stats.alloc_bytes - before.stats.alloc_bytes;
       evidence.wireBytes = after.stats.wire_bytes - before.stats.wire_bytes;
@@ -303,6 +313,7 @@ if (process.argv.includes('--build')) {
       await Promise.all(diagnosticReads);
       evidence.consoleErrors = consoleErrors;
       await writeFile(output, JSON.stringify(evidence, null, 2) + '\n');
+      assert.deepEqual(interactionErrors, [], 'every native composer interaction must complete within one second');
       assert.ok(evidence.output.coverage >= .95, 'output latency must observe at least 95% of foreground text markers');
       if (process.argv.includes('--candidate-gates')) {
         // Absolute CPU budgets describe the 40 Hz standard workload. Stress
