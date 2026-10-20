@@ -1355,7 +1355,7 @@ describe('FlowerSurface navigation', () => {
 
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${threadID}"] button`)));
     (runtime.querySelector(`[data-thread-id="${threadID}"] button`) as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+    await waitFor(() => runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === threadID && !runtime.querySelector('main')?.hasAttribute('data-flower-pending-thread-id') && Boolean(runtime.querySelector('textarea')));
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'send once';
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
@@ -1413,7 +1413,7 @@ describe('FlowerSurface navigation', () => {
 
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${threadID}"] button`)));
     (runtime.querySelector(`[data-thread-id="${threadID}"] button`) as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+    await waitFor(() => runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === threadID && !runtime.querySelector('main')?.hasAttribute('data-flower-pending-thread-id') && Boolean(runtime.querySelector('textarea')));
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'send exactly once';
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
@@ -1522,7 +1522,7 @@ describe('FlowerSurface navigation', () => {
 
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${idleThread.thread_id}"] button`)));
     (runtime.querySelector(`[data-thread-id="${idleThread.thread_id}"] button`) as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('.flower-composer textarea')));
+    await waitFor(() => runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === idleThread.thread_id && !runtime.querySelector('main')?.hasAttribute('data-flower-pending-thread-id') && Boolean(runtime.querySelector('.flower-composer textarea')));
     const textarea = runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement;
     textarea.value = 'Keep this draft while the previous reply stops';
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));

@@ -1612,7 +1612,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 		return Boolean(threadID && !threadCache().views.has(threadID));
   });
   const selectedDecisionAvailable = createMemo(() => (
-    !pendingThreadSelection() && !selectedThreadReadOnly() && !selectedThreadDetailPending() && !threadLoadError()
+    !selectedThreadReadOnly() && !selectedThreadDetailPending() && !threadLoadError()
   ));
   const selectedThreadHasContent = createMemo(() => {
     const thread = selectedThread();
@@ -4470,22 +4470,30 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return;
     }
     const token = deferredThreadSelectionToken;
-    deferredThreadSelectionFrame = requestTranscriptAnimationFrame(() => {
+    // Chromium can present a main-thread frame one compositor frame later.
+    // Keep transcript work out of both the style/paint and presentation frames.
+    let framesRemaining = 4;
+    const afterFeedbackFrame = () => {
+      if (token !== deferredThreadSelectionToken) return;
+      if (--framesRemaining > 0) {
+        deferredThreadSelectionFrame = requestTranscriptAnimationFrame(afterFeedbackFrame);
+        return;
+      }
       deferredThreadSelectionFrame = 0;
+      const transaction = threadSelectionTransaction;
+      if (transaction?.value === tid) emitThreadSelectionEvent(transaction, 'intent_presented');
       deferredThreadSelectionTimer = window.setTimeout(() => {
         deferredThreadSelectionTimer = undefined;
         if (token !== deferredThreadSelectionToken) return;
         const transaction = threadSelectionTransaction;
-        if (transaction?.value === tid) {
-          emitThreadSelectionEvent(transaction, 'intent_presented');
-          emitThreadSelectionEvent(transaction, 'commit_started');
-        }
+        if (transaction?.value === tid) emitThreadSelectionEvent(transaction, 'commit_started');
         void loadAndSelectThread(tid, false, claimedSequence, focusOwner);
         if (transaction?.value === tid && threadSelectionTransaction === transaction) {
           emitThreadSelectionEvent(transaction, 'committed');
         }
       }, 0);
-    });
+    };
+    deferredThreadSelectionFrame = requestTranscriptAnimationFrame(afterFeedbackFrame);
   };
 
   const focusThreadFromRequest = async (requestID: string, threadID: string) => {
@@ -12680,7 +12688,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   );
 
   const composerPanel = () => (
-        <div class="flower-chat-bottom-dock" inert={!!pendingThreadSelection()} data-flower-action-layout={bottomActionMode()}>
+        <div class="flower-chat-bottom-dock" data-flower-action-layout={bottomActionMode()}>
           <Show when={showScrollToLatestButton()}>
             <div class="flower-scroll-to-latest-float">
               <button
@@ -13601,19 +13609,34 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </div>
   ));
 
+  const guardConversationNavigation = (element: HTMLElement) => {
+    // Native inert on the transcript restyles its entire history before the
+    // rail can paint. Block old interactions at this fixed boundary instead.
+    const events = ['click', 'dblclick', 'contextmenu', 'pointerdown', 'mousedown', 'keydown', 'beforeinput', 'input', 'submit', 'dragstart', 'drop', 'paste', 'cut'];
+    const guard = (event: Event) => {
+      if (!untrack(pendingThreadSelection)) return;
+      if (event instanceof KeyboardEvent && event.key === 'Tab') {
+        const threadID = untrack(pendingThreadSelection);
+        const rows = surfaceRef?.querySelectorAll<HTMLElement>('[data-flower-thread-card]');
+        const row = Array.from(rows ?? []).find(candidate => candidate.dataset.threadId === threadID);
+        row?.querySelector<HTMLElement>('.flower-thread-card-select-button')?.focus({ preventScroll: true });
+      }
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+    for (const type of events) element.addEventListener(type, guard, true);
+    onCleanup(() => { for (const type of events) element.removeEventListener(type, guard, true); });
+  };
   const conversationPanel = () => (
-      <section class="flower-component-main" aria-busy={pendingThreadSelection() ? 'true' : undefined}
-        data-flower-navigation-pending={pendingThreadSelection() ? 'true' : undefined}
+      <section ref={guardConversationNavigation} class="flower-component-main"
         inert={threadDrawerPresent() || settingsDialogPresent()}
         aria-hidden={threadDrawerPresent() || settingsDialogPresent() ? 'true' : undefined}>
-        <Show when={pendingThreadSelection()}>
-          <div class="flower-thread-navigation-status" role="status">
-            <Refresh class="h-3.5 w-3.5 motion-safe:animate-spin" aria-hidden="true" />
-            <span>{copy().chat.threadLoading}</span>
-          </div>
-        </Show>
+        <div class="flower-thread-navigation-status" role="status" aria-busy={!!pendingThreadSelection()} hidden={!pendingThreadSelection()}>
+          <Refresh class="h-3.5 w-3.5 motion-safe:animate-spin" aria-hidden="true" />
+          <span>{copy().chat.threadLoading}</span>
+        </div>
         <div class="h-full min-h-0" data-flower-panel="chat" hidden={visiblePanel() !== 'chat'}
-          aria-hidden={visiblePanel() !== 'chat'} inert={visiblePanel() !== 'chat' || !!pendingThreadSelection()}>
+          aria-hidden={visiblePanel() !== 'chat'} inert={visiblePanel() !== 'chat'}>
           {chatPanel()}
         </div>
         <div class="h-full min-h-0" data-flower-panel="extensions" hidden={visiblePanel() !== 'extensions'}

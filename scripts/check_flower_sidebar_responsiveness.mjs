@@ -14,6 +14,7 @@ await session.run(async () => {
   const requireDesktop = createRequire(path.join(root, 'desktop/package.json'));
   const requireUI = createRequire(path.join(root, 'internal/envapp/ui_src/package.json'));
   const { _electron } = requireUI('playwright');
+  const { PNG } = requireUI('pngjs');
   const { build } = await import(pathToFileURL(requireDesktop.resolve('vite')));
   const temporary = await mkdtemp(path.join(tmpdir(), 'flower-sidebar-build-'));
   await session.directory(temporary);
@@ -62,26 +63,64 @@ await session.run(async () => {
   const version = await app.evaluate(() => process.versions);
   assert.equal(version.electron, JSON.parse(await readFile(path.join(root, 'desktop/package.json'))).devDependencies.electron);
   const selections = [];
-  for (let index = 0; index < 14; index++) {
-    const result = await page.evaluate(index => window.flowerSidebar.select(index % 2 ? window.flowerSidebar.bigID : window.flowerSidebar.smallID), index);
+  for (let index = 0; index < 18; index++) {
+    const id = index % 2 ? (index >= 14 ? 'sidebar-huge' : 'sidebar-large') : 'sidebar-small';
+    await page.locator('[data-thread-id="' + id + '"]').hover();
+    const result = await page.evaluate(id => window.flowerSidebar.select(id), id);
     assert.equal(result.synchronous.active, result.id);
     assert.equal(result.synchronous.committed, result.committedBefore);
     assert.equal(result.synchronous.rows, result.beforeRows);
     assert.equal(result.synchronous.parses, 0);
+    const committing = result.events.find(event => event.phase === 'commit_started');
+    assert.ok(committing?.hovered, 'Selection qualification must include actual pointer hover');
+    assert.equal(committing.background, result.background, 'Selection highlight must reach its final color before content work starts');
     selections.push(result);
   }
   const cdp = await app.context().newCDPSession(page);
   const trace = [];
   cdp.on('Tracing.dataCollected', event => trace.push(...event.value));
   await cdp.send('Tracing.start', { categories: 'devtools.timeline,blink.user_timing,disabled-by-default-devtools.screenshot', transferMode: 'ReportEvents' });
-  await page.evaluate(() => window.flowerSidebar.select(window.flowerSidebar.smallID));
-  await page.evaluate(() => window.flowerSidebar.select(window.flowerSidebar.bigID));
+  const painted = [];
+  const pixel = (png, sample) => {
+    const scale = png.width / sample.viewportWidth;
+    const offset = (Math.floor(sample.y * scale) * png.width + Math.floor(sample.x * scale)) * 4;
+    return [...png.data.subarray(offset, offset + 3)];
+  };
+  for (const id of ['sidebar-small', 'sidebar-large', 'sidebar-small', 'sidebar-huge']) {
+    await page.locator('[data-thread-id="' + id + '"]').hover();
+    const result = await page.evaluate(id => window.flowerSidebar.select(id), id);
+    const reference = PNG.sync.read(await page.screenshot());
+    await writeFile(path.join(output, 'selection-reference-' + painted.length + '.png'), PNG.sync.write(reference));
+    painted.push({ id, sample: result.sample, rgb: pixel(reference, result.sample) });
+  }
   const traceComplete = new Promise(resolve => cdp.once('Tracing.tracingComplete', resolve));
   await cdp.send('Tracing.end'); await traceComplete;
   await writeFile(path.join(output, 'selection-trace.json'), JSON.stringify({ traceEvents: trace }));
+  await writeFile(path.join(output, 'paint-samples.json'), JSON.stringify(painted, null, 2));
+  const requests = trace.filter(event => event.name === 'sidebar-selection-requested');
+  const commits = trace.filter(event => event.name === 'sidebar-selection-commit_started');
+  assert.equal(requests.length, painted.length);
+  for (let index = 0; index < painted.length; index++) {
+    const frames = trace.filter(event => event.name === 'Screenshot'
+      && event.ts > requests[index].ts && event.args.expected_display_time < commits[index].ts);
+    let evidence;
+    for (const frame of frames) {
+      const png = await app.evaluate(({ nativeImage }, base64) => nativeImage.createFromBuffer(Buffer.from(base64, 'base64')).toPNG().toString('base64'), frame.args.snapshot);
+      const rgb = pixel(PNG.sync.read(Buffer.from(png, 'base64')), painted[index].sample);
+      if (rgb.every((channel, i) => Math.abs(channel - painted[index].rgb[i]) <= 8)) {
+        evidence = frame;
+        await writeFile(path.join(output, 'selection-before-content-' + index + '.png'), Buffer.from(png, 'base64'));
+        painted[index].paintMs = (frame.ts - requests[index].ts) / 1000;
+        painted[index].displayMs = (frame.args.expected_display_time - requests[index].ts) / 1000;
+        painted[index].commitMs = (commits[index].ts - requests[index].ts) / 1000;
+        break;
+      }
+    }
+    assert.ok(evidence, 'Trace must show the selected background before content commit: ' + painted[index].id);
+  }
   await page.screenshot({ path: path.join(output, 'large-conversation.png') });
   const pins = [];
-  for (const width of [220, 224, 272, 360]) {
+  for (const width of process.argv.includes('--selection-only') ? [] : [220, 224, 272, 360]) {
     console.log('Sidebar pin qualification width: ' + width);
     await page.evaluate(width => document.querySelector('.flower-surface').style.setProperty('--flower-thread-rail-width', width + 'px'), width);
     for (let index = 0; index < 16; index++) {
@@ -173,7 +212,7 @@ await session.run(async () => {
     await page.locator('[data-thread-id="sidebar-4"]').hover();
     await page.locator('.flower-component-thread-rail').screenshot({ path: path.join(output, 'rail-' + width + '.png') });
   }
-  const rapid = await page.evaluate(async () => {
+  const rapid = process.argv.includes('--selection-only') ? null : await page.evaluate(async () => {
     window.flowerSidebar.setDelays(250, 900);
     const row = document.querySelector('[data-thread-id="sidebar-6"]');
     const title = row.querySelector('.flower-thread-list-title');
@@ -211,23 +250,25 @@ await session.run(async () => {
       finalPinned: row.dataset.pinned, otherPinned: other.closest('[data-thread-id]').dataset.pinned,
       requests: window.flowerSidebar.pinState().pinCalls.slice(initial.pinCalls.length) };
   });
-  assert.deepEqual(rapid.immediate, { pinned: 'true', otherPinned: 'true', disabled: false, requests: 1 });
-  assert.ok(rapid.writeDuringRead, 'A delayed list read must not block another write');
-  assert.ok(rapid.rowRetained && rapid.titleRetained && rapid.focusRetained);
-  assert.equal(rapid.finalPinned, 'false');
-  assert.equal(rapid.otherPinned, 'true');
-  assert.equal(rapid.disabledFrames, 0);
-  assert.equal(rapid.invalidFrames, 0);
-  assert.deepEqual(rapid.requests, [{ id: 'sidebar-6', pinned: true }, { id: 'sidebar-6', pinned: true },
-    { id: 'sidebar-7', pinned: true }, { id: 'sidebar-6', pinned: false }]);
-  await page.locator('.flower-component-thread-rail').screenshot({ path: path.join(output, 'rapid-pins.png') });
+  if (rapid) {
+    assert.deepEqual(rapid.immediate, { pinned: 'true', otherPinned: 'true', disabled: false, requests: 1 });
+    assert.ok(rapid.writeDuringRead, 'A delayed list read must not block another write');
+    assert.ok(rapid.rowRetained && rapid.titleRetained && rapid.focusRetained);
+    assert.equal(rapid.finalPinned, 'false');
+    assert.equal(rapid.otherPinned, 'true');
+    assert.equal(rapid.disabledFrames, 0);
+    assert.equal(rapid.invalidFrames, 0);
+    assert.deepEqual(rapid.requests, [{ id: 'sidebar-6', pinned: true }, { id: 'sidebar-6', pinned: true },
+      { id: 'sidebar-7', pinned: true }, { id: 'sidebar-6', pinned: false }]);
+    await page.locator('.flower-component-thread-rail').screenshot({ path: path.join(output, 'rapid-pins.png') });
+  }
   assert.deepEqual(pageErrors, []);
   const sorted = selections.slice(2).map(value => value.syncMs).sort((a, b) => a - b);
   const clickP95 = sorted[Math.ceil(sorted.length * 0.95) - 1];
   assert.ok(clickP95 < 8, 'Warm sidebar click P95 must stay below 8ms: ' + clickP95);
   const report = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
     sourceDiff: execFileSync('git', ['diff', '--stat'], { cwd: root, encoding: 'utf8' }).trim(),
-    version, clickP95, selections, pins, rapid, frames: pins.reduce((sum, value) => sum + value.frames, 0),
+    version, clickP95, selections, painted, pins, rapid, frames: pins.reduce((sum, value) => sum + value.frames, 0),
     traceScreenshots: trace.filter(value => value.name === 'Screenshot').length };
   await session.writeEvidence(path.join(output, 'metrics.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify({ output, electron: version.electron, chrome: version.chrome, clickP95, pinOperations: pins.length, sampledFrames: report.frames, traceScreenshots: report.traceScreenshots, rapid }));

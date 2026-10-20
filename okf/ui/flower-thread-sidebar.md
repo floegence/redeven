@@ -19,13 +19,10 @@ existing workspace summary stream or one explicit post-command read.
 
 ## Rename from the conversation header
 
-The full conversation header places a quiet pencil button beside the current
-title when the host supports renaming. It remains available during execution
-and detail loading; new conversations without a ThreadID have no rename action.
-Long titles truncate while the button retains its hit area and the complete
-title remains available as a tooltip. Touch layouts use the header's 44px target.
-During inline editing, narrow headers move their other actions to a second row
-so the input and controls remain usable.
+The header's pencil renames an existing ThreadID when supported, including
+during execution and detail loading. Long titles truncate with a full tooltip
+and retain the pencil hit area; touch targets are 44px. Narrow inline editors
+move other actions to a second row.
 
 The pencil replaces the title with an inline input, prefilled from the current
 canonical title with its text selected. A checkmark saves; a close icon or Escape
@@ -45,16 +42,18 @@ and sidebar titles update through the existing thread cache.
 ## Selection and navigation
 
 The rail acknowledges a selection with a short-lived navigation intent before
-committing the conversation. The existing animation-frame plus task boundary
-lets that highlight paint before ThreadCache selection, transcript projection,
-scroll measurement and detail loading. Only the latest intent commits;
+committing the conversation. Four cancellable animation frames and a task
+reserve style, paint and compositor presentation before ThreadCache selection,
+transcript projection, scroll measurement and detail loading. Selection has no
+background transition. Only the latest intent commits;
 ThreadCache.selectedId remains the sole committed conversation identity.
 Foreground detail requests cannot bypass this boundary through summary effects.
 
 The previous title, body and draft stay together with a localized loading status
-until commit. That conversation and its composer are inert; Send, Stop, input,
-approval and Goal entry points also reject actions during the intent. The rail
-remains available. An already captured immutable submission keeps its original
+until commit. A capture guard blocks old conversation interactions; Send, Stop,
+input, approval and Goal also reject the intent. Native inert must not restyle
+the history, and the status node stays mounted so inserting it cannot invalidate
+Markdown first-child selectors. The rail remains available. An already captured immutable submission keeps its original
 ThreadID and cannot cancel a newer navigation. Returning to the committed
 conversation cancels the pending target without remounting its body. New chat,
 external focus, embedded scope changes, deletion and disposal retain their
