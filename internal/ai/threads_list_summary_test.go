@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"testing"
@@ -13,8 +14,10 @@ import (
 
 type countingListThreadRuntime struct {
 	flruntime.ThreadService
-	lists atomic.Int64
-	views atomic.Int64
+	lists     atomic.Int64
+	rootLists atomic.Int64
+	summaries atomic.Int64
+	views     atomic.Int64
 }
 
 func TestThreadReadsDoNotRequireDesktopModelSourceAvailability(t *testing.T) {
@@ -91,6 +94,9 @@ func TestThreadReadsDoNotRequireDesktopModelSourceAvailability(t *testing.T) {
 
 func (runtime *countingListThreadRuntime) List(ctx context.Context, scope flruntime.ThreadScope) ([]flruntime.ThreadSummary, error) {
 	runtime.lists.Add(1)
+	if scope.ParentID == nil {
+		runtime.rootLists.Add(1)
+	}
 	return runtime.ThreadService.List(ctx, scope)
 }
 
@@ -133,5 +139,64 @@ func TestListThreadsUsesSummaryWithoutLoadingThreadViews(t *testing.T) {
 	}
 	if got := counter.views.Load(); got != 0 {
 		t.Fatalf("View calls = %d, want 0", got)
+	}
+}
+
+func (runtime *countingListThreadRuntime) Summary(ctx context.Context, threadID identity.ThreadID) (flruntime.ThreadSummary, error) {
+	runtime.summaries.Add(1)
+	return runtime.ThreadService.(flruntime.ThreadSummaryReader).Summary(ctx, threadID)
+}
+
+func TestPointThreadReadsUsePublishedSummaryReader(t *testing.T) {
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	created, err := svc.CreateThread(t.Context(), meta, "point summary", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	counter := &countingListThreadRuntime{ThreadService: svc.threadRuntime}
+	svc.threadRuntime = counter
+	if _, err := svc.GetThread(t.Context(), meta, created.ThreadID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.GetFlowerThreadDetail(t.Context(), meta, created.ThreadID); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.publishCanonicalThreadSummary(t.Context(), meta.EndpointID, created.ThreadID); err != nil {
+		t.Fatal(err)
+	}
+	if got := counter.rootLists.Load(); got != 0 {
+		t.Fatalf("point reads enumerated root histories %d times", got)
+	}
+	if got := counter.summaries.Load(); got != 3 {
+		t.Fatalf("Summary calls = %d, want 3", got)
+	}
+}
+
+type summaryUnavailableRuntime struct{ flruntime.ThreadService }
+type failingSummaryRuntime struct {
+	flruntime.ThreadService
+	err error
+}
+
+func (runtime failingSummaryRuntime) Summary(context.Context, identity.ThreadID) (flruntime.ThreadSummary, error) {
+	return flruntime.ThreadSummary{}, runtime.err
+}
+
+func TestPointSummaryRequiresPublishedCapabilityAndPreservesErrors(t *testing.T) {
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	created, err := svc.CreateThread(t.Context(), meta, "summary errors", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := identity.ThreadID(created.ThreadID)
+	if _, err := threadSummaryFromRuntime(t.Context(), summaryUnavailableRuntime{svc.threadRuntime}, id); err == nil {
+		t.Fatal("missing Summary capability was accepted")
+	}
+	for _, want := range []error{context.Canceled, context.DeadlineExceeded, flruntime.ErrThreadNotFound} {
+		if _, got := threadSummaryFromRuntime(t.Context(), failingSummaryRuntime{svc.threadRuntime, want}, id); !errors.Is(got, want) {
+			t.Fatalf("error = %v, want %v", got, want)
+		}
 	}
 }
