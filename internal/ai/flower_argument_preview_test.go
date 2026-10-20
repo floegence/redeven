@@ -101,6 +101,35 @@ func TestFlowerArgumentPreviewNamesArriveBeforeArgumentsComplete(t *testing.T) {
 	}
 }
 
+func TestFlowerArgumentPreviewLongBodyFirstKeepsProgressUntilPathArrives(t *testing.T) {
+	body := strings.Repeat("long body line\n", 4096)
+	encoded, _ := json.Marshal(body)
+	parse := flowerArgumentPreviewFactory("file.write")()
+	prefix := `{"content":` + string(encoded)
+	for start := 0; start < len(prefix); start += 137 {
+		end := min(start+137, len(prefix))
+		preview, err := parse(prefix[start:end], false)
+		if err != nil || preview.DisplayName != "" {
+			t.Fatalf("body-first preview=%#v err=%v", preview, err)
+		}
+		if end == len(prefix) && (preview.Additions == nil || *preview.Additions != 4096) {
+			t.Fatalf("line progress missing: %#v", preview)
+		}
+	}
+	preview, err := parse(`,"ignored":{"file_path":"wrong.txt"},"file_path":"src/\u4e2d`, false)
+	if err != nil || preview.DisplayName != "" {
+		t.Fatalf("incomplete escaped path: %#v %v", preview, err)
+	}
+	preview, err = parse(`\u6587\ud83d\ude00.txt"`, false)
+	if err != nil || preview.DisplayName != "中文😀.txt" || *preview.Additions != 4096 {
+		t.Fatalf("late complete path: %#v %v", preview, err)
+	}
+	preview, err = parse(`}`, true)
+	if err != nil || preview.DisplayName != "中文😀.txt" {
+		t.Fatalf("final preview: %#v %v", preview, err)
+	}
+}
+
 func TestFlowerArgumentPreviewPatchNamesStreamFromCompleteHeaders(t *testing.T) {
 	parse := flowerArgumentPreviewFactory("apply_patch")()
 	for _, step := range []struct{ delta, name string }{

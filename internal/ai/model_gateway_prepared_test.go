@@ -61,7 +61,7 @@ func TestProviderPreparationFreezesDispatchedWireAndEstimate(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			request := ModelGatewayRequest{Model: tc.model, Protocol: tc.protocol, Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: strings.Repeat("Review the source code and explain the changes.\n", 100)}}}}, Tools: []ToolDef{{Name: "inspect", InputSchema: json.RawMessage(`{"type":"object","properties":{}}`)}}}
+			request := ModelGatewayRequest{Model: tc.model, Protocol: tc.protocol, Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: strings.Repeat("Review the source code and explain the changes.\n", 100)}}}}, Tools: []ToolDef{{Name: "file.write", Strict: true, InputSchema: json.RawMessage(`{"type":"object","properties":{"content":{"type":"string"},"file_path":{"type":"string"}},"required":["file_path","content"],"additionalProperties":false}`)}}}
 			request.ProviderControls.ReasoningCapability.Kind = "toggle"
 			request.ProviderControls.ReasoningCapability.ResponseReasoningFields = []string{"reasoning_content"}
 			prepared, err := gateway.(modelGatewayRequestPreparer).prepareTurn(context.Background(), request)
@@ -99,6 +99,9 @@ func TestProviderPreparationFreezesDispatchedWireAndEstimate(t *testing.T) {
 				t.Fatal(err)
 			}
 			actual := <-wire
+			if !bytes.Contains(actual, []byte(`"properties":{"file_path":`)) {
+				t.Fatalf("schema order lost after SDK encoding: %s", actual)
+			}
 			var final map[string]any
 			if err := json.Unmarshal(actual, &final); err != nil {
 				t.Fatal(err)

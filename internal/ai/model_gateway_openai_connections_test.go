@@ -78,6 +78,7 @@ func TestOpenAIWebSocketContinuationUsesCompletePreparedHistory(t *testing.T) {
 	}))
 	defer server.Close()
 	req := testOpenAISocketRequest("scope")
+	req.Tools = []ToolDef{{Name: "file.write", Strict: true, InputSchema: json.RawMessage(`{"type":"object","properties":{"content":{"type":"string"},"file_path":{"type":"string"}},"required":["file_path","content"],"additionalProperties":false}`)}}
 	first, err := testOpenAISocketProvider(t, server, pool).StreamTurn(t.Context(), req, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -94,6 +95,10 @@ func TestOpenAIWebSocketContinuationUsesCompletePreparedHistory(t *testing.T) {
 	}
 	if prepared.TokenEstimate().EstimatedInputTokens <= 0 {
 		t.Fatal("full request was not estimated")
+	}
+	var frozen map[string]json.RawMessage
+	if err := json.Unmarshal(prepared.(*preparedModelWire).payload, &frozen); err != nil {
+		t.Fatal(err)
 	}
 	second, err := prepared.StreamTurn(t.Context(), nil)
 	if err != nil {
@@ -127,6 +132,9 @@ func TestOpenAIWebSocketContinuationUsesCompletePreparedHistory(t *testing.T) {
 		}
 	}
 	for _, body := range bodies {
+		if string(body["tools"]) != string(frozen["tools"]) || !strings.Contains(string(body["tools"]), `"properties":{"file_path":`) {
+			t.Fatalf("WebSocket tool declaration differs from frozen request: %s", body["tools"])
+		}
 		if body["stream"] != nil || body["background"] != nil || string(body["type"]) != `"response.create"` || string(body["store"]) != "false" {
 			t.Fatalf("invalid socket body: %+v", body)
 		}

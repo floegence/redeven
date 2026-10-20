@@ -38,6 +38,10 @@ func newPreparedModelWire(providerType, model string, format flprovider.RequestF
 	if err != nil {
 		return nil, err
 	}
+	raw, err = flprovider.OrderToolSchemas(format, raw)
+	if err != nil {
+		return nil, err
+	}
 	estimate, err := flprovider.EstimateRenderedRequest(flprovider.RenderedRequest{Provider: providerType, Model: model, Format: format, Payload: raw, Attribution: renderedContextAttribution(format, raw, req, aliases)})
 	if err != nil {
 		return nil, err

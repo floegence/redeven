@@ -17,8 +17,10 @@ import (
 
 func TestChatGPTWireFullHistoryNamespaceAndNativeReplay(t *testing.T) {
 	var bodies []map[string]any
+	var rawBodies [][]byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body)
+		rawBodies = append(rawBodies, raw)
 		var body map[string]any
 		json.Unmarshal(raw, &body)
 		bodies = append(bodies, body)
@@ -39,12 +41,15 @@ func TestChatGPTWireFullHistoryNamespaceAndNativeReplay(t *testing.T) {
 	provider := adapter.(*openAIProvider)
 	provider.chatGPT = true
 	provider.chatGPTToken = func(context.Context) (string, error) { return "rotating-access", nil }
-	req := ModelGatewayRequest{Model: "gpt-5.5", Messages: []Message{{Role: "system", Content: []ContentPart{{Type: "text", Text: "system instructions"}}}, {Role: "user", Content: []ContentPart{{Type: "text", Text: "inspect the image"}, {Type: "image", MimeType: "image/png", FileURI: "https://example.com/image.png"}}}}, Tools: []ToolDef{{Name: "inspect", InputSchema: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)}}}
+	req := ModelGatewayRequest{Model: "gpt-5.5", Messages: []Message{{Role: "system", Content: []ContentPart{{Type: "text", Text: "system instructions"}}}, {Role: "user", Content: []ContentPart{{Type: "text", Text: "inspect the image"}, {Type: "image", MimeType: "image/png", FileURI: "https://example.com/image.png"}}}}, Tools: []ToolDef{{Name: "inspect", Strict: true, InputSchema: json.RawMessage(`{"type":"object","properties":{"content":{"type":"string"},"file_path":{"type":"string"}},"required":["file_path","content"],"additionalProperties":false}`)}}}
 	first, err := provider.StreamTurn(context.Background(), req, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	wire, _ := json.Marshal(bodies[0])
+	if !strings.Contains(string(rawBodies[0]), `"properties":{"file_path":`) {
+		t.Fatalf("namespace lost schema order: %s", rawBodies[0])
+	}
 	for _, field := range []string{"max_output_tokens", "temperature", "top_p", "previous_response_id", "metadata", "background", "conversation", "max_tool_calls", "prompt_cache_retention", "truncation", "safety_identifier"} {
 		if _, ok := bodies[0][field]; ok {
 			t.Errorf("unsupported field %s", field)

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 	"reflect"
-	"sort"
 
+	fltools "github.com/floegence/floret/v7/tools"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
@@ -142,7 +142,10 @@ func compileStrictArgumentRule(schema map[string]any, depth int) (*strictArgumen
 				return nil, fmt.Errorf("required property %s is undefined", name)
 			}
 		}
-		names := make([]string, 0, len(properties))
+		names, err := fltools.InputPropertyOrder(schema)
+		if err != nil {
+			return nil, err
+		}
 		rule.properties = make(map[string]*strictArgumentRule, len(properties))
 		for name, value := range properties {
 			child, ok := value.(map[string]any)
@@ -163,9 +166,7 @@ func compileStrictArgumentRule(schema map[string]any, depth int) (*strictArgumen
 				childRule.omitNull = true
 			}
 			rule.properties[name] = childRule
-			names = append(names, name)
 		}
-		sort.Strings(names)
 		schema["required"] = names
 	}
 	if child, ok := schema["items"].(map[string]any); ok {
