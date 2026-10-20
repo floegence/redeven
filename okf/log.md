@@ -2,7 +2,7 @@
 
 ## 2026-10-20 — Stable ChatGPT sign-out and explicit account removal
 
-- Preserve account summary geometry and owned focus through logout; collapse the picker once without loading flicker. Add confirmed local removal of signed-out registrations, retaining provider settings and conversations and rejecting late returning callbacks. See [provider configuration](ui/flower-provider-configuration.md) and [account lifecycle](ai/chatgpt-account-lifecycle.md).
+- Preserve account summary geometry and owned focus through logout; collapse the picker once without loading flicker. Add confirmed local removal of signed-out registrations, retaining provider settings and conversations and rejecting late returning callbacks. See [ChatGPT authentication](ui/flower-provider-chatgpt-authentication.md), [provider configuration](ui/flower-provider-configuration.md) and [account lifecycle](ai/chatgpt-account-lifecycle.md).
 
 ## 2026-10-20 — Bounded tool correction and explicit recovery
 
