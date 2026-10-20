@@ -8,6 +8,10 @@
 
 - Remove repeated language, image/schema tutorials, basic tool usage and per-surface recovery rules. Keep one shared recovery policy and retain product interaction boundaries; tighten system and combined request budgets without growing tool definitions. See [prompt contracts](ai/flower-prompt-and-rule-sources.md).
 
+## 2026-10-19 — Native measured compaction pressure
+
+- Adopt published Floret v7.70.0 and schema 28; map attempt-bound Responses measurement with HTTP/connection inclusion evidence and frozen suffix replay, retaining upstream pressure and recovery ownership. See [native request measurement](ai/model-provider-surface-and-history.md#native-request-measurement).
+
 ## 2026-10-19 — Preserve Flower tail following during live growth
 
 - Resume following when downward scrolling reaches the previous bottom during live growth. Retain follow intent as short content overflows, including no-op inputs and whitespace clicks; preserve explicit reading and disclosure anchors. See [activity interaction](ui/flower-activity-interaction.md).
@@ -17,8 +21,6 @@
 - Consume published Floret point summaries, remove hidden command reloads, and use one ephemeral detail demand owner with transport cancellation and explicit recovery. Preserve the [sidebar feedback boundary](ui/flower-thread-sidebar.md) and [Desktop document isolation](desktop/desktop-runtime-bridge.md).
 
 ## 2026-10-20 — Stable Flower media ownership
-
-- Adopt published Floret v7.70.0 and schema 28; map attempt-bound Responses measurement with HTTP/connection inclusion evidence and frozen suffix replay, retaining upstream pressure and recovery ownership.
 
 - Use published Floe 0.86.47 media request ownership, bounded reads and Retry. Bind media to each rendered thread and retain equal complete context updates before timeline projection. See [inline media](ui/flower-inline-media.md) and [streaming stability](ui/flower-streaming-stability.md).
 

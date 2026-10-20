@@ -959,8 +959,12 @@ func assertFlowerViewerReadBaseline(t *testing.T, subscription *FlowerLiveStream
 	if err := json.Unmarshal(frame.Data, &envelope); err != nil {
 		t.Fatal(err)
 	}
-	if frame.Kind != FlowerLiveStreamViewerReadState || envelope.ThreadID != threadID || envelope.ReadStatus == nil || envelope.ReadStatus.Snapshot.ActivityRevision <= 0 {
+	if frame.Kind != FlowerLiveStreamViewerReadState || envelope.Kind != FlowerLiveStreamViewerReadState || envelope.ThreadID != threadID || envelope.ReadStatus == nil || envelope.ReadStatus.Snapshot.ActivityRevision <= 0 {
 		t.Fatalf("private read baseline=%s, want current read state for %q", frame.Data, threadID)
+	}
+	status := envelope.ReadStatus
+	if status.ReadState.LastSeenActivityRevision > status.Snapshot.ActivityRevision || status.IsUnread != (status.Snapshot.ActivityRevision > status.ReadState.LastSeenActivityRevision) {
+		t.Fatalf("inconsistent private read baseline: %+v", status)
 	}
 }
 
