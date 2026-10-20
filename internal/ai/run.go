@@ -1593,7 +1593,8 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 			return outcome, nil
 		}
 		if errors.Is(toolErrRaw, context.DeadlineExceeded) {
-			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeTimeout, Message: "Tool execution timed out", Retryable: !isComputerUseTool(toolName)}, "", partial)
+			toolErr := aitools.ClassifyError(aitools.Invocation{ToolName: toolName, Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, toolErrRaw)
+			setToolError(toolErr, "", partial)
 			return outcome, nil
 		}
 		var navigationErr *computerNavigationError

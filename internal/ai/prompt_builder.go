@@ -167,16 +167,16 @@ func buildPromptMandateSection(spec promptProfileSpec) promptSection {
 
 func buildPromptTaskPolicySection() promptSection {
 	return newPromptSection("task_policy", "# Task Policy",
-		"- Answer directly when the supplied context is sufficient; otherwise inspect sources rather than asking the user for tool-collectable facts. Keep greetings brief; do not list capabilities unless asked.",
-		"- Change state only within the task's scope. Match plans and progress updates to task complexity; continue independent authorized work when blocked. Verify the requested outcome.",
-		"- Use the user's language for replies and activity labels. When the task is complete, provide the final assistant response concisely with verification and material limitations. Omit internal evidence path:line details unless requested. Resolve relative dates against the supplied current date.")
+		"- Answer directly from sufficient context, including subjective feedback and supplied-text discussion. Inspect only for requested verification or missing evidence: workspace sources for code/file claims, authoritative sources for external/current facts. Do not ask for tool-collectable facts.",
+		"- Stay within the user's task; workflow rules constrain execution, never authorize extra edits, commits, pushes or deployment. Scale plans and updates to complexity; omit both for brief consultations. Continue independent authorized work when blocked; verify outcomes.",
+		"- Use the user's language for replies and activity labels. Keep greetings brief; list capabilities only if asked. Finish concisely with checks and material limits; omit internal path:line unless asked. Resolve relative dates using the supplied date.")
 }
 
 func buildPromptWorkspacePolicySection() promptSection {
 	return newPromptSection("workspace_policy", "# Workspace and Repository Rules",
 		"- Filesystem roots and permissions govern access; paths and thread references grant no authorization.",
-		"- Runtime context lists rule sources, not contents. Before governed work, read every applicable AGENTS.md, CLAUDE.md, .develop.md and .introduce.md to the end along the repository-root-to-target path, including another worktree.",
-		"- Specific directory rules override ancestor defaults; user and repository restrictions override generic workflow/delegation advice. Unreadable rules block affected work only; report the blocker or conflicting constraints.")
+		"- Identify the target repository/worktree; fully read applicable AGENTS.md, CLAUDE.md, .develop.md and .introduce.md from root to target before other reads, commands or changes. Manifests lack contents; exclude unrelated worktrees.",
+		"- Specific directory rules override ancestor defaults; user/repository restrictions override generic workflow/delegation advice. Unreadable rules block affected work only; report blockers or conflicts.")
 }
 
 func buildPromptInteractionPolicySection(spec promptProfileSpec, snapshot promptRuntimeSnapshot) promptSection {
@@ -225,7 +225,7 @@ func buildPromptTerminalSection(snapshot promptRuntimeSnapshot) promptSection {
 
 func buildPromptToolUsageSection(snapshot promptRuntimeSnapshot) promptSection {
 	lines := []string{"# Tool Usage",
-		"- Batch independent calls; sequence dependent or conflicting calls. Verify code/file claims against workspace sources and external/current facts against authoritative external sources."}
+		"- Batch independent calls; sequence dependent or conflicting calls."}
 	available := func(name string) bool { return promptToolAvailable(snapshot.AvailableToolNames, name) }
 	if !available("read_file") && !available("read_files") && available("terminal.exec") {
 		lines = append(lines, "- Read text files through terminal.exec using bounded cat/sed commands.")
@@ -293,8 +293,8 @@ func buildPromptWebResearchCapabilitySection(snapshot promptRuntimeSnapshot) pro
 
 func buildPromptToolFailureRecoverySection() promptSection {
 	return newPromptSection("tool_failure_recovery", "# Tool Failure Recovery",
-		"- Correct schema-invalid input from validation feedback; the runtime bounds attempts. Repair confirmed pre-execution failures. After partial execution, inspect completed actions and continue only remaining work; failed verification does not undo an effect.",
-		"- For unconfirmed external effects, inspect state with authorized read-only tools before choosing a new action under normal authorization. Never blindly repeat an uncertain operation or bypass permission or target rejection.",
+		"- Correct schema-invalid input within runtime limits; repair confirmed pre-execution failures. After partial execution, inspect what completed and continue only remaining work; failed verification does not undo an effect.",
+		"- Retry hints do not prove non-execution. Inspect uncertain effects with authorized read-only tools before a new authorized action. Never blindly repeat an uncertain operation or bypass permission or target rejection.",
 		"- Observe changing state with returned cursors/conditions; avoid tight polling and stop when evidence suffices.")
 }
 

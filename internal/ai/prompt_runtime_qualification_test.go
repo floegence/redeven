@@ -92,6 +92,42 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 		assertQualificationContextAttribution(t, detail)
 		return detail
 	}
+	// Fresh consultations retain the production tool surface and Floret Goal
+	// injection. No user instruction forbids tools or task management here.
+	for _, tc := range []struct{ name, input string }{
+		{"subjective_feedback", "你觉得‘简单问题直接回答，复杂问题先确认范围’这句话会让你困惑吗？说说你的感受。"},
+		{"supplied_code_discussion", "帮我看看这段提供的代码：func Add(a, b int) int { return a - b }。它是否符合函数名表达的含义？"},
+		{"workflow_scope", "帮我看看这条仓库规则是否合理：‘实现后验证、提交、推送并部署’。"},
+	} {
+		consultation, err := svc.CreateThread(ctx, meta, tc.name, modelID, config.AIPermissionFullAccess, workspace)
+		if err != nil {
+			t.Fatal(err)
+		}
+		start := len(recorder.snapshot())
+		response, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{ThreadID: consultation.ThreadID, ClientRequestID: tc.name, Input: RunInput{Text: tc.input}, Options: RunOptions{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, MaxOutputTokens: 4096, NoUserInteraction: true, ToolAllowlist: []string{"terminal.exec", "terminal.read", "file.edit", "file.write", "apply_patch"}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		detail := waitForDeepSeekAskUserDetail(t, ctx, svc, meta, consultation.ThreadID, func(d *FlowerThreadDetail) bool {
+			return d.Current.TurnID == response.Current.TurnID && d.Current.Activity == flruntime.ThreadActivityIdle && d.Current.LastOutcome != nil
+		})
+		if *detail.Current.LastOutcome != flruntime.TurnOutcomeCompleted || (detail.Current.Goal != nil && detail.Current.Goal.Status != "absent") || strings.TrimSpace(ollamaTaskText(detail.Current)) == "" {
+			t.Errorf("%s: consultation did not complete directly without Goal", tc.name)
+		}
+		mainRequests := 0
+		for _, request := range recorder.snapshot()[start:] {
+			if request.Kind == "main" {
+				mainRequests++
+			}
+			if len(request.ResponseToolNames) != 0 {
+				t.Errorf("%s: consultation invoked tools: %v", tc.name, request.ResponseToolNames)
+			}
+		}
+		if mainRequests != 1 {
+			t.Errorf("%s: consultation required %d provider steps", tc.name, mainRequests)
+		}
+		report[tc.name] = detail
+	}
 	detail := send("repair", "Fix Add in this fixture project. Follow its repository rules and verify the existing tests. Work only inside this workspace; no subagents. Reply concisely in Chinese with the result.")
 	code, err := os.ReadFile(filepath.Join(workspace, "calc.py"))
 	if err != nil {

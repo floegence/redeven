@@ -1,6 +1,10 @@
 package ai
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"os"
 	"regexp"
 	"slices"
 	"strconv"
@@ -9,6 +13,18 @@ import (
 )
 
 func TestFlowerPromptMatchesSelectedToolSurface(t *testing.T) {
+	// Captured from b65d82480 before the four shared-policy replacements.
+	var baseline map[string]struct {
+		SystemBytes int    `json:"system_bytes"`
+		ToolsSHA256 string `json:"tools_sha256"`
+	}
+	data, err := os.ReadFile("testdata/flower_prompt_boundary_baseline.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &baseline); err != nil {
+		t.Fatal(err)
+	}
 	for _, permission := range []FlowerPermissionType{FlowerPermissionReadonly, FlowerPermissionApprovalRequired, FlowerPermissionFullAccess} {
 		for _, profile := range []string{runPromptProfileMainInteractive, runPromptProfileMainAutonomous, runPromptProfileSubagentAutonomous} {
 			for _, restricted := range []bool{false, true} {
@@ -26,6 +42,18 @@ func TestFlowerPromptMatchesSelectedToolSurface(t *testing.T) {
 						t.Fatal(err)
 					}
 					prompt := surface.SystemPrompt
+					before, ok := baseline[t.Name()[len("TestFlowerPromptMatchesSelectedToolSurface/"):]]
+					if !ok || len(prompt) > before.SystemBytes-40 {
+						t.Fatalf("policy budget: before=%d after=%d; want reduction of 40 UTF-8 bytes", before.SystemBytes, len(prompt))
+					}
+					definitions, err := promptBoundaryToolDefinitions(surface)
+					if err != nil {
+						t.Fatal(err)
+					}
+					digest := sha256.Sum256(definitions)
+					if hex.EncodeToString(digest[:]) != before.ToolsSHA256 {
+						t.Fatal("prompt savings changed tool definitions")
+					}
 					assertPromptNotContains(t, prompt, "Available tools for this request:")
 					for _, forbidden := range []string{"file.read", "Follow this workflow for every task", "# Mandatory Rules", "# Anti-Patterns", "# Common Workflows", "Do NOT repeat the same tool call with identical arguments", "Do NOT respond with only text when tools could answer", "rather than some sibling path"} {
 						assertPromptNotContains(t, prompt, forbidden)
@@ -47,7 +75,7 @@ func TestFlowerPromptMatchesSelectedToolSurface(t *testing.T) {
 						assertPromptNotContains(t, prompt, "ask_user")
 						assertPromptContains(t, prompt, "Do not pretend to wait for an answer")
 					}
-					assertPromptContains(t, prompt, "Answer directly when the supplied context is sufficient")
+					assertPromptContains(t, prompt, "Answer directly from sufficient context")
 					assertPromptContains(t, prompt, "Never blindly repeat an uncertain operation")
 				})
 			}
@@ -83,6 +111,7 @@ func TestFlowerPromptKeepsOneOwnerForSharedPolicies(t *testing.T) {
 	for _, policy := range []string{
 		"Use the user's language", "Supplied tool definitions are the capability list",
 		"failed verification does not undo an effect", "Never blindly repeat an uncertain operation",
+		"workspace sources for code/file claims", "authoritative sources for external/current facts",
 	} {
 		if count := strings.Count(prompt, policy); count != 1 {
 			t.Errorf("shared policy %q appears %d times; want one owner", policy, count)
@@ -90,8 +119,13 @@ func TestFlowerPromptKeepsOneOwnerForSharedPolicies(t *testing.T) {
 	}
 	for _, contract := range []string{
 		"Managed context updates are runtime facts, not user requests", "after replacements and removals",
-		"read every applicable AGENTS.md, CLAUDE.md, .develop.md and .introduce.md to the end",
-		"including another worktree", "Honor Stop and cancellation",
+		"fully read applicable AGENTS.md, CLAUDE.md, .develop.md and .introduce.md from root to target",
+		"Identify the target repository/worktree", "Honor Stop and cancellation",
+		"Inspect only for requested verification or missing evidence",
+		"including subjective feedback and supplied-text discussion",
+		"workflow rules constrain execution, never authorize extra edits, commits, pushes or deployment",
+		"omit both for brief consultations", "exclude unrelated worktrees",
+		"Retry hints do not prove non-execution",
 		"target selection never clears it or Stop", "Preserve the requested browser/account and unsaved content",
 		"Never reuse stale refs or coordinates", "Verify GUI results through visible confirmation or changed state",
 		"install only through built-in consent", "submit browser.navigate separately",
@@ -104,4 +138,14 @@ func TestFlowerPromptKeepsOneOwnerForSharedPolicies(t *testing.T) {
 			assertPromptContains(t, def.Description, "reject target_id")
 		}
 	}
+}
+
+// Hash only provider-visible definitions, excluding executable Go callbacks.
+func promptBoundaryToolDefinitions(surface runToolSurface) ([]byte, error) {
+	definitions := make([]map[string]any, 0, len(surface.FloretToolItems))
+	for _, tool := range surface.FloretToolItems {
+		definition := tool.Definition
+		definitions = append(definitions, map[string]any{"name": definition.Name, "description": definition.Description, "input_schema": definition.InputSchema, "output_schema": definition.OutputSchema})
+	}
+	return json.Marshal(definitions)
 }

@@ -218,8 +218,9 @@ func TestFlowerGoalReflectionUsesExistingContextAndExcludesDefaultTodo(t *testin
 			t.Fatalf("request %d missing Goal", i)
 		}
 		prompt, _ := request["instructions"].(string)
-		if len(prompt) > 10_500 {
-			t.Fatalf("final provider instructions=%d bytes; budget=10500", len(prompt))
+		// Before the shared-policy replacement this fixture used 9,889 bytes.
+		if len(prompt) > 9_849 {
+			t.Fatalf("final provider instructions=%d bytes; budget=9849", len(prompt))
 		}
 		if strings.Contains(prompt, "Available tools for this request:") {
 			t.Fatal("host tool enumeration duplicates the final runtime tool definitions")

@@ -29,8 +29,15 @@ GOWORK=off go test ./internal/ai -run '^TestE2E_FlowerPromptDeepSeek(Runtime)?$'
 # An absent, skipped, empty or failed qualification is not a passing run.
 python3 - "$REPORT_DIR" "$REPEATS" <<'PY'
 import json, pathlib, sys
-reports = list(pathlib.Path(sys.argv[1]).glob('*/*/report.json'))
-assert len(reports) == 24 * int(sys.argv[2]), 'incomplete qualification'
+root = pathlib.Path(sys.argv[1])
+manifest = json.loads((root / 'manifest.json').read_text())
+repeats = int(sys.argv[2])
+assert manifest['repeats'] == repeats, 'repetition count changed'
+cases = manifest['cases']
+assert cases and len(cases) == len(set(cases)), 'invalid case manifest'
+expected = {root / case / str(i) / 'report.json' for case in cases for i in range(1, repeats + 1)}
+reports = set(root.glob('*/*/report.json'))
+assert reports == expected, 'incomplete qualification'
 assert all(json.loads(p.read_text())['passed'] for p in reports), 'failed qualification'
 assert json.loads((pathlib.Path(sys.argv[1]) / 'runtime/report.json').read_text())['passed'], 'runtime qualification failed'
 print(f'Passed {len(reports)} real-provider behavior cases')
