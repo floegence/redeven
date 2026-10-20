@@ -312,12 +312,12 @@ func TestSubagentPromptUsesOneHandoffContract(t *testing.T) {
 	if !strings.Contains(prompt, "subagents inspect") {
 		t.Fatalf("prompt does not describe the handoff contract:\n%s", prompt)
 	}
-	for _, required := range []string{"Reuse complete reports", "Completion events contain no final report", "all overflow before claiming completeness", "never retry unknown effects", "Integrate results and close children"} {
+	for _, required := range []string{"Reuse complete reports", "Completion events contain no final report", "read subagent_events for missing event text and overflow", "integrate results and close children"} {
 		if !strings.Contains(prompt, required) {
 			t.Fatalf("prompt is missing failure guidance %q:\n%s", required, prompt)
 		}
 	}
-	assertPromptContains(t, buildPromptToolFailureRecoverySection().render(), "An unconfirmed external effect is tool feedback")
+	assertPromptContains(t, buildPromptToolFailureRecoverySection().render(), "Never blindly repeat an uncertain operation")
 	for _, def := range builtInToolDefinitions() {
 		if def.Name == "subagents" {
 			assertPromptContains(t, def.Description, "handoffs[].content")

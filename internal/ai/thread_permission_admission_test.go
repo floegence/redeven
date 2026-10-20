@@ -330,8 +330,8 @@ func assertPermissionProviderSurface(t *testing.T, request map[string]any, mode 
 	if !strings.Contains(prompt, "Current permission mode for this request: "+mode) {
 		t.Errorf("provider prompt omitted current permission %s", mode)
 	}
-	if len(prompt) > 16_000 {
-		t.Errorf("final %s provider instructions=%d bytes; budget=16000", mode, len(prompt))
+	if len(prompt) > 12_000 {
+		t.Errorf("final %s provider instructions=%d bytes; budget=12000", mode, len(prompt))
 	}
 	if strings.Contains(prompt, "Available tools for this request:") {
 		t.Error("host tool enumeration duplicates final provider definitions")

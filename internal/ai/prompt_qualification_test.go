@@ -214,14 +214,17 @@ func TestFlowerPromptSizeBudget(t *testing.T) {
 	prompt, _ := promptQualificationSurface(t, promptQualificationCase{})
 	// A byte budget is deterministic and tokenizer-independent; provider usage is
 	// measured separately in the paid lane, including unchanged tool definitions.
-	if len(prompt) > 16_000 {
-		t.Fatalf("full capability system prompt is %d bytes; budget=16000", len(prompt))
+	if len(prompt) > 11_000 {
+		t.Fatalf("full capability system prompt is %d bytes; budget=11000", len(prompt))
 	}
 	for _, tutorial := range []string{
 		"Put headings, lists, blockquotes", "reason_code must be one of:", "*** Add File:", "Script example after observing",
 		"Envelope example", "response_mode", "choices_exhaustive", "evidence_refs", "filter.thread_ids",
 		"browser_source", "default_candidate_ref", "locator.read()", "waitFor()", "opener_tab_id",
 		"after_seq", "last_seq", "handoffs[].content", "items[].failure",
+		"Use canonical tool names", "Locator mode never accepts", "no browser or temporary HTTP service",
+		"short headers/labels", "2–4 concise, mutually exclusive choices", "Use terminal.write only",
+		"Use okf.index for", "Use okf.search for", "Use okf.open for", "Batch independent reads with read_files",
 	} {
 		if strings.Contains(prompt, tutorial) {
 			t.Errorf("interface/tutorial duplication in system prompt: %s", tutorial)

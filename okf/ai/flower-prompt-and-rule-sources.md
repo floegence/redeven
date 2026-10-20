@@ -14,46 +14,36 @@ produce concrete recovery conditions without a second lifecycle or silent clippi
 
 # Contract
 
-One task policy, interaction policy, and failure-recovery policy govern all three
-Flower profiles. Profiles express persona and user-interaction differences.
-Operational guidance comes from the selected `runToolSurface`, including actual
-control signals, rather than permission-mode guesses. Supplied material may be
-answered directly; current file, external, and execution claims require evidence.
-User and repository restrictions override generic delegation advice.
-The final supplied definitions are the capability list, including Floret's Goal
-tool. The host does not print a second enumeration before runtime injection.
-Definitions describe capabilities; current authorization still governs each call.
+The three profiles share task, interaction and recovery policies; profiles
+express persona and interaction differences. The selected `runToolSurface`,
+including control signals and Floret's Goal, is the only capability list. Current
+authorization governs each call. Supplied material can be answered directly;
+current file, external and execution claims require evidence. User and repository
+restrictions override generic delegation advice.
 
-Runtime context admits rule-source descriptors: absolute path, applicable
-directory, and readable status. Discovery uses the authorized filesystem Registry
-and checks symlinks; it does not inject rule bodies or previews. Supported names
-remain `AGENTS.md`, `CLAUDE.md`, `.develop.md`, and `.introduce.md`. Before a governed
-operation, Flower reads every applicable source to its end with current tools.
-The manifest names the directories actually scanned and distinguishes completed
-discovery with no sources from incomplete discovery. Git worktree roots bound the
-ancestor path; confirmed non-repositories scan only the working directory. Missing
-Git, failed root probes and invalid scope reject context admission through the
-existing recoverable failure path instead of publishing an empty source list.
-Another worktree or target directory requires discovery along its own repository
-ancestor path. Specific directory rules override ancestor defaults; incompatible
-same-scope rules use the interaction policy. Unreadable sources or missing reading
-capabilities block affected operations while independent work may continue.
+Runtime context lists rule-source paths, applicable directories and readability,
+not bodies or previews. Discovery uses the authorized filesystem Registry and
+checks symlinks. Flower completely reads applicable `AGENTS.md`, `CLAUDE.md`,
+`.develop.md` and `.introduce.md` before governed work. The manifest distinguishes
+completed empty discovery from incomplete scanning and records scanned directories.
+Git worktree roots bound ancestor discovery; confirmed non-repositories scan only
+the working directory. Missing Git, failed root probes and invalid scope reject
+admission through existing recovery. Other worktrees require their own discovery.
+Specific directory rules override ancestors; incompatible same-scope rules use
+the interaction policy. Unreadable rules or unavailable readers block affected
+work while independent work continues.
 
-The complete runtime snapshot and assembled input pass published Floret public
-validation before execution authority is saved. No final host-side clipping hides
-sources or skill entries. Overflow rejects admission, releases the send operation
-and workload lease, and permits a corrected input with the same request identity.
-Earlier canonical context and provider checkpoints remain immutable. Skill
-catalogs are admission facts; current capabilities alone supply activation advice.
+Floret validates complete runtime snapshots and assembled input before authority
+is saved; no host clipping hides rules or skills. Overflow releases the send and
+workload lease, permitting corrected input with the same request identity. Earlier
+context and checkpoints stay immutable. Skill catalogs are facts; current
+capabilities supply activation advice.
 
-When execution requires a user decision or the user requests guided questions,
-and `ask_user` is supplied, Flower uses the structured canonical interaction.
-Without that capability, the main assistant
-finishes with the blocker and recovery condition; a child reports to its parent.
-There is no host waiting state or duplicate question before tool approval.
-Ordinary discussion and optional feedback can use prose.
-The host retains Floret's question-tool description; Responses requests preserve
-every supplied function description alongside its schema.
+Use supplied `ask_user` for necessary decisions and requested guided questions;
+ordinary discussion and optional feedback can use prose. Without input capability,
+report the blocker and recovery condition to the user or parent. Do not duplicate
+tool approval with a question or add a host waiting state. Responses requests
+preserve supplied function descriptions, including Floret's question description.
 
 A running command is observed through its existing process identity and cursor;
 repeated observations are valid when state may change. Timeouts do not establish
@@ -86,25 +76,23 @@ GUI operation with text-page research requires user acceptance.
 
 # Prompt Budget And Qualification
 
-System instructions keep product behavior and boundaries. Tool definitions keep
-purpose and non-obvious invocation semantics, without repeating general policy,
-schema types, enums or basic concepts. Shared time-range semantics appear once per
-filter schema; field names need no restatement. General observation policy stays
-in system instructions, while child ownership and result shapes stay in tool
-definitions. Custom API syntax and cursor, identity,
-effect and retry semantics remain explicit. Output instructions retain Redeven-specific
-media references, the exact `html preview` fence and preview isolation limits.
-Concise policies retain complete rule reading, user interaction, denial, Stop,
-unknown-effect handling, browser identity and observed GUI verification.
-The system contains no tool JSON envelopes, argument-field recipes or scripting
-API examples. Short behavioral reminders keep greetings brief, preserve real
-choice interaction and continue observing finite commands in the current turn.
+System instructions own product behavior and boundaries; tool definitions own
+purpose and non-obvious invocation semantics, including custom APIs, cursors,
+identity and result shapes. Do not repeat schema constraints, field names, basic
+concepts or tool tutorials. Shared time-range semantics appear once per filter.
+Language, capability authority and effect recovery have one system owner. Runtime
+facts need no projection tutorial; questions preserve user format and custom
+input without generic writing advice. Retain complete rule reading, approval,
+Stop, unknown effects, browser identity, observed GUI verification, finite-command
+continuation, media references and isolated `html preview`. Do not move guidance
+into tool definitions to claim system savings.
 
-The full built-in qualification surface has a deterministic 16,000-byte system
-budget, including live permission transitions. The production Service fixture
-bounds final instructions after Floret Goal injection to 14,000 bytes and
-serialized definitions to 37,000 bytes. These are regression guards, not tokenizer
-or total-request measurements.
+The built-in qualification surface has an 11,000-byte system budget; final live
+permission-transition requests have a 12,000-byte budget including Goal injection.
+The production Service fixture bounds final instructions to 10,500 bytes,
+serialized definitions to 37,000 bytes, and their combined cost to 47,500 bytes.
+These are deterministic regression guards, not tokenizer or total-request
+measurements.
 Permission/profile/allowlist tests require guidance to match supplied tools.
 Definitions retain operational details; their full serialized cost is measured
 as tool overhead, not credited as system savings.

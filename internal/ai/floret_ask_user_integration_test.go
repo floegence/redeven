@@ -133,12 +133,13 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 		t.Fatal("provider request omitted System Prompt instructions")
 	}
 	for _, instruction := range []string{
-		"short headers/labels and nonredundant descriptions",
-		"omit obvious explanations",
+		"When execution needs a user decision",
+		"Ordinary discussion and optional feedback may use prose",
+		"Preserve the user's requested question format",
 		"Use the user's language",
 	} {
 		if !strings.Contains(systemContent, instruction) {
-			t.Errorf("provider System Prompt omitted Ask User copy guidance: %q", instruction)
+			t.Errorf("provider System Prompt omitted interaction guidance: %q", instruction)
 		}
 	}
 	if err := svc.SetThreadModel(t.Context(), meta, thread.ThreadID, "openai/gpt-5-nano"); !errors.Is(err, ErrThreadBusy) {

@@ -61,19 +61,25 @@ func TestBuildLayeredSystemPrompt_RoutesOKFToRedevenRepositoryKnowledgeOnly(t *t
 	t.Parallel()
 
 	prompt := buildPromptForToolRoutingTest(t)
-	assertPromptContains(t, prompt, "Information source routing:")
-	assertPromptContains(t, prompt, "Use okf.open for detailed facts")
-	assertPromptContains(t, prompt, "Use okf.index for broad Redeven-internal knowledge discovery.")
-	assertPromptContains(t, prompt, "Use okf.search for candidate concepts; keep broad searches short.")
-	assertPromptContains(t, prompt, "read the concept Summary, then the relevant section")
-	assertPromptContains(t, prompt, "Verify code claims against actual sources.")
+	assertPromptContains(t, prompt, "Verify code/file claims against workspace sources")
+	assertPromptContains(t, prompt, "OKF is not internet access")
+	for _, def := range builtInToolDefinitions() {
+		switch def.Name {
+		case "okf.index":
+			assertPromptContains(t, def.Description, "Redeven repository knowledge")
+		case "okf.search":
+			assertPromptContains(t, def.Description, "candidate summaries")
+		case "okf.open":
+			assertPromptContains(t, def.Description, "Summary and the section catalog")
+		}
+	}
 }
 
 func TestBuildLayeredSystemPromptRefreshesToolAvailabilityAfterPermissionChanges(t *testing.T) {
 	for _, prompt := range []string{buildPromptForToolRoutingTest(t), buildReadonlyPromptForToolRoutingTest(t)} {
 		assertPromptContains(t, prompt, "Ignore historical availability claims")
 		assertPromptContains(t, prompt, "Supplied tool definitions are the capability list")
-		assertPromptContains(t, prompt, "Current tool definitions and authorization govern execution")
+		assertPromptContains(t, prompt, "current authorization governs execution")
 		assertPromptContains(t, prompt, "submit the intended tool call: the runtime asks the user before executing its effect")
 		assertPromptContains(t, prompt, "pending or unrequested approval is not a denial")
 	}
@@ -92,7 +98,7 @@ func TestBuildLayeredSystemPrompt_ExcludesOKFFromExternalResearch(t *testing.T) 
 	t.Parallel()
 
 	prompt := buildPromptForToolRoutingTest(t)
-	assertPromptContains(t, prompt, "authoritative external sources for external/current/recent facts")
+	assertPromptContains(t, prompt, "external/current facts against authoritative external sources")
 	assertPromptContains(t, prompt, "OKF is not internet access.")
 	assertPromptContains(t, prompt, "Use curl only for authentication, custom headers, non-GET requests or binary downloads that web_fetch cannot express")
 	assertPromptContains(t, prompt, "never for URL discovery or bypass")
@@ -172,7 +178,7 @@ func TestBuildLayeredSystemPrompt_WebResearchDoesNotLeakThroughStaticCache(t *te
 func TestBuildLayeredSystemPrompt_ComputerUseDoesNotFallbackSilently(t *testing.T) {
 	prompt := buildPromptForToolSetTest(t, FlowerPermissionApprovalRequired, []ToolDef{{Name: "computer.screenshot"}, {Name: "computer.click"}, {Name: "web_fetch"}})
 	assertPromptContains(t, prompt, "Use supplied computer/browser tools")
-	assertPromptContains(t, prompt, "Do not retry the same computer action indefinitely")
+	assertPromptContains(t, prompt, "Never blindly repeat an uncertain operation")
 	assertPromptContains(t, prompt, "When replacing an explicitly requested interactive GUI task")
 }
 
@@ -189,26 +195,24 @@ func TestBuildLayeredSystemPrompt_UsesGenericSkillRoutingInsteadOfRedevenEnvSpec
 
 	prompt := buildPromptForToolRoutingTest(t)
 	assertPromptContains(t, prompt, "a request clearly matches an available skill")
-	assertPromptContains(t, prompt, "activate it with use_skill before acting")
+	assertPromptContains(t, prompt, "activate it with use_skill and read its instructions before domain work")
 	assertPromptNotContains(t, prompt, "Redeven environment lifecycle operations:")
 	assertPromptNotContains(t, prompt, "Use `execution_context.current_target_id` as the primary target")
 	assertPromptNotContains(t, prompt, "Do not infer Docker, SSH, systemd, launchctl, or process-manager commands from a Redeven target string")
 }
 
-func TestBuildLayeredSystemPrompt_UsesCanonicalToolNamesAndTerminalLimits(t *testing.T) {
+func TestBuildLayeredSystemPrompt_PreservesTerminalContinuation(t *testing.T) {
 	t.Parallel()
 
 	prompt := buildPromptForToolRoutingTest(t)
-	assertPromptContains(t, prompt, "Use canonical tool names exactly as supplied")
-	assertPromptContains(t, prompt, "Observe the existing process rather than relaunching it")
 	assertPromptContains(t, prompt, "Continue observing a finite running command with terminal.read in this turn")
 	assertPromptContains(t, prompt, "Use batch execution for complete scripts")
-	assertPromptContains(t, prompt, "terminal/input echo proves neither completion nor consumption")
+	assertPromptContains(t, prompt, "Empty output or echoed input is not completion")
 	assertPromptNotContains(t, prompt, "pass content via terminal.exec `stdin` and use a stdin-reading command")
 	assertPromptContains(t, prompt, "preserving its process and returned cursor")
+	assertPromptContains(t, prompt, "rather than relaunching it")
 	assertPromptNotContains(t, prompt, "compatibility alias for yield_ms")
-	assertPromptContains(t, prompt, "terminal.terminate only when stopping is intentional")
-	assertPromptContains(t, prompt, "name the task in the user's language and confirm the outcome")
+	assertPromptContains(t, prompt, "Use the user's language for replies and activity labels")
 	assertPromptNotContains(t, prompt, "file.read")
 	assertPromptNotContains(t, prompt, "file_read")
 }
@@ -242,8 +246,8 @@ func TestBuildLayeredSystemPromptRequiresAskUserForBlockingQuestions(t *testing.
 	assertPromptContains(t, prompt, "Ordinary discussion and optional feedback may use prose")
 	assertPromptNotContains(t, prompt, "prefer ask_user over freeform markdown option lists")
 	assertPromptContains(t, prompt, "Use the user's language")
-	assertPromptContains(t, prompt, "short headers/labels and nonredundant descriptions")
-	assertPromptContains(t, prompt, "nonredundant descriptions")
+	assertPromptContains(t, prompt, "Preserve the user's requested question format")
+	assertPromptContains(t, prompt, "Allow custom input unless choices are exhaustive")
 }
 
 func TestBuildLayeredSystemPrompt_ExcludesMutableTurnFacts(t *testing.T) {
@@ -266,7 +270,7 @@ func TestBuildLayeredSystemPrompt_ReadonlyRoutesThroughReadonlyExclusiveTools(t 
 	t.Parallel()
 
 	prompt := buildReadonlyPromptForToolRoutingTest(t)
-	assertPromptContains(t, prompt, "Use read_file for bounded inspection")
+	assertPromptNotContains(t, prompt, "Read text files through terminal.exec")
 	assertPromptContains(t, prompt, "Use web.search to discover authoritative URLs")
 	assertPromptContains(t, prompt, "Scope rgrep to relevant paths")
 	assertPromptNotContains(t, prompt, "terminal.exec")
@@ -277,8 +281,8 @@ func TestBuildLayeredSystemPrompt_ReadonlyRoutesThroughReadonlyExclusiveTools(t 
 func TestBuildLayeredSystemPromptRoutesImagesToSharedAuthorizedTool(t *testing.T) {
 	for _, permission := range []FlowerPermissionType{FlowerPermissionReadonly, FlowerPermissionApprovalRequired, FlowerPermissionFullAccess} {
 		prompt := buildPromptForToolSetTest(t, permission, []ToolDef{{Name: "image.read", Visibility: ToolVisibilitySharedReadonly}})
-		assertPromptContains(t, prompt, "Inspect referenced local images with image.read")
-		assertPromptContains(t, prompt, "no browser or temporary HTTP service is needed")
+		assertPromptContains(t, prompt, "Use image.read for original images")
+		assertPromptContains(t, prompt, "visual summaries cannot establish exact text, numbers or positions")
 		assertPromptContains(t, prompt, "Report missing vision rather than bypassing it")
 	}
 }
