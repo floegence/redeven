@@ -44,16 +44,8 @@ Canonical repository rules. Keep this file within 100 lines, including headings 
 
 ## Knowledge Maintenance
 
-- `okf/` is the only maintained knowledge corpus. Before domain work, use [the OKF index](okf/index.md) and read the relevant contracts below and any directly affected concepts.
+- `okf/` is the only maintained knowledge corpus. Consult [the OKF index](okf/index.md) and relevant concepts when additional context is needed.
 - Update affected OKF contracts with architecture, protocol, permission, interaction, runtime, CI, or release changes; derive claims from current code, tests, and active contracts.
 - Each concept answers one coherent question, begins with `# Summary`, separates contracts from evidence, and avoids duplicated ownership or stale implementation inventories. Target 8,000 body characters; split above 12,000 unless justified.
 - After OKF edits, regenerate and commit all three `okf/dist/` bundle artifacts; run `scripts/okf/check_source_integrity.sh` and `scripts/build_okf_bundle.sh --verify-only`.
 - Add domain rules to their owning OKF concept, not this file. Do not restore retired documentation trees or add a committed `.develop.md` or parallel rulebook.
-
-## Read Before Changing
-
-- Dependencies and plugins: [published web dependencies](okf/architecture/env-app-upstream-web-dependencies.md), [ReDevPlugin ownership](okf/architecture/redevplugin-boundary.md), [service template compatibility](okf/architecture/service-template-format-compatibility.md).
-- Flower and Floret: [typed runtime](okf/ai/floret-thread-runtime.md), [product adapters](okf/ai/floret-redeven-adapter-and-projection.md), [storage and migrations](okf/architecture/database-schema-migrations.md).
-- UI and Workbench: [interaction ownership](okf/ui/workbench-interaction-contracts.md), [floating layers](okf/ui/env-app-floating-layer-order.md), [input focus](okf/ui/input-focus-boundaries.md), [dialog content](okf/ui/dialog-content.md).
-- Desktop validation: [qualification lifecycle](okf/desktop/desktop-test-lifecycle.md), [interaction continuity](okf/desktop/desktop-interaction-continuity.md).
-- CI, releases, and installers: [gates and publication contracts](okf/release/ci-and-release-gates.md), [plugin release artifacts](okf/release/redevplugin-release-gates.md).
