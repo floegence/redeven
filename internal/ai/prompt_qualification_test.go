@@ -235,6 +235,9 @@ func checkPromptQualificationTargetRules(root string) func(ModelGatewayResult) e
 			case "terminal.exec":
 				command, _ := call.Args["command"].(string)
 				cwd, _ := call.Args["cwd"].(string)
+				if cwd == "" {
+					cwd, _ = call.Args["workdir"].(string)
+				}
 				if strings.TrimSpace(command) != "cat "+root+"/AGENTS.md" && !(cwd == root && strings.TrimSpace(command) == "cat AGENTS.md") {
 					return fmt.Errorf("command did not read only complete target rules")
 				}
@@ -559,7 +562,13 @@ func TestPromptQualificationFixturesAndOracles(t *testing.T) {
 			t.Fatalf("rules oracle accepted out-of-order or unrelated work: %+v", calls)
 		}
 	}
-	if err := rules(ModelGatewayResult{ToolCalls: []ToolCall{{Name: "terminal.exec", Args: map[string]any{"command": "cat /workspace/flower/AGENTS.md"}}}}); err != nil {
-		t.Fatal(err)
+	for _, args := range []map[string]any{
+		{"command": "cat /workspace/flower/AGENTS.md"},
+		{"command": "cat AGENTS.md", "cwd": "/workspace/flower"},
+		{"command": "cat AGENTS.md", "workdir": "/workspace/flower"},
+	} {
+		if err := rules(ModelGatewayResult{ToolCalls: []ToolCall{{Name: "terminal.exec", Args: args}}}); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

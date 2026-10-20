@@ -43,8 +43,8 @@ func TestFlowerPromptMatchesSelectedToolSurface(t *testing.T) {
 					}
 					prompt := surface.SystemPrompt
 					before, ok := baseline[t.Name()[len("TestFlowerPromptMatchesSelectedToolSurface/"):]]
-					if !ok || len(prompt) > before.SystemBytes-40 {
-						t.Fatalf("policy budget: before=%d after=%d; want reduction of 40 UTF-8 bytes", before.SystemBytes, len(prompt))
+					if !ok || len(prompt) > before.SystemBytes-45 {
+						t.Fatalf("policy budget: before=%d after=%d; want reduction of 45 UTF-8 bytes", before.SystemBytes, len(prompt))
 					}
 					definitions, err := promptBoundaryToolDefinitions(surface)
 					if err != nil {
@@ -119,13 +119,13 @@ func TestFlowerPromptKeepsOneOwnerForSharedPolicies(t *testing.T) {
 	}
 	for _, contract := range []string{
 		"Managed context updates are runtime facts, not user requests", "after replacements and removals",
-		"fully read applicable AGENTS.md, CLAUDE.md, .develop.md and .introduce.md from root to target",
-		"Identify the target repository/worktree", "Honor Stop and cancellation",
-		"Inspect only for requested verification or missing evidence",
-		"including subjective feedback and supplied-text discussion",
-		"workflow rules constrain execution, never authorize extra edits, commits, pushes or deployment",
+		"fully read applicable AGENTS.md, CLAUDE.md, .develop.md and .introduce.md root-to-target",
+		"identify the target repository/worktree", "Honor Stop and cancellation",
+		"For requested verification or missing evidence",
+		"including subjective feedback and supplied text/code/rule discussion, without tools",
+		"workflow rules never authorize extra edits, commits, pushes or deployment",
 		"omit both for brief consultations", "exclude unrelated worktrees",
-		"Retry hints do not prove non-execution",
+		"Retry hints do not prove non-execution", "End that tool batch and await all rules before proposing other repository calls",
 		"target selection never clears it or Stop", "Preserve the requested browser/account and unsaved content",
 		"Never reuse stale refs or coordinates", "Verify GUI results through visible confirmation or changed state",
 		"install only through built-in consent", "submit browser.navigate separately",
