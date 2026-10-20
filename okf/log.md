@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-20 — Focused compaction knowledge contracts
+
+- Separate [execution and Goal continuation](ai/flower-context-compaction.md), [usage presentation](ai/model-context-usage-and-compaction.md), and [isolated qualification](operations/flower-compaction-qualification.md) without changing their contracts. Keep each concept focused and below the strict size limit.
+
 ## 2026-10-20 — Compact favorite directory locations
 
 - Place Files favorites beside Home and Computer with standard folder icons, single-line tail-preserving paths, full-path tooltips and separate directory menus. Retain filtering, scrolling and keyboard navigation. See [directory favorites](ui/directory-favorites.md).

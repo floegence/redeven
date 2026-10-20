@@ -18,7 +18,7 @@ successful mutation or completion.
 
 ## Compaction and continuation
 
-Manual compaction defaults to explicit continue_goal intent. Published Floret v7.74.0 atomically selects goal_continuation for an active Goal; absent or completed Goals stay pure compaction. The same execution owns mandatory preparation, provider work, interactions and current-version Goal review. The pure secondary action and old outbox entries retain their original semantics. Goal deletion before business preparation prevents work; deletion after work starts cancels later review without replacing Stop. Retry and restart use canonical preparation and confirmed tools. Unknown effects require inspection and explicit continuation. Redeven forwards intent and renders state without a second execution coordinator.
+[Manual compaction](flower-context-compaction.md) defaults to explicit continue_goal intent. Published Floret v7.74.0 atomically selects goal_continuation for an active Goal; absent or completed Goals stay pure compaction. The same execution owns mandatory preparation, provider work, interactions and current-version Goal review. The pure secondary action and old outbox entries retain their original semantics. Goal deletion before business preparation prevents work; deletion after work starts cancels later review without replacing Stop. Retry and restart use canonical preparation and confirmed tools. Unknown effects require inspection and explicit continuation. Redeven forwards intent and renders state without a second execution coordinator.
 
 
 ## Goal ownership and execution
