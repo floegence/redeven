@@ -29,6 +29,8 @@ Code, tables, quotes, links and nested lists remain rendered while generating. U
 
 ## Disclosure and layout
 
+Composer autosizing and approval measurements listen to releasable font loading completion/error events. Disposal removes those listeners; an unsettled FontFaceSet.ready promise must never retain a detached surface.
+
 Closed process and detail bodies mount on demand. An interface-lifetime store preserves manual inner choices by runtime/thread/kind/ID across outer unmount, navigation and reconnect. Closing releases readers, observers, timers and animations. Ordinary historical prose remains selectable and findable. Completed history uses browser layout skipping outside height animation; live-to-complete transitions retain measured layout until remount so automatic collapse cannot move a protected reading anchor.
 
 FlowerScrollTailController is the sole transcript scroll writer. Geometry reads and writes are frame-batched. Ordinary text growth does not scan all historical rows or buttons. Following latest, user reading anchors, selection, focus, pointer gestures, menus and reduced motion retain their established contracts. Parent disclosure never rewrites an inner manual choice. [Terminal disclosure](flower-turn-process-disclosure.md) owns eligibility and reading protection.
