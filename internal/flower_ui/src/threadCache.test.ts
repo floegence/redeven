@@ -612,6 +612,32 @@ describe('ThreadCache native baseline reads', () => {
     items: [{ id: 'answer', ordinal: 1, kind: 'assistant', text: 'text', live: true, turn_id: 'turn', run_id: 'run' }] };
   const update: FlowerRuntimeUpdate = { thread_id: 'a', base_version: 2, view_version: 3, turn_id: 'turn', run_id: 'run',
     facts: { activity: 'active', queue_count: 0, run_progress: { phase: 'streaming' } }, items: [{ kind: 'append', item_id: 'answer', append: { offset_bytes: 4, text: '!' } }] };
+  it('confirms covered HTTP content behind a newer native cancellation without restoring its lifecycle', () => {
+    const running = { ...thread('a', 7, ''), status: 'running' as const, active_run_id: 'run' };
+    let cache = createThreadCache().receiveView({ thread: running, version: 2 }, { current }).cache;
+    cache.receiveUpdate({ ...update, facts: { activity: 'idle', queue_count: 0, last_outcome: 'cancelled' } });
+    cache = cache.replaceSummary({ ...running, updated_at_ms: 9, read_status: thread('a', 9, '').read_status });
+    const response = { ...running, updated_at_ms: 9, read_status: thread('a', 9, '').read_status };
+    cache = cache.receiveView({ thread: response, version: 2 }, { current, preserveSummary: false }).cache;
+    expect(cache.views.get('a')?.version).toBe(3);
+    expect(cache.views.get('a')?.thread.status).toBe('canceled');
+    expect(cache.views.get('a')?.thread.messages[0].content).toBe('text!');
+    expect(cache.views.get('a')?.contentRevision).toBe(9);
+    expect(cache.summaries.get('a')?.status).toBe('canceled');
+    expect(threadSummaryNeedsDetail(cache.summaries.get('a'), cache.views.get('a')?.thread, cache.views.get('a')?.contentRevision)).toBe(false);
+  });
+  it('requires a matching explicit native baseline before an older read can confirm content coverage', () => {
+    const initial = { ...thread('a', 7, ''), status: 'running' as const, active_run_id: 'run' };
+    let cache = createThreadCache().receiveView({ thread: initial, version: 2 }, { current }).cache;
+    cache.receiveUpdate(update);
+    const newerActivity = { ...initial, updated_at_ms: 9, read_status: thread('a', 9, '').read_status };
+    cache = cache.receiveView({ thread: newerActivity, version: 2 }).cache;
+    expect(cache.views.get('a')?.contentRevision).toBe(7);
+    cache = cache.receiveView({ thread: newerActivity, version: 2 }, { current: { ...current, view_version: 1 } }).cache;
+    expect(cache.views.get('a')?.contentRevision).toBe(7);
+    cache = cache.receiveCurrent({ thread: newerActivity, version: 2 }, { current }).cache;
+    expect(cache.views.get('a')?.contentRevision).toBe(7);
+  });
   it('converges equal-revision summary lifecycle through an authoritative unchanged detail read', () => {
     const stopped = { ...thread('a', 9, 'retained'), status: 'canceled' as const };
     const current = { thread_id: 'a', view_version: 2, activity: 'idle' as const, last_outcome: 'cancelled' as const, items: [] };
