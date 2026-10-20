@@ -14,14 +14,14 @@ type RuntimeRoot = PickerPathContext['roots'][number] & { kind?: string };
 type RuntimePathContext = Omit<PickerPathContext, 'roots'> & { roots: readonly RuntimeRoot[] };
 
 /** Map runtime declarations only. Display Home must never manufacture a root or permission. */
-export function mapFilesystemPickerContext(context: RuntimePathContext, copy: Pick<FilesystemPickerCopy, 'home' | 'root'>): PickerPathContext {
+export function mapFilesystemPickerContext(context: RuntimePathContext, copy: () => Pick<FilesystemPickerCopy, 'home' | 'root'>): PickerPathContext {
   const order = (kind?: string) => kind === 'home' ? 0 : kind === 'computer' ? 1 : 2;
   return {
     homePathAbs: context.homePathAbs,
     defaultRootId: context.defaultRootId,
     roots: context.roots.map((root) => ({
       ...root,
-      label: root.kind === 'home' ? copy.home : root.kind === 'computer' ? copy.root : root.label,
+      get label() { return root.kind === 'home' ? copy().home : root.kind === 'computer' ? copy().root : root.label; },
     })).sort((left, right) => order(left.kind) - order(right.kind)),
   };
 }

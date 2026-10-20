@@ -1,0 +1,97 @@
+import { Show, createSignal, onCleanup, onMount } from 'solid-js';
+import { Plus, Minus, Maximize } from '@floegence/floe-webapp-core/icons';
+import { TessivenGraph, type TessivenViewportControl, type GraphBrowseState, type TessivenViewOptions } from '../TessivenGraph';
+import { attachTouchViewport } from './touchViewport';
+import type { RenderVersion, Selection } from '../types';
+import { supportedPresentationFormats } from './contract';
+import { tessivenText } from '../i18n';
+import { resolveRedevenLocaleFromCandidates } from '../../../../desktop/src/shared/i18n/resolveLocale';
+
+declare global {
+  interface Window {
+    webkit?: { messageHandlers?: { canvas?: { postMessage: (message: unknown) => void } } };
+    serviceCanvas?: {
+      update: (input: { render_id: string; version: RenderVersion; historical: boolean; dark: boolean; contrast: boolean; bottomInset?: number; locale?: string }) => void;
+      command: (input: { canvas_id: string; version_id: number; action: 'expand' | 'collapse' | 'all' | 'group' | 'clearSelection' }) => void;
+    };
+  }
+}
+
+const renderID = new URLSearchParams(location.hash.slice(1)).get('render_id');
+const notifyNativeHost = (type: string, version?: RenderVersion, selection?: Selection, options?: TessivenViewOptions) =>
+  window.webkit?.messageHandlers?.canvas?.postMessage({
+    type, render_id: renderID, canvas_id: version?.canvas_id, version_id: version?.number, selection, ...options,
+  });
+let currentVersion: RenderVersion | undefined;
+export const notifyNativeCanvasError = () => notifyNativeHost('error', currentVersion);
+export function NativeCanvas() {
+  const [locale, setLocale] = createSignal(resolveRedevenLocaleFromCandidates([...navigator.languages, navigator.language]).locale);
+  document.documentElement.lang = locale();
+  const t = (key: string, values?: Record<string, string | number>) => tessivenText(locale())(key, values);
+  onCleanup(() => { delete window.serviceCanvas; });
+  const [input, setInput] = createSignal<{ version: RenderVersion; historical: boolean }>();
+  const [scale, setScale] = createSignal(1);
+  const browsing = new Map<string, GraphBrowseState>();
+  let control: TessivenViewportControl | undefined;
+  const zoom = (factor: number) => { touch?.reset(); control?.zoom(factor, window.innerWidth / 2, window.innerHeight / 2); };
+  let host: HTMLElement | undefined;
+  let floatingBoundary: HTMLDivElement | undefined;
+  let touch: ReturnType<typeof attachTouchViewport> | undefined;
+  onMount(() => {
+    if (host) {
+      touch = attachTouchViewport(host, () => control);
+      onCleanup(touch.dispose);
+    }
+  });
+  window.serviceCanvas = {
+    command(value) {
+      const version = input()?.version;
+      if (!control || value.canvas_id !== version?.canvas_id || value.version_id !== version.number) return;
+      touch?.reset();
+      switch (value.action) {
+        case 'clearSelection': control.clearSelection(); break;
+        case 'expand': control.expandAll(); break;
+        case 'collapse': control.collapseAll(); break;
+        case 'all': case 'group': control.setServiceScope(value.action); break;
+      }
+    },
+    update(value) {
+      if (!renderID || value.render_id !== renderID) return;
+      currentVersion = value.version;
+      if (!value.version || !value.version.canvas_id || !Number.isSafeInteger(value.version.number) || value.version.number < 1
+        || !value.version.view || !supportedPresentationFormats.some(format => format === value.version.view.format)
+        || !value.version.view.model?.metadata || value.version.view.compatibility?.status === 'unavailable') {
+        notifyNativeHost('error', value.version);
+        return;
+      }
+      setLocale(resolveRedevenLocaleFromCandidates([value.locale, ...navigator.languages, navigator.language]).locale);
+      document.documentElement.lang = locale();
+      const inset = Number.isFinite(value.bottomInset) ? Math.max(0, Math.min(window.innerHeight / 2, value.bottomInset!)) : 0;
+      document.documentElement.style.setProperty('--native-bottom-inset', `${inset}px`);
+      document.documentElement.dataset.theme = value.dark ? 'dark' : 'light';
+      document.documentElement.classList.toggle('dark', value.dark);
+      document.documentElement.classList.toggle('high-contrast', value.contrast);
+      const previous = input();
+      if (previous?.version.canvas_id !== value.version.canvas_id || previous.version.number !== value.version.number || previous.historical !== value.historical) {
+        touch?.reset();
+        setInput({ version: value.version, historical: value.historical });
+      }
+    },
+  };
+  notifyNativeHost('ready');
+  return <main class="tessiven" ref={host}><div class="native-canvas-floating-boundary" ref={floatingBoundary} role="presentation" /><Show when={input()} keyed>{value => <TessivenGraph
+    version={value.version} historical={value.historical} t={t} visible={true} askReferenceMode="display"
+    onAsk={selection => notifyNativeHost('ask', value.version, selection)} onSelectionChange={selection => notifyNativeHost('selection', value.version, selection)}
+    onInspect={() => undefined} onViewportControl={value => { control = value; }}
+    tools="hidden" onZoomChange={setScale} onViewOptions={options => notifyNativeHost('viewOptions', value.version, undefined, options)}
+    floatingBoundary={floatingBoundary}
+    onRenderState={state => notifyNativeHost(state, value.version)}
+    browseState={browsing.get(value.version.canvas_id)}
+    onBrowseState={state => browsing.set(value.version.canvas_id, state)}
+  />}</Show><nav class="native-canvas-tools" aria-label={t('canvasView')}>
+    <button aria-label={t('zoomOut')} title={t('zoomOut')} disabled={scale() <= 0.1} onClick={() => zoom(0.8)}><Minus /></button>
+    <output aria-label={t('zoomLevel')}>{Math.round(scale() * 100)}%</output>
+    <button aria-label={t('zoomIn')} title={t('zoomIn')} disabled={scale() >= 3} onClick={() => zoom(1.25)}><Plus /></button>
+    <button aria-label={t('fit')} title={t('fit')} onClick={() => { touch?.reset(); control?.fit(); }}><Maximize /></button>
+  </nav></main>;
+}

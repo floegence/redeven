@@ -7081,7 +7081,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               {i18n().t('desktop.provider')}: <span class="font-medium text-foreground">{providerRuntimeLinkConfirmation()?.environment.provider_runtime_link_target?.cloud_origin || i18n().t('environmentCenter.unknownProvider')}</span>
             </p>
             <p class="text-xs text-muted-foreground">
-              {i18n().t('environmentCenter.sourceEnvironment')}: <span class="font-mono text-foreground">{providerRuntimeLinkConfirmation()?.environment.provider_runtime_link_target?.env_public_id || 'unknown'}</span>
+              {i18n().t('environmentCenter.sourceEnvironment')}: <span class="font-mono text-foreground">{providerRuntimeLinkConfirmation()?.environment.provider_runtime_link_target?.env_public_id || i18n().t('common.unknown')}</span>
             </p>
           </Show>
           <Show

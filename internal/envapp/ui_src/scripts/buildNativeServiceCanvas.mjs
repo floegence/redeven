@@ -41,7 +41,7 @@ await build({
 const licenses = path.join(output, 'licenses');
 await fs.mkdir(licenses, { recursive: true });
 for (const name of await fs.readdir(path.join(core, 'licenses'))) {
-  await fs.copyFile(path.join(core, 'licenses', name), path.join(licenses, name));
+  await fs.cp(path.join(core, 'licenses', name), path.join(licenses, name), { recursive: true });
 }
 const packages = new Map();
 for (const id of modules) {

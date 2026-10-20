@@ -23,7 +23,8 @@ export async function assertWebSearchSurface() {
  (runtime.querySelector(`[data-thread-id="${summary.thread_id}"] button`) as HTMLButtonElement).click();
  await waitFor(()=>Boolean(runtime.querySelector('[data-flower-activity-item-id="opaque"]')));
  const opaque=runtime.querySelector('[data-flower-activity-item-id="opaque"]')!;
- expect(opaque.textContent).toContain('Web Search:');
+ expect(opaque.textContent).toContain('Search');
+ expect(opaque.textContent).not.toContain('Web Search:');
  expect(opaque.textContent).not.toContain('not provided');
  expect(opaque.querySelector('[data-flower-disclosure-trigger]')).toBeNull();
  const search=runtime.querySelector('[data-flower-activity-item-id="search"]')!;

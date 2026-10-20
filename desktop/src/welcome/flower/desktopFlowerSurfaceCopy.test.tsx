@@ -1,10 +1,29 @@
 import { describe, expect, it } from 'vitest';
 
-import { createDesktopI18n } from '../../shared/i18n';
+import { createDesktopI18n, REDEVEN_SUPPORTED_LOCALES } from '../../shared/i18n';
 import { createDesktopFlowerSurfaceCopy } from './desktopFlowerSurfaceCopy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../internal/flower_ui/src/copy';
+import { presentFlowerActivityItem } from '../../../../internal/flower_ui/src/flowerActivityPresentation';
 
 describe('createDesktopFlowerSurfaceCopy', () => {
+  it.each(REDEVEN_SUPPORTED_LOCALES)('resolves every immediate surface message in %s', locale => {
+    const i18n = createDesktopI18n(locale);
+    const copy = createDesktopFlowerSurfaceCopy({ ...i18n, t: (key, params) => {
+      const message = i18n.t(key, params);
+      expect(message, `${locale}: ${key}`).not.toBe(key);
+      return message;
+    } });
+    for (const message of [copy.chat.fileReadEmpty, copy.chat.fileReadEmptyTotal(10), copy.chat.fileReadRange(2, 5), copy.chat.fileReadRangeTotal(2, 5, 10)]) {
+      expect(message).not.toMatch(/\{(?:start|end|total)\}/u);
+      expect(message).not.toContain('flowerSurface.');
+    }
+    expect(copy.filesystemPicker.selectedCount(3)).not.toContain('{count}');
+    const presentation = presentFlowerActivityItem({ item_id: 'search', tool_name: 'web_search', renderer: 'web_search', kind: 'hosted_tool',
+      status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
+      payload: { operation: 'search', query: 'Runtime' },
+    }, { webSearch: copy.chat.webSearch });
+    expect(presentation.label).toBe(copy.chat.webSearch.search + ' Runtime');
+  });
   it('keeps the localized English starter tasks aligned with the shared surface defaults', () => {
     expect(createDesktopFlowerSurfaceCopy(createDesktopI18n('en-US')).emptyState)
       .toEqual(DEFAULT_FLOWER_SURFACE_COPY.emptyState);

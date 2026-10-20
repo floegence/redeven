@@ -14,7 +14,9 @@ Flower keeps environment and Desktop model sources explicit, preserves thread-ow
 ## Mechanism
 
 The composer always keeps its model label visible without an availability
-spinner or busy status. Settings, the
+spinner or busy status. Context capacity, output limits, image support, model
+change failures, default-save failures, and reasoning-adjustment notifications
+use the active locale in both Desktop and Env App. Settings, the
 Runtime baseline directory, and thread history start independently. Dynamic
 directory checks run in the background; a ready static model remains usable.
 Settings, history, and directory failures expose their own recovery actions.

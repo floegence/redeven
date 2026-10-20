@@ -818,7 +818,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
   const notifyModelError = (message: string) => notify({
     tone: 'error',
-    title: 'Flower could not update the model.',
+    title: copy().chat.modelUpdateFailedTitle,
     message,
   });
   const notifyConversationPreferenceError = (message: string) => notify({
@@ -826,7 +826,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
   const notifyFutureDefaultModelError = (message: string) => notify({
     tone: 'error',
-    title: 'Default model was not updated.',
+    title: copy().chat.defaultModelUpdateFailedTitle,
     message,
   });
   const notifyThreadActionError = (message: string) => notify({
@@ -3687,7 +3687,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       && previous.model_id !== retained.model_id
       && !sameFlowerReasoningSelection(previous.reasoning_selection, retained.reasoning_selection)
     )) {
-      notifySuccess('Reasoning adjusted for this model.');
+      notifySuccess(copy().chat.reasoningAdjusted);
     }
     if (runtimeState === 'accepted' && threadID === selectedThreadID()) {
       setTranscriptLayoutRevision((revision) => revision + 1);
@@ -9637,8 +9637,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     if (title.kind === 'web_search') {
       return <>
-        <strong class="flower-activity-inline-title-verb">Web Search:</strong>
-        <span class="flower-activity-inline-title-target" title={title.url || title.text}>{title.text}</span>
+        <span class="flower-activity-inline-title-target" title={title.url || title.text}>{title.text || copy().chat.webSearch.search}</span>
       </>;
     }
     if (title.kind === 'web_fetch') {
@@ -10255,7 +10254,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }}
       </For>
       <Show when={block().question.questions.length === 0}>
-        <div class="flower-activity-question-empty">Waiting for user input.</div>
+        <div class="flower-activity-question-empty">{copy().chat.inputRequestTitle}</div>
       </Show>
     </section>
   );
@@ -10265,9 +10264,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const start = Math.max(1, Math.floor(Number(block().line_offset || 1)));
       const count = Math.max(0, Math.floor(Number(block().line_count || 0)));
       const total = Math.max(0, Math.floor(Number(block().total_lines || 0)));
-      if (count <= 0) return total > 0 ? `0 lines of ${total}` : '0 lines';
+      if (count <= 0) return total > 0 ? copy().chat.fileReadEmptyTotal(total) : copy().chat.fileReadEmpty;
       const end = start + count - 1;
-      return total > 0 ? `lines ${start}-${end} of ${total}` : `lines ${start}-${end}`;
+      return total > 0 ? copy().chat.fileReadRangeTotal(start, end, total) : copy().chat.fileReadRange(start, end);
     };
     return (
       <div class="flower-activity-file-read">
@@ -10275,7 +10274,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <span class="flower-activity-file-meta">
             {lineSummary()}
             <Show when={block().truncated}>
-              <span class="flower-activity-file-truncated"> · truncated</span>
+              <span class="flower-activity-file-truncated"> · {copy().chat.truncatedLabel}</span>
             </Show>
           </span>
           {fileActionButtons(() => block().action)}
@@ -12031,13 +12030,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <Show when={option.quantization}><span>{option.quantization} · </span></Show>
             <Show when={option.disabled}><span>{option.unavailableReason ?? (option.pending ? copy().chat.modelsChecking : copy().settings.dialog.catalog.unavailableModel)}{option.contextWindow ? ' · ' : ''}</span></Show>
             <Show when={option.contextWindow}>
-              <span>{formatFlowerTokenCount(option.contextWindow)} context</span>
+              <span>{formatFlowerTokenCount(option.contextWindow)} {copy().settings.dialog.contextSuffix}</span>
             </Show>
             <Show when={option.maxOutputTokens}>
-              <span> · {formatFlowerTokenCount(option.maxOutputTokens)} output</span>
+              <span> · {formatFlowerTokenCount(option.maxOutputTokens)} {copy().settings.dialog.outputSuffix}</span>
             </Show>
             <Show when={option.supportsImageInput}>
-              <span> · Image</span>
+              <span> · {copy().settings.dialog.imageInput}</span>
             </Show>
           </span>
           <Show when={option.aliases?.length}><span class="flower-model-menu-meta flower-model-menu-aliases" title={option.aliases?.join(', ')}>{copy().settings.dialog.catalog.aliases}: {option.aliases?.join(', ')}</span></Show>
@@ -14026,7 +14025,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         suggestedPathsLabel={copy().chat.workingDirPickerRecent}
         loadPathContext={async () => {
           if (!props.adapter.getWorkingDirectoryPathContext) throw new Error('Filesystem context unavailable');
-          return mapFilesystemPickerContext(await props.adapter.getWorkingDirectoryPathContext(), copy().filesystemPicker);
+          return mapFilesystemPickerContext(await props.adapter.getWorkingDirectoryPathContext(), () => copy().filesystemPicker);
         }}
         loadDirectory={async (path, options) => {
           if (!props.adapter.listWorkingDirectoryEntries) throw new Error('Filesystem connection unavailable');

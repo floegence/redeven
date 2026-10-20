@@ -434,6 +434,9 @@ export type FlowerSurfaceCopy = Readonly<{
     modelsChecking: string;
     modelsCheckTimedOut: string;
     modelsCheckFailed: string;
+    modelUpdateFailedTitle: string;
+    defaultModelUpdateFailedTitle: string;
+    reasoningAdjusted: string;
     modelsUnavailable: string;
     modelUnavailableMissingKeys: string;
     modelUnavailableProviderDisabled: string;
@@ -459,6 +462,10 @@ export type FlowerSurfaceCopy = Readonly<{
     reasoningLoading: string;
     noModelSelected: string;
     linkedContextLabel: string;
+    fileReadEmpty: string;
+    fileReadEmptyTotal: (total: number) => string;
+    fileReadRange: (start: number, end: number) => string;
+    fileReadRangeTotal: (start: number, end: number, total: number) => string;
 		truncatedLabel: string;
     permissionSelectorLabel: string;
     permissionSelectorSaving: string;
@@ -887,6 +894,9 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     modelsChecking: 'Checking model availability…',
     modelsCheckTimedOut: 'The model check timed out after 10 seconds. Refresh to try again.',
     modelsCheckFailed: 'Could not finish checking models. Refresh to try again.',
+    modelUpdateFailedTitle: "Flower could not update the model.",
+    defaultModelUpdateFailedTitle: "Default model was not updated.",
+    reasoningAdjusted: "Reasoning adjusted for this model.",
     modelsUnavailable: 'This model is unavailable. Refresh the list, select another model, or open settings.',
     modelUnavailableMissingKeys: "This model provider has no credentials configured. Add credentials in settings.",
     modelUnavailableProviderDisabled: "This model provider is disabled. Enable it in settings or select another model.",
@@ -912,6 +922,10 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     reasoningLoading: 'Loading reasoning setting…',
     noModelSelected: 'No model selected',
     linkedContextLabel: 'Linked context',
+    fileReadEmpty: '0 lines',
+    fileReadEmptyTotal: (total) => `0 lines of ${total}`,
+    fileReadRange: (start, end) => `lines ${start}–${end}`,
+    fileReadRangeTotal: (start, end, total) => `lines ${start}–${end} of ${total}`,
 		truncatedLabel: 'Truncated',
     permissionSelectorLabel: 'Thread permission',
     permissionSelectorSaving: 'Saving permission...',

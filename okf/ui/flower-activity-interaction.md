@@ -56,7 +56,7 @@ canonical lookup, privacy, server bounds and failure behavior.
 
 ## Web search details
 
-Web operations share the fixed `Web Search:` prefix and localized action text.
+Web operations use one localized action title for visible and accessible labels.
 Search uses the actual first query, retaining `site:` syntax, plus the remaining
 query count. Open shows the returned URL. Find shows the exact pattern and
 `@site:host`. Distinct search, open-page and find icons reflect the operation.

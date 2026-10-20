@@ -2,10 +2,22 @@ import { describe, expect, it } from 'vitest';
 import { classifyFilesystemPathError, mapFilesystemPickerContext, mapFilesystemPickerEntries } from './filesystemPicker';
 
 describe('runtime filesystem picker adapter', () => {
+  it('keeps system location labels current without changing the loaded context', () => {
+    let copy = { home: 'Home', root: 'Root' };
+    const context = mapFilesystemPickerContext({ homePathAbs: '/Users/alice', defaultRootId: 'home', roots: [
+      { id: 'home', pathAbs: '/Users/alice', label: 'Server home', kind: 'home' },
+      { id: 'computer', pathAbs: '/', label: 'Server root', kind: 'computer' },
+      { id: 'project', pathAbs: '/srv/project', label: 'Project', kind: 'custom' },
+    ] }, () => copy);
+    copy = { home: '主目录', root: '根目录' };
+    expect(context.roots.map(root => root.label)).toEqual(['主目录', '根目录', 'Project']);
+    copy = { home: 'Home', root: 'Root' };
+    expect(context.roots.map(root => root.label)).toEqual(['Home', 'Root', 'Project']);
+  });
   it('preserves declared roots and permissions without inferring Home or Root', () => {
     const context = mapFilesystemPickerContext({ homePathAbs: '/Users/alice', defaultRootId: 'project', roots: [
       { id: 'project', pathAbs: '/srv/project', label: 'Project', kind: 'custom', permissions: { read: true, write: false } },
-    ] }, { home: 'Home', root: 'Root' });
+    ] }, () => ({ home: 'Home', root: 'Root' }));
     expect(context.roots).toEqual([{ id: 'project', pathAbs: '/srv/project', label: 'Project', kind: 'custom', permissions: { read: true, write: false } }]);
     expect(context.defaultRootId).toBe('project');
   });
@@ -13,7 +25,7 @@ describe('runtime filesystem picker adapter', () => {
     const context = mapFilesystemPickerContext({ homePathAbs: '/Users/alice', defaultRootId: 'home', roots: [
       { id: 'computer', pathAbs: '/', label: 'Computer', kind: 'computer', permissions: { read: true, write: false } },
       { id: 'home', pathAbs: '/Users/alice', label: 'Home', kind: 'home', permissions: { read: true, write: true } },
-    ] }, { home: '主目录', root: '根目录' });
+    ] }, () => ({ home: '主目录', root: '根目录' }));
     expect(context.roots.map((root) => [root.label, root.pathAbs])).toEqual([['主目录', '/Users/alice'], ['根目录', '/']]);
     const items = mapFilesystemPickerEntries([{ name: 'project', path: '/Volumes/team/project', isDirectory: true, entryType: 'symlink', resolvedType: 'folder' }]);
     expect(items[0]).toMatchObject({ id: '/Volumes/team/project', path: '/Volumes/team/project', type: 'folder' });
