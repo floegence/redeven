@@ -230,6 +230,9 @@ func TestFlowerGoalReflectionUsesExistingContextAndExcludesDefaultTodo(t *testin
 				t.Fatal(err)
 			}
 			t.Logf("final provider instructions=%d bytes tool definitions=%d bytes", len(prompt), len(definitions))
+			if len(definitions) > 40_000 {
+				t.Errorf("final tool definitions=%d bytes; budget=40000", len(definitions))
+			}
 		}
 		if strings.Contains(prompt, "write_todos") || strings.Contains(prompt, "Todo Discipline") {
 			t.Fatal("Todo instructions remain")

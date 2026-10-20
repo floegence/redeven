@@ -86,9 +86,10 @@ GUI operation with text-page research requires user acceptance.
 
 # Prompt Budget And Qualification
 
-System instructions keep product behavior and boundaries. Tool argument formats
-and API tutorials belong to the existing supplied tool definitions; ordinary
-Markdown needs no tutorial. Output instructions retain only Redeven-specific
+System instructions keep product behavior and boundaries. Tool definitions keep
+purpose and non-obvious invocation semantics, without repeating general policy,
+schema types, enums or basic concepts. Custom API syntax and cursor, identity,
+effect and retry semantics remain explicit. Output instructions retain Redeven-specific
 media references, the exact `html preview` fence and preview isolation limits.
 Concise policies retain complete rule reading, user interaction, denial, Stop,
 unknown-effect handling, browser identity and observed GUI verification.
@@ -98,11 +99,12 @@ choice interaction and continue observing finite commands in the current turn.
 
 The full built-in qualification surface has a deterministic 16,000-byte system
 budget. Regression tests also enforce this budget on actual provider requests
-after Floret adds Goal instructions, including live permission transitions. This
-is a regression guard, not a tokenizer or total-request measurement.
+after Floret adds Goal instructions, including live permission transitions, and
+bound serialized definitions to 40,000 bytes in the same Service fixture. These
+are regression guards, not tokenizer or total-request measurements.
 Permission/profile/allowlist tests require guidance to match supplied tools.
-Definitions retain operational details; focused input-array and child-result
-clarifications are measured as tool overhead, not credited as system savings.
+Definitions retain operational details; their full serialized cost is measured
+as tool overhead, not credited as system savings.
 
 `scripts/check_flower_prompt_deepseek.sh` is an opt-in paid qualification lane. It
 reads the selected local DeepSeek provider and its effective `deepseek-flash`

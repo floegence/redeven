@@ -14,8 +14,8 @@ func TestBuildLayeredSystemPrompt_DocumentsCanonicalPatchUsage(t *testing.T) {
 	for _, def := range builtInToolDefinitions() {
 		if def.Name == "apply_patch" {
 			found = true
-			for _, contract := range []string{"*** Begin Patch", "*** End Patch", "*** Add File:", "*** Update File:", "*** Move to:", "every content line must start with"} {
-				assertPromptContains(t, def.Description, contract)
+			for _, contract := range []string{"*** Begin Patch", "*** End Patch", "*** Add File:", "*** Update File:", "*** Move to:", "Prefix added lines with +"} {
+				assertPromptContains(t, string(def.InputSchema), contract)
 			}
 		}
 	}

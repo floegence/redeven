@@ -46,26 +46,26 @@ func builtInThreadQueryToolDefinitions() []ToolDef {
 	common := func(keys []string, description string) map[string]any {
 		ordering := object(map[string]any{
 			"key":        map[string]any{"type": "string", "enum": keys, "description": description},
-			"descending": map[string]any{"type": "boolean", "description": "True for newest/largest first; false or omitted for ascending order."},
+			"descending": map[string]any{"type": "boolean", "description": "Default false (ascending)."},
 		})
 		return map[string]any{"object": map[string]any{"type": "string", "enum": []string{"threads", "messages", "tool_calls"}}, "filter": filter, "sort": ordering, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 200}, "cursor": str}
 	}
 	add := func(name, description string, properties map[string]any, required []string) ToolDef {
 		if name == "threads.query" || name == "threads.read" {
-			properties["description"] = map[string]any{"type": "string", "minLength": 1, "maxLength": 160, "description": "Brief user-facing intent in the user's language. Say what you are finding or reading; omit IDs and private excerpts."}
+			properties["description"] = map[string]any{"type": "string", "minLength": 1, "maxLength": 160, "description": "User-facing intent in the user's language; omit IDs and private excerpts."}
 		}
 		schema := object(properties)
 		schema["required"] = required
 		return ToolDef{Name: name, Description: description, InputSchema: toolSchemaRaw(schema), Visibility: ToolVisibilitySharedReadonly, Capabilities: []ToolCapabilityClass{ToolCapabilityReadonlyLocal}, Source: "builtin", Namespace: "builtin.threads", Priority: 100}
 	}
-	query := common(queryKeys, "Allowed by object: threads = created, updated, title, thread_id; messages = time, order; tool_calls = time, completed, tool_name, elapsed. Omit or use an empty string for the default key: threads created, messages time, tool_calls time. Queries default to descending order (newest first); set descending to false for ascending order. Response fields such as created_at are not sort keys.")
-	query["sort"].(map[string]any)["properties"].(map[string]any)["descending"] = map[string]any{"type": "boolean", "default": true, "description": "True or omitted for descending order (newest/largest first); false for ascending order."}
-	aggregate := common(append([]string{""}, threadQuerySortKeys("threads.aggregate", "")...), "Allowed for every object: key or count. Omit or use an empty string for key (group key); count sorts by group size. Query record sort keys do not apply to aggregation.")
+	query := common(queryKeys, "By object: threads created/updated/title/thread_id; messages time/order; tool_calls time/completed/tool_name/elapsed. Omit or empty for the first key listed.")
+	query["sort"].(map[string]any)["properties"].(map[string]any)["descending"] = map[string]any{"type": "boolean", "default": true, "description": "Default true (descending)."}
+	aggregate := common(append([]string{""}, threadQuerySortKeys("threads.aggregate", "")...), "Default key (group key); count sorts by group size.")
 	aggregate["group_by"] = map[string]any{"type": "string", "enum": []string{"", "thread", "role", "tool_name", "status", "day", "week", "month"}}
 	return []ToolDef{
-		add("threads.query", "Search canonical active paths of all readable conversations in the current Runtime, including children. Reference IDs grant no access. Filters combine with AND; enum arrays use OR. Literal Unicode substring, keywords and contiguous phrase matching ignore case by default. Excludes reasoning and secrets. Default sort is newest first: threads created descending; messages/tool_calls time descending. Sort keys: threads created/updated/title/thread_id; messages time/order; tool_calls time/completed/tool_name/elapsed. Default 50, maximum 200. Follow next_cursor with unchanged input; invalid/expired cursors require a new query. Use returned ref with threads.read for full content.", query, []string{"object"}),
-		add("threads.read", "Read the exact authorized ref returned by threads.query. Full visible content includes confirmed tool arguments/results only here. UTF-8 chunks have field-local byte offsets, at most 16 KiB each and 64 KiB per response; follow next_cursor without changing ref. No silent truncation. Expiry or access changes require a new query.", map[string]any{"ref": str, "cursor": str}, []string{"ref"}),
-		add("threads.aggregate", "Count canonical records with the same filters as threads.query. Omit group_by for exact count; otherwise group by thread, role, tool_name, status or UTC day/week/month (Monday weeks). Sort key is key or count, with stable key ties. Authorization applies before counting. Follow next_cursor with unchanged input.", aggregate, []string{"object"}),
+		add("threads.query", "Search active paths of readable conversations, including children; excludes reasoning and secrets. Filters use AND; enum arrays use OR. Text matches literal Unicode substrings, keywords and contiguous phrases, case-insensitive by default. Default limit 50. Follow next_cursor with unchanged input; restart expired queries. Pass returned ref to threads.read.", query, []string{"object"}),
+		add("threads.read", "Read full message or confirmed tool content from a query ref in UTF-8 chunks with field-local byte offsets (16 KiB/chunk, 64 KiB/response). Follow next_cursor with unchanged ref; requery on expiry or access changes.", map[string]any{"ref": str, "cursor": str}, []string{"ref"}),
+		add("threads.aggregate", "Count records with threads.query filters. Omit group_by for exact count. Dates use UTC; weeks start Monday. Sort ties use group key. Follow next_cursor with unchanged input.", aggregate, []string{"object"}),
 	}
 }
 

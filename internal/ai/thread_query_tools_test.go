@@ -57,7 +57,7 @@ func TestThreadQuerySortSchemas(t *testing.T) {
 				if got := sortProps["descending"].(map[string]any)["default"]; got != true {
 					t.Errorf("default descending=%v, want true", got)
 				}
-				for _, rule := range []string{"threads", "messages", "tool_calls", "time", "order", "created_at"} {
+				for _, rule := range []string{"threads", "messages", "tool_calls", "time", "order", "Omit or empty"} {
 					if !strings.Contains(description, rule) {
 						t.Errorf("sort.key description omits %q: %q", rule, description)
 					}
