@@ -57,6 +57,7 @@ func TestFlowerCPUQualification(t *testing.T) {
 	var sequence atomic.Int64
 	type outputEvidence struct {
 		index     int
+		nextAt    time.Time
 		text      strings.Builder
 		reasoning strings.Builder
 		timings   map[int]int64
@@ -161,13 +162,21 @@ func TestFlowerCPUQualification(t *testing.T) {
 					return
 				}
 			}
-			ticker := time.NewTicker(time.Second / time.Duration(hz.Load()))
-			defer ticker.Stop()
+			interval := time.Second / time.Duration(hz.Load())
+			timer := time.NewTimer(interval)
+			defer timer.Stop()
 			for {
+				evidenceMu.Lock()
+				if output.nextAt.IsZero() {
+					output.nextAt = time.Now().Add(interval)
+				}
+				deadline := output.nextAt
+				evidenceMu.Unlock()
+				timer.Reset(max(0, time.Until(deadline)))
 				select {
 				case <-ctx.Done():
 					return
-				case <-ticker.C:
+				case <-timer.C:
 					if !running.Load() {
 						// A final provider response must contain an answer. Empty done
 						// responses intentionally trigger the engine's no-output recovery.
@@ -187,6 +196,9 @@ func TestFlowerCPUQualification(t *testing.T) {
 						return
 					}
 					evidenceMu.Lock()
+					// Tool responses share this run's absolute schedule. Starting
+					// another provider request must not silently lower its rate.
+					output.nextAt = output.nextAt.Add(interval)
 					output.index++
 					index := output.index
 					output.timings[index] = time.Now().UnixMilli()
