@@ -291,11 +291,15 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       case 'temporarily_unavailable': return copy().chatGPT.temporarilyUnavailable;
       case 'review_required': return copy().chatGPT.reviewRequired;
       case 'storage_unavailable': return copy().chatGPT.storageUnavailable;
-      case 'signed_out': return current.revocation_confirmed === false ? copy().chatGPT.revocationUnconfirmed : copy().chatGPT.signedOut;
+      case 'signed_out': return copy().chatGPT.signedOut;
       case 'authorization_required': return copy().chatGPT.authorizationRequired;
       default: return copy().chatGPT.planPermission;
     }
   };
+  const accountError = () => authError() !== accountDescription() ? authError() : '';
+  const needsAccessReview = () => account()?.revocation_confirmed === false || authFailure()?.cleanupUnconfirmed === true;
+  const ConnectionBadge = () => <span class="flower-provider-account-connected" tabIndex={connected() ? 0 : -1}><Check class="h-3 w-3" aria-hidden="true" /><span class="flower-provider-account-connected-label">{copy().chatGPT.connected}</span></span>;
+  const AccessReviewLink = () => <a class="flower-provider-account-review" href="https://chatgpt.com/#settings" target="_blank" rel="noopener noreferrer" tabIndex={needsAccessReview() ? 0 : -1}><Info class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{copy().chatGPT.disconnectApps}<ExternalLink class="h-3 w-3 shrink-0" aria-hidden="true" /></a>;
   const signOut = async () => {
     const id = store.draft?.account_id;
     const auth = props.chatGPTAuth;
@@ -313,7 +317,6 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
           if (updated) setSavedAccounts(entries => entries.map(item => item.account_id === id ? updated : item));
         });
         if (result.local_cleanup_complete === false) setAuthError(copy().chatGPT.cleanupFailed);
-        else if (result.revocation_confirmed === false) setAuthError(copy().chatGPT.revocationUnconfirmed);
       }
     } catch { if (props.open && binding === props.chatGPTBindingID && store.draft?.account_id === id) setAuthError(copy().chatGPT.signOutStatusUnavailable); }
     finally {
@@ -735,9 +738,9 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                             </Show>
                           </div>
                           <div class="flower-provider-account-identity" aria-live="polite" aria-atomic="true">
-                            <Show when={authorizing()} fallback={<><h4>{account()?.email || copy().chatGPT.connectTitle}</h4><p class="flower-provider-account-description flower-provider-account-status">
+                            <Show when={authorizing()} fallback={<><h4 title={account()?.email || copy().chatGPT.connectTitle}>{account()?.email || copy().chatGPT.connectTitle}</h4><p class="flower-provider-account-description flower-provider-account-status">
                               <Show when={accountSummary()}><For each={[copy().chatGPT.planSource, copy().chatGPT.signingOut, copy().chatGPT.signedOut]}>{text => <span aria-hidden="true" class="flower-provider-account-status-reserve" data-text={text} />}</For></Show>
-                              <span>{accountDescription()}</span>
+                              <span role={authError() && authError() === accountDescription() ? 'alert' : undefined}>{accountDescription()}</span>
                             </p></>}>
                               <div class="flower-provider-auth-progress">
                                 <For each={['preparing', 'waiting', 'verifying'] as const}>{phase => <div aria-hidden={authProgress() !== phase} style={{ visibility: authProgress() === phase ? 'visible' : 'hidden' }}>
@@ -747,28 +750,28 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                               </div>
                             </Show>
                           </div>
-                          <Show when={accountSummary()}><span class="flower-provider-account-connected" aria-hidden={!connected()} style={{ visibility: connected() ? 'visible' : 'hidden' }}><Check class="h-3 w-3" aria-hidden="true" />{copy().chatGPT.connected}</span></Show>
+                          <Show when={accountSummary()}><span class="flower-provider-account-badge" aria-hidden={!connected()} style={{ visibility: connected() ? 'visible' : 'hidden' }}><Show when={connected()} fallback={<ConnectionBadge />}><Tooltip content={copy().chatGPT.savedSignIn} placement="bottom" class="!whitespace-normal w-64 max-w-[75vw] !right-0 !left-auto !translate-x-0">
+                            <ConnectionBadge />
+                          </Tooltip></Show></span></Show>
                         </div>
-                        <Show when={accountSummary()}><p class="text-xs text-muted-foreground flower-provider-account-status">
-                          <For each={[copy().chatGPT.savedSignIn, copy().chatGPT.signInAgainHint]}>{text => <span aria-hidden="true" class="flower-provider-account-status-reserve" data-text={text} />}</For>
-                          <span>{needsSignIn(account()!) ? copy().chatGPT.signInAgainHint : accountBusy() ? copy().chatGPT.signingOut : copy().chatGPT.savedSignIn}</span>
-                        </p></Show>
-                        <Show when={authError()}><div role="alert" class="flower-provider-account-error">{authError()}</div></Show>
+                        <Show when={accountError()}><div role="alert" class="flower-provider-account-error">{accountError()}</div></Show>
                         <Show when={account()?.state === 'temporarily_unavailable' || account()?.state === 'storage_unavailable'}>
                           <Button size="sm" variant="outline" disabled={retrying() || accountBusy()} onClick={() => void retryAccount()}>{copy().chatGPT.retry}</Button>
                         </Show>
-                        <Show when={account()?.revocation_confirmed === false || authFailure()?.cleanupUnconfirmed}>
-                          <a class="cursor-pointer text-sm text-primary hover:underline" href="https://chatgpt.com/#settings" target="_blank" rel="noopener noreferrer">{copy().chatGPT.disconnectApps}<ExternalLink class="inline h-3 w-3" aria-hidden="true" /></a>
-                        </Show>
                         <div class="flower-provider-account-actions" ref={authActions}>
-                          <Show when={accountSummary()}><a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" class="flower-provider-account-usage" aria-hidden={!connected()} tabIndex={connected() ? 0 : -1} style={{ visibility: connected() ? 'visible' : 'hidden' }}>{copy().chatGPT.manageUsage}<ExternalLink class="h-3 w-3" aria-hidden="true" /></a></Show>
+                          <Show when={accountSummary() || authFailure()?.cleanupUnconfirmed}><div class="flower-provider-account-access">
+                            <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" class="flower-provider-account-usage" aria-hidden={!connected() || needsAccessReview()} tabIndex={connected() && !needsAccessReview() ? 0 : -1} style={{ visibility: connected() && !needsAccessReview() ? 'visible' : 'hidden' }}>{copy().chatGPT.manageUsage}<ExternalLink class="h-3 w-3" aria-hidden="true" /></a>
+                            <span aria-hidden={!needsAccessReview()} style={{ visibility: needsAccessReview() ? 'visible' : 'hidden' }}><Show when={needsAccessReview()} fallback={<AccessReviewLink />}><Tooltip content={authFailure()?.cleanupUnconfirmed ? copy().chatGPT.signInCleanupUnconfirmed : copy().chatGPT.revocationUnconfirmed} placement="bottom" delay={0} class="!whitespace-normal w-64 max-w-[75vw] !left-0 !translate-x-0">
+                              <AccessReviewLink />
+                            </Tooltip></Show></span>
+                          </div></Show>
                           <Button ref={authPrimary} size="sm" variant={connected() ? 'ghost' : 'default'} class="flower-provider-account-primary" disabled={authorizing() || accountBusy() || !canContinueAuthorization()} onClick={continueAuthorization}>
                             <StableText reserve={accountSummary() ? [copy().chatGPT.continue] : [copy().chatGPT.preparing, copy().chatGPT.verifying, copy().chatGPT.waiting, copy().chatGPT.continue]}>{authorizing() ? copy().chatGPT[authProgress()] : copy().chatGPT.continue}</StableText>
                             <ExternalLink class="h-3.5 w-3.5 shrink-0" aria-hidden="true" style={{ visibility: !authorizing() && account()?.state !== 'ready' ? 'visible' : 'hidden' }} />
                           </Button>
                           <Show when={authorizing()}><Button ref={authCancel} size="sm" variant="ghost" onClick={cancelAuthorization}>{copy().chatGPT.cancel}</Button></Show>
                           <Show when={!authorizing() && (savedAccounts().length > 0 || account())}><div class="flower-provider-account-secondary">
-                            <Button size="sm" variant="ghost" aria-hidden={signedOutAccounts().length === 0} tabIndex={signedOutAccounts().length ? 0 : -1} style={{ visibility: signedOutAccounts().length ? 'visible' : 'hidden' }} disabled={accountBusy() || !accountListReady()} onClick={openReauthorization}>{copy().chatGPT.signInAgain}</Button>
+                            <Show when={signedOutAccounts().some(item => item.account_id !== store.draft?.account_id)}><Button size="sm" variant="ghost" disabled={accountBusy() || !accountListReady()} onClick={openReauthorization}>{copy().chatGPT.signInAgain}</Button></Show>
                             <Button size="sm" variant="ghost" disabled={accountBusy() || !accountListReady()} onClick={() => setConfirmNewRegistration(true)}>{copy().chatGPT.changeAccount}</Button>
                             <Show when={account() && account()?.state !== 'authorization_required'}>
                               <Button size="sm" variant="ghost" class="whitespace-nowrap" disabled={accountBusy() || !accountListReady()} onClick={() => {

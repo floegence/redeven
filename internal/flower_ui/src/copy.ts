@@ -1753,7 +1753,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
         signOutStatusUnavailable: "Sign-out status could not be read. Check the connection and retry to confirm the result.",
         removeAccountOnSaveImpact: tasks => `Saving this removal signs out the account because it has no other connections. It stops all tasks using this account, including ${tasks} active tasks on this Runtime and their child tasks. Conversations are kept. Until you save, the account stays signed in.`,
         retry: "Retry",
-        disconnectApps: "Review connected apps in ChatGPT settings",
+        disconnectApps: "Review access",
         eligibilityRequired: "Your account is not eligible to share its ChatGPT plan. Review your plan and account access.",
         regionUnavailable: "ChatGPT plan sharing is unavailable in your region.",
         cancelSignOut: "Keep signed in",

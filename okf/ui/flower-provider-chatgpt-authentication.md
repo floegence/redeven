@@ -74,13 +74,23 @@ one reserved grid area, so preparation, waiting and verification do not resize
 the panel or move the actions. Polling reads attempt status only; saved-account
 reads are coalesced and occur on opening, terminal changes and existing lifecycle
 events. Identical account facts do not replace the settings snapshot. Ready accounts use a
-compact summary with the account identity, plan source, one connected status, and
-an aligned toolbar for usage and account actions. Reauthorization remains a quiet
+compact summary with the account identity, one concise status, and an aligned
+toolbar for usage and account actions. Saved-sign-in guidance is available from
+the connected badge through hover or keyboard focus, without a persistent
+explanation row. Reauthorization remains a quiet
 secondary action after connection. The first-use explanation is a separate notice;
 its confirmation aligns with its copy, retains keyboard access, and collapses
 without an abrupt layout jump. Closing notice content becomes inert immediately,
 and reduced-motion preferences skip the animation. Failures keep the recovery
 action in the account panel.
+A signed-out account shows the short local sign-out status once. Unconfirmed
+remote revocation exposes one concise Review access link in the existing usage
+slot; its tooltip retains the complete warning, and removal confirmation repeats
+the warning with the external review action. Local cleanup failures remain visible
+and actionable; identical status and action errors are presented once. Failed new
+sign-in cleanup retains its distinct warning without claiming the current account
+was signed out. The current signed-out binding uses the primary Continue action;
+a separate Sign in again chooser appears only for other previous connections.
 Sign-out retains the compact account summary and toolbar geometry through pending
 and terminal states; localized status and action labels reserve their full size.
 The signed-in picker collapses once with the shared disclosure motion and becomes

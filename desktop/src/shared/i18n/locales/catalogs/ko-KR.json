@@ -1282,7 +1282,7 @@
       "dialogChatGPTSignOutStatusUnavailable": "로그아웃 상태를 읽을 수 없습니다. 연결을 확인하고 다시 시도하여 결과를 확인하세요.",
       "dialogChatGPTRemoveAccountOnSaveImpact": "이 제거를 저장하면 다른 연결이 없으므로 계정에서 로그아웃됩니다. 이 런타임의 활성 작업 {tasks}개와 하위 작업을 포함하여 이 계정을 사용하는 모든 작업이 중지됩니다. 대화는 유지됩니다. 저장하기 전까지 로그인 상태가 유지됩니다.",
       "dialogChatGPTRetry": "다시 시도",
-      "dialogChatGPTDisconnectApps": "ChatGPT 설정에서 연결된 앱 확인",
+      "dialogChatGPTDisconnectApps": "접근 권한 확인",
       "dialogChatGPTEligibilityRequired": "이 계정은 ChatGPT 요금제를 공유할 수 없습니다. 요금제와 계정 권한을 확인하세요.",
       "dialogChatGPTRegionUnavailable": "현재 지역에서는 ChatGPT 요금제 공유를 사용할 수 없습니다.",
       "dialogChatGPTCancelSignOut": "로그인 유지",

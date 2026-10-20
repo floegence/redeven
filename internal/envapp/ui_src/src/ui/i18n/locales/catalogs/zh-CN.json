@@ -6191,7 +6191,7 @@
       "dialogChatGPTSignOutStatusUnavailable": "未能读取退出状态。请检查连接并重试，以确认结果。",
       "dialogChatGPTRemoveAccountOnSaveImpact": "保存此次移除后，账号将因没有其他连接而退出。使用此账号的所有任务将停止，包括此 运行时 上的 {tasks} 个活动任务及其子任务。对话会保留。保存前，账号仍保持登录。",
       "dialogChatGPTRetry": "重试",
-      "dialogChatGPTDisconnectApps": "在 ChatGPT 设置中检查已连接的应用",
+      "dialogChatGPTDisconnectApps": "检查授权",
       "dialogChatGPTEligibilityRequired": "此账号不符合共享 ChatGPT 套餐的条件。请检查套餐及账号权限。",
       "dialogChatGPTRegionUnavailable": "你所在地区暂不支持共享 ChatGPT 套餐。",
       "dialogChatGPTCancelSignOut": "保持登录",

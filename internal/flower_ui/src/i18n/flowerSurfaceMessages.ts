@@ -887,7 +887,7 @@ export const flowerSurfaceEnUS = {
     dialogChatGPTSignOutStatusUnavailable: "Sign-out status could not be read. Check the connection and retry to confirm the result.",
     dialogChatGPTRemoveAccountOnSaveImpact: "Saving this removal signs out the account because it has no other connections. It stops all tasks using this account, including {tasks} active tasks on this Runtime and their child tasks. Conversations are kept. Until you save, the account stays signed in.",
     dialogChatGPTRetry: "Retry",
-    dialogChatGPTDisconnectApps: "Review connected apps in ChatGPT settings",
+    dialogChatGPTDisconnectApps: "Review access",
     dialogChatGPTEligibilityRequired: "Your account is not eligible to share its ChatGPT plan. Review your plan and account access.",
     dialogChatGPTRegionUnavailable: "ChatGPT plan sharing is unavailable in your region.",
     dialogChatGPTCancelSignOut: "Keep signed in",

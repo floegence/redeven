@@ -6191,7 +6191,7 @@
       "dialogChatGPTSignOutStatusUnavailable": "ログアウト状態を読み取れませんでした。接続を確認し、再試行して結果を確認してください。",
       "dialogChatGPTRemoveAccountOnSaveImpact": "この削除を保存すると、他の接続がないためアカウントからログアウトします。この ランタイム 上の {tasks} 件の実行中タスクとその子タスクを含め、このアカウントを使用するすべてのタスクを停止します。会話は保持されます。保存するまではログイン状態を維持します。",
       "dialogChatGPTRetry": "再試行",
-      "dialogChatGPTDisconnectApps": "ChatGPT の設定で接続済みアプリを確認",
+      "dialogChatGPTDisconnectApps": "アクセスを確認",
       "dialogChatGPTEligibilityRequired": "このアカウントは ChatGPT プランの共有対象ではありません。プランとアカウントの権限を確認してください。",
       "dialogChatGPTRegionUnavailable": "お住まいの地域では ChatGPT プランの共有を利用できません。",
       "dialogChatGPTCancelSignOut": "ログインを維持",

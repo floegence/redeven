@@ -1297,7 +1297,7 @@
       "dialogChatGPTSignOutStatusUnavailable": "Не удалось прочитать состояние выхода. Проверьте соединение и повторите попытку, чтобы подтвердить результат.",
       "dialogChatGPTRemoveAccountOnSaveImpact": "После сохранения удаления произойдёт выход из аккаунта, поскольку других подключений нет. Будут остановлены все его задачи, включая {tasks} активных задач этой среды выполнения и их дочерние задачи. Переписка сохранится. До сохранения аккаунт остаётся авторизованным.",
       "dialogChatGPTRetry": "Повторить",
-      "dialogChatGPTDisconnectApps": "Проверить подключённые приложения в настройках ChatGPT",
+      "dialogChatGPTDisconnectApps": "Проверить доступ",
       "dialogChatGPTEligibilityRequired": "Ваш аккаунт не может предоставлять доступ к тарифу ChatGPT. Проверьте тариф и права аккаунта.",
       "dialogChatGPTRegionUnavailable": "Предоставление доступа к тарифу ChatGPT недоступно в вашем регионе.",
       "dialogChatGPTCancelSignOut": "Остаться в аккаунте",

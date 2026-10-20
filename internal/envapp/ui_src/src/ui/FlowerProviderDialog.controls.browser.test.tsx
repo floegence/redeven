@@ -1,4 +1,6 @@
 import desktopCSS from '../../../../../desktop/src/welcome/index.css?inline';
+import { createDesktopI18n } from '../../../../../desktop/src/shared/i18n';
+import { createDesktopFlowerSurfaceCopy } from '../../../../../desktop/src/welcome/flower/desktopFlowerSurfaceCopy';
 import envCSS from '../index.css?inline';
 import flowerCSS from './flower-feature.css?inline';
 import { FloeProvider, builtInShellThemePresets, useTheme } from '@floegence/floe-webapp-core';
@@ -26,7 +28,7 @@ async function mount(surface: 'desktop' | 'env', theme = 'porcelain-light', auth
   const [currentAccount, setAccount] = createSignal(account);
   await page.viewport(width, 900);
   const i18n = createI18nHelpers(locale, await loadEnvAppDictionary(locale));
-  const localizedCopy = createLocalizedFlowerSurfaceCopy({ locale,
+  const localizedCopy = surface === 'desktop' ? createDesktopFlowerSurfaceCopy(createDesktopI18n(locale)).settings.dialog : createLocalizedFlowerSurfaceCopy({ locale,
     t: (key, params) => i18n.t(key as EnvAppTranslationKey, params),
     tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params),
   }).settings.dialog;
@@ -56,8 +58,8 @@ async function mount(surface: 'desktop' | 'env', theme = 'porcelain-light', auth
   return { discover, onOpenChange, setAccount, copy: localizedCopy, dialog: document.querySelector<HTMLElement>('.flower-provider-dialog')! };
 }
 
-for (const surface of ['desktop', 'env'] as const) for (const [locale, width, reduced] of [['en-US', 1280, false], ['zh-CN', 390, false], ['de-DE', 320, true]] as const) {
-  it(`keeps logout geometry stable through a delayed registry read in ${surface} ${locale}`, async () => {
+for (const surface of ['desktop', 'env'] as const) for (const [locale, width, reduced] of [['en-US', 1280, false], ['zh-CN', 390, false], ['de-DE', 320, true]] as const) for (const confirmed of [true, false]) {
+  it(`keeps logout geometry stable through a delayed registry read in ${surface} ${locale} confirmed=${confirmed}`, async () => {
     await media.emulateMediaPreferences({ reducedMotion: reduced ? 'reduce' : 'no-preference' });
     const saved: FlowerChatGPTAccount = { account_id: 'logout', email: 'person@example.com', state: 'ready', welcome_acknowledged: true };
     let finish!: (result: Awaited<ReturnType<FlowerChatGPTAuth>>) => void;
@@ -70,11 +72,14 @@ for (const surface of ['desktop', 'env'] as const) for (const [locale, width, re
     const primary = panel.querySelector<HTMLButtonElement>('.flower-provider-account-primary')!;
     const geometry = () => [panel.getBoundingClientRect().height, primary.getBoundingClientRect().top - panel.getBoundingClientRect().top, primary.getBoundingClientRect().width];
     const initial = geometry();
+    const usage = page.getByRole('link', { name: localized.chatGPT.manageUsage, exact: true }).element();
+    const usageBounds = usage.getBoundingClientRect();
+    expect(usage.contains(document.elementFromPoint(usageBounds.left + usageBounds.width / 2, usageBounds.top + usageBounds.height / 2))).toBe(true);
     await userEvent.click(page.getByRole('button', { name: localized.chatGPT.signOut, exact: true }));
     setAccount({ ...saved, state: 'signing_out' });
     expect(geometry()).toEqual(initial);
     const tops: number[] = [];
-    finish({ local_cleanup_complete: true, revocation_confirmed: true });
+    finish({ local_cleanup_complete: true, revocation_confirmed: confirmed });
     for (let frame = 0; frame < 14; frame++) {
       await new Promise(requestAnimationFrame);
       tops.push(panel.getBoundingClientRect().top);
@@ -84,14 +89,18 @@ for (const surface of ['desktop', 'env'] as const) for (const [locale, width, re
     await expect.poll(() => typeof finishRefresh).toBe('function');
     await expect.poll(() => dialog.querySelector('.flower-provider-account-picker')).toBeNull();
     const settledTop = panel.getBoundingClientRect().top;
-    finishRefresh({ accounts: {}, saved_accounts: [{ ...saved, state: 'signed_out', revocation_confirmed: true }] });
+    finishRefresh({ accounts: {}, saved_accounts: [{ ...saved, state: 'signed_out', revocation_confirmed: confirmed }] });
     await expect.element(page.getByRole('button', { name: localized.chatGPT.continue, exact: true })).toBeEnabled();
     expect(geometry()).toEqual(initial);
     expect(panel.getBoundingClientRect().top).toBe(settledTop);
     expect(panel.querySelector('.flower-provider-account-primary')).toBe(primary);
     await expect.poll(() => document.activeElement).toBe(primary);
     expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth + 1);
-    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/flower-logout-${surface}-${locale}.png` });
+    expect(panel.querySelectorAll('[role=alert]')).toHaveLength(0);
+    expect(panel.textContent).not.toContain(localized.chatGPT.signInAgainHint);
+    expect(panel.getBoundingClientRect().height).toBeLessThan(width === 1280 ? 150 : 310);
+    if (!confirmed) await expect.element(page.getByRole('link', { name: localized.chatGPT.disconnectApps, exact: true })).toBeVisible();
+    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/flower-logout-${surface}-${locale}-${confirmed}.png` });
   });
 }
 

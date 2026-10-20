@@ -6191,7 +6191,7 @@
       "dialogChatGPTSignOutStatusUnavailable": "Não foi possível ler o status de saída. Verifique a conexão e tente novamente para confirmar o resultado.",
       "dialogChatGPTRemoveAccountOnSaveImpact": "Salvar esta remoção encerra a sessão da conta porque ela não tem outras conexões. Todas as tarefas dessa conta serão interrompidas, incluindo as {tasks} tarefas ativas neste ambiente de execução e suas subtarefas. As conversas serão mantidas. A conta continuará conectada até você salvar.",
       "dialogChatGPTRetry": "Tentar novamente",
-      "dialogChatGPTDisconnectApps": "Revisar aplicativos conectados nas configurações do ChatGPT",
+      "dialogChatGPTDisconnectApps": "Revisar acesso",
       "dialogChatGPTEligibilityRequired": "Sua conta não é elegível para compartilhar o plano do ChatGPT. Revise seu plano e as permissões da conta.",
       "dialogChatGPTRegionUnavailable": "O compartilhamento do plano do ChatGPT não está disponível na sua região.",
       "dialogChatGPTCancelSignOut": "Continuar conectado",
