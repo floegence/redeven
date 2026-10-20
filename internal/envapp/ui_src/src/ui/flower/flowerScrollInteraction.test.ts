@@ -60,6 +60,94 @@ function touchMove(target: Element, clientY: number) {
 }
 
 describe('Flower viewport input ownership', () => {
+  it.each(['wheel', 'touch', 'keyboard'])('keeps following short content after a %s input that cannot scroll', (source) => {
+    const { controller, viewport, frame, grow } = harness();
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 100 });
+    viewport.scrollTop = 0;
+    controller.startFollowing();
+    if (source === 'wheel') viewport.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -100 }));
+    if (source === 'touch') { pointer(viewport, 'pointerdown', 'touch'); touchMove(viewport, 300); }
+    if (source === 'keyboard') viewport.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowUp' }));
+    pointer(viewport, 'pointerup');
+    frame(); frame(); frame();
+    expect(controller.followingLatest()).toBe(true);
+    grow();
+    expect(viewport.scrollTop).toBe(520);
+    expect(controller.showLatest()).toBe(false);
+  });
+
+  it('preserves an explicit reading pause when short content receives upward input', () => {
+    const { controller, viewport, frame, grow } = harness();
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 100 });
+    viewport.scrollTop = 0;
+    viewport.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -100 }));
+    frame(); frame();
+    grow();
+    expect(controller.followingLatest()).toBe(false);
+    expect(viewport.scrollTop).toBe(0);
+  });
+
+  it.each(['wheel', 'touch', 'scrollbar', 'keyboard'])('resumes when a %s scroll reaches the bottom during streamed growth', (source) => {
+    const { controller, viewport, grow } = harness();
+    if (source === 'wheel') viewport.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 220 }));
+    if (source === 'touch') { pointer(viewport, 'pointerdown', 'touch'); touchMove(viewport, 100); }
+    if (source === 'scrollbar') pointer(viewport, 'pointerdown');
+    if (source === 'keyboard') viewport.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'End' }));
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 580 });
+    viewport.scrollTop = 480;
+    viewport.dispatchEvent(new Event('scroll'));
+    expect(controller.followingLatest()).toBe(true);
+    pointer(viewport, 'pointerup');
+    grow();
+    expect(viewport.scrollTop).toBe(520);
+    expect(controller.showLatest()).toBe(false);
+  });
+
+  it('schedules the final catch-up when content grows again before a return-to-bottom scroll event', () => {
+    const { controller, viewport, frame } = harness();
+    viewport.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 220 }));
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 580 });
+    viewport.scrollTop = 480;
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 780 });
+    viewport.dispatchEvent(new Event('scroll'));
+    expect(controller.followingLatest()).toBe(true);
+    frame();
+    expect(viewport.scrollTop).toBe(680);
+  });
+
+  it('does not resume an upward gesture when content growth and browser positioning move it forward', () => {
+    const { controller, viewport, grow } = harness();
+    viewport.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -20 }));
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 580 });
+    viewport.scrollTop = 480;
+    viewport.dispatchEvent(new Event('scroll'));
+    grow();
+    expect(controller.followingLatest()).toBe(false);
+    expect(viewport.scrollTop).toBe(480);
+  });
+
+  it('does not resume a partial downward scroll while content grows', () => {
+    const { controller, viewport, grow } = harness();
+    viewport.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 40 }));
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 580 });
+    viewport.scrollTop = 340;
+    viewport.dispatchEvent(new Event('scroll'));
+    grow();
+    expect(controller.followingLatest()).toBe(false);
+    expect(viewport.scrollTop).toBe(340);
+  });
+
+  it('keeps following after clicking transcript whitespace without scrolling', () => {
+    const { controller, viewport, frame, grow } = harness();
+    controller.scrollToBottom();
+    pointer(viewport, 'pointerdown');
+    pointer(viewport, 'pointerup');
+    frame(); frame(); frame();
+    expect(controller.followingLatest()).toBe(true);
+    grow();
+    expect(viewport.scrollTop).toBe(520);
+  });
+
   it.each(['wheel', 'touch', 'scrollbar', 'keyboard'])('resumes only after a %s gesture actually returns to the bottom', (source) => {
     const { viewport, title, controller, frame, grow } = harness();
     if (source === 'wheel') viewport.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 100 }));

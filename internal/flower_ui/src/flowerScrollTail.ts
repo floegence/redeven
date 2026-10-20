@@ -62,7 +62,7 @@ export function createFlowerScrollTailController(
   let scrollIntentFrame = 0;
   let disconnect: (() => void) | undefined;
   let touchY: number | undefined;
-  let userScroll: { top: number; height: number; viewportHeight: number; moved: boolean } | undefined;
+  let userScroll: { top: number; height: number; viewportHeight: number; direction: number; moved: boolean } | undefined;
 
   const clearFrame = (id: number) => {
     if (id) options.cancelAnimationFrame(id);
@@ -168,12 +168,12 @@ export function createFlowerScrollTailController(
   };
   const startUserScroll = (direction: number) => {
     if (!node) return;
-    const current = gesture();
-    if (current) current.scrolled = true;
+    // Input cannot leave the tail while all content fits in the viewport.
+    if (followingLatest() && node.scrollHeight <= node.clientHeight) return;
     clearAnchor();
     stopFollowing();
     options.onUserInteraction?.();
-    userScroll = { top: node.scrollTop, height: node.scrollHeight, viewportHeight: node.clientHeight, moved: false };
+    userScroll = { top: node.scrollTop, height: node.scrollHeight, viewportHeight: node.clientHeight, direction, moved: false };
     scrollIntentFrame = clearFrame(scrollIntentFrame);
     // Native scrolling happens after the input default action. Expire input
     // that did not scroll; an actual scroll keeps ownership until scrollend.
@@ -270,12 +270,24 @@ export function createFlowerScrollTailController(
     if (input) {
       const delta = node.scrollTop - input.top;
       const sameLayout = input.height === node.scrollHeight && input.viewportHeight === node.clientHeight;
+      // Growth can race a real downward scroll. A non-contracting scroll range
+      // cannot clamp the viewport forward, so it still proves user movement.
+      const rangeDidNotShrink = node.scrollHeight - node.clientHeight >= input.height - input.viewportHeight;
+      const moved = delta !== 0 && (sameLayout || delta > 0 && rangeDidNotShrink);
+      const reachedPreviousBottom = node.scrollTop >= Math.max(0, input.height - input.viewportHeight) - 1;
       input.top = node.scrollTop;
       input.height = node.scrollHeight;
       input.viewportHeight = node.clientHeight;
-      input.moved ||= delta !== 0;
-      if (delta < 0 && sameLayout) stopFollowing();
-      if (delta > 0 && sameLayout && isNearBottom()) setFollowingLatest(true);
+      input.moved ||= moved;
+      if (moved) {
+        const current = gesture();
+        if (current) current.scrolled = true;
+        if (delta < 0) stopFollowing();
+        if (delta > 0 && input.direction >= 0 && (isNearBottom() || reachedPreviousBottom)) {
+          setFollowingLatest(true);
+          scheduleLayout();
+        }
+      }
     }
     // Scroll events report geometry; only a verified user scroll may resume.
     setNearBottom(isNearBottom());

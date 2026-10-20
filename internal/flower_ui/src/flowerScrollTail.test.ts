@@ -135,6 +135,22 @@ describe('Flower scroll tail controller', () => {
     controller.dispose();
   });
 
+  it('keeps following as short content grows into an overflowing transcript', () => {
+    const { controller, raf } = createController();
+    const metrics = createViewport(100);
+    controller.bind(metrics.viewport);
+
+    for (const height of [100, 100, 340, 620]) {
+      metrics.setScrollHeight(height);
+      controller.measureAfterLayout();
+      raf.flushAll();
+      expect(controller.followingLatest()).toBe(true);
+      expect(metrics.scrollTop()).toBe(Math.max(0, height - 100));
+      expect(controller.showLatest()).toBe(false);
+    }
+    controller.dispose();
+  });
+
   it('keeps following even when one update exceeds the near-bottom threshold', () => {
     const { controller, raf } = createController();
     const metrics = createViewport();

@@ -57,6 +57,95 @@ const toggleFor = (runtime: HTMLElement, id: string) => rowFor(runtime, id).quer
 beforeEach(async () => { await page.viewport(1280, 900); });
 
 describe('Activity disclosure interaction', () => {
+  it.each([false, true])('follows short content through overflow with no-op wheel input: %s', async (useWheel) => {
+    let items = [write()];
+    const { runtime, live } = await mount(items);
+    const viewport = runtime.querySelector<HTMLElement>('.flower-chat-transcript')!;
+    const distance = () => viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop;
+    const gap = () => runtime.querySelector('.flower-chat-bottom-dock-track')!.getBoundingClientRect().top
+      - rowFor(runtime, items.at(-1)!.item_id).getBoundingClientRect().bottom;
+    await waitFor(() => viewport.dataset.flowerTailPreparing !== 'true' && viewport.clientHeight > 0);
+    expect(gap()).toBeGreaterThan(200);
+    expect(viewport.scrollHeight).toBe(viewport.clientHeight);
+    if (useWheel) {
+      const wheel = commands as unknown as { wheelScrollRegion: (request: { regionSelector: string; deltaY: number }) => Promise<unknown> };
+      await wheel.wheelScrollRegion({ regionSelector: '.flower-chat-transcript', deltaY: -300 });
+    }
+    for (const [index, count] of [1, 30, 8].entries()) {
+      items = [...items, ...Array.from({ length: count }, (_, offset) => activityItem({
+        ...read(), item_id: `short-growth-${index}-${offset}`, tool_id: `short-growth-${index}-${offset}`, label: `New tool ${index}-${offset}`,
+      }))];
+      live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor(items, index + 2) });
+      await waitFor(() => Boolean(rowFor(runtime, items.at(-1)!.item_id)));
+      await waitFor(() => distance() <= 1);
+      expect(runtime.querySelector('.flower-scroll-to-latest-button')).toBeNull();
+      if (index === 0) {
+        expect(gap()).toBeGreaterThan(200);
+        expect(viewport.scrollTop).toBe(0);
+        expect(viewport.scrollHeight).toBe(viewport.clientHeight);
+      } else {
+        expect(viewport.scrollHeight - viewport.clientHeight).toBeGreaterThan(96);
+        expect(viewport.scrollTop).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('follows live tools after a native click on transcript whitespace', async () => {
+    const items = [write(), ...Array.from({ length: 24 }, (_, index) => activityItem({
+      ...read(), item_id: `read-${index}`, tool_id: `read-${index}`, label: `Check diagnostic output ${index}`,
+    }))];
+    const { runtime, live } = await mount(items);
+    const viewport = runtime.querySelector<HTMLElement>('.flower-chat-transcript')!;
+    const distance = () => viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop;
+    await waitFor(() => viewport.dataset.flowerTailPreparing !== 'true' && distance() <= 1);
+    await userEvent.click(viewport, { position: { x: 24, y: 20 } });
+    live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([
+      ...items, ...Array.from({ length: 8 }, (_, index) => activityItem({
+        ...read(), item_id: `appended-${index}`, tool_id: `appended-${index}`, label: `New tool ${index}`,
+      })),
+    ], 2) });
+    await waitFor(() => Boolean(rowFor(runtime, 'appended-7')));
+    await waitFor(() => distance() <= 1);
+    expect(runtime.querySelector('.flower-scroll-to-latest-button')).toBeNull();
+  });
+
+  it('resumes native scrolling to latest while content grows and still protects reading above it', async () => {
+    const items = [write(), ...Array.from({ length: 24 }, (_, index) => activityItem({
+      ...read(), item_id: `read-${index}`, tool_id: `read-${index}`, label: `Check diagnostic output ${index}`,
+    }))];
+    const { runtime, live } = await mount(items);
+    const viewport = runtime.querySelector<HTMLElement>('.flower-chat-transcript')!;
+    const distance = () => viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop;
+    await waitFor(() => viewport.dataset.flowerTailPreparing !== 'true' && distance() <= 1);
+    const wheel = commands as unknown as { wheelScrollRegion: (request: { regionSelector: string; deltaY: number }) => Promise<unknown> };
+    await wheel.wheelScrollRegion({ regionSelector: '.flower-chat-transcript', deltaY: -300 });
+    await waitFor(() => distance() > 96);
+    viewport.addEventListener('wheel', () => {
+      const incoming = document.createElement('div');
+      incoming.style.height = '180px';
+      incoming.style.flexShrink = '0';
+      viewport.firstElementChild!.append(incoming);
+    }, { once: true });
+    await wheel.wheelScrollRegion({ regionSelector: '.flower-chat-transcript', deltaY: 10000 });
+    await waitFor(() => distance() <= 1);
+    const appended = [...items, ...Array.from({ length: 8 }, (_, index) => activityItem({
+      ...read(), item_id: `appended-${index}`, tool_id: `appended-${index}`, label: `New tool ${index}`,
+    }))];
+    live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor(appended, 2) });
+    await waitFor(() => Boolean(rowFor(runtime, 'appended-7')));
+    await waitFor(() => distance() <= 1);
+    await wheel.wheelScrollRegion({ regionSelector: '.flower-chat-transcript', deltaY: -300 });
+    await waitFor(() => distance() > 96);
+    const readingTop = viewport.scrollTop;
+    live.push({ schema_version: 1, kind: 'thread.batch', thread_id: 'terminal-activity', current: currentFor([
+      ...appended, { ...read(), item_id: 'reading-update', tool_id: 'reading-update' },
+    ], 3) });
+    await waitFor(() => Boolean(rowFor(runtime, 'reading-update')));
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    expect(viewport.scrollTop).toBe(readingTop);
+    expect(runtime.querySelector('.flower-scroll-to-latest-button')).not.toBeNull();
+  });
+
   it.each([60, 100, 160])('preserves a real mouse click during a %i ms press and live append', async (pressDuration) => {
     await page.viewport(1280, 900);
     const items = [write(), ...Array.from({ length: 24 }, (_, index) => activityItem({
