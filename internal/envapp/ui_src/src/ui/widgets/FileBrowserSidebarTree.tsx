@@ -6,6 +6,8 @@ import type { NormalizedFilesystemRoot } from '../utils/filesystemRoots';
 import { matchFilesystemRoot } from '../utils/filesystemRoots';
 import { REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS } from '../workbench/surface/workbenchActionSurface';
 import { useI18n } from '../i18n';
+import { useEnvDirectoryFavorites } from '../services/directoryFavorites';
+import { DirectoryFavoritesSection } from './DirectoryFavoritesSection';
 
 const MAX_VISIBLE_DEPTH = 5;
 const TREE_ROW_BASE_PADDING = 8;
@@ -58,7 +60,6 @@ function buildFolderIndex(items: FileItem[], index: Map<string, FileItem> = new 
 export interface FileBrowserSidebarTreeProps {
   instanceId: string;
   enableDragDrop?: boolean;
-  directoryFavoritesAvailable?: boolean;
   sidebarOpen?: boolean;
   scrollContainer?: () => HTMLElement | null;
   pendingNavigationPath?: string;
@@ -223,6 +224,7 @@ function FileBrowserSidebarTreeRow(props: FileBrowserSidebarTreeRowProps) {
 export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
   const browser = useFileBrowser();
   const i18n = useI18n();
+  const favoritePicker = useEnvDirectoryFavorites();
   const rootFolders = createMemo(() => browser.files().filter((item) => item.type === 'folder'));
   const folderIndex = createMemo(() => buildFolderIndex(browser.files()));
   const activeRoot = createMemo(() => matchFilesystemRoot(props.currentPath || browser.currentPath(), props.roots ?? []));
@@ -355,9 +357,9 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
 
   return (
     <div class={cn('flex min-h-full flex-col', props.class)}>
-      <Show when={(props.roots?.length ?? 0) > 0}>
-        <div class={FILE_TREE_ROOT_SECTION_CLASS}>
-          <div class={FILE_TREE_ROOT_LABEL_CLASS}>{i18n.t('files.roots')}</div>
+      <Show when={(props.roots?.length ?? 0) > 0 || favoritePicker.directoryFavorites}>
+        <div data-filesystem-locations class={FILE_TREE_ROOT_SECTION_CLASS}>
+          <Show when={(props.roots?.length ?? 0) > 0}><div class={FILE_TREE_ROOT_LABEL_CLASS}>{i18n.t('files.roots')}</div></Show>
           <For each={props.roots}>
             {(root) => {
               const isActive = createMemo(() => activeRoot()?.id === root.id);
@@ -385,7 +387,7 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
                     </span>
                     <span class="min-w-0 flex-1 truncate">{root.label}</span>
                   </button>
-                  <Show when={props.directoryFavoritesAvailable}><button type="button" aria-label={i18n.t('common.actions.more') + ': ' + root.pathAbs}
+                  <Show when={favoritePicker.directoryFavorites}><button type="button" aria-label={i18n.t('common.actions.more') + ': ' + root.pathAbs}
                     class="shrink-0 cursor-pointer rounded p-1 text-muted-foreground hover:bg-sidebar-accent focus-visible:ring-1 focus-visible:ring-sidebar-ring"
                     onClick={event => showDirectoryMenu(browser, root.pathAbs, event)}><MoreHorizontal class="h-3.5 w-3.5" /></button></Show>
                   <span
@@ -404,6 +406,11 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
               );
             }}
           </For>
+          <Show when={favoritePicker.directoryFavorites}>{favorites => <DirectoryFavoritesSection
+            favorites={favorites()} copy={favoritePicker.copy} currentPath={props.currentPath || browser.currentPath()}
+            onNavigate={path => props.onRootSelect?.(path)}
+            onContextMenu={(event, path) => showDirectoryMenu(browser, path, event)}
+          />}</Show>
         </div>
       </Show>
       <Show

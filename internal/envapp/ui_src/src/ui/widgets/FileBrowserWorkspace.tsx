@@ -1,5 +1,4 @@
 import './file-workspace-header.css';
-import { DirectoryFavoritesSection } from './DirectoryFavoritesSection';
 import { useEnvDirectoryFavorites } from '../services/directoryFavorites';
 import { DirectoryFavoriteButton } from '@floegence/floe-webapp-core/ui';
 import { Show, createUniqueId, createEffect, createMemo, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
@@ -273,7 +272,6 @@ function FileWorkspaceStatusBar(props: { initializing?: boolean }) {
 
 function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files' | 'initialPath' | 'persistenceKey' | 'resetKey'>) {
   const browser = useFileBrowser();
-  const favoritePicker = useEnvDirectoryFavorites();
   const unregister = props.registerPageStateReader?.(() => ({
     view: browser.viewMode(), sort: browser.sortConfig(), filter: browser.filterQueryApplied(),
     selected_paths: browser.getSelectedItemsList().slice(0, 16).map(item => item.path),
@@ -482,10 +480,6 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
       )}
       sidebarBody={(
         <div class="flex h-full min-h-0 flex-col gap-1.5">
-          <Show when={favoritePicker.directoryFavorites}>{favorites => <DirectoryFavoritesSection favorites={favorites()} copy={favoritePicker.copy}
-            onNavigate={path => { props.onRootSelect?.(path); }}
-            onContextMenu={(event, path) => { event.preventDefault(); event.stopPropagation(); const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-              browser.showContextMenu({ x: event instanceof MouseEvent ? event.clientX : rect.left, y: event instanceof MouseEvent ? event.clientY : rect.bottom, items: [], targetKind: 'directory-background', source: 'background', directory: { path } }); }} />}</Show>
           <div class="flex min-h-[18px] items-center justify-between px-0.5 text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground/60">
             <span>{i18n.t('files.folderTree')}</span>
             <span data-floe-reload-omit class="flex items-center gap-1">
@@ -516,7 +510,6 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
           >
             <Show when={!props.initializing}>
               <FileBrowserSidebarTree
-                directoryFavoritesAvailable={Boolean(favoritePicker.directoryFavorites)}
                 instanceId={props.instanceId}
                 enableDragDrop={dragEnabled()}
                 sidebarOpen={props.open}
