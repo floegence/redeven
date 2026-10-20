@@ -64,9 +64,15 @@ export function FlowerApprovalRow(props: Readonly<{
   onMount(() => {
     const observer = new ResizeObserver(scheduleMeasure);
     if (commandRef) observer.observe(commandRef);
-    let active = true;
-    void document.fonts?.ready.then(() => { if (active) scheduleMeasure(); });
-    onCleanup(() => { active = false; observer.disconnect(); cancelAnimationFrame(measureFrame); });
+    const fonts = document.fonts;
+    fonts?.addEventListener('loadingdone', scheduleMeasure);
+    fonts?.addEventListener('loadingerror', scheduleMeasure);
+    onCleanup(() => {
+      fonts?.removeEventListener('loadingdone', scheduleMeasure);
+      fonts?.removeEventListener('loadingerror', scheduleMeasure);
+      observer.disconnect();
+      cancelAnimationFrame(measureFrame);
+    });
   });
   createEffect(on([() => props.presentation.command, expanded], scheduleMeasure));
   const icon = () => {

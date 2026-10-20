@@ -2203,3 +2203,5 @@ Runtime restart, and compact-panel recovery. See the
 - Document default continuation, pure secondary action, frozen transport intent, legacy outbox behavior and distinct Retry semantics.
 
 - 2026-10-20: Adopt published Floret v7.74.1 deleted-actor resource release; qualify fixed-workset surface disposal independently from native browser navigation context retention.
+
+- 2026-10-20: Release font measurement callbacks on Flower composer and approval disposal, including indefinitely pending font loads; preserve completion/error remeasurement without uncancellable readiness promises.

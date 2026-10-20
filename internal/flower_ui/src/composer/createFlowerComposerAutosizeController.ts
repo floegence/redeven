@@ -83,9 +83,11 @@ export function createFlowerComposerAutosizeController(
     })
     : null;
   const handleWindowResize = () => schedule();
+  const fonts = ownerDocument.fonts;
   resizeObserver?.observe(element);
   ownerWindow.addEventListener('resize', handleWindowResize);
-  void ownerDocument.fonts?.ready.then(schedule).catch(() => undefined);
+  fonts?.addEventListener('loadingdone', schedule);
+  fonts?.addEventListener('loadingerror', schedule);
   schedule();
 
   return {
@@ -111,6 +113,8 @@ export function createFlowerComposerAutosizeController(
       frame = 0;
       resizeObserver?.disconnect();
       ownerWindow.removeEventListener('resize', handleWindowResize);
+      fonts?.removeEventListener('loadingdone', schedule);
+      fonts?.removeEventListener('loadingerror', schedule);
       clearInlineSizing();
     },
   };

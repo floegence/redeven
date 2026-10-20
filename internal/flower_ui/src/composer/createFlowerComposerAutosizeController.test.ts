@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createFlowerComposerAutosizeController } from './createFlowerComposerAutosizeController';
 
@@ -41,9 +41,36 @@ const createHarness = () => {
 
 afterEach(() => {
   document.body.replaceChildren();
+  vi.restoreAllMocks();
 });
 
 describe('createFlowerComposerAutosizeController', () => {
+  it('releases font observers even when font loading never settles', () => {
+    const fonts = new EventTarget();
+    const added = vi.spyOn(fonts, 'addEventListener');
+    const removed = vi.spyOn(fonts, 'removeEventListener');
+    const original = Object.getOwnPropertyDescriptor(document, 'fonts');
+    Object.defineProperty(fonts, 'ready', { get: () => { throw new Error('uncancellable readiness promise retains disposed composers'); } });
+    Object.defineProperty(document, 'fonts', { configurable: true, value: fonts });
+    try {
+      const harness = createHarness();
+      expect(added).toHaveBeenCalledWith('loadingdone', expect.any(Function));
+      expect(added).toHaveBeenCalledWith('loadingerror', expect.any(Function));
+      harness.flush();
+      fonts.dispatchEvent(new Event('loadingdone'));
+      expect(harness.pendingFrames()).toBe(1);
+      harness.flush();
+      fonts.dispatchEvent(new Event('loadingerror'));
+      expect(harness.pendingFrames()).toBe(1);
+      harness.controller.dispose();
+      expect(removed.mock.calls).toEqual(added.mock.calls);
+      fonts.dispatchEvent(new Event('loadingdone'));
+      expect(harness.pendingFrames()).toBe(0);
+    } finally {
+      if (original) Object.defineProperty(document, 'fonts', original);
+      else Reflect.deleteProperty(document, 'fonts');
+    }
+  });
   it('uses scrollHeight for explicit and soft-wrapped lines and caps at five visual lines', () => {
     const harness = createHarness();
     harness.flush();
