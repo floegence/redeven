@@ -367,10 +367,10 @@ it.each([false, true])('locates the canonical parent report from its accepted ch
   await waitFor(() => surface.querySelector('[data-parent-event="receipt-event"] .flower-parent-event-disclosure')?.getAttribute('aria-expanded') === 'true');
   if (folded) {
     await waitFor(() => report()?.closest('.flower-turn-row-viewport')?.getAttribute('data-state') === 'open');
+    await waitFor(() => document.querySelector('[data-flower-subagent-detail="open"]') === null);
     expect(surface.querySelector('.flower-turn-summary-button')?.getAttribute('aria-expanded')).toBe('true');
     expect(report().closest('[inert], [aria-hidden="true"]')).toBeNull();
     expect(report().getBoundingClientRect().height).toBeGreaterThan(0);
     expect(document.activeElement).toBe(report().querySelector('.flower-parent-event-disclosure'));
-    expect(document.querySelector('[data-flower-subagent-detail="open"]')).toBeNull();
   }
 });
