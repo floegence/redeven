@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-20 — Quiet Flower conversation navigation
+
+- Remove the floating conversation-loading status from the shared Flower surface. Keep existing inline loading, selected-row feedback, retained history and drafts, and interaction guards. See [conversation selection](ui/flower-thread-selection.md).
+
 ## 2026-10-20 — Focused Flower execution boundaries
 
 - Clarify sufficient-context answers, proportionate inspection, rule dependencies and workflow authorization in the existing [prompt contract](ai/flower-prompt-and-rule-sources.md). Reduce shared policies by 50 UTF-8 bytes; preserve personas, Goal and tools, and unify timeout advice with partial results intact. Replace route-based acceptance with intent/evidence/effect checks, separate pending review, withdraw biased totals, and replay both retained versions through one scorer. Keep real model, actual Service, semantic review and deterministic evidence distinct; retain residual failures.

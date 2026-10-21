@@ -43,7 +43,7 @@ describe('Flower navigation intent', () => {
     expect(loadThread).not.toHaveBeenCalled();
     presentFrame();
     expect(host.querySelector('.flower-chat-bottom-dock')?.hasAttribute('inert')).toBe(false);
-    expect(host.querySelector('.flower-thread-navigation-status')?.textContent).toContain('Loading conversation');
+    expect(host.querySelector('.flower-thread-navigation-status')).toBeNull();
     await flush();
     expect(committed(host)).toBe('');
     expect(loadThread).not.toHaveBeenCalled();
@@ -52,6 +52,8 @@ describe('Flower navigation intent', () => {
     presentFrame(); await flush();
     expect(committed(host)).toBe('b');
     expect(loadThread).toHaveBeenCalledTimes(1);
+    expect(host.querySelector('.flower-thread-navigation-status')).toBeNull();
+    expect(host.querySelector('.flower-thread-loading')).not.toBeNull();
     detail.resolve(liveBootstrap(summaries[1]));
     await waitFor(() => host.textContent?.includes('Body B') ?? false);
     expect(host.querySelector<HTMLElement>('[data-flower-panel="chat"]')?.inert).toBe(false);
@@ -67,7 +69,7 @@ describe('Flower navigation intent', () => {
     editor.value = 'Draft owned by A';
     editor.dispatchEvent(new InputEvent('input', { bubbles: true }));
     const body = host.querySelector('[data-flower-message-id="a-message"]');
-    const navigationStatus = host.querySelector('.flower-thread-navigation-status');
+    expect(host.querySelector('.flower-thread-navigation-status')).toBeNull();
     const previousChatSibling = host.querySelector('[data-flower-panel="chat"]')?.previousElementSibling;
     const loads = loadThread.mock.calls.length;
     const presentFrame = holdFrames();
@@ -78,7 +80,7 @@ describe('Flower navigation intent', () => {
     expect(host.querySelector('[data-flower-message-id="a-message"]')).toBe(body);
     expect(host.querySelector('[data-flower-message-id="b-message"]')).toBeNull();
     expect(editor.value).toBe('Draft owned by A');
-    expect(host.querySelector('.flower-thread-navigation-status')).toBe(navigationStatus);
+    expect(host.querySelector('.flower-thread-navigation-status')).toBeNull();
     expect(host.querySelector('[data-flower-panel="chat"]')?.previousElementSibling).toBe(previousChatSibling);
     const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
     editor.dispatchEvent(tab);
