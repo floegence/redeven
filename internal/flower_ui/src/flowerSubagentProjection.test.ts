@@ -14,7 +14,6 @@ function summary(overrides: Partial<FlowerSubagentSummary>): FlowerSubagentSumma
     thread_id: threadID,
     task_name: 'Review API',
     task_description: 'Review the public API boundary.',
-    agent_type: 'reviewer',
     status: 'completed',
     can_send_input: false,
     can_interrupt: false,
@@ -185,12 +184,10 @@ describe('buildFlowerSubagentPanelItems', () => {
         summary({
           thread_id: 'child-review',
           task_name: '检查安全边界',
-          agent_type: 'reviewer',
         }),
         summary({
           thread_id: 'child-worker',
           task_name: '',
-          agent_type: 'worker',
         }),
       ],
     }));

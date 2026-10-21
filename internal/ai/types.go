@@ -215,7 +215,6 @@ type FlowerSubagentSummary struct {
 	ThreadID        string `json:"thread_id"`
 	TaskName        string `json:"task_name,omitempty"`
 	TaskDescription string `json:"task_description,omitempty"`
-	AgentType       string `json:"agent_type,omitempty"`
 	ContextMode     string `json:"context_mode,omitempty"`
 	Status          string `json:"status"`
 	LastMessage     string `json:"last_message,omitempty"`

@@ -38,7 +38,7 @@ function mount(entries: Accessor<readonly FlowerTimelineEntry[]>, overrides: Par
     const props: SubagentDetailWindowProps = {
       open: true, onOpenChange: () => undefined, threadID: 'child', title: 'Inspect sources',
       status: 'running', statusLabel: 'Running', statusIndicator: null,
-      agentTypeLabel: 'Explore', elapsedLabel: '12s', description: 'Inspect source evidence.',
+      elapsedLabel: '12s', description: 'Inspect source evidence.',
       loading: false, error: '', detailAvailable: true, entries: [],
       renderTimeline: () => <FlowerTurnTimeline thread={null} entries={entries()} failureNoticeVisible={false}
         runtimeID="test" scope="subagent" choices={choices} scroll={scroll} reducedMotion={() => true}

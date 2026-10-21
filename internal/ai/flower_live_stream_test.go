@@ -335,7 +335,7 @@ func TestFlowerWorkspaceStreamRoutesChildCurrentAndInventoryToParent(t *testing.
 		}
 		return []flruntime.ThreadSummary{{
 			ID: identity.ThreadID(childThreadID), ParentThreadID: identity.ThreadID(parentThreadID),
-			TaskName: "Research models", TaskDescription: "Review model releases", HostProfileRef: subagentAgentTypeExplore,
+			TaskName: "Research models", TaskDescription: "Review model releases", HostProfileRef: "explore",
 			ForkMode: subagentContextModeMissionOnly, Activity: flruntime.ThreadActivityActive,
 			CreatedAt: now, UpdatedAt: now,
 		}}, nil

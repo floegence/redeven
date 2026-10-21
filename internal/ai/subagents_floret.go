@@ -27,10 +27,6 @@ const (
 	subagentStatusCanceled  = "canceled"
 	subagentStatusTimedOut  = "timed_out"
 
-	subagentAgentTypeExplore  = "explore"
-	subagentAgentTypeWorker   = "worker"
-	subagentAgentTypeReviewer = "reviewer"
-
 	subagentActionSpawn     = "spawn"
 	subagentActionWait      = "wait"
 	subagentActionList      = "list"
@@ -52,15 +48,6 @@ type subagentRuntime interface {
 	release()
 }
 
-type subagentCapabilityContract struct {
-	VisibleTools        []string
-	HiddenControlTools  []string
-	HiddenToolSet       map[string]struct{}
-	AllowSpawnSubagents bool
-	AllowUserApproval   bool
-	AllowUserInput      bool
-}
-
 type subagentSnapshot struct {
 	Title              string
 	TitleStatus        flruntime.ThreadTitleStatus
@@ -71,7 +58,7 @@ type subagentSnapshot struct {
 	TaskDescription    string
 	ParentThreadID     string
 	ParentTurnID       string
-	AgentType          string
+	HostProfileRef     string
 	ContextMode        string
 	Status             string
 	Failure            *flruntime.ThreadTurnFailure
@@ -155,75 +142,85 @@ func (runtime *floretSubagentRuntime) spawn(ctx context.Context, toolCallID stri
 	}
 	taskName := strings.TrimSpace(anyToString(args["task_name"]))
 	taskDescription := strings.TrimSpace(anyToString(args["task_description"]))
-	message := strings.TrimSpace(anyToString(args["message"]))
-	if taskName == "" || taskDescription == "" || message == "" {
+	message := anyToString(args["message"])
+	if taskName == "" || taskDescription == "" || strings.TrimSpace(message) == "" {
 		return nil, errors.New("subagents spawn requires task_name, task_description, and message")
 	}
-	agentType := normalizeSubagentAgentType(anyToString(args["agent_type"]))
 	contextMode := normalizeSubagentContextMode(anyToString(args["context_mode"]))
+	// Floret requires a host reference for child threads; this shared value selects no role or policy.
+	hostProfileRef := "flower"
+	if historicalProfile := strings.TrimSpace(anyToString(args["agent_type"])); historicalProfile != "" {
+		// Historical spawn calls need their original Floret creation fingerprint
+		// when replayed. This value never selects current prompts or permissions.
+		hostProfileRef = historicalProfile
+	}
 	requestKey, err := subagentPublicationID(parent.threadID, parent.turnID, toolCallID)
 	if err != nil {
 		return nil, err
 	}
-	prompt := buildFlowerSubagentPrompt(flowerSubagentPromptSpec{
-		AgentType: agentType, TaskName: taskName, Message: message, ContextMode: contextMode,
-	})
 	parentID := identity.ThreadID(strings.TrimSpace(parent.threadID))
 	parentTurnID := identity.TurnID(strings.TrimSpace(parent.turnID))
 	var child flruntime.ThreadView
 	if contextMode == subagentContextModeFullHistory {
 		child, err = threads.Fork(ctxOrBackground(ctx), flruntime.ForkThreadInput{
 			SourceThreadID: parentID, ParentThreadID: parentID, ParentTurnID: parentTurnID,
-			TaskName: taskName, TaskDescription: taskDescription, HostProfileRef: agentType,
+			TaskName: taskName, TaskDescription: taskDescription, HostProfileRef: hostProfileRef,
 			ForkMode: contextMode, RequestKey: flruntime.RequestKey(requestKey),
 		})
 	} else {
 		child, err = threads.Create(ctxOrBackground(ctx), flruntime.CreateThreadInput{
 			ParentThreadID: parentID, ParentTurnID: parentTurnID, TaskName: taskName,
-			TaskDescription: taskDescription, HostProfileRef: agentType, ForkMode: contextMode,
+			TaskDescription: taskDescription, HostProfileRef: hostProfileRef, ForkMode: contextMode,
 			RequestKey: flruntime.RequestKey(requestKey),
 		})
 	}
 	if err != nil {
 		return nil, err
 	}
-	if err := service.ensureChildThreadSettings(ctx, parent, child.ThreadID.String(), parentID.String(), agentType); err != nil {
+	if err := service.ensureChildThreadSettings(ctx, parent, child.ThreadID.String(), parentID.String()); err != nil {
 		return nil, err
 	}
 	sendKey := requestKey + ":input"
-	request := runtime.childEffectRequest(parent, child.ThreadID.String(), sendKey, prompt, agentType)
-	result, err := service.sendFloretSubagentInput(ctx, threads, child.ThreadID, prompt, sendKey, request)
+	result := child
+	admittedText, inputAdmitted, err := subagentInputText(ctx, threads, child, sendKey)
 	if err != nil {
 		return nil, err
+	}
+	if inputAdmitted && args["agent_type"] == nil && admittedText != message {
+		return nil, flruntime.ErrRequestConflict
+	}
+	if !inputAdmitted {
+		request := runtime.childEffectRequest(parent, child.ThreadID.String(), sendKey, message,
+			strings.TrimSpace(parent.currentModelID), permissionTypeString(parent.currentPermissionType()))
+		result, err = service.sendFloretSubagentInput(ctx, threads, child.ThreadID, message, sendKey, request)
+		if err != nil {
+			return nil, err
+		}
 	}
 	now := time.Now()
 	summary := flruntime.ThreadSummary{
 		ID: child.ThreadID, ParentThreadID: parentID, ParentTurnID: parentTurnID,
-		TaskName: taskName, TaskDescription: taskDescription, HostProfileRef: agentType,
+		TaskName: taskName, TaskDescription: taskDescription, HostProfileRef: hostProfileRef,
 		ForkMode: contextMode, CreatedAt: now, UpdatedAt: now,
 	}
 	snapshot := subagentSnapshotFromThread(summary, result)
 	item := boundedSubagentItem(subagentSnapshotPayload(snapshot))
 	return map[string]any{
 		"status": "ok", "action": subagentActionSpawn, "accepted": true,
-		"thread_id": snapshot.ThreadID, "agent_type": snapshot.AgentType,
+		"thread_id":    snapshot.ThreadID,
 		"context_mode": snapshot.ContextMode, "task_name": snapshot.TaskName,
 		"task_description": snapshot.TaskDescription, "items": []map[string]any{item},
 	}, nil
 }
 
-func (runtime *floretSubagentRuntime) childEffectRequest(parent *run, childID, requestKey, text, agentType string) floretEffectRequest {
+func (runtime *floretSubagentRuntime) childEffectRequest(parent *run, childID, requestKey, text, modelID, permissionType string) floretEffectRequest {
 	meta := session.Meta{}
 	if parent.sessionMeta != nil {
 		meta = *parent.sessionMeta
 	}
-	permission := permissionTypeString(parent.currentPermissionType())
-	if agentType != subagentAgentTypeWorker {
-		permission = permissionTypeString(FlowerPermissionReadonly)
-	}
 	return floretEffectRequest{meta: meta, req: SendUserTurnRequest{
-		ClientRequestID: requestKey, ThreadID: childID, Model: strings.TrimSpace(parent.currentModelID),
-		Input: RunInput{Text: text}, Options: RunOptions{NoUserInteraction: true, PermissionType: permission},
+		ClientRequestID: requestKey, ThreadID: childID, Model: strings.TrimSpace(modelID),
+		Input: RunInput{Text: text}, Options: RunOptions{NoUserInteraction: true, PermissionType: permissionType},
 	}}
 }
 
@@ -262,7 +259,26 @@ func hasSubagentAdmission(view flruntime.ThreadView, requestKey string) bool {
 	return false
 }
 
-func (service *Service) ensureChildThreadSettings(ctx context.Context, parent *run, childID, parentID, agentType string) error {
+func subagentInputText(ctx context.Context, threads flruntime.ThreadService, view flruntime.ThreadView, requestKey string) (string, bool, error) {
+	reader, ok := threads.(flruntime.ThreadSendReader)
+	if !ok {
+		return "", false, errors.New("subagent input lookup is unavailable")
+	}
+	input, found, err := reader.LookupSend(ctxOrBackground(ctx), flruntime.LookupSendInput{
+		ThreadID: view.ThreadID, RequestKey: flruntime.RequestKey(requestKey),
+	})
+	if err != nil || found {
+		return input.Text, found, err
+	}
+	for _, item := range view.Items {
+		if item.ID == "steer:"+requestKey && item.Kind == flruntime.ThreadItemSteering {
+			return item.Text, true, nil
+		}
+	}
+	return "", false, nil
+}
+
+func (service *Service) ensureChildThreadSettings(ctx context.Context, parent *run, childID, parentID string) error {
 	if service == nil || service.threadsDB == nil || parent == nil {
 		return errors.New("child thread catalog is unavailable")
 	}
@@ -281,9 +297,6 @@ func (service *Service) ensureChildThreadSettings(ctx context.Context, parent *r
 	child.ThreadID = childID
 	child.ParentThreadID = parentID
 	child.PermissionType = permissionTypeString(parent.currentPermissionType())
-	if normalizeSubagentAgentType(agentType) != subagentAgentTypeWorker {
-		child.PermissionType = permissionTypeString(FlowerPermissionReadonly)
-	}
 	child.PinnedAtUnixMs = 0
 	child.PinRank = 0
 	child.SettingsCreatedAtUnixMs = 0
@@ -315,8 +328,8 @@ func (runtime *floretSubagentRuntime) sendInput(ctx context.Context, toolCallID 
 		return nil, err
 	}
 	target := strings.TrimSpace(anyToString(args["target"]))
-	message := strings.TrimSpace(anyToString(args["message"]))
-	if target == "" || message == "" {
+	message := anyToString(args["message"])
+	if target == "" || strings.TrimSpace(message) == "" {
 		return nil, errors.New("subagents send_input requires target and message")
 	}
 	summary, found, err := runtime.childSummary(ctx, target)
@@ -330,7 +343,41 @@ func (runtime *floretSubagentRuntime) sendInput(ctx context.Context, toolCallID 
 	if err != nil {
 		return nil, err
 	}
-	request := runtime.childEffectRequest(parent, target, requestKey, message, summary.HostProfileRef)
+	existingView, err := threads.View(ctxOrBackground(ctx), summary.ID)
+	if err != nil {
+		return nil, err
+	}
+	admittedText, inputAdmitted, err := subagentInputText(ctx, threads, existingView, requestKey)
+	if err != nil {
+		return nil, err
+	}
+	if inputAdmitted {
+		if admittedText != message {
+			return nil, flruntime.ErrRequestConflict
+		}
+		snapshot := subagentSnapshotFromThread(summary, existingView)
+		return map[string]any{
+			"status": "ok", "action": subagentActionSendInput, "target": target,
+			"thread_id": target, "accepted": true,
+			"items": []map[string]any{boundedSubagentItem(subagentSnapshotPayload(snapshot))},
+		}, nil
+	}
+	if service.threadsDB == nil {
+		return nil, errors.New("subagent settings are unavailable")
+	}
+	settings, err := service.threadsDB.GetThreadSettingsByCanonicalThreadID(ctxOrBackground(ctx), target)
+	if err != nil {
+		return nil, err
+	}
+	if settings == nil {
+		return nil, errors.New("subagent settings are unavailable")
+	}
+	permission, err := parsePermissionType(settings.PermissionType)
+	if err != nil {
+		return nil, err
+	}
+	request := runtime.childEffectRequest(parent, target, requestKey, message,
+		settings.ModelID, permissionTypeString(permission))
 	controller, ok := threads.(flruntime.ThreadSteeringController)
 	if !ok {
 		return nil, errors.New("subagent steering is unavailable")
@@ -536,7 +583,7 @@ func (runtime *floretSubagentRuntime) status(ctx context.Context, args map[strin
 		taskName, _ := truncateByRunes(snapshot.TaskName, 140)
 		item := map[string]any{
 			"thread_id": snapshot.ThreadID, "task_name": taskName,
-			"agent_type": snapshot.AgentType, "status": snapshot.Status,
+			"status":         snapshot.Status,
 			"latest_turn_id": snapshot.LatestTurnID, "closed": snapshot.Closed,
 			"queued_inputs": snapshot.QueuedInputs, "updated_at_ms": snapshot.UpdatedAtMS,
 		}
@@ -620,8 +667,8 @@ func completedSubagentHandoffs(ctx context.Context, threads flruntime.ThreadServ
 		}
 		handoffs = append(handoffs, map[string]any{
 			"thread_id": threadID.String(), "turn_id": item.TurnID.String(), "run_id": item.RunID.String(),
-			"task_name": snapshot.TaskName, "agent_type": snapshot.AgentType,
-			"status": subagentStatusCompleted, "content": item.Text,
+			"task_name": snapshot.TaskName,
+			"status":    subagentStatusCompleted, "content": item.Text,
 		})
 	}
 	return handoffs, nil
@@ -683,7 +730,7 @@ func subagentThreadSummary(snapshot subagentSnapshot) flruntime.ThreadSummary {
 		Title: snapshot.Title, TitleStatus: snapshot.TitleStatus, TitleGeneration: snapshot.TitleGeneration,
 		ID: identity.ThreadID(snapshot.ThreadID), ParentThreadID: identity.ThreadID(snapshot.ParentThreadID),
 		ParentTurnID: identity.TurnID(snapshot.ParentTurnID), TaskName: snapshot.TaskName,
-		TaskDescription: snapshot.TaskDescription, HostProfileRef: snapshot.AgentType,
+		TaskDescription: snapshot.TaskDescription, HostProfileRef: snapshot.HostProfileRef,
 		ForkMode: snapshot.ContextMode, CreatedAt: time.UnixMilli(snapshot.CreatedAtMS),
 		UpdatedAt: time.UnixMilli(snapshot.UpdatedAtMS),
 	}
@@ -724,8 +771,9 @@ func subagentSnapshotFromThread(summary flruntime.ThreadSummary, view flruntime.
 		Title: summary.Title, TitleStatus: summary.TitleStatus, TitleGeneration: summary.TitleGeneration,
 		ThreadID: summary.ID.String(), TaskName: summary.TaskName, TaskDescription: summary.TaskDescription,
 		ParentThreadID: summary.ParentThreadID.String(), ParentTurnID: summary.ParentTurnID.String(),
-		AgentType: normalizeSubagentAgentType(summary.HostProfileRef), ContextMode: normalizeSubagentContextMode(summary.ForkMode),
-		Status: status, Failure: view.Failure, LatestTurnID: view.TurnID.String(), LastMessagePreview: truncateRunes(lastMessage, 160), WaitingPrompt: waitingPrompt,
+		HostProfileRef: summary.HostProfileRef,
+		ContextMode:    normalizeSubagentContextMode(summary.ForkMode),
+		Status:         status, Failure: view.Failure, LatestTurnID: view.TurnID.String(), LastMessagePreview: truncateRunes(lastMessage, 160), WaitingPrompt: waitingPrompt,
 		QueuedInputs: len(view.Queue), CreatedAtMS: timeUnixMS(summary.CreatedAt), UpdatedAtMS: timeUnixMS(summary.UpdatedAt),
 		Closed: closed, CanSendInput: !closed, CanInterrupt: view.Activity == flruntime.ThreadActivityActive,
 		CanClose: !closed,
@@ -784,7 +832,7 @@ func flowerSubagentSummaryFromSnapshot(snapshot subagentSnapshot) FlowerSubagent
 		Title: snapshot.Title, TitleStatus: string(snapshot.TitleStatus), TitleGeneration: snapshot.TitleGeneration,
 		ParentThreadID: snapshot.ParentThreadID, ThreadID: snapshot.ThreadID,
 		TaskName: snapshot.TaskName, TaskDescription: snapshot.TaskDescription,
-		AgentType: snapshot.AgentType, ContextMode: snapshot.ContextMode, Status: snapshot.Status,
+		ContextMode: snapshot.ContextMode, Status: snapshot.Status,
 		LastMessage: snapshot.LastMessagePreview, WaitingPrompt: snapshot.WaitingPrompt, QueuedInputs: snapshot.QueuedInputs,
 		CanSendInput: snapshot.CanSendInput, CanInterrupt: snapshot.CanInterrupt, CanClose: snapshot.CanClose,
 		CreatedAtUnixMs: snapshot.CreatedAtMS, UpdatedAtUnixMs: snapshot.UpdatedAtMS,
@@ -929,21 +977,6 @@ func normalizeSubagentContextMode(raw string) string {
 	return subagentContextModeMissionOnly
 }
 
-func normalizeSubagentAgentType(raw string) string {
-	value := strings.ToLower(strings.TrimSpace(raw))
-	switch value {
-	case subagentAgentTypeExplore, subagentAgentTypeWorker, subagentAgentTypeReviewer:
-		return value
-	default:
-		return subagentAgentTypeExplore
-	}
-}
-
-func isValidSubagentAgentType(value string) bool {
-	value = strings.ToLower(strings.TrimSpace(value))
-	return value == subagentAgentTypeExplore || value == subagentAgentTypeWorker || value == subagentAgentTypeReviewer
-}
-
 func isSubagentTerminalStatus(status string) bool {
 	switch strings.TrimSpace(status) {
 	case subagentStatusCompleted, subagentStatusFailed, subagentStatusCanceled, subagentStatusTimedOut:
@@ -955,7 +988,7 @@ func isSubagentTerminalStatus(status string) bool {
 
 func subagentSnapshotPayload(snapshot subagentSnapshot) map[string]any {
 	payload := map[string]any{
-		"id": snapshot.ThreadID, "thread_id": snapshot.ThreadID, "agent_type": snapshot.AgentType,
+		"id": snapshot.ThreadID, "thread_id": snapshot.ThreadID,
 		"context_mode": snapshot.ContextMode, "task_name": snapshot.TaskName,
 		"task_description": snapshot.TaskDescription, "status": snapshot.Status,
 		"last_message_preview": snapshot.LastMessagePreview, "waiting_prompt": snapshot.WaitingPrompt,
@@ -978,8 +1011,8 @@ func subagentListPayload(snapshot subagentSnapshot) map[string]any {
 	payload := subagentSnapshotPayload(snapshot)
 	item := map[string]any{
 		"thread_id": payload["thread_id"], "task_name": payload["task_name"],
-		"task_description": payload["task_description"], "agent_type": payload["agent_type"],
-		"context_mode": payload["context_mode"], "status": payload["status"],
+		"task_description": payload["task_description"],
+		"context_mode":     payload["context_mode"], "status": payload["status"],
 		"updated_at_ms": payload["updated_at_ms"], "last_message_preview": payload["last_message_preview"],
 		"can_send_input": payload["can_send_input"], "can_interrupt": payload["can_interrupt"],
 		"can_close": payload["can_close"],
@@ -1029,44 +1062,4 @@ func subagentStableID(prefix string, values ...string) string {
 	}
 	sum := sha256.Sum256([]byte(strings.Join(values, "\x00")))
 	return prefix + hex.EncodeToString(sum[:18])
-}
-
-type flowerSubagentPromptSpec struct {
-	AgentType   string
-	TaskName    string
-	Message     string
-	ContextMode string
-	Contract    subagentCapabilityContract
-}
-
-func buildFlowerSubagentPrompt(spec flowerSubagentPromptSpec) string {
-	lines := []string{
-		"# Delegated Mission", strings.TrimSpace(spec.Message), "", "# Role",
-		subagentRolePrompt(spec.AgentType), "", "# Operating Contract",
-		"- You are working for the parent Flower thread, not directly for the end user.",
-		"- Finish the delegated slice independently and verify concrete claims with tools when needed.",
-		"- Do not delegate, spawn child work, or ask the user for input.",
-		"- Return a focused final handoff with summary, evidence, verification, open risks, and parent actions.",
-		"- Use report_to_parent for important discoveries, blockers, or help while working. Ordinary progress needs no report. Completion notifications are delivered automatically; they contain no final report. The parent reads your final report when needed. Reporting does not end your mission.",
-	}
-	if normalizeSubagentContextMode(spec.ContextMode) == subagentContextModeFullHistory {
-		lines = append(lines, "- Use the inherited parent history only when it is relevant to this mission.")
-	} else {
-		lines = append(lines, "- Work from this mission and current evidence; parent history is not included.")
-	}
-	if len(spec.Contract.VisibleTools) > 0 {
-		lines = append(lines, "- Available tools: "+strings.Join(spec.Contract.VisibleTools, ", "))
-	}
-	return strings.TrimSpace(strings.Join(lines, "\n"))
-}
-
-func subagentRolePrompt(agentType string) string {
-	switch normalizeSubagentAgentType(agentType) {
-	case subagentAgentTypeWorker:
-		return "Worker: implement or verify the assigned slice within the parent policy."
-	case subagentAgentTypeReviewer:
-		return "Reviewer: independently inspect evidence and report precise, actionable findings."
-	default:
-		return "Explorer: investigate the bounded question and report findings without changing the workspace."
-	}
 }

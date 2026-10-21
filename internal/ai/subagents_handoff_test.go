@@ -83,7 +83,7 @@ func completedSubagentTestSummary(threadID, taskName, preview string, updatedAt 
 	outcome := flruntime.TurnOutcomeCompleted
 	return flruntime.ThreadSummary{
 		ID: identity.ThreadID(threadID), ParentThreadID: "thread-parent", ParentTurnID: "turn-parent",
-		TaskName: taskName, HostProfileRef: subagentAgentTypeExplore,
+		TaskName: taskName, HostProfileRef: "explore",
 		CreatedAt: updatedAt.Add(-time.Second), UpdatedAt: updatedAt,
 		Activity: flruntime.ThreadActivityIdle, LastOutcome: &outcome,
 		TurnID: "turn-" + identity.TurnID(threadID), RunID: "run-" + identity.RunID(threadID),
@@ -149,8 +149,8 @@ func TestFloretSubagentWaitAndInspectReturnCompleteHandoffs(t *testing.T) {
 		targets = append(targets, summary.ID.String())
 		wantHandoffs = append(wantHandoffs, map[string]any{
 			"thread_id": summary.ID.String(), "turn_id": summary.TurnID.String(), "run_id": summary.RunID.String(),
-			"task_name": summary.TaskName, "agent_type": subagentAgentTypeExplore,
-			"status": subagentStatusCompleted, "content": spec.content,
+			"task_name": summary.TaskName,
+			"status":    subagentStatusCompleted, "content": spec.content,
 		})
 	}
 	adapter, _ := newSubagentHandoffTestAdapter(t, summaries, views)
@@ -188,7 +188,7 @@ func TestFloretSubagentTimedOutWaitReturnsOnlyCompletedHandoffs(t *testing.T) {
 	failed.Failure = &flruntime.ThreadTurnFailure{Code: flruntime.ThreadTurnFailureProvider, Message: "provider unavailable"}
 	running := flruntime.ThreadSummary{
 		ID: "thread-running", ParentThreadID: "thread-parent", ParentTurnID: "turn-parent",
-		TaskName: "Running", HostProfileRef: subagentAgentTypeExplore,
+		TaskName: "Running", HostProfileRef: "explore",
 		CreatedAt: now, UpdatedAt: now, Activity: flruntime.ThreadActivityActive,
 		TurnID: "turn-running", RunID: "run-running", LastItemPreview: "running preview",
 	}
@@ -223,7 +223,7 @@ func TestFloretSubagentInspectKeepsActiveAndMissingTargetsStatusOnly(t *testing.
 	now := time.Now()
 	running := flruntime.ThreadSummary{
 		ID: "thread-running", ParentThreadID: "thread-parent", ParentTurnID: "turn-parent",
-		TaskName: "Running", HostProfileRef: subagentAgentTypeExplore,
+		TaskName: "Running", HostProfileRef: "explore",
 		CreatedAt: now, UpdatedAt: now, Activity: flruntime.ThreadActivityActive,
 		TurnID: "turn-running", RunID: "run-running", LastItemPreview: "running preview",
 	}

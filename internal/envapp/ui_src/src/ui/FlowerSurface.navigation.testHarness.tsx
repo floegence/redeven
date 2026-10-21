@@ -750,7 +750,6 @@ export function subagentSummary(overrides: Partial<FlowerSubagentSummary> = {}):
     thread_id: 'thread-child-review',
     task_name: 'Review API contract', title: 'Review API contract', title_status: 'ready' as const, title_generation: 1,
     task_description: 'Review the API boundary.',
-    agent_type: 'reviewer',
     status: 'running',
     can_send_input: false,
     can_interrupt: true,

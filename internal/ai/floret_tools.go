@@ -16,11 +16,8 @@ import (
 )
 
 const (
-	subagentToolHostContextAgentTypeKey     = "subagent_agent_type"
 	subagentToolHostContextChildRunIDKey    = "child_run_id"
 	subagentToolHostContextChildThreadIDKey = "child_thread_id"
-	subagentToolHostContextForkModeKey      = "subagent_fork_mode"
-	subagentToolHostContextPublicationIDKey = "subagent_publication_id"
 
 	floretToolHostContextPermissionSnapshotIDKey = "permission_snapshot_id"
 	floretToolHostContextPermissionEpochKey      = "permission_surface_epoch"

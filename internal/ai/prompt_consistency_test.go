@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -54,7 +55,10 @@ func TestFlowerPromptMatchesSelectedToolSurface(t *testing.T) {
 					}
 					digest := sha256.Sum256(definitions)
 					if hex.EncodeToString(digest[:]) != before.ToolsSHA256 {
-						t.Fatal("persona simplification changed provider-visible tool definitions")
+						t.Fatal("tool definition baseline changed")
+					}
+					if strings.Contains(string(definitions), `"agent_type"`) {
+						t.Fatal("current tool surface retained the removed agent_type field")
 					}
 				})
 			}

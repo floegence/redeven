@@ -37,13 +37,18 @@ their own services and tools. Source configuration and credentials stay unchange
 - Persist Ask User and queued input through service restart, answer the unchanged
   question, finish both tasks, accept an identical answer replay, and reject a
   conflicting answer. Stopping an unanswered question permits a fresh task.
-- Spawn two real child workers before waiting; verify their tool execution,
+- Spawn two real child tasks before waiting; verify their tool execution,
   complete result handoffs, aggregated result, inspection, and follow-up input
   without creating duplicate children.
 - Fork full conversation history into a child, recover a fact omitted from its
   mission, and perform a real child file write. Assert the fact is present in
   inherited messages, absent from the mission, and never written by the parent.
   Closing the child retains its history.
+- Delegate an isolated read-only Git audit using terminal commands, preserve the
+  exact task and authorization text, and check branch divergence, merge base,
+  worktree state and unchanged files/refs. Separately delegate an authorized file
+  write and public-page fetch; require successful child tool effects with no
+  parent execution on the child's behalf.
 - Interrupt a child during a running command, send replacement work to the same
   child, and prevent the original delayed effect.
 - Stop the parent while a child is running, wait for both canonical cancellations,
@@ -103,7 +108,26 @@ Run `scripts/check_flower_tasks_ollama.sh` explicitly, or use
 operation cases. Set
 `REDEVEN_FLOWER_CONTEXT_SOURCE_STATE_ROOT` when the existing local-environment
 path differs from `$HOME/.redeven/local-environment`. The script sets
-`GOWORK=off` and is outside ordinary CI and the push gate.
+`GOWORK=off` and is outside ordinary CI and the push gate. The direct-delegation
+case is `TestE2E_FlowerOllamaTaskLifecycle/subagent_direct_instruction_capabilities`.
+
+Deterministic contract tests separately verify schema, exact messages, permission
+inheritance and historical replay. A compiled or skipped real-model case is not
+model behavior qualification; record its actual execution outcome independently.
+
+### Direct-delegation qualification status, 2026-10-21
+
+Deterministic tests pass for the role-free schema, exact delegation text, all
+three inherited permission modes, historical readonly preservation, and canonical
+steering and spawn replay. The replay case changes child permissions, rejects
+conflicting content, and verifies that removed historical queued input remains
+removed. Shared Flower UI and targeted child browser checks also pass.
+
+Real-model qualification remains unexecuted: the focused scenario stops in the
+profile loader with `the selected model must belong to an Ollama provider`.
+The available selected profile is DeepSeek. No inference or delegated Git,
+file-write, or network scenario runs before this failure; deterministic results
+do not certify model instruction compliance.
 
 Set `REDEVEN_FLOWER_TASK_REPORT_ROOT` to a private evidence directory for per-case
 JSON reports. They contain synthetic task views, model request metadata, fault

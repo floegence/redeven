@@ -35,7 +35,7 @@ export function projectSubagentDetailThread(
     created_at_ms: Math.max(0, Math.floor(Number(summary.created_at_ms ?? updatedAt))),
     updated_at_ms: updatedAt,
     status: 'idle',
-    source_label: trimString(summary.agent_type) || 'Subagent',
+    source_label: title,
     target_labels: [],
     read_only_reason: 'Subagent details are managed by the parent Flower thread.',
     parent_thread_id: trimString(summary.parent_thread_id),

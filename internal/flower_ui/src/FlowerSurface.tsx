@@ -5305,7 +5305,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       title: '', title_status: 'unset', title_generation: 0,
       task_name: trimString(item.taskName) || trimString(item.title),
       task_description: trimString(item.taskDescription),
-      agent_type: trimString(item.agentType),
       status: item.status,
       can_send_input: false,
       can_interrupt: false,
@@ -11575,14 +11574,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
   const subagentRowTitle = (item: FlowerSubagentPanelItem): string => (
-    trimString(item.displayName) || trimString(item.title) || trimString(item.taskName) || subagentsCopy().typeLabels.unknown
+    trimString(item.displayName) || trimString(item.title) || trimString(item.taskName) || subagentsCopy().activity.labels.subagent
   );
   const activeSubagentTitle = createMemo(() => {
     const item = activeSubagentItem();
     if (item) return subagentRowTitle(item);
     const summary = subagentDetailSummary();
     const taskName = trimString(summary?.task_name);
-    return taskName ? presentSubagentTaskName(taskName) : subagentsCopy().typeLabels.unknown;
+    return taskName ? presentSubagentTaskName(taskName) : subagentsCopy().activity.labels.subagent;
   });
   const subagentSummaryStatus = createMemo(() => {
     return subagentStatusLabel(subagentDetailActiveStatus());
@@ -11591,19 +11590,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const summary = subagentDetailSummary();
     const item = activeSubagentItem();
     return trimString(summary?.task_description || item?.taskDescription || summary?.task_name || item?.taskName || '');
-  });
-  const subagentDetailAgentTypeLabel = createMemo(() => {
-    const raw = trimString(subagentDetailSummary()?.agent_type || activeSubagentItem()?.agentType).toLowerCase();
-    switch (raw) {
-      case 'explore':
-        return subagentsCopy().typeLabels.explore;
-      case 'worker':
-        return subagentsCopy().typeLabels.worker;
-      case 'reviewer':
-        return subagentsCopy().typeLabels.reviewer;
-      default:
-        return subagentsCopy().typeLabels.unknown;
-    }
   });
   const subagentDetailElapsedLabel = createMemo(() => {
     const summary = subagentDetailSummary();
@@ -11809,7 +11795,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       status={subagentDetailActiveStatus()}
       statusLabel={subagentSummaryStatus()}
       statusIndicator={subagentStatusIndicator(subagentDetailActiveStatus())}
-      agentTypeLabel={subagentDetailAgentTypeLabel()}
       elapsedLabel={subagentDetailElapsedLabel()}
       description={subagentDetailMeta()}
       loading={subagentDetailLoading()}

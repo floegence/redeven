@@ -655,12 +655,6 @@ export const flowerSurfaceEnUS = {
       timedOut: 'Timed out',
       unknown: 'Unknown',
     },
-    types: {
-      explore: 'Explore',
-      worker: 'Worker',
-      reviewer: 'Reviewer',
-      unknown: 'Subagent',
-    },
     activity: {
       actions: {
         spawn: 'Create subagent',
@@ -691,7 +685,7 @@ export const flowerSurfaceEnUS = {
         action: 'action',
         status: 'result status',
         thread: 'thread',
-        subagent: 'subagent',
+        subagent: 'Subagent',
         task: 'task',
         title: 'title',
         profile: 'profile',

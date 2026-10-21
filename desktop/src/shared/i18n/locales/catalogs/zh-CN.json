@@ -991,12 +991,6 @@
         "timedOut": "已超时",
         "unknown": "未知"
       },
-      "types": {
-        "explore": "探索",
-        "worker": "执行",
-        "reviewer": "审阅",
-        "unknown": "子代理"
-      },
       "activity": {
         "actions": {
           "spawn": "创建子代理",

@@ -1184,12 +1184,6 @@
         "timedOut": "Expiré",
         "unknown": "Inconnu"
       },
-      "types": {
-        "explore": "Explorateur",
-        "worker": "Agent d’exécution",
-        "reviewer": "Relecteur",
-        "unknown": "Sous-agent"
-      },
       "activity": {
         "actions": {
           "spawn": "Créer un sous-agent",
@@ -1219,7 +1213,7 @@
           "action": "action",
           "status": "état du résultat",
           "thread": "fil de conversation",
-          "subagent": "sous-agent",
+          "subagent": "Sous-agent",
           "task": "tâche",
           "title": "titre",
           "profile": "profil",
@@ -5877,12 +5871,6 @@
         "timedOut": "Expiré",
         "unknown": "Inconnu"
       },
-      "types": {
-        "explore": "Explorateur",
-        "worker": "Agent d’exécution",
-        "reviewer": "Relecteur",
-        "unknown": "Sous-agent"
-      },
       "activity": {
         "actions": {
           "spawn": "Créer un sous-agent",
@@ -5912,7 +5900,7 @@
           "action": "opération",
           "status": "état du résultat",
           "thread": "fil",
-          "subagent": "sous-agent",
+          "subagent": "Sous-agent",
           "task": "tâche",
           "title": "titre",
           "profile": "profil",

@@ -54,7 +54,7 @@ func TestSubagentGuidanceInterruptsProviderWithoutReplacingTask(t *testing.T) {
 		t.Fatal(err)
 	}
 	childRuntime := newServiceFloretSubagentRuntime(svc, &run{sessionMeta: meta, endpointID: meta.EndpointID, threadID: parent.ThreadID, turnID: "parent-turn", currentModelID: "openai/gpt-5-mini", permissionType: FlowerPermissionReadonly})
-	spawned, err := childRuntime.spawn(t.Context(), "spawn-guide", map[string]any{"task_name": "Review", "task_description": "Review sources", "agent_type": "reviewer", "message": "Start reviewing"})
+	spawned, err := childRuntime.spawn(t.Context(), "spawn-guide", map[string]any{"task_name": "Review", "task_description": "Review sources", "message": "Start reviewing"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,8 +110,11 @@ func TestSubagentGuidanceInterruptsProviderWithoutReplacingTask(t *testing.T) {
 	if pending != 0 {
 		t.Fatalf("unconsumed effect requests=%d", pending)
 	}
-	if _, err := childRuntime.sendInput(t.Context(), "guide-tool", args); err != nil {
+	if err := svc.threadsDB.UpdateThreadPermissionType(t.Context(), meta.EndpointID, childID.String(), permissionTypeString(FlowerPermissionFullAccess)); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := childRuntime.sendInput(t.Context(), "guide-tool", args); err != nil {
+		t.Fatalf("replay after current permission changed: %v", err)
 	}
 	if calls.Load() != 2 {
 		t.Fatalf("replay interrupted provider again: %d", calls.Load())
@@ -167,6 +170,45 @@ func TestSubagentGuidanceInterruptsProviderWithoutReplacingTask(t *testing.T) {
 	if err != nil || final.Activity != flruntime.ThreadActivityIdle || final.TurnID != stopped.TurnID || final.RunID != stopped.RunID || calls.Load() != 3 {
 		t.Fatalf("old guidance revived stopped child: %+v calls=%d err=%v", final, calls.Load(), err)
 	}
+	spawnArgs := map[string]any{"task_name": "Review", "task_description": "Review sources", "message": "Start reviewing"}
+	if replay, err := childRuntime.spawn(t.Context(), "spawn-guide", spawnArgs); err != nil || replay["thread_id"] != childID.String() {
+		t.Fatalf("spawn replay after current permission changed: result=%v err=%v", replay, err)
+	}
+	spawnArgs["message"] = "Different work under the same request key"
+	if _, err := childRuntime.spawn(t.Context(), "spawn-guide", spawnArgs); !errors.Is(err, flruntime.ErrRequestConflict) {
+		t.Fatalf("conflicting spawn replay=%v", err)
+	}
+	parentID := identity.ThreadID(parent.ThreadID)
+	children, err := svc.threadRuntime.List(t.Context(), flruntime.ThreadScope{ParentID: &parentID})
+	if err != nil || len(children) != 1 || calls.Load() != 3 {
+		t.Fatalf("spawn replay duplicated child execution: children=%d calls=%d err=%v", len(children), calls.Load(), err)
+	}
+	const removedText = "Historical queued child instruction"
+	removedKey, err := subagentInputRequestID(parent.ThreadID, childID.String(), "removed-guidance")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.persistExecutionAuthority(t.Context(), meta, childID.String(), removedKey, "", permissionTypeString(FlowerPermissionReadonly)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.threadRuntime.ImportPendingInputs(t.Context(), flruntime.ImportPendingInputsInput{
+		ThreadID: childID, Items: []flruntime.ImportedPendingInput{{RequestKey: flruntime.RequestKey(removedKey), Input: flruntime.UserInput{Text: removedText}}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.threadRuntime.DeleteQueued(t.Context(), flruntime.DeleteQueuedInput{
+		ThreadID: childID, QueueItemID: "queue:" + removedKey, RequestKey: "remove-historical-guidance",
+		ExpectedInputSHA256: queuedInputFingerprint(flruntime.UserInput{Text: removedText}),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := childRuntime.sendInput(t.Context(), "removed-guidance", map[string]any{"target": childID.String(), "message": removedText}); err != nil {
+		t.Fatalf("removed historical input replay: %v", err)
+	}
+	final, err = svc.threadRuntime.View(t.Context(), childID)
+	if err != nil || len(final.Queue) != 0 || final.Activity != flruntime.ThreadActivityIdle || calls.Load() != 3 {
+		t.Fatalf("removed instruction replay revived child: queue=%d calls=%d err=%v", len(final.Queue), calls.Load(), err)
+	}
 }
 
 func TestSubagentInputOperationsAuthorizeAndConsumeCanonicalQueue(t *testing.T) {
@@ -180,7 +222,7 @@ func TestSubagentInputOperationsAuthorizeAndConsumeCanonicalQueue(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.ensureChildThreadSettings(t.Context(), &run{sessionMeta: meta, endpointID: meta.EndpointID, threadID: parent.ThreadID, permissionType: FlowerPermissionReadonly}, child.ThreadID.String(), parent.ThreadID, "reviewer"); err != nil {
+	if err := svc.ensureChildThreadSettings(t.Context(), &run{sessionMeta: meta, endpointID: meta.EndpointID, threadID: parent.ThreadID, permissionType: FlowerPermissionReadonly}, child.ThreadID.String(), parent.ThreadID); err != nil {
 		t.Fatal(err)
 	}
 	input := flruntime.UserInput{Text: "Canonical instruction", References: []flruntime.MessageReference{{ReferenceID: "reference", Kind: flruntime.MessageReferenceText, Label: "Source", Text: "Complete source"}}}

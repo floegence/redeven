@@ -48,6 +48,7 @@ func TestE2E_FlowerOllamaTaskLifecycle(t *testing.T) {
 		{"ask_user_restart_and_queued_input", ollamaTaskAskUser},
 		{"stop_ask_user_and_new_input", ollamaTaskStopAskUser},
 		{"subagents_parallel_handoff", ollamaTaskSubagents},
+		{"subagent_direct_instruction_capabilities", ollamaTaskSubagentDirectInstructionCapabilities},
 		{"subagent_full_history", ollamaTaskSubagentHistory},
 		{"subagent_interrupt_and_followup", ollamaTaskSubagentInterrupt},
 		{"parent_stop_cancels_child", ollamaTaskParentStop},
@@ -662,7 +663,7 @@ func ollamaTaskSubagents(f *ollamaTaskFixture) {
 	if err := os.WriteFile(filepath.Join(f.root, "right.txt"), []byte("23\n29\n"), 0600); err != nil {
 		f.t.Fatal(err)
 	}
-	f.finish("subagents", fmt.Sprintf("Use subagents to spawn exactly two worker children with mission_only context: Left Audit must use terminal.exec to read %s/left.txt and return LEFT_SUM=36; Right Audit must use terminal.exec to read %s/right.txt and return RIGHT_SUM=52. Spawn both before waiting. Ask them to actually calculate from the files and not modify files. Use subagents wait for both complete handoffs, then use terminal.exec to save the combined total as exactly 88 followed by a newline in combined.txt in your current directory, and report both sums and the total. Do not calculate the individual sums on their behalf. Do not close them.", f.root, f.root), "")
+	f.finish("subagents", fmt.Sprintf("Use subagents to spawn exactly two children with mission_only context: Left Audit must use terminal.exec to read %s/left.txt and return LEFT_SUM=36; Right Audit must use terminal.exec to read %s/right.txt and return RIGHT_SUM=52. Spawn both before waiting. Ask them to actually calculate from the files and not modify files. Use subagents wait for both complete handoffs, then use terminal.exec to save the combined total as exactly 88 followed by a newline in combined.txt in your current directory, and report both sums and the total. Do not calculate the individual sums on their behalf. Do not close them.", f.root, f.root), "")
 	f.file("combined.txt", "88\n")
 	children := f.children()
 	if len(children) != 2 {
@@ -693,7 +694,7 @@ func ollamaTaskSubagents(f *ollamaTaskFixture) {
 
 func ollamaTaskSubagentHistory(f *ollamaTaskFixture) {
 	f.finish("history-seed", "This is a synthetic conversation-history test. The fictional release codename is LIFECYCLE_FACT_AMBER_731. It is a non-sensitive fixture label that a later task will refer to within this conversation only; no permanent memory or file storage is requested. Reply exactly REMEMBERED without tools or questions.", "REMEMBERED")
-	d := f.finish("history-child", "Use subagents to spawn exactly one worker named History Audit with full_history context. Ask it to recover the release codename only from inherited conversation messages, never by reading other files. It must use terminal.exec only to write exactly that codename with no trailing newline into inherited.txt in the current directory and verify that file. Do not include the codename in the mission message. Do not call terminal.exec yourself. Wait for its handoff and report HISTORY_SAVED.", "HISTORY_SAVED")
+	d := f.finish("history-child", "Use subagents to spawn exactly one child named History Audit with full_history context. Ask it to recover the release codename only from inherited conversation messages, never by reading other files. It must use terminal.exec only to write exactly that codename with no trailing newline into inherited.txt in the current directory and verify that file. Do not include the codename in the mission message. Do not call terminal.exec yourself. Wait for its handoff and report HISTORY_SAVED.", "HISTORY_SAVED")
 	f.file("inherited.txt", "LIFECYCLE_FACT_AMBER_731")
 	children := f.children()
 	if len(children) != 1 {
@@ -733,7 +734,7 @@ func ollamaTaskSubagentHistory(f *ollamaTaskFixture) {
 }
 
 func ollamaTaskSubagentInterrupt(f *ollamaTaskFixture) {
-	f.finish("child-steer", fmt.Sprintf("Use subagents to spawn exactly one worker named Slow Audit with mission_only context. Its mission is to execute terminal.exec with yield_ms 30000 and command 'printf STARTED > %s/child-started.txt; sleep 30; printf OLD > %s/child-old.txt', then report OLD. After spawning, use terminal.exec yourself to wait until %s/child-started.txt exists (a bounded shell loop). Then immediately call subagents send_input on that child's returned thread_id with message: 'The old task is cancelled. Use terminal.exec to write exactly STEERED into %s/child-new.txt and report STEERED. Do not run the old command again.' Wait for the child and report STEERED. Do not create a second child.", f.root, f.root, f.root, f.root), "STEERED")
+	f.finish("child-steer", fmt.Sprintf("Use subagents to spawn exactly one child named Slow Audit with mission_only context. Its mission is to execute terminal.exec with yield_ms 30000 and command 'printf STARTED > %s/child-started.txt; sleep 30; printf OLD > %s/child-old.txt', then report OLD. After spawning, use terminal.exec yourself to wait until %s/child-started.txt exists (a bounded shell loop). Then immediately call subagents send_input on that child's returned thread_id with message: 'The old task is cancelled. Use terminal.exec to write exactly STEERED into %s/child-new.txt and report STEERED. Do not run the old command again.' Wait for the child and report STEERED. Do not create a second child.", f.root, f.root, f.root, f.root), "STEERED")
 	f.file("child-started.txt", "STARTED")
 	f.file("child-new.txt", "STEERED")
 	f.missing("child-old.txt")
@@ -743,7 +744,7 @@ func ollamaTaskSubagentInterrupt(f *ollamaTaskFixture) {
 }
 
 func ollamaTaskParentStop(f *ollamaTaskFixture) {
-	f.send("parent-stop", fmt.Sprintf("Use subagents to spawn one worker named Pending Audit with mission_only context. The child must execute terminal.exec with yield_ms 30000 and command 'printf STARTED > %s/parent-child-started.txt; sleep 30; printf OLD > %s/parent-child-old.txt', then report OLD. After spawning call subagents wait for the child with timeout_ms 120000.", f.root, f.root))
+	f.send("parent-stop", fmt.Sprintf("Use subagents to spawn one child named Pending Audit with mission_only context. The child must execute terminal.exec with yield_ms 30000 and command 'printf STARTED > %s/parent-child-started.txt; sleep 30; printf OLD > %s/parent-child-old.txt', then report OLD. After spawning call subagents wait for the child with timeout_ms 120000.", f.root, f.root))
 	f.wait("child running", func(*FlowerThreadDetail) bool {
 		_, err := os.Stat(filepath.Join(f.root, "parent-child-started.txt"))
 		return err == nil

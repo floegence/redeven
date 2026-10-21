@@ -26,6 +26,44 @@ func TestBuiltInToolDefinitions_StrictSchemaCompatible(t *testing.T) {
 	}
 }
 
+func TestSubagentsSpawnSchemaUsesParentProvidedInstructions(t *testing.T) {
+	t.Parallel()
+
+	var definition ToolDef
+	for _, item := range builtInToolDefinitions() {
+		if item.Name == "subagents" {
+			definition = item
+			break
+		}
+	}
+	if definition.Name == "" {
+		t.Fatal("subagents definition not found")
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(definition.InputSchema, &schema); err != nil {
+		t.Fatal(err)
+	}
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema has no properties: %#v", schema)
+	}
+	spawn, ok := properties["action"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(spawn["enum"]), "spawn") {
+		t.Fatalf("schema action does not include spawn: %#v", properties["action"])
+	}
+	if _, exists := properties["agent_type"]; exists {
+		t.Fatal("subagents schema still exposes agent_type")
+	}
+	for _, required := range []string{"task_name", "task_description", "message"} {
+		if _, exists := properties[required]; !exists {
+			t.Errorf("subagents schema is missing %q", required)
+		}
+	}
+	if !strings.Contains(definition.Description, "execution authorization in message") || strings.Contains(definition.Description, "agent_type") {
+		t.Fatalf("subagents description does not match direct delegation: %q", definition.Description)
+	}
+}
+
 func TestBuiltInToolDefinitions_ApplyPatchContractIsCanonical(t *testing.T) {
 	t.Parallel()
 

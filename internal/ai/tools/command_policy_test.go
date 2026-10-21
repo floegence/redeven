@@ -392,22 +392,8 @@ func TestInvocationPolicies_Subagents(t *testing.T) {
 		detail   string
 	}{
 		{
-			name:     "explore spawn is delegation control",
-			args:     map[string]any{"action": "spawn", "agent_type": "explore"},
-			approval: false,
-			risk:     "delegation",
-			detail:   "spawn",
-		},
-		{
-			name:     "reviewer spawn is delegation control",
-			args:     map[string]any{"action": "spawn", "agent_type": "reviewer"},
-			approval: false,
-			risk:     "delegation",
-			detail:   "spawn",
-		},
-		{
-			name:     "worker spawn is delegation control",
-			args:     map[string]any{"action": "spawn", "agent_type": "worker"},
+			name:     "spawn is delegation control",
+			args:     map[string]any{"action": "spawn"},
 			approval: false,
 			risk:     "delegation",
 			detail:   "spawn",

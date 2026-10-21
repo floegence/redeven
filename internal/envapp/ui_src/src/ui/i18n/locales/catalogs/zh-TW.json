@@ -1184,12 +1184,6 @@
         "timedOut": "已逾時",
         "unknown": "未知"
       },
-      "types": {
-        "explore": "探索",
-        "worker": "執行",
-        "reviewer": "審閱",
-        "unknown": "子代理"
-      },
       "activity": {
         "actions": {
           "spawn": "建立子代理",
@@ -5876,12 +5870,6 @@
         "canceled": "已取消",
         "timedOut": "已逾時",
         "unknown": "未知"
-      },
-      "types": {
-        "explore": "探索",
-        "worker": "執行",
-        "reviewer": "審閱",
-        "unknown": "子代理"
       },
       "activity": {
         "actions": {

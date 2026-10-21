@@ -8,6 +8,10 @@
 
 - Reduce the [base Flower prompt](ai/flower-prompt-and-rule-sources.md) to one shared introduction. Keep tool definitions, native Floret guidance and managed context separate; replace removed-policy text checks with identity, capability and provider-request regressions.
 
+## 2026-10-21 — Direct Flower subagent delegation
+
+- Remove role-selected child prompts and permissions. Parents now provide task and execution authorization directly in `message`, while `context_mode` selects inherited history; new children inherit current parent permission, and later child input uses current child settings. Preserve historical role metadata and admitted requests without using them to choose current behavior. See [subagent runtime](ai/subagent-runtime.md), [tool permissions](ai/tool-permission-runtime.md), and [Floret adapter boundary](ai/floret-redeven-adapter-and-projection.md).
+
 ## 2026-10-20 — Quiet Flower conversation navigation
 
 - Remove the floating conversation-loading status from the shared Flower surface. Keep existing inline loading, selected-row feedback, retained history and drafts, and interaction guards. See [conversation selection](ui/flower-thread-selection.md).

@@ -352,7 +352,6 @@ export type FlowerSubagentsCopy = Readonly<{
   unavailableThread: string;
   readOnlyComposerLabel: string;
   statusLabels: Readonly<Record<'queued' | 'running' | 'waiting_input' | 'completed' | 'failed' | 'canceled' | 'timed_out' | 'unknown', string>>;
-  typeLabels: Readonly<Record<'explore' | 'worker' | 'reviewer' | 'unknown', string>>;
   activity: Readonly<{
     actions: Readonly<Record<'spawn' | 'send_input' | 'wait' | 'list' | 'status' | 'inspect' | 'close' | 'close_all' | 'unknown', string>>;
     hints: Readonly<Record<'status' | 'inspect', string>>;
@@ -1500,12 +1499,6 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       timed_out: 'Timed out',
       unknown: 'Unknown',
     },
-    typeLabels: {
-      explore: 'Explore',
-      worker: 'Worker',
-      reviewer: 'Reviewer',
-      unknown: 'Subagent',
-    },
     activity: {
       actions: {
         spawn: 'Create subagent',
@@ -1536,7 +1529,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
         action: 'action',
         status: 'result status',
         thread: 'thread',
-        subagent: 'subagent',
+        subagent: 'Subagent',
         task: 'task',
         title: 'title',
         profile: 'profile',

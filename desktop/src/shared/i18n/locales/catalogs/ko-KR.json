@@ -991,12 +991,6 @@
         "timedOut": "시간 초과",
         "unknown": "알 수 없음"
       },
-      "types": {
-        "explore": "탐색",
-        "worker": "작업자",
-        "reviewer": "검토자",
-        "unknown": "하위 에이전트"
-      },
       "activity": {
         "actions": {
           "spawn": "하위 에이전트 생성",

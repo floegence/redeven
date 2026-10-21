@@ -160,14 +160,6 @@ func validateSubagentsArgsByAction(action string, args map[string]any) error {
 		if strings.TrimSpace(anyToString(args["message"])) == "" {
 			return invalidSubagentArguments("invalid_arguments.subagents.spawn_requires_message", "spawn requires message", nil)
 		}
-		agentType := strings.ToLower(strings.TrimSpace(anyToString(args["agent_type"])))
-		if !isValidSubagentAgentType(agentType) {
-			return invalidSubagentArguments(
-				"invalid_arguments.subagents.spawn_invalid_agent_type",
-				fmt.Sprintf("invalid agent_type %q", strings.TrimSpace(anyToString(args["agent_type"]))),
-				nil,
-			)
-		}
 		return nil
 	case subagentActionWait:
 		if len(normalizeSubagentThreadIDs(args["ids"])) == 0 {

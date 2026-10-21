@@ -991,12 +991,6 @@
         "timedOut": "Zeitüberschreitung",
         "unknown": "Unbekannt"
       },
-      "types": {
-        "explore": "Erkunden",
-        "worker": "Ausführen",
-        "reviewer": "Rezensent",
-        "unknown": "Sub-Agent"
-      },
       "activity": {
         "actions": {
           "spawn": "Sub-Agent erstellen",

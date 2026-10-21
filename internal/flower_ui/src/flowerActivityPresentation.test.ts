@@ -120,7 +120,6 @@ function subagentSummary(overrides: Partial<FlowerSubagentSummary> = {}): Flower
     thread_id: 'child-thread-1',
     task_name: 'Review API boundary',
     task_description: 'Review the API boundary and identify contract risks.',
-    agent_type: 'reviewer',
     status: 'running',
     can_send_input: true,
     can_interrupt: true,
@@ -796,7 +795,6 @@ describe('presentFlowerActivityItem', () => {
         items: [{
           name: 'Review API boundary',
           description: 'Review the API boundary and identify contract risks.',
-          agent_type: '',
           raw_status: 'running',
           show_status: true,
           open_messages: {
@@ -890,7 +888,6 @@ describe('presentFlowerActivityItem', () => {
         thread_id: 'child-thread-1',
         task_name: 'Review API boundary',
         task_description: 'Review the API boundary and identify contract risks.',
-        agent_type: 'reviewer',
         fork_mode: 'none',
         status: 'completed',
       },
@@ -904,7 +901,6 @@ describe('presentFlowerActivityItem', () => {
         items: [{
           name: 'Review API boundary',
           description: 'Review the API boundary and identify contract risks.',
-          agent_type: 'reviewer',
           raw_status: 'completed',
           show_status: false,
           open_messages: {
@@ -941,7 +937,6 @@ describe('presentFlowerActivityItem', () => {
       expect.objectContaining({
         name: 'Review API boundary',
         description: 'Review the API boundary and identify contract risks.',
-        agent_type: '',
         raw_status: 'completed',
         show_status: true,
       }),
@@ -961,7 +956,6 @@ describe('presentFlowerActivityItem', () => {
       payload: {
         action: 'inspect',
         targets: [{
-          agent_type: 'custom-profile',
           status: 'paused_elsewhere',
           accepted: true,
           can_close: false,
