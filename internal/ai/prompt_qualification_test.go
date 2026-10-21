@@ -229,17 +229,7 @@ func promptQualificationSurface(t *testing.T, tc promptQualificationCase) (strin
 	// Qualification has no host attachment service or configured search provider.
 	tools = slices.DeleteFunc(tools, func(d ToolDef) bool { return d.Name == "attachment.read" || d.Name == "web.search" })
 	signals := filter.FilterTools(permission, builtInControlSignalDefinitions())
-	snapshot := promptRuntimeSnapshot{PermissionType: string(permission), PromptProfile: profile, AvailableToolNames: joinToolAndSignalNames(toolNamesForQualification(tools), toolNamesForQualification(signals)), AllowUserInteraction: len(signals) > 0}
-	prompt := buildPromptDocument(snapshot).render()
-	return prompt, append(tools, signals...)
-}
-
-func toolNamesForQualification(defs []ToolDef) []string {
-	names := make([]string, 0, len(defs))
-	for _, d := range defs {
-		names = append(names, d.Name)
-	}
-	return names
+	return buildFlowerSystemPrompt(), append(tools, signals...)
 }
 
 // This first-step check permits discovery and equivalent read-only commands.
@@ -328,10 +318,11 @@ func checkPromptQualificationTargetRules(root string) func(ModelGatewayResult) e
 
 func TestFlowerPromptSizeBudget(t *testing.T) {
 	prompt, _ := promptQualificationSurface(t, promptQualificationCase{})
+	assertFlowerIdentityPrompt(t, prompt)
 	// A byte budget is deterministic and tokenizer-independent; provider usage is
 	// measured separately in the paid lane, including unchanged tool definitions.
-	if len(prompt) > 11_000 {
-		t.Fatalf("full capability system prompt is %d bytes; budget=11000", len(prompt))
+	if len(prompt) > 200 {
+		t.Fatalf("identity system prompt is %d bytes; budget=200", len(prompt))
 	}
 	for _, tutorial := range []string{
 		"Put headings, lists, blockquotes", "reason_code must be one of:", "*** Add File:", "Script example after observing",
@@ -346,7 +337,6 @@ func TestFlowerPromptSizeBudget(t *testing.T) {
 			t.Errorf("interface/tutorial duplication in system prompt: %s", tutorial)
 		}
 	}
-	assertPromptContains(t, prompt, "Prefer the supplied file-editing tools over shell overwrites")
 }
 
 func TestE2E_FlowerPromptDeepSeek(t *testing.T) {

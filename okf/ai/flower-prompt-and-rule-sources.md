@@ -1,102 +1,62 @@
 ---
 type: AI Prompt Contract
 title: Flower prompt and rule sources
-description: Unify task, interaction and recovery instructions with actual capabilities and complete authorized rule sources.
+description: Keep one Flower introduction separate from runtime facts, capabilities and native engine guidance.
 tags: [ai, flower, prompts, context]
-timestamp: 2026-10-20T00:00:00Z
+timestamp: 2026-10-21T00:00:00Z
 ---
 # Summary
 
-Flower shares task, interaction and recovery policies across three profiles.
-Current tools supply operation semantics; admitted context carries complete facts
-and rule-source manifests, without silent clipping or a second lifecycle.
-Evidence triggers and task authorization remain explicit.
+Flower's host-owned base system prompt contains only its Chinese introduction as
+Redeven's general assistant. Every run profile uses the same introduction.
+Runtime facts, tool definitions and native Floret guidance retain their own owners
+and remain available independently of the product identity.
 
 # Contract
 
-Profiles express persona and interaction differences. The selected runToolSurface,
-including control signals and Floret Goal, defines capabilities. Answer directly
-when context suffices. Verification or context needed to assess a request triggers
-relevant workspace or authoritative external inspection. Explicit text-only
-requests forbid inspection; supplied text alone does not. Workflow rules constrain
-execution, never authorize extra edits, commits, pushes or deployment. Brief
-consultations omit plans and progress updates.
+`internal/ai/prompt_builder.go` is the sole source of the base system prompt. It
+introduces Flower and its software engineering, device use, information analysis,
+question answering, planning and creative scope. It adds no task modes, workflow
+policies, tool tutorials or persona-specific execution requirements.
 
-Identify the target repository/worktree and fully read applicable AGENTS.md,
-CLAUDE.md, .develop.md and .introduce.md root-to-target before dependent work.
-Discovery may accompany rule reads; await contents before code inspection.
-Exclude unrelated worktrees. Specific directory rules override ancestors;
-user/repository restrictions override generic delegation advice. Unreadable rules
-block affected work only; report blockers/conflicts.
+Run profiles remain capability metadata for interactive, autonomous and delegated
+execution; they do not select different identity text. `runToolSurface` continues
+to select permission-filtered tools and control signals. Operation schemas,
+authorization, approvals and cancellation remain enforced by the existing tool
+and published Floret runtime contracts. Guidance is not moved into tool
+definitions to replace the removed system policies.
 
-Manifests list rule paths/scope/readability, not contents. Discovery checks
-symlinks, distinguishes empty scans from failures and stops at Git roots.
-New worktrees require discovery. Floret validates complete admitted context;
-overflow releases admission for corrected same-identity retry. Earlier context
-remains immutable. Skill catalogs are facts, not activation instructions.
+Current directory, local date, timezone, permissions, skill catalog and rule-source
+manifests remain managed context facts. They do not enter the base system prompt.
+Manifests describe rule paths, scope and readability without loading their contents.
+Discovery checks symlinks and Git boundaries; incomplete discovery and context
+overflow fail admission rather than silently clipping facts. Earlier admitted
+context remains immutable, and a corrected request can retry with the same identity.
 
-Use ask_user for necessary decisions and requested guided questions; ordinary
-discussion/optional feedback may use prose. Noninteractive runs report blockers.
-Tool calls submit approval; never duplicate approval with a question. Floret owns
-schema correction, approval, cancellation, restart and [Goal](flower-goals.md).
-Observe finite commands this turn with existing process identity/returned cursor.
-Timeout classification retains partial results: hints do not prove non-execution
-or authorize replay. Inspect uncertainty; never bypass denials. No default Todo.
+Floret can append native Goal guidance to the final provider instructions. The
+one-introduction contract applies to Redeven's base prompt, not to that independent
+engine-owned addition. There is no separate social or creative prompt path.
 
-Filesystem roots/permissions define access; paths/references grant no authority.
-Authorized sibling worktrees use explicit terminal cwd/workdir and absolute file
-paths. apply_patch stays in the run directory; elsewhere use file tools.
-read_file retains typed pagination. Cite verified research URLs; local/hosted
-search differ. Browser fallback serves unavailable search, confirmed pre-execution
-failure or rendering needs, never denial. Replacing requested GUI work requires
-user acceptance.
+# Acceptance
 
-# Prompt Budget And Qualification
+Deterministic tests require the exact introduction across all 18 permission,
+profile and allowlist combinations. Immutable definition hashes guard against
+changes to the provider-visible tools. The base prompt has a 200 UTF-8 byte cap;
+byte counts are not provider token measurements.
 
-Policies own behavior; definitions own schemas/APIs/cursors. Do not shift guidance
-into tool definitions to claim savings. Preserve approval, Stop, uncertain effects,
-browser identity, verification, finite commands, media and isolated HTML previews.
+Service integration tests inspect actual provider requests, including live
+permission changes and queued work. They verify the introduction, current managed
+facts, normal completion, structured input resume, Goal operation and tool
+execution. Rules, skills and runtime facts retain their independent admission and
+refresh tests. Provider sampling uses the same production base prompt.
 
-Byte budgets are deterministic guards, not tokenizer measurements: 11,000 for the
-built-in surface, 12,000 for permission transitions including Goal, and 9,839 for
-the production fixture (definitions 37,000; combined 47,500). All 18 permission/
-profile/allowlist combinations shrink 50 UTF-8 bytes against `b65d82480`, retaining
-definition hashes. The final Goal-injected fixture falls from 9,889 to 9,839
-bytes; definitions remain 36,683 bytes. Replaced instructions use 1,948 bytes
-versus 1,998. Personas, Goal guidance and tool contracts are unchanged.
+`scripts/check_flower_prompt_deepseek.sh` remains an opt-in paid qualification
+lane. Synthetic receipts never execute proposed tools; the Service lane runs
+inside disposable state. Freeze inputs and retain requests, responses, receipts,
+usage and unresolved semantic reviews. Skipped paid runs are not new model
+qualification, and historical scores do not establish quality for this prompt.
 
-`scripts/check_flower_prompt_deepseek.sh` is an opt-in paid lane. It uses the
-selected local DeepSeek provider's effective `deepseek-flash` configuration via
-production parsers, fresh reports and normally three repetitions of 33 cases.
-Synthetic receipts test denial and uncertain effects without executing proposed
-operations. Fixtures and returned calls must satisfy tool schemas.
-
-Acceptance tests intent, evidence, scope and effects. Text-only requests forbid
-inspection; repository-aware assessment requires source evidence. Open-ended rule
-assessment permits proportionate read-only inspection. Quoted workflows do not
-authorize delivery. Calls/provider steps are efficiency observations; one-step
-routing cannot establish eventual completion of independent work after a blocker.
-
-Service retains Goal and real tools. A disposable Git repository carries a hidden
-workflow fact; the answer must use actual receipts, accepting equivalent Chinese.
-File snapshots and arguments check effects. Complete rules precede dependent reads;
-specifications precede repair. Process identity/cursors/completion, restart,
-structured input resume and readonly execution remain covered.
-
-Conservative shell classification does not prove a write. Unknown syntax/relevance
-is review_required, neither pass nor fail; scripts stay nonzero pending review.
-Oracle regressions cover incomplete/paginated rules, failed receipts, unsupported
-facts, unauthorized writes, process relaunches and wrong cursors. Manual semantic
-review must also assess source meaning and answer usefulness, not just keywords.
-
-Freeze prompts, inputs and harness before sampling. Retain hashes, requests,
-receipts, responses, errors and usage, never credentials. Missing configuration,
-skips or absent reports do not qualify. After oracle repairs, the same scorer in
-TestFlowerPromptQualificationRetainedEvidence reassesses both immutable response
-sets offline into a separate report; it does not resample until green or erase
-provider errors. Baseline source overlays cover old-prompt Service execution.
-Remove copied credentials/overlays before formal checks. Measure system bytes
-separately from provider input, including cache-read tokens.
+# Historical Qualification
 
 On 2026-10-20, the earlier 78/93 versus 86/93 claim was withdrawn: reasonable
 inspection was wrongly failed, including in Service. The earlier terminal defect
@@ -123,23 +83,22 @@ credentials and overlays were removed.
 
 # Boundaries
 
-Redeven owns product prompts and tool adaptation. The published Floret runtime owns
-canonical interaction, approval, cancellation, context validation and recovery.
-This change adds no public API, tool input shape, storage schema, durable rule
-loader, provider checkpoint rewrite or parallel waiting lifecycle.
+Redeven owns Flower's product identity and tool adaptation. Published Floret owns
+canonical interaction, approval, cancellation, context validation, Goal and
+recovery. The identity change adds no upstream API, tool schema, storage migration,
+rule loader or parallel lifecycle.
 
 # Evidence
 
-- redeven:internal/ai/prompt_builder.go — Shared policies; prompt_profiles.go owns unchanged personas.
-- redeven:internal/ai/prompt_workspace_context.go — Authorized manifests and complete runtime context.
-- redeven:internal/ai/send_user_turn.go — Admission before persistence.
-- redeven:internal/ai/prompt_consistency_test.go — Surface and byte/hash matrix.
-- redeven:internal/ai/prompt_rule_sources_test.go — Complete reads and bounded discovery.
-- redeven:internal/ai/prompt_context_admission_test.go — Overflow and same-identity retry.
-- redeven:internal/ai/floret_ask_user_integration_test.go — Natural completion and follow-up.
-- redeven:internal/ai/thread_permission_admission_test.go — Live permission surfaces.
-- redeven:internal/ai/tools/orchestrator_test.go — Conservative retry advice.
-- redeven:internal/ai/tool_timeout_test.go — Actual timeout/partial-result dispatch.
+- redeven:internal/ai/prompt_builder.go — The shared introduction.
+- redeven:internal/ai/prompt_profiles.go — Capability profile selection.
+- redeven:internal/ai/run_tool_surface.go — Permission-filtered tools and base prompt.
+- redeven:internal/ai/prompt_consistency_test.go — Exact identity and immutable definition matrix.
+- redeven:internal/ai/model_gateway_prompt_context_test.go — Stable identity with changing runtime facts.
+- redeven:internal/ai/model_context_runtime_integration_test.go — Real provider requests and current facts.
+- redeven:internal/ai/thread_permission_admission_test.go — Live permission changes and queued work.
+- redeven:internal/ai/floret_ask_user_integration_test.go — Natural completion and structured input resume.
+- redeven:internal/ai/prompt_rule_sources_test.go — Complete rule-source discovery.
+- redeven:internal/ai/prompt_context_admission_test.go — Context overflow and same-identity retry.
 - redeven:internal/ai/prompt_qualification_test.go — Provider sampling and retained scoring.
-- redeven:internal/ai/prompt_runtime_qualification_test.go — Real isolated execution.
-- redeven:scripts/check_flower_prompt_deepseek.sh — Paid lane and pending-review summary.
+- redeven:internal/ai/prompt_runtime_qualification_test.go — Isolated Service execution.

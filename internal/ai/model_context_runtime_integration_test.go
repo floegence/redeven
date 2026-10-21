@@ -43,6 +43,11 @@ func TestModelContextRefreshAfterConfirmedToolAndSafeRetry(t *testing.T) {
 					writeAskUserIntegrationTextResponse(w, flusher, "resp_context_title", "Runtime context")
 					return
 				}
+				instructions, _ := body["instructions"].(string)
+				assertPromptContains(t, instructions, flowerIdentityIntroduction)
+				for _, catalog := range []string{"INITIAL_RUNTIME_CATALOG", "UPDATED_RUNTIME_CATALOG", "REPAIRED_RUNTIME_CATALOG"} {
+					assertPromptNotContains(t, instructions, catalog)
+				}
 				raw, _ := json.Marshal(body)
 				requestMu.Lock()
 				requests = append(requests, string(raw))

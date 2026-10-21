@@ -132,15 +132,15 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 	if !ok {
 		t.Fatal("provider request omitted System Prompt instructions")
 	}
-	for _, instruction := range []string{
-		"When execution needs a user decision",
-		"Ordinary discussion and optional feedback may use prose",
-		"Preserve the user's requested question format",
-		"Use the user's language",
-	} {
-		if !strings.Contains(systemContent, instruction) {
-			t.Errorf("provider System Prompt omitted interaction guidance: %q", instruction)
+	assertPromptContains(t, systemContent, flowerIdentityIntroduction)
+	hasAskUser := false
+	for _, raw := range request["tools"].([]any) {
+		if tool, ok := raw.(map[string]any); ok && tool["name"] == "ask_user" {
+			hasAskUser = true
 		}
+	}
+	if !hasAskUser {
+		t.Fatal("provider request omitted the ask_user tool")
 	}
 	if err := svc.SetThreadModel(t.Context(), meta, thread.ThreadID, "openai/gpt-5-nano"); !errors.Is(err, ErrThreadBusy) {
 		t.Fatalf("SetThreadModel while waiting error=%v, want ErrThreadBusy", err)
@@ -311,7 +311,7 @@ func TestRedevenHostedRunNaturalStopCompletesTurn(t *testing.T) {
 			t.Fatalf("unexpected main provider request %d", mainCalls.Load())
 		}
 		prompt, _ := request["instructions"].(string)
-		assertPromptContains(t, prompt, "Answer directly when context suffices")
+		assertPromptContains(t, prompt, flowerIdentityIntroduction)
 		assertPromptNotContains(t, prompt, "Follow this workflow for every task")
 		assertPromptNotContains(t, prompt, "file.read")
 		writeAskUserIntegrationTextResponse(w, flusher, "resp_natural_stop", "Finished naturally.")

@@ -327,8 +327,18 @@ func assertPermissionProviderSurface(t *testing.T, request map[string]any, mode 
 			}
 		}
 	}
-	if !strings.Contains(prompt, "Current permission mode for this request: "+mode) {
-		t.Errorf("provider prompt omitted current permission %s", mode)
+	if !strings.HasPrefix(prompt, flowerIdentityIntroduction) {
+		t.Errorf("provider instructions omitted the Flower introduction: %s", prompt)
+	}
+	assertPromptNotContains(t, prompt, "Current permission mode for this request:")
+	input, err := json.Marshal(request["input"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	const permissionPrefix = "- Permission type: "
+	latest := strings.LastIndex(string(input), permissionPrefix)
+	if latest < 0 || !strings.HasPrefix(string(input)[latest:], permissionPrefix+mode) {
+		t.Errorf("provider input omitted latest permission fact %s", mode)
 	}
 	if len(prompt) > 12_000 {
 		t.Errorf("final %s provider instructions=%d bytes; budget=12000", mode, len(prompt))

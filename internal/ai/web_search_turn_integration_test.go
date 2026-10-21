@@ -144,7 +144,7 @@ func TestWebSearchTurnSurfaceReachesProvider(t *testing.T) {
 			if body["model"] != wire {
 				t.Fatalf("wire model=%v", body["model"])
 			}
-			hosted, local := 0, 0
+			hosted, local, fetch := 0, 0, 0
 			for _, value := range body["tools"].([]any) {
 				tool := value.(map[string]any)
 				if tool["type"] == "web_search" || tool["type"] == "builtin_function" {
@@ -153,19 +153,34 @@ func TestWebSearchTurnSurfaceReachesProvider(t *testing.T) {
 				if tool["name"] == "web_search_tool" {
 					local++
 				}
-				if function, ok := tool["function"].(map[string]any); ok && function["name"] == "web_search_tool" {
-					local++
+				if tool["name"] == "web_fetch" {
+					fetch++
+				}
+				if function, ok := tool["function"].(map[string]any); ok {
+					if function["name"] == "web_search_tool" {
+						local++
+					}
+					if function["name"] == "web_fetch" {
+						fetch++
+					}
 				}
 			}
-			if (hosted == 1) != (tc.toolType != "") || (local == 1) != (tc.functionName != "") {
+			wantHosted, wantLocal := 0, 0
+			if tc.toolType != "" {
+				wantHosted = 1
+			}
+			if tc.functionName != "" {
+				wantLocal = 1
+			}
+			if hosted != wantHosted || local != wantLocal {
 				t.Fatalf("search tools hosted=%d local=%d", hosted, local)
+			}
+			if tc.name == "fetch_only" && fetch == 0 {
+				t.Fatal("fetch-only allowlist omitted web_fetch")
 			}
 			raw, _ := json.Marshal(body)
 			if tc.name == "vision" && !strings.Contains(string(raw), `"type":"input_image"`) {
 				t.Fatal("unsupported search disabled Vision image input")
-			}
-			if !wantSearch && !strings.Contains(string(raw), "computer.exec for search and source verification") && !strings.Contains(string(raw), "URL discovery is unavailable") {
-				t.Fatalf("prompt/search mismatch: search=%v", wantSearch)
 			}
 			if len(titleBodies) == 0 {
 				t.Fatal("automatic title was not exercised")
