@@ -10,7 +10,6 @@ import { commands, page, userEvent } from 'vitest/browser';
 import { CommandProvider, ComponentRegistryProvider, useComponentRegistry, FloeConfigProvider, LayoutProvider } from '@floegence/floe-webapp-core';
 import { Dialog } from '@floegence/floe-webapp-core/ui';
 import { REDEVEN_BROWSER_MOBILE_QUERY } from './mobileViewportPolicy';
-import { FileBrowserWorkspace } from './widgets/FileBrowserWorkspace';
 import { FlowerTurnLauncherWindow as SharedFlowerTurnLauncherWindow } from '../../../../flower_ui/src/FlowerTurnLauncherWindow';
 import type { DocumentAssetRecoveryReason } from '@floegence/floe-webapp-core/app';
 import { buildDesktopWindowChromeStyleText, DESKTOP_WINDOW_CHROME_STYLE_ID } from '../../../../../desktop/src/shared/windowChromeContract';
@@ -1005,6 +1004,9 @@ vi.mock('./envSidebarVisibilityMotion', () => ({
   resolveEnvSidebarVisibilityMotion: () => 'animated',
   shouldEnvTabOpenSidebar: () => false,
 }));
+// Load the product graph after the mock state referenced by its imports exists.
+const { FileBrowserWorkspace } = await import('./widgets/FileBrowserWorkspace');
+
 async function settleFrames(count = 3): Promise<void> {
   for (let index = 0; index < count; index += 1) {
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
