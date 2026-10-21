@@ -42721,7 +42721,7 @@
         "ui",
         "workbench"
       ],
-      "timestamp": "2026-10-20T00:00:00Z",
+      "timestamp": "2026-10-21T00:00:00Z",
       "frontmatter": {
         "description": "Select a new Flower draft directory and browse its files from the header, with shared conversation menu navigation.",
         "tags": [
@@ -42731,11 +42731,11 @@
           "ui",
           "workbench"
         ],
-        "timestamp": "2026-10-20T00:00:00Z",
+        "timestamp": "2026-10-21T00:00:00Z",
         "title": "Flower working directory navigation",
         "type": "UI Contract"
       },
-      "body_length": 10225,
+      "body_length": 10295,
       "summary": "Flower owns draft and conversation directory intent; Env App owns Activity and\nWorkbench navigation. The full-page header browses the displayed directory, and the\nfull-page new-conversation welcome selects the draft directory. The floating\ncompanion omits both directory controls while retaining the same draft and\nruntime execution directory. Created directories stay\nimmutable. Row and transcript menus capture the exact thread and directory;\nupdates cannot retarget actions. Activity opens Files or a new Terminal session;\nWorkbench creates the corresponding widget without changing scale. Runtime\nretains filesystem and process authorization. Unavailable targets show explicit\ndisabled reasons or destination errors, and opening never injects commands into\nan existing shell.",
       "sections": [
         {
@@ -46444,5 +46444,5 @@
       ]
     }
   ],
-  "source_sha256": "808f9e53a8393654cd52c21b371af916b4e34590c776d833d4a925a7e7ebd97b"
+  "source_sha256": "ce78152dafb87d8d8ff590a15bc5a1b9e025542068473609040070d424a38688"
 }

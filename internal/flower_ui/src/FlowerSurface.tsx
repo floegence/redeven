@@ -19,7 +19,6 @@ import { flowerMenuModels } from './modelMenu';
 import { flowerDirectoryDesktopStatus } from './modelDirectory';
 import {
   Input,
-  DirectoryFavoriteButton,
   StableText,
   Button,
   ConfirmDialog,
@@ -11993,7 +11992,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     expanded={workingDirectoryPickerOpen()}
                     onClick={openWorkingDirectoryPicker}
                   />
-                  <Show when={directoryMenuAvailability().favorites && displayedWorkingDirectory()}><DirectoryFavoriteButton path={displayedWorkingDirectory()} favorites={directoryMenuAvailability().favorites!} copy={copy().filesystemPicker} onError={notifyThreadActionError} /></Show>
                 </div>
               </Show>
             )}
@@ -13383,7 +13381,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 void browseWorkingDirectory({ path, ...(threadID ? { thread_id: threadID } : {}) }, event.currentTarget);
               }}
             /></Show>
-            <Show when={directoryMenuAvailability().favorites && displayedWorkingDirectory()}><DirectoryFavoriteButton path={displayedWorkingDirectory()} favorites={directoryMenuAvailability().favorites!} copy={copy().filesystemPicker} onError={notifyThreadActionError} /></Show>
             <For each={headerActionDefinitions}>{action => <Show when={action.visible()}><Switch fallback={
               <button type="button" class="flower-header-icon-button" aria-label={action.label()} title={action.label()}
                 disabled={action.disabled?.()} aria-haspopup={action.id === 'connections' ? 'dialog' : undefined}

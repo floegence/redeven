@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower working directory navigation
 description: Select a new Flower draft directory and browse its files from the header, with shared conversation menu navigation.
 tags: [ui, flower, filesystem, terminal, workbench]
-timestamp: 2026-10-20T00:00:00Z
+timestamp: 2026-10-21T00:00:00Z
 ---
 # Summary
 
@@ -165,8 +165,9 @@ AI execution. These existing owners retain their respective boundaries:
 
 ## Directory favorites
 
-Current-directory stars and captured conversation-directory menus use the same
-[personal directory favorites](directory-favorites.md) as Files and every picker.
+The Flower header and new-conversation welcome contain no direct directory-favorite
+buttons. Directory pickers and captured conversation-directory menus use the same
+[personal directory favorites](directory-favorites.md) as Files.
 Favorite changes never create a conversation or update the draft/default directory.
 Recent suggestions remain ordered by root-conversation update time, independent
 of pins and favorites, with ten distinct absolute paths and an internal scroll viewport.

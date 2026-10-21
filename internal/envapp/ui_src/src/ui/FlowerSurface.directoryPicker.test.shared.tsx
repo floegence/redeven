@@ -45,7 +45,7 @@ async function setup(pathContext = context, history: ReturnType<typeof thread>[]
   return { a, host, open, navigate, send };
 }
 describe('Flower published absolute directory picker', () => {
-  it('shares stars and shortcuts without changing the draft until confirmation', async () => {
+  it('keeps favorites inside the picker without changing the draft until confirmation', async () => {
     let paths: string[] = [target]; let revision = 1;
     const client = createDirectoryFavoritesClient(async (method, path) => {
       if (method !== 'GET' && path) {
@@ -58,11 +58,13 @@ describe('Flower published absolute directory picker', () => {
     try {
       await client.refresh();
       const f = await setup(context, [], favorites);
-      const star = f.host.querySelector<HTMLButtonElement>('button[aria-label="Favorite: ' + home + '"]')!;
+      expect(f.host.querySelector('button[aria-label="Favorite: ' + home + '"]')).toBeNull();
+      await f.open();
+      const star = document.querySelector<HTMLButtonElement>('button[aria-label="Favorite: ' + home + '"]')!;
       expect(star).toBeTruthy(); star.click();
       await waitFor(() => favorites.paths.includes(home));
       expect(f.host.querySelector('.flower-working-directory-select')?.getAttribute('title')).toContain(home);
-      await f.open(); button('Favorites').click(); await flush();
+      button('Favorites').click(); await flush();
       expect(button('Select').disabled).toBe(true);
       const shortcut = document.querySelector<HTMLButtonElement>('[data-picker-favorite-path="' + target + '"]')!;
       expect(shortcut).toBeTruthy(); shortcut.click();
