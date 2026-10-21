@@ -346,11 +346,6 @@ export type FlowerSubagentsCopy = Readonly<{
   threadIDLabel: string;
   lastMessageLabel: string;
   detailTimelineLabel: string;
-  detailInstructionLabel: string;
-  detailConstraintsLabel: string;
-  detailAnalysisLabel: string;
-  detailActivityLabel: (count: number) => string;
-  detailOutcomeLabel: string;
   detailRetry: string;
   input: Readonly<Record<'queueTitle' | 'steerNow' | 'remove' | 'resend' | 'pending' | 'applied' | 'cancelled' | 'stopped' | 'unknown' | 'ended' | 'failed' | 'changed' | 'busy', string>>;
   feedbackClose: string;
@@ -1476,11 +1471,6 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     lastMessageLabel: 'Latest handoff',
     events: {"title": "Important events", "readFailed": "Unable to load reports. Loaded content is preserved; retry to continue.", "readTimeout": "Loading reports timed out. Retry to continue.", "received": "Received", "admitted": "Added to context", "read": "Expand full report", "collapse": "Collapse full report", "open": "View subtask", "more": "Load more events", "report": "Subagent report", "input": "Input required", "approval": "Approval required", "interrupted": "Interrupted"},
     detailTimelineLabel: 'Subagent execution record',
-    detailInstructionLabel: 'Delegated instruction',
-    detailConstraintsLabel: 'Runtime constraints',
-    detailAnalysisLabel: 'Analysis',
-    detailActivityLabel: (count) => count === 1 ? '1 operation' : `${count} operations`,
-    detailOutcomeLabel: 'Outcome',
     detailRetry: 'Retry',
     input: {
       queueTitle: 'Queued instructions',

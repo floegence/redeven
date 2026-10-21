@@ -871,11 +871,6 @@ function createLocalizedFlowerSubagentsCopy(i18n: FlowerSurfaceTranslator): Flow
       interrupted: t(i18n, k('events.interrupted')),
     },
     detailTimelineLabel: t(i18n, k('detailTimelineLabel')),
-    detailInstructionLabel: t(i18n, k('detailInstructionLabel')),
-    detailConstraintsLabel: t(i18n, k('detailConstraintsLabel')),
-    detailAnalysisLabel: t(i18n, k('detailAnalysisLabel')),
-    detailActivityLabel: (count) => t(i18n, k('detailActivityLabel'), { count }),
-    detailOutcomeLabel: t(i18n, k('detailOutcomeLabel')),
     detailRetry: t(i18n, k('detailRetry')),
     input: {
       queueTitle: t(i18n, k('input.queueTitle')),

@@ -84,7 +84,7 @@ describe('Subagent identity and reading surfaces', () => {
       expect(avatar.querySelector('svg')?.innerHTML).toBe(identity.querySelector('svg')?.innerHTML);
       expect(getComputedStyle(avatar).borderRadius).toBe('28%');
       expect(windowSurface.querySelector('canvas[data-thinking-orb-state]')).toBeNull();
-      const ledger = windowSurface.querySelector<HTMLElement>('.flower-subagent-ledger')!;
+      const ledger = windowSurface.querySelector<HTMLElement>('.flower-subagent-detail-timeline')!;
       expect(getComputedStyle(ledger, '::before').content).toBe('none');
       expect(windowSurface.scrollWidth).toBeLessThanOrEqual(windowSurface.clientWidth + 1);
       await page.screenshot({ element: windowSurface, path: `__screenshots__/subagent-appearance/detail-${theme}.png` });

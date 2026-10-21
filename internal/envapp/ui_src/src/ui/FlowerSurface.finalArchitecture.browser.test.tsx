@@ -93,6 +93,56 @@ function completedTerminalThread() {
 beforeEach(async () => { await page.viewport(1280, 900); });
 
 describe('Flower final thread cache and workspace transport', () => {
+  it('keeps an open child body through a full root cache, pin refresh, root baselines and native updates', async () => {
+    const parentID = 'retained-root-11';
+    const child = subagentSummary({ parent_thread_id: parentID, thread_id: 'retained-child', task_name: 'Inspect retained work', status: 'running' });
+    const roots = Array.from({ length: 12 }, (_, index) => thread({ thread_id: 'retained-root-' + index, title: 'Visited root ' + index,
+      ...(index === 11 ? { subagents: [child] } : {}) }));
+    const parent = roots[11]!;
+    const firstDetail = deferred<FlowerSubagentDetail>();
+    const detail = subagentDetail({ summary: child, current: { thread_id: child.thread_id, view_version: 3, activity: 'active',
+      turn_id: 'retained-turn', run_id: 'retained-run', run_progress: { phase: 'streaming' },
+      items: [{ kind: 'assistant', id: 'retained-output', turn_id: 'retained-turn', run_id: 'retained-run', ordinal: 1, text: 'Canonical retained work', live: true }] } });
+    const stream = controlledWorkspaceStream([{ schema_version: 2, kind: 'ready', summaries: roots }]);
+    const loadSubagentDetail = vi.fn().mockImplementationOnce(() => firstDetail.promise).mockResolvedValue(detail);
+    const setThreadPinned = vi.fn(async () => [{ thread_id: parentID, pinned_at_ms: 10, pin_rank: 1, settings_revision: 2 }]);
+    const listThreads = vi.fn(async () => roots);
+    const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads, setThreadPinned, connectLiveStream: stream.connect,
+      loadThread: vi.fn(async id => liveBootstrap(roots.find(value => value.thread_id === id)!)), loadSubagentDetail });
+    for (const root of roots) {
+      await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="' + root.thread_id + '"] button')));
+      runtime.querySelector<HTMLButtonElement>('[data-thread-id="' + root.thread_id + '"] button')!.click();
+      await waitFor(() => runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === root.thread_id
+        && runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-loading') === 'false');
+    }
+    runtime.querySelector<HTMLButtonElement>('button[aria-controls="flower-subagents-dropdown"]')!.click();
+    await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-row="0"]')));
+    document.querySelector<HTMLButtonElement>('[data-flower-subagent-row="0"]')!.click();
+    await waitFor(() => Boolean(document.querySelector('.flower-subagent-detail-loading')));
+    firstDetail.resolve(detail);
+    await waitFor(() => document.querySelector('.flower-subagent-detail-transcript')?.textContent?.includes('Canonical retained work') === true);
+    const window = document.querySelector('.flower-subagent-detail-window');
+    const row = document.querySelector('[data-flower-row-message-id="retained-output"]');
+    expect(runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-id')).toBe(parent.thread_id);
+    const listReads = listThreads.mock.calls.length;
+    runtime.querySelector<HTMLButtonElement>('[data-thread-id="' + parentID + '"] .flower-thread-card-pin-button')!.click();
+    await waitFor(() => listThreads.mock.calls.length > listReads);
+    expect(setThreadPinned).toHaveBeenCalledExactlyOnceWith(parentID, true);
+    expect(document.querySelector('.flower-subagent-detail-transcript')?.textContent).toContain('Canonical retained work');
+    stream.push({ schema_version: 2, kind: 'ready', summaries: roots });
+    await waitFor(() => loadSubagentDetail.mock.calls.length === 2);
+    expect(document.querySelector('.flower-subagent-detail-transcript')?.textContent).toContain('Canonical retained work');
+    stream.push({ schema_version: 2, kind: 'thread.batch', thread_id: parent.thread_id, subagent_update: {
+      thread_id: child.thread_id, turn_id: 'retained-turn', run_id: 'retained-run', base_version: 3, view_version: 4,
+      facts: { activity: 'active', queue_count: 0, run_progress: { phase: 'streaming' } },
+      items: [{ kind: 'append', item_id: 'retained-output', append: { offset_bytes: new TextEncoder().encode('Canonical retained work').length, text: ' plus streamed work' } }],
+    } });
+    await waitFor(() => document.querySelector('.flower-subagent-detail-transcript')?.textContent?.includes('plus streamed work') === true);
+    expect(document.querySelector('.flower-subagent-detail-window')).toBe(window);
+    expect(document.querySelector('[data-flower-row-message-id="retained-output"]')).toBe(row);
+    expect(document.querySelector('.flower-subagent-detail-loading, .flower-subagent-detail-state-error')).toBeNull();
+  });
+
   it('keeps authoritative Stop visible after acknowledgement, navigation, and detail reload', async () => {
     const running = thread({ thread_id: 'thread-graceful-stop', status: 'running', active_run_id: 'run-stop', run_progress: { phase: 'tool_execution', run_id: 'run-stop', turn_id: 'turn-stop' }, messages: [{ id: 'user-stop', turn_id: 'turn-stop', role: 'user', content: 'Inspect device', status: 'complete', created_at_ms: 1 }] });
     const other = thread({ thread_id: 'thread-other-stop', title: 'Other conversation' });

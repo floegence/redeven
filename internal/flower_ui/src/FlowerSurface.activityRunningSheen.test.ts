@@ -172,7 +172,7 @@ describe('Flower activity status presentation', () => {
     expect(flowerStyles()).not.toContain('.flower-header-icon-badge');
   });
 
-  it('uses named layers and dedicated ledger tokens for subagent overlays', () => {
+  it('uses named layers and dedicated window tokens for subagent overlays', () => {
     const css = flowerStyles();
     const shellRule = cssRule(css, '.flower-chat-shell');
     const mainRule = cssRule(css, '.flower-chat-main');

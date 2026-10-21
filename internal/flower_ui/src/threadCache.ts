@@ -187,10 +187,11 @@ export type ThreadCache = {
   readonly summaries: ReadonlyMap<string, FlowerThreadSnapshot>;
   readonly views: ReadonlyMap<string, ThreadView>;
   select(id: string | null): ThreadCache;
+  retainDetails(ids: readonly string[]): ThreadCache;
   invalidateRuntimeVersions(): ThreadCache;
   replaceSummary(summary: FlowerThreadSummary): ThreadCache;
-  replaceSummaries(summaries: readonly FlowerThreadSummary[], retainedSelectedID?: string): ThreadCache;
-  resetRootSummaries(summaries: readonly FlowerThreadSummary[], retainedSelectedID?: string): ThreadCache;
+  replaceSummaries(summaries: readonly FlowerThreadSummary[]): ThreadCache;
+  resetRootSummaries(summaries: readonly FlowerThreadSummary[]): ThreadCache;
   beginRuntimeRead(id: string): () => void;
   receiveView(
     view: ThreadView,
@@ -257,6 +258,7 @@ function createCache(
   views: Map<string, CacheEntry>,
   clock: number,
   reads: BaselineReads = new Map(),
+  retainedIDs: ReadonlySet<string> = new Set(),
 ): ThreadCache {
   const receive = (view: ThreadDetailView, title: ThreadTitleSnapshot | undefined, options?: Readonly<{ preserveSummary?: boolean; current?: FlowerRuntimeCurrentView }>): ThreadViewReceiveResult => {
     const id = view.thread.thread_id.trim();
@@ -320,10 +322,10 @@ function createCache(
     const next = new Map(views);
     // Live traffic is not a user visit. Background updates cannot displace
     // the displayed thread or outrank previously visited conversations.
-    next.set(id, { view: initializedView, runtime, usedAt: views.get(id)?.usedAt ?? (id === selectedId ? clock + 1 : 0) });
+    next.set(id, { view: initializedView, runtime, usedAt: views.get(id)?.usedAt ?? (id === selectedId || retainedIDs.has(id) ? clock + 1 : 0) });
     while (next.size > MAX_VIEWS) {
       const oldest = [...next.entries()]
-        .filter(([candidateID]) => candidateID !== selectedId)
+        .filter(([candidateID]) => candidateID !== selectedId && !retainedIDs.has(candidateID))
         .sort((left, right) => left[1].usedAt - right[1].usedAt)[0];
       if (!oldest) break;
       next.delete(oldest[0]);
@@ -333,7 +335,7 @@ function createCache(
       ? mergeNewerSummaryMetadata(currentSummary, mergedView.thread)
       : mergeNewerSummaryMetadata(mergedView.thread, currentSummary ?? mergedView.thread);
     summary.set(id, retainEqualValue(currentSummary, summaryOnly({ ...metadata, ...acceptedTitle })));
-    let acceptedCache = createCache(selectedId, summary, next, clock + 1, reads);
+    let acceptedCache = createCache(selectedId, summary, next, clock + 1, reads, retainedIDs);
     const observations: FlowerRuntimeCurrentView[] = [];
     if (runtimeState === 'accepted' && options?.current) {
       const pending = reads.get(id)?.updates.splice(0) ?? [];
@@ -379,7 +381,18 @@ function createCache(
     })),
     select(id) {
       const nextID = id == null || id.trim() === '' ? null : id.trim();
-      return createCache(nextID, summaries, touch(nextID ?? ''), clock + 1, reads);
+      return createCache(nextID, summaries, touch(nextID ?? ''), clock + 1, reads, retainedIDs);
+    },
+    retainDetails(ids) {
+      const nextIDs = new Set(ids.map(id => id.trim()).filter(Boolean));
+      if (nextIDs.size >= MAX_VIEWS) throw new Error('Too many displayed thread details.');
+      if (nextIDs.size === retainedIDs.size && [...nextIDs].every(id => retainedIDs.has(id))) return this;
+      const nextViews = new Map(views);
+      for (const id of nextIDs) {
+        const entry = nextViews.get(id);
+        if (entry && !retainedIDs.has(id)) nextViews.set(id, { ...entry, usedAt: clock + 1 });
+      }
+      return createCache(selectedId, summaries, nextViews, clock + 1, reads, nextIDs);
     },
     replaceSummary(summary) {
       const id = summary.thread_id.trim();
@@ -387,25 +400,25 @@ function createCache(
       const next = new Map(summaries);
       // Summary state never carries or inherits detail content.
       next.set(id, receiveSummary(summaries.get(id), summary));
-      return createCache(selectedId, next, views, clock + 1, reads);
+      return createCache(selectedId, next, views, clock + 1, reads, retainedIDs);
     },
-    replaceSummaries(nextSummaries, retainedSelectedID) {
+    replaceSummaries(nextSummaries) {
       const next = new Map<string, FlowerThreadSnapshot>();
       for (const summary of nextSummaries) {
         const id = summary.thread_id.trim();
         if (id) next.set(id, receiveSummary(summaries.get(id), summary));
       }
-      // Root inventory does not decide whether an explicitly opened child exists.
-      // Keep only the selected child while its normal detail read revalidates it.
-      if (selectedId && selectedId === retainedSelectedID && !next.has(selectedId)) {
-        const selected = summaries.get(selectedId);
-        if (selected) next.set(selectedId, selected);
+      // Root inventory owns root membership, not explicitly displayed children.
+      for (const id of retainedIDs) {
+        const retained = summaries.get(id);
+        if (retained && !next.has(id)) next.set(id, retained);
       }
-      return createCache(selectedId, next, views, clock + 1, reads);
+      const nextViews = new Map([...views].filter(([id]) => next.has(id)));
+      return createCache(selectedId, next, nextViews, clock + 1, reads, retainedIDs);
     },
-    resetRootSummaries(nextSummaries, retainedSelectedID) {
-      const replaced = this.replaceSummaries(nextSummaries, retainedSelectedID);
-      return replaced.selectedId && !replaced.summaries.has(replaced.selectedId) && replaced.selectedId !== retainedSelectedID
+    resetRootSummaries(nextSummaries) {
+      const replaced = this.replaceSummaries(nextSummaries);
+      return replaced.selectedId && !replaced.summaries.has(replaced.selectedId) && !retainedIDs.has(replaced.selectedId)
         ? replaced.select(null) : replaced;
     },
     receiveView(view, options) {
@@ -445,7 +458,7 @@ function createCache(
         ...current,
         view: { ...current.view, get version() { return current.view.version; }, thread: current.runtime ? current.runtime.syncAdjuncts(adjunct as FlowerThreadSnapshot) : adjunct },
       });
-      return createCache(selectedId, summaries, next, clock + 1, reads);
+      return createCache(selectedId, summaries, next, clock + 1, reads, retainedIDs);
     },
     updateSummaryAdjuncts(id, update) {
       const threadID = id.trim();
@@ -455,7 +468,7 @@ function createCache(
       if (currentSummary) nextSummaries.set(threadID, summaryOnly({ ...mergeThreadActivity(adjunctOnly(update(detailOnly(currentSummary))), currentSummary), ...threadTitleSnapshot(currentSummary) }));
       if (!currentSummary) return this;
       // Adjunct updates never author titles or replace runtime detail.
-      return createCache(selectedId, nextSummaries, views, clock + 1, reads);
+      return createCache(selectedId, nextSummaries, views, clock + 1, reads, retainedIDs);
     },
     invalidateRuntimeVersions() {
       reads.clear();
@@ -463,14 +476,14 @@ function createCache(
       const next = new Map([...views].map(([id, entry]) => [id, {
         ...entry, view: { ...entry.view, version: 0 },
       }]));
-      return createCache(selectedId, summaries, next, clock, reads);
+      return createCache(selectedId, summaries, next, clock, reads, retainedIDs);
     },
     applyReadStatus(id, status) {
       const current = summaries.get(id);
       if (!current) return this;
       const next = new Map(summaries);
       next.set(id, receiveSummary(current, { ...current, read_status: status }));
-      return createCache(selectedId, next, views, clock + 1, reads);
+      return createCache(selectedId, next, views, clock + 1, reads, retainedIDs);
     },
     evict(id) {
       reads.delete(id);
@@ -478,7 +491,7 @@ function createCache(
       const nextViews = new Map(views);
       nextSummaries.delete(id);
       nextViews.delete(id);
-      return createCache(selectedId === id ? null : selectedId, nextSummaries, nextViews, clock + 1, reads);
+      return createCache(selectedId === id ? null : selectedId, nextSummaries, nextViews, clock + 1, reads, retainedIDs);
     },
   };
   return cache;

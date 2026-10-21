@@ -5842,6 +5842,10 @@ button.flower-composer-context-source:focus-visible,
   outline-offset: -2px;
 }
 
+@media (pointer: coarse) {
+  .flower-activity-inline-button { min-height: 2.75rem; }
+}
+
 .flower-activity-structured-rows {
   display: grid;
   min-width: 0;
@@ -10335,14 +10339,6 @@ button.flower-attachment-preview-trigger:disabled {
   color: var(--flower-subagent-window-muted);
 }
 
-.flower-subagent-detail-surface[data-flower-subagent-status='canceled'] .flower-subagent-ledger-entry-outcome .flower-subagent-ledger-entry-label {
-  color: var(--flower-subagent-window-muted);
-}
-
-.flower-subagent-detail-surface[data-flower-subagent-status='canceled'] .flower-subagent-ledger-entry-outcome .flower-subagent-ledger-entry-body {
-  border-left-color: var(--flower-subagent-window-muted);
-}
-
 .flower-subagent-status-label-completed {
   color: var(--flower-subagent-window-success);
 }
@@ -10377,7 +10373,7 @@ button.flower-attachment-preview-trigger:disabled {
   align-items: start;
   gap: 0.85rem;
   opacity: 0.55;
-  animation: flower-subagent-ledger-loading 1.5s ease-in-out infinite;
+  animation: flower-subagent-detail-loading-pulse 1.5s ease-in-out infinite;
 }
 
 .flower-subagent-detail-loading-row:nth-child(2) {
@@ -10417,7 +10413,7 @@ button.flower-attachment-preview-trigger:disabled {
   opacity: 0.7;
 }
 
-@keyframes flower-subagent-ledger-loading {
+@keyframes flower-subagent-detail-loading-pulse {
   0%,
   100% {
     opacity: 0.34;
@@ -10472,8 +10468,6 @@ button.flower-attachment-preview-trigger:disabled {
   outline-offset: 1px;
 }
 
-
-
 .flower-subagent-detail-transcript {
   position: relative;
   min-height: 0;
@@ -10484,7 +10478,7 @@ button.flower-attachment-preview-trigger:disabled {
   scrollbar-width: thin;
 }
 
-.flower-subagent-ledger {
+.flower-subagent-detail-timeline {
   position: relative;
   width: min(100%, 58rem);
   min-height: 100%;
@@ -10500,285 +10494,6 @@ button.flower-attachment-preview-trigger:disabled {
   border: 1px solid var(--flower-subagent-window-border-soft);
   border-radius: 0.75rem;
   padding: 0.875rem 1rem;
-}
-
-.flower-subagent-ledger-entry {
-  position: relative;
-  display: block;
-  min-width: 0;
-  margin: 0;
-  padding: 0 0 0.85rem 1.7rem;
-  color: var(--flower-subagent-window-text);
-}
-
-.flower-subagent-ledger-entry + .flower-subagent-ledger-entry {
-  padding-top: 0.25rem;
-}
-
-.flower-subagent-ledger-entry::before {
-  content: '';
-  position: absolute;
-  top: 0.42rem;
-  left: 0.03rem;
-  width: 0.5rem;
-  height: 0.5rem;
-  border: 1px solid var(--flower-subagent-window-border);
-  background: var(--flower-subagent-window-surface);
-}
-
-.flower-subagent-ledger-entry-instruction::before,
-.flower-subagent-ledger-entry-constraints::before {
-  border-color: color-mix(in srgb, var(--flower-subagent-window-warning) 62%, var(--flower-subagent-window-border));
-}
-
-.flower-subagent-ledger-entry-activity::before {
-  border-color: color-mix(in srgb, var(--flower-subagent-window-accent) 68%, var(--flower-subagent-window-border));
-  background: color-mix(in srgb, var(--flower-subagent-window-accent) 18%, var(--flower-subagent-window-surface));
-}
-
-.flower-subagent-ledger-entry-outcome::before {
-  border-color: color-mix(in srgb, var(--flower-subagent-window-success) 70%, var(--flower-subagent-window-border));
-  background: color-mix(in srgb, var(--flower-subagent-window-success) 16%, var(--flower-subagent-window-surface));
-}
-
-.flower-subagent-ledger-entry > summary {
-  display: block;
-  cursor: pointer;
-  list-style: none;
-}
-
-.flower-subagent-ledger-entry > summary::-webkit-details-marker {
-  display: none;
-}
-
-.flower-subagent-ledger-entry > summary:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--flower-subagent-window-accent) 34%, transparent);
-  outline-offset: 3px;
-}
-
-.flower-subagent-ledger-entry-header {
-  display: grid;
-  min-height: 1.25rem;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 0.4rem;
-  color: var(--flower-subagent-window-muted);
-}
-
-.flower-subagent-ledger-entry-label {
-  min-width: 0;
-  overflow: hidden;
-  font-size: 0.75rem;
-  font-weight: 500;
-  line-height: 1.125rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.flower-subagent-ledger-entry-activity .flower-subagent-ledger-entry-label {
-  color: color-mix(in srgb, var(--flower-subagent-window-accent) 78%, var(--flower-subagent-window-text) 22%);
-}
-
-.flower-subagent-ledger-entry-outcome .flower-subagent-ledger-entry-label {
-  color: color-mix(in srgb, var(--flower-subagent-window-success) 78%, var(--flower-subagent-window-text) 22%);
-}
-
-.flower-subagent-ledger-entry-time {
-  color: var(--flower-subagent-window-muted);
-  font-family: var(--font-mono, Iosevka, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 0.75rem;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.125rem;
-}
-
-.flower-subagent-ledger-entry-chevron {
-  color: var(--flower-subagent-window-muted);
-  transition: transform 160ms ease;
-}
-
-.flower-subagent-ledger-entry[open] > summary .flower-subagent-ledger-entry-chevron {
-  transform: rotate(180deg);
-}
-
-.flower-subagent-ledger-entry-body {
-  min-width: 0;
-  padding-top: 0.38rem;
-}
-
-.flower-subagent-ledger-entry-instruction .flower-subagent-ledger-entry-body,
-.flower-subagent-ledger-entry-constraints .flower-subagent-ledger-entry-body {
-  border-top: 1px solid var(--flower-subagent-window-border-soft);
-  margin-top: 0.35rem;
-  background: color-mix(in srgb, var(--flower-subagent-window-surface-soft) 54%, transparent);
-  padding: 0.65rem 0.75rem 0.7rem;
-}
-
-.flower-subagent-ledger-entry-outcome .flower-subagent-ledger-entry-body {
-  border-left: 2px solid color-mix(in srgb, var(--flower-subagent-window-success) 66%, transparent);
-  background: transparent;
-  margin-top: 0.28rem;
-  padding: 0.6rem 0.75rem;
-}
-
-.flower-subagent-detail-surface:is(
-  [data-flower-subagent-status='failed'],
-  [data-flower-subagent-status='timed_out']
-) .flower-subagent-ledger-entry-outcome::before {
-  border-color: color-mix(in srgb, var(--flower-subagent-window-danger) 70%, var(--flower-subagent-window-border));
-  background: color-mix(in srgb, var(--flower-subagent-window-danger) 16%, var(--flower-subagent-window-surface));
-}
-
-.flower-subagent-detail-surface:is(
-  [data-flower-subagent-status='failed'],
-  [data-flower-subagent-status='timed_out']
-) .flower-subagent-ledger-entry-outcome .flower-subagent-ledger-entry-label {
-  color: color-mix(in srgb, var(--flower-subagent-window-danger) 78%, var(--flower-subagent-window-text) 22%);
-}
-
-.flower-subagent-detail-surface:is(
-  [data-flower-subagent-status='failed'],
-  [data-flower-subagent-status='timed_out']
-) .flower-subagent-ledger-entry-outcome .flower-subagent-ledger-entry-body {
-  border-left-color: color-mix(in srgb, var(--flower-subagent-window-danger) 70%, transparent);
-  background: transparent;
-}
-
-.flower-subagent-ledger-entry-body .flower-message-row,
-.flower-subagent-ledger-entry-body .flower-message-block-stack,
-.flower-subagent-ledger-entry-body .flower-message-bubble,
-.flower-subagent-ledger-entry-body .flower-message-assistant-copy-line,
-.flower-subagent-ledger-entry-body .flower-message-assistant-copy-body {
-  width: 100%;
-  max-width: 100%;
-}
-
-.flower-subagent-ledger-entry-body .flower-message-row {
-  justify-content: flex-start;
-}
-
-.flower-subagent-ledger-entry-body .flower-message-block-stack {
-  align-items: stretch;
-  gap: 0.32rem;
-}
-
-.flower-subagent-ledger-entry-body .flower-message-bubble {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--flower-subagent-window-text);
-  padding: 0;
-  font-size: var(--floe-type-body);
-  line-height: 1.62;
-}
-
-.flower-subagent-ledger-entry-body .flower-message-time {
-  display: none;
-}
-
-.flower-subagent-ledger-entry-body .flower-message-action-row {
-  min-height: 1.5rem;
-  justify-content: flex-start;
-  margin: 0.1rem 0 0;
-}
-
-.flower-subagent-ledger-entry-body .flower-message-copy-button {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 120ms ease;
-}
-
-.flower-subagent-ledger-entry:hover .flower-message-copy-button,
-.flower-subagent-ledger-entry:focus-within .flower-message-copy-button,
-.flower-subagent-ledger-entry-body .flower-message-copy-button[data-copied='true'] {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.flower-subagent-ledger-entry-body .flower-chat-md-block {
-  line-height: 1.66;
-}
-
-.flower-subagent-ledger-entry-body .flower-chat-md-block :is(p, ul, ol, blockquote, pre, table):not(.chat-html-source) {
-  margin-top: 0.58rem;
-}
-
-.flower-subagent-ledger-entry-body .flower-activity-inline {
-  width: 100%;
-  gap: 0.12rem;
-  border-left: 0;
-  margin: 0;
-  padding-left: 0;
-}
-
-.flower-subagent-ledger-activity-list {
-  display: grid;
-  min-width: 0;
-  gap: 0.12rem;
-}
-
-.flower-subagent-ledger-entry-single-activity {
-  padding-bottom: 0.58rem;
-}
-
-.flower-subagent-ledger-entry > .flower-subagent-ledger-single-activity-summary {
-  display: none;
-}
-
-.flower-subagent-ledger-single-activity-body {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 0.55rem;
-  padding-top: 0;
-}
-
-.flower-subagent-ledger-single-activity-time {
-  display: inline-flex;
-  min-height: 1.9rem;
-  align-items: center;
-  padding-right: 1.35rem;
-}
-
-.flower-subagent-ledger-entry-single-activity::before {
-  top: 0.7rem;
-}
-
-.flower-subagent-ledger-entry-body .flower-activity-inline-button {
-  min-height: 2rem;
-  grid-template-columns: 1rem minmax(0, 1fr) auto 1rem;
-  border-radius: 4px;
-  padding: 0.18rem 0.35rem;
-}
-
-.flower-subagent-detail-transcript .flower-activity-inline-detail,
-.flower-subagent-detail-transcript .flower-activity-inline-status {
-  font-family: var(--font-mono, Iosevka, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 0.75rem;
-  font-weight: 400;
-}
-
-.flower-subagent-detail-transcript .flower-activity-inline-detail {
-  font-family: var(--font-sans, inherit);
-}
-
-@media (pointer: coarse) {
-  .flower-activity-inline-button,
-  .flower-subagent-ledger-entry-body .flower-activity-inline-button { min-height: 2.75rem; }
-}
-
-.flower-subagent-ledger-entry-body .flower-activity-inline-details {
-  margin: 0.2rem 0 0.45rem 1.45rem;
-}
-
-.flower-subagent-ledger-entry-body .flower-activity-inline-details-content {
-  max-height: 18rem;
-  border: 1px solid var(--flower-subagent-window-border-soft);
-  border-radius: 4px;
-  background: var(--flower-subagent-window-surface-raised);
-  padding: 0.65rem;
-  font-size: 0.75rem;
-  line-height: 1.25rem;
 }
 
 .flower-subagent-detail-scroll-to-latest {
@@ -10805,30 +10520,9 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 @media (max-width: 560px) {
-  .flower-subagent-ledger {
+  .flower-subagent-detail-timeline {
     padding-inline: 0.7rem;
   }
-
-  .flower-subagent-ledger-entry {
-    padding-left: 1.35rem;
-  }
-
-  .flower-subagent-ledger-entry::before {
-    left: 0;
-  }
-
-  .flower-subagent-ledger-single-activity-body {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
-  }
-
-  .flower-subagent-ledger-single-activity-time {
-    min-height: 0;
-    justify-content: flex-end;
-    margin-top: -0.1rem;
-    padding-right: 1.35rem;
-  }
-
 }
 
 /* Window-local adaptation also applies when a narrow window sits inside a
@@ -10848,21 +10542,9 @@ button.flower-attachment-preview-trigger:disabled {
   }
 }
 
-@media (hover: none) {
-  .flower-subagent-ledger-entry-body .flower-message-copy-button {
-    opacity: 0.55;
-    pointer-events: auto;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .flower-subagent-detail-loading-row {
     animation: none !important;
-  }
-
-  .flower-subagent-ledger-entry-chevron,
-  .flower-subagent-ledger-entry-body .flower-message-copy-button {
-    transition: none !important;
   }
 }
 

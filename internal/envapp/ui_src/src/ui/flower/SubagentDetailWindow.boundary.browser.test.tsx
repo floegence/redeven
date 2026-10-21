@@ -82,7 +82,7 @@ function windowProps(open: boolean, onOpenChange: (open: boolean) => void): Suba
     error: '',
     detailAvailable: true,
     entries: [],
-    renderEntry: () => null,
+    renderTimeline: () => null,
     bindScroll: () => undefined,
     onScroll: () => undefined,
     onWheel: () => undefined,
