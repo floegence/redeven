@@ -32,6 +32,7 @@ import type {
   RuntimeFlowerStreamRequest,
   RuntimeFlowerStreamStartResult,
 } from '../../shared/runtimeFlowerIPC';
+import { isRuntimeFlowerCancellableRead } from '../../shared/runtimeFlowerIPC';
 import type {
   RuntimeFlowerAttachmentCancelResponse,
   RuntimeFlowerAttachmentChunkResponse,
@@ -265,12 +266,7 @@ async function runtimeJSON<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   signal?.throwIfAborted();
-  const readID = signal ? crypto.randomUUID() : undefined;
-  const cancel = () => { if (readID) bridge.cancelRuntimeFlowerRead(readID); };
-  let abortRead: (() => void) | undefined;
-  try {
-  const operation = bridge.requestRuntimeFlower({
-    ...(readID ? { read_id: readID } : {}),
+  const request: RuntimeFlowerRequest = {
     method,
     path,
     ...(body === undefined ? {} : { body }),
@@ -279,16 +275,25 @@ async function runtimeJSON<T>(
       staging_scope_id: stagingScope.staging_scope_id,
       staging_capability: stagingScope.capability,
     } : {}),
-  });
-  const result = await (signal ? Promise.race([operation, new Promise<never>((_, reject) => {
-    abortRead = () => { cancel(); reject(new DOMException('Flower read was cancelled.', 'AbortError')); };
-    signal.addEventListener('abort', abortRead, { once: true });
-    if (signal.aborted) abortRead();
-  })]) : operation);
-  signal?.throwIfAborted();
-  if (!result.ok) throw runtimeFlowerError(result.error, result.failureKind);
-  return result.data as T;
-  } finally { if (abortRead) signal?.removeEventListener('abort', abortRead); }
+  };
+  const readID = signal && isRuntimeFlowerCancellableRead(request) ? crypto.randomUUID() : undefined;
+  const cancel = () => { if (readID) bridge.cancelRuntimeFlowerRead(readID); };
+  const abortMessage = readID ? 'Flower read was cancelled.' : 'Waiting for the Flower request was cancelled.';
+  let abortWait: (() => void) | undefined;
+  try {
+    const operation = bridge.requestRuntimeFlower({
+      ...(readID ? { read_id: readID } : {}),
+      ...request,
+    });
+    const result = await (signal ? Promise.race([operation, new Promise<never>((_, reject) => {
+      abortWait = () => { cancel(); reject(new DOMException(abortMessage, 'AbortError')); };
+      signal.addEventListener('abort', abortWait, { once: true });
+      if (signal.aborted) abortWait();
+    })]) : operation);
+    signal?.throwIfAborted();
+    if (!result.ok) throw runtimeFlowerError(result.error, result.failureKind);
+    return result.data as T;
+  } finally { if (abortWait) signal?.removeEventListener('abort', abortWait); }
 }
 
 export function runtimeFlowerStreamFetch(

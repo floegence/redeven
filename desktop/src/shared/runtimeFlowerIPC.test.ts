@@ -1,10 +1,33 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  isRuntimeFlowerCancellableRead,
   normalizeRuntimeFlowerStreamEvent,
   normalizeRuntimeFlowerStreamID,
   normalizeRuntimeFlowerStreamRequest,
 } from './runtimeFlowerIPC';
+
+describe('runtime Flower read cancellation', () => {
+  it.each([
+    '/_redeven_proxy/api/settings',
+    '/_redeven_proxy/api/ai/models?mode=baseline',
+    '/_redeven_proxy/api/ai/conversation_preferences',
+    '/_redeven_proxy/api/ai/threads/thread-1',
+  ])('allows cancellation for a body-free GET read at %s', path => {
+    expect(isRuntimeFlowerCancellableRead({ method: 'GET', path })).toBe(true);
+  });
+
+  it.each([
+    { method: 'POST' as const, path: '/_redeven_proxy/api/ai/turns' },
+    { method: 'PUT' as const, path: '/_redeven_proxy/api/fs/directory_favorites' },
+    { method: 'PATCH' as const, path: '/_redeven_proxy/api/ai/conversation_preferences' },
+    { method: 'DELETE' as const, path: '/_redeven_proxy/api/fs/directory_favorites' },
+    { method: 'GET' as const, path: '/_redeven_proxy/api/settings', body: {} },
+    { method: 'GET' as const, path: '/_redeven_proxy/api/settings', staging_scope_id: 'scope', staging_capability: 'secret' },
+  ])('rejects cancellation for non-read requests %#', request => {
+    expect(isRuntimeFlowerCancellableRead(request)).toBe(false);
+  });
+});
 
 describe('runtime Flower stream IPC normalization', () => {
   it('accepts bounded opaque stream identities and absolute request paths', () => {

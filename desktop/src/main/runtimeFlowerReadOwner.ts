@@ -1,6 +1,6 @@
 import type { WebContents } from 'electron';
 import { bindRuntimeFlowerStreamOwner } from './runtimeFlowerStreamOwner';
-import { isRuntimeFlowerDetailRead, normalizeRuntimeFlowerReadID, type RuntimeFlowerRequest } from '../shared/runtimeFlowerIPC';
+import { isRuntimeFlowerCancellableRead, normalizeRuntimeFlowerReadID, type RuntimeFlowerRequest } from '../shared/runtimeFlowerIPC';
 type Sender = Pick<WebContents, 'id' | 'on' | 'removeListener'>;
 
 /** Cancellation belongs to one renderer document and never controls a command. */
@@ -11,9 +11,9 @@ export function createRuntimeFlowerReadOwner() {
     async run<T>(sender: Sender, request: RuntimeFlowerRequest, read: (signal?: AbortSignal) => Promise<T>, document: string): Promise<T> {
       if (request.read_id === undefined) return read();
       const id = normalizeRuntimeFlowerReadID(request.read_id);
-      if (!id || !document || !isRuntimeFlowerDetailRead(request)) throw new Error('Invalid cancellable Flower detail read.');
+      if (!id || !document || !isRuntimeFlowerCancellableRead(request)) throw new Error('Invalid cancellable Flower read.');
       const key = keyFor(sender, document, id);
-      if (reads.has(key)) throw new Error('Flower detail read identity is already active.');
+      if (reads.has(key)) throw new Error('Flower read identity is already active.');
       const controller = new AbortController();
       const operation = { controller, release: () => {} };
       reads.set(key, operation);
