@@ -2227,3 +2227,5 @@ Runtime restart, and compact-panel recovery. See the
 - 2026-10-20: Adopt published Floret v7.74.1 deleted-actor resource release; qualify fixed-workset surface disposal independently from native browser navigation context retention.
 
 - 2026-10-20: Release font measurement callbacks on Flower composer and approval disposal, including indefinitely pending font loads; preserve completion/error remeasurement without uncancellable readiness promises.
+
+- 2026-10-21: Classify unavailable computer targets before dispatch, describe tool failure state without prescribing model routes, and clarify saved bindings and manual recovery exits across all shipped locales.

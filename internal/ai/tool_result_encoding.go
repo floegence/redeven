@@ -96,15 +96,14 @@ func encodeModelToolResult(result ToolResult) (encodedModelToolResult, error) {
 
 func safeToolResultAfterEncodingFailure(source ToolResult, code aitools.ErrorCode) (ToolResult, *fltools.InputRequest) {
 	guidance := "The tool result could not be encoded. Inspect current state before deciding the next step."
-	if code == aitools.ErrorCodeToolResultTooLarge {
-		guidance = "The final Computer JSON result exceeds 1 MiB. "
+	if isComputerUseTool(source.ToolName) {
+		guidance = "The tool result could not be encoded."
 	}
-	if isComputerManagementTool(source.ToolName) {
-		guidance += " Refresh computer.targets, select an eligible candidate, then observe it."
-	} else if source.ToolName == "computer.exec" {
-		guidance += " Reduce script output and use a read-only computer.observe or computer.screenshot before any further action. Never replay completed operations."
-	} else if isComputerUseTool(source.ToolName) {
-		guidance += " Use a smaller root_ref/limit for computer.observe, or computer.screenshot. No action is replayed."
+	if code == aitools.ErrorCodeToolResultTooLarge {
+		guidance = "The final Computer JSON result exceeds 1 MiB."
+	}
+	if isComputerUseTool(source.ToolName) {
+		guidance += " An unavailable result does not establish that an action did not execute. Completed actions must not be replayed."
 	}
 	facts := source.executionFacts
 	data := map[string]any{"result_unavailable": true}

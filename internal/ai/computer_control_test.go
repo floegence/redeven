@@ -22,10 +22,13 @@ func TestComputerRecoveryRejectsWritesUntilFreshObservation(t *testing.T) {
 	if !errors.As(err, &policy) || policy.code != "recovery_observation_required" {
 		t.Fatalf("write before observation returned %v", err)
 	}
-	for _, instruction := range []string{"fresh observation", "computer.targets", "computer.select_target", "Do not repeat completed actions"} {
+	for _, instruction := range []string{"fresh observation", "Completed actions must not be repeated"} {
 		if !strings.Contains(err.Error(), instruction) {
 			t.Fatalf("model feedback omitted %q: %v", instruction, err)
 		}
+	}
+	if strings.Contains(err.Error(), "computer.targets") || strings.Contains(err.Error(), "computer.select_target") {
+		t.Fatalf("recovery gate prescribed a tool route: %v", err)
 	}
 	if len(executor.calls) != 0 {
 		t.Fatalf("write reached target before observation: %+v", executor.calls)
@@ -77,7 +80,6 @@ func TestComputerRecoveryCanSelectDiscoveredReplacement(t *testing.T) {
 	control.pause = &InteractionSafetyDecision{Level: "takeover", ReasonCodes: []string{"user_control"}}
 	control.recheckInteractionID = "tool-input:resolved"
 	host.registry.remove("browser-main")
-	host.registry.remove("browser-main")
 	continuation := TargetToolCall{ThreadID: "thread-first", TurnID: "recovery-turn", RunID: "waiting-run", TargetID: "browser-main", interactionID: "tool-input:resolved"}
 	r := &run{
 		threadID: "thread-first", turnID: "recovery-turn", id: "recovery-run",
@@ -92,8 +94,14 @@ func TestComputerRecoveryCanSelectDiscoveredReplacement(t *testing.T) {
 	if !ok {
 		t.Fatalf("target discovery returned %T", inventoryValue)
 	}
+	if inventory.CurrentTargetID != "browser-main" {
+		t.Fatalf("discovery replaced the saved binding: %+v", inventory)
+	}
 	var candidate string
 	for _, item := range inventory.Candidates {
+		if item.TargetID == inventory.CurrentTargetID {
+			t.Fatalf("closed target remained in fresh candidates: %+v", item)
+		}
 		if item.TargetID == "desktop-main" {
 			candidate = item.CandidateRef
 		}
