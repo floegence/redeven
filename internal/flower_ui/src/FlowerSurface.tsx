@@ -7582,7 +7582,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     };
     const retryAction = () => <Show when={!hasCompactionRecoveryDivider()
       && (targetThread()?.current_execution?.turn_kind !== 'context_compaction' || isCompactionRecovery(targetThread()))}>
-      <Button size="sm" variant="ghost" disabled={retryBlocked()}
+      <Button size="sm" variant="ghost" loading={retryPending()} disabled={retryBlocked()}
         onClick={() => void retryContinuation()}>{isCompactionRecovery(targetThread())
           ? compactionRecoveryPending(targetThread()) ? copy().chat.compactionDivider.retrying : copy().chat.compactionDivider.retry
           : copy().chat.retryReply}</Button>

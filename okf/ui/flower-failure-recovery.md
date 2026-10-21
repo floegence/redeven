@@ -42,6 +42,10 @@ before another deliberate attempt. Unknown tool effects retain their no-retry
 boundary. Manual retry uses the same deadline without dispatching another
 command automatically.
 
+Manual retry immediately shows the shared button spinner beside its retained
+label, including while canonical preflight is pending. The existing per-thread
+retry owner supplies loading and disabled state and releases both on completion,
+failure or timeout. The reserved icon slot keeps adjacent actions stable.
 Manual retry first reads canonical thread detail and proceeds only while the
 selected thread is still failed, or the same manual compaction is canonically failed or cancelled. Historical typed engine failures expose the
 same action; unknown effect outcomes never do. Floret validates the checkpoint
