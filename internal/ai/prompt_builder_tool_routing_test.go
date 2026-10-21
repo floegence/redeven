@@ -29,11 +29,12 @@ func assertPromptNotContains(t *testing.T, prompt string, forbidden string) {
 
 func TestToolDefinitionsRetainTheirOperationContracts(t *testing.T) {
 	contracts := map[string][]string{
-		"okf.index":  {"Redeven repository knowledge"},
-		"okf.search": {"candidate summaries"},
-		"okf.open":   {"Summary and the section catalog"},
-		"image.read": {"exactly one of file_path or a media:v1 locator", "reject target_id"},
-		"subagents":  {"direct children", "inherited history does not transfer ownership"},
+		"okf.index":        {"Redeven repository knowledge"},
+		"okf.search":       {"candidate summaries"},
+		"okf.open":         {"Summary and the section catalog"},
+		"image.read":       {"exactly one of file_path or a media:v1 locator", "reject target_id"},
+		"subagents":        {"direct children", "inherited history does not transfer ownership"},
+		"report_to_parent": {"child task managed by your direct parent", "question, blocker", "automatically notifies the parent", "subagents inspect/wait"},
 	}
 	for _, def := range builtInToolDefinitions() {
 		required, ok := contracts[def.Name]
