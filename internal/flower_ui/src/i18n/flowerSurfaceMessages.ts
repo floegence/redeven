@@ -339,6 +339,10 @@ export const flowerSurfaceEnUS = {
     syncTimeout: "Synchronization timed out after 15 seconds. Try again.",
     composerErrorTitle: 'Flower could not send.',
     turnProcess: {
+      toolCalls: { one: '{count} tool call', other: '{count} tool calls' },
+      thinkingSegments: { one: '{count} thinking segment', other: '{count} thinking segments' },
+      runningTools: { one: '{count} running', other: '{count} running' },
+      expandTools: 'Expand tool calls', collapseTools: 'Collapse tool calls',
       failed: 'Flower could not complete this turn.', cancelled: 'Stopped', interrupted: 'This turn was interrupted.',
       worked: 'Worked for {duration}',
       subtaskUpdates: { one: '{count} subtask update', other: '{count} subtask updates' },

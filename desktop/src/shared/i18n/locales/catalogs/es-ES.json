@@ -780,7 +780,30 @@
             "one": "{count} actualización de subtarea",
             "other": "{count} actualizaciones de subtareas"
           }
-        }
+        },
+        "toolCalls": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} llamada a herramienta",
+            "other": "{count} llamadas a herramientas"
+          }
+        },
+        "thinkingSegments": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} segmento de razonamiento",
+            "other": "{count} segmentos de razonamiento"
+          }
+        },
+        "runningTools": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} en ejecución",
+            "other": "{count} en ejecución"
+          }
+        },
+        "expandTools": "Expandir llamadas a herramientas",
+        "collapseTools": "Contraer llamadas a herramientas"
       },
       "modelUnavailableMissingKeys": "Este proveedor de modelos no tiene credenciales configuradas. Añádelas en la configuración.",
       "modelUnavailableProviderDisabled": "Este proveedor de modelos está desactivado. Actívalo en la configuración o selecciona otro modelo.",

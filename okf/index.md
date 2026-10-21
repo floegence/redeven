@@ -265,6 +265,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Flower failure recovery](ui/flower-failure-recovery.md) - One turn-level failure and bounded canonical recovery.
 - [Flower composer attachments](ui/flower-composer-attachments.md) - Stage files and long text through one shared connection-local composer workflow.
 - [Flower file activity presentation](ui/flower-file-activity.md) - Show typed file-change statistics and unified diffs without protocol metadata or reconstructed state.
+- [Flower consecutive tool sequences](ui/flower-tool-sequences.md) - Compact consecutive tools and bounded thinking while preserving dialogue, explicit choices and active reading.
 - [Flower activity disclosure interaction](ui/flower-activity-interaction.md) - Keep tool clicks, reading position, and floating controls stable during streaming.
 - [Flower conversation sidebar](ui/flower-thread-sidebar.md) - Distinguish selection and persist pin order while preserving menus, focus and running animations.
 - [Flower inline media](ui/flower-inline-media.md) - Display screenshots, video, audio, and isolated HTML previews inside assistant messages.
