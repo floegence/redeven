@@ -2,6 +2,7 @@ package ai
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
+	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/settings"
 )
 
 func ollamaTaskSubagentDirectInstructionCapabilities(f *ollamaTaskFixture) {
@@ -123,6 +126,73 @@ func ollamaTaskSubagentDirectInstructionCapabilities(f *ollamaTaskFixture) {
 		f.t.Fatal("child network report omitted the fetched page content")
 	}
 	f.report["subagent_direct_instruction_capabilities"] = true
+}
+
+func TestE2E_FlowerSubagentDirectInstructionCapabilities(t *testing.T) {
+	if os.Getenv("REDEVEN_FLOWER_SUBAGENT_CAPABILITY_E2E") != "1" {
+		t.Skip("set REDEVEN_FLOWER_SUBAGENT_CAPABILITY_E2E=1 to qualify delegated capabilities with the selected real model")
+	}
+	profile, model, key := loadSelectedFlowerTaskProfile(t)
+	modelID := profile.ID + "/" + model.ModelName
+	t.Logf("selected model=%s", model.EffectiveWireModelName())
+	fixture := newOllamaTaskFixture(t, profile, model, modelID, key)
+	ollamaTaskSubagentDirectInstructionCapabilities(fixture)
+	fixture.verifyLive()
+}
+
+func loadSelectedFlowerTaskProfile(t *testing.T) (config.AIProvider, config.AIProviderModel, string) {
+	t.Helper()
+	root := os.Getenv("REDEVEN_FLOWER_CONTEXT_SOURCE_STATE_ROOT")
+	if root == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			t.Fatal(err)
+		}
+		root = filepath.Join(home, ".redeven", "local-environment")
+	}
+	raw, err := os.ReadFile(filepath.Join(root, "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var source struct {
+		AI config.AIConfig `json:"ai"`
+	}
+	if err := json.Unmarshal(raw, &source); err != nil {
+		t.Fatal("invalid local AI configuration")
+	}
+	providerID, modelName, found := strings.Cut(source.AI.CurrentModelID, "/")
+	if !found {
+		t.Fatal("local configuration has no selected provider/model")
+	}
+	var selected config.AIProvider
+	for _, provider := range source.AI.Providers {
+		if provider.ID == providerID {
+			selected = provider
+			break
+		}
+	}
+	if selected.ID == "" {
+		t.Fatal("selected provider is missing from local configuration")
+	}
+	model, found := config.AIModelCatalogEntry(selected.Type, modelName)
+	if !found {
+		for _, candidate := range selected.EffectiveModels() {
+			if candidate.ModelName == modelName {
+				model, found = candidate, true
+				break
+			}
+		}
+	}
+	if !found || model.ContextWindow == 0 || model.MaxOutputTokens == 0 {
+		t.Fatal("selected model is missing its published effective budget")
+	}
+	key, found, err := settings.NewSecretsStore(filepath.Join(root, "secrets.json")).GetAIProviderAPIKey(providerID)
+	if err != nil || !found || key == "" {
+		t.Fatal("selected provider credential is unavailable")
+	}
+	selected.ModelSelection = nil
+	selected.Models = []config.AIProviderModel{model}
+	return selected, model, key
 }
 
 func ollamaTaskCompletedChild(f *ollamaTaskFixture, previousCount int, parentTurnID identity.TurnID, expectedInput, expectedTool string) *FlowerSubagentDetailResponse {
