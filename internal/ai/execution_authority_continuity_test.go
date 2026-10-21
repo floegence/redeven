@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -378,6 +379,60 @@ func TestNewSubagentSettingsInheritEveryParentPermissionMode(t *testing.T) {
 	}
 }
 
+func TestSubagentSpawnReplayUsesExistingChildPermissionBeforeInputAdmission(t *testing.T) {
+	ctx := t.Context()
+	const parentThreadID = "thread_parent_pending_spawn"
+	const childThreadID = "thread_child_pending_spawn"
+	meta := &session.Meta{
+		EndpointID: "endpoint_pending_spawn", NamespacePublicID: "namespace_pending_spawn",
+		UserPublicID: "user_pending_spawn", CanRead: true, CanWrite: true, CanExecute: true,
+	}
+	store := newAuthorityContinuityStore(t)
+	for _, settings := range []threadstore.ThreadSettings{
+		{ThreadID: parentThreadID, EndpointID: meta.EndpointID, NamespacePublicID: meta.NamespacePublicID, ModelID: "openai/gpt-5-mini", PermissionType: permissionTypeString(FlowerPermissionFullAccess)},
+		{ThreadID: childThreadID, EndpointID: meta.EndpointID, NamespacePublicID: meta.NamespacePublicID, ModelID: "openai/gpt-5-mini", PermissionType: permissionTypeString(FlowerPermissionReadonly), ParentThreadID: parentThreadID},
+	} {
+		if err := store.CreateThreadSettings(ctx, settings); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	childView := flruntime.ThreadView{ThreadID: identity.ThreadID(childThreadID), Activity: flruntime.ThreadActivityIdle}
+	threadRuntime := &authorityContinuityRuntime{}
+	threadRuntime.create = func(_ context.Context, input flruntime.CreateThreadInput) (flruntime.ThreadView, error) {
+		if input.HostProfileRef != "flower" {
+			t.Fatalf("spawn host profile=%q", input.HostProfileRef)
+		}
+		return childView, nil
+	}
+	threadRuntime.lookupSend = func(context.Context, flruntime.LookupSendInput) (flruntime.UserInput, bool, error) {
+		return flruntime.UserInput{}, false, nil
+	}
+	threadRuntime.send = func(ctx context.Context, input flruntime.SendInput) (flruntime.ThreadView, error) {
+		authority, err := store.GetExecutionAuthority(ctx, string(input.RequestKey))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if authority == nil || authority.PermissionType != permissionTypeString(FlowerPermissionReadonly) {
+			t.Fatalf("pending spawn authority=%#v, want existing child readonly permission", authority)
+		}
+		childView.TurnID = identity.TurnID("turn-pending-child")
+		return childView, nil
+	}
+	service := &Service{threadsDB: store, threadRuntime: threadRuntime, floretEffects: newFloretEffectAdapter()}
+	parent := &run{
+		sessionMeta: meta, endpointID: meta.EndpointID, threadID: parentThreadID, turnID: "turn-pending-parent",
+		currentModelID: "openai/gpt-5-mini", permissionType: FlowerPermissionFullAccess,
+	}
+	_, err := newServiceFloretSubagentRuntime(service, parent).spawn(ctx, "tool-pending-spawn", map[string]any{
+		"task_name": "continue pending task", "task_description": "Continue the admitted child task.",
+		"message": "Continue the admitted child task.", "context_mode": subagentContextModeMissionOnly,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestHistoricalSubagentSpawnReplayKeepsOriginalInputAndPermission(t *testing.T) {
 	ctx := t.Context()
 	const parentThreadID = "thread_parent_legacy_spawn"
@@ -450,6 +505,91 @@ func TestHistoricalSubagentSpawnReplayKeepsOriginalInputAndPermission(t *testing
 	child, err := store.GetThreadSettings(ctx, meta.EndpointID, childThreadID)
 	if err != nil || child == nil || child.PermissionType != permissionTypeString(FlowerPermissionReadonly) {
 		t.Fatalf("historical child permission changed: %#v err=%v", child, err)
+	}
+}
+
+func TestSubagentPendingInputReplayKeepsPersistedExecutionAuthority(t *testing.T) {
+	for _, action := range []string{subagentActionSpawn, subagentActionSendInput} {
+		t.Run(action, func(t *testing.T) {
+			ctx := t.Context()
+			const parentID = "thread_parent_pending_authority"
+			const childID = "thread_child_pending_authority"
+			const message = "\nInvestigate with terminal access. Preserve these instructions.\n"
+			meta := &session.Meta{
+				EndpointID: "endpoint_pending_authority", NamespacePublicID: "namespace_pending_authority",
+				UserPublicID: "user_original", ChannelID: "channel_original", CanRead: true, CanWrite: true, CanExecute: true,
+			}
+			store := newAuthorityContinuityStore(t)
+			for _, settings := range []threadstore.ThreadSettings{
+				{ThreadID: parentID, EndpointID: meta.EndpointID, NamespacePublicID: meta.NamespacePublicID, ModelID: "openai/gpt-5-mini", PermissionType: permissionTypeString(FlowerPermissionReadonly)},
+				{ThreadID: childID, EndpointID: meta.EndpointID, NamespacePublicID: meta.NamespacePublicID, ModelID: "openai/gpt-5-mini", PermissionType: permissionTypeString(FlowerPermissionReadonly), ParentThreadID: parentID},
+			} {
+				if err := store.CreateThreadSettings(ctx, settings); err != nil {
+					t.Fatal(err)
+				}
+			}
+			view := flruntime.ThreadView{ThreadID: identity.ThreadID(childID), Activity: flruntime.ThreadActivityIdle}
+			injected := errors.New("input not admitted")
+			attempts := 0
+			var requestKey string
+			threadRuntime := &authorityContinuityRuntime{}
+			threadRuntime.create = func(context.Context, flruntime.CreateThreadInput) (flruntime.ThreadView, error) { return view, nil }
+			threadRuntime.list = func(context.Context, flruntime.ThreadScope) ([]flruntime.ThreadSummary, error) {
+				return []flruntime.ThreadSummary{{ID: identity.ThreadID(childID), ParentThreadID: identity.ThreadID(parentID)}}, nil
+			}
+			threadRuntime.view = func(context.Context, identity.ThreadID) (flruntime.ThreadView, error) { return view, nil }
+			threadRuntime.send = func(ctx context.Context, input flruntime.SendInput) (flruntime.ThreadView, error) {
+				attempts++
+				requestKey = string(input.RequestKey)
+				if input.Input.Text != message {
+					t.Fatalf("pending input text=%q", input.Input.Text)
+				}
+				authority, err := store.GetExecutionAuthority(ctx, requestKey)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if authority == nil || authority.PermissionType != permissionTypeString(FlowerPermissionReadonly) || authority.UserPublicID != "user_original" || authority.ChannelID != "channel_original" {
+					t.Fatalf("pending input authority=%#v", authority)
+				}
+				if attempts == 1 {
+					return flruntime.ThreadView{}, injected
+				}
+				view.TurnID = "turn-pending-authority"
+				view.Items = []flruntime.ThreadItem{{ID: "user:" + requestKey, TurnID: view.TurnID, Kind: flruntime.ThreadItemUser, Text: message}}
+				return view, nil
+			}
+			threadRuntime.steer = func(ctx context.Context, input flruntime.SteerInput) (flruntime.ThreadView, error) {
+				return threadRuntime.send(ctx, flruntime.SendInput{ThreadID: input.ThreadID, Input: input.Input, RequestKey: input.RequestKey})
+			}
+			service := &Service{threadsDB: store, threadRuntime: threadRuntime, floretEffects: newFloretEffectAdapter()}
+			parent := &run{sessionMeta: meta, endpointID: meta.EndpointID, threadID: parentID, turnID: "turn-parent", currentModelID: "openai/gpt-5-mini", permissionType: FlowerPermissionReadonly}
+			runtime := newServiceFloretSubagentRuntime(service, parent)
+			args := map[string]any{"action": action, "target": childID, "task_name": "pending input", "task_description": "Investigate with terminal access.", "message": message}
+			if _, err := runtime.manage(ctx, "tool-pending-input", args); !errors.Is(err, injected) {
+				t.Fatalf("first input attempt=%v, want injected admission failure", err)
+			}
+			if err := store.UpdateThreadPermissionType(ctx, meta.EndpointID, childID, permissionTypeString(FlowerPermissionFullAccess)); err != nil {
+				t.Fatal(err)
+			}
+			meta.UserPublicID, meta.ChannelID = "user_new", "channel_new"
+			parent.permissionType = FlowerPermissionFullAccess
+			service = &Service{threadsDB: store, threadRuntime: threadRuntime, floretEffects: newFloretEffectAdapter()}
+			runtime = newServiceFloretSubagentRuntime(service, parent)
+			if _, err := runtime.manage(ctx, "tool-pending-input", args); err != nil {
+				t.Fatalf("pending input replay=%v", err)
+			}
+			if attempts != 2 {
+				t.Fatalf("input attempts=%d, want failed admission then one successful replay", attempts)
+			}
+			authority, err := store.GetExecutionAuthority(ctx, requestKey)
+			if err != nil || authority == nil || authority.TurnID != view.TurnID.String() {
+				t.Fatalf("admitted authority=%#v err=%v", authority, err)
+			}
+			settings, err := store.GetThreadSettingsByCanonicalThreadID(ctx, childID)
+			if err != nil || settings == nil || settings.PermissionType != permissionTypeString(FlowerPermissionFullAccess) {
+				t.Fatalf("current child permission changed on replay: %#v err=%v", settings, err)
+			}
+		})
 	}
 }
 

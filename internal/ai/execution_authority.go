@@ -53,3 +53,11 @@ func (s *Service) persistExecutionAuthorityRecord(ctx context.Context, authority
 	}
 	return db.PutExecutionAuthority(ctxOrBackground(ctx), copy)
 }
+
+func sessionMetaFromExecutionAuthority(authority *threadstore.ExecutionAuthority) session.Meta {
+	return session.Meta{
+		ChannelID: strings.TrimSpace(authority.ChannelID), EndpointID: strings.TrimSpace(authority.EndpointID),
+		NamespacePublicID: strings.TrimSpace(authority.NamespacePublicID), UserPublicID: strings.TrimSpace(authority.UserPublicID),
+		UserEmail: strings.TrimSpace(authority.UserEmail), CanRead: true, CanWrite: true, CanExecute: true,
+	}
+}
