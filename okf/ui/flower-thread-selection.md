@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower conversation selection and detail reads
 description: Present navigation feedback before committing content and coordinate bounded canonical detail reads.
 tags: [flower, navigation, cancellation, recovery, detail]
-timestamp: 2026-10-19T00:00:00Z
+timestamp: 2026-10-20T00:00:00Z
 ---
 # Summary
 
@@ -24,11 +24,12 @@ background transition. Only the latest intent commits;
 ThreadCache.selectedId remains the sole committed conversation identity.
 Foreground detail requests cannot bypass this boundary through summary effects.
 
-The previous title, body and draft stay together with a localized loading status
-until commit. A capture guard blocks old conversation interactions; Send, Stop,
-input, approval and Goal also reject the intent. Native inert must not restyle
-the history, and the status node stays mounted so inserting it cannot invalidate
-Markdown first-child selectors. The rail remains available. An already captured immutable submission keeps its original
+The previous title, body and draft stay together until commit. The rail's
+selected state acknowledges navigation; no floating loading status covers the
+conversation. Cold conversations use the chat's existing inline loading state.
+A capture guard blocks old conversation interactions; Send, Stop, input, approval
+and Goal also reject the intent. Native inert must not restyle the history.
+The rail remains available. An already captured immutable submission keeps its original
 ThreadID and cannot cancel a newer navigation. Returning to the committed
 conversation cancels the pending target without remounting its body. New chat,
 external focus, embedded scope changes, deletion and disposal retain their
@@ -105,5 +106,6 @@ Floret; the host does not reconstruct its history or lifecycle.
 - `redeven:internal/flower_ui/src/threadDetailLoader.test.ts` - Shared demand, fresh confirmations, cancellation, explicit retry, settlement and bounded idle records.
 - `redeven:internal/flower_ui/src/threadSelectionSchedule.test.ts` - Visible feedback, hidden documents and idempotent commit cancellation.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.test.tsx` - Latest selection, retained drafts and interaction ownership.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigationIntent.test.tsx` - No floating loading status during cold or warm selection; inline loading and interaction guards remain intact.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.threadReferences.browser.test.tsx` - Preview closure and late response rejection.
 - [Performance and recovery qualification](../operations/flower-thread-switch-qualification.md) - Synthetic point-read scaling and actual selection presentation.

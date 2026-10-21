@@ -13739,10 +13739,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       <section ref={guardConversationNavigation} class="flower-component-main"
         inert={threadDrawerPresent() || settingsDialogPresent()}
         aria-hidden={threadDrawerPresent() || settingsDialogPresent() ? 'true' : undefined}>
-        <div class="flower-thread-navigation-status" role="status" aria-busy={!!pendingThreadSelection()} hidden={!pendingThreadSelection()}>
-          <Refresh class="h-3.5 w-3.5 motion-safe:animate-spin" aria-hidden="true" />
-          <span>{copy().chat.threadLoading}</span>
-        </div>
         <div class="h-full min-h-0" data-flower-panel="chat" hidden={visiblePanel() !== 'chat'}
           aria-hidden={visiblePanel() !== 'chat'} inert={visiblePanel() !== 'chat'}>
           {chatPanel()}
