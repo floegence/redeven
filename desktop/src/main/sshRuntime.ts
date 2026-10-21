@@ -726,7 +726,7 @@ export function buildManagedSSHRemoteInstallScript(): string {
     'script_path="${staging_root}/install.sh"',
     'mkdir -p "$staging_bin_dir"',
     'curl -fsSL "$install_script_url" -o "$script_path"',
-    'REDEVEN_INSTALL_PROGRESS=1 REDEVEN_INSTALL_MODE=upgrade REDEVEN_VERSION="$target_release_tag" REDEVEN_INSTALL_DIR="$staging_bin_dir" sh "$script_path"',
+    'REDEVEN_INSTALL_MODE=upgrade REDEVEN_VERSION="$target_release_tag" REDEVEN_INSTALL_DIR="$staging_bin_dir" sh "$script_path" >&2',
     'old_stamp_path="$stamp_path"',
     'old_managed_root="$managed_root"',
     'managed_root="$staging_root"',
