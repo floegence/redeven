@@ -521,6 +521,11 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       syncTimeout: t(i18n, k('chat.syncTimeout')),
       composerErrorTitle: t(i18n, k('chat.composerErrorTitle')),
       turnProcess: {
+        toolCalls: count => i18n.tn(k('chat.turnProcess.toolCalls'), count, { count: new Intl.NumberFormat(i18n.locale).format(count) }),
+        thinkingSegments: count => i18n.tn(k('chat.turnProcess.thinkingSegments'), count, { count: new Intl.NumberFormat(i18n.locale).format(count) }),
+        runningTools: count => i18n.tn(k('chat.turnProcess.runningTools'), count, { count: new Intl.NumberFormat(i18n.locale).format(count) }),
+        expandTools: t(i18n, k('chat.turnProcess.expandTools')),
+        collapseTools: t(i18n, k('chat.turnProcess.collapseTools')),
         failed: t(i18n, k('chat.turnProcess.failed')),
         cancelled: t(i18n, k('chat.turnProcess.cancelled')),
         interrupted: t(i18n, k('chat.turnProcess.interrupted')),

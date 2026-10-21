@@ -44,6 +44,9 @@ Triggers expose a pointer cursor, focus indication, `aria-expanded`, and
 `aria-controls`. Enter and Space retain native activation. Before closing a
 panel containing focus, the trigger receives focus with `preventScroll`.
 
+Consecutive tools and bounded thinking use [tool sequences](flower-tool-sequences.md)
+for compact spacing and group disclosure, without replacing individual details.
+
 ## Thread query and read details
 
 `Thread Query:` and `Thread Read:` are fixed English technical tool labels; their

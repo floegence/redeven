@@ -634,7 +634,30 @@
           "one": "{count} subtask update",
           "other": "{count} subtask updates"
         }
-      }
+      },
+      "toolCalls": {
+        "kind": "plural",
+        "forms": {
+          "one": "{count} tool call",
+          "other": "{count} tool calls"
+        }
+      },
+      "thinkingSegments": {
+        "kind": "plural",
+        "forms": {
+          "one": "{count} thinking segment",
+          "other": "{count} thinking segments"
+        }
+      },
+      "runningTools": {
+        "kind": "plural",
+        "forms": {
+          "one": "{count} running",
+          "other": "{count} running"
+        }
+      },
+      "expandTools": "Expand tool calls",
+      "collapseTools": "Collapse tool calls"
     },
     "modelUnavailableMissingKeys": "This model provider has no credentials configured. Add credentials in settings.",
     "modelUnavailableProviderDisabled": "This model provider is disabled. Enable it in settings or select another model.",

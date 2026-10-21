@@ -1,11 +1,13 @@
 import type { Accessor, Component } from 'solid-js';
 import { Show, createEffect, createSignal, on, onCleanup } from 'solid-js';
+import { Brain } from 'lucide-solid';
 import { ChevronRight } from '@floegence/floe-webapp-core/icons';
 
 export type FlowerThinkingDisclosureView = 'preview' | 'expanded' | 'collapsed';
 
 export type FlowerThinkingDisclosureProps = Readonly<{
   contentID: string;
+  inline?: Accessor<boolean>;
   content: Accessor<string>;
   live: Accessor<boolean>;
   liveConfirmed: Accessor<boolean>;
@@ -72,6 +74,7 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
   return (
     <div
       class="flower-thinking-disclosure"
+      classList={{ 'flower-thinking-disclosure-inline': props.inline?.() ?? false }}
       data-state={view() === 'collapsed' ? 'closed' : 'open'}
       data-flower-thinking-view={view()}
       data-flower-thinking-active={active() ? 'true' : 'false'}
@@ -80,13 +83,18 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
         ref={toggleButton}
         type="button"
         class="flower-thinking-toggle"
+        classList={{ 'flower-activity-inline-button': props.inline?.() ?? false }}
+        data-flower-manual-open={view() === 'expanded' ? 'true' : undefined}
         aria-controls={contentID}
         aria-expanded={view() !== 'collapsed'}
         aria-label={view() === 'expanded' ? props.collapseLabel() : props.expandLabel()}
         onClick={toggle}
       >
-        <ChevronRight class="flower-thinking-toggle-icon" aria-hidden="true" />
-        <span>{props.label()}</span>
+        <Show when={props.inline?.()} fallback={<ChevronRight class="flower-thinking-toggle-icon" aria-hidden="true" />}>
+          <span class="flower-activity-inline-icon"><Brain size={16} strokeWidth={1.7} aria-hidden="true" /></span>
+        </Show>
+        <span classList={{ 'flower-activity-inline-title': props.inline?.() ?? false }}>{props.label()}</span>
+        <Show when={props.inline?.()}><ChevronRight class="flower-thinking-toggle-icon" aria-hidden="true" /></Show>
         <span class="flower-visually-hidden">
           {view() === 'expanded' ? props.collapseLabel() : props.expandLabel()}
         </span>

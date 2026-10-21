@@ -91,6 +91,7 @@ import { FlowerContextCompactionDivider } from './chat/FlowerContextCompactionDi
 import { compactionDividerDetail } from './chat/flowerContextPresentation';
 import { SubagentAvatar } from './SubagentAvatar';
 import { SubagentAvatarStack } from './SubagentAvatarStack';
+import { FlowerToolSequenceNode, useFlowerToolSequenceMember } from './FlowerToolSequenceNode';
 import { FlowerThinkingDisclosure } from './FlowerThinkingDisclosure';
 import { FlowerTurnTimeline } from './FlowerTurnTimeline';
 import { createFlowerTurnDisclosureStore } from './flowerTurnDisclosure';
@@ -10837,11 +10838,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <For each={visibleItemKeys()}>
             {(itemKey) => {
               const visibleItem = createMemo(() => visibleItemsByKey().get(itemKey) ?? null);
-              return <div data-flower-tool-row-identity={itemKey}>
+              return <FlowerToolSequenceNode nodeKey={itemKey}>
                 <Show when={visibleItem()} fallback={<Show when={preview()}>{argumentPreviewRow}</Show>}>
                   {(item) => activityRow(messageID, blockIndex, () => block()!, item, viewportScope, media)}
                 </Show>
-              </div>;
+              </FlowerToolSequenceNode>;
             }}
           </For>
         </div>
@@ -10860,6 +10861,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ) => {
     const markdown = createMemo(() => block().block_type === 'markdown');
     const thinking = createMemo(() => block().block_type === 'thinking');
+    const sequenceMember = useFlowerToolSequenceMember(() => block().key);
     const thinkingLive = createMemo(() => thinking() && message().live === true);
     const thinkingEndsAbnormally = createMemo(() => {
       const currentThread = thread();
@@ -10952,19 +10954,22 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           </div>
         )}
       >
-        <FlowerThinkingDisclosure
-          contentID={block().key}
-          manualExpanded={() => expandedDetails[detailDisclosureKey(message().thread_id ?? '', 'thinking', block().key)]}
-          onManualExpanded={expanded => setExpandedDetails(detailDisclosureKey(message().thread_id ?? '', 'thinking', block().key), expanded)}
-          content={() => block().content}
-          live={thinkingLive}
-          liveConfirmed={livePresentationConfirmed}
-          preserveOnEnd={thinkingEndsAbnormally}
-          label={() => thinkingLive() && livePresentationConfirmed() ? copy().chat.modelStatus.streaming : copy().chat.thinkingLabel}
-          expandLabel={() => copy().chat.expandThinking}
-          collapseLabel={() => copy().chat.collapseThinking}
-          contentBody={ContentBody}
-        />
+        <FlowerToolSequenceNode nodeKey={block().key}>
+          <FlowerThinkingDisclosure
+            inline={() => Boolean(sequenceMember())}
+            contentID={block().key}
+            manualExpanded={() => expandedDetails[detailDisclosureKey(message().thread_id ?? '', 'thinking', block().key)]}
+            onManualExpanded={expanded => setExpandedDetails(detailDisclosureKey(message().thread_id ?? '', 'thinking', block().key), expanded)}
+            content={() => block().content}
+            live={thinkingLive}
+            liveConfirmed={livePresentationConfirmed}
+            preserveOnEnd={thinkingEndsAbnormally}
+            label={() => thinkingLive() && livePresentationConfirmed() ? copy().chat.modelStatus.streaming : copy().chat.thinkingLabel}
+            expandLabel={() => copy().chat.expandThinking}
+            collapseLabel={() => copy().chat.collapseThinking}
+            contentBody={ContentBody}
+          />
+        </FlowerToolSequenceNode>
       </Show>
     );
   };

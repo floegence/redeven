@@ -5679,7 +5679,21 @@
         "subtaskUpdates": {
           "one": "{count} Unteraufgaben-Update",
           "other": "{count} Unteraufgaben-Updates"
-        }
+        },
+        "toolCalls": {
+          "one": "{count} Werkzeugaufruf",
+          "other": "{count} Werkzeugaufrufe"
+        },
+        "thinkingSegments": {
+          "one": "{count} Denkabschnitt",
+          "other": "{count} Denkabschnitte"
+        },
+        "runningTools": {
+          "one": "{count} in Ausführung",
+          "other": "{count} in Ausführung"
+        },
+        "expandTools": "Werkzeugaufrufe aufklappen",
+        "collapseTools": "Werkzeugaufrufe zuklappen"
       },
       "modelUnavailableMissingKeys": "Für diesen Modellanbieter sind keine Zugangsdaten eingerichtet. Füge sie in den Einstellungen hinzu.",
       "modelUnavailableProviderDisabled": "Dieser Modellanbieter ist deaktiviert. Aktiviere ihn in den Einstellungen oder wähle ein anderes Modell.",

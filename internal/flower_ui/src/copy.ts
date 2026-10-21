@@ -14,6 +14,11 @@ import type { FlowerProviderTypeLabels } from './settings/providerTypeLabels';
 import { localizedFlowerProviderTypeLabels } from './settings/providerTypeLabels';
 
 export type FlowerTurnProcessCopy = Readonly<{
+  toolCalls: (count: number) => string;
+  thinkingSegments: (count: number) => string;
+  runningTools: (count: number) => string;
+  expandTools: string;
+  collapseTools: string;
   failed: string;
   cancelled: string;
   interrupted: string;
@@ -1165,6 +1170,10 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     syncTimeout: "Synchronization timed out after 15 seconds. Try again.",
     composerErrorTitle: 'Flower could not send.',
     turnProcess: {
+      toolCalls: count => `${count} ${count === 1 ? 'tool call' : 'tool calls'}`,
+      thinkingSegments: count => `${count} ${count === 1 ? 'thinking segment' : 'thinking segments'}`,
+      runningTools: count => `${count} running`,
+      expandTools: 'Expand tool calls', collapseTools: 'Collapse tool calls',
       failed: 'Flower could not complete this turn.', cancelled: 'Stopped', interrupted: 'This turn was interrupted.',
       worked: (duration) => `Worked for ${duration}`,
       subtaskUpdates: (count) => count === 1 ? '1 subtask update' : count + ' subtask updates',

@@ -780,7 +780,30 @@
             "one": "{count} mise à jour de sous-tâche",
             "other": "{count} mises à jour de sous-tâches"
           }
-        }
+        },
+        "toolCalls": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} appel d’outil",
+            "other": "{count} appels d’outils"
+          }
+        },
+        "thinkingSegments": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} étape de réflexion",
+            "other": "{count} étapes de réflexion"
+          }
+        },
+        "runningTools": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} en cours",
+            "other": "{count} en cours"
+          }
+        },
+        "expandTools": "Développer les appels d’outils",
+        "collapseTools": "Réduire les appels d’outils"
       },
       "modelUnavailableMissingKeys": "Aucun identifiant n’est configuré pour ce fournisseur de modèles. Ajoutez-les dans les réglages.",
       "modelUnavailableProviderDisabled": "Ce fournisseur de modèles est désactivé. Activez-le dans les réglages ou sélectionnez un autre modèle.",

@@ -5679,7 +5679,21 @@
         "subtaskUpdates": {
           "one": "{count} 条子任务动态",
           "other": "{count} 条子任务动态"
-        }
+        },
+        "toolCalls": {
+          "one": "{count} 次工具调用",
+          "other": "{count} 次工具调用"
+        },
+        "thinkingSegments": {
+          "one": "{count} 段思考",
+          "other": "{count} 段思考"
+        },
+        "runningTools": {
+          "one": "{count} 项执行中",
+          "other": "{count} 项执行中"
+        },
+        "expandTools": "展开工具调用",
+        "collapseTools": "收起工具调用"
       },
       "modelUnavailableMissingKeys": "此模型的模型提供商尚未配置凭据。请在设置中添加凭据。",
       "modelUnavailableProviderDisabled": "此模型的模型提供商已停用。请在设置中启用，或选择其他模型。",

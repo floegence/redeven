@@ -5679,7 +5679,21 @@
         "subtaskUpdates": {
           "one": "サブタスクの更新 {count} 件",
           "other": "サブタスクの更新 {count} 件"
-        }
+        },
+        "toolCalls": {
+          "one": "ツール呼び出し {count} 回",
+          "other": "ツール呼び出し {count} 回"
+        },
+        "thinkingSegments": {
+          "one": "思考 {count} 件",
+          "other": "思考 {count} 件"
+        },
+        "runningTools": {
+          "one": "{count} 件実行中",
+          "other": "{count} 件実行中"
+        },
+        "expandTools": "ツール呼び出しを展開",
+        "collapseTools": "ツール呼び出しを折りたたむ"
       },
       "modelUnavailableMissingKeys": "このモデルプロバイダーの認証情報が設定されていません。設定で認証情報を追加してください。",
       "modelUnavailableProviderDisabled": "このモデルプロバイダーは無効です。設定で有効にするか、別のモデルを選択してください。",

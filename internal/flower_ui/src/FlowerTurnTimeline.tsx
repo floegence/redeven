@@ -5,6 +5,8 @@ import type { FlowerTurnProcessCopy } from './copy';
 import type { FlowerTimelineEntry } from './flowerTimelineProjection';
 import type { FlowerScrollTailController } from './flowerScrollTail';
 import type { FlowerTurnDisclosureStore } from './flowerTurnDisclosure';
+import { FlowerToolSequenceContext } from './FlowerToolSequenceNode';
+import { projectFlowerToolSequences, type FlowerToolSequence, type FlowerToolSequenceProjection } from './flowerToolSequences';
 import { createFlowerActivityDisclosureMotion } from './activityDisclosure';
 import { flowerDurationParts, projectFlowerTurnProcess, type FlowerTurnProcessProjection } from './flowerTurnPresentation';
 
@@ -60,18 +62,18 @@ export function FlowerTurnTimeline(props: Readonly<{
     if (layoutAnchor) props.scroll.releaseDisclosure(layoutAnchor);
   });
 
-  const inspectionProtected = (turnID: string, processKeys: readonly string[]) => {
+  const inspectionProtected = (turnID: string, processKeys: readonly string[], protectThinking = false, inspectedNodes?: readonly HTMLElement[]) => {
     const viewport = props.scroll.viewport();
     const visible = viewport?.getBoundingClientRect();
     const selection = document.getSelection();
-    return processKeys.some((key) => {
-      const row = nodes.get(key);
+    return (inspectedNodes ?? processKeys.map(key => nodes.get(key))).some((row) => {
       if (!row) return false;
       if (row.contains(document.activeElement) || gestureTarget && row.contains(gestureTarget)) return true;
       if (menuOwner === turnID && document.querySelector('[role="menu"]')) return true;
       if (row.querySelector('details[open]')) return true;
       for (const button of row.querySelectorAll('[aria-expanded="true"]')) {
-        if (button.closest('.flower-thinking-disclosure')) continue;
+        if (button.closest('.flower-thinking-disclosure') && (!protectThinking || button.getAttribute('data-flower-manual-open') !== 'true')) continue;
+        if (button.matches('.flower-tool-sequence-toggle') && button.getAttribute('data-flower-manual-open') !== 'true') continue;
         if (button.matches('.flower-activity-inline-button') && button.getAttribute('data-flower-manual-open') !== 'true') continue;
         return true;
       }
@@ -103,6 +105,28 @@ export function FlowerTurnTimeline(props: Readonly<{
     });
     previousProjection = { threadID, value };
     return value;
+  });
+  const sequenceIdentity = (key: string) => JSON.stringify([props.runtimeID, props.thread?.thread_id, 'tools', key]);
+  let previousSequences: { threadID?: string; value: FlowerToolSequenceProjection } | undefined;
+  const sequences = createMemo(() => {
+    const next = projectFlowerToolSequences(props.entries);
+    const previous = previousSequences?.threadID === props.thread?.thread_id ? previousSequences?.value : undefined;
+    if (previous) untrack(() => {
+      for (const group of next.groups.values()) {
+        const addedKeys = new Set(group.nodeKeys.filter(key => !previous.members.has(key)));
+        if (!addedKeys.size) continue;
+        const inspectedNodes = group.entryKeys.flatMap(key =>
+          [...(nodes.get(key)?.querySelectorAll<HTMLElement>('[data-flower-tool-row-identity]') ?? [])]
+            .filter(node => addedKeys.has(node.dataset.flowerToolRowIdentity!)));
+        const turnID = processes().rows.get(group.entryKeys[0])?.turnID ?? '';
+        if (inspectionProtected(turnID, group.entryKeys, true, inspectedNodes)) {
+          props.choices.observe(sequenceIdentity(group.key), 'manual', () => false);
+          props.choices.retainExpanded(sequenceIdentity(group.key));
+        }
+      }
+    });
+    previousSequences = { threadID: props.thread?.thread_id, value: next };
+    return next;
   });
   const preserveReadingAnchor = (processKeys: readonly string[]) => {
     if (props.scroll.followingLatest()) return;
@@ -142,6 +166,44 @@ export function FlowerTurnTimeline(props: Readonly<{
     });
   });
 
+  createEffect(() => {
+    const projection = sequences();
+    untrack(() => {
+      for (const group of projection.groups.values()) {
+        const turnID = processes().rows.get(group.entryKeys[0])?.turnID ?? '';
+        props.choices.observe(sequenceIdentity(group.key), group.disclosure,
+          () => inspectionProtected(turnID, group.entryKeys, true),
+          () => preserveReadingAnchor(group.entryKeys));
+      }
+    });
+  });
+  const finishMotion = (key: string) => {
+    motions.delete(key);
+    if (motions.size === 0 && layoutAnchor) {
+      props.scroll.finishDisclosure(layoutAnchor);
+      layoutAnchor = undefined;
+    }
+    props.scroll.measureAfterLayout();
+  };
+  const sequenceContext = {
+    projection: sequences,
+    expanded: (group: FlowerToolSequence) => props.choices.expanded(sequenceIdentity(group.key), group.disclosure),
+    manuallyExpanded: (group: FlowerToolSequence) => props.choices.manuallyExpanded(sequenceIdentity(group.key)),
+    toggle: (group: FlowerToolSequence, button: HTMLButtonElement) => {
+      if (group.entryKeys.some(key => nodes.get(key)?.contains(document.activeElement))) button.focus({ preventScroll: true });
+      layoutAnchor = button;
+      props.scroll.activateDisclosure(button);
+      props.choices.toggle(sequenceIdentity(group.key), group.disclosure);
+    },
+    contentID: (key: string) => `flower-tool-sequence-${encodeURIComponent(`${props.scope}:${props.thread?.thread_id}:${key}`)}`,
+    onLayoutFrame: (key: string, moving: boolean) => {
+      if (moving) motions.add(key);
+      props.scroll.measureAfterLayout();
+    },
+    onMotionEnd: finishMotion,
+    copy: () => props.copy,
+    reducedMotion: props.reducedMotion,
+  };
   const row = (key: string, entry: Accessor<FlowerTimelineEntry>) => {
     const group = createMemo(() => processes().rows.get(key));
     const process = createMemo(() => group()?.processKeys.includes(key) ?? false);
@@ -165,14 +227,6 @@ export function FlowerTurnTimeline(props: Readonly<{
       const worked = props.copy.worked(duration(current.turn!.work_duration_ms));
       return current.parentEventCount ? worked + ' · ' + props.copy.subtaskUpdates(current.parentEventCount) : worked;
     };
-    const finishMotion = () => {
-      motions.delete(key);
-      if (motions.size === 0 && layoutAnchor) {
-        props.scroll.finishDisclosure(layoutAnchor);
-        layoutAnchor = undefined;
-      }
-      props.scroll.measureAfterLayout();
-    };
     const motion = createFlowerActivityDisclosureMotion(expanded, {
       initialOpen: untrack(expanded),
       reducedMotion: props.reducedMotion,
@@ -180,7 +234,7 @@ export function FlowerTurnTimeline(props: Readonly<{
         if (motion.state() === 'opening' || motion.state() === 'closing') motions.add(key);
         props.scroll.measureAfterLayout();
       },
-      onMotionEnd: finishMotion,
+      onMotionEnd: () => finishMotion(key),
     });
     const toggle = (button: HTMLButtonElement) => {
       const current = group();
@@ -205,6 +259,7 @@ export function FlowerTurnTimeline(props: Readonly<{
         data-flower-row-message-id={entry().type === 'message' ? (entry() as Extract<FlowerTimelineEntry, { type: 'message' }>).message.id : undefined}
         data-flower-row-event-id={entry().type === 'parent_event' ? (entry() as Extract<FlowerTimelineEntry, { type: 'parent_event' }>).event.id : undefined}
         data-flower-row-decoration-id={entry().type === 'context_compaction' ? (entry() as Extract<FlowerTimelineEntry, { type: 'context_compaction' }>).decoration.decoration_id : undefined}
+        data-flower-sequence-continues={sequences().continuingEntries.has(key) ? 'true' : undefined}
         data-flower-turn-settled={settled() ? 'true' : undefined}>
         <Show when={summary()}>
           <div class="flower-turn-summary">
@@ -231,9 +286,9 @@ export function FlowerTurnTimeline(props: Readonly<{
       </div>
     );
   };
-  return <div class="flower-turn-timeline"><For each={keys()}>{(token) => {
+  return <FlowerToolSequenceContext.Provider value={sequenceContext}><div class="flower-turn-timeline"><For each={keys()}>{(token) => {
     const key = (JSON.parse(token) as [string, string])[1];
     const entry = createMemo(() => entries().get(key)!);
     return row(key, entry);
-  }}</For></div>;
+  }}</For></div></FlowerToolSequenceContext.Provider>;
 }

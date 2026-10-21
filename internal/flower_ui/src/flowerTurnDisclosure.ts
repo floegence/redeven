@@ -6,6 +6,11 @@ export function createFlowerTurnDisclosureStore() {
   const choices = new Map<string, { policy: FlowerTurnDisclosurePolicy; expanded: boolean; retained: boolean }>();
   const [revision, setRevision] = createSignal(0);
   return {
+    manuallyExpanded(key: string): boolean {
+      revision();
+      const choice = choices.get(key);
+      return Boolean(choice?.retained && choice.expanded);
+    },
     settled(key: string): boolean {
       revision();
       const choice = choices.get(key);
