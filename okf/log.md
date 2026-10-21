@@ -10,7 +10,7 @@
 
 ## 2026-10-21 — Direct Flower subagent delegation
 
-- Remove role-selected child prompts and permissions. Parents now provide task and execution authorization directly in `message`, while `context_mode` selects inherited history; new children inherit current parent permission, and later child input uses current child settings. Preserve historical role metadata and admitted requests without using them to choose current behavior. See [subagent runtime](ai/subagent-runtime.md), [tool permissions](ai/tool-permission-runtime.md), and [Floret adapter boundary](ai/floret-redeven-adapter-and-projection.md).
+- Remove role-selected child prompts and permissions. Parents now provide task and execution authorization directly in `message`, while `context_mode` selects inherited history; new children inherit current parent permission, and later child input uses current child settings. Pending retries retain their persisted execution identity. Preserve historical role metadata and admitted requests without using them to choose current behavior. See [subagent runtime](ai/subagent-runtime.md), [tool permissions](ai/tool-permission-runtime.md), and [Floret adapter boundary](ai/floret-redeven-adapter-and-projection.md).
 
 ## 2026-10-20 — Quiet Flower conversation navigation
 

@@ -15,6 +15,7 @@ import (
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	fltools "github.com/floegence/floret/v7/tools"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -190,8 +191,10 @@ func (runtime *floretSubagentRuntime) spawn(ctx context.Context, toolCallID stri
 		return nil, flruntime.ErrRequestConflict
 	}
 	if !inputAdmitted {
-		request := runtime.childEffectRequest(parent, child.ThreadID.String(), sendKey, message,
-			strings.TrimSpace(parent.currentModelID), permissionTypeString(parent.currentPermissionType()))
+		request, err := service.childEffectRequest(ctx, parent, child.ThreadID.String(), sendKey, message)
+		if err != nil {
+			return nil, err
+		}
 		result, err = service.sendFloretSubagentInput(ctx, threads, child.ThreadID, message, sendKey, request)
 		if err != nil {
 			return nil, err
@@ -213,15 +216,42 @@ func (runtime *floretSubagentRuntime) spawn(ctx context.Context, toolCallID stri
 	}, nil
 }
 
-func (runtime *floretSubagentRuntime) childEffectRequest(parent *run, childID, requestKey, text, modelID, permissionType string) floretEffectRequest {
+func (service *Service) childEffectRequest(ctx context.Context, parent *run, childID, requestKey, text string) (floretEffectRequest, error) {
+	db := service.snapshotThreadStore()
+	if db == nil {
+		return floretEffectRequest{}, errors.New("subagent settings are unavailable")
+	}
+	settings, err := db.GetThreadSettingsByCanonicalThreadID(ctxOrBackground(ctx), childID)
+	if err != nil {
+		return floretEffectRequest{}, err
+	}
+	if settings == nil {
+		return floretEffectRequest{}, errors.New("subagent settings are unavailable")
+	}
+	permission, err := parsePermissionType(settings.PermissionType)
+	if err != nil {
+		return floretEffectRequest{}, err
+	}
+	permissionType := permissionTypeString(permission)
 	meta := session.Meta{}
 	if parent.sessionMeta != nil {
 		meta = *parent.sessionMeta
 	}
+	authority, err := db.GetExecutionAuthority(ctxOrBackground(ctx), requestKey)
+	if err != nil {
+		return floretEffectRequest{}, err
+	}
+	if authority != nil {
+		if authority.ThreadID != childID {
+			return floretEffectRequest{}, threadstore.ErrExecutionAuthorityConflict
+		}
+		meta = sessionMetaFromExecutionAuthority(authority)
+		permissionType = authority.PermissionType
+	}
 	return floretEffectRequest{meta: meta, req: SendUserTurnRequest{
-		ClientRequestID: requestKey, ThreadID: childID, Model: strings.TrimSpace(modelID),
+		ClientRequestID: requestKey, ThreadID: childID, Model: strings.TrimSpace(settings.ModelID),
 		Input: RunInput{Text: text}, Options: RunOptions{NoUserInteraction: true, PermissionType: permissionType},
-	}}
+	}}, nil
 }
 
 func (service *Service) sendFloretSubagentInput(ctx context.Context, threads flruntime.ThreadService, threadID identity.ThreadID, text, requestKey string, request floretEffectRequest) (flruntime.ThreadView, error) {
@@ -362,22 +392,10 @@ func (runtime *floretSubagentRuntime) sendInput(ctx context.Context, toolCallID 
 			"items": []map[string]any{boundedSubagentItem(subagentSnapshotPayload(snapshot))},
 		}, nil
 	}
-	if service.threadsDB == nil {
-		return nil, errors.New("subagent settings are unavailable")
-	}
-	settings, err := service.threadsDB.GetThreadSettingsByCanonicalThreadID(ctxOrBackground(ctx), target)
+	request, err := service.childEffectRequest(ctx, parent, target, requestKey, message)
 	if err != nil {
 		return nil, err
 	}
-	if settings == nil {
-		return nil, errors.New("subagent settings are unavailable")
-	}
-	permission, err := parsePermissionType(settings.PermissionType)
-	if err != nil {
-		return nil, err
-	}
-	request := runtime.childEffectRequest(parent, target, requestKey, message,
-		settings.ModelID, permissionTypeString(permission))
 	controller, ok := threads.(flruntime.ThreadSteeringController)
 	if !ok {
 		return nil, errors.New("subagent steering is unavailable")

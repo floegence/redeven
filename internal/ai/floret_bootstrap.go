@@ -156,12 +156,7 @@ func (s *Service) restoreFloretEffectRequest(ctx context.Context, request flrunt
 	}
 	// Admission requires RWX session authority. Tool policy is resolved at each
 	// authorization boundary independently of this durable identity.
-	meta := session.Meta{
-		ChannelID: strings.TrimSpace(authority.ChannelID), EndpointID: strings.TrimSpace(authority.EndpointID),
-		NamespacePublicID: strings.TrimSpace(authority.NamespacePublicID), UserPublicID: strings.TrimSpace(authority.UserPublicID),
-		UserEmail: strings.TrimSpace(authority.UserEmail), CanRead: true,
-		CanWrite: true, CanExecute: true,
-	}
+	meta := sessionMetaFromExecutionAuthority(authority)
 	var canonicalInput RunInput
 	if request.TurnKind == "" {
 		canonicalInput, err = canonicalRunInputFromFloret(request)

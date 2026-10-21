@@ -119,7 +119,9 @@ model behavior qualification; record its actual execution outcome independently.
 
 Deterministic tests pass for the role-free schema, exact delegation text, all
 three inherited permission modes, historical readonly preservation, and canonical
-steering and spawn replay. The replay case changes child permissions, rejects
+steering and spawn replay. Pending spawn and send-input retries also retain their
+persisted execution identity when child permissions or session identity change
+before input admission. The replay case changes child permissions, rejects
 conflicting content, and verifies that removed historical queued input remains
 removed. Shared Flower UI and targeted child browser checks also pass.
 
