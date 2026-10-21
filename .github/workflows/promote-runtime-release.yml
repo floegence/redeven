@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: Exact stable release whose installation entry is already deployed
+        description: Exact stable release whose immutable installer distribution is ready
         required: true
         type: string
 

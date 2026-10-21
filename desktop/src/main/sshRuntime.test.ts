@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -386,7 +386,7 @@ describe('sshRuntime', () => {
     }
   });
 
-  it('normalizes remote-install Runtime metadata independently of the target umask', () => {
+  it('keeps installer output off the staged-path channel and normalizes remote metadata', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-remote-runtime-mode-'));
     try {
       const targetRoot = path.join(root, 'target');
@@ -403,6 +403,7 @@ describe('sshRuntime', () => {
         'cat > "$output" <<\'INSTALL\'',
         '#!/bin/sh',
         'set -eu',
+        "printf '%s\\n' 'Downloading Redeven: 25%' 'Downloading ripgrep: 10%' 'Installer diagnostic'",
         'mkdir -p "$REDEVEN_INSTALL_DIR"',
         'printf \'#!/bin/sh\\necho redeven v1 abc\\n\' > "$REDEVEN_INSTALL_DIR/redeven"',
         'chmod 775 "$REDEVEN_INSTALL_DIR/redeven"',
@@ -414,7 +415,7 @@ describe('sshRuntime', () => {
       const scriptPath = path.join(root, 'remote-install.sh');
       fs.writeFileSync(scriptPath, buildManagedSSHRemoteInstallScript());
 
-      const stagingRoot = execFileSync('sh', [
+      const result = spawnSync('sh', [
         '-c',
         'umask 0002\nexec sh "$1" "$2" "$3" "$4"',
         'redeven-remote-runtime-mode-test',
@@ -425,7 +426,12 @@ describe('sshRuntime', () => {
       ], {
         encoding: 'utf8',
         env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH ?? ''}` },
-      }).trim();
+      });
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe('Downloading Redeven: 25%\nDownloading ripgrep: 10%\nInstaller diagnostic\n');
+      const stagingRoot = result.stdout.trim();
+      expect(result.stdout).toBe(`${stagingRoot}\n`);
+      expect(stagingRoot).toMatch(new RegExp(`^${targetRoot}/runtime/managed\\.staging\\.[^/\\n]+$`));
 
       expect(fileMode(stagingRoot)).toBe(0o700);
       expect(fileMode(path.join(stagingRoot, 'bin'))).toBe(0o700);

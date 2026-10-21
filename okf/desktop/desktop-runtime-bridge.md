@@ -14,7 +14,7 @@ Redeven Desktop opens Runtime instances through machine-readable startup, scoped
 # Contract
 
 ## Mechanism
-This concept is the stable overview for the subject.
+Focused contracts:
 
 Settings, model directory, preferences, and thread-detail GETs can carry it; commands, request bodies, and staging authorization cannot.
 
