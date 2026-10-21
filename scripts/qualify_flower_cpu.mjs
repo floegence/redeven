@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -121,7 +122,13 @@ if (process.argv.includes('--build')) {
       await tracer.send('Tracing.start', { categories: 'devtools.timeline,disabled-by-default-devtools.timeline.invalidationTracking', options: 'record-as-much-as-possible' });
     }
     const metrics = () => application.evaluate(({ app }) => app.getAppMetrics().map(item => ({ pid: item.pid, type: item.type, cpu: item.cpu.cumulativeCPUUsage })));
+    const clockTicks = process.platform === 'linux' ? Number(execFileSync('getconf', ['CLK_TCK'], { encoding: 'utf8' }).trim()) : 0;
     const runtimeCPU = () => {
+      if (process.platform === 'linux') {
+        const stat = readFileSync('/proc/' + setup.pid + '/stat', 'utf8');
+        const fields = stat.slice(stat.lastIndexOf(')') + 2).trim().split(/\s+/);
+        return (Number(fields[11]) + Number(fields[12])) / clockTicks;
+      }
       const value = execFileSync('ps', ['-p', String(setup.pid), '-o', 'time='], { encoding: 'utf8' }).trim();
       return value.split(':').reduce((total, piece) => total * 60 + Number(piece), 0);
     };
