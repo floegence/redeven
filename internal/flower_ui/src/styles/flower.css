@@ -5089,9 +5089,8 @@ button.flower-composer-context-source:focus-visible,
   border: 0;
 }
 
-.flower-chat-md-committed-segment,
-.flower-chat-md-tail,
-.flower-chat-md-tail-frame {
+.flower-chat-md-content,
+.flower-chat-md-committed-segment {
   min-width: 0;
   max-width: 100%;
 }
@@ -5106,9 +5105,7 @@ button.flower-composer-context-source:focus-visible,
   border-top: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 58%, transparent);
 }
 
-.flower-chat-md-block > .flower-chat-md-committed-segment:first-child > :first-child,
-.flower-chat-md-block > .flower-chat-md-committed-segment:first-child .flower-chat-md-segment-html > :first-child,
-.flower-chat-md-block > .flower-chat-md-tail-frame:first-child .flower-chat-md-tail > :first-child,
+.flower-chat-md-block > .flower-chat-md-content > .flower-chat-md-committed-segment:first-child > :first-child,
 .flower-chat-md-blockquote > :first-child,
 .flower-chat-md-block li > :first-child {
   margin-top: 0;
