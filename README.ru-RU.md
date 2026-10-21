@@ -86,7 +86,7 @@ Redeven объединяет компьютеры и серверы в един�
 
 ```bash
 # 1. Установить
-curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
+curl -fsSL https://github.com/floegence/redeven/releases/latest/download/redeven-install.sh | sh
 
 redeven run
 ```

@@ -681,6 +681,7 @@ jobs:
             redeven-installer_*
             redeven-installer-contract.json
             redeven-install.sh
+            redeven-install-portal.sh
             redeven-gateway_*.tar.gz
             redeven-runtime-compatibility_*.json
             redeven-runtime-compatibility_*.sig
@@ -766,6 +767,7 @@ jobs:
             dist/redeven-installer_*
             dist/redeven-installer-contract.json
             dist/redeven-install.sh
+            dist/redeven-install-portal.sh
             dist/redeven-runtime-compatibility_*.json
             dist/redeven-runtime-compatibility_*.sig
             dist/redeven-runtime-compatibility_*.pem

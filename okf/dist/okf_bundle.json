@@ -12700,6 +12700,12 @@
           "title": "Redeven OKF Bundle"
         },
         {
+          "label": "CI and release gates",
+          "path": "release/ci-and-release-gates.md",
+          "concept_id": "release.ci-and-release-gates",
+          "title": "CI and release gates"
+        },
+        {
           "label": "Shared surface material",
           "path": "ui/surface-material.md",
           "concept_id": "ui.surface-material",
@@ -20380,15 +20386,15 @@
         "title": "Desktop SSH runtime operations",
         "type": "Desktop Contract"
       },
-      "body_length": 2311,
+      "body_length": 9872,
       "summary": "Desktop manages an SSH-host or SSH-container Runtime only through the exact saved SSH connection and placement. The same process-local lifecycle coordinator, Launcher Operation, transport lease, platform observation, and temporary helper session serve Start, Stop, Restart, Update, Refresh, Open recovery, and Reinstall. Gateway and Provider credentials are never substituted for SSH authority, and the target stores no Desktop lifecycle lock or supervisor state.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Transport\nThe SSH transport manager keys a connection by normalized destination, port, authentication mode, SSH binary, and credential scope. A transport failure ends the current command with its original SSH diagnostics; Desktop does not silently select another connection, Gateway, public URL, or Provider route.\n\nA metadata-normalization failure leaves the live slot unchanged, while ReDevPlugin remains the final fail-closed executable-admission authority at startup.\n\n## Host and container behavior\nSSH-host actions execute against the confirmed remote user and Runtime root. Start, Restart, Update, or Reinstall may start that saved container when required; Stop never starts a stopped container and succeeds idempotently when the Runtime inventory is already empty.\n\nDesktop owns sequence, timeouts, cancellation, progress, and retry.\n\n## User-facing result\nDirect host bootstrap fetches the canonical maintained installer at `https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh` and passes the selected release tag explicitly.\n\nA Gateway-only or Provider-only Environment has no SSH authority and therefore cannot borrow this execution path.",
-          "char_count": 1176
+          "body": "## Transport\n\nThe SSH transport manager keys a connection by normalized destination, port, authentication mode, SSH binary, and credential scope. A transport failure ends the current command with its original SSH diagnostics; Desktop does not silently select another connection, Gateway, public URL, or Provider route.\n\nmacOS and Linux reuse an OpenSSH ControlMaster. Windows uses the same credential-scoped lease contract with independent native OpenSSH processes for bounded commands and one persistent SSH child for each private Runtime Bridge. Windows does not require ControlMaster sockets or WSL to connect to SSH Environments. A nonzero remote command is returned without replay; SSH authentication and transport failures keep their distinct diagnostics. Cancellation and disposal terminate only children owned by that Desktop transport. The normalized environment Connect Timeout governs both OpenSSH connection establishment and Runtime probe, inventory and startup readiness for that control connection. Runtime startup and package transfer retain their own deadlines; lifecycle callers do not supply a second connection timeout.\n\nWindows password authentication uses the packaged x64 native askpass helper. Each SSH process inherits only its connection's password; the helper accepts password/passphrase prompts, refuses host-key prompts, and writes the answer only to its private standard output. Passwords never enter command arguments, helper files, or logs. Host-key verification remains OpenSSH-owned and enabled. The helper is included separately from the Linux Runtime archive; a missing helper fails password connection visibly.\n\nSSH discovery follows bounded configuration includes, excludes wildcard and negated aliases from selectable entries, and still allows explicit destinations. The Environment registration keeps the display name separate from SSH destination and supplies the exact Runtime root and, for containers, engine and container id.\n\nOne lifecycle operation opens or reuses one SSH transport, probes platform once, prepares a lightweight helper only when required, and reuses that session for inventory and stop. Start and Stop do not prepare a full Runtime package. Update prepares the Runtime package independently, verifies it before target modification, and exposes build/download/upload phases separately from process discovery.\n\nRuntime package admission limits the compressed archive to 256 MiB and its entire expanded tar stream to 512 MiB. The expanded budget covers the native Runtime, Computer suite, and signed plugin inventory together. Gzip expansion enforces the limit while decoding; oversized input fails before target modification. Validation consumes one parsed entry inventory rather than inflating the same archive again for executable discovery.\n\nSource package preparation builds from a clean checkout against published dependencies. Embedded asset preparation installs Desktop dependencies before compiling Env App, because the shared Flower surface resolves its imports from Desktop. A package build must not depend on a developer's existing `node_modules`.\n\nBulk package uploads use bounded pipe writes and a progress deadline. A continuously progressing upload may exceed the ordinary command deadline; a stalled write still terminates the owned SSH command. After the final write, the ordinary completion deadline applies until the remote command exits. Pipe progress does not certify remote receipt: package admission and target verification remain mandatory. Cancellation and transport loss retain their existing authority, and administrator credential streams do not use the bulk-upload deadline.\n\nDesktop stages every managed Runtime package with private metadata independent of the target user's shell `umask`: `runtime`, `runtime/managed`, and `runtime/managed/bin` are mode `0700`; the `redeven` and `redevplugin-runtime` executables are mode `0700`; and the managed stamp plus ReDevPlugin evidence files are mode `0600`. Upload, remote-install, container, and reinstall paths consume this one slot contract. A metadata-normalization failure leaves the live slot unchanged, while ReDevPlugin remains the final fail-closed executable-admission authority at startup.\n\n## Host and container behavior\n\nSSH-host actions execute against the confirmed remote user and Runtime root. SSH-container actions additionally inspect the saved exact container. Start, Restart, Update, or Reinstall may start that saved container when required; Stop never starts a stopped container and succeeds idempotently when the Runtime inventory is already empty.\n\nInventory identifies processes by exact Runtime scope and returns typed before/after state. Desktop signals only verified matching processes for ordinary Stop/Restart/Update. Wipe reinstall treats helper inventory and stop as best effort and proceeds to exact-root isolation when SSH and filesystem access remain available.\n\nThe remote command snippets each perform one bounded action: probe, stage helper, inventory, stop, install, start, verify, isolate, or cleanup. They do not implement a lifecycle state machine, persist a lock, maintain a heartbeat, or wait on Provider/Gateway authorization. Desktop owns sequence, timeouts, cancellation, progress, and retry.\n\n## User-facing result\n\nDirect host bootstrap fetches the same generated, signed Release entry documented for users at `https://github.com/floegence/redeven/releases/latest/download/redeven-install.sh` and passes the selected release tag explicitly. A separately deployed Portal route is not a second installation implementation.\n\nRuntime package transfers appear inside the existing Launcher Operation task row for both Desktop upload and direct host download, including Update and Reinstall. Desktop upload reports acknowledged local pipe-write bytes and archive size; Desktop archive acquisition reports response-body bytes and a usable HTTP content length. Concurrent hosts sharing one cached acquisition observe the same transfer. Direct host download observes curl's progress-bar percentage from that exact installer command, without a second download or polling SSH command. Missing download length keeps the meter indeterminate. Transmission reaching 100% does not certify integrity, installation, or Runtime readiness. The preparation task remains active until the staged package is verified; cancellation or failure freezes the observed progress and never fills it synthetically. SSH package acquisition, upload-directory creation, archive upload, and staged unpacking all belong to package preparation; only activation modifies the installed slot.\n\nThe Launcher Operation exists before the first SSH command and reports the actual active phase. SSH connection failure, missing container, unavailable engine, package preparation failure, command exit, and Runtime readiness failure remain distinct structured errors with technical stderr available in details. The session-specific startup-report reader returns an empty successful result until Runtime atomically publishes the report; Desktop treats that state as pending within the existing bounded startup deadline. A nonzero report-read result is a target-command failure, a valid blocked report is a Runtime start failure with the reported reason, and only a nonempty malformed or contract-invalid report is labeled invalid. Start, Restart, Update, Open recovery, and Reinstall consume this one report-availability contract.\n\nAn SSH or SSH-container registration always retains its direct lifecycle menu. A Gateway-only or Provider-only Environment has no SSH authority and therefore cannot borrow this execution path.",
+          "char_count": 7659
         },
         {
           "id": "boundaries",
@@ -20416,6 +20422,54 @@
           "source": "redeven:desktop/src/main/sshTransportManager.test.ts",
           "line": 1,
           "description": "Platform execution, failure classification, and owned-child disposal."
+        },
+        {
+          "id": "redeven:desktop/src/main/managedRuntimeSlot.ts:1:standard managed runtime file inventory and private metadata contract.",
+          "source": "redeven:desktop/src/main/managedRuntimeSlot.ts",
+          "line": 1,
+          "description": "Standard managed Runtime file inventory and private metadata contract."
+        },
+        {
+          "id": "redeven:desktop/src/main/sshRuntime.ts:1:direct ssh runtime package, helper, process, start, and verification operations.",
+          "source": "redeven:desktop/src/main/sshRuntime.ts",
+          "line": 1,
+          "description": "Direct SSH Runtime package, helper, process, start, and verification operations."
+        },
+        {
+          "id": "redeven:desktop/src/main/runtimeTransferProgress.ts:1:bounded transfer observation and upload event frequency.",
+          "source": "redeven:desktop/src/main/runtimeTransferProgress.ts",
+          "line": 1,
+          "description": "Bounded transfer observation and upload event frequency."
+        },
+        {
+          "id": "redeven:desktop/src/welcome/RuntimeComponentTransferProgress.tsx:1:localized determinate and indeterminate transfer meters.",
+          "source": "redeven:desktop/src/welcome/RuntimeComponentTransferProgress.tsx",
+          "line": 1,
+          "description": "Localized determinate and indeterminate transfer meters."
+        },
+        {
+          "id": "redeven:desktop/src/main/containerRuntime.ts:1:exact ssh-container command construction.",
+          "source": "redeven:desktop/src/main/containerRuntime.ts",
+          "line": 1,
+          "description": "Exact SSH-container command construction."
+        },
+        {
+          "id": "redeven:desktop/src/main/runtimeLifecycleCoordinator.ts:1:one current-desktop owner per physical target.",
+          "source": "redeven:desktop/src/main/runtimeLifecycleCoordinator.ts",
+          "line": 1,
+          "description": "One current-Desktop owner per physical target."
+        },
+        {
+          "id": "redeven:desktop/src/main/runtimeLifecycleExecutionPlan.ts:1:explicit intent-specific progress phases.",
+          "source": "redeven:desktop/src/main/runtimeLifecycleExecutionPlan.ts",
+          "line": 1,
+          "description": "Explicit intent-specific progress phases."
+        },
+        {
+          "id": "redeven:desktop/src/main/reinstallTargetCoordinator.ts:1:ssh and container final-recovery path.",
+          "source": "redeven:desktop/src/main/reinstallTargetCoordinator.ts",
+          "line": 1,
+          "description": "SSH and container final-recovery path."
         }
       ],
       "snippet": "Desktop manages an SSH-host or SSH-container Runtime only through the exact saved SSH connection and placement. The same process-local lifecycle coordinator, Launcher Operation, transport lease, platform observation, and temporary helper se",
@@ -20478,6 +20532,12 @@
           "label": "Redeven OKF Bundle",
           "path": "index.md",
           "title": "Redeven OKF Bundle"
+        },
+        {
+          "label": "CI and release gates",
+          "path": "release/ci-and-release-gates.md",
+          "concept_id": "release.ci-and-release-gates",
+          "title": "CI and release gates"
         }
       ]
     },
@@ -24372,22 +24432,22 @@
         "title": "CI and release gates",
         "type": "Release Contract"
       },
-      "body_length": 3893,
+      "body_length": 24790,
       "summary": "Redeven uses focused checks during implementation, a fast staged pre-commit\ngate, and one complete integration gate for the exact main tip being pushed.\nPublished dependency evidence, generated assets, localized public docs, UI\nbehavior, Desktop/runtime bundles, Go tests, lint, and OKF must all agree. A\nmissing, stale, unsigned, optional, or target-mismatched ReDevPlugin artifact\nfails release packaging.\nWindows is an internal certification target only; the formal release inventory\nfails closed if any Windows asset appears.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "The [self-contained installer distribution](self-contained-installer.md) contract owns prebuilt installer pins, complete suite activation, and the separate guarded default-version promotion after immutable asset publication.\n\n## Validation levels\n`AGENTS.md` owns concise global working rules and Git discipline, with an OKF index entrypoint for consultation when additional context is needed.\n\nRedeven native sources and other build output remain scanned; upstream fixture literals must not require disabling a rule for product code.\n\nWorkflow cleanup may unregister only its temporary test distributions; product code never performs that system operation.\n\n## Documentation and generated assets\n`README.md` is canonical.\n\nEnv App builds continue to verify committed assets with `--check`.\n\n## Focused release contracts\nThe published ReDevPlugin artifact and plugin surface contracts are maintained as focused concepts so this gate remains the owner of exact-main validation order and evidence handoff:\n\n- [ReDevPlugin release artifact gate](redevplugin-release-gates.md) owns upstream publication, runtime evidence, native packaging, and collector inventory. - [Plugin integration gate](plugin-integration-gates.md) owns Host/market/plugin UI integration and its isolated renderer and Desktop smokes.\n\n## Desktop update publication\nThe protected `redeven-release` environment supplies Developer ID signing, notarization, Sparkle Ed25519, and expected Team ID secrets without committing their values. The hosted Desktop job submits that exact disk image to Apple, requires an `Accepted` result within its bounded wait, and staples and validates its ticket before installer receipts or Sparkle metadata are generated.\n\nAppcasts, signed notes, Linux metadata, and installers are included in the aggregate checksum and remote readback comparison before publication.\n\n## Flower storage compatibility\nThe [historical writer contract](../ai/flower-upgrade-compatibility.md) is part of every final main integration, including Floret dependency upgrades. Failure and restore tests cover WAL, cross-owner retry, zero execution during preparation, backup protection, full-set replacement interruption and stale outbox rejection.\n\n## Other published boundaries\nFloret follows the same published-dependency discipline. Gateway protocol drift fails before packaging.\n\nWorkbench PDF drag tests remove only the Vitest runner's outer preview scaling while preserving the product canvas projection, then restore the runner styles after the interaction.",
-          "char_count": 2536
+          "body": "The [self-contained installer distribution](self-contained-installer.md)\ncontract owns prebuilt installer pins, complete suite activation, and the\nseparate guarded default-version promotion after immutable asset publication.\n\n## Validation levels\n\n`AGENTS.md` owns concise global working rules and Git discipline, with an OKF\nindex entrypoint for consultation when additional context is needed. It does\nnot prescribe a mandatory reading list before changes. Domain-specific behavior\nstays in its own concept rather than being duplicated in repository instructions. The\nrepository-instruction tests in `scripts/quick_ci_policy.test.mjs` enforce a\n100-line limit, including headings and blank lines, and verify the OKF index\nand linked contract files. Fast commit checks, ordinary source CI, and the\nexact-main source gate run these checks without adding product qualification.\n\nFeature work runs focused checks for affected code and contracts. Pre-commit\nchecks the staged diff, README localization contract, staged open-source\nhygiene, and third-party notices when dependency or attribution inputs change.\nIt does not run full asset, Desktop, Docker, or repository suites.\n\nSecret scanning excludes the downloaded SwiftPM dependency checkouts under\n`desktop/native/computer-host/.build/checkouts/`, like the configured npm\ndependency caches. Redeven native sources and other build output remain scanned;\nupstream fixture literals must not require disabling a rule for product code.\n\nThe notice check exports the Git index to a temporary tree and calls that\ntree's existing generator with `--check`. It checks the content being committed,\nincluding partial staging; an unstaged notice update cannot satisfy it. The\nsnapshot reads installed package metadata from the current checkout and uses\nonly the local Go toolchain and module cache, with proxy, checksum-server, and\nVCS downloads disabled. Unrelated commits skip this check. Missing prerequisites\nor stale output stop the commit with instructions to prepare dependencies,\nregenerate notices, and stage matching inputs. Success and failure remove the\ntemporary tree without rewriting working files or the index.\n\nOrdinary push and pull-request Actions run one bounded source-only job. CodeQL\nis a separate asynchronous discovery lane: it runs on a daily schedule or\nmanual dispatch, never from push or pull request. Before a scheduled analysis,\nthe plan job compares the current `main` SHA with the most recent successful\nscheduled CodeQL run. An unchanged SHA skips the language matrix; an API lookup\nfailure fails safe by scanning. This preserves daily detection for changed code\nwithout making hosted analysis part of the normal development gate.\n\nResolve each dependency and code-scanning finding against the current main\nsource. Upgrade fixed dependencies in every maintained npm and pnpm lockfile.\nDismiss a finding only with its specific authorization or input-boundary\nevidence; unavailable scanning is not evidence of a clean result. Signed bundle\nmanifest refresh reads and validates each native file through one no-follow\ndescriptor, retaining rejection of symlink replacement during signing.\n\nEvery external GitHub Action is pinned to a reviewed commit, including the\ncertificate-import action that receives signing secrets. Node-based Actions\nuse supported Node 24 runtimes independently of the product Node 26 toolchain.\n\nThe hosted source job and exact-main gate both reject non-canonical formatting\nin any tracked Go file. The exact-main check reports every affected path before\nthe expensive integration stages begin, and a source-only policy test prevents\nthe local gate from drifting behind the cloud formatting contract.\n\nThe main pre-push hook owns final integration. It requires the checked-out local\nmain tip to be the pushed tip, verifies fast-forward ancestry against the\nremote handshake, rejects merge commits in the unpublished range, and invokes\n`scripts/check_final_integration.sh` with the exact base and tip. Evidence from\nan earlier commit or pre-rebase tip does not transfer.\n\nThe final script requires a clean worktree and runs bounded source, dependency,\nrelease-manifest, compatibility, focused changed-package, and OKF contracts.\nAny generator that changes the tree fails the gate. Full Desktop, browser,\nDocker, stress, and performance suites belong to explicit qualification only.\nFlower's historical conversation qualification is a dedicated manual workflow\nfor the exact final main commit. It opens immutable released-writer copies,\nexplicitly continues through the product and repeats after restart. Release-ref\nrequires successful same-commit Actions evidence before packaging. This is a\nhard historical-data compatibility requirement; ordinary CI and the bounded\nmain gate retain source-only fixture checks.\nThe [Desktop qualification lifecycle](../desktop/desktop-test-lifecycle.md) owns\ntest teardown and final cleanup evidence.\n\n`go.mod` is the single authoritative Go toolchain version and currently pins\nGo 1.27.2. Every GitHub Actions `setup-go` step resolves that file through\n`go-version-file: go.mod`; repository checks select the matching\nthe module's Go directive; public README prerequisites and badges mirror the\nsame value. Quick CI and the exact-main final integration gate run\n`scripts/check_go_version_consistency.mjs`, which rejects drift among these\nsources and requires the local gate runtime to report the exact version. Build,\ntest, Desktop, and release paths therefore cannot silently select an older Go\npatch release.\n\nOffline staged notice checks resolve the installed toolchain from the staged\nmodule before running the generator with `GOTOOLCHAIN=local`. An older `go` on\nPATH must not override that selection. Resolution uses the same offline\nenvironment, so a missing cached toolchain fails before generation without\ndownloading, installing, or changing the index.\n\n`.node-version` is the single authoritative first-party Node.js toolchain and\npins Node 26.7.0. GitHub Actions resolves it through `node-version-file`, while\nDesktop, Env App, and Code App package engines accept only Node 26. Shared UI\nand Desktop development helpers reject other Node majors before dependency or\nbuild work begins, and the public README badges and prerequisites mirror the\nsame exact version.\n\nDesktop pnpm installation permits lifecycle scripts only for `electron` and\n`esbuild`. It explicitly ignores `electron-winstaller`'s Squirrel 7-Zip setup:\nthe internal Windows target uses NSIS. New script-bearing dependencies still\nrequire review. After a dependency update, regenerate `THIRD_PARTY_NOTICES.md`\nfrom the locked packages with `scripts/generate_third_party_notices.mjs` and\nverify it with `--check` before integration.\n\nShipped Redeven Runtime binaries use cgo plus the `floeterm_native` tag so the\npublished terminal-go Ghostty engine is present. The release matrix builds\nLinux amd64/arm64 and Darwin amd64/arm64 on matching native runners and never\ncross-builds a Darwin Runtime from Linux. The exact-main gate checks the native\nbuild contract and focused changed\npackages; full native regression belongs to qualification. An untagged terminal\nlive attachment must fail closed rather than act as a product fallback.\nA source-only contract test guards release, Desktop bundle, SSH source-build,\nand semantic carrier commands against reverting to `CGO_ENABLED=0` or omitting\nthe native tag.\n\nRelease runtime commands must also execute under the macOS runner's system\nBash 3.2 with strict error handling. The build step starts with its required\narguments and appends Linux-only relink options, so Darwin never expands an\nempty array under `set -u`. The native build contract test executes the actual\nworkflow step through `/bin/bash` with a recording builder for all four targets,\nchecking exact arguments without compiling packages or accessing credentials.\n\nEvery hosted job that creates or consumes signed ReDevPlugin runtime artifacts\ninstalls the pinned Cosign action before that operation. Desktop packaging must\nverify the release-profile runtime signature on its own clean runner; an earlier\nbuild job's installed tools do not carry across jobs. A source-only workflow\ncontract guards this prerequisite for build, Desktop, and release collection.\nEach native Desktop job also enables Corepack and installs the frozen Env App\nUI dependency lock before packaging. Computer-resource staging resolves its\nJavaScript helpers from that package root, including Playwright and QuickJS;\nthe Runtime job's installed dependencies do not carry into the Desktop runner.\nThis prerequisite stages helper packages only and does not install browser\nbinaries or run browser tests in the release workflow.\nDesktop bundle staging captures its exact cleanup path before installing the\nexit trap, so both system Bash 3.2 and newer Linux Bash preserve the original\nfailure status and remove only that invocation's temporary staging directory.\n\nComputer qualification proxies accept only the fixed provider Responses POST\nroute. Request paths cannot redirect provider credentials to another origin.\nDesktop Runtime log tails inspect and read one no-follow file descriptor, so a\npath replacement cannot change the file between sizing and reading. Release\nsource verification and Sparkle private-key reads also verify the opened\nno-follow descriptor rather than checking one path and reading it later.\nTemporary Flower qualification credentials are written and permissioned through\none no-follow descriptor. Terminal carrier TLS fingerprints are accepted only\nafter the server authenticates against that run's isolated device CA; an\nunrelated certificate cannot become a browser trust exception.\n\nThe exact-main UI and renderer steps invoke the canonical headless browser and\nterminal carrier gates without a display server. Explicit headed runs are\nmanual diagnostics and cannot replace exact-main evidence. Browser-mode and\nrunner-evidence semantics are owned by [Env App upstream web dependencies](../architecture/env-app-upstream-web-dependencies.md).\nThe gate builds the embedded UI assets from the exact main source before those\nbrowser steps; an ignored or previously generated `internal/envapp/ui/dist`\ntree is never accepted as carrier input.\n\nEnv App's `pnpm build` owns one checkout-local kernel lock across cache cleanup,\nTypeScript, Vite output replacement, initial-budget validation, and gzip/Brotli\ngeneration. The Python 3 launcher uses `flock` on the supported Linux/macOS build\nhosts and passes the descriptor to the build shell and its children. Concurrent\nbuilds in the same checkout wait; separate worktrees remain independent. A failed\nor interrupted build releases ownership when its processes exit, without stale\nPID recovery or deleting another builder's lock file. `build_assets.sh` delegates\nto that package command and must not compress its output after the lock is\nreleased. Missing assets remain build failures and must not be silently skipped.\n\nDesktop and shared Flower tests that consume renderer-only Floe APIs run in the client Vitest suite with browser resolution and a DOM environment. Server-side test resolution must not replace or bypass published cryptographic tools to load those tests. UI mocks retain the real upstream utility exports unless the utility itself is the boundary under test.\n\nHeadless UI tests keep browser scrollbars enabled so geometry assertions observe\nreal scrollbar layout. Fixtures requiring space-consuming scrollbars explicitly\nreset the standard scrollbar properties before setting a custom width; system\noverlay preferences and theme colors must not disable that coverage. Dialog\nfocus checks await the upstream restoration after the unmount paint.\n\nThe Desktop gate protects real Electron preload coverage from local process\ncollisions. Every preload run uses a temporary real working directory and\nseparate utility/session user-data directories, then verifies both paths inside\nElectron before inspecting bridge surfaces. It starts headless with a random\nintegration marker and owns either a dedicated POSIX process group or an exact\nWindows process tree while its spawned leader remains addressable. Timeout,\noutput overflow, and POSIX abnormal-close cleanup target only that spawned group\nand wait for it to drain. An unexplained external\n`SIGKILL` remains a gate failure and is never converted to success by retry or\nname-based process substitution. Before real Electron coverage, the full gate\nruns a non-mutating, non-interactive execution preflight against the exact npm\nElectron binary. The preflight resolves package-manager symlinks, requires the\npackage root to remain inside Desktop `node_modules`, matches the installed\nversion to the exact `package.json` pin, and executes only that package's standard\nbinary path. Signal termination or macOS AMFI rejection fails as an explicit\nenvironment error. Tests and gates never sign Electron, use developer signing\nidentities, or mutate `node_modules` to change the host trust decision. These\ntest-runtime rules do not change Dev Desktop launch or shutdown behavior.\n\nThe manual `Windows WSL Certification` workflow is outside ordinary push and\npull-request CI and requires exact `origin/main`. An Ubuntu job builds the\nmatching Linux amd64 Runtime archive from that commit. A `windows-2025` job runs\nDesktop tests, creates two temporary WSL 2 distributions, verifies isolated\ninstall, Start, private Bridge, external distribution shutdown, explicit retry,\nUpdate, and exact Stop behavior, then builds an unsigned per-user internal NSIS\nartifact. Workflow cleanup may unregister only its temporary test\ndistributions; product code never performs that system operation.\n\n## Documentation and generated assets\n\n`README.md` is canonical. Every supported localized README must preserve\nstructure, links, executable and inline-code literals, protected terms, and the\ncurrent canonical and localized content hashes recorded as synchronization\nmetadata in `assets/readme/locales.json`. The machine gate does not accept or\nrequire reviewer identity, review method, or approval-count metadata.\n\n`okf/` is the maintained knowledge corpus. Source concepts must match code and\ncontracts, and `okf/dist/okf_bundle.json`, manifest, and checksum are generated\nand committed together. Embedded Env App and Code App assets are built before\nGo tests that import their embed packages.\n\nViewer catalogs, input assets, icons, and Desktop standalone styles have one\ngenerator: `internal/envapp/ui_src/scripts/buildHostApplicationAppearance.mjs`.\nCommit checks verify its outputs against the staged tree when catalog sources,\npublished UI dependencies, or generated viewer assets change. They use installed\nlocked dependencies without installing, regenerating, or staging files. Run the\ngenerator from the repository root and stage matching sources and outputs before\ncommitting. Env App builds continue to verify committed assets with `--check`.\n\n\n## Focused release contracts\n\nThe published ReDevPlugin artifact and plugin surface contracts are maintained as focused concepts so this gate remains the owner of exact-main validation order and evidence handoff:\n\n- [ReDevPlugin release artifact gate](redevplugin-release-gates.md) owns upstream publication, runtime evidence, native packaging, and collector inventory.\n- [Plugin integration gate](plugin-integration-gates.md) owns Host/market/plugin UI integration and its isolated renderer and Desktop smokes.\n## Desktop update publication\n\nThe protected `redeven-release` environment supplies Developer ID signing,\nnotarization, Sparkle Ed25519, and expected Team ID secrets without committing\ntheir values. Packaged Desktop builds inject only a credential-free HTTPS feed\nURL and the Sparkle public key. macOS packages are checked for the Sparkle\nframework, native bridge, architecture, hardened runtime, notarization, and\nstapling. Electron Builder signs and notarizes the App, then signs the final\nDMG. The hosted Desktop job submits that exact disk image to Apple, requires an\n`Accepted` result within its bounded wait, and staples and validates its ticket\nbefore installer receipts or Sparkle metadata are generated. Verification binds\nthe App, framework, bridge, and DMG to the expected Team ID, validates both\nstapled tickets, and uses `syspolicy_check distribution` on the native macOS\nrelease runner for the App's Gatekeeper assessment. Linux packages publish\nmatching `latest-linux.yml` metadata for each architecture.\n\nStable tags run a macOS Sparkle job that generates two appcasts with no delta\npackages, signs the appcasts and release notes, verifies their enclosure and\nrelease-note signatures, and removes temporary private-key files. Prerelease\ntags skip that job and the release collector rejects any stable-feed asset.\nAppcasts, signed notes, Linux metadata, and installers are included in the\naggregate checksum and remote readback comparison before publication.\n\n## Flower storage compatibility\n\nThe [historical writer contract](../ai/flower-upgrade-compatibility.md) is part\nof every final main integration, including Floret dependency upgrades. Ordinary\nCI checks immutable fixture digests, producer provenance and frozen decoder\nboundaries without opening databases or building a historical runtime. The\nuncached Go suite in the final main gate copies every fixture and runs the real\nproduct upgrade, new-turn continuation and second-start checks. Failure and\nrestore tests cover WAL, cross-owner retry, zero execution during preparation,\nbackup protection, full-set replacement interruption and stale outbox rejection.\n\n## Other published boundaries\n\nFloret follows the same published-dependency discipline. The boundary guard\nrejects sibling wiring, internal imports, and direct access to Floret-owned\nschema. Gateway protocol drift fails before packaging. Runtime/Desktop\ncompatibility uses its checked-in compatibility contract, not release-note or\nDesktop conditionals.\n\nBrowser tests store generated screenshots in `src/**/__screenshots__/`, runtime\nattachments in `.vitest-attachments/`, and named PDF/progress evidence under\n`.cache/`. These generated paths and the explicit control-harmony and\nsettings-design outputs are\nignored; source fixtures remain tracked. Workbench PDF drag tests remove only\nthe Vitest runner's outer preview scaling while preserving the product canvas\nprojection, then restore the runner styles after the interaction.",
+          "char_count": 18432
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "CI confirms a locally validated pushed tip; it is not the first validator. Generated contracts, markers, lockfiles, assets, and OKF are regenerated from authoritative sources instead of manually stitched.\n\nIntegration experiments may exist only on an unmerged feature branch and may not become a fallback, shim, or local artifact path.",
-          "char_count": 335
+          "body": "CI confirms a locally validated pushed tip; it is not the first validator.\nRelease jobs do not accept partial ReDevPlugin evidence or mutable repository\nconfiguration as provenance. Generated contracts, markers, lockfiles, assets,\nand OKF are regenerated from authoritative sources instead of manually stitched.\n\nUnreleased ReDevPlugin or Floret behavior is not a valid main dependency.\nIntegration experiments may exist only on an unmerged feature branch and may\nnot become a fallback, shim, or local artifact path.",
+          "char_count": 516
         }
       ],
       "evidence": [
@@ -24405,6 +24465,223 @@
           "id": "redeven:internal/envapp/ui_src/scripts/buildEnvApp.node-test.mjs:0:exercises overlapping builds, compression ownership, failure/signal release, and independent worktrees.",
           "source": "redeven:internal/envapp/ui_src/scripts/buildEnvApp.node-test.mjs",
           "description": "Exercises overlapping builds, compression ownership, failure/signal release, and independent worktrees."
+        },
+        {
+          "id": "redeven:.githooks/pre-commit:1:defines the fast staged gate.",
+          "source": "redeven:.githooks/pre-commit",
+          "line": 1,
+          "description": "Defines the fast staged gate."
+        },
+        {
+          "id": "redeven:.githooks/pre-push:1:binds full validation to the exact main push.",
+          "source": "redeven:.githooks/pre-push",
+          "line": 1,
+          "description": "Binds full validation to the exact main push."
+        },
+        {
+          "id": "redeven:scripts/check_quick_ci.sh:1:defines the bounded hosted source and go formatting checks.",
+          "source": "redeven:scripts/check_quick_ci.sh",
+          "line": 1,
+          "description": "Defines the bounded hosted source and Go formatting checks."
+        },
+        {
+          "id": "redeven:scripts/check_final_integration.sh:1:defines the complete local integration gate.",
+          "source": "redeven:scripts/check_final_integration.sh",
+          "line": 1,
+          "description": "Defines the complete local integration gate."
+        },
+        {
+          "id": "redeven:scripts/quick_ci_policy.test.mjs:1:keeps the hosted and exact-main go formatting contracts aligned.",
+          "source": "redeven:scripts/quick_ci_policy.test.mjs",
+          "line": 1,
+          "description": "Keeps the hosted and exact-main Go formatting contracts aligned."
+        },
+        {
+          "id": "redeven:scripts/check_go_version_consistency.mjs:1:binds go workflows, capability checks, public prerequisites, and the local gate runtime to `go.mod`.",
+          "source": "redeven:scripts/check_go_version_consistency.mjs",
+          "line": 1,
+          "description": "Binds Go workflows, capability checks, public prerequisites, and the local gate runtime to `go.mod`."
+        },
+        {
+          "id": "redeven:desktop/package.json:0:pins the desktop package manager and explicit dependency lifecycle-script policy.",
+          "source": "redeven:desktop/package.json",
+          "description": "Pins the Desktop package manager and explicit dependency lifecycle-script policy."
+        },
+        {
+          "id": "redeven:desktop/electron-builder.config.mjs:0:selects nsis for the internal windows target.",
+          "source": "redeven:desktop/electron-builder.config.mjs",
+          "description": "Selects NSIS for the internal Windows target."
+        },
+        {
+          "id": "redeven:scripts/generate_third_party_notices.mjs:0:generates and checks attribution against locked dependencies.",
+          "source": "redeven:scripts/generate_third_party_notices.mjs",
+          "description": "Generates and checks attribution against locked dependencies."
+        },
+        {
+          "id": "redeven:scripts/check_staged_third_party_notices.mjs:0:runs the same checker offline against staged content only when its inputs change.",
+          "source": "redeven:scripts/check_staged_third_party_notices.mjs",
+          "description": "Runs the same checker offline against staged content only when its inputs change."
+        },
+        {
+          "id": "redeven:scripts/check_staged_third_party_notices.test.mjs:0:exercises stale and partially staged notices, missing dependencies, cleanup, and actual commit rejection.",
+          "source": "redeven:scripts/check_staged_third_party_notices.test.mjs",
+          "description": "Exercises stale and partially staged notices, missing dependencies, cleanup, and actual commit rejection."
+        },
+        {
+          "id": "redeven:scripts/check_desktop_electron_test_runtime.sh:1:fails closed when the exact npm electron runtime cannot execute without modifying host trust.",
+          "source": "redeven:scripts/check_desktop_electron_test_runtime.sh",
+          "line": 1,
+          "description": "Fails closed when the exact npm Electron runtime cannot execute without modifying host trust."
+        },
+        {
+          "id": "redeven:desktop/src/build/desktopPreloadRuntime.test.ts:1:runs real electron preload bridges in isolated working and user-data directories.",
+          "source": "redeven:desktop/src/build/desktopPreloadRuntime.test.ts",
+          "line": 1,
+          "description": "Runs real Electron preload bridges in isolated working and user-data directories."
+        },
+        {
+          "id": "redeven:scripts/check_plugin_integration.sh:1:defines focused redevplugin integration coverage.",
+          "source": "redeven:scripts/check_plugin_integration.sh",
+          "line": 1,
+          "description": "Defines focused ReDevPlugin integration coverage."
+        },
+        {
+          "id": "redeven:scripts/check_redevplugin_dependency_boundary.sh:1:rejects maintained local source wiring and fails closed on scan errors.",
+          "source": "redeven:scripts/check_redevplugin_dependency_boundary.sh",
+          "line": 1,
+          "description": "Rejects maintained local source wiring and fails closed on scan errors."
+        },
+        {
+          "id": "redeven:internal/pluginmarket/service_test.go:1:proves strict market validation, complete remote transport, and last-known-good fallback.",
+          "source": "redeven:internal/pluginmarket/service_test.go",
+          "line": 1,
+          "description": "Proves strict market validation, complete remote transport, and last-known-good fallback."
+        },
+        {
+          "id": "redeven:scripts/check_redevplugin_release_artifacts.sh:1:verifies the exact-one upstream publication and registry readbacks.",
+          "source": "redeven:scripts/check_redevplugin_release_artifacts.sh",
+          "line": 1,
+          "description": "Verifies the exact-one upstream publication and registry readbacks."
+        },
+        {
+          "id": "redeven:scripts/check_redevplugin_consumption_gate.sh:1:verifies the product runtime marker, evidence, target, and signature.",
+          "source": "redeven:scripts/check_redevplugin_consumption_gate.sh",
+          "line": 1,
+          "description": "Verifies the product runtime marker, evidence, target, and signature."
+        },
+        {
+          "id": "redeven:scripts/stage_redevplugin_release_artifacts.sh:1:builds and signs each native linux or darwin runtime from the exact published crate graph.",
+          "source": "redeven:scripts/stage_redevplugin_release_artifacts.sh",
+          "line": 1,
+          "description": "Builds and signs each native Linux or Darwin runtime from the exact published crate graph."
+        },
+        {
+          "id": "redeven:scripts/prepare_redevplugin_rust_toolchain.sh:1:reuses verified local rust components and bounds transient rustup recovery without changing trust or source selection.",
+          "source": "redeven:scripts/prepare_redevplugin_rust_toolchain.sh",
+          "line": 1,
+          "description": "Reuses verified local Rust components and bounds transient Rustup recovery without changing trust or source selection."
+        },
+        {
+          "id": "redeven:scripts/redevplugin_rust_toolchain.test.mjs:1:covers cache reuse, transient retry, deterministic failure, offline mode, and retry-policy bounds with a fake rustup.",
+          "source": "redeven:scripts/redevplugin_rust_toolchain.test.mjs",
+          "line": 1,
+          "description": "Covers cache reuse, transient retry, deterministic failure, offline mode, and retry-policy bounds with a fake Rustup."
+        },
+        {
+          "id": "redeven:scripts/link_redevplugin_runtime_static_pie.sh:1:enforces the closed static pie linker profile required by runtime admission.",
+          "source": "redeven:scripts/link_redevplugin_runtime_static_pie.sh",
+          "line": 1,
+          "description": "Enforces the closed static PIE linker profile required by runtime admission."
+        },
+        {
+          "id": "redeven:scripts/safe_extract_tar.py:1:enforces bounded, typed, inode-bound archive extraction and atomic directory publication.",
+          "source": "redeven:scripts/safe_extract_tar.py",
+          "line": 1,
+          "description": "Enforces bounded, typed, inode-bound archive extraction and atomic directory publication."
+        },
+        {
+          "id": "redeven:scripts/build_desktop_bundled_runtime.sh:1:stages the formal runtime into desktop bundles.",
+          "source": "redeven:scripts/build_desktop_bundled_runtime.sh",
+          "line": 1,
+          "description": "Stages the formal runtime into Desktop bundles."
+        },
+        {
+          "id": "redeven:scripts/check_desktop_redevplugin_package.sh:1:verifies final native installer contents and writes target-bound receipts.",
+          "source": "redeven:scripts/check_desktop_redevplugin_package.sh",
+          "line": 1,
+          "description": "Verifies final native installer contents and writes target-bound receipts."
+        },
+        {
+          "id": "redeven:scripts/extract_desktop_runtime.py:1:parses linux package payload streams and extracts only the closed runtime inventory.",
+          "source": "redeven:scripts/extract_desktop_runtime.py",
+          "line": 1,
+          "description": "Parses Linux package payload streams and extracts only the closed runtime inventory."
+        },
+        {
+          "id": "redeven:desktop/scripts/sign-packaged-runtime.mjs:1:binds signed resource bytes before the app seal and validates the complete packaged runtime.",
+          "source": "redeven:desktop/scripts/sign-packaged-runtime.mjs",
+          "line": 1,
+          "description": "Binds signed resource bytes before the app seal and validates the complete packaged Runtime."
+        },
+        {
+          "id": "redeven:scripts/collect_release_artifacts.mjs:1:enforces the exact downstream release artifact inventory.",
+          "source": "redeven:scripts/collect_release_artifacts.mjs",
+          "line": 1,
+          "description": "Enforces the exact downstream release artifact inventory."
+        },
+        {
+          "id": "redeven:scripts/installer_bootstrap.sh.in:1:verifies exact release identity and atomically activates the complete versioned runtime suite.",
+          "source": "redeven:scripts/installer_bootstrap.sh.in",
+          "line": 1,
+          "description": "Verifies exact release identity and atomically activates the complete versioned runtime suite."
+        },
+        {
+          "id": "redeven:.github/workflows/release.yml:1:makes least-privilege four-target runtime and installer proof mandatory.",
+          "source": "redeven:.github/workflows/release.yml",
+          "line": 1,
+          "description": "Makes least-privilege four-target runtime and installer proof mandatory."
+        },
+        {
+          "id": "redeven:.github/workflows/codeql.yml:1:runs daily changed-main security analysis outside ordinary push and pull-request ci.",
+          "source": "redeven:.github/workflows/codeql.yml",
+          "line": 1,
+          "description": "Runs daily changed-main security analysis outside ordinary push and pull-request CI."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/scripts/checkPackagedRenderer.mjs:1:verifies the production plugin entry and built renderer.",
+          "source": "redeven:internal/envapp/ui_src/scripts/checkPackagedRenderer.mjs",
+          "line": 1,
+          "description": "Verifies the production Plugin entry and built renderer."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/vitest.browser.config.ts:1:keeps scrollbars observable in headless ui tests.",
+          "source": "redeven:internal/envapp/ui_src/vitest.browser.config.ts",
+          "line": 1,
+          "description": "Keeps scrollbars observable in headless UI tests."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/pages/GitTemplateImport.browser.test.tsx:1:checks stable dialog geometry with space-consuming scrollbars.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/pages/GitTemplateImport.browser.test.tsx",
+          "line": 1,
+          "description": "Checks stable dialog geometry with space-consuming scrollbars."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginManagement.browser.test.tsx:1:checks retained management state and deferred focus restoration.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginManagement.browser.test.tsx",
+          "line": 1,
+          "description": "Checks retained management state and deferred focus restoration."
+        },
+        {
+          "id": "redeven:scripts/check_readme_localizations.mjs:1:enforces public readme localization structure, terminology, literals, and synchronization hashes.",
+          "source": "redeven:scripts/check_readme_localizations.mjs",
+          "line": 1,
+          "description": "Enforces public README localization structure, terminology, literals, and synchronization hashes."
+        },
+        {
+          "id": "redeven:scripts/okf/check_source_integrity.sh:1:validates the maintained okf corpus.",
+          "source": "redeven:scripts/okf/check_source_integrity.sh",
+          "line": 1,
+          "description": "Validates the maintained OKF corpus."
         }
       ],
       "snippet": "Redeven uses focused checks during implementation, a fast staged pre-commit gate, and one complete integration gate for the exact main tip being pushed. Published dependency evidence, generated assets, localized public docs, UI",
@@ -24414,6 +24691,18 @@
           "path": "ai/flower-upgrade-compatibility.md",
           "concept_id": "ai.flower-upgrade-compatibility",
           "title": "Flower historical writer acceptance"
+        },
+        {
+          "label": "Env App upstream web dependencies",
+          "path": "architecture/env-app-upstream-web-dependencies.md",
+          "concept_id": "architecture.env-app-upstream-web-dependencies",
+          "title": "Env App upstream web dependencies"
+        },
+        {
+          "label": "Desktop qualification lifecycle",
+          "path": "desktop/desktop-test-lifecycle.md",
+          "concept_id": "desktop.desktop-test-lifecycle",
+          "title": "Desktop qualification lifecycle"
         },
         {
           "label": "Plugin integration gate",
@@ -24611,22 +24900,22 @@
         "title": "ReDevPlugin release artifact gate",
         "type": "Release Contract"
       },
-      "body_length": 1452,
+      "body_length": 12079,
       "summary": "Redeven admits only the coordinated ReDevPlugin release published through its exact manifest, registry readbacks, native runtime evidence, and closed installer inventory. Every artifact is bound to the release tag, source commit, target, digest, signature identity, and package receipt before publication; partial, mutable, Windows, or target-mismatched inputs fail closed.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Redeven consumes only the coordinated ReDevPlugin `v3.0.36` release manifest. Local-wiring scans cover maintained source, scripts, and build configuration while excluding generated `dist` and `node_modules` trees; a scanner error fails closed instead of being treated as no match.\n\nUnknown activation links, unsupported architectures, or missing native runtime evidence are fatal.",
-          "char_count": 380
+          "body": "Redeven consumes only the coordinated ReDevPlugin `v3.0.36` release manifest. The\nboundary guard rejects local sibling paths, Go workspaces/replacements, npm\nlinks, copied contracts or runtimes, Rust path overrides, and a second\nplatform-core package tree. Local-wiring scans cover maintained source, scripts,\nand build configuration while excluding generated `dist` and `node_modules`\ntrees; a scanner error fails closed instead of being treated as no match.\n\nThe product does not commit plugin packages or a product-specific catalog\ndistribution manifest. Production refreshes and atomically publishes a\nvalidated latest-only market snapshot, then ReDevPlugin retrieves and verifies\nthe selected immutable release transport. Focused gates cover snapshot\nschema/generation, last-known-good fallback, release identity, locator mapping,\nand content digests without turning market metadata into trust.\n\nThe upstream GitHub Release contains exactly one\n`platform-release-manifest.json` asset. The verifier binds it to the tag,\nsource commit, release workflow, and GitHub attestation, then independently\nreads back:\n\n- the Go module h1 and go.mod h1 from the public proxy and SumDB;\n- both npm package integrities and provenance subject SHA-512 values;\n- the `redevplugin-runtime` and `redevplugin-worker-sdk` crates.io archive\n  checksums and exact Cargo VCS source identities;\n- the release-manifest contract version, closed coordinate ordering, and contract-set\n  hash.\n\nPartial publication, an extra GitHub Release asset, an unrecognized workflow,\nlocal package source, mutable source identity, or any registry mismatch fails\nbefore runtime construction.\n\nStaging retrieves that exact manifest with curl's bounded transfer recovery:\none initial attempt and up to three retries, including TLS handshake failures\nthat ordinary `--retry` excludes. Connections time out after 15 seconds and\neach transfer after 60 seconds; new retries stop after a 120-second window.\nThe final transfer may finish after that retry window. Both the original URL\nand redirects require HTTPS with certificate verification. Exhausted transfers\nreport the release tag and GitHub/proxy troubleshooting guidance, remove partial\nstaging files, and stop before Rust preparation. A successful transfer still\npasses the strict manifest/version and crate-digest checks; malformed or\nmismatched documents are rejected without retrying validation. An explicitly\nsupplied `--manifest-file` follows the same manifest checks without downloading.\nThe Node 26 contract CLI executes through symlinked checkout paths as well as\ncanonical paths. It must write requested verification evidence and reject\ninvalid manifests in both cases; a successful no-op is not validation.\n\nFor every native Linux and Darwin target, staging prepares Rust 1.88.0 and the\nexact published `redevplugin-runtime` version with its packaged lockfile. The\nRust preparation step first verifies the exact local toolchain and target, so a\nwarm cache never contacts the distribution server. A missing component uses a\nbounded exponential retry (three attempts by default, at most five) only for\nclassified transient network failures;\nchecksum, manifest, signature, and other deterministic failures stop\nimmediately. `REDEVEN_RUSTUP_OFFLINE=1` makes Rustup cache-only preparation\nexplicit and reports the exact missing component instead of silently switching\nmirrors or weakening TLS verification; it does not disable manifest or Cargo\ndownloads owned by the surrounding staging flow. Standard `CARGO_HOME`,\n`RUSTUP_HOME`, `RUSTUP_DIST_SERVER`, and proxy settings are honored; probes\ndisable Rustup auto-install. Download timeout defaults to 120 seconds per\nRustup download, retries wait 2 then 4 seconds by default, and backoff is capped\nat 60 seconds. Successful installs are rechecked before returning the exact\nCargo path. Cancellation stops retrying and terminal exits clean up temporary\ndiagnostics.\nMetadata comes from that crate and must not resolve another first-party runtime\npath dependency. The fixed product toolchain links a static PIE with no ELF\ninterpreter or dynamic dependencies on Linux, and a target-exact 64-bit Mach-O\nexecutable on a native macOS runner. Darwin release bytes are Developer ID\nsigned with hardened runtime and a timestamp before their product digest and\nSigstore evidence are created; development bytes receive an ad hoc signature.\nRedeven emits the binary, SPDX SBOM, resolved-package provenance, notices, and a\nsignature/certificate. Release builds use Sigstore keyless identity bound to\nthe exact Redeven tag workflow; local builds use a fresh ephemeral Ed25519 key\nand are rejected by `--require-release`.\nCosign 3 signing explicitly selects `--new-bundle-format=false` and\n`--use-signing-config=false` to retain the released detached signature and\ncertificate contract. Verification selects the same detached format while\nretaining the exact workflow identity, OIDC issuer, and transparency-log checks.\n\nThe deterministic `redeven.redevplugin_runtime_build.v1` marker embeds the\nverified upstream publication and binds every product-built file, target, Rust\ntoolchain, Redeven source commit, workflow, and signature identity. The\nconsumption gate rechecks file descriptors, ELF or Mach-O target identity,\nevidence profile, and signature. Linux and Darwin runtime archives contain\nexactly the Redeven binary, runtime, six evidence files, license, and product\nnotices.\n\nDesktop assembly validates the Redeven archive name, exact flat inventory, Go\ntarget, and target-specific runtime policy before replacing `.bundle/\u003ctarget\u003e`.\nGateway remains a separate distribution and is rejected in Desktop installers.\nLinux and Darwin Electron packages include the complete\nruntime evidence beside `redeven`; macOS packaging excludes the already\nDeveloper-ID-signed nested runtime from a second signing pass so its evidence\nremains exact. The Electron Builder signing exclusion is a regular expression\nanchored to that exact executable path, not a filesystem glob. The Redeven\nbinary, computer helper, Sparkle framework, and native bridge remain eligible\nfor signing. Computer resources are copied as the complete staged tree after\nElectron assembly; dependency filters must not prune their nested packages or\nlicenses. The Desktop startup validator checks this tree before signing. The\nmacOS signing callback refreshes only signer-visited Runtime and Computer file\ndescriptors immediately before the enclosing app resource seal is signed, then\nruns the same startup validator again before notarization. Independently\nattested ReDevPlugin bytes and evidence may never change during this step.\n\nNative builders inspect final DEB, RPM, or read-only DMG bytes and write v2\nreceipts. Desktop artifact upload selects installers, verification receipts,\nand `latest-linux*.yml` feeds explicitly; builder diagnostics and unrelated\nmacOS YAML feeds must not enter the collector's closed inventory.\nmacOS package verification uses the operating system's text tools alongside\nApple's native inspection and policy tools; it does not require ripgrep on a\nhosted runner. Pipeline readers consume complete command output under\n`pipefail`, while signature, Team ID, hardened-runtime, updater-key, stapling,\nand distribution-policy failures continue to reject the package. Sparkle\narchitecture verification passes the final framework binary before Apple's\n`-verify_arch` option so the hosted `lipo` invocation matches the native tool\ncontract on both macOS targets. The ReDevPlugin consumption scan excludes the\nLinux relink source/object archives from its runtime archive pattern; the\ndedicated relink gate validates those archives separately. Compatibility\nmanifest release tests read the current reviewed contract so generated epoch\nand upgrade-window assertions cannot drift from the published source. Linux\nupdate feeds are normalized to the exact published installer names before the\nclosed release inventory is signed and uploaded.\nThe DEB parser accepts POSIX ustar and GNU regular/directory headers,\nbounded GNU long names, and a metadata-only root directory. RPM packaging\ndisables optional build-id symlink indexes rather than admitting links into the\nclosed payload. Linux package parsers use\nbounded no-follow snapshots and reject non-canonical paths, duplicate entries,\nlinks, devices, privileged modes, sparse/PAX metadata, malformed trailers,\ntrailing data, and oversized payloads. Every native receipt binds the runtime\nand all six evidence files to the exact installer bytes.\n\nWindows assembly is a separate `managed_wsl_archive` policy: it admits one\nverified `redeven_linux_amd64.tar.gz`, binds version, commit, size, and digest,\nand rejects `redeven.exe`. It does not enter the formal release matrix.\n\nHost startup takes the expected runtime digest from this product release marker;\nit must not hash the field binary and accept that value as its own trust anchor.\n\nThe release collector accepts exactly four package and four Desktop artifact\ndirectories, four Redeven archives, four Gateway archives, two DEBs, two RPMs,\ntwo DMGs, six target-bound receipts, and byte-identical shared metadata. Each\nsource is opened once with `O_NOFOLLOW`, hashed and copied through the same\ndescriptor, checked for inode or metadata changes, fsynced, and linked without\nreplacement. A failed collection removes partial outputs.\n\nAny Windows artifact directory is rejected with the signing and signed-update\ncertification prerequisite rather than being treated as an optional fifth\ntarget.\n\nThe final job runs the consumption gate in release-only mode, signs checksums,\npublishes `safe_extract_tar.py`, verifies the complete draft asset set by name,\nsize, and SHA-256, then makes the release public. The installer binds Cosign to\nthe selected tag, extracts the target-specific closed archive, publishes one\ncontent-addressed suite, prepares retention, and only then changes the activation\nsymlink. Unknown activation links, unsupported architectures, or missing native\nruntime evidence are fatal.",
+          "char_count": 10042
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "This concept owns ReDevPlugin release provenance and package assembly. Unreleased upstream bytes, local sibling wiring, mutable source identities, partial evidence, and Windows artifacts cannot become formal release inputs.",
-          "char_count": 223
+          "body": "This concept owns ReDevPlugin release provenance and package assembly. The main CI and release gate owns when this contract runs; the plugin integration concept owns Host, market, renderer, and Desktop plugin behavior. Unreleased upstream bytes, local sibling wiring, mutable source identities, partial evidence, and Windows artifacts cannot become formal release inputs.",
+          "char_count": 371
         }
       ],
       "evidence": [
@@ -24646,6 +24935,41 @@
           "id": "redeven:scripts/redevplugin_release_contract.test.mjs:0:verifies linked cli execution, manifest rejection, and bound runtime evidence.",
           "source": "redeven:scripts/redevplugin_release_contract.test.mjs",
           "description": "Verifies linked CLI execution, manifest rejection, and bound runtime evidence."
+        },
+        {
+          "id": "redeven:scripts/redevplugin_manifest_download.test.mjs:0:exercises real curl against controlled tls disconnects, retry exhaustion, certificate and redirect rejection, and strict manifest admission.",
+          "source": "redeven:scripts/redevplugin_manifest_download.test.mjs",
+          "description": "Exercises real curl against controlled TLS disconnects, retry exhaustion, certificate and redirect rejection, and strict manifest admission."
+        },
+        {
+          "id": "redeven:scripts/check_redevplugin_consumption_gate.sh:1:verifies runtime markers, evidence, target identity, and signatures.",
+          "source": "redeven:scripts/check_redevplugin_consumption_gate.sh",
+          "line": 1,
+          "description": "Verifies runtime markers, evidence, target identity, and signatures."
+        },
+        {
+          "id": "redeven:scripts/check_desktop_redevplugin_package.sh:1:verifies native installer contents and writes target-bound receipts.",
+          "source": "redeven:scripts/check_desktop_redevplugin_package.sh",
+          "line": 1,
+          "description": "Verifies native installer contents and writes target-bound receipts."
+        },
+        {
+          "id": "redeven:scripts/collect_release_artifacts.mjs:1:enforces the exact downstream release artifact inventory.",
+          "source": "redeven:scripts/collect_release_artifacts.mjs",
+          "line": 1,
+          "description": "Enforces the exact downstream release artifact inventory."
+        },
+        {
+          "id": "redeven:scripts/installer_bootstrap.sh.in:1:verifies release identity and atomically activates the complete versioned runtime suite.",
+          "source": "redeven:scripts/installer_bootstrap.sh.in",
+          "line": 1,
+          "description": "Verifies release identity and atomically activates the complete versioned runtime suite."
+        },
+        {
+          "id": "redeven:.github/workflows/release.yml:1:makes four-target runtime and installer proof mandatory.",
+          "source": "redeven:.github/workflows/release.yml",
+          "line": 1,
+          "description": "Makes four-target runtime and installer proof mandatory."
         }
       ],
       "snippet": "Redeven admits only the coordinated ReDevPlugin release published through its exact manifest, registry readbacks, native runtime evidence, and closed installer inventory. Every artifact is bound to the release tag, source commit, target, di",
@@ -24690,22 +25014,22 @@
         "title": "Self-contained installer distribution",
         "type": "Release Contract"
       },
-      "body_length": 2039,
+      "body_length": 7496,
       "summary": "Release packaging builds `redeven-installer_\u003cos\u003e_\u003carch\u003e` for macOS and Linux,\nAMD64 and ARM64, with CGO disabled. It renders `redeven-install.sh` from the\nactual four binary digests and signs both the binaries and entry through\n`SHA256SUMS`. No receiving-host Go, Cosign, Python, OpenSSL or package manager\nis required. A standard shell, HTTPS downloader and SHA-256 utility remain\nbootstrap prerequisites.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Trust and failure boundaries\nThe original HTTPS script is the initial trust boundary.\n\nTUF requests preserve cancellation, use bounded HTTP timeouts and do not write the user's trust cache.\n\nExplicit versions can request a rollback.\n\n## Installation transaction\nA no-follow, nonblocking lock serializes an activation root. Product-selected regular archive members are closed and bounded; links, duplicates, traversal, unexpected files, missing components, invalid trailers and changed bytes fail.\n\nUpgrade mode does not edit shell profiles, start services or restart Runtime; Runtime owns maintenance and re-exec after installer success.\n\n## Publication and entry cutover\nFrom `v0.13.13`, the authenticated `redeven-installer-contract.json` declares the minimum installer, closed targets and Runtime archive contract. Older installers must stop before acquiring a new incompatible payload.\n\nInstallation, historical upgrade and lifecycle qualification remain separate from a successful metadata readiness check.",
-          "char_count": 1014
+          "body": "## Trust and failure boundaries\n\nThe original HTTPS script is the initial trust boundary. A reviewed fixed\ninstaller digest authenticates the executable before it runs. The executable\nuses the upstream Cosign Blob API, authenticated TUF roots, certificate\ntransparency and Rekor evidence to verify the exact repository workflow, OIDC\nissuer and requested tag. It accepts detached `.sig` plus PEM or base64 PEM;\nit does not guess a bundle format, accept mutable trust overrides, disable\nverification, or fabricate upstream verification markers.\n\nTUF requests preserve cancellation, use bounded HTTP timeouts and do not write\nthe user's trust cache. Log responses are bounded before SDK parsing and admit\nonly the detached X.509 `hashedrekord/0.0.1` contract. Other log types, including\nlegacy OpenPGP-capable formats, fail before the general upstream parser.\nThe bytes passed to the SDK are unchanged; the SDK owns cryptographic checks.\nSignature or digest failure never executes the downloaded Runtime.\n\nPublic installation discovers GitHub's latest release unless an exact Runtime\nversion is supplied. The explicit managed channel selects the public version\nmanifest and GitHub-first artifact sources; it does not affect the public\ndefault. The existing Runtime self-upgrade environment contract is retained.\nAutomatic resolution cannot downgrade a known installed version. Explicit\nversions can request a rollback.\n\n## Installation transaction\n\nA no-follow, nonblocking lock serializes an activation root. Product-selected\nregular archive members are closed and bounded; links, duplicates, traversal,\nunexpected files, missing components, invalid trailers and changed bytes fail.\nPublished artifact-cache code owns acquisition and digest-checked storage.\n\nComplete suites live in `.redeven-runtime-suites/\u003carchive-sha256\u003e`. Staging,\nfile synchronization, inventory/digest/version readback and pinned ripgrep\npreparation precede the atomic `redeven` symlink switch. Ripgrep 15.2.0 uses\nmusl archives on both Linux targets; every new or reused authenticated executable\nmust run and report the exact required version before its link or Runtime is\nactivated. A missing loader, execution failure, wrong version, oversized output\nor deadline failure leaves the previous Runtime activation unchanged. Activation detects\nconcurrent changes, retains every published suite, and restores and\nchecks the prior entry when post-switch verification fails. Errors distinguish\nan unchanged activation from a committed but unconfirmed change.\n\nUnselected suites and legacy flat-layout resource files are not automatically\nremoved: a still-running older Runtime can need its original resources after\none or multiple newer installations. The installer\ndoes not own process lifetime and cannot prove those suites unused. Disk usage\ntherefore grows with distinct installed archives; removal requires a separate\nexplicit decision after confirming no process or rollback still needs them.\n\nFresh installs use a writable per-user directory without implicit sudo.\nPATH updates use idempotent managed bash, zsh or fish blocks; the current shell\nstill needs the printed command. Unknown shells receive a direct executable\npath. Upgrade mode does not edit shell profiles, start services or restart\nRuntime; Runtime owns maintenance and re-exec after installer success.\n\n## Publication and entry selection\n\nFrom `v0.13.13`, the authenticated `redeven-installer-contract.json` declares\nthe minimum installer, closed targets and Runtime archive contract. Older\ninstallers must stop before acquiring a new incompatible payload.\n\nOne bootstrap template is rendered from the four actual installer build\nhashes. Release signing covers both `redeven-install.sh` (GitHub channel) and\n`redeven-install-portal.sh` (Portal channel with the official mirror fallback).\nThere is no separately maintained shell installation implementation.\n\nRelease publication is separate from default-version promotion: assets are\npublished with `--latest=false`. Before promotion, `check-distribution`\nauthenticates the candidate inventory and contract, verifies each bootstrap's\nwhole-file digest, own release tag, channel and four installer pins. This\nimmutable candidate check does not depend on the current default pointer.\nAfter promotion, `--check-active-entry` additionally reads back the public\nentry: GitHub must match the authenticated candidate bytes; Portal authenticates\nthe active bootstrap against its own signed release and checks the candidate\nRuntime's minimum installer version, allowing an older recommended Runtime.\nGitHub's default\npointer is read back separately.\n\nRuntime README commands select the generated GitHub release bootstrap. Portal's\nConsole and Install Worker redirect to the generated Portal bootstrap, using\none Portal-owned channel contract. That redirect is routing, not signature\nverification. Bootstrap hashes are derived only from real release builds; no\nplaceholder pins or absent assets may be publicly activated. Public deployment\nis an explicit operation, not a side effect of delivering source changes.\nRollback selects another compatible immutable signed release; it never restores\nan obsolete external-tool installer or a duplicated rollback shell source.\nInstallation, historical upgrade, native execution and page integration are\nindependent feature/release acceptance, not additional ordinary push gates.",
+          "char_count": 5399
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Verification is online; transparency or trust-service outages fail closed.\n\nDo not describe a nonzero scanner result as a clean audit, add a blanket suppression, or remove this boundary without reviewing the upstream replacement and genuine fixtures.",
-          "char_count": 250
+          "body": "Verification is online; transparency or trust-service outages fail closed.\nThe bootstrap cannot defend against compromise of its original HTTPS script.\nCross-compilation alone does not certify execution on every target OS.\n\nThe dependency audit fixes the reviewed gRPC findings by selecting released\n`v1.83.1`. The general SDK still imports the deprecated OpenPGP implementation\nreported by `GO-2026-5932`; symbol scanning can continue to report it. The\ninstaller rejects those input formats before SDK parsing. Do not describe a\nnonzero scanner result as a clean audit, add a blanket suppression, or remove\nthis boundary without reviewing the upstream replacement and genuine fixtures.",
+          "char_count": 686
         }
       ],
       "evidence": [
@@ -24726,6 +25050,42 @@
           "source": "redeven:internal/installer/install.go",
           "line": 1,
           "description": "Verify-before-execute controller and upgrade ownership."
+        },
+        {
+          "id": "redeven:internal/installer/suite.go:1:complete immutable suites, activation readback and restoration.",
+          "source": "redeven:internal/installer/suite.go",
+          "line": 1,
+          "description": "Complete immutable suites, activation readback and restoration."
+        },
+        {
+          "id": "redeven:internal/installer/install_test.go:1:consecutive activations preserve a live older process's resource access.",
+          "source": "redeven:internal/installer/install_test.go",
+          "line": 1,
+          "description": "Consecutive activations preserve a live older process's resource access."
+        },
+        {
+          "id": "redeven:internal/installer/distribution.go:1:signed compatibility and deployed-entry readiness.",
+          "source": "redeven:internal/installer/distribution.go",
+          "line": 1,
+          "description": "Signed compatibility and deployed-entry readiness."
+        },
+        {
+          "id": "redeven:scripts/installer_bootstrap.sh.in:1:thin entry with fixed digests and no external verifier.",
+          "source": "redeven:scripts/installer_bootstrap.sh.in",
+          "line": 1,
+          "description": "Thin entry with fixed digests and no external verifier."
+        },
+        {
+          "id": "redeven:scripts/render_installer_bootstrap.mjs:1:pins rendered from real build bytes.",
+          "source": "redeven:scripts/render_installer_bootstrap.mjs",
+          "line": 1,
+          "description": "Pins rendered from real build bytes."
+        },
+        {
+          "id": "redeven:.github/workflows/promote-runtime-release.yml:1:explicit guarded default-version promotion.",
+          "source": "redeven:.github/workflows/promote-runtime-release.yml",
+          "line": 1,
+          "description": "Explicit guarded default-version promotion."
         }
       ],
       "snippet": "Release packaging builds `redeven-installer_\u003cos\u003e_\u003carch\u003e` for macOS and Linux, AMD64 and ARM64, with CGO disabled. It renders `redeven-install.sh` from the actual four binary digests and signs both the binaries and entry through",
@@ -32869,5 +33229,5 @@
       ]
     }
   ],
-  "source_sha256": "fd0021bafaf34b5e5afeac3193b5089a3d920b812428b46235c91825e4ee811a"
+  "source_sha256": "0d76e8fad4c92942e98e27da5beea9a71cd5d6e0a892c337bc1c69affc1a455e"
 }

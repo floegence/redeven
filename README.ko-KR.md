@@ -86,7 +86,7 @@ Redeven은 파일, 터미널, Git, 브라우저 기반 개발, AI, 서비스, �
 
 ```bash
 # 1. 설치
-curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
+curl -fsSL https://github.com/floegence/redeven/releases/latest/download/redeven-install.sh | sh
 
 redeven run
 ```

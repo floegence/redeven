@@ -33,15 +33,16 @@ jobs:
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
-      - name: Verify immutable release and active and rollback entries
+      - name: Verify immutable release and generated bootstraps
         run: |
           set -euo pipefail
           [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
           gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease \
             --jq 'if .isDraft or .isPrerelease then error("only completed stable releases may be promoted") else . end'
           GOWORK=off go run ./cmd/redeven-installer check-distribution \
-            --channel github --runtime-version "$RELEASE_TAG" \
-            --expected-entry scripts/install.sh --rollback-entry scripts/install-rollback.sh
+            --channel github --runtime-version "$RELEASE_TAG"
+          GOWORK=off go run ./cmd/redeven-installer check-distribution \
+            --channel portal --runtime-version "$RELEASE_TAG"
       - name: Advance and read back GitHub default version
         run: |
           set -euo pipefail
@@ -51,3 +52,5 @@ jobs:
             echo '::error::Default version update was submitted but readback did not confirm it; inspect current state before retrying.'
             exit 1
           fi
+          GOWORK=off go run ./cmd/redeven-installer check-distribution \
+            --channel github --runtime-version "$RELEASE_TAG" --check-active-entry

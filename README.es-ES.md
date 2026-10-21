@@ -86,7 +86,7 @@ Para equipos remotos, Desktop puede instalar automáticamente la versión corres
 
 ```bash
 # 1. Instalar
-curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
+curl -fsSL https://github.com/floegence/redeven/releases/latest/download/redeven-install.sh | sh
 
 redeven run
 ```

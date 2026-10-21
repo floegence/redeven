@@ -14,19 +14,42 @@ Desktop manages an SSH-host or SSH-container Runtime only through the exact save
 # Contract
 
 ## Transport
+
 The SSH transport manager keys a connection by normalized destination, port, authentication mode, SSH binary, and credential scope. A transport failure ends the current command with its original SSH diagnostics; Desktop does not silently select another connection, Gateway, public URL, or Provider route.
 
-A metadata-normalization failure leaves the live slot unchanged, while ReDevPlugin remains the final fail-closed executable-admission authority at startup.
+macOS and Linux reuse an OpenSSH ControlMaster. Windows uses the same credential-scoped lease contract with independent native OpenSSH processes for bounded commands and one persistent SSH child for each private Runtime Bridge. Windows does not require ControlMaster sockets or WSL to connect to SSH Environments. A nonzero remote command is returned without replay; SSH authentication and transport failures keep their distinct diagnostics. Cancellation and disposal terminate only children owned by that Desktop transport. The normalized environment Connect Timeout governs both OpenSSH connection establishment and Runtime probe, inventory and startup readiness for that control connection. Runtime startup and package transfer retain their own deadlines; lifecycle callers do not supply a second connection timeout.
+
+Windows password authentication uses the packaged x64 native askpass helper. Each SSH process inherits only its connection's password; the helper accepts password/passphrase prompts, refuses host-key prompts, and writes the answer only to its private standard output. Passwords never enter command arguments, helper files, or logs. Host-key verification remains OpenSSH-owned and enabled. The helper is included separately from the Linux Runtime archive; a missing helper fails password connection visibly.
+
+SSH discovery follows bounded configuration includes, excludes wildcard and negated aliases from selectable entries, and still allows explicit destinations. The Environment registration keeps the display name separate from SSH destination and supplies the exact Runtime root and, for containers, engine and container id.
+
+One lifecycle operation opens or reuses one SSH transport, probes platform once, prepares a lightweight helper only when required, and reuses that session for inventory and stop. Start and Stop do not prepare a full Runtime package. Update prepares the Runtime package independently, verifies it before target modification, and exposes build/download/upload phases separately from process discovery.
+
+Runtime package admission limits the compressed archive to 256 MiB and its entire expanded tar stream to 512 MiB. The expanded budget covers the native Runtime, Computer suite, and signed plugin inventory together. Gzip expansion enforces the limit while decoding; oversized input fails before target modification. Validation consumes one parsed entry inventory rather than inflating the same archive again for executable discovery.
+
+Source package preparation builds from a clean checkout against published dependencies. Embedded asset preparation installs Desktop dependencies before compiling Env App, because the shared Flower surface resolves its imports from Desktop. A package build must not depend on a developer's existing `node_modules`.
+
+Bulk package uploads use bounded pipe writes and a progress deadline. A continuously progressing upload may exceed the ordinary command deadline; a stalled write still terminates the owned SSH command. After the final write, the ordinary completion deadline applies until the remote command exits. Pipe progress does not certify remote receipt: package admission and target verification remain mandatory. Cancellation and transport loss retain their existing authority, and administrator credential streams do not use the bulk-upload deadline.
+
+Desktop stages every managed Runtime package with private metadata independent of the target user's shell `umask`: `runtime`, `runtime/managed`, and `runtime/managed/bin` are mode `0700`; the `redeven` and `redevplugin-runtime` executables are mode `0700`; and the managed stamp plus ReDevPlugin evidence files are mode `0600`. Upload, remote-install, container, and reinstall paths consume this one slot contract. A metadata-normalization failure leaves the live slot unchanged, while ReDevPlugin remains the final fail-closed executable-admission authority at startup.
 
 ## Host and container behavior
-SSH-host actions execute against the confirmed remote user and Runtime root. Start, Restart, Update, or Reinstall may start that saved container when required; Stop never starts a stopped container and succeeds idempotently when the Runtime inventory is already empty.
 
-Desktop owns sequence, timeouts, cancellation, progress, and retry.
+SSH-host actions execute against the confirmed remote user and Runtime root. SSH-container actions additionally inspect the saved exact container. Start, Restart, Update, or Reinstall may start that saved container when required; Stop never starts a stopped container and succeeds idempotently when the Runtime inventory is already empty.
+
+Inventory identifies processes by exact Runtime scope and returns typed before/after state. Desktop signals only verified matching processes for ordinary Stop/Restart/Update. Wipe reinstall treats helper inventory and stop as best effort and proceeds to exact-root isolation when SSH and filesystem access remain available.
+
+The remote command snippets each perform one bounded action: probe, stage helper, inventory, stop, install, start, verify, isolate, or cleanup. They do not implement a lifecycle state machine, persist a lock, maintain a heartbeat, or wait on Provider/Gateway authorization. Desktop owns sequence, timeouts, cancellation, progress, and retry.
 
 ## User-facing result
-Direct host bootstrap fetches the canonical maintained installer at `https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh` and passes the selected release tag explicitly.
 
-A Gateway-only or Provider-only Environment has no SSH authority and therefore cannot borrow this execution path.
+Direct host bootstrap fetches the same generated, signed Release entry documented for users at `https://github.com/floegence/redeven/releases/latest/download/redeven-install.sh` and passes the selected release tag explicitly. A separately deployed Portal route is not a second installation implementation.
+
+Runtime package transfers appear inside the existing Launcher Operation task row for both Desktop upload and direct host download, including Update and Reinstall. Desktop upload reports acknowledged local pipe-write bytes and archive size; Desktop archive acquisition reports response-body bytes and a usable HTTP content length. Concurrent hosts sharing one cached acquisition observe the same transfer. Direct host download observes curl's progress-bar percentage from that exact installer command, without a second download or polling SSH command. Missing download length keeps the meter indeterminate. Transmission reaching 100% does not certify integrity, installation, or Runtime readiness. The preparation task remains active until the staged package is verified; cancellation or failure freezes the observed progress and never fills it synthetically. SSH package acquisition, upload-directory creation, archive upload, and staged unpacking all belong to package preparation; only activation modifies the installed slot.
+
+The Launcher Operation exists before the first SSH command and reports the actual active phase. SSH connection failure, missing container, unavailable engine, package preparation failure, command exit, and Runtime readiness failure remain distinct structured errors with technical stderr available in details. The session-specific startup-report reader returns an empty successful result until Runtime atomically publishes the report; Desktop treats that state as pending within the existing bounded startup deadline. A nonzero report-read result is a target-command failure, a valid blocked report is a Runtime start failure with the reported reason, and only a nonempty malformed or contract-invalid report is labeled invalid. Start, Restart, Update, Open recovery, and Reinstall consume this one report-availability contract.
+
+An SSH or SSH-container registration always retains its direct lifecycle menu. A Gateway-only or Provider-only Environment has no SSH authority and therefore cannot borrow this execution path.
 
 # Boundaries
 
@@ -35,7 +58,14 @@ Desktop never scans unrelated processes, selects a similarly named container, de
 # Evidence
 
 - `redeven:desktop/src/main/sshTransportManager.ts:1` - Credential-scoped SSH transport reuse and cancellation.
-
 - `redeven:desktop/native/windows-ssh/main.go:1` - Native Windows askpass prompt and credential boundary.
-
 - `redeven:desktop/src/main/sshTransportManager.test.ts:1` - Platform execution, failure classification, and owned-child disposal.
+- `redeven:desktop/src/main/managedRuntimeSlot.ts:1` - Standard managed Runtime file inventory and private metadata contract.
+- `redeven:desktop/src/main/sshRuntime.ts:1` - Direct SSH Runtime package, helper, process, start, and verification operations.
+- `redeven:desktop/src/main/runtimeTransferProgress.ts:1` - Bounded transfer observation and upload event frequency.
+- `redeven:desktop/src/welcome/RuntimeComponentTransferProgress.tsx:1` - Localized determinate and indeterminate transfer meters.
+- `redeven:desktop/src/main/runtimeArchive.ts:1` and `redeven:desktop/src/main/runtimeArchive.test.ts:1` - Bounded package expansion and complete-suite admission.
+- `redeven:desktop/src/main/containerRuntime.ts:1` - Exact SSH-container command construction.
+- `redeven:desktop/src/main/runtimeLifecycleCoordinator.ts:1` - One current-Desktop owner per physical target.
+- `redeven:desktop/src/main/runtimeLifecycleExecutionPlan.ts:1` - Explicit intent-specific progress phases.
+- `redeven:desktop/src/main/reinstallTargetCoordinator.ts:1` - SSH and container final-recovery path.

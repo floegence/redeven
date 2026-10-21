@@ -1377,7 +1377,7 @@ describe('sshRuntime integration', () => {
     expect(transfers).toContainEqual({ transfer_kind: 'download', transfer_percent: 25 });
     expect(transfers).toContainEqual({ transfer_kind: 'download', transfer_percent: 100 });
     expect(events.find((event) => event.event === 'remote_install')?.data?.install_script_url)
-      .toBe('https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh');
+      .toBe('https://github.com/floegence/redeven/releases/latest/download/redeven-install.sh');
     await removeFakeSSHFixture(fixture);
   });
 

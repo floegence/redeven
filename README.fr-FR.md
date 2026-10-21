@@ -86,7 +86,7 @@ Pour les machines distantes, Desktop peut installer automatiquement la version c
 
 ```bash
 # 1. Installer
-curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
+curl -fsSL https://github.com/floegence/redeven/releases/latest/download/redeven-install.sh | sh
 
 redeven run
 ```
