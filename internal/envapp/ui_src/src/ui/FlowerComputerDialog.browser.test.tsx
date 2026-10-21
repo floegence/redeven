@@ -209,6 +209,61 @@ it('returns a remote user to chat without selecting a replacement or resuming a 
   expect(management.createManagedProfile).not.toHaveBeenCalled();
   expect(onContinue).not.toHaveBeenCalled();
 });
+
+for (const width of [1000, 390]) {
+  for (const outcome of ['empty', 'failed', 'pending'] as const) {
+    it(`keeps recovery and exits usable with a ${outcome} target list at ${width}px`, async () => {
+      await page.viewport(width, 800);
+      const { management, setOpen, onContinue } = mount(); await ready();
+      const originalInventory = await management.listCandidates.mock.results[0].value;
+      if (outcome === 'empty') management.listCandidates.mockResolvedValue({ current_target_id: 'lost-page', candidates: [] });
+      else if (outcome === 'failed') management.listCandidates.mockRejectedValue(new Error('private inventory error'));
+      else management.listCandidates.mockImplementation(() => new Promise(() => undefined));
+      button(copy.switchTarget).click();
+      await waitFor(() => !!button(copy.cancel));
+      if (outcome !== 'pending') await waitFor(() => document.querySelector('[data-flower-computer-panel]')?.getAttribute('aria-busy') === 'false');
+      if (outcome === 'empty') expect(document.body.textContent).toContain(copy.noTargets);
+      if (outcome === 'failed') expect(document.body.textContent).toContain(copy.loadFailed);
+      expect(document.body.textContent).not.toContain('private inventory error');
+      expect(button(copy.confirmTarget).disabled).toBe(true);
+      expect(button(copy.cancel).disabled).toBe(false);
+      expect(button(copy.refresh).disabled).toBe(outcome === 'pending');
+      const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+      await waitFor(() => dialog.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running'));
+      expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
+      const cancelBounds = button(copy.cancel).getBoundingClientRect();
+      expect(cancelBounds.left).toBeGreaterThanOrEqual(0);
+      expect(cancelBounds.bottom).toBeLessThanOrEqual(800);
+      button(copy.cancel).click();
+      expect(button(copy.backToChat).disabled).toBe(false);
+      if (outcome === 'failed') {
+        management.listCandidates.mockResolvedValue(originalInventory);
+        button(copy.refresh).click();
+        await ready();
+      }
+      button(copy.backToChat).click();
+      await waitFor(() => !document.querySelector('[data-flower-computer-panel]'));
+      setOpen(true);
+      await waitFor(() => !!document.querySelector('[data-flower-computer-panel]'));
+      const close = document.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!;
+      expect(close.disabled).toBe(false);
+      close.click();
+      await waitFor(() => !document.querySelector('[data-flower-computer-panel]'));
+      expect(management.selectCandidate).not.toHaveBeenCalled();
+      expect(onContinue).not.toHaveBeenCalled();
+    });
+  }
+}
+
+it('keeps close available while a replacement selection is pending', async () => {
+  const { management } = mount(); await ready(); await picker();
+  management.selectCandidate.mockImplementation(() => new Promise(() => undefined));
+  radios()[0].click(); button(copy.confirmTarget).click();
+  await waitFor(() => management.selectCandidate.mock.calls.length === 1);
+  const close = document.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!;
+  expect(close.disabled).toBe(false); close.click();
+  await waitFor(() => !document.querySelector('[data-flower-computer-panel]'));
+});
 it('explains the headless browser before offering optional account groups', async () => {
   const { management } = mount(); await ready(); button(copy.browserSettings).click();
   await waitFor(() => !!document.querySelector('details'));

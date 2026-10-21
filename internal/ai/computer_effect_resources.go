@@ -10,13 +10,22 @@ import (
 	"unicode"
 
 	fltools "github.com/floegence/floret/v7/tools"
+	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
 type computerAuthorizedTargetKey struct{}
 type computerAuthorizedCandidateKey struct{}
 type computerAuthorizedNavigationKey struct{}
 
-func floretComputerResources(r *run, inv fltools.Invocation[map[string]any]) ([]fltools.ResourceRef, error) {
+func floretComputerResources(r *run, inv fltools.Invocation[map[string]any]) (resources []fltools.ResourceRef, resourceErr error) {
+	// Floret renders resource extraction failures as text, before dispatch. Keep
+	// the stable classification and execution boundary in that text.
+	defer func() {
+		if resourceErr != nil {
+			failure := aitools.ClassifyError(aitools.Invocation{ToolName: inv.Name}, resourceErr)
+			resourceErr = fmt.Errorf("%s: %w Tool execution has not started; no action was executed.", failure.Code, resourceErr)
+		}
+	}()
 	if inv.Name == "computer.targets" {
 		return []fltools.ResourceRef{{Kind: "computer_inventory", Value: string(inv.ThreadID)}}, nil
 	}
@@ -50,14 +59,14 @@ func floretComputerResources(r *run, inv fltools.Invocation[map[string]any]) ([]
 	}
 	if err != nil {
 		if errors.Is(err, errTargetNotRegistered) || errors.Is(err, errTargetAmbiguous) {
-			return nil, fmt.Errorf("discover pages and windows with computer.targets, then select a candidate with computer.select_target: %w", err)
+			return nil, &targetToolPolicyError{code: "target_unavailable", tool: inv.Name, target: alias, targetState: "unavailable"}
 		}
 		return nil, err
 	}
 	if !targetAllowedByPolicy(r.toolTargetPolicy, target.ID) {
-		return nil, errors.New("computer target is not authorized")
+		return nil, &targetToolPolicyError{code: "target_not_allowed", tool: inv.Name, target: target.ID}
 	}
-	resources := []fltools.ResourceRef{{Kind: "computer_target", Value: target.ID}}
+	resources = []fltools.ResourceRef{{Kind: "computer_target", Value: target.ID}}
 	if inv.Name == "browser.navigate" {
 		u, err := parseComputerNavigationURL(anyToString(inv.Args["url"]))
 		if err != nil {

@@ -3197,33 +3197,33 @@ func (e *targetToolPolicyError) Error() string {
 		return "computer use is not ready on this environment"
 	case "target_permission_required":
 		if e.repairAction == "enable_extension_file_access" {
-			return "Enable Allow access to file URLs for the Redeven Chrome extension before opening this file page."
+			return "The Redeven Chrome extension does not have the Allow access to file URLs permission required for this file page."
 		}
 		return "computer use requires target permissions"
 	case "target_connection_required":
-		return "The selected page is disconnected. Use computer.targets to find current pages or create an eligible new task page. Preserve any requested browser or account; do not ask a remote user to reopen the desktop."
+		return "The selected page is disconnected."
 	case "target_not_ready":
 		return "computer use target is not ready"
 	case "target_in_use":
-		return "This page or application is being used by another task. Choose another available target or wait for that task to finish."
+		return "This page or application is being used by another task."
 	case "target_ambiguous":
-		return "Multiple personal browser profiles are connected. Use computer.targets and choose the profile matching the task, or ask one question if the profile is unclear."
+		return "The browser profile selection is ambiguous."
 	case "target_selection_stale":
-		return "The page or window changed. Refresh computer.targets and choose the current candidate; do not repeat the previous action."
+		return "The selected page or window changed since discovery."
 	case "target_not_allowed":
 		return "the selected target is not allowed for this Flower thread"
 	case "target_unavailable":
-		return "The previous page or window is unavailable. Use computer.targets to discover current resources, select a suitable candidate, and observe before continuing. Do not ask the user to configure a target or replay completed actions."
+		return "The selected page or window is unavailable."
 	case "target_observation_unavailable":
-		return "The page could not be inspected. Observe it again before acting; do not repeat completed actions. If inspection keeps failing, reconnect the browser."
+		return "The page could not be inspected."
 	case "recovery_observation_required":
-		return "A fresh observation is required before computer actions can resume. Use computer.targets and computer.select_target if the previous page is unavailable, then inspect the selected page with computer.observe or computer.screenshot. Do not repeat completed actions."
+		return "Computer actions are paused until a fresh observation is available. Completed actions must not be repeated."
 	case "frame_unavailable":
-		return "The screenshot is unavailable. Observe the target before continuing; do not replay the previous action."
+		return "The screenshot is unavailable."
 	case "invalid_computer_arguments":
 		return "The computer action has invalid arguments."
 	case "target_action_failed":
-		return "The computer action failed. Inspect the target before continuing."
+		return "The computer action failed."
 	case "interaction_takeover_required":
 		return "user takeover is required before this interaction"
 	default:

@@ -3,7 +3,7 @@ type: AI Tool Contract
 title: Computer target selection across threads
 description: Resolve logical targets without side effects and preserve each authorized thread selection across turns and restart.
 tags: [ai, computer-use, targets, permissions]
-timestamp: 2026-10-08T00:00:00Z
+timestamp: 2026-10-21T00:00:00Z
 ---
 # Summary
 
@@ -27,6 +27,17 @@ It returns bounded Runtime-issued `candidate_ref` values,
 page titles, URLs, profile names, actual opener identities and availability.
 References are thread-scoped, expire after ten minutes and exist only in bounded
 Runtime memory. A native Chrome window is a desktop window, not a browser page.
+`current_target_id` is the conversation's saved binding, independent of the
+fresh inventory. It can remain set when that identity is absent from candidates.
+
+Resource extraction rejects an unavailable target or expired/thread-mismatched
+candidate before the EffectDispatcher or handler runs. Redeven preserves the
+stable `TARGET_UNAVAILABLE` / `TARGET_SELECTION_STALE` classification and the
+fact that execution has not started in Floret's textual extraction error.
+Errors describe state without prescribing a sequence of tools. Model error
+metadata retains factual state and safety fields but excludes `repair_action`
+and `suggested_targets`; the source error remains intact for presentation.
+Published typed Activity carries the failure message and target references.
 
 Live browser inventory owns page availability. Registered adapters preserve
 identity, but their cached descriptors cannot keep a closed page available.
@@ -82,6 +93,9 @@ users refresh inventory to inspect the current binding, without retrying the wri
 picker and never connects a page by itself. Real ambiguities are resolved in the
 conversation. Environment setup and permissions follow the
 [environment settings contract](computer-use-environment-settings.md).
+The unavailable-page notice offers manual selection or a return to conversation
+without promising an automatic replacement. Empty, failed and pending inventory
+reads retain cancellation, return and close controls.
 
 ## Persistence and fork
 
@@ -92,11 +106,11 @@ intact. Floret storage is opaque and its published v7.26.0 authorization, result
 Activity and interaction contracts require no upstream API expansion.
 
 Restart restores selection identity, not helper liveness or control. A lost task
-page fails until a fresh candidate is selected. Flower recovers through discovery,
-selection and a fresh observation, without directing a remote user to restore the
-desktop or configure a target. It reuses a matching live page or, for ordinary web
-work, opens an eligible page and navigates to the task URL. Explicit browser and
-account requirements, Stop, private control and completed effects remain binding.
+page fails until an authorized candidate is selected. The Runtime never selects a
+substitute or replays the failed call automatically; the model decides subsequent
+work from the current facts. Explicit browser and account requirements, Stop,
+private control and completed effects remain binding. Fresh observation remains
+required by the existing recovery gate before further actions.
 Missing account access or unsaved page content is explained in the conversation;
 recovery never claims to restore unsaved forms or replays an unknown effect.
 New and forked threads start unbound, have independent task pages and inherit no

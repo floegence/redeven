@@ -277,6 +277,32 @@ func toolErrorPayload(toolErr *aitools.ToolError) map[string]any {
 	return out
 }
 
+func modelToolErrorPayload(toolErr *aitools.ToolError, toolName string) map[string]any {
+	payload := toolErrorPayload(toolErr)
+	if !isComputerUseTool(toolName) {
+		return payload
+	}
+	meta, ok := payload["meta"].(map[string]any)
+	if !ok {
+		return payload
+	}
+	meta = cloneAnyMap(meta)
+	delete(meta, "repair_action")
+	delete(meta, "suggested_targets")
+	if details, ok := meta["validation_details"].(map[string]any); ok {
+		details = cloneAnyMap(details)
+		delete(details, "repair_action")
+		delete(details, "suggested_targets")
+		meta["validation_details"] = details
+	}
+	if len(meta) == 0 {
+		delete(payload, "meta")
+	} else {
+		payload["meta"] = meta
+	}
+	return payload
+}
+
 func activityToolErrorPayloadFromValue(value any) (map[string]any, bool) {
 	switch typed := value.(type) {
 	case *aitools.ToolError:
@@ -350,7 +376,7 @@ func modelToolResultPayload(result ToolResult) (map[string]any, error) {
 		raw["data"] = result.Data
 	}
 	if result.Error != nil {
-		raw["error"] = toolErrorPayload(result.Error)
+		raw["error"] = modelToolErrorPayload(result.Error, result.ToolName)
 	}
 	if status == toolResultStatusAborted && result.cancellationConfirmed {
 		raw["outcome"] = fltools.ResultOutcomeCanceled
