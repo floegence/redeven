@@ -123,15 +123,19 @@ if (process.argv.includes('--build')) {
     }
     const metrics = () => application.evaluate(({ app }) => app.getAppMetrics().map(item => ({ pid: item.pid, type: item.type, cpu: item.cpu.cumulativeCPUUsage })));
     const clockTicks = process.platform === 'linux' ? Number(execFileSync('getconf', ['CLK_TCK'], { encoding: 'utf8' }).trim()) : 0;
-    const runtimeCPU = () => {
+    const processCPU = pid => {
       if (process.platform === 'linux') {
-        const stat = readFileSync('/proc/' + setup.pid + '/stat', 'utf8');
+        const stat = readFileSync('/proc/' + pid + '/stat', 'utf8');
         const fields = stat.slice(stat.lastIndexOf(')') + 2).trim().split(/\s+/);
         return (Number(fields[11]) + Number(fields[12])) / clockTicks;
       }
-      const value = execFileSync('ps', ['-p', String(setup.pid), '-o', 'time='], { encoding: 'utf8' }).trim();
+      const value = execFileSync('ps', ['-p', String(pid), '-o', 'time='], { encoding: 'utf8' }).trim();
       return value.split(':').reduce((total, piece) => total * 60 + Number(piece), 0);
     };
+    const runtimeCPU = () => processCPU(setup.pid);
+    const auxiliaryPIDs = argument('auxiliary-pids').split(',').filter(Boolean).map(Number);
+    assert.ok(auxiliaryPIDs.every(pid => Number.isInteger(pid) && pid > 0), 'auxiliary process identities must be explicit');
+    const auxiliaryCPU = () => auxiliaryPIDs.reduce((total, pid) => total + processCPU(pid), 0);
     let evidence;
     try {
       if (process.argv.includes('--stability')) {
@@ -142,12 +146,13 @@ if (process.argv.includes('--build')) {
         let cycle = 0;
         while (performance.now() < deadline) {
           const cycleStart = performance.now();
-          const startCPU = { runtime: runtimeCPU(), app: await metrics(), time: performance.now() };
+          const startCPU = { runtime: runtimeCPU(), auxiliary: auxiliaryCPU(), app: await metrics(), time: performance.now() };
           await api('start', '&threads=' + threads);
           await page.waitForTimeout(10000);
           const elapsed = (performance.now() - startCPU.time) / 1000;
           const app = await metrics();
-          const cpu = { runtime: 100 * (runtimeCPU() - startCPU.runtime) / elapsed, app: 100 * app.reduce((sum, value) => sum + value.cpu - (startCPU.app.find(prior => prior.pid === value.pid)?.cpu ?? 0), 0) / elapsed };
+          const displayCPU = 100 * (auxiliaryCPU() - startCPU.auxiliary) / elapsed;
+          const cpu = { auxiliary: displayCPU, runtime: 100 * (runtimeCPU() - startCPU.runtime) / elapsed, app: displayCPU + 100 * app.reduce((sum, value) => sum + value.cpu - (startCPU.app.find(prior => prior.pid === value.pid)?.cpu ?? 0), 0) / elapsed };
           await page.locator('.flower-composer textarea').fill('Retained stability draft');
           await api('stop');
           const completed = await Promise.all(configured.threads.map(id => api('evidence', '&id=' + encodeURIComponent(id))));
@@ -199,7 +204,7 @@ if (process.argv.includes('--build')) {
       }
       if (!idle) await api('start', '&threads=' + threads);
       await page.waitForTimeout(warmup * 1000);
-      const before = { runtime: runtimeCPU(), app: await metrics(), stats: await api('stats'), time: performance.now(), wallTime: Date.now() };
+      const before = { runtime: runtimeCPU(), auxiliary: auxiliaryCPU(), app: await metrics(), stats: await api('stats'), time: performance.now(), wallTime: Date.now() };
       await page.evaluate(() => { window.flowerCPU.active = true; });
       const deadline = performance.now() + seconds * 1000;
       const interactionErrors = [];
@@ -224,7 +229,7 @@ if (process.argv.includes('--build')) {
         await tracer.send('Tracing.end'); await complete;
         await writeFile(output + '.trace.json', JSON.stringify({ traceEvents: trace }));
       }
-      const after = { runtime: runtimeCPU(), app: await metrics(), stats: await api('stats'), time: performance.now() };
+      const after = { runtime: runtimeCPU(), auxiliary: auxiliaryCPU(), app: await metrics(), stats: await api('stats'), time: performance.now() };
       const uiMetrics = await page.evaluate(() => { window.flowerCPU.active = false; return window.flowerCPU; });
       const streamingDOM = await page.evaluate(() => ({ textChunks: document.querySelectorAll('.flower-chat-md-text-chunk').length, codeChunks: document.querySelectorAll('.flower-chat-md-code-chunk').length, tail: [...document.querySelectorAll('.flower-chat-md-content')].at(-1)?.innerHTML.slice(0, 500) }));
       const elapsed = (after.time - before.time) / 1000;
@@ -233,7 +238,8 @@ if (process.argv.includes('--build')) {
       evidence = { threads, hz, seconds: elapsed, warmup, setup, before, after, processes, runtimeCPU: 100 * (after.runtime - before.runtime) / elapsed, rendererCPU: processes.filter(item => item.type === 'Tab').reduce((sum, item) => sum + item.percent, 0), appCPU: processes.reduce((sum, item) => sum + item.percent, 0), frames: { count: uiMetrics.frames.length, p95: percentile(uiMetrics.frames, .95) }, input: { count: uiMetrics.inputs.length, p95: percentile(uiMetrics.inputs, .95) }, click: { count: uiMetrics.clicks.length, p95: percentile(uiMetrics.clicks, .95) }, longTasks: uiMetrics.longTasks, errors };
       evidence.streamingDOM = streamingDOM;
       evidence.interactionErrors = interactionErrors;
-      evidence.combinedCPU = evidence.runtimeCPU + evidence.appCPU;
+      evidence.auxiliaryCPU = 100 * (after.auxiliary - before.auxiliary) / elapsed;
+      evidence.combinedCPU = evidence.runtimeCPU + evidence.appCPU + evidence.auxiliaryCPU;
       evidence.allocationBytes = after.stats.alloc_bytes - before.stats.alloc_bytes;
       evidence.wireBytes = after.stats.wire_bytes - before.stats.wire_bytes;
       await writeFile(output, JSON.stringify(evidence, null, 2) + '\n');
@@ -241,7 +247,7 @@ if (process.argv.includes('--build')) {
       if (idle) {
         await assertConverged();
         evidence.consoleErrors = consoleErrors;
-        evidence.combinedCPU = evidence.runtimeCPU + evidence.appCPU;
+        evidence.combinedCPU = evidence.runtimeCPU + evidence.appCPU + evidence.auxiliaryCPU;
         await writeFile(output, JSON.stringify(evidence, null, 2) + '\n');
         assert.deepEqual(errors, []);
         assert.ok(evidence.combinedCPU <= 3, 'idle related processes must remain at or below 3% CPU');
@@ -313,7 +319,8 @@ if (process.argv.includes('--build')) {
       }
       if (profiler && stopSamples) { const { profile } = await profiler.send('Profiler.stop'); await writeFile(output + '.stop.cpuprofile', JSON.stringify(profile)); }
       if (stopDelays.length) evidence.stop = { count: stopDelays.length, p95: percentile(stopDelays, .95), samples: stopDetails };
-      evidence.combinedCPU = evidence.runtimeCPU + evidence.appCPU;
+      evidence.auxiliaryCPU = 100 * (after.auxiliary - before.auxiliary) / elapsed;
+      evidence.combinedCPU = evidence.runtimeCPU + evidence.appCPU + evidence.auxiliaryCPU;
       evidence.allocationBytes = after.stats.alloc_bytes - before.stats.alloc_bytes;
       evidence.wireBytes = after.stats.wire_bytes - before.stats.wire_bytes;
       evidence.workload = workload;
