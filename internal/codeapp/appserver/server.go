@@ -1657,12 +1657,12 @@ func (g *Server) saveAIProviderBundle(
 	webSearchKeyPatches []settings.WebSearchProviderAPIKeyPatch,
 	allowChatGPTAuthentication bool,
 ) (*config.Config, error) {
-	if err := validateAIProviderBundleCredentials(modelProfile, g.secrets, aiKeyPatches, webSearchKeyPatches); err != nil {
-		return nil, aiProviderBundleSaveError{status: http.StatusBadRequest, err: err}
-	}
 	prevConfig, err := g.loadConfigLocked()
 	if err != nil {
 		return nil, aiProviderBundleSaveError{status: http.StatusInternalServerError, err: err}
+	}
+	if err := validateAIProviderBundleCredentials(modelProfile, prevConfig.AI, g.secrets, aiKeyPatches, webSearchKeyPatches); err != nil {
+		return nil, aiProviderBundleSaveError{status: http.StatusBadRequest, err: err}
 	}
 	prevAIKeys, err := snapshotAIProviderAPIKeys(g.secrets, aiKeyPatches)
 	if err != nil {

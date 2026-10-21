@@ -23,6 +23,24 @@
   padding: 0;
 }
 
+.flower-provider-footer {
+  display: grid;
+  gap: 0.75rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.flower-provider-save-error {
+  padding: 0.625rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--destructive) 30%, transparent);
+  border-radius: 0.375rem;
+  background: color-mix(in srgb, var(--destructive) 10%, transparent);
+  color: var(--destructive);
+  font-size: var(--floe-type-body);
+  line-height: var(--floe-line-body);
+  overflow-wrap: anywhere;
+}
+
 .flower-provider-workspace {
   display: grid;
   grid-template-columns: 12rem minmax(0, 1fr);
