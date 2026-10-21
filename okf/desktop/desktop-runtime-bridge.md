@@ -25,18 +25,25 @@ This concept is the stable overview for the subject. Detailed contracts are main
 
 - [Desktop session and model source](desktop-session-model-source.md)
 
-Cancellable Flower detail GETs carry a read_id through the existing request IPC.
+Cancellable Flower reads carry a read_id through the existing request IPC only
+for a body-free GET without staging authorization. The main-process read owner
+binds cancellation to one renderer document and accepts reads only; the existing
+Flower path and method allowlist still validates each request before dispatch.
 [Runtime read ownership](../../desktop/src/main/runtimeFlowerReadOwner.ts) registers
 before asynchronous preparation and isolates cancellation by WebContents,
-renderer frame token and read identity. Only an exact thread-detail GET can
-carry it; commands cannot acquire read cancellation. Reload, renderer crash and
-destruction cancel the document's outstanding reads. Completion releases the
-registration and lifecycle listeners; later cancellation is a no-op.
+renderer frame token and read identity. Settings, model directory, preferences,
+and thread-detail GETs can carry it; commands, request bodies, and staging
+authorization cannot. Reload, renderer crash and destruction cancel the
+document's outstanding reads. Completion releases the registration and
+lifecycle listeners; later cancellation is a no-op. Aborting a write request
+only stops the renderer from waiting; it does not cancel work already dispatched
+to Runtime and must not be presented as server-side cancellation.
 
-Runtime preparation and access authorization remain shared work. Cancellation
-releases only this waiter, and a late lease is released without starting HTTP.
-The same signal reaches HTTP headers and body, and is checked before and after
-423 authorization refresh. A cancelled challenge cannot dispatch a late retry.
+For eligible reads, Runtime preparation and access authorization remain shared
+work. Cancellation releases only this waiter, and a late lease is released
+without starting HTTP. The same signal reaches HTTP headers and body, and is
+checked before and after 423 authorization refresh. A cancelled challenge cannot
+dispatch a late retry.
 See [selection and detail ownership](../ui/flower-thread-selection.md).
 
 Native Local Environment transport is independent from public Local UI addressing. Runtime writes `local_ui_bridge_url` and a fresh 256-bit `local_ui_bridge_token` into local socket status and the private `0600` Desktop launch report. Public `local_ui_url` and `local_ui_urls` describe actual HTTP or HTTPS client entries even while Desktop uses its bridge. WSL, SSH, and container hello responses carry public URLs separately from the private token over stdio. Native BrowserWindow loading, health verification, access unlock, and Desktop Flower requests use the validated HTTP loopback-IP root plus that token without falling back to a public interface. Electron injects the header only for requests and upgrades to its authorized bridge authority, after diagnostics capture the token-free request.

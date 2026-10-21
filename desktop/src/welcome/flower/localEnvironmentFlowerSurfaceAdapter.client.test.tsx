@@ -1,10 +1,18 @@
 import { modelDirectoryWireFixture } from '../../../../internal/envapp/ui_src/src/test/modelDirectoryWireFixture';
 import { resolveFlowerProviderModels } from '../../../../internal/flower_ui/src/settings/modelSelection';
 import { flowerLiveWireFixture } from '../../../../internal/flower_ui/src/test/flowerLiveWireFixture';
+import { EventEmitter } from 'node:events';
+import type { WebContents } from 'electron';
+import { render } from 'solid-js/web';
+import { FlowerTurnLauncherPanel, type FlowerTurnLauncherSubmitInput } from '../../../../internal/flower_ui/src/FlowerTurnLauncherWindow';
+import type { FlowerTurnLauncherIntent } from '../../../../internal/flower_ui/src/contracts/flowerSurfaceContracts';
 import { describe, expect, it, vi } from 'vitest';
+import { awaitRuntimeFlowerRead, createRuntimeFlowerReadOwner } from '../../main/runtimeFlowerReadOwner';
+import { runtimeFlowerMethodAllowed, runtimeFlowerPath } from '../../main/runtimeFlowerRoutes';
 
 import {
   createLocalEnvironmentFlowerSurfaceAdapter,
+  createDesktopFlowerModelReadResource,
   createDesktopDirectoryFavoritesClient,
   launchLocalEnvironmentFlowerTurn,
   prepareLocalEnvironmentFlowerTurnInput,
@@ -12,7 +20,7 @@ import {
   mapRuntimeFlowerSettings,
   type DesktopSettingsBridge,
 } from './localEnvironmentFlowerSurfaceAdapter';
-import type { RuntimeFlowerRequest } from '../../shared/runtimeFlowerIPC';
+import type { RuntimeFlowerRequest, RuntimeFlowerRequestResult } from '../../shared/runtimeFlowerIPC';
 import type { RuntimeFlowerStreamEvent, RuntimeFlowerStreamRequest } from '../../shared/runtimeFlowerIPC';
 import type { AgentSettingsResponse } from '../../../../internal/envapp/ui_src/src/ui/pages/settings/types';
 
@@ -148,6 +156,27 @@ function attachmentBridgeStubs() {
     cancelRuntimeFlowerAttachment: vi.fn(async () => ({ ok: true, cancelled: true })),
     subscribeRuntimeFlowerAttachmentProgress: vi.fn(() => () => undefined),
     previewRuntimeFlowerAttachment: vi.fn(async () => ({ ok: true })),
+  };
+}
+
+// Exercise the same read ownership and route boundary as the Desktop main IPC handler.
+function bridgeWithMainReadOwnership(bridge: DesktopSettingsBridge): DesktopSettingsBridge {
+  const owner = createRuntimeFlowerReadOwner();
+  const sender = Object.assign(new EventEmitter(), { id: 1 }) as unknown as WebContents;
+  return {
+    ...bridge,
+    requestRuntimeFlower: vi.fn(async (request: RuntimeFlowerRequest): Promise<RuntimeFlowerRequestResult> => {
+      try {
+        return await owner.run(sender, request, async signal => {
+          const path = runtimeFlowerPath(request.path);
+          if (!runtimeFlowerMethodAllowed(path, request.method)) throw new Error('Method is not allowed.');
+          return awaitRuntimeFlowerRead(bridge.requestRuntimeFlower(request), signal);
+        }, 'document-1');
+      } catch (cause) {
+        return { ok: false, failureKind: 'local', error: { message: (cause as Error).message } };
+      }
+    }),
+    cancelRuntimeFlowerRead: vi.fn(readID => owner.cancel(sender, readID, 'document-1')),
   };
 }
 
@@ -673,7 +702,7 @@ describe('Local Environment Flower surface adapter', () => {
 
   it('loads settings and threads, then returns the immediate typed current view from Send', async () => {
     const calls: RuntimeFlowerRequest[] = [];
-    const bridge = bridgeFor((request) => {
+    const bridge = bridgeWithMainReadOwnership(bridgeFor((request) => {
       calls.push(request);
       if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
       if (request.path === '/_redeven_proxy/api/ai/models?mode=baseline') return { current_model: 'default/gpt-4.1', models: [{ id: 'default/gpt-4.1' }] };
@@ -686,7 +715,7 @@ describe('Local Environment Flower surface adapter', () => {
         };
       }
       throw new Error(`unexpected path: ${request.path}`);
-    });
+    }));
     const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
 
     await adapter.loadSettings();
@@ -720,6 +749,91 @@ describe('Local Environment Flower surface adapter', () => {
       staging_scope_id: 'staging_client_desktop-message',
       staging_capability: 'secret_client_desktop-message',
     });
+  });
+
+  it.each(['retry', 'close'])('keeps an explicitly failed Welcome preflight recoverable via %s', async recovery => {
+    const calls: RuntimeFlowerRequest[] = [];
+    let failSettings = true;
+    const bridge = bridgeWithMainReadOwnership(bridgeFor(request => {
+      calls.push(request);
+      if (request.path === '/_redeven_proxy/api/settings') {
+        if (failSettings) { failSettings = false; throw new Error('Runtime temporarily unavailable.'); }
+        return settingsResponse();
+      }
+      if (request.path === '/_redeven_proxy/api/ai/models?mode=baseline') return { current_model: 'default/gpt-4.1' };
+      if (request.path !== '/_redeven_proxy/api/ai/turns') throw new Error(`Unexpected path: ${request.path}`);
+      return {
+        client_request_id: request.body && (request.body as { create?: { client_request_id?: string } }).create?.client_request_id,
+        thread_id: 'thread-retried',
+        current: currentView({ thread_id: 'thread-retried', activity: 'active', turn_id: 'turn-retried' }),
+      };
+    }));
+    const intent: FlowerTurnLauncherIntent = {
+      id: 'desktop-launcher-recovery', source_surface: 'file_preview', initial_prompt: 'Keep this message',
+      suggested_working_dir: '/workspace/redeven', context_items: [], notes: [],
+    };
+    const onClose = vi.fn();
+    const onSubmit = async (input: FlowerTurnLauncherSubmitInput) => {
+      const prepared = await prepareLocalEnvironmentFlowerTurnInput(bridge, {
+        client_request_id: input.client_request_id, prompt: input.prompt, working_dir: '/workspace/redeven',
+      });
+      await launchLocalEnvironmentFlowerTurn(bridge, prepared);
+    };
+    const dispose = render(() => <FlowerTurnLauncherPanel open intent={intent} onClose={onClose} onSubmit={onSubmit} />, document.body);
+    try {
+      const send = () => document.querySelector<HTMLButtonElement>('[data-testid="flower-turn-launcher-inline-send"]')!.click();
+      send();
+      await vi.waitFor(() => expect(document.querySelector('[role="alert"]')?.textContent).toContain('Runtime temporarily unavailable.'));
+      expect(document.querySelector('textarea')).toMatchObject({ value: 'Keep this message', disabled: false });
+      expect(document.querySelector<HTMLButtonElement>('[data-testid="flower-turn-launcher-inline-send"]')?.disabled).toBe(false);
+      expect(onClose).not.toHaveBeenCalled();
+      expect(calls.filter(call => call.path === '/_redeven_proxy/api/ai/turns')).toHaveLength(0);
+
+      const close = [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.trim() === 'Close');
+      expect(close?.disabled).toBe(false);
+      if (recovery === 'close') {
+        close?.click();
+        expect(onClose).toHaveBeenCalledOnce();
+      } else {
+        send();
+        await vi.waitFor(() => expect(calls.filter(call => call.path === '/_redeven_proxy/api/ai/turns')).toHaveLength(1));
+        expect(calls.at(-1)).toMatchObject({ method: 'POST', body: { input: { text: 'Keep this message' } } });
+        expect(calls.at(-1)?.read_id).toBeUndefined();
+        await vi.waitFor(() => expect(document.querySelector<HTMLButtonElement>('[data-testid="flower-turn-launcher-inline-send"]')?.disabled).toBe(false));
+        expect(document.querySelector('[role="alert"]')).toBeNull();
+      }
+    } finally {
+      dispose();
+      document.body.innerHTML = '';
+    }
+  });
+
+  it('cancels settings, model directory, and conversation preference GETs through the read bridge', async () => {
+    const calls: RuntimeFlowerRequest[] = [];
+    const transport = bridgeFor(() => undefined);
+    vi.mocked(transport.requestRuntimeFlower).mockImplementation(request => {
+      calls.push(request);
+      return new Promise(() => {});
+    });
+    const bridge = bridgeWithMainReadOwnership(transport);
+    const resource = createDesktopFlowerModelReadResource(bridge, () => 'read-cancellation');
+    const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge, { modelReadResource: resource });
+    const controller = new AbortController();
+    const loading = adapter.loadSettings!(false, controller.signal);
+    await vi.waitFor(() => expect(calls).toHaveLength(3));
+    expect(calls.map(({ method, path, read_id }) => ({ method, path, read_id }))).toEqual([
+      { method: 'GET', path: '/_redeven_proxy/api/settings', read_id: expect.any(String) },
+      { method: 'GET', path: '/_redeven_proxy/api/ai/models?mode=baseline', read_id: expect.any(String) },
+      { method: 'GET', path: '/_redeven_proxy/api/ai/conversation_preferences', read_id: expect.any(String) },
+    ]);
+
+    controller.abort();
+    resource.invalidate();
+    await expect(loading).rejects.toMatchObject({ name: 'AbortError' });
+    expect(bridge.cancelRuntimeFlowerRead).toHaveBeenCalledTimes(3);
+    expect(bridge.cancelRuntimeFlowerRead).toHaveBeenCalledWith(calls[0]!.read_id);
+    expect(bridge.cancelRuntimeFlowerRead).toHaveBeenCalledWith(calls[1]!.read_id);
+    expect(bridge.cancelRuntimeFlowerRead).toHaveBeenCalledWith(calls[2]!.read_id);
   });
 
   it('accepts a new-thread receipt while canonical detail is still unavailable', async () => {
@@ -1771,12 +1885,49 @@ it('does not dispatch a detail read that was already cancelled', async () => {
 });
 
 describe('Desktop directory favorite transport', () => {
+  it('cancels favorite reads across IPC but never gives write requests read cancellation IDs', async () => {
+    let finishRead!: (value: unknown) => void;
+    const finishWrites: Array<(value: unknown) => void> = [];
+    const bridge = bridgeFor(request => new Promise(resolve => {
+      if (request.method === 'GET') finishRead = resolve;
+      else finishWrites.push(resolve);
+    }));
+    const client = createDesktopDirectoryFavoritesClient(bridge, 'environment_1');
+    const view = client.view(() => 'Favorites unavailable');
+    try {
+      const reading = view.onRefresh!();
+      await vi.waitFor(() => expect(bridge.requestRuntimeFlower).toHaveBeenCalledOnce());
+      const readRequest = vi.mocked(bridge.requestRuntimeFlower).mock.calls[0]![0];
+      expect(readRequest).toMatchObject({ method: 'GET', read_id: expect.any(String) });
+      client.dispose();
+      await reading;
+      expect(bridge.cancelRuntimeFlowerRead).toHaveBeenCalledExactlyOnceWith(readRequest.read_id);
+
+      for (const [index, favorite] of [true, false].entries()) {
+        const writeClient = createDesktopDirectoryFavoritesClient(bridge, 'environment_1');
+        const writeView = writeClient.view(() => 'Favorites unavailable');
+        const writing = writeView.onSetFavorite!('/work/project', favorite);
+        await vi.waitFor(() => expect(bridge.requestRuntimeFlower).toHaveBeenCalledTimes(index + 2));
+        const writeRequest = vi.mocked(bridge.requestRuntimeFlower).mock.calls[index + 1]![0];
+        expect(writeRequest).toMatchObject({ method: favorite ? 'PUT' : 'DELETE', path: '/_redeven_proxy/api/fs/directory_favorites', body: { path: '/work/project' } });
+        expect(writeRequest.read_id).toBeUndefined();
+        writeClient.dispose();
+        await writing;
+      }
+      expect(bridge.cancelRuntimeFlowerRead).toHaveBeenCalledOnce();
+      finishRead?.({ ok: true, data: { paths: [], revision: 0 } });
+      finishWrites.forEach(finish => finish({ ok: true, data: { paths: ['/work/project'], revision: 1 } }));
+    } finally {
+      client.dispose();
+    }
+  });
+
   it('shares both Flower surfaces and retains the captured target Runtime', async () => {
-    const bridge = bridgeFor(request => {
+    const bridge = bridgeWithMainReadOwnership(bridgeFor(request => {
       expect(request.path).toBe('/_redeven_proxy/api/fs/directory_favorites');
       expect(request.environment_id).toBe('environment_1');
-      return {paths:request.method === 'PUT' ? ['/work/project'] : [],revision:request.method === 'PUT' ? 1 : 0};
-    });
+      return {paths:request.method === 'PUT' ? ['/work/project'] : [],revision:request.method === 'DELETE' ? 2 : request.method === 'PUT' ? 1 : 0};
+    }));
     const client = createDesktopDirectoryFavoritesClient(bridge,'environment_1');
     try {
       const one = createLocalEnvironmentFlowerSurfaceAdapter(bridge,{runtimeEnvironmentID:'environment_1',directoryFavoritesClient:client});
@@ -1789,6 +1940,11 @@ describe('Desktop directory favorite transport', () => {
       expect(bridge.requestRuntimeFlower).toHaveBeenCalledWith(expect.objectContaining({
         method:'PUT',path:'/_redeven_proxy/api/fs/directory_favorites',environment_id:'environment_1',body:{path:'/work/project'},
       }));
+      await second.onSetFavorite!('/work/project',false);
+      expect(first.paths).toEqual([]);
+      for (const [request] of vi.mocked(bridge.requestRuntimeFlower).mock.calls) {
+        expect(request.read_id).toEqual(request.method === 'GET' ? expect.any(String) : undefined);
+      }
       client.dispose();
       await expect(second.onSetFavorite!('/work/old',true)).rejects.toMatchObject({name:'AbortError'});
     } finally {client.dispose();}
