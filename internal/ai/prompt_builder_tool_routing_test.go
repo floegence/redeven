@@ -7,7 +7,7 @@ import (
 
 func assertFlowerIdentityPrompt(t *testing.T, prompt string) {
 	t.Helper()
-	const want = "你是 Flower，Redeven 中的通用助手。你帮助用户解决软件工程、设备使用、信息分析、日常问答、规划和创作等问题。"
+	const want = "You are Flower, a general-purpose assistant in Redeven. You help users with software engineering, device use, information analysis, everyday questions, planning, and creative work."
 	if prompt != want {
 		t.Fatalf("core system prompt must contain only the Flower introduction:\ngot: %q\nwant: %q", prompt, want)
 	}

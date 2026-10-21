@@ -4493,7 +4493,7 @@
               "flower",
               "prompts"
             ],
-            "summary": "Flower's host-owned base system prompt contains only its Chinese introduction as\nRedeven's general assistant. Every run profile uses the same introduction.\nRuntime facts, tool definitions and native Floret guidance retain their own owners\nand remain available independently of the product identity.",
+            "summary": "Flower's host-owned base system prompt contains only its English introduction as\nRedeven's general assistant. Every run profile uses the same introduction.\nRuntime facts, tool definitions and native Floret guidance retain their own owners\nand remain available independently of the product identity.",
             "section_count": 4
           },
           {
@@ -10993,7 +10993,7 @@
         "type": "AI Prompt Contract"
       },
       "body_length": 5836,
-      "summary": "Flower's host-owned base system prompt contains only its Chinese introduction as\nRedeven's general assistant. Every run profile uses the same introduction.\nRuntime facts, tool definitions and native Floret guidance retain their own owners\nand remain available independently of the product identity.",
+      "summary": "Flower's host-owned base system prompt contains only its English introduction as\nRedeven's general assistant. Every run profile uses the same introduction.\nRuntime facts, tool definitions and native Floret guidance retain their own owners\nand remain available independently of the product identity.",
       "sections": [
         {
           "id": "contract",
@@ -11024,7 +11024,7 @@
           "char_count": 276
         }
       ],
-      "snippet": "Flower's host-owned base system prompt contains only its Chinese introduction as Redeven's general assistant. Every run profile uses the same introduction. Runtime facts, tool definitions and native Floret guidance retain their own owners",
+      "snippet": "Flower's host-owned base system prompt contains only its English introduction as Redeven's general assistant. Every run profile uses the same introduction. Runtime facts, tool definitions and native Floret guidance retain their own owners",
       "backlinks": [
         {
           "label": "AI model and context runtime",
@@ -46260,5 +46260,5 @@
       ]
     }
   ],
-  "source_sha256": "add12b7e45f04b4c753823cf533bcfd66e60cb1b4610f741b426603b62a2c140"
+  "source_sha256": "93e32b7da343a133d408a56cba0e071a9a4c2b7db8c36a4e88d88c7adb3b9611"
 }
