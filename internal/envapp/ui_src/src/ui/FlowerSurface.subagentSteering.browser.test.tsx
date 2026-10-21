@@ -34,11 +34,13 @@ const row = (id = 'first') => document.querySelector<HTMLElement>(`[data-flower-
 const buttons = (id = 'first') => [...row(id).querySelectorAll<HTMLButtonElement>('button')];
 
 describe('Subagent immediate guidance controls', () => {
-  it('scopes busy state and updates the stable window from the canonical response', async () => {
+  it('scopes busy state and removes applied guidance status while preserving the message and window', async () => {
     await page.viewport(1280, 1000);
     const pending = deferred<FlowerSubagentDetail>();
     const { detail, call, runtime } = await mount(() => pending.promise);
     const window = document.querySelector<HTMLElement>('.flower-subagent-detail-window')!;
+    const message = window.querySelector('[data-flower-message-id="guide"]');
+    expect(message?.textContent).toContain('Prioritize original sources');
     expect(document.querySelector('[data-flower-steering-status="pending"]')).not.toBeNull();
     buttons()[0].focus(); await userEvent.keyboard('{Enter}');
     await waitFor(() => call.mock.calls.length === 1);
@@ -49,7 +51,10 @@ describe('Subagent immediate guidance controls', () => {
     pending.resolve({ ...detail, current: { ...detail.current, view_version: 8, queue: detail.current.queue!.slice(1), items: detail.current.items!.map(item => ({ ...item, steering: { status: 'applied' as const } })) } });
     await waitFor(() => !document.querySelector('[data-flower-subagent-input-id="first"]'));
     expect(document.querySelector('.flower-subagent-detail-window')).toBe(window);
-    expect(document.querySelector('[data-flower-steering-status="applied"]')).not.toBeNull();
+    expect(window.querySelector('.flower-steering-status')).toBeNull();
+    expect(window.textContent).not.toContain('Added to context');
+    expect(window.querySelector('[data-flower-message-id="guide"]')).toBe(message);
+    expect(message?.textContent).toContain('Prioritize original sources');
     await page.viewport(540, 850);
     await waitFor(() => window.getBoundingClientRect().width < 540);
     expect(window.scrollWidth).toBeLessThanOrEqual(window.clientWidth + 1);
