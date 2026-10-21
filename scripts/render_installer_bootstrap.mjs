@@ -31,7 +31,7 @@ export function renderBootstrap(version, digests, channel = 'github') {
 // Release packaging runs only on trusted build outputs. Consumers must first
 // authenticate SHA256SUMS and match every downloaded file to its signed digest;
 // they must not call this renderer on unverified or mutable downloaded inputs.
-export function renderFromBuild(dist, version) {
+export function renderFromBuild(dist, version, channel = 'github') {
   const digests = {};
   for (const platform of platforms) {
     const file = path.join(dist, `redeven-installer_${platform}`);
@@ -39,7 +39,7 @@ export function renderFromBuild(dist, version) {
     if (!info.isFile() || info.size <= 0 || info.size > 64 * 1024 * 1024) throw new Error(`Invalid installer build: ${file}`);
     digests[platform] = createHash('sha256').update(readFileSync(file)).digest('hex');
   }
-  return renderBootstrap(version, digests);
+  return renderBootstrap(version, digests, channel);
 }
 
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
@@ -49,8 +49,9 @@ if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === imp
       throw new Error('Usage: render_installer_bootstrap.mjs --dist <release-directory> --tag <vX.Y.Z>');
     }
     const dist = path.resolve(args[1]);
-    const script = renderFromBuild(dist, args[3]);
-    writeFileSync(path.join(dist, 'redeven-install.sh'), script, { flag: 'wx', mode: 0o755 });
+    for (const [channel, name] of [['github', 'redeven-install.sh'], ['portal', 'redeven-install-portal.sh']]) {
+      writeFileSync(path.join(dist, name), renderFromBuild(dist, args[3], channel), { flag: 'wx', mode: 0o755 });
+    }
     console.log(`[INFO] pinned bootstrap rendered from four real installer builds (${fileURLToPath(import.meta.url)})`);
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));

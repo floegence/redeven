@@ -86,7 +86,7 @@ Für entfernte Rechner kann Desktop die passende Redeven-Version automatisch üb
 
 ```bash
 # 1. Installieren
-curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
+curl -fsSL https://github.com/floegence/redeven/releases/latest/download/redeven-install.sh | sh
 
 redeven run
 ```

@@ -43,18 +43,17 @@ func execute(ctx context.Context, args []string) error {
 		flags := flag.NewFlagSet("redeven-installer check-distribution", flag.ContinueOnError)
 		channel := flags.String("channel", "github", "official distribution channel: github or portal")
 		version := flags.String("runtime-version", "", "exact release tag to promote")
-		entry := flags.String("expected-entry", "", "reviewed installation entry source file")
-		rollback := flags.String("rollback-entry", "", "reviewed emergency entry whose installer must also remain compatible")
+		active := flags.Bool("check-active-entry", false, "also authenticate the public entry and check candidate compatibility")
 		if err := flags.Parse(args[1:]); err != nil {
 			return err
 		}
-		if flags.NArg() != 0 || *entry == "" {
-			return errors.New("check-distribution requires --expected-entry and --runtime-version")
+		if flags.NArg() != 0 || *version == "" {
+			return errors.New("check-distribution requires --runtime-version")
 		}
-		if err := installer.CheckDistribution(ctx, *channel, *version, *entry, *rollback); err != nil {
+		if err := installer.CheckDistribution(ctx, *channel, *version, *active); err != nil {
 			return err
 		}
-		fmt.Printf("Release %s distribution entry and authenticated installer pins verified.\n", *version)
+		fmt.Printf("Release %s signed distribution bootstrap and installer pins verified.\n", *version)
 		return nil
 	}
 	if len(args) > 0 && args[0] == "install" {

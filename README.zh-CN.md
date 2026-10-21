@@ -86,7 +86,7 @@ Redeven 通过统一工作区连接电脑与服务器，整合文件、终端、
 
 ```bash
 # 1. 安装
-curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
+curl -fsSL https://github.com/floegence/redeven/releases/latest/download/redeven-install.sh | sh
 
 redeven run
 ```

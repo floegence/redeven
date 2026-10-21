@@ -85,3 +85,34 @@ test('unsupported platforms fail before downloading and incomplete pins cannot r
   assert.throws(() => renderBootstrap('latest', digests), /canonical/);
   assert.throws(() => renderFromBuild(os.tmpdir(), 'v0.13.13'), /ENOENT/);
 });
+
+test('release renderer writes both channels from the same four actual builds', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-bootstrap-release-'));
+  try {
+    for (const platform of platforms) fs.writeFileSync(path.join(root, `redeven-installer_${platform}`), fixture);
+    const renderer = new URL('./render_installer_bootstrap.mjs', import.meta.url);
+    const result = spawnSync(process.execPath, [renderer.pathname, '--dist', root, '--tag', 'v0.13.13'], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    for (const [channel, name] of [['github', 'redeven-install.sh'], ['portal', 'redeven-install-portal.sh']]) {
+      assert.equal(fs.readFileSync(path.join(root, name), 'utf8'), renderFromBuild(root, 'v0.13.13', channel));
+    }
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('release signing and verification explicitly preserve detached Sigstore evidence with Cosign 3', () => {
+  for (const file of ['scripts/stage_redevplugin_release_artifacts.sh', '.github/workflows/release.yml']) {
+    const source = fs.readFileSync(new URL("../" + file, import.meta.url), 'utf8');
+    const commands = source.match(/cosign sign-blob[^\n]*/gu) ?? [];
+    assert.equal(commands.length, file.endsWith('.yml') ? 2 : 1, file);
+    for (const command of commands) {
+      assert.match(command, /--new-bundle-format=false/u, file);
+      assert.match(command, /--use-signing-config=false/u, file);
+      assert.doesNotMatch(command, /--tlog-upload=false/u, file);
+    }
+  }
+  for (const file of ['scripts/check_redevplugin_consumption_gate.sh', 'scripts/generate_release_notes.sh']) {
+    const source = fs.readFileSync(new URL("../" + file, import.meta.url), 'utf8');
+    assert.match(source, /cosign verify-blob --new-bundle-format=false/u, file);
+    assert.doesNotMatch(source, /--insecure-ignore-tlog/u, file);
+  }
+});

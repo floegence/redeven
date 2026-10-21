@@ -197,7 +197,7 @@ if ! validate_release_tag "$release_tag"; then
 fi
 
 if [ -z "$install_script_url" ]; then
-  install_script_url="https://raw.githubusercontent.com/${repo}/${release_tag}/scripts/install.sh"
+  install_script_url="https://github.com/${repo}/releases/download/${release_tag}/redeven-install.sh"
 fi
 
 output_dir=$(dirname "$output_path")

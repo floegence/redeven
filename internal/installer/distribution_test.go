@@ -2,6 +2,8 @@ package installer
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -157,5 +159,76 @@ func TestOlderInstallerCannotActivateNewRelease(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "requires installer") || requests.Load() != 0 {
 		t.Fatal("obsolete installer did not stop before payload execution:", err)
+	}
+}
+
+func TestPublishedBootstrapAuthenticatesBytesAndChannel(t *testing.T) {
+	data, err := os.ReadFile("distribution_contract.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	contract, err := decodeDistribution(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, channel := range []string{"github", "portal"} {
+		t.Run(channel, func(t *testing.T) {
+			inventory := map[string]string{}
+			entry := "INSTALLER_VERSION='v0.13.13'\nINSTALLER_CONTRACT='redeven.installer_distribution.v1'\n" +
+				"INSTALLER_CHANNEL='" + channel + "'\nINSTALLER_MIRROR='" + sourceFor(channel).mirrorURL + "'\n"
+			for i, platform := range contract.Platforms {
+				digest := strings.Repeat(fmt.Sprint(i), 64)
+				inventory["redeven-installer_"+platform] = digest
+				entry += "SHA256_" + strings.ToUpper(platform) + "='" + digest + "'\n"
+			}
+			sign := func(value string) {
+				hash := sha256.Sum256([]byte(value))
+				inventory[bootstrapAsset(channel)] = hex.EncodeToString(hash[:])
+			}
+			sign(entry)
+			if err := checkPublishedBootstrap([]byte(entry), channel, "v0.13.13", contract, inventory); err != nil {
+				t.Fatal(err)
+			}
+			newerMinimum := *contract
+			newerMinimum.MinimumInstallerVersion = "v0.13.14"
+			if _, err := checkBootstrapPins([]byte(entry), &newerMinimum, inventory); err == nil {
+				t.Fatal("active installer below candidate minimum accepted")
+			}
+			if err := checkPublishedBootstrap([]byte(entry+"# tampered\n"), channel, "v0.13.13", contract, inventory); err == nil {
+				t.Fatal("unsigned bytes accepted")
+			}
+			for _, invalid := range []string{
+				strings.Replace(entry, "INSTALLER_CHANNEL='"+channel+"'", "INSTALLER_CHANNEL='unreviewed'", 1),
+				strings.Replace(entry, "INSTALLER_MIRROR='"+sourceFor(channel).mirrorURL+"'", "INSTALLER_MIRROR='https://untrusted.invalid'", 1),
+				strings.Replace(entry, "v0.13.13", "v0.13.14", 1),
+				strings.Replace(entry, "SHA256_LINUX_ARM64=", "MISSING_PIN=", 1),
+			} {
+				sign(invalid)
+				if err := checkPublishedBootstrap([]byte(invalid), channel, "v0.13.13", contract, inventory); err == nil {
+					t.Fatal("incompatible signed bootstrap accepted")
+				}
+			}
+		})
+	}
+}
+
+func TestActiveBootstrapReadback(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/unavailable" {
+			http.Error(w, "unavailable", 503)
+			return
+		}
+		fmt.Fprint(w, "signed bootstrap bytes")
+	}))
+	defer server.Close()
+	d := &downloader{client: server.Client()}
+	if err := checkActiveBootstrap(t.Context(), d, server.URL, []byte("signed bootstrap bytes")); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkActiveBootstrap(t.Context(), d, server.URL, []byte("other bootstrap")); err == nil {
+		t.Fatal("stale active entry accepted")
+	}
+	if err := checkActiveBootstrap(t.Context(), d, server.URL+"/unavailable", nil); err == nil {
+		t.Fatal("unavailable active entry accepted")
 	}
 }
