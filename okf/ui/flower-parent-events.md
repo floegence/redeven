@@ -63,6 +63,6 @@ production adapter and FlowerSurface, including read failures and restart.
 - `redeven:internal/flower_ui/src/parentEvents.tsx` - Canonical avatars, inline disclosure, fixed-range reads and stale-response isolation.
 - `redeven:internal/flower_ui/src/flowerTimelineProjection.ts` - Chronological parent event insertion and stable event keys.
 - `redeven:internal/ai/parent_events.go` - Recipient authorization and canonical event reads.
-- `redeven:internal/ai/flower_runtime_current_publisher.go` - Receipt, admission and resolution boundaries.
+- `redeven:internal/ai/flower_runtime_update.go` - Receipt, admission and resolution boundaries.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.parentEvents.browser.test.tsx` - Full Unicode reading, navigation, pagination and narrow themed surfaces.
 - `redeven:internal/ai/parent_event_fork_ui_test.go` - Published runtime scope and real product/browser fork regression.
