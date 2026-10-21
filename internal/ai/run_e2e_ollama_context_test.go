@@ -451,18 +451,22 @@ func newOllamaContextProxy(t *testing.T, baseURL string, recorder *ollamaContext
 			return
 		}
 		index := -1
-		if request.URL.Path == "/v1/chat/completions" {
+		if request.URL.Path == "/v1/chat/completions" || request.URL.Path == "/v1/responses" {
 			var payload struct {
-				Model     string            `json:"model"`
-				MaxTokens int64             `json:"max_tokens"`
-				Messages  []json.RawMessage `json:"messages"`
-				Tools     []json.RawMessage `json:"tools"`
+				Model           string            `json:"model"`
+				MaxTokens       int64             `json:"max_tokens"`
+				MaxOutputTokens int64             `json:"max_output_tokens"`
+				Messages        []json.RawMessage `json:"messages"`
+				Tools           []json.RawMessage `json:"tools"`
 			}
 			if err := json.Unmarshal(body, &payload); err != nil {
 				http.Error(w, "invalid request JSON", http.StatusBadRequest)
 				return
 			}
 			record := ollamaContextRequest{Kind: "auxiliary", Model: payload.Model, MaxOutputTokens: payload.MaxTokens, HasMarker: bytes.Contains(body, []byte(recorder.marker))}
+			if request.URL.Path == "/v1/responses" {
+				record.MaxOutputTokens = payload.MaxOutputTokens
+			}
 			if len(payload.Tools) > 0 {
 				record.Kind = "main"
 			}

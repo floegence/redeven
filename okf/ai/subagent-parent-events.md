@@ -17,6 +17,9 @@ identity comes from the exact authorized tool call; Floret derives its direct
 parent. Readonly children may report to that parent without gaining routing,
 input-response, approval, or filesystem rights. Success returns `accepted`,
 a stable event ID and parent ThreadID, without ending the child mission.
+The tool description carries the child-parent relationship, reporting purpose,
+automatic completion notification, and full-result reading instructions; the
+shared Flower introduction does not duplicate this communication contract.
 
 Floret atomically records references for completion, failure, cancellation,
 interruption, normalized execution timeout and input/approval attention alongside
