@@ -16,6 +16,10 @@ const ui = path.join(root, 'internal/envapp/ui_src');
 const require = createRequire(path.join(ui, 'package.json'));
 const hash = value => createHash('sha256').update(value).digest('hex');
 if (process.argv.includes('--build')) {
+  const reference = argument('ref');
+  const referenceFiles = reference
+    ? new Set(execFileSync('git', ['ls-tree', '-r', '--name-only', reference, '--', 'internal/flower_ui/src'], { cwd: root, encoding: 'utf8' }).trim().split(String.fromCharCode(10)).map(file => path.join(root, file)))
+    : new Set();
   const { build, loadConfigFromFile } = await import(pathToFileURL(require.resolve('vite')));
   const loaded = await loadConfigFromFile({ command: 'build', mode: 'production' }, path.join(ui, 'vite.config.ts'));
   const entry = 'virtual:cpu-qualification';
@@ -23,7 +27,14 @@ if (process.argv.includes('--build')) {
     .map(file => 'import ' + JSON.stringify(file) + ';').join('\n');
   await build({
     ...loaded.config, root: ui, base: '/', configFile: false, logLevel: 'error',
-    plugins: [...loaded.config.plugins, { name: 'flower-cpu-qualification', resolveId: id => id === entry ? entry : undefined, load: id => id === entry ? source : undefined }],
+    plugins: [{ name: 'flower-cpu-reference', enforce: 'pre', resolveId(specifier, importer) {
+      if (!reference || !specifier.startsWith('.') || !importer?.startsWith(path.join(root, 'internal/flower_ui/src/'))) return;
+      const target = path.resolve(path.dirname(importer.split('?')[0]), specifier);
+      return ['', '.ts', '.tsx', '.css', '/index.ts'].map(suffix => target + suffix).find(file => referenceFiles.has(file));
+    }, load(id) {
+      if (!reference || !referenceFiles.has(id)) return;
+      return execFileSync('git', ['show', reference + ':' + path.relative(root, id)], { cwd: root, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+    } }, ...loaded.config.plugins, { name: 'flower-cpu-qualification', resolveId: id => id === entry ? entry : undefined, load: id => id === entry ? source : undefined }],
     build: { ...loaded.config.build, outDir: dist, emptyOutDir: true, manifest: false, sourcemap: true, cssCodeSplit: false, rolldownOptions: undefined, rollupOptions: { input: entry, output: { entryFileNames: 'qualification.js' } } },
   });
   const assets = await readdir(path.join(dist, 'assets'));
@@ -52,6 +63,9 @@ if (process.argv.includes('--build')) {
   const initialBytes = Number(argument('initial-bytes', '0'));
   const idle = process.argv.includes('--idle');
   const configured = await api('configure', '&threads=' + threads + '&hz=' + hz + '&mode=' + workload + '&initial_bytes=' + initialBytes);
+  const childDetail = process.argv.includes('--subagent');
+  assert.ok(!childDetail || configured.child_detail, 'Subagent qualification requires a canonical child fixture');
+  const bodySelector = childDetail ? '.flower-subagent-detail-transcript ' : '';
   const { _electron: electron } = require('playwright');
   const desktopRequire = createRequire(path.join(root, 'desktop/package.json'));
   const session = await createDesktopTestSession(import.meta.url, { timeoutMs: (seconds + warmup + 120) * 1000 });
@@ -60,7 +74,7 @@ if (process.argv.includes('--build')) {
     const application = await session.launchElectron(electron, {
       executablePath: desktopRequire('electron'),
       args: [path.join(root, 'internal/flower_ui/testing/performance/desktop.cjs'), '--redeven-smoke-run=flower-cpu'],
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined, FLOWER_PERF_PROFILE: profile, FLOWER_PERF_URL: url + '/?cpu=1&thread=' + configured.threads[0] },
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined, FLOWER_PERF_PROFILE: profile, FLOWER_PERF_URL: url + '/?cpu=1&thread=' + (childDetail ? configured.parent_thread : configured.threads[0]) },
     });
     const page = await application.firstWindow();
     const errors = []; page.on('pageerror', error => errors.push(String(error)));
@@ -78,6 +92,27 @@ if (process.argv.includes('--build')) {
     };
     await page.locator('.flower-composer textarea').waitFor({ timeout: 30000 });
     await page.locator('[data-flower-message-id]').first().waitFor({ timeout: 30000 });
+    if (childDetail) {
+      if (process.argv.includes('--full-cache')) {
+        for (const id of configured.visited_roots) {
+          await page.locator('[data-thread-id=' + JSON.stringify(id) + '] .flower-thread-card-select-button').click();
+          await page.locator('main[data-flower-selected-thread-id=' + JSON.stringify(id) + '][data-flower-selected-thread-loading="false"]').waitFor();
+        }
+      }
+      await page.locator('button[aria-controls="flower-subagents-dropdown"]').click();
+      const ended = page.locator('.flower-subagents-dropdown-disclosure');
+      if (await ended.count() && await ended.getAttribute('aria-expanded') === 'false') await ended.click();
+      await page.locator('[data-flower-subagent-row]').first().click();
+      await page.locator(bodySelector + '[data-flower-message-id]').first().waitFor();
+      const resize = page.locator('.flower-subagent-detail-window [data-floe-floating-window-resize-handle="s"]');
+      const bounds = await resize.boundingBox();
+      assert.ok(bounds, 'Subagent detail resize handle must be visible');
+      await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2 - 320, { steps: 8 });
+      await page.mouse.up();
+      await page.locator('.flower-composer textarea').click({ timeout: 5000 });
+    }
     await page.evaluate(({ idle }) => {
       window.flowerCPU = { frames: [], longTasks: [], inputs: [], clicks: [], outputs: [], active: false };
       const observed = new Set();
@@ -266,7 +301,7 @@ if (process.argv.includes('--build')) {
       evidence.display = await page.evaluate(() => ({ textChunks: document.querySelectorAll('.flower-chat-md-text-chunk').length, codeChunks: document.querySelectorAll('.flower-chat-md-code-chunk').length, text: document.querySelector('.flower-transcript-stack')?.textContent?.slice(-2000), selected: document.querySelector('main')?.getAttribute('data-flower-selected-thread-id'), rows: [...document.querySelectorAll('[data-flower-message-id]')].slice(-10).map(node => ({ id: node.getAttribute('data-flower-message-id'), text: node.textContent?.slice(-160) })) }));
       // Inspect after timing; compare every generated item with full parsing.
       const generatedTurn = visible.items.find(item => item.turn_id)?.turn_id;
-      const turnSelector = '.flower-turn-row[data-flower-turn-id=' + JSON.stringify(generatedTurn) + ']';
+      const turnSelector = bodySelector + '.flower-turn-row[data-flower-turn-id=' + JSON.stringify(generatedTurn) + ']';
       const summary = page.locator(turnSelector + ' .flower-turn-summary-button').first();
       await page.waitForTimeout(500);
       if (await summary.count() && await summary.getAttribute('aria-expanded') === 'false') await summary.click();
@@ -276,7 +311,7 @@ if (process.argv.includes('--build')) {
       evidence.rendered = [];
       for (const item of visible.items.filter(item => item.kind === 'assistant' || item.kind === 'thinking')) {
         if (await summary.count() && await summary.getAttribute('aria-expanded') === 'false') await summary.click();
-        const row = page.locator('[data-flower-message-id=' + JSON.stringify(item.id) + ']').first();
+        const row = page.locator(bodySelector + '[data-flower-message-id=' + JSON.stringify(item.id) + ']').first();
         await row.waitFor({ timeout: 15000 });
         const toggle = row.locator('.flower-thinking-toggle');
         if (await toggle.count() && await toggle.getAttribute('aria-expanded') === 'false') await toggle.click();

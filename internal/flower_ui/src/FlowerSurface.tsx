@@ -43,7 +43,7 @@ import { FlowerProviderBrandIcon } from './settings/FlowerProviderBrandIcon';
 import { WebSearchActivity } from './WebSearchActivity';
 import type { Accessor, Component, JSX } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
-import { For, Match, Show, Suspense, Switch, batch, createEffect, createMemo, createResource, createSignal, createUniqueId, lazy, on, onCleanup, onMount, untrack } from 'solid-js';
+import { For, Match, Show, Suspense, Switch, batch, createComputed, createEffect, createMemo, createResource, createSignal, createUniqueId, lazy, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn, useMobileLayout, createAdaptiveSidebar, createRetainedContent } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
 import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, Globe, GripVertical, Link, Menu, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Search, Send, Settings, Shield, Terminal, Trash, X, XCircle, Zap } from '@floegence/floe-webapp-core/icons';
@@ -399,7 +399,7 @@ type ActiveSubagentDetail = Readonly<{
   generation: number;
   requestStatus: 'idle' | 'loading';
   connectionEpoch?: number;
-  detail: Pick<FlowerSubagentDetail, 'summary'> | null;
+  summary: FlowerSubagentSummary | null;
   error: string;
 }>;
 type FlowerQueueDockRow = Readonly<{
@@ -1095,13 +1095,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     selectThread(childThreadID);
   };
   const subagentDetailOpen = createMemo(() => activeSubagentDetail() !== null);
-  const activeSubagentID = () => activeSubagentDetail()?.childThreadID ?? '';
-  const subagentDetail = () => activeSubagentDetail()?.detail ?? null;
+  const activeSubagentID = createMemo(() => activeSubagentDetail()?.childThreadID ?? '');
+  const retainedAttentionChildID = createMemo(() => attentionNavigation()?.childThreadID === selectedThreadID() ? selectedThreadID() : '');
+  createComputed(on([activeSubagentID, retainedAttentionChildID], (ids) => {
+    setThreadCache(cache => cache.retainDetails(ids));
+  }));
+  const subagentDetailSummary = () => activeSubagentDetail()?.summary ?? null;
   const subagentDetailLoading = () => {
     const active = activeSubagentDetail();
-    return active?.requestStatus === 'loading' && !active.detail;
+    return active?.requestStatus === 'loading';
   };
-  const subagentDetailError = () => activeSubagentDetail()?.error ?? '';
+  const subagentDetailError = () => {
+    const active = activeSubagentDetail();
+    return active?.error || (active?.requestStatus === 'idle' && !threadCache().views.has(active.childThreadID) ? copy().chat.threadSyncFailed : '');
+  };
   let subagentDetailGeneration = 0;
   type SubagentInputAction = FlowerSubagentInputOperation['action'];
   type SubagentInputCommand = Readonly<{ busy: boolean; error: string; action: SubagentInputAction; requestID: string; fingerprint?: string }>;
@@ -3478,7 +3485,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           // Coalesce post-command reads independently of writes and interaction.
           const summaries = await withFlowerThreadListTimeout(props.adapter.listThreads());
           if (generation !== pinMutationGeneration) return;
-          setThreadCache(cache => cache.replaceSummaries(summaries.filter(thread => !retiredThreadIDs.has(thread.thread_id)), attentionNavigation()?.childThreadID));
+          setThreadCache(cache => cache.replaceSummaries(summaries.filter(thread => !retiredThreadIDs.has(thread.thread_id))));
         } catch {
           if (generation === pinMutationGeneration && notifyFailure) notifyThreadActionError(copy().threadList.pinRefreshFailed);
         }
@@ -4380,7 +4387,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         closeSubagentOverlays();
         setSelectedThreadID('');
       }
-      setThreadCache((cache) => cache.replaceSummaries(next, attentionNavigation()?.childThreadID));
+      setThreadCache((cache) => cache.replaceSummaries(next));
       const currentSelection = selectedThreadID();
       if (currentSelection && !next.some((thread) => thread.thread_id === currentSelection) && !threadCache().views.has(currentSelection) && attentionNavigation()?.childThreadID !== currentSelection) {
         cancelDeferredThreadSelection();
@@ -4974,8 +4981,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const incoming = (envelope.summaries ?? [])
         .filter((summary) => !retiredThreadIDs.has(summary.thread_id));
       if (envelope.kind === 'ready') {
-        const retainedChild = attentionNavigation()?.childThreadID === selectedID ? selectedID : undefined;
-        setThreadCache((cache) => cache.resetRootSummaries(incoming, retainedChild));
+        setThreadCache((cache) => cache.resetRootSummaries(incoming));
         if (selectedID && !threadCache().selectedId) {
           closeSubagentOverlays();
           setSelectedThreadID('');
@@ -5327,7 +5333,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       && trimString(summary.parent_thread_id) === parentThreadID
       && trimString(summary.thread_id) === childThreadID
       ? summary
-      : selected.detail?.summary ?? subagentSummaryFromItem(parentThreadID, selected.item);
+      : selected.summary ?? subagentSummaryFromItem(parentThreadID, selected.item);
     const projected = projectSubagentDetailThread({ summary: nextSummary, current }, untrack(subagentDetailThread), {
       model_context: modelContext, context_usage: contextUsage,
       context_compactions: contextCompactions, timeline_decorations: timelineDecorations,
@@ -5347,9 +5353,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setThreadCache(cache => cache.updateDetailAdjuncts(childThreadID,
         thread => applyFlowerRuntimeContext(thread as FlowerThreadSnapshot, context)));
     }
+    if (!threadCache().views.has(childThreadID)) {
+      const error = new Error('Subagent detail did not remain available after receipt.');
+      reportThreadDetailDiagnostic(childThreadID, 'detail_not_converged', 'live_current', error, viewVersion, result);
+      throw error;
+    }
     const accepted = result.state === 'accepted';
     setActiveSubagentDetail(active => !active || active.parentThreadID !== parentThreadID || active.childThreadID !== childThreadID ? active : {
-      ...active, detail: { summary: nextSummary }, connectionEpoch: liveTransport.connectionEpoch(), error: '',
+      ...active, summary: nextSummary, connectionEpoch: liveTransport.connectionEpoch(), error: '',
     });
     if (accepted) {
       subagentDetailScroll.measureAfterLayout();
@@ -5397,7 +5408,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if ((error as { code?: unknown })?.code === 'flower_live_sync_error') liveTransport.fail(error, requestEpoch);
       setActiveSubagentDetail((current) => (
         current?.generation === generation
-          ? { ...current, requestStatus: 'idle', error: readController.signal.aborted ? '' : getErrorMessage(error) }
+          ? { ...current, requestStatus: 'idle', error: readController.signal.aborted ? '' : threadDetailUserError(error) }
           : current
       ));
     } finally { releaseRead(); }
@@ -5455,7 +5466,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       item,
       generation: subagentDetailGeneration,
       requestStatus: 'idle',
-      detail: null,
+      summary: null,
       error: '',
     });
     setSubagentDropdownOpen(false);
@@ -6199,6 +6210,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     clearSelectedThreadTailRevealSchedule();
     transcriptScroll.dispose();
     subagentDetailScroll.dispose();
+    setThreadCache(cache => cache.retainDetails([]));
     readSync.dispose();
     if (copiedMessageResetTimer !== undefined) {
       window.clearTimeout(copiedMessageResetTimer);
@@ -6554,7 +6566,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const subagentDetailActiveStatus = createMemo<FlowerSubagentPanelStatus>(() => {
     const itemStatus = activeSubagentItem()?.status ?? 'unknown';
-    const detailStatus = normalizeSubagentPanelStatus(subagentDetailThread()?.status ?? subagentDetail()?.summary.status);
+    const detailStatus = normalizeSubagentPanelStatus(subagentDetailThread()?.status ?? subagentDetailSummary()?.status);
     if (detailStatus !== 'unknown') return detailStatus;
     return itemStatus;
   });
@@ -7508,7 +7520,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const retryContinuation = () => retryThreadContinuation(targetThread, isCompactionRecovery(targetThread()) ? targetThread()?.current_execution?.run_id : undefined);
     const inspectPending = () => retryPending() || transportOutbox().forThread(trimString(targetThread()?.thread_id)).some(entry => entry.delivery !== 'accepted');
     const inspectBlocked = () => !settingsReady() || props.adapter.canMutate === false || inspectPending()
-      || (Boolean(targetThread()?.parent_thread_id) && !subagentDetail()?.summary.can_send_input)
+      || (Boolean(targetThread()?.parent_thread_id) && !subagentDetailSummary()?.can_send_input)
       || !props.adapter.launchTurn || (!targetThread()?.parent_thread_id && Boolean(trimString(targetThread()?.read_only_reason)))
       || ['running', 'waiting_approval', 'waiting_user'].includes(targetThread()?.status ?? '')
       || (trimString(targetThread()?.thread_id) === selectedThreadID() && selectedThreadReadOnly());
@@ -7539,7 +7551,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           || latest.status !== 'failed' || latest.error?.code !== 'floret_effect_outcome_unknown'
           || latest.active_run_id || latest.input_request || latest.approval_pending || latest.queued_turn_count
           || (!child && trimString(latest.read_only_reason))
-          || (child && (!props.adapter.loadSubagentDetail || !subagentDetail()?.summary.can_send_input))
+          || (child && (!props.adapter.loadSubagentDetail || !subagentDetailSummary()?.can_send_input))
           || transportOutbox().forThread(threadID).some(entry => entry.delivery !== 'accepted')) return;
         const requestID = createFlowerClientRequestID();
         outboxOperations.set(requestID, { adapter: props.adapter });
@@ -11568,7 +11580,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const activeSubagentTitle = createMemo(() => {
     const item = activeSubagentItem();
     if (item) return subagentRowTitle(item);
-    const summary = subagentDetail()?.summary;
+    const summary = subagentDetailSummary();
     const taskName = trimString(summary?.task_name);
     return taskName ? presentSubagentTaskName(taskName) : subagentsCopy().typeLabels.unknown;
   });
@@ -11576,12 +11588,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return subagentStatusLabel(subagentDetailActiveStatus());
   });
   const subagentDetailMeta = createMemo(() => {
-    const detail = subagentDetail();
+    const summary = subagentDetailSummary();
     const item = activeSubagentItem();
-    return trimString(detail?.summary.task_description || item?.taskDescription || detail?.summary.task_name || item?.taskName || '');
+    return trimString(summary?.task_description || item?.taskDescription || summary?.task_name || item?.taskName || '');
   });
   const subagentDetailAgentTypeLabel = createMemo(() => {
-    const raw = trimString(subagentDetail()?.summary.agent_type || activeSubagentItem()?.agentType).toLowerCase();
+    const raw = trimString(subagentDetailSummary()?.agent_type || activeSubagentItem()?.agentType).toLowerCase();
     switch (raw) {
       case 'explore':
         return subagentsCopy().typeLabels.explore;
@@ -11594,14 +11606,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   });
   const subagentDetailElapsedLabel = createMemo(() => {
-    const detail = subagentDetail();
+    const summary = subagentDetailSummary();
     const item = activeSubagentItem();
-    const startedAtMs = Math.max(0, Number(detail?.summary.created_at_ms || item?.startedAtMs || item?.createdAtMs || 0));
+    const startedAtMs = Math.max(0, Number(summary?.created_at_ms || item?.startedAtMs || item?.createdAtMs || 0));
     if (!startedAtMs) return '';
     const status = subagentDetailActiveStatus();
     const terminal = status === 'completed' || status === 'failed' || status === 'canceled' || status === 'timed_out';
     const endedAtMs = terminal
-      ? Math.max(startedAtMs, Number(detail?.summary.updated_at_ms || item?.updatedAtMs || startedAtMs))
+      ? Math.max(startedAtMs, Number(summary?.updated_at_ms || item?.updatedAtMs || startedAtMs))
       : activityClockNow();
     return formatActivityDuration(Math.max(0, endedAtMs - startedAtMs));
   });
@@ -11836,7 +11848,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </section>
       </Show></>}
 
-      renderEntry={(entry) => timelineEntry(entry, subagentDetailScroll, subagentDetailThread, subagentThreadMedia)}
       contextIndicator={<Show when={subagentDetailThread()?.model_context}><FlowerComposerContextIndicator placement="below-start" usage={subagentDetailThread()?.context_usage ?? {}} modelContext={subagentDetailThread()?.model_context} copy={copy()} /></Show>}
       renderTimeline={() => <FlowerTurnTimeline thread={subagentDetailThread()} entries={subagentDetailTimelineEntries()}
         failureNoticeVisible={runErrorNoticeVisible(subagentDetailThread())}
@@ -11850,10 +11861,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       onTouchMove={subagentDetailScroll.onTouchMove}
       onKeyDown={subagentDetailScroll.onKeyDown}
       latestPointerBlocked={subagentDetailScroll.latestPointerBlocked()}
-      onDisclosureClick={(title) => {
-        subagentDetailScroll.activateDisclosure(title);
-        requestTranscriptAnimationFrame(() => subagentDetailScroll.finishDisclosure(title));
-      }}
       showScrollToLatest={showSubagentDetailScrollToLatestButton()}
       onScrollToLatest={() => subagentDetailScroll.scrollToBottom({ smooth: true })}
       onRetryLoad={retrySubagentDetailLoad}

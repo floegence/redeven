@@ -55,7 +55,7 @@ const adapter = createRuntimeFlowerSurfaceAdapter({
     loadThread: threadID => api('detail', threadID),
     forkThread: unavailable,
 
-    loadSubagentDetail: unavailable,
+    loadSubagentDetail: (_parentID, childID) => api('subagent_detail', childID),
     markThreadRead: async () => ({ read_status: readStatus }),
     patchThread: unavailable, submitApproval: unavailable,
   },

@@ -626,11 +626,6 @@ export const flowerSurfaceEnUS = {
     lastMessageLabel: 'Latest handoff',
     events: {"title": "Important events", "readFailed": "Unable to load reports. Loaded content is preserved; retry to continue.", "readTimeout": "Loading reports timed out. Retry to continue.", "received": "Received", "admitted": "Added to context", "read": "Expand full report", "collapse": "Collapse full report", "open": "View subtask", "more": "Load more events", "report": "Subagent report", "input": "Input required", "approval": "Approval required", "interrupted": "Interrupted"},
     detailTimelineLabel: 'Subagent execution record',
-    detailInstructionLabel: 'Delegated instruction',
-    detailConstraintsLabel: 'Runtime constraints',
-    detailAnalysisLabel: 'Analysis',
-    detailActivityLabel: '{count} operations',
-    detailOutcomeLabel: 'Outcome',
     detailRetry: 'Retry',
     input: {
       queueTitle: 'Queued instructions',

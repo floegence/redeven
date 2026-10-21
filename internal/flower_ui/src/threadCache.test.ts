@@ -115,6 +115,64 @@ describe('ThreadCache', () => {
     expect(cache.views.has('selected')).toBe(false);
   });
 
+  it('retains an opened child at capacity without selecting it in the sidebar', () => {
+    let cache = createThreadCache();
+    for (let index = 0; index < 12; index++) {
+      cache = receive(cache.select('root-' + index), view('root-' + index, 1, 'Root body'));
+    }
+    cache = cache.retainDetails(['child']);
+    const result = cache.receiveView(view('child', 3, 'Child work'));
+    expect(result.state).toBe('accepted');
+    cache = result.cache;
+    expect(cache.selectedId).toBe('root-11');
+    expect(cache.views.get('child')?.thread.messages[0]?.content).toBe('Child work');
+    expect(cache.views.has('root-0')).toBe(false);
+    expect(cache.views.size).toBe(12);
+    for (let index = 0; index < 20; index++) {
+      cache = receive(cache, view('background-' + index, 1, 'Background'));
+      expect(cache.views.has('child')).toBe(true);
+      expect(cache.views.has('root-11')).toBe(true);
+      expect(cache.views.size).toBeLessThanOrEqual(12);
+    }
+  });
+
+  it('retains only explicitly displayed children through root refresh and reconnect', () => {
+    let cache = receive(createThreadCache().select('root'), view('root', 1, 'Root body'));
+    cache = receive(cache.retainDetails(['child']), view('child', 7, 'Child work'));
+    cache = receive(cache, view('old-child', 1, 'Old work'));
+    for (let cycle = 0; cycle < 3; cycle++) {
+      cache = cache.replaceSummaries([thread('root', 1, '')]);
+      expect(cache.views.get('child')?.thread.messages[0]?.content).toBe('Child work');
+      expect(cache.views.has('old-child')).toBe(false);
+      cache = cache.invalidateRuntimeVersions().resetRootSummaries([thread('root', 1, '')]);
+      expect(cache.selectedId).toBe('root');
+      expect(cache.views.get('child')?.thread.messages[0]?.content).toBe('Child work');
+      cache = receive(cache, view('child', 1, 'Child work'));
+    }
+    cache = cache.retainDetails([]).resetRootSummaries([thread('root', 1, '')]);
+    expect(cache.views.has('child')).toBe(false);
+    expect(cache.summaries.has('child')).toBe(false);
+    expect(cache.selectedId).toBe('root');
+    const reloaded = cache.receiveView(view('child', 1, 'Fresh child work'));
+    expect(reloaded.runtimeState).toBe('accepted');
+    expect(reloaded.cache.views.get('child')?.thread.messages[0]?.content).toBe('Fresh child work');
+  });
+
+  it('retains attention selection before its first detail arrives and releases visit priority normally', () => {
+    let cache = receive(createThreadCache(), view('root', 1, 'Root body'));
+    cache = cache.select('child').retainDetails(['child']).resetRootSummaries([thread('root', 1, '')]);
+    expect(cache.selectedId).toBe('child');
+    cache = receive(cache, view('child', 1, 'Attention body'));
+    expect(cache.retainDetails(['child', 'child'])).toBe(cache);
+    cache = cache.select('root').retainDetails([]);
+    for (let index = 0; index < 12; index++) {
+      const id = 'visited-' + index;
+      cache = receive(cache.select(id), view(id, 1, 'Visited'));
+    }
+    expect(cache.views.size).toBe(12);
+    expect(cache.views.has('child')).toBe(false);
+  });
+
   it('uses user visits for eviction priority rather than background refresh frequency', () => {
     let cache = receive(createThreadCache(), view('visited', 1, 'Visited')).select('visited');
     cache = receive(cache, view('selected', 1, 'Selected')).select('selected');
@@ -491,13 +549,13 @@ describe('ThreadCache', () => {
 
   it('retains only an explicitly selected child through a root baseline until detail revalidation', () => {
     let cache = receive(receive(createThreadCache(), view('root', 2, 'root')), view('child', 1, 'child')).select('child');
-    cache = cache.resetRootSummaries([thread('root', 3, '')], 'child');
+    cache = cache.retainDetails(['child']).resetRootSummaries([thread('root', 3, '')]);
     expect(cache.selectedId).toBe('child');
     expect(cache.views.get('child')?.thread.messages[0]?.content).toBe('child');
-    cache = cache.replaceSummaries([thread('root', 4, '')], 'child');
+    cache = cache.replaceSummaries([thread('root', 4, '')]);
     expect(cache.selectedId).toBe('child');
     expect(cache.views.has('child')).toBe(true);
-    cache = cache.select('root').resetRootSummaries([thread('root', 4, '')], 'child');
+    cache = cache.select('root').retainDetails([]).resetRootSummaries([thread('root', 4, '')]);
     expect([...cache.summaries.keys()]).toEqual(['root']);
     expect(cache.views.has('child')).toBe(false);
   });

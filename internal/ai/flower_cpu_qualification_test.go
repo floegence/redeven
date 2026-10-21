@@ -103,6 +103,18 @@ func TestFlowerCPUQualification(t *testing.T) {
 	}
 	rootID := created.ThreadID
 	var ids = []string{rootID}
+	childDetail := os.Getenv("REDEVEN_CPU_CHILD_DETAIL") == "1"
+	var visitedRoots []string
+	if childDetail {
+		for index := range 11 {
+			root, e := service.CreateThread(t.Context(), meta, fmt.Sprintf("Visited root %d", index), "", "", "")
+			if e != nil {
+				t.Fatal(e)
+			}
+			visitedRoots = append(visitedRoots, root.ThreadID)
+		}
+		visitedRoots = append(visitedRoots, rootID)
+	}
 	var configureMu sync.Mutex
 	summaryReader := service.threadRuntime.(flruntime.ThreadSummaryReader)
 	waitIdle := func(id string) error {
@@ -345,14 +357,45 @@ func TestFlowerCPUQualification(t *testing.T) {
 			clear(latestRuns)
 			evidenceMu.Unlock()
 			for len(ids) <= count {
-				fork, e := service.ForkThread(r.Context(), meta, rootID, fmt.Sprintf("CPU qualification %d", len(ids)))
+				var childID string
+				var e error
+				if childDetail {
+					seedView, readErr := service.threadRuntime.View(r.Context(), identity.ThreadID(rootID))
+					if readErr != nil {
+						http.Error(w, readErr.Error(), 500)
+						return
+					}
+					child, forkErr := service.threadRuntime.Fork(r.Context(), flruntime.ForkThreadInput{
+						SourceThreadID: identity.ThreadID(rootID), ParentThreadID: identity.ThreadID(rootID), ParentTurnID: seedView.Turns[len(seedView.Turns)-1].TurnID,
+						TaskName: "Inspect retained work", TaskDescription: "Verify canonical child detail under load.", HostProfileRef: subagentAgentTypeWorker,
+						ForkMode: subagentContextModeFullHistory, RequestKey: flruntime.RequestKey(fmt.Sprintf("cpu-child-%d", sequence.Add(1))),
+					})
+					e = forkErr
+					childID = child.ThreadID.String()
+					if e == nil {
+						e = service.ensureChildThreadSettings(r.Context(), &run{threadID: rootID, endpointID: meta.EndpointID, permissionType: FlowerPermissionApprovalRequired}, childID, rootID, subagentAgentTypeWorker)
+					}
+				} else {
+					fork, forkErr := service.ForkThread(r.Context(), meta, rootID, fmt.Sprintf("CPU qualification %d", len(ids)))
+					e = forkErr
+					if e == nil {
+						childID = fork.ThreadID
+					}
+				}
 				if e != nil {
 					http.Error(w, e.Error(), 500)
 					return
 				}
-				ids = append(ids, fork.ThreadID)
+				ids = append(ids, childID)
 			}
-			encode(w, map[string]any{"threads": ids[1 : count+1], "hz": rate, "mode": pattern, "initial_bytes": size})
+			encode(w, map[string]any{"threads": ids[1 : count+1], "hz": rate, "mode": pattern, "initial_bytes": size, "parent_thread": rootID, "visited_roots": visitedRoots, "child_detail": childDetail})
+		case "subagent_detail":
+			value, e := service.GetFlowerSubagentDetail(r.Context(), meta, rootID, r.URL.Query().Get("id"))
+			if e != nil {
+				http.Error(w, e.Error(), 500)
+				return
+			}
+			encode(w, map[string]any{"detail": value})
 		case "start":
 			configureMu.Lock()
 			defer configureMu.Unlock()
