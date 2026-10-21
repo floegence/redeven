@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-10-21 — Remove completed Goal controls
+
+- Hide the composer Goal badge and close its popup when the upstream typed Goal
+  reaches `completed`; retain the canonical completion timeline fact and any
+  local draft recovery state. See [Flower thread Goals](ai/flower-goals.md).
+
 ## 2026-10-21 — English Flower introduction
 
 - Translate the [base Flower prompt](ai/flower-prompt-and-rule-sources.md) into English and update its exact-text assertion while retaining the introduction-only contract.
