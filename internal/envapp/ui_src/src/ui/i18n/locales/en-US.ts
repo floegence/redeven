@@ -3679,6 +3679,8 @@ export const enUS = defineDictionary({
       "importHint": "The template will be added to your library. Service installation starts separately when you deploy it."
     },
     management: {
+      closeKeepsOperation: 'Closing keeps the operation running.',
+      executionDetails: 'Execution details',
       openingMissing: "No authentication entrance remains for this launch.",
       openingOutput: "Startup output could not be read within its limits. Check the service logs.",
       openingInvalid: "The declared entrance does not match the protected local endpoint.",

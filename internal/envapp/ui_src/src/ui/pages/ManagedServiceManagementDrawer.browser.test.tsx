@@ -3,6 +3,7 @@ import { I18nProvider } from '../i18n';
 import { REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY } from '../i18n/storageKey';
 import '../../index.css';
 import { render } from 'solid-js/web';
+import { createSignal } from 'solid-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import {
@@ -110,7 +111,7 @@ describe('Managed service recovery drawer', () => {
     const restart=vi.fn(),open=vi.fn();
     api.fetch.mockResolvedValue({...service,status:'running',opening:{state:'error',error_code:'OPENING_URL_MISSING'},actions:{open:{available:true},restart:{available:true}},facts:{presence:'present',runtime:'running',ownership:'verified',checked_at_unix_ms:Date.now(),resources:[]}});
     mount(async()=>undefined,false,false,true,{onOpen:open,onRestart:restart});await settle();
-    await userEvent.click(page.elementLocator(document.querySelector<HTMLButtonElement>('.service-management-section:last-child button')!));expect(open).toHaveBeenCalledWith(true);
+    await userEvent.click(page.getByRole('button', { name: 'Prepare and open again', exact: true }));expect(open).toHaveBeenCalledWith(true);
     await userEvent.click(page.getByRole('button',{name:'Restart',exact:true}));expect(restart).not.toHaveBeenCalled();
     expect(document.body.textContent).toContain('Pending settings will be applied');
     await userEvent.click(page.getByRole('button',{name:'Cancel',exact:true}));expect(restart).not.toHaveBeenCalled();
@@ -125,7 +126,7 @@ describe('Managed service recovery drawer', () => {
     mount(async () => undefined, false, true);
     await vi.waitFor(() => expect(document.querySelector('.service-management-execute')).not.toBeNull());
     await document.fonts.ready; await settle();
-    const panel = document.querySelector<HTMLElement>('[data-testid="service-management-drawer"]')!;
+    const panel = document.querySelector<HTMLElement>('.service-management-panel')!;
     expectSingleLineButtonLabels(panel);
     expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
     const bounds = panel.getBoundingClientRect();
@@ -139,7 +140,7 @@ describe('Managed service recovery drawer', () => {
     await page.viewport(320,800);localStorage.setItem(REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY,locale);
     api.fetch.mockResolvedValue({...service,status:'running',opening:{state:'error',error_code:'OPENING_URL_MISSING'},actions:{open:{available:true},restart:{available:true}},facts:{presence:'present',runtime:'running',ownership:'verified',checked_at_unix_ms:Date.now(),resources:[]}});
     mount(async()=>undefined,false,true,true);await settle();await document.fonts.ready;
-    const panel=document.querySelector<HTMLElement>('[data-testid="service-management-drawer"]')!;
+    const panel=document.querySelector<HTMLElement>('.service-management-panel')!;
     expectSingleLineButtonLabels(panel);expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
     const bounds=panel.getBoundingClientRect();
     for(const button of panel.querySelectorAll('button')) {
@@ -148,6 +149,53 @@ describe('Managed service recovery drawer', () => {
       expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(bounds.right);
     }
   });
+  it('retains newer known inventory facts when a later check becomes unavailable', async () => {
+    const checkedAt = Date.now() - 10_000;
+    const [current, setCurrent] = createSignal({ ...service, status: 'running', facts: { presence: 'present', runtime: 'running', ownership: 'verified', checked_at_unix_ms: checkedAt, resources: [] } });
+    api.fetch.mockImplementation(async () => current());
+    mount(async () => undefined, false, false, true, { get service() { return current(); } });
+    await settle();
+    setCurrent(previous => ({ ...previous, status: 'stopped', facts: { ...previous.facts, runtime: 'stopped', checked_at_unix_ms: checkedAt + 1000 } }));
+    await settle();
+    expect(document.querySelector('.service-management-conclusion')?.textContent).toBe('Stopped');
+    setCurrent(previous => ({ ...previous, status: 'inspection_unavailable', facts: { ...previous.facts, runtime: 'unknown', checked_at_unix_ms: checkedAt + 2000 } }));
+    await settle();
+    expect(document.querySelector('.service-management-conclusion')?.textContent).toBe('Stopped');
+    expect(document.querySelector('[role="alert"]')).not.toBeNull();
+  });
+
+  it('keeps busy controls in the footer and treats closing and cancellation independently', async () => {
+    api.fetch.mockResolvedValue({ ...service, status: 'stopped', facts: { presence: 'present', runtime: 'stopped', ownership: 'verified', checked_at_unix_ms: Date.now(), resources: [] } });
+    const close = vi.fn(), cancel = vi.fn(), execute = vi.fn();
+    mount(execute, false, false, true, { operation: { cancellable: true }, onClose: close, onCancelOperation: cancel, onVersions: vi.fn() });
+    await settle();
+    const footer = document.querySelector<HTMLElement>('[data-testid="service-management-footer"]')!;
+    expect(footer.textContent).toContain('Closing keeps the operation running.');
+    expect(document.querySelector('.service-management-conclusion')?.textContent).toBe('Stopped');
+    expect(footer.querySelector('[aria-label="Other actions"]')?.getAttribute('aria-disabled')).toBe('true');
+    await userEvent.click(page.getByTestId('service-management-footer').getByRole('button', { name: 'Close', exact: true }));
+    expect(close).toHaveBeenCalledOnce();
+    expect(cancel).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+    await userEvent.click(page.getByRole('button', { name: 'Cancel operation', exact: true }));
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('keeps utilities in one footer and opens versions from that fixed region', async () => {
+    api.fetch.mockResolvedValue({ ...service, status: 'running', facts: { presence: 'present', runtime: 'running', ownership: 'verified', checked_at_unix_ms: Date.now(), resources: [] } });
+    const versions = vi.fn();
+    mount(async () => undefined, false, false, true, { onVersions: versions });
+    await settle();
+    const footer = document.querySelector<HTMLElement>('[data-testid="service-management-footer"]')!;
+    for (const label of ['View logs', 'Edit configuration', 'Versions', 'Other actions']) {
+      const control = page.getByRole('button', { name: label, exact: true }).element();
+      expect(footer.contains(control)).toBe(true);
+    }
+    await userEvent.click(page.getByRole('button', { name: 'Versions', exact: true }));
+    expect(versions).toHaveBeenCalledOnce();
+    expect(api.fetch.mock.calls.every(([url]) => String(url).endsWith('/inspection'))).toBe(true);
+  });
+
   it('maps observed absence and missing configuration to actionable explanations', () => {
     expect(managementProblemKey('INSTANCE_MISSING')).toBe(
       'webServices.management.problems.missingInstance',
@@ -299,12 +347,9 @@ describe('Managed service recovery drawer', () => {
     const execute = vi.fn(async (_request: ManagementRequest) => undefined);
     mount(execute);
     await settle();
-    await userEvent.click(page.getByText('Advanced actions', { exact: true }));
+    await userEvent.click(page.getByRole('button', { name: 'Other actions', exact: true }));
     await userEvent.click(
-      page.getByRole('button', {
-        name: 'Detach and keep resources',
-        exact: true,
-      }),
+      page.getByRole('menuitem', { name: 'Detach and keep resources', exact: true }),
     );
     await settle();
     expect(document.body.textContent).toContain(
@@ -393,12 +438,9 @@ describe('Managed service recovery drawer', () => {
     const execute = vi.fn(async (_request: ManagementRequest) => undefined);
     mount(execute);
     await settle();
-    await userEvent.click(page.getByText('Advanced actions', { exact: true }));
+    await userEvent.click(page.getByRole('button', { name: 'Other actions', exact: true }));
     await userEvent.click(
-      page.getByRole('button', {
-        name: 'Detach and keep resources',
-        exact: true,
-      }),
+      page.getByRole('menuitem', { name: 'Detach and keep resources', exact: true }),
     );
     await settle();
     resolveOld({

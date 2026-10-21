@@ -1,0 +1,94 @@
+/* Management and release styles load with the Web Services product page. */
+[data-floe-dialog-panel].env-app-drawer-panel.service-management-panel { width: min(36rem, 100%); }
+[data-floe-dialog-overlay-root][data-floe-dialog-mode="surface"] [data-floe-dialog-panel].service-management-panel { width: min(36rem, 100%); }
+.service-management-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 4px; font-size: var(--floe-type-body); line-height: var(--floe-line-body); }
+.service-management-section { display: grid; gap: 12px; }
+.service-management-section > h3, .service-management-section-heading h3 { font-size: 12px; font-weight: 600; color: var(--muted-foreground); }
+.service-management-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.service-management-conclusion { font-size: 16px; font-weight: 500; line-height: 24px; }
+.service-management-resource { display: grid; gap: 6px; padding-block: 10px; border-bottom: 1px solid var(--border); font-size: 12px; }
+.service-management-resource-summary { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 12px; line-height: 18px; }
+.service-management-resource-summary > :last-child { text-align: end; }
+.service-management-resource-identity { font-family: var(--font-mono); font-size: 12px; line-height: 18px; overflow-wrap: anywhere; color: var(--muted-foreground); }
+.service-management-references { padding: 8px; border-radius: 6px; background: var(--muted); }
+.service-management-references summary { display: flex; align-items: center; justify-content: space-between; list-style: revert; cursor: pointer; }
+.service-management-reference-chevron { transition: transform 120ms; }
+.service-management-references[open] .service-management-reference-chevron { transform: rotate(180deg); }
+.service-management-references[open] summary { margin-bottom: 8px; }
+.service-management-path { display: grid; gap: 4px; }
+.service-management-footer { display: grid; gap: 12px; width: 100%; min-width: 0; }
+.service-management-execute { white-space: nowrap; max-width: 100%; }
+.service-management-panel button, .service-management-panel summary { transition: background-color 120ms, color 120ms, border-color 120ms; }
+.service-management-panel [role="alert"] { overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) {
+  .service-management-panel *, .service-management-panel *::before, .service-management-panel *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+.managed-release-verification { height: 2rem; overflow: auto; align-content: start; width: clamp(6rem, 28cqw, 12rem); max-width: 100%; }
+
+.managed-release-origin { display: flex; align-items: center; gap: 6px; }
+.managed-release-origin > * { min-width: 0; }
+.managed-release-origin > code { flex: 1; margin-top: 0; }
+.managed-release-origin.hidden { display: none; }
+
+/* Product composition consumes the published Dialog, controls, and semantic palette. */
+.service-management-identity { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; color: var(--muted-foreground); font-size: 12px; }
+.service-management-identity code { overflow-wrap: anywhere; font-size: 11px; }
+.service-management-utilities { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
+.service-management-utilities > button { padding-inline: 6px; }
+.service-management-utilities > .service-management-more { margin-inline-start: auto; padding-inline: 6px; }
+.service-management-footer-main { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.service-management-primary-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; min-width: 0; margin-inline-start: auto; }
+.service-management-footer-note { color: var(--muted-foreground); font-size: 11px; line-height: 18px; }
+.service-management-resource-details summary, .service-management-advanced summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; color: var(--muted-foreground); list-style: none; font-size: 12px; }
+.service-management-resource-details[open] > summary { margin-bottom: 8px; }
+.service-management-resource-details[open] > summary svg { transform: rotate(180deg); }
+.service-management-advanced { border-top: 1px solid var(--border); padding-top: 12px; }
+.service-operation-details { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 20px; border-top: 1px solid var(--border); padding: 20px; }
+.service-operation-details > * { min-width: 0; }
+.service-operation[data-drawer] > div { border-block: 1px solid var(--border); background: transparent; }
+[data-drawer] .service-operation-details { grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); padding: 16px 0; }
+.service-operation-summary { padding-block: 16px; font-size: 12px; }
+.service-operation-heading, .service-operation-summary-actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.service-operation-heading > :first-child { color: var(--primary); overflow-wrap: anywhere; }
+.service-operation-heading > :last-child { flex-shrink: 0; }
+.service-operation-track { display: flex; gap: 3px; height: 3px; margin-block: 16px 10px; }
+.service-operation-track > span { flex: 1; border-radius: 1px; background: var(--border); }
+.service-operation-track > [data-state='complete'] { background: color-mix(in srgb, var(--primary) 55%, var(--border)); }
+.service-operation-track > [data-state='active'] { background: var(--primary); }
+.service-operation-track > [data-state='failed'] { background: var(--destructive); }
+.service-operation-summary-actions { font-size: 11px; }
+.service-operation-summary-actions button { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; color: var(--primary); cursor: pointer; }
+.service-operation-output-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; list-style: none; font-size: 12px; cursor: pointer; }
+.service-operation-output-disclosure:not([open]) > summary svg { transform: rotate(-90deg); }
+.service-management-panel .web-service-operation-error { margin: 0 0 12px; }
+.managed-release-workspace { display: flex; flex: 1; min-width: 0; min-height: 0; }
+.managed-release-list-pane { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; flex: 1; }
+.managed-release-workspace[data-split] { display: grid; grid-template-columns: minmax(0, 13.75rem) minmax(0, 1fr); gap: 20px; }
+.managed-release-workspace[data-split] > .managed-release-list-pane { border-inline-end: 1px solid var(--border); padding-inline-end: 16px; }
+.managed-release-workspace[data-split] .managed-release-candidate-scroll { border: 0; border-radius: 0; }
+.managed-release-workspace[data-split] .managed-release-compact-row { grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 10px 8px; min-height: 56px; }
+.managed-release-workspace[data-split] .managed-release-compact-row > .managed-release-verification { grid-column: 1; grid-row: auto; justify-content: flex-start; height: auto; min-height: 16px; width: 100%; max-width: none; padding-inline-start: 24px; }
+.managed-release-plan-pane { min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding-inline-end: 4px; font-size: var(--floe-type-body); }
+.managed-release-plan-heading { display: grid; gap: 6px; padding-block: 4px 20px; }
+.managed-release-plan-heading h3 { font-size: 14px; line-height: 20px; }
+.managed-release-plan-placeholder { color: var(--muted-foreground); padding-block: 48px; text-align: center; }
+@media (max-width: 639px) {
+  .service-operation-details, [data-drawer] .service-operation-details { grid-template-columns: minmax(0, 1fr); }
+  .service-management-footer-main { align-items: flex-start; }
+  .service-management-footer-note { flex-basis: 100%; }
+  .managed-release-workspace[data-split] { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(16rem, 1fr) minmax(6rem, .65fr); gap: 12px; overflow-y: auto; }
+  .managed-release-workspace[data-split] > .managed-release-list-pane { border-inline-end: 0; border-bottom: 1px solid var(--border); padding-inline-end: 0; padding-bottom: 8px; }
+  .managed-release-browser-toolbar > :first-child { min-width: 0; flex-basis: 100%; }
+  .managed-release-plan-heading { padding-block: 4px 12px; }
+  .managed-release-plan-placeholder { padding-block: 16px; }
+}
+@media (pointer: coarse) {
+  .service-management-panel button, .service-management-panel summary, .service-operation-summary-actions button { min-height: 44px; }
+}
+
+.managed-release-workspace[data-split] .managed-release-compact-row > :last-child { grid-column: 1; }
+.managed-release-plan-facts { display: grid; gap: 0; }
+.managed-release-plan-facts > div { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px; border-bottom: 1px solid var(--border); padding-block: 10px; }
+.managed-release-plan-facts dt { color: var(--muted-foreground); }
+.managed-release-plan-facts dd { min-width: 0; text-align: end; }

@@ -145,7 +145,7 @@ describe('Managed service version drawer', () => {
     const body = document.querySelector<HTMLElement>('[data-testid="managed-release-drawer-body"]')!;
     const footer = document.querySelector<HTMLElement>('[data-testid="managed-release-footer"]')!;
     const scroll = document.querySelector<HTMLElement>('[data-testid="managed-release-candidate-scroll"]')!;
-    expect(body.querySelectorAll('[data-redeven-workbench-wheel-role="local-scroll-viewport"]')).toHaveLength(1);
+    expect(body.querySelectorAll('[data-redeven-workbench-wheel-role="local-scroll-viewport"]')).toHaveLength(2);
     expect(scroll.clientHeight).toBeGreaterThan(180);
     expect(scroll.scrollWidth).toBeLessThanOrEqual(scroll.clientWidth + 1);
     expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth + 1);
@@ -222,7 +222,7 @@ describe('Managed service version drawer', () => {
     expect(operations[0].accepted_notice_revisions).toEqual({ 'root-access': 2 });
   });
 
-  it('places the selected version above its notices without shifting earlier rows', async () => {
+  it('keeps the selected plan beside a stable candidate list', async () => {
     notices = [notice];
     await mount();
     const first = document.querySelector<HTMLElement>('[data-release-id="1.2.0"]')!;
@@ -230,9 +230,10 @@ describe('Managed service version drawer', () => {
     await select('1.1.0');
     const selected = document.querySelector<HTMLElement>('[data-release-id="1.1.0"]')!;
     const plan = document.querySelector<HTMLElement>('[data-testid="managed-update-plan"]')!;
-    expect(plan.getBoundingClientRect().top).toBeGreaterThanOrEqual(selected.getBoundingClientRect().bottom);
+    expect(plan.getBoundingClientRect().left).toBeGreaterThan(selected.getBoundingClientRect().right);
+    expect(document.querySelector('.managed-release-plan-heading')?.textContent).toContain('1.1.0');
     expect(first.getBoundingClientRect().top).toBe(firstTop);
-    expect(selected.nextElementSibling?.contains(plan)).toBe(true);
+    expect(document.querySelector('[data-testid="managed-release-plan-pane"]')?.contains(plan)).toBe(true);
     const checkbox = plan.querySelector<HTMLInputElement>('input')!;
     checkbox.focus();
     await userEvent.keyboard('{ArrowDown}');
@@ -264,9 +265,8 @@ describe('Managed service version drawer', () => {
     candidates[1] = candidate('1.1.0', 'older', { tag: '0.1.6-alpha.1-r1-market.1', channel: 'preview' });
     await mount(width, dark, locale); await select('1.1.0');
     assertGeometry();
-    const selected = document.querySelector<HTMLElement>('[data-release-id="1.1.0"]')!;
     const plan = document.querySelector<HTMLElement>('[data-testid="managed-update-plan"]')!;
-    expect(selected.nextElementSibling?.contains(plan)).toBe(true);
+    expect(document.querySelector('[data-testid="managed-release-plan-pane"]')?.contains(plan)).toBe(true);
     expect(plan.querySelector('input')).toBeNull();
     expect(plan.querySelectorAll('[data-notice-id]')).toHaveLength(2);
     const buttonText = submit().querySelector<HTMLElement>('span span')!;
@@ -386,6 +386,26 @@ describe('Managed service version drawer', () => {
     }
     await screenshot(`long-version-german-dark-${width}`);
   });
+  it('shows the running installed version after a download fails before stopping', async () => {
+    const original = api.fetch.getMockImplementation()!;
+    api.fetch.mockImplementation(async (url: string, options?: RequestInit) => {
+      if (url.endsWith('/operations')) return { operation_id: 'failed-download', service_id: service.service_id, action: 'update', state: 'failed', stage: 'pulling', progress_current: 2, progress_total: 7, error_code: 'IMAGE_PULL_FAILED' };
+      if (url.endsWith('/inspection')) return { ...service, facts: { presence: 'present', runtime: 'running', ownership: 'verified', checked_at_unix_ms: Date.now(), resources: [] } };
+      return original(url, options);
+    });
+    await mount(); await select();
+    await userEvent.click(submit());
+    await expect.poll(() => document.querySelector('[data-testid="managed-release-drawer-body"]')).toBeNull();
+    await userEvent.click(page.getByRole('button', { name: 'Workspace: More', exact: true }));
+    await userEvent.click(page.getByRole('menuitem', { name: 'Details and diagnostics', exact: true }));
+    await expect.poll(() => document.querySelector('.service-management-conclusion')?.textContent).toBe('Running');
+    expect(document.querySelector('.service-management-identity')?.textContent).toContain('1.0.0');
+    expect(document.querySelector('.service-operation-heading')?.textContent).toContain('Update');
+    expect(document.querySelectorAll('.service-operation-track > span')).toHaveLength(7);
+    expect(document.querySelector('.service-operation-track > [data-state="failed"]')).not.toBeNull();
+    expect(document.querySelector('.service-management-footer')?.textContent).not.toContain('Closing keeps the operation running.');
+  });
+
   it('clears unsaved confirmations when the drawer is closed', async () => {
     notices = [notice];
     await mount(); await select();

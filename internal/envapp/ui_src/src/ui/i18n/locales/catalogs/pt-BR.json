@@ -3700,6 +3700,8 @@
       "importHint": "O modelo será adicionado à sua biblioteca. A instalação do serviço começa separadamente quando você o implanta."
     },
     "management": {
+      "closeKeepsOperation": "A operação continua após fechar.",
+      "executionDetails": "Detalhes da execução",
       "references": "Referenciado por",
       "copyPath": "Copiar caminho do diretório de trabalho",
       "copyFailed": "Não foi possível copiar o caminho. Selecione-o para copiar manualmente.",

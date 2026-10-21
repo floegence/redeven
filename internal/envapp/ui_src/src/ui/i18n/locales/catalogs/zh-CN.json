@@ -3700,6 +3700,8 @@
       "importHint": "模板将添加到模板库。部署服务时，才会安装应用及其依赖。"
     },
     "management": {
+      "closeKeepsOperation": "关闭抽屉后，操作仍会继续。",
+      "executionDetails": "执行详情",
       "references": "引用此资源的实例",
       "copyPath": "复制工作目录路径",
       "copyFailed": "无法复制路径，请选中路径后手动复制。",

@@ -43,7 +43,7 @@
 .web-service-version { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; border-radius: 4px; font-family: var(--font-mono); text-align: start; overflow-wrap: anywhere; transition: color 120ms, background-color 120ms; }
 .web-service-version:enabled:hover { color: var(--foreground); background: var(--muted); }
 .web-service-version:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
-.web-service-update-dot { width: 5px; height: 5px; flex-shrink: 0; border-radius: 50%; background: var(--primary); }
+.web-service-update-label { color: var(--primary); font: 11px/16px var(--font-sans); }
 .web-service-preview { font: 10px/14px var(--font-sans); color: var(--muted-foreground); border: 1px solid var(--border); border-radius: 3px; padding-inline: 3px; }
 .web-service-workspace { display: inline-flex; align-items: center; gap: 4px; }
 .web-service-workspace > span { overflow-wrap: anywhere; }
@@ -91,31 +91,6 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .web-services *, .web-services *::before, .web-services *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
-}
-
-[data-floe-dialog-panel].env-app-drawer-panel.service-management-panel { width: min(36rem, 100%); }
-[data-floe-dialog-overlay-root][data-floe-dialog-mode="surface"] [data-floe-dialog-panel].service-management-panel { width: min(36rem, 100%); }
-.service-management-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 4px; font-size: var(--floe-type-body); }
-.service-management-section { display: grid; gap: 12px; }
-.service-management-section > h3, .service-management-section-heading h3 { font-size: 12px; font-weight: 600; color: var(--muted-foreground); }
-.service-management-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.service-management-conclusion { font-size: 16px; font-weight: 600; line-height: 24px; }
-.service-management-resource { display: grid; gap: 6px; padding-block: 10px; border-bottom: 1px solid var(--border); font-size: 12px; }
-.service-management-resource-summary { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 12px; line-height: 18px; }
-.service-management-resource-summary > :last-child { text-align: end; }
-.service-management-resource-identity { font-family: var(--font-mono); font-size: 12px; line-height: 18px; overflow-wrap: anywhere; color: var(--muted-foreground); }
-.service-management-references { padding: 8px; border-radius: 6px; background: var(--muted); }
-.service-management-references summary { display: flex; align-items: center; justify-content: space-between; list-style: revert; cursor: pointer; }
-.service-management-reference-chevron { transition: transform 120ms; }
-.service-management-references[open] .service-management-reference-chevron { transform: rotate(180deg); }
-.service-management-references[open] summary { margin-bottom: 8px; }
-.service-management-path { display: grid; gap: 4px; }
-.service-management-footer { display: grid; gap: 8px; width: 100%; }
-.service-management-execute { min-height: 36px; height: auto; white-space: nowrap; text-align: center; line-height: 20px; padding: 8px 12px; }
-.service-management-panel button, .service-management-panel summary { transition: background-color 120ms, color 120ms, border-color 120ms; }
-.service-management-panel [role="alert"] { overflow-wrap: anywhere; }
-@media (prefers-reduced-motion: reduce) {
-  .service-management-panel *, .service-management-panel *::before, .service-management-panel *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
 
 .web-service-forward-notice { margin: 0; grid-column: 1 / -1; }
@@ -166,11 +141,8 @@
 /* Only explicit disclosure adds a detail row; background progress stays in the status cell. */
 .web-service-activity { grid-column: 1 / -1; min-width: 0; }
 .web-service-status-trigger { display: flex; height: 100%; align-items: center; gap: 4px; width: 100%; min-width: 0; text-align: left; cursor: pointer; }
-.managed-release-verification { height: 2rem; overflow: auto; align-content: start; width: clamp(6rem, 28cqw, 12rem); max-width: 100%; }
-
-.managed-release-origin { display: flex; align-items: center; gap: 6px; }
-.managed-release-origin > * { min-width: 0; }
-.managed-release-origin > code { flex: 1; margin-top: 0; }
-.managed-release-origin.hidden { display: none; }
-
 .web-service-status-anchor { display: flex; width: 100%; height: 100%; min-width: 0; }
+
+.web-service-operation-state { display: grid; min-width: 0; width: 100%; gap: 1px; line-height: 16px; }
+.web-service-operation-state .web-service-state { line-height: 16px; }
+.web-service-operation-stage { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-inline-start: 20px; font-size: 11px; color: var(--muted-foreground); }

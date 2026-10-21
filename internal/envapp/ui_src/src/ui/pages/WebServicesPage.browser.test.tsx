@@ -85,7 +85,7 @@ describe('Web Services product interaction', () => {
     host = document.createElement('div');
     host.style.cssText = `width:${width}px;height:840px;position:relative;`;
     document.body.append(host);
-    function Surface() { const theme = useTheme(); theme.selectShellTheme(preset === 'classic-dark' ? 'dark' : 'light', preset); return <I18nProvider><EnvPortForwardsPage /></I18nProvider>; }
+    function Surface() { const theme = useTheme(); theme.selectShellTheme(['classic-dark', 'soft-black'].includes(preset) ? 'dark' : 'light', preset); return <I18nProvider><EnvPortForwardsPage /></I18nProvider>; }
     dispose = render(() => <FloeConfigProvider config={{ theme: { shellPresets: builtInShellThemePresets }, storage: { enabled: false } }}><ThemeProvider><Surface /></ThemeProvider></FloeConfigProvider>, host);
     await expect.poll(() => host.querySelectorAll('[data-testid="managed-service-row"]').length).toBe(records.filter((item) => item.management_state === 'active').length);
     await settle();
@@ -192,7 +192,8 @@ describe('Web Services product interaction', () => {
     expect(footer.getBoundingClientRect().bottom).toBeLessThanOrEqual(960);
     await new Promise((resolve) => setTimeout(resolve, 260));
     expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
-    await userEvent.click(page.getByRole('button', { name: 'Uninstall', exact: true }));
+    await userEvent.click(page.getByRole('button', { name: 'Other actions', exact: true }));
+    await userEvent.click(page.getByRole('menuitem', { name: 'Uninstall', exact: true }));
     await userEvent.click(page.getByRole('button', { name: 'Keep data and complete uninstall', exact: true }));
     await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"]')).toBeNull();
     await expect.poll(() => host.querySelectorAll('[data-managed-service-id]').length).toBe(1);
@@ -370,6 +371,61 @@ describe('Web Services product interaction', () => {
     await expect.poll(() => api.open.mock.calls.length).toBe(2);
     finishOpen({ ok: true });
     await expect.poll(() => managed.disabled).toBe(false);
+  });
+
+  for (const [width, preset] of [[1440, 'soft-black'], [390, 'cloud-white'], [320, 'soft-black']] as const) it(`keeps operation details and resource disclosure independent at ${width}px in ${preset}`, async () => {
+    records = [base];
+    let stream!: ReadableStreamDefaultController<Uint8Array>;
+    let streamSignal: AbortSignal | null | undefined;
+    const operation: ManagedOperation = {
+      operation_id: 'stop-with-output', service_id: base.service_id, action: 'stop', state: 'running', stage: 'stopping', progress_current: 1, progress_total: 2,
+      progress_detail: { schema_version: 2, stage_started_at_unix_ms: Date.now() - 5000,
+        commands: [{ command_id: 'stop', display: 'stop application', state: 'running' }],
+        output: [{ sequence: 1, command_id: 'stop', stream: 'stdout', text: 'Waiting for the application to exit' }],
+      },
+    };
+    api.stream.mockImplementation(async (_url: string, options?: RequestInit) => {
+      streamSignal = options?.signal;
+      return new Response(new ReadableStream<Uint8Array>({ start(controller) { stream = controller; } }), { headers: { 'Content-Type': 'text/event-stream' } });
+    });
+    const original = api.fetch.getMockImplementation()!;
+    api.fetch.mockImplementation(async (url: string, options?: RequestInit) => url.endsWith('/operations') ? operation : original(url, options));
+    await mount(width, preset);
+    await page.viewport(width, 900);
+    await userEvent.click(page.getByRole('button', { name: 'Example dashboard: Stop', exact: true }));
+    await expect.poll(() => api.stream.mock.calls.length).toBe(1);
+    await userEvent.click(page.getByRole('button', { name: 'Example dashboard: More', exact: true }));
+    await userEvent.click(page.getByRole('menuitem', { name: 'Details and diagnostics', exact: true }));
+    await expect.poll(() => document.querySelector('.service-management-conclusion')?.textContent).toBe('Running');
+    const drawer = document.querySelector<HTMLElement>('.service-management-panel')!;
+    const footer = drawer.querySelector<HTMLElement>('[data-testid="service-management-footer"]')!;
+    const footerTop = footer.getBoundingClientRect().top;
+    expect(drawer.querySelector('.service-operation-heading')?.textContent).toContain('Stop');
+    expect(drawer.querySelectorAll('.service-operation-track > span')).toHaveLength(2);
+    await userEvent.click(page.getByRole('button', { name: 'Execution details', exact: true }));
+    const disclosure = drawer.querySelector<HTMLDetailsElement>('[data-testid="managed-operation-command-output"]')!;
+    const output = drawer.querySelector<HTMLElement>('[data-testid="managed-operation-output"]')!;
+    const resource = drawer.querySelector<HTMLDetailsElement>('.service-management-resource-details')!;
+    await userEvent.click(disclosure.querySelector('summary')!);
+    expect(disclosure.open).toBe(false);
+    stream.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ ...operation, progress_detail: { ...operation.progress_detail, output: [...operation.progress_detail!.output!, { sequence: 2, command_id: 'stop', stream: 'stdout', text: 'Still waiting for the application' }] } })}\n\n`));
+    await expect.poll(() => output.textContent).toContain('Still waiting');
+    expect(drawer.querySelector('[data-testid="managed-operation-output"]')).toBe(output);
+    expect(disclosure.open).toBe(false);
+    expect(resource.open).toBe(false);
+    expect(footer.getBoundingClientRect().top).toBe(footerTop);
+    expect(drawer.scrollWidth).toBeLessThanOrEqual(drawer.clientWidth + 1);
+    await userEvent.click(disclosure.querySelector('summary')!);
+    await document.fonts.ready;
+    const directory = import.meta.env.VITE_REDEVEN_SERVICE_SCREENSHOTS;
+    if (directory) await page.screenshot({ path: `${directory}/management-${width}-${preset}.png` });
+    await userEvent.click(page.elementLocator([...footer.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.trim() === 'Close')!));
+    await expect.poll(() => document.querySelector('.service-management-panel')).toBeNull();
+    expect(streamSignal?.aborted).toBe(false);
+    expect(api.fetch.mock.calls.some(([url]) => String(url).endsWith('/cancel'))).toBe(false);
+    stream.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ ...operation, state: 'failed', error_code: 'STOP_SCRIPT_FAILED' })}\n\n`));
+    stream.close();
+    await expect.poll(() => host.querySelector('[data-testid="managed-service-status"]')?.textContent).toBe('Running');
   });
 
   it('keeps reviewed content intact during the sidebar exit', async () => {

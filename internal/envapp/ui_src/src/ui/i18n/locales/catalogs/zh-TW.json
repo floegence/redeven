@@ -3700,6 +3700,8 @@
       "importHint": "範本將新增至範本庫。部署服務時，才會安裝應用程式及其相依套件。"
     },
     "management": {
+      "closeKeepsOperation": "關閉抽屜後，操作仍會繼續。",
+      "executionDetails": "執行詳情",
       "references": "參照此資源的執行個體",
       "copyPath": "複製工作目錄路徑",
       "copyFailed": "無法複製路徑，請選取路徑後手動複製。",

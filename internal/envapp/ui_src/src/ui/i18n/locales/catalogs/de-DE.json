@@ -3700,6 +3700,8 @@
       "importHint": "Die Vorlage wird deiner Bibliothek hinzugefügt. Die Dienstinstallation beginnt separat beim Bereitstellen."
     },
     "management": {
+      "closeKeepsOperation": "Der Vorgang läuft nach dem Schließen weiter.",
+      "executionDetails": "Ausführungsdetails",
       "references": "Referenziert von",
       "copyPath": "Arbeitsverzeichnispfad kopieren",
       "copyFailed": "Der Pfad konnte nicht kopiert werden. Wählen Sie ihn aus und kopieren Sie ihn manuell.",
