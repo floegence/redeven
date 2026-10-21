@@ -93,7 +93,8 @@ func TestEnvironmentCardSendPreservesDeviceThroughDeepSeekWireFollowup(t *testin
 		t.Fatalf("HTTP requests=%d", len(bodies))
 	}
 	for index, body := range bodies {
-		for _, fact := range []string{"udesk26", "ssh:host:udesk26:7afba939", "redeven targets exec", "User-selected device", "Tool execution environment", "env_tool_runtime"} {
+		for _, fact := range []string{"udesk26", "ssh:host:udesk26:7afba939", "redeven targets exec", "User-selected device", "Tool execution environment", "env_tool_runtime",
+			"probe_failed", "Connection refused", "ssh-start-fixture", "ssh_runtime_launch_failed", "Check the port and retry", "address already in use"} {
 			if !strings.Contains(body, fact) {
 				t.Errorf("HTTP request %d omitted %q", index+1, fact)
 			}
