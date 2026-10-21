@@ -1974,19 +1974,20 @@ describe('EnvPortForwardsPage', () => {
 
     render(() => <EnvPortForwardsPage />, host);
     await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-version"]')).toBeTruthy());
+    expect(host.querySelector('.web-service-update-label')?.textContent).toContain('Update available');
     host.querySelector<HTMLButtonElement>('[data-testid="managed-service-version"]')?.click();
     await flushPage();
     const releaseDrawerBody = host.querySelector<HTMLElement>('[data-testid="managed-release-drawer-body"]')!;
     expect(releaseDrawerBody.className).toContain('overflow-hidden');
     expect(releaseDrawerBody.getAttribute('data-redeven-workbench-wheel-role')).toBeNull();
-    expect(releaseDrawerBody.querySelectorAll('[data-redeven-workbench-wheel-role="local-scroll-viewport"]')).toHaveLength(1);
+    expect(releaseDrawerBody.querySelectorAll('[data-redeven-workbench-wheel-role="local-scroll-viewport"]')).toHaveLength(2);
     host.querySelector<HTMLButtonElement>('[data-release-id="candidate-new"]')?.click();
     await flushPage();
     await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-update-plan"]')).toBeTruthy());
     expect(updatePlanBody).toEqual({ target_candidate_id: 'candidate-new' });
     expect(operationBody).toBeNull();
     expect(host.querySelector('[data-testid="managed-release-candidates"]')).toBeTruthy();
-    expect(releaseDrawerBody.querySelectorAll('[data-redeven-workbench-wheel-role="local-scroll-viewport"]')).toHaveLength(1);
+    expect(releaseDrawerBody.querySelectorAll('[data-redeven-workbench-wheel-role="local-scroll-viewport"]')).toHaveLength(2);
     expect(Array.from(host.querySelectorAll('button')).some((button) => controlText(button)?.includes('Review update plan'))).toBe(false);
     const update = host.querySelector<HTMLButtonElement>('[data-testid="managed-release-submit"]');
     expect(update?.disabled).toBe(true);

@@ -3700,6 +3700,8 @@
       "importHint": "Le modèle sera ajouté à votre bibliothèque. L’installation du service démarre séparément lors du déploiement."
     },
     "management": {
+      "closeKeepsOperation": "L’opération continue après la fermeture.",
+      "executionDetails": "Détails de l’exécution",
       "references": "Référencé par",
       "copyPath": "Copier le chemin du répertoire de travail",
       "copyFailed": "Impossible de copier le chemin. Sélectionnez-le pour le copier manuellement.",

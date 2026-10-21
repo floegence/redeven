@@ -1021,6 +1021,7 @@ function ManagedOperationDisclosure(props: Readonly<{
   canCancel: boolean;
   onExpandedChange: (expanded: boolean) => void;
   onCancel: () => void;
+  drawer?: boolean;
 }>) {
   const i18n = useI18n();
   let outputViewport: HTMLDivElement | undefined;
@@ -1044,7 +1045,8 @@ function ManagedOperationDisclosure(props: Readonly<{
       if (outputViewport && followOutput) outputViewport.scrollTop = outputViewport.scrollHeight;
     });
   }));
-  const detailsID = () => `managed-operation-details-${props.operation.operation_id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+  const disclosureID = createUniqueId();
+  const detailsID = () => `managed-operation-details-${disclosureID}`;
   const transferSummary = () => {
     const item = transfer();
     if (!item) return `${Math.min(props.operation.progress_current, props.operation.progress_total)}/${props.operation.progress_total}`;
@@ -1055,7 +1057,7 @@ function ManagedOperationDisclosure(props: Readonly<{
   return (
     <div
       class={cn(
-        'grid overflow-hidden transition-[grid-template-rows,opacity,transform] duration-[220ms] ease-out motion-reduce:transform-none motion-reduce:transition-none',
+        'service-operation grid overflow-hidden transition-[grid-template-rows,opacity,transform] duration-[220ms] ease-out motion-reduce:transform-none motion-reduce:transition-none',
         props.presentationPhase === 'exiting'
           ? 'grid-rows-[0fr] -translate-y-1 opacity-0'
           : 'grid-rows-[1fr] translate-y-0 opacity-100 animate-in fade-in slide-in-from-top-1 duration-200 motion-reduce:animate-none',
@@ -1065,8 +1067,10 @@ function ManagedOperationDisclosure(props: Readonly<{
       aria-hidden={props.presentationPhase === 'exiting' || undefined}
       data-testid="managed-operation-disclosure"
       data-presentation-state={props.presentationPhase}
+      data-drawer={props.drawer || undefined}
     >
       <div class="relative min-h-0 overflow-hidden border-t border-border/70 bg-muted/15">
+        <Show when={!props.drawer}>
         <div class="flex h-14 min-h-14 min-w-0 items-stretch pl-[3.25rem] pr-3" data-testid="managed-operation-header">
         <span class="absolute bottom-0 left-8 top-0 w-px bg-border/80" aria-hidden="true" />
         <span class="absolute left-8 top-[1.4rem] h-px w-5 bg-border/80" aria-hidden="true" />
@@ -1098,11 +1102,29 @@ function ManagedOperationDisclosure(props: Readonly<{
           <Button size="sm" variant="ghost" class="my-auto h-7 shrink-0 whitespace-nowrap px-2" onClick={props.onCancel} disabled={!props.canCancel || props.operation.state === 'cancelling' || props.operation.state === 'submitting'}>{i18n.t('webServices.managed.cancelOperation')}</Button>
         </Show>
         </div>
+        </Show>
+        <Show when={props.drawer}>
+          <div class="service-operation-summary">
+            <div class="service-operation-heading" role="status">
+              <span>{managedOperationActivityLabel(props.operation, i18n)}</span>
+              <span class="tabular-nums text-muted-foreground">{Math.min(props.operation.progress_current, props.operation.progress_total)}/{props.operation.progress_total}</span>
+            </div>
+            <div class="service-operation-track" aria-hidden="true">
+              <For each={steps()}>{(_, index) => <span data-state={managedOperationStepState(props.operation, steps(), index())} />}</For>
+            </div>
+            <div class="service-operation-summary-actions">
+              <span class="text-muted-foreground">{i18n.t('webServices.managed.operationElapsed')}{' '}{formatManagedElapsed(props.operation.progress_detail?.stage_started_at_unix_ms, terminal() ? props.operation.progress_detail?.updated_at_unix_ms : currentTimeUnixMs())}</span>
+              <button type="button" aria-expanded={props.expanded} aria-controls={detailsID()} onClick={() => props.onExpandedChange(!props.expanded)}>
+                {i18n.t('webServices.management.executionDetails')}<ChevronDown class={cn('h-3 w-3', props.expanded && 'rotate-180')} aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        </Show>
         <Show when={props.operation.state === 'failed' || props.operation.state === 'interrupted'}>
           <p class="web-service-operation-error" role="alert">{managedOperationFailureMessage(props.operation, i18n)}</p>
         </Show>
         <Show when={props.expanded}>
-        <div id={detailsID()} class="grid gap-4 border-t border-border/60 px-5 py-4 sm:grid-cols-[minmax(12rem,0.8fr)_minmax(16rem,1.2fr)]" data-testid="managed-service-operation-details">
+        <div id={detailsID()} class="service-operation-details" data-testid="managed-service-operation-details">
           <ol class="space-y-2">
             <For each={steps()}>{(stage, index) => {
               const state = () => managedOperationStepState(props.operation, steps(), index());
@@ -1119,11 +1141,11 @@ function ManagedOperationDisclosure(props: Readonly<{
               </div>
             )}</Show>
             <Show when={commands().length > 0 || output().length > 0}>
-              <div class={cn(transfer() && 'mt-4 border-t border-border/60 pt-4')} data-testid="managed-operation-command-output">
-                <div class="flex items-center justify-between gap-3">
-                  <h4 class="text-xs font-semibold text-foreground">{i18n.t('webServices.managed.operationCommandOutput')}</h4>
-                  <Show when={props.operation.progress_detail?.output_truncated}><span class="text-[10px] text-warning">{i18n.t('webServices.managed.operationOutputTruncated')}</span></Show>
-                </div>
+              <details class={cn('service-operation-output-disclosure', transfer() && 'mt-4 border-t border-border/60 pt-4')} open data-testid="managed-operation-command-output">
+                <summary class="service-operation-output-heading">
+                  <span>{i18n.t('webServices.managed.operationCommandOutput')}</span><ChevronDown class="h-3 w-3" aria-hidden="true" />
+                </summary>
+                <Show when={props.operation.progress_detail?.output_truncated}><p class="text-[11px] text-warning">{i18n.t('webServices.managed.operationOutputTruncated')}</p></Show>
                 <div class="mt-2 space-y-1.5">
                   <For each={commands()}>{(command) => (
                     <div class="flex min-w-0 items-center gap-2 text-[10px]">
@@ -1150,7 +1172,7 @@ function ManagedOperationDisclosure(props: Readonly<{
                     </div>
                   )}</For>
                 </div>
-              </div>
+              </details>
             </Show>
             <Show when={!transfer() && commands().length === 0 && output().length === 0 && (!terminal() || succeeded())}>
               <div class="space-y-3">
@@ -1424,18 +1446,20 @@ export function ManagedReleaseCandidates(props: Readonly<{
 				<div class="min-w-0"><div class="text-[10px] font-medium text-muted-foreground">{i18n.t('webServices.managed.releaseCheckedAt')}</div><div class="mt-1 text-foreground">{i18n.formatDateTime(result().checked_at_unix_ms, { dateStyle: 'medium', timeStyle: 'short' })}</div><div class="mt-1 text-[10px] text-muted-foreground">{i18n.t('webServices.managed.releaseDirectSource')}</div></div>
 			</div>}</Show>
 			<Show when={props.result?.last_error_code}>{(code) => <div class="shrink-0 rounded-lg border border-warning/30 bg-warning/[0.06] p-3 text-xs text-warning"><div>{releaseSourceErrorLabel(code(), i18n)}</div><div class="mt-1 text-[10px] text-muted-foreground">{i18n.t('webServices.managed.releaseCheckStale')}</div></div>}</Show>
-			<div class="flex shrink-0 flex-wrap gap-2">
+			<div class="managed-release-browser-toolbar flex shrink-0 flex-wrap gap-2">
 				<div class="min-w-48 flex-1"><Input value={props.query} onInput={(event) => props.onQueryChange(event.currentTarget.value)} placeholder={i18n.t('webServices.managed.releaseSearch')} aria-label={i18n.t('webServices.managed.releaseSearch')} class="w-full" /></div>
 				<div class="inline-flex rounded-md border p-0.5" role="group" aria-label={i18n.t('webServices.managed.releaseFilterLabel')}>
 					<For each={['all', 'stable', 'preview'] as const}>{(filter) => <Button size="sm" variant={props.filter === filter ? 'default' : 'ghost'} onClick={() => props.onFilterChange(filter)}>{i18n.t(`webServices.managed.releaseFilter.${filter}` as EnvAppTranslationKey)}</Button>}</For>
 				</div>
 			</div>
+      <div class="managed-release-workspace" data-split={props.compact || undefined}>
+      <div class="managed-release-list-pane">
 			<div class="flex min-h-0 flex-1 flex-col gap-2">
 				<Show when={props.result} fallback={<div class={cn('flex min-h-0 flex-1 items-center justify-center rounded-lg border p-3 text-[length:var(--floe-type-body)]', props.error ? 'border-destructive/30 bg-destructive/[0.06] text-destructive' : 'text-muted-foreground')}>{props.error || i18n.t('common.status.loading')}</div>}>
 					<div
 						{...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
 						ref={(element) => { scrollViewport = element; scheduleViewportScan(); }}
-						class="min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-lg border [overflow-anchor:none] [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] [touch-action:pan-y_pinch-zoom]"
+						class="managed-release-candidate-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-lg border [overflow-anchor:none] [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] [touch-action:pan-y_pinch-zoom]"
 						data-testid="managed-release-candidate-scroll"
 						tabindex="0"
 						onScroll={scheduleViewportScan}
@@ -1474,11 +1498,11 @@ export function ManagedReleaseCandidates(props: Readonly<{
 								<StatusRegion lines={1} class="col-span-2 text-[11px] sm:col-span-3"><Show when={candidate.tag_moved}><p class="col-span-2 text-[11px] text-warning sm:col-span-3">{i18n.t('webServices.managed.releaseTagMoved')}</p></Show>
 								<Show when={candidate.digest_verified || candidate.verification_status === 'unavailable'}><p class="col-span-2 text-[11px] text-warning sm:col-span-3">{releaseReasonLabel(candidate, i18n)}</p></Show></StatusRegion>
 							</button>
-                <Show when={isSelected() && props.renderSelectedContent}><div class="managed-release-selected-content">{props.renderSelectedContent?.()}</div></Show>
+                <Show when={!props.compact && isSelected() && props.renderSelectedContent}><div class="managed-release-selected-content">{props.renderSelectedContent?.()}</div></Show>
               </div>;
 						}}</For>
             </div>
-            <Show when={props.renderSelectedContent && selected() && !selectedVisible()}>
+            <Show when={!props.compact && props.renderSelectedContent && selected() && !selectedVisible()}>
               <div class="border-t bg-primary/[0.04] px-3 pt-3 shadow-[inset_3px_0_0_0_var(--primary)]">
                 <div class="text-[11px] text-muted-foreground">{i18n.t('webServices.managed.targetRelease')}</div>
                 <div class="mt-1 break-all font-mono text-[length:var(--floe-type-body)] font-semibold">{selected()?.version || selected()?.tag}</div>
@@ -1495,6 +1519,20 @@ export function ManagedReleaseCandidates(props: Readonly<{
 					<Show when={statusBusy()}><span class="managed-release-list-status__track" aria-hidden="true"><span /></span></Show>
 				</div>
 			</div>
+      </div>
+      <Show when={props.compact}>
+        <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="managed-release-plan-pane" data-testid="managed-release-plan-pane" tabindex="0">
+          <Show when={selected()} fallback={<p class="managed-release-plan-placeholder">{i18n.t('webServices.managed.chooseUpdateVersion')}</p>}>
+            {(candidate) => <>
+              <div class="managed-release-plan-heading"><span class="text-xs text-muted-foreground">{i18n.t('webServices.managed.targetRelease')}</span><h3 class="break-all font-mono font-medium">{candidate().version || candidate().tag}</h3></div>
+              <Show when={props.renderSelectedContent} fallback={<p class="mt-3 text-xs text-muted-foreground">{candidate().is_current || candidate().relation === 'same' ? i18n.t('webServices.managed.updateNotRequired') : candidate().verification_status === 'unavailable' ? releaseReasonLabel(candidate(), i18n) : statusBusy() ? statusText() : i18n.t('common.status.loading')}</p>}>
+                {props.renderSelectedContent?.()}
+              </Show>
+            </>}
+          </Show>
+        </div>
+      </Show>
+      </div>
 			<Show when={props.showRiskHints && selected()} keyed>{(candidate) => (
 				<div class="shrink-0"><ManagedReleaseRiskHints riskIDs={releaseRiskHintIDs(candidate, props.defaultKind)} /></div>
 			)}</Show>
@@ -1542,7 +1580,7 @@ export function ManagedServiceRow(props: { service: ManagedService; selected?: b
   const statusLabel = createMemo(() => {
     const current = activeOperation();
     if (!current) return i18n.t(managementStatusKey(props.service.status ?? props.service.observed_state));
-    return current.state === 'submitting' ? i18n.t('webServices.managed.operationStarting') : managedStageLabel(current.stage, i18n);
+    return managedOperationActivityLabel(current, i18n);
   });
   const busy = () => props.busy || managedOperationActive(props.operation);
   const actionCapability = (action: ManagedAction): ManagedActionCapability => props.service.actions?.[action] ?? { available: false, reason_code: 'SERVICE_STATE_UNAVAILABLE' };
@@ -1638,7 +1676,7 @@ export function ManagedServiceRow(props: { service: ManagedService; selected?: b
               <button type="button" class="web-service-version" onClick={props.onVersions} disabled={busy() || !props.canManage || !props.onVersions}
                 aria-label={`${props.service.name}: ${i18n.t('webServices.managed.versions')}`} data-testid="managed-service-version">
                 {props.service.release_status.current_release ? releaseIdentityLabel(props.service.release_status.current_release) : '—'}
-                <Show when={props.service.release_status.latest_stable_relation === 'newer'}><span class="web-service-update-dot" aria-label={i18n.t('webServices.collection.updateAvailable')} /></Show>
+                <Show when={props.service.release_status.latest_stable_relation === 'newer'}><span class="web-service-update-label">{i18n.t('webServices.managed.updateAvailable')}<Show when={props.service.release_status.latest_stable_release}>{(release) => <> · {release().version || release().tag}</>}</Show></span></Show>
                 <Show when={props.service.release_status.latest_stable_relation !== 'newer' && props.service.release_status.latest_preview_relation === 'newer'}><span class="web-service-preview">{i18n.t('webServices.managed.releaseChannel.preview')}</span></Show>
               </button>
             </Tooltip>
@@ -1653,8 +1691,9 @@ export function ManagedServiceRow(props: { service: ManagedService; selected?: b
             <button type="button" class="web-service-status-trigger" aria-expanded={operation() ? props.operationExpanded : undefined}
               aria-label={operation() ? managedOperationActivityLabel(operation()!, i18n) : undefined}
               onClick={() => { const current = operation(); if (current) props.onOperationExpandedChange(current.operation_id, !props.operationExpanded); }}>
-              <ServiceStatusIndicator label={statusLabel()}
-                tone={activeOperation() ? 'neutral' : notices().length ? 'warning' : managedStatusTone(props.service.status ?? props.service.observed_state)} />
+              <Show when={activeOperation()} fallback={<ServiceStatusIndicator label={statusLabel()} tone={notices().length ? 'warning' : managedStatusTone(props.service.status ?? props.service.observed_state)} />}>
+                {(current) => <Show when={current().state !== 'submitting'} fallback={<ServiceStatusIndicator label={i18n.t('webServices.managed.operationStarting')} tone="neutral" />}><span class="web-service-operation-state"><ServiceStatusIndicator label={managedActionLabel(current().action, i18n)} tone="neutral" /><span class="web-service-operation-stage" title={managedStageLabel(current().stage, i18n)}>{managedStageLabel(current().stage, i18n)}</span></span></Show>}
+              </Show>
               <Show when={operation()}><ChevronDown class="h-3 w-3 shrink-0" aria-hidden="true" /></Show>
             </button>
           </Tooltip>
@@ -3036,6 +3075,15 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
     return managedState().filter((service) => (service.management_state ?? 'active') === archiveView()).filter((service) => !query || `${service.name}\n${service.description ?? ''}\n${service.workspace_path}\n${service.template_id}`.toLowerCase().includes(query));
   });
   const managedServicesByID = createMemo(() => new Map(managedState().map((service) => [service.service_id, service])));
+  const managementService = createMemo(() => {
+    const target = managementTarget();
+    return target ? managedServicesByID().get(target.service.service_id) ?? target.service : null;
+  });
+  const managementPresentationService = createMemo<ManagedService | null>((previous) => managementService() ?? previous, null);
+  const managementPresentationOperation = createMemo<ManagedOperation | null>((previous) => {
+    const service = managementService();
+    return service ? managedPresentedOperation(service.service_id) : previous;
+  }, null);
   const filteredManagedServiceIDs = createMemo(() => filteredManagedServices().map((service) => service.service_id));
   const managedServiceForID = (serviceID: string) => managedServicesByID().get(serviceID) ?? null;
 
@@ -3626,10 +3674,19 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
       />
 
       <ManagedServiceManagementDrawer
-        service={managementTarget() ? managedServicesByID().get(managementTarget()!.service.service_id) ?? managementTarget()!.service : null}
+        service={managementService()}
         initialAction={managementTarget()?.action ?? 'inspect'}
-		operation={(() => {const operation=managementTarget() ? managedRowOperation(managementTarget()!.service.service_id) : null;return operation && managedOperationActive(operation) ? {label:managedStageLabel(operation.stage,i18n),current:operation.progress_current ?? 0,total:operation.progress_total ?? 7,cancellable:!operation.cancel_requested}:null;})()}
+		operation={(() => {const operation=managementTarget() ? managedRowOperation(managementTarget()!.service.service_id) : null;return operation && managedOperationActive(operation) ? {cancellable:canManageManagedService() && !operation.cancel_requested && !['submitting', 'cancelling'].includes(operation.state)}:null;})()}
 		onCancelOperation={() => void cancelManagedOperation(managementTarget() ? managedRowOperation(managementTarget()!.service.service_id) : null)}
+        canManage={canManageManagedService()}
+        identity={<Show when={managementPresentationService()}>{(service) => <div class="service-management-identity"><span>{managedDeploymentLabel(service().deployment, i18n)}</span><code>{service().release_status.current_release ? releaseIdentityLabel(service().release_status.current_release!) : '—'}</code></div>}</Show>}
+        operationContent={<Show when={managementPresentationOperation()}>{(operation) => <ManagedOperationDisclosure
+          operation={operation()} deployment={managementPresentationService()!.deployment} presentationPhase="visible" drawer
+          expanded={Boolean(expandedManagedOperations()[operation().operation_id])}
+          onExpandedChange={(expanded) => setManagedOperationExpanded(operation().operation_id, expanded)}
+          canCancel={canManageManagedService()} onCancel={() => void cancelManagedOperation(operation())}
+        />}</Show>}
+        onVersions={['npm', 'oci'].includes(managementService()?.release_status.current_release?.kind ?? '') ? () => { const target = managementTarget(); if (target) { setManagementTarget(null); openServiceReleasePicker(managedServiceForID(target.service.service_id) ?? target.service); } } : undefined}
         administrator={Boolean(ctx.env()?.permissions?.can_admin || ctx.env()?.permissions?.is_owner)}
         onClose={closeManagement}
 		onService={(id) => {setManagementTarget(null);setArchiveView('active');const service=managedServiceForID(id);if(service)setSearchQuery(service.name);}}
@@ -4078,11 +4135,6 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
             <Show when={releasePickerTarget()?.kind === 'service'}>
               <div class="space-y-2" aria-live="polite">
                 <Show when={selectedReleaseCandidate()} fallback={<p class="text-xs text-muted-foreground">{i18n.t('webServices.managed.chooseUpdateVersion')}</p>}>
-                  <div class="managed-release-change">
-                    <div class="min-w-0"><span class="block text-[11px] text-muted-foreground">{i18n.t('webServices.managed.currentRelease')}</span><span class="block truncate font-mono text-[length:var(--floe-type-body)]" title={releasePickerService()?.release_status.current_release ? releaseIdentityLabel(releasePickerService()!.release_status.current_release!) : ''}>{releasePickerService()?.release_status.current_release ? releaseIdentityLabel(releasePickerService()!.release_status.current_release!) : '—'}</span></div>
-                    <span class="text-muted-foreground" aria-hidden="true">→</span>
-                    <div class="min-w-0"><span class="block text-[11px] text-muted-foreground">{i18n.t('webServices.managed.targetRelease')}</span><span class="block truncate font-mono text-[length:var(--floe-type-body)] font-semibold" title={selectedVersionLabel()}>{selectedVersionLabel()}</span></div>
-                  </div>
                   <p class="text-xs leading-5 text-muted-foreground" data-testid="managed-release-impact">{selectedReleaseCandidate()?.is_current || selectedReleaseCandidate()?.relation === 'same'
                     ? i18n.t('webServices.managed.updateNotRequired')
                     : managedUpdatePlanRequiresStopped() ? i18n.t('webServices.managed.stopBeforeSwitch')
@@ -4103,7 +4155,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
           </div>}
         >
           <div class="flex h-full min-h-0 flex-col gap-3 overflow-hidden p-1" data-testid="managed-release-drawer-body">
-            <Show when={releasePickerTarget()?.kind === 'service' && releasePickerService()?.release_status.current_release}>{(identity) => <div class="flex shrink-0 items-center gap-2 text-xs text-muted-foreground"><span>{i18n.t('webServices.managed.currentRelease')}</span><span class="min-w-0 truncate font-mono font-medium text-foreground" title={releaseIdentityLabel(identity())}>{releaseIdentityLabel(identity())}</span><span class="ml-auto shrink-0">{releaseServiceStopped() ? i18n.t('webServices.managed.status.stopped') : ''}</span></div>}</Show>
+            <Show when={releasePickerTarget()?.kind === 'service' && releasePickerService()?.release_status.current_release}>{(identity) => <div class="flex shrink-0 items-center gap-2 text-xs text-muted-foreground"><span>{i18n.t('webServices.managed.currentRelease')}</span><span class="min-w-0 truncate font-mono font-medium text-foreground" title={releaseIdentityLabel(identity())}>{releaseIdentityLabel(identity())}</span><span class="ml-auto shrink-0">{i18n.t(managementStatusKey(releasePickerService()?.status ?? releasePickerService()?.observed_state ?? 'inspection_unavailable'))}</span></div>}</Show>
             <Show when={releasePickerTarget()?.authTokenParameter}>{(parameterName) => <div class="shrink-0 rounded-lg border p-3"><label class="mb-1 block text-xs font-medium" for="managed-release-token">{i18n.t('webServices.managed.registryToken', { parameter: parameterName() })}</label><Input id="managed-release-token" type="password" autocomplete="off" value={releaseSecretParameters()[parameterName()] ?? ''} onInput={(event) => setReleaseSecretParameters((current) => ({ ...current, [parameterName()]: event.currentTarget.value }))} /><p class="mt-1 text-[11px] text-muted-foreground">{i18n.t('webServices.managed.registryTokenDescription')}</p><Show when={!releaseCandidates() && !releaseCandidatesLoading()}><p class="mt-2 text-[11px] text-foreground">{i18n.t('webServices.managed.releaseTokenRefreshPrompt')}</p></Show></div>}</Show>
             <div class="min-h-0 flex-1">
               <ManagedReleaseCandidates
@@ -4118,6 +4170,15 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
                 showRiskHints={releasePickerTarget()?.kind === 'template'} defaultKind={selectedReleaseDefaultKind()}
                 compact={releasePickerTarget()?.kind === 'service'} disabled={managedReleaseSubmitting() || releaseOperationActive()}
                 renderSelectedContent={managedUpdatePlan() ? () => <Show when={releasePickerTarget()?.kind === 'service' && managedUpdatePlan()}>{(plan) => <section class="space-y-4" data-testid="managed-update-plan">
+                  <div class="managed-release-change">
+                    <div class="min-w-0"><span class="block text-[11px] text-muted-foreground">{i18n.t('webServices.managed.currentRelease')}</span><span class="block truncate font-mono text-[length:var(--floe-type-body)]" title={releasePickerService()?.release_status.current_release ? releaseIdentityLabel(releasePickerService()!.release_status.current_release!) : ''}>{releasePickerService()?.release_status.current_release ? releaseIdentityLabel(releasePickerService()!.release_status.current_release!) : '—'}</span></div>
+                    <span class="text-muted-foreground" aria-hidden="true">→</span>
+                    <div class="min-w-0"><span class="block text-[11px] text-muted-foreground">{i18n.t('webServices.managed.targetRelease')}</span><span class="block truncate font-mono text-[length:var(--floe-type-body)] font-semibold" title={selectedVersionLabel()}>{selectedVersionLabel()}</span></div>
+                  </div>
+                  <dl class="managed-release-plan-facts">
+                    <div><dt>{i18n.t('webServices.managed.deployment')}</dt><dd>{releasePickerService() ? managedDeploymentLabel(releasePickerService()!.deployment, i18n) : '—'}</dd></div>
+                    <div><dt>{i18n.t('webServices.management.workspace')}</dt><dd class="break-all font-mono">{releasePickerService()?.workspace_path}</dd></div>
+                  </dl>
                   <Show when={updateNotices().length > 0}><ManagedTemplateNotices presentation="inline" notices={localizedManagedNotices(updateNotices(), releasePickerService()?.localizations, i18n.locale(), releasePickerService()?.default_locale)} accepted={updateNoticeChecks()} disabled={managedReleaseSubmitting()} onAcceptedChange={(id, accepted) => setUpdateNoticeAcceptances((current) => ({ ...current, [id]: accepted ? updateNotices().find((notice) => notice.id === id)!.revision : 0 }))} /></Show>
                   <Show when={(plan().risk_ids?.length ?? 0) > 0}><div class={cn(updateNotices().length > 0 && 'border-t border-border/60 pt-3')}><ManagedReleaseRiskHints quiet riskIDs={plan().risk_ids ?? []} /></div></Show>
                   <details class="managed-release-details text-xs"><summary class="cursor-pointer text-muted-foreground">{i18n.t('webServices.managed.releaseDetails')}</summary><dl class="mt-3 grid gap-2 text-xs">

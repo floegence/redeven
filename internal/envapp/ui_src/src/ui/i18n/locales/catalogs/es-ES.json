@@ -3700,6 +3700,8 @@
       "importHint": "La plantilla se añadirá a tu biblioteca. La instalación del servicio se inicia por separado al desplegarlo."
     },
     "management": {
+      "closeKeepsOperation": "La operación continúa al cerrar.",
+      "executionDetails": "Detalles de ejecución",
       "references": "Referenciado por",
       "copyPath": "Copiar la ruta del directorio de trabajo",
       "copyFailed": "No se pudo copiar la ruta. Selecciónala para copiarla manualmente.",
