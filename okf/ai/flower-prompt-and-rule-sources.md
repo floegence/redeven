@@ -7,7 +7,7 @@ timestamp: 2026-10-21T00:00:00Z
 ---
 # Summary
 
-Flower's host-owned base system prompt contains only its Chinese introduction as
+Flower's host-owned base system prompt contains only its English introduction as
 Redeven's general assistant. Every run profile uses the same introduction.
 Runtime facts, tool definitions and native Floret guidance retain their own owners
 and remain available independently of the product identity.
