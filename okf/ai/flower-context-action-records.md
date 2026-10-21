@@ -3,7 +3,7 @@ type: AI Context Contract
 title: Flower context action admission
 description: Ask Flower context actions become Floret-owned message references and durable model-context snapshots at admission.
 tags: [ai, flower, context]
-timestamp: 2026-10-11T00:00:00Z
+timestamp: 2026-10-21T00:00:00Z
 ---
 # Summary
 
@@ -37,6 +37,28 @@ Ask User responses, retry, fork, restart, and compaction use Floret's one canoni
 projection. `SupplementalContext` remains reserved for explicit temporary inputs,
 including secrets; missing old temporary context is never reconstructed.
 
+Desktop environment cards capture their selected device's inspection and operation
+facts when Ask Flower opens, in the existing `text_snapshot`. Inspection includes
+probe source, freshness and check time, observed status and reason, Runtime control,
+compatibility and readiness, maintenance recovery, and applicable Cloud/Gateway
+route state. The card's existing operation selector also supplies the submitted or
+retained operation status, phase, timestamps, steps, failure presentation, recovery
+hint, and available diagnostic excerpts. Other environments' operations are excluded;
+there is no second operation history or failure-state owner. Unknown inspection and
+absent retained operations remain explicit and never imply success.
+
+The snapshot stays fixed through editing, background refresh, and admission retry;
+closing and reopening captures current facts. It carries fewer than 24,000 Unicode
+characters, with separate metadata, inspection, and operation budgets so logs cannot
+displace environment identity or detection state. At most four non-sensitive
+diagnostics contribute 3,000-character excerpts each; omitted diagnostics are counted.
+Long text retains its beginning and end with an explicit truncation marker. Existing
+Desktop credential redaction applies before truncation; diagnostics marked sensitive
+are excluded. The snapshot identifies captured observations and diagnostic data,
+not instructions, current execution authority, or proof that an operation succeeded.
+The Desktop adapter owns this projection; upstream Flower UI and the admission
+schema remain unchanged.
+
 Floret schema v9 to v10 preserves historical journal bytes and request records.
 Projection v8 restores already saved reference content and establishes an explicit
 prefix boundary. The retired product queue importer retains its frozen migration
@@ -52,6 +74,10 @@ Context actions and references do not alter working directory, target permission
 
 # Evidence
 
+- `redeven:desktop/src/welcome/environmentFlowerContext.ts` - Bounded, redacted environment inspection and card-owned operation capture.
+- `redeven:desktop/src/welcome/environmentFlowerContext.test.ts` - State distinctions, owner isolation, failure diagnostics, omission, Unicode bounds, and shared wire fixture.
+- `redeven:desktop/src/welcome/EnvironmentRelation.client.test.tsx` - Captured context submission, retry and close recovery, fresh reopening, and Cloud/Runtime isolation.
+- `redeven:internal/ai/flower_environment_context_integration_test.go` - Device, inspection, and failure facts survive Send, idempotent replay, and DeepSeek HTTP follow-up.
 - `redeven:internal/ai/context_action.go:101` - Typed context encoding preserves required zero values.
 - `redeven:internal/ai/context_action.go:185` - Normalization rejects damaged or unsupported context-action shapes before admission.
 - `redeven:internal/ai/pending_input_migration.go` - Migration-only queued context actions decode through the strict validator.

@@ -13,6 +13,7 @@ import { openConnectionProgress } from '../shared/desktopOpenConnectionProgress'
 import { runtimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
 import { launchLocalEnvironmentFlowerTurn } from './flower/localEnvironmentFlowerSurfaceAdapter';
 import type { FlowerTurnLaunchInput } from '../../../internal/flower_ui/src/contracts/flowerSurfaceContracts';
+import type { EnvironmentFlowerContextActionEnvelope } from './environmentFlowerContext';
 
 vi.mock('./flower/localEnvironmentFlowerSurfaceAdapter', async importOriginal => ({
   ...await importOriginal<typeof import('./flower/localEnvironmentFlowerSurfaceAdapter')>(),
@@ -651,6 +652,73 @@ describe('linked environment owner interactions', () => {
         execution_context: expect.objectContaining({ session_source: role === 'runtime' ? 'local_runtime' : 'provider_environment' }),
       }),
     }));
+  });
+  it('sends captured inspection and failure logs, retains retryable input, and refreshes context only on reopening', async () => {
+    const h = await mount();
+    const failedRuntime = { ...h.runtime, runtime_health: { ...h.runtime.runtime_health,
+      freshness: 'failed' as const, offline_reason_code: 'probe_failed' as const, offline_reason: 'Probe connection refused',
+    } };
+    const failed: DesktopLauncherActionProgress = {
+      action: 'start_environment_runtime', environment_id: h.runtime.id, operation_key: 'start-context-fixture',
+      started_at_unix_ms: 1000, status: 'failed', active_progress_surface: 'runtime_lifecycle',
+      phase: 'starting_runtime_process', title: 'Start runtime', detail: 'Process exited',
+      failure: { code: 'local_runtime_launch_failed', severity: 'error', title: 'Start failed',
+        summary: 'Runtime exited before readiness', recovery_hint: 'Check the port and retry',
+        diagnostics: [{ channel: 'stderr', label: 'Output', text: 'port already in use' }] },
+    };
+    h.publish({ ...h.snapshot, environments: [failedRuntime, h.cloud], action_progress: [failed] });
+    await settle();
+    const open = async (role: 'runtime' | 'cloud') => {
+      await h.select(role);
+      h.owner(role).querySelector<HTMLButtonElement>('.redeven-environment-card__flower-button')!.click();
+      await settle();
+      return document.querySelector<HTMLElement>('.flower-turn-launcher-window')!;
+    };
+    const launcher = await open('runtime');
+    const input = launcher.querySelector('textarea')!;
+    input.value = 'Diagnose this failure'; input.dispatchEvent(new Event('input', { bubbles: true }));
+    await settle();
+    // A background recovery must not silently replace the context already selected by the user.
+    h.publish({ ...h.snapshot, environments: [h.runtime, h.cloud], action_progress: [] });
+    await settle();
+    const send = launcher.querySelector<HTMLButtonElement>('[data-testid="flower-turn-launcher-inline-send"]')!;
+    const before = vi.mocked(launchLocalEnvironmentFlowerTurn).mock.calls.length;
+    send.click(); await settle();
+    const sent = vi.mocked(launchLocalEnvironmentFlowerTurn).mock.calls.at(-1)![1];
+    const content = (sent.context_action as EnvironmentFlowerContextActionEnvelope).context[0].content;
+    for (const fact of ['probe_failed', 'Probe connection refused', 'start-context-fixture', 'local_runtime_launch_failed', 'port already in use']) {
+      expect(content).toContain(fact);
+    }
+    expect(input.value).toBe('Diagnose this failure');
+    expect(input.disabled).toBe(false);
+    expect(send.disabled).toBe(false);
+    send.click(); await settle();
+    expect(vi.mocked(launchLocalEnvironmentFlowerTurn).mock.calls.length).toBe(before + 2);
+    expect(vi.mocked(launchLocalEnvironmentFlowerTurn).mock.calls.at(-1)![1].context_action).toEqual(sent.context_action);
+    button(launcher, 'Close').click(); await settle();
+    expect(document.querySelector('.flower-turn-launcher-window')).toBeNull();
+
+    const cloudLauncher = await open('cloud');
+    const cloudInput = cloudLauncher.querySelector('textarea')!;
+    cloudInput.value = 'Inspect Cloud'; cloudInput.dispatchEvent(new Event('input', { bubbles: true }));
+    await settle();
+    cloudLauncher.querySelector<HTMLButtonElement>('[data-testid="flower-turn-launcher-inline-send"]')!.click(); await settle();
+    const cloudAction = vi.mocked(launchLocalEnvironmentFlowerTurn).mock.calls.at(-1)![1].context_action as EnvironmentFlowerContextActionEnvelope;
+    const cloudContent = cloudAction.context[0].content;
+    expect(cloudContent).not.toContain('port already in use');
+    expect(cloudContent).toContain('"card_operation": null');
+    button(cloudLauncher, 'Close').click(); await settle();
+
+    const reopened = await open('runtime');
+    const reopenedInput = reopened.querySelector('textarea')!;
+    reopenedInput.value = 'Inspect current state'; reopenedInput.dispatchEvent(new Event('input', { bubbles: true }));
+    await settle();
+    reopened.querySelector<HTMLButtonElement>('[data-testid="flower-turn-launcher-inline-send"]')!.click(); await settle();
+    const refreshedAction = vi.mocked(launchLocalEnvironmentFlowerTurn).mock.calls.at(-1)![1].context_action as EnvironmentFlowerContextActionEnvelope;
+    const refreshed = refreshedAction.context[0].content;
+    expect(refreshed).toContain('"freshness": "fresh"');
+    expect(refreshed).not.toContain('port already in use');
+    button(reopened, 'Close').click(); await settle();
   });
   it('retains removal confirmation but requires explicit verification after delete capability returns', async () => {
     const h = await mount();
