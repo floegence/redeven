@@ -12,6 +12,49 @@ const copy = DEFAULT_FLOWER_SURFACE_COPY;
 beforeEach(() => page.viewport(1100, 900));
 afterEach(() => vi.restoreAllMocks());
 
+it.each([390, 1100])('shows immediate retry feedback through preflight and dispatch at width %s', async width => {
+  await page.viewport(width, 900);
+  const state = await mount({ code: 'provider_request_failed' });
+  await document.fonts.ready;
+  await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+  const failed = await state.loadThread('thread-1');
+  const preflight = deferred<ReturnType<typeof liveBootstrap>>();
+  const pending = deferred<void>();
+  state.loadThread.mockImplementationOnce(() => preflight.promise);
+  state.retryThread.mockImplementationOnce(() => pending.promise);
+  const retry = () => [...state.surface.querySelectorAll<HTMLButtonElement>('.flower-error-card button')]
+    .find(button => button.textContent === copy.chat.retryReply)!;
+  const geometry = () => [retry(), state.configure(), state.surface.querySelector('.flower-error-details summary')!]
+    .map(element => {
+      const { x, y, width, height } = element.getBoundingClientRect();
+      return { x, y, width, height };
+    });
+  const idleGeometry = geometry();
+  retry().click();
+  expect(retry().getAttribute('aria-busy')).toBe('true');
+  expect(retry().disabled).toBe(true);
+  const spinner = retry().querySelector<SVGElement>('svg.animate-spin');
+  expect(spinner).not.toBeNull();
+  expect(getComputedStyle(spinner!).animationName).not.toBe('none');
+  expect(spinner!.getBoundingClientRect().width).toBeGreaterThan(0);
+  expect(geometry()).toEqual(idleGeometry);
+  expect(state.retryThread).not.toHaveBeenCalled();
+  retry().click();
+  preflight.resolve(failed);
+  await waitFor(() => state.retryThread.mock.calls.length === 1);
+  expect(retry().getAttribute('aria-busy')).toBe('true');
+  expect(retry().querySelector('svg.animate-spin')).not.toBeNull();
+  expect(geometry()).toEqual(idleGeometry);
+  pending.reject(new Error('retry unavailable'));
+  await waitFor(() => !retry().disabled);
+  expect(retry().hasAttribute('aria-busy')).toBe(false);
+  expect(retry().querySelector('svg.animate-spin')).toBeNull();
+  expect(geometry()).toEqual(idleGeometry);
+  await userEvent.click(retry());
+  await waitFor(() => !state.surface.querySelector('.flower-error-card'));
+  expect(state.retryThread).toHaveBeenCalledTimes(2);
+});
+
 it.each(['resolve', 'reject'])('ignores correction retry %s after navigation without touching the new target', async outcome => {
   const state = await mount({ code: 'floret_tool_argument_correction_exhausted' });
   const pending = deferred<void>();
