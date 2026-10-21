@@ -19792,15 +19792,15 @@
         "title": "Desktop runtime bridge",
         "type": "Desktop Contract"
       },
-      "body_length": 1782,
+      "body_length": 1748,
       "summary": "Redeven Desktop opens Runtime instances through machine-readable startup, scoped transport, session, and process contracts. Runtime remains independently runnable without Gateway. Redeven-managed lifecycle actions use the registered Local, WSL, SSH, or container direct channel and are owned by Desktop's process-local coordinator; Gateway and Provider remain access-only. This overview is the canonical navigation point for readiness, recovery, WSL/SSH operations, and model/session integration. Focused concepts own the independent details while this concept retains the boundary between Desktop lifecycle coordination, Runtime services, optional access forwarding, and plugin capabilities.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Mechanism\nThis concept is the stable overview for the subject.\n\nSettings, model directory, preferences, and thread-detail GETs can carry it; commands, request bodies, and staging authorization cannot.\n\nA worker cannot borrow another partition's bridge or attach its token to a public origin.",
-          "char_count": 294
+          "body": "## Mechanism\nFocused contracts:\n\nSettings, model directory, preferences, and thread-detail GETs can carry it; commands, request bodies, and staging authorization cannot.\n\nA worker cannot borrow another partition's bridge or attach its token to a public origin.",
+          "char_count": 260
         },
         {
           "id": "boundaries",
@@ -33229,5 +33229,5 @@
       ]
     }
   ],
-  "source_sha256": "81042861361e8bb8f337934507b4ecbb989e29815bd243159dabcb7947f8a4bd"
+  "source_sha256": "2c56fe6141225e49748f2ca08d7cf4565c96541ec14688addb6963a9e4a3de9c"
 }
