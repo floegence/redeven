@@ -20,7 +20,6 @@ export type SubagentDetailWindowProps = Readonly<{
   agentSwitcher?: JSX.Element;
   syncNotice?: JSX.Element;
   runProgress?: JSX.Element;
-  agentTypeLabel: string;
   elapsedLabel: string;
   description: string;
   loading: boolean;
@@ -79,9 +78,6 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
                 {props.statusLabel}
               </span>
             </span>
-            <Show when={props.agentTypeLabel}>
-              <span class="flower-subagent-detail-agent-type" title={props.agentTypeLabel}>{props.agentTypeLabel}</span>
-            </Show>
             <Show when={props.elapsedLabel}>
               <span class="flower-subagent-detail-elapsed">
                 <Clock class="h-3 w-3" aria-hidden="true" />

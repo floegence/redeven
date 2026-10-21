@@ -127,8 +127,8 @@ func TestBuiltInPresentationSpecsCarryProjectionFacts(t *testing.T) {
 			toolName:            "subagents",
 			operation:           "subagents",
 			labelFields:         []string{"task_name", "action"},
-			callPayloadFields:   []string{"action", "task_name", "task_description", "agent_type", "context_mode", "target", "thread_id", "ids", "limit", "running_only"},
-			resultPayloadFields: []string{"action", "status", "task_name", "task_description", "agent_type", "context_mode", "target", "thread_id", "ids", "target_ids", "requested_ids", "affected_ids", "accepted", "closed", "stopped", "closed_count", "stopped_count", "agent_count", "total", "running_only", "counts", "requested_count", "found_count", "missing_count", "items", "timed_out"},
+			callPayloadFields:   []string{"action", "task_name", "task_description", "context_mode", "target", "thread_id", "ids", "limit", "running_only"},
+			resultPayloadFields: []string{"action", "status", "task_name", "task_description", "context_mode", "target", "thread_id", "ids", "target_ids", "requested_ids", "affected_ids", "accepted", "closed", "stopped", "closed_count", "stopped_count", "agent_count", "total", "running_only", "counts", "requested_count", "found_count", "missing_count", "items", "timed_out"},
 		},
 	}
 

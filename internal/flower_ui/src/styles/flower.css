@@ -10275,15 +10275,13 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 
-.flower-subagent-detail-overview-meta .flower-subagent-status-text,
-.flower-subagent-detail-agent-type {
+.flower-subagent-detail-overview-meta .flower-subagent-status-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .flower-subagent-status-label,
-.flower-subagent-detail-agent-type,
 .flower-subagent-detail-elapsed {
   display: inline-flex;
   min-width: 0;
@@ -10537,9 +10535,6 @@ button.flower-attachment-preview-trigger:disabled {
     grid-column: 1;
   }
 
-  .flower-subagent-detail-agent-type {
-    display: none;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

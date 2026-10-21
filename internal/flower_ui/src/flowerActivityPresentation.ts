@@ -188,7 +188,6 @@ export type FlowerActivitySubagentDetailItem = Readonly<{
   thread_id: string;
   name: string;
   description: string;
-  agent_type: string;
   raw_status: string;
   status: string;
   show_status: boolean;
@@ -771,15 +770,11 @@ function subagentDetailItemFromRecord(
   const threadID = subagentThreadID(record) || subagentThreadID(payload);
   const name = subagentNameFromRecord(record) || (threadID ? subagentsCopy(copy).activity.labels.subagent : '');
   const description = subagentDescriptionFromRecord(record, payload);
-  const agentType = item.renderer === 'subagent'
-    ? payloadValue(record, 'agent_type', 'host_profile_ref') || payloadValue(payload, 'agent_type', 'host_profile_ref')
-    : '';
   if (!name) return null;
   return {
     thread_id: threadID,
     name,
     description,
-    agent_type: agentType,
     raw_status: normalizedStatus,
     status,
     show_status: item.renderer === 'subagent_operation' ? Boolean(status) : shouldShowSubagentStatus(rawStatus),
@@ -796,7 +791,6 @@ function subagentTaskRecord(summary: FlowerSubagentSummary): Readonly<Record<str
     thread_id: summary.thread_id,
     task_name: summary.task_name,
     task_description: summary.task_description,
-    agent_type: summary.agent_type,
   };
 }
 
@@ -922,7 +916,7 @@ function presentationForSubagents(item: FlowerActivityItem, copy?: FlowerActivit
   const payload = item.payload ?? {};
   const detail = subagentsDetailFromPayload(item, payload, copy);
   const titleText = item.renderer === 'subagent'
-    ? subagentsCopy(copy).typeLabels.unknown
+    ? subagentsCopy(copy).activity.labels.subagent
     : subagentActionTitle(detail.action, detail.items, item, payload, copy);
   const title: FlowerActivityTitle = { kind: 'plain', text: titleText };
   const detailBlocks: FlowerActivityDetailBlock[] = [];

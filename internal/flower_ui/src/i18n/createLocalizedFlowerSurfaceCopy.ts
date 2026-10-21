@@ -900,12 +900,6 @@ function createLocalizedFlowerSubagentsCopy(i18n: FlowerSurfaceTranslator): Flow
       timed_out: t(i18n, k('status.timedOut')),
       unknown: t(i18n, k('status.unknown')),
     },
-    typeLabels: {
-      explore: t(i18n, k('types.explore')),
-      worker: t(i18n, k('types.worker')),
-      reviewer: t(i18n, k('types.reviewer')),
-      unknown: t(i18n, k('types.unknown')),
-    },
     activity: {
       actions: {
         spawn: t(i18n, k('activity.actions.spawn')),

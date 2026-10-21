@@ -8,6 +8,7 @@ import {
   mapFlowerGoal,
   mapFlowerGoalChange,
   mapFlowerThread,
+  mapFlowerSubagents,
   mapFlowerContextCompactions,
   mapFlowerTimelineDecorations,
 } from './flowerLiveMapper';
@@ -37,6 +38,35 @@ describe('Canonical thread reference identity', () => {
     { ...reference, kind: 'text' }, { ...reference, text: '' }, { ...reference, resource_ref: 'private-authority' },
   ])('rejects malformed or parallel reference authority %j', value => {
     expect(() => mapFlowerMessage({ ...message, references: [value] })).toThrow('Flower contract error');
+  });
+});
+
+describe('Historical subagent role metadata', () => {
+  it('does not project legacy role fields into current Flower summaries', () => {
+    const [summary] = mapFlowerSubagents([{
+      parent_thread_id: 'parent-thread',
+      thread_id: 'child-thread',
+      task_name: 'Review API',
+      task_description: 'Inspect the public API.',
+      title: 'Review API',
+      title_status: 'ready',
+      title_generation: 1,
+      agent_type: 'reviewer',
+      status: 'completed',
+      can_send_input: false,
+      can_interrupt: false,
+      can_close: false,
+    }], 'thread.subagents')!;
+
+    expect(summary).toMatchObject({
+      parent_thread_id: 'parent-thread',
+      thread_id: 'child-thread',
+      task_name: 'Review API',
+      task_description: 'Inspect the public API.',
+      status: 'completed',
+    });
+    expect(summary).not.toHaveProperty('agent_type');
+    expect(JSON.stringify(summary)).not.toContain('reviewer');
   });
 });
 

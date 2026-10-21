@@ -1184,12 +1184,6 @@
         "timedOut": "タイムアウト",
         "unknown": "不明"
       },
-      "types": {
-        "explore": "探索",
-        "worker": "作業",
-        "reviewer": "レビュー",
-        "unknown": "サブエージェント"
-      },
       "activity": {
         "actions": {
           "spawn": "サブエージェントを作成",
@@ -5876,12 +5870,6 @@
         "canceled": "キャンセル済み",
         "timedOut": "タイムアウト",
         "unknown": "不明"
-      },
-      "types": {
-        "explore": "探索",
-        "worker": "作業",
-        "reviewer": "レビュー",
-        "unknown": "サブエージェント"
       },
       "activity": {
         "actions": {

@@ -1038,7 +1038,6 @@ function mapFlowerSubagentSummary(raw: unknown): FlowerSubagentSummary | null {
       title_generation: record.title_generation as number,
     }),
     ...(trim(record.task_description) ? { task_description: trim(record.task_description) } : {}),
-    ...(trim(record.agent_type) ? { agent_type: trim(record.agent_type) } : {}),
     ...(trim(record.context_mode) ? { context_mode: trim(record.context_mode) } : {}),
     status: trim(record.status) || 'unknown',
     ...(trim(record.last_message) ? { last_message: trim(record.last_message) } : {}),

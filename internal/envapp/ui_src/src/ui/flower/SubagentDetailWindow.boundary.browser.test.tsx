@@ -75,7 +75,6 @@ function windowProps(open: boolean, onOpenChange: (open: boolean) => void): Suba
     status: 'running',
     statusLabel: 'Running',
     statusIndicator: <span aria-hidden="true" />,
-    agentTypeLabel: 'Explore',
     elapsedLabel: '12s',
     description: 'Inspect the latest source evidence and operation progress.',
     loading: false,

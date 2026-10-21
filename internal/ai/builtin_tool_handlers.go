@@ -387,7 +387,6 @@ func subagentsToolInputSchema() map[string]any {
 			},
 			"task_description": map[string]any{"type": "string", "maxLength": 500},
 			"message":          map[string]any{"type": "string", "maxLength": 4000},
-			"agent_type":       map[string]any{"type": "string", "enum": []string{"explore", "worker", "reviewer"}},
 			"context_mode": map[string]any{
 				"type": "string",
 				"enum": []string{subagentContextModeMissionOnly, subagentContextModeFullHistory},
@@ -745,7 +744,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:         "subagents",
-			Description:  "Manage this thread's direct children; inherited history does not transfer ownership. spawn requires task_name, task_description, agent_type and message. status requires target or ids (at most 200) and returns metadata only. inspect/wait return full reports in handoffs[].content and failures in items[].failure.",
+			Description:  "Manage this thread's direct children; inherited history does not transfer ownership. spawn requires task_name, task_description and message. Give the child your task instructions and execution authorization in message, including any relevant scope, constraints, deliverables and verification; no fixed template is required. context_mode selects mission_only (default) or full_history. status requires target or ids (at most 200) and returns metadata only. inspect/wait return full reports in handoffs[].content and failures in items[].failure.",
 			InputSchema:  toSchema(subagentsToolInputSchema()),
 			Mutating:     false,
 			Visibility:   ToolVisibilityDelegationControl,

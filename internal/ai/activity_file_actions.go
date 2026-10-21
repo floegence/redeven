@@ -665,7 +665,7 @@ func activityPayloadAllowedKeys(renderer fltools.ActivityRenderer) map[string]st
 func activitySubagentsPayloadAllowedKeys() map[string]struct{} {
 	return stringSet(
 		"action", "status", "thread_id", "parent_thread_id", "parent_turn_id",
-		"task_name", "task_description", "agent_type", "target", "ids", "target_ids", "requested_ids", "affected_ids", "items", "targets", "counts",
+		"task_name", "task_description", "target", "ids", "target_ids", "requested_ids", "affected_ids", "items", "targets", "counts",
 		"started_at_ms", "created_at_ms", "updated_at_ms", "closed",
 		"agent_count", "requested_count", "completed_count", "found_count",
 		"missing_count", "closed_count", "stopped_count", "accepted", "running_only",
@@ -678,7 +678,7 @@ func activityTimelineBlockAllowedKeys() map[string]struct{} {
 }
 
 func activitySubagentsItemAllowedKeys() map[string]struct{} {
-	return stringSet("thread_id", "parent_thread_id", "parent_turn_id", "task_name", "task_description", "agent_type", "status", "started_at_ms", "created_at_ms", "updated_at_ms", "closed")
+	return stringSet("thread_id", "parent_thread_id", "parent_turn_id", "task_name", "task_description", "status", "started_at_ms", "created_at_ms", "updated_at_ms", "closed")
 }
 
 func activitySubagentsCountAllowedKeys() map[string]struct{} {

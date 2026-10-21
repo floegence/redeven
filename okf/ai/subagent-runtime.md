@@ -1,7 +1,7 @@
 ---
 type: AI Tool Contract
 title: Flower subagent runtime
-description: Canonical child threads, passive important events, scoped reads, and complete handoffs.
+description: Canonical child threads, direct task instructions, scoped reads, and complete handoffs.
 tags: [ai, floret, subagents, permissions]
 timestamp: 2026-10-18T00:00:00Z
 ---
@@ -11,9 +11,9 @@ Floret v7 owns each SubAgent as a normal canonical child Thread. Redeven exposes
 
 # Contract
 
-The `subagents` tool supports spawn, send input, wait, list, status, inspect, close, and close all. Spawn requires `task_name`, `task_description`, `agent_type`, and `message`, with optional context mode. Title/objective aliases and inferred task names are rejected. Mission-only creates a child without inherited transcript; full-history uses the typed Floret fork path. Published Floret v7.26.0 closes copied in-flight tool calls before the child branch boundary with an explicit non-inheritance result. The child starts with paired model history while the parent retains ownership of its ongoing execution and real result.
+The `subagents` tool supports spawn, send input, wait, list, status, inspect, close, and close all. Spawn requires `task_name`, `task_description`, and `message`, with optional `context_mode`. The parent writes the task, scope, constraints, execution authorization, deliverables, and verification needs in `message`; Flower passes that text unchanged as child input. `context_mode` selects mission-only or full-history context and does not select capabilities. Task names, descriptions, and message wording do not filter tools or change permission. New children inherit the parent's current permission settings; later `send_input` uses the child's current settings. Every child still follows the ordinary product resource, permission, and approval lifecycle. The new schema has no `agent_type`. Floret `HostProfileRef` is host metadata only: new children share `flower`, while historical values remain available for original-request replay. Neither this metadata nor historical role fields select current prompts, permissions, or tools. Replay retains the original admitted input and request identity. Title/objective aliases and inferred task names are rejected. Mission-only creates a child without inherited transcript; full-history uses the typed Floret fork path. Published Floret v7.26.0 closes copied in-flight tool calls before the child branch boundary with an explicit non-inheritance result. The child starts with paired model history while the parent retains ownership of its ongoing execution and real result.
 
-Floret v7.64.0 distinguishes status checks from result reads. `status` requires explicit target/ids, deduplicates in request order, and accepts at most 200 distinct direct children. Its allowlist contains thread identity, task name (140 code points), type, status, current turn, closed, queue count, update time, and optional failure code. It never reads a complete View or returns previews, report bodies, task descriptions, waiting questions, or failure messages. Missing identities are explicit. `inspect` and `wait` retain full results.
+Floret v7.64.0 distinguishes status checks from result reads. `status` requires explicit target/ids, deduplicates in request order, and accepts at most 200 distinct direct children. Its allowlist contains thread identity, task name (140 code points), status, current turn, closed, queue count, update time, and optional failure code. It never reads a complete View or returns previews, report bodies, task descriptions, waiting questions, or failure messages. Missing identities are explicit. `inspect` and `wait` retain full results.
 
 Parents reuse sufficient untruncated reports and complete results already available for the same child turn. Read report events only when their text is needed; completion events have no final report, so read the result through inspect when needed. Event reads remain available for audit and overflow review remains mandatory. Wait only for outstanding children when independent work is exhausted. No durable read ledger, automatic full-report injection, or extra parent wakeup is introduced.
 
@@ -37,59 +37,7 @@ Each child execution proves parent-child membership through the typed runtime an
 
 Flower detail reads canonical child current state and typed activity through the parent-scoped product route. It does not parse metadata into messages, reconstruct activity from audits, or maintain a second child transcript. Flower Stop requests graceful cancellation of the selected thread and every existing descendant through published Floret `CancelInput.IncludeDescendants`. Children retain their canonical histories and queued inputs; independent root threads keep running. Each child settles its own confirmed effects, so parent settlement is not a barrier proving every child is already idle. Thread deletion follows the canonical Floret tree deletion contract.
 
-## Passive important events
-
-Flower enables published Floret v7.49.0 parent events. The child-only
-`report_to_parent({message})` accepts nonempty UTF-8 text up to 8 KiB. Invocation
-identity comes from the exact authorized tool call; Floret derives its direct
-parent. Readonly children may report to that parent without gaining routing,
-input-response, approval, or filesystem rights. Success returns `accepted`,
-a stable event ID and parent ThreadID, without ending the child mission.
-
-Floret atomically records references for completion, failure, cancellation,
-interruption, normalized execution timeout and input/approval attention alongside
-their canonical source. Ordinary running/queued changes, counts, message previews
-and status-read failures produce no automatic message. A wait deadline is only
-`wait_timeout`, never evidence of execution timeout. Completion does not copy a
-final handoff; failures contain reason codes rather than raw error strings.
-
-Received events stay in the canonical journal until the next natural logical
-provider boundary. Floret pairs complete tool calls/results first, admits one
-typed bounded projection, then applies request budgeting, compaction and freezing.
-Idle, stopped, naturally ended and human-waiting parents stay passive. No Send,
-Steer, timer, host receipt ledger or uncertain-effect replay delivers events.
-Resolved interactions no longer claim action is required. Admission means context
-placement, never proof of model reading. Retry, restart, fork and compaction use
-the same upstream projection. Domain 18→19 migration retains older history;
-opt-in bootstraps current unresolved interactions once without old terminal backfill.
-
-Each automatic item is bounded to 2 KiB / 512 estimated tokens; each admitted
-batch to 8 KiB / 2,048. Explicit reports preview at most 512 UTF-8 bytes. Overflow
-uses a fixed full-event range and requires explicit review before claiming all
-delegated work is reviewed. `subagent_events` lists metadata or reads one event
-or a fixed closed range with explicit pagination, preserving complete report text.
-These are engineering limits, not measured context savings.
-
-Published Floret v7.50.0 optional `ThreadWaiter` owns bounded waiting.
-Redeven maps its selected snapshots and `completed`, `attention_required`,
-`missing`, `events` and `wait_timeout` outcomes; it has no subscription/read
-loop. Omitted targets freeze at wait start. Missing children never count as
-completed. Cancellation and Host shutdown retain their own errors. A normal
-single deadline may repeat without a cumulative limit; only a successful,
-nonempty wait that actually used its deadline receives bounded-wait metadata.
-Engine alone evaluates every call in a repeated batch, so waits cannot exempt
-side effects or polling with unchanged progress. Full handoffs remain intact.
-
-Child approval/input pauses the parent through the completed tool's canonical
-InputRequired interaction. The shared UI opens the child in the ordinary chat
-interaction surface, provides Return to parent, and requires deliberate parent
-continuation after handling the request or using available results. Stop and
-navigation remain available. No passive event wakes an idle or failed parent.
-
-The compact [event panel](../ui/flower-subagent-detail.md) shows source, kind,
-received versus added-to-context state, full read and source navigation. Both
-Env App and Desktop use an authorized recipient route with explicit pagination.
-The browser keeps only temporary reading/disclosure state.
+Parent reports, lifecycle events, bounded waiting, and the compact event panel are described in [Subagent parent events](subagent-parent-events.md).
 
 ## Child ownership and historical references
 

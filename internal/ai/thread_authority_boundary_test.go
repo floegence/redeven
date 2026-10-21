@@ -43,7 +43,7 @@ func TestForeignEndpointCannotReadSubagentDetail(t *testing.T) {
 	}
 	child, err := svc.threadRuntime.Create(t.Context(), flruntime.CreateThreadInput{
 		ParentThreadID: identity.ThreadID(parent.ThreadID), TaskName: "private child", TaskDescription: "private child task",
-		HostProfileRef: subagentAgentTypeReviewer, ForkMode: subagentContextModeMissionOnly, RequestKey: "create-private-child",
+		HostProfileRef: "reviewer", ForkMode: subagentContextModeMissionOnly, RequestKey: "create-private-child",
 	})
 	if err != nil {
 		t.Fatal(err)

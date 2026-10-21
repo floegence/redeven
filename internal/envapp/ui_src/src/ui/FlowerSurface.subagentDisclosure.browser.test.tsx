@@ -234,7 +234,7 @@ describe('Subagent inline capsules', () => {
       expect(Boolean(surface.querySelector('.flower-subagent-detail-loading'))).toBe(index !== 0);
       if (index === 0) expect(surface.querySelector('.flower-subagent-detail-transcript')).not.toBeNull();
       checkGeometry();
-      const detail = detailFor({ ...summaries[index]!, agent_type: index === 2 ? 'worker' : 'reviewer' });
+      const detail = detailFor(summaries[index]!);
       requests.at(-1)!.resolve(index === 0 ? { ...detail, model_context: modelContext } : {
         ...detail, current: { ...detail.current, activity: 'idle', run_progress: undefined },
       });

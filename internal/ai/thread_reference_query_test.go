@@ -149,11 +149,14 @@ func TestThreadQueryToolsAuthorizeBeforeSearchAndPagination(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	child, err := svc.threadRuntime.Create(t.Context(), flruntime.CreateThreadInput{ParentThreadID: identity.ThreadID(parent.ThreadID), TaskName: "child", TaskDescription: "child task", HostProfileRef: subagentAgentTypeReviewer, ForkMode: subagentContextModeMissionOnly, RequestKey: "query-child"})
+	child, err := svc.threadRuntime.Create(t.Context(), flruntime.CreateThreadInput{ParentThreadID: identity.ThreadID(parent.ThreadID), TaskName: "child", TaskDescription: "child task", HostProfileRef: "reviewer", ForkMode: subagentContextModeMissionOnly, RequestKey: "query-child"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.ensureChildThreadSettings(t.Context(), &run{endpointID: meta.EndpointID}, child.ThreadID.String(), parent.ThreadID, subagentAgentTypeReviewer); err != nil {
+	if err := svc.ensureChildThreadSettings(t.Context(), &run{
+		endpointID: meta.EndpointID, threadID: parent.ThreadID,
+		permissionType: FlowerPermissionApprovalRequired,
+	}, child.ThreadID.String(), parent.ThreadID); err != nil {
 		t.Fatal(err)
 	}
 	foreign := *meta

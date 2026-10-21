@@ -278,7 +278,8 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Shared interface scale](ui/interface-scale.md) - Align desktop text, controls, and spacing while preserving touch targets and content-viewer scale.
 - [Flower approval surface](ui/flower-approval-surface.md) - Review bounded approval queues, inspect commands, and decide exact one-time batches.
 - [Flower citations](ui/flower-citations.md) - Render canonical assistant sources safely and keep private provider markers out of prose and copied messages.
-- [Flower subagent detail presentation](ui/flower-subagent-detail.md) - Render parent-owned membership and read-only child execution detail.
+- [Flower subagent detail window](ui/flower-subagent-detail-window.md) - Keep child current-view reads, live Activity and queued-input controls stable.
+- [Flower subagent detail presentation](ui/flower-subagent-detail.md) - Render parent-owned membership, task summaries, and canonical child navigation.
 - [Flower parent event timeline](ui/flower-parent-events.md) - Read child reports and automatic events in the parent conversation with canonical avatars and inline task navigation.
 
 ## AI
@@ -340,6 +341,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Flower canonical thread queries](ai/flower-thread-queries.md) - Authorize active-path search, exact counts and bounded content reads through released Floret tools.
 - [Floret thread runtime integration](ai/floret-thread-runtime.md) - Read canonical overviews, titles, structured attachments, and admitted lifecycle through published Floret APIs.
 - [Floret Redeven adapter and projection](ai/floret-redeven-adapter-and-projection.md) - Authorize, sanitize, and project Floret views without a second lifecycle.
+- [Flower subagent parent events](ai/subagent-parent-events.md) - Deliver bounded reports and lifecycle events through canonical context and explicit handoffs.
 - [Flower subagent runtime](ai/subagent-runtime.md) - Use Floret-owned child threads, bounded status previews, canonical membership, and complete handoffs.
 - [Flower thread fork coordination](ai/flower-thread-fork-coordination.md) - Fork canonical Agent state first, then materialize fixed host settings and thread resource ownership.
 - [Flower thread deletion coordination](ai/flower-thread-deletion-coordination.md) - Retire product access after durable intent, serialize canonical-first cleanup, and fail closed on integrity loss.

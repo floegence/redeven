@@ -991,12 +991,6 @@
         "timedOut": "Tempo esgotado",
         "unknown": "Desconhecido"
       },
-      "types": {
-        "explore": "Explorar",
-        "worker": "Executor",
-        "reviewer": "Revisor",
-        "unknown": "Subagente"
-      },
       "activity": {
         "actions": {
           "spawn": "Criar subagente",
@@ -1026,7 +1020,7 @@
           "action": "ação",
           "status": "status do resultado",
           "thread": "conversa",
-          "subagent": "subagente",
+          "subagent": "Subagente",
           "task": "tarefa",
           "title": "título",
           "profile": "tipo",

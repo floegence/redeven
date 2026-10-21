@@ -834,7 +834,6 @@ export type FlowerSubagentSummary = Readonly<{
   thread_id: string;
   task_name: string;
   task_description?: string;
-  agent_type?: string;
   context_mode?: string;
   status: string;
   last_message?: string;

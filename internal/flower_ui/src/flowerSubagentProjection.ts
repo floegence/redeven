@@ -22,7 +22,6 @@ export type FlowerSubagentPanelItem = Readonly<{
   taskDescription: string;
   title: string;
   displayName: string;
-  agentType: string;
   status: FlowerSubagentPanelStatus;
   action: string;
   canOpen: boolean;
@@ -134,7 +133,6 @@ function itemFromSummary(summary: FlowerSubagentSummary, ownerThreadID: string):
   const taskName = trimString(summary.task_name);
   if (!taskName) return null;
   const taskDescription = trimString(summary.task_description);
-  const agentType = trimString(summary.agent_type);
   const displayName = presentSubagentTaskName(taskName);
   const createdAtMs = numberValue(summary.created_at_ms);
   const updatedAtMs = subagentUpdatedAtMs(summary);
@@ -145,7 +143,6 @@ function itemFromSummary(summary: FlowerSubagentSummary, ownerThreadID: string):
     taskDescription,
     title: taskName,
     displayName,
-    agentType,
     status: normalizeStatus(summary.status),
     action: 'inspect',
     canOpen: true,

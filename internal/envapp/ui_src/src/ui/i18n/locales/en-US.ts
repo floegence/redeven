@@ -2413,12 +2413,6 @@ export const enUS = defineDictionary({
         timedOut: 'Timed out',
         unknown: 'Unknown',
       },
-      types: {
-        explore: 'Explore',
-        worker: 'Worker',
-        reviewer: 'Reviewer',
-        unknown: 'Subagent',
-      },
       activity: {
         actions: {
           spawn: 'Create subagent',
@@ -2449,7 +2443,7 @@ export const enUS = defineDictionary({
           action: 'action',
           status: 'result status',
           thread: 'thread',
-          subagent: 'subagent',
+          subagent: 'Subagent',
           task: 'task',
           title: 'title',
           profile: 'profile',

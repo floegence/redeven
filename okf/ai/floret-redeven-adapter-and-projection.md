@@ -256,8 +256,9 @@ transcript or lifecycle projection.
 Authority is durable before pending-input import or child-thread Send can admit
 canonical input. Retry and child Send then bind the same authority to the TurnID
 returned by Floret using a bounded service-owned context, so caller cancellation
-after acceptance cannot break restart or a later retry. Child settings preserve
-autonomous execution and reviewer readonly permission across restart. SubAgent
+after acceptance cannot break restart or a later retry. New child settings inherit
+the parent's current permission mode and remain authoritative across restart;
+historical `HostProfileRef` values do not choose current permission. SubAgent
 detail reads prove parent endpoint ownership before using the process-wide
 Floret child list or view.
 

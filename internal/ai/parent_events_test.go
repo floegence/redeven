@@ -435,7 +435,7 @@ func TestFlowerParentEventProductEffectAndPassiveNaturalRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	adapter := newServiceFloretSubagentRuntime(svc, &run{sessionMeta: meta, endpointID: meta.EndpointID, threadID: parent.ThreadID, turnID: "parent-turn", currentModelID: "openai/gpt-5-mini", permissionType: FlowerPermissionReadonly})
-	spawned, err := adapter.spawn(t.Context(), "spawn-report", map[string]any{"task_name": "Research", "task_description": "Verify sources", "agent_type": "reviewer", "message": "Investigate"})
+	spawned, err := adapter.spawn(t.Context(), "spawn-report", map[string]any{"task_name": "Research", "task_description": "Verify sources", "message": "Investigate"})
 	if err != nil {
 		t.Fatal(err)
 	}

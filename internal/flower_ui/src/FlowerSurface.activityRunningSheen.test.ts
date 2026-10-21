@@ -286,6 +286,6 @@ describe('Flower activity status presentation', () => {
     expect(metaRule).toContain('flex-wrap: nowrap');
     expect(metaRule).toContain('min-height: 2rem');
     expect(css).toContain('@container flower-subagent-window (max-width: 560px)');
-    expect(css).toContain('.flower-subagent-detail-agent-type {\n    display: none;');
+    expect(css).not.toContain('.flower-subagent-detail-agent-type');
   });
 });
