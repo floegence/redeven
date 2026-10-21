@@ -307,27 +307,18 @@ func TestFloretSubagentModelResultPreservesLongHandoffAndBoundsActivity(t *testi
 	}
 }
 
-func TestSubagentPromptUsesOneHandoffContract(t *testing.T) {
-	prompt := buildPromptSubagentSection(promptProfileSpec{}).render()
-	if !strings.Contains(prompt, "subagents inspect") {
-		t.Fatalf("prompt does not describe the handoff contract:\n%s", prompt)
-	}
-	for _, required := range []string{"Reuse complete reports", "Completion events contain no final report", "read subagent_events for missing event text and overflow", "integrate results and close children"} {
-		if !strings.Contains(prompt, required) {
-			t.Fatalf("prompt is missing failure guidance %q:\n%s", required, prompt)
-		}
-	}
-	assertPromptContains(t, buildPromptToolFailureRecoverySection().render(), "Never blindly repeat an uncertain operation")
+func TestSubagentDefinitionUsesOneHandoffContract(t *testing.T) {
 	for _, def := range builtInToolDefinitions() {
-		if def.Name == "subagents" {
-			assertPromptContains(t, def.Description, "handoffs[].content")
-			assertPromptContains(t, def.Description, "items[].failure")
-			assertPromptContains(t, def.Description, "returns metadata only")
+		if def.Name != "subagents" {
+			continue
 		}
-	}
-	for _, stale := range []string{"final_handoff_report", "progress_summary"} {
-		if strings.Contains(prompt, stale) {
-			t.Fatalf("prompt contains stale field %q:\n%s", stale, prompt)
+		for _, want := range []string{"handoffs[].content", "items[].failure", "returns metadata only"} {
+			assertPromptContains(t, def.Description, want)
 		}
+		for _, stale := range []string{"final_handoff_report", "progress_summary"} {
+			assertPromptNotContains(t, def.Description, stale)
+		}
+		return
 	}
+	t.Fatal("subagents definition missing")
 }

@@ -55,7 +55,7 @@ func TestComputerScriptErrorClassifications(t *testing.T) {
 	}
 }
 
-func TestComputerNavigationDefinitionMatchesRuntimeAndPrompt(t *testing.T) {
+func TestComputerNavigationDefinitionMatchesRuntime(t *testing.T) {
 	for _, definition := range builtInComputerToolDefinitions() {
 		if definition.Name != "browser.navigate" {
 			continue
@@ -68,15 +68,9 @@ func TestComputerNavigationDefinitionMatchesRuntimeAndPrompt(t *testing.T) {
 		if urlSchema["enum"] != nil || urlSchema["pattern"] != nil || urlSchema["maxLength"] != float64(maxComputerNavigationURLLength) {
 			t.Fatalf("navigation schema narrows native URLs: %+v", urlSchema)
 		}
-		prompt := renderPromptSections([]promptSection{buildPromptComputerUseCapabilitySection(promptRuntimeSnapshot{AvailableToolNames: "computer.screenshot,computer.targets,computer.select_target,computer.observe,computer.exec,browser.navigate"})})
 		for _, term := range []string{"file://", "data:", "about:"} {
 			if !strings.Contains(strings.ToLower(definition.Description), strings.ToLower(term)) {
 				t.Fatalf("definition omits %q", term)
-			}
-		}
-		for _, term := range []string{"Approval Required", "Observe before acting and after navigation"} {
-			if !strings.Contains(prompt, term) {
-				t.Fatalf("prompt omits policy %q", term)
 			}
 		}
 		return

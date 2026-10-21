@@ -95,10 +95,6 @@ func (r *run) buildRunToolSurface(cfg runToolSurfaceConfig, permissionType Flowe
 	if err != nil {
 		return runToolSurface{}, err
 	}
-	systemPrompt := r.buildLayeredSystemPrompt(
-		permissionTypeString(permissionType),
-		capabilityContract,
-	)
 	hostContext := cloneStringMap(cfg.HostLabels)
 	if hostContext == nil {
 		hostContext = map[string]string{}
@@ -112,7 +108,7 @@ func (r *run) buildRunToolSurface(cfg runToolSurfaceConfig, permissionType Flowe
 		CapabilityContract: capabilityContract,
 		FloretToolItems:    floretToolItems,
 		HostedTools:        hosted,
-		SystemPrompt:       systemPrompt,
+		SystemPrompt:       buildFlowerSystemPrompt(),
 		HostContext:        hostContext,
 	}, nil
 }

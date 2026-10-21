@@ -349,6 +349,9 @@ func TestFlowerProviderContextKeepsCapabilityAndPermissionRefresh(t *testing.T) 
 	delegationContextSend(t, service, created.ThreadID, "still-restricted", nil)
 	requests := gateway.Requests()
 	for index, request := range requests {
+		if !strings.HasPrefix(request.Messages[0].Text, flowerIdentityIntroduction) {
+			t.Fatalf("request %d omitted the Flower introduction", index)
+		}
 		hasSubagents := false
 		for _, def := range request.Tools {
 			if def.Name == "subagents" {
@@ -369,9 +372,6 @@ func TestFlowerProviderContextKeepsCapabilityAndPermissionRefresh(t *testing.T) 
 		} else {
 			if len(updates) != 2 || !strings.Contains(updates[1], "Subagent delegation available: false") || !strings.Contains(updates[1], "Permission type: readonly") {
 				t.Fatalf("restricted facts=%v", updates)
-			}
-			if !strings.Contains(request.Messages[0].Text, "readonly") {
-				t.Fatal("permission instructions did not refresh")
 			}
 			for _, def := range request.Tools {
 				if def.Name == "file.write" {

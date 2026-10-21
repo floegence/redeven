@@ -171,10 +171,11 @@ func assertModelSwitchRequestHistory(t *testing.T, requests []map[string]any) {
 	if !reflect.DeepEqual(requests[0]["input"].([]any)[0], requests[2]["input"].([]any)[0]) {
 		t.Fatal("Flash render lineage changed its first message prefix")
 	}
-	if reflect.DeepEqual(requests[0]["input"].([]any)[0], requests[1]["input"].([]any)[0]) {
-		t.Fatal("new Pro turn did not receive the current readonly System Prompt")
+	if !reflect.DeepEqual(requests[0]["input"].([]any)[0], requests[1]["input"].([]any)[0]) {
+		t.Fatal("permission change altered the shared Flower System Prompt")
 	}
 	for i, request := range requests {
+		assertPermissionProviderSurface(t, request, []string{"full_access", "readonly", "full_access"}[i])
 		if _, ok := request["previous_response_id"]; ok {
 			t.Fatalf("request %d leaked provider continuation metadata across turns", i+1)
 		}

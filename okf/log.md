@@ -4,6 +4,10 @@
 
 - Keep displayed child bodies in the bounded shared cache through capacity, root refresh and reconnect. Derive retention from selection, require readable detail before success, and remove the retired ledger rendering path. Preserve indexed streaming, retry, focus and independent scroll ownership. See [Subagent detail](ui/flower-subagent-detail.md).
 
+## 2026-10-21 — Minimal Flower identity
+
+- Reduce the [base Flower prompt](ai/flower-prompt-and-rule-sources.md) to one shared introduction. Keep tool definitions, native Floret guidance and managed context separate; replace removed-policy text checks with identity, capability and provider-request regressions.
+
 ## 2026-10-20 — Quiet Flower conversation navigation
 
 - Remove the floating conversation-loading status from the shared Flower surface. Keep existing inline loading, selected-row feedback, retained history and drafts, and interaction guards. See [conversation selection](ui/flower-thread-selection.md).

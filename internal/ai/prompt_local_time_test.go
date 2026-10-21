@@ -35,17 +35,15 @@ func TestCurrentPromptLocalTimeContext_FallsBackToUTCOffsetForLocalLabel(t *test
 	}
 }
 
-func TestBuildBasicPromptCurrentContextLines_IncludesLocalDateFacts(t *testing.T) {
+func TestRenderPromptLocalTimeContextLines_IncludesLocalDateFacts(t *testing.T) {
 	t.Parallel()
 
-	lines := buildBasicPromptCurrentContextLines("/tmp/work", promptLocalTimeContext{
+	lines := renderPromptLocalTimeContextLines(promptLocalTimeContext{
 		CurrentDate: "2026-04-04",
 		Timezone:    "Asia/Shanghai",
 	})
 
 	want := []string{
-		"## Current Context",
-		"- Working directory: /tmp/work",
 		"- Current date: 2026-04-04",
 		"- Timezone: Asia/Shanghai",
 	}

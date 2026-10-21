@@ -62,12 +62,3 @@ func promptWorkingDirForRun(r *run) string {
 	}
 	return cwd
 }
-
-func buildBasicPromptCurrentContextLines(workingDir string, localTime promptLocalTimeContext) []string {
-	lines := []string{"## Current Context"}
-	if workingDir = strings.TrimSpace(workingDir); workingDir != "" {
-		lines = append(lines, fmt.Sprintf("- Working directory: %s", workingDir))
-	}
-	lines = append(lines, renderPromptLocalTimeContextLines(localTime)...)
-	return lines
-}

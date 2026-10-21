@@ -324,7 +324,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [AI tool approval runtime](ai/tool-approval-runtime.md) - Reconcile pending approval queues, conflicts, decisions, and authoritative live state.
 - [AI terminal tool runtime](ai/terminal-tool-runtime.md) - Manage PTY handles, incremental output, termination, and Floret settlement.
 - [Model reasoning capabilities and transport](ai/model-reasoning-runtime.md) - Discover exact thinking controls and preserve selections, streaming output, and provider history.
-- [Flower prompt and rule sources](ai/flower-prompt-and-rule-sources.md) - Align task, interaction and recovery guidance with current capabilities and complete authorized repository rules.
+- [Flower prompt and rule sources](ai/flower-prompt-and-rule-sources.md) - Keep one shared identity introduction separate from runtime facts, capability contracts and native engine guidance.
 - [AI model and context runtime](ai/model-context-runtime.md) - Separate model-source ownership, provider mapping, token limits, context, and compaction.
 - [Model provider surface and history](ai/model-provider-surface-and-history.md) - Keep provider-visible history, tool surfaces, and render lineage under one Floret owner.
 - [Model request recovery](ai/model-request-recovery.md) - Keep retry budgets and deadlines upstream while projecting attempt diagnostics and recoverable interaction.
