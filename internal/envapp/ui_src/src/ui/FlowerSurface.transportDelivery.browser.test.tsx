@@ -17,6 +17,15 @@ beforeEach(async () => {
   });
 });
 
+async function waitForCommittedSelection(runtime: HTMLElement, threadID: string) {
+  await waitFor(() => {
+    const surface = runtime.querySelector('main');
+    return surface?.getAttribute('data-flower-selected-thread-id') === threadID
+      && !surface.hasAttribute('data-flower-pending-thread-id')
+      && runtime.querySelector('.flower-chat-transcript')?.getAttribute('aria-busy') !== 'true';
+  });
+}
+
 async function setup(options: { generation?: Promise<string> | (() => Promise<string>); newThread?: boolean; idle?: boolean; overrides?: Partial<FlowerSurfaceAdapter> } = {}) {
   const initial = thread({ thread_id: 'delivery-thread', status: options.idle ? 'idle' : 'running', active_run_id: options.idle ? undefined : 'original-run' });
   const other = thread({ thread_id: 'other-thread' });
@@ -42,11 +51,11 @@ async function setup(options: { generation?: Promise<string> | (() => Promise<st
   await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${initial.thread_id}"] button`)));
   if (!options.newThread) {
     (runtime.querySelector(`[data-thread-id="${initial.thread_id}"] button`) as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelector(`[data-thread-id="${initial.thread_id}"]`)?.getAttribute('data-flower-thread-active') === 'true');
+    await waitForCommittedSelection(runtime, initial.thread_id);
   }
   const editor = () => runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement;
   await waitFor(() => Boolean(editor()) && !editor().disabled
-    && runtime.querySelector('.flower-thread-navigation-status')?.hasAttribute('hidden') === true);
+    && !runtime.querySelector('main')?.hasAttribute('data-flower-pending-thread-id'));
   const type = (text: string) => { editor().value = text; editor().dispatchEvent(new Event('input', { bubbles: true })); };
   const submit = () => (runtime.querySelector('[data-flower-primary-action="send"]') as HTMLButtonElement).click();
   const emit = (current: FlowerRuntimeCurrentView) => {
@@ -105,8 +114,8 @@ it.each(['receipt', 'current'] as const)('binds follow-up preparation after the 
   expect(s.rows()).toHaveLength(0);
   if (confirmation === 'receipt') s.receipt(0);
   else s.emit(queuedCurrent(s.initial.thread_id, s.launch.mock.calls[0][0].client_request_id, 'Create A'));
-  await waitFor(() => s.runtime.querySelector(`[data-thread-id="${s.initial.thread_id}"]`)?.getAttribute('data-flower-thread-active') === 'true');
-  await waitFor(() => s.runtime.querySelector('.flower-thread-navigation-status')?.hasAttribute('hidden') === true);
+  await waitForCommittedSelection(s.runtime, s.initial.thread_id);
+
   expect(s.editor().value).toBe('Follow-up B');
   s.submit();
   await waitFor(() => generationRequests === 2);
@@ -204,7 +213,7 @@ it('binds successive new-chat input to the accepted conversation', async () => {
   expect(s.rows()).toHaveLength(0);
   expect(s.launch.mock.calls[0][0].thread_id).toBeUndefined();
   s.receipt(0);
-  await waitFor(() => s.runtime.querySelector(`[data-thread-id="${s.initial.thread_id}"]`)?.getAttribute('data-flower-thread-active') === 'true');
+  await waitForCommittedSelection(s.runtime, s.initial.thread_id);
   s.submit();
   await waitFor(() => s.launch.mock.calls.length === 2);
   expect(s.launch.mock.calls[1][0].thread_id).toBe(s.initial.thread_id);
@@ -261,8 +270,8 @@ it('keeps another thread usable while the first thread awaits confirmation', asy
   s.requests[0].reject(flowerTurnAdmissionError('unknown', new Error('Connection lost')));
   await waitFor(() => s.rows()[0].dataset.flowerTransportDelivery === 'unknown');
   (s.runtime.querySelector(`[data-thread-id="${s.other.thread_id}"] button`) as HTMLButtonElement).click();
-  await waitFor(() => s.runtime.querySelector(`[data-thread-id="${s.other.thread_id}"]`)?.getAttribute('data-flower-thread-active') === 'true');
-  await waitFor(() => s.runtime.querySelector('.flower-thread-navigation-status')?.hasAttribute('hidden') === true);
+  await waitForCommittedSelection(s.runtime, s.other.thread_id);
+
   s.type('Independent message'); s.submit();
   await waitFor(() => s.launch.mock.calls.length === 2);
   expect(s.launch.mock.calls[1][0].thread_id).toBe(s.other.thread_id);

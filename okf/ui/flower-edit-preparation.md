@@ -50,5 +50,4 @@ publication owner.
 
 - `redeven:internal/ai/flower_argument_preview.go` - Incremental bounded filename extraction from canonical patch headers.
 - `redeven:internal/ai/flower_argument_preview_test.go` - Partial paths, chunk boundaries, rename/delete, Unicode, body isolation, and display bounds.
-- `redeven:internal/ai/flower_runtime_current_publisher_test.go` - Immediate name publication while numeric previews coalesce.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.streamingStability.browser.test.tsx` - Retained rows, progressive names, narrow viewports, approval, execution, and actual-result takeover.

@@ -38822,7 +38822,7 @@
         "title": "Flower file edit preparation",
         "type": "UI Contract"
       },
-      "body_length": 2866,
+      "body_length": 2739,
       "summary": "Flower shows candidate filenames while file-editing arguments are being prepared.\nThe existing Floret argument preview is display-only; actual tool results remain\nthe authority for completed changes. Progressive names keep long preparations\nunderstandable while one stable activity row continues through approval and\nexecution.",
       "sections": [
         {
@@ -38850,11 +38850,6 @@
           "id": "redeven:internal/ai/flower_argument_preview_test.go:0:partial paths, chunk boundaries, rename/delete, unicode, body isolation, and display bounds.",
           "source": "redeven:internal/ai/flower_argument_preview_test.go",
           "description": "Partial paths, chunk boundaries, rename/delete, Unicode, body isolation, and display bounds."
-        },
-        {
-          "id": "redeven:internal/ai/flower_runtime_current_publisher_test.go:0:immediate name publication while numeric previews coalesce.",
-          "source": "redeven:internal/ai/flower_runtime_current_publisher_test.go",
-          "description": "Immediate name publication while numeric previews coalesce."
         },
         {
           "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.streamingStability.browser.test.tsx:0:retained rows, progressive names, narrow viewports, approval, execution, and actual-result takeover.",
@@ -40163,7 +40158,7 @@
         "title": "Flower parent event timeline",
         "type": "UI Contract"
       },
-      "body_length": 8352,
+      "body_length": 8341,
       "summary": "- Authority: Floret owns received events and their canonical context admission; the UI holds only presentation pages, report bodies and disclosure state.\n- Outcome: important child reports and automatic events appear directly in the selected parent conversation without opening the subagent dropdown.\n- Invariants: every event uses the canonical child avatar; receipt, admission and preservation notices do not appear in the timeline. Reading never wakes either task.\n- Failure boundary: recipient authorization and canonical fixed-range paging apply to every full read.",
       "sections": [
         {
@@ -40198,8 +40193,8 @@
           "description": "Recipient authorization and canonical event reads."
         },
         {
-          "id": "redeven:internal/ai/flower_runtime_current_publisher.go:0:receipt, admission and resolution boundaries.",
-          "source": "redeven:internal/ai/flower_runtime_current_publisher.go",
+          "id": "redeven:internal/ai/flower_runtime_update.go:0:receipt, admission and resolution boundaries.",
+          "source": "redeven:internal/ai/flower_runtime_update.go",
           "description": "Receipt, admission and resolution boundaries."
         },
         {
@@ -46010,5 +46005,5 @@
       ]
     }
   ],
-  "source_sha256": "36e4d5e5138b74bed0aa9c80743c753ada81df84230010099630118b54481eb0"
+  "source_sha256": "29e6c5b36c47e918418e953d008982d99c1f826c76d7c0346c83b7ad89611c20"
 }
