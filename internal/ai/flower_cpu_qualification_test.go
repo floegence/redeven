@@ -367,13 +367,13 @@ func TestFlowerCPUQualification(t *testing.T) {
 					}
 					child, forkErr := service.threadRuntime.Fork(r.Context(), flruntime.ForkThreadInput{
 						SourceThreadID: identity.ThreadID(rootID), ParentThreadID: identity.ThreadID(rootID), ParentTurnID: seedView.Turns[len(seedView.Turns)-1].TurnID,
-						TaskName: "Inspect retained work", TaskDescription: "Verify canonical child detail under load.", HostProfileRef: subagentAgentTypeWorker,
+						TaskName: "Inspect retained work", TaskDescription: "Verify canonical child detail under load.", HostProfileRef: "flower",
 						ForkMode: subagentContextModeFullHistory, RequestKey: flruntime.RequestKey(fmt.Sprintf("cpu-child-%d", sequence.Add(1))),
 					})
 					e = forkErr
 					childID = child.ThreadID.String()
 					if e == nil {
-						e = service.ensureChildThreadSettings(r.Context(), &run{threadID: rootID, endpointID: meta.EndpointID, permissionType: FlowerPermissionApprovalRequired}, childID, rootID, subagentAgentTypeWorker)
+						e = service.ensureChildThreadSettings(r.Context(), &run{threadID: rootID, endpointID: meta.EndpointID, permissionType: FlowerPermissionApprovalRequired}, childID, rootID)
 					}
 				} else {
 					fork, forkErr := service.ForkThread(r.Context(), meta, rootID, fmt.Sprintf("CPU qualification %d", len(ids)))

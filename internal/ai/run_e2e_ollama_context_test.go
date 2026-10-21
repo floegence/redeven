@@ -441,6 +441,10 @@ func newOllamaContextProxy(t *testing.T, baseURL string, recorder *ollamaContext
 	base := strings.TrimSuffix(strings.TrimRight(baseURL, "/"), "/v1")
 	client := &http.Client{Timeout: 7 * time.Minute}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		captureProviderHTTP := os.Getenv("REDEVEN_FLOWER_TASK_CAPTURE_HTTP") == "1"
+		if captureProviderHTTP {
+			t.Logf("qualification provider request method=%s path=%s", request.Method, request.URL.Path)
+		}
 		body, err := io.ReadAll(io.LimitReader(request.Body, 8<<20))
 		if err != nil {
 			http.Error(w, "read qualification request", http.StatusBadRequest)
@@ -512,10 +516,16 @@ func newOllamaContextProxy(t *testing.T, baseURL string, recorder *ollamaContext
 		upstream.Header = request.Header.Clone()
 		response, err := client.Do(upstream)
 		if err != nil {
+			if captureProviderHTTP {
+				t.Logf("qualification provider transport failed path=%s error_type=%T", request.URL.Path, err)
+			}
 			http.Error(w, "upstream request failed", http.StatusBadGateway)
 			return
 		}
 		defer response.Body.Close()
+		if captureProviderHTTP {
+			t.Logf("qualification provider response path=%s status=%d content_type=%q", request.URL.Path, response.StatusCode, response.Header.Get("Content-Type"))
+		}
 		for key, values := range response.Header {
 			for _, value := range values {
 				w.Header().Add(key, value)

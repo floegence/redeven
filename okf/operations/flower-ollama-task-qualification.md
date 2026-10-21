@@ -125,11 +125,22 @@ before input admission. The replay case changes child permissions, rejects
 conflicting content, and verifies that removed historical queued input remains
 removed. Shared Flower UI and targeted child browser checks also pass.
 
-Real-model qualification remains unexecuted: the focused scenario stops in the
-profile loader with `the selected model must belong to an Ollama provider`.
-The available selected profile is DeepSeek. No inference or delegated Git,
-file-write, or network scenario runs before this failure; deterministic results
-do not certify model instruction compliance.
+The Ollama lifecycle suite is unavailable when the current selected provider is
+not Ollama. A separate focused selected-model scenario,
+`TestE2E_FlowerSubagentDirectInstructionCapabilities`, runs only the direct
+delegation case with the configured provider and published model metadata. It
+checks delegated read-only Git inspection, an explicitly authorized file write,
+and public-page fetch through child tools, while checking that the parent did
+not perform those effects.
+
+The 2026-10-21 attempt used the configured DeepSeek v4 Flash profile. The
+provider returned HTTP 200 with an SSE response on `/v1/responses`, but the
+runtime settled the parent request as `provider_request_failed` with response
+shape `unknown` before it created a child or dispatched tools. The model
+instruction qualification is therefore inconclusive; no delegated Git,
+file-write, or network behavior was observed. The test records this as a failed
+model run and does not retry automatically. Deterministic contract and UI
+results do not certify model instruction compliance.
 
 Set `REDEVEN_FLOWER_TASK_REPORT_ROOT` to a private evidence directory for per-case
 JSON reports. They contain synthetic task views, model request metadata, fault
