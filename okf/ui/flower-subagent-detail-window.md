@@ -25,7 +25,7 @@ The detail window hides its avatar switcher for a single child. With multiple ca
 
 The detail has no independent chat composer. Historical queued inputs offer Steer now and Remove through one parent-scoped operation boundary shared by Env App and Desktop. Each row freezes its full-input fingerprint; a conflict refreshes canonical detail and preserves usable controls. Busy and failure state belongs only to that row. Navigation, closing the window, and parent Stop remain available. Selection identity and connection epoch prevent late operation responses from reopening a window or replacing another child's content. Reconnection uses the existing live/current refresh, without polling.
 
-Canonical steering renders as one stable user message with pending, applied, or cancelled status. Cancelled guidance explains why it was not applied. Only a `stopped` cancellation offers explicit Send again; unknown-effect failures explain the boundary without a retry control. Floret remains the lifecycle owner described in [Subagent runtime](../ai/subagent-runtime.md).
+Canonical parent steering renders as one stable user message. Pending and cancelled guidance show status; applied guidance shows no status line. Cancelled guidance explains why it was not applied. Only a `stopped` cancellation offers explicit Send again; unknown-effect failures explain the boundary without a retry control. Floret remains the lifecycle owner described in [Subagent runtime](../ai/subagent-runtime.md).
 
 # Boundaries
 

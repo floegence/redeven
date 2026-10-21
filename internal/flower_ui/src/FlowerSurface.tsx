@@ -11504,7 +11504,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         const message = () => (entry() as Extract<FlowerTimelineEntry, { type: 'message' }>).message;
         return <>
           {messageEntry(() => entry() as Extract<FlowerTimelineEntry, { type: 'message' }>, viewportScope, thread, media)}
-          <Show when={message().steering}>{(steering) => <div class="flower-steering-status" data-flower-steering-status={steering().status}>
+          <Show when={message().steering?.status !== 'applied' && message().steering}>{(steering) => <div class="flower-steering-status" data-flower-steering-status={steering().status}>
             <span role="status">{subagentsCopy().input[steering().status]}</span>
             <Show when={steering().status === 'cancelled'}>
               <span>{steering().reason === 'effect_outcome_unknown' ? subagentsCopy().input.unknown
