@@ -367,6 +367,19 @@ it('retains an unsent draft when the model removes the current Goal', async () =
   expect(f.manageGoal).not.toHaveBeenCalled();
 });
 
+it('automatically hides a completed Goal and closes its editor without losing a draft', async () => {
+  const f = goalFixture(); await f.open(); await waitFor(() => Boolean(f.input()));
+  edit(f.input(), 'Keep this unsaved objective');
+  f.publish({ version: 3, text: 'Current work', status: 'completed', actor: 'model' });
+  await waitFor(() => f.surface.querySelector('.flower-goal-tag') === null);
+  expect(f.surface.querySelector('.flower-goal-popup')).toBeNull();
+  expect(f.coordinator.read('thread-1').value.goal_edit?.text).toBe('Keep this unsaved objective');
+  expect(f.manageGoal).not.toHaveBeenCalled();
+  f.publish({ version: 4, text: 'New objective', status: 'active', actor: 'user' });
+  await waitFor(() => f.surface.querySelector('.flower-goal-tag')?.getAttribute('title') === 'New objective');
+  expect(f.surface.querySelector('.flower-goal-popup')).toBeNull();
+});
+
 it('supports keyboard draft tabs and returns focus without modifying the draft', async () => {
   const f = goalFixture(); await f.open(); await waitFor(() => Boolean(f.input())); edit(f.input(), 'Keyboard draft');
   await userEvent.keyboard('{Escape}'); await f.open(); await waitFor(() => Boolean(f.input()));
@@ -467,13 +480,7 @@ it.each([['en-US', 1100, 'light'], ['zh-CN', 390, 'light'], ['en-US', 1100, 'dar
   const surface = renderSurfaceWithAdapterProps({ ...base, listThreads: async () => [snapshot], loadThread: async () => ({ thread: applyFlowerRuntimeCurrentView(snapshot, current), current }) }, { copy, focusThreadRequest: focus });
   surface.style.cssText = 'width:100%;height:800px;position:relative;';
   await waitFor(() => surface.querySelectorAll('.flower-goal-history').length === 3, 10000);
-  const badge = surface.querySelector<HTMLButtonElement>('.flower-goal-tag')!;
-  expect(badge.querySelector('[data-flower-goal-icon]')).not.toBeNull();
-  expect(badge.querySelector('.flower-goal-dot')).toBeNull();
-  const badgeStyle = getComputedStyle(badge);
-  expect(badgeStyle.borderTopWidth).toBe('0px');
-  expect(parseFloat(badgeStyle.borderTopLeftRadius)).toBeGreaterThan(0);
-  expect(parseFloat(badgeStyle.borderTopLeftRadius)).toBeLessThan(badge.getBoundingClientRect().height / 2);
+  expect(surface.querySelector('.flower-goal-tag')).toBeNull();
   expect(surface.querySelector('[data-flower-tool-call-id="goal-call"]')).toBeNull();
   if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: surface, path: '__screenshots__/flower-goal-history-' + locale + '-' + theme + '.png' });
   for (const [index, label] of [copy.chat.goalSet, copy.chat.goalSet, copy.chat.goalCompleted].entries()) {
@@ -502,23 +509,6 @@ it.each([['en-US', 1100, 'light'], ['zh-CN', 390, 'light'], ['en-US', 1100, 'dar
     await userEvent.click(surface.querySelector<HTMLElement>('.flower-goal-history-text')!);
     await page.screenshot({ element: surface, path: '__screenshots__/flower-goal-history-expanded-' + locale + '-' + theme + '.png' });
   }
-  await userEvent.click(badge);
-  await waitFor(() => Boolean(document.querySelector('.flower-goal-popup')));
-  const popup = document.querySelector<HTMLElement>('.flower-goal-popup')!;
-  const editor = popup.querySelector<HTMLTextAreaElement>('.flower-goal-input')!;
-  await waitFor(() => document.activeElement === editor);
-  const popupStyle = getComputedStyle(popup);
-  expect(popupStyle.borderTopWidth).toBe('0px');
-  expect(popupStyle.outlineStyle).toBe('none');
-  expect(popupStyle.boxShadow).not.toBe('none');
-  expect(popup.hasAttribute('data-floe-input-surface')).toBe(false);
-  if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: surface, path: '__screenshots__/flower-goal-popup-' + locale + '-' + theme + '.png' });
-  await userEvent.keyboard('{Shift>}{Tab}{/Shift}');
-  expect(document.activeElement).toBe(popup.querySelector('.flower-goal-popup-controls button:last-child'));
-  expect(getComputedStyle(document.activeElement!).boxShadow).not.toBe('none');
-  await userEvent.keyboard('{Escape}');
-  expect(document.activeElement).toBe(badge);
-  expect(getComputedStyle(badge).outlineStyle).not.toBe('none');
 });
 
 it('keeps failed Goal tools inspectable with the shared icon and never claims completion', async () => {

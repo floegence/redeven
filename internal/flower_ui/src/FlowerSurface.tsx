@@ -6715,6 +6715,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (goalPopupScope() && (goalPopupScope() !== currentComposerSessionKey() || epoch !== goalPopupEpoch || !selectedGoal()?.text && !goalEditor())) closeGoalEditor(false, false);
   });
   createEffect(() => {
+    if (selectedGoal()?.status === 'completed' && goalPopupScope()) closeGoalEditor(false, false);
+  });
+  createEffect(() => {
     if (!goalPopupOpen()) return;
     const measure = () => {
       if (!goalTriggerRef || !goalPanelRef) return;
@@ -12703,7 +12706,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   );
 
   const goalControls = () => (
-    <Show when={selectedGoal()?.text || goalEditor()}>
+    <Show when={selectedGoal()?.status !== 'completed' && (selectedGoal()?.text || goalEditor())}>
       <button ref={goalTriggerRef} type="button" class="flower-goal-tag" aria-label={copy().chat.goalTitle}
         title={selectedGoal()?.text || copy().chat.goalDraft} aria-haspopup="dialog" aria-expanded={goalPopupOpen()}
         data-goal-status={selectedGoal()?.status} onClick={() => goalPopupOpen() ? closeGoalEditor() : openGoalEditor()}>

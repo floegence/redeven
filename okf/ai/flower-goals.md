@@ -78,6 +78,12 @@ confirmation never presents cached text as current or blocks input, Stop,
 approvals or navigation. The accepted ThreadCache view remains the only current
 Goal source, including when newer live state wins over an older read.
 
+When Floret records a canonical Goal completion, the current Goal controls are
+removed from the composer immediately, including an open popup, while the
+completion fact remains available in the transcript. A retained local draft is
+kept in ComposerDraftStore for recovery and is not presented as a new current
+Goal until an active Goal exists again.
+
 Viewing, focus and dismissal create no draft. Only actual input creates goal_edit
 in ComposerDraftStore, with its original Goal version. Reopening starts on the
 confirmed current Goal. A retained draft has quiet Current goal / My draft tabs,
