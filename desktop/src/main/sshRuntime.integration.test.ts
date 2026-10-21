@@ -482,7 +482,7 @@ if (args.includes('-M') && args.includes('-N')) {
       process.exit(0);
       break;
     case 'redeven-ssh-remote-install':
-      process.stderr.write('\r######## 25.0%\r################ 100.0%\n');
+      process.stderr.write('Downloading Redeven: 25%\nDownloading Redeven: 100%\nDownloading ripgrep: 10%\n');
       appendLog('remote_install', {
         install_script_url: remoteScriptArgs()[2] || args[args.length - 1] || '',
         release_tag: remoteInstallReleaseTag(),

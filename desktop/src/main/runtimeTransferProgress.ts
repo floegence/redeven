@@ -1,7 +1,7 @@
 import type { DesktopRuntimeTransferProgress } from '../shared/desktopComponentTaskProgress';
 
-// curl's progress-bar mode observes the installer's actual transfer. It
-// reports percentages only when the server supplies a download length.
+// Observe complete Runtime transfer records from the self-contained installer.
+// Companion downloads and diagnostics must not reset the Runtime progress.
 export function runtimeDownloadProgressObserver(
   publish: (progress: DesktopRuntimeTransferProgress) => void,
 ): (chunk: string) => void {
@@ -11,8 +11,8 @@ export function runtimeDownloadProgressObserver(
     pending += chunk;
     const frames = pending.split(/[\r\n]/u);
     pending = frames.pop() ?? '';
-    for (const frame of [...frames, pending]) {
-      const match = /^[#\s]*(\d{1,3}\.\d)%\s*$/u.exec(frame);
+    for (const frame of frames) {
+      const match = /^Downloading Redeven: (\d{1,3})%$/u.exec(frame);
       if (!match) continue;
       const percent = Number(match[1]);
       if (percent < 0 || percent > 100 || percent === lastPercent) continue;
