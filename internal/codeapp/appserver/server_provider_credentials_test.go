@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -194,4 +195,164 @@ func TestServer_AIProviderBundleCredentialRequirements(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestServer_AIProviderBundlePreservesUnchangedChatGPTBindingAfterPlanPermissionChanges(t *testing.T) {
+	path := writeTestConfigWithAI(t)
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	account := settings.ChatGPTAccount{
+		Issuer: "https://auth.openai.com", Subject: "plan-changed", ClientID: "issued-client",
+		AccessToken: "saved-token", Scopes: []string{"resource.invoke", "chatgpt.tokens.use.direct"},
+	}
+	previousProvider := config.AIProvider{
+		ID: "openai", Type: "openai", AuthMethod: config.AIAuthChatGPT, AccountID: account.ID(),
+		ModelSelection: &config.AIModelSelection{SelectedModels: []string{"gpt-5.5"}},
+	}
+	previousAI := &config.AIConfig{CurrentModelID: "openai/gpt-5.5", Providers: []config.AIProvider{previousProvider}}
+	cfg.AI = previousAI
+	if err := config.Save(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+	svc, err := ai.NewService(ai.Options{StateDir: t.TempDir(), AgentHomeDir: t.TempDir(), Shell: "/bin/sh", Config: cfg.AI})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = svc.Close() })
+	srv, err := New(Options{
+		Backend: &stubBackend{}, DistFS: fstest.MapFS{"env/index.html": {Data: []byte("env")}},
+		ListenAddr: "127.0.0.1:0", ConfigPath: path, AIServiceProvider: newStaticAIServiceProvider(svc),
+		ResolveSessionMeta: resolveMetaForTest("credential-test", session.Meta{CanRead: true, CanAdmin: true}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := srv.secrets.UpdateChatGPTAccount(t.Context(), account.ID(), func(stored *settings.ChatGPTAccount) error {
+		*stored = account
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := srv.secrets.UpdateChatGPTAccount(t.Context(), account.ID(), func(stored *settings.ChatGPTAccount) error {
+		stored.Scopes = []string{"resource.invoke"}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if changed, _, err := srv.secrets.ChatGPTAccount(account.ID()); err != nil || changed.PlanEnabled() {
+		t.Fatalf("ChatGPT account did not lose plan permission: %v", err)
+	}
+
+	anthropicKey := "anthropic-key"
+	profile := config.AIModelProfile{
+		CurrentModelID: previousAI.CurrentModelID,
+		Providers: []config.AIProvider{
+			previousProvider,
+			{ID: "anthropic", Type: "anthropic", Models: []config.AIProviderModel{{ModelName: "claude-sonnet-4-5"}}},
+		},
+	}
+	updated, err := srv.saveAIProviderBundle(svc, profile, []settings.AIProviderAPIKeyPatch{{ProviderID: "anthropic", APIKey: &anthropicKey}}, nil, true)
+	if err != nil {
+		t.Fatalf("unrelated provider save was rejected: %v", err)
+	}
+	if len(updated.AI.Providers) != 2 || !reflect.DeepEqual(updated.AI.Providers[0], previousProvider) {
+		t.Fatalf("existing ChatGPT configuration changed: %+v", updated.AI.Providers)
+	}
+	if key, ok, err := srv.secrets.GetAIProviderAPIKey("anthropic"); err != nil || !ok || key != anthropicKey {
+		t.Fatalf("Anthropic credential was not saved: configured=%v err=%v", ok, err)
+	}
+}
+
+func TestServer_AIProviderBundleRejectsNewReboundAndReenabledChatGPTWithoutPlan(t *testing.T) {
+	account := settings.ChatGPTAccount{Issuer: "https://auth.openai.com", Subject: "prior-account", ClientID: "issued-client"}
+	missingAccountID := "chatgpt_plan_required"
+	for _, tc := range []struct {
+		name         string
+		previous     *config.AIConfig
+		accountID    string
+		priorAccount *settings.ChatGPTAccount
+	}{
+		{name: "new binding", previous: &config.AIConfig{}, accountID: missingAccountID},
+		{
+			name: "rebound account", previous: &config.AIConfig{Providers: []config.AIProvider{{
+				ID: "openai", Type: "openai", AuthMethod: config.AIAuthChatGPT, AccountID: account.ID(),
+				ModelSelection: &config.AIModelSelection{SelectedModels: []string{"gpt-5.5"}},
+			}}}, accountID: missingAccountID, priorAccount: &account,
+		},
+		{
+			name: "reenabled account", previous: &config.AIConfig{Providers: []config.AIProvider{{
+				ID: "openai", Type: "openai", AuthMethod: config.AIAuthChatGPT, AccountID: missingAccountID,
+				Enabled: boolPointer(false), ModelSelection: &config.AIModelSelection{SelectedModels: []string{"gpt-5.5"}},
+			}}}, accountID: missingAccountID,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := writeTestConfigWithAI(t)
+			cfg, err := config.Load(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg.AI = tc.previous
+			if err := config.Save(path, cfg); err != nil {
+				t.Fatal(err)
+			}
+			svc, err := ai.NewService(ai.Options{StateDir: t.TempDir(), AgentHomeDir: t.TempDir(), Shell: "/bin/sh", Config: cfg.AI})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = svc.Close() })
+			srv, err := New(Options{
+				Backend: &stubBackend{}, DistFS: fstest.MapFS{"env/index.html": {Data: []byte("env")}},
+				ListenAddr: "127.0.0.1:0", ConfigPath: path, AIServiceProvider: newStaticAIServiceProvider(svc),
+				ResolveSessionMeta: resolveMetaForTest("credential-test", session.Meta{CanRead: true, CanAdmin: true}),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.priorAccount != nil {
+				if err := srv.secrets.UpdateChatGPTAccount(t.Context(), tc.priorAccount.ID(), func(stored *settings.ChatGPTAccount) error {
+					*stored = *tc.priorAccount
+					return nil
+				}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			provider := config.AIProvider{
+				ID: "openai", Type: "openai", AuthMethod: config.AIAuthChatGPT, AccountID: tc.accountID,
+				ModelSelection: &config.AIModelSelection{SelectedModels: []string{"gpt-5.5"}},
+			}
+			if tc.name == "reenabled account" {
+				provider.Enabled = boolPointer(true)
+			}
+			anthropicKey := "replacement-anthropic-key"
+			if err := srv.secrets.SetAIProviderAPIKey("anthropic", "retained-anthropic-key"); err != nil {
+				t.Fatal(err)
+			}
+			before, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			profile := config.AIModelProfile{Providers: []config.AIProvider{
+				provider,
+				{ID: "anthropic", Type: "anthropic", Models: []config.AIProviderModel{{ModelName: "claude-sonnet-4-5"}}},
+			}}
+			_, err = srv.saveAIProviderBundle(svc, profile, []settings.AIProviderAPIKeyPatch{{ProviderID: "anthropic", APIKey: &anthropicKey}}, nil, true)
+			if err == nil || !strings.Contains(err.Error(), "ChatGPT plan permission") {
+				t.Fatalf("invalid ChatGPT binding was accepted: %v", err)
+			}
+			after, err := os.ReadFile(path)
+			if err != nil || string(after) != string(before) {
+				t.Fatalf("rejected save changed persisted configuration: %v", err)
+			}
+			if key, ok, err := srv.secrets.GetAIProviderAPIKey("anthropic"); err != nil || !ok || key != "retained-anthropic-key" {
+				t.Fatalf("rejected save changed provider credential: configured=%v err=%v", ok, err)
+			}
+		})
+	}
+}
+
+func boolPointer(value bool) *bool {
+	return &value
 }

@@ -372,7 +372,8 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
       }
       providerIDs.add(provider.id);
       const missingCredential = missingFlowerProviderCredential(provider,
-        providerSecretConfigured(props.snapshot, provider.id), providerWebSearchSecretConfigured(props.snapshot, provider.id));
+        providerSecretConfigured(props.snapshot, provider.id), providerWebSearchSecretConfigured(props.snapshot, provider.id),
+        props.snapshot?.model_profile?.providers.find(saved => saved.id === provider.id));
       if (missingCredential) {
         return { ok: false, error: missingCredential === 'provider' ? provider.auth_method === 'chatgpt' ? copy().dialog.chatGPT.planPermission : copy().needsKey : copy().needsBraveKey };
       }

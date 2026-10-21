@@ -620,35 +620,40 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       class="flower-provider-dialog w-[min(72rem,96vw)] max-w-[96vw]"
       contentClass="flower-provider-dialog-body"
       footer={(
-        <div class="flex flex-wrap items-center justify-end gap-2">
-          <Show when={props.saving}><span role="status" class="mr-auto text-sm text-muted-foreground">{copy().catalog.settingsSavePending}</span></Show>
-          <Show when={selectedProviderType() && missingCredential() && !chatGPTSelected()}>
-            <span role="status" class="mr-auto text-sm text-muted-foreground">
-              {missingCredential() === 'provider' ? copy().needsKey : copy().needsBraveKey}
-            </span>
+        <div class="flower-provider-footer">
+          <Show when={props.error}>
+            {(error) => <div role="alert" aria-atomic="true" class="flower-provider-save-error">{error()}</div>}
           </Show>
-          <Show when={incompleteModel()}>{model => <div class="mr-auto flex min-w-0 flex-wrap items-center gap-2">
-            <span role="status" class="max-w-48 truncate text-sm text-muted-foreground" title={model().display_name || model().model_name}>{model().display_name || model().model_name}</span>
-            <Button size="sm" variant="outline" disabled={props.disabled || props.saving} onClick={() => configureModel(model().model_name)}>{copy().catalog.configure}</Button>
-          </div>}</Show>
-          <Button size="sm" variant="outline" data-flower-skip-discovery onClick={() => props.onOpenChange(false)}>
-            {props.saving ? copy().catalog.settingsCloseSaving : copy().discard}
-          </Button>
-          <Button
-            size="sm"
-            variant="default"
-            icon={Save}
-            loading={props.saving}
-            disabled={props.disabled || !selectedProviderType() || props.saving || Boolean(missingCredential()) || Boolean(store.draft?.model_selection && !store.draft.model_selection.selected_models)}
-            onClick={() => {
-              if (props.disabled || props.saving || !selectedProviderType() || !store.draft || missingCredential()) return;
-              const model = incompleteModel();
-              if (model) configureModel(model.model_name);
-              else void props.onConfirm(store.draft);
-            }}
-          >
-            {copy().saveProvider}
-          </Button>
+          <div class="flex flex-wrap items-center justify-end gap-2">
+            <Show when={props.saving}><span role="status" class="mr-auto text-sm text-muted-foreground">{copy().catalog.settingsSavePending}</span></Show>
+            <Show when={selectedProviderType() && missingCredential() && !chatGPTSelected()}>
+              <span role="status" class="mr-auto text-sm text-muted-foreground">
+                {missingCredential() === 'provider' ? copy().needsKey : copy().needsBraveKey}
+              </span>
+            </Show>
+            <Show when={incompleteModel()}>{model => <div class="mr-auto flex min-w-0 flex-wrap items-center gap-2">
+              <span role="status" class="max-w-48 truncate text-sm text-muted-foreground" title={model().display_name || model().model_name}>{model().display_name || model().model_name}</span>
+              <Button size="sm" variant="outline" disabled={props.disabled || props.saving} onClick={() => configureModel(model().model_name)}>{copy().catalog.configure}</Button>
+            </div>}</Show>
+            <Button size="sm" variant="outline" data-flower-skip-discovery onClick={() => props.onOpenChange(false)}>
+              {props.saving ? copy().catalog.settingsCloseSaving : copy().discard}
+            </Button>
+            <Button
+              size="sm"
+              variant="default"
+              icon={Save}
+              loading={props.saving}
+              disabled={props.disabled || !selectedProviderType() || props.saving || Boolean(missingCredential()) || Boolean(store.draft?.model_selection && !store.draft.model_selection.selected_models)}
+              onClick={() => {
+                if (props.disabled || props.saving || !selectedProviderType() || !store.draft || missingCredential()) return;
+                const model = incompleteModel();
+                if (model) configureModel(model.model_name);
+                else void props.onConfirm(store.draft);
+              }}
+            >
+              {copy().saveProvider}
+            </Button>
+          </div>
         </div>
       )}
     >
@@ -1048,9 +1053,6 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                     </Button>
                   </div></Show>
                 </section></Show>
-                <Show when={props.error}>
-                  {(error) => <div role="alert" class="rounded-md border border-destructive/30 bg-destructive/10 p-3 flower-body-copy text-destructive">{error()}</div>}
-                </Show>
               </div>
             </Show>
           </div>
