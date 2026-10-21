@@ -59,7 +59,11 @@ it('keeps every source in the input with bounded scrolling, preview actions and 
   const rows = [...input.querySelectorAll<HTMLElement>('.flower-composer-context-reference')];
   expect(rows).toHaveLength(6);
   expect(rows[0].textContent).toBe('checkout.ts');
-  expect(rows[0].querySelector('.flower-composer-context-icon svg')?.getAttribute('data-file-icon-type')).toBe('ts');
+  const selectionIcon = rows[0].querySelector<SVGSVGElement>('.flower-composer-context-icon svg')!;
+  expect(selectionIcon.getAttribute('data-file-icon-type')).toBeNull();
+  expect(selectionIcon.closest('.flower-composer-context-icon')?.getAttribute('aria-hidden')).toBe('true');
+  expect(selectionIcon.getBoundingClientRect().width).toBe(16);
+  expect(selectionIcon.querySelector('path, polyline')).not.toBeNull();
   expect(rows[4].querySelector('.flower-composer-context-icon svg')?.getAttribute('data-file-icon-kind')).toBe('folder');
   expect(input.querySelector('.flower-composer-context-heading')).toBeNull();
   expect(document.querySelector('.flower-turn-launcher-message-surface')?.textContent).not.toContain('selected content');

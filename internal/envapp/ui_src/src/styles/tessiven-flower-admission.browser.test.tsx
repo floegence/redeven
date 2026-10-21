@@ -179,7 +179,11 @@ it('preserves a rejected send for explicit restoration with its canvas reference
   await select();
   await send('Keep this draft');
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
-  await expect.element(editor()).toHaveValue('');
+  await expect.poll(() => document.querySelector('[data-flower-transport-delivery="failed"]')).not.toBeNull();
+  await expect.element(editor()).toHaveValue('Keep this draft');
+  expect(referenceText()).toContain('Orders API');
+  await expect.element(page.getByRole('button', { name: 'Restore to empty editor', exact: true })).toBeDisabled();
+  await editor().fill('');
   await expect.element(page.getByRole('button', { name: 'Restore to empty editor', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Restore to empty editor', exact: true }).click();
   await expect.element(editor()).toHaveValue('Keep this draft');
