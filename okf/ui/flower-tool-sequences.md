@@ -8,8 +8,9 @@ timestamp: 2026-10-21T00:00:00Z
 # Summary
 
 Flower groups consecutive tool calls in the shared Desktop and Env App timeline.
-Thinking bounded by tools becomes an inline node in that sequence. Older settled
-sequences collapse while the newest sequence and active tools remain expanded.
+Thinking after the first tool becomes an inline node in that sequence, including
+thinking after the final tool. Older settled sequences collapse while the newest
+sequence and active tools remain expanded.
 This is product presentation over existing published Floret facts; it introduces
 no upstream contract, canonical summary or backend migration.
 
@@ -17,20 +18,23 @@ no upstream contract, canonical summary or backend migration.
 
 ## Boundaries and identity
 
-A sequence requires at least two tool calls with the same thread, turn and run.
-Successful, active and failed ordinary tool activity and argument previews qualify.
-Leading and trailing thinking retain the existing standalone disclosure; only
-thinking between calls joins a sequence. Counts distinguish calls from thinking
-segments and failed calls without generating semantic summaries. Even a newer
-single-call segment makes an earlier untouched sequence eligible for automatic
-collapse.
+A sequence requires at least two nodes with the same thread, turn and run, and at
+least one tool call. One tool and following thinking can form a sequence. Successful,
+active and failed ordinary tool activity and argument previews qualify. Running
+attention is part of ordinary execution state and does not break the sequence;
+waiting and approval attention remain interaction boundaries. Leading thinking
+retains the standalone disclosure; thinking from the first tool onward joins its
+sequence. Counts distinguish calls from thinking segments and failed calls without
+generating semantic summaries. Even a newer single-call segment makes an earlier
+untouched sequence eligible for automatic collapse.
 
-Prose, user messages, interactions, parent events, compaction, Goal updates,
+Prose, user messages, interactions, parent events, compaction, Goal state updates,
 SubAgent operations, approvals, uncertain effects and non-tool errors break
-sequences. Failed ordinary tool calls remain in the group, with a visible failed
-count and a yellow status color on the original tool glyph; expanding the group
-retains each call's original error details. Approval and waiting rows remain
-outside tool folding. Whole-turn disclosure continues to use its separate
+sequences. Goal tool calls and Web Search remain ordinary tool nodes. Failed
+ordinary tool calls remain in the group, with a visible failed count, a yellow
+status color on the original tool glyph, and warning-foreground row text; expanding
+the group retains each call's original error details. Approval and waiting rows
+remain outside tool folding. Whole-turn disclosure continues to use its separate
 canonical eligibility and existing thinking policy. Sequence grouping never
 alters that order, the source blocks, or final output.
 
@@ -44,8 +48,9 @@ becoming bounded changes its presentation in place without reparenting its body.
 The existing tool trigger, semantic type glyph, independent details and
 secondary file actions remain intact. Failed calls retain their type glyph and
 use the existing theme warning token as its status color. One thin line connects
-the existing icons. Completed rows use existing quiet theme tokens; active rows
-keep existing foreground treatment.
+adjacent tool icon centers, including the compact running-command loader. Completed
+rows use existing quiet theme tokens; active rows keep existing foreground
+treatment.
 Tool title font size and line height remain unchanged. Inline thinking uses a
 16px Lucide Brain glyph with a 1.7 stroke; standalone thinking keeps its chevron.
 
@@ -82,10 +87,10 @@ and [whole-turn disclosure](flower-turn-process-disclosure.md) for their owners.
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/flowerToolSequences.test.ts` - Bounded thinking, failed and active tool counts, interaction boundaries, recent-segment policy and stable identity.
+- `redeven:internal/flower_ui/src/flowerToolSequences.test.ts` - Leading and trailing thinking, running-attention classification, failed and active tool counts, interaction boundaries, recent-segment policy and stable identity.
 - `redeven:internal/flower_ui/src/FlowerToolSequenceNode.tsx` - Mounted stable rows, native group disclosure and existing motion integration.
 - `redeven:internal/flower_ui/src/FlowerTurnTimeline.tsx` - Existing store, reading protection and sole scroll owner.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.toolSequences.browser.test.tsx` - Live appends, focus, selection, gestures, detail retention, navigation, theme typography and reading anchors.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.toolSequences.browser.test.tsx` - Running and completed row geometry, icon-center connectors, argument-preview transitions, failure colors, live appends, focus, selection, gestures, detail retention, navigation, theme typography and reading anchors.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.turnProcess.browser.test.tsx` - Whole-turn disclosure and independent thinking regression coverage.
 
 ## Qualification limit

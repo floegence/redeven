@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-21 — Keep running calls connected in Flower sequences
+
+- Keep canonical running-attention tool rows inside consecutive sequences, connect tool glyph centers through running and completed rows, and tint failed row text with the existing warning foreground without changing its type size. Treat post-tool thinking, Goal calls, and Web Search consistently while retaining interaction and SubAgent boundaries. See [Flower consecutive tool sequences](ui/flower-tool-sequences.md).
+
 ## 2026-10-21 — Keep failed calls in Flower tool sequences
 
 - Include failed ordinary tool calls in consecutive folding, expose the failed count in the collapsed summary, and color the original tool-type glyph with the theme's yellow warning token. Preserve expanded error details and keep interaction, approval, SubAgent, Goal, and uncertain-effect boundaries. See [Flower consecutive tool sequences](ui/flower-tool-sequences.md).
