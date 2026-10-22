@@ -32,29 +32,27 @@ try {
    if(view==='join') {
     await page.getByRole('button',{name:i18n.t('gatewayJoin.title'),exact:true}).click();
     const inputs=page.locator('[role="dialog"] input');
-    const suggestion=page.locator('[data-gateway-suggestion]');
-    assert.equal(await suggestion.getAttribute('aria-pressed'),'false');
-    assert.equal((await suggestion.innerText()).includes('https://'),false);
-    assert.equal(await suggestion.getByText(i18n.t('gatewayDiscovery.local'),{exact:true}).count(),1);
+    const picker=page.getByRole('combobox',{name:i18n.t('gatewayDiscovery.savedGateway')});
+    assert.equal(await picker.inputValue(),'');
+    assert.equal(await picker.locator('option').count(),2);
+    assert.match(await picker.locator('option').nth(1).innerText(),/Office Gateway.*office\.local:7443/);
     if(['en-US','zh-CN','de-DE'].includes(locale))await page.screenshot({path:`${output}/${locale}-join-empty.png`});
-    const initialSize=await suggestion.boundingBox();
+    const initialSize=await picker.boundingBox();
     await inputs.first().fill('https://draft.example:7443');
-    await inputs.first().focus();await page.keyboard.press('Tab');
-    assert.equal(await suggestion.evaluate(el=>el===document.activeElement),true);
-    await page.keyboard.press('Enter');
+    await picker.selectOption('https://office.local:7443');
     assert.equal(await inputs.first().inputValue(),'https://office.local:7443');
     assert.equal(await inputs.nth(1).evaluate(el=>el===document.activeElement),true);
-    assert.equal(await suggestion.getAttribute('aria-pressed'),'true');
-    const filledSize=await suggestion.boundingBox();
+    assert.equal(await picker.inputValue(),'https://office.local:7443');
+    const filledSize=await picker.boundingBox();
     assert.equal(filledSize.height,initialSize.height);
     assert.equal(filledSize.width,initialSize.width);
     await inputs.first().fill('https://edited.example:7443');
-    assert.equal(await suggestion.getAttribute('aria-pressed'),'false');
-    await suggestion.locator('.redeven-gateway-local-name').click();
+    assert.equal(await picker.inputValue(),'');
+    await picker.selectOption('https://office.local:7443');
     await inputs.nth(1).fill('123456789ABCDEFGHJKMNPQRSTV');
     await page.getByRole('button',{name:i18n.t('gatewayJoin.verify'),exact:true}).click();
     await page.getByRole('button',{name:i18n.t('gatewayJoin.confirmEnable'),exact:true}).waitFor();
-    await page.locator('[data-gateway-suggestion]').click();
+    await inputs.first().fill('https://edited.example:7443');
     assert.equal(await page.locator('.redeven-gateway-join-summary').count(),0);
     assert.equal(await inputs.nth(1).inputValue(),'123456789ABCDEFGHJKMNPQRSTV');
     assert.equal(await page.evaluate(()=>window.gatewayRequests.filter(r=>r.operation==='join').length),0);
@@ -94,19 +92,19 @@ try {
   await page.goto(new URL(`gateway-network.html?locale=${locale}&theme=${theme}&scenario=${scenario}`,server.resolvedUrls.local[0]).href);
   const trigger=page.getByRole('button',{name:i18n.t('gatewayJoin.title'),exact:true});
   await trigger.click();
-  const suggestions=page.locator('[data-gateway-suggestion]');
-  assert.equal(await suggestions.count(),scenario==='none' ? 0 : scenario==='multiple' ? 2 : 1);
+  const picker=page.locator('[data-gateway-picker]');
+  const optionCount=scenario==='none' ? 0 : scenario==='multiple' ? 3 : 2;
+  assert.equal(await picker.count(),scenario==='none' ? 0 : 1);
+  if(scenario!=='none')assert.equal(await picker.locator('option').count(),optionCount);
   const dialog=page.getByRole('dialog');
   const layout=await dialog.evaluate(el=>({width:el.getBoundingClientRect().width,overflow:el.scrollWidth-el.clientWidth}));
   assert.ok(layout.width<=width-16 && layout.overflow<=1);
   if(scenario==='long') {
-   const name=suggestions.locator('.redeven-gateway-local-name');
-   assert.equal(await name.evaluate(el=>getComputedStyle(el).textOverflow),'ellipsis');
-   assert.match(await suggestions.getAttribute('title'),/design and engineering team/);
+   assert.match(await picker.locator('option').nth(1).innerText(),/design and engineering team/);
   }
   if(scenario==='multiple') {
-   assert.match(await suggestions.nth(0).innerText(),/office\.local:7443/);
-   assert.match(await suggestions.nth(1).innerText(),/office\.example:7443/);
+   assert.match(await picker.locator('option').nth(1).innerText(),/office\.local:7443/);
+   assert.match(await picker.locator('option').nth(2).innerText(),/office\.example:7443/);
   }
   await page.screenshot({path:`${output}/${locale}-${width}-${theme}-${scenario}.png`});
   if(locale==='zh-CN' && width===1280 && scenario==='default')await dialog.screenshot({path:`${output}/zh-CN-dialog-${theme}.png`});

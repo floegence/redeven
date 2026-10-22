@@ -344,7 +344,7 @@ describe('linked environment owner interactions', () => {
     },
   );
 
-  it.each(['typed', 'local suggestion'] as const)('retains Gateway %s drafts across launcher snapshots', async method => {
+  it.each(['typed', 'saved selection'] as const)('retains Gateway %s drafts across launcher snapshots', async method => {
     const fixture = mixedEnvironmentFixture();
     const original = fixture.snapshot.environments.find(entry => entry.kind === 'local_environment')!;
     const runtime = { ...original, runtime_service: { ...original.runtime_service!,
@@ -370,8 +370,10 @@ describe('linked environment owner interactions', () => {
     button(dialog, 'Connect and continue').click(); await settle();
     const inputs = [...dialog.querySelectorAll<HTMLInputElement>('input')];
     const expected = method === 'typed' ? 'https://typed.example:7443' : gateway.member_endpoints[0].address;
-    if (method === 'local suggestion') dialog.querySelector<HTMLButtonElement>('[data-gateway-suggestion]')!.click();
-    else { inputs[0].value = expected; inputs[0].dispatchEvent(new Event('input', { bubbles: true })); }
+    if (method === 'saved selection') {
+      const picker = dialog.querySelector<HTMLSelectElement>('[data-gateway-picker]')!;
+      picker.value = expected; picker.dispatchEvent(new Event('change', { bubbles: true }));
+    } else { inputs[0].value = expected; inputs[0].dispatchEvent(new Event('input', { bubbles: true })); }
     inputs[1].value = 'draft-code'; inputs[1].dispatchEvent(new Event('input', { bubbles: true }));
     inputs[1].focus();
     for (let index = 1; index <= 3; index++) {

@@ -46,15 +46,14 @@ async function assertWizardTypography(dialog) {
    .map(element=>parseFloat(getComputedStyle(element).fontSize)/rem);
   return {coarse:matchMedia('(pointer: coarse)').matches,title:font('h2'),heading:font('h3'),
    copy:font('.redeven-gateway-join-section p'),labels:font('label'),inputs:font('input'),
-   suggestions:font('.redeven-gateway-local-name'),localLabels:font('.redeven-gateway-local-label')};
+   gatewayPicker:font('.redeven-gateway-local-picker')};
  });
  assert.ok(typography.title.every(size=>Math.abs(size-1)<.01),JSON.stringify(typography));
  assert.ok(typography.heading.every(size=>Math.abs(size-.8125)<.01),JSON.stringify(typography));
  assert.ok(typography.copy.every(size=>Math.abs(size-(typography.coarse ? .875 : .75))<.01),JSON.stringify(typography));
  assert.ok(typography.labels.every(size=>Math.abs(size-(typography.coarse ? .8125 : .75))<.01),JSON.stringify(typography));
  assert.ok(typography.inputs.every(size=>Math.abs(size-(typography.coarse ? 1 : .75))<.01),JSON.stringify(typography));
- assert.ok(typography.suggestions.every(size=>Math.abs(size-(typography.coarse ? .875 : .75))<.01),JSON.stringify(typography));
- assert.ok(typography.localLabels.every(size=>Math.abs(size-.6875)<.01),JSON.stringify(typography));
+ assert.ok(typography.gatewayPicker.every(size=>Math.abs(size-(typography.coarse ? .875 : .75))<.01),JSON.stringify(typography));
  return typography;
 }
 async function holdAction(page) {
@@ -307,7 +306,7 @@ try {
      const inputs=dialog.locator('input');await inputs.nth(0).waitFor({state:'visible'});
      assert.equal(await dialog.getByRole('button',{name:i18n.t('gatewayJoin.verify'),exact:true})
       .evaluate(button=>!!button.closest('.redeven-gateway-join-scroll')),true,'verify stays with its fields');
-     await dialog.locator('[data-gateway-suggestion="local-gateway"]').waitFor();
+     await dialog.locator('[data-gateway-picker]').waitFor();
      await assertStableWizard(dialog,initialLayout,'startup');
      await inputs.nth(0).fill('https://office.example:7443');await inputs.nth(1).fill('DRAFT-CODE');
      await inputs.nth(1).evaluate(input=>input.setSelectionRange(1,4));

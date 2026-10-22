@@ -3719,10 +3719,8 @@
     "codeHelpTitle": "Utiliser ce code"
   },
   "gatewayDiscovery": {
-    "local": "Local",
-    "useAddress": "Utiliser",
-    "filled": "Renseigné",
-    "useNamed": "Utiliser le Gateway local {name} : {address}"
+    "savedGateway": "Gateway enregistré",
+    "chooseSavedGateway": "Choisir un Gateway enregistré"
   },
   "gatewayNetwork": {
     "listenTitle": "Écoute locale",

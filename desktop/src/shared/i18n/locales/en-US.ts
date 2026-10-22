@@ -67,10 +67,8 @@ export const enUS = {
     "tab": "Gateway"
 },
   gatewayDiscovery: {
-    local: "Local",
-    useAddress: "Use",
-    filled: "Filled",
-    useNamed: "Use local Gateway {name}: {address}",
+    savedGateway: "Saved Gateway",
+    chooseSavedGateway: "Choose a saved Gateway",
   },
   gatewayNetwork: {
     "listenTitle": "Local listener",

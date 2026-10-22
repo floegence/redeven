@@ -3718,10 +3718,8 @@
     "codeHelpTitle": "So verwenden Sie diesen Code"
   },
   "gatewayDiscovery": {
-    "local": "Lokal",
-    "useAddress": "Verwenden",
-    "filled": "Übernommen",
-    "useNamed": "Lokales Gateway {name} verwenden: {address}"
+    "savedGateway": "Gespeichertes Gateway",
+    "chooseSavedGateway": "Gespeichertes Gateway auswählen"
   },
   "gatewayNetwork": {
     "listenTitle": "Lokaler Listener",

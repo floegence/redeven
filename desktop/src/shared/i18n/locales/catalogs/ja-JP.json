@@ -3713,10 +3713,8 @@
     "codeHelpTitle": "アクセスコードの使い方"
   },
   "gatewayDiscovery": {
-    "local": "ローカル",
-    "useAddress": "使用",
-    "filled": "入力済み",
-    "useNamed": "ローカル Gateway {name} を使用：{address}"
+    "savedGateway": "保存済み Gateway",
+    "chooseSavedGateway": "保存済み Gateway を選択"
   },
   "gatewayNetwork": {
     "listenTitle": "ローカルリスナー",

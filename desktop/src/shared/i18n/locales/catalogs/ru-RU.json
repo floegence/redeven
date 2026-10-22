@@ -3765,10 +3765,8 @@
     "codeHelpTitle": "Как использовать этот код"
   },
   "gatewayDiscovery": {
-    "local": "Локальный",
-    "useAddress": "Использовать",
-    "filled": "Подставлен",
-    "useNamed": "Использовать локальный Gateway {name}: {address}"
+    "savedGateway": "Сохраненный Gateway",
+    "chooseSavedGateway": "Выберите сохраненный Gateway"
   },
   "gatewayNetwork": {
     "listenTitle": "Локальный слушатель",
