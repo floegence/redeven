@@ -15,6 +15,31 @@ function mount(view: () => JSX.Element) {
 const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
 describe('streaming markdown DOM', () => {
+  it.each([1, 3, 11])('keeps the billing list through %i-character deltas and completion', async size => {
+    const answer = 'Added `api/internal/billing/limits_test.go`:\n\n'
+      + '- **Under the limit** — 80 units are recorded normally.\n'
+      + '- **Over the limit** — the next 30 units return `ErrLimitExceeded`.\n'
+      + '- **No partial writes** — the bucket stays at 80 after a rejection.\n\n'
+      + 'One follow-up: `NewMeter` never initializes `limits`, so limits only apply when set explicitly. Want me to load them from config next?';
+    const [content, setContent] = createSignal('');
+    const [streaming, setStreaming] = createSignal(true);
+    const [revision, setRevision] = createSignal(0);
+    const chunks: string[] = [];
+    const textSource = { get length() { return chunks.length; }, get revision() { return revision(); }, read: (from: number) => chunks.slice(from) };
+    mount(() => <FlowerMarkdownBlock content={content()} textSource={textSource} streaming={streaming()} copyCodeLabel="Copy code" codeCopiedLabel="Copied" />);
+    for (let at = 0; at < answer.length; at += size) {
+      const delta = answer.slice(at, at + size);
+      chunks.push(delta);
+      setContent(value => value + delta);
+      setRevision(value => value + 1);
+      await Promise.resolve();
+    }
+    expect(root.querySelectorAll('ul > li')).toHaveLength(3);
+    setStreaming(false); await frame();
+    expect([...root.querySelectorAll('ul > li strong')].map(node => node.textContent)).toEqual(['Under the limit', 'Over the limit', 'No partial writes']);
+    expect(root.querySelector('ul')?.textContent).toContain('ErrLimitExceeded');
+    expect(root.querySelectorAll('p')).toHaveLength(2);
+  });
   it('keeps word spaces and code tab stops in the surrounding line context', async () => {
     const prose = ('alpha beta 中文 words ').repeat(2000);
     const code = 'x'.repeat(32769) + '\tcolumn\nabc\tvalue';

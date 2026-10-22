@@ -236,7 +236,7 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
     const fallback = textSource ? undefined : props.content;
     untrack(() => {
       dom ??= createIncrementalMarkdownDOM(marked, contentRef, decorateRegion, citations.locate, token => token.type === 'code' && 'text' in token && props.citationLabels && parseFlowerSourceFence(token as { text: string; lang?: string; raw?: string }) ? sourcesRef : contentRef, citations.forget);
-      model ??= createMarkdownRenderModel(marked, (update, live) => dom!.apply(update, live), {
+      model ??= createMarkdownRenderModel(marked, (update, live, reset) => dom!.apply(update, live, reset), {
         reset: citations.reset, append: citations.index.append,
       });
       model.update(() => fallback ?? props.content, streaming, textSource, key);

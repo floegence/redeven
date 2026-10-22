@@ -3,7 +3,7 @@ import { createIncrementalMarkdownParser, type MarkdownUpdate } from '@floegence
 import type { FlowerMessageTextSource } from '../../contracts/flowerSurfaceContracts';
 
 /** One parser, one append cursor. Full source reads are explicit boundaries. */
-export function createMarkdownRenderModel(markdown: Marked<string, string>, apply: (update: MarkdownUpdate, streaming: boolean) => void,
+export function createMarkdownRenderModel(markdown: Marked<string, string>, apply: (update: MarkdownUpdate, streaming: boolean, reset?: boolean) => void,
   source: { reset(): void; append(delta: string): void }) {
   const parser = createIncrementalMarkdownParser(markdown);
   let initialized = false; let previous = ''; let cursor = 0;
@@ -20,7 +20,12 @@ export function createMarkdownRenderModel(markdown: Marked<string, string>, appl
           if (initialized && owner === textSource && key === renderingKey && value.startsWith(previous)) {
             const delta = value.slice(previous.length); source.append(delta); apply(parser.append(delta), streaming);
           } else {
-            source.reset(); source.append(value); apply(parser.reset(value), streaming);
+            const reset = initialized && value !== previous;
+            // A changed source needs a complete baseline: reset can otherwise
+            // omit unchanged tokens whose source offsets and IDs have moved.
+            if (reset) parser.reset('');
+            source.reset(); source.append(value);
+            apply(parser.reset(value), streaming, reset);
           }
           previous = value;
         }
@@ -28,6 +33,7 @@ export function createMarkdownRenderModel(markdown: Marked<string, string>, appl
       } else {
         for (const delta of textSource.read(cursor)) {
           source.append(delta); apply(parser.append(delta), streaming);
+          previous += delta;
         }
         cursor = textSource.length;
       }

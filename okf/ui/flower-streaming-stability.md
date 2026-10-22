@@ -21,6 +21,8 @@ Obsolete JSON signature helpers and their signature-only tests are removed; proj
 ## One Markdown parser
 Released Floe `createIncrementalMarkdownParser` owns Marked, CJK and GFM syntax. Reset establishes a source baseline; append returns explicit changed blocks, inline regions or text appends; finish performs the authoritative complete parse and necessary correction.
 
+Flower tracks the complete accepted source through appends. A changed snapshot establishes a complete parser baseline: unchanged list tokens can move to new source offsets and block identities. The DOM adapter reuses exact tokens at unchanged offsets and retires the other old regions before applying that baseline. Identical-source metadata changes retain existing regions. Completed answers preserve every authored block through tool-process collapse and later snapshot replacement.
+
 See [code highlighting](flower-code-highlighting.md) and [inline media](flower-inline-media.md).
 
 ## Disclosure and layout
@@ -54,6 +56,8 @@ Floret remains the runtime/persistence owner; Floe owns generic parsing; Redeven
 - [Reactive record tests](../../internal/flower_ui/src/runtimeThreadRecord.client.test.ts)
 
 - [Incremental model and semantic differential tests](../../internal/flower_ui/src/chat/markdown/streamingMarkdownModel.test.ts)
+
+- [Browser transcript completion and corrected-snapshot list regression](../../internal/envapp/ui_src/src/ui/FlowerSurface.streamingStability.browser.test.tsx)
 
 - [Frame queue Unicode soak, budgets, gaps and epoch recovery](../../internal/flower_ui/src/flowerLiveFrameQueue.test.ts)
 
