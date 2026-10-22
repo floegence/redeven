@@ -20,10 +20,10 @@ import (
 )
 
 const (
-	terminalProcessDefaultYieldMS   = 1000
+	terminalProcessDefaultYieldMS   = 5_000
 	terminalProcessMaxYieldMS       = 30_000
 	terminalProcessOutputChunkBytes = 4_000
-	terminalProcessModelReadWaitMS  = 5_000
+	terminalProcessModelReadWaitMS  = 10_000
 	terminalProcessModelReadBytes   = 8_000
 	terminalProcessUIReadWaitMS     = 1_000
 	terminalProcessUIReadBytes      = 256_000
@@ -450,6 +450,16 @@ func (p *terminalProcess) ReadAfter(req terminalProcessReadRequest) (terminalPro
 	return snapshot, nil
 }
 
+func effectiveTerminalProcessYieldMS(yieldMS int64) int64 {
+	if yieldMS <= 0 {
+		yieldMS = terminalProcessDefaultYieldMS
+	}
+	if yieldMS > terminalProcessMaxYieldMS {
+		yieldMS = terminalProcessMaxYieldMS
+	}
+	return yieldMS
+}
+
 func (p *terminalProcess) WaitForYieldContext(ctx context.Context, yieldMS int64) (terminalProcessSnapshot, error) {
 	if p == nil {
 		return terminalProcessSnapshot{}, errors.New("terminal process not found")
@@ -457,12 +467,7 @@ func (p *terminalProcess) WaitForYieldContext(ctx context.Context, yieldMS int64
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if yieldMS <= 0 {
-		yieldMS = terminalProcessDefaultYieldMS
-	}
-	if yieldMS > terminalProcessMaxYieldMS {
-		yieldMS = terminalProcessMaxYieldMS
-	}
+	yieldMS = effectiveTerminalProcessYieldMS(yieldMS)
 	deadline := time.Now().Add(time.Duration(yieldMS) * time.Millisecond)
 	stopWake := context.AfterFunc(ctx, func() {
 		p.mu.Lock()

@@ -151,8 +151,12 @@ func TestBuiltInToolDefinitions_TerminalSchemasAreCanonical(t *testing.T) {
 	if !ok || !strings.Contains(fmt.Sprint(stdinSchema["description"]), "does not close stdin or send EOF") {
 		t.Fatal("terminal.exec stdin must describe its interactive input boundary")
 	}
-	if !strings.Contains(terminalExec.Description, "exit_code") || !strings.Contains(terminalExec.Description, "running process_id") || !strings.Contains(fmt.Sprint(stdinSchema["description"]), "Echo alone is not command completion") {
+	if !strings.Contains(terminalExec.Description, "exit_code") || !strings.Contains(terminalExec.Description, "status=running") || !strings.Contains(terminalExec.Description, "process_id") || !strings.Contains(terminalExec.Description, "Waits 5 seconds by default") || !strings.Contains(terminalExec.Description, "not the command's runtime") || !strings.Contains(fmt.Sprint(stdinSchema["description"]), "Echo alone is not command completion") {
 		t.Fatal("terminal.exec must distinguish completion, running processes and PTY echo")
+	}
+	yieldDescription := fmt.Sprint(yieldSchema["description"])
+	if !strings.Contains(yieldDescription, "omitted or 0 uses 5000") || !strings.Contains(yieldDescription, "command runtime timeout") {
+		t.Fatalf("terminal.exec yield_ms description must explain its default and scope: %q", yieldDescription)
 	}
 
 	var readSchema map[string]any
@@ -194,12 +198,18 @@ func TestBuiltInToolDefinitions_TerminalSchemasAreCanonical(t *testing.T) {
 	toolDescription := strings.ToLower(terminalRead.Description)
 	for _, phrase := range []string{
 		"new output after after_seq",
+		"waiting up to 10 seconds",
+		"returning sooner when output arrives or the process ends",
+		"on timeout with no new output, returns status=running, process_id, and an unchanged cursor",
 		"if has_more, read again",
 		"status=running remains active even with empty output",
 	} {
 		if !strings.Contains(toolDescription, phrase) {
 			t.Fatalf("terminal.read description missing %q: %q", phrase, terminalRead.Description)
 		}
+	}
+	if terminalProcessModelReadWaitMS != 10_000 {
+		t.Fatalf("model terminal.read wait=%dms, want 10000ms", terminalProcessModelReadWaitMS)
 	}
 
 	var terminateSchema map[string]any

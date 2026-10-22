@@ -11388,15 +11388,15 @@
         "title": "AI terminal tool runtime",
         "type": "AI Tool Contract"
       },
-      "body_length": 1500,
+      "body_length": 1781,
       "summary": "Redeven owns PTY process resources and bounded output retention. Floret v7 owns the canonical tool call, interaction, effect attempt, result, and Activity. One effect adapter authorizes execution once and publishes stable current-view updates; Redeven does not persist a parallel terminal lifecycle or recover effects from product SQL.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "`terminal.exec` starts a local PTY after the Floret invocation provides the exact thread, turn, run, tool-call, and effect-attempt identity.\n\n`terminal.read` returns output after the caller's sequence, `terminal.write` writes bounded stdin, and `terminal.terminate` requests process-tree termination and waits for reap and output drain.\n\nBrowser payloads exclude local working paths, stdin, authorization proofs, and effect internals.",
-          "char_count": 434
+          "body": "Each local PTY uses Floret's execution and effect identities. `terminal.exec` waits 5 seconds by default (`yield_ms` omitted or zero), or a positive value capped at 30 seconds. When waiting ends, it returns a running process ID and the command continues.\n\n`terminal.read` waits up to 10 seconds for output after the caller's sequence and returns early on output or exit. An empty timeout returns the running process ID with its cursor unchanged; the model decides whether to read again. `terminal.write` writes bounded stdin; `terminal.terminate` requests process-tree termination and waits for reap and output drain.\n\nBrowser payloads exclude local working paths, stdin, authorization proofs, and effect internals.",
+          "char_count": 715
         },
         {
           "id": "boundaries",
@@ -32859,5 +32859,5 @@
       ]
     }
   ],
-  "source_sha256": "24364068d4c73b47159b98b316cc52c3f47f028e7eac68f6ffd9bba90b382f5a"
+  "source_sha256": "02f8fd98e85a5039e6726bf0bc00648031782a43f2393860fd4005e6f75c8ccd"
 }

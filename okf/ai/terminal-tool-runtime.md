@@ -13,9 +13,9 @@ Redeven owns PTY process resources and bounded output retention. Floret v7 owns 
 
 # Contract
 
-`terminal.exec` starts a local PTY after the Floret invocation provides the exact thread, turn, run, tool-call, and effect-attempt identity.
+Each local PTY uses Floret's execution and effect identities. `terminal.exec` waits 5 seconds by default (`yield_ms` omitted or zero), or a positive value capped at 30 seconds. When waiting ends, it returns a running process ID and the command continues.
 
-`terminal.read` returns output after the caller's sequence, `terminal.write` writes bounded stdin, and `terminal.terminate` requests process-tree termination and waits for reap and output drain.
+`terminal.read` waits up to 10 seconds for output after the caller's sequence and returns early on output or exit. An empty timeout returns the running process ID with its cursor unchanged; the model decides whether to read again. `terminal.write` writes bounded stdin; `terminal.terminate` requests process-tree termination and waits for reap and output drain.
 
 Browser payloads exclude local working paths, stdin, authorization proofs, and effect internals.
 

@@ -649,8 +649,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "terminal.exec",
-			Description:      "Run a PTY shell locally; defaults to the run working directory. Returns exit_code or a running process_id for terminal.read/write/terminate.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"command": map[string]any{"type": "string"}, "stdin": map[string]any{"type": "string", "maxLength": 200000, "description": "Interactive PTY input; does not close stdin or send EOF. Echo alone is not command completion."}, "cwd": map[string]any{"type": "string"}, "workdir": map[string]any{"type": "string"}, "yield_ms": map[string]any{"type": "integer", "minimum": 0, "maximum": 30000, "description": "Initial wait, not a runtime timeout."}, "description": map[string]any{"type": "string", "maxLength": 200}}, "required": []string{"command"}, "additionalProperties": false}),
+			Description:      "Run a PTY shell locally; defaults to the run working directory. Waits 5 seconds by default; yield_ms changes only the initial wait, not the command's runtime. A completed command returns exit_code; if waiting ends first, the command keeps running with status=running and returns process_id for terminal.read/write/terminate.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"command": map[string]any{"type": "string"}, "stdin": map[string]any{"type": "string", "maxLength": 200000, "description": "Interactive PTY input; does not close stdin or send EOF. Echo alone is not command completion."}, "cwd": map[string]any{"type": "string"}, "workdir": map[string]any{"type": "string"}, "yield_ms": map[string]any{"type": "integer", "minimum": 0, "maximum": 30000, "description": "Initial wait in milliseconds; omitted or 0 uses 5000. This does not set a command runtime timeout."}, "description": map[string]any{"type": "string", "maxLength": 200}}, "required": []string{"command"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
 			Visibility:       ToolVisibilityStandard,
@@ -661,7 +661,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "terminal.read",
-			Description:      "Read new output after after_seq. If has_more, read again; status=running remains active even with empty output.",
+			Description:      "Read new output after after_seq, waiting up to 10 seconds and returning sooner when output arrives or the process ends. On timeout with no new output, returns status=running, process_id, and an unchanged cursor. If has_more, read again; status=running remains active even with empty output.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string"}, "description": map[string]any{"type": "string", "minLength": 1, "maxLength": terminalDescriptionMaxRunes, "description": "User-facing command/task description in the user's language."}, "after_seq": map[string]any{"type": "integer", "minimum": 0, "description": "0 for the first read; then the previous result's last_seq unchanged."}}, "required": []string{"process_id", "description", "after_seq"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
