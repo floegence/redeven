@@ -20,6 +20,7 @@ preview error without interrupting the conversation.
 
 ## Authoring and interaction
 - `![Title](source)` displays image, video, or audio. Preview references always produce inert placeholders. Health snapshots, labels, and ordinary thread updates do not reload a ready preview; a real context change cancels stale work.
+- An `html preview` code fence previews an HTML fragment or document. A plain `html` fence previews when its content starts with a complete HTML document (`<!doctype html>` and `<html>`); standalone HTML snippets remain visible as source.
 
 ## Request lifecycle and thread ownership
 One media entry at each rendered thread boundary serves both assistant Markdown and Activity images. A child without a trusted working directory cannot resolve relative sources or HTML links against the parent's directory.

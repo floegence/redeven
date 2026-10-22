@@ -34,6 +34,22 @@ async function imageBlob(): Promise<Blob> {
 }
 
 describe('Flower inline media', () => {
+  it('previews a complete HTML document fenced as plain html', async () => {
+    await page.viewport(1000, 800);
+    const root = document.createElement('div'); document.body.appendChild(root);
+    const html = '<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8"></head><body><button>Live preview</button></body></html>';
+    const content = ['```html', html, '```'].join('\n');
+    const dispose = render(() => <FlowerMarkdownBlock content={content} mediaEnabled
+      copyCodeLabel="Copy code" codeCopiedLabel="Copied" mediaLabels={markdownMediaEnUS} />, root);
+    onTestFinished(() => { dispose(); root.remove(); });
+
+    await waitFor(() => Boolean(root.querySelector('.chat-html-canvas iframe')));
+    expect(root.querySelector('.flower-chat-md-code-block')).toBeNull();
+    expect(root.querySelector('.chat-html-canvas iframe')?.getAttribute('sandbox')).toBe('allow-scripts');
+    await userEvent.click(root.querySelector<HTMLButtonElement>('[data-chat-media-action="source"]')!);
+    expect(root.querySelector('.chat-html-source')?.textContent).toBe(html);
+  });
+
   it('retains one bounded canvas while HTML streams, stops, closes, and moves before later text', async () => {
     await page.viewport(1000, 800);
     const root = document.createElement('div'); document.body.appendChild(root);

@@ -8,7 +8,7 @@ import { enhanceCodeBlock } from '@floegence/floe-webapp-core/code-highlight';
 import { MarkdownMedia, readMarkdownMediaPlaceholder, type MarkdownMediaLabels, type MarkdownMediaProps } from '@floegence/floe-webapp-core/chat';
 
 import { writeTextToClipboard } from '../../clipboard';
-import { createFlowerMarkdownRenderer } from './markedConfig';
+import { createFlowerMarkdownRenderer, isFlowerHTMLPreviewFence } from './markedConfig';
 import { createMarkdownRenderModel } from './streamingMarkdownModel';
 import { createIncrementalMarkdownDOM } from './incrementalMarkdownDOM';
 import { createIncrementalCitations } from './incrementalCitations';
@@ -180,14 +180,15 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
     for (const node of element.querySelectorAll<HTMLElement>('[data-floe-markdown-media]')) {
       const source = readMarkdownMediaPlaceholder(node);
       if (!source) continue;
-      const state = token.type === 'code' && token.lang?.trim().toLowerCase() === 'html preview' && !isClosedFence(token.raw)
+      const htmlPreviewToken = isFlowerHTMLPreviewFence(token) ? token : undefined;
+      const state = htmlPreviewToken && !isClosedFence(htmlPreviewToken.raw)
         ? live ? 'generating' as const : 'incomplete' as const : undefined;
       const [mediaSource, setMediaSource] = createSignal(source);
       const [mediaState, setMediaState] = createSignal(state);
-      if (token.type === 'code' && token.lang?.trim().toLowerCase() === 'html preview') {
-        let current = token;
+      if (htmlPreviewToken) {
+        let current = htmlPreviewToken;
         updatePreview = (next, streaming) => {
-          if (next.type !== 'code' || next.lang?.trim().toLowerCase() !== 'html preview') return false;
+          if (!isFlowerHTMLPreviewFence(next)) return false;
           current = next;
           batch(() => {
             setMediaSource({ ...source, html: next.text });
