@@ -22,7 +22,10 @@ Closing a pending viewer prevents automatic application opening.
 # Contract
 
 ## Component ownership and admission
-Redeven consumes `github.com/floegence/floe-native-apps` v0.22.19 as a published Go module, built with the same Go 1.27.2 toolchain.
+Redeven consumes `github.com/floegence/floe-native-apps` as a published Go module
+at the exact version pinned in `go.mod`. The same file's Go directive owns the
+Runtime toolchain version; this contract does not maintain a separate version
+pin.
 
 Partial managed and system installations are never merged into a synthetic toolset.
 

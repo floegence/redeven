@@ -99,11 +99,11 @@ main gate retain source-only fixture checks.
 The [Desktop qualification lifecycle](../desktop/desktop-test-lifecycle.md) owns
 test teardown and final cleanup evidence.
 
-`go.mod` is the single authoritative Go toolchain version and currently pins
-Go 1.27.2. Every GitHub Actions `setup-go` step resolves that file through
-`go-version-file: go.mod`; repository checks select the matching
-the module's Go directive; public README prerequisites and badges mirror the
-same value. Quick CI and the exact-main final integration gate run
+`go.mod` is the single authoritative source for the exact patch-level Go
+toolchain version. Every GitHub Actions `setup-go` step resolves that file
+through `go-version-file: go.mod`; repository checks select the toolchain
+matching the module's Go directive. Public README prerequisites and badges
+mirror the same value. Quick CI and the exact-main final integration gate run
 `scripts/check_go_version_consistency.mjs`, which rejects drift among these
 sources and requires the local gate runtime to report the exact version. Build,
 test, Desktop, and release paths therefore cannot silently select an older Go
