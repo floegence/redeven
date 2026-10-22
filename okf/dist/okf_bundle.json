@@ -28374,15 +28374,15 @@
         "title": "Flower personal conversation preferences",
         "type": "UI Contract"
       },
-      "body_length": 2599,
+      "body_length": 3098,
       "summary": "Flower remembers explicit choices for future root conversations in one\nRedeven-owned product store, scoped by authenticated namespace, endpoint, and\nuser. The existing controls and layout are unchanged. Loading or switching a\nThread never writes a preference. Existing Threads and immutable Turns keep\ntheir own confirmed settings; new conversations use explicit launch/draft\nchoices before personal memory and configured defaults.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Ownership and persistence\n`ai_conversation_preferences` belongs to `ai_threadstore_product_v1`, schema version 11. The v10-to-v11 transactional migration validates both historical and target shapes, preserves product data, and never infers a user's preference from old Threads.\n\nStable scope absence cannot read another user's defaults.\n\n## Selection events\nOnly the selected field is patched. Existing-Thread edits must succeed before personal memory is changed; a later memory failure does not roll back the confirmed Thread result.\n\nExplicit Default remains distinct from absent memory; existing Default/budget and Off/budget semantics are unchanged.\n\n## Drafts and admission\nShared drafts separate explicit `model_id_override`/`working_dir_override` from effective `model_id`/`working_dir` admission projections. Old Thread selection cannot seed the new draft.\n\nExisting busy/queued/unresolved-interaction edit restrictions are unchanged.\n\n## Concurrency and failure\nEach authenticated adapter orders captured field patches and loads the latest revision before writing. The product store atomically merges fields and uses compare-and-set revision; concurrent stale writes return HTTP 409 and are not automatically retried.\n\nThread/draft targets and model identities are captured before asynchronous work; a late response cannot retarget another draft or navigate the surface.",
-          "char_count": 1382
+          "body": "## Ownership and persistence\n`ai_conversation_preferences` belongs to `ai_threadstore_product_v1`, schema version 11. The v10-to-v11 transactional migration validates both historical and target shapes, preserves product data, and never infers a user's preference from old Threads.\n\nStable scope absence cannot read another user's defaults.\n\n## Selection events\nOnly the selected field is patched. Existing-Thread edits must succeed before personal memory is changed; a later memory failure does not roll back the confirmed Thread result.\n\nExplicit Default remains distinct from absent memory; existing Default/budget and Off/budget semantics are unchanged.\n\n## Drafts and admission\nShared drafts separate explicit `model_id_override`/`working_dir_override` from effective `model_id`/`working_dir` admission projections. Old Thread selection cannot seed the new draft.\n\nExisting busy/queued/unresolved-interaction edit restrictions are unchanged.\n\n## Concurrency and failure\nEach authenticated adapter orders captured field patches and loads the latest revision before writing. The product store atomically merges fields and uses compare-and-set revision; concurrent stale writes return HTTP 409 and are not automatically retried.\n\nThread/draft targets and model identities are captured before asynchronous work; a late response cannot retarget another draft or navigate the surface.\n\nSaving a conversation preference updates the active Flower surface from the\nauthoritative response. The originating surface consumes its own settings\nrevision notification without reloading the shared model settings resource;\nother mounted surfaces still refresh from the persisted preference. Provider and\nmodel catalog refreshes remain reserved for model configuration changes, so\nswitching a model or reasoning level does not replace the active composer with a\nloading state or move its layout.",
+          "char_count": 1881
         },
         {
           "id": "boundaries",
@@ -33230,5 +33230,5 @@
       ]
     }
   ],
-  "source_sha256": "069c9b0072da7f0b423bea36bebd5be1b0a1aa8a4d09286386b7a574a05ce137"
+  "source_sha256": "5d5f18347b7617391f92d9b9fe7dfce8392f864d7593cb66d6890766cf5f6a34"
 }

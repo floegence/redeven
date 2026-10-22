@@ -846,6 +846,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [savedAt, setSavedAt] = createSignal<number | null>(null);
   const [snapshot, setSnapshot] = createSignal<FlowerSettingsSnapshot | null>(null);
   const settingsLoading = () => settingsState().status === 'loading';
+  // A preference save notifies every mounted surface. The originating surface
+  // already has the authoritative response and must not reload its composer.
+  let localPreferenceRefreshesPending = 0;
 	const [threadCache, setThreadCache] = createSignal(createThreadCache());
   const outboxExpirationChanged = () => setOutboxRetryTick(tick => tick + 1);
   const [transportOutbox, setTransportOutbox] = createSignal(createTransportOutbox({ onExpired: outboxExpirationChanged }));
@@ -2379,9 +2382,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const rememberConversationPreference = async (adapter: FlowerSurfaceAdapter, patch: FlowerConversationPreferencePatch) => {
     if (!adapter.saveConversationPreferences) return;
     const generation = settingsRefreshGeneration;
-    const preferences = await adapter.saveConversationPreferences(patch);
-    if (generation === settingsRefreshGeneration) acceptConversationPreferences(adapter, preferences);
-    return preferences;
+    const revision = props.settingsRevision?.();
+    if (revision !== undefined) localPreferenceRefreshesPending += 1;
+    try {
+      const preferences = await adapter.saveConversationPreferences(patch);
+      if (generation === settingsRefreshGeneration) acceptConversationPreferences(adapter, preferences);
+      return preferences;
+    } finally {
+      // Adapters notify before resolving. If no revision changed, this save
+      // does not need to reserve a future external refresh.
+      if (revision !== undefined && props.settingsRevision?.() === revision) {
+        localPreferenceRefreshesPending = Math.max(0, localPreferenceRefreshesPending - 1);
+      }
+    }
   };
   const updateComposerModelID = async (modelID: string) => {
     const mid = trimString(modelID);
@@ -4507,6 +4520,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     () => props.settingsRevision?.() ?? 0,
     (revision, previousRevision) => {
       if (revision === previousRevision) return;
+      if (localPreferenceRefreshesPending > 0) {
+        localPreferenceRefreshesPending = 0;
+        return;
+      }
       void refreshSettingsForRevision(true).then(() => { void refreshAccounts(); return refreshDirectory(); }).catch(() => undefined);
     },
     { defer: true },

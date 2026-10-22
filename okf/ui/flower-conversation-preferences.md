@@ -38,6 +38,14 @@ Each authenticated adapter orders captured field patches and loads the latest re
 
 Thread/draft targets and model identities are captured before asynchronous work; a late response cannot retarget another draft or navigate the surface.
 
+Saving a conversation preference updates the active Flower surface from the
+authoritative response. The originating surface consumes its own settings
+revision notification without reloading the shared model settings resource;
+other mounted surfaces still refresh from the persisted preference. Provider and
+model catalog refreshes remain reserved for model configuration changes, so
+switching a model or reasoning level does not replace the active composer with a
+loading state or move its layout.
+
 # Boundaries
 
 This is Redeven product preference policy using already published Floret capabilities, not a generic upstream settings framework. Runtime catalogs, filesystem scope, canonical Thread settings, and immutable Turn execution remain authoritative. Model and directory recovery use existing controls and host notifications, not new switches, save buttons, or confirmation dialogs.

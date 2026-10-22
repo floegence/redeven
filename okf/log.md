@@ -25,6 +25,8 @@ A compact digest of updates from the last 30 days. Current contracts and evidenc
 - Concepts: [Flower thread fork coordination](ai/flower-thread-fork-coordination.md), [terminal tool runtime](ai/terminal-tool-runtime.md)
 
 ## 2026-10-22
+- Keep Flower model and reasoning preference changes in the active composer without refreshing the shared model settings surface
+- Concepts: [personal conversation preferences](ui/flower-conversation-preferences.md)
 - Preview complete HTML documents in ordinary Flower `html` fences while preserving HTML snippets as code
 - Concepts: [Flower inline media](ui/flower-inline-media.md)
 - Keep answered inputs visible as checkpoints between independently folded Flower work sequences
