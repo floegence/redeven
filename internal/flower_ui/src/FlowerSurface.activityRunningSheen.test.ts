@@ -83,8 +83,8 @@ describe('Flower activity status presentation', () => {
     const titleVerbRule = cssRule(css, '.flower-activity-inline-title-verb');
     const detailRule = cssRule(css, '.flower-activity-inline-detail');
     const durationRule = cssRule(css, '.flower-activity-inline-duration');
-    const runningTitleRule = cssRule(css, ".flower-activity-inline-row-running:has([data-floe-progress-shimmer='text']) .flower-activity-inline-title");
-    const runningButtonRule = cssRule(css, ".flower-activity-inline-row-running:has([data-floe-progress-shimmer='text']) .flower-activity-inline-button");
+    const runningTitleRule = cssRule(css, ".flower-activity-inline-row:has([data-floe-progress-shimmer='text']) .flower-activity-inline-title");
+    const runningButtonRule = cssRule(css, ".flower-activity-inline-row:has([data-floe-progress-shimmer='text']) .flower-activity-inline-button");
 
     expect(activityInlineRule).toContain('--flower-activity-tool-row-foreground: var(--flower-reading-title)');
     expect(activityInlineRule).toContain('--flower-activity-tool-row-foreground-strong: var(--foreground)');
@@ -101,7 +101,8 @@ describe('Flower activity status presentation', () => {
     expect(css).toContain('.flower-activity-inline-button-static');
     expect(css).not.toContain('flower-activity-running-sheen');
     const surface = fs.readFileSync(path.join(repoRoot, 'internal/flower_ui/src/FlowerSurface.tsx'), 'utf8');
-    expect(surface).toContain('data-floe-progress-shimmer={livePresentationConfirmed() && displayStatus() === \'running\' ? \'text\' : undefined}');
+    expect(surface).toContain("return livePresentationConfirmed() && (value.status === 'running' || subagentWait);");
+    expect(surface).toContain("data-floe-progress-shimmer={progressShimmer() ? 'text' : undefined}");
     expect(css).not.toContain('.flower-activity-inline-row-running .flower-activity-inline-button::before');
     expect(css).not.toContain('.flower-activity-inline-row-waiting .flower-activity-inline-button::before');
     expect(titleRule).toContain('position: relative');
