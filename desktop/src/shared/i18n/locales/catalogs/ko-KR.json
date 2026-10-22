@@ -3714,7 +3714,8 @@
   },
   "gatewayDiscovery": {
     "savedGateway": "저장된 Gateway",
-    "chooseSavedGateway": "저장된 Gateway 선택"
+    "chooseSavedGateway": "저장된 Gateway 선택",
+    "enterAddress": "주소 입력"
   },
   "gatewayNetwork": {
     "listenTitle": "로컬 리스너",

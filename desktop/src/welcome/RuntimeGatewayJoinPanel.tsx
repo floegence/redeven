@@ -1,8 +1,8 @@
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import { localGatewaySuggestions } from './localGatewaySuggestions';
 import { Monitor, ArrowRight } from '@floegence/floe-webapp-core/icons';
-import { Button, Dialog, Input, StableText, Stepper } from '@floegence/floe-webapp-core/ui';
-import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX } from 'solid-js';
+import { Button, Dialog, Input, KeyedFor, StableText, Stepper, Tabs, TabPanel } from '@floegence/floe-webapp-core/ui';
+import { createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
 import type { GatewayJoinPreview, GatewayMembershipOperation, GatewayEnrollmentPurpose } from '../shared/gatewayJoin';
 import type { DesktopI18n } from '../shared/i18n';
@@ -36,7 +36,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const currentStep = createMemo(() => props.wizard ? step() : preview() ? 2 : 1);
   const [now, setNow] = createSignal(Date.now());
   let generation = 0, statusGeneration = 0;
-  let trigger: HTMLButtonElement | undefined, addressInput: HTMLInputElement | undefined, codeInput: HTMLInputElement | undefined, confirmButton: HTMLButtonElement | undefined;
+  let trigger: HTMLButtonElement | undefined, addressInput: HTMLInputElement | undefined, savedGatewayInput: HTMLSelectElement | undefined, codeInput: HTMLInputElement | undefined, confirmButton: HTMLButtonElement | undefined;
   let connectionHeading: HTMLHeadingElement | undefined, confirmationHeading: HTMLHeadingElement | undefined;
   const focusConfirmation = () => props.wizard ? confirmationHeading?.focus({ preventScroll: true }) : confirmButton?.focus();
   let scrollViewport: HTMLDivElement | undefined;
@@ -50,16 +50,53 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const initialAddress = createMemo(() => props.address ?? '');
   const initialCode = createMemo(() => props.code ?? '');
   const initialPurpose = createMemo(purpose);
+  const suggestions = createMemo(() => localGatewaySuggestions(props.gateways ?? [], props.targetID));
+  type AddressMode = 'saved' | 'new';
+  const initialSavedAddress = () => suggestions().find(suggestion => suggestion.address === initialAddress().trim())?.address ?? '';
+  const [addressMode, setAddressMode] = createSignal<AddressMode>(suggestions().length && (!initialAddress().trim() || initialSavedAddress()) ? 'saved' : 'new');
+  const [savedAddress, setSavedAddress] = createSignal(initialSavedAddress());
+  const addressTabsID = createUniqueId();
+  const savedTabID = `${addressTabsID}-saved-tab`, newTabID = `${addressTabsID}-new-tab`;
+  const savedPanelID = `${addressTabsID}-saved-panel`, newPanelID = `${addressTabsID}-new-panel`;
+  const selectedSavedAddress = createMemo(() => suggestions().find(suggestion => suggestion.address === savedAddress())?.address ?? '');
+  const effectiveAddress = createMemo(() => addressMode() === 'saved' ? selectedSavedAddress() : address().trim());
+  const focusAddress = () => (addressMode() === 'saved' ? savedGatewayInput : addressInput)?.focus();
+  const changeAddressMode = (mode: AddressMode) => {
+    if (mode === addressMode()) return;
+    setAddressMode(mode);
+    invalidate();
+  };
+  const updateSavedAddress = (value: string) => {
+    const previousAddress = effectiveAddress();
+    setSavedAddress(value);
+    if (previousAddress !== value) invalidate();
+  };
+  const manualAddressField = () => <label class="redeven-gateway-join-field"><span>{text('gatewayJoin.address')}</span><Input ref={addressInput} value={address()} placeholder="https://gateway.example:7443" autocomplete="off" spellcheck={false} disabled={busy()}
+    onInput={event => { invalidate(); setAddress(event.currentTarget.value); }} /></label>;
+  const invalidate = () => { generation++; setPreview(undefined); setPending(null); setError(''); };
+  const chooseInitialAddress = (value: string) => {
+    const matching = suggestions().find(suggestion => suggestion.address === value.trim());
+    setAddress(value);
+    setSavedAddress(matching?.address ?? '');
+    setAddressMode(matching ? 'saved' : value.trim() || !suggestions().length ? 'new' : 'saved');
+  };
+  createEffect(on(suggestions, available => {
+    const selected = savedAddress();
+    if (selected && !available.some(suggestion => suggestion.address === selected)) {
+      setSavedAddress('');
+      if (addressMode() === 'saved') invalidate();
+    }
+    if (!available.length && addressMode() === 'saved') {
+      setAddressMode('new');
+      invalidate();
+    }
+  }, { defer: true }));
   createEffect(on(currentStep, () => {
     if (props.wizard && scrollViewport) scrollViewport.scrollTop = 0;
   }, { defer: true }));
-  const suggestions = createMemo(() => localGatewaySuggestions(props.gateways ?? [], props.targetID));
-  const selectedSuggestion = createMemo(() => suggestions().find(suggestion => suggestion.address === address().trim())?.address ?? '');
-  function fillAddress(value: string) { invalidate(); setAddress(value); queueMicrotask(() => codeInput?.focus()); }
-  const invalidate = () => { generation++; setPreview(undefined); setPending(null); setError(''); };
   createEffect(on([initialAddress, initialCode, initialPurpose], ([nextAddress, nextCode]) => {
     if (open()) return;
-    invalidate(); setAddress(nextAddress); setCode(nextCode);
+    invalidate(); chooseInitialAddress(nextAddress); setCode(nextCode);
   }));
   // IMPORTANT: Identity changes revoke verification, never the user's draft or current step.
   createEffect(on([targetID, managementCoordinates, authorityKey], () => {
@@ -70,7 +107,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const close = () => { invalidate(); statusGeneration++; clearTimeout(timer); setCode(''); setStep(0); setOpen(false); props.onClose?.();
     queueMicrotask(() => trigger?.isConnected ? trigger.focus() : props.focusOwner?.()); };
   onCleanup(() => { generation++; statusGeneration++; clearTimeout(timer); clearInterval(expiryTimer); });
-  const openDialog = () => { setOpen(true); if (!blocked() && !props.wizard) void refresh(); queueMicrotask(() => { if (props.wizard) connectionHeading?.focus({ preventScroll: true }); else if (!blocked()) addressInput?.focus(); }); };
+  const openDialog = () => { setOpen(true); if (!blocked() && !props.wizard) void refresh(); queueMicrotask(() => { if (props.wizard) connectionHeading?.focus({ preventScroll: true }); else if (!blocked()) focusAddress(); }); };
   let observedRuntimeStart = props.runtimeStartedAtUnixMS;
   createEffect(on(runtimeStart, value => {
     if (!value) return;
@@ -101,7 +138,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
       if (!result?.ok || !result.gateway_membership) { setStatusError(text('gatewayJoin.connectFailed')); return; }
       if (preview() && preview()!.expires_at_unix_ms <= Date.now()) { setPreview(undefined); setError(text('gatewayJoin.expired')); }
       setStep(preview() ? 2 : 1);
-      queueMicrotask(() => preview() ? focusConfirmation() : addressInput?.focus());
+      queueMicrotask(() => preview() ? focusConfirmation() : focusAddress());
     } catch { if (current === statusGeneration) setStatusError(text('gatewayJoin.connectFailed')); }
     finally { if (current === statusGeneration) setPending(null); }
   }
@@ -125,7 +162,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
     if (blocked() || busy()) return;
     invalidate(); const current = generation; const start = runtimeStart(); setPending('verifying');
     try {
-      const result = await window.redevenDesktopLauncher?.performAction({kind:'manage_runtime_gateway',runtime_target_id:props.targetID,operation:'preview',address:address(),code:code(),purpose:purpose()});
+      const result = await window.redevenDesktopLauncher?.performAction({kind:'manage_runtime_gateway',runtime_target_id:props.targetID,operation:'preview',address:effectiveAddress(),code:code(),purpose:purpose()});
       if (current !== generation) return;
       if (start && runtimeStart() && start !== runtimeStart()) { setError(text('gatewayJoin.changed')); return; }
       if (!result?.ok || !result.gateway_preview) { setError(errorText(result && !result.ok ? result.gateway_error_code : undefined)); return; }
@@ -189,18 +226,31 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
         <section class="redeven-gateway-join-section" hidden={props.wizard && currentStep() !== 1}>
           <Show when={props.wizard}><h3>{text('gatewayJoin.gatewayInvitation')}</h3><p class="text-sm text-muted-foreground">{text('gatewayJoin.codeHelp')}</p></Show>
           <div class="redeven-gateway-join-address">
-            <Show when={suggestions().length}><label class="redeven-gateway-join-field"><span>{text('gatewayDiscovery.savedGateway')}</span><select data-gateway-picker class="redeven-gateway-local-picker" value={selectedSuggestion()} disabled={busy()}
-              onChange={event => { if (event.currentTarget.value) fillAddress(event.currentTarget.value); }}>
-              <option value="">{text('gatewayDiscovery.chooseSavedGateway')}</option>
-              <For each={suggestions()}>{suggestion => <option value={suggestion.address}>{suggestion.name} · {new URL(suggestion.address).host}</option>}</For>
-            </select></label></Show>
-            <label class="redeven-gateway-join-field"><span>{text('gatewayJoin.address')}</span><Input ref={addressInput} value={address()} placeholder="https://gateway.example:7443" autocomplete="off" spellcheck={false} disabled={busy()}
-              onInput={event => { invalidate(); setAddress(event.currentTarget.value); }} /></label>
+            <Show when={suggestions().length}>
+              <Tabs items={[
+                { id: 'saved', domId: savedTabID, panelId: savedPanelID, label: text('gatewayDiscovery.savedGateway') },
+                { id: 'new', domId: newTabID, panelId: newPanelID, label: text('gatewayDiscovery.enterAddress') },
+              ]} activeId={addressMode()} onChange={id => changeAddressMode(id as AddressMode)}
+                features={{ indicator: { mode: 'slider', animated: true, thicknessPx: 2 } }}
+                slotClassNames={{ tab: 'redeven-gateway-source-tab', indicator: 'redeven-gateway-source-indicator' }}
+                ariaLabel={text('gatewayJoin.address')} class="redeven-gateway-source-tabs" />
+              <TabPanel id={savedPanelID} labelledBy={savedTabID} active={addressMode() === 'saved'} keepMounted class="redeven-gateway-source-panel">
+                <label class="redeven-gateway-join-field"><span>{text('gatewayDiscovery.savedGateway')}</span><select ref={savedGatewayInput} data-gateway-picker class="redeven-gateway-local-picker" value={selectedSavedAddress()} disabled={busy()}
+                  onChange={event => { const value = event.currentTarget.value; updateSavedAddress(value); if (value) queueMicrotask(() => codeInput?.focus()); }}>
+                  <option value="">{text('gatewayDiscovery.chooseSavedGateway')}</option>
+                  <KeyedFor each={suggestions()} by={suggestion => suggestion.address}>{suggestion => <option value={suggestion().address}>{suggestion().name} · {new URL(suggestion().address).host}</option>}</KeyedFor>
+                </select></label>
+              </TabPanel>
+              <TabPanel id={newPanelID} labelledBy={newTabID} active={addressMode() === 'new'} keepMounted class="redeven-gateway-source-panel">
+                {manualAddressField()}
+              </TabPanel>
+            </Show>
+            <Show when={!suggestions().length}>{manualAddressField()}</Show>
           </div>
           <label class="redeven-gateway-join-field"><span>{text('gatewayJoin.code')}</span><Input ref={codeInput} value={code()} autocomplete="off" spellcheck={false} disabled={busy()}
-            onInput={event => { invalidate(); setCode(event.currentTarget.value); }} onKeyDown={event => { if (event.key === 'Enter' && !blocked() && !busy() && address().trim() && code().trim()) { event.preventDefault(); void verify(); } }} /></label>
+            onInput={event => { invalidate(); setCode(event.currentTarget.value); }} onKeyDown={event => { if (event.key === 'Enter' && !blocked() && !busy() && effectiveAddress() && code().trim()) { event.preventDefault(); void verify(); } }} /></label>
         </section>
-        <Show when={preview()}>{value => <section class="redeven-gateway-join-section" hidden={props.wizard && currentStep() !== 2}>
+        <Show when={preview()}>{value => <section class="redeven-gateway-join-section" hidden={currentStep() !== 2}>
           <Show when={props.wizard}><h3 ref={confirmationHeading} tabIndex={-1}>{text('gatewayJoin.confirmAccess')}</h3></Show>
           <p class="font-medium text-primary">{text('gatewayJoin.verified')}</p>
           <dl class="redeven-gateway-join-summary"><div><span>{text('gatewayJoin.gateway')}</span><strong>{value().gateway_name}</strong></div><div><span>{text('gatewayJoin.targetRuntime')}</span><strong>{props.targetLabel ?? value().target_runtime_id}</strong></div><div><span>{text('gatewayJoin.expiry')}</span><strong>{new Date(value().expires_at_unix_ms).toLocaleTimeString(props.i18n.locale)}</strong></div></dl>
@@ -214,7 +264,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
       </div></Show>
       <Show when={error() || (currentStep() !== 0 && statusError())}><p role="alert" class="text-sm text-error">{error() || statusError()}</p></Show>
       <Show when={!props.wizard || currentStep() > 0}><div class="redeven-gateway-step-actions">
-        <Show when={preview() && (!props.wizard || currentStep() === 2)} fallback={<Button class="cursor-pointer whitespace-nowrap" disabled={busy() || blocked() || !address().trim() || !code().trim()} onClick={() => void verify()}><StableText reserve={[text('gatewayJoin.verify'),text('gatewayJoin.verifying')]}>{text(pending() === 'verifying' ? 'gatewayJoin.verifying' : 'gatewayJoin.verify')}</StableText></Button>}>
+        <Show when={preview() && (!props.wizard || currentStep() === 2)} fallback={<Button class="cursor-pointer whitespace-nowrap" disabled={busy() || blocked() || !effectiveAddress() || !code().trim()} onClick={() => void verify()}><StableText reserve={[text('gatewayJoin.verify'),text('gatewayJoin.verifying')]}>{text(pending() === 'verifying' ? 'gatewayJoin.verifying' : 'gatewayJoin.verify')}</StableText></Button>}>
           <Button ref={confirmButton} class="cursor-pointer whitespace-nowrap" disabled={busy() || blocked() || previewInvalidated() || preview()!.expires_at_unix_ms <= now()} onClick={() => void act(purpose())}>{text('gatewayJoin.confirmEnable')}</Button>
         </Show>
         <Show when={preview() && (previewInvalidated() || preview()!.expires_at_unix_ms <= now())}><Button variant="outline" disabled={busy() || blocked()} onClick={() => void verify()}>{text('gatewayJoin.verify')}</Button></Show>
@@ -222,7 +272,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
     </div>
     <div class="redeven-gateway-join-actions">
       <Show when={props.wizard && currentStep() > 0}><Button class="cursor-pointer whitespace-nowrap" variant="outline" disabled={busy()}
-        onClick={() => { setStep(currentStep() - 1); setError(''); setStatusError(''); queueMicrotask(() => { if (currentStep() === 1) addressInput?.focus(); else connectionHeading?.focus({ preventScroll: true }); }); }}>{text('gatewayJoin.back')}</Button></Show>
+        onClick={() => { setStep(currentStep() - 1); setError(''); setStatusError(''); queueMicrotask(() => { if (currentStep() === 1) focusAddress(); else connectionHeading?.focus({ preventScroll: true }); }); }}>{text('gatewayJoin.back')}</Button></Show>
       <Button class="cursor-pointer whitespace-nowrap" variant="ghost" onClick={close}>{text('common.cancel')}</Button>
     </div>
   </div>;

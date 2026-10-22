@@ -987,6 +987,28 @@
   gap: .5rem;
 }
 
+.redeven-gateway-source-tabs {
+  min-width: 0;
+  padding-inline: .25rem;
+}
+
+.redeven-gateway-source-tabs [role='tablist'] { flex: 1 1 auto; }
+
+.redeven-gateway-source-tabs .redeven-gateway-source-tab {
+  min-width: 0;
+  height: 2.5rem;
+  font-size: var(--floe-type-control);
+  white-space: nowrap;
+}
+
+.redeven-gateway-source-indicator { border-radius: 2px 2px 0 0; }
+
+.redeven-gateway-source-panel:not([aria-hidden='true']) {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
 .redeven-gateway-local-picker {
   width: 100%;
   min-height: 2.5rem;

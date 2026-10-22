@@ -3714,7 +3714,8 @@
   },
   "gatewayDiscovery": {
     "savedGateway": "保存済み Gateway",
-    "chooseSavedGateway": "保存済み Gateway を選択"
+    "chooseSavedGateway": "保存済み Gateway を選択",
+    "enterAddress": "アドレスを入力"
   },
   "gatewayNetwork": {
     "listenTitle": "ローカルリスナー",

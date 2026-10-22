@@ -16,7 +16,7 @@ Desktop owns Gateway enrollment/management for managed Local, SSH, WSL and conta
 ## Runtime joining
 Creation offers Not now or After setup, add Gateway access. Unknown health, stopped processes or absent capabilities cannot hide the entry.
 
-The invitation address field keeps manual entry and offers a quick picker for eligible saved local Gateways. Options use confirmed Gateway share addresses from `member_endpoints`; choosing one fills the address and invalidates prior verification, but does not verify or authorize access. Gateway invitation verification and explicit Runtime consent remain required.
+When eligible saved local Gateways exist, invitation address sources are separated into tabs for saved Gateways and manual entry. The saved tab uses only confirmed Gateway share addresses from `member_endpoints`; its selection does not verify or authorize access. The manual address draft remains in its own tab, and changing the active address invalidates any prior verification. Gateway invitation verification and explicit Runtime consent remain required.
 
 Success clears the consumed code; reopening starts a fresh draft.
 
@@ -41,7 +41,7 @@ This surface presents current Gateway state and starts explicit user-authorized 
 
 # Evidence
 
-- `redeven:desktop/scripts/check-gateway-network-ui.mjs` — Ten-locale narrow-screen quick fill, retained input, explicit verification and distinct network settings.
+- `redeven:desktop/scripts/check-gateway-network-ui.mjs` — Ten-locale narrow-screen source tabs, independent address drafts, explicit verification and distinct network settings.
 
 - `redeven:desktop/src/welcome/GatewayClientsPanel.tsx` — Client enrollment, countdown and confirmed revocation.
 

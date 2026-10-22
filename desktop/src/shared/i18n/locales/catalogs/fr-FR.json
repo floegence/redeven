@@ -3720,7 +3720,8 @@
   },
   "gatewayDiscovery": {
     "savedGateway": "Gateway enregistré",
-    "chooseSavedGateway": "Choisir un Gateway enregistré"
+    "chooseSavedGateway": "Choisir un Gateway enregistré",
+    "enterAddress": "Saisir une adresse"
   },
   "gatewayNetwork": {
     "listenTitle": "Écoute locale",

@@ -355,7 +355,7 @@ describe('linked environment owner interactions', () => {
       connection_kind: 'local_host' as const, management_capability: 'managed_local_host' as const,
       capabilities: [], status: 'online' as const, trust_state: 'paired' as const, listener_running: true,
       created_at_ms: 1, updated_at_ms: 1, environments: [],
-      member_endpoints: [{ endpoint_id: 'local', address: 'https://127.0.0.1:7443', scope: 'lan' as const, priority: 0 }],
+      member_endpoints: [{ endpoint_id: 'local', address: 'https://office.local:7443', scope: 'lan' as const, priority: 0 }],
     };
     const snapshot = { ...fixture.snapshot, gateway_sources: [gateway],
       environments: fixture.snapshot.environments.map(entry => entry.id === runtime.id ? runtime : entry),
@@ -372,8 +372,17 @@ describe('linked environment owner interactions', () => {
     const expected = method === 'typed' ? 'https://typed.example:7443' : gateway.member_endpoints[0].address;
     if (method === 'saved selection') {
       const picker = dialog.querySelector<HTMLSelectElement>('[data-gateway-picker]')!;
+      [...dialog.querySelectorAll<HTMLElement>('[role="tab"]')].find(tab => tab.textContent?.trim() === 'Saved Gateway')!.click();
+      await settle();
+      expect([...picker.options].map(option => option.value)).toContain(expected);
       picker.value = expected; picker.dispatchEvent(new Event('change', { bubbles: true }));
-    } else { inputs[0].value = expected; inputs[0].dispatchEvent(new Event('input', { bubbles: true })); }
+      await settle();
+      expect(picker.value).toBe(expected);
+    } else {
+      [...dialog.querySelectorAll<HTMLElement>('[role="tab"]')].find(tab => tab.textContent?.trim() === 'Enter an address')!.click();
+      await settle();
+      inputs[0].value = expected; inputs[0].dispatchEvent(new Event('input', { bubbles: true }));
+    }
     inputs[1].value = 'draft-code'; inputs[1].dispatchEvent(new Event('input', { bubbles: true }));
     inputs[1].focus();
     for (let index = 1; index <= 3; index++) {
@@ -381,7 +390,8 @@ describe('linked environment owner interactions', () => {
     }
     expect(document.querySelector('[role="dialog"]')).toBe(dialog);
     expect(dialog.querySelector('input')).toBe(inputs[0]);
-    expect(inputs.map(input => input.value)).toEqual([expected, 'draft-code']);
+    expect(inputs.map(input => input.value)).toEqual([method === 'typed' ? expected : '', 'draft-code']);
+    expect(dialog.querySelector<HTMLSelectElement>('[data-gateway-picker]')?.value).toBe(method === 'saved selection' ? expected : '');
     expect(document.activeElement).toBe(inputs[1]);
     expect(perform).toHaveBeenCalledOnce();expect(harness.performAction).not.toHaveBeenCalled();
   });

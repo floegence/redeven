@@ -3766,7 +3766,8 @@
   },
   "gatewayDiscovery": {
     "savedGateway": "Сохраненный Gateway",
-    "chooseSavedGateway": "Выберите сохраненный Gateway"
+    "chooseSavedGateway": "Выберите сохраненный Gateway",
+    "enterAddress": "Ввести адрес"
   },
   "gatewayNetwork": {
     "listenTitle": "Локальный слушатель",

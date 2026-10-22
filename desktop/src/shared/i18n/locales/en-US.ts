@@ -69,6 +69,7 @@ export const enUS = {
   gatewayDiscovery: {
     savedGateway: "Saved Gateway",
     chooseSavedGateway: "Choose a saved Gateway",
+    enterAddress: "Enter an address",
   },
   gatewayNetwork: {
     "listenTitle": "Local listener",
