@@ -11,6 +11,13 @@ import { preflightTessivenSource, requestTessivenTarget } from './runtimeControl
 import { isTessivenRuntimePath } from './runtimeTessivenRoutes';
 import { environmentAccessBinding, rememberEnvironmentIdentity, selectEnvironmentAccessRoute, removalNeedsAccessReplacement } from './environmentAccess';
 import { gatewayServiceStepProgress, finishGatewayServiceStepProgress } from './gatewayServiceProgress';
+import {
+  completeGatewayStepProgress,
+  failGatewayStepProgress,
+  gatewayStepProgress,
+  GATEWAY_REFRESH_WORKFLOW_STEPS,
+  type GatewayWorkflowStepID,
+} from './gatewayRefreshProgress';
 import { gatewayConnectionFromSetup, verifyGatewayConnectionChange } from './gatewayRegistration';
 import { DesktopWelcomeRuntimePoller } from './desktopWelcomeRuntimePoller';
 import { RuntimeSessionHandoff, runtimeSessionMatchesTarget } from './runtimeSessionHandoff';
@@ -6152,86 +6159,6 @@ function gatewayLauncherActionFailureCode(error: unknown): DesktopLauncherAction
     return 'gateway_catalog_failed';
   }
   return gatewayServiceFailureCode(error);
-}
-
-type GatewayWorkflowStepID =
-  | 'checking_gateway_service'
-  | 'checking_gateway_package'
-  | 'fetching_pairing_challenge'
-  | 'saving_trust_profile'
-  | 'refreshing_gateway_catalog'
-  | 'gateway_refreshed';
-
-type GatewayWorkflowStepDefinition = Readonly<{
-  id: GatewayWorkflowStepID;
-  label: string;
-  labelKey: DesktopTranslationKey;
-  backendEvent: string;
-}>;
-
-const GATEWAY_REFRESH_WORKFLOW_STEPS: readonly GatewayWorkflowStepDefinition[] = [
-  { id: 'checking_gateway_service', label: 'Checking Gateway service', labelKey: 'progress.checkingGatewayService', backendEvent: 'gateway.service.check' },
-  { id: 'checking_gateway_package', label: 'Checking Gateway package', labelKey: 'progress.checkingGatewayVersion', backendEvent: 'gateway.package.check' },
-  { id: 'fetching_pairing_challenge', label: 'Fetching pairing challenge', labelKey: 'progress.checkingGatewayTrust', backendEvent: 'gateway.pair.challenge' },
-  { id: 'saving_trust_profile', label: 'Saving trust profile', labelKey: 'progress.checkingGatewayTrust', backendEvent: 'gateway.pair.trust' },
-  { id: 'refreshing_gateway_catalog', label: 'Refreshing Gateway catalog', labelKey: 'progress.checkingGatewayCatalog', backendEvent: 'gateway.catalog.refresh' },
-  { id: 'gateway_refreshed', label: 'Gateway refreshed', labelKey: 'progress.gatewayChecked', backendEvent: 'gateway.refresh.done' },
-];
-
-function gatewayStepProgress(
-  steps: readonly GatewayWorkflowStepDefinition[],
-  activeStepID: GatewayWorkflowStepID,
-  status: DesktopStepProgressStepStatus = 'running',
-): DesktopStepProgress {
-  const activeIndex = Math.max(0, steps.findIndex((step) => step.id === activeStepID));
-  return {
-    active_step_id: activeStepID,
-    steps: steps.map((step, index) => ({
-      id: step.id,
-      backend_event: step.backendEvent,
-      label: step.label,
-      label_key: step.labelKey,
-      status: index < activeIndex
-        ? 'succeeded'
-        : index === activeIndex
-          ? status
-          : 'pending',
-    })),
-  };
-}
-
-function completeGatewayStepProgress(
-  steps: readonly GatewayWorkflowStepDefinition[],
-  activeStepID: GatewayWorkflowStepID,
-): DesktopStepProgress {
-  const activeIndex = Math.max(0, steps.findIndex((step) => step.id === activeStepID));
-  return {
-    active_step_id: activeStepID,
-    steps: steps.map((step, index) => ({
-      id: step.id,
-      backend_event: step.backendEvent,
-      label: step.label,
-      status: index <= activeIndex ? 'succeeded' : 'pending',
-    })),
-  };
-}
-
-function failGatewayStepProgress(
-  steps: readonly GatewayWorkflowStepDefinition[],
-  activeStepID: GatewayWorkflowStepID,
-  detail: string,
-): DesktopStepProgress {
-  const activeIndex = Math.max(0, steps.findIndex((step) => step.id === activeStepID));
-  return {
-    active_step_id: activeStepID,
-    steps: steps.map((step, index) => ({
-      id: step.id,
-      backend_event: step.backendEvent,
-      label: step.label,
-      status: index < activeIndex ? 'succeeded' : index === activeIndex ? 'failed' : 'pending',
-      ...(index === activeIndex ? { detail } : {}),
-    })),
-  };
 }
 
 function gatewayDiagnosisNextActions(
