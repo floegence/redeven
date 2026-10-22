@@ -531,7 +531,7 @@ func TestFlowerWorkspaceStreamReconnectsWithCompletePagedBaseline(t *testing.T) 
 
 func TestFlowerWorkspaceStreamReceivesNativeUpdateWithoutSelectingThread(t *testing.T) {
 	ctx := context.Background()
-	svc := newSendTurnTestService(t)
+	svc := newSendTurnTestServiceWithActivation(t, true)
 	meta := &session.Meta{
 		ChannelID: "channel_workspace_current", EndpointID: "env_workspace_current",
 		UserPublicID: "user_workspace_current", NamespacePublicID: "namespace_workspace_current",
@@ -539,6 +539,24 @@ func TestFlowerWorkspaceStreamReceivesNativeUpdateWithoutSelectingThread(t *test
 	}
 	thread, err := svc.CreateThread(ctx, meta, "Background thread", "", "", "")
 	if err != nil {
+		t.Fatal(err)
+	}
+	// Start observation after creation, and keep execution active until cleanup.
+	// Neither a delayed creation event nor missing credentials should race Send.
+	agent, err := flruntime.NewAgent(flconfig.AgentConfig{
+		Profile: flconfig.AgentProfile{ID: "background", Name: "Background"}, SystemPrompt: "Wait.",
+		Context: flconfig.ContextPolicy{ContextWindowTokens: flconfig.DefaultContextWindowTokens},
+	}, testFloretGatewayFunc(func(ctx context.Context, _ flprovider.Request) (<-chan flprovider.Event, error) {
+		events := make(chan flprovider.Event)
+		go func() { <-ctx.Done(); close(events) }()
+		return events, nil
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const requestKey = "request-workspace-current"
+	svc.floretEffects.put(identity.ThreadID(thread.ThreadID), requestKey, floretEffectRequest{agent: agent, meta: *meta})
+	if err := svc.Activate(ctx); err != nil {
 		t.Fatal(err)
 	}
 	subscription, err := svc.SubscribeFlowerLiveStream(ctx, meta, FlowerLiveStreamRequest{})
@@ -551,7 +569,7 @@ func TestFlowerWorkspaceStreamReceivesNativeUpdateWithoutSelectingThread(t *test
 	}
 	assertFlowerViewerReadBaseline(t, subscription, thread.ThreadID)
 	startedAt := time.Now()
-	result, err := svc.threadRuntime.Send(ctx, flruntime.SendInput{ThreadID: identity.ThreadID(thread.ThreadID), Input: flruntime.UserInput{Text: "continue in background"}, RequestKey: "request-workspace-current"})
+	result, err := svc.threadRuntime.Send(ctx, flruntime.SendInput{ThreadID: identity.ThreadID(thread.ThreadID), Input: flruntime.UserInput{Text: "continue in background"}, RequestKey: requestKey})
 	if err != nil {
 		t.Fatal(err)
 	}
