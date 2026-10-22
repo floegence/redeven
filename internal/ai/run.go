@@ -3447,10 +3447,7 @@ func clampTerminalExecYieldMS(value int) int64 {
 	if value <= 0 {
 		return 0
 	}
-	if value > terminalProcessMaxYieldMS {
-		return terminalProcessMaxYieldMS
-	}
-	return int64(value)
+	return effectiveTerminalProcessYieldMS(int64(value))
 }
 
 func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.Meta, toolID string, args map[string]any, activityUpdater toolActivityUpdater) (*toolCallOutcome, *aitools.ToolError) {
@@ -3594,6 +3591,10 @@ func (r *run) terminalProcessForTool(processID string) (*terminalProcess, error)
 }
 
 func (r *run) toolTerminalRead(processID string, afterSeq int64) (any, error) {
+	return r.toolTerminalReadWithWait(processID, afterSeq, terminalProcessModelReadWaitMS)
+}
+
+func (r *run) toolTerminalReadWithWait(processID string, afterSeq int64, waitMS int64) (any, error) {
 	proc, err := r.terminalProcessForTool(processID)
 	if err != nil {
 		return nil, err
@@ -3601,7 +3602,7 @@ func (r *run) toolTerminalRead(processID string, afterSeq int64) (any, error) {
 	snapshot, err := proc.ReadAfter(terminalProcessReadRequest{
 		ProcessID: strings.TrimSpace(processID),
 		AfterSeq:  afterSeq,
-		WaitMS:    terminalProcessModelReadWaitMS,
+		WaitMS:    waitMS,
 		MaxBytes:  terminalProcessModelReadBytes,
 	})
 	if err != nil {
