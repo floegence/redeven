@@ -48,7 +48,9 @@ describe('native live update interaction scheduling', () => {
       for (let version = 1; version <= 10; version++) { f.queue.push(envelope(version)); await vi.advanceTimersByTimeAsync(7); }
       f.frame(); expect(f.apply).not.toHaveBeenCalled();
       await vi.advanceTimersByTimeAsync(5); f.frame();
-      expect(f.apply.mock.calls.map(([value]) => value.update.view_version)).toEqual(Array.from({ length: 10 }, (_, i) => i + 1));
+      expect(f.apply).toHaveBeenCalledOnce();
+      expect(f.apply.mock.calls[0]![0].update.view_version).toBe(10);
+      expect(f.apply.mock.calls[0]![0].update.items[0].append.text).toBe('x'.repeat(10));
       f.queue.push(envelope(11)); f.root.removeAttribute(attribute); await Promise.resolve(); f.frame();
       expect(f.apply).toHaveBeenLastCalledWith(envelope(11), 1); expect(vi.getTimerCount()).toBe(0);
     } finally { f.queue.dispose(); }
@@ -63,7 +65,7 @@ describe('native live update interaction scheduling', () => {
         ...(kind === 'terminal' ? { facts: { ...base.update!.facts, activity: 'idle' } } : {}),
         ...(kind === 'preview' ? { tool_call_previews: { value: [] } } : {}),
       } };
-      f.queue.push(value); expect(f.apply.mock.calls.map(([item]) => item.update.view_version)).toEqual([1, 2, 3]);
+      f.queue.push(value); expect(f.apply.mock.calls.map(([item]) => item.update.view_version)).toEqual([2, 3]);
       expect(vi.getTimerCount()).toBe(0);
     } finally { f.queue.dispose(); }
   });

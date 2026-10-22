@@ -60,7 +60,7 @@ await session.run(async () => {
         },
         transform(code, id) {
           if (!id.endsWith('/chat/markdown/FlowerMarkdownBlock.tsx')) return;
-          const marker = /const renderMarkdown = createMarkdownRenderModel\(marked\);/;
+          const marker = /const \[copiedButton, setCopiedButton\] = createSignal<HTMLButtonElement \| null>\(null\);/;
           if (!marker.test(code)) throw new Error('Markdown instrumentation boundary changed');
           return code.replace(
             marker,
@@ -171,12 +171,15 @@ await session.run(async () => {
             () => document.querySelector('.flower-chat-transcript')?.getAttribute('data-flower-tail-preparing') !== 'true',
           );
           await page.waitForTimeout(300);
-          const outputProgress = reference ? null : await page.evaluate(() => window.flowerPerformance.checkOutputProgress());
           const row = page.locator('[data-flower-activity-item-id]').last();
           const toggle = row.locator('[data-flower-disclosure-trigger]');
           await toggle.scrollIntoViewIfNeeded();
           const cdp = await context.newCDPSession(page);
           await cdp.send('Performance.enable');
+          // Sample allocations including objects collected during the window;
+          // retained heap alone would hide the cost of short-lived append data.
+          await cdp.send('HeapProfiler.startSampling', { samplingInterval: 32768,
+            includeObjectsCollectedByMajorGC: true, includeObjectsCollectedByMinorGC: true });
           const before = await cdp.send('Performance.getMetrics');
           let frameIndex = 0;
           if (runtime === 'desktop') {
@@ -203,7 +206,19 @@ await session.run(async () => {
           const result = await page.evaluate(() => window.flowerPerformance.stop());
           if (pageErrors.length) throw new AggregateError(pageErrors, 'Flower renderer failed during measurement');
           const after = await cdp.send('Performance.getMetrics');
+          const { profile: allocations } = await cdp.send('HeapProfiler.stopSampling');
           const continuity = await page.evaluate(() => window.flowerPerformance.checkContinuity());
+          // Run state-mutating output probes on a fresh fixture after timing
+          // and continuity checks. Reference and candidate measure identical
+          // input; the probe never rewinds already-streamed canonical items.
+          let outputProgress = null;
+          if (!reference) {
+            await page.reload();
+            await page.waitForSelector('[data-flower-queued-turn-dock-id="queued-first"]');
+            await page.waitForFunction(() => document.querySelector('.flower-chat-transcript')?.getAttribute('data-flower-tail-preparing') !== 'true');
+            await page.waitForTimeout(300);
+            outputProgress = await page.evaluate(() => window.flowerPerformance.checkOutputProgress());
+          }
           const metric = (data, key) => data.metrics.find((value) => value.name === key)?.value ?? 0;
           const run = {
             runtime,
@@ -217,6 +232,10 @@ await session.run(async () => {
             ...result,
             continuity,
             outputProgress,
+            rendererCpuMs: 1000 * (metric(after, 'TaskDuration') - metric(before, 'TaskDuration')),
+            scriptCpuMs: 1000 * (metric(after, 'ScriptDuration') - metric(before, 'ScriptDuration')),
+            sampledAllocationBytes: allocations.samples.reduce((bytes, sample) => bytes + sample.size, 0),
+            retainedHeapDeltaBytes: metric(after, 'JSHeapUsedSize') - metric(before, 'JSHeapUsedSize'),
             layoutMs: 1000 * (metric(after, 'LayoutDuration') - metric(before, 'LayoutDuration')),
             styleMs: 1000 * (metric(after, 'RecalcStyleDuration') - metric(before, 'RecalcStyleDuration')),
             layoutCount: metric(after, 'LayoutCount') - metric(before, 'LayoutCount'),
@@ -237,6 +256,9 @@ await session.run(async () => {
               protectedChanges: run.protectedChanges,
               parses: run.parsers.parses,
               layoutMs: run.layoutMs,
+              rendererCpuMs: run.rendererCpuMs,
+              sampledAllocationBytes: run.sampledAllocationBytes,
+              livePayloadBytes: run.livePayloadBytes,
               continuity,
             }),
           );

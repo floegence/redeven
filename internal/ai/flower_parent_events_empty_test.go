@@ -91,10 +91,19 @@ func TestFlowerHiEmptyParentEventsThroughLiveAndDetail(t *testing.T) {
 		if err := json.Unmarshal(frame.Data, &envelope); err != nil {
 			t.Fatal(err)
 		}
-		if envelope.Update == nil || envelope.ThreadID != thread.ThreadID {
+		if envelope.ThreadID != thread.ThreadID {
 			continue
 		}
-		applyFlowerTestUpdate(t, &current, *envelope.Update)
+		if envelope.Current != nil {
+			if envelope.Current.ViewVersion <= current.ViewVersion {
+				continue
+			}
+			current = *envelope.Current
+		} else if envelope.Update != nil {
+			applyFlowerTestUpdate(t, &current, *envelope.Update)
+		} else {
+			continue
+		}
 		assertFlowerEmptyParentEvents(t, SendUserTurnResponse{Current: current})
 		if current.Activity != flruntime.ThreadActivityIdle {
 			continue

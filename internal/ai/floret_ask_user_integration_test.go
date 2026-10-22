@@ -485,6 +485,14 @@ func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderC
 	}
 	waitingRunID := baseline.Current.RunID
 
+	// The source publishes preparing before output. A slow product observer
+	// may instead receive a newer authoritative snapshot covering that phase.
+	updates, err := svc.threadRuntime.(flruntime.ThreadUpdateSource).SubscribeUpdates(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer updates.Close()
+
 	router := sessionrpc.NewRouter()
 	rpcClient := newTestRPCPeer(router)
 	svc.RegisterRPC(router, meta, rpcClient)
@@ -538,7 +546,23 @@ func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderC
 	case <-time.After(5 * time.Second):
 		t.Fatal("resumed provider request did not start")
 	}
-	assertAskUserContinuationLiveThinking(t, live, thread.ThreadID, waitingRunID, "Check receipt")
+	progressCtx, cancelProgress := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancelProgress()
+	var continuationRunID identity.RunID
+	for continuationRunID == "" {
+		update, err := updates.Next(progressCtx)
+		if err != nil {
+			t.Fatalf("read canonical continuation progress: %v", err)
+		}
+		if update.ThreadID.String() != thread.ThreadID || update.RunID == "" || update.RunID == waitingRunID {
+			continue
+		}
+		if update.Facts.RunProgress == nil || update.Facts.RunProgress.Phase != flruntime.ThreadRunPhasePreparing {
+			t.Fatal("new Run did not publish preparing before provider output")
+		}
+		continuationRunID = update.RunID
+	}
+	assertAskUserContinuationLiveThinking(t, live, baseline.Current, continuationRunID, "Check receipt")
 	select {
 	case result := <-submitted:
 		if result.err != nil || result.response.Kind != "accepted" ||
@@ -600,51 +624,43 @@ func deepSeekRequestHasStableSystemPrompt(request map[string]any, forbidden ...s
 	return false
 }
 
-func assertAskUserContinuationLiveThinking(t *testing.T, live *FlowerLiveStreamSubscription, threadID string, waitingRunID identity.RunID, wantThinking string) {
+func assertAskUserContinuationLiveThinking(t *testing.T, live *FlowerLiveStreamSubscription, current flruntime.ThreadView, continuationRunID identity.RunID, wantThinking string) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	sawPreparing := false
-	thinking := map[string]string{}
-	for time.Now().Before(deadline) {
-		ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	for {
 		frame, err := readFlowerLiveStreamEnvelope(ctx, live)
-		cancel()
 		if err != nil {
 			t.Fatalf("read continuation live frame: %v", err)
-		}
-		if frame.Kind != FlowerLiveStreamThreadBatch {
-			continue
 		}
 		var envelope FlowerLiveStreamEnvelope
 		if err := json.Unmarshal(frame.Data, &envelope); err != nil {
 			t.Fatalf("decode continuation live frame: %v", err)
 		}
-		update := envelope.Update
-		if envelope.ThreadID != threadID || update == nil || update.RunID == "" || update.RunID == waitingRunID {
+		if envelope.ThreadID != current.ThreadID.String() {
 			continue
 		}
-		if update.Facts.RunProgress != nil && update.Facts.RunProgress.Phase == flruntime.ThreadRunPhasePreparing {
-			sawPreparing = true
+		if envelope.Current != nil {
+			if envelope.Current.ViewVersion <= current.ViewVersion {
+				continue
+			}
+			current = *envelope.Current
+		} else if envelope.Update != nil {
+			applyFlowerTestUpdate(t, &current, *envelope.Update)
+		} else {
+			continue
 		}
-		for _, change := range update.Items {
-			item := change.Item
-			if item != nil && item.Kind == flruntime.ThreadItemThinking && item.RunID == update.RunID && item.Live {
-				thinking[change.ItemID] = item.Text
+		for _, item := range current.Items {
+			if item.Kind != flruntime.ThreadItemThinking || item.RunID != continuationRunID || !item.Live || item.Text != wantThinking {
+				continue
 			}
-			if change.Append != nil {
-				if prior, ok := thinking[change.ItemID]; ok {
-					thinking[change.ItemID] = prior + change.Append.Text
-				}
+			if current.RunID != continuationRunID || current.Activity != flruntime.ThreadActivityActive || current.RunProgress == nil ||
+				current.RunProgress.Phase != flruntime.ThreadRunPhaseStreaming || current.Attention.InputCount != 0 {
+				t.Fatal("live thinking lost the active continuation identity or progress")
 			}
-			if thinking[change.ItemID] == wantThinking {
-				if !sawPreparing {
-					t.Fatal("live thinking arrived before the new Run published preparing")
-				}
-				return
-			}
+			return
 		}
 	}
-	t.Fatalf("continuation did not publish new-run progress and live thinking %q before terminal", wantThinking)
 }
 
 func writeAskUserIntegrationCompletedResponse(w http.ResponseWriter, flusher http.Flusher, responseID string) {

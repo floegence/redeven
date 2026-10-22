@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createRuntimeThreadRecord } from './runtimeThreadRecord';
+import { FlowerLiveSyncError } from './flowerLiveWire';
 import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
 import type { FlowerRuntimeCurrentView, FlowerRuntimeUpdate, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
 
@@ -38,6 +39,16 @@ describe('runtime item records', () => {
       expect(record.version).toBe(1); expect(thread.messages[0].content).toBe('中文🌸');
     }
     expect(record.apply(thread, append())!.thread.messages[0].content).toBe('中文🌸!');
+  });
+  it('recovers offset gaps across presentation frames while rejecting invalid identities', () => {
+    const { record } = fixture(); const thread = record.initializeThread();
+    expect(() => record.apply(thread, append(1, '!', 4))).toThrow(FlowerLiveSyncError);
+    for (const value of [{ ...append(), run_id: 'old' }, append(1, '!', -1)]) {
+      try { record.apply(thread, value); throw new Error('accepted invalid update'); }
+      catch (error) { expect(error).not.toBeInstanceOf(FlowerLiveSyncError); }
+    }
+    expect(record.version).toBe(1);
+    expect(thread.messages[0].content).toBe('中文🌸');
   });
   it('does not enumerate historical presentation or unrelated components on an append', () => {
     const { record } = fixture(); const thread = record.initializeThread();

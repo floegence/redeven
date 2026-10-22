@@ -25,7 +25,6 @@ function setup() {
   const root = document.getElementById('root')!;
   root.style.height = '100vh';
   const drafts = createFlowerComposerDraftCoordinator();
-  const dispose = render(() => <FloeProvider><FlowerSurface adapter={fixture.adapter} draftCoordinator={drafts} focusThreadRequest={{ request_id: 'fixture-focus', thread_id: fixture.thread.thread_id }} /></FloeProvider>, root);
   let running = false;
   let interval: ReturnType<typeof setInterval> | undefined;
   let raf = 0;
@@ -51,6 +50,20 @@ function setup() {
   };
   root.addEventListener('click', clicked, true);
   let callsBefore = { ...fixture.calls };
+  let livePayloadBytes = 0;
+  let liveEnvelopes = 0;
+  const utf8 = new TextEncoder();
+  const source = fixture.adapter.connectLiveStream;
+  fixture.adapter.connectLiveStream = async function* (options) {
+    for await (const envelope of source(options)) {
+      if (running) {
+        livePayloadBytes += utf8.encode(JSON.stringify(envelope)).byteLength;
+        liveEnvelopes++;
+      }
+      yield envelope;
+    }
+  };
+  const dispose = render(() => <FloeProvider><FlowerSurface adapter={fixture.adapter} draftCoordinator={drafts} focusThreadRequest={{ request_id: 'fixture-focus', thread_id: fixture.thread.thread_id }} /></FloeProvider>, root);
   return {
     async checkOutputProgress() {
       const original = fixture.current();
@@ -116,6 +129,8 @@ function setup() {
       } finally { observer.disconnect(); }
     },
     start(hz: number) {
+      livePayloadBytes = 0; liveEnvelopes = 0;
+      performance.clearMarks('flower.live.frame_queue');
       window.__flowerPerfCounts.parses = 0; window.__flowerPerfCounts.lexes = 0;
       callsBefore = { ...fixture.calls };
       protectedRoot = root.querySelector('[data-flower-queued-turn-dock-id]')?.parentElement;
@@ -126,9 +141,10 @@ function setup() {
     },
     stop() {
       running = false; clearInterval(interval); cancelAnimationFrame(raf); mutations.disconnect();
+      const queueMetrics = (performance.getEntriesByName('flower.live.frame_queue').at(-1) as PerformanceMark | undefined)?.detail;
       const percentile = (values: number[], p: number) => [...values].sort((a, b) => a - b)[Math.min(values.length - 1, Math.floor(values.length * p))] ?? 0;
       return { frames, clicks, longTasks, frameP95: percentile(frames, .95), clickP95: percentile(clicks, .95), maxLongTask: Math.max(0, ...longTasks), additions, removals, protectedChanges,
-        parsers: { ...window.__flowerPerfCounts }, calls: fixture.calls, callsBefore, domElements: root.querySelectorAll('*').length, version: fixture.current().view_version, userAgent: navigator.userAgent };
+        livePayloadBytes, liveEnvelopes, queueMetrics, parsers: { ...window.__flowerPerfCounts }, calls: fixture.calls, callsBefore, domElements: root.querySelectorAll('*').length, version: fixture.current().view_version, userAgent: navigator.userAgent };
     },
     dispose() { running = false; clearInterval(interval); cancelAnimationFrame(raf); mutations.disconnect(); tasks.disconnect(); root.removeEventListener('click', clicked, true); dispose(); },
   };

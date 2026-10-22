@@ -29,6 +29,8 @@ A compact digest of updates from the last 30 days. Current contracts and evidenc
 - Concepts: [model reasoning](ai/model-reasoning-runtime.md), [personal conversation preferences](ui/flower-conversation-preferences.md)
 - Keep Flower model and reasoning preference changes in the active composer without refreshing the shared model settings surface
 - Concepts: [personal conversation preferences](ui/flower-conversation-preferences.md)
+- Coalesce Flower live observations within existing memory budgets; converge dirty threads from authoritative current views and merge contiguous client appends.
+- Concepts: [incremental live state](ui/flower-live-timeline.md), [streaming stability](ui/flower-streaming-stability.md)
 - Preview complete HTML documents in ordinary Flower `html` fences while preserving HTML snippets as code
 - Concepts: [Flower inline media](ui/flower-inline-media.md)
 - Keep answered inputs visible as checkpoints between independently folded Flower work sequences
