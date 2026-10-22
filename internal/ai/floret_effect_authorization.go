@@ -203,6 +203,9 @@ func (r *run) withAuthorizedFloretEffect(ctx context.Context, req flruntime.Effe
 			}
 		}
 	}
+	if req.ToolName == "apply_patch" && !r.shouldRouteTargetTool(req.ToolName) {
+		executionContext = context.WithValue(executionContext, authorizedPatchResourcesKey{}, append([]fltools.ResourceRef(nil), req.Resources...))
+	}
 	dispatchErr := dispatch(executionContext, proof)
 	releaseAuthorization()
 	return dispatchErr

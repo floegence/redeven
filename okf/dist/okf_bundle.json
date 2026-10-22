@@ -11688,15 +11688,15 @@
         "title": "AI tool permissions and dispatch",
         "type": "AI Tool Contract"
       },
-      "body_length": 2112,
+      "body_length": 4378,
       "summary": "Redeven owns product visibility, presentation, current permission policy, prompt, and approval UX; Floret owns invocation and product-neutral tool implementations. Saved thread permission applies at the next authorization boundary within the same task, including queued work, continuation, retry and restart. Each prepared invocation keeps its own snapshot through approval and execution. Missing or invalid authority fails closed. Ordinary calls in one model response enter authorization together and may execute concurrently; dependent work waits for a later response.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Default Flower tools omit write_todos; historical Todo results remain readable. The Floret-native goal tool has independent control ownership; see [Flower Goals](flower-goals.md).\n\n## Mechanism\nThe registry includes readonly file/search helpers, standard mutation, patch, terminal, web search, OKF, interaction, skill, subagent, MCP, and Floret-native tools. Structured detail uses Floret's bounded typed rows; operation, status, repeated names, and raw tool fields never create an expand affordance.\n\nThe resolver validates MIME, size, and digest through the target-owned media store; it never stores image bytes in durable tool state.",
-          "char_count": 636
+          "body": "Default Flower tools omit write_todos; historical Todo results remain readable. The Floret-native goal tool has independent control ownership; see [Flower Goals](flower-goals.md).\n\n## Mechanism\nThe registry includes readonly file/search helpers, standard mutation, patch, terminal, web search, OKF, interaction, skill, subagent, MCP, and Floret-native tools. Structured detail uses Floret's bounded typed rows; operation, status, repeated names, and raw tool fields never create an expand affordance.\n\nThe resolver validates MIME, size, and digest through the target-owned media store; it never stores image bytes in durable tool state.\n\n## File editing\n\nThe active Flower patch executor belongs to Redeven. Local file edits use the\nfilesystem registry; patch source and move destinations additionally remain\ninside the run working directory after canonical resolution. Relative and\nabsolute spellings are accepted. Existing symlinks and new-file ancestors resolve\nbefore approval, and execution checks the approved canonical targets again.\nReadonly roots cannot be written. Target-routed tools retain target-owned policy.\n\nUse file.edit for small unique literal replacements, file.write for complete\nfiles, and apply_patch for multi-chunk or multi-file changes. The current provider\nsurface uses one strict JSON patch argument plus declared routing fields; input\nand input_format are not accepted aliases. No endpoint is assumed to support\nfreeform grammar based on its model name.\n\nBegin/End Patch preserves context anchors and EOF markers. Chunks search forward\nthrough original content, pure additions append, numeric ranges remain supported,\nand untouched lines retain their endings. Insertions use the first existing\nending (LF for empty files); nonempty updates retain the established final-newline\nconvention. Exact matching precedes whitespace and punctuation normalization.\nExplicit Add and Move preserve the existing replacement behavior for regular\nfiles. Multiple operations on one canonical path must be combined into one file\noperation with ordered chunks.\n\nAll plans validate before writing and recheck source and destination snapshots\nbefore each commit. Validation errors confirm no writes. Filesystem commit errors\nreport completed file operations and uncertain effects; they never authorize\nblind replay. Single-file replacement is atomic, but a multi-file patch is not a\nfilesystem transaction. Model success retains confirmed paths and counts; actual\nbefore/after diffs and format metadata remain in canonical Activity presentation.",
+          "char_count": 2554
         },
         {
           "id": "boundaries",
@@ -33254,5 +33254,5 @@
       ]
     }
   ],
-  "source_sha256": "987cc75e80bb5df2a6b4b29022c05ed977ce6048c80d3e9ee6c47412a3615779"
+  "source_sha256": "73399f0c3bf4f0c8b0d1a2d0d22baf40aa5e20767882efd784e66e88a355346d"
 }
