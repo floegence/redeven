@@ -5687,6 +5687,10 @@
           "one": "{count} chamada de ferramenta",
           "other": "{count} chamadas de ferramentas"
         },
+        "userResponses": {
+          "one": "{count} resposta do usuário",
+          "other": "{count} respostas do usuário"
+        },
         "failedCalls": {
           "one": "{count} chamada de ferramenta com falha",
           "other": "{count} chamadas de ferramentas com falha"

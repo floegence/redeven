@@ -5687,6 +5687,10 @@
           "one": "도구 호출 {count}회",
           "other": "도구 호출 {count}회"
         },
+        "userResponses": {
+          "one": "사용자 응답 {count}건",
+          "other": "사용자 응답 {count}건"
+        },
         "failedCalls": {
           "one": "실패한 도구 호출 {count}건",
           "other": "실패한 도구 호출 {count}건"

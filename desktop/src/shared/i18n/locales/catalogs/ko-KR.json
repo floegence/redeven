@@ -789,6 +789,13 @@
             "other": "도구 호출 {count}회"
           }
         },
+        "userResponses": {
+          "kind": "plural",
+          "forms": {
+            "one": "사용자 응답 {count}건",
+            "other": "사용자 응답 {count}건"
+          }
+        },
         "failedCalls": {
           "kind": "plural",
           "forms": {

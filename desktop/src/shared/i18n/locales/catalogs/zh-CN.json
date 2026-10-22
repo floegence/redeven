@@ -789,6 +789,13 @@
             "other": "{count} 次工具调用"
           }
         },
+        "userResponses": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} 条用户回复",
+            "other": "{count} 条用户回复"
+          }
+        },
         "failedCalls": {
           "kind": "plural",
           "forms": {

@@ -8,6 +8,10 @@ export type FlowerTurnProcess = Readonly<{
   turn?: FlowerRuntimeTurn;
   processKeys: readonly string[];
   parentEventCount: number;
+  staticOverview: boolean;
+  inputResponseCount: number;
+  toolCallCount: number;
+  failedCallCount: number;
   summaryKey?: string;
   terminalKey?: string;
   disclosure: FlowerTurnDisclosurePolicy;
@@ -25,6 +29,7 @@ export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[]
   const rowTurns = new Map<string, string>();
   const eventCounts = new Map<string, number>();
   const terminalKeys = new Map<string, string>();
+  const inputResponses = new Map<string, string[]>();
   for (const entry of entries) {
     const id = entry.type === 'message' ? entry.message.turn_id : entry.type === 'parent_event' ? entry.event.parent_turn_id : entry.type === 'context_compaction' ? entry.decoration.compaction.turn_id : undefined;
     if (!id) continue;
@@ -44,6 +49,11 @@ export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[]
       continue;
     }
     if (entry.type !== 'message') continue;
+    if (facts.get(id)?.run_id === entry.message.run_id && entry.blocks.some((block) => block.type === 'input_response')) {
+      const responses = inputResponses.get(id) ?? [];
+      responses.push(entry.key);
+      inputResponses.set(id, responses);
+    }
     terminalKeys.set(id, entry.key);
     const turn = facts.get(id);
     const final = turn?.final_item_ids.includes(entry.message.id);
@@ -58,16 +68,42 @@ export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[]
       || block.type === 'content' && block.block_type === 'thinking');
     if (!final && (goalProcess || !dialogue && (intermediate || explicitProcess))) groups.get(id)!.push(entry.key);
   }
+  const positions = new Map(entries.map((entry, index) => [entry.key, index]));
   const projected = new Map([...groups].map(([turnID, processKeys]) => {
     const turn = facts.get(turnID);
     const pending = pendingTurnIDs.includes(turnID);
     const disclosable = Boolean(turn?.outcome && turn.ended_at && turn.kind !== 'context_compaction' && processKeys.length && !pending);
-    const disclosure: FlowerTurnDisclosurePolicy = !disclosable ? 'none'
+    const processPositions = processKeys.map((key) => positions.get(key) ?? -1).filter((position) => position >= 0);
+    const firstProcess = Math.min(...processPositions);
+    const lastProcess = Math.max(...processPositions);
+    const inputResponseCount = (inputResponses.get(turnID) ?? []).filter((key) => {
+      const position = positions.get(key);
+      return position !== undefined && position > firstProcess && position < lastProcess;
+    }).length;
+    const staticOverview = disclosable && inputResponseCount > 0;
+    let toolCallCount = 0;
+    let failedCallCount = 0;
+    for (const key of processKeys) {
+      const entry = entries[positions.get(key) ?? -1];
+      if (entry?.type !== 'message') continue;
+      for (const block of entry.blocks) {
+        if (block.type !== 'activity' || block.block.turn_id !== turnID || block.block.run_id !== turn?.run_id) continue;
+        for (const item of block.block.items) {
+          if (item.kind !== 'tool' && item.kind !== 'hosted_tool') continue;
+          toolCallCount += 1;
+          if (item.status === 'error') failedCallCount += 1;
+        }
+      }
+    }
+    const disclosure: FlowerTurnDisclosurePolicy = !disclosable || staticOverview ? 'none'
       : turnID === latestTurnID && turn?.outcome !== 'completed' ? 'manual' : 'automatic';
-    const next = { turnID, turn, processKeys, parentEventCount: eventCounts.get(turnID) ?? 0, summaryKey: processKeys[0], terminalKey: terminalKeys.get(turnID), disclosure };
+    const next = { turnID, turn, processKeys, parentEventCount: eventCounts.get(turnID) ?? 0, staticOverview, inputResponseCount,
+      toolCallCount, failedCallCount, summaryKey: processKeys[0], terminalKey: terminalKeys.get(turnID), disclosure };
     const prior = previous?.groups.get(turnID);
     return [turnID, prior && prior.turn === turn && prior.disclosure === disclosure
       && prior.parentEventCount === next.parentEventCount && prior.terminalKey === next.terminalKey
+      && prior.staticOverview === staticOverview && prior.inputResponseCount === inputResponseCount
+      && prior.toolCallCount === toolCallCount && prior.failedCallCount === failedCallCount
       && prior.processKeys.length === processKeys.length && prior.processKeys.every((key, index) => key === processKeys[index]) ? prior : next];
   }));
   return { groups: projected, rows: new Map([...rowTurns].map(([key, turnID]) => [key, projected.get(turnID)!])) };

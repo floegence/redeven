@@ -5687,6 +5687,10 @@
           "one": "{count} 次工具呼叫",
           "other": "{count} 次工具呼叫"
         },
+        "userResponses": {
+          "one": "{count} 則使用者回覆",
+          "other": "{count} 則使用者回覆"
+        },
         "failedCalls": {
           "one": "{count} 次工具呼叫失敗",
           "other": "{count} 次工具呼叫失敗"

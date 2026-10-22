@@ -5687,6 +5687,10 @@
           "one": "{count} appel d’outil",
           "other": "{count} appels d’outils"
         },
+        "userResponses": {
+          "one": "{count} réponse utilisateur",
+          "other": "{count} réponses utilisateur"
+        },
         "failedCalls": {
           "one": "{count} appel d’outil en échec",
           "other": "{count} appels d’outils en échec"

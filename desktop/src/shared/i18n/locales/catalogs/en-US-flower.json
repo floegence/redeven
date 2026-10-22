@@ -643,6 +643,13 @@
           "other": "{count} tool calls"
         }
       },
+      "userResponses": {
+        "kind": "plural",
+        "forms": {
+          "one": "{count} user response",
+          "other": "{count} user responses"
+        }
+      },
       "failedCalls": {
         "kind": "plural",
         "forms": {

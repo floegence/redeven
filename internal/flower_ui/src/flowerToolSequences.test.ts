@@ -195,6 +195,18 @@ describe('consecutive tool presentation', () => {
     const other = tool('other');
     expect(projectFlowerToolSequences([tool('a'), { ...other, message: { ...other.message, run_id: 'other' } }]).groups.size).toBe(0);
   });
+  it('keeps both tool groups folded when a resolved user interaction separates them', () => {
+    const answer: Message = { ...text('answer'), message: { ...text('answer').message, role: 'user' }, blocks: [{
+      type: 'input_response', key: 'answer:0', block_index: 0,
+      block: { type: 'input-response', questions: [{ question_id: 'continue', question: 'Continue?', answer: 'Yes' }] },
+    }] };
+    const result = projectFlowerToolSequences([
+      tool('before-one'), tool('before-two'), answer, tool('after-one'), tool('after-two'),
+    ], 'thread', [runtimeTurn({ outcome: 'interrupted', ended_at: '2026-10-21T10:01:00Z' })]);
+    expect([...result.groups.values()].map(group => [group.toolCount, group.disclosure])).toEqual([
+      [2, 'automatic'], [2, 'automatic'],
+    ]);
+  });
   it('ages an earlier group when the newest segment contains just one tool', () => {
     expect([...projectFlowerToolSequences([tool('a'), tool('b'), text('progress'), tool('c')]).groups.values()][0].disclosure).toBe('automatic');
   });
