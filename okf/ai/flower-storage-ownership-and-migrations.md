@@ -17,7 +17,7 @@ reviewed_at: "2026-10-22"
 # Contract
 
 ## Storage owners
-Redeven consumes published Floret v7.78.2 with `GOWORK=off`.
+Redeven consumes published Floret v7.79.0 with `GOWORK=off`.
 
 Ordinary Floret writes stage, validate and persist affected canonical records only; startup, migrations and explicit integrity checks still validate the complete repository.
 
