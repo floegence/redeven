@@ -211,6 +211,19 @@ function mapRuntimeThread(thread: ThreadView, options: RuntimeFlowerSurfaceAdapt
 	return mapFlowerThread(thread, [], options.mapperOptions, thread.read_status);
 }
 
+function mapRuntimeThreadDetailBase(thread: ThreadView, options: RuntimeFlowerSurfaceAdapterOptions): FlowerThreadSnapshot {
+  return mapRuntimeThread({
+    ...thread,
+    run_status: 'idle',
+    active_run_id: undefined,
+    run_progress: undefined,
+    cancellation: undefined,
+    run_error: undefined,
+    run_error_code: undefined,
+    run_error_detail: undefined,
+  }, options);
+}
+
 function mapRuntimeSummaryThread(thread: ThreadView, options: RuntimeFlowerSurfaceAdapterOptions): FlowerThreadSummary {
   const updatedAt = Math.max(0, Math.floor(Number(thread.updated_at_unix_ms ?? 0)));
   const lastMessageAt = Math.max(0, Math.floor(Number(thread.last_message_at_unix_ms ?? updatedAt)));
@@ -226,7 +239,7 @@ function mapRuntimeThreadView(raw: unknown, options: RuntimeFlowerSurfaceAdapter
     ? value.thread as ThreadView
     : undefined;
   if (current && productThread) {
-    const base = mapRuntimeThread(productThread, options);
+    const base = mapRuntimeThreadDetailBase(productThread, options);
     const thread = applyFlowerRuntimeCurrentView(base, current);
     return { thread, current };
   }

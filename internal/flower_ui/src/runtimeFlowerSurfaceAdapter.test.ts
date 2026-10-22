@@ -358,6 +358,47 @@ describe('runtime Flower surface adapter read state', () => {
 		expect(detail).not.toHaveProperty('live_state');
 	});
 
+	it('uses the typed current view when detail metadata has stale active lifecycle fields', async () => {
+		const loadThread = vi.fn(async () => ({
+			thread: {
+				thread_id: 'thread_detail',
+				title: 'Current detail', title_status: 'ready', title_generation: 1,
+				model_id: 'default/gpt-5', permission_type: 'approval_required', working_dir: '/workspace',
+				queued_turn_count: 0, run_status: 'running',
+				created_at_unix_ms: 1, updated_at_unix_ms: 2, last_message_at_unix_ms: 2,
+				read_status: readStatus(),
+			},
+			current: {
+				thread_id: 'thread_detail', view_version: 8, activity: 'active',
+				turn_id: 'turn-current', run_id: 'run-current',
+				run_progress: { phase: 'preparing' }, items: [],
+			},
+		}));
+		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ loadThread }));
+
+		const detail = await adapter.loadThread('thread_detail', new AbortController().signal);
+
+		expect(detail.thread.status).toBe('running');
+		expect(detail.thread.active_run_id).toBe('run-current');
+		expect(detail.thread.active_run_id).not.toBe(detail.current.turn_id);
+	});
+
+	it('still rejects an active current view without its exact run identity', async () => {
+		const loadThread = vi.fn(async () => ({
+			thread: {
+				thread_id: 'thread_detail', title: 'Current detail', title_status: 'ready', title_generation: 1,
+				model_id: 'default/gpt-5', permission_type: 'approval_required', working_dir: '/workspace',
+				queued_turn_count: 0, run_status: 'running', created_at_unix_ms: 1, updated_at_unix_ms: 2,
+				read_status: readStatus(),
+			},
+			current: { thread_id: 'thread_detail', view_version: 8, activity: 'active', turn_id: 'turn-current', items: [] },
+		}));
+		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ loadThread }));
+
+		await expect(adapter.loadThread('thread_detail', new AbortController().signal))
+			.rejects.toThrow('Flower contract error: an active thread current requires run_id.');
+	});
+
 	it('loads one typed Subagent current without pagination parameters', async () => {
 		const loadSubagentDetail = vi.fn(async () => ({
 			detail: {
