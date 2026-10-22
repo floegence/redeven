@@ -2,7 +2,7 @@ import '../index.css';
 import './flower-feature.css';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
-import type { FlowerLiveStreamEnvelope, FlowerRuntimeCurrentView, FlowerSurfaceAdapter } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerLiveStreamEnvelope, FlowerRuntimeCurrentItem, FlowerRuntimeCurrentView, FlowerSurfaceAdapter } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { streamingFixture } from '../../../../flower_ui/testing/streamingFixture';
 import { adapter, deferred, inputRequest, liveBootstrap, renderSurfaceWithAdapter, renderSurfaceWithAdapterProps, runtimeCurrentView, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
@@ -26,6 +26,47 @@ function liveStream() {
 }
 
 describe('Flower streaming presentation stability', () => {
+  it.each([false, true])('retains streamed billing bullets after approved tools and completion (snapshot correction: %s)', async correctSnapshot => {
+    const answer = 'Added `api/internal/billing/limits_test.go`:\n\n'
+      + '- **Under the limit** — 80 units are recorded normally.\n'
+      + '- **Over the limit** — the next 30 units return `ErrLimitExceeded`.\n'
+      + '- **No partial writes** — the bucket stays at 80 after a rejection.\n\n'
+      + 'One follow-up: `NewMeter` never initializes `limits`, so limits only apply when set explicitly. Want me to load them from config next?';
+    const fixture = streamingFixture(8, 2);
+    const base = fixture.current();
+    const tools = base.items!.filter(item => item.kind === 'tool').map((item, index): FlowerRuntimeCurrentItem => ({ ...item, activity: {
+      ...item.activity!, tool_name: index === 0 ? 'terminal_exec' : 'apply_patch',
+      presentation: index === 0 ? item.activity!.presentation : { renderer: 'patch', label: 'Add billing tests', payload: { operation: 'apply_patch', mutations: [{ display_name: 'limits_test.go', change_type: 'add', additions: 12, deletions: 0 }] } },
+    } }));
+    const items = [base.items![0], ...tools, { ...base.items!.at(-1)!, text: '' }];
+    const turn = { turn_id: base.turn_id!, run_id: base.run_id!, started_at: '2026-10-22T10:00:00Z', elapsed_ms: 0, waiting_ms: 0, work_duration_ms: 0, intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false };
+    fixture.replace({ ...base, view_version: 2, items, turns: [turn], queue: [], interactions: tools.map(item => ({ id: `approval-${item.id}`, turn_id: base.turn_id!, run_id: base.run_id!, kind: 'approval' as const, tool_call_id: item.id, resolved: true, approved: true })) });
+    await page.viewport(1280, 900);
+    const root = renderSurfaceWithAdapter({ ...adapter(true), ...fixture.adapter });
+    root.style.height = '780px';
+    await waitFor(() => Boolean(root.querySelector(`[data-thread-id="${base.thread_id}"] button`)));
+    root.querySelector<HTMLButtonElement>(`[data-thread-id="${base.thread_id}"] button`)!.click();
+    await waitFor(() => root.querySelectorAll('[data-flower-activity-item-id]').length === 2);
+    // Removing one blank line changes offsets without changing list tokens.
+    const streamed = correctSnapshot ? answer.replace(':\n\n', ':\n\n\n') : answer;
+    for (let at = 0; at < streamed.length; at += 11) {
+      fixture.append(streamed.slice(at, at + 11));
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    const finalMessage = () => root.querySelector('[data-flower-message-id="streaming-tail"]');
+    expect(finalMessage()?.querySelectorAll('ul > li')).toHaveLength(3);
+    const current = fixture.current();
+    fixture.replace({ ...current, view_version: current.view_version + 1, activity: 'idle', last_outcome: 'completed', run_progress: undefined,
+      items: current.items!.map(item => item.id === 'streaming-tail' ? { ...item, live: false, text: answer } : item),
+      turns: [{ ...turn, elapsed_ms: 8000, waiting_ms: 2000, work_duration_ms: 6000, final_item_ids: ['streaming-tail'], final_boundary_complete: true, outcome: 'completed', ended_at: '2026-10-22T10:00:08Z' }],
+    });
+    await waitFor(() => Boolean(root.querySelector('.flower-answer-actions')));
+    await waitFor(() => Boolean(root.querySelector('.flower-turn-summary')));
+    expect(root.querySelector('.flower-turn-summary')!.textContent).toContain('Worked for');
+    expect([...finalMessage()!.querySelectorAll('ul > li strong')].map(node => node.textContent)).toEqual(['Under the limit', 'Over the limit', 'No partial writes']);
+    expect(finalMessage()!.querySelector('ul')?.textContent).toContain('ErrLimitExceeded');
+    expect(finalMessage()!.textContent).toContain('One follow-up:');
+  });
   it('retains queued controls and history through 300 text updates', async () => {
     await page.viewport(1280, 900);
     const seed = thread({

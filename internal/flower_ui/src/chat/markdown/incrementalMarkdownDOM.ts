@@ -1,7 +1,7 @@
 import type { Marked, Token, Tokens, TokensList } from 'marked';
 import type { MarkdownUpdate, MarkdownBlockChange } from '@floegence/floe-webapp-core/markdown';
 
-type Region = { start: number; length: number; element: HTMLDivElement; code?: { append(text: string): void }; inline?: HTMLSpanElement[]; lengths?: number[]; offsets?: number[]; token: Token; live: boolean; specializedCode?: boolean };
+type Region = { start: number; length: number; element: HTMLDivElement; code?: { append(text: string): void }; inline?: HTMLSpanElement[]; lengths?: number[]; offsets?: number[]; token: Token; live: boolean; specializedCode?: boolean; incremental?: boolean };
 export type MarkdownDecoration = { dispose(): void; finish?(): void; update?(token: Token, live: boolean): boolean };
 
 // Mutating one huge Text forces Chromium to reshape the complete line. Stable
@@ -170,10 +170,37 @@ export function createIncrementalMarkdownDOM(markdown: Marked<string, string>, r
         if (predicate(region.token, region.element)) replace({ kind: 'replace', block: { id, start: region.start, token: region.token } }, streaming, true);
       }
     },
-    apply(update: MarkdownUpdate, streaming: boolean) {
+    apply(update: MarkdownUpdate, streaming: boolean, reset = false) {
       links = update.links;
+      const retained = new Set<number>();
+      if (reset) {
+        const key = (start: number, token: Token) => JSON.stringify([start, token]);
+        // Inline patches update DOM directly; their original tokens no longer
+        // describe the region and cannot prove that it is unchanged.
+        const previous = new Map([...regions].filter(([, region]) => !region.incremental)
+          .map(([id, region]) => [key(region.start, region.token), { id, region }]));
+        const matches = update.changes.flatMap(change => {
+          if (change.kind !== 'replace') return [];
+          const prior = previous.get(key(change.block.start, change.block.token));
+          return prior ? [{ ...prior, block: change.block, cleanup: cleanups.get(prior.id)! }] : [];
+        });
+        const kept = new Set(matches.map(match => match.id));
+        for (const [id, region] of regions) if (!kept.has(id)) {
+          forget(region.start, region.length); release(id); region.element.remove();
+        }
+        regions.clear(); cleanups.clear();
+        for (const { region, block, cleanup } of matches) {
+          region.token = block.token;
+          region.element.dataset.segmentKey = String(block.id);
+          regions.set(block.id, region); cleanups.set(block.id, cleanup); retained.add(block.id);
+          locate([block.token], block.start, block.token.raw);
+          // Rebuild renderer metadata against the new source index without
+          // replacing retained controls, selection, or decorated code.
+          render(block.token);
+        }
+      }
       for (const change of update.changes) {
-        if (change.kind === 'replace') replace(change, streaming);
+        if (change.kind === 'replace') { if (!retained.has(change.block.id)) replace(change, streaming); }
         else if (change.kind === 'remove') {
           const prior = regions.get(change.id);
           if (prior) forget(prior.start, prior.length);
@@ -181,6 +208,7 @@ export function createIncrementalMarkdownDOM(markdown: Marked<string, string>, r
         } else {
           const region = regions.get(change.id);
           if (!region) throw new Error('Flower contract error: Markdown update requires a block.');
+          region.incremental = true;
           if (change.kind === 'append_text') {
             region.length += change.text.length;
             const target = change.code ? region.code : region.inline?.[change.inlineIndex!];

@@ -15,7 +15,7 @@ function fixture(initial = '', citationSources: readonly import('../../contracts
   const root = document.createElement('div'); document.body.appendChild(root);
   const dispose = vi.fn();
   const dom = createIncrementalMarkdownDOM(markdown, root, () => ({ dispose }), citations.locate, undefined, citations.forget);
-  const model = createMarkdownRenderModel(markdown, (update, live) => dom.apply(update, live), { reset: citations.reset, append: citations.index.append });
+  const model = createMarkdownRenderModel(markdown, (update, live, reset) => dom.apply(update, live, reset), { reset: citations.reset, append: citations.index.append });
   let text = initial; const chunks: string[] = [];
   const source = { get length() { return chunks.length; }, get revision() { return chunks.length; }, read: (from: number) => chunks.slice(from) };
   model.update(() => text, true, source);
@@ -32,6 +32,29 @@ function canonicalHTML(element: HTMLElement) {
   return [...copy.children].map(node => node.innerHTML).join('');
 }
 describe('incremental Markdown DOM', () => {
+  it.each([1, 3, 11])('retains the complete billing list across %i-character deltas and snapshot correction', size => {
+    const source = 'Added `api/internal/billing/limits_test.go`:\n\n'
+      + '- **Under the limit** — 80 units are recorded normally.\n'
+      + '- **Over the limit** — the next 30 units return `ErrLimitExceeded`.\n'
+      + '- **No partial writes** — the bucket stays at 80 after a rejection.\n\n'
+      + 'One follow-up: `NewMeter` never initializes `limits`, so limits only apply when set explicitly. Want me to load them from config next?';
+    const streamed = source.replace(':\n\n', ':\n\n\n');
+    const f = fixture();
+    try {
+      for (let at = 0; at < streamed.length; at += size) f.append(streamed.slice(at, at + size));
+      expect(f.root.querySelectorAll('ul > li')).toHaveLength(3);
+      f.finish();
+      f.replace(source);
+      expect(f.root.querySelectorAll('ul > li')).toHaveLength(3);
+      expect(canonicalHTML(f.root)).toBe(normalizeHTML(String(f.markdown.parse(source))));
+      f.replace('Replacement paragraph.');
+      expect(f.root.querySelector('ul')).toBeNull();
+      expect(f.root.textContent).toBe('Replacement paragraph.\n');
+    } finally {
+      f.dom.dispose();
+      f.root.remove();
+    }
+  });
   it('keeps stable blocks, active text nodes, selection, and copy targets through ordinary appends', () => {
     const f = fixture('Stable\n\nTail');
     const stable = f.root.firstChild; const tail = f.root.lastChild; const text = tail!.firstChild!.firstChild!.firstChild!;
@@ -47,6 +70,21 @@ describe('incremental Markdown DOM', () => {
     for (let i = 0; i < 200; i++) f.append(' additional text');
     expect(f.root.firstChild).toBe(node); expect(f.model.diagnostics().parsedCharacters).toBe(before.parsedCharacters);
     expect(f.root.textContent!.length).toBe((initial.startsWith('\x60') ? initial.length - 8 : initial.length + 1) + 200 * 16);
+  });
+  it('preserves an unchanged code control when a snapshot removes later blocks', () => {
+    const prefix = '\x60\x60\x60text\nstable code\n\x60\x60\x60\n\n';
+    const f = fixture(prefix + 'First paragraph.\n\nSecond paragraph.');
+    const code = f.root.querySelector('code');
+    f.replace(prefix + 'First paragraph.');
+    expect(f.root.querySelector('code')).toBe(code);
+    f.dom.dispose();
+  });
+  it('replaces appended inline text when a snapshot restores the original paragraph', () => {
+    const f = fixture('Original');
+    f.append(' appended');
+    f.replace('Original\n\nNew tail');
+    expect(canonicalHTML(f.root)).toBe(normalizeHTML(String(f.markdown.parse('Original\n\nNew tail'))));
+    f.dom.dispose();
   });
   it('matches authoritative semantics at every random chunk boundary and after completion', () => {
     const cases = [
@@ -82,6 +120,15 @@ describe('incremental Markdown DOM', () => {
     expect(f.citations.remaining()).toEqual([]);
     f.replace('plain');
     expect(f.citations.remaining()).toEqual([source]);
+    f.dom.dispose();
+  });
+  it('keeps retained citations used when a completed snapshot changes later prose', () => {
+    const marker = '\uE200cite\uE202ref\uE201';
+    const f = fixture(marker + '\n\nOld tail', [{ url: 'https://example.com/', title: 'Docs', start_index: 0, end_index: [...marker].length }]);
+    f.finish();
+    f.replace(marker + '\n\nNew tail');
+    expect(f.root.querySelector('a.flower-chat-citation')?.textContent).toBe('Docs');
+    expect(f.citations.remaining()).toEqual([]);
     f.dom.dispose();
   });
   it('handles source replacement, deletion, completion, and normalization without stale blocks', () => {
