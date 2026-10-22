@@ -4,6 +4,8 @@ title: Flower thread deletion coordination
 description: Synchronous, idempotent convergence across Floret canonical deletion and Redeven product cleanup.
 tags: [ai, threads, persistence, deletion, floret]
 timestamp: 2026-08-15T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -11,13 +13,11 @@ Floret owns canonical thread deletion and Redeven owns product settings, read st
 
 # Contract
 
-The service first reads endpoint-scoped Redeven product settings. An absent product row is already converged and returns success without reading or deleting any Floret thread. This makes repeated, unfamiliar, and cross-endpoint DELETE requests safe and non-probing. For an existing product row, the service reads the typed Floret `ThreadView`; an active thread requires `force=true`, which requests typed cancellation before deletion. Without force, active work returns the busy result without changing either owner.
+The service first reads endpoint-scoped Redeven product settings.
 
-Canonical deletion runs before product cleanup. Floret typed deleted or not-found results mean canonical deletion has already converged, so Redeven continues its own cleanup. This is required when an earlier request deleted Floret successfully but product cleanup failed. Other Floret errors stop the request and preserve Redeven product data.
+Canonical deletion runs before product cleanup.
 
-After canonical deletion, one Redeven transaction releases attachment claims and removes thread settings, execution authority, and upload staging scopes. The current schema has no routing, delete-authority, or pending-input staging table. Read-state retirement is best-effort asynchronous presentation cleanup and cannot change the canonical deletion result. A product cleanup failure is returned directly; retrying the same DELETE observes the Floret tombstone/not-found result and resumes product cleanup without creating an operation row.
-
-The HTTP boundary accepts only an absent query or one exact `force=true|false` pair. Success is HTTP 200 with `{"ok":true}`. Busy without force is HTTP 409. Other failures use the normal product error envelope and preserve the Flower dialog and current selection. Flower sends `force=true` after destructive confirmation, retires the local cache entry only after HTTP success, and has no pending, committed, failed, operation-id, or durable-intent UI state.
+Flower sends `force=true` after destructive confirmation, retires the local cache entry only after HTTP success, and has no pending, committed, failed, operation-id, or durable-intent UI state.
 
 # Boundaries
 
@@ -26,8 +26,7 @@ Redeven never opens or edits Floret tables, never restores a deleted canonical t
 # Evidence
 
 - `redeven:internal/ai/threads.go` - Performs typed canonical delete followed by idempotent product cleanup.
+
 - `redeven:internal/ai/threadstore/catalog_mutation.go` - Removes only Redeven-owned thread product data in one transaction.
+
 - `redeven:internal/ai/thread_delete_test.go` - Covers product cleanup failure, retry convergence, and absence without a Floret read.
-- `redeven:internal/codeapp/appserver/server.go` - Exposes the synchronous DELETE response and strict force query.
-- `redeven:internal/codeapp/appserver/server_test.go` - Covers success, idempotent absence, read-state retirement, and force parsing.
-- `redeven:internal/flower_ui/src/runtimeFlowerSurfaceAdapter.ts` - Maps deletion to `Promise<void>` without lifecycle receipts.

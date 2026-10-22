@@ -4,6 +4,8 @@ title: File preview window actions
 description: Read files in Activity and Workbench with one set of product actions in the existing title bar.
 tags: [ui, files, preview, floating-windows, selection]
 timestamp: 2026-10-16T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -19,137 +21,40 @@ until the published window or mobile dialog retires its content.
 # Contract
 
 ## Title bar and reading space
+The desktop preview passes its actions through `FloatingWindow.headerActions` using the product's `PreviewWindow` and `PersistentFloatingWindow` adapters.
 
-The desktop preview passes its actions through `FloatingWindow.headerActions`
-using the product's `PreviewWindow` and `PersistentFloatingWindow` adapters.
-Floe owns the separator, title truncation, window controls, and exclusion of the
-action region from title-bar dragging and double-click maximization. Redeven
-uses 28px action buttons inside the existing 32px title bar. Document content
-begins directly below the title bar without a second path-and-actions row.
-
-The action order is copy path, edit, Ask Flower, and download. While editing,
-discard and save replace edit in the same group. Availability follows the
-current file, renderer, write permission, loading, dirty, and saving state.
-Copying still copies the complete path and briefly confirms success even though
-the path is no longer displayed in the floating window.
+Copying still copies the complete path and briefly confirms success even though the path is no longer displayed in the floating window.
 
 ## Workbench reading space and narrow widgets
+Workbench shows the file name in its existing header and exposes the full path through the title tooltip and copy action. Its body starts directly below the header, except when an existing pending-sync notice is present.
 
-Workbench shows the file name in its existing header and exposes the full path
-through the title tooltip and copy action. Its body starts directly below the
-header, except when an existing pending-sync notice is present. Header actions
-retain the current theme height and remain separate from window controls.
-
-At widget layout widths below 480 CSS pixels, file actions use a single More
-file actions button. Wider widgets show compact icons. Canvas zoom does not
-change that breakpoint. Both presentations use the same action definitions,
-permissions, disabled states, and feedback. Resizing across the breakpoint
-closes any open menu without remounting the document or losing its draft.
-
-The menu uses the existing local `FloatingContextMenu` and `SurfaceFloatingLayer`
-contract. Opening captures the owning preview's selection before menu focus
-moves. The snapshot lasts only for that menu session and is cleared on dismissal
-or file changes. Clicking the toggle again closes the menu; its pointer and focus
-events belong to the menu boundary. Keyboard navigation, Escape/Tab dismissal, and focus restoration
-must not activate canvas gestures or reclaim focus through the widget shell.
+Keyboard navigation, Escape/Tab dismissal, and focus restoration must not activate canvas gestures or reclaim focus through the widget shell.
 
 ## One action implementation
+`FilePreviewActions` owns action presentation and temporary copy feedback.
 
-`FilePreviewActions` owns action presentation and temporary copy feedback. It
-invokes the existing controller and product callbacks without owning another
-draft or save lifecycle. The desktop surface renders it once in the title bar
-and suppresses the content header. Workbench uses the same actions through
-`WorkbenchWidgetHeader`, supplied by its body without moving the controller or
-remounting document content. Mobile dialogs keep the inline header.
-
-Ask Flower prioritizes the controller's editor selection, then reads a DOM
-selection contained by the current preview body. A selection in another surface
-does not become preview context. Header button input must preserve the selected
-reading text. The existing Ask Flower intent builder remains authoritative for outbound
-context: it sends file paths, without inlining selected file text. Downloads keep
-the current file and draft mapping owned by the product download command builder.
+Header button input must preserve the selected reading text. Downloads keep the current file and draft mapping owned by the product download command builder.
 
 ## PDF drafts and persistence
+Writable PDFs expose the existing Edit file action. PDF.js saves full Unicode field values, but when the original field font cannot encode them, it sets `NeedAppearances` instead of embedding a replacement form font.
 
-Writable PDFs expose the existing Edit file action. Editing supports native
-AcroForm fields and highlights on a text selection within one page, with annotation
-undo and redo. This is document annotation and form filling, not arbitrary original
-page-text editing. PDF.js saves full Unicode field values, but when the original
-field font cannot encode them, it sets `NeedAppearances` instead of embedding a
-replacement form font. Cross-viewer appearance then depends on that viewer's
-font availability and form-appearance generation. This is not a guarantee of
-self-contained multilingual form appearance; verify the target viewer before
-printing or distributing those forms. Read-only previews show saved annotations without editable
-fields. Opening or toggling edit mode never grants filesystem write permission.
-
-The controller binds exactly one editor to the current source bytes. It owns dirty,
-saving, errors, and unsaved-close confirmation; upstream owns serialization. Saving
-serializes the current PDF and rechecks file identity, active editor, and write
-permission before the existing base64 write RPC. A successful write acknowledges
-that snapshot without replacing the active document or moving the reading position.
-Changes made after serialization remain dirty. A failed save retains the draft and
-visible error. Discard returns to the latest acknowledged PDF snapshot. Stale editor
-callbacks and late exports cannot affect a replacement preview.
-
-Save PDF copy exports the current dirty PDF through the existing Downloads flow,
-without overwriting the source or clearing the unsaved-change state. Clean copies
-retain the runtime-file download path. Saving disables document editing and discard;
-close and file replacement retain the controller's unsaved-change confirmation.
 No browser-only blob download bypasses the product download manager.
 
 ## Unavailable targets and recovery
-
-Navigation opens the current filesystem object, while historical tool results,
-diffs, and image snapshots retain their original content. Opening checks current
-readability first. A missing or inaccessible file produces one specific entry
-error without opening a window or replacing the current preview. A target that
-fails after opening uses a compact panel with Retry and Open parent folder.
-The path occupies one selectable, truncated line with a copy icon; expanding
-details exposes its complete value. Technical details begin collapsed. Permissions, connection,
-type changes, unsupported formats, and renderer failures remain distinct.
-
-The existing preview controller owns loading, retry, cancellation, dirty drafts,
-and errors. Retry preserves the recovery panel and button nodes, uses local busy
-state, and ignores duplicate input. Success replaces the panel with content.
-Closing or switching targets invalidates delayed responses; retry never reruns
-the original editing tool or polls for file restoration. Audio/video failure
-uses an authorized HEAD request to classify missing, denied, disconnected, and
-changed-type resources without downloading media. Accessible resources with
-playback failure show a renderer error. Image, PDF, and DOCX rendering failures
-join the same controller-owned recovery surface.
-
-Preflight and window-opening failures use one entry notification. Failures after
-opening belong to the target surface without a duplicate notification. Files keeps its established recovery behavior:
-failed navigation preserves a valid directory, missing initial/current directories
-show recovery instead of an empty list, transient refresh failure preserves
-usable content, and parent/Home jumps remain explicit and authorized.
+Navigation opens the current filesystem object, while historical tool results, diffs, and image snapshots retain their original content. A target that fails after opening uses a compact panel with Retry and Open parent folder.
 
 Preview dismissal and resource lifetime follow the [file preview dismissal contract](file-preview-dismissal.md).
 
 # Boundaries
 
-Preview loading and error presentation remain in the body. Save errors and
-unsaved-close confirmation retain their existing controller and local modal
-ownership. A title-bar layout change must not add a second close policy or
-bypass discard confirmation. A Workbench removal request must publish its pending
-removal flag and confirmation state together. Confirmed discard must publish
-confirmation dismissal and preview closure together, so observers cannot
-mistake either transition for cancellation. The [floating layer contract](env-app-floating-layer-order.md)
-owns stacking and modal placement; [Workbench input ownership](workbench-input-ownership.md)
-owns reading-surface selection and scrolling.
+Preview loading and error presentation remain in the body. A title-bar layout change must not add a second close policy or bypass discard confirmation.
 
-Preview scale, content bounds, and asynchronous renderer ownership follow the
-[viewport and rendering contract](file-preview-viewport-and-rendering.md).
+Preview scale, content bounds, and asynchronous renderer ownership follow the [viewport and rendering contract](file-preview-viewport-and-rendering.md).
 
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewSurface.tsx` - Chooses title-bar actions for desktop and the inline header for mobile.
+
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewActions.tsx` - Shares action availability, copy feedback, and preview-local selection mapping.
+
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewPanel.tsx` - Retains the body and unsaved-change confirmation boundary.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewSurface.browser.test.tsx` - Exercises the published window, narrow layouts, native button input, and Markdown selection.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewContent.test.tsx` - Preserves inline action behavior and editing availability.
-- `redeven:internal/envapp/ui_src/src/ui/workbench/WorkbenchFilePreviewWidget.tsx` - Supplies header actions from the existing controller and suppresses the body toolbar.
-- `redeven:internal/envapp/ui_src/src/ui/workbench/WorkbenchFilePreviewWidget.browser.test.tsx` - Verifies reading space, responsive actions, selection, and local menu input on the published Workbench.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/createFilePreviewController.test.ts` - Binary saves, failed writes, stale bindings and permission changes during serialization.
-- `redeven:internal/envapp/ui_src/src/ui/downloads/runtimeDownloadSource.test.ts` - PDF draft byte preservation and cancellation without a runtime connection.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewRecovery.browser.test.tsx` - Narrow layouts, full paths, keyboard focus, duplicate retry, and recovery controls.

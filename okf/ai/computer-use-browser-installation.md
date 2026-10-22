@@ -4,6 +4,8 @@ title: Optional built-in browser installation
 description: Confirm browser acquisition, persist the environment capability switch, and keep setup separate from canonical Flower questions.
 tags: [ai, computer-use, browser, installation, desktop]
 timestamp: 2026-10-08T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -20,144 +22,27 @@ partial package, and failures offer an explicit retry or alternative source.
 # Contract
 
 ## User contract
-
 The shared Browser and desktop dialog opens Browser settings for this environment.
-A prominent switch controls permission to use the built-in headless browser.
-The installation panel names the exact distribution (Chrome for Testing or
-Chromium), its version and the Runtime platform,
-shows download and total storage sizes, and presents two mutually exclusive sources:
 
-- Environment download fetches the pinned official archive directly on the
-  Runtime host after Download and install is pressed.
-- Install via Desktop is selected by default when its acquisition bridge exists.
-  After confirmation, Desktop automatically obtains the exact Runtime package,
-  reuses a verified cache, and transfers the archive. Users never choose a file
-  or follow an archive download link. Ordinary web carriers default to environment
-  download and explain how to enable Desktop acquisition.
+Users never choose a file   or follow an archive download link.
 
-Source selection does not start installation. Progress identifies Desktop cache
-checking, Desktop download, upload, host verification and installation. A cache
-hit skips network download. The explicit Cancel installation action stops active
-acquisition or installation. Closing the panel only unsubscribes: its environment
-session continues the operation, and a reopened panel observes the same state.
-The disabled browser hides installation choices and retains installed bytes and
-website data. Re-enabling reuses a valid installation without downloading.
-Installation paths remain secondary details; website-account groups stay separate.
-
-Flower's browser setup uses this component for first use and catalog upgrades.
-An older package alone is not current readiness. Closing the panel does not
-cancel a confirmed background installation. Managed launch always checks
-the authoritative manager; neither a missing manager nor Playwright's cache
-provides an implicit executable fallback. Tests and local debugging prepare an
-explicit qualified installation fixture.
-
-A first managed-browser use without a package returns failed setup facts. Flower
-may independently ask the user to install or choose another approach, citing the
-tool call. The canonical [interaction boundary](computer-use-takeover.md) supplies
-the setup action; the installer never creates a question. Independent questions
-remain answerable without completed installation, and answers never certify
-readiness or disable the browser. Opening, closing or completing their setup
-panel does not submit an answer. Existing tool-origin setup interactions retain
-scoped acknowledgement from the initiating panel; delayed completion cannot
-continue a different question or conversation. No agent installation tool,
-automatic re-enable, shell fallback or target substitution is introduced.
+No agent installation tool, automatic re-enable, shell fallback or target substitution is introduced.
 
 ## Distribution and state
+Standard Runtime release suites carry `computer.zip`: official Node, published Playwright, QuickJS, the published FloeBrowser SDK and its native media collector, and product helpers, with a closed SHA-256 file inventory.
 
-Standard Runtime release suites carry `computer.zip`: official Node, published
-Playwright, QuickJS, the published FloeBrowser SDK and its native media collector,
-and product helpers, with a closed SHA-256 file inventory. FloeBrowser's original
-compiled dependency licenses remain in the bundle and in the generated root
-notices. Relocated-resource qualification uses the public SDK to resolve and
-start the verified collector without source directories or a helper on PATH.
-Native Desktop stages the same thin resources as a directory; managed WSL keeps
-the Linux helper ZIP in its exact archive. Neither includes the optional Chromium
-archive. Runtime startup validates and extracts the release-suite helper ZIP into
-a digest-keyed state directory; extraction requires no network. Public installer
-and Desktop SSH activation preserve that companion. Historical published Runtime
-suites without this optional file remain installable; this does not synthesize
-browser support for those versions. Source-only debugging requires explicit
-helpers as before. Runtime compatibility epoch 29 protects the new management
-interface from older Desktop clients.
-
-The browser catalog pins the official Playwright CDN URL, version, platform,
-architecture, byte size, expanded size, SHA-256 and executable path for every
-supported Runtime target. Build staging verifies its Playwright version against
-the published installed dependency. Download and upload use the same verifier.
 The Runtime never accepts a client-supplied URL, executable path or checksum.
-Bounded ZIP extraction rejects traversal, special files, duplicates and escaping
-symlinks. macOS framework links stay inside the new directory. A complete verified
-package is published under `state/computer/browser/packages/<digest>`; no system
-Chrome installation is required. Normal host OS dependencies still apply. Installed bytes and launch readiness are
-separate facts; [Linux system preparation](computer-use-browser-system.md) owns
-the exact AppArmor preparation and authorization transaction.
 
-Desktop source-built Runtime upload suites also include `computer.zip`, with
-resources staged from that source snapshot for the target platform. Linux
-staging may use a different builder platform: its JavaScript/Wasm dependencies
-are portable and the target Node archive is checked against official checksums.
-Only native target Node binaries are executed on the builder. Darwin staging
-retains its matching native Swift builder requirement. The source-build cache
-requires the helper archive in its closed inventory, so older incomplete caches
-are rebuilt. Runtime helper verification requires extension entrypoints as well
-as Node and Playwright. Historical released packages without helpers remain
-installable and report their unavailable browser capability through
-[Chrome diagnostics](computer-use-chrome-diagnostics.md).
-
-### Archive acquisition ownership
-
-The reusable `artifactcache.Acquire` and `Verify` APIs were introduced in released
-`floe-native-apps` v0.10.1 and remain consumed from the current published v0.22.19
-module. Redeven owns the Playwright-bound browser catalog,
-consent and placement. Desktop invokes its bundled Runtime's `browser-package`
-command with the target package ID, expected SHA-256 and size; the compiled
-catalog must match before any cache or network access. Renderer input cannot
-select URLs, paths or digests outside that catalog. A mismatch explicitly requires
-an update or environment download; it never selects a substitute package.
-
-Original archives are cached by digest in Desktop's private browser-package-cache
-directory. Cache reuse rechecks size and digest. Host downloads use the same
-upstream acquisition code with temporary cache placement; host upload verification
-also uses the upstream verifier before bounded extraction and atomic publication.
-Package cache state is independent of Floret conversation and continuation state.
-Transport failures do not replay installation requests automatically. A known
-unfinished upload is cancelled; uncertain responses require a current host status
-read and an explicit retry or cancel action.
-
-The Runtime HTTP installation contract and compatibility epoch remain unchanged.
-The new acquisition command belongs to the matching bundled Runtime, and the new
-Desktop preload capability is detected directly by both product carriers.
-
-`state/computer/browser/settings.json` owns the versioned enabled preference.
-Writes are atomic. Malformed or unknown settings fail closed without rewriting
-user state. The installer owns one operation at a time; uploads have opaque IDs,
-exact offsets and chunks no larger than 256 KiB. Cancelled or failed operations
-remove temporary transfer files; startup clears abandoned transfer staging without
-restarting a download. The shared environment-session controller owns active transfer work; panels are
-observers. Desktop acquisition jobs are bound to their initiating main frame and
-window and environment, with opaque operation IDs and bounded reads. Launcher
-browser requests require the original running environment and never start a
-stopped Runtime. Environment replacement retires its acquisition jobs. Closing the environment
-session or Desktop cancels unfinished acquisition/upload, retaining verified
-cache entries. Runtime remains authoritative after upload completion.
 No installation automatically restarts following a Runtime restart.
 
 # Boundaries
 
-Discovery, settings and agent execution cannot initiate installation. Disabling retains installed bytes and website data while canceling installation and managed processes. Verification failure never publishes a partial package; recovery requires an explicit retry or alternative source.
+Discovery, settings and agent execution cannot initiate installation. Verification failure never publishes a partial package; recovery requires an explicit retry or alternative source.
 
 # Evidence
 
 - `redeven:desktop/src/main/runtimePackageCache.ts` - complete source suites and cache admission.
+
 - `redeven:scripts/stage_computer_resources.mjs` - verified native and cross-platform helper staging.
+
 - `redeven:internal/browserinstall/manager.go` - preference, upstream acquisition and atomic package publication.
-- `redeven:cmd/redeven/browser_package.go` - fixed catalog acquisition for Desktop.
-- `redeven:desktop/src/main/browserPackage.ts` - document-owned process and cached-byte access.
-- `redeven:internal/flower_ui/host/browserInstallationController.ts` - environment-owned transfer and panel observation.
-- `redeven:internal/browserinstall/catalog.json` - official pinned package identities.
-- `redeven:internal/browserinstall/helpers.go` - release-suite helper preparation.
-- `redeven:internal/browserinstall/manager_test.go` - consent, cancellation, verification, repair and real browser launch.
-- `redeven:internal/ai/computer_browser_installation_integration_test.go` - failed setup facts and independent Floret continuation.
-- `redeven:internal/flower_ui/src/FlowerManagedBrowser.tsx` - shared switch and source confirmation.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerManagedBrowser.browser.test.tsx` - browser interaction and layout acceptance.
-- `redeven:scripts/stage_computer_resources.test.mjs` - relocated thin helpers with explicit browser executable.

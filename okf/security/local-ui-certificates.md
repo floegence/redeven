@@ -4,6 +4,8 @@ title: Local UI certificates
 description: Manage saved HTTPS identities, explicit file imports and replacements, and independent client trust without interrupting a running Runtime.
 tags: [security, local-ui, desktop, certificates]
 timestamp: 2026-09-30T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -12,66 +14,33 @@ Runtime owns the saved HTTPS identity and validates it before serving. Desktop e
 # Contract
 
 ## Identity and trust
+The user explicitly creates a device CA with `local-authority device-ca generate` and inspects it with `status`. Runtime startup never generates, replaces, or repairs certificate material.
 
-The user explicitly creates a device CA with `local-authority device-ca generate` and inspects it with `status`. Generation refuses an existing identity, including an invalid one. Runtime startup never generates, replaces, or repairs certificate material. The device CA is a self-signed P-256 certificate with a matching PKCS#8 key. Each HTTPS start creates an in-memory leaf for the actual DNS and IP SANs; that leaf is not persisted. Network address changes re-sign the in-memory leaf under that same loaded device CA.
-
-A valid untrusted identity is a successful status query with `identity: ready`, not a damaged certificate. Expired, not-yet-valid, incomplete, and malformed identities remain separate from permission, timeout, and inspection failures. Status reports carry public metadata, certificate kind, SHA-256 fingerprint, and operation capabilities. The maintenance report schema remains `redeven.local_authority_maintenance.v1`; older runtimes without lifecycle capabilities require an update before new management actions are offered.
-
-For a device CA, macOS and Windows support explicit current-user `install --scope user`. Linux requires manual trust configuration after public export. Redeven never modifies system-wide trust, invokes sudo, or silently elevates privileges. Installation success requires a fresh trust check. Cancellation and failure retain the certificate and allow retry without regeneration. macOS authorization-sheet cancellation is recognized even when its diagnostic omits the numeric OSStatus. Trust on one OS user does not establish trust on other devices or in browsers with separate stores.
-
-Imported server certificates use their issuing CA for trust. They are never installed as trusted roots by Redeven. Remote maintenance inspects the server's identity; its trust report is never presented as trust on the current Desktop client. Public export contains certificate material only, never the key.
+Public export contains certificate material only, never the key.
 
 ## Explicit certificate changes
+`import`, `regenerate`, and `remove` require `--confirm`. Reject malformed or extraneous PEM blocks, trailing text, encrypted/mismatched keys, invalid dates, invalid chains, missing SANs, and certificates unsuitable for server authentication.
 
-`import`, `regenerate`, and `remove` require `--confirm`. Import reads one closed JSON object on stdin with `certificate_pem` and `private_key_pem`. Accept a PEM leaf-first certificate chain and one matching unencrypted private key, at most 1 MiB each; an existing Redeven device CA and key can also be restored. Reject malformed or extraneous PEM blocks, trailing text, encrypted/mismatched keys, invalid dates, invalid chains, missing SANs, and certificates unsuitable for server authentication. A public certificate file must never contain private material that could later be exported.
-
-Imported server certificates are served directly. HTTPS startup validates their coverage for every actual listener authority; Desktop preflight uses the same public host policy before stopping a running Runtime. It probes optional loopback families only on temporary ephemeral ports, never the occupied service port. Wildcard network mode includes `localhost`, IPv4 loopback, and available IPv6 loopback SANs as well as network addresses. A server certificate missing coverage lists all missing addresses and fails read-only; the user must explicitly import a covering certificate before restarting. Startup repeats validation against actual listeners, including any interface changes since preflight. Trust remains the connecting client's responsibility. A failed preflight keeps the existing Runtime running, and a certificate failure never selects HTTP automatically.
-
-Regeneration creates a new device CA and fingerprint; clients must explicitly configure its trust. Removal deletes the saved certificate and private key, preventing the next HTTPS start until a usable identity exists. Existing OS trust entries are not removed. Saved identity replacement does not replace the loaded CA or imported server certificate until an explicit restart. Active connections remain intact; address refresh may update only the ephemeral leaf under the already loaded CA. Private runtime-control access reports compare the complete saved certificate-chain digest with the running HTTPS identity so pending state survives settings close/reopen without a second client-owned flag.
-
-Readers and writers share the state-scoped certificate maintenance lock. A replacement is validated in a private staging directory before publishing the complete pair. During publication, the previous directory is retained until commit succeeds; a failed rename restores it. On the next locked operation, an interrupted pre-commit replacement restores the previous directory, while a committed target wins and its previous directory is removed. Removal commits an explicit tombstone so recovery cannot resurrect a deliberately removed identity. Unsafe directories and symlinks fail closed. This supports process-interruption recovery; it does not promise an OS trust rollback or filesystem power-loss durability.
+This supports process-interruption recovery; it does not promise an OS trust rollback or filesystem power-loss durability.
 
 ## Coverage during network changes
+[Local UI network exposure](local-ui-network-exposure.md) owns the two-second interface refresh and atomic public snapshot.
 
-[Local UI network exposure](local-ui-network-exposure.md) owns the two-second interface refresh and atomic public snapshot. For a loaded device CA, address changes sign a new in-memory leaf and publish it with current URL/Host/Origin admission. TLS `GetCertificate` supplies the new leaf to subsequent handshakes without persisting keys or certificates, changing the CA, installing trust, or closing established sessions.
-
-An imported server certificate remains unchanged. Refresh advertises and admits only current addresses covered by that certificate and reports `certificate_hosts_not_covered` for excluded hosts. A signing failure retains only current addresses covered by the previous valid leaf and reports `certificate_refresh_failed`; retries recover automatically. Removed addresses remain withdrawn even when signing fails. Coverage diagnostics appear in the address region with certificate management where available and disappear after recovery. Startup and explicit saved-identity preflight retain their strict validation boundary.
+A signing failure retains only current addresses covered by the previous valid leaf and reports `certificate_refresh_failed`; retries recover automatically. Startup and explicit saved-identity preflight retain their strict validation boundary.
 
 ## Desktop interaction and private input
+The compact HTTPS panel presents certificate validity, expiry, and system trust separately. Public path, fingerprint, and bounded selectable diagnostics live in the expandable details section.
 
-The compact HTTPS panel presents certificate validity, expiry, and system trust separately. The certificate row offers “Manage certificate”; import, regeneration, and removal each have an inline explanation and explicit confirmation. Cancellation has neutral feedback. Pending operations disable duplicate actions and HTTPS restart. Completed changes update the panel in place and return keyboard focus to management. Public path, fingerprint, and bounded selectable diagnostics live in the expandable details section.
-
-“Create certificate” creates only a missing identity. “Trust on this device” is a separate explicit current-user operation that verifies trust afterward. Retrying trust reuses the valid certificate. The epoch 18 legacy `failed + ready + untrusted` report still means an intact identity awaiting trust.
-
-Every certificate IPC request names the registered Environment management target. Main validates its authority before opening native certificate and key file pickers, reads bounded files privately, and sends PEM only over maintenance stdin or the existing authorized remote execution channel. Renderer requests cannot supply filesystem paths or PEM; renderer reports, clipboard, and diagnostics contain no private key. Canceling either picker does not mutate the store. Imported input is never placed in process arguments.
-
-Public export is offered only when status advertises `certificate_export: true`.
-The maintenance command `device-ca export --output -` returns a validated public
-CA or server chain in `public_certificate_pem`. Desktop main opens a native Save
-picker, validates certificate-only PEM blocks, writes the chosen file and returns
-only the public operation report to the renderer. Canceling the picker does not
-export. Export neither changes the identity nor installs trust. The existing
-CLI file export still refuses to overwrite an existing file.
-
-Changing the selected Environment or closing the settings window invalidates outstanding UI results. Task navigation retains certificate state and readiness. Background snapshots preserve management confirmation, expanded details, scroll, and drafts. Certificate changes are saved immediately and survive canceling the settings dialog; restart is the separate step that applies them to Runtime. Saving next-start HTTPS settings remains possible with an unusable certificate, with an explicit startup warning.
+Saving next-start HTTPS settings remains possible with an unusable certificate, with an explicit startup warning.
 
 # Boundaries
 
-Runtime owns saved identity validation and replacement; Desktop owns explicit
-management presentation and private file acquisition. Client trust remains
-independent of saved identity and serving state. Certificate operations cannot
-silently restart Runtime, install system-wide trust, or expose private material
-to the renderer.
+Runtime owns saved identity validation and replacement; Desktop owns explicit management presentation and private file acquisition. Certificate operations cannot silently restart Runtime, install system-wide trust, or expose private material to the renderer.
 
 # Evidence
 
 - `redeven:internal/localui/public_address_refresh_test.go` - Verifies CA continuity, imported coverage, signing recovery, actual TLS/WSS, and established-session survival.
 
 - `redeven:internal/localui/device_identity.go` - Validated imports, locked replacement, interruption recovery, explicit removal, and bind preflight.
+
 - `redeven:internal/localui/device_identity_test.go` - Invalid input preservation, real TLS serving, restart boundaries, CA restore, and transaction recovery.
-- `redeven:internal/localui/device_ca.go` - Device identity validation, ephemeral exact-SAN leaves, public status/export, and client trust inspection.
-- `redeven:internal/localui/device_ca_install.go` - Explicit current-user trust installation and cancellation classification.
-- `redeven:internal/localui/runtime_access_test.go` - Saved-versus-serving certificate fingerprint comparison.
-- `redeven:cmd/redeven/local_authority_test.go` - Confirmation, secret-free reports, and intact identity after rejected import.
-- `redeven:desktop/src/main/desktopCertificate.test.ts` - Private picker input, capability checks, explicit operations, trust separation, and preflight.
-- `redeven:desktop/src/welcome/LocalCertificateSettings.client.test.tsx` - Inline confirmation, cancellation, failure recovery, keyboard state, and target changes.

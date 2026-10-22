@@ -4,6 +4,8 @@ title: Flower thread fork coordination
 description: Redeven authorizes a source thread, calls Floret's typed fork, and adopts product settings for the returned canonical destination.
 tags: [ai, threads, persistence, floret]
 timestamp: 2026-10-08T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -14,36 +16,8 @@ timestamp: 2026-10-08T00:00:00Z
 
 # Contract
 
-`ForkThreadWithOptions` validates RWX access, the source ThreadID, endpoint identity, and a stable `client_request_id`. The shared endpoint/thread authority boundary must find a live product settings row for that exact endpoint before any Floret call. Redeven then reads the source's current product settings and invokes published Floret v7 `Fork` with the source ThreadID and client request key.
+`ForkThreadWithOptions` validates RWX access, the source ThreadID, endpoint identity, and a stable `client_request_id`. The shared endpoint/thread authority boundary must find a live product settings row for that exact endpoint before any Floret call.
 
-Floret returns the canonical destination. Redeven copies only product-owned settings into a new root settings value, preserves the source endpoint, namespace, model, reasoning selection, permission, and working directory, clears pin state, and records the current requesting user as the destination creator/updater. `AdoptCanonicalRootSettings` inserts that exact destination or accepts an identical existing record; a conflicting record fails closed. A non-empty requested title is then sent through typed `SetTitle` with a derived stable key.
-
-The response is rebuilt from the returned Floret current view plus the adopted product settings. There is no durable fork operation table, immutable resource snapshot, lifecycle gate, stage replay, upload-copy protocol, summary acknowledgement receipt, or fork recovery coordinator. Product settings adoption is deliberately small; canonical fork idempotency remains owned by Floret's request key.
-
-The shared Flower UI freezes the client request identity and localized branch
-title together until creation is acknowledged. It reserves room for the branch
-suffix within Floret's 200-rune title limit and sends the title through the
-existing fork request. After settings adoption and title assignment, the
-service schedules the canonical summary publisher so other windows see the
-destination without polling.
-
-Creation returns a summary independently of detail loading. Flower inserts and
-selects that summary immediately and announces success. A failed detail read
-keeps the destination available and retries only detail, never the fork command.
-Untitled persisted threads use a localized display label plus a short ThreadID;
-that label is presentation only and never replaces the canonical title. Existing
-forks are not deleted or rewritten. New forks receive canonical fallback titles
-from published Floret v7.26.0 even when a caller omits an explicit product title.
-
-Published Floret v7.26.0 also owns canonical tool-call persistence across hosted
-search boundaries. Engine execution and live projection use the same complete
-call message and assistant fragment boundaries. Redeven consumes this upstream
-correction without cleaning history, synthesizing results, or weakening tool
-validation. Source threads and ordinary or nested forks created from corrected
-history can continue after restart; existing corrupt histories are unchanged.
-
-Fork parent-event projection follows [Parent event reading](../ui/flower-parent-events.md).
-The page identifies the fork while inherited event recipients remain unchanged.
 Detail recovery retains the created destination and retries loading only.
 
 # Boundaries
@@ -53,10 +27,7 @@ Redeven never stores a fork saga, source/destination turn or run identity mappin
 # Evidence
 
 - `redeven:internal/ai/threads.go` - Authorizes the source, calls typed Floret Fork, adopts returned product settings, and applies an optional title.
+
 - `redeven:internal/ai/threadstore/orphan_adoption.go` - Inserts exact canonical-root settings idempotently and rejects conflicting settings.
+
 - `redeven:internal/ai/threadstore/orphan_adoption_test.go` - Covers exact adoption and conflict handling.
-- `redeven:internal/ai/thread_authority_boundary_test.go` - Proves foreign endpoint ThreadIDs fail before canonical mutation.
-- `redeven:internal/session/floret_v7_dependency_contract_test.go` - Enforces the released typed v7 dependency boundary.
-- `redeven:internal/ai/thread_fork_tool_history_test.go` - Exercises two local calls with reasoning, fork, restart, and continuation through the product service and published DeepSeek gateway.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.fork.test.shared.tsx` - Checks fork selection, continued input, completed replies, refresh, and live-stream reconnection in the shared UI.
-- `redeven:internal/ai/parent_event_fork_ui_test.go` - Published runtime scope and real product/browser fork regression.

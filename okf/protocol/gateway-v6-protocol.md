@@ -4,6 +4,8 @@ title: Gateway v6 protocol
 description: Define signed pairing, member invitations, policy, reverse access and versioned Cloud association.
 tags: [gateway, protocol, security, identity]
 timestamp: 2026-10-10T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -12,35 +14,25 @@ timestamp: 2026-10-10T00:00:00Z
 # Contract
 
 ## Wire authority
+The signed Desktop surface includes pairing, identity proof, catalog, invitation, member removal, member and default policy, reevaluation, member access offer and service description, and Cloud configuration/status.
 
-The signed Desktop surface includes pairing, identity proof, catalog, invitation, member removal, member and default policy, reevaluation, member access offer and service description, and Cloud configuration/status. Signed requests bind method, route, body digest, protocol, Gateway identity, audience, nonce and time. Access, member management and Cloud configuration are independent grants.
+A Runtime mTLS certificate must be current for that exact member and version.
 
-The member TLS endpoint serves invitation redemption, rotation, cancellation, leaving, member connection admission, Cloud context and the closure-only relay. A Runtime mTLS certificate must be current for that exact member and version. Admission artifacts are one-use. Reverse streams target only the fixed Runtime application; no Runtime address or arbitrary dial request exists in the protocol. Gateway listener binding is separate from the endpoint set; a Gateway can advertise LAN, overlay and public options and the Runtime selects them automatically.
-
-Gateway ID derives from the persisted machine key, not a URL audience. Address changes prove the original key before changing trust coordinates. Member delegation binds Runtime, Gateway, member and explicit access/publication consent. Service descriptions are signed separately and bind the Runtime's TLS application identity.
+Service descriptions are signed separately and bind the Runtime's TLS application identity.
 
 ## Version and persistence
+Member version controls removal and replacement. Directory and policy revisions prevent stale messages from restoring permissions.
 
-Member version controls removal and replacement. Cloud binding generation controls publication and recovery. Network connection generation only distinguishes live observations. Directory and policy revisions prevent stale messages from restoring permissions. None of these versions substitutes for another.
-
-Gateway Cloud v3 DTOs are maintained in Portal shared contracts and mirrored with common fixtures in Runtime. The legacy wire protocol is not served during migration. Historical local readers migrate one stored v4 route into one v5 endpoint without changing Gateway or Runtime identity; old v4 invitations are rejected and must be recreated. Runtime Service epoch 48 defines `preview` plus preview-bound `join`, `replace` and `update-endpoints`, explicit member-targeted `retry`/`leave`, and separate `publish`. Pairing confirmations reject Cloud choice fields. `leave` checks Cloud interruption consent against the current selected member. Trusted snapshots expose only nonsecret membership summaries. Runtime membership schema v1 migrates through v2 to v3; [Gateway service](../gateway/gateway-service.md) owns that local migration. Gateway directory and Portal Cloud wire contracts are unchanged.
-
-[Gateway service](../gateway/gateway-service.md) owns membership and policy. [Gateway access sessions](../gateway/gateway-access-sessions.md) owns stream and TLS behavior. [Gateway Cloud access](../gateway/gateway-cloud-access.md) owns publication, recovery and revocation.
+[Gateway Cloud access](../gateway/gateway-cloud-access.md) owns publication, recovery and revocation.
 
 # Boundaries
 
-The OpenAPI document and signed DTOs are the protocol authority. This concept defines wire compatibility and version fencing; implementation concepts own membership, stream handling, and Cloud behavior. Unknown routes, stale generations, and legacy URL-profile requests remain rejected rather than silently translated.
+The OpenAPI document and signed DTOs are the protocol authority. Unknown routes, stale generations, and legacy URL-profile requests remain rejected rather than silently translated.
 
 # Evidence
 
 - `redeven:spec/openapi/gateway-v6.yaml` — Closed OpenAPI surface.
+
 - `redeven:internal/runtimegateway/protocol/protocol.go` — Signed management DTOs.
+
 - `redeven:internal/runtimegateway/protocol/membership.go` — Member identity, policy and application contracts.
-- `redeven:internal/runtimegateway/protocol/openapi_contract_test.go` — Router and schema conformance.
-- `redeven:internal/gatewaycloud/protocol/wire_test.go` — Cloud fixture parity.
-
-## Cloud management owner
-
-One machine-authenticated HTTPS NDJSON stream carries authoritative snapshots and durable command results. A new stream starts with a full snapshot; stream sequence and directory revisions fence old updates. Fifteen-second keepalive is transport-only, with no challenge or database write. Sixty-second calibration and coalesced directory changes replace the old five-second polling loop. Buffers are bounded; slow consumers reconnect for a snapshot. Waiting does not retain a database transaction or connection. Identity expiry, revocation, cancellation and shutdown end the stream.
-
-Runtime Cloud enrollment and recovery are independent signed RCPP v5 requests through the selected explicit HTTPS CONNECT route. Gateway directory and notifications never deliver Runtime credentials. Egress denial closes forwarded streams without revoking Cloud approval. Member removal also closes local access. Route switching preserves Cloud identity and never automatically falls back to direct.

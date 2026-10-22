@@ -4,6 +4,8 @@ title: Browser and desktop settings
 description: Separate environment capability, Chrome pairing, conversation target selection, and grants in one shared settings surface.
 tags: [ai, computer-use, settings, desktop, envapp]
 timestamp: 2026-09-20T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -19,108 +21,23 @@ or explicitly replaced. Floret remains the sole conversation lifecycle owner.
 # Contract
 
 ## Overview and navigation
+The overview identifies the actual Runtime hostname and platform, then shows the page or app used by the current conversation and three environment entries: built-in headless browser, Chrome in this environment, and desktop/applications. Opening or enabling never downloads.
 
-The overview identifies the actual Runtime hostname and platform, then shows the
-page or app used by the current conversation and three environment entries:
-built-in headless browser, Chrome in this environment, and desktop/applications.
-The built-in browser is headless Chromium installed on demand in the current
-Runtime environment, without needing system Chrome. Browser settings presents
-one default-on capability switch and explicit source/size confirmation under the
-[optional browser installation contract](computer-use-browser-installation.md).
-Opening or enabling never downloads. Saved website data stays separate from system Chrome.
-Optional account groups are collapsed by default; the built-in group is localized
-as shared website data using its stable ID. Creating a group isolates website
-sign-ins without selecting a page or importing system Chrome data.
-
-Chrome management describes live profiles and saved pairing, with one setup guide. Desktop details explain missing OS permission or
-components. A global Flower settings entry opens this same dialog; without a
-conversation it exposes only environment settings. Opening management always
-shows the overview, even when the conversation is waiting for Chrome. Only the
-explicit connection-assistance action opens a guide that may resume that request.
-
-The conversation section is the overview's primary action area. An unavailable
-previous page is informational: the primary action returns to the conversation,
-where Flower can discover and select a suitable resource for the task. Manual
-selection is secondary. Closing settings neither submits nor resumes work.
-Environment entries use equal-width cards with textual status badges and visible outlined management
-buttons aligned along the bottom; narrow surfaces stack the cards. Help and
-advanced discovery are secondary navigation, and conversation permissions remain
-in the footer. Status color supplements the label and never represents a new
-state owner. Shared Floe buttons retain their keyboard and disabled behavior;
-product layout uses theme tokens in both light and dark appearances.
-
-Target selection follows the single
-[target selection contract](computer-use-target-selection.md). Its bounded dialog
-keeps environment identity, search, category filters and confirmation visible;
-only the compact resource list scrolls. Page and app filters show matching counts
-and combine with title, URL and profile search. Rows keep titles and addresses
-on separate truncated lines, with full identity available in the row title.
-The current conversation target is labeled separately from the staged radio
-selection. Only exceptional availability needs a status label. Filtering retains
-the staged choice and names it beside confirmation; cancel discards it without
-binding anything. Per-resource grants
-are edited on a separate conversation-permissions page. Full access hides
-redundant grant controls and never implies installed components or OS permission.
-Changing approval mode returns to the existing composer editor; settings do not
-create another permission owner or task continuation path.
-
-Closing the dialog or changing conversations retires outstanding UI results and
-Chrome guide observation. Read-only carriers may inspect settings; mutation
-controls remain disabled. Search, keyboard selection, cancellation, long resource
-names, and narrow layouts use published Floe UI primitives. Both carriers provide
-complete explicit localized copy.
+Both carriers provide complete explicit localized copy.
 
 ## Runtime observation and recovery
+`GET computer/environment` returns hostname, platform, managed-browser capability, desktop capability, and the existing live Chrome status snapshot. Capability is an observation, not an authorization or a guarantee that subsequent startup cannot fail.
 
-`GET computer/environment` returns hostname, platform, managed-browser capability,
-desktop capability, and the existing live Chrome status snapshot. It requires the
-existing authenticated computer-management permission. Managed capability checks
-profile metadata and installed entrypoints without starting Chromium. Native
-capability probes helper protocol and OS permissions without opening a control
-session. Private Linux desktop checks installed dependencies without launching
-Xvfb, its window manager, or application processes. Capability is an observation,
-not an authorization or a guarantee that subsequent startup cannot fail.
-
-Capability states are `ready`, `on_demand`, `setup_required`, and
-`permission_required`, `installation_required`, and `disabled`; closed reason codes are available in collapsed diagnostics.
-An independent missing desktop permission does not hide a usable browser. A failed
-status request shows unknown and offers refresh; refresh never repairs a missing
-installation or clears a reported failure without new evidence.
-
-No live Chrome profile means no online Chrome was detected. It does not establish
-that the user never paired Chrome. Confirmed persistence, manual disconnection,
-and automatic reconnection belong to the
-[Chrome connection contract](computer-use-browser-connection.md).
-
-`POST computer/candidates` accepts a thread ID and user-entered Chromium debugging
-endpoint. Product authorization verifies endpoint/thread ownership first. Runtime
-performs bounded read-only tab discovery, captures exact identity, title and URL,
-and issues the same expiring opaque candidate references used by normal discovery.
-The response preserves the selected identity and current resource occupancy,
-deduplicates existing targets, and obeys the shared inventory limit. The UI never
-constructs connections from tab metadata. Only explicit selection prepares or
-binds a page; discovery failure leaves the old selection intact.
-
-Runtime compatibility epoch 29 is required by the bundled Desktop surface for
-these environment and candidate interfaces. Existing Runtime compatibility and
-upgrade boundaries apply; no local fallback connection form, durable candidate
-store, schema migration, or new Floret API is introduced. Published Floe components
-already supply the required UI primitives, so this change is product integration
-rather than an upstream platform extension.
+Published Floe components already supply the required UI primitives, so this change is product integration rather than an upstream platform extension.
 
 # Boundaries
 
-Inspection never selects a page, grants authority, starts a task or installs components. Failed observations remain unknown. A lost selection stays unavailable until it is recovered or explicitly replaced; the settings dialog does not own Floret lifecycle.
+Inspection never selects a page, grants authority, starts a task or installs components. A lost selection stays unavailable until it is recovered or explicitly replaced; the settings dialog does not own Floret lifecycle.
 
 # Evidence
 
 - `redeven:internal/flower_ui/src/FlowerComputerConnections.tsx` - shared dialog and staged operations.
+
 - `redeven:internal/flower_ui/host/computerUseAdapter.ts` - one carrier-neutral Runtime adapter.
+
 - `redeven:internal/flower_ui/src/settings/FlowerSettingsSurface.tsx` - global entry to the same dialog.
-- `redeven:scripts/stage_computer_resources.mjs` - thin helper delivery without Chromium.
-- `redeven:internal/envapp/ui_src/scripts/redevenManagedBrowser.mjs` - headless persistent browser process.
-- `redeven:internal/ai/computer_environment.go` - capability observation and authorized advanced discovery.
-- `redeven:internal/ai/computer_environment_test.go` - no startup/binding, independent failure, authority and inventory limits.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerComputerDialog.browser.test.tsx` - actual dialog behavior, cancellation, read-only inspection and keyboard layout.
-- `redeven:desktop/src/main/runtimeFlowerRoutes.test.ts` - exact Desktop route admission.
-- `redeven:internal/runtimeservice/compatibility_contract.json` - paired Runtime/Desktop compatibility window.

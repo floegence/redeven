@@ -4,6 +4,8 @@ title: Workbench interaction contracts
 description: Canonical navigation for Workbench input and surface-lifecycle ownership.
 tags: [ui, workbench, interaction, accessibility]
 timestamp: 2026-07-18T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -12,12 +14,7 @@ Workbench interaction is governed by explicit ownership contracts rather than wi
 # Contract
 
 ## Mechanism
-
-This concept is the stable overview for the subject. Detailed contracts are maintained in the focused concepts below:
-
-- [Workbench composition surfaces and editing](workbench-composition.md)
-- [Workbench input ownership](workbench-input-ownership.md)
-- [Workbench terminal interaction](workbench-terminal-interaction.md)
+This concept is the stable overview for the subject.
 
 - [Workbench surface lifecycle](workbench-surface-lifecycle.md)
 
@@ -28,4 +25,5 @@ Workbench widgets must not infer canvas, input, recovery, focus, or overlay owne
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchWheelInteractive.ts:1` - Wheel ownership uses a dedicated data attribute.
+
 - `redeven:internal/envapp/ui_src/src/ui/workbench/EnvWorkbenchPage.test.tsx:2806` - Tests cover reusing a singleton widget without implicit ensureWidget centering when focus is disabled.

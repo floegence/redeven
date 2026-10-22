@@ -4,6 +4,8 @@ title: Desktop runtime bridge
 description: Canonical navigation and security boundary for Desktop-integrated Runtime access and direct lifecycle.
 tags: [desktop, runtime, bridge, lifecycle]
 timestamp: 2026-08-27T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -12,96 +14,20 @@ Redeven Desktop opens Runtime instances through machine-readable startup, scoped
 # Contract
 
 ## Mechanism
+This concept is the stable overview for the subject.
 
-This concept is the stable overview for the subject. Detailed contracts are maintained in the focused concepts below:
+Settings, model directory, preferences, and thread-detail GETs can carry it; commands, request bodies, and staging authorization cannot.
 
-- [Desktop runtime readiness](desktop-runtime-readiness.md)
-
-- [Desktop transport recovery](desktop-transport-recovery.md)
-
-- [Desktop SSH runtime operations](desktop-ssh-runtime-operations.md)
-
-- [Desktop WSL runtime operations](desktop-wsl-runtime-operations.md)
-
-- [Desktop session and model source](desktop-session-model-source.md)
-
-Cancellable Flower reads carry a read_id through the existing request IPC only
-for a body-free GET without staging authorization. The main-process read owner
-binds cancellation to one renderer document and accepts reads only; the existing
-Flower path and method allowlist still validates each request before dispatch.
-[Runtime read ownership](../../desktop/src/main/runtimeFlowerReadOwner.ts) registers
-before asynchronous preparation and isolates cancellation by WebContents,
-renderer frame token and read identity. Settings, model directory, preferences,
-and thread-detail GETs can carry it; commands, request bodies, and staging
-authorization cannot. Reload, renderer crash and destruction cancel the
-document's outstanding reads. Completion releases the registration and
-lifecycle listeners; later cancellation is a no-op. Aborting a write request
-only stops the renderer from waiting; it does not cancel work already dispatched
-to Runtime and must not be presented as server-side cancellation.
-
-For eligible reads, Runtime preparation and access authorization remain shared
-work. Cancellation releases only this waiter, and a late lease is released
-without starting HTTP. The same signal reaches HTTP headers and body, and is
-checked before and after 423 authorization refresh. A cancelled challenge cannot
-dispatch a late retry.
-See [selection and detail ownership](../ui/flower-thread-selection.md).
-
-Native Local Environment transport is independent from public Local UI addressing. Runtime writes `local_ui_bridge_url` and a fresh 256-bit `local_ui_bridge_token` into local socket status and the private `0600` Desktop launch report. Public `local_ui_url` and `local_ui_urls` describe actual HTTP or HTTPS client entries even while Desktop uses its bridge. WSL, SSH, and container hello responses carry public URLs separately from the private token over stdio. Native BrowserWindow loading, health verification, access unlock, and Desktop Flower requests use the validated HTTP loopback-IP root plus that token without falling back to a public interface. Electron injects the header only for requests and upgrades to its authorized bridge authority, after diagnostics capture the token-free request.
-
-Environment connection presentation and access settings follow [Desktop Environment connections](desktop-environment-connections.md). That contract owns address namespace, copy/browser/share actions, live settings state, and the distinction between reported access URLs and private session transport.
-
-Native Open and its cold-start recovery share the same target operation key, so the lifecycle owner can authorize startup before the window session exists. Library running counts follow Runtime health independently of open windows. Welcome does not publish a second cached startup plan alongside current Runtime presence.
-
-Local Runtime starts detached with file-backed logs, so closing the initiating Desktop cannot terminate it through broken stdout/stderr pipes. Each client closes only its own session; explicit authorized lifecycle actions remain the sole stop/restart path. URL clients receive connection access without SSH or process-management authority. SSH and container startup honor saved Runtime access configuration rather than replacing it with a dynamic loopback bind. Development scripts announce configuration as pending until Runtime reports the actual listener; a one-start bind override preserves the saved port.
-
-Each WSL, SSH, or container Runtime placement owns one long-lived `desktop-bridge` exec and one HTTP/2 session over that exec's stdio. SSH and SSH-container placements additionally own one credential-scoped SSH transport lease. macOS/Linux reuse ControlMaster; Windows runs the Bridge in one native OpenSSH child, as defined by [SSH transport](desktop-ssh-runtime-operations.md). Node composes stdin and stdout into the HTTP/2 client connection; Go serves the peer with the standard `net/http.Server`, explicit unencrypted HTTP/2-only protocols, and `HTTP2Config`. A single-connection listener adapter hands over the existing stdio connection without binding a socket; peer closure or context cancellation releases the accept loop, active request contexts, and surface connections. There is no TCP listener, TLS, HTTP/1, Upgrade, Redeven frame codec, stream-id allocator, or global read scheduler at this boundary. The session protocol is exactly `redeven-desktop-placement-h2/1`; older bridge protocols fail with an update requirement and are never negotiated or retried as a fallback.
-
-`local-ui`, `runtime-control`, and `gateway-protocol` are independent HTTP/2 CONNECT streams. The internal `openStream(surface)` interface remains the only caller boundary. Hello and Runtime shutdown are bounded control requests on the same session. The connection allows at most 64 concurrent streams, a 256 KiB receive window per stream, a 16 MiB connection receive window, 32 MiB of Node session memory, and bounded header count and size. Desktop advertises a 64 KiB maximum received HTTP/2 frame so the Runtime peer can send an ordinary 32 KiB tunnel read without splitting it at the protocol's 16 KiB default. This changes frame negotiation only; flow-control windows, admission and stream ownership retain their existing bounds. The published Flowersec proxy writes each WebSocket header and payload as one bounded stream record, without waiting to batch messages; its wire framing and ordered delivery retain the same contract. Fifteen seconds without inbound frames starts one PING; ten seconds without its acknowledgement closes the session. A stream reset or half-close affects only that stream. Whole-connection teardown first destroys the composed stdio stream and waits for its close event before destroying HTTP/2. This applies to keepalive failure, cancellation and retirement, including an SSH stdout EOF while writable shutdown remains pending; teardown must not write GOAWAY into that shutdown. Stdio, exec, SSH, GOAWAY, or HTTP/2 termination is recovered once by the existing SSH placement owner with a fresh exec and session; individual streams do not reconnect or replay. A terminated WSL bridge stays offline until an explicit Open, Start, or Retry action creates a new bridge.
-
-Each loopback TCP connection stays bound to the surface selected by its first request. Runtime-control HTTP calls use request-owned connections, never Node's shared origin connection pool: a Local UI socket at the same proxy origin has different routing and authorization. New control streams reuse the existing placement HTTP/2 session and SSH lease. An authorization failure never retries through Local UI or adds its bridge credential to a control request.
-
-Managed readiness records store only Runtime PID, start identity, Runtime Service state, and placement. They never retain an executable path, bridge URL, token, runtime-control credential, or a URL from a bridge that has already closed. The standard managed executable is derived once from the live placement when Desktop opens the bridge. Open creates or reuses that one live placement bridge and derives the Env App base, entry, display, and allowed URL only from its live record. SSH target identity contains no URL. External URL, Provider, and Gateway paths continue to own and validate their explicit public URL and cannot borrow the managed private bridge path.
-
-Successful Env App shell and entry-asset validation may be reused only inside the current Desktop process for the same registered target, process start identity, and Runtime Service build identity. Replacement loopback proxy ports do not invalidate that package fact, while a different target or changed process/build identity always validates again and failed validation is never cached. This cache does not reuse authorization: every replacement bridge performs a fresh authorized health request with its own live URL and token before shell validation can be reused.
-
-`desktopSessionTransport` resolves the immutable transport kind, base URL, entry URL, display URL, navigation boundary, proxy policy, and partition before a session window exists. Native Local Environment and SSH/container placements use session-scoped non-persistent Electron partitions configured with `setProxy({ mode: 'direct' })` before the first load. Root, child, and access-gate windows share that partition, and session closure clears its storage. [Gateway access sessions](../gateway/gateway-access-sessions.md) owns Gateway's isolated partition and fixed proxy policy; [CodeSpace native access](codespace-native-access.md) owns the editor's separate persistent partition. Provider remote and external Local UI sessions continue to use the default Session and system proxy policy.
-
-Session-root navigation on the entry origin, including equivalent loopback hosts,
-is limited to the original entry pathname and Runtime-owned Env App shell routes,
-including the root redirect, index document, and extensionless routes under
-`/_redeven_proxy/env/`, with query and hash changes preserved. Asset and Browser
-documents have separate owners. Same-origin file paths, missing routes, and `file:`
-URLs are blocked without replacing the document or opening the system browser.
-External web links keep their existing external-open policy. Child windows retain
-their existing session-family or product route policy. This defense complements
-[inert assistant media references](../ui/flower-inline-media.md); it grants no
-filesystem authorization.
-
-WebRequest diagnostics are installed idempotently for every Electron Session that Desktop uses. An opening root document with final HTTP status 400 or greater fails immediately with transport and status diagnostics; Chromium failures remain immediate through `did-fail-load`. The readiness timeout is reserved for a loaded document that never reports an interactive password gate or connected Runtime state. Renderer projections, Welcome snapshots, persisted preferences, and user diagnostics omit both private bridge fields. The main process projects only `desktop_private_bridge_v2` through the session-context preload for private documents. Env App selects `flowersec-private-loopback/1` only with that exact provenance. Public HTTP uses the separate released HTTPDirect profile; public HTTPS retains normal `flowersec/3` WSS. Placement HTTP/2 is outside Flowersec and cannot weaken its admission, lease, or E2EE rules. [Local UI network exposure](../security/local-ui-network-exposure.md) owns these protocol boundaries.
-
-Worker requests without a window identity resolve their Runtime owner through
-the Electron Session's isolated partition. Existing exact private-origin and
-graphical-scope checks govern bridge authorization. A worker cannot borrow
-another partition's bridge or attach its token to a public origin.
+A worker cannot borrow another partition's bridge or attach its token to a public origin.
 
 # Boundaries
 
-Runtime-control is a local Desktop coordination capability, not a general network API or plugin grant plane. Bridge, health, process, Gateway, Provider, and session observations must not become competing lifecycle authorities. Desktop must not log or project the bridge token, attach it to a public origin, change the system proxy, modify system-wide trust, add VPN/private-range bypass tables, globally disable proxying, or recover a missing authorized bridge by selecting a public address. Certificate creation and current-user trust installation occur only through explicit settings actions calling the bundled maintenance CLI. The private Flowersec profile cannot become a Provider, Gateway, URL, or public-browser fallback. ReDevPlugin and access components retain their separate execution boundaries.
+Runtime-control is a local Desktop coordination capability, not a general network API or plugin grant plane. Bridge, health, process, Gateway, Provider, and session observations must not become competing lifecycle authorities. ReDevPlugin and access components retain their separate execution boundaries.
 
 # Evidence
 
 - `redeven:desktop/src/main/desktopCertificate.test.ts` - Exercises explicit setup, preserved identity after trust failure, verification, and HTTPS restart admission.
+
 - `redeven:desktop/src/welcome/LocalCertificateSettings.client.test.tsx` - Covers legacy trust status, actionable retries, duplicate actions, and stale environment responses.
+
 - `redeven:cmd/redeven/main.go:299` - Local Desktop startup is rejected for remote-only mode.
-- `redeven:desktop/src/main/localUIURL.ts:44` - Desktop builds the Env App entry URL under `/_redeven_proxy/env/`.
-- `redeven:cmd/redeven/desktop_launch_report.go:123` - Ready and attached private reports require and validate the trusted bridge URL.
-- `redeven:internal/localui/localui.go:417` - Runtime starts a separate ephemeral loopback listener for trusted Desktop transport.
-- `redeven:desktop/src/main/desktopSessionTransport.ts:1` - Desktop resolves transport, display, proxy, and partition state through one contract.
-- `redeven:desktop/src/main/runtimeState.ts:1` - Private bridge probes keep live authorization separate from target-scoped shell integrity reuse.
-- `redeven:desktop/src/main/runtimeControlClient.test.ts` - Real pooled Local UI traffic followed by access reads/writes verifies control routing and separate credentials; genuine authorization failures remain failures.
-- `redeven:desktop/src/main/runtimePlacementBridgeSession.ts:555` - One stdio-backed HTTP/2 session owns control requests, CONNECT streams, liveness, and recovery.
-- `redeven:internal/desktopbridge/server.go:26` - Runtime serves the private HTTP/2 connection directly on bridge stdio.
-- `redeven:desktop/src/main/main.ts:8222` - Session creation prepares direct Electron proxy state before loading Desktop-owned loopback transport.
-- `redeven:desktop/src/main/main.ts:16928` - Per-Session diagnostics fail opening root documents on final HTTP errors.
-- `redeven:okf/desktop/desktop-runtime-process-lifecycle.md:1` - Runtime process inventory and lifecycle ordering are maintained as a separate Desktop contract.
-- `redeven:desktop/src/main/main.ts:8854` - Welcome Flower cold-starts Local Environment through structured local Runtime lifecycle progress.

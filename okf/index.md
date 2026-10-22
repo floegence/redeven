@@ -8,362 +8,351 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## Architecture
 
-- [Flower startup and recovery presentation](architecture/flower-startup-presentation.md) - Keep drafts, navigation, stop and retry usable throughout preparation.
-- [Flower startup performance acceptance](operations/flower-startup-performance.md) - Record published-module and complete product startup, memory, disk and query measurements.
-- [Flower conversation switch qualification](operations/flower-thread-switch-qualification.md) - Reproduce point-read scaling, cancellable demand and actual sidebar feedback with synthetic data.
-- [Flower conversation selection and detail reads](ui/flower-thread-selection.md) — Deferred navigation, shared reads, cancellation and recovery.
+- [Flower startup and recovery presentation](architecture/flower-startup-presentation.md)
+- [Flower startup performance acceptance](operations/flower-startup-performance.md)
+- [Flower conversation switch qualification](operations/flower-thread-switch-qualification.md)
+- [Flower conversation selection and detail reads](ui/flower-thread-selection.md)
 
-- [Control-plane capacity qualification](operations/controlplane-capacity-qualification.md) - Measure enrolled control sessions, dynamic heartbeat policy, and real Gateway recovery on independent load hosts.
+- [Control-plane capacity qualification](operations/controlplane-capacity-qualification.md)
 
-- [Tessiven DSL versioning](architecture/tessiven-dsl-versioning.md) - Select frozen semantic-version schemas and upgrade supported documents without rewriting history.
-- [Tessiven stable canvas presentation](architecture/tessiven-canvas-presentation.md) - Keep native display compatibility independent of DSL upgrades.
-- [Tessiven canvas contract](architecture/tessiven-canvas-contract.md) - Store one Runtime-owned, versioned YAML canvas library with stable topology identities.
+- [Tessiven DSL versioning](architecture/tessiven-dsl-versioning.md)
+- [Tessiven stable canvas presentation](architecture/tessiven-canvas-presentation.md)
+- [Tessiven canvas contract](architecture/tessiven-canvas-contract.md)
 
-- [Native Runtime bridge](architecture/native-runtime-bridge.md) - Attach native SSH clients to running instances with independent, restricted authorization.
+- [Native Runtime bridge](architecture/native-runtime-bridge.md)
 
-- [Flower browser source ownership](architecture/flower-browser-sources.md) - Admit browser targets once, preserve private ancestry and fence source loss without product projection.
-- [Flower browser Linux preparation](architecture/flower-browser-linux-preparation.md) - Prepare a separate persistent browser application while preserving personal data and the existing application lifecycle.
-- [Database schema migration ownership](architecture/database-schema-migrations.md) - Automatically migrate Redeven product stores while Floret and ReDevPlugin schemas remain upstream-owned.
-- [AI readiness and service generation lifecycle](architecture/ai-readiness-lifecycle.md) - Keep product surfaces available while AI startup, retry, generation draining, and typed unavailability remain process-local.
-- [Runtime startup presentation](architecture/runtime-startup-presentation.md) - Structured startup events, renderer modes, and Desktop readiness reports.
-- [Observation and target action events](architecture/observation-events.md) - Publish target action progress on the canonical Flower stream with target-scoped media.
-- [Local UI surface](architecture/local-ui-surface.md) - Browser entrypoints, access gate, direct sessions, and Env App proxying.
-- [Env App session event transport](architecture/env-event-transport.md) - Shared session HTTP authority, bounded event observation, refresh availability, and cancellation.
-- [Activity navigation restoration](ui/activity-navigation-restoration.md) - Restore the last Activity page before startup and recover unavailable plugin targets through recent built-in pages.
-- [Env App resource snapshots](ui/env-resource-cache.md) - Restore authorized local inventories and refresh them without disrupting navigation or focus.
-- [Env App page loading continuity](ui/page-loading-continuity.md) - Use one loading and refresh policy across all Activity pages and Workbench widgets.
-- [Env App document reload presentation](ui/document-reload-presentation.md) - Preserve the prior inventory layout before application modules load and reveal authorized content once.
-- [Web Services interface](architecture/web-services-interface.md) - Read service status, open archives, and resolve exceptions in compact, accessible Activity and Workbench panels.
-- [Web Service browser sessions](architecture/web-service-browser-sessions.md) - Address-first opens, persisted proxy choice, and isolated Desktop loopback compatibility.
-- [Managed host application preparation](architecture/host-application-preparation.md) - Prepare native graphical support and recover interrupted setup without host configuration.
-- [Remote desktop sessions](architecture/remote-desktop.md) - Share the current host desktop with exclusive remote control, private media and explicit OS authorization.
-- [Deploy remote desktop through SSH](architecture/remote-desktop-ssh-deployment.md) - Confirm privileged scope in Env App, keep administrator credentials within one SSH transaction, and observe lifecycle rollback without target-side desktop consent.
-- [Restore remote desktop sharing approval](architecture/remote-desktop-authorization.md) - Restore approval with default persistence, single-use Portal credential rotation, reset boundaries, and truthful recovery states.
-- [Remote desktop connection launcher](architecture/remote-desktop-launcher.md) - Identify the host, explain readiness and recover from connection failures in a concise desktop or Workbench flow.
-- [Graphical window transport](architecture/graphical-window-transport.md) - Route every desktop and host application data channel through resource-scoped Flowersec direct or tunnel sessions.
-- [Graphical window transport qualification](operations/graphical-window-transport-results.md) - Assess native direct/tunnel integrity, live Linux behavior and the remaining unlocked macOS checks.
-- [Remote desktop viewer interaction](architecture/remote-desktop-viewer.md) - Operate display, input, clipboard and fullscreen controls and recover from an unconfirmed disconnect.
-- [Remote desktop media and input scheduling](architecture/remote-desktop-media.md) - Preserve ordered media and input while reducing Wayland capture work and selecting supported encoders.
-- [Wayland cursor and scheduling optimization evidence](operations/remote-desktop-wayland-optimization-results.md) - Assess separate cursor ownership, ordered asynchronous input and damage-aware capture with explicit synthetic and real-host evidence boundaries.
-- [Wayland legacy MemFd capture compatibility](operations/remote-desktop-wayland-buffer-results.md) - Assess the post-authorization capture repair for older GNOME buffer allocations and its real-host verification boundary.
-- [Wayland capture pool optimization evidence](operations/remote-desktop-capture-pool-results.md) - Verify pixel lifetime and compare the installed pool implementation with the previous release on udesk24.
-- [Remote desktop validation](operations/remote-desktop-validation.md) - Qualify office interaction, lifecycle and actual painted performance with published dependencies.
-- [Remote desktop acceptance results](operations/remote-desktop-results.md) - Assess published macOS/X11 performance, local delivery and remaining acceptance limits.
-- [Desktop latency and NVIDIA encoding](operations/remote-desktop-latency-results.md) - Compare controlled RTX 4090 D response measurements, decoder behavior and remaining copy/transport limits.
-- [Desktop drag latency](operations/remote-desktop-drag-latency.md) - Assess repeated native drag measurements and raw-pointer dispatch over the production SSH placement bridge.
-- [Physical desktop responsiveness and local input](operations/remote-desktop-responsive-input-results.md) - Compare physical-seat receipts and DRM feedback on orange and udesk26, and verify local text independently of clipboard synchronization.
-- [Orange AFBC capture qualification](operations/remote-desktop-orange-afbc-results.md) - Verify legacy Rockchip component normalization with real pixels, lock/unlock fencing and explicit product/performance acceptance limits.
-- [Physical-device remote desktop Viewer qualification](operations/remote-desktop-device-viewer-results.md) - Assess actual udesk26 toolkit input, unlock and paint recovery while identifying incomplete orange, IME, cursor and competitor acceptance.
-- [Orange Viewer follow-up](operations/remote-desktop-orange-viewer-results.md) - Verify published Orange deployment, functional recovery, and the limits of the current RustDesk comparison.
-- [Physical desktop RustDesk comparison](operations/remote-desktop-rustdesk-comparison-results.md) - Check paired presentation, quality and resource evidence before accepting latency and performance parity.
-- [LAN experiment decision ledger](operations/remote-desktop-lan-experiment-ledger.md) - Consult complete historical candidates, current deficits and controlled retry conditions before another performance experiment.
-- [Historical LAN desktop crossover C01](operations/remote-desktop-lan-historical-c01.md): Inspect matched historical/current candidates, fixture validity and all crossover results.
-- [Confirmed receipt crossover C02](operations/remote-desktop-lan-receipt-c02.md) - Inspect the interval-only diagnostic, unproven recovery change and verified input association failure.
-- [LAN codec and capture experiments](operations/remote-desktop-lan-codec-experiments.md) - Check adopted and rejected codec, rate, quantization and capture tradeoffs against their raw evidence.
-- [LAN transport and tracing experiments](operations/remote-desktop-lan-transport-experiments.md) - Check credit, receipts, HTTP2, SSH and stage diagnostics before repeating a latency hypothesis.
-- [LAN stage tracing](operations/remote-desktop-lan-stage-tracing.md) - Inspect clock-qualified publication, write, receive and receipt boundaries before assigning transport stalls.
-- [LAN receipt and window comparison](operations/remote-desktop-lan-window-c04.md) - Evaluate C03's rejected timer change and C04's four-versus-six-frame evidence and compatibility boundary.
-- [Published LAN C05 outcomes](operations/remote-desktop-lan-c05-results.md) - Inspect all retained paired results, source-loss validity and unresolved resource/detail boundaries before another experiment.
-- [Historical v40 and v45 results](operations/remote-desktop-rustdesk-v40-v45-results.md) - Retrieve original published cadence, host-input regression and calibration limits without mistaking history for current acceptance.
-- [Published six-frame qualification C05](operations/remote-desktop-lan-published-c05.md) - Check released adoption, paired acceptance and retained preparation failures before claiming restored LAN performance.
-- [udesk26 hardware AV1 comparison](operations/remote-desktop-rustdesk-v42-results.md) - Inspect published AV1 diagnostic latency, complete resources and unresolved parity failures.
-- [udesk26 DRM cadence comparison](operations/remote-desktop-rustdesk-v43-results.md) - Inspect released cadence improvements, corrected motion validity and remaining latency, quality and memory deficits.
-- [Orange RustDesk comparison attempts](operations/remote-desktop-rustdesk-orange-results.md) - Inspect failed responses and unstable LAN conditions before applying another host's results to Orange.
-- [udesk26 v0.22.37 RustDesk comparison](operations/remote-desktop-rustdesk-v37-results.md) - Trace the failing H.264 baseline and clock limits before assessing successor releases.
-- [Remote desktop platform reacceptance](operations/remote-desktop-platform-reacceptance.md) - Verify fresh GDM, GNOME lock, Portal and macOS pixels, input and recovery with explicit native/product evidence boundaries.
-- [Desktop reconnect qualification](operations/remote-desktop-recovery-results.md) - Verify published sound continuity, Mac physical hotplug, locked reconnect and Wayland display recovery.
-- [Wayland desktop qualification](operations/remote-desktop-wayland-results.md) - Assess real GNOME office interaction and retained capture limits after virtual graphics provisioning.
-- [Host Applications](architecture/host-applications.md) - Browse host applications and apply shared authorization and session lifecycle rules.
-- [Cross-platform application behavior](architecture/host-application-behavior.md) - Compare common operations and the OS limits that prevent identical behavior.
-- [Linux application lifecycle](architecture/linux-application-lifecycle.md) - Recover surviving application instances and separate sharing, normal window closure and explicit force quit.
-- [Host application input](architecture/host-application-input.md) - Use client input methods across streamed applications, bind confirmed text to painted targets, and recover without replay.
-- [Host application pointer gestures](architecture/host-application-pointer.md) — Trace touch scrolling, clicks, drag and cancellation through the shared client owner.
-- [Host application display](architecture/host-application-display.md) - Stabilize SDK window layout, display density and cursor coordinates while preserving native window state.
-- [Native Linux picture streams](architecture/host-application-native-stream.md) - Negotiate image modes, compose bounded regions and retain legacy sessions without changing input authority.
-- [Host application viewer resources](architecture/host-application-viewer-resources.md) - Upgrade viewer snapshots independently of applications and enforce digest, owner and active-share cache boundaries.
-- [Host application viewer](architecture/host-application-viewer.md) - Interpret connection, waiting and terminal states without inferring application exit from transport loss.
-- [Host Application Platforms](architecture/host-application-platforms.md) - Prepare a headless host, diagnose missing capabilities, and distinguish Linux capability requirements from native macOS initialization.
-- [macOS Application Picture](architecture/macos-application-picture.md) - Adjust Retina resolution and streaming quality, and understand actual frame rate and bandwidth.
-- [Native macOS Applications](architecture/macos-host-applications.md) - Open local Mac apps directly or operate owned remote windows with capture, input and reconnection.
-- [macOS application window lifecycle](architecture/macos-application-window-lifecycle.md) - Distinguish living windows, unavailable capture and confirmed closure before ending a viewer.
-- [macOS application menus](architecture/macos-application-menus.md) — Determine which native menu operations a single-application viewer exposes and how live handles are validated.
-- [macOS application capture ownership](architecture/macos-application-capture-owner.md) - Keep suspended and active application channels independent under one native capture process.
+- [Flower browser source ownership](architecture/flower-browser-sources.md)
+- [Flower browser Linux preparation](architecture/flower-browser-linux-preparation.md)
+- [Database schema migration ownership](architecture/database-schema-migrations.md)
+- [AI readiness and service generation lifecycle](architecture/ai-readiness-lifecycle.md)
+- [Runtime startup presentation](architecture/runtime-startup-presentation.md)
+- [Observation and target action events](architecture/observation-events.md)
+- [Local UI surface](architecture/local-ui-surface.md)
+- [Env App session event transport](architecture/env-event-transport.md)
+- [Activity navigation restoration](ui/activity-navigation-restoration.md)
+- [Env App resource snapshots](ui/env-resource-cache.md)
+- [Env App page loading continuity](ui/page-loading-continuity.md)
+- [Env App document reload presentation](ui/document-reload-presentation.md)
+- [Web Services interface](architecture/web-services-interface.md)
+- [Web Service browser sessions](architecture/web-service-browser-sessions.md)
+- [Managed host application preparation](architecture/host-application-preparation.md)
+- [Remote desktop sessions](architecture/remote-desktop.md)
+- [Deploy remote desktop through SSH](architecture/remote-desktop-ssh-deployment.md)
+- [Restore remote desktop sharing approval](architecture/remote-desktop-authorization.md)
+- [Remote desktop connection launcher](architecture/remote-desktop-launcher.md)
+- [Graphical window transport](architecture/graphical-window-transport.md)
+- [Graphical window transport qualification](operations/graphical-window-transport-results.md)
+- [Remote desktop viewer interaction](architecture/remote-desktop-viewer.md)
+- [Remote desktop media and input scheduling](architecture/remote-desktop-media.md)
+- [Wayland cursor and scheduling optimization evidence](operations/remote-desktop-wayland-optimization-results.md)
+- [Wayland legacy MemFd capture compatibility](operations/remote-desktop-wayland-buffer-results.md)
+- [Wayland capture pool optimization evidence](operations/remote-desktop-capture-pool-results.md)
+- [Remote desktop validation](operations/remote-desktop-validation.md)
+- [Remote desktop acceptance results](operations/remote-desktop-results.md)
+- [Desktop latency and NVIDIA encoding](operations/remote-desktop-latency-results.md)
+- [Desktop drag latency](operations/remote-desktop-drag-latency.md)
+- [Physical desktop responsiveness and local input](operations/remote-desktop-responsive-input-results.md)
+- [Orange AFBC capture qualification](operations/remote-desktop-orange-afbc-results.md)
+- [Physical-device remote desktop Viewer qualification](operations/remote-desktop-device-viewer-results.md)
+- [Orange Viewer follow-up](operations/remote-desktop-orange-viewer-results.md)
+- [Physical desktop RustDesk comparison](operations/remote-desktop-rustdesk-comparison-results.md)
+- [LAN experiment decision ledger](operations/remote-desktop-lan-experiment-ledger.md)
+- [Published LAN C05 outcomes](operations/remote-desktop-lan-c05-results.md)
+- [Published six-frame qualification C05](operations/remote-desktop-lan-published-c05.md)
+- [Remote desktop platform reacceptance](operations/remote-desktop-platform-reacceptance.md)
+- [Desktop reconnect qualification](operations/remote-desktop-recovery-results.md)
+- [Wayland desktop qualification](operations/remote-desktop-wayland-results.md)
+- [Host Applications](architecture/host-applications.md)
+- [Cross-platform application behavior](architecture/host-application-behavior.md)
+- [Linux application lifecycle](architecture/linux-application-lifecycle.md)
+- [Host application input](architecture/host-application-input.md)
+- [Host application pointer gestures](architecture/host-application-pointer.md)
+- [Host application display](architecture/host-application-display.md)
+- [Native Linux picture streams](architecture/host-application-native-stream.md)
+- [Host application viewer resources](architecture/host-application-viewer-resources.md)
+- [Host application viewer](architecture/host-application-viewer.md)
+- [Host Application Platforms](architecture/host-application-platforms.md)
+- [macOS Application Picture](architecture/macos-application-picture.md)
+- [Native macOS Applications](architecture/macos-host-applications.md)
+- [macOS application window lifecycle](architecture/macos-application-window-lifecycle.md)
+- [macOS application menus](architecture/macos-application-menus.md)
+- [macOS application capture ownership](architecture/macos-application-capture-owner.md)
 - [macOS application management and graceful quit](architecture/macos-application-management.md): Manage live host applications, distinguish quit from sharing, and reject stale process targets.
-- [Host Application Setup](operations/host-application-setup.md) - Prepare the combined backend and identify the optional administrator-managed Xpra path.
-- [Host Application Validation](operations/host-application-validation.md) - Qualify managed components, native client input and mobile pointer behavior.
-- [Host application picture performance](operations/host-application-performance.md) - Measure bandwidth, painted frames and input latency against reproducible native/browser workloads and explicit budgets.
-- [Host application input validation](operations/host-application-input-validation.md) - Verify actual toolkit text, click focus and old-session recovery while separating real IME acceptance.
-- [Linux desktop and package compatibility validation](operations/host-application-desktop-validation.md) - Assess released graphics/package evidence, product receipts and remaining desktop/device limits.
-- [Host application platform validation](operations/host-application-platform-validation.md) - Verify Linux userspace and native macOS evidence while retaining hardware, translation and policy limits.
-- [Host application cursor acceptance](operations/host-application-cursor-validation.md) - Verify transported cursor geometry and application clicks while tracking physical pointer and device limitations.
-- [Host Application Lifecycle](operations/host-application-lifecycle.md) - Diagnose startup, window, access and transport transitions using the focused acceptance matrix.
-- [Runtime Binary Portability](architecture/runtime-binary-portability.md) - Build native Linux/macOS runtimes and preserve static library source and relink access.
-- [Desktop loopback Web Service access](architecture/web-service-desktop-loopback.md) - Give one HTTP service a protected numeric-loopback Origin in its isolated Desktop window.
-- [Web Service system-browser authorization](architecture/web-service-browser-authorization.md) - Exchange a Desktop-private route for one exact, bounded browser session without a public fallback.
-- [Managed Web Service opening](architecture/managed-web-service-opening.md) - Prepare a verified current-launch entrance and recover authentication without implicit lifecycle changes.
-- [Managed Web Service Templates](architecture/managed-web-service-templates.md) - Verify and map one released external catalog without retaining service-specific content in Redeven.
-- [Redeven Service Template format compatibility](architecture/service-template-format-compatibility.md) - Read branded and historical source formats without rewriting original files.
-- [GitHub service template sources](architecture/managed-service-git-sources.md) - Import original directories through either download location and review source changes before committing them.
-- [Independent Host service lifecycle](architecture/independent-host-services.md) - Preserve application processes across management restarts and safely recover native ownership and private opening sessions.
-- [Managed Web Services](architecture/managed-web-services.md) - Resolve current templates with fixed releases, exact bindings, applied Runtime digests, and explicit failure recovery.
-- [Web Service management recovery](architecture/service-management-recovery.md) - Review current facts, resume partial uninstall, and detach or restore management without losing resource control.
-- [Service resource ownership](architecture/service-resource-ownership.md) - Allocate isolated instance resources and preserve unverified legacy or externally referenced data.
-- [Managed Service operation progress](architecture/managed-service-operation-progress.md) - Persist and stream bounded, redacted command output without losing user-controlled disclosure state.
-- [Managed Service release discovery and updates](architecture/managed-service-release-discovery.md) - Discover exact npm and OCI releases directly from configured sources, require explicit selection, and update with rollback.
-- [Managed Service version interaction](architecture/managed-service-version-interaction.md) - Select and verify a version in one drawer, confirm only changed notices, and stop or submit without losing context.
-- [Managed Service instance configuration](architecture/managed-service-instance-configuration.md) - Combine current template definitions with typed instance overrides and apply stopped Runtime changes through one risk-checked journal.
-- [Runtime Service snapshot](architecture/runtime-service-snapshot.md) - Desktop/runtime compatibility, open readiness, capabilities, and bindings.
-- [Runtime session permission gates](architecture/runtime-session-permission-gates.md) - Runtime validation and local permission clamping before sessions open.
-- [Runtime system monitoring](architecture/runtime-system-monitoring.md) - Read cached resource snapshots, exclude loopback traffic, and recover network sampling without a second metrics owner.
-- [Runtime transport dependencies](architecture/runtime-transport-dependencies.md) - Flowersec and Floeterm dependency boundaries.
-- [Runtime artifact spend and control pool](architecture/runtime-artifact-spend-and-control-pool.md) - Burn opaque control artifacts once and recover bounded pool delivery.
-- [Runtime terminal lifecycle](architecture/runtime-terminal-lifecycle.md) - Delegate PTY, semantic history, and live terminal ownership to Floeterm.
-- [Product RPC request encoding](architecture/product-rpc-request-encoding.md) - Construct JSON requests that preserve optional filesystem operation semantics before transport dispatch.
-- [Git workspace inventory lifecycle](architecture/git-workspace-inventory-lifecycle.md) - Bound revisioned workspace capture, transport resources, mutation coordination, and linked-worktree removal.
-- [Env App upstream web dependencies](architecture/env-app-upstream-web-dependencies.md) - Published web package contracts consumed by Env App.
-- [Env App terminal and surface composition](architecture/env-app-terminal-and-surface-composition.md) - Compose semantic terminal and retained Activity/Workbench surfaces.
-- [Env App connection and recovery](architecture/env-app-connection-and-recovery.md) - Bind published artifact sources and structured reconnect recovery.
-- [Whole-window status surfaces](ui/window-status-surfaces.md) - Present connection, access and standalone Desktop status while keeping glass out of movable content.
-- [Env App page asset recovery](ui/page-asset-recovery.md) - Detect frontend updates after reconnect and recover failed page modules without automatically discarding unsaved work.
-- [ReDevPlugin host integration boundary](architecture/redevplugin-boundary.md) - Separate released platform ownership from Redeven source policy, placement, runtime build, and business adapters.
-- [ReDevPlugin Redeven adapters](architecture/redevplugin-redeven-adapters.md) - Bind authenticated product sessions, source policy, and product surfaces to released platform contracts.
-- [Plugin platform integration](architecture/plugin-platform-integration.md) - Mount the released Host, admit reviewed external packages, and coordinate exact Activity and Workbench placements.
-- [Plugin process sessions](architecture/plugin-process-sessions.md) - Run user-configured local processes through the ReDevPlugin Process Broker with opaque ownership, bounded binary streams, and deterministic cleanup.
-- [Plugin background entries](architecture/plugin-background-entries.md) - Start, recover, diagnose, and stop headless plugin workers without coupling them to visible surfaces.
-- [Plugin package and runtime lifecycle](architecture/redevplugin-package-lifecycle.md) - Qualify released package sources, installation, runtime readiness, and cache ownership.
-- [Plugin surface recovery and permissions](architecture/redevplugin-surface-recovery.md) - Observe plugin inventory, installation, permissions, and reconnect recovery through one client scope.
-- [Plugin market consumption](architecture/plugin-market-consumption.md) - Discover one verified latest release per channel while GitHub Releases and ReDevPlugin retain artifact and trust authority.
-- [Native container operation observation](architecture/containers-operation-observation.md) - Keep endpoint-bound native mutations locked until authoritative reconciliation proves a terminal outcome.
-- [Native container resources](architecture/container-resources-capability.md) - Manage Docker and Podman through one native engine, operation, permission, and product boundary.
-- [Container runtime execution](architecture/container-runtime-execution.md) - Discover active engine endpoints and bind typed Docker or Podman observations without changing host selection.
-- [Volume usage observation](architecture/container-volume-usage.md) - Distinguish referenced, unused, and unknown volumes while loading engine-reported disk usage independently.
-- [Container service management](architecture/container-service-management.md) - Detect, control, and configure the active local Docker or Podman implementation without endpoint selection or elevation.
-- [Native container console](architecture/container-resources-console.md) - Present stable aggregated inventory, structured Compose input, and exact-target resource navigation.
+- [Host Application Setup](operations/host-application-setup.md)
+- [Host Application Validation](operations/host-application-validation.md)
+- [Host application picture performance](operations/host-application-performance.md)
+- [Host application input validation](operations/host-application-input-validation.md)
+- [Linux desktop and package compatibility validation](operations/host-application-desktop-validation.md)
+- [Host application platform validation](operations/host-application-platform-validation.md)
+- [Host application cursor acceptance](operations/host-application-cursor-validation.md)
+- [Host Application Lifecycle](operations/host-application-lifecycle.md)
+- [Runtime Binary Portability](architecture/runtime-binary-portability.md)
+- [Desktop loopback Web Service access](architecture/web-service-desktop-loopback.md)
+- [Web Service system-browser authorization](architecture/web-service-browser-authorization.md)
+- [Managed Web Service opening](architecture/managed-web-service-opening.md)
+- [Managed Web Service Templates](architecture/managed-web-service-templates.md)
+- [Redeven Service Template format compatibility](architecture/service-template-format-compatibility.md)
+- [GitHub service template sources](architecture/managed-service-git-sources.md)
+- [Independent Host service lifecycle](architecture/independent-host-services.md)
+- [Managed Web Services](architecture/managed-web-services.md)
+- [Web Service management recovery](architecture/service-management-recovery.md)
+- [Service resource ownership](architecture/service-resource-ownership.md)
+- [Managed Service operation progress](architecture/managed-service-operation-progress.md)
+- [Managed Service release discovery and updates](architecture/managed-service-release-discovery.md)
+- [Managed Service version interaction](architecture/managed-service-version-interaction.md)
+- [Managed Service instance configuration](architecture/managed-service-instance-configuration.md)
+- [Runtime Service snapshot](architecture/runtime-service-snapshot.md)
+- [Runtime session permission gates](architecture/runtime-session-permission-gates.md)
+- [Runtime system monitoring](architecture/runtime-system-monitoring.md)
+- [Runtime transport dependencies](architecture/runtime-transport-dependencies.md)
+- [Runtime artifact spend and control pool](architecture/runtime-artifact-spend-and-control-pool.md)
+- [Runtime terminal lifecycle](architecture/runtime-terminal-lifecycle.md)
+- [Product RPC request encoding](architecture/product-rpc-request-encoding.md)
+- [Git workspace inventory lifecycle](architecture/git-workspace-inventory-lifecycle.md)
+- [Env App upstream web dependencies](architecture/env-app-upstream-web-dependencies.md)
+- [Env App terminal and surface composition](architecture/env-app-terminal-and-surface-composition.md)
+- [Env App connection and recovery](architecture/env-app-connection-and-recovery.md)
+- [Whole-window status surfaces](ui/window-status-surfaces.md)
+- [Env App page asset recovery](ui/page-asset-recovery.md)
+- [ReDevPlugin host integration boundary](architecture/redevplugin-boundary.md)
+- [ReDevPlugin Redeven adapters](architecture/redevplugin-redeven-adapters.md)
+- [Plugin platform integration](architecture/plugin-platform-integration.md)
+- [Plugin process sessions](architecture/plugin-process-sessions.md)
+- [Plugin background entries](architecture/plugin-background-entries.md)
+- [Plugin package and runtime lifecycle](architecture/redevplugin-package-lifecycle.md)
+- [Plugin surface recovery and permissions](architecture/redevplugin-surface-recovery.md)
+- [Plugin market consumption](architecture/plugin-market-consumption.md)
+- [Native container operation observation](architecture/containers-operation-observation.md)
+- [Native container resources](architecture/container-resources-capability.md)
+- [Container runtime execution](architecture/container-runtime-execution.md)
+- [Volume usage observation](architecture/container-volume-usage.md)
+- [Container service management](architecture/container-service-management.md)
+- [Native container console](architecture/container-resources-console.md)
 
 ## Security
 
-- [Runtime access sessions](security/runtime-access-sessions.md) - Preserve browser refresh continuity, scope Runtime cookies, and enforce session expiry and revocation.
-- [Runtime two-factor authentication](security/runtime-two-factor-authentication.md) - Set up environment MFA, sign in, recover lost factors, and enforce session revocation.
-- [Local UI network exposure](security/local-ui-network-exposure.md) - Configure network scope, authenticated HTTP/HTTPS endpoints, exact authorities, and independent client sessions.
-- [Local UI certificates](security/local-ui-certificates.md) - Import, regenerate, or remove HTTPS identities safely and configure client trust explicitly.
-- [Permission policy and filesystem scope](security/permission-policy-and-filesystem-scope.md) - Local caps and directory-level file access policy.
-- [Plugin platform integration security](security/plugin-platform-integration-security.md) - Keep authenticated ownership, package provenance, signature trust, permissions, and runtime authority independent.
+- [Runtime access sessions](security/runtime-access-sessions.md)
+- [Runtime two-factor authentication](security/runtime-two-factor-authentication.md)
+- [Local UI network exposure](security/local-ui-network-exposure.md)
+- [Local UI certificates](security/local-ui-certificates.md)
+- [Permission policy and filesystem scope](security/permission-policy-and-filesystem-scope.md)
+- [Plugin platform integration security](security/plugin-platform-integration-security.md)
 
 ## Desktop
 
-- [Verified Environment access routes](desktop/desktop-environment-access.md) - Associate verified Gateway paths, select explicit defaults and preserve independent Runtime and Cloud authority.
+- [Verified Environment access routes](desktop/desktop-environment-access.md)
 
-- [Host application component cache](desktop/host-application-component-cache.md) - Reuse graphical component downloads across devices and distinguish cached bytes from network and upload progress.
-- [Desktop qualification lifecycle](desktop/desktop-test-lifecycle.md) - Run explicit Desktop acceptance with bounded, identity-scoped cleanup and cleanup-verified results.
-- [Desktop development sessions and bundles](desktop/desktop-development-bundles.md) - Build and stop local development services together while retaining current, recent, and running-process bundles.
-- [Desktop Web Service browser window](desktop/web-service-browser-window.md) - Preserve trusted chrome, isolated application state, exact navigation authority, and recoverable connection failures.
-- [Desktop host application titlebar](desktop/host-application-titlebar.md) - Operate application windows and picture settings beside native window buttons while preserving fast connection and normal close semantics.
-- [Desktop shell theme state](desktop/desktop-shell-theme-state.md) - Global source, per-mode Floe presets, renderer synchronization, and native window colors.
-- [Desktop runtime bridge](desktop/desktop-runtime-bridge.md) - Separate Desktop direct lifecycle coordination from Runtime and optional access transports.
-- [Desktop Environment library](desktop/desktop-environment-library.md) - Group trusted Runtime, Cloud and Gateway routes once and browse source grids with consistent counts.
-- [Preserve Desktop interaction sessions](desktop/desktop-interaction-continuity.md) - Keep dialogs, popups, drafts and handoffs continuous through background refresh and enforce regression gates.
-- [Environment card presentation](desktop/desktop-environment-card-presentation.md) - Preserve original Env card tabs, facts, split footer, focus and geometry across refreshes.
-- [Desktop Welcome navigation](desktop/desktop-welcome-navigation.md) - Switch Environments and Flower immediately while retaining page state and honoring explicit host requests.
-- [Desktop Environment connections](desktop/desktop-environment-connections.md) - Identify each connection's host and apply one address scope and sharing policy across cards and settings.
-- [Desktop runtime readiness](desktop/desktop-runtime-readiness.md) - Separate direct Runtime health and recovery from access-only Gateway, Provider, and URL readiness.
-- [Runtime platform facts and icons](desktop/desktop-runtime-platform.md) - Identify Runtime operating systems from trusted reports and preserve Env card geometry with pinned local marks.
-- [Desktop transport recovery](desktop/desktop-transport-recovery.md) - Preserve bridge identity, recovery generations, and terminal session disposal.
-- [Desktop SSH runtime operations](desktop/desktop-ssh-runtime-operations.md) - Execute SSH-host and SSH-container lifecycle actions through one direct Desktop owner.
-- [Desktop WSL runtime operations](desktop/desktop-wsl-runtime-operations.md) - Register exact WSL 2 distributions and manage Linux Runtime lifecycle through a private Windows Desktop Bridge.
-- [Desktop session and model source](desktop/desktop-session-model-source.md) - Project session routes, opaque Desktop models, Flower attach, and lifecycle invalidation.
-- [Desktop Environment registration ownership](desktop/desktop-environment-registrations.md) - Keep independent registration owners per action surface, migrate retired SSH records once, and serialize rename, pin, and removal safely.
-- [Desktop environment settings](desktop/desktop-environment-settings.md) - Open one settings window, retain independent drafts, and save through the selected registration’s authority.
-- [Desktop environment settings presentation](desktop/desktop-environment-settings-presentation.md) - Apply one theme-aware visual hierarchy, fixed window geometry and responsive controls across settings tasks.
-- [Desktop SSH environment settings](desktop/desktop-ssh-environment-settings.md) - Edit SSH connection details, reveal custom configuration, and dismiss the editor directly.
-- [Desktop runtime process lifecycle](desktop/desktop-runtime-process-lifecycle.md) - Own Local, WSL, SSH, and container Runtime lifecycle through one process-local Desktop coordinator.
-- [Desktop managed Environment reinstall](desktop/desktop-reinstall-operations.md) - Recover an exact managed Runtime root with a Runtime-only package and minimal Desktop journal.
-- [Desktop application updates](desktop/desktop-application-updates.md) - Coordinate signed macOS Sparkle and Linux DEB/RPM updates with one stateful installation boundary.
+- [Host application component cache](desktop/host-application-component-cache.md)
+- [Desktop qualification lifecycle](desktop/desktop-test-lifecycle.md)
+- [Desktop development sessions and bundles](desktop/desktop-development-bundles.md)
+- [Desktop Web Service browser window](desktop/web-service-browser-window.md)
+- [Desktop host application titlebar](desktop/host-application-titlebar.md)
+- [Desktop shell theme state](desktop/desktop-shell-theme-state.md)
+- [Desktop runtime bridge](desktop/desktop-runtime-bridge.md)
+- [Desktop Environment library](desktop/desktop-environment-library.md)
+- [Preserve Desktop interaction sessions](desktop/desktop-interaction-continuity.md)
+- [Environment card presentation](desktop/desktop-environment-card-presentation.md)
+- [Desktop Welcome navigation](desktop/desktop-welcome-navigation.md)
+- [Desktop Environment connections](desktop/desktop-environment-connections.md)
+- [Desktop runtime readiness](desktop/desktop-runtime-readiness.md)
+- [Runtime platform facts and icons](desktop/desktop-runtime-platform.md)
+- [Desktop transport recovery](desktop/desktop-transport-recovery.md)
+- [Desktop SSH runtime operations](desktop/desktop-ssh-runtime-operations.md)
+- [Desktop WSL runtime operations](desktop/desktop-wsl-runtime-operations.md)
+- [Desktop session and model source](desktop/desktop-session-model-source.md)
+- [Desktop Environment registration ownership](desktop/desktop-environment-registrations.md)
+- [Desktop environment settings](desktop/desktop-environment-settings.md)
+- [Desktop environment settings presentation](desktop/desktop-environment-settings-presentation.md)
+- [Desktop SSH environment settings](desktop/desktop-ssh-environment-settings.md)
+- [Desktop runtime process lifecycle](desktop/desktop-runtime-process-lifecycle.md)
+- [Desktop managed Environment reinstall](desktop/desktop-reinstall-operations.md)
+- [Desktop application updates](desktop/desktop-application-updates.md)
 
 ## Gateway
 
-- [Gateway Cloud access](gateway/gateway-cloud-access.md) - Publish unified Runtime members through Namespace approval and track recovery and independent closure receipts.
-- [Gateway client access](gateway/gateway-client-access.md) - Verify host management and enroll, reconnect or revoke environment-only URL clients.
-- [Gateway service](gateway/gateway-service.md) - Manage invitations, membership and policy without Runtime lifecycle authority.
-- [Gateway network settings](gateway/gateway-network-settings.md) - Separate Runtime share endpoints, next-start bind addresses and exact request Host admission.
-- [Gateway Desktop interactions](gateway/gateway-desktop-interactions.md) - Manage environments in place and verify clear counts, contextual forms, access actions and operation feedback.
-- [Gateway access sessions](gateway/gateway-access-sessions.md) - Open outbound members with isolated TLS, Runtime authentication and bounded reverse streams.
-- [Gateway deployment qualification](gateway/gateway-deployment-qualification.md) - Verify outbound-only LAN and Cloud application access with real Electron and network isolation.
+- [Gateway Cloud access](gateway/gateway-cloud-access.md)
+- [Gateway client access](gateway/gateway-client-access.md)
+- [Gateway service](gateway/gateway-service.md)
+- [Gateway network settings](gateway/gateway-network-settings.md)
+- [Gateway Desktop interactions](gateway/gateway-desktop-interactions.md)
+- [Gateway access sessions](gateway/gateway-access-sessions.md)
+- [Gateway deployment qualification](gateway/gateway-deployment-qualification.md)
 
 ## Code
 
-- [CodeSpace system-browser access](desktop/codespace-system-browser.md) - Hand a resource-bound entry to an ordinary browser and preserve editor operations without private bridge credentials.
-- [Native Desktop CodeSpace access](desktop/codespace-native-access.md) - Open a bound editor through a persistent protected loopback origin over the selected environment transport.
-- [Browser Editor runtime](code/browser-editor-runtime.md) - Code App app server, codespace proxying, and managed Browser Editor setup.
+- [CodeSpace system-browser access](desktop/codespace-system-browser.md)
+- [Native Desktop CodeSpace access](desktop/codespace-native-access.md)
+- [Browser Editor runtime](code/browser-editor-runtime.md)
 
-- [Flower MCP runtime](ai/mcp-runtime.md) - Configure MCP servers and execute tools with authenticated configuration, Floret approval, and terminal unknown outcomes.
+- [Flower MCP runtime](ai/mcp-runtime.md)
 ## UI
 
-- [Tessiven canvas](ui/tessiven-canvas.md) - Render progressively detailed Runtime topology with readable grouping, progressive connections, and accessible Ask Flower context.
-- [Tessiven relationship summaries](ui/tessiven-relationship-summaries.md) - Browse bounded node-pool call patterns and every exact relationship without inflating the canvas.
-- [Tessiven canvas navigation and rendering](ui/tessiven-canvas-navigation.md) - Browse compact layouts, control group visibility, reveal scoped connections and bound route painting during large-graph drags.
-- [Tessiven Flower replies](ui/tessiven-flower-replies.md) - Read live canvas replies in a refined floating window with canonical actions and projected menu ownership.
+- [Tessiven canvas](ui/tessiven-canvas.md)
+- [Tessiven relationship summaries](ui/tessiven-relationship-summaries.md)
+- [Tessiven canvas navigation and rendering](ui/tessiven-canvas-navigation.md)
+- [Tessiven Flower replies](ui/tessiven-flower-replies.md)
 
-- [Runtime settings](ui/runtime-settings.md) - Navigate runtime configuration with retained drafts, responsive controls, and confirmed maintenance.
-- [Flower Skills and MCP](ui/flower-extensions.md) - Manage instructions and external tools in the conversation rail’s shared two-tab page.
+- [Runtime settings](ui/runtime-settings.md)
+- [Flower Skills and MCP](ui/flower-extensions.md)
 
-- [UI presentation transactions](ui/ui-presentation-transactions.md) - Visual intent, after-paint content commits, post-paint effects, keep-alive continuity, and performance budgets.
-- [Env App floating layer order](ui/env-app-floating-layer-order.md) - Order movable windows, Flower, plugin surfaces, blocking modals, and command UI through one product contract.
-- [Dialog content placement](ui/dialog-content.md) - Place instructions and consequences in the body while preserving title identity, accessible guidance, and scrollable content.
-- [Adaptive desktop layout](ui/adaptive-desktop-layout.md) - Preserve desktop workflows in narrow windows and allocate transient navigation from local space.
-- [Mobile shell navigation](ui/mobile-shell-navigation.md) - Reach global tools and plugins above an interactive bottom bar while reclaiming the mobile toolbar row.
-- [File preview window actions](ui/file-preview-window-actions.md) - Read files with compact title-bar actions while preserving selection, editing, and dismissal behavior.
-- [File preview dismissal](ui/file-preview-dismissal.md) - Close previews without blank or brighter frames while cancelling work immediately and releasing content after exit.
-- [File preview viewport and rendering](ui/file-preview-viewport-and-rendering.md) - Fit pages and images to the full reading area, float zoom controls, and prevent stale or overlapping renders.
-- [Static PPTX file preview](ui/file-preview-pptx.md) — Read presentations locally with windowed slides, native text selection, isolated resources, and verified license provenance.
-- [HTML file preview](ui/file-preview-html.md) - Open HTML pages by default with isolated interaction, bounded reads, and explicit source editing.
-- [Git workspace generation and Files decoration](ui/git-workspace-generation-and-decoration.md) - Keep Git views and background Files status consistent through capability gating and monotonic invalidation.
-- [Shared surface material](ui/surface-material.md) - Apply lightweight shared depth, quiet seams, and immediate control feedback across Env App, Desktop, and Flower.
-- [Product accessibility for AI agents](ui/agent-accessibility.md) - Preserve core UI presentation and interaction while auditing semantic gaps and shared ownership.
-- [Input focus boundaries](ui/input-focus-boundaries.md) - Keep one stable focus border across standard and compound inputs while preserving non-input keyboard cues.
-- [Git browser visual states](ui/git-browser-visual-states.md) - Keep selection, current-branch facts, Git status tones, hover, and focus visually independent across themes.
-- [Git diff request lifecycle](ui/git-diff-request-lifecycle.md) - Preserve request ownership and reading state across layout changes while refreshing on new Git targets, explicit actions, and transport replacement.
-- [Workbench interaction contracts](ui/workbench-interaction-contracts.md) - Wheel, text selection, and action-surface ownership contracts.
-- [Workbench composition surfaces and editing](ui/workbench-composition.md) - Edit optional region names and note materials with native input and durable layout storage.
-- [Workbench input ownership](ui/workbench-input-ownership.md) - Distinguish canvas, local-scroll, pointer, text, and terminal input ownership.
-- [Workbench terminal interaction](ui/workbench-terminal-interaction.md) - Preserve attachment, input-plane, focus, retained-history, and performance ownership.
-- [Terminal fonts across client devices](ui/terminal-fonts.md) - Resolve bundled and available local fonts without rewriting shared preferences or observer-controlled geometry.
-- [Terminal session groups](ui/terminal-session-groups.md) - Persist one Environment group catalog and project it consistently through Activity and Workbench placement trees.
-- [Official installation progress](ui/plugin-installation-progress.md) - Observe durable installation and permission setup across management close and reconnect.
-- [Plugin package review](ui/plugin-package-review.md) - Review exact update and external-package evidence before mutation.
-- [Plugin layout continuity](ui/plugin-layout-continuity.md) - Preserve plugin placements through updates, recovery, and independent display modes.
-- [Workbench surface lifecycle](ui/workbench-surface-lifecycle.md) - Preserve selection, recovery, lazy widgets, and shared floating-surface ownership.
-- [File icon presentation](ui/file-icon-presentation.md) - Identify file formats with released upstream artwork, product palettes, and size-appropriate detail across Files and Git.
-- [Files context menus](ui/files-context-menu.md) - Keep file actions inside the whole Files workspace and above mobile Flower chrome with shared touch, keyboard, and scroll handling.
-- [Plugin Center interaction](ui/plugin-center-interaction.md) - Browse, filter, and manage plugins with retained drawer state and correct modal input.
-- [Plugin surfaces](ui/plugin-surfaces.md) - Review exact plugin inventory and place SDK surfaces in Activity windows or Workbench widgets.
-- [Flower thread Goals](ai/flower-goals.md) - Manage a concise objective, reflect before completion and recover without losing drafts.
-- [Flower turn launcher](ui/flower-turn-launcher.md) - Use one strict turn endpoint, connection-local composer state, typed admission outcomes, and host handoff responsibilities.
-- [Flower Activity origin page references](ui/flower-page-context.md) - Capture once from the actual Activity page, inspect the frozen reference and remove it without replenishment.
-- [Flower conversation references](ui/flower-thread-references.md) - Add frozen conversation snapshots, preview basic facts and open authorized threads without losing drafts.
-- [Flower composer references](ui/flower-composer-references.md) - Working-directory @ discovery, editable draft chips, strict composer wire data, and ordered admission into Floret.
-- [Flower input history](ui/flower-input-history.md) - Recall previous user text with arrow keys while preserving drafts, input methods and completion ownership.
-- [Absolute filesystem directory selection](ui/filesystem-picker-navigation.md) - Select runtime-authorized absolute paths with shared navigation and independent product forms.
-- [Floating Files window dismissal](ui/files-floating-window-dismissal.md) - Close Files without a blank frame while retiring content on the published window lifecycle.
-- [Personal directory favorites](ui/directory-favorites.md) - Share authenticated directory shortcuts across Files, Flower, Git and every picker.
-- [Flower working directory navigation](ui/flower-working-directory-navigation.md) - Open a conversation directory in Files or a new Terminal through consistent Activity and Workbench menus.
-- [Flower mobile navigation](ui/flower-mobile-navigation.md) - Switch between full-height conversations and chat while retaining drafts, readable content, and circular send actions.
-- [Flower Activity companion](ui/flower-activity-companion.md) - Expand a compact floating entry into the same retained Flower surface and preserve placement, composer identity, focus, and read ownership.
-- [Ask Flower window boundaries](ui/ask-flower-window.md) - Keep contextual launchers below headers and preserve manual resizing without maximization.
-- [Flower companion composer and motion](ui/flower-companion-composer.md) - Keep one native editor, anchor its toolbar below text, and dissolve closing detail without a compact-entry jump.
-- [Flower companion presence](ui/flower-companion-presence.md) - Present live work, pending actions, and new completion feedback without displacing drafts or creating a second observation stream.
-- [Flower read state](ui/flower-read-state.md) - Keep read indicators monotonic, acknowledge rendered content and recover silently from synchronization failures.
-- [Flower live timeline](ui/flower-live-timeline.md) - Apply native runtime mutations through one workspace stream, authorized public DTOs and indexed local rendering.
-- [Flower file edit preparation](ui/flower-edit-preparation.md) - Candidate filenames during argument streaming, immediate publication, and actual-result takeover.
-- [Flower timeline ordering](ui/flower-timeline-ordering.md) - Consume canonical turn pages, projections, decorations, cursors, and replacement events.
-- [Flower terminal turn process disclosure](ui/flower-turn-process-disclosure.md) - Control ended work manually and collapse successful work automatically while retaining conclusions, reading position and historical outcomes.
-- [Flower reasoning selection ownership](ui/flower-reasoning-selection.md) - Preserve explicit reasoning choices through cold loading, shared drafts, and restart.
-- [Flower personal conversation preferences](ui/flower-conversation-preferences.md) - Persist explicit model, directory, and model-owned reasoning choices without importing thread settings into future defaults.
-- [Flower model and navigation presentation](ui/flower-model-navigation.md) - Keep model-source controls, notifications, and staged thread selection explicit.
-- [Flower setup and settings](ui/flower-setup-and-settings.md) - Configure Flower through clear setup destinations and flat settings sections while preserving drafts and permission ownership.
-- [Flower provider configuration](ui/flower-provider-configuration.md) - Complete provider access before configuring models, with clear authentication selection and stable catalog interaction.
-- [Flower ChatGPT authentication](ui/flower-provider-chatgpt-authentication.md) - Explicit account selection, stable sign-out feedback and confirmed local account removal.
-- [Flower failure recovery](ui/flower-failure-recovery.md) - One turn-level failure and bounded canonical recovery.
-- [Flower composer attachments](ui/flower-composer-attachments.md) - Stage files and long text through one shared connection-local composer workflow.
-- [Flower file activity presentation](ui/flower-file-activity.md) - Show typed file-change statistics and unified diffs without protocol metadata or reconstructed state.
-- [Flower consecutive tool sequences](ui/flower-tool-sequences.md) - Compact consecutive tools, including failures, and bounded thinking while preserving dialogue, explicit choices and active reading.
-- [Flower activity disclosure interaction](ui/flower-activity-interaction.md) - Keep tool clicks, reading position, and floating controls stable during streaming.
-- [Flower conversation sidebar](ui/flower-thread-sidebar.md) - Distinguish selection and persist pin order while preserving menus, focus and running animations.
-- [Flower inline media](ui/flower-inline-media.md) - Display screenshots, video, audio, and isolated HTML previews inside assistant messages.
-- [Flower streaming stability](ui/flower-streaming-stability.md) - Preserve complete interaction subtrees, bound rendering work, and reproduce streaming performance acceptance.
-- [Flower received output progress](ui/flower-output-progress.md) - Show request waiting time, received output estimates and safe streamed edit counts with canonical result replacement.
+- [UI presentation transactions](ui/ui-presentation-transactions.md)
+- [Env App floating layer order](ui/env-app-floating-layer-order.md)
+- [Dialog content placement](ui/dialog-content.md)
+- [Adaptive desktop layout](ui/adaptive-desktop-layout.md)
+- [Mobile shell navigation](ui/mobile-shell-navigation.md)
+- [File preview window actions](ui/file-preview-window-actions.md)
+- [File preview dismissal](ui/file-preview-dismissal.md)
+- [File preview viewport and rendering](ui/file-preview-viewport-and-rendering.md)
+- [Static PPTX file preview](ui/file-preview-pptx.md)
+- [HTML file preview](ui/file-preview-html.md)
+- [Git workspace generation and Files decoration](ui/git-workspace-generation-and-decoration.md)
+- [Shared surface material](ui/surface-material.md)
+- [Product accessibility for AI agents](ui/agent-accessibility.md)
+- [Input focus boundaries](ui/input-focus-boundaries.md)
+- [Git browser visual states](ui/git-browser-visual-states.md)
+- [Git diff request lifecycle](ui/git-diff-request-lifecycle.md)
+- [Workbench interaction contracts](ui/workbench-interaction-contracts.md)
+- [Workbench composition surfaces and editing](ui/workbench-composition.md)
+- [Workbench input ownership](ui/workbench-input-ownership.md)
+- [Workbench terminal interaction](ui/workbench-terminal-interaction.md)
+- [Terminal fonts across client devices](ui/terminal-fonts.md)
+- [Terminal session groups](ui/terminal-session-groups.md)
+- [Official installation progress](ui/plugin-installation-progress.md)
+- [Plugin package review](ui/plugin-package-review.md)
+- [Plugin layout continuity](ui/plugin-layout-continuity.md)
+- [Workbench surface lifecycle](ui/workbench-surface-lifecycle.md)
+- [File icon presentation](ui/file-icon-presentation.md)
+- [Files context menus](ui/files-context-menu.md)
+- [Plugin Center interaction](ui/plugin-center-interaction.md)
+- [Plugin surfaces](ui/plugin-surfaces.md)
+- [Flower thread Goals](ai/flower-goals.md)
+- [Flower turn launcher](ui/flower-turn-launcher.md)
+- [Flower Activity origin page references](ui/flower-page-context.md)
+- [Flower conversation references](ui/flower-thread-references.md)
+- [Flower composer references](ui/flower-composer-references.md)
+- [Flower input history](ui/flower-input-history.md)
+- [Absolute filesystem directory selection](ui/filesystem-picker-navigation.md)
+- [Floating Files window dismissal](ui/files-floating-window-dismissal.md)
+- [Personal directory favorites](ui/directory-favorites.md)
+- [Flower working directory navigation](ui/flower-working-directory-navigation.md)
+- [Flower mobile navigation](ui/flower-mobile-navigation.md)
+- [Flower Activity companion](ui/flower-activity-companion.md)
+- [Ask Flower window boundaries](ui/ask-flower-window.md)
+- [Flower companion composer and motion](ui/flower-companion-composer.md)
+- [Flower companion presence](ui/flower-companion-presence.md)
+- [Flower read state](ui/flower-read-state.md)
+- [Flower live timeline](ui/flower-live-timeline.md)
+- [Flower file edit preparation](ui/flower-edit-preparation.md)
+- [Flower timeline ordering](ui/flower-timeline-ordering.md)
+- [Flower terminal turn process disclosure](ui/flower-turn-process-disclosure.md)
+- [Flower reasoning selection ownership](ui/flower-reasoning-selection.md)
+- [Flower personal conversation preferences](ui/flower-conversation-preferences.md)
+- [Flower model and navigation presentation](ui/flower-model-navigation.md)
+- [Flower setup and settings](ui/flower-setup-and-settings.md)
+- [Flower provider configuration](ui/flower-provider-configuration.md)
+- [Flower ChatGPT authentication](ui/flower-provider-chatgpt-authentication.md)
+- [Flower failure recovery](ui/flower-failure-recovery.md)
+- [Flower composer attachments](ui/flower-composer-attachments.md)
+- [Flower file activity presentation](ui/flower-file-activity.md)
+- [Flower consecutive tool sequences](ui/flower-tool-sequences.md)
+- [Flower activity disclosure interaction](ui/flower-activity-interaction.md)
+- [Flower conversation sidebar](ui/flower-thread-sidebar.md)
+- [Flower inline media](ui/flower-inline-media.md)
+- [Flower streaming stability](ui/flower-streaming-stability.md)
+- [Flower received output progress](ui/flower-output-progress.md)
 - [Flower code highlighting](ui/flower-code-highlighting.md): Verify syntax colors, stable code selection/copy, and bounded background work in both hosts.
-- [Flower message appearance](ui/flower-message-appearance.md) - Recognize sent user messages and preserve readable content and native text selection across themes.
-- [Flower terminal activity presentation](ui/flower-terminal-activity.md) - Render safe terminal operation facts and bounded output.
-- [Flower interactions and context state](ui/flower-approval-context.md) - Reconcile questions, shared decision guards, and context recovery.
-- [Asynchronous layout stability](ui/asynchronous-layout-stability.md) - Keep controls, retained lists, feedback, and media stationary through asynchronous state changes.
-- [Shared interface scale](ui/interface-scale.md) - Align desktop text, controls, and spacing while preserving touch targets and content-viewer scale.
-- [Flower approval surface](ui/flower-approval-surface.md) - Review bounded approval queues, inspect commands, and decide exact one-time batches.
-- [Flower citations](ui/flower-citations.md) - Render canonical assistant sources safely and keep private provider markers out of prose and copied messages.
-- [Flower subagent detail window](ui/flower-subagent-detail-window.md) - Keep child current-view reads, live Activity and queued-input controls stable.
-- [Flower subagent detail presentation](ui/flower-subagent-detail.md) - Render parent-owned membership, task summaries, and canonical child navigation.
-- [Flower parent event timeline](ui/flower-parent-events.md) - Read child reports and automatic events in the parent conversation with canonical avatars and inline task navigation.
+- [Flower message appearance](ui/flower-message-appearance.md)
+- [Flower terminal activity presentation](ui/flower-terminal-activity.md)
+- [Flower interactions and context state](ui/flower-approval-context.md)
+- [Asynchronous layout stability](ui/asynchronous-layout-stability.md)
+- [Shared interface scale](ui/interface-scale.md)
+- [Flower approval surface](ui/flower-approval-surface.md)
+- [Flower citations](ui/flower-citations.md)
+- [Flower subagent detail window](ui/flower-subagent-detail-window.md)
+- [Flower subagent detail presentation](ui/flower-subagent-detail.md)
+- [Flower parent event timeline](ui/flower-parent-events.md)
 
 ## AI
 
-- [Tessiven Runtime discovery and operations](ai/tessiven-runtime-operations.md) - Discover exact device and host Gateway paths, authenticate through native owners and delegate scoped service or process actions.
-- [Tessiven Flower and service operations](ai/tessiven-flower-and-operations.md) - Generate evidence-backed canvas versions and route exact service actions through existing authority.
+- [Tessiven Runtime discovery and operations](ai/tessiven-runtime-operations.md)
+- [Tessiven Flower and service operations](ai/tessiven-flower-and-operations.md)
 
-- [Authorized platform model gateway](ai/platform-model-gateway.md) - Session-scoped catalogs, credential isolation, and stable streamed execution.
+- [Authorized platform model gateway](ai/platform-model-gateway.md)
 
-- [Model directory and selection](ai/model-directory-and-selection.md) - Preserve explicit selections across catalog updates and present a bounded, searchable chat menu.
-- [Model web search](ai/model-web-search.md) - Review search capability and align badges, admission, and provider tools.
-- [Local ChatGPT plan authentication](ai/chatgpt-local-authentication.md) - Admit official sign-in only on a verified local host and preserve account, credentials, history and billing choice.
-- [ChatGPT account lifecycle](ai/chatgpt-account-lifecycle.md) - Save verified registrations, select local accounts, renew rotating sessions and recover cancellation or logout independently of connection editing.
-- [Provider configuration validation](ai/provider-configuration-validation.md) - Validate required provider fields and credentials while preserving optional defaults and keyless Ollama and compatible-endpoint chat.
-- [Provider API and catalog review](ai/provider-api-catalog-review.md) - Check current official models, endpoint compatibility, regional configuration, and released-adapter blockers.
+- [Model directory and selection](ai/model-directory-and-selection.md)
+- [Model web search](ai/model-web-search.md)
+- [Local ChatGPT plan authentication](ai/chatgpt-local-authentication.md)
+- [ChatGPT account lifecycle](ai/chatgpt-account-lifecycle.md)
+- [Provider configuration validation](ai/provider-configuration-validation.md)
+- [Provider API and catalog review](ai/provider-api-catalog-review.md)
 
-- [Direct image reading and retention](ai/image-read-and-retention.md) - Authorize native image reads, preserve immutable snapshots and collect from complete canonical inventory.
-- [AI tool runtime](ai/ai-tool-runtime.md) - Builtin tool registry, permission checks, and activity projection.
-- [Flower storage ownership and migrations](ai/flower-storage-ownership-and-migrations.md) - Preserve owner lineages and deterministic canonical imports without mutable request decoders.
-- [Flower backup and recovery](ai/flower-backup-and-recovery.md) - Review protected complete-set snapshots and restore data without replaying old work.
-- [Flower historical writer acceptance](ai/flower-upgrade-compatibility.md) - Add immutable writer samples and prove upgrade, continued use and restart at final integration.
-- [Flower attachment resources](ai/flower-attachment-resources.md) - Enforce owner-scoped uploads, canonical reads, quotas, and last-reference cleanup.
-- [AI tool permissions and dispatch](ai/tool-permission-runtime.md) - Apply tool registration, scheduling, permission, approval, readonly, and target-routing contracts.
-- [Computer and browser use runtime](ai/computer-use-runtime.md) - Keep authorization, execution, observation and packaged helper compatibility under one Runtime owner.
-- [Computer semantic snapshots](ai/computer-use-semantics.md) - Validate schema v2 trees, portable roles, relationships and privacy at the Runtime boundary.
-- [Computer script execution](ai/computer-use-scripts.md) - Compose bounded semantic operations and preserve partial results without replaying effects.
-- [Optional built-in browser installation](ai/computer-use-browser-installation.md) - Confirm browser download or Desktop upload, persist the capability switch, and validate task continuation.
-- [Built-in browser Linux system preparation](ai/computer-use-browser-system.md) - Authorize exact versioned AppArmor preparation while preserving the browser sandbox and user data.
-- [Browser and desktop settings](ai/computer-use-environment-settings.md) - Inspect environment capabilities and manage pairing without changing conversation targets or permissions.
-- [Guided Chrome connection](ai/computer-use-browser-connection.md) - Prepare and confirm a browser connection while retaining independent task answers and Stop.
-- [Chrome connection diagnostics and recovery](ai/computer-use-chrome-diagnostics.md) - Diagnose missing components and graphical sessions, then recover on the correct environment host.
-- [Managed browsers and authorized Chrome tabs](ai/computer-use-browser.md) - Select profiles and exact tabs, preserve user settings, and qualify background control.
-- [Semantic desktop operations](ai/computer-use-desktop.md) - Use window AX and isolated AT-SPI with explicit foreground authority and user input priority.
-- [Computer target selection across threads](ai/computer-use-target-selection.md) - Preserve authorized target choices across turns and restart without inheriting control on fork.
-- [Computer use safety pauses and user control](ai/computer-use-takeover.md) - Return operation facts, resolve independent question evidence, and require fresh observation after user input.
-- [Private browser observation and input](ai/computer-use-private-browser-control.md) - Fence secret-surface observation, user-only frames, ordered input and explicit handback recovery.
-- [Computer use media and visual requests](ai/computer-use-media.md) - Separate durable keyframes from live samples and verify decoded Stage pixels and visual request budgets.
-- [Flower computer viewer presentation](ui/flower-computer-viewer.md) - Present decoded Stage pixels, restore viewer geometry and apply canonical status without changing media authority.
-- [Computer use qualification](ai/computer-use-qualification.md) - Verify real pixels, input, handback, target scope and isolated cleanup.
-- [Computer use qualification evidence](ai/computer-use-qualification-evidence.md) - Assess measured native, browser and private-recovery outcomes within their tested scope.
-- [Computer use paired model measurements](ai/computer-use-performance.md) - Compare semantic scripts with visual primitives and reject incomplete performance evidence.
-- [Codex design evidence](ai/computer-use-design-evidence.md) - Trace command-first, AX, batching and background-control decisions to official guidance and version-scoped packaged behavior.
-- [AI tool approval runtime](ai/tool-approval-runtime.md) - Reconcile pending approval queues, conflicts, decisions, and authoritative live state.
-- [AI terminal tool runtime](ai/terminal-tool-runtime.md) - Manage PTY handles, incremental output, termination, and Floret settlement.
-- [Model reasoning capabilities and transport](ai/model-reasoning-runtime.md) - Discover exact thinking controls and preserve selections, streaming output, and provider history.
-- [Flower prompt and rule sources](ai/flower-prompt-and-rule-sources.md) - Keep one shared identity introduction separate from runtime facts, capability contracts and native engine guidance.
-- [AI model and context runtime](ai/model-context-runtime.md) - Separate model-source ownership, provider mapping, token limits, context, and compaction.
-- [Model provider surface and history](ai/model-provider-surface-and-history.md) - Keep provider-visible history, tool surfaces, and render lineage under one Floret owner.
-- [Model request recovery](ai/model-request-recovery.md) - Keep retry budgets and deadlines upstream while projecting attempt diagnostics and recoverable interaction.
-- [Model request measurement](ai/model-request-measurement.md) - Map native coverage evidence and frozen boundaries into upstream-owned compaction pressure.
-- [Model request reuse](ai/model-request-reuse.md) - Execute canonical cache/continuation decisions with bounded OpenAI connections and recent/cumulative usage.
-- [Flower context compaction and Goal continuation](ai/flower-context-compaction.md) - Preserve explicit intent and one upstream execution and recovery owner.
-- [Model context usage and compaction](ai/model-context-usage-and-compaction.md) - Account usage, context pressure, compaction, and capacity failures through typed runtime facts.
-- [Flower context compaction qualification](operations/flower-compaction-qualification.md) - Verify isolated deterministic, historical-copy and real-provider behavior.
-- [Flower Ollama context qualification](operations/flower-ollama-context-qualification.md) - Verify the selected installed model's real compaction, token accounting, live context, and restart recovery in isolated state.
-- [Flower context distribution qualification](operations/flower-context-distribution-qualification.md) - Compare frozen-request estimates with fixed native usage and preserve real task, compaction and presentation evidence.
-- [Flower Ollama task qualification](operations/flower-ollama-task-qualification.md) - Exercise real selected-model tasks, interruption, queue controls, approvals, restart, checkpoint retry, and child-agent handoffs.
-- [DeepSeek Responses](ai/deepseek-responses.md) - Share Floret stateless transport and enforce documented web tool limits.
-- [Flower canonical thread queries](ai/flower-thread-queries.md) - Authorize active-path search, exact counts and bounded content reads through released Floret tools.
-- [Floret thread runtime integration](ai/floret-thread-runtime.md) - Read canonical overviews, titles, structured attachments, and admitted lifecycle through published Floret APIs.
-- [Floret Redeven adapter and projection](ai/floret-redeven-adapter-and-projection.md) - Authorize, sanitize, and project Floret views without a second lifecycle.
-- [Flower subagent parent events](ai/subagent-parent-events.md) - Deliver bounded reports and lifecycle events through canonical context and explicit handoffs.
-- [Flower subagent runtime](ai/subagent-runtime.md) - Use Floret-owned child threads, bounded status previews, canonical membership, and complete handoffs.
-- [Flower thread fork coordination](ai/flower-thread-fork-coordination.md) - Fork canonical Agent state first, then materialize fixed host settings and thread resource ownership.
-- [Flower thread deletion coordination](ai/flower-thread-deletion-coordination.md) - Retire product access after durable intent, serialize canonical-first cleanup, and fail closed on integrity loss.
-- [Flower plugin generation](ai/flower-plugin-generation.md) - Generated plugin flows through Floret approval and ReDevPlugin lifecycle APIs.
-- [Flower context action records](ai/flower-context-action-records.md) - Ask Flower launcher context validation, persistence, and UI badge projection.
-- [Redeven environment operations](ai/redeven-env-operations.md) - Product boundary for Flower and automation environment lifecycle requests.
-- [OKF bundle lifecycle](ai/okf-bundle-lifecycle.md) - OKF source validation, deterministic artifacts, and runtime embedding.
-- [OKF tool suite](ai/okf-search-tool.md) - Read-only repository knowledge access through index browsing, short search, and concept opening.
+- [Direct image reading and retention](ai/image-read-and-retention.md)
+- [AI tool runtime](ai/ai-tool-runtime.md)
+- [Flower storage ownership and migrations](ai/flower-storage-ownership-and-migrations.md)
+- [Flower backup and recovery](ai/flower-backup-and-recovery.md)
+- [Flower historical writer acceptance](ai/flower-upgrade-compatibility.md)
+- [Flower attachment resources](ai/flower-attachment-resources.md)
+- [AI tool permissions and dispatch](ai/tool-permission-runtime.md)
+- [Computer and browser use runtime](ai/computer-use-runtime.md)
+- [Computer semantic snapshots](ai/computer-use-semantics.md)
+- [Computer script execution](ai/computer-use-scripts.md)
+- [Optional built-in browser installation](ai/computer-use-browser-installation.md)
+- [Built-in browser Linux system preparation](ai/computer-use-browser-system.md)
+- [Browser and desktop settings](ai/computer-use-environment-settings.md)
+- [Guided Chrome connection](ai/computer-use-browser-connection.md)
+- [Chrome connection diagnostics and recovery](ai/computer-use-chrome-diagnostics.md)
+- [Managed browsers and authorized Chrome tabs](ai/computer-use-browser.md)
+- [Semantic desktop operations](ai/computer-use-desktop.md)
+- [Computer target selection across threads](ai/computer-use-target-selection.md)
+- [Computer use safety pauses and user control](ai/computer-use-takeover.md)
+- [Private browser observation and input](ai/computer-use-private-browser-control.md)
+- [Computer use media and visual requests](ai/computer-use-media.md)
+- [Flower computer viewer presentation](ui/flower-computer-viewer.md)
+- [Computer use qualification](ai/computer-use-qualification.md)
+- [Computer use qualification evidence](ai/computer-use-qualification-evidence.md)
+- [Computer use paired model measurements](ai/computer-use-performance.md)
+- [Codex design evidence](ai/computer-use-design-evidence.md)
+- [AI tool approval runtime](ai/tool-approval-runtime.md)
+- [AI terminal tool runtime](ai/terminal-tool-runtime.md)
+- [Model reasoning capabilities and transport](ai/model-reasoning-runtime.md)
+- [Flower prompt and rule sources](ai/flower-prompt-and-rule-sources.md)
+- [AI model and context runtime](ai/model-context-runtime.md)
+- [Model provider surface and history](ai/model-provider-surface-and-history.md)
+- [Model request recovery](ai/model-request-recovery.md)
+- [Model request measurement](ai/model-request-measurement.md)
+- [Model request reuse](ai/model-request-reuse.md)
+- [Flower context compaction and Goal continuation](ai/flower-context-compaction.md)
+- [Model context usage and compaction](ai/model-context-usage-and-compaction.md)
+- [Flower context compaction qualification](operations/flower-compaction-qualification.md)
+- [Flower Ollama context qualification](operations/flower-ollama-context-qualification.md)
+- [Flower context distribution qualification](operations/flower-context-distribution-qualification.md)
+- [Flower Ollama task qualification](operations/flower-ollama-task-qualification.md)
+- [DeepSeek Responses](ai/deepseek-responses.md)
+- [Flower canonical thread queries](ai/flower-thread-queries.md)
+- [Floret thread runtime integration](ai/floret-thread-runtime.md)
+- [Floret Redeven adapter and projection](ai/floret-redeven-adapter-and-projection.md)
+- [Flower subagent parent events](ai/subagent-parent-events.md)
+- [Flower subagent runtime](ai/subagent-runtime.md)
+- [Flower thread fork coordination](ai/flower-thread-fork-coordination.md)
+- [Flower thread deletion coordination](ai/flower-thread-deletion-coordination.md)
+- [Flower plugin generation](ai/flower-plugin-generation.md)
+- [Flower context action records](ai/flower-context-action-records.md)
+- [Redeven environment operations](ai/redeven-env-operations.md)
+- [OKF bundle lifecycle](ai/okf-bundle-lifecycle.md)
+- [OKF tool suite](ai/okf-search-tool.md)
 
 ## Protocol
 
-- [Gateway v6 protocol](protocol/gateway-v6-protocol.md) - Define signed multi-endpoint invitations, member identity, independent permissions and reverse access.
-- [RCPP v5 Cloud API](protocol/rcpp-v5-cloud-api.md) - Define Provider discovery, health, open-session, Runtime link, and access authorization only.
+- [Gateway v6 protocol](protocol/gateway-v6-protocol.md)
+- [RCPP v5 Cloud API](protocol/rcpp-v5-cloud-api.md)
 
 ## Release
 
-- [Self-contained installer distribution](release/self-contained-installer.md) - Authenticate prebuilt installers, activate complete suites, and gate default-version promotion on deployed and rollback entry compatibility.
-- [CI and release gates](release/ci-and-release-gates.md) - Local/CI checks and release artifact contracts.
-- [ReDevPlugin release artifact gate](release/redevplugin-release-gates.md) - Verify published runtime evidence, native packaging, and closed release inventory.
-- [Plugin integration gate](release/plugin-integration-gates.md) - Qualify released plugin Host, market, renderer, and Desktop integration.
-- [OKF release assets](release/okf-release-assets.md) - Public release verification files for the embedded OKF bundle.
-- [Automated service-template catalog updates](release/service-template-updates.md) - Adopt checksum-verified catalog tags through the final main gate without publishing product packages or upgrading instances.
+- [Self-contained installer distribution](release/self-contained-installer.md)
+- [CI and release gates](release/ci-and-release-gates.md)
+- [ReDevPlugin release artifact gate](release/redevplugin-release-gates.md)
+- [Plugin integration gate](release/plugin-integration-gates.md)
+- [OKF release assets](release/okf-release-assets.md)
+- [Automated service-template catalog updates](release/service-template-updates.md)
 
 - [Managed runtime facts](ai/flower-managed-model-context.md): canonical request-boundary snapshots and safe recovery.

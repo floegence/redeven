@@ -5,6 +5,8 @@ description: Open one target-bound settings session, preserve independent drafts
 tags: [desktop, environments, settings, interaction]
 quality_exception: One target-bound settings session joins connection drafts, access prerequisites, and restart recovery; keep their cross-domain authority and focus handoff together.
 timestamp: 2026-10-12T06:30:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -20,141 +22,27 @@ Local access settings.
 # Contract
 
 ## Sections and authority
+Local opens Access & security and has no connection editor. Access management uses existing WSL authority only after discovery confirms that exact distribution is running; opening settings or automatic loading never starts a stopped distro.
 
-Local opens Access & security and has no connection editor. SSH and container
-registrations open Connection and load Access & security on its first visit.
-WSL opens Connection with an editable name and its registered distribution,
-Linux user and Runtime directory as identity information. Access management uses
-existing WSL authority only after discovery confirms that exact distribution is
-running; opening settings or automatic loading never starts a stopped distro.
-The error surface offers the existing explicit Start action.
-
-URL registrations edit their name, address and automatic status detection.
-Gateway members expose their member identity and Gateway-authorized membership
-settings. Neither entry provides Runtime access management. Cloud shows its
-connection information and the existing Redeven Cloud management entry. None of
-these sections grants additional lifecycle or access authority.
-
-The main-frame Desktop settings bridge resolves each requested ID against the
-registration catalog before invoking any management operation. There is no
-selected-Environment or Local fallback and no legacy launcher save action.
-Running compatible Runtimes use private control; stopped Runtimes use the same
-registered host's authorized CLI. An older native Runtime's saved configuration
-can be read through the bundled authority, while saving requires stopping or
-updating that Runtime. Current process password constraints remain distinct from
-saved next-start configuration.
+Current process password constraints remain distinct from saved next-start configuration.
 
 ## Opening, drafts and saves
+One opening owns the committed connection baseline, connection draft and lazily loaded access baseline and draft. Background health revalidation preserves the observed running summary, connection nodes, expanded listeners, address filters, selection, scroll and QR panels; it never reloads access, certificate or security configuration.
 
-One opening owns the committed connection baseline, connection draft and lazily
-loaded access baseline and draft. There is no access-settings cache in Welcome
-snapshots. Live snapshots update health and actual addresses without replacing
-inputs. Background health revalidation preserves the observed running summary,
-connection nodes, expanded listeners, address filters, selection, scroll and QR
-panels; it never reloads access, certificate or security configuration. Completed
-observations update actual addresses and status, including failure or Stop.
-Only a newly observed Runtime start identity invalidates security state; an old
-open window cannot restore its historical start time during a probe. Runtime
-management actions still use live capability authority. Address
-observation continuity follows [Environment connections](desktop-environment-connections.md).
-Access dirty state and save/discard availability use the same comparison;
-manually restoring the baseline clears the dirty state.
-
-Switching tabs keeps both forms mounted, preserving drafts, expanded controls and
-scroll positions. Ordinary Save submits only the active tab and stays in the
-window. Submitted forms reject further edits and duplicate saves; only the chosen
-save action shows its pending label. Failure retains the draft. Closing the window, Escape and backdrop dismissal
-discard unsaved changes; they do not cancel an already submitted save. Returning
-to the access overview keeps the draft for explicit review or discard.
-
-Save and restart persists access settings first. Failure stays in the editor;
-success closes that exact opening and reveals the Environment card's existing
-Runtime progress after the published Dialog reports that its exit has completed.
-The card selects the Runtime owner and scrolls into view, clearing search or
-source filters only when they hide the target. Submission feedback has no fake
-steps or percentage. The admitted operation's exact key and start time bind the
-existing lifecycle disclosure, including an operation that finishes before the
-window exits. Completed results remain readable; reopening through the card also
-retains the settings navigation until another operation replaces it. Dismissing
-progress does not cancel work or let later events reopen it.
-
-A connection draft, including a WSL name change, blocks Save and restart with an
-inline explanation and navigation to Connection. Explicitly discarding connection
-changes retains the access draft; Save for next restart remains available so
-identity edits and access edits cannot deadlock. Saving one section never commits
-or silently discards the other section.
-
-A requested restart continues for its original target after manual dismissal,
-but a late save cannot close a new opening, reveal old progress over it, or steal
-focus. A removed target is not restarted. If restart fails or is canceled, the
-progress surface distinguishes saved settings from an incomplete restart and
-retains diagnostics and recovery. Retry submits only another restart. A lifecycle
-conflict reveals the existing owner when the user is still following the request,
-even when its first progress snapshot arrives after admission; dismissing that
-request or opening settings cancels the pending focus handoff. The owner's
-completion never claims that the rejected restart applied settings. Success
-leaves users on the card with Open Env App and Return to settings. Visible results
-do not also generate success toasts; background results name their Environment.
-
-Connection saves return the committed canonical target ID. A change of host,
-port, container or Runtime directory cannot submit while access edits remain;
-the user first saves or discards them. Successful identity changes invalidate old
-access data and the next Access visit reads the new registered target. A rename
-retains the access draft. Removed registrations close their session. Reads,
-saves, certificate refreshes and connection failures are scoped to opening and
-target identity. Starting a save invalidates older reads; late failure from a
-closed opening is a notification, never an error in the next editor.
+Starting a save invalidates older reads; late failure from a closed opening is a notification, never an error in the next editor.
 
 ## Access tasks and recovery
+Access opens a task overview for current connection, browser access, sign-in protection and HTTPS certificate.
 
-Access opens a task overview for current connection, browser access, sign-in
-protection and HTTPS certificate. Choosing a task presents its relevant
-configuration and retains the same access draft. Configuration proceeds through
-scope/protocol, prerequisites and an explicit next-start review. Advanced bind
-and port controls remain available. Navigation does not add a draft or save owner.
+Recovery-pending protection must be restored before that change.
 
-A protected HTTP or password change first explains the dependency, verifies
-identity and explicitly commits disabling two-factor, then resumes the original
-task. Recovery-pending protection must be restored before that change. Password
-removal also selects local-only access and reviews both changes together.
-
-An unset password offers Set password without a removal action. Running environments with security
-management wait for its authoritative status; loading or failed status
-cannot bypass the protected-change prerequisite. The existing error and Retry
-surface owns recovery. Stopped environments retain next-start password editing
-through their existing saved-configuration authority. Entering removal stages only the draft and review;
-explicit saving owns persistence.
-
-Authenticator enrollment, recovery-code confirmation and management use the same
-window body and fixed actions, never a nested dialog. Committed security changes
-are immediate and survive canceling later access edits. Their authoritative
-refresh retains the mounted task and pending draft. HTTPS preparation for
-enrollment preserves the existing restart handoff and requires an explicit
-return and setup action after restart; it never enrolls automatically.
-
-Access loading and failures remain inside the access section. Failures show their
-structured summary or original diagnostic with Copy and Retry. Control HTTP 401
-and 403 retain their status, code and original diagnostic across settings IPC;
-the visible message explains in the selected language that this Environment
-rejected Desktop's settings authority. Copy retains the original diagnostic.
-The same message projection applies to a save failure delivered after dismissal.
-Retry keeps the current window and connection draft. Missing or invalid
-responses never become fabricated defaults or a generic claim that Runtime is
-preparing.
-
-The [settings presentation contract](desktop-environment-settings-presentation.md)
-owns window geometry, theme material, section hierarchy, responsive controls,
-address disclosures, workflow inputs, focus affordances and visual transitions.
+The [settings presentation contract](desktop-environment-settings-presentation.md) owns window geometry, theme material, section hierarchy, responsive controls, address disclosures, workflow inputs, focus affordances and visual transitions.
 
 # Boundaries
 
 [Verified access routes](desktop-environment-access.md) owns identity association and locally saved access defaults.
 
-Address namespace and copy/browser/QR policy are owned by
-[Environment connections](desktop-environment-connections.md); certificate
-operations are owned by [Local UI certificates](../security/local-ui-certificates.md).
-SSH field and secret details are owned by
-[SSH environment settings](desktop-ssh-environment-settings.md).
+SSH field and secret details are owned by [SSH environment settings](desktop-ssh-environment-settings.md).
 
 # Evidence
 
@@ -163,14 +51,3 @@ SSH field and secret details are owned by
 - `redeven:desktop/scripts/check-settings-restart.mjs` - Full Welcome shell acceptance for Local, SSH, WSL and container restart handoff, focus, dismissal, retry, narrow layouts and reduced motion.
 
 - `redeven:desktop/scripts/check-settings-expansion.mjs` - Per-frame window, footer and disclosure measurements, rapid reversals, immediate focus exclusion and reduced motion.
-- `redeven:desktop/scripts/check-access-settings.mjs` - Browser evidence for grouped password actions, matching security cards, keyboard and touch interaction, control proportions, all shipped themes and locales, narrow panels, enlarged text, real scrolling, certificate presentation and save recovery. `--password-only` selects focused password acceptance.
-- `redeven:desktop/src/welcome/EnvironmentAccessWorkflow.tsx` - Task navigation, prerequisite continuation and contextual review/save feedback.
-- `redeven:desktop/src/welcome/EnvironmentSettingsDialog.css` - Product geometry, responsive fields and fixed action baseline.
-- `redeven:desktop/src/welcome/EnvironmentSettingsDialog.tsx` - Published modal and tabs with retained, independently scrolling panels.
-- `redeven:desktop/src/welcome/environmentSettingsSession.ts` - Opening identity, independent drafts and asynchronous result isolation.
-- `redeven:desktop/src/welcome/EnvironmentSettingsEntry.client.test.tsx` - Actual card entry, real health-store refresh continuity, read failures, reopening, deletion and late save behavior.
-- `redeven:desktop/src/welcome/environmentSettingsSession.test.ts` - Read/write ordering, manual revert, tab drafts and target rebinding.
-- `redeven:desktop/src/main/environmentAccessSettings.ts` - Explicit owner, WSL guard, compatibility and Runtime configuration projection.
-- `redeven:desktop/src/main/environmentAccessSettings.test.ts` - Cloud write rejection, no implicit WSL start and process-bound pending state.
-- `redeven:desktop/scripts/check-environment-settings.mjs` - Actual card openings, per-frame tab geometry and motion, successful/failed/delayed reads, rapid keyboard switching, reduced motion, repeated health probes, and retained nodes, drafts, QR panels, selection and scroll positions.
-- `redeven:scripts/check_desktop.sh` - Full Desktop validation includes settings and endpoint browser acceptance; ordinary source checks do not launch browsers.

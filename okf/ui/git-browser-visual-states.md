@@ -4,6 +4,8 @@ title: Git browser visual states
 description: Keep Git selection, repository facts, semantic status, hover, and focus visually independent across themes.
 tags: [ui, git, files, accessibility, themes]
 timestamp: 2026-10-18T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -12,58 +14,33 @@ Env App's Git browser owns file selection and inline diff inspection. File lists
 # Contract
 
 ## State ownership
+Selected navigation, branch rows, history rows, status summaries, and changed-file rows share the Git selection accent, background, border, and indicator tokens. Hover uses a lower-emphasis neutral surface and never overrides an active selection.
 
-Selected navigation, branch rows, history rows, status summaries, and changed-file rows share the Git selection accent, background, border, and indicator tokens. List-like selections use a filled surface plus a solid left indicator. Compact segmented tabs and Files/Git mode buttons use the primary/primary-foreground selection contract owned by [Shared surface material](surface-material.md). They update the actual selected button immediately, retain both button instances, and do not adopt list indicators. Hover uses a lower-emphasis neutral surface and never overrides an active selection. Keyboard focus uses a distinct outline that remains visible on selected and unselected controls.
-
-Selected-row secondary metadata blends the published muted and body foregrounds and must retain at least 4.5:1 contrast against its selected surface in every preset and material, including Soft Black. This product alias does not override the upstream palette.
-
-The Current branch chip is independent of selection styling. It always uses the current-branch chip tokens, including when the current branch is selected. Git change and health tones such as success, warning, danger, info, and remote-branch violet remain on semantic icons, badges, paths, and values; they must not determine a selection indicator or focus ring.
+Git change and health tones such as success, warning, danger, info, and remote-branch violet remain on semantic icons, badges, paths, and values; they must not determine a selection indicator or focus ring.
 
 ## Commit graph layout
+The history sidebar has one measured geometry owner for static rails, row connectors, nodes, and row columns.
 
-The history sidebar has one measured geometry owner for static rails, row connectors, nodes, and row columns. Simple histories retain the natural 16-pixel lane spacing. When topology is wider than the sidebar budget, the graph uses at most 45% of the commit row and compresses lane spacing, nodes, and strokes together while preserving every lane and connection. The commit summary keeps the remaining width, with a 128-pixel target where the sidebar can provide it; subject and author truncate within their own cells while hash and time remain visible. Sidebar resizing recomputes this geometry directly and does not create horizontal scrolling, rewrite the persisted sidebar width, or select a second compact layout.
-
-The selected row surface and the main commit detail are the selection presentation. The history summary does not add a competing inline `Selected` label. Complex topology cannot change commit selection, detail loading, context actions, or keyboard behavior.
+Complex topology cannot change commit selection, detail loading, context actions, or keyboard behavior.
 
 ## Inline file inspection
+Workspace changes, graph commit details, branch worktree status, branch commit details, and branch comparisons use one retained file/diff navigation surface.
 
-Workspace changes, graph commit details, branch worktree status, branch commit details, and branch comparisons use one retained file/diff navigation surface. Wide layouts keep both visible; below 768 CSS pixels the list and detail are consecutive full-height views. Selecting a file reveals its diff with an accessible return-to-files action; returning retains selection and list scroll and restores row focus. Neither transition remounts the patch or list. Branch comparison retains its existing comparison dialog, with both files and diff inside it. Saved-stash review remains a separate floating-window workflow.
+Filtering, removing a file, changing sections, or switching commits cannot leave a detached old file object as the displayed diff.
 
-The active page or commit owns the available files. Selection resolves against that current inventory and defaults to its first file; directory rows continue to navigate the workspace scope. Filtering, removing a file, changing sections, or switching commits cannot leave a detached old file object as the displayed diff. Stage, unstage, discard, pagination, and context menus retain their existing authority and confirmation behavior. Arrow Up/Down and Home/End navigate within the focused file rail; nested action buttons keep their own keyboard semantics.
-
-The file rail and patch share one outer frame and one internal divider, with equal-height navigation and diff headers. Nested file tables do not draw independent borders or rounded corners. Before a file is selected, the diff header retains its title but hides mode controls; selection guidance occupies the full detail body rather than a separate notification strip. The file rail and patch have independent constrained scroll viewports. The single-pane threshold uses actual container width, including a narrow Workbench widget. Narrow file rows and navigation controls have at least 44px touch targets. Commit overview uses a single title/action row; the full-message action retains access to author, timestamp, hash, and body. Patch scrolling and text selection use the existing Workbench ownership contracts. Selecting another file resets patch scroll position and expansion state without resetting file-list scroll.
-
-Changed-file inventories use dense single-line rows, never spaced cards or repeated two-line metadata blocks. Desktop rows are 28 CSS pixels high; coarse-pointer and narrow navigation rows are at least 44 pixels. File names use the 12px control tier from the [shared interface scale](interface-scale.md). File names have priority over inline muted parent paths. Exact paths and rename identities remain available through titles, accessible text, and the selected diff. Compact Git status codes retain localized accessible names; aligned addition/deletion counts appear only when the inventory provides statistics. Workspace actions remain directly reachable on the same row, with distinct stage and unstage icons. Status, path, and metrics must all update when the selected file changes.
-
-Branch history uses the full available width and height for its commit list until a commit is selected, with one quiet guidance line instead of an empty detail panel. Selection opens the detail beside the list: commit navigation takes 24% with a 14rem minimum. At container widths of 1000 CSS pixels or less it moves above the detail, taking 25% of the available height bounded between 100 pixels and 18rem. This prevents a tall screen from expanding navigation at the expense of inspection. The selected commit stays visible when the rail contracts. Closing details restores the full history viewport and returns focus to the selected row without remounting the graph. Detail entry uses a short opacity reveal; reduced-motion preferences disable it. The nested file/diff split still follows its own available width, independently of the browser viewport or Workbench canvas scale.
-
-An empty branch workspace section uses one full-width status surface with balanced vertical placement. It does not render empty table columns, a file/diff divider, or Patch/Full Context controls with no file. Directory-scoped empty copy remains scoped to that directory, and unavailable worktree states use the same contained surface with their existing explanation. Loading and verification retain the stable toolbar and content frame. State copy must wrap within narrow widgets without horizontal scrolling or clipping.
-
-Commit switches in both graph entry points retain the mounted overview, action row, and file/diff frame while details load. The selected graph summary supplies known subject, author, hash, time, and body preview immediately; unknown counts, dense file rows, and patch content use placeholders inside their actual layout slots. Loading never substitutes a full-width table for the inline split. File headers, the divider, and diff toolbar retain the same geometry across pending and ready states, including the active narrow pane. Full-message and commit actions remain disabled until details arrive; previous files and patches are cleared immediately. Late detail responses cannot replace a newer selection, and clearing or disposing the view invalidates its requests. Error and empty results remain explicit.
-
-Diff chrome keeps file identity and Patch/Full Context controls in one compact toolbar, followed by status, counts, and copy. Permanent implementation descriptions and nested panel padding do not displace code. Selection and hover use short color transitions without changing row geometry; a newly mounted patch uses a restrained opacity reveal. Reduced-motion preferences disable these effects. File navigation must remain immediate and must not wait for animation completion.
-
-Diff request ownership, refresh, transport recovery, and Workbench placement continuity follow [Git diff request lifecycle](git-diff-request-lifecycle.md). These rules apply to every inspection placement.
-
-Long lines keep their own horizontal scroll viewport. When content overflows, the detail surface consumes Floe Webapp Core’s published `PersistentHorizontalScrollbar` as a persistent in-surface track instead of relying on an OS overlay scrollbar that may disappear; the track mirrors the viewport, supports pointer dragging and track seeking, and exposes keyboard scrolling through the horizontal scrollbar role. Floe owns overflow measurement, native scroll synchronization, pointer and keyboard interaction, scaling, and accessible scrollbar semantics. Redeven supplies placement, the localized label, and the Workbench action-surface contract. The viewport reserves room for this affordance, keeps it inside the detail surface rather than allowing page or Workbench scrolling to own it, and retains independent vertical scrolling. The viewport remains contained at narrow widths and under Workbench projection.
+The viewport remains contained at narrow widths and under Workbench projection.
 
 ## Theme and accessibility
-
-Every built-in light and dark shell preset inherits the complete Git interaction token set. Themes, including Classic Dark, derive selected surfaces from Floe's published `ring` interaction role and derive selection indicators and focus rings from the theme `ring`, with a small foreground mixture in dark themes where needed to preserve adjacent-color contrast. This keeps warm, green, violet, neutral, and blue themes within their own interaction identity. Light themes use a restrained selection mixture over the panel; dark themes use a stronger mixture so selection does not disappear into dark panels, while Classic Dark keeps a quieter surface mixture suited to its elevated panels. Classic Light and Porcelain Light use a stronger blend of their muted theme accent to remain distinct from neutral hover. No preset retains a fixed blue interaction override; blue text selection, links, and Git fact colors remain independent. Selected text, branch metadata, table headers, and current-chip text meet a 4.5:1 contrast target. Browser titles and table headers keep opaque semantic text. Studio limits its neutral selection fill to retain readable metadata; Solarized Light slightly strengthens Git control and shared Tag ink without changing semantic status hues. Selection indicators and focus rings meet a 3:1 adjacent-color target, while selected, hover, and idle surfaces retain measurable perceptual separation. Forced-colors mode exposes selected borders, indicators, focus outlines, and current-chip boundaries through system colors.
+Every built-in light and dark shell preset inherits the complete Git interaction token set. Forced-colors mode exposes selected borders, indicators, focus outlines, and current-chip boundaries through system colors.
 
 # Boundaries
 
-Inline inspection changes local presentation and file navigation only. It does not alter Git mutations, workspace generation, sidebar-width persistence, or Files decoration. Product themes may vary selection hue and surrounding surfaces, but they must not replace interaction roles with Git semantic status colors, inherit a fixed palette from another theme, or make Current a proxy for selection.
+Inline inspection changes local presentation and file navigation only. Product themes may vary selection hue and surrounding surfaces, but they must not replace interaction roles with Git semantic status colors, inherit a fixed palette from another theme, or make Current a proxy for selection.
 
 # Evidence
 
 - redeven:internal/envapp/ui_src/src/ui/widgets/GitCommitLoading.browser.test.tsx - Checks mounted-frame and geometric stability through delayed and superseded commit requests in both entry points at landscape, tall, and narrow sizes.
 
 - redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffSplit.browser.test.tsx - Verifies row density, stable commit-file navigation, responsive containment, independent scrolling, keyboard selection, removal of the selected file, and a persistent scrollbar with synchronized seeking, resizing, and scaled pointer dragging in a real browser.
+
 - redeven:internal/envapp/ui_src/src/ui/widgets/GitHistoryBrowser.e2e.test.tsx - Verifies commit navigation clears obsolete diff ownership and preserves commit actions.
-- redeven:internal/envapp/ui_src/src/styles/redeven.css - Defines the shared light, dark, and forced-colors Git interaction tokens and state classes.
-- redeven:internal/envapp/ui_src/src/styles/gitBrowserSelectionVisual.browser.test.tsx - Verifies computed contrast and perceptual separation across all built-in shell themes.
-- redeven:internal/envapp/ui_src/src/ui/widgets/GitChrome.ts - Centralizes selectable row, navigation, secondary text, selection chip, and current-branch helpers.
-- redeven:internal/envapp/ui_src/src/ui/widgets/GitCommitGraph.tsx - Owns topology construction and the single width-bounded graph geometry.
-- redeven:internal/envapp/ui_src/src/ui/widgets/GitCommitGraph.browser.test.tsx - Verifies complex topology containment, summary visibility, resizing, and rail-to-node alignment in a real browser.
-- redeven:internal/envapp/ui_src/src/ui/widgets/GitWorkbenchSidebar.e2e.test.tsx - Covers independent current and selected branch combinations.

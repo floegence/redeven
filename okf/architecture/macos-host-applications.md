@@ -4,6 +4,8 @@ title: Native macOS host applications
 description: Real application discovery, direct local launch, owned remote window capture and human input on macOS.
 tags: [runtime, desktop, applications, macos, security]
 timestamp: 2026-09-23T08:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -21,128 +23,28 @@ quit is independent of sharing and binds to the selected OS process generations.
 # Contract
 
 ## Catalog and local launch
+AppKit discovers applications in standard system/user application directories, running application bundle paths, and explicit custom absolute `.app` paths. Canonical bundle paths define identity; localized bundle metadata and system icons define presentation.
 
-AppKit discovers applications in standard system/user application directories,
-running application bundle paths, and explicit custom absolute `.app` paths.
-Canonical bundle paths define identity; localized bundle metadata and system icons
-define presentation. Unknown descriptions and categories remain empty. Arbitrary
-executable arguments, invented product categories and renamed custom entries are
-not part of this macOS catalog. Explicit custom paths are stored privately by
-Redeven and do not change the system application menu. Launch resolution validates
-current installed bundles and describes only the requested application, avoiding
-full-catalog icon rendering. The streaming helper receives the validated application
-ID and private custom-path inventory directly; it does not repeat a catalog export.
-
-Only a trusted Desktop session marked `local_environment` / `local_host` selects
-direct native launch automatically. `NSWorkspace` opens or activates the actual
-installed application. No streaming session, viewer, or forward is created. Local
-launch requires a graphical login but no capture/input permission. Browser and
-remote Desktop targets use the streaming route.
-
-The [application management contract](macos-application-management.md) owns live
-OS inventory, explicit quit confirmation, process-generation validation and the
-distinction between quitting an app and stopping its sharing session.
+The [application management contract](macos-application-management.md) owns live OS inventory, explicit quit confirmation, process-generation validation and the distinction between quitting an app and stopping its sharing session.
 
 ## Remote window ownership and transport
+The [native capture owner](macos-application-capture-owner.md) uses one Swift process and host-application protocol 2, separate from Computer Use. The helper verifies the returned canonical bundle path and binds its process, so single-instance applications reuse their existing windows.
 
-The [native capture owner](macos-application-capture-owner.md) uses one Swift process
-and host-application protocol 2, separate from Computer Use. AppKit opens or activates the
-selected catalog bundle. The helper verifies the returned canonical bundle path
-and binds its process, so single-instance applications reuse their existing
-windows. The session records whether that process existed before the request.
-Window IDs and menu handles must belong to this bound process. The browser cannot
-supply an arbitrary PID, application path or capture source.
-
-ScreenCaptureKit captures a selected application window on macOS 13 or newer.
-Child-window inclusion uses the macOS 14.2 API when available. A counted window selector in the [application toolbar](../desktop/host-application-titlebar.md) shows the current host window
-title and is enabled whenever shareable windows are available. It opens a scrollable list of literal host window
-titles with the current selection marked, independently of picture settings.
-Untitled windows use the app name and inventory position; the viewer never invents
-application-specific names. Selecting a window keeps the list open, dims retained
-pixels and disables input until a frame from the new binding is decoded. Window
-renames and inventory reordering preserve keyboard focus; removing the focused
-window returns focus to the window button. Escape returns focus to the opener.
-The list follows only the bound process's shareable AX windows, including floating
-tool panels rather than only WindowServer layer zero. Proven window IDs remain
-lifecycle evidence while their WindowServer surfaces exist, even if AX briefly
-omits them. Unrelated menu and status-bar surfaces do not become application windows.
-Passive system capture
-chrome is excluded only when AX confirms no main-window activation, focus, modal
-state or native window controls, and its activation point lies outside its bounds.
-Missing metadata cannot exclude a window; hidden and minimized windows are retained.
-This uses native interaction evidence, never application names or window titles.
-A newly opened focused window
-is selected automatically; inventory refresh does not override an explicit choice
-among existing windows. Rapid explicit selections supersede in-flight capture
-requests; retired callbacks cannot restore an earlier choice. Closing that window returns to a remaining owned window. The [picture and transport contract](macos-application-picture.md) defines Retina
-sampling, live quality controls, hardware video, lossless still refresh and bounded
-delivery. A new capture generation invalidates previous pixels and input coordinates.
-The viewer reveals only decoded pixels, preserves aspect ratio, and requests real
-AX window resizing. macOS and application minimum/maximum sizes can constrain the
-result.
-
-An ephemeral loopback listener requires an unpredictable per-session credential
-via WebSocket subprotocol, independently of the existing owner/full-permission
-forward guard. Credentials never enter URLs. One connection owns input; replacement
-revokes the old connection and releases held keys and buttons before the new connection can
-send input. The viewer first sends one `resume` request carrying its initial
-picture/viewport settings. The adapter orders it after helper launch and rejects
-control before negotiation or repeated negotiation on the same connection.
-Heartbeats detect lost peers. Reconnect refreshes capture without
-launching another process. Capture/permission failure exposes explicit recovery;
-old frames and callback generations cannot reactivate a disconnected view.
-Retired image decoders cannot delay a new connection, and pending pointer movement,
-composition text and menus are discarded when their capture binding changes.
-The [shared client input contract](host-application-input.md) owns composition,
-keyboard transitions, candidate placement and soft-keyboard interaction. Local
-focus during same-window recapture grants no remote input authority; composition
-begun before decoded pixels cannot acquire permission by waiting for a frame.
+Local focus during same-window recapture grants no remote input authority; composition begun before decoded pixels cannot acquire permission by waiting for a frame.
 
 ## Human control and lifecycle
+Remote input shares the host's real graphical session and foreground. Explicit input activates and raises the bound window; foreground identity, focused AX window and pointer hit ownership must be verified before injection.
 
-Remote input shares the host's real graphical session and foreground. Screen
-recording and accessibility grants are required. Explicit input activates and
-raises the bound window; foreground identity, focused AX window and pointer hit
-ownership must be verified before injection. A covered window fails the operation
-instead of sending pointer input into another application. A process-scoped event
-tap acknowledges only Redeven-marked input; the next event waits for that receipt,
-without inspecting unmarked key contents or monitoring other applications. A
-missing receipt fails without replaying the action. The viewer supports
-mouse, wheel, versioned key transitions and confirmed Unicode text. Its remote pixels use
-one published pointer controller for mouse, trackpad, pen and touch: touch scrolls in
-CSS pixels, long press can produce a right click or a later drag, and pinch zoom stays
-with the browser. The controller locks a capture-generation/window token and cancels
-on focus, viewport or capture changes, while toolbar and keyboard controls remain local.
-This is human control, not a Flower automation or model-observation path. Password/privileged system
-dialogs and OS-reserved shortcuts remain subject to macOS policy.
-
-The [native application menu contract](macos-application-menus.md) owns scoped
-menu export, live execution validation and toolbar navigation. Windowless viewers
-retain application-menu access; system-wide Apple actions are never exported.
-Window closure, sharing detachment and application quit follow the
-[application management contract](macos-application-management.md): ordinary
-closure preserves save/cancel dialogs, and only confirmed final-window loss
-closes the viewer. Closing the viewer itself preserves the application.
-The [native window lifecycle contract](macos-application-window-lifecycle.md)
-owns window-presence evidence, replacement grace, unavailable capture and terminal
-reasons. It separates a surviving native window from a currently shareable surface.
-
-The integration does not provide a separate logged-out/headless AppKit session,
-audio, remote file transfer, clipboard synchronization or secure desktop control.
-Protected content, inaccessible custom controls, separate-process dialogs, and apps
-with unusual window ownership require application-specific validation. macOS
-13 API compatibility is a build contract, not a claim of testing every OS version,
-Intel host or third-party application.
+Protected content, inaccessible custom controls, separate-process dialogs, and apps with unusual window ownership require application-specific validation. macOS 13 API compatibility is a build contract, not a claim of testing every OS version, Intel host or third-party application.
 
 # Boundaries
 
-Every operation and stream keeps Host Applications authorization. Missing graphical login or OS permissions block capture explicitly. Network loss preserves the application; reconnect binds the same process, and quitting remains independent of viewer closure.
+Every operation and stream keeps Host Applications authorization. Network loss preserves the application; reconnect binds the same process, and quitting remains independent of viewer closure.
 
 # Evidence
 
 - `desktop/native/computer-host/Sources/RedevenComputerHost/HostApplications.swift`: bundle discovery, owned capture and input, menu and graceful window lifecycle.
+
 - `desktop/native/computer-host/Sources/RedevenComputerHost/HostApplicationWindows.swift` and `desktop/native/computer-host/Tests/RedevenComputerHostTests/HostApplicationTests.swift`: authoritative inventory and transient window lifecycle.
+
 - `internal/hostapps/macos.go` and `macos_test.go`: helper resolution, stream credentials, connection ownership, native launch and cleanup.
-- `internal/codeapp/appserver/host_application_viewer/macos.js` and `internal/envapp/ui_src/src/ui/services/macHostApplicationViewer.test.ts`: first frame, generation, shared pointer gestures, IME, recovery and physical viewer closure.
-- `scripts/check_macos_host_applications.py`, `scripts/check_macos_host_application_waiting.py`, `scripts/check_macos_host_application_quit.py`, `scripts/check_macos_host_application_termination.py` and `scripts/fixtures/nativeHostApplication.swift`: disposable real-app pixel/input/menu/lifecycle acceptance.
-- `internal/envapp/ui_src/src/ui/pages/EnvHostApplicationsPage.test.tsx`: trusted local launch and remote permission presentation.

@@ -4,6 +4,8 @@ title: Desktop Environment registration ownership
 description: Single registration owners, versioned connection records, serialized persistence, and generation-safe removal.
 tags: [desktop, environments, persistence, ssh, wsl, runtime, launcher]
 timestamp: 2026-10-14T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -11,48 +13,26 @@ Each Environment action surface has one authoritative registration owner. Built-
 
 # Contract
 
-Registered Runtime, URL, and Gateway action surfaces carry an explicit `EnvironmentRegistrationRef`. Create, edit, rename, pin, and remove route through the generic registration actions and that reference; Renderer presentation kinds and placement fields never select a persistence action. An SSH destination is connection identity, while the Runtime Target label is user-visible metadata; changing the label does not change the SSH destination. Removal deletes only the Desktop registration, publishes the new snapshot before background session and bridge cleanup, and never deletes remote Redeven data. A missing registration is a typed failure rather than a successful no-op.
+Registered Runtime, URL, and Gateway action surfaces carry an explicit `EnvironmentRegistrationRef`. Create, edit, rename, pin, and remove route through the generic registration actions and that reference; Renderer presentation kinds and placement fields never select a persistence action.
 
-Provider Environment entries retain their Provider-specific action and pin owner; a visual pairing grants no registration or lifecycle authority. Relationship grouping never merges persisted records. Pinning or removing one registration does not mutate its counterpart, and unlinking deletes neither owner nor remote data. The active access perspective selects the action owner without changing storage. Switching perspectives never rebinds an already-open settings or Flower session. Signing out of the official Redeven Cloud account clears only its Desktop authorization and Cloud cache; Runtime registrations and binding identity remain intact, as defined by [RCPP account sign-out](../protocol/rcpp-v5-provider-api.md). Display rules are owned by [Environment library](desktop-environment-library.md).
+The first WSL registration fills an empty default, explicit selection replaces it, and deleting that target clears the reference in the same preference mutation.
 
-Preferences mutations form one serialized queue. Each mutation reads the latest committed value and writes only its owner fields. Long-running Open, probe, and lifecycle work may update health, operation, or `last_used_at` only while the registration still exists. Removal advances the Launcher subject generation before background cleanup, so results from an earlier generation cannot reintroduce a card. Pinning and use-time updates never upsert a missing registration.
+The retired standalone SSH catalog shape is decoded only by the one-time Environment registration migration module. Migration matches SSH host Runtime Targets by destination, port, and normalized Runtime root, transfers credentials and settings, preserves the current visible Runtime Target name, removes duplicate Runtime Target projections of the built-in Local Environment, and never connects to or modifies the remote target.
 
-Saved Cloud registrations accept RCPP v5 only. Cloud validation runs before preference normalization or persistence. Retired fields, unsupported protocol versions, malformed state and retired Cloud migration journals fail read-only with the exact file and recovery instructions. Desktop never converts v3/v4 registrations, replays a Cloud journal or silently discards an invalid Cloud account. Recreate the obsolete local registration and its saved credentials, or explicitly choose a new profile, then sign in and enroll again. Cloud authorization and unrelated Runtime, Gateway and SSH data are independent of this local cleanup.
+The decoder and journal payload can be deleted when the minimum supported catalog version no longer includes the retired SSH schema.
 
-Connection records are explicitly versioned. Desktop reads existing v1 Local, URL, and SSH records without eagerly rewriting or deleting them; new WSL records require v2 and preserve the exact distribution name plus confirmed Linux user. `default_flower_runtime_target_id` references one registered Runtime Target. The first WSL registration fills an empty default, explicit selection replaces it, and deleting that target clears the reference in the same preference mutation.
+Every Launcher Operation declares one `active_progress_surface`: `open`, `runtime_lifecycle`, `reinstall`, or `gateway`. Renderer panels and main-process title, detail, and cancellation presentation read only that surface; Renderer never fabricates a long-lived replacement timeline.
+
+SSH fields follow [Desktop SSH environment settings](desktop-ssh-environment-settings.md).
 
 # Boundaries
 
 Desktop owns registration metadata, persistence, and presentation. Runtime, Gateway, WSL, and remote targets retain ownership of external data, lifecycle authority, and access policy; removing or changing a Desktop registration never deletes those resources. WSL-specific discovery and lifecycle behavior is owned by [Desktop WSL runtime operations](desktop-wsl-runtime-operations.md).
 
-# Legacy SSH migration
-
-The retired standalone SSH catalog shape is decoded only by the one-time Environment registration migration module. Migration matches SSH host Runtime Targets by destination, port, and normalized Runtime root, transfers credentials and settings, preserves the current visible Runtime Target name, removes duplicate Runtime Target projections of the built-in Local Environment, and never connects to or modifies the remote target.
-
-Migration writes an external journal before committing canonical catalogs. The journal contains the complete encoded retired registration and secret source needed to resume after a partial catalog or secret write; normal preference code treats that payload as opaque migration data. A crash before commit repeats the conversion without losing SSH credentials or settings; a crash after commit observes canonical Runtime Targets and removes the stale journal. The migration is idempotent. Normal `DesktopPreferences`, Welcome projection, and launcher actions contain no retired SSH registration collection or SSH-specific CRUD path. The decoder and journal payload can be deleted when the minimum supported catalog version no longer includes the retired SSH schema.
-
-# Operation presentation
-
-Every Launcher Operation declares one `active_progress_surface`: `open`, `runtime_lifecycle`, `reinstall`, or `gateway`. Renderer panels and main-process title, detail, and cancellation presentation read only that surface; Renderer never fabricates a long-lived replacement timeline. A lifecycle operation started directly owns and completes its Operation. A lifecycle recovery invoked by Open is a child stage: it updates Runtime progress without finishing or scheduling removal of the parent, then explicitly returns ownership to Open. The renderer creates and binds lifecycle disclosure to the exact `operation_key` and `started_at_unix_ms`. Lifecycle timeline selection never chooses an attempt by recency or combines retained and current operations for the same Environment.
-
-The main-process Launcher Operation Registry timestamps the active step. Repeated detail or task updates preserve that timestamp; entering a different step starts a new one. Renderer computes elapsed time from the selected active surface and that snapshot timestamp, so opening, closing, or reopening a progress popup never starts or resets the clock.
-
-Each action popup remains within the visible viewport while staying anchored to its trigger. Top-anchored progress popups stay above the trigger, shift horizontally to retain viewport margins, and use no more than 25rem of height or the available space above the trigger, whichever is smaller. Each action popup has one vertical scroll owner. The outer frame clips its border and rounded surface; ordinary content scrolls at the content root, while progress and Gateway panels keep fixed actions outside their single scrolling body. A non-scrolling parent must not reserve a scrollbar gutter, so the body scrollbar stays against the popup's inner edge instead of being inset. Parent and body scrollbars must never overlap.
-
-SSH Runtime package-delivery choices name the user-visible data path rather than an internal strategy relationship. `desktop_upload` is presented as Desktop upload, while `remote_install` is presented as remote download and install; neither an explicit selector nor an Environment fact calls the latter a fallback. Automatic describes its ordered choice in plain language without changing the persisted strategy contract.
-
-Settings sections, explicit target binding, and committed identity rebinding follow [Desktop environment settings](desktop-environment-settings.md). SSH fields follow [Desktop SSH environment settings](desktop-ssh-environment-settings.md).
-
 # Evidence
 
 - `redeven:desktop/src/shared/desktopLauncherIPC.ts:1` - Explicit registration reference and progress-surface contracts.
+
 - `redeven:desktop/src/main/desktopEnvironmentRegistrationMigration.ts:1` - Sole retired SSH decoder and idempotent canonical migration.
+
 - `redeven:desktop/src/main/desktopPreferences.ts:1` - Canonical preference owners and non-resurrecting mutations.
-- `redeven:desktop/src/main/desktopWelcomeState.ts:1` - One snapshot entry per canonical registration owner.
-- `redeven:desktop/src/main/launcherOperations.ts:1` - Required active surface and subject generation.
-- `redeven:desktop/src/main/main.ts:1` - Serialized persistence, atomic removal, and parent/child operation ownership.
-- `redeven:desktop/src/welcome/environmentLifecycleDisclosure.ts:1` - Exact attempt binding.
-- `redeven:desktop/src/welcome/environmentProgressPrimaryPresentation.ts:1` - Active-surface-only progress and recovery actions.
-- `redeven:desktop/src/welcome/environmentProgressMeter.ts:1` - Snapshot-based progress percentage and elapsed-time projection.
-- `redeven:desktop/src/welcome/desktopOverlayPosition.ts:1` - Viewport-constrained anchored popup placement and available-height calculation.
-- `redeven:desktop/src/welcome/DesktopAnchoredOverlaySurface.tsx:1` - Applies measured viewport bounds to the popup surface.

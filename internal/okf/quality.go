@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
+	"unicode/utf8"
 )
 
 type QualityMode string
@@ -15,6 +17,18 @@ const (
 	QualityOff        QualityMode = "off"
 	QualityReportMode QualityMode = "report"
 	QualityStrict     QualityMode = "strict"
+
+	OKFSourceCharacterTarget  = 900_000
+	OKFSourceCharacterLimit   = 1_000_000
+	OKFConceptCharacterTarget = 840_000
+	OKFIndexCharacterTarget   = 25_000
+	OKFLogCharacterTarget     = 35_000
+)
+
+const (
+	LifecycleContract        = "contract"
+	LifecycleActiveEvidence  = "active_evidence"
+	LifecycleRetainedHistory = "retained_history"
 )
 
 type QualityIssue struct {
@@ -25,9 +39,20 @@ type QualityIssue struct {
 }
 
 type QualityReport struct {
-	Issues   []QualityIssue `json:"issues"`
-	Errors   int            `json:"errors"`
-	Warnings int            `json:"warnings"`
+	Issues                   []QualityIssue           `json:"issues"`
+	Errors                   int                      `json:"errors"`
+	Warnings                 int                      `json:"warnings"`
+	SourceCharacters         int                      `json:"source_characters"`
+	SourceCharacterTarget    int                      `json:"source_character_target"`
+	SourceCharacterLimit     int                      `json:"source_character_limit"`
+	SourceCharactersRemain   int                      `json:"source_characters_remaining"`
+	SourceCharacterBreakdown SourceCharacterBreakdown `json:"source_character_breakdown"`
+}
+
+type SourceCharacterBreakdown struct {
+	Index    int `json:"index"`
+	Log      int `json:"log"`
+	Concepts int `json:"concepts"`
 }
 
 func (r *QualityReport) add(level, code, path, message string) {
@@ -40,10 +65,52 @@ func (r *QualityReport) add(level, code, path, message string) {
 }
 
 func ValidateBundleQuality(bundle Bundle, sourceRoot string, mode QualityMode) QualityReport {
-	var report QualityReport
+	return validateBundleQualityAt(bundle, sourceRoot, mode, time.Now())
+}
+
+func validateBundleQualityAt(bundle Bundle, sourceRoot string, mode QualityMode, now time.Time) QualityReport {
+	report := QualityReport{
+		SourceCharacterTarget: OKFSourceCharacterTarget,
+		SourceCharacterLimit:  OKFSourceCharacterLimit,
+	}
 	if mode == QualityOff {
 		return report
 	}
+	usage, err := countSourceCharacters(sourceRoot)
+	if err != nil {
+		report.add("error", "OKF024", "", "cannot count OKF source characters: "+err.Error())
+	} else {
+		report.SourceCharacters = usage.Total
+		report.SourceCharactersRemain = OKFSourceCharacterLimit - usage.Total
+		report.SourceCharacterBreakdown = SourceCharacterBreakdown{
+			Index: usage.Index, Log: usage.Log, Concepts: usage.Concepts,
+		}
+		if usage.Total > OKFSourceCharacterTarget {
+			report.add("warning", "OKF019", "", fmt.Sprintf("OKF source contains %d characters; target is %d", usage.Total, OKFSourceCharacterTarget))
+		}
+		for _, budget := range []struct {
+			path   string
+			name   string
+			actual int
+			target int
+		}{
+			{path: "index.md", name: "index", actual: usage.Index, target: OKFIndexCharacterTarget},
+			{path: "log.md", name: "log", actual: usage.Log, target: OKFLogCharacterTarget},
+			{path: "", name: "concepts", actual: usage.Concepts, target: OKFConceptCharacterTarget},
+		} {
+			if budget.actual > budget.target {
+				report.add("warning", "OKF026", budget.path, fmt.Sprintf("OKF %s contain %d characters; target is %d", budget.name, budget.actual, budget.target))
+			}
+		}
+		if usage.Total > OKFSourceCharacterLimit {
+			level := "warning"
+			if mode == QualityStrict {
+				level = "error"
+			}
+			report.add(level, "OKF020", "", fmt.Sprintf("OKF source contains %d characters, exceeding the hard limit of %d by %d", usage.Total, OKFSourceCharacterLimit, usage.Total-OKFSourceCharacterLimit))
+		}
+	}
+	validateLogRecency(&report, sourceRoot, mode, now)
 
 	indexCounts := make(map[string]int)
 	for _, section := range bundle.RootIndex.Sections {
@@ -107,10 +174,157 @@ func ValidateBundleQuality(bundle Bundle, sourceRoot string, mode QualityMode) Q
 		if len(concept.Evidence) > 30 {
 			report.add("warning", "OKF012", path, fmt.Sprintf("concept contains %d evidence references; consider splitting or consolidating evidence", len(concept.Evidence)))
 		}
+		validateConceptLifecycle(&report, concept, mode, now)
 		validateEvidence(&report, concept, sourceRoot, mode)
 	}
 	validateDuplicateParagraphs(&report, bundle, mode)
 	return report
+}
+
+func validateLogRecency(report *QualityReport, sourceRoot string, mode QualityMode, now time.Time) {
+	logPath := filepath.Join(sourceRoot, "log.md")
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		level := "warning"
+		if mode == QualityStrict {
+			level = "error"
+		}
+		report.add(level, "OKF027", "log.md", "cannot read OKF update log: "+err.Error())
+		return
+	}
+	level := "warning"
+	if mode == QualityStrict {
+		level = "error"
+	}
+	today := time.Date(now.UTC().Year(), now.UTC().Month(), now.UTC().Day(), 0, 0, 0, 0, time.UTC)
+	cutoff := today.AddDate(0, 0, -30)
+	for lineNumber, raw := range strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n") {
+		line := strings.TrimSpace(raw)
+		if !strings.HasPrefix(line, "## ") {
+			continue
+		}
+		heading := strings.TrimSpace(strings.TrimPrefix(line, "## "))
+		if len(heading) < len("2000-01-01") {
+			report.add(level, "OKF027", "log.md", fmt.Sprintf("log heading on line %d must begin with a YYYY-MM-DD date", lineNumber+1))
+			continue
+		}
+		date, ok := parseReviewDate(heading[:len("2000-01-01")])
+		if !ok {
+			report.add(level, "OKF027", "log.md", fmt.Sprintf("log heading on line %d must begin with a valid YYYY-MM-DD date", lineNumber+1))
+			continue
+		}
+		if date.After(today) {
+			report.add(level, "OKF027", "log.md", fmt.Sprintf("log heading on line %d cannot be in the future", lineNumber+1))
+			continue
+		}
+		if date.Before(cutoff) {
+			report.add(level, "OKF028", "log.md", fmt.Sprintf("log entry on line %d is older than 30 days; move durable knowledge to its concept and remove the entry", lineNumber+1))
+		}
+	}
+}
+
+type sourceCharacterUsage struct {
+	Total    int
+	Index    int
+	Log      int
+	Concepts int
+}
+
+func countSourceCharacters(sourceRoot string) (sourceCharacterUsage, error) {
+	var usage sourceCharacterUsage
+	root := filepath.Clean(sourceRoot)
+	distRoot := filepath.Join(root, "dist")
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			if path == distRoot {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.ToLower(filepath.Ext(entry.Name())) != ".md" {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		characters := utf8.RuneCountInString(strings.ReplaceAll(string(data), "\r\n", "\n"))
+		usage.Total += characters
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		switch filepath.ToSlash(relative) {
+		case "index.md":
+			usage.Index += characters
+		case "log.md":
+			usage.Log += characters
+		default:
+			usage.Concepts += characters
+		}
+		return nil
+	})
+	if err != nil {
+		return sourceCharacterUsage{}, err
+	}
+	return usage, nil
+}
+
+func validateConceptLifecycle(report *QualityReport, concept Concept, mode QualityMode, now time.Time) {
+	issueLevel := "warning"
+	if mode == QualityStrict {
+		issueLevel = "error"
+	}
+	lifecycle, _ := concept.Frontmatter["lifecycle"].(string)
+	lifecycle = strings.TrimSpace(lifecycle)
+	intervalDays := 0
+	switch lifecycle {
+	case LifecycleContract:
+		intervalDays = 180
+	case LifecycleActiveEvidence:
+		intervalDays = 90
+	case LifecycleRetainedHistory:
+		intervalDays = 365
+	default:
+		report.add(issueLevel, "OKF021", concept.Path, "lifecycle must be contract, active_evidence, or retained_history")
+		return
+	}
+	if lifecycle == LifecycleRetainedHistory {
+		retentionReason, _ := concept.Frontmatter["retention_reason"].(string)
+		if strings.TrimSpace(retentionReason) == "" {
+			report.add(issueLevel, "OKF023", concept.Path, "retained history requires a concise retention_reason")
+		}
+	}
+	reviewedAt, ok := parseReviewDate(concept.Frontmatter["reviewed_at"])
+	if !ok {
+		report.add(issueLevel, "OKF022", concept.Path, "reviewed_at must be a valid YYYY-MM-DD date")
+		return
+	}
+	today := time.Date(now.UTC().Year(), now.UTC().Month(), now.UTC().Day(), 0, 0, 0, 0, time.UTC)
+	reviewDate := time.Date(reviewedAt.UTC().Year(), reviewedAt.UTC().Month(), reviewedAt.UTC().Day(), 0, 0, 0, 0, time.UTC)
+	if reviewDate.After(today) {
+		report.add(issueLevel, "OKF022", concept.Path, "reviewed_at cannot be in the future")
+		return
+	}
+	dueDate := reviewDate.AddDate(0, 0, intervalDays)
+	if !today.Before(dueDate) {
+		report.add(issueLevel, "OKF025", concept.Path, fmt.Sprintf("review is overdue; %s content must be reviewed every %d days", lifecycle, intervalDays))
+	}
+}
+
+func parseReviewDate(value any) (time.Time, bool) {
+	switch date := value.(type) {
+	case string:
+		parsed, err := time.Parse("2006-01-02", strings.TrimSpace(date))
+		return parsed, err == nil
+	case time.Time:
+		return date, true
+	default:
+		return time.Time{}, false
+	}
 }
 
 func validateEvidence(report *QualityReport, concept Concept, sourceRoot string, mode QualityMode) {

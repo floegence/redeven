@@ -4,6 +4,8 @@ title: Desktop runtime readiness
 description: Direct Runtime health, access readiness, and Open recovery boundaries.
 tags: [desktop, runtime, startup, readiness]
 timestamp: 2026-10-13T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -12,125 +14,54 @@ Desktop derives managed Runtime readiness from the exact Local, SSH, or containe
 # Contract
 
 ## Local Environment
+Every Desktop installation includes a managed Local Environment.
 
-Every Desktop installation includes a managed Local Environment. Desktop uses two explicit paths consistently:
+A new process that has published listeners but not yet published final status remains in the bounded startup wait.
 
-- outer Desktop `stateRoot` for Runtime `--state-root`, startup report, process lock, control socket, and status lookup;
-- nested Local Environment `runtimeRoot` for managed files and process inventory.
-
-Start, Auto Start, Open, Stop, Restart, Update, Refresh, and Reinstall use that same pair and the same lifecycle coordinator. Desktop does not append `local-environment` twice or infer one path from the other during attach. A new process that has published listeners but not yet published final status remains in the bounded startup wait. Failure is reported only when the process exits, the state path is inaccessible, the service reports failure, or the readiness deadline expires with the original logs retained.
-
-Desktop never treats a persisted Runtime status report as proof that a Local Environment can open. A current process inventory and the private `local_ui_bridge_url` must both be valid before Desktop attaches or creates a Local session. If the report is stale or the bridge is unreachable, Desktop clears the in-memory record and uses the existing Start/Restart recovery path instead of opening a dead address.
-
-Packaged Desktop validates the Runtime-only bundle manifest, version, commit, platform, architecture, file inventory, executable permissions, sizes, and digests before modifying the Local installation. Missing or mismatched managed files trigger the direct Runtime repair path. Desktop update handoff tells the user that installation restarts Desktop and the Local Runtime and interrupts Local sessions; choosing Later changes nothing.
+Desktop update handoff tells the user that installation restarts Desktop and the Local Runtime and interrupts Local sessions; choosing Later changes nothing.
 
 ## Managed remote readiness
+SSH-host, local-container, and SSH-container readiness is observed through the saved direct channel.
 
-SSH-host, local-container, and SSH-container readiness is observed through the saved direct channel. Open uses one main-process flow:
+Unknown or failed health offers Refresh with the real direct-channel diagnostic.
 
-```text
-probe -> decide -> lifecycle when needed -> re-probe same target -> open
-```
-
-A healthy Runtime opens directly. A stopped Runtime offers Start and Open. An incompatible Runtime offers Update and Open. Unknown or failed health offers Refresh with the real direct-channel diagnostic. A successful lifecycle step cannot complete Open until the same target produces a fresh compatible readiness observation. That observation carries Runtime health only; Open must create the live placement bridge before resolving an Env App URL, and an empty public `local_ui_url` is valid for a managed Desktop-private Runtime.
-
-Open may reuse a Welcome health observation for the separate status preflight only while it remains inside the 30-second freshness window and matches the exact target's ready record by Runtime PID, process start identity, and Runtime Service build identity. Missing identity, stale or failed health, non-openable service state, or any mismatch forces the normal direct probe. A reused observation never supplies a bridge URL or credential: Open still creates the live placement bridge, verifies its current private token, and probes Runtime health and Env App readiness through that bridge. The first recoverable bridge-start failure after reuse forces one status refresh before the existing bounded bridge retry and lifecycle recovery flow continues.
-
-A missing startup timestamp does not establish that a Runtime is stopped. Welcome shows an unknown time/state for unverified, checking, or failed observations without a known startup time; the stopped label requires an explicit stopped Runtime or container reason without a pending or failed health check. A verified online Runtime without a timestamp shows that its start time is unavailable. Successful probes cache observed startup time and process identity alongside health, without bridge credentials or live control endpoints. A pending refresh retains that observation and its startup age while withdrawing live presence; completed results replace it.
+A pending refresh retains that observation and its startup age while withdrawing live presence; completed results replace it.
 
 ## Observation continuity and authority
+The main-process Welcome health store retains each target’s completed credential-free control diagnosis in `observed_runtime_control_status`. Probe failure or changed management configuration clears it.
 
-The main-process Welcome health store retains each target’s completed credential-free control diagnosis in `observed_runtime_control_status`. Checking retains that health record while withdrawing live Presence; completion replaces it. Probe failure or changed management configuration clears it. Target identity and monotonic generations fence retired probes, including removed/re-added registrations.
-
-Retained diagnosis must never fill live `runtime_control_status`, open a trusted connection or authorize an operation. The renderer may retain a stable prerequisite presentation while `revalidating`; without a completed observation it still requests inspection. Main validates the exact current target, trusted channel and Runtime permissions for every command. [Gateway Desktop interactions](../gateway/gateway-desktop-interactions.md) owns enrollment steps, fault recovery and request settlement; observation does not own those interaction states.
-
-Runtime process health, Runtime Service compatibility, Local UI availability, Workspace readiness, AI readiness, Provider link, and Gateway access are separate facts. AI or Provider failure does not make a healthy Runtime installation unavailable. Gateway failure affects only sessions routed through that Gateway.
+Gateway failure affects only sessions routed through that Gateway.
 
 ## Capability and progress
+Local and registered SSH/container targets are direct managed Environments and retain all direct lifecycle actions in every diagnosis state.
 
-Local and registered SSH/container targets are direct managed Environments and retain all direct lifecycle actions in every diagnosis state. Gateway, Provider, and URL entries without a direct management registration are access-only and expose no Runtime lifecycle action.
+If nested recovery fails, the card names the failed Runtime operation, such as Start failed, and its details retain the structured failure and diagnostics.
 
-One Launcher Operation owns Open and any nested direct Runtime recovery. Runtime recovery temporarily selects the Runtime lifecycle progress surface, then returns to Open without completing or deleting the parent operation. If nested recovery fails, the card names the failed Runtime operation, such as Start failed, and its details retain the structured failure and diagnostics. When a new Environment operation is accepted, older terminal Open, Runtime, and reinstall operations leave that card. Renderer selects the newest accepted attempt deterministically; multiple retained failures never remove the failure button or details entry.
-
-`runtime_state_incompatible` is a typed reinstall-required result. Every managed-Linux transport classifies the blocked startup report before generic failure handling and preserves that report in technical diagnostics. Desktop persists the existing reinstall-required marker and offers the standard wipe-reinstall review; Update and ordinary Retry are not valid alternatives. Toasts remain concise, while the card failure panel owns the original launch report, logs, and recovery action.
-
-One blocked-report conversion owns the `runtime_state_incompatible` failure presentation for Local, SSH, WSL, and container startup. SSH keeps the raw startup report once under `runtime_startup_report`; it does not duplicate the same payload in generic command stdout. Status refresh preserves `reinstall_required` from runtime-control presence through Runtime health and the Welcome card. The card remains reinstall-required when any one authoritative source requires recovery: the persisted marker, the current post-confirmation reinstall journal, or cached typed health. Local Auto Start attempts Update only for an explicit `runtime_update_required`; other failures retain their first diagnosis and recovery action.
-
-All operation labels, details, errors, recovery actions, tooltips, and accessibility text use structured keys and localized catalogs. Raw command stderr remains literal only inside technical diagnostics.
+Raw command stderr remains literal only inside technical diagnostics.
 
 # Boundaries
 
 [Verified access routes](desktop-environment-access.md) owns identity association and locally saved access defaults.
 
 ## Gateway access readiness
+Gateway directory presence, active membership and the Runtime application probe are distinct readiness facts. Failure never triggers another route or a Runtime lifecycle action.
 
-Gateway directory presence, active membership and the Runtime application probe
-are distinct readiness facts. Desktop opens an authorized reverse stream over
-the Runtime's existing outbound member connection and retains the signed logical
-origin, ordinary Runtime login and MFA. Failure never triggers another route or
-a Runtime lifecycle action. Open progress, cancellation, retry and focus
-restoration use the shared Desktop presentation contract.
-[Gateway access sessions](../gateway/gateway-access-sessions.md) owns transport,
-certificate and authentication boundaries.
-
-Read-only health probes do not start, stop, repair, or reconnect Runtime. Access endpoints are not management channels. Runtime handles its internal sessions and graceful signal cleanup, but it exposes no Provider/Gateway lifecycle authority. Desktop is the only component that decides and executes a managed Runtime recovery.
+Desktop is the only component that decides and executes a managed Runtime recovery.
 
 ## Desktop Flower compatibility
+Desktop's bundled Flower client uses [one protocol check](../../desktop/src/shared/runtimeFlowerAccess.ts) for HTTP commands, workspace subscriptions, computer frames and attachment entrypoints. The actual Runtime must report the supported protocol and compatibility epoch.
 
-Desktop's bundled Flower client uses
-[one protocol check](../../desktop/src/shared/runtimeFlowerAccess.ts) for HTTP
-commands, workspace subscriptions, computer frames and attachment entrypoints.
-The actual Runtime must report the supported protocol and compatibility epoch.
-Missing or malformed identity blocks before submission; a newer epoch requires
-Desktop update. Different commits within the supported window remain usable.
-The Runtime's own Env App, terminals and files retain their independent opening
-boundary. A missing protocol is never normalized into a compatible claim.
-
-The Flower entry displays the connected version/commit and an update action.
-The existing Desktop lifecycle coordinator retains workload confirmation and
-re-probes the replacement process. Failed updates leave the action available;
-success re-evaluates the observed Runtime snapshot. Composer drafts remain in
-the existing composer draft coordinator while the incompatible client is unmounted.
-WSL uses the same check and update presentation. Development attachment logs
-report both the validated bundle identity and actual connected Runtime identity.
 Desktop restart alone is not evidence that the background Runtime changed.
 
 ## Desktop Flower AI preparation
+Welcome admits Flower only when the compatible, openable Runtime reports AI `ready` or `degraded`. Transitional AI states show localized preparation with an always-available return action; blocked, unavailable, or missing AI facts remain explicit and cannot admit requests.
 
-Welcome admits Flower only when the compatible, openable Runtime reports AI
-`ready` or `degraded`. Shell readiness alone does not admit settings, model,
-thread, attachment, or workspace-stream requests. Transitional AI states show
-localized preparation with an always-available return action; blocked,
-unavailable, or missing AI facts remain explicit and cannot admit requests.
-The [AI lifecycle owner](../architecture/ai-readiness-lifecycle.md) defines these
-facts and recovery authority.
-
-The existing Welcome health observer supplies updates. Transitional AI
-observations bypass its 30-second cache, so the next regular health tick can
-observe publication. Current presence and the latest health snapshot take
-precedence over historical startup reports, including while a probe is pending.
-Ready publication mounts Flower automatically; later AI loss disposes that
-subtree while the shell-owned draft coordinator retains unsent content. Ordinary
-navigation and stable ready/degraded updates keep the same Flower instance.
-There is no renderer readiness poller, API-error retry loop, or inferred repair.
-
-The additive Runtime OS observation follows [Runtime platform facts and icons](desktop-runtime-platform.md). Missing platform fields do not change readiness or compatibility admission.
+Missing platform fields do not change readiness or compatibility admission.
 
 # Evidence
 
 - `redeven:desktop/src/main/desktopBundle.ts:1` - Runtime-only bundle identity and file validation.
+
 - `redeven:desktop/src/main/desktopWelcomeRuntimeState.ts:1` - Local readiness hydration with explicit state and Runtime roots.
+
 - `redeven:desktop/src/main/runtimeProcess.ts:1` - Local inventory and status lookup path contract.
-- `redeven:desktop/src/main/runtimePlacementManager.ts:1` - Container process replacement, startup waiting, and ready Runtime snapshots.
-- `redeven:desktop/src/main/managedLinuxRuntime.ts:1` - Managed-Linux startup report classification and process readiness.
-- `redeven:desktop/src/main/runtimeBlockedLaunchFailure.ts:1` - Shared incompatible-state failure and startup-report diagnostic.
-- `redeven:desktop/src/main/reinstallRuntimePackage.ts:1` - Reinstall startup, single-process inventory, and Runtime Service terminal verification.
-- `redeven:desktop/src/main/environmentOpenCoordinator.ts:1` - One probe/decide/lifecycle/re-probe/open flow.
-- `redeven:desktop/src/main/runtimeOpenPreflight.ts:1` - Fresh status reuse requires exact process and Runtime Service identity.
-- `redeven:desktop/src/main/launcherOperations.ts:1` - Authoritative progress surface and terminal state.
-- `redeven:desktop/src/shared/environmentManagementPrinciples.ts:1` - Direct managed versus access-only capability boundary.
-- `redeven:desktop/src/welcome/viewModel.test.ts:1` - Unknown versus explicitly stopped Runtime card evidence.
-- `redeven:desktop/src/welcome/App.tsx:1` - Localized action menu, progress, and recovery presentation.
-- `redeven:desktop/src/welcome/flower/DesktopFlowerRuntimeBoundary.client.test.tsx` - AI admission, preparation, blocked states, and draft preservation through recovery.
-- `redeven:desktop/src/main/desktopWelcomeRuntimeHealth.test.ts` - Preparation cache bypass, presentation-only control retention, live Presence withdrawal and stale-response fencing on the existing observer.
-- `redeven:desktop/src/main/desktopWelcomeState.test.ts` - Current readiness wins over historical startup during refresh.

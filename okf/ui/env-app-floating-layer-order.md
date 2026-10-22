@@ -4,6 +4,8 @@ title: Env App floating layer order
 description: One product-owned stacking contract orders movable windows, Flower, plugin surfaces, blocking modals, and command UI.
 tags: [ui, floating-windows, flower, plugins, dialogs, focus]
 timestamp: 2026-10-19T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -17,110 +19,43 @@ replace the live preferred geometry.
 # Contract
 
 ## Drag-region synchronization
+Desktop's embedded host projects iframe-relative native drag regions. A settled snapshot must not schedule another animation frame by rebuilding itself.
 
-Desktop's embedded host projects iframe-relative native drag regions. Its
-observer ignores its own overlay and style writes, and unchanged projected
-rectangles retain their DOM nodes. A settled snapshot must not schedule another
-animation frame by rebuilding itself. Frame replacement, source changes, resize,
-and externally removed overlay roots retain normal refresh and stale-region
-clearing.
-
-Env App observes global no-drag blockers as complete boxes. Ordinary content
-changes within a blocker do not rescan drag membership or read its geometry.
-ResizeObserver owns box-size changes; blocker/ancestor style changes, marker
-changes, root controls, insertion and removal still refresh the relevant regions.
-The [streaming contract](flower-streaming-stability.md#bounded-streaming-work)
-owns Flower's bounded text painting during the published Floe drag/resize
-interaction. Native pointer and floating geometry ownership remain upstream.
+Native pointer and floating geometry ownership remain upstream.
 
 ## Global bands
+The command palette is always the top Env App surface at 5000.
 
-The command palette is always the top Env App surface at 5000. Blocking authorization, confirmation, recovery, and inspection modals use 4000 so required decisions remain above the plugin Panel and Flower but below command UI. The Activity plugin launcher Panel uses 3000. The expanded or transitioning Flower companion uses 2000. Ordinary movable windows, including Files, file preview, Git, Debug Console, Flower launcher and Activity plugin surfaces, use the shared 1000 through 1099 band. Flower context previews use 2100 through 2199 so their shared window stays operable above the expanded companion. Both bands use the same registered window order; no separate activation controller or arbitrary z-index is permitted.
-
-The product layer constants are the only authority for these bands. Published floe-webapp `CommandPalette.zIndex`, `Dialog.globalZIndex`, and `DialogPlacementProvider` configure global roots without CSS guessing or DOM discovery. Env App's modal wrapper supplies 4000 by default. Window-local menus, tooltips, and recovery panels must not cross a global band.
+Window-local menus, tooltips, and recovery panels must not cross a global band.
 
 ## Dialog placement
+Mobile plugin and tools navigation is local to the released Shell content region, not a global launcher modal.
 
-Mobile plugin and tools navigation is local to the released Shell content region,
-not a global launcher modal. Its mobile navigation bar stays interactive. The
-[mobile shell navigation](mobile-shell-navigation.md) contract owns this boundary;
-global product confirmations still cover it and the navigation bar.
+Clicking the backdrop closes only the Dialog; the first click never reaches the Activity content beneath it.
 
-Activity owns one global modal boundary. The Activity Shell, Activity movable windows, and the retained Flower product while placed in Activity select global Dialog placement at layer 4000. Clicking the backdrop closes only the Dialog; the first click never reaches the Activity content beneath it. Escape, focus trapping, focus restoration, and exit presence use the same published global Dialog path.
-
-Workbench selects automatic placement. A Dialog opened from a widget or projected Flower surface remains inside that owning surface: clicking the canvas or another widget neither closes nor captures the destination interaction, while clicking the surface-local backdrop closes the Dialog. Moving the retained Flower product between Activity and Workbench changes this single placement input reactively; it does not install another listener or duplicate Dialog state. Dropdowns, tooltips, and `SurfaceFloatingLayer` keep their existing surface-coordinate ownership.
-
-Desktop drawers retain the global Dialog backdrop and focus boundary, but their interactive panel begins below the native titlebar safe area. The panel is a no-drag region; the full-window overlay must not become one, so the unobstructed titlebar remains available for native window movement while the backdrop still owns outside-click dismissal. Interactive titlebar controls retain their existing no-drag exclusions.
+Interactive titlebar controls retain their existing no-drag exclusions.
 
 ## Visible viewport boundaries
+Published Floe Webapp owns the visible viewport, safe areas, Safari fixed-origin conversion, and projected surface intersection for Dialog and FloatingWindow. Product CSS must not bypass this boundary with fixed panel positions, viewport-unit heights plus removed maximums, or forced transforms.
 
-Published Floe Webapp owns the visible viewport, safe areas, Safari fixed-origin
-conversion, and projected surface intersection for Dialog and FloatingWindow.
-Browser toolbar, soft-keyboard, and orientation changes constrain window geometry;
-headers, close controls, and footer actions remain inside the visible boundary,
-while long content scrolls locally. Geometry changes retain the live content and
-input owner. Product CSS must not bypass this boundary with fixed panel positions,
-viewport-unit heights plus removed maximums, or forced transforms.
-
-The document-level AppViewport owns the document scroll origin at normal zoom.
-Safari's native focus pan can leave an undersized visual viewport; restoring the
-origin must preserve nested reading scroll, the live editor, and its selection.
-The host must not then apply a delayed visual offset a second time. Pinch zoom
-keeps native panning and shared coordinate conversion. On coarse-pointer devices,
-the published host acquires the same native editor without scrolling at completed
-pointer activation; native caret placement remains available. Flower composer
-padding activates on click, never on pointerdown: opening the keyboard before
-touch release can retarget Safari's compatibility click and dismiss the editor.
-
-Safari can also transiently clip visual height twice during keyboard animation.
-Floe measures every native event and publishes the first keyboard size immediately.
-Further contractions in the same layout must remain stable for 100ms; recovery
-cancels the pending contraction. This bounded settling does not use window height
-as a floor. Expansion, orientation changes and pinch zoom remain immediate.
-Focus loss alone does not reveal navigation before keyboard occlusion ends.
-Flower's title tools do not flex-shrink; the reading area absorbs the reduced
-height. The header stays at the visible top and the composer follows the lower edge.
-Redeven consumes this published behavior and must not reset scroll, reclaim
-focus, add keyboard padding, or install a second viewport observer itself.
-
-EnvAppDrawer selects the published side-drawer presentation. Redeven supplies its
-business width and the Desktop titlebar gap inside the available region. Preview
-windows supply preferred sizes and a desktop edge margin rather than subscribing
-to window resize or computing a second viewport. Mobile Activity plugin windows
-use the upstream compact boundary, and keep their existing modal and retirement
-lifecycle. Temporary viewport constraints do not replace upstream's live preferred
-window size.
+Temporary viewport constraints do not replace upstream's live preferred window size.
 
 ## Movable window order
+One Shell-lifetime provider registers every open movable window under a stable identifier.
 
-One Shell-lifetime provider registers every open movable window under a stable identifier. Registration order establishes the initial order. Captured pointer input, focus entering the surface, and plugin bridge activation, focus, or action events move the interacted window to the top of the movable band. Product and plugin windows participate in the same order; the plugin window controller retains only its nine-window capacity and LRU eviction responsibility.
-
-The stack recomputes consecutive layers after every registration, activation, or unregistration. It never uses an unbounded incrementing counter, stays inside 1000–1099 for ordinary windows or 2100–2199 for Flower context previews, and keeps a multiply registered identifier until all owners unregister. Closing or unmounting a window removes its registration and compacts the remaining order. The minimized Debug Console entry is a launcher control at the base of the window band rather than an open movable window.
+It never uses an unbounded incrementing counter, stays inside 1000–1099 for ordinary windows or 2100–2199 for Flower context previews, and keeps a multiply registered identifier until all owners unregister. The minimized Debug Console entry is a launcher control at the base of the window band rather than an open movable window.
 
 ## Flower dismissal
-
-The Flower companion remains above ordinary movable windows while expanded; its owned context preview remains above it and below plugin Panels and product modals. Its explicit close control first transfers focus to the neutral Activity content anchor, then collapses with an explicit non-focus-restoring path. It must not return focus to the retained composer because composer focus is an expansion intent. Outside pointer and Escape dismissal retain their published companion ownership and focus rules. Activity plugin window interaction is also outside Flower: host pointer or focus input and trusted plugin bridge activation, focus, or action events collapse the companion without consuming the destination interaction, including when the event originates inside a cross-origin iframe and cannot bubble through the product document.
+The Flower companion remains above ordinary movable windows while expanded; its owned context preview remains above it and below plugin Panels and product modals. It must not return focus to the retained composer because composer focus is an expansion intent. Activity plugin window interaction is also outside Flower: host pointer or focus input and trusted plugin bridge activation, focus, or action events collapse the companion without consuming the destination interaction, including when the event originates inside a cross-origin iframe and cannot bubble through the product document.
 
 # Boundaries
 
-This contract governs cross-surface Env App stacking and the Activity-versus-Workbench Dialog boundary. Workbench projected overlays and menus remain surface-local, and reusable floe-webapp or Flower components do not own Redeven's numeric product policy or display-mode decision. New global UI must select an existing band or update this contract and its browser hit-testing evidence; arbitrary escape values, document-level dismissal patches, per-Dialog placement branches, and component-specific global counters are forbidden.
+This contract governs cross-surface Env App stacking and the Activity-versus-Workbench Dialog boundary. New global UI must select an existing band or update this contract and its browser hit-testing evidence; arbitrary escape values, document-level dismissal patches, per-Dialog placement branches, and component-specific global counters are forbidden.
 
 # Evidence
 
 - `redeven:desktop/src/preload/desktopEmbeddedDragHost.test.ts` - No self-triggered frame after overlay creation or clearing, stable region identity, frame replacement and externally removed overlay recovery.
+
 - `redeven:internal/envapp/ui_src/src/ui/services/desktopEmbeddedDragRegions.test.ts` - No refresh for ordinary blocker content; retained resize, geometry, marker and membership updates.
 
 - `redeven:internal/envapp/ui_src/scripts/checkMobileNavigation.mjs` - Replays native document panning, stale visual offsets, and transient keyboard heights while checking fixed header size, composer bounds, retained editor, and selection.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.composerFocus.browser.test.tsx` - Checks completed padding activation, cancelled gestures, and retained selection.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/OverlayViewport.browser.test.tsx` - Checks mobile preview, editor, drawer, and plugin boundaries with retained content in light and dark themes.
-- `redeven:internal/envapp/ui_src/src/ui/utils/envAppLayers.ts` - Defines the five product bands.
-- `redeven:internal/envapp/ui_src/src/ui/utils/envAppFloatingWindowStack.ts` - Maintains compact shared movable-window ordering.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/PersistentFloatingWindow.tsx` - Registers product windows, activates them from pointer and focus input, and supplies their global Dialog placement.
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Selects global Activity placement and automatic Workbench placement for the retained Flower product.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/ActivityPluginSurfaceWindow.tsx` - Projects plugin bridge interaction into the shared window stack.
-- `redeven:internal/envapp/ui_src/src/ui/primitives/EnvAppModal.tsx` - Applies the product modal band to explicitly global product dialogs.
-- `redeven:internal/envapp/ui_src/src/ui/primitives/EnvAppDrawer.tsx` - Keeps drawer interaction below the Desktop titlebar while preserving global Dialog dismissal and focus ownership.
-- `redeven:internal/envapp/ui_src/src/ui/primitives/EnvAppDrawer.browser.test.tsx` - Verifies the panel remains no-drag without turning the full-window overlay into a titlebar blocker.
-- `redeven:internal/envapp/ui_src/src/ui/envAppFloatingLayers.browser.test.tsx` - Uses actual overlapping DOM hit results to verify window MRU and every global band.
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.flowerCompanion.browser.test.tsx` - Verifies explicit close, focus handoff, persistent collapse, and outside dismissal.
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx` - Verifies trusted plugin window interaction dismisses the expanded companion across the iframe boundary.

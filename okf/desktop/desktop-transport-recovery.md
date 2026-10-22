@@ -4,6 +4,8 @@ title: Desktop transport recovery
 description: Bridge registry, recovery snapshots, generation fencing, and session disposal.
 tags: [desktop, runtime, transport, recovery]
 timestamp: 2026-09-18T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -12,70 +14,23 @@ Each Desktop placement bridge owns one HTTP/2 session, an immutable-generation r
 # Contract
 
 ## Recovery presentation
+Recovery uses an unboxed layout within the existing shell, with generous whitespace, semantic theme colors, standard buttons, and fine separators around the authoritative countdown or active phase.
 
-Recovery uses an unboxed layout within the existing shell, with generous
-whitespace, semantic theme colors, standard buttons, and fine separators around
-the authoritative countdown or active phase. The environment identity, next
-action, and collapsed diagnostics remain visible without nested cards.
-An inline SVG connects a workspace terminal to a Runtime cube: a gently pulsing
-clock denotes a scheduled wait, and opposing signals denote active connection
-work. Stopped, offline, and terminal states remain still; success shows a check.
-Reduced-motion preferences disable all illustration animation. The artwork
-needs no asset request and never implies percentage completion.
-All whole-window recovery states use an opaque surface so a Browser or other
-underlying disconnect notice cannot show through the primary state. Terminal
-failure cannot imply that recovery is still running. Recoverable interruptions offer Retry now and Stop retrying;
-user-stopped recovery offers Resume connection. Desktop identity failures retain
-the existing Connection Center action.
-For Cloud windows, Reopen environment reloads the same-origin parent bootstrap
-that owns the connection, rather than only reloading its iframe through an
-expired proxy. Unrelated or cross-origin parents are never navigated.
-
-The Cloud bootstrap owns an opaque loading surface from its first paint until
-Env App reports an interactive surface after the existing shell paint boundary.
-The same-origin `redeven:env_app_ready` message (`v: 1`) is presentation-only:
-it carries no credentials or proxy authority. The bootstrap checks both the app
-frame window and origin, waits for document load and service-worker preparation,
-and reveals the app only while its own connection is still healthy. An
-interactive access gate or terminal connection failure also transfers presentation
-so required user action is not hidden. A 30-second stalled-app timeout shows an
-actionable failure instead of an endless loading surface.
+A 30-second stalled-app timeout shows an actionable failure instead of an endless loading surface.
 
 ## Mechanism
+Each established bridge owns one immutable transport-recovery snapshot with a monotonic `generation` and `revision`, the real `waiting`, `connecting`, `paused`, `ready`, or `failed` phase, completed attempt count, known retry and recovery timestamps, a structured failure, and explicitly allowed actions.
 
-Each established bridge owns one immutable transport-recovery snapshot with a monotonic `generation` and `revision`, the real `waiting`, `connecting`, `paused`, `ready`, or `failed` phase, completed attempt count, known retry and recovery timestamps, a structured failure, and explicitly allowed actions. The bridge publishes interruption state before active streams fail and before the stable loopback begins returning its existing 502 response. Stop cancels the pending delay or in-flight exec acquisition and publishes `paused` without retiring the session identity or stable proxy. Late canceled transports are closed before attachment. Explicit resume continues through the same recovery owner and exact identity checks. A manual retry wakes the current recovery delay; it does not create another recovery loop, replay a request, or acquire an alternate transport. Desktop copies the current snapshot into the owning Env App session, forwards later revisions through the session preload subscription, and resolves snapshot reads and retry commands only from the sending window's WebContents-to-session mapping. Env App cannot read another Environment's recovery state or the broader launcher operation stream.
-
-Native Local Runtime documents are bound to an ephemeral trusted listener. A connection refusal at that exact bridge origin is terminal for the current document: Desktop publishes one failed transport snapshot and offers Connection Center; Env App cancels SDK acquisition retries and clears its countdown. Canceled requests, unrelated origins, forwarded application listeners, and retiring sessions cannot terminate the Runtime session. Explicit Open or Show Env App for that failed Local Environment enters the existing workspace-preserving Restart owner, instead of focusing the stale window. Restart obtains the new trusted listener and restores the original window; no browser retry, address fallback, or independent polling loop may rebind it to a later Runtime identity.
-
-The bridge registry and the exact `RuntimePlacementBridgeSession` identity are the single transport lifecycle owner. Each registry entry pairs one target and immutable bridge record with either its opening operation or attached Desktop session and one settlement promise. Record updates must still match both the target and session, so a late probe, model-source task, or termination from an old session cannot alter its replacement. One transport generation contains one remote exec and one HTTP/2 session; proxy connections add only CONNECT streams. Session, stdio, exec, or SSH failure closes all old streams and starts one replacement generation. A stream reset closes only that stream and never starts recovery. `session.closed` is the only automatic registry-removal path. Explicit retirement requests `session.disconnect()` and awaits that same settlement without deleting the record first; the settlement callback alone stops the model source and either publishes terminal failure into the retained Env App shell or finalizes an attached session that is not already closing. Open failure, explicit replacement, window close, destructive lifecycle operations, and Desktop shutdown all use this ordering.
-
-Bridge recovery is generation-safe and process-safe. Runtime recovery requires exact equality of `started_at_unix_ms`, `runtime_version`, runtime-control protocol version, target identity, and the in-memory runtime-control token. Gateway recovery requires exact equality of normalized state root, executable path, managed service PID, and the in-memory managed bridge token reported by the Gateway desktop-bridge hello. A remote command exit, HTTP/2 GOAWAY, stdio EOF, or transient SSH interruption is recoverable only by opening a fresh exec and HTTP/2 session for the same identity. Authentication failure, malformed or incomplete identity, protocol mismatch, or any process identity mismatch permanently closes the old session and returns control to explicit Open. Recovery never starts, restarts, updates, or stops the remote Runtime or Gateway service.
-
-When bridge recovery reaches a terminal failure, `session.closed` removes the exact registry entry before its single settlement handler stops the session's Desktop model source, clears the Runtime handle and Runtime diagnostics attachment, and retains the already loaded Env App window as a disconnected recovery shell. The terminal snapshot remains available after renderer reload and exposes Connection Center as the next Desktop-owned action. Explicit close marks the window session as closing before retirement, so bridge settlement cannot recursively finalize it a second time. The old Runtime content is not rebound when another process becomes ready. An explicit Open for the same Environment first finalizes the retained failed session, then creates a new window, bridge, and identity boundary.
-
-Welcome runtime health retains the 30-second in-memory freshness TTL and per-record cache identity. Beneath those records, concurrent probes coordinate by physical host, placement/state root, target Runtime release, and password credential scope. A shared physical probe result is projected back onto each saved record's own target id, Environment id, label, host access, and placement, so deduplication never changes provider/runtime target selection. Placement bridge health is a read-only observation with four results: `absent`, `ready`, `recovering`, or `unavailable`. Only `absent` permits remote Runtime or process discovery. A `waiting` or `connecting` recovery snapshot returns `recovering` without a Local UI or runtime-control request. A `paused` snapshot returns `unavailable` without probing or starting recovery. A `ready` snapshot permits the typed Local UI health probe, after which Desktop rechecks both the recovery snapshot and exact registry session identity before updating startup state. Typed probe failure returns `unavailable`, preserves the bridge and last confirmed managed Runtime presence and Provider binding, and never retires transport; a stale result from a replaced or terminated session is discarded. Welcome, Provider occupancy, SSH health, container inspection, and manual refresh consume this observation without acquiring bridge lifecycle write authority. Failed physical tasks are removed after settlement and never become a permanent failure cache.
-
-Desktop matches managed sessions by the normalized physical Runtime target, independent of Cloud-bound window aliases. Stop and Update close matching windows and the placement bridge before process discovery, stop, or package activation. Desktop-initiated Restart first requires every matching Env App to hand over user-authored workspace and draft state; any failure aborts before Runtime replacement and leaves the old page intact. It then navigates each original window to a scriptless Desktop status document, retires old sessions and bridge authority, verifies the restarted Runtime, and loads a fresh secure session into each retained window. Each handoff is bound to that window, its source and destination document generations, and a one-use ticket. A restore failure retains the status document and handoff for explicit session-only reopen. Unsigned commands, old credentials, old bridge callbacks, and late old-page readiness cannot complete the new session. Ordinary transport recovery remains the sole owner of short interruptions and cannot cross process identity; authentication failure, unexpected process identity change, provider-link changes, ordinary window close, and application quit retain their existing terminal boundaries. Lifecycle generation fencing cancels matching Opens so a late response cannot recreate the old session.
+Lifecycle generation fencing cancels matching Opens so a late response cannot recreate the old session.
 
 # Boundaries
 
-Transport recovery IPC is a narrow current-session capability. It exposes only the normalized bridge snapshot, its subscription, the immediate-retry/resume command, and the stop-recovery command; it does not create a later Runtime identity. The separate Desktop Restart handoff exposes only the current window's bounded user-authored state to its fresh session, never ports, tokens, other Environment snapshots, Runtime handles, or launcher operations. Terminal transport failure may preserve the renderer window for diagnosis and navigation, but every previously loaded Runtime surface remains non-interactive until a fresh session is explicitly opened.
+Transport recovery IPC is a narrow current-session capability. The separate Desktop Restart handoff exposes only the current window's bounded user-authored state to its fresh session, never ports, tokens, other Environment snapshots, Runtime handles, or launcher operations. Terminal transport failure may preserve the renderer window for diagnosis and navigation, but every previously loaded Runtime surface remains non-interactive until a fresh session is explicitly opened.
 
 # Evidence
 
 - `redeven:desktop/src/main/nativeLocalTransportRecovery.test.ts:1` - Production HTTP failure routing and explicit Open cover terminal native listener loss, unrelated request isolation, and workspace-preserving lifecycle recovery.
+
 - `redeven:internal/envapp/ui_src/src/ui/reconnect/createRuntimeReconnectController.test.ts:280` - Terminal Desktop failure stops protocol acquisition and rejects late connection events.
+
 - `redeven:desktop/src/main/localUIURL.ts:44` - Desktop builds the Env App entry URL under `/_redeven_proxy/env/`.
-- `redeven:desktop/src/main/main.ts:8136` - The Desktop Flower bridge allowlist admits the fixed FS path context route.
-- `redeven:desktop/src/shared/sessionRestartIPC.ts:1` - Bounded current-window user-state handoff contract.
-- `redeven:desktop/src/main/sessionRestartDocument.ts:1` - Scriptless local Restart status and explicit reopen intents.
-- `redeven:desktop/src/welcome/flower/localEnvironmentFlowerSurfaceAdapter.tsx:496` - The Desktop Flower adapter reads working-directory path context and list data through the runtime bridge.
-- `redeven:internal/localui/localui.go:410` - Runtime starts a separate ephemeral loopback trusted bridge listener.
-- `redeven:desktop/src/main/runtimePlacementBridgeSession.ts:555` - SSH and container opens share one HTTP/2 placement session and one generation-fenced recovery owner.
-- `redeven:desktop/src/main/runtimePlacementBridgeSessionLifecycle.test.ts:240` - A blocked CONNECT stream does not delay an independent stream or create another exec.
-- `redeven:desktop/src/main/sshTransportManager.ts:314` - The Desktop SSH manager lazily acquires host/auth/credential-scoped leases.
-- `redeven:desktop/src/main/sshRuntime.ts:1252` - SSH lifecycle phases map a dead fixed-generation lease to the existing interruption presentation.
-- `redeven:desktop/src/main/runtimePlacementLoopbackProxy.ts:210` - The stable loopback proxy returns the existing 502 response when no remote bridge transport is attached.
-- `redeven:cmd/redeven-gateway/main.go:165` - Gateway desktop-bridge hello publishes the managed service identity over the private stdio bridge.
-- `redeven:desktop/src/main/runtimePlacementBridgeRegistry.ts:41` - The registry owns target records, exact session identity, opening/session ownership, and one settlement promise.
-- `redeven:desktop/src/main/runtimePlacementBridgeObservation.ts:25` - Read-only bridge observation skips probes during recovery, revalidates session identity, and preserves transport on typed probe failure.

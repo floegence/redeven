@@ -4,6 +4,8 @@ title: Flower composer attachments
 description: Connection-local attachment staging, long-text conversion, and canonical timeline presentation.
 tags: [ui, flower, attachments, composer, accessibility]
 timestamp: 2026-10-16T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -14,70 +16,35 @@ timestamp: 2026-10-16T00:00:00Z
 
 # Contract
 
-An attachment selected while the model capability snapshot is loading stays queued with its local bytes. The controller validates the resolved snapshot before uploading and starts supported files automatically. A failed or mismatched capability read preserves the image and exposes retry, which reloads the selected model capability. Upload request, integrity, idempotency and staging failures use upload feedback; only a resolved disabled capability attributes rejection to the selected model.
+An attachment selected while the model capability snapshot is loading stays queued with its local bytes.
 
-The attachment lane is part of the composer rather than a separate modal workflow. Each item has a stable size, status, progress treatment, and icon action set. File selection, drop, and paste converge on the same controller and closed capability snapshot. Upload order is preserved independently of completion order. Failed items retain retry or reselect actions, cancellation is immediate, incompatible items remain legible, and sending is enabled only when every included item is ready. Attachment-only turns are valid and never receive invented prompt copy.
+Attachment-only turns are valid and never receive invented prompt copy.
 
-Composer images use fixed 96-by-80 CSS-pixel thumbnails with one top-right X removal action. Ready images show no filename, byte count, line count, MIME, or ready label; identity remains available in the preview tooltip and accessible name. Clicking the thumbnail opens the existing preview. Upload progress and necessary failure or capability feedback stay within the same thumbnail, with retry or reselect when needed. Removing an uploading image cancels its active attempt through the existing controller. Image and file items retain submission order, wrap at narrow widths, and share this presentation across full and companion Flower. Removal moves keyboard focus to the adjacent item or back to the attachment picker when the lane is empty.
-
-Ready files use compact, non-stretching labels showing only the file icon and filename, with full names available on hover and in accessible labels. File size, line count, MIME, and ready status are accessible metadata rather than visible rows. The X removal action stays hidden at rest on mouse devices and appears on item hover or keyboard focus, without changing item dimensions. Touch devices retain visible, 44-pixel removal controls. One X dismisses either kind of attachment: queued or uploading items use the existing cancellation callback; other states use removal. Necessary upload and failure feedback stays within the fixed item height; complete feedback is available through its tooltip and accessible description. Retry, reselect, and long-text restoration remain explicit actions.
-
-The inline threshold is exactly 50,000 Unicode code points. Exactly 50,000 stays inline. A paste payload that alone exceeds the threshold is staged as one lossless UTF-8 `long_text` attachment while the surrounding selection remains in the editor. If attachments are unavailable, browser paste remains untouched; if local limits reject conversion, the exact payload, surrounding text, and selection are restored. Typing, restoration, or a smaller paste that makes the whole editor value exceed the threshold keeps the editor intact and shows a restrained conversion status; Send stages the complete original scalar string first. Raw whitespace and newlines over the limit remain valid long text even though trimmed prompt text is empty. During preparation the primary action becomes Stop. Cancellation, a new approval or input request, read-only transition, detail load, or warmup aborts the exact generated upload, preserves the original editor value before admission, and permits an explicit retry. Lone UTF-16 surrogates fail before encoding, and composition events suppress conversion and submission until `compositionend` updates the same connection-local scope.
-
-Long-text source keeps original whitespace and newline bytes. Until Send is accepted, the item offers Restore to editor. Restore reads the exact owner-and-staging-scope-bound text with the connection-held capability, verifies its digest, inserts it at the current selection, and removes the staging membership. Ordinary remove updates the local scope and releases that membership; abandoned late upload completion uses the same idempotent staged cleanup path. A subsequent Send may stage the current complete editor value again. Names are presentation only and include a timestamp plus collision ordinal.
-
-For a Desktop-initiated Runtime Restart, the Env App's existing draft coordinator temporarily suspends uploads and exports only unsent user-authored text, references, explicit choices, and locally available attachment bytes. Desktop holds the bounded transfer in memory for the retained window. The fresh session restores each draft before Flower surfaces mount, assigns new upload request ids, and stages local files against the new capability; it never reuses old staging secrets or automatically replays commands. An attachment without locally available bytes makes preparation fail before the old Runtime is stopped. A canceled preparation resumes the original upload controller. No automatic Send occurs during restoration.
+No automatic Send occurs during restoration.
 
 ## Connection-local editing
+Activity and Workbench use one Env App shell-owned in-memory coordinator; Desktop uses one App-owned coordinator per connection. A Flower surface never creates a module singleton.
 
-Activity and Workbench use one Env App shell-owned in-memory coordinator; Desktop uses one App-owned coordinator per connection. A Flower surface never creates a module singleton. The coordinator starts empty, is not hydrated by the host, and is disposed with the connection. All placements that open the same thread or new-thread scope synchronously observe one cell, including across page switches and retained-surface remounts. Different scopes and different connections are isolated. There is no server draft, lease, holder, expected revision, takeover, conflict state, store-unavailable state, polling, or persistence retry. Picker activation happens in the originating click task, while captured files, focus, and text selection apply only to the same connection-local scope.
-
-The shared in-memory value contains text, staged attachment projection, references, model, reasoning, an optional explicit new-thread `permission_type_override`, working directory, a stable product `client_request_id` or `queue_id`, capability revision, and the local mode. It never persists file handles, editable text, references, or turn history. The environment permission default is read from the settings snapshot and is not copied into this value; an existing Thread uses its canonical `permission_type`. Each composer scope obtains a separate random staging scope and bearer capability, held only in connection memory. Existing-thread staging binds the exact Floret ThreadID; a new-conversation staging scope binds the stable client request target and carries no candidate canonical identity. Admission uncertainty preserves that product request identity in the live connection so retry and reconciliation cannot silently create another request.
+Admission uncertainty preserves that product request identity in the live connection so retry and reconciliation cannot silently create another request.
 
 ## Queued content
-
-Active execution keeps file selection, paste, drag-and-drop and reference controls available. Ready resources freeze into the ordinary Send path and appear immediately in the local queue row. [Turn launcher](flower-turn-launcher.md) owns the single-line layout, preview overflow and take-back action. Before queue removal, authorized admitted attachments are copied into the ordinary composer staging scope bound to the same ThreadID. The restored message replaces existing draft text, references and attachments. Users can remove or add resources and send normally; staged copies remain usable after the queue item is removed, while canonical attachment bytes stay immutable.
+Active execution keeps file selection, paste, drag-and-drop and reference controls available. Users can remove or add resources and send normally; staged copies remain usable after the queue item is removed, while canonical attachment bytes stay immutable.
 
 ## Canonical Presentation
+Message attachment previews cross the host's authenticated `loadMessageAttachment` boundary. Env App prepares its local access credentials; Desktop sends a scoped GET through Runtime IPC and receives bounded bytes with the canonical MIME type.
 
-Message attachment previews cross the host's authenticated `loadMessageAttachment`
-boundary. Env App prepares its local access credentials; Desktop sends a scoped
-GET through Runtime IPC and receives bounded bytes with the canonical MIME type.
-The shared surface never resolves a Runtime upload URL against Desktop's `file:`
-origin or fetches it directly. Visible message images load lazily into short-lived
-Blob URLs; disposal aborts pending work and releases each URL. Preview failures
-use localized media-unavailable copy, independently of model capabilities. Image,
-native-file, and UTF-8 text-tool input routes remain separate capability decisions.
-
-Queued rows are Redeven-owned unadmitted projections reconstructed from immutable commands and exact resource metadata. Admitted rows come only from Floret public reads and display canonical attachment name, MIME, size, text statistics, and an optional scoped preview URL. Staged images use a connection-local Blob URL for immediate thumbnails; the URL is released on removal, replacement, consumption, or controller disposal and never enters a draft, request, or canonical history. The chat stream projects image MIME attachments as ordered image blocks and other attachments as file blocks, preserving mixed order and using a static file fallback when a preview is unavailable. Queued preview carries thread and queue, and canonical preview carries thread and turn. Download or preview actions reauthenticate and do not treat a locator as identity. The authenticated response's canonical media type, never the display-name suffix, selects a fixed safe temporary extension; plain text is always `.txt`, while HTML, SVG, missing, or non-canonical media types fail closed before a temporary directory is created. Model capability changes mark staged items incompatible rather than silently dropping them. While the model menu is open, each option checks current MIME routes, long-text support, count, per-file size, and total size and labels support, rejection, loading, or an unavailable check without switching models automatically.
-
-Desktop upload operations permit only one in-flight binary chunk write per operation id. A concurrent chunk is rejected before either offset state or the runtime socket can be touched, while different operations remain independent. If the commit request receives an HTTP 423 challenge, the main process invalidates only the challenged runtime's cached access cookie and returns the failure to the UI. An explicit retry keeps the server idempotency key and runs access preparation again; Desktop never transparently replays a request body after transmission.
-
-All visible strings, tooltips, error states, progress labels, and accessibility names use the shared locale catalog. Item names include IEC size, localized line count, MIME, and state in their accessible name; polite announcements cover add, conversion, completion, and failure. Picker completion returns focus to the composer. The lane wraps on narrow screens, keeps touch targets stable, and does not expand controls when status text changes. A real Chromium 320-CSS-pixel layout check covers common desktop 400-percent zoom width without horizontal overflow.
+A real Chromium 320-CSS-pixel layout check covers common desktop 400-percent zoom width without horizontal overflow.
 
 # Boundaries
 
-The shared Flower UI owns attachment presentation, connection-local interaction state, and ordered controller behavior. Host adapters own authenticated staging transport, progress delivery, preview handoff, and platform-specific temporary-file lifecycle. The Redeven AI service owns bytes, owner-scoped metadata, quotas, staging capability hashes, claims, integrity checks, and unadmitted command admission. Floret alone owns canonical turn membership and admitted attachment history.
+The shared Flower UI owns attachment presentation, connection-local interaction state, and ordered controller behavior. Floret alone owns canonical turn membership and admitted attachment history.
 
-A surface never persists file bytes or editable state, creates its own global coordinator, treats a locator or scope id as authorization, invents prompt text for an attachment-only turn, or admits an unresolved or incompatible item. Env App and Desktop integrations do not reinterpret attachment controller states or expose the staging bearer secret outside the fixed authorization header boundary. Canonical timeline projection does not fall back to a staged client snapshot when Floret membership is unavailable.
+Canonical timeline projection does not fall back to a staged client snapshot when Floret membership is unavailable.
 
 # Evidence
 
 - `redeven:internal/flower_ui/src/attachments/flowerAttachmentModel.ts` - Unicode, selection, capability, route, and staged-identity helpers define shared semantics.
-- `redeven:internal/flower_ui/src/attachments/createFlowerAttachmentController.ts` - Ordered upload, progress, retry, cancel, remove, restore, and capability transitions share one controller.
-- `redeven:internal/flower_ui/src/attachments/FlowerAttachmentLane.tsx` - The accessible attachment lane presents bounded item states and icon actions.
-- `redeven:internal/flower_ui/src/composer/createFlowerComposerDraftCoordinator.ts` - One connection-local in-memory cell coordinates Activity and Workbench without persistence or editor ownership.
-- `redeven:internal/flower_ui/src/composer/createFlowerComposerAutosizeController.ts` - Measured visual-line sizing grows through five lines and then enables internal scrolling.
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Composer events, long-text conversion, admission, and canonical timeline projection are integrated in one surface.
-- `redeven:internal/ai/flower_current_projection.go` - One detail, live, and command-response boundary redacts opaque references and adds scoped preview URLs.
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Env App owns the shared Flower draft coordinator above Activity and Workbench placement.
-- `redeven:internal/envapp/ui_src/src/ui/services/sessionRestart.ts` - Versioned Env App restart capture and restoration of local draft bytes.
-- `redeven:desktop/src/welcome/App.tsx` - Desktop owns one draft coordinator for its Flower surfaces.
-- `redeven:desktop/src/main/runtimeFlowerAttachmentOperationLifecycle.ts` - Desktop operation lifecycle serializes chunk writes for one upload.
-- `redeven:desktop/src/main/runtimeFlowerHTTP.ts` - HTTP 423 invalidates only the challenged runtime access cache entry.
-- `redeven:internal/flower_host_ui/src/flowerAttachmentStaging.ts` - Hosts validate staging responses and place scope identity plus bearer authority only in fixed headers.
-- `redeven:internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.ts` - Env preview authenticates a fetch before creating a short-lived Blob URL.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.composerAttachments.browser.test.tsx` - Chromium verifies narrow and 400-percent-equivalent attachment layout containment.
 
-- `redeven:internal/ai/threadstore/uploads_test.go` - Queue-edit claims remain retryable and reject unrelated staging scopes.
-- `redeven:internal/flower_ui/src/composer/createFlowerComposerDraftCoordinator.test.ts` - Restart preserves ordinary draft content and resource intent without staging credentials.
+- `redeven:internal/flower_ui/src/attachments/createFlowerAttachmentController.ts` - Ordered upload, progress, retry, cancel, remove, restore, and capability transitions share one controller.
+
+- `redeven:internal/flower_ui/src/attachments/FlowerAttachmentLane.tsx` - The accessible attachment lane presents bounded item states and icon actions.

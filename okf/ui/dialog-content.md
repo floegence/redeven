@@ -4,6 +4,8 @@ title: Dialog content placement
 description: Keep dialog titles distinct from visible body guidance across Env App, Desktop, drawers, and window-local confirmations.
 tags: [ui, dialogs, accessibility, desktop]
 timestamp: 2026-10-08T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -16,28 +18,9 @@ restore a header subtitle or hide the text.
 
 # Contract
 
-Floe Webapp 0.84.0 removes the ambiguous `description` parameter from `Dialog` and
-`ConfirmDialog`. Plain-text guidance uses `bodyDescription`, which renders once
-at the start of the body and supplies the dialog's `aria-describedby` association.
-Rich content uses children in the content viewport. Custom headers and title JSX
-must not recreate the removed explanatory subtitle. WindowModal follows the same
-product content contract while retaining its existing window-local ownership.
+Floe Webapp 0.84.0 removes the ambiguous `description` parameter from `Dialog` and `ConfirmDialog`. Custom headers and title JSX must not recreate the removed explanatory subtitle.
 
-Description-only confirmations contain a populated body between the title and
-actions. Host application confirmations describe the explicit window-close or
-quit action and its effect on the running process; cancel never invokes either
-operation.
-
-Body layout customizations must include the description in their available space.
-Drawers reserve remaining height for their content after guidance; terminal,
-preview, and Git panels use explicit content classes rather than child-position
-selectors. Guidance retains readable padding and wraps on narrow screens. Actions
-remain reachable while long content scrolls. Existing localization keys retain
-their meaning and text.
-
-[Floating layer order](env-app-floating-layer-order.md) remains authoritative for
-placement, focus, dismissal, and Workbench boundaries. This contract changes no
-application connection, process, or window lifecycle.
+This contract changes no application connection, process, or window lifecycle.
 
 # Boundaries
 
@@ -46,7 +29,7 @@ Headers contain identity and controls only. Missing guidance must be repaired in
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/primitives/EnvAppModal.tsx` - Uses the published Dialog and ConfirmDialog contracts.
+
 - `redeven:internal/envapp/ui_src/src/ui/primitives/EnvAppDrawer.tsx` - Allocates body guidance and remaining drawer content height.
+
 - `redeven:internal/envapp/ui_src/src/ui/widgets/WindowModal.tsx` - Places window-local confirmation guidance in its scrollable body.
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvHostApplicationsPage.browser.test.tsx` - Checks Host Applications controls, localized confirmation placement, narrow screens, and cancellation.
-- `redeven:desktop/scripts/check-environment-settings.mjs` - Verifies Desktop settings guidance and interaction geometry.

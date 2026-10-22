@@ -4,6 +4,8 @@ title: Desktop session and model source
 description: Session routing, Desktop model catalog, Flower attach, and lifecycle invalidation.
 tags: [desktop, sessions, models, flower]
 timestamp: 2026-10-18T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -12,79 +14,22 @@ Desktop session context publishes an explicit target route and owns the current 
 # Contract
 
 ## Mechanism
+Desktop main owns the complete session-context route contract. Every `DesktopSessionContextSnapshot` carries a required `target_route`: Local Environment targets publish their declared `local_host` or `remote_desktop` route, while SSH, Gateway, and External Local UI targets always publish `remote_desktop`.
 
-Desktop main owns the complete session-context route contract. Every `DesktopSessionContextSnapshot` carries a required `target_route`: Local Environment targets publish their declared `local_host` or `remote_desktop` route, while SSH, Gateway, and External Local UI targets always publish `remote_desktop`. Preload and Env App accept only `local_host` or `remote_desktop` and reject an incomplete or invalid snapshot instead of inferring route from target kind, URL, SSH metadata, or browser placement. Env App therefore exposes the Desktop Flower model source only from the explicit `remote_desktop` route. The Desktop shell also owns the internal `flower_settings` navigation action, which opens or focuses Welcome Flower and advances an explicit settings-focus revision so the local Flower provider editor is focused without duplicating settings UI in Env App.
+The Desktop bridge treats compaction as a thread action, not as a transcript message or a local UI-only marker, so Desktop and Env App receive the same live timeline decorations and read-state patches from the runtime.
 
-Desktop model-source RPC v4 publishes opaque desktop:model_<hash> identifiers and sanitized capability descriptors. Both peers require this exact protocol under compatibility epoch 68; older epochs enter the existing upgrade path. Desktop reads local provider profiles and Runtime-owned atomic catalog snapshots without supplier discovery. It replaces catalog identity with the opaque Desktop identity while retaining operational limits, modality support, tool-schema behavior and reasoning controls. Credentials, endpoints and secret locations remain local to Desktop.
-
-Every ai.turn.stream error carries a bounded provider-failure envelope in Message and explicit RetryAdvice, including empty advice for unknown failures. The envelope retains the actual supplier; advice carries Category, absolute NotBefore and Forbidden independently. The receiver validates advice and never derives execution policy from prose. ChatGPT authorization/storage codes retain their account-stop behavior. Floret's Engine alone schedules model retries; the connector only restores connection readiness and never replays model calls.
-
-The connection owner closes failed sockets and settles every pending call with its original classified cause. Valid bindings may await transient reconnection within the Engine's remaining budget; explicit disconnect, expired binding and protocol errors terminate. Missing terminal fields, empty errors, malformed results and bounded queue overflow fail explicitly and close the connection. Writes use a cancellable serial gate; failure closes the connection and cancels associated work. Stop's cancel frame waits at most one second and returns the original cancellation outcome. Normal generation uses the Engine's existing request deadlines, without a new RPC-wide timeout.
-
-The Runtime status projection also publishes `configured`, the authoritative fact that Desktop has a Flower provider profile. A bound, connected source with `configured:false` is an intentional unconfigured state rather than a bridge failure; an empty catalog or missing provider keys are separate availability states. Connection, protocol, catalog, and runtime failures retain diagnostics and are the only states that use connection recovery. Remote Runtime and Desktop provider profiles remain independent and are never copied or used as an implicit fallback.
-
-Desktop stores the model-source process handle immediately after spawn and opens the Env App without awaiting its startup report. There is no fixed eight-second kill boundary. One loop inside the model-source process owns both initial connection and later reconnection, uses capped backoff for transient network, timeout, rate-limit, and server failures, and stops immediately for authentication, configuration, or protocol failures. Desktop does not add a second retry owner. Session close cancels the connector, closes an in-progress WebSocket dial or read, and stops the exact process. On the Runtime side, cancellation of an AI service generation closes that generation’s RPC socket even during an idle read. The canceled handler releases its service lease before shutdown waits for the generation to drain; an open Desktop connection cannot hold Runtime restart indefinitely. A normal WebSocket close is reconnectable and never replaces a previously observed actionable failure with close code 1000.
-
-Thread inventory and detail reads project persisted model id, reasoning selection, permissions, and working directory without consulting the live Desktop model catalog. Model capability remains live catalog state. Creating a thread, changing its model or reasoning selection, and accepting a new send still validate the selected Desktop model against the current source and fail closed while it is disconnected. The send preflight runs after idempotency lookup, so retrying an already accepted request returns its canonical result without admitting new work. Draft editing and persisted history remain usable during connection recovery; Redeven adds no cached model directory, read-only mode, queued-send fallback, or second retry loop.
-
-The same RPC carries final model results under one complete ToolCall contract: every final call has a non-empty id and canonical name plus a present JSON argument object. An empty argument object is encoded as `args:{}` rather than omitted, while missing or `null` arguments fail at the shared model-gateway result validator before any call enters Floret. Streaming start and delta events remain partial observations and do not weaken the final-result contract. Desktop validates before writing the result frame and the runtime validates the decoded result again as a transport boundary; neither side repairs a malformed call or substitutes empty arguments.
-
-Desktop Welcome has one Local Environment Flower readiness path for settings, thread inventory, and stream requests. It attaches immediately when Runtime Service is openable. A cold Runtime starts through the existing Desktop lifecycle coordinator, and concurrent first requests coalesce on one in-memory target-resolution promise and the same Start. Target resolution has a bounded Flower request deadline; a timed-out caller receives a retryable readiness error while the lifecycle owner continues and the in-flight promise is released when it settles. An active Start, Restart, or Update is joined, marked with the explicit `flower_warmup` presentation context, and awaited before Desktop revalidates Runtime Service, invalidates the stale local access session, and attaches again. An active Stop or Reinstall fails immediately and never triggers a replacement Start. Open or Refresh ownership permits only an already-openable attach; otherwise the existing lifecycle conflict is returned. Lifecycle failure remains structured and terminal for that request: Flower adds no retry, polling, cache, or second startup path. The Flower surface renders coordinated Start, Restart, and Update progress as warmup instead of treating the surface as stalled.
-
-Model directory reads are separate from that lifecycle. Desktop and Env Shell
-read the current directory alongside settings and begin thread history and
-canvas-bound Flower loading independently. Both model-directory read modes consume the current snapshot immediately. The Runtime owns supplier synchronization; the Desktop source reads the atomic snapshot and publishes metadata changes independently of connection status.
-Full Flower and Tessiven share the resource only for the same Runtime route,
-session, instance, and settings revision. Runtime restart, connection changes,
-or settings writes fence old responses and release subscriptions, while drafts,
-thread references, and persisted history remain owned by their canvas surface.
-
-Runtime event streams belong to the renderer document that opened them. Full
-navigation, reload, renderer crash, and destruction cancel its active requests
-and release their bridge leases and stream slots. In-page navigation preserves
-the connection. Settling a request removes its ownership listeners, and a late
-response cannot revive a canceled document's stream.
-
-Desktop Welcome uses the same Flower adapter contract as Env App for thread operations and split settings writes. Sending a turn posts through the runtime Flower IPC proxy, stop posts to the thread cancel route, and `/compact` posts to `/_redeven_proxy/api/ai/threads/{thread}/context/compact` before reloading the canonical live bootstrap. Default permission writes use the exact `PUT /_redeven_proxy/api/ai/default_permission` route, provider profile writes use `PUT /_redeven_proxy/api/ai/provider_bundle`, and composer model selection writes the future new-thread default through `PUT /_redeven_proxy/api/ai/current_model`. The Desktop bridge also exposes the Flower working-directory picker through exact read-only runtime FS paths: `GET /_redeven_proxy/api/fs/path_context` and `POST /_redeven_proxy/api/fs/list`. The bridge allowlist is a single route table that admits only declared paths, methods, and query shapes, so the permission route is PUT-only and path selection data travels in the POST body instead of opening arbitrary query-path proxying. The Desktop bridge treats compaction as a thread action, not as a transcript message or a local UI-only marker, so Desktop and Env App receive the same live timeline decorations and read-state patches from the runtime.
-
-# Transport resources
-
-The executor retains one Responses transport manager across control reconnects. Reconnect cancels active work and closes sockets while preserving per-thread SSE selection. Process exit clears the manager. The idempotent ai.thread.transport.release management command releases only in-memory transport resources; canonical deletion remains Floret-owned. Disconnected cleanup does not wait for reconnection or create a compensation queue. Transport events pass through the exact v4 contract; incompatible peers fail immediately.
+The executor retains one Responses transport manager across control reconnects. The idempotent ai.thread.transport.release management command releases only in-memory transport resources; canonical deletion remains Floret-owned. Transport events pass through the exact v4 contract; incompatible peers fail immediately.
 
 # Boundaries
 
-Welcome's full Flower page and embedded Tessiven conversation use the same
-Runtime compatibility and AI readiness boundary. The embedded conversation
-does not issue AI requests until the published state is `ready` or `degraded`.
-Preparation and update recovery occupy a compact bottom surface; the canvas
-remains browsable. A transition back to preparation disposes stale Flower
-initialization, while the parent-owned ComposerDraftStore preserves drafts for
-the next ready instance. Neither placement retries startup independently.
+Welcome's full Flower page and embedded Tessiven conversation use the same Runtime compatibility and AI readiness boundary. A transition back to preparation disposes stale Flower initialization, while the parent-owned ComposerDraftStore preserves drafts for the next ready instance.
 
-The local metadata read and silent synchronization contract is owned by
-[Model directory and selection](../ai/model-directory-and-selection.md).
-
-Runtime-control is also not a plugin grant, plugin management, or plugin capability plane. Its token and routes are reserved for Desktop-to-Runtime coordination such as provider-link, code-workspace-engine import, and Desktop model source binding. Plugin workers and sandbox surfaces must not receive runtime-control endpoint data, use runtime-control bearer tokens, or treat runtime-control routes as plugin capabilities; plugin access to Redeven resources must go through released ReDevPlugin brokers and Redeven-registered adapters.
+Plugin workers and sandbox surfaces must not receive runtime-control endpoint data, use runtime-control bearer tokens, or treat runtime-control routes as plugin capabilities; plugin access to Redeven resources must go through released ReDevPlugin brokers and Redeven-registered adapters.
 
 # Evidence
 
 - `redeven:desktop/src/main/runtimeFlowerStreamOwner.ts` - Runtime event streams release their document ownership on full navigation, renderer crash, or destruction; in-page navigation preserves the active connection.
 
 - `redeven:desktop/src/welcome/FlowerNavigation.client.test.tsx` - Canvas startup waits for AI publication and preserves drafts through recovery.
-- `redeven:internal/envapp/ui_src/src/styles/desktop-tessiven-model.browser.test.tsx` - Real browser placement, configured Desktop model and draft recovery in light and dark themes.
 
-- `redeven:desktop/src/main/main.ts:9863` - Welcome Flower attaches or joins the single coordinated Local Environment lifecycle readiness path.
-- `redeven:desktop/src/main/runtimeLifecycleCoordinator.ts:235` - Only Start, Restart, and Update may be awaited as ready-producing mutations.
-- `redeven:desktop/src/welcome/App.tsx:3073` - The Flower warmup state only consumes lifecycle progress marked with the `flower_warmup` presentation context.
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx:315` - Flower renders the explicit warmup state without replacing selected-thread content.
-- `redeven:desktop/src/welcome/flower/localEnvironmentFlowerSurfaceAdapter.tsx:443` - Desktop Flower compaction posts to the runtime compact endpoint and reloads live bootstrap.
-- `redeven:internal/localui/runtime_control.go:134` - Runtime-control routes are limited to provider-link, code-workspace-engine, and Desktop model source handlers.
-- `redeven:internal/ai/desktop_model_source.go:1132` - Desktop builds the model capability from the local provider profile before publishing the model snapshot.
-- `redeven:desktop/src/main/desktopModelSource.ts:117` - Desktop returns an owned process handle immediately and exposes connection readiness separately.
-- `redeven:internal/ai/desktop_model_source.go:807` - One connector loop owns initial connection and capped-backoff reconnection classification.
-- `redeven:internal/ai/threads.go:91` - Thread read projections use persisted settings without querying the live model catalog.
-- `redeven:internal/ai/send_user_turn.go:177` - New sends validate Desktop model availability after idempotency lookup.
-- `redeven:internal/ai/model_gateway_result.go:36` - One validator owns final ToolCall completeness for provider, Desktop RPC, and Floret mapping boundaries.
-- `redeven:internal/localui/device_ca.go:39` - Local UI device trust is an explicit generated CA lifecycle, independent of Desktop session routing.
-- `redeven:internal/flower_ui/src/contracts/flowerSurfaceContracts.ts:1173` - Desktop and Env App implement the same split settings adapter contract.
-- `redeven:internal/envapp/ui_src/src/ui/services/desktopSessionContext.ts:71` - Env App independently validates the required route before consuming Desktop session context.
+- `redeven:internal/envapp/ui_src/src/styles/desktop-tessiven-model.browser.test.tsx` - Real browser placement, configured Desktop model and draft recovery in light and dark themes.

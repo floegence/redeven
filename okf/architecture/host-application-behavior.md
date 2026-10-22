@@ -4,6 +4,8 @@ title: Cross-platform host application behavior
 description: Compare aligned user operations and operating-system limits for macOS and Linux host applications.
 tags: [applications, macos, linux, lifecycle]
 timestamp: 2026-10-07T05:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -29,40 +31,19 @@ must not silently relaunch an unrelated or replacement process.
 | Running list | Regular apps in the logged-in OS session | Caller-owned Redeven instances, including detached/windowless apps |
 | Host reboot / display server destruction / OS cleanup | No survival guarantee | Same; Runtime cgroup cleanup may also end its virtual display |
 
-The UI shares interaction structure, themes and ten explicit locale catalogs.
-Platform-specific labels state the real available operation rather than promising
-an application-level Linux graceful quit. Force quit is a separate deliberate
-action, never escalation of a save cancellation. Linux recovery and boundaries
-belong to the [instance lifecycle contract](linux-application-lifecycle.md).
-
 ## Accepted operations and visible state
+Quit and force-quit requests are asynchronous. The Host Applications surface must close the confirmation dialog after acceptance and show a per-application pending state until the authoritative running snapshot confirms the target instance is gone.
 
-Quit and force-quit requests are asynchronous. A successful request response
-means that the host accepted the operation, not that the process has already
-exited. The Host Applications surface must close the confirmation dialog after
-acceptance and show a per-application pending state until the authoritative
-running snapshot confirms the target instance is gone. Pending work must not
-disable unrelated applications or leave the target card visually unchanged.
-
-Sharing is client-scoped. The running card expresses the application process and
-always opens or resumes the current client's viewer; it does not expose a
-stop-sharing action or confirmation. Releasing one lease ends only its route,
-credential, WebSocket and native attachment. The final release ends shared
-transport while leaving the process and windows running.
-
-Force quit requires an explicit confirmation state that names the data-loss
-consequence. The first Force quit action only enters that state; only its final
-confirmation sends the destructive host request.
+The first Force quit action only enters that state; only its final confirmation sends the destructive host request.
 
 # Boundaries
 
-Linux cannot generically request AppKit-style application quit or reopen, nor adopt
-an arbitrary process on another display. macOS requires its real logged-in graphical
-session and explicit capture/input permissions. Neither backend can preserve an
-application after its OS or display environment has been destroyed.
+Linux cannot generically request AppKit-style application quit or reopen, nor adopt an arbitrary process on another display. macOS requires its real logged-in graphical session and explicit capture/input permissions. Neither backend can preserve an application after its OS or display environment has been destroyed.
 
 # Evidence
 
 - [Linux instance lifecycle](linux-application-lifecycle.md): surviving private backends, connection revocation and exact-instance controls.
+
 - [macOS application management](macos-application-management.md): OS inventory, normal quit and explicit force quit.
+
 - [Lifecycle acceptance](../operations/host-application-lifecycle.md): focused native and renderer scenarios.

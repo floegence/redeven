@@ -4,6 +4,8 @@ title: Flower reasoning selection ownership
 description: Preserve explicit reasoning choices across cold loads, shared drafts, submission, and restart.
 tags: [ai, flower, reasoning, composer]
 timestamp: 2026-10-08T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -11,43 +13,15 @@ Confirmed Thread settings own the reasoning level displayed for an existing Flow
 
 # Contract
 
-Existing Threads display the newest confirmed settings snapshot in `ThreadCache`, comparing settings revisions independently of runtime view versions. A saved `off` remains explicit even when the model defaults to `high`. Cold detail loads may use confirmed summary settings; if neither snapshot is available, the segment shows a fixed-width, non-interactive loading placeholder. Loading, reconnecting, and rendering must never write a reasoning preference.
+Existing Threads display the newest confirmed settings snapshot in `ThreadCache`, comparing settings revisions independently of runtime view versions. Loading, reconnecting, and rendering must never write a reasoning preference.
 
-The connection-local composer draft stores only an explicit new-thread reasoning choice. Effective model defaults and existing-thread settings are read-only projections, never draft input. Launch freezes effective reasoning in the request/outbox snapshot without promoting it to a draft override; existing-thread sends omit reasoning overrides. Admission transfers ownership to confirmed thread settings. An old existing-thread draft cannot mask those settings. A pending preference save disables conflicting model/reasoning edits, leaves the last confirmed value visible, and reports failures through the host notification channel. Its response updates only the owning Thread and cannot change navigation.
+New-thread Off survives shared-surface remounts and attachment preparation, while changing to a confirmed model without reasoning clears the unsupported draft choice.
 
-Running and waiting Threads expose no editable reasoning control. Input answers continue the immutable Turn surface through the existing runtime contract; they do not submit a reasoning override. New-thread Off survives shared-surface remounts and attachment preparation, while changing to a confirmed model without reasoning clears the unsupported draft choice.
+[Conversation preferences](flower-conversation-preferences.md) store only explicit reasoning choices, keyed by the complete model identity and including budget tokens. Loading, sending, reconnecting, and automatic model normalization never write preferences. A preference-save failure retains the confirmed Thread result and reports a separate save error; active Turns and retry snapshots remain immutable.
 
-# Personal new-conversation memory
+All shared control variants use one ordered option list and localized labels. An explicit `default` is never labeled On or replaced with a specific effort.
 
-[Conversation preferences](flower-conversation-preferences.md) store only
-explicit reasoning choices, keyed by the complete model identity and including
-budget tokens. A successful user edit on an existing Thread remembers only that
-model's reasoning, not the Thread's model or directory. Reselecting the current
-value also remembers it without an unnecessary Thread PATCH. Loading, sending,
-reconnecting, and automatic model normalization never write preferences.
-A preference-save failure retains the confirmed Thread result and reports a
-separate save error; active Turns and retry snapshots remain immutable.
-
-# Default and effort presentation
-
-All shared control variants use one ordered option list and localized labels.
-An effort control includes Default, Off when supported, and only the catalog's
-supported levels. Default remains selectable even when the catalog has no
-`default_level`. An explicit `default` is never labeled On or replaced with a
-specific effort. Existing model/profile default resolution still applies when
-no explicit selection exists; rendering never writes that resolved choice.
-
-Returning to Default submits the existing `level: default` selection. Toggle
-and budget defaults also remain labeled Default rather than claiming enabled
-reasoning. An explicit budget displays its token count, and Off takes precedence
-over budget presentation. Turning Off clears the budget as before. Running and
-waiting Turns retain their frozen settings.
-
-DeepSeek's published Floret transport omits explicit reasoning effort for absent
-or Default selections, sends `none` for Off, and preserves supported Low, High,
-and Max selections. The UI does not infer an effective provider default.
-
-# Model capability presentation
+The UI does not infer an effective provider default.
 
 The shared Desktop and Env App control distinguishes these model contracts:
 
@@ -60,32 +34,14 @@ The shared Desktop and Env App control distinguishes these model contracts:
 | Thinking with unknown controls | Non-interactive Model controlled status with an explanation |
 | No reasoning | No reasoning control |
 
-On is a persisted choice distinct from Default and from effort names. Published
-Floret v7.25.2 advertises it only for verified boolean transports. Named effort
-and token-budget controls may coexist only when the provider permits it; Qwen's
-`qwen_reasoning_effort` clears the budget when a specific effort is chosen and
-shows the budget input only under Default. Off clears any budget.
-
-Provider metadata discovery and exact wire encoding follow the
-[model reasoning contract](../ai/model-reasoning-runtime.md).
-
-Runtime compatibility epoch 35 pairs clients that understand the additive `on`
-value. Existing database lineages and immutable active-Turn settings do not
-change. The model directory remains the authority for provider metadata; no
-second capability store or probing inference request is introduced.
-
 # Boundaries
 
-This is shared Redeven UI policy, not a Floret API or a second preference store. The model catalog and navigation remain governed by [Flower model and navigation presentation](flower-model-navigation.md). Runtime continuation uses the [immutable Turn surface](../ai/floret-thread-runtime.md); no reasoning override is added to an input answer.
+This is shared Redeven UI policy, not a Floret API or a second preference store. Runtime continuation uses the [immutable Turn surface](../ai/floret-thread-runtime.md); no reasoning override is added to an input answer.
 
 # Evidence
 
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Resolve confirmed settings independently from explicit drafts and freeze submission options.
+
 - `redeven:internal/flower_ui/src/composer/createFlowerComposerDraftCoordinator.ts` - Connection-local explicit new-thread reasoning choice.
+
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.reasoningSelection.browser.test.tsx` - Cold loading, explicit intent, failed saves, remounts, and request ownership.
-- `redeven:internal/ai/thread_reasoning_restart_test.go` - Persisted Off and On survive service reopening; DeepSeek waiting continuation and Ollama dispatch retain the confirmed choice.
-
-- `redeven:internal/envapp/ui_src/src/ui/ReasoningControl.browser.test.tsx` - Default/effort labels, budgets, localization, and keyboard interaction.
-- `redeven:internal/ai/model_gateway_deepseek_test.go` - Published Floret transport reasoning selection wire contract.
-
-- `redeven:internal/ai/model_gateway_ollama_reasoning_test.go` - Exact declared wire choices, thinking stream/history, and opt-in live model acceptance.

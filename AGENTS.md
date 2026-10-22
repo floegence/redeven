@@ -47,5 +47,7 @@ Canonical repository rules. Keep this file within 100 lines, including headings 
 - `okf/` is the only maintained knowledge corpus. Consult [the OKF index](okf/index.md) and relevant concepts when additional context is needed.
 - Update affected OKF contracts with architecture, protocol, permission, interaction, runtime, CI, or release changes; derive claims from current code, tests, and active contracts.
 - Each concept answers one coherent question, begins with `# Summary`, separates contracts from evidence, and avoids duplicated ownership or stale implementation inventories. Target 8,000 body characters; split above 12,000 unless justified.
+- Keep all authored OKF Markdown, including `index.md` and `log.md` but excluding generated `dist/`, below a 1,000,000 Unicode-character hard limit; target at most 900,000. Strict quality checks enforce the cap.
+- Every concept declares `lifecycle` and `reviewed_at`: `contract` is reviewed every 180 days, `active_evidence` every 90 days, and `retained_history` every 365 days with a concise `retention_reason`. Expired content must be revalidated, consolidated, or removed; do not add an OKF archive.
 - After OKF edits, regenerate and commit all three `okf/dist/` bundle artifacts; run `scripts/okf/check_source_integrity.sh` and `scripts/build_okf_bundle.sh --verify-only`.
 - Add domain rules to their owning OKF concept, not this file. Do not restore retired documentation trees or add a committed `.develop.md` or parallel rulebook.
