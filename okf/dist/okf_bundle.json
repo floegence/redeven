@@ -4571,7 +4571,7 @@
               "tools"
             ],
             "summary": "Flower exposes two read-only tools for finding another readable conversation\nand reading its content: `threads.query` and `threads.read`. The tool contract\nis intentionally smaller than Floret's published general query API.\n`threads.aggregate` is not registered or dispatched.",
-            "section_count": 1
+            "section_count": 2
           },
           {
             "concept_id": "ai.floret-thread-runtime",
@@ -9657,15 +9657,22 @@
         "title": "Flower canonical thread queries",
         "type": "Integration Contract"
       },
-      "body_length": 3090,
+      "body_length": 3104,
       "summary": "Flower exposes two read-only tools for finding another readable conversation\nand reading its content: `threads.query` and `threads.read`. The tool contract\nis intentionally smaller than Floret's published general query API.\n`threads.aggregate` is not registered or dispatched.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Find, browse, read\n\n- `threads.query` defaults to `object: threads`, listing recently updated\n  conversations first. Optional `title` is one literal, case-insensitive title\n  fragment. Optional `thread_id` selects one exact conversation.\n- To browse `messages` or `tool_calls`, provide one `thread_id`. Records are\n  chronological; there are no model-controlled sort keys or detailed filters.\n- `limit` defaults to 50, with a maximum of 200. Continue with `next_cursor` and\n  unchanged input. Pass a record's `ref` to `threads.read` for complete content,\n  following its cursor until no continuation remains.\n- Nested `filter`, message-body matching, argument/result matching, keywords,\n  phrases, time/role/tool/status predicates, grouping and aggregation are not\n  accepted by the tool schema or handler. Unsupported inputs fail explicitly.\n- Reasoning, secrets and private provider state remain excluded. Tool arguments\n  and confirmed results are available only through authorized content reads.\n\n## Authorization owner\n\nAuthenticated session authority supplies read permission, user, endpoint and\nnamespace identity. Redeven reconstructs the readable scope for every page and\nread. Tool parameters and returned references never grant authority. Changed\nscope invalidates frozen cursors; a new query starts under current permission.\nThe adapter uses published Floret public APIs and never reads Floret SQL or\nreconstructs canonical records.\n\n## Historical results and presentation\n\nSaved query/read results remain previewable after restart and after their\noriginal refs expire. The historical aggregate result renderer remains solely\nfor immutable already-saved tool exchanges; it cannot dispatch aggregation.\nPrivate query contents are not added to Activity snapshots. The intent label\nand explicitly opened, bounded result preview remain the presentation boundary.\n\n## Storage and execution\n\nThe canonical owner stores source locators and metadata. Flower requires no\nfull-text index and schedules no startup or background indexing. Metadata-only\nbrowsing requests one thread's ordered records; canonical full content is read\nonly as needed. Floret's retired optional indexing declarations are not a\nproduct capability. The engine's published query API may retain compatibility\nfilters without exposing those filters to Flower's model tools.",
-          "char_count": 2350
+          "body": "## Find, browse, read\n\n- `threads.query` defaults to `object: threads`, listing recently updated\n  conversations first. Optional `title` is one literal, case-insensitive title\n  fragment. Optional `thread_id` selects one exact conversation.\n- To browse `messages` or `tool_calls`, provide one `thread_id`. Records are\n  chronological; there are no model-controlled sort keys or detailed filters.\n- `limit` defaults to 50, with a maximum of 200. Continue with `next_cursor` and\n  unchanged input. Pass a record's `ref` to `threads.read` for complete content,\n  following its cursor until no continuation remains.\n- Nested `filter`, message-body matching, argument/result matching, keywords,\n  phrases, time/role/tool/status predicates, grouping and aggregation are not\n  accepted by the tool schema or handler. Unsupported inputs fail explicitly.\n- Reasoning, secrets and private provider state remain excluded. Tool arguments\n  and confirmed results are available only through authorized content reads.",
+          "char_count": 1002
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "## Authorization owner\n\nAuthenticated session authority supplies read permission, user, endpoint and\nnamespace identity. Redeven reconstructs the readable scope for every page and\nread. Tool parameters and returned references never grant authority. Changed\nscope invalidates frozen cursors; a new query starts under current permission.\nThe adapter uses published Floret public APIs and never reads Floret SQL or\nreconstructs canonical records.\n\n## Historical results and presentation\n\nSaved query/read results remain previewable after restart and after their\noriginal refs expire. The historical aggregate result renderer remains solely\nfor immutable already-saved tool exchanges; it cannot dispatch aggregation.\nPrivate query contents are not added to Activity snapshots. The intent label\nand explicitly opened, bounded result preview remain the presentation boundary.\n\n## Storage and execution\n\nThe canonical owner stores source locators and metadata. Flower requires no\nfull-text index and schedules no startup or background indexing. Metadata-only\nbrowsing requests one thread's ordered records; canonical full content is read\nonly as needed. Floret's retired optional indexing declarations are not a\nproduct capability. The engine's published query API may retain compatibility\nfilters without exposing those filters to Flower's model tools.",
+          "char_count": 1346
         }
       ],
       "snippet": "Flower exposes two read-only tools for finding another readable conversation and reading its content: `threads.query` and `threads.read`. The tool contract is intentionally smaller than Floret's published general query API.",
@@ -33353,5 +33360,5 @@
       ]
     }
   ],
-  "source_sha256": "0ccb40b2c5aee11afbc38c236f6cdfe613247bc13c38f1cf31b1eada08f71261"
+  "source_sha256": "d383e89a0d1bd0af72460bc8589f2898a9957f0fdc805f2c2df4eebc7173a13f"
 }
