@@ -18,6 +18,20 @@ const entries = [entry('user', 'user'), entry('progress'), entry('final-a'), ent
 const thinking: MessageEntry = {
   ...entry('thinking'), blocks: [{ type: 'content', key: 'thinking:0', block_index: 0, block_type: 'thinking', content: 'Inspecting evidence.' }],
 };
+const toolEntry = (id: string, status: FlowerActivityItem['status'] = 'success'): MessageEntry => ({
+  ...entry(id), blocks: [{ type: 'activity', key: `${id}:0`, block_index: 0,
+    block: { type: 'activity-timeline', schema_version: 1, thread_id: 'thread', turn_id: 'turn', run_id: 'run',
+      summary: { status, severity: status === 'error' ? 'error' : 'quiet', needs_attention: status === 'error', total_items: 1, counts: { [status]: 1 } },
+      items: [{ item_id: id, tool_id: id, tool_name: 'terminal.exec', kind: 'tool', status,
+        severity: status === 'error' ? 'error' : 'quiet', needs_attention: status === 'error', requires_approval: false }],
+    },
+  }],
+});
+const inputResponse = (): MessageEntry => ({
+  ...entry('answer', 'user'), blocks: [{ type: 'input_response', key: 'answer:0', block_index: 0,
+    block: { type: 'input-response', questions: [{ question_id: 'retry', question: 'Retry the hook?', answer: 'Yes' }] },
+  }],
+});
 
 describe('canonical turn process presentation', () => {
   it('treats goal continuation as business work with the existing disclosure owner', () => {
@@ -129,6 +143,22 @@ describe('canonical turn process presentation', () => {
     expect(result.groups.get('turn')?.processKeys).toEqual(['progress']);
     expect(result.groups.get('turn')?.summaryKey).toBe('progress');
     expect(result.groups.get('turn')?.disclosure).toBe('automatic');
+  });
+  it('shows a static overview when an answered interaction separates work segments', () => {
+    const before = [toolEntry('before-one'), toolEntry('before-two')];
+    const after = [toolEntry('after-one'), toolEntry('after-two', 'error')];
+    const result = projectFlowerTurnProcess([...before, inputResponse(), ...after], [turn({
+      outcome: 'interrupted', ended_at: '2026-10-11T12:02:18Z', intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false,
+    })]).groups.get('turn');
+    expect(result).toMatchObject({
+      disclosure: 'none', staticOverview: true, inputResponseCount: 1, toolCallCount: 4, failedCallCount: 1,
+      processKeys: [...before, ...after].map(value => value.key),
+    });
+  });
+  it('keeps ordinary dialogue outside the process without changing its disclosure', () => {
+    const result = projectFlowerTurnProcess([toolEntry('before-one'), toolEntry('before-two'), entry('ordinary-user', 'user'), toolEntry('after-one')], [turn()]).groups.get('turn');
+    expect(result?.staticOverview).toBe(false);
+    expect(result?.disclosure).toBe('automatic');
   });
   it.each(['failed', 'cancelled', 'interrupted'] as const)('keeps %s turns expanded', (outcome) => {
     expect(projectFlowerTurnProcess(entries, [turn({ outcome, intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })]).groups.get('turn')?.disclosure).toBe('none');

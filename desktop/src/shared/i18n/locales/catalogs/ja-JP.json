@@ -789,6 +789,13 @@
             "other": "ツール呼び出し {count} 回"
           }
         },
+        "userResponses": {
+          "kind": "plural",
+          "forms": {
+            "one": "ユーザーの回答 {count} 件",
+            "other": "ユーザーの回答 {count} 件"
+          }
+        },
         "failedCalls": {
           "kind": "plural",
           "forms": {

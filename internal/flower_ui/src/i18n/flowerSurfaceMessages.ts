@@ -348,6 +348,7 @@ export const flowerSurfaceEnUS = {
       failed: 'Flower could not complete this turn.', cancelled: 'Stopped', interrupted: 'This turn was interrupted.',
       worked: 'Worked for {duration}',
       subtaskUpdates: { one: '{count} subtask update', other: '{count} subtask updates' },
+      userResponses: { one: '{count} user response', other: '{count} user responses' },
       expand: 'Expand work process', collapse: 'Collapse work process', lessThanSecond: 'less than a second',
       hour: { one: '{count} hour', other: '{count} hours' },
       minute: { one: '{count} minute', other: '{count} minutes' },

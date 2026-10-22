@@ -27,3 +27,5 @@ A compact digest of updates from the last 30 days. Current contracts and evidenc
 ## 2026-10-22
 - Preview complete HTML documents in ordinary Flower `html` fences while preserving HTML snippets as code
 - Concepts: [Flower inline media](ui/flower-inline-media.md)
+- Keep answered inputs visible as checkpoints between independently folded Flower work sequences
+- Concepts: [turn-process projection](ui/flower-turn-process-disclosure.md), [Flower consecutive tool sequences](ui/flower-tool-sequences.md)

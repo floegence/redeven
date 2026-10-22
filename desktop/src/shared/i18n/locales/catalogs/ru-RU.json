@@ -806,6 +806,15 @@
             "other": "{count} вызовов инструментов"
           }
         },
+        "userResponses": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} ответ пользователя",
+            "few": "{count} ответа пользователя",
+            "many": "{count} ответов пользователя",
+            "other": "{count} ответа пользователя"
+          }
+        },
         "failedCalls": {
           "kind": "plural",
           "forms": {

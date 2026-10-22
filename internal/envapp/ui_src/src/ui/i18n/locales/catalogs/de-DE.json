@@ -5687,6 +5687,10 @@
           "one": "{count} Werkzeugaufruf",
           "other": "{count} Werkzeugaufrufe"
         },
+        "userResponses": {
+          "one": "{count} Nutzerantwort",
+          "other": "{count} Nutzerantworten"
+        },
         "failedCalls": {
           "one": "{count} fehlgeschlagener Werkzeugaufruf",
           "other": "{count} fehlgeschlagene Werkzeugaufrufe"

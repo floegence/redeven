@@ -3357,7 +3357,7 @@
               "turns",
               "ui"
             ],
-            "summary": "Published Floret owns each turn's identity, outcome, final output boundary and durations. Flower consumes only validated detail accepted by ThreadCache. Successful ordinary turns default to collapsed, including legacy history whose explicitly typed process can be separated safely from assistant output. Failure, cancellation and interruption default to expanded only for the latest ordinary turn; older abnormal work defaults to collapsed once a newer ordinary turn starts. Users, resolved clarification answers and every final segment remain visible in their original order; unknown assistant output is never hidden. Pending interactions remain expanded without a turn disclosure control. Reading protection overrides automatic collapse once, without a later timer.",
+            "summary": "Published Floret owns turn identity, outcome, final output and durations. Flower\nuses validated detail only. Successful ordinary turns default to collapsed; the\nlatest failed, cancelled or interrupted turn stays expanded, while older\nabnormal turns collapse after newer work starts. Dialogue, answered inputs and\nfinal segments stay ordered and visible; unknown output is never hidden. Pending\ninteractions stay expanded, and reading protection preserves the reader's\nposition. If an answered input falls between process rows in a settled turn,\nFlower shows a static overview and keeps the receipt as a visible checkpoint.\nSettled tool sequences on either side default to independent collapsed groups;\nactive tools remain available. Ordinary turns keep whole-turn disclosure.",
             "section_count": 2
           },
           {
@@ -3512,7 +3512,7 @@
               "thinking",
               "ui"
             ],
-            "summary": "Flower groups consecutive tool calls in the shared Desktop and Env App timeline.\nThinking after the first tool becomes an inline node in that sequence, including\nthinking after the final tool. Older settled sequences collapse while the newest\nsequence and active tools remain expanded.\nThis is product presentation over existing published Floret facts; it introduces\nno upstream contract, canonical summary or backend migration.",
+            "summary": "Flower groups consecutive tool calls in the shared Desktop and Env App timeline.\nThinking after the first tool becomes an inline node in that sequence, including\nthinking after the final tool. Older settled sequences collapse while the newest\nsequence and active tools remain expanded.\nWhen an answered input falls between work segments in a settled turn, each\nsettled tool sequence remains independently collapsed, including the newest\nsequence. Active tools retain their existing disclosure behavior.\nThis is product presentation over existing published Floret facts; it introduces\nno upstream contract, canonical summary or backend migration.",
             "section_count": 2
           },
           {
@@ -30356,15 +30356,15 @@
         "title": "Flower consecutive tool sequences",
         "type": "UI Contract"
       },
-      "body_length": 3476,
-      "summary": "Flower groups consecutive tool calls in the shared Desktop and Env App timeline.\nThinking after the first tool becomes an inline node in that sequence, including\nthinking after the final tool. Older settled sequences collapse while the newest\nsequence and active tools remain expanded.\nThis is product presentation over existing published Floret facts; it introduces\nno upstream contract, canonical summary or backend migration.",
+      "body_length": 3955,
+      "summary": "Flower groups consecutive tool calls in the shared Desktop and Env App timeline.\nThinking after the first tool becomes an inline node in that sequence, including\nthinking after the final tool. Older settled sequences collapse while the newest\nsequence and active tools remain expanded.\nWhen an answered input falls between work segments in a settled turn, each\nsettled tool sequence remains independently collapsed, including the newest\nsequence. Active tools retain their existing disclosure behavior.\nThis is product presentation over existing published Floret facts; it introduces\nno upstream contract, canonical summary or backend migration.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Boundaries and identity\n\nA sequence needs at least two nodes from the same thread, turn and run, including\na tool call. One tool plus following thinking qualifies. Successful, active and\nfailed calls and argument previews qualify. Running attention does not break a\nsequence; waiting and approval do. Leading thinking stays standalone; thinking\nfrom the first tool onward joins. Counts report calls, thinking segments and\nfailures without generating summaries. A newer single-call segment can make an\nolder untouched sequence eligible for collapse.\n\nProse, user messages, interactions, parent events, compaction, Goal state updates,\nSubAgent operations, approvals, uncertain effects and non-tool errors break\nsequences. Goal calls and Web Search remain tool nodes. Failed calls retain their\nerrors; summaries show the failure count and existing warning treatment. Whole-turn\ndisclosure stays separate, and grouping preserves source order and final output.\n\nEmpty assistant text placeholders between tool messages are transparent; non-empty\ntext remains a boundary. Canonical tool identity owns row lifetime, the first call\nanchors the sequence through updates, and thinking changes presentation in place.\nExisting actions and details remain intact. Adjacent tool icons connect; theme\ntokens own active, completed and failure states.\n\n## Disclosure and reading\n\nChoices live for the interface session by runtime, thread and tool. Automatic\ncollapse settles once; explicit choices persist through updates, reconnects and\nnavigation, then reset on refresh. Focus, selection, gestures, open details or\nthinking, and reading away from the tail protect expansion.\n\nCollapsed groups stay mounted and inert so nested detail state survives. Whole-turn\nclosure releases its body after motion. The timeline remains the sole scroll owner;\nmanual collapse restores focus to the group button, while automatic collapse above\nthe reader preserves position and user scrolling takes precedence.\n\nControls expose viewport IDs, localized counts and labels. Hidden nodes create no\ngaps. Focus, reduced motion, forced colors, narrow layouts and pointer targets\nfollow shared Flower rules; both product catalogs translate all copy.",
-          "char_count": 2211
+          "body": "## Boundaries and identity\n\nA sequence needs at least two nodes from the same thread, turn and run, including\na tool call. One tool plus following thinking qualifies. Successful, active and\nfailed calls and argument previews qualify. Running attention does not break a\nsequence; waiting and approval do. Leading thinking stays standalone; thinking\nfrom the first tool onward joins. Counts report calls, thinking segments and\nfailures without generating summaries. A newer single-call segment can make an\nolder untouched sequence eligible for collapse.\n\nProse, user messages, interactions, parent events, compaction, Goal state updates,\nSubAgent operations, approvals, uncertain effects and non-tool errors break\nsequences. Goal calls and Web Search remain tool nodes. Failed calls retain their\nerrors; summaries show the failure count and existing warning treatment. Whole-turn\ndisclosure stays separate, and grouping preserves source order and final output.\nAn answered input receipt is a turn-sequence boundary. When one splits a settled\nturn's work, settled sequence groups on both sides default to collapsed; explicit\nuser choices and active calls continue to use the existing disclosure store.\n\nEmpty assistant text placeholders between tool messages are transparent; non-empty\ntext remains a boundary. Canonical tool identity owns row lifetime, the first call\nanchors the sequence through updates, and thinking changes presentation in place.\nExisting actions and details remain intact. Adjacent tool icons connect; theme\ntokens own active, completed and failure states.\n\n## Disclosure and reading\n\nChoices live for the interface session by runtime, thread and tool. Automatic\ncollapse settles once; explicit choices persist through updates, reconnects and\nnavigation, then reset on refresh. Focus, selection, gestures, open details or\nthinking, and reading away from the tail protect expansion.\n\nCollapsed groups stay mounted and inert so nested detail state survives. Whole-turn\nclosure releases its body after motion. The timeline remains the sole scroll owner;\nmanual collapse restores focus to the group button, while automatic collapse above\nthe reader preserves position and user scrolling takes precedence.\n\nControls expose viewport IDs, localized counts and labels. Hidden nodes create no\ngaps. Focus, reduced motion, forced colors, narrow layouts and pointer targets\nfollow shared Flower rules; both product catalogs translate all copy.",
+          "char_count": 2451
         },
         {
           "id": "boundaries",
@@ -30386,9 +30386,9 @@
           "description": "Running and completed row layout, updates, interaction state, details, navigation, theme and reading anchors."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.turnProcess.browser.test.tsx:0:whole-turn disclosure regression coverage.",
+          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.turnProcess.browser.test.tsx:0:whole-turn disclosure and interleaved user-response checkpoints.",
           "source": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.turnProcess.browser.test.tsx",
-          "description": "Whole-turn disclosure regression coverage."
+          "description": "Whole-turn disclosure and interleaved user-response checkpoints."
         }
       ],
       "snippet": "Flower groups consecutive tool calls in the shared Desktop and Env App timeline. Thinking after the first tool becomes an inline node in that sequence, including thinking after the final tool. Older settled sequences collapse while the newe",
@@ -30534,15 +30534,15 @@
         "title": "Flower terminal turn process disclosure",
         "type": "UI Contract"
       },
-      "body_length": 2386,
-      "summary": "Published Floret owns each turn's identity, outcome, final output boundary and durations. Flower consumes only validated detail accepted by ThreadCache. Successful ordinary turns default to collapsed, including legacy history whose explicitly typed process can be separated safely from assistant output. Failure, cancellation and interruption default to expanded only for the latest ordinary turn; older abnormal work defaults to collapsed once a newer ordinary turn starts. Users, resolved clarification answers and every final segment remain visible in their original order; unknown assistant output is never hidden. Pending interactions remain expanded without a turn disclosure control. Reading protection overrides automatic collapse once, without a later timer.",
+      "body_length": 2862,
+      "summary": "Published Floret owns turn identity, outcome, final output and durations. Flower\nuses validated detail only. Successful ordinary turns default to collapsed; the\nlatest failed, cancelled or interrupted turn stays expanded, while older\nabnormal turns collapse after newer work starts. Dialogue, answered inputs and\nfinal segments stay ordered and visible; unknown output is never hidden. Pending\ninteractions stay expanded, and reading protection preserves the reader's\nposition. If an answered input falls between process rows in a settled turn,\nFlower shows a static overview and keeps the receipt as a visible checkpoint.\nSettled tool sequences on either side default to independent collapsed groups;\nactive tools remain available. Ordinary turns keep whole-turn disclosure.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Canonical facts and eligibility\nThreadView and HistoryPage expose `turns`: exact TurnID and RunID, optional control kind, start and terminal time, outcome, elapsed/wait/work milliseconds, explicit ordered `intermediate_item_ids`, `final_item_ids` and `final_boundary_complete`. Summary updates cannot author them or trigger collapse.\n\nThe summary shows at most two nonzero time units, with subsecond copy; expansion reveals the original process without extra timing rows.\n\n## Reading and interface state\nRunning, preparing, retrying, finalizing and waiting turns remain expanded without a turn disclosure control. The latest ordinary turn retains process output, open thinking previews and details by default on failure, interruption or cancellation; users may then manually hide confirmed intermediate prose and explicitly typed process rows.\n\nMain, embedded and child-detail timelines share the same renderer while using separate scroll controllers.\n\n## Layout and accessibility\nMessages and events share canonical Path ordering; timestamps never insert receipts.\n\nClarification receipts keep their existing secret-answer redaction.",
-          "char_count": 1137
+          "body": "## Canonical facts and eligibility\nThreadView and HistoryPage expose `turns`: exact TurnID and RunID, optional control kind, start and terminal time, outcome, elapsed/wait/work milliseconds, explicit ordered `intermediate_item_ids`, `final_item_ids` and `final_boundary_complete`. Summary updates cannot author them or trigger collapse.\n\nThe summary shows at most two nonzero time units, with subsecond copy; expansion reveals the original process without extra timing rows. A static overview for an interleaved answer also reports tool calls, failed calls, and answered input count; it never acts as a disclosure control.\n\n## Reading and interface state\nRunning, preparing, retrying, finalizing and waiting turns remain expanded without a turn disclosure control. The latest ordinary turn retains process output, open thinking previews and details by default on failure, interruption or cancellation; users may then manually hide confirmed intermediate prose and explicitly typed process rows.\n\nMain, embedded and child-detail timelines share the same renderer while using separate scroll controllers.\n\n## Layout and accessibility\nMessages and events share canonical Path ordering; timestamps never insert receipts.\n\nClarification receipts keep their existing secret-answer redaction.",
+          "char_count": 1285
         },
         {
           "id": "boundaries",
@@ -30567,9 +30567,19 @@
           "id": "redeven:internal/flower_ui/src/runtimeCurrentView.ts:0:validates and maps current turn facts.",
           "source": "redeven:internal/flower_ui/src/runtimeCurrentView.ts",
           "description": "Validates and maps current turn facts."
+        },
+        {
+          "id": "redeven:internal/flower_ui/src/flowerTurnPresentation.test.ts:0:classifies interleaved answered inputs without changing ordinary turn disclosure.",
+          "source": "redeven:internal/flower_ui/src/flowerTurnPresentation.test.ts",
+          "description": "Classifies interleaved answered inputs without changing ordinary turn disclosure."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.turnProcess.browser.test.tsx:0:verifies the checkpoint stays ordered between independently folded tool sequences.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.turnProcess.browser.test.tsx",
+          "description": "Verifies the checkpoint stays ordered between independently folded tool sequences."
         }
       ],
-      "snippet": "Published Floret owns each turn's identity, outcome, final output boundary and durations. Flower consumes only validated detail accepted by ThreadCache. Successful ordinary turns default to collapsed, including legacy history whose explicit",
+      "snippet": "Published Floret owns turn identity, outcome, final output and durations. Flower uses validated detail only. Successful ordinary turns default to collapsed; the latest failed, cancelled or interrupted turn stays expanded, while older",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -32859,5 +32869,5 @@
       ]
     }
   ],
-  "source_sha256": "746a76ac14c28cff0ea079357b8f27cf62624f07bda0606cf3a37e36dd74ccb8"
+  "source_sha256": "7559bb89fe25fb471c97a52005a274502b11ed8ef5cd48b30090defe7f367a27"
 }

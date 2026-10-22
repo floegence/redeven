@@ -789,6 +789,13 @@
             "other": "{count} chamadas de ferramentas"
           }
         },
+        "userResponses": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} resposta do usuário",
+            "other": "{count} respostas do usuário"
+          }
+        },
         "failedCalls": {
           "kind": "plural",
           "forms": {

@@ -683,6 +683,64 @@ describe('completed turn process disclosure', () => {
     expect(message(root, 'answer').textContent).toContain('Scenic');
     expect(message(root, 'user').textContent).toContain('notes.txt');
   });
+  it('keeps an answered interaction between independently folded tool groups', async () => {
+    const done = current(true);
+    const sourceTool = done.items!.find((item) => item.id === 'tool')!;
+    const toolItem = (id: string, ordinal: number, status: 'success' | 'error' = 'success') => ({
+      ...sourceTool,
+      id,
+      ordinal,
+      activity: {
+        ...sourceTool.activity!,
+        item_id: id,
+        tool_id: id,
+        status,
+        severity: status === 'error' ? 'error' : 'quiet',
+      },
+    });
+    const receipt = { id: 'answer', turn_id: 'turn', run_id: 'run', ordinal: 4, kind: 'interaction' as const, interaction: {
+      id: 'input-1', turn_id: 'turn', run_id: 'run', kind: 'input' as const, resolved: true,
+      input: { summary: 'Choose a route', questions: [{ id: 'route', kind: 'write' as const, prompt: 'Which route?' }] },
+      resolution: { accepted: true, input: { route: 'Scenic' } },
+    } };
+    const initial = current(true, {
+      last_outcome: 'interrupted',
+      turns: [turn({ outcome: 'interrupted', intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })],
+      items: [
+        { ...done.items!.find((item) => item.id === 'user')!, ordinal: 1 },
+        toolItem('before-one', 2), toolItem('before-two', 3), receipt,
+        toolItem('after-one', 5), toolItem('after-two', 6, 'error'),
+        { ...done.items!.find((item) => item.id === 'final-a')!, ordinal: 7, text: 'The run stopped after the response.' },
+      ],
+    });
+    const { root } = await mount(initial);
+    const overview = () => root.querySelector<HTMLElement>('.flower-turn-summary-static');
+    const toolGroups = () => [...root.querySelectorAll<HTMLButtonElement>('.flower-tool-sequence-toggle')];
+    await waitFor(() => overview()?.textContent?.includes('4 tool calls') === true && toolGroups().length === 2
+      && toolGroups().every((button) => button.getAttribute('aria-expanded') === 'false'));
+
+    expect(summary(root)).toBeNull();
+    expect(overview()?.textContent).toContain('1 user response');
+    expect(overview()?.textContent).toContain('1 failed tool call');
+    expect(hidden(root, 'before-one')).toBe(false);
+    expect(hidden(root, 'after-one')).toBe(false);
+    expect(hidden(root, 'answer')).toBe(false);
+    expect(message(root, 'answer').textContent).toContain('Scenic');
+    expect(messageRow(root, 'answer').dataset.flowerInputCheckpoint).toBe('true');
+    expect(messageRow(root, 'before-two').compareDocumentPosition(messageRow(root, 'answer')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(messageRow(root, 'answer').compareDocumentPosition(messageRow(root, 'after-one')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    toolGroups()[0]!.click();
+    await waitFor(() => toolGroups()[0]?.getAttribute('aria-expanded') === 'true');
+    expect(toolGroups()[1]?.getAttribute('aria-expanded')).toBe('false');
+    expect(message(root, 'before-one')).not.toBeNull();
+    const afterSequence = message(root, 'after-one')?.querySelector('.flower-tool-sequence-viewport');
+    expect(afterSequence?.getAttribute('aria-hidden')).toBe('true');
+    expect(afterSequence?.hasAttribute('inert')).toBe(true);
+
+    await page.viewport(390, 844);
+    const label = overview()!.querySelector<HTMLElement>('.flower-turn-overview-copy')!;
+    expect(label.getBoundingClientRect().right).toBeLessThanOrEqual(root.getBoundingClientRect().right + 1);
+  });
   it.each(['canonical', 'legacy'] as const)('defaults %s child work to collapsed while preserving the parent background entry', async (history) => {
     await page.viewport(1280, 900);
     const child = subagentSummary({ parent_thread_id: 'parent', thread_id: 'process', status: 'completed' });
