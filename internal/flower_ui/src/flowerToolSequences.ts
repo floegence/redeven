@@ -60,6 +60,7 @@ export function projectFlowerToolSequences(
   entries: readonly FlowerTimelineEntry[],
   threadID?: string,
   turns: readonly FlowerRuntimeTurn[] = [],
+  previous?: FlowerToolSequenceProjection,
 ): FlowerToolSequenceProjection {
   const tokens: (SequenceNode | null)[] = [];
   const turnsByID = uniqueTurnsByID(turns);
@@ -184,7 +185,7 @@ export function projectFlowerToolSequences(
     const lastEntry = Math.max(...nodes.map(node => entryPositions.get(node.entryKey) ?? firstEntry));
     const entryKeys = entries.slice(firstEntry, lastEntry + 1).map(entry => entry.key);
     const separated = Boolean(nodes[0].turnID && settledTurns.has(nodes[0].turnID) && separatedTurns.has(nodes[0].turnID));
-    const group: FlowerToolSequence = {
+    let group: FlowerToolSequence = {
       key: nodes[0].key,
       nodeKeys: nodes.map(node => node.key),
       entryKeys,
@@ -196,9 +197,25 @@ export function projectFlowerToolSequences(
       runningCount: tools.filter(node => node.active).length,
       disclosure: nodes.some(node => node.active) || !separated && index === runs.length - 1 ? 'manual' : 'automatic',
     };
+    const prior = previous?.groups.get(group.key);
+    if (prior && (Object.keys(group) as (keyof FlowerToolSequence)[]).every(key => {
+      const value = group[key], old = prior[key];
+      return Array.isArray(value) && Array.isArray(old)
+        ? value.length === old.length && value.every((item, index) => item === old[index])
+        : value === old;
+    })) group = prior;
     groups.set(group.key, group);
     entryKeys.slice(0, -1).forEach(key => continuingEntries.add(key));
-    nodes.forEach((node, nodeIndex) => members.set(node.key, { group, first: nodeIndex === 0, last: nodeIndex === nodes.length - 1 }));
+    nodes.forEach((node, nodeIndex) => {
+      const priorMember = previous?.members.get(node.key);
+      members.set(node.key, priorMember?.group === group ? priorMember
+        : { group, first: nodeIndex === 0, last: nodeIndex === nodes.length - 1 });
+    });
   });
+  const previousKeys = previous ? [...previous.groups.keys()] : [];
+  if (previous && groups.size === previous.groups.size && members.size === previous.members.size
+    && [...groups].every(([key, group], index) => previousKeys[index] === key && previous.groups.get(key) === group)
+    && continuingEntries.size === previous.continuingEntries.size
+    && [...continuingEntries].every(key => previous.continuingEntries.has(key))) return previous;
   return { groups, members, continuingEntries };
 }

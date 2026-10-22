@@ -44,6 +44,43 @@ const parentEvent = (id: string, kind: FlowerParentEvent['kind'] = 'completed'):
 });
 
 describe('consecutive tool presentation', () => {
+  it('retains unchanged projections and replaces only changed groups', () => {
+    const entries = [tool('a'), tool('b'), text('prose'), tool('c'), tool('d')];
+    const first = projectFlowerToolSequences(entries, 'thread');
+    const contentOnly = [...entries, text('streamed prose')];
+    const unchanged = projectFlowerToolSequences(contentOnly, 'thread', [], first);
+    expect(unchanged).toBe(first);
+    const changed = projectFlowerToolSequences([tool('a'), tool('b'), text('prose'), tool('c'), tool('d', { status: 'running' })], 'thread', [], first);
+    const [stableKey, changedKey] = [...first.groups.keys()];
+    expect(changed.groups.get(stableKey)).toBe(first.groups.get(stableKey));
+    expect(changed.members.get(stableKey)).toBe(first.members.get(stableKey));
+    expect(changed.groups.get(changedKey)).not.toBe(first.groups.get(changedKey));
+    expect(changed.groups.get(changedKey)?.runningCount).toBe(1);
+    expect(first.groups.get(changedKey)?.runningCount).toBe(0);
+    const removed = projectFlowerToolSequences([text('only prose')], 'thread', [], changed);
+    expect(removed).toEqual(projectFlowerToolSequences([text('only prose')], 'thread'));
+  });
+  it('matches fresh projection through membership, authority and status changes', () => {
+    const variants = [
+      [tool('a'), tool('b')],
+      [tool('a'), tool('b'), text('thinking', true)],
+      [tool('a'), tool('b', { status: 'running' }), text('thinking', true)],
+      [tool('a'), tool('b', { requires_approval: true }), text('thinking', true)],
+      [tool('a'), scopedTool('b', 'other-run'), text('thinking', true)],
+      [tool('a'), tool('b'), text('prose'), tool('c'), tool('d')],
+      [tool('c'), tool('d'), text('prose'), tool('a'), tool('b')],
+      [tool('c'), tool('d', { status: 'error', needs_attention: true, severity: 'error' })],
+      [],
+    ];
+    let previous = projectFlowerToolSequences([], 'thread');
+    for (const entries of variants) {
+      const before = structuredClone(previous);
+      const next = projectFlowerToolSequences(entries, 'thread', [], previous);
+      expect(next).toEqual(projectFlowerToolSequences(entries, 'thread'));
+      expect(previous).toEqual(before);
+      previous = next;
+    }
+  });
   it('groups adjacent leading, middle, and trailing thinking with tools', () => {
     const result = projectFlowerToolSequences([text('leading', true), tool('a'), text('middle', true), text('middle-two', true), tool('b'), text('trailing', true)]);
     const group = [...result.groups.values()][0];

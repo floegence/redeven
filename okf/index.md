@@ -260,6 +260,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Flower inline media](ui/flower-inline-media.md)
 - [Flower streaming stability](ui/flower-streaming-stability.md)
 - [Flower live queue CPU qualification](operations/flower-live-queue-performance.md)
+- [Flower request-history CPU qualification](operations/flower-request-history-performance.md)
 - [Flower received output progress](ui/flower-output-progress.md)
 - [Flower code highlighting](ui/flower-code-highlighting.md): Verify syntax colors, stable code selection/copy, and bounded background work in both hosts.
 - [Flower message appearance](ui/flower-message-appearance.md)
