@@ -11,7 +11,7 @@ import (
 )
 
 func TestFlowerPreparationCancellationNeverExecutes(t *testing.T) {
-	for _, phase := range []FloretStoreStartupPhase{FloretStoreStartupInspecting, FloretStoreStartupIndexing, FloretStoreStartupVerifying, FloretStoreStartupPreparing} {
+	for _, phase := range []FloretStoreStartupPhase{FloretStoreStartupInspecting, FloretStoreStartupMigrating, FloretStoreStartupVerifying, FloretStoreStartupPreparing} {
 		t.Run(string(phase), func(t *testing.T) {
 			state, _ := loadFlowerUpgradeFixture(t, "10ce4c152-lifecycle")
 			opts := fixtureMaintenanceOptions(t, state)
@@ -19,8 +19,10 @@ func TestFlowerPreparationCancellationNeverExecutes(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			opts.DeferExecution = false
+			observed := false
 			opts.StoreStartupProgress = func(current FloretStoreStartupPhase) {
 				if current == phase {
+					observed = true
 					cancel()
 				}
 			}
@@ -28,6 +30,9 @@ func TestFlowerPreparationCancellationNeverExecutes(t *testing.T) {
 			if svc != nil {
 				_ = svc.Close()
 				t.Fatal("cancelled preparation returned a service")
+			}
+			if !observed {
+				t.Fatalf("startup never reached cancellation phase %q", phase)
 			}
 			if !errors.Is(err, context.Canceled) || calls.Load() != 0 {
 				t.Fatalf("cancel=%v calls=%d", err, calls.Load())
