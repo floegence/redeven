@@ -23,7 +23,7 @@ import { createManagedServiceUpdatePreparation } from './managedServiceUpdatePre
 import { GitTemplateImport } from './GitTemplateImport';
 import type { ManagedWebEntranceContext } from '../../../../../../desktop/src/shared/desktopShellWebServiceWindowIPC';
 import type { ResolvedSource } from '@floegence/redeven-service-templates';
-import { For, Show, createEffect, createMemo, createSignal, createUniqueId, untrack, on, onCleanup, onMount, type JSX } from 'solid-js';
+import { For, Show, batch, createEffect, createMemo, createSignal, createUniqueId, untrack, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { cn, useNotification, useViewActivation } from '@floegence/floe-webapp-core';
 import { AlertTriangle, ArrowLeft, ArrowRight, Check, ChevronDown, ChevronRight, ExternalLink, Loader2, Filter, FileText, FolderOpen, Globe, MoreHorizontal, Pencil, Plus, RefreshIcon, Save, Search, ShieldCheck, Trash, Play, Stop, Refresh } from '@floegence/floe-webapp-core/icons';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
@@ -200,6 +200,17 @@ type ManagedReleaseCandidate = Readonly<{
 	relation: 'newer' | 'same' | 'older' | 'unknown';
 	verification_status: 'pending' | 'verified' | 'unavailable';
 }>;
+
+const managedReleaseCandidateIdentity = (candidate: ManagedReleaseCandidate) => JSON.stringify([
+	candidate.source_kind,
+	candidate.source,
+	candidate.registry ?? '',
+	candidate.version ?? '',
+	candidate.tag ?? '',
+	candidate.digest ?? '',
+	candidate.integrity ?? '',
+	candidate.platform ?? '',
+]);
 
 type ManagedReleaseCandidateResult = Readonly<{
 	schema_version: 2;
@@ -2825,7 +2836,16 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 				}),
 			});
 			if (!request.isCurrent()) return;
-			setReleaseCandidates(result);
+			const previousSelectionID = selectedReleaseID();
+			const previousSelection = releaseCandidates()?.candidates.find((candidate) => candidate.candidate_id === previousSelectionID);
+			const refreshedSelection = previousSelection
+				? result.candidates.find((candidate) => candidate.candidate_id === previousSelectionID)
+					?? result.candidates.find((candidate) => managedReleaseCandidateIdentity(candidate) === managedReleaseCandidateIdentity(previousSelection))
+				: undefined;
+			batch(() => {
+				setReleaseCandidates(result);
+				if (previousSelection) setSelectedReleaseID(refreshedSelection?.candidate_id ?? '');
+			});
 			if (target.kind === 'template') {
 				const recommendation = result.candidates.find((candidate) => candidate.recommendation_status === 'unavailable' || candidate.recommendation_status === 'available');
 				if (recommendation?.recommendation_status === 'unavailable') setTemplateRecommendationUnavailable(true);
@@ -2834,7 +2854,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 			const recommended = target.kind === 'template'
 				? result.candidates.find((candidate) => candidate.selectable && candidate.is_recommended)
 				: undefined;
-			if (!selectedReleaseID() && recommended) setSelectedReleaseID(recommended.candidate_id);
+			if (action === 'open' && !selectedReleaseID() && recommended) setSelectedReleaseID(recommended.candidate_id);
 			refreshAfterOpen = action === 'open' && result.check_status === 'stale';
 		} catch (error) {
 			if (isAbortError(error) && action === 'verify') {
