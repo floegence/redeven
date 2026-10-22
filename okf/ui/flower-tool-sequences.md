@@ -68,8 +68,10 @@ preserve details, focus and selection; disposal restores borrowed rows to their
 original slots. The transcript controller continues to own outer scroll intent.
 Internal scrolling does not scroll or resume the outer transcript. Active content
 follows its own tail only until the reader scrolls upward, and resumes when they
-return to the bottom. Manual collapse restores focus to the group button, while
-automatic collapse above the reader preserves position.
+return to the bottom. Opening a sequence positions its internal viewport at the
+latest tool and resumes tail following, including after reading older calls or
+receiving new calls while collapsed. Manual collapse restores focus to the group
+button, while automatic collapse above the reader preserves position.
 
 Controls expose viewport IDs, localized counts and labels. Hidden nodes create no
 gaps. Focus, reduced motion, forced colors, narrow layouts and pointer targets
