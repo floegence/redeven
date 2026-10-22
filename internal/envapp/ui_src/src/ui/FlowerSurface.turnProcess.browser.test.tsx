@@ -541,6 +541,10 @@ describe('completed turn process disclosure', () => {
     expect(['goal-set', 'goal-completed'].every(id => hidden(root, id))).toBe(true);
     expect(hidden(root, 'tool')).toBe(true);
     expect(message(root, 'user').compareDocumentPosition(summary(root)!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(root.querySelector('.flower-goal-tag')).toBeNull();
+    const nextGoal = { version: 3, text: 'Verify the next deployment', status: 'active' as const, actor: 'user' as const };
+    live.push({ ...done, items, goal: nextGoal, view_version: 3 });
+    await waitFor(() => Boolean(root.querySelector('.flower-goal-tag')));
     const editor = root.querySelector<HTMLButtonElement>('.flower-goal-tag')!;
     expect(editor.closest('[inert], [aria-hidden="true"]')).toBeNull();
     editor.click();
@@ -554,7 +558,7 @@ describe('completed turn process disclosure', () => {
     const details = tool.querySelector('[aria-expanded="true"]');
     expect(details).not.toBeNull();
     summary(root)!.click();
-    live.push({ ...done, items, goal, view_version: 3 });
+    live.push({ ...done, items, goal: nextGoal, view_version: 4 });
     await waitFor(() => !message(root, 'tool'));
     expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
     summary(root)!.click();
