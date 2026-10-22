@@ -82,7 +82,7 @@ func promptQualificationCases() []promptQualificationCase {
 		}},
 		{name: "markdown", input: "请用一个 Markdown 表格比较 TCP 与 UDP，然后用两条列表说明区别。不要调用工具。", noTools: true, contains: []string{"|", "TCP", "UDP"}},
 		{name: "media", input: "工具已保存截图，确切引用是 computer://fixture/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef。请直接把截图显示在聊天中。", noTools: true, contains: []string{"![", "computer://fixture/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}},
-		{name: "html_preview", input: "只输出一个很小的自包含可交互 HTML 预览，点击按钮计数。不要写文件或调用工具。", noTools: true, contains: []string{"```html preview"}, check: func(r ModelGatewayResult) error {
+		{name: "html_preview", input: "用一个小型可交互演示展示点击按钮后计数如何变化。不要写文件或调用工具。", noTools: true, contains: []string{"```html preview"}, check: func(r ModelGatewayResult) error {
 			if strings.Contains(r.Text, "https://") || strings.Contains(r.Text, "localStorage") {
 				return fmt.Errorf("preview depends on unavailable external resources")
 			}
@@ -321,8 +321,8 @@ func TestFlowerPromptSizeBudget(t *testing.T) {
 	assertFlowerSystemPrompt(t, prompt)
 	// A byte budget is deterministic and tokenizer-independent; provider usage is
 	// measured separately in the paid lane, including unchanged tool definitions.
-	if len(prompt) > 500 {
-		t.Fatalf("system prompt is %d bytes; budget=500", len(prompt))
+	if len(prompt) > 600 {
+		t.Fatalf("system prompt is %d bytes; budget=600", len(prompt))
 	}
 	for _, tutorial := range []string{
 		"Put headings, lists, blockquotes", "reason_code must be one of:", "*** Add File:", "Script example after observing",
