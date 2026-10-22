@@ -61,6 +61,34 @@ describe('connection-owned local model reads', () => {
     expect((await resource.loadSettings(true)).defaults.permission_type).toBe('readonly');
     expect(configRead).toHaveBeenCalledTimes(2);
   });
+  it('coalesces concurrent forced settings refreshes', async () => {
+    const reads: Array<(value: FlowerSettingsSnapshot) => void> = [];
+    const configRead = vi.fn(() => new Promise<FlowerSettingsSnapshot>(resolve => { reads.push(resolve); }));
+    const resource = createFlowerModelReadResource({ scope: () => 'connection', loadConfiguration: configRead, loadDirectory: async () => directory });
+    const first = resource.loadSettings(true);
+    const second = resource.loadSettings(true);
+    await Promise.resolve(); await Promise.resolve();
+
+    expect(configRead).toHaveBeenCalledTimes(1);
+    reads[0](configuration);
+    await expect(Promise.all([first, second])).resolves.toEqual([configuration, configuration]);
+  });
+  it('lets a forced refresh supersede an ordinary settings read', async () => {
+    const reads: Array<(value: FlowerSettingsSnapshot) => void> = [];
+    const configRead = vi.fn(() => new Promise<FlowerSettingsSnapshot>(resolve => { reads.push(resolve); }));
+    const resource = createFlowerModelReadResource({ scope: () => 'connection', loadConfiguration: configRead, loadDirectory: async () => directory });
+    const ordinary = resource.loadSettings();
+    await Promise.resolve(); await Promise.resolve();
+    const refreshed = resource.loadSettings(true);
+    await Promise.resolve(); await Promise.resolve();
+
+    expect(configRead).toHaveBeenCalledTimes(2);
+    await expect(ordinary).rejects.toMatchObject({ name: 'AbortError' });
+    reads[0](configuration);
+    reads[1]({ ...configuration, defaults: { permission_type: 'readonly' } });
+    await expect(refreshed).resolves.toMatchObject({ defaults: { permission_type: 'readonly' } });
+    await expect(resource.loadSettings()).resolves.toMatchObject({ defaults: { permission_type: 'readonly' } });
+  });
   it('releases an invalidated settings read without restarting its old owner', async () => {
     let finish!: (value: typeof configuration) => void;
     const configRead = vi.fn().mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })).mockResolvedValue(configuration);
