@@ -41,7 +41,7 @@ func TestFlowerPromptMatchesSelectedToolSurface(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					assertFlowerIdentityPrompt(t, surface.SystemPrompt)
+					assertFlowerSystemPrompt(t, surface.SystemPrompt)
 					if surface.CapabilityContract.PromptProfile != profile {
 						t.Fatalf("run profile=%q; want %q", surface.CapabilityContract.PromptProfile, profile)
 					}
