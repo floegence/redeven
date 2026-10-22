@@ -27,6 +27,8 @@ A compact digest of updates from the last 30 days. Current contracts and evidenc
 - Concepts: [Flower thread fork coordination](ai/flower-thread-fork-coordination.md), [terminal tool runtime](ai/terminal-tool-runtime.md)
 
 ## 2026-10-22
+- Record paired real-Service CPU qualification for ordered live updates before actual queue saturation.
+- Concepts: [live queue performance evidence](operations/flower-live-queue-performance.md)
 - Correct Flower patch anchors, EOF placement, newline preservation, canonical in-directory absolute paths, approval targets, and partial-write diagnostics.
 - Concepts: [file editing and permissions](ai/tool-permission-runtime.md)
 - Preserve streamed Markdown lists when completion snapshots shift source offsets; qualify approved-tool transcripts and completed work disclosure.
