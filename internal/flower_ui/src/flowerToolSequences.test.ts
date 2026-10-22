@@ -19,6 +19,12 @@ const tool = (id: string, overrides: Partial<FlowerActivityItem> = {}): Message 
     items: [{ item_id: id, tool_id: id, tool_name: 'terminal.exec', kind: 'tool', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false, ...overrides }],
   },
 }] });
+const scopedTool = (id: string, runID: string, overrides: Partial<FlowerActivityItem> = {}): Message => {
+  const value = tool(id, overrides);
+  const block = value.blocks[0];
+  if (block.type !== 'activity') throw new Error('test tool fixture must be an activity');
+  return { ...value, message: { ...value.message, run_id: runID }, blocks: [{ ...block, block: { ...block.block, run_id: runID } }] };
+};
 const toolPreview = (id: string, name: string): Message => ({ ...text(id), blocks: [{
   type: 'tool_preview', key: `activity:${id}`, block_index: 0, block: { type: 'tool-call-preview', call: {
     thread_id: 'thread', turn_id: 'turn', run_id: 'run', logical_request_id: 'request',
@@ -203,6 +209,19 @@ describe('consecutive tool presentation', () => {
     const result = projectFlowerToolSequences([
       tool('before-one'), tool('before-two'), answer, tool('after-one'), tool('after-two'),
     ], 'thread', [runtimeTurn({ outcome: 'interrupted', ended_at: '2026-10-21T10:01:00Z' })]);
+    expect([...result.groups.values()].map(group => [group.toolCount, group.disclosure])).toEqual([
+      [2, 'automatic'], [2, 'automatic'],
+    ]);
+  });
+  it('keeps continuation-run tool groups folded after a resolved interaction', () => {
+    const answer: Message = { ...text('answer'), message: { ...text('answer').message, role: 'user', run_id: 'run-a' }, blocks: [{
+      type: 'input_response', key: 'answer:0', block_index: 0,
+      block: { type: 'input-response', questions: [{ question_id: 'continue', question: 'Continue?', answer: 'Yes' }] },
+    }] };
+    const result = projectFlowerToolSequences([
+      scopedTool('before-one', 'run-a'), scopedTool('before-two', 'run-a'), answer,
+      scopedTool('after-one', 'run-b'), scopedTool('after-two', 'run-b'),
+    ], 'thread', [runtimeTurn({ run_id: 'run-b', outcome: 'interrupted', ended_at: '2026-10-21T10:01:00Z' })]);
     expect([...result.groups.values()].map(group => [group.toolCount, group.disclosure])).toEqual([
       [2, 'automatic'], [2, 'automatic'],
     ]);
