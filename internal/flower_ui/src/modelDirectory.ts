@@ -69,6 +69,7 @@ export function createFlowerModelReadResource(options: Readonly<{
   let generation = 0;
   let configuration: FlowerSettingsSnapshot | null = null;
   let settingsRequest: Promise<FlowerSettingsSnapshot> | null = null;
+  let settingsRequestRefresh = false;
   let directoryRequest: Promise<FlowerModelDirectory> | null = null;
   let directoryRead: { again: boolean } | null = null;
   let directory: FlowerModelDirectory | null = null;
@@ -80,6 +81,7 @@ export function createFlowerModelReadResource(options: Readonly<{
     controllers.clear();
     configuration = null; directory = null;
     settingsRequest = null; directoryRequest = null; directoryRead = null;
+    settingsRequestRefresh = false;
   };
   const checkScope = () => {
     const next = options.scope();
@@ -130,8 +132,9 @@ export function createFlowerModelReadResource(options: Readonly<{
     return request;
   };
   const loadSettings = (refresh = false): Promise<FlowerSettingsSnapshot> => {
-    if (refresh) invalidate();
     checkScope();
+    if (refresh && settingsRequest && settingsRequestRefresh) return settingsRequest;
+    if (refresh) invalidate();
     if (configuration) return Promise.resolve(directory ? withFlowerModelDirectory(configuration, directory) : configuration);
     if (settingsRequest) return settingsRequest;
     const revision = generation;
@@ -148,9 +151,15 @@ export function createFlowerModelReadResource(options: Readonly<{
         for (const listener of listeners) listener(directory);
       }
       return directory ? withFlowerModelDirectory(value, directory) : value;
-    }).finally(() => { if (settingsRequest === request) settingsRequest = null; });
+    }).finally(() => {
+      if (settingsRequest === request) {
+        settingsRequest = null;
+        settingsRequestRefresh = false;
+      }
+    });
     void loadDirectory().catch(() => undefined);
     settingsRequest = request;
+    settingsRequestRefresh = refresh;
     return request;
   };
   return { invalidate, loadSettings, loadDirectory,
