@@ -185,6 +185,21 @@ func ValidateAIReasoningSelection(capability AIReasoningCapability, selection AI
 	return nil
 }
 
+// CanonicalAIReasoningSelection validates a requested selection for one model
+// and returns the selection to persist or send. Default asks for the model's own
+// behavior; on a model without verified reasoning controls that is the omitted
+// selection. A budget remains explicit intent and is never dropped.
+func CanonicalAIReasoningSelection(capability AIReasoningCapability, selection AIReasoningSelection) (AIReasoningSelection, error) {
+	selection = NormalizeAIReasoningSelection(selection)
+	if capability.IsZero() && selection == (AIReasoningSelection{Level: AIReasoningLevelDefault}) {
+		return AIReasoningSelection{}, nil
+	}
+	if err := ValidateAIReasoningSelection(capability, selection); err != nil {
+		return AIReasoningSelection{}, err
+	}
+	return selection, nil
+}
+
 func normalizeReasoningLevelStrings(in []string) []string {
 	if len(in) == 0 {
 		return nil

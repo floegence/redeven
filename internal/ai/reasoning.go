@@ -53,12 +53,13 @@ func resolveEffectiveReasoning(capability config.AIReasoningCapability, singleTu
 		if selection.IsZero() {
 			continue
 		}
-		if err := config.ValidateAIReasoningSelection(capability, selection); err != nil {
+		effective, err := config.CanonicalAIReasoningSelection(capability, selection)
+		if err != nil {
 			return normalizedReasoning{}, err
 		}
 		return normalizedReasoning{
 			Requested:  selection,
-			Effective:  selection,
+			Effective:  effective,
 			Capability: capability,
 			Source:     candidate.name,
 			Adjusted:   false,
@@ -122,17 +123,6 @@ func modelReasoningDefaultsFromCapability(capability contextmodel.ModelCapabilit
 		return reasoningCapability, config.AIReasoningSelection{Level: config.AIReasoningLevel(reasoningCapability.DefaultLevel)}
 	}
 	return reasoningCapability, config.AIReasoningSelection{}
-}
-
-func normalizeRequestedReasoningOrReject(capability config.AIReasoningCapability, selection config.AIReasoningSelection) (config.AIReasoningSelection, error) {
-	selection = config.NormalizeAIReasoningSelection(selection)
-	if selection.IsZero() {
-		return config.AIReasoningSelection{}, nil
-	}
-	if err := config.ValidateAIReasoningSelection(capability, selection); err != nil {
-		return config.AIReasoningSelection{}, err
-	}
-	return selection, nil
 }
 
 func reasoningSelectionError(modelID string, err error) error {

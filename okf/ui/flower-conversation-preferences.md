@@ -31,6 +31,11 @@ Explicit Default remains distinct from absent memory; existing Default/budget an
 ## Drafts and admission
 Shared drafts separate explicit `model_id_override`/`working_dir_override` from effective `model_id`/`working_dir` admission projections. Old Thread selection cannot seed the new draft.
 
+A root launch without an explicit or remembered reasoning choice freezes
+explicit Default, so a retry cannot pick up memory written after preparation.
+The client does not inspect model capability for this; the server owns
+[Default canonicalization](../ai/model-reasoning-runtime.md).
+
 Existing busy/queued/unresolved-interaction edit restrictions are unchanged.
 
 ## Concurrency and failure

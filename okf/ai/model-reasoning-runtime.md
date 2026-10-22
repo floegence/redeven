@@ -24,6 +24,16 @@ OpenAI-compatible Chat reasoning is capability-driven. Redeven reads only respon
 
 Budget-only and fixed-thinking models never acquire synthetic effort names or a toggle merely because another model supports one.
 
+## Default selection
+Default asks for the model's own reasoning behavior. Thread creation, Thread
+edits, and every Turn canonicalize it once, in
+`config.CanonicalAIReasoningSelection`: on a model without verified reasoning
+controls a budget-free Default is the omitted selection and is neither stored
+nor sent. Default with a budget, Off, On, and named efforts remain explicit
+intent and are rejected for such a model; personal memory keeps no reasoning
+choice for it. Clients may send Default without knowing the model's capability
+and must not drop or rewrite it themselves.
+
 ## Settings ownership
 Thread model, reasoning and permission settings are Redeven product state. Execution authority records admission permission for historical attribution only, never as live tool authorization. The configured `current_model_id` initializes future threads only.
 
@@ -43,3 +53,7 @@ The same capability and selection reach direct Environment models and Desktop mo
 - `redeven:internal/ai/model_catalog.go` - Read-only discovery from declared capabilities.
 
 - `redeven:internal/ai/model_gateway.go` - Provider request, stream, and approved history-field mapping.
+
+- `redeven:internal/config/ai_reasoning.go` - Selection validation and Default canonicalization.
+
+- `redeven:internal/ai/initial_turn_reasoning_test.go` - Default on an OpenAI-compatible model without reasoning controls starts a turn without reasoning wire fields.

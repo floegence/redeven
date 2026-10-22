@@ -676,7 +676,7 @@ func (s *Service) buildThreadCreateSettings(ctx context.Context, meta *session.M
 	if requestedReasoning.IsZero() {
 		requestedReasoning = preferences.ReasoningByModel[modelID]
 	}
-	reasoningSelection, err := normalizeRequestedReasoningOrReject(reasoningCapability, requestedReasoning)
+	reasoningSelection, err := config.CanonicalAIReasoningSelection(reasoningCapability, requestedReasoning)
 	if err != nil {
 		return threadstore.ThreadSettings{}, reasoningSelectionError(modelID, err)
 	}
@@ -1167,7 +1167,7 @@ func (s *Service) SetThreadReasoningSelection(ctx context.Context, meta *session
 	if err != nil {
 		return err
 	}
-	normalized, err := normalizeRequestedReasoningOrReject(capability, selection)
+	normalized, err := config.CanonicalAIReasoningSelection(capability, selection)
 	if err != nil {
 		return reasoningSelectionError(th.ModelID, err)
 	}
