@@ -58,7 +58,7 @@ function stream(initial: FlowerRuntimeCurrentView, summaries: () => FlowerLiveSt
     fail() { envelope(Object.assign(new Error('private diagnostic'), { code: 'envelope_encoding_failed' })); },
   };
 }
-const disclosure = (root: ParentNode, id = 'thinking') => root.querySelector<HTMLElement>(`[data-flower-message-id="${id}"] .flower-thinking-disclosure`)!;
+const disclosure = (root: ParentNode, id = 'thinking') => root.querySelector<HTMLElement>(`[data-flower-thinking-id="${id}:block:0"]`)!;
 const toggle = (root: ParentNode, id = 'thinking') => disclosure(root, id).querySelector<HTMLButtonElement>('button')!;
 function chevronDirection(root: ParentNode): number {
   const path = toggle(root).querySelector<SVGPathElement>('.flower-thinking-toggle-icon path')!;

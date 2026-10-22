@@ -28,6 +28,7 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
   const [view, setView] = createSignal<FlowerThinkingDisclosureView>(props.manualExpanded?.() ? 'expanded' : 'collapsed');
   let viewport: HTMLDivElement | undefined;
   let toggleButton: HTMLButtonElement | undefined;
+  let following = true;
   const contentID = `flower-thinking-content-${safeContentID(props.contentID)}`;
   const active = () => props.live() && props.liveConfirmed();
   const collapse = () => {
@@ -52,12 +53,13 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
     }
     const frame = requestAnimationFrame(() => {
       if (!viewport) return;
-      if (isActive) viewport.scrollTop = viewport.scrollHeight;
+      if (isActive && following) viewport.scrollTop = viewport.scrollHeight;
     });
     onCleanup(() => cancelAnimationFrame(frame));
   });
 
   const toggle = () => {
+    following = true;
     if (props.live()) {
       setView((current) => current === 'expanded'
         ? 'collapsed'
@@ -75,6 +77,7 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
       class="flower-thinking-disclosure flower-activity-inline"
       data-state={view() === 'collapsed' ? 'closed' : 'open'}
       data-flower-thinking-view={view()}
+      data-flower-thinking-id={props.contentID}
       data-flower-thinking-active={active() ? 'true' : 'false'}
     >
       <div class="flower-activity-inline-row flower-activity-inline-row-thinking" data-state={view() === 'collapsed' ? 'closed' : 'open'}>
@@ -106,6 +109,14 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
             class="flower-thinking-content"
             data-flower-thinking-view={view()}
             ref={viewport}
+            tabIndex={0}
+            role="region"
+            aria-label={props.label()}
+            onScroll={event => {
+              const node = event.currentTarget;
+              following = node.scrollHeight - node.clientHeight - node.scrollTop <= 24;
+              node.toggleAttribute('data-flower-reading-paused', !following);
+            }}
           >
             <div class="flower-thinking-content-body"><props.contentBody /></div>
           </div>
