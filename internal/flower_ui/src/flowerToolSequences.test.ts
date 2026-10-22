@@ -8,6 +8,10 @@ const text = (id: string, thinking = false): Message => ({ type: 'message', key:
   message: { id, role: 'assistant', content: '', created_at_ms: 1, status: 'complete', thread_id: 'thread', turn_id: 'turn', run_id: 'run' },
   blocks: [{ type: 'content', key: id, block_index: 0, block_type: thinking ? 'thinking' : 'text', content: id }],
 });
+const emptyLiveText = (id: string): Message => ({ ...text(id),
+  message: { ...text(id).message, live: true, status: 'streaming' },
+  blocks: [{ type: 'content', key: id, block_index: 0, block_type: 'text', content: '' }],
+});
 const tool = (id: string, overrides: Partial<FlowerActivityItem> = {}): Message => ({ ...text(id), blocks: [{
   type: 'activity', key: id, block_index: 0, block: { type: 'activity-timeline', schema_version: 1,
     thread_id: 'thread', run_id: 'run', turn_id: 'turn',
@@ -66,5 +70,17 @@ describe('consecutive tool presentation', () => {
     const next = projectFlowerToolSequences([tool('a'), tool('b'), text('thought', true), tool('c')]);
     expect([...first.groups.keys()]).toEqual([...next.groups.keys()]);
     expect([...next.groups.values()][0].toolCount).toBe(3);
+  });
+  it('keeps live empty assistant placeholders transparent to tool continuity and row spacing', () => {
+    const result = projectFlowerToolSequences([
+      tool('a'), tool('b'), emptyLiveText('live-empty-1'), tool('c', { status: 'running' }),
+      emptyLiveText('live-empty-2'), tool('d', { status: 'running' }),
+    ]);
+    const group = [...result.groups.values()][0];
+    expect(result.groups.size).toBe(1);
+    expect(group.toolCount).toBe(4);
+    expect(group.runningCount).toBe(2);
+    expect(group.entryKeys).toEqual(['a', 'b', 'live-empty-1', 'c', 'live-empty-2', 'd']);
+    expect([...result.continuingEntries]).toEqual(['a', 'b', 'live-empty-1', 'c', 'live-empty-2']);
   });
 });
