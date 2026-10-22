@@ -12,6 +12,8 @@ reviewed_at: "2026-10-22"
 
 Env App is built as a Redeven-specific shell on top of published floe-webapp UI/runtime primitives, floe-webapp protocol connectivity, Floeterm terminal-web components, and Flowersec controlplane artifact helpers.
 
+Env App pins Floe Webapp Boot, Core, and Protocol v0.86.55, Floeterm terminal-web v0.19.2, and Flowersec Core v5.11.1. It consumes Floeterm's semantic Presentation and session exports.
+
 
 Frontend deployment and lazy-import recovery follow [Env App page asset recovery](../ui/page-asset-recovery.md), using Floe's published document asset monitor and per-view error boundary.
 

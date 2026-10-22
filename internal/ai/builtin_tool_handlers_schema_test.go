@@ -3,8 +3,11 @@ package ai
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
+
+	flruntime "github.com/floegence/floret/v7/runtime"
 )
 
 func TestBuiltInToolDefinitions_StrictSchemaCompatible(t *testing.T) {
@@ -24,6 +27,87 @@ func TestBuiltInToolDefinitions_StrictSchemaCompatible(t *testing.T) {
 			validateStrictObjectSchema(t, def.Name, schema)
 		})
 	}
+}
+
+func TestAskUserResponseModesMatchFloret(t *testing.T) {
+	coreDefinitions := flruntime.CoreControlDefinitions()
+	if len(coreDefinitions) != 1 || coreDefinitions[0].Name != flruntime.CoreControlAskUser {
+		t.Fatalf("Floret control definitions = %#v", coreDefinitions)
+	}
+
+	var redevenDefinition ToolDef
+	for _, definition := range builtInControlSignalDefinitions() {
+		if definition.Name == flruntime.CoreControlAskUser {
+			redevenDefinition = definition
+			break
+		}
+	}
+	if redevenDefinition.Name == "" {
+		t.Fatal("Redeven ask_user definition not found")
+	}
+	var redevenSchema map[string]any
+	if err := json.Unmarshal(redevenDefinition.InputSchema, &redevenSchema); err != nil {
+		t.Fatalf("parse Redeven ask_user schema: %v", err)
+	}
+
+	coreModes := schemaResponseModeEnum(t, coreDefinitions[0].InputSchema)
+	redevenModes := schemaResponseModeEnum(t, redevenSchema)
+	wantModes := []any{"write", "select_or_write"}
+	if !reflect.DeepEqual(coreModes, wantModes) {
+		t.Fatalf("Floret response_mode enum = %#v, want %#v", coreModes, wantModes)
+	}
+	if !reflect.DeepEqual(redevenModes, coreModes) {
+		t.Fatalf("Redeven response_mode enum = %#v, want Floret enum %#v", redevenModes, coreModes)
+	}
+
+	questionProperties := schemaQuestionProperties(t, redevenSchema)
+	responseMode := questionProperties["response_mode"].(map[string]any)
+	if !strings.Contains(fmt.Sprint(responseMode["description"]), "separate custom-text answer") {
+		t.Fatalf("response_mode description omits the custom answer: %q", responseMode["description"])
+	}
+}
+
+func schemaResponseModeEnum(t *testing.T, schema map[string]any) []any {
+	t.Helper()
+	questionProperties := schemaQuestionProperties(t, schema)
+	responseMode, ok := questionProperties["response_mode"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema response_mode is missing: %#v", questionProperties)
+	}
+	switch values := responseMode["enum"].(type) {
+	case []string:
+		out := make([]any, len(values))
+		for index, value := range values {
+			out[index] = value
+		}
+		return out
+	case []any:
+		return values
+	default:
+		t.Fatalf("schema response_mode enum is missing: %#v", responseMode)
+		return nil
+	}
+}
+
+func schemaQuestionProperties(t *testing.T, schema map[string]any) map[string]any {
+	t.Helper()
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema properties are missing: %#v", schema)
+	}
+	questions, ok := properties["questions"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema questions are missing: %#v", properties)
+	}
+	item, ok := questions["items"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema question item is missing: %#v", questions)
+	}
+	questionProperties, ok := item["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema question properties are missing: %#v", item)
+	}
+	return questionProperties
 }
 
 func TestSubagentsSpawnSchemaUsesParentProvidedInstructions(t *testing.T) {

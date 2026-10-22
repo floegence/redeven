@@ -20,6 +20,8 @@ The local direct and remote agent production session profiles register the compl
 ## Mechanism
 The released runtime dependency set includes Floeterm terminal-go v0.19.2 and Flowersec Go v5.11.1.
 
+Env App and Desktop consume Flowersec TypeScript v5.11.1.
+
 Switching a Flower thread, Activity or Workbench mode, terminal view, or file consumer cannot reconnect Flowersec.
 
 Terminal ownership, live framing, history, attachment arbitration, and warmup are specified in [Runtime terminal lifecycle](runtime-terminal-lifecycle.md); this concept only defines the Flowersec/Floeterm dependency boundary and shared transport admission.

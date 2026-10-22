@@ -581,37 +581,84 @@ func TestFlowerWorkspaceTerminalBatchAndDetailRestoreCanonicalManualCompaction(t
 	if ready := nextFlowerLiveStreamFrame(t, subscription); ready.Kind != FlowerLiveStreamReady {
 		t.Fatalf("ready kind=%q", ready.Kind)
 	}
-	_, err = svc.CompactThreadContext(ctx, meta, thread.ThreadID, CompactThreadContextRequest{ClientRequestID: "request-manual-compaction-recovery"})
+	type terminalUpdateResult struct {
+		context flowerPublicContext
+		err     error
+	}
+	updatesCtx, cancelUpdates := context.WithTimeout(ctx, 10*time.Second)
+	terminalUpdates := make(chan terminalUpdateResult, 1)
+	readerDone := make(chan struct{})
+	go func() {
+		defer close(readerDone)
+		var currentContext *flowerPublicContext
+		for {
+			frame, readErr := readFlowerLiveStreamEnvelope(updatesCtx, subscription)
+			if readErr != nil {
+				terminalUpdates <- terminalUpdateResult{err: readErr}
+				return
+			}
+			if frame.Kind != FlowerLiveStreamThreadBatch {
+				continue
+			}
+			var envelope FlowerLiveStreamEnvelope
+			if readErr := json.Unmarshal(frame.Data, &envelope); readErr != nil {
+				terminalUpdates <- terminalUpdateResult{err: readErr}
+				return
+			}
+			if envelope.ThreadID != thread.ThreadID || envelope.Update == nil {
+				continue
+			}
+			if envelope.Update.Context != nil {
+				var projected struct {
+					Update struct {
+						Context *flruntime.ThreadComponent[flowerPublicContext]
+					}
+				}
+				if readErr := json.Unmarshal(frame.Data, &projected); readErr != nil {
+					terminalUpdates <- terminalUpdateResult{err: readErr}
+					return
+				}
+				if projected.Update.Context != nil {
+					value := projected.Update.Context.Value
+					currentContext = &value
+				}
+			}
+			if envelope.Update.Facts.Activity == flruntime.ThreadActivityIdle && currentContext != nil && len(currentContext.ContextCompactions) > 0 {
+				terminalUpdates <- terminalUpdateResult{context: *currentContext}
+				return
+			}
+		}
+	}()
+	defer func() {
+		cancelUpdates()
+		<-readerDone
+	}()
+	admitted, err := svc.CompactThreadContext(ctx, meta, thread.ThreadID, CompactThreadContextRequest{ClientRequestID: "request-manual-compaction-recovery"})
 	if err != nil {
 		t.Fatal(err)
 	}
+	if admitted.Activity != flruntime.ThreadActivityActive {
+		t.Fatalf("compaction admission activity=%q, want active", admitted.Activity)
+	}
 
 	var terminal *flowerPublicContext
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		frame := nextFlowerLiveStreamFrame(t, subscription)
-		if frame.Kind != FlowerLiveStreamThreadBatch {
-			continue
+	select {
+	case result := <-terminalUpdates:
+		if result.err != nil {
+			t.Fatalf("read terminal compaction update: %v", result.err)
 		}
-		var envelope FlowerLiveStreamEnvelope
-		if err := json.Unmarshal(frame.Data, &envelope); err != nil {
-			t.Fatal(err)
+		terminal = &result.context
+	case <-updatesCtx.Done():
+		current, viewErr := svc.threadRuntime.View(context.Background(), identity.ThreadID(thread.ThreadID))
+		contextSnapshot, contextErr := svc.threadRuntime.(flruntime.ThreadContextReader).Context(context.Background(), identity.ThreadID(thread.ThreadID))
+		svc.mu.Lock()
+		var subscriberStates []string
+		for _, subscriber := range svc.flowerLiveSubscribers {
+			subscriberStates = append(subscriberStates, fmt.Sprintf("closed=%t close=%v queued=%d", subscriber.closed, subscriber.closeErr, len(subscriber.queue)))
 		}
-		if envelope.ThreadID == thread.ThreadID && envelope.Update != nil && envelope.Update.Facts.Activity == flruntime.ThreadActivityIdle {
-			var projected struct {
-				Update struct {
-					Context *flruntime.ThreadComponent[flowerPublicContext]
-				}
-			}
-			if err := json.Unmarshal(frame.Data, &projected); err != nil {
-				t.Fatal(err)
-			}
-			if projected.Update.Context != nil && len(projected.Update.Context.Value.ContextCompactions) > 0 {
-				value := projected.Update.Context.Value
-				terminal = &value
-				break
-			}
-		}
+		svc.mu.Unlock()
+		t.Logf("terminal timeout current activity=%q version=%d context=%#v viewErr=%v context=%#v contextErr=%v subscribers=%v", current.Activity, current.ViewVersion, current.Context, viewErr, contextSnapshot, contextErr, subscriberStates)
+		t.Fatalf("wait for terminal compaction update: %v", updatesCtx.Err())
 	}
 	if terminal == nil {
 		t.Fatal("terminal thread.batch omitted canonical manual compaction")

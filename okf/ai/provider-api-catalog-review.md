@@ -20,7 +20,7 @@ The 2026-10-12 review covers all existing provider types. Audio, video, embeddin
 | OpenAI | GPT-6 Astra, GPT-6.1 Sol, GPT-6 Sol, GPT-6 Luna | `/v1/responses`; function tools for GPT-6.1 Sol require Responses. Sol/Luna permit `none`; 6.1 Sol and Astra do not. 1,050,000 context and 128,000 output tokens. |
 | Anthropic | Claude Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 5.5 and 4.5 | `/v1/messages`, API version `2023-06-01`; SDK base is the origin without `/v1`. Opus/Sonnet 5.5 use adaptive thinking with effort, reject manual budgets and `disabled`, and expose 1M context / 128K output. |
 | Google | Gemini 3.8 Flash | Supported `/v1beta/openai/chat/completions` with model-specific effort/budget settings and opaque tool thought signatures. Existing directory already includes the current model. |
-| DeepSeek | `deepseek-flash` (V4.1 Flash), `deepseek-v4-pro` | The current published Floret v7.29.2 Responses gateway accepts the new name; the capability was introduced and qualified in v7.19.0. Flash and both official aliases support images, while Pro is text-only. All support off/low/high/max and a 393,216-token output ceiling. Built-in search remains ignored by the provider. |
+| DeepSeek | `deepseek-flash` (V4.1 Flash), `deepseek-v4-pro` | The published Floret v7.78.2 Responses gateway accepts the new name; the capability was introduced and qualified in v7.19.0. Flash and both official aliases support images, while Pro is text-only. All support off/low/high/max and a 393,216-token output ceiling. Built-in search remains ignored by the provider. |
 | Qwen | Qwen3.8 Max, Flash, Omni Flash | `/compatible-mode/v1/chat/completions`; existing qualified search models use Responses. New Omni Flash is text output with tools and text/image input in Redeven. Qwen3.7 Max/Plus output ceilings rise to 131,072. |
 | Moonshot | Kimi K3, K2.7 Code, K2.6 | `/v1/chat/completions`; K3 requires thinking, supports low/high/max, and accepts `max_completion_tokens` up to 1,048,576 (provider default 131,072). Search for K3 remains unintegrated. |
 | Z.ai | GLM-5.3, GLM-5.3-Flash/FlashX | `/api/paas/v4/chat/completions`; FlashX has 1M context and 128K output, forced thinking with low/high/max. The persisted provider type stays `chatglm`; display branding is Z.ai. |
@@ -41,7 +41,7 @@ Anthropic's SDK appends `v1/messages`.
 Preserve existing configured bases; never save the literal template or silently move a key between regions. Native iOS settings link to official provider documentation for this choice.
 
 ## Published-engine adoption
-Redeven currently consumes published Floret v7.29.2 with `GOWORK=off`; no sibling dependency or transport copy bypasses the upstream boundary.
+Redeven currently consumes published Floret v7.78.2 with `GOWORK=off`; no sibling dependency or transport copy bypasses the upstream boundary.
 
 New catalog entries receive an explicit search review; supplier search support does not imply an implemented or qualified Redeven search adapter.
 

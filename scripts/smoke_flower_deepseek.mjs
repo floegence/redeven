@@ -985,7 +985,7 @@ async function runScenarios(page, config, telemetry) {
   await remember('S06', async () => {
     await startNewThread(page); await setPermission(page, 'full_access');
     const normal = marker('ASK_CHOICE');
-    const sentNormal = await sendPrompt(page, `Call ask_user exactly once. Ask for a deployment lane using response_mode "select", choices_exhaustive true, and exactly two fixed choices: Alpha and Beta. After the answer, reply ${normal}. Call no other tool.`, { visibleMarker: normal });
+    const sentNormal = await sendPrompt(page, `Call ask_user exactly once. Ask for a deployment lane using response_mode "select_or_write", choices_exhaustive false, and exactly two fixed choices: Alpha and Beta. Leave write_label out. After the answer, reply ${normal}. Call no other tool.`, { visibleMarker: normal });
     const prompt = surface.locator('[data-flower-input-request-prompt]');
     await prompt.waitFor({ state: 'visible', timeout: 180_000 });
     await startNewThread(page); await selectThread(page, sentNormal.threadID);

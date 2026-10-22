@@ -26,6 +26,8 @@ No database schema or migration changes are part of this optimization.
 
 Its `request_key` remains the send idempotency identity used only to settle the short-lived browser outbox; the two values are not interchangeable.
 
+Flower ask_user exposes only write and select_or_write. The latter always presents fixed choices with a separate custom-text answer, even when write_label is omitted. Floret owns normalization of historical select requests; Redeven does not add a second compatibility path. Ordinary InputRequired selection remains a separate contract.
+
 # Boundaries
 
 The adapter may add product authorization, resource resolution, DTO mapping, and browser-safe presentation. It must not import Floret internals, read or migrate Floret storage, create a legacy run handler, infer lifecycle from error text or timestamps, or introduce a second event/retry/replay state machine.

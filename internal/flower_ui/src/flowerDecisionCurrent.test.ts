@@ -30,7 +30,7 @@ describe('published runtime decision content', () => {
   });
   it('does not invent descriptions for sparse choices', () => {
     const result = applyFlowerRuntimeCurrentView(summary, fixtures.ask_sparse as FlowerRuntimeCurrentView);
-    expect(result.input_request?.questions[0].response_mode).toBe('select');
+    expect(result.input_request?.questions[0].response_mode).toBe('select_or_write');
     expect(result.input_request?.questions[0].choices?.every((choice) => !choice.description)).toBe(true);
   });
   it('keeps string-only historical and tool input valid without inventing a header', () => {

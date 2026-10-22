@@ -135,6 +135,8 @@ func TestAutomaticTitleSettlementPublishesCanonicalWorkspaceSummary(t *testing.T
 			if ready := nextFlowerLiveStreamFrame(t, subscription); ready.Kind != FlowerLiveStreamReady {
 				t.Fatalf("ready kind=%q", ready.Kind)
 			}
+			summaries, summaryErrors, stopSummaryReader := startFlowerTitleSummaryReader(t, subscription)
+			defer stopSummaryReader()
 
 			terminal, err := runTypedTurnForTest(t, t.Context(), svc, meta, "request-live-title-"+test.name, RunStartRequest{
 				ThreadID: thread.ThreadID,
@@ -157,13 +159,13 @@ func TestAutomaticTitleSettlementPublishesCanonicalWorkspaceSummary(t *testing.T
 					t.Errorf("title wire request is missing language instruction %q", instruction)
 				}
 			}
-			pending := nextFlowerTitleSummary(t, subscription, thread.ThreadID, flruntime.ThreadTitleStatusPending)
+			pending := nextFlowerTitleSummaryFromReader(t, summaries, summaryErrors, thread.ThreadID, flruntime.ThreadTitleStatusPending)
 			if pending.Title != "First user request" || pending.TitleGeneration != 2 {
 				t.Fatalf("pending title=%q, want fallback", pending.Title)
 			}
 
 			mock.release()
-			settled := nextFlowerTitleSummary(t, subscription, thread.ThreadID, test.finalStatus)
+			settled := nextFlowerTitleSummaryFromReader(t, summaries, summaryErrors, thread.ThreadID, test.finalStatus)
 			if settled.Title != test.finalTitle || settled.TitleGeneration != pending.TitleGeneration {
 				t.Fatalf("settled title=%q, want %q", settled.Title, test.finalTitle)
 			}
@@ -178,9 +180,56 @@ func TestAutomaticTitleSettlementPublishesCanonicalWorkspaceSummary(t *testing.T
 	}
 }
 
-func nextFlowerTitleSummary(
+func startFlowerTitleSummaryReader(
 	t *testing.T,
 	subscription *FlowerLiveStreamSubscription,
+) (<-chan ThreadView, <-chan error, func()) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	summaries := make(chan ThreadView, flowerLiveSubscriberBatchLimit)
+	readerErrors := make(chan error, 1)
+	readerDone := make(chan struct{})
+	var stopOnce sync.Once
+	go func() {
+		defer close(readerDone)
+		for {
+			frame, err := readFlowerLiveStreamEnvelope(ctx, subscription)
+			if err != nil {
+				if ctx.Err() == nil {
+					readerErrors <- err
+				}
+				return
+			}
+			if frame.Kind != FlowerLiveStreamSummaryBatch {
+				continue
+			}
+			var envelope FlowerLiveStreamEnvelope
+			if err := json.Unmarshal(frame.Data, &envelope); err != nil {
+				readerErrors <- err
+				return
+			}
+			for _, summary := range envelope.Summaries {
+				select {
+				case summaries <- summary:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}()
+	stop := func() {
+		stopOnce.Do(func() {
+			cancel()
+			<-readerDone
+		})
+	}
+	return summaries, readerErrors, stop
+}
+
+func nextFlowerTitleSummaryFromReader(
+	t *testing.T,
+	summaries <-chan ThreadView,
+	readerErrors <-chan error,
 	threadID string,
 	status flruntime.ThreadTitleStatus,
 ) ThreadView {
@@ -188,21 +237,15 @@ func nextFlowerTitleSummary(
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	for {
-		frame, err := readFlowerLiveStreamEnvelope(ctx, subscription)
-		if err != nil {
-			t.Fatalf("next Flower title summary: %v", err)
-		}
-		if frame.Kind != FlowerLiveStreamSummaryBatch {
-			continue
-		}
-		var envelope FlowerLiveStreamEnvelope
-		if err := json.Unmarshal(frame.Data, &envelope); err != nil {
-			t.Fatal(err)
-		}
-		for _, summary := range envelope.Summaries {
+		select {
+		case summary := <-summaries:
 			if summary.ThreadID == threadID && summary.TitleStatus == string(status) {
 				return summary
 			}
+		case err := <-readerErrors:
+			t.Fatalf("read Flower title summary: %v", err)
+		case <-ctx.Done():
+			t.Fatalf("next Flower title summary: %v", ctx.Err())
 		}
 	}
 }
