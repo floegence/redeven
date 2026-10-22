@@ -82,7 +82,10 @@ func threadToolPreview(result flruntime.ThreadToolResult) (FlowerToolPreview, er
 		if err := json.Unmarshal([]byte(result.Arguments), &fields); err != nil {
 			return preview, ErrFlowerToolPreviewNotFound
 		}
-		if result.ToolName == "threads.query" && fields["filter"] == nil && fields["sort"] == nil {
+		// An object-only saved call is shared by old and current contracts. Do not
+		// invent which default ordering produced its immutable result.
+		ambiguousOrder := result.ToolName == "threads.query" && fields["object"] != nil && fields["thread_id"] == nil && fields["title"] == nil && fields["filter"] == nil && fields["sort"] == nil
+		if result.ToolName == "threads.query" && !ambiguousOrder && fields["filter"] == nil && fields["sort"] == nil {
 			var browse threadBrowseInput
 			if err := json.Unmarshal([]byte(result.Arguments), &browse); err != nil {
 				return preview, ErrFlowerToolPreviewNotFound
@@ -145,7 +148,9 @@ func threadToolPreview(result flruntime.ThreadToolResult) (FlowerToolPreview, er
 		if input.Sort.Descending {
 			direction = " ↓"
 		}
-		preview.Inputs = append(preview.Inputs, row("sort", sortKey+direction))
+		if !ambiguousOrder {
+			preview.Inputs = append(preview.Inputs, row("sort", sortKey+direction))
+		}
 		scope := "all"
 		if len(input.Filter.ThreadIDs) > 0 {
 			scope = strconv.Itoa(len(input.Filter.ThreadIDs))

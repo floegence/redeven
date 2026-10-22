@@ -253,11 +253,23 @@ func TestThreadToolPreviewBoundsAndEffectiveQueryParameters(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, row := range preview.Inputs {
+		if row.Title == "sort" {
+			t.Fatal("invented ordering for an ambiguous historical call")
+		}
+	}
+	result.Arguments = `{}`
+	preview, err = threadToolPreview(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	values = map[string]string{}
+	for _, row := range preview.Inputs {
 		values[row.Title] = row.Content
 	}
-	if values["sort"] != "updated ↓" {
-		t.Fatalf("wrong default order: %v", values)
+	if values["sort"] != "updated ↓" || values["object"] != "threads" {
+		t.Fatalf("wrong browsing defaults: %v", values)
 	}
+
 }
 
 func TestThreadReadPreviewBoundsUTF8Chunks(t *testing.T) {
