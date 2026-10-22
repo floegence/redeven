@@ -1,20 +1,54 @@
 @layer components {
-  .plugin-panel-backdrop {
-    opacity: 0;
-    transition-property: opacity;
-    transition-duration: 190ms;
-    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  .plugin-activity-panel {
+    height: 427px;
+    max-height: min(calc(100dvh - 24px), var(--floe-anchored-layer-max-height, calc(100dvh - 24px)));
   }
 
-  .plugin-panel-backdrop[data-plugin-launcher-motion-state='open'] {
-    opacity: 1;
+  .plugin-activity-anchor[data-placement='right'] .plugin-panel-surface {
+    --redeven-plugin-panel-origin-x: 0%;
+    --redeven-plugin-panel-origin-y: var(--floe-anchored-layer-anchor-y);
+    --redeven-plugin-panel-enter-x: -10px;
+    --redeven-plugin-panel-enter-y: 0px;
   }
 
-  .plugin-panel-backdrop[data-plugin-launcher-motion-state='closing'] {
+  .plugin-activity-anchor[data-placement='left'] .plugin-panel-surface {
+    --redeven-plugin-panel-origin-x: 100%;
+    --redeven-plugin-panel-origin-y: var(--floe-anchored-layer-anchor-y);
+    --redeven-plugin-panel-enter-x: 10px;
+    --redeven-plugin-panel-enter-y: 0px;
+  }
+
+  .plugin-activity-arrow {
+    position: absolute;
+    top: var(--floe-anchored-layer-anchor-y);
+    width: 12px;
+    height: 12px;
+    background: var(--popover);
+    border: 1px solid var(--border);
+    transform: translateY(-50%) rotate(45deg);
     pointer-events: none;
-    opacity: 0;
-    transition-duration: 140ms;
-    transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
+  }
+
+  .plugin-activity-anchor[data-placement='right'] .plugin-activity-arrow {
+    left: -7px;
+    border-top: 0;
+    border-right: 0;
+  }
+
+  .plugin-activity-anchor[data-placement='left'] .plugin-activity-arrow {
+    right: -7px;
+    border-bottom: 0;
+    border-left: 0;
+  }
+
+  @media (max-width: 480px) {
+    .plugin-activity-title {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+    }
   }
 
   .plugin-panel-surface {
@@ -134,7 +168,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-plugin-launcher-backdrop] .animate-in,
+  .plugin-activity-panel .animate-in,
   [data-plugin-center-view] .animate-in,
   [data-external-plugin-dialog] .animate-in,
   [data-external-plugin-footer] .animate-in,
@@ -149,7 +183,6 @@
     transition: none !important;
   }
 
-  .plugin-panel-backdrop[data-plugin-launcher-motion-state='open'],
   .plugin-panel-surface[data-plugin-panel-motion-state='open'],
   .plugin-panel-surface[data-plugin-panel-motion-state='open'] > [data-plugin-panel-content] {
     opacity: 1 !important;

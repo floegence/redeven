@@ -2441,14 +2441,15 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushAsync();
       expect(trigger.getAttribute('aria-expanded')).toBe('true');
       expect(pluginPanelState.lastProps.open).toBe(true);
-      expect(document.querySelectorAll('[data-plugin-launcher-backdrop]')).toHaveLength(1);
+      expect(document.querySelectorAll('[data-plugin-panel-motion-kind="activity-popover"]')).toHaveLength(1);
+      expect(document.querySelectorAll('[data-plugin-launcher-backdrop]')).toHaveLength(0);
       (document.querySelector('[aria-label="Close plugins"]') as HTMLButtonElement).click();
       await flushAsync();
       expect(pluginPanelState.lastProps.open).toBe(false);
       expect(host.querySelector('[data-activity-id="plugins"]')?.getAttribute('aria-expanded')).toBe('false');
       expect(document.querySelector('[data-plugin-panel-motion-state="closing"]')).not.toBeNull();
       vi.advanceTimersByTime(160);
-      expect(document.querySelector('[data-plugin-launcher-backdrop]')).toBeNull();
+      expect(document.querySelector('[data-plugin-panel-motion-kind="activity-popover"]')).toBeNull();
       innerProviderState.refreshOwner();
       await flushAsync();
       expect(pluginPanelState.mounts).toBe(1);
@@ -2458,7 +2459,8 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushAsync();
       expect(pluginPanelState.lastProps.open).toBe(true);
       expect(document.querySelector('[data-plugin-panel-motion-state="open"]')).not.toBeNull();
-      expect(document.querySelectorAll('[data-plugin-launcher-backdrop]')).toHaveLength(1);
+      expect(document.querySelectorAll('[data-plugin-panel-motion-kind="activity-popover"]')).toHaveLength(1);
+      expect(document.querySelectorAll('[data-plugin-launcher-backdrop]')).toHaveLength(0);
 
       findButtonByText(host, 'Workbench')?.click();
       await flushAsync();

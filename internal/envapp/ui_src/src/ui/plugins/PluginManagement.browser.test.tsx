@@ -843,13 +843,12 @@ describe('plugin management browser geometry and interaction', () => {
     await page.viewport(1440, 900);
     const mounted = mountPanel(false);
     const dialog = document.querySelector<HTMLElement>('#plugin-switcher-browser-test')!;
-    const backdrop = document.querySelector<HTMLElement>('[data-plugin-launcher-backdrop]')!;
 
     expect(dialog.dataset.pluginPanelMotionState).toBe('entering');
-    expect(backdrop.dataset.pluginLauncherMotionState).toBe('entering');
-    expect(dialog.style.getPropertyValue('--redeven-plugin-panel-origin-x')).toBe('8%');
-    expect(Number.parseFloat(dialog.style.getPropertyValue('--redeven-plugin-panel-enter-x'))).toBeLessThan(0);
-    expect(getComputedStyle(dialog).opacity).toBe('0');
+    expect(document.querySelector('[data-plugin-launcher-backdrop]')).toBeNull();
+    expect(dialog.dataset.pluginPanelMotionKind).toBe('activity-popover');
+    await settle();
+    expect(Number.parseFloat(getComputedStyle(dialog).getPropertyValue('--redeven-plugin-panel-enter-x'))).toBeLessThan(0);
     expect(getComputedStyle(dialog).transitionProperty).toContain('transform');
 
     await settle();
@@ -861,7 +860,6 @@ describe('plugin management browser geometry and interaction', () => {
     mounted.setOpen(false);
     await Promise.resolve();
     expect(dialog.dataset.pluginPanelMotionState).toBe('closing');
-    expect(backdrop.dataset.pluginLauncherMotionState).toBe('closing');
     expect(getComputedStyle(dialog).pointerEvents).toBe('none');
   });
 
@@ -884,7 +882,7 @@ describe('plugin management browser geometry and interaction', () => {
   });
 
   it.each(viewportCases.filter(({ width }) => width >= 768))(
-    'centers the modal Plugin Launcher without overflow at $width px',
+    'anchors the nonmodal Activity Launcher without overflow at $width px',
     async (viewport) => {
       await page.viewport(viewport.width, viewport.height);
       const mounted = mountPanel(false);
@@ -892,16 +890,72 @@ describe('plugin management browser geometry and interaction', () => {
       await new Promise<void>((resolve) => window.setTimeout(resolve, 260));
 
       const dialog = document.querySelector<HTMLElement>('#plugin-switcher-browser-test')!;
-      expect(dialog.getAttribute('aria-modal')).toBe('true');
+      expect(dialog.getAttribute('aria-modal')).toBeNull();
       expectInsideViewport(dialog, viewport);
       expectNoHorizontalOverflow(dialog);
-      expect(Math.abs(dialog.getBoundingClientRect().left + dialog.getBoundingClientRect().width / 2 - viewport.width / 2)).toBeLessThan(2);
-      expect(mounted.host.inert).toBe(true);
+      expect(dialog.getBoundingClientRect().width).toBe(424);
+      expect(Math.abs(dialog.getBoundingClientRect().left - mounted.trigger()!.getBoundingClientRect().right - 16)).toBeLessThan(1);
+      expect(mounted.host.inert).toBe(false);
+      expect(document.querySelector('[data-plugin-launcher-backdrop]')).toBeNull();
 
-      const lastAction = dialog.querySelector<HTMLButtonElement>('[data-plugin-center-market-action]')!;
-      lastAction.focus();
-      await userEvent.tab();
-      expect(dialog.contains(document.activeElement)).toBe(true);
+      dialog.querySelector<HTMLInputElement>('[data-plugin-launcher-search]')!.focus();
+      await userEvent.tab({ shift: true });
+      expect(dialog.contains(document.activeElement)).toBe(false);
+    },
+  );
+
+  it.each([{ width: 768, height: 820 }, { width: 1440, height: 900 }])(
+    'fits sixteen plugins in a four by four Activity flyout at $width px',
+    async (viewport) => {
+      await page.viewport(viewport.width, viewport.height);
+      const model: PluginPanelModel = {
+        loading: false,
+        tiles: Array.from({ length: 16 }, (_, index) => ({
+          kind: 'plugin' as const,
+          action: 'open_surface' as const,
+          item: { ...metricsItem, inventoryKey: `instance:grid-${index}`, displayName: `Plugin ${index}`, presentation: undefined },
+        })),
+      };
+      const mounted = mountPanel(false, model);
+      await settle();
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 280));
+      const dialog = document.querySelector<HTMLElement>('#plugin-switcher-browser-test')!;
+      const search = dialog.querySelector<HTMLInputElement>('[data-plugin-launcher-search]')!;
+      const header = dialog.querySelector('header')!;
+      const grid = dialog.querySelector<HTMLElement>('[data-plugin-launcher-grid]')!;
+      const body = grid.parentElement!;
+      const tiles = Array.from(grid.querySelectorAll<HTMLElement>('[data-plugin-panel-tile]'));
+      const rects = tiles.map((tile) => tile.getBoundingClientRect());
+      expect(new Set(rects.map((rect) => Math.round(rect.left))).size).toBe(4);
+      expect(new Set(rects.map((rect) => Math.round(rect.top))).size).toBe(4);
+      expect(body.scrollHeight).toBeLessThanOrEqual(body.clientHeight + 1);
+      expect(dialog.getBoundingClientRect().height).toBe(427);
+      expect(header.getBoundingClientRect().height).toBeLessThanOrEqual(55);
+      for (const element of [search, dialog.querySelector('[data-plugin-center-market-action]')!, dialog.querySelector('h2')!]) {
+        const rect = element.getBoundingClientRect();
+        expect(Math.abs(rect.top + rect.height / 2 - (header.getBoundingClientRect().top + header.getBoundingClientRect().height / 2))).toBeLessThan(2);
+      }
+      expect(dialog.querySelector('footer')).toBeNull();
+      expect(dialog.querySelector('[data-plugin-launcher-category-filter]')).not.toBeNull();
+      expect(dialog.querySelector('[data-plugin-launcher-category="all"]')).toBeNull();
+      expectInsideViewport(dialog, viewport);
+      tiles[0]!.focus();
+      await userEvent.keyboard('{ArrowRight}{ArrowDown}');
+      expect(document.activeElement).toBe(tiles[5]);
+      search.focus();
+      await userEvent.type(search, 'Retained query');
+      mounted.trigger()!.style.top = `${viewport.height - 50}px`;
+      await page.viewport(viewport.width - 1, viewport.height);
+      await settle();
+      expectInsideViewport(dialog, { width: viewport.width - 1, height: viewport.height });
+      expect(dialog.querySelector('[data-plugin-launcher-search]')).toBe(search);
+      expect(search.value).toBe('Retained query');
+      await userEvent.keyboard('{Escape}');
+      expect(search.value).toBe('');
+      const outside = document.querySelector<HTMLButtonElement>('[data-testid="after-plugin-switcher"]')!;
+      await userEvent.click(outside);
+      expect(document.activeElement).toBe(outside);
+      expect(dialog.dataset.pluginPanelMotionState).toBe('closing');
     },
   );
 
