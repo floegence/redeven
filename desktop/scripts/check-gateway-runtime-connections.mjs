@@ -153,6 +153,7 @@ try {
     await join.getByRole('button',{name:i18n.t('gatewayJoin.connecting'),exact:true}).waitFor();
     await assertStableWizard(join,initialLayout,'connecting');
     await releaseAction(page);
+    await join.getByRole('tab',{name:i18n.t('gatewayDiscovery.enterAddress'),exact:true}).click();
     const inputs=join.locator('input');await inputs.nth(0).fill('https://draft.internal:7443');await inputs.nth(1).fill('TEST-ONLY-CODE');
     assert.equal(await join.getByRole('button',{name:i18n.t('gatewayJoin.verify'),exact:true})
      .evaluate(button=>!!button.closest('.redeven-gateway-join-scroll')),true,'verify stays with its fields');
@@ -303,16 +304,25 @@ try {
      assert.ok(preparationControls.every(item=>item.width<=item.client+1 && item.whiteSpace==='nowrap'));
      await page.screenshot({path:`${output}/${locale}-${width}-${kind}-preparation.png`});
      await dialog.getByRole('button',{name:i18n.t('gatewayJoin.startAndContinue'),exact:true}).click();
-     const inputs=dialog.locator('input');await inputs.nth(0).waitFor({state:'visible'});
+     await dialog.getByRole('tab',{name:i18n.t('gatewayDiscovery.enterAddress'),exact:true}).click();
+     const addressPanel=dialog.locator('[role="tabpanel"]:not([aria-hidden="true"])');
+     const addressInput=addressPanel.getByRole('textbox',{name:i18n.t('gatewayJoin.address')});
+     const invitationInput=dialog.getByRole('textbox',{name:i18n.t('gatewayJoin.code')});
+     const inputs=dialog.locator('input');
+     await addressInput.waitFor({state:'visible'});
      assert.equal(await dialog.getByRole('button',{name:i18n.t('gatewayJoin.verify'),exact:true})
       .evaluate(button=>!!button.closest('.redeven-gateway-join-scroll')),true,'verify stays with its fields');
-     await dialog.locator('[data-gateway-picker]').waitFor();
+     const savedPicker=dialog.locator('[data-gateway-picker]');await savedPicker.waitFor({state:'attached'});
+     assert.equal(await savedPicker.isVisible(),false,'saved Gateway picker stays out of the manual address tab');
+     assert.equal(await dialog.getByRole('tab',{name:i18n.t('gatewayDiscovery.enterAddress'),exact:true}).getAttribute('aria-selected'),'true');
      await assertStableWizard(dialog,initialLayout,'startup');
-     await inputs.nth(0).fill('https://office.example:7443');await inputs.nth(1).fill('DRAFT-CODE');
-     await inputs.nth(1).evaluate(input=>input.setSelectionRange(1,4));
+     await addressInput.fill('https://office.example:7443');await invitationInput.fill('DRAFT-CODE');
+     assert.deepEqual([await addressInput.inputValue(),await invitationInput.inputValue()],['https://office.example:7443','DRAFT-CODE']);
+     await invitationInput.evaluate(input=>input.setSelectionRange(1,4));
      await assertBackgroundContinuity('invitation');
      await page.evaluate(snapshot=>window.gatewayAcceptancePublish(snapshot),fixtures.ready.snapshot);
-     assert.equal(await inputs.nth(1).evaluate(element=>element===document.activeElement),true);
+     assert.deepEqual([await addressInput.inputValue(),await invitationInput.inputValue()],['https://office.example:7443','DRAFT-CODE']);
+     assert.equal(await invitationInput.evaluate(element=>element===document.activeElement),true);
      await dialog.getByRole('button',{name:i18n.t('gatewayJoin.verify'),exact:true}).click();
      await dialog.getByRole('button',{name:i18n.t('gatewayJoin.confirmEnable'),exact:true}).waitFor();
      assert.equal(await dialog.getByRole('button',{name:i18n.t('gatewayJoin.confirmEnable'),exact:true})

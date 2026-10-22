@@ -3714,7 +3714,8 @@
   },
   "gatewayDiscovery": {
     "savedGateway": "已保存的 Gateway",
-    "chooseSavedGateway": "选择已保存的 Gateway"
+    "chooseSavedGateway": "选择已保存的 Gateway",
+    "enterAddress": "输入新地址"
   },
   "gatewayNetwork": {
     "listenTitle": "本机监听",

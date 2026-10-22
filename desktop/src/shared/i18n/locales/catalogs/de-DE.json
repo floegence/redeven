@@ -3719,7 +3719,8 @@
   },
   "gatewayDiscovery": {
     "savedGateway": "Gespeichertes Gateway",
-    "chooseSavedGateway": "Gespeichertes Gateway auswählen"
+    "chooseSavedGateway": "Gespeichertes Gateway auswählen",
+    "enterAddress": "Adresse eingeben"
   },
   "gatewayNetwork": {
     "listenTitle": "Lokaler Listener",
