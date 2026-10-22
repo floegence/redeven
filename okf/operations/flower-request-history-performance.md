@@ -9,19 +9,13 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Redeven consumes published Floret v7.79.0. Each Engine execution reads canonical
-request history once for its initial turn surface and provider/model invariants,
-then advances bounded facts only after successful writes. Latest-request checks
-use the canonical point reader. Returning to an earlier render lineage still
-performs the required historical lineage validation. Retry and restart create a
-new execution owner and reload canonical facts.
-
-Flower sidebar preview projection stops at the newest nonempty preview. Stable
-sequence membership flags retain resize observers across unrelated snapshots.
-Unchanged groups and members retain their projection identities within the same
-thread, preventing historical layout work on content-only updates while preserving
-open tools, selection, focus and manual reading. Every semantic field is compared;
-changed groups are replaced without mutating earlier projections.
+Published Floret v7.79.0 reads canonical request facts once per Engine execution
+and advances bounded state only after successful writes. Retry/restart reload
+facts; historical render-lineage validation remains intact. Redeven stops sidebar
+preview work at the latest useful content and retains unchanged sequence groups,
+members and observers during streaming. Three real-Service/Electron samples
+reduce median backend CPU 80.3%, combined CPU 53.9% and allocations 87.0%, while
+preserving complete output, responsive controls, selection and manual reading.
 
 # Contract
 
@@ -160,6 +154,14 @@ completed control is absent, then admits an active Goal and verifies its editor
 remains outside collapsed content. Production Goal behavior is unchanged. All
 217 tests across seven relevant browser suites pass, including sequence/turn
 disclosure, thinking, streaming stability, Markdown, recovery and Goal behavior.
+
+After preserving 2d994f6b4 native scroll chaining, production source 938b525a6
+passes another 31 scroll-ownership and 55 sequence/streaming browser checks.
+Final-1 measures backend 20.45%, renderer 36.85%, combined 65.96%, 16.410 GB
+allocated, input/click/output/Stop P95 11.4/16.6/51.0/23.2 ms and frame P95
+18.6 ms. Canonical and all rendered contents match, marker coverage is 100%,
+and owned cleanup passes. It is a separate confirmation, not part of the
+three-run medians.
 
 # Boundaries
 
