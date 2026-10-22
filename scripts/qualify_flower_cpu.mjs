@@ -310,8 +310,21 @@ if (process.argv.includes('--build')) {
       const markdown = createMarkdownParser({ gfm: true, breaks: false, pedantic: false });
       evidence.rendered = [];
       for (const item of visible.items.filter(item => item.kind === 'assistant' || item.kind === 'thinking')) {
-        if (await summary.count() && await summary.getAttribute('aria-expanded') === 'false') await summary.click();
+        // A turn can contain several independently folded process groups. Open
+        // the control for this row rather than repeatedly opening the first one.
+        const wrapper = page.locator(bodySelector + '[data-flower-row-message-id=' + JSON.stringify(item.id) + ']').first();
+        await wrapper.waitFor({ state: 'attached', timeout: 15000 });
+        const viewportID = await wrapper.locator('.flower-turn-row-viewport').getAttribute('id');
+        const disclosure = page.locator(bodySelector + '.flower-turn-summary-button[aria-controls~=' + JSON.stringify(viewportID) + ']').first();
+        if (await disclosure.count() && await disclosure.getAttribute('aria-expanded') === 'false') await disclosure.click();
         const row = page.locator(bodySelector + '[data-flower-message-id=' + JSON.stringify(item.id) + ']').first();
+        await row.waitFor({ state: 'attached', timeout: 15000 });
+        const sequenceIDs = await row.evaluate(node => [...node.querySelectorAll('.flower-tool-sequence-viewport'), node.closest('.flower-tool-sequence-viewport')]
+          .filter(Boolean).map(viewport => viewport.id));
+        for (const sequenceID of sequenceIDs) {
+          const sequence = page.locator(bodySelector + '.flower-tool-sequence-toggle[aria-controls~=' + JSON.stringify(sequenceID) + ']').first();
+          if (await sequence.count() && await sequence.getAttribute('aria-expanded') === 'false') await sequence.click();
+        }
         await row.waitFor({ timeout: 15000 });
         const toggle = row.locator('.flower-thinking-toggle');
         if (await toggle.count() && await toggle.getAttribute('aria-expanded') === 'false') await toggle.click();

@@ -39,7 +39,7 @@ The queue retains at most 64 pending updates and 4 MiB of incoming encoded updat
 
 Copy timers start only on explicit copy and reset after 1.6 seconds; clipboard failure never reports success.
 
-The opt-in real-Service qualifier builds the production renderer, freezes historical content and provider cadence, and records cumulative runtime plus all Electron process CPU, frame/input/click/output latency, allocations and wire bytes. It verifies canonical provider content and rendered content after timing.
+The opt-in real-Service qualifier builds the production renderer, freezes historical content and provider cadence, and records cumulative runtime plus all Electron process CPU, frame/input/click/output latency, allocations and wire bytes. It verifies canonical provider content and rendered content after timing. Full-content checks open each row through its exact turn and nested tool-sequence disclosure controls before comparing every assistant and thinking item with canonical text.
 
 The task's explicit CPU, latency, allocation, transfer and long-task thresholds are hard gates, separate from ordinary CI and the bounded main pre-push gate.
 
