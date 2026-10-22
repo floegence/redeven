@@ -758,20 +758,33 @@ func enqueueFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveS
 			if batch.version <= previous.version {
 				return true
 			}
-			if previous.refresh || batch.refresh {
-				return replaceFlowerLiveQueuedBatchLocked(service, subscriber, index, flowerLiveRefreshBatch(batch))
-			}
 			if batch.current {
-				return replaceFlowerLiveQueuedBatchLocked(service, subscriber, index, batch)
+				return convergeFlowerLiveRouteLocked(service, subscriber, batch)
+			}
+			if previous.refresh || batch.refresh {
+				return convergeFlowerLiveRouteLocked(service, subscriber, flowerLiveRefreshBatch(batch))
 			}
 			if index == len(subscriber.queue)-1 {
 				if merged := mergeFlowerLiveAppendBatches(previous, batch); merged != nil {
 					return replaceFlowerLiveQueuedBatchLocked(service, subscriber, index, merged)
 				}
 			}
-			// Semantic changes, gaps, item switches and growth beyond a bounded
-			// append chunk converge from the canonical owner. No text is discarded.
-			return replaceFlowerLiveQueuedBatchLocked(service, subscriber, index, flowerLiveRefreshBatch(batch))
+			// A semantic boundary or a full append fragment is not backpressure.
+			// Keep ordered deltas while the existing queue has capacity; turning
+			// every item switch into a historical view amplifies a small backlog.
+			continuous := previous.version == batch.baseVersion
+			if a, b := previous.append, batch.append; a != nil && b != nil &&
+				a.turnID == b.turnID && a.runID == b.runID && a.itemID == b.itemID {
+				continuous = continuous && a.offset+len(a.text) == b.offset
+			}
+			if continuous && len(subscriber.queue) < flowerLiveSubscriberBatchLimit &&
+				subscriber.queuedBytes+subscriber.mediaBytes+batch.bytes() <= flowerLiveEnvelopeByteLimit &&
+				service.flowerLiveQueuedBytes+batch.bytes() <= flowerLiveGlobalQueuedByteLimit {
+				return appendFlowerLiveQueuedBatchLocked(service, subscriber, batch)
+			}
+			// A real capacity boundary or sequence gap converges from authority.
+			// Retire all queued deltas covered by the replacement, not just the last.
+			return convergeFlowerLiveRouteLocked(service, subscriber, flowerLiveRefreshBatch(batch))
 		}
 	}
 	if batch.mailbox != "" {
@@ -786,6 +799,29 @@ func enqueueFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveS
 
 func flowerLiveRefreshBatch(batch *flowerLiveEncodedBatch) *flowerLiveEncodedBatch {
 	return &flowerLiveEncodedBatch{kind: FlowerLiveStreamThreadBatch, route: batch.route, version: batch.version, refresh: true}
+}
+
+// One canonical replacement covers every queued delta for this exact route.
+// Other threads, viewer metadata, and an already-started envelope keep their order.
+func convergeFlowerLiveRouteLocked(service *Service, subscriber *flowerLiveSubscriber, batch *flowerLiveEncodedBatch) bool {
+	first, kept := -1, 0
+	for _, queued := range subscriber.queue {
+		if queued.route == batch.route {
+			if first >= 0 {
+				releaseFlowerLiveBatchLocked(service, subscriber, queued)
+				continue
+			}
+			first = kept
+		}
+		subscriber.queue[kept] = queued
+		kept++
+	}
+	clear(subscriber.queue[kept:])
+	subscriber.queue = subscriber.queue[:kept]
+	if first < 0 {
+		return appendFlowerLiveQueuedBatchLocked(service, subscriber, batch)
+	}
+	return replaceFlowerLiveQueuedBatchLocked(service, subscriber, first, batch)
 }
 
 func appendFlowerLiveQueuedBatchLocked(service *Service, subscriber *flowerLiveSubscriber, batch *flowerLiveEncodedBatch) bool {
@@ -809,7 +845,7 @@ func appendFlowerLiveQueuedBatchLocked(service *Service, subscriber *flowerLiveS
 }
 
 // Re-encoding is bounded to one fragment, independent of total streamed text.
-// Larger growth uses a current snapshot read by Next outside the service lock.
+// Larger growth remains in separate ordered chunks while queue capacity allows.
 func mergeFlowerLiveAppendBatches(before, after *flowerLiveEncodedBatch) *flowerLiveEncodedBatch {
 	a, b := before.append, after.append
 	if a == nil || b == nil || before.route != after.route || a.turnID != b.turnID || a.runID != b.runID || a.itemID != b.itemID ||

@@ -1320,8 +1320,8 @@ func TestFlowerLiveSubscriberKeepsSemanticBoundariesSeparate(t *testing.T) {
 	if !enqueueFlowerLiveSubscriberLocked(svc, subscriber, appendBatch) || !enqueueFlowerLiveSubscriberLocked(svc, subscriber, boundary) {
 		t.Fatal("boundary enqueue failed")
 	}
-	if len(subscriber.queue) != 1 || !subscriber.queue[0].refresh {
-		t.Fatalf("queue=%#v, want one authoritative refresh marker", subscriber.queue)
+	if len(subscriber.queue) != 2 || subscriber.queue[0] != appendBatch || subscriber.queue[1] != boundary {
+		t.Fatalf("queue=%#v, want ordered append and semantic boundary without historical hydration", subscriber.queue)
 	}
 }
 
