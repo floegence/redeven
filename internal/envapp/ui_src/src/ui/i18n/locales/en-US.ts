@@ -3679,6 +3679,8 @@ export const enUS = defineDictionary({
       "importHint": "The template will be added to your library. Service installation starts separately when you deploy it."
     },
     management: {
+      backToService: "Back to service management",
+      notInstalled: "Not installed",
       closeKeepsOperation: 'Closing keeps the operation running.',
       executionDetails: 'Execution details',
       openingMissing: "No authentication entrance remains for this launch.",

@@ -10,7 +10,7 @@ import {
   onCleanup,
   type JSX,
 } from 'solid-js';
-import { Check, ChevronDown, Copy, FileText, MoreHorizontal, Pencil } from '@floegence/floe-webapp-core/icons';
+import { ArrowLeft, Check, ChevronDown, Copy, ExternalLink, FileText, GitBranch, Info, MoreHorizontal, Play, Refresh, Settings } from '@floegence/floe-webapp-core/icons';
 import { EnvAppDrawer } from '../primitives/EnvAppDrawer';
 import { useI18n, type EnvAppTranslationKey } from '../i18n';
 import { fetchLocalApiJSON, LocalApiError } from '../services/localApi';
@@ -155,6 +155,9 @@ export function ManagedServiceManagementDrawer(props: {
   canManage?: boolean;
   identity?: JSX.Element;
   operationContent?: JSX.Element;
+  executionDetails?: JSX.Element;
+  showExecutionDetails?: boolean;
+  onBack?: () => void;
   onLegacyRestore: () => void;
   onReinstall: () => void;
   canLegacyRestore: boolean;
@@ -331,28 +334,29 @@ export function ManagedServiceManagementDrawer(props: {
       onOpenChange={(open) => {
         if (!open) props.onClose();
       }}
-      title={displayedService()?.name ?? text('title')}
+      title={props.showExecutionDetails ? text('executionDetails') : displayedService()?.name ?? text('title')}
       class="service-management-panel"
       bodyClass="min-h-0"
       footer={<div class="service-management-footer" data-testid="service-management-footer">
-        <div class="service-management-utilities">
+        <Show when={!props.showExecutionDetails}><div class="service-management-utilities">
           <Button size="sm" variant="ghost" icon={FileText} onClick={props.onLogs}>{i18n.t('webServices.managed.logs')}</Button>
-          <Button size="sm" variant="ghost" icon={Pencil} onClick={props.onSettings} disabled={busy()}>{text('settings')}</Button>
-          <Show when={props.onVersions}><Button size="sm" variant="ghost" onClick={props.onVersions} disabled={busy() || props.canManage === false}>{i18n.t('webServices.managed.versions')}</Button></Show>
+          <Button size="sm" variant="ghost" icon={Settings} onClick={props.onSettings} disabled={busy()}>{text('settings')}</Button>
+          <Show when={props.onVersions}><Button size="sm" variant="ghost" icon={GitBranch} onClick={props.onVersions} disabled={busy() || props.canManage === false}>{i18n.t('webServices.managed.versions')}</Button></Show>
           <Dropdown align="end" triggerAriaLabel={text('otherActions')} disabled={busy()} class="service-management-more" triggerClass="web-services-menu-trigger"
             items={utilityItems()} onSelect={(id) => id === 'verify' ? props.onLegacyRestore() : choose(id as ManagementAction)}
             trigger={<MoreHorizontal class="h-4 w-4" aria-hidden="true" />} />
-        </div>
+        </div></Show>
         <div class="service-management-footer-main">
-          <Show when={props.operation}><p class="service-management-footer-note">{text('closeKeepsOperation')}</p></Show>
+          <Show when={props.operation}><p class="service-management-footer-note"><Info class="h-3 w-3" aria-hidden="true" />{text('closeKeepsOperation')}</p></Show>
           <div class="service-management-primary-actions">
+            <Show when={!props.operation}><Button size="sm" variant="outline" onClick={props.onClose}>{i18n.t('common.actions.close')}</Button></Show>
             <Show when={restartReview() && !props.operation}>
               <Button size="sm" onClick={props.onRestart} disabled={loading() || mutationDisabled()}>{i18n.t('webServices.managed.restart')}</Button>
               <Button size="sm" variant="outline" onClick={() => setRestartReview(false)}>{i18n.t('common.actions.cancel')}</Button>
             </Show>
             <Show when={inspecting() && !props.operation && !restartReview()}>
-              <Show when={currentService()?.actions?.open?.available}><Button size="sm" onClick={() => props.onOpen?.(Boolean(currentService()?.opening?.error_code))} disabled={loading() || busy()}>{text(currentService()?.opening?.error_code ? 'retryOpen' : 'openService')}</Button></Show>
-              <Show when={currentService()?.actions?.start?.available}><Button size="sm" onClick={props.onStart} disabled={loading() || mutationDisabled()}>{i18n.t('webServices.managed.start')}</Button></Show>
+              <Show when={currentService()?.actions?.open?.available}><Button size="sm" icon={ExternalLink} onClick={() => props.onOpen?.(Boolean(currentService()?.opening?.error_code))} disabled={loading() || busy()}>{text(currentService()?.opening?.error_code ? 'retryOpen' : 'openService')}</Button></Show>
+              <Show when={currentService()?.actions?.start?.available}><Button size="sm" icon={Play} onClick={props.onStart} disabled={loading() || mutationDisabled()}>{i18n.t('webServices.managed.start')}</Button></Show>
               <Show when={currentService()?.actions?.restart?.available && currentService()?.opening?.error_code}><Button size="sm" variant="outline" onClick={() => setRestartReview(true)} disabled={loading() || mutationDisabled()}>{i18n.t('webServices.managed.restart')}</Button></Show>
               <Show when={currentService()?.actions?.recover?.available}><Button size="sm" variant="outline" onClick={() => choose('recover')} disabled={mutationDisabled()}>{text('actions.recover')}</Button></Show>
               <Show when={currentService()?.management_state === 'detached'}><Button size="sm" variant="outline" onClick={() => choose('restore')} disabled={mutationDisabled()}>{text('actions.restore')}</Button></Show>
@@ -382,16 +386,16 @@ export function ManagedServiceManagementDrawer(props: {
           </Button>
             </Show>
             <Show when={props.operation?.cancellable}><Button size="sm" variant="outline" onClick={props.onCancelOperation}>{i18n.t('webServices.managed.cancelOperation')}</Button></Show>
-            <Button size="sm" variant="outline" onClick={props.onClose}>{i18n.t('common.actions.close')}</Button>
+            <Show when={props.operation}><Button size="sm" variant="outline" onClick={props.onClose}>{i18n.t('common.actions.close')}</Button></Show>
           </div>
         </div>
       </div>}
     >
-      <div class="service-management-body" data-testid="service-management-drawer">
+      <div hidden={props.showExecutionDetails}><div class="service-management-body" data-testid="service-management-drawer">
         {props.identity}
         <section class="service-management-situation space-y-2">
-          <div class="service-management-section-heading"><h3>{text('currentSituation')}</h3><Button size="sm" variant="ghost" onClick={() => setRevision((value) => value + 1)} disabled={loading() || executing()} loading={loading()}><StableText reserve={[text('checking'), text('recheck')]}>{text(loading() ? 'checking' : 'recheck')}</StableText></Button></div>
-          <p class="service-management-conclusion">
+          <div class="service-management-section-heading"><h3>{text('currentSituation')}</h3><Button size="sm" variant="ghost" icon={Refresh} onClick={() => setRevision((value) => value + 1)} disabled={loading() || executing()} loading={loading()}><StableText reserve={[text('checking'), text('recheck')]}>{text(loading() ? 'checking' : 'recheck')}</StableText></Button></div>
+          <p class="service-management-conclusion" data-runtime={currentService()?.status}><span aria-hidden="true" class="service-management-status-dot" />
             {i18n.t(
               managementStatusKey(
                 currentService()?.status ?? 'inspection_unavailable',
@@ -430,7 +434,7 @@ export function ManagedServiceManagementDrawer(props: {
               </div>
             )}
           </Show>
-          <For each={facts()?.resources ?? []}>
+          <For each={[...(facts()?.resources ?? [])].sort((a, b) => Number(b.resource_id === 'workspace') - Number(a.resource_id === 'workspace'))}>
             {(resource) => {
               const label = () => text(resource.resource_id === 'workspace' ? 'workspace' : resource.kind === 'network' ? 'network' : 'data');
               const state = () => text(resource.presence === 'absent' ? 'removed' : resource.presence === 'unknown' ? 'unknown' : 'retained');
@@ -656,7 +660,7 @@ export function ManagedServiceManagementDrawer(props: {
           </Show>
         </section>
         </Show>
-      </div>
+      </div></div><div hidden={!props.showExecutionDetails}><div class="service-management-execution"><button type="button" class="service-management-back" onClick={props.onBack}><ArrowLeft class="h-3 w-3" />{text('backToService')}</button>{props.executionDetails}</div></div>
     </EnvAppDrawer>
   );
 }

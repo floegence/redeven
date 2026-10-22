@@ -3700,6 +3700,8 @@
       "importHint": "O modelo será adicionado à sua biblioteca. A instalação do serviço começa separadamente quando você o implanta."
     },
     "management": {
+      "backToService": "Voltar ao gerenciamento do serviço",
+      "notInstalled": "Não instalado",
       "closeKeepsOperation": "A operação continua após fechar.",
       "executionDetails": "Detalhes da execução",
       "references": "Referenciado por",
