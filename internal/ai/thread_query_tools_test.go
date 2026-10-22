@@ -9,195 +9,111 @@ import (
 	"testing"
 	"time"
 
+	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/floret/v7/threadquery"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
-func TestThreadQuerySortSchemas(t *testing.T) {
-	t.Parallel()
-	for _, def := range builtInThreadQueryToolDefinitions() {
-		if def.Name == "threads.read" {
-			continue
-		}
-		t.Run(def.Name, func(t *testing.T) {
-			var schema map[string]any
-			if err := json.Unmarshal(def.InputSchema, &schema); err != nil {
-				t.Fatal(err)
-			}
-			validator, err := compileArgumentSchema(schema)
-			if err != nil {
-				t.Fatal(err)
-			}
-			keys := []string{"", "created", "updated", "title", "thread_id", "time", "order", "completed", "tool_name", "elapsed"}
-			invalid := []string{"recent_first", "created_at", "updated_at", "completed_at", "key", "count"}
-			if def.Name == "threads.aggregate" {
-				keys = []string{"", "key", "count"}
-				invalid = []string{"created_at", "time", "created", "order", "recent_first"}
-			}
-			for _, key := range keys {
-				input := map[string]any{"object": "messages", "sort": map[string]any{"key": key}}
-				if err := validator.Validate(input); err != nil {
-					t.Errorf("supported sort key %q rejected: %v", key, err)
-				}
-			}
-			for _, key := range invalid {
-				input := map[string]any{"object": "messages", "sort": map[string]any{"key": key}}
-				if err := validator.Validate(input); err == nil {
-					t.Errorf("unsupported sort key %q accepted", key)
-				}
-			}
-			if err := validator.Validate(map[string]any{"object": "messages"}); err != nil {
-				t.Fatalf("omitted sort rejected: %v", err)
-			}
-			props := schema["properties"].(map[string]any)
-			sortProps := props["sort"].(map[string]any)["properties"].(map[string]any)
-			description, _ := sortProps["key"].(map[string]any)["description"].(string)
-			if def.Name == "threads.query" {
-				if got := sortProps["descending"].(map[string]any)["default"]; got != true {
-					t.Errorf("default descending=%v, want true", got)
-				}
-				for _, rule := range []string{"threads", "messages", "tool_calls", "time", "order", "Omit or empty"} {
-					if !strings.Contains(description, rule) {
-						t.Errorf("sort.key description omits %q: %q", rule, description)
-					}
-				}
-			} else if !strings.Contains(description, "count") || !strings.Contains(description, "key") {
-				t.Errorf("aggregate sort.key description is incomplete: %q", description)
-			}
-		})
-	}
-}
-
-func TestThreadQueryToolSortValidation(t *testing.T) {
-	svc := newSendTurnTestService(t)
-	meta := testSendTurnMeta()
-	for _, tc := range []struct {
-		tool, object, invalid string
-		allowed               []string
-	}{
-		{"threads.query", "messages", "created_at", []string{"time", "order"}},
-		{"threads.query", "messages", "recent_first", []string{"time", "order"}},
-		{"threads.query", "threads", "time", []string{"created", "updated", "title", "thread_id"}},
-		{"threads.query", "tool_calls", "title", []string{"time", "completed", "tool_name", "elapsed"}},
-		{"threads.aggregate", "messages", "time", []string{"key", "count"}},
-		{"threads.aggregate", "threads", "created_at", []string{"key", "count"}},
-	} {
-		t.Run(tc.tool+"/"+tc.object, func(t *testing.T) {
-			args := map[string]any{"object": tc.object, "sort": map[string]any{"key": tc.invalid, "descending": true}}
-			_, err := svc.execThreadQueryTool(t.Context(), meta, tc.tool, args)
-			if !errors.Is(err, threadquery.ErrInvalidQuery) {
-				t.Fatalf("invalid sort classification lost: %v", err)
-			}
-			toolErr := aitools.ClassifyError(aitools.Invocation{ToolName: tc.tool, Args: args}, err)
-			if toolErr.Code != aitools.ErrorCodeInvalidArguments || toolErr.Retryable {
-				t.Fatalf("invalid sort tool error: %+v", toolErr)
-			}
-			for _, value := range append([]string{tc.invalid, tc.object}, tc.allowed...) {
-				if !strings.Contains(toolErr.Message, value) {
-					t.Errorf("error omits %q: %q", value, toolErr.Message)
-				}
-			}
-			details, _ := toolErr.Meta["validation_details"].(map[string]any)
-			if details["field"] != "sort.key" || details["value"] != tc.invalid || details["object"] != tc.object || !reflect.DeepEqual(details["allowed_values"], tc.allowed) {
-				t.Errorf("sort validation details: %v", details)
-			}
-			if args["sort"].(map[string]any)["key"] != tc.invalid {
-				t.Fatal("invalid sort silently rewritten")
-			}
-			for _, key := range append([]string{""}, tc.allowed...) {
-				args["sort"] = map[string]any{"key": key, "descending": true}
-				if _, err := svc.execThreadQueryTool(t.Context(), meta, tc.tool, args); err != nil {
-					t.Errorf("supported sort key %q rejected: %v", key, err)
-				}
-			}
-		})
-	}
-}
-
 type threadQueryRecordingRuntime struct {
 	flruntime.ThreadService
-	query     threadquery.QueryInput
-	aggregate threadquery.AggregateInput
+	query threadquery.QueryInput
+	calls int
 }
 
 func (r *threadQueryRecordingRuntime) Query(_ context.Context, _ threadquery.Scope, input threadquery.QueryInput) (threadquery.Page, error) {
 	r.query = input
+	r.calls++
 	return threadquery.Page{}, nil
 }
-
 func (r *threadQueryRecordingRuntime) Read(context.Context, threadquery.Scope, threadquery.ReadInput) (threadquery.ReadPage, error) {
 	return threadquery.ReadPage{}, nil
 }
-
-func (r *threadQueryRecordingRuntime) Aggregate(_ context.Context, _ threadquery.Scope, input threadquery.AggregateInput) (threadquery.AggregatePage, error) {
-	r.aggregate = input
-	return threadquery.AggregatePage{}, nil
+func (r *threadQueryRecordingRuntime) Aggregate(context.Context, threadquery.Scope, threadquery.AggregateInput) (threadquery.AggregatePage, error) {
+	panic("aggregation must never be dispatched")
 }
 
-func TestThreadQueryDefaultsToDescending(t *testing.T) {
+func TestThreadBrowseSchemasExcludeAdvancedQueries(t *testing.T) {
+	defs := builtInThreadQueryToolDefinitions()
+	if len(defs) != 2 || defs[0].Name != "threads.query" || defs[1].Name != "threads.read" || isThreadQueryTool("threads.aggregate") {
+		t.Fatalf("unexpected tools: %+v", defs)
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(defs[0].InputSchema, &schema); err != nil {
+		t.Fatal(err)
+	}
+	validator, err := compileArgumentSchema(schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range []map[string]any{{}, {"title": "Release"}, {"object": "messages", "thread_id": "thread"}, {"object": "tool_calls", "thread_id": "thread", "limit": 5, "cursor": "page"}} {
+		if err := validator.Validate(args); err != nil {
+			t.Fatalf("browse rejected: %v %v", args, err)
+		}
+	}
+	for _, key := range []string{"filter", "sort", "group_by", "text", "arguments", "result", "keywords", "phrase", "roles", "tool_names", "statuses", "time"} {
+		if err := validator.Validate(map[string]any{key: map[string]any{}}); err == nil {
+			t.Fatalf("advanced parameter accepted: %s", key)
+		}
+	}
+}
+
+func TestThreadBrowseMapsOnlyNecessaryInputs(t *testing.T) {
 	svc := newSendTurnTestService(t)
 	meta := testSendTurnMeta()
 	runtime := &threadQueryRecordingRuntime{ThreadService: svc.threadRuntime}
 	svc.threadRuntime = runtime
-	for _, object := range []threadquery.Object{threadquery.Threads, threadquery.Messages, threadquery.ToolCalls} {
-		key := "time"
-		if object == threadquery.Threads {
-			key = "created"
-		}
-		for _, tc := range []struct {
-			name string
-			sort map[string]any
-			want threadquery.Sort
-		}{
-			{"omitted", nil, threadquery.Sort{Descending: true}},
-			{"empty_sort", map[string]any{}, threadquery.Sort{Descending: true}},
-			{"empty_key", map[string]any{"key": ""}, threadquery.Sort{Descending: true}},
-			{"explicit_ascending", map[string]any{"descending": false}, threadquery.Sort{}},
-			{"explicit_descending", map[string]any{"descending": true}, threadquery.Sort{Descending: true}},
-			{"concrete_default", map[string]any{"key": key}, threadquery.Sort{Key: key, Descending: true}},
-			{"concrete_ascending", map[string]any{"key": key, "descending": false}, threadquery.Sort{Key: key}},
-			{"concrete_descending", map[string]any{"key": key, "descending": true}, threadquery.Sort{Key: key, Descending: true}},
-		} {
-			t.Run(string(object)+"/"+tc.name, func(t *testing.T) {
-				args := map[string]any{"object": string(object), "cursor": "frozen-page", "limit": 7}
-				if tc.sort != nil {
-					args["sort"] = tc.sort
-				}
-				before, _ := json.Marshal(args)
-				if _, err := svc.execThreadQueryTool(t.Context(), meta, "threads.query", args); err != nil {
-					t.Fatal(err)
-				}
-				if runtime.query.Sort != tc.want || runtime.query.Cursor != "frozen-page" || runtime.query.Limit != 7 {
-					t.Fatalf("query=%+v, want sort=%+v with original cursor/limit", runtime.query, tc.want)
-				}
-				after, _ := json.Marshal(args)
-				if string(before) != string(after) {
-					t.Fatal("query defaults mutated model arguments")
-				}
-			})
-		}
-	}
-	for _, sort := range []map[string]any{nil, {"key": "count"}, {"key": "count", "descending": true}} {
-		args := map[string]any{"object": "messages"}
-		if sort != nil {
-			args["sort"] = sort
-		}
-		if _, err := svc.execThreadQueryTool(t.Context(), meta, "threads.aggregate", args); err != nil {
+	for _, tc := range []struct {
+		args map[string]any
+		want threadquery.QueryInput
+	}{
+		{map[string]any{}, threadquery.QueryInput{Object: threadquery.Threads, Sort: threadquery.Sort{Key: "updated", Descending: true}}},
+		{map[string]any{"title": "发布", "limit": 7, "cursor": "page"}, threadquery.QueryInput{Object: threadquery.Threads, Filter: threadquery.Filter{Title: threadquery.TextMatch{Contains: "发布"}}, Sort: threadquery.Sort{Key: "updated", Descending: true}, Limit: 7, Cursor: "page"}},
+		{map[string]any{"object": "messages", "thread_id": "thread"}, threadquery.QueryInput{Object: threadquery.Messages, Filter: threadquery.Filter{ThreadIDs: []identity.ThreadID{"thread"}}, Sort: threadquery.Sort{Key: "order"}}},
+		{map[string]any{"object": "tool_calls", "thread_id": "thread"}, threadquery.QueryInput{Object: threadquery.ToolCalls, Filter: threadquery.Filter{ThreadIDs: []identity.ThreadID{"thread"}}, Sort: threadquery.Sort{Key: "time"}}},
+	} {
+		before, _ := json.Marshal(tc.args)
+		if _, err := svc.execThreadQueryTool(t.Context(), meta, "threads.query", tc.args); err != nil {
 			t.Fatal(err)
 		}
-		var expected threadquery.AggregateInput
-		raw, _ := json.Marshal(args)
-		if err := json.Unmarshal(raw, &expected); err != nil {
-			t.Fatal(err)
+		if !reflect.DeepEqual(runtime.query, tc.want) {
+			t.Fatalf("query=%+v want=%+v", runtime.query, tc.want)
 		}
-		if runtime.aggregate.Sort != expected.Sort {
-			t.Fatalf("aggregate sort changed: %+v, want %+v", runtime.aggregate.Sort, expected.Sort)
+		after, _ := json.Marshal(tc.args)
+		if string(before) != string(after) {
+			t.Fatal("mutated tool arguments")
 		}
 	}
 }
 
-func TestThreadQueryDefaultReturnsNewestFirstAcrossPages(t *testing.T) {
+func TestThreadBrowseRejectsAdvancedAndUnscopedInputs(t *testing.T) {
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	for _, args := range []map[string]any{
+		{"object": "messages"}, {"object": "tool_calls"}, {"object": "messages", "thread_id": "thread", "title": "needle"},
+		{"filter": map[string]any{"text": map[string]any{"contains": "needle"}}}, {"sort": map[string]any{"key": "time"}},
+		{"object": "unknown"}, {"limit": 201}, {"authority": "forged"},
+	} {
+		_, err := svc.execThreadQueryTool(t.Context(), meta, "threads.query", args)
+		if err == nil {
+			t.Fatalf("accepted invalid browse: %v", args)
+		}
+		classified := aitools.ClassifyError(aitools.Invocation{ToolName: "threads.query", Args: args}, err)
+		if classified.Code != aitools.ErrorCodeInvalidArguments || classified.Retryable {
+			t.Fatalf("invalid classification: %+v", classified)
+		}
+	}
+	runtime := &threadQueryRecordingRuntime{ThreadService: svc.threadRuntime}
+	svc.threadRuntime = runtime
+	if _, err := svc.execThreadQueryTool(t.Context(), meta, "threads.aggregate", map[string]any{}); err == nil {
+		t.Fatal("removed aggregation accepted")
+	}
+	if runtime.calls != 0 {
+		t.Fatal("removed aggregation reached runtime")
+	}
+}
+
+func TestThreadBrowseListsRecentThreadsAndPages(t *testing.T) {
 	svc := newSendTurnTestService(t)
 	meta := testSendTurnMeta()
 	var ids []string
@@ -209,14 +125,14 @@ func TestThreadQueryDefaultReturnsNewestFirstAcrossPages(t *testing.T) {
 		ids = append(ids, thread.ThreadID)
 		time.Sleep(time.Millisecond)
 	}
-	args := map[string]any{"object": "threads", "limit": 2}
+	args := map[string]any{"limit": 2}
 	result, err := svc.execThreadQueryTool(t.Context(), meta, "threads.query", args)
 	if err != nil {
 		t.Fatal(err)
 	}
 	first := result.(threadquery.Page)
-	if first.Total != 3 || len(first.Records) != 2 || first.Records[0].ThreadID.String() != ids[2] || first.Records[1].ThreadID.String() != ids[1] || first.NextCursor == "" {
-		t.Fatalf("default first page is not newest first: %+v", first)
+	if first.Total != 3 || len(first.Records) != 2 || first.Records[0].ThreadID.String() != ids[2] || first.NextCursor == "" {
+		t.Fatalf("first page=%+v", first)
 	}
 	args["cursor"] = first.NextCursor
 	result, err = svc.execThreadQueryTool(t.Context(), meta, "threads.query", args)
@@ -225,48 +141,15 @@ func TestThreadQueryDefaultReturnsNewestFirstAcrossPages(t *testing.T) {
 	}
 	last := result.(threadquery.Page)
 	if len(last.Records) != 1 || last.Records[0].ThreadID.String() != ids[0] || last.NextCursor != "" {
-		t.Fatalf("default continuation is not newest first: %+v", last)
+		t.Fatalf("last page=%+v", last)
 	}
-	delete(args, "cursor")
-	args["sort"] = map[string]any{"descending": false}
-	result, err = svc.execThreadQueryTool(t.Context(), meta, "threads.query", args)
+	result, err = svc.execThreadQueryTool(t.Context(), meta, "threads.query", map[string]any{"title": "IDDLE"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	ascending := result.(threadquery.Page)
-	if len(ascending.Records) != 2 || ascending.Records[0].ThreadID.String() != ids[0] || ascending.Records[1].ThreadID.String() != ids[1] {
-		t.Fatalf("explicit ascending order ignored: %+v", ascending)
-	}
-}
-
-func TestThreadQueryToolInvalidInputClassification(t *testing.T) {
-	svc := newSendTurnTestService(t)
-	meta := testSendTurnMeta()
-	for _, tc := range []struct {
-		name, tool string
-		args       map[string]any
-		canonical  bool
-	}{
-		{"unknown_object", "threads.query", map[string]any{"object": "unknown"}, true},
-		{"invalid_filter", "threads.query", map[string]any{"object": "messages", "filter": map[string]any{"roles": []string{"tool"}}}, true},
-		{"invalid_limit", "threads.query", map[string]any{"object": "messages", "limit": 201}, true},
-		{"unknown_field", "threads.query", map[string]any{"object": "messages", "unknown": true}, false},
-		{"wrong_sort_type", "threads.aggregate", map[string]any{"object": "messages", "sort": map[string]any{"key": 42}}, false},
-		{"wrong_ref_type", "threads.read", map[string]any{"ref": 42}, false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := svc.execThreadQueryTool(t.Context(), meta, tc.tool, tc.args)
-			if err == nil {
-				t.Fatal("invalid input accepted")
-			}
-			if tc.canonical && !errors.Is(err, threadquery.ErrInvalidQuery) {
-				t.Fatalf("canonical error classification lost: %v", err)
-			}
-			toolErr := aitools.ClassifyError(aitools.Invocation{ToolName: tc.tool, Args: tc.args}, err)
-			if toolErr.Code != aitools.ErrorCodeInvalidArguments || toolErr.Retryable || toolErr.Meta["validation_details"] != nil {
-				t.Fatalf("invalid input misclassified: %+v", toolErr)
-			}
-		})
+	matched := result.(threadquery.Page)
+	if matched.Total != 1 || matched.Records[0].ThreadID.String() != ids[1] {
+		t.Fatalf("title lookup=%+v", matched)
 	}
 }
 
@@ -293,9 +176,9 @@ func TestThreadQueryToolPreservesRuntimeFailures(t *testing.T) {
 	base := svc.threadRuntime
 	defer func() { svc.threadRuntime = base }()
 	for _, failure := range []error{threadquery.ErrCursorInvalid, threadquery.ErrSnapshotLimit, threadquery.ErrRecordUnavailable, context.Canceled, context.DeadlineExceeded, errors.New("storage unavailable")} {
-		for _, tool := range []string{"threads.query", "threads.read", "threads.aggregate"} {
+		for _, tool := range []string{"threads.query", "threads.read"} {
 			svc.threadRuntime = threadQueryFailureRuntime{ThreadService: base, failure: failure}
-			args := map[string]any{"object": "messages"}
+			args := map[string]any{"object": "messages", "thread_id": "thread"}
 			if tool == "threads.read" {
 				args = map[string]any{"ref": "opaque"}
 			}
@@ -367,5 +250,61 @@ func TestThreadQueryDescriptionSchemas(t *testing.T) {
 				t.Fatalf("invalid intent accepted for %s", def.Name)
 			}
 		}
+	}
+}
+
+func TestThreadBrowseReadsReferencedConversationContent(t *testing.T) {
+	svc := newRealtimeTestService(t, time.Minute)
+	meta := testSendTurnMeta()
+	source, err := svc.CreateThread(t.Context(), meta, "Source conversation", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := svc.CreateThread(t.Context(), meta, "Reading conversation", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if source.ThreadID == target.ThreadID {
+		t.Fatal("same conversation")
+	}
+	text := strings.Repeat("发布计划🌸 with complete context. ", 3000)
+	_, err = svc.threadRuntime.Send(t.Context(), flruntime.SendInput{ThreadID: identity.ThreadID(source.ThreadID), RequestKey: "cross-thread-read", Input: flruntime.UserInput{Text: text}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := svc.execThreadQueryTool(t.Context(), meta, "threads.query", map[string]any{"object": "messages", "thread_id": source.ThreadID, "limit": 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := result.(threadquery.Page)
+	if len(page.Records) != 1 || page.Records[0].ThreadID.String() != source.ThreadID || page.Records[0].Role != "user" {
+		t.Fatalf("wrong source page: %+v", page)
+	}
+	input := map[string]any{"ref": page.Records[0].Ref}
+	var body strings.Builder
+	for {
+		result, err = svc.execThreadQueryTool(t.Context(), meta, "threads.read", input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		read := result.(threadquery.ReadPage)
+		for _, chunk := range read.Chunks {
+			if chunk.Field == "body" {
+				body.WriteString(chunk.Text)
+			}
+		}
+		if read.NextCursor == "" {
+			break
+		}
+		input["cursor"] = read.NextCursor
+	}
+	if body.String() != text {
+		t.Fatalf("cross-thread read truncated content: got=%d want=%d", body.Len(), len(text))
+	}
+	foreign := *meta
+	foreign.NamespacePublicID = "unrelated"
+	result, err = svc.execThreadQueryTool(t.Context(), &foreign, "threads.query", map[string]any{"object": "messages", "thread_id": source.ThreadID})
+	if err != nil || result.(threadquery.Page).Total != 0 {
+		t.Fatalf("foreign content visible: %v %v", result, err)
 	}
 }

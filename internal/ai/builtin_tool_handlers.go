@@ -219,7 +219,7 @@ func normalizeTruncatedToolPayload(toolName string, payload any) (any, bool, err
 		return normalizeTodosPayload(payload)
 	case "subagents":
 		return payload, false, nil
-	case "report_to_parent", "subagent_events", "threads.query", "threads.read", "threads.aggregate", "okf.index", "okf.search", "okf.open", "rgrep", "find", "read_file", "read_files", "use_skill", "sources", "tessiven.runtimes", "tessiven.runtime.inspect", "tessiven.runtime.action", "tessiven.schema", "tessiven.list", "tessiven.read", "tessiven.search", "tessiven.versions", "tessiven.validate", "tessiven.save", "tessiven.edit":
+	case "report_to_parent", "subagent_events", "threads.query", "threads.read", "okf.index", "okf.search", "okf.open", "rgrep", "find", "read_file", "read_files", "use_skill", "sources", "tessiven.runtimes", "tessiven.runtime.inspect", "tessiven.runtime.action", "tessiven.schema", "tessiven.list", "tessiven.read", "tessiven.search", "tessiven.versions", "tessiven.validate", "tessiven.save", "tessiven.edit":
 		// These executors already bound their content. Keep the typed shape;
 		// truncating an entire JSON object destroys every usable result field.
 		return payload, false, nil

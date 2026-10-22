@@ -51,7 +51,7 @@ func (s *Service) ReadFlowerToolPreview(ctx context.Context, meta *session.Meta,
 		return FlowerToolPreview{}, ErrFlowerToolPreviewNotFound
 	}
 	result, found, err := reader.LookupToolResult(ctx, flruntime.LookupToolResultInput{ThreadID: identity.ThreadID(req.ThreadID), TurnID: identity.TurnID(req.TurnID), RunID: identity.RunID(req.RunID), ToolCallID: req.ToolCallID})
-	if err != nil || !found || !isThreadQueryTool(result.ToolName) {
+	if err != nil || !found || !(isThreadQueryTool(result.ToolName) || result.ToolName == "threads.aggregate") {
 		return FlowerToolPreview{}, ErrFlowerToolPreviewNotFound
 	}
 	return threadToolPreview(result)
@@ -75,6 +75,32 @@ func threadToolPreview(result flruntime.ThreadToolResult) (FlowerToolPreview, er
 		input.Sort.Descending = result.ToolName == "threads.query"
 		if err := json.Unmarshal([]byte(result.Arguments), &input); err != nil {
 			return preview, ErrFlowerToolPreviewNotFound
+		}
+		// Flat browsing arguments belong to the current tool. Nested filters are
+		// decoded only for displaying immutable results of released tool versions.
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal([]byte(result.Arguments), &fields); err != nil {
+			return preview, ErrFlowerToolPreviewNotFound
+		}
+		if result.ToolName == "threads.query" && fields["filter"] == nil && fields["sort"] == nil {
+			var browse threadBrowseInput
+			if err := json.Unmarshal([]byte(result.Arguments), &browse); err != nil {
+				return preview, ErrFlowerToolPreviewNotFound
+			}
+			if input.Object == "" {
+				input.Object = threadquery.Threads
+			}
+			input.Filter.Title.Contains = browse.Title
+			if browse.ThreadID != "" {
+				input.Filter.ThreadIDs = []identity.ThreadID{browse.ThreadID}
+			}
+			input.Sort = threadquery.Sort{Key: "time"}
+			if input.Object == threadquery.Threads {
+				input.Sort = threadquery.Sort{Key: "updated", Descending: true}
+			}
+			if input.Object == threadquery.Messages {
+				input.Sort.Key = "order"
+			}
 		}
 		for _, match := range []struct {
 			name  string
@@ -108,7 +134,7 @@ func threadToolPreview(result flruntime.ThreadToolResult) (FlowerToolPreview, er
 		if sortKey == "" {
 			sortKey = "key"
 			if result.ToolName == "threads.query" {
-				keys := threadQuerySortKeys(result.ToolName, input.Object)
+				keys := historicalThreadQuerySortKeys(input.Object)
 				if len(keys) == 0 {
 					return preview, ErrFlowerToolPreviewNotFound
 				}
@@ -309,4 +335,16 @@ func threadToolContentRows(toolName, field, content string) []fltools.Structured
 		rows[i].Format = fltools.StructuredActivityRowFormatText
 	}
 	return rows
+}
+
+// Retain ordering labels for displaying immutable released tool results.
+func historicalThreadQuerySortKeys(object threadquery.Object) []string {
+	switch object {
+	case threadquery.Threads:
+		return []string{"created"}
+	case threadquery.Messages, threadquery.ToolCalls:
+		return []string{"time"}
+	default:
+		return nil
+	}
 }

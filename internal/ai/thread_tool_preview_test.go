@@ -255,7 +255,7 @@ func TestThreadToolPreviewBoundsAndEffectiveQueryParameters(t *testing.T) {
 	for _, row := range preview.Inputs {
 		values[row.Title] = row.Content
 	}
-	if values["sort"] != "created ↓" {
+	if values["sort"] != "updated ↓" {
 		t.Fatalf("wrong default order: %v", values)
 	}
 }

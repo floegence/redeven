@@ -195,13 +195,13 @@ func TestThreadQueryToolsAuthorizeBeforeSearchAndPagination(t *testing.T) {
 	}
 	denied := *meta
 	denied.CanRead = false
-	for _, name := range []string{"threads.query", "threads.read", "threads.aggregate"} {
+	for _, name := range []string{"threads.query", "threads.read"} {
 		if _, err := svc.execThreadQueryTool(t.Context(), &denied, name, map[string]any{}); err == nil {
 			t.Fatalf("%s ignored revoked permission", name)
 		}
 	}
-	counted, err := svc.execThreadQueryTool(t.Context(), meta, "threads.aggregate", map[string]any{"object": "threads", "filter": map[string]any{"thread_ids": []string{hidden.ThreadID}}})
-	if err != nil || counted.(threadquery.AggregatePage).Total != 0 {
+	counted, err := svc.execThreadQueryTool(t.Context(), meta, "threads.query", map[string]any{"thread_id": hidden.ThreadID})
+	if err != nil || counted.(threadquery.Page).Total != 0 {
 		t.Fatalf("foreign filter count: %+v %v", counted, err)
 	}
 	if _, err := svc.execThreadQueryTool(t.Context(), meta, "threads.query", map[string]any{"object": "threads", "authority": "forged"}); err == nil {
