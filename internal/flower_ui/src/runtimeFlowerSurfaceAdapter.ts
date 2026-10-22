@@ -4,6 +4,7 @@ import type { FlowerModelCatalogDiscovery } from './contracts/flowerSurfaceContr
 import type {
   FlowerApprovalCommandResult,
   FlowerCanonicalReferenceOpenRequest,
+  FlowerForkThreadInput,
   FlowerLinkedContextPathOpenRequest,
   FlowerModelSourceRecovery,
   FlowerPermissionType,
@@ -130,7 +131,7 @@ export type FlowerRuntimeTransport = Readonly<{
   takeBackQueuedTurn?(threadID: string, queueID: string, fingerprint: string): Promise<FlowerRuntimeCurrentView>;
   editQueuedTurn?(threadID: string, queueID: string, input: FlowerQueuedTurnEditInput): Promise<unknown>;
   sendQueuedTurnNow?(threadID: string, queueID: string): Promise<unknown>;
-  forkThread(threadID: string, input: Readonly<{ client_request_id: string; title: string }>): Promise<LoadThreadResponse>;
+  forkThread(threadID: string, input: FlowerForkThreadInput): Promise<LoadThreadResponse>;
   deleteThread?(threadID: string): Promise<void>;
   submitApproval(input: RuntimeApprovalSubmitInput): Promise<FlowerApprovalCommandResult>;
 }>;
@@ -567,7 +568,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       const requestID = trim(input.client_request_id);
       if (!tid) throw new Error(missingThreadIDMessage(options));
       if (!requestID) throw new Error('Missing client request id.');
-      const threadResp = await options.transport.forkThread(tid, { client_request_id: requestID, title: input.title });
+      const threadResp = await options.transport.forkThread(tid, { ...input, client_request_id: requestID });
       if (trim(threadResp.client_request_id) !== requestID) {
         throw new Error('Flower fork returned a different client request identity.');
       }

@@ -123,12 +123,15 @@ it('forks the clicked answer and reuses its request key after a transport failur
   const button = runtime.querySelector<HTMLButtonElement>('[aria-label="Fork from this answer"]')!;
   await userEvent.click(button);
   expect(fork.mock.calls[0][1]).toMatchObject({ source_item_id: 'answer', title: 'Answer actions · Fork' });
+  const requestID = fork.mock.calls[0][1].client_request_id;
+  expect(requestID).toBeTruthy();
   expect(button.disabled).toBe(true);
   expect(runtime.querySelector<HTMLTextAreaElement>('textarea')?.disabled).not.toBe(true);
   pending.reject(new Error('Connection interrupted'));
   await waitFor(() => !button.disabled);
   await userEvent.click(button);
   expect(fork.mock.calls[1][1]).toEqual(fork.mock.calls[0][1]);
+  expect(fork.mock.calls[1][1].client_request_id).toBe(requestID);
   await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="answer-branch"]')));
 });
 

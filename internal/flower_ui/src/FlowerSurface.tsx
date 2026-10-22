@@ -140,6 +140,7 @@ import type {
   FlowerQueuedTurnAttachment,
   FlowerContextUsage,
   FlowerActivityStatus,
+  FlowerForkThreadInput,
   FlowerThreadView,
   FlowerLiveStreamEnvelope,
   FlowerRuntimeCurrentView,
@@ -1003,7 +1004,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [threadDetailLoadingIDs, setThreadDetailLoadingIDs] = createSignal<ReadonlySet<string>>(new Set());
   const [localReadVisibilityRevision, setLocalReadVisibilityRevision] = createSignal(0);
   const [threadActionBusy, setThreadActionBusy] = createSignal<{ threadID: string; action: FlowerThreadMenuAction } | null>(null);
-  const forkRequests = new Map<string, Readonly<{ client_request_id: string; title: string; source_item_id?: string }>>();
+  const forkRequests = new Map<string, FlowerForkThreadInput>();
   const [createdForkThreadID, setCreatedForkThreadID] = createSignal('');
   type ThreadPinCommand = Readonly<{ threadID: string } & (
     | { kind: 'pin'; pinned: boolean; wasPinned: boolean; pinnedAt: number }

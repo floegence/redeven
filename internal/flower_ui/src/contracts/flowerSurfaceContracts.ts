@@ -1640,6 +1640,12 @@ export type FlowerComputerUserInput = Readonly<{
   x?: number; y?: number; text?: string; key?: string; delta_x?: number; delta_y?: number;
 }>;
 
+export type FlowerForkThreadInput = Readonly<{
+  client_request_id: string;
+  title: string;
+  source_item_id?: string;
+}>;
+
 export type FlowerSurfaceAdapter = Readonly<{
   extensions?: import('../extensions/types').FlowerExtensionsAdapter;
   runtime: FlowerSurfaceRuntimeDescriptor;
@@ -1677,7 +1683,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   takeBackQueuedTurn?: (threadID: string, queueID: string, fingerprint: string) => Promise<FlowerRuntimeCurrentView>;
   editQueuedTurn?: (threadID: string, queueID: string, input: FlowerQueuedTurnEditInput) => Promise<void>;
   sendQueuedTurnNow?: (threadID: string, queueID: string) => Promise<void>;
-  forkThread?: (threadID: string, input: Readonly<{ client_request_id: string; title: string; source_item_id?: string }>) => Promise<FlowerThreadSnapshot>;
+  forkThread?: (threadID: string, input: FlowerForkThreadInput) => Promise<FlowerThreadSnapshot>;
   deleteThread?: (threadID: string) => Promise<void>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
   loadAttachmentCapability?: (modelID: string) => Promise<FlowerAttachmentCapability>;

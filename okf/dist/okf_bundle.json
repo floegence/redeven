@@ -4623,7 +4623,7 @@
             "path": "ai/flower-thread-fork-coordination.md",
             "type": "AI Persistence Contract",
             "title": "Flower thread fork coordination",
-            "description": "Redeven authorizes a source thread, calls Floret's typed fork, and adopts product settings for the returned canonical destination.",
+            "description": "Redeven authorizes a source thread, selects a full-thread or answer-anchored Floret fork, and adopts settings for the canonical destination.",
             "tags": [
               "ai",
               "floret",
@@ -9541,7 +9541,7 @@
       "concept_id": "ai.flower-thread-fork-coordination",
       "type": "AI Persistence Contract",
       "title": "Flower thread fork coordination",
-      "description": "Redeven authorizes a source thread, calls Floret's typed fork, and adopts product settings for the returned canonical destination.",
+      "description": "Redeven authorizes a source thread, selects a full-thread or answer-anchored Floret fork, and adopts settings for the canonical destination.",
       "tags": [
         "ai",
         "floret",
@@ -9550,9 +9550,9 @@
       ],
       "timestamp": "2026-10-08T00:00:00Z",
       "frontmatter": {
-        "description": "Redeven authorizes a source thread, calls Floret's typed fork, and adopts product settings for the returned canonical destination.",
+        "description": "Redeven authorizes a source thread, selects a full-thread or answer-anchored Floret fork, and adopts settings for the canonical destination.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-21",
         "tags": [
           "ai",
           "floret",
@@ -9563,15 +9563,15 @@
         "title": "Flower thread fork coordination",
         "type": "AI Persistence Contract"
       },
-      "body_length": 1812,
+      "body_length": 2130,
       "summary": "- Authority: Floret owns the forked journal and canonical destination identity; Redeven owns endpoint authorization and the destination's product settings.\n- Outcome: one stable client request forks the authorized source, adopts settings for the returned destination, and optionally sets an explicit title.\n- Invariants: source ownership is proven before Floret mutation, the returned destination is the only product adoption target, and the product stores no fork receipt, saga, or canonical lifecycle copy.\n- Failure boundary: invalid request identity, foreign source authority, Floret failure, or conflicting destination settings fails explicitly without a recovery coordinator or compensating canonical delete.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "`ForkThreadWithOptions` validates RWX access, the source ThreadID, endpoint identity, and a stable `client_request_id`. The shared endpoint/thread authority boundary must find a live product settings row for that exact endpoint before any Floret call.\n\nDetail recovery retains the created destination and retries loading only.",
-          "char_count": 326
+          "body": "`ForkThreadWithOptions` validates RWX access, the source ThreadID, endpoint identity, and a stable `client_request_id`. The shared endpoint/thread authority boundary must find a live product settings row for that exact endpoint before any Floret call.\n\nAn optional `source_item_id` selects a committed assistant answer on the active path. Floret retains that answer and its preceding history while excluding later items. Answer-level Fork supplies this anchor; thread-list Fork omits it and retains the current full path. Invalid or uncommitted anchors fail explicitly.\n\nDetail recovery retains the created destination and retries loading only.",
+          "char_count": 644
         },
         {
           "id": "boundaries",
@@ -32859,5 +32859,5 @@
       ]
     }
   ],
-  "source_sha256": "a531b9ef7d886a252e788295b0d65ecc3100c08024372f9387db8d559695120e"
+  "source_sha256": "24364068d4c73b47159b98b316cc52c3f47f028e7eac68f6ffd9bba90b382f5a"
 }

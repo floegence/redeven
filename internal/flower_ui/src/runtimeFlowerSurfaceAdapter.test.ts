@@ -5,6 +5,7 @@ import type {
   FlowerRouterDecision,
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
+  FlowerForkThreadInput,
   FlowerThreadReadStatus,
   FlowerLiveStreamConnectInput,
 } from './contracts/flowerSurfaceContracts';
@@ -239,7 +240,10 @@ describe('runtime Flower surface adapter read state', () => {
     expect(received[1]).toEqual({ thread_id: 'task', interaction_id: 'input-1', target_id: 'browser-1', state: 'unavailable', at_unix_ms: 11 });
   });
 
-  it('returns a named fork summary without coupling creation to detail loading', async () => {
+  it.each([
+    { name: 'whole-thread', input: { client_request_id: 'fork-request', title: 'Source · Fork' } },
+    { name: 'answer-anchored', input: { client_request_id: 'fork-request', title: 'Source · Fork', source_item_id: 'answer-1' } },
+  ])('returns a named $name fork summary without coupling creation to detail loading', async ({ input }) => {
     const forkThread = vi.fn(async () => ({
       client_request_id: 'fork-request',
       thread: {
@@ -250,9 +254,9 @@ describe('runtime Flower surface adapter read state', () => {
     }));
     const options = adapterOptions({ forkThread });
     const adapter = createRuntimeFlowerSurfaceAdapter(options);
-    const input = { client_request_id: 'fork-request', title: 'Source · Fork' };
-    await expect(adapter.forkThread!('source', input)).resolves.toMatchObject({ thread_id: 'fork-result', title: input.title });
-    expect(forkThread).toHaveBeenCalledWith('source', input);
+    const request: FlowerForkThreadInput = input;
+    await expect(adapter.forkThread!('source', request)).resolves.toMatchObject({ thread_id: 'fork-result', title: request.title });
+    expect(forkThread).toHaveBeenCalledWith('source', request);
     expect(options.transport.loadThread).not.toHaveBeenCalled();
   });
 

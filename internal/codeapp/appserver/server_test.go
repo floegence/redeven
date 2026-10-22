@@ -3135,12 +3135,13 @@ func TestServer_AIThreadForkDecodesBodyStrictly(t *testing.T) {
 		CanExecute:        true,
 	}
 	stateDir := t.TempDir()
-	aiSvc, err := ai.NewService(ai.Options{
+	aiOptions := ai.Options{
 		StateDir:     stateDir,
 		AgentHomeDir: t.TempDir(),
 		Shell:        "/bin/sh",
 		Config:       appserverTestAIConfig(),
-	})
+	}
+	aiSvc, err := ai.NewService(aiOptions)
 	if err != nil {
 		t.Fatalf("ai.NewService: %v", err)
 	}
@@ -3152,6 +3153,21 @@ func TestServer_AIThreadForkDecodesBodyStrictly(t *testing.T) {
 		t.Fatalf("CreateThread: %v", err)
 	}
 	seedFloretForkSourceThread(t, stateDir, thread.ThreadID)
+	if err := aiSvc.Close(); err != nil {
+		t.Fatalf("close AI service before canonical fork fixture: %v", err)
+	}
+	aiSvc, err = ai.NewService(aiOptions)
+	if err != nil {
+		t.Fatalf("reopen AI service after canonical fork fixture: %v", err)
+	}
+	sourceDetail, err := aiSvc.GetFlowerThreadDetail(context.Background(), &meta, thread.ThreadID)
+	if err != nil {
+		t.Fatalf("GetFlowerThreadDetail(source): %v", err)
+	}
+	if len(sourceDetail.Current.Turns) != 3 || !sourceDetail.Current.Turns[1].FinalBoundaryComplete || len(sourceDetail.Current.Turns[1].FinalItemIDs) != 1 {
+		t.Fatalf("missing committed middle answer boundary: %+v", sourceDetail.Current.Turns)
+	}
+	sourceItemID := sourceDetail.Current.Turns[1].FinalItemIDs[0]
 	srv, err := New(Options{
 		Backend:            &stubBackend{},
 		DistFS:             dist,
@@ -3180,7 +3196,11 @@ func TestServer_AIThreadForkDecodesBodyStrictly(t *testing.T) {
 	}
 
 	const clientRequestID = "fork_server_strict_body"
-	rr := performServerRequest(srv, http.MethodPost, forkPath, origin, `{"client_request_id":"`+clientRequestID+`","title":"Server fork"}`)
+	forkBody, err := json.Marshal(ai.ForkThreadRequest{ClientRequestID: clientRequestID, Title: "Server fork", SourceItemID: sourceItemID})
+	if err != nil {
+		t.Fatalf("marshal anchored fork body: %v", err)
+	}
+	rr := performServerRequest(srv, http.MethodPost, forkPath, origin, string(forkBody))
 	if rr.Code != http.StatusOK {
 		t.Fatalf("fork status=%d, want=%d body=%s", rr.Code, http.StatusOK, rr.Body.String())
 	}
@@ -3200,11 +3220,27 @@ func TestServer_AIThreadForkDecodesBodyStrictly(t *testing.T) {
 	if !resp.OK || resp.Data.ClientRequestID != clientRequestID || strings.TrimSpace(resp.Data.Thread.ThreadID) == "" || resp.Data.Thread.ThreadID == thread.ThreadID || resp.Data.Thread.Title != "Server fork" {
 		t.Fatalf("fork response=%+v, want titled fork", resp)
 	}
+	forkDetail, err := aiSvc.GetFlowerThreadDetail(context.Background(), &meta, resp.Data.Thread.ThreadID)
+	if err != nil {
+		t.Fatalf("GetFlowerThreadDetail(fork): %v", err)
+	}
+	if len(forkDetail.Current.Turns) != 2 {
+		t.Fatalf("anchored fork retained %d turns, want earlier history and the selected answer's turn", len(forkDetail.Current.Turns))
+	}
+	var forkText strings.Builder
+	for _, item := range forkDetail.Current.Items {
+		forkText.WriteString(item.Text)
+	}
+	if !strings.Contains(forkText.String(), "fork earlier projection") || !strings.Contains(forkText.String(), "fork anchored projection") || strings.Contains(forkText.String(), "later fork projection") {
+		t.Fatalf("anchored fork has wrong history: %q", forkText.String())
+	}
 }
 
 func seedFloretForkSourceThread(t *testing.T, stateDir string, threadID string) {
 	t.Helper()
-	seedFloretThreadTurn(t, stateDir, threadID, "turn_appserver_fork_source", "run_appserver_fork_source", "Fork me", "fork source projection")
+	seedFloretThreadTurn(t, stateDir, threadID, "turn_appserver_fork_earlier", "run_appserver_fork_earlier", "Earlier question", "fork earlier projection")
+	seedFloretThreadTurn(t, stateDir, threadID, "turn_appserver_fork_source", "run_appserver_fork_source", "Fork me", "fork anchored projection")
+	seedFloretThreadTurn(t, stateDir, threadID, "turn_appserver_fork_later", "run_appserver_fork_later", "Later question", "later fork projection")
 }
 
 func seedFloretThreadTurn(t *testing.T, stateDir string, threadID string, turnID string, runID string, input string, output string) {
