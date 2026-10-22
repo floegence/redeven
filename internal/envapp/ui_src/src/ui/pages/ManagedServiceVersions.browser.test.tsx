@@ -50,6 +50,10 @@ describe('Managed service version drawer', () => {
   let dispose: (() => void) | undefined;
   let service: typeof base;
   let candidates: ReturnType<typeof candidate>[];
+  let refreshedCandidates: ReturnType<typeof candidate>[] | null;
+  let staleOpenCatalog: boolean;
+  let refreshResponseGate: Promise<void> | null;
+  let refreshStarted: boolean;
   let notices: typeof notice[];
   let accepted: Record<string, number>;
   let failure: string;
@@ -68,6 +72,10 @@ describe('Managed service version drawer', () => {
     localStorage.setItem('redeven_ui_language_preference', 'en-US');
     service = structuredClone(base);
     candidates = [candidate('1.2.0', 'newer', { is_recommended: true, recommendation_status: 'available', is_latest_stable: true }), candidate('1.1.0'), candidate('1.0.0', 'same', { is_current: true }), ...Array.from({ length: 18 }, (_, index) => candidate(`0.${18 - index}.0`, 'older'))];
+    refreshedCandidates = null;
+    staleOpenCatalog = false;
+    refreshResponseGate = null;
+    refreshStarted = false;
     notices = [];
     accepted = {};
     failure = '';
@@ -78,7 +86,18 @@ describe('Managed service version drawer', () => {
       if (url.endsWith('/catalog')) return { templates: [] };
       if (url.endsWith('/managed-web-services')) return { services: [service] };
       if (url.endsWith('/forwards')) return { forwards: [] };
-      if (url.endsWith('/release-candidates')) return { schema_version: 2, current_release: currentRelease, recommended_release: currentRelease, candidates: [...candidates], catalog_status: 'complete', has_more: false, loaded_count: candidates.length, check_status: 'fresh', checked_at_unix_ms: Date.now() };
+      if (url.endsWith('/release-candidates')) {
+        const request = JSON.parse(String(options?.body ?? '{}'));
+        if (request.action === 'refresh' && refreshResponseGate) {
+          refreshStarted = true;
+          await refreshResponseGate;
+        }
+        if (request.action === 'refresh' && refreshedCandidates) {
+          candidates = refreshedCandidates;
+          refreshedCandidates = null;
+        }
+        return { schema_version: 2, current_release: currentRelease, recommended_release: currentRelease, candidates: [...candidates], catalog_status: 'complete', has_more: false, loaded_count: candidates.length, check_status: request.action === 'open' && staleOpenCatalog ? 'stale' : 'fresh', checked_at_unix_ms: Date.now() };
+      }
       if (url.endsWith('/update-plans')) {
         if (pendingPlan) return new Promise((_resolve, reject) => options?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true }));
         const selected = candidates.find((item) => item.candidate_id === JSON.parse(String(options?.body)).target_candidate_id)!;
@@ -225,6 +244,37 @@ describe('Managed service version drawer', () => {
     expect(document.querySelector<HTMLInputElement>('[data-testid="managed-update-plan"] input')?.checked).toBe(true);
     await userEvent.click(submit());
     expect(operations[0].accepted_notice_revisions).toEqual({ 'root-access': 2 });
+  });
+
+  it('keeps the selected release when automatic refresh finishes after selection', async () => {
+    staleOpenCatalog = true;
+    let releaseRefresh!: () => void;
+    refreshResponseGate = new Promise<void>((resolve) => { releaseRefresh = resolve; });
+    await mount();
+    await expect.poll(() => refreshStarted).toBe(true);
+    await select('1.1.0');
+    refreshedCandidates = candidates.map((item) => ({ ...item, candidate_id: `refreshed-${item.candidate_id}` }));
+    releaseRefresh();
+    await expect.poll(() => document.querySelector('[data-release-id="refreshed-1.1.0"]')?.getAttribute('aria-checked')).toBe('true');
+    await expect.poll(() => document.querySelector('.managed-release-plan-heading')?.textContent).toContain('1.1.0');
+    expect(submit().textContent).toContain('Update to 1.1.0');
+    expect(submit().disabled).toBe(false);
+    await userEvent.click(submit());
+    expect(api.fetch.mock.calls.filter(([url]) => url.endsWith('/update-plans')).at(-1)?.[1]?.body).toBe(JSON.stringify({ target_candidate_id: 'refreshed-1.1.0' }));
+    expect(operations).toMatchObject([{ action: 'update', update_plan_id: 'plan-refreshed-1.1.0' }]);
+  });
+
+  it('requires a new selection when refresh changes the selected release identity', async () => {
+    await mount(); await select('1.1.0');
+    refreshedCandidates = candidates.map((item) => item.candidate_id === '1.1.0'
+      ? { ...item, candidate_id: 'refreshed-1.1.0', digest: `sha256:${'c'.repeat(64)}` }
+      : { ...item, candidate_id: `refreshed-${item.candidate_id}` });
+    await userEvent.click(document.querySelector<HTMLButtonElement>('[data-testid="managed-release-footer"] button[aria-label="Refresh"]')!);
+    await expect.poll(() => document.querySelector('[data-release-id="refreshed-1.1.0"]')).toBeTruthy();
+    expect(document.querySelector('[data-release-id="refreshed-1.1.0"]')?.getAttribute('aria-checked')).toBe('false');
+    expect(document.querySelector('[data-testid="managed-update-plan"]')).toBeNull();
+    expect(submit().disabled).toBe(true);
+    expect(operations).toHaveLength(0);
   });
 
   it('keeps the selected plan beside a stable candidate list', async () => {
