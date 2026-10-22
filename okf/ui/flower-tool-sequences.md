@@ -54,9 +54,22 @@ navigation, then reset on refresh. Focus, selection, gestures, open details or
 thinking, and reading away from the tail protect expansion.
 
 Collapsed groups stay mounted and inert so nested detail state survives. Whole-turn
-closure releases its body after motion. The timeline remains the sole scroll owner;
-manual collapse restores focus to the group button, while automatic collapse above
-the reader preserves position and user scrolling takes precedence.
+closure releases its body after motion. Expanded sequences share one internal
+scroll viewport below their reachable summary button. Its height is bounded by
+24rem, half the window height, and 65% of the actual transcript height, whichever
+is smallest. Expanded thinking has its own scroll viewport bounded by 20rem,
+45% of the window height, and the same transcript limit. Short content keeps its
+natural height; no canonical content is truncated. Both viewports expose a thin
+scrollbar, keyboard focus, a localized accessible name, and contained overscroll.
+
+Canonical row components retain their rendering owners when the sequence layout
+places their existing DOM under the first node's viewport. Membership changes
+preserve details, focus and selection; disposal restores borrowed rows to their
+original slots. The transcript controller continues to own outer scroll intent.
+Internal scrolling does not scroll or resume the outer transcript. Active content
+follows its own tail only until the reader scrolls upward, and resumes when they
+return to the bottom. Manual collapse restores focus to the group button, while
+automatic collapse above the reader preserves position.
 
 Controls expose viewport IDs, localized counts and labels. Hidden nodes create no
 gaps. Focus, reduced motion, forced colors, narrow layouts and pointer targets
@@ -72,5 +85,6 @@ and [whole-turn disclosure](flower-turn-process-disclosure.md).
 # Evidence
 
 - `redeven:internal/flower_ui/src/flowerToolSequences.test.ts` - Classification, counts, boundaries, collapse and stable identity.
+- `redeven:internal/flower_ui/src/flowerToolSequenceLayout.ts` - Stable row placement inside a shared bounded viewport.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.toolSequences.browser.test.tsx` - Running and completed row layout, updates, interaction state, details, navigation, theme and reading anchors.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.turnProcess.browser.test.tsx` - Whole-turn disclosure and interleaved user-response checkpoints.

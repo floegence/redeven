@@ -317,7 +317,9 @@ if (process.argv.includes('--build')) {
         const viewportID = await wrapper.locator('.flower-turn-row-viewport').getAttribute('id');
         const disclosure = page.locator(bodySelector + '.flower-turn-summary-button[aria-controls~=' + JSON.stringify(viewportID) + ']').first();
         if (await disclosure.count() && await disclosure.getAttribute('aria-expanded') === 'false') await disclosure.click();
-        const row = page.locator(bodySelector + '[data-flower-message-id=' + JSON.stringify(item.id) + ']').first();
+        const row = page.locator(bodySelector + (item.kind === 'thinking'
+          ? '[data-flower-thinking-id=' + JSON.stringify(`${item.id}:block:0`) + ']'
+          : '[data-flower-message-id=' + JSON.stringify(item.id) + ']')).first();
         await row.waitFor({ state: 'attached', timeout: 15000 });
         const sequenceIDs = await row.evaluate(node => [...node.querySelectorAll('.flower-tool-sequence-viewport'), node.closest('.flower-tool-sequence-viewport')]
           .filter(Boolean).map(viewport => viewport.id));

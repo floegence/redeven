@@ -1,8 +1,9 @@
-import { Show, createContext, createMemo, onCleanup, untrack, useContext, type Accessor, type JSX } from 'solid-js';
+import { Show, createContext, createEffect, createMemo, onCleanup, onMount, untrack, useContext, type Accessor, type JSX } from 'solid-js';
 import { ChevronRight } from '@floegence/floe-webapp-core/icons';
 import type { FlowerTurnProcessCopy } from './copy';
 import type { FlowerToolSequence, FlowerToolSequenceProjection } from './flowerToolSequences';
 import { createFlowerActivityDisclosureMotion } from './activityDisclosure';
+import type { FlowerToolSequenceElement } from './flowerToolSequenceLayout';
 
 export const FlowerToolSequenceContext = createContext<Readonly<{
   projection: Accessor<FlowerToolSequenceProjection>;
@@ -14,6 +15,7 @@ export const FlowerToolSequenceContext = createContext<Readonly<{
   onLayoutFrame: (key: string, moving: boolean) => void;
   onMotionEnd: (key: string) => void;
   reducedMotion: Accessor<boolean>;
+  register: (key: string, element: FlowerToolSequenceElement) => () => void;
 }>>();
 
 export function useFlowerToolSequenceMember(key: Accessor<string>) {
@@ -29,16 +31,52 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
   const expanded = createMemo(() => !member() || !context || context.expanded(member()!.group));
   let trigger: HTMLButtonElement | undefined;
   let content: HTMLDivElement | undefined;
+  let slot!: HTMLDivElement;
+  let node!: HTMLDivElement;
+  let body!: HTMLDivElement;
+  let following = true;
+  let previousHeight = 0;
+  let scrollTop = 0;
+  let restoringScroll = false;
   const motionKey = `tools:${props.nodeKey}`;
   const motion = createFlowerActivityDisclosureMotion(expanded, {
     initialOpen: untrack(expanded), reducedMotion: context?.reducedMotion,
     onLayoutFrame: () => context?.onLayoutFrame(motionKey, motion.state() === 'opening' || motion.state() === 'closing'),
     onMotionEnd: () => context?.onMotionEnd(motionKey),
     onBeforeClose: () => {
+      if (first()) { scrollTop = body.scrollTop; restoringScroll = true; }
       if (content?.contains(document.activeElement)) trigger?.focus({ preventScroll: true });
     },
   });
   onCleanup(() => context?.onMotionEnd(motionKey));
+  onMount(() => {
+    const unregister = context?.register(props.nodeKey, { node, slot, body });
+    onCleanup(() => unregister?.());
+  });
+  createEffect(() => {
+    if (!first() || motion.state() !== 'open' || !restoringScroll) return;
+    const frame = requestAnimationFrame(() => {
+      body.scrollTop = scrollTop;
+      restoringScroll = false;
+    });
+    onCleanup(() => cancelAnimationFrame(frame));
+  });
+  createEffect(() => {
+    if (!first() || !expanded()) return;
+    const observer = new ResizeObserver(() => {
+      const height = body.scrollHeight;
+      if (!restoringScroll && following && height > previousHeight && member()?.group.runningCount) body.scrollTop = height;
+      previousHeight = height;
+    });
+    const observe = () => {
+      observer.disconnect();
+      for (const child of body.children) observer.observe(child);
+    };
+    observe();
+    const children = new MutationObserver(observe);
+    children.observe(body, { childList: true });
+    onCleanup(() => { observer.disconnect(); children.disconnect(); });
+  });
   const label = () => {
     const group = member()!.group, copy = context!.copy();
     const summary = () => {
@@ -80,9 +118,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
       </button>
     );
   };
-  // Keep the existing row mounted during classification. No row is reparented
-  // when a trailing thought becomes bounded by the next invocation.
-  return <div class="flower-tool-sequence-node" data-flower-tool-row-identity={props.nodeKey}
+  return <div class="flower-tool-sequence-slot" ref={slot}><div class="flower-tool-sequence-node" ref={node} data-flower-tool-row-identity={props.nodeKey}
     classList={{ 'flower-activity-inline': Boolean(member()) }}
     data-flower-sequence={member()?.group.key}
     data-flower-sequence-start={first() === undefined ? undefined : String(first())}
@@ -93,9 +129,21 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
     <div id={context?.contentID(props.nodeKey)} class="flower-tool-sequence-viewport" ref={motion.bindViewport}
       data-state={motion.state()} aria-hidden={!expanded() ? 'true' : undefined} inert={!expanded()}
       style={{ height: motion.height(), display: motion.state() === 'closed' ? 'none' : undefined }}>
-      <div class="flower-tool-sequence-content" ref={node => { content = node; motion.bindContent(node); }}>
-        {props.children}
+      <div class="flower-tool-sequence-body" classList={{ 'flower-tool-sequence-scroll': Boolean(first()) }}
+        ref={element => { body = element; motion.bindContent(element); }}
+        tabIndex={first() && expanded() ? 0 : undefined} role={first() ? 'region' : undefined}
+        aria-label={first() ? label() : undefined}
+        onScroll={event => {
+          if (motion.state() !== 'open' || restoringScroll) return;
+          const element = event.currentTarget;
+          following = element.scrollHeight - element.clientHeight - element.scrollTop <= 24;
+          scrollTop = element.scrollTop;
+          element.toggleAttribute('data-flower-reading-paused', !following);
+        }}>
+        <div class="flower-tool-sequence-content" ref={content}>
+          {props.children}
+        </div>
       </div>
     </div>
-  </div>;
+  </div></div>;
 }

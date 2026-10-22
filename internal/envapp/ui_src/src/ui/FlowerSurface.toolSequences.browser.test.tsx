@@ -86,6 +86,120 @@ function expectConnectorBetween(root: HTMLElement, previousID: string, nextID: s
 afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('consecutive tools in the shared Flower surface', () => {
+  it('bounds a long expanded sequence and scrolls its complete contents below the reachable header', async () => {
+    const { root } = await mount(Array.from({ length: 98 }, (_, index) => tool(`bounded-${index}`)));
+    const header = toggle(root, 'bounded-0');
+    const viewport = group(root, 'bounded-0').querySelector<HTMLElement>('.flower-tool-sequence-scroll')!;
+    expect(viewport).not.toBeNull();
+    expect(viewport.clientHeight).toBeGreaterThan(100);
+    expect(viewport.clientHeight).toBeLessThanOrEqual(384);
+    expect(viewport.scrollHeight).toBeGreaterThan(viewport.clientHeight * 2);
+    expect(viewport.contains(row(root, 'bounded-97'))).toBe(true);
+    expect(viewport.contains(header)).toBe(false);
+    const top = header.getBoundingClientRect().top;
+    const transcript = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
+    const transcriptTop = transcript.scrollTop;
+    const wheel = commands as unknown as { wheelScrollRegion: (request: { regionSelector: string; deltaY: number }) => Promise<{ before: number; after: number }> };
+    const result = await wheel.wheelScrollRegion({ regionSelector: '.flower-tool-sequence-scroll', deltaY: 300 });
+    expect(result.after).toBeGreaterThan(result.before);
+    expect(transcript.scrollTop).toBe(transcriptTop);
+    expect(header.getBoundingClientRect().top).toBe(top);
+    viewport.scrollTop = viewport.scrollHeight;
+    viewport.dispatchEvent(new Event('scroll'));
+    const savedTop = viewport.scrollTop;
+    expect(row(root, 'bounded-97').getBoundingClientRect().bottom).toBeLessThanOrEqual(viewport.getBoundingClientRect().bottom + 1);
+    header.click();
+    await waitFor(() => collapsed(root, 'bounded-97'));
+    header.click();
+    await waitFor(() => group(root, 'bounded-97').dataset.state === 'open');
+    await expect.poll(() => viewport.scrollTop).toBe(savedTop);
+    expect(viewport.clientHeight).toBeLessThanOrEqual(384);
+    await page.screenshot({ element: root, path: '__screenshots__/flower-bounded-tools.png' });
+    await page.viewport(390, 600);
+    root.style.height = '520px';
+    await expect.poll(() => viewport.clientHeight).toBeLessThanOrEqual(transcript.clientHeight * 0.65 + 1);
+    expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
+    await page.screenshot({ element: root, path: '__screenshots__/flower-bounded-tools-narrow.png' });
+  });
+
+  it('bounds long thinking independently and preserves the reading position while content streams', async () => {
+    const longThought = Array.from({ length: 100 }, (_, index) => `Reasoning line ${index}.`).join('\n');
+    const initial = [tool('before-thinking'), { ...item('bounded-thinking', 'thinking', longThought), live: true }];
+    const { root, push } = await mount(initial);
+    const thinking = root.querySelector<HTMLElement>('.flower-thinking-disclosure')!;
+    thinking.querySelector<HTMLButtonElement>('.flower-thinking-toggle')!.click();
+    const content = thinking.querySelector<HTMLElement>('.flower-thinking-content')!;
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    expect(content.clientHeight).toBeGreaterThan(100);
+    expect(content.clientHeight).toBeLessThanOrEqual(320);
+    expect(content.scrollHeight).toBeGreaterThan(content.clientHeight * 2);
+    content.scrollTop = 40;
+    content.dispatchEvent(new Event('scroll'));
+    push([initial[0], { ...initial[1], text: `${longThought}\nNew reasoning.` }]);
+    await waitFor(() => content.textContent?.includes('New reasoning.') === true);
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    expect(content.scrollTop).toBe(40);
+    content.focus();
+    expect(document.activeElement).toBe(content);
+    await page.screenshot({ element: root, path: '__screenshots__/flower-bounded-thinking.png' });
+    content.scrollTop = content.scrollHeight;
+    content.dispatchEvent(new Event('scroll'));
+    push([initial[0], { ...initial[1], text: `${longThought}\nLatest reasoning.\nMore reasoning.` }]);
+    await waitFor(() => content.textContent?.includes('Latest reasoning.') === true);
+    await expect.poll(() => content.scrollHeight - content.clientHeight - content.scrollTop).toBeLessThanOrEqual(1);
+  });
+
+  it('follows new active tool rows only while the list stays at its tail', async () => {
+    const initial = Array.from({ length: 30 }, (_, index) => tool(`live-${index}`));
+    const { root, push } = await mount([...initial, tool('live-30', 'running')]);
+    const viewport = root.querySelector<HTMLElement>('.flower-tool-sequence-scroll')!;
+    await expect.poll(() => viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop).toBeLessThanOrEqual(1);
+    viewport.scrollTop = 40;
+    viewport.dispatchEvent(new Event('scroll'));
+    const header = toggle(root, 'live-0');
+    push([...initial, tool('live-30'), tool('live-31', 'running')]);
+    await waitFor(() => Boolean(row(root, 'live-31')));
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    expect(viewport.scrollTop).toBe(40);
+    expect(toggle(root, 'live-0')).toBe(header);
+    viewport.scrollTop = viewport.scrollHeight;
+    viewport.dispatchEvent(new Event('scroll'));
+    push([...initial, tool('live-30'), tool('live-31'), tool('live-32', 'running')]);
+    await waitFor(() => Boolean(row(root, 'live-32')));
+    await expect.poll(() => viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop).toBeLessThanOrEqual(1);
+  });
+
+  it.each([false, true])('preserves selected thinking and focused controls when grouping grows (standard DOM moves: %s)', async standardMoves => {
+    const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'moveBefore');
+    if (standardMoves) Object.defineProperty(Element.prototype, 'moveBefore', { configurable: true, value: undefined });
+    try {
+      const initial = [tool('stable-first')];
+      const { root, push } = await mount(initial);
+      const firstRow = row(root, 'stable-first');
+      firstRow.querySelector<HTMLButtonElement>('.flower-activity-inline-button')!.focus();
+      const focused = document.activeElement;
+      push([...initial, item('selected-thought', 'thinking', 'Keep this selected thought.')]);
+      await waitFor(() => Boolean(root.querySelector('[data-flower-thinking-id="selected-thought:block:0"]')));
+      expect(row(root, 'stable-first')).toBe(firstRow);
+      expect(document.activeElement).toBe(focused);
+      const thinking = root.querySelector<HTMLElement>('[data-flower-thinking-id="selected-thought:block:0"]')!;
+      thinking.querySelector<HTMLButtonElement>('.flower-thinking-toggle')!.click();
+      const text = thinking.querySelector('.flower-thinking-content-body')!.firstChild!;
+      const selection = document.getSelection()!;
+      const range = document.createRange();
+      range.selectNodeContents(text);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      push([...initial, item('selected-thought', 'thinking', 'Keep this selected thought.'), tool('stable-third')]);
+      await waitFor(() => Boolean(row(root, 'stable-third')));
+      expect(selection.toString()).toBe('Keep this selected thought.');
+      expect(root.querySelector('[data-flower-thinking-id="selected-thought:block:0"]')).toBe(thinking);
+    } finally {
+      if (descriptor) Object.defineProperty(Element.prototype, 'moveBefore', descriptor);
+      else Reflect.deleteProperty(Element.prototype, 'moveBefore');
+    }
+  });
+
   it('folds web search, goal activity and thinking after the final tool into one styled sequence', async () => {
     const { root } = await mount([
       tool('search', 'success', 'web_search', 'web_search'),
@@ -128,7 +242,8 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(nodes.map(node => node.dataset.flowerSequenceEnd)).toEqual(['false', 'false', 'false', 'false', 'true']);
     for (let index = 0; index < nodes.length - 1; index += 1) expectConnectorBetweenNodes(nodes[index]!, nodes[index + 1]!);
     for (let index = 1; index < nodes.length; index += 1) {
-      expect(Math.abs(nodes[index]!.getBoundingClientRect().top - nodes[index - 1]!.getBoundingClientRect().bottom)).toBeLessThan(1);
+      const previous = nodes[index - 1]!.querySelector('.flower-tool-sequence-content')!;
+      expect(Math.abs(nodes[index]!.getBoundingClientRect().top - previous.getBoundingClientRect().bottom)).toBeLessThan(1);
     }
     const sequenceToggle = nodes[0]!.querySelector<HTMLButtonElement>('.flower-tool-sequence-toggle')!;
     expect(sequenceToggle.textContent).toContain('2 tool calls');
@@ -171,7 +286,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     } } };
     const activeThinking = { ...item('active-thinking', 'thinking'), live: true };
     const { root } = await mount([tool('before'), activeThinking, waiting, tool('after')]);
-    const thinking = root.querySelector<HTMLElement>('[data-flower-message-id="active-thinking"] .flower-thinking-disclosure')!;
+    const thinking = root.querySelector<HTMLElement>('[data-flower-thinking-id="active-thinking:block:0"]')!;
     expect(thinking.dataset.flowerThinkingView).toBe('collapsed');
     expect(thinking.querySelector('.flower-thinking-toggle')?.textContent).toContain('Thinking...');
     expect(thinking.querySelector('[data-floe-progress-shimmer="text"]')?.textContent).toContain('Thinking...');

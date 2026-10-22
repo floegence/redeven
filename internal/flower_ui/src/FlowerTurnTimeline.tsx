@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, onCleanup, untrack, type Accessor, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, onCleanup, onMount, untrack, type Accessor, type JSX } from 'solid-js';
 import { ChevronRight } from '@floegence/floe-webapp-core/icons';
 import type { FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
 import type { FlowerTurnProcessCopy } from './copy';
@@ -8,6 +8,7 @@ import type { FlowerTurnDisclosureStore } from './flowerTurnDisclosure';
 import { FlowerToolSequenceContext, FlowerToolSequenceNode } from './FlowerToolSequenceNode';
 import { projectFlowerToolSequences, type FlowerToolSequence, type FlowerToolSequenceProjection } from './flowerToolSequences';
 import { createFlowerActivityDisclosureMotion } from './activityDisclosure';
+import { createFlowerToolSequenceLayout } from './flowerToolSequenceLayout';
 import { flowerDurationParts, projectFlowerTurnProcess, type FlowerTurnProcessProjection } from './flowerTurnPresentation';
 
 export function FlowerTurnTimeline(props: Readonly<{
@@ -27,6 +28,16 @@ export function FlowerTurnTimeline(props: Readonly<{
   const failureTurnID = createMemo(() => props.failureNoticeVisible
     ? props.thread?.turns?.at(-1)?.turn_id : undefined);
   const nodes = new Map<string, HTMLElement>();
+  let timeline!: HTMLDivElement;
+  onMount(() => {
+    const viewport = props.scroll.viewport();
+    if (!viewport) return;
+    const measure = () => timeline.style.setProperty('--flower-detail-available-height', `${viewport.clientHeight * 0.65}px`);
+    const observer = new ResizeObserver(measure);
+    observer.observe(viewport);
+    measure();
+    onCleanup(() => observer.disconnect());
+  });
   const motions = new Set<string>();
   let layoutAnchor: HTMLElement | undefined;
   let gestureTarget: Element | undefined;
@@ -71,6 +82,7 @@ export function FlowerTurnTimeline(props: Readonly<{
       if (row.contains(document.activeElement) || gestureTarget && row.contains(gestureTarget)) return true;
       if (menuOwner === turnID && document.querySelector('[role="menu"]')) return true;
       if (row.querySelector('details[open]')) return true;
+      if (row.querySelector('[data-flower-reading-paused]')) return true;
       for (const button of row.querySelectorAll('[aria-expanded="true"]')) {
         if (button.closest('.flower-thinking-disclosure') && (!protectThinking || button.getAttribute('data-flower-manual-open') !== 'true')) continue;
         if (button.matches('.flower-tool-sequence-toggle') && button.getAttribute('data-flower-manual-open') !== 'true') continue;
@@ -132,9 +144,10 @@ export function FlowerTurnTimeline(props: Readonly<{
       for (const group of next.groups.values()) {
         const addedKeys = new Set(group.nodeKeys.filter(key => !previous.members.has(key)));
         if (!addedKeys.size) continue;
-        const inspectedNodes = group.entryKeys.flatMap(key =>
-          [...(nodes.get(key)?.querySelectorAll<HTMLElement>('[data-flower-tool-row-identity]') ?? [])]
-            .filter(node => addedKeys.has(node.dataset.flowerToolRowIdentity!)));
+        const inspectedNodes = [...addedKeys].flatMap(key => {
+          const element = sequenceLayout.element(key);
+          return element ? [element] : [];
+        });
         const turnID = processes().rows.get(group.entryKeys[0])?.turnID ?? '';
         if (inspectionProtected(turnID, group.entryKeys, true, inspectedNodes)) {
           props.choices.observe(sequenceIdentity(group.key), 'manual', () => false);
@@ -145,6 +158,7 @@ export function FlowerTurnTimeline(props: Readonly<{
     previousSequences = { threadID: props.thread?.thread_id, value: next };
     return next;
   });
+  const sequenceLayout = createFlowerToolSequenceLayout(sequences);
   createEffect(() => {
     const groups = processes();
     const threadID = props.thread?.thread_id;
@@ -189,6 +203,7 @@ export function FlowerTurnTimeline(props: Readonly<{
     props.scroll.measureAfterLayout();
   };
   const sequenceContext = {
+    ...sequenceLayout,
     projection: sequences,
     expanded: (group: FlowerToolSequence) => props.choices.expanded(sequenceIdentity(group.key), group.disclosure),
     manuallyExpanded: (group: FlowerToolSequence) => props.choices.manuallyExpanded(sequenceIdentity(group.key)),
@@ -308,7 +323,7 @@ export function FlowerTurnTimeline(props: Readonly<{
       </div>
     );
   };
-  return <FlowerToolSequenceContext.Provider value={sequenceContext}><div class="flower-turn-timeline"><For each={keys()}>{(token) => {
+  return <FlowerToolSequenceContext.Provider value={sequenceContext}><div class="flower-turn-timeline" ref={timeline}><For each={keys()}>{(token) => {
     const key = (JSON.parse(token) as [string, string])[1];
     const entry = createMemo(() => entries().get(key)!);
     return row(key, entry);
