@@ -196,6 +196,63 @@ describe('Flower viewport input ownership', () => {
     expect(viewport.scrollTop).toBe(400);
   });
 
+  it.each(['wheel', 'touch', 'keyboard'])('pauses transcript following when %s leaves the top of a tool sequence', source => {
+    const { controller, viewport, grow } = harness();
+    const sequence = document.createElement('div');
+    sequence.className = 'flower-tool-sequence-scroll';
+    sequence.style.overflowY = 'auto';
+    Object.defineProperties(sequence, { scrollHeight: { value: 500 }, clientHeight: { value: 100 } });
+    const row = document.createElement('button');
+    sequence.append(row);
+    viewport.append(sequence);
+    controller.startFollowing();
+    if (source === 'wheel') row.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -100 }));
+    if (source === 'touch') { pointer(row, 'pointerdown', 'touch'); touchMove(row, 300); }
+    if (source === 'keyboard') row.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowUp' }));
+    expect(controller.followingLatest()).toBe(false);
+    viewport.scrollTop = 200;
+    viewport.dispatchEvent(new Event('scroll'));
+    pointer(row, 'pointerup');
+    grow();
+    expect(viewport.scrollTop).toBe(200);
+  });
+
+  it('resumes transcript following when scrolling past the last tool reaches the conversation tail', () => {
+    const { controller, viewport, grow } = harness();
+    const sequence = document.createElement('div');
+    sequence.className = 'flower-tool-sequence-scroll';
+    sequence.style.overflowY = 'auto';
+    Object.defineProperties(sequence, { scrollHeight: { value: 500 }, clientHeight: { value: 100 } });
+    sequence.scrollTop = 400;
+    viewport.append(sequence);
+    sequence.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 100 }));
+    viewport.scrollTop = 400;
+    viewport.dispatchEvent(new Event('scroll'));
+    expect(controller.followingLatest()).toBe(true);
+    grow();
+    expect(viewport.scrollTop).toBe(520);
+  });
+
+  it('keeps interior tool scrolling and embedded terminal boundaries out of transcript following', () => {
+    const { controller, viewport } = harness();
+    const sequence = document.createElement('div');
+    sequence.className = 'flower-tool-sequence-scroll';
+    sequence.style.overflowY = 'auto';
+    Object.defineProperties(sequence, { scrollHeight: { value: 500 }, clientHeight: { value: 100 } });
+    sequence.scrollTop = 200;
+    viewport.append(sequence);
+    controller.startFollowing();
+    sequence.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -100 }));
+    expect(controller.followingLatest()).toBe(true);
+    const terminal = document.createElement('div');
+    terminal.style.overflowY = 'auto';
+    Object.defineProperties(terminal, { scrollHeight: { value: 300 }, clientHeight: { value: 100 } });
+    sequence.append(terminal);
+    sequence.scrollTop = 0;
+    terminal.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -100 }));
+    expect(controller.followingLatest()).toBe(true);
+  });
+
   it('holds hidden float visibility through pointerup until native activation finishes', () => {
     const { controller, viewport, title, frame, grow } = harness();
     controller.scrollToBottom();

@@ -153,15 +153,19 @@ export function createFlowerScrollTailController(
   };
   const measureAfterLayout = scheduleLayout;
 
-  const ownsScrollInput = (target: EventTarget | null): boolean => {
+  const ownsScrollInput = (target: EventTarget | null, direction: number): boolean => {
     if (!node) return false;
     if (target === node) return true;
-    // A terminal, detail panel, editor, or other nested viewport owns its input
-    // even when it has reached its edge. Do not broaden Workbench wheel ownership.
+    // Tool sequences chain native scrolling into the transcript at their edges.
+    // Terminals, editors and other nested viewports retain their own input.
     let element = target instanceof Element ? target : null;
     while (element && element !== node) {
       const style = window.getComputedStyle(element);
-      if (/(auto|scroll)/.test(style.overflowY) && element.scrollHeight > element.clientHeight) return false;
+      if (/(auto|scroll)/.test(style.overflowY) && element.scrollHeight > element.clientHeight) {
+        if (!element.classList.contains('flower-tool-sequence-scroll')) return false;
+        const remaining = element.scrollHeight - element.clientHeight - element.scrollTop;
+        if (direction === 0 || direction < 0 && element.scrollTop > 1 || direction > 0 && remaining > 1) return false;
+      }
       element = element.parentElement;
     }
     return element === node;
@@ -244,11 +248,11 @@ export function createFlowerScrollTailController(
     if (event.target === node && event.pointerType !== 'touch') startUserScroll(0);
   };
   const onTouchMove = (event: TouchEvent) => {
-    if (!ownsScrollInput(event.target)) return;
     const nextY = event.touches[0]?.clientY;
     if (nextY === undefined) return;
-    startUserScroll(touchY === undefined ? 0 : touchY - nextY);
+    const direction = touchY === undefined ? 0 : touchY - nextY;
     touchY = nextY;
+    if (ownsScrollInput(event.target, direction)) startUserScroll(direction);
   };
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || !(event.target instanceof Element)) return;
@@ -259,10 +263,9 @@ export function createFlowerScrollTailController(
     }
     if (event.target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]')) return;
     if (event.key === ' ' && event.target.closest('button, summary')) return;
-    if (!ownsScrollInput(event.target)) return;
     const direction = ['ArrowDown', 'PageDown', 'End', ' '].includes(event.key) ? (event.shiftKey ? -1 : 1)
       : ['ArrowUp', 'PageUp', 'Home'].includes(event.key) ? -1 : 0;
-    if (direction) startUserScroll(direction);
+    if (direction && ownsScrollInput(event.target, direction)) startUserScroll(direction);
   };
   const onScroll = () => {
     if (!node) return;
@@ -293,7 +296,7 @@ export function createFlowerScrollTailController(
     setNearBottom(isNearBottom());
   };
   const onWheel = (event: WheelEvent) => {
-    if (event.defaultPrevented || event.ctrlKey || event.deltaY === 0 || !ownsScrollInput(event.target)) return;
+    if (event.defaultPrevented || event.ctrlKey || event.deltaY === 0 || !ownsScrollInput(event.target, event.deltaY)) return;
     startUserScroll(event.deltaY);
   };
   const activateDisclosure = (title: HTMLElement) => {

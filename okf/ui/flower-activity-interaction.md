@@ -46,6 +46,7 @@ Presentation never supplies execution input or authorization.
 
 ## Viewport and gesture ownership
 One controller per viewport owns transcript position. Layout, focus, animation and growth never resume a reading pause.
+Tool sequence scroll chaining follows the [sequence reading contract](flower-tool-sequences.md#disclosure-and-reading): short groups and outward input at a sequence edge reach the transcript, while embedded terminals and editors retain their own input.
 
 Hidden controls do not enter the focus or hit-test order.
 

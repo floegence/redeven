@@ -87,6 +87,89 @@ afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.
 
 describe('consecutive tools in the shared Flower surface', () => {
   it.each([
+    ['success', false, 1280], ['running', false, 1280],
+    ['success', true, 1280], ['running', false, 390],
+  ] as const)('scrolls over short %s tool rows with details open=%s at width %i', async (status, detailsOpen, width) => {
+    const history = item('scroll-history', 'assistant', 'Earlier conversation paragraph.\n\n'.repeat(60));
+    const initial = [history, tool('scroll-first'), tool('scroll-last', status)];
+    const { root, push } = await mount(initial);
+    await page.viewport(width, 900);
+    const transcript = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
+    const sequence = root.querySelector<HTMLElement>('.flower-tool-sequence-scroll')!;
+    await expect.poll(() => transcript.scrollHeight - transcript.clientHeight - transcript.scrollTop).toBeLessThanOrEqual(1);
+    const trigger = row(root, 'scroll-last').querySelector<HTMLButtonElement>('button')!;
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    if (detailsOpen) {
+      trigger.click();
+      await waitFor(() => row(root, 'scroll-last').dataset.state === 'open');
+    }
+    expect(sequence.scrollHeight).toBe(sequence.clientHeight);
+    const wheel = commands as unknown as { wheelScrollRegion: (request: { regionSelector: string; targetSelector: string; deltaY: number }) => Promise<{ before: number; after: number }> };
+    let beforeWheel = transcript.scrollTop;
+    transcript.addEventListener('wheel', () => { beforeWheel = transcript.scrollTop; }, { once: true });
+    await wheel.wheelScrollRegion({ regionSelector: '.flower-chat-transcript', targetSelector: '[data-flower-activity-item-id="scroll-last"] button', deltaY: -180 });
+    await expect.poll(() => transcript.scrollTop).toBeLessThan(beforeWheel - 100);
+    const readingTop = transcript.scrollTop;
+    push([...initial, item('scroll-growth', 'assistant', 'New output.\n\n'.repeat(10))]);
+    await waitFor(() => root.textContent?.includes('New output.') === true);
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    expect(transcript.scrollTop).toBe(readingTop);
+  });
+
+  it('hands native keyboard scrolling from a sequence edge to the transcript', async () => {
+    const initial = [item('key-history', 'assistant', 'Earlier conversation paragraph.\n\n'.repeat(60)),
+      ...Array.from({ length: 30 }, (_, index) => tool(`key-${index}`))];
+    const { root, push } = await mount(initial);
+    const transcript = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
+    const sequence = root.querySelector<HTMLElement>('.flower-tool-sequence-scroll')!;
+    await expect.poll(() => transcript.scrollHeight - transcript.clientHeight - transcript.scrollTop).toBeLessThanOrEqual(1);
+    await expect.poll(() => sequence.scrollHeight - sequence.clientHeight - sequence.scrollTop).toBeLessThanOrEqual(1);
+    sequence.scrollTop = 0;
+    sequence.focus({ preventScroll: true });
+    const before = transcript.scrollTop;
+    const scrollEnd = new Promise<void>(resolve => transcript.addEventListener('scrollend', () => resolve(), { once: true }));
+    await userEvent.keyboard('{ArrowUp}');
+    await expect.poll(() => transcript.scrollTop).toBeLessThan(before - 10);
+    await scrollEnd;
+    const readingTop = transcript.scrollTop;
+    push([...initial, item('key-growth', 'assistant', 'Keyboard reading update.\n\n'.repeat(10))]);
+    await waitFor(() => root.textContent?.includes('Keyboard reading update.') === true);
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    expect(transcript.scrollTop).toBe(readingTop);
+  });
+
+  it('chains wheel input at both tool sequence edges and retains internal scrolling between them', async () => {
+    const initial = [item('edge-history', 'assistant', 'Earlier conversation paragraph.\n\n'.repeat(60)),
+      ...Array.from({ length: 30 }, (_, index) => tool(`edge-${index}`, index === 29 ? 'running' : 'success'))];
+    const { root, push } = await mount(initial);
+    const transcript = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
+    const sequence = root.querySelector<HTMLElement>('.flower-tool-sequence-scroll')!;
+    await expect.poll(() => transcript.scrollHeight - transcript.clientHeight - transcript.scrollTop).toBeLessThanOrEqual(1);
+    await expect.poll(() => sequence.scrollHeight - sequence.clientHeight - sequence.scrollTop).toBeLessThanOrEqual(1);
+    const wheel = commands as unknown as { wheelScrollRegion: (request: { regionSelector: string; targetSelector: string; deltaY: number }) => Promise<{ before: number; after: number }> };
+    const outerTop = transcript.scrollTop;
+    const internal = await wheel.wheelScrollRegion({ regionSelector: '.flower-tool-sequence-scroll', targetSelector: '[data-flower-activity-item-id="edge-29"] button', deltaY: -120 });
+    await expect.poll(() => sequence.scrollTop).toBeLessThan(internal.before - 50);
+    expect(transcript.scrollTop).toBe(outerTop);
+    sequence.scrollTop = 0;
+    sequence.dispatchEvent(new Event('scroll'));
+    const upward = await wheel.wheelScrollRegion({ regionSelector: '.flower-chat-transcript', targetSelector: '[data-flower-activity-item-id="edge-0"] button', deltaY: -120 });
+    await expect.poll(() => transcript.scrollTop).toBeLessThan(upward.before - 50);
+    const readingTop = transcript.scrollTop;
+    push([...initial.slice(0, -1), tool('edge-29'), tool('edge-30', 'running')]);
+    await waitFor(() => Boolean(row(root, 'edge-30')));
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    expect(transcript.scrollTop).toBe(readingTop);
+    sequence.scrollTop = sequence.scrollHeight;
+    sequence.dispatchEvent(new Event('scroll'));
+    await wheel.wheelScrollRegion({ regionSelector: '.flower-chat-transcript', targetSelector: '[data-flower-activity-item-id="edge-30"] button', deltaY: 600 });
+    await expect.poll(() => transcript.scrollHeight - transcript.clientHeight - transcript.scrollTop).toBeLessThanOrEqual(1);
+    push([...initial.slice(0, -1), tool('edge-29'), tool('edge-30'), item('edge-growth', 'assistant', 'Following output.\n\n'.repeat(10))]);
+    await waitFor(() => root.textContent?.includes('Following output.') === true);
+    await expect.poll(() => transcript.scrollHeight - transcript.clientHeight - transcript.scrollTop).toBeLessThanOrEqual(1);
+  });
+
+  it.each([
     ['success', 'reduce'], ['success', 'no-preference'],
     ['running', 'reduce'], ['running', 'no-preference'],
   ] as const)('opens a collapsed %s sequence at its latest tool with %s motion', async (status, reducedMotion) => {

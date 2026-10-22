@@ -60,13 +60,21 @@ scroll viewport below their reachable summary button. Its height is bounded by
 is smallest. Expanded thinking has its own scroll viewport bounded by 20rem,
 45% of the window height, and the same transcript limit. Short content keeps its
 natural height; no canonical content is truncated. Both viewports expose a thin
-scrollbar, keyboard focus, a localized accessible name, and contained overscroll.
+scrollbar, keyboard focus, and a localized accessible name. Tool sequences use
+native scroll chaining: short groups pass scrolling through to the transcript,
+and overflowing groups consume input only while they can scroll in that
+direction. At either edge, scrolling continues in the transcript. Expanded
+thinking and embedded terminal/detail viewports retain their own scroll boundary.
 
 Canonical row components retain their rendering owners when the sequence layout
 places their existing DOM under the first node's viewport. Membership changes
 preserve details, focus and selection; disposal restores borrowed rows to their
 original slots. The transcript controller continues to own outer scroll intent.
-Internal scrolling does not scroll or resume the outer transcript. Active content
+Internal scrolling does not scroll or resume the outer transcript while the
+sequence can consume it. The transcript controller recognizes wheel, touch, and
+keyboard input handed off at a sequence edge: upward scrolling pauses outer
+tail following, and an actual return to the transcript bottom resumes it. This
+exception does not change terminal, editor, or Workbench input ownership. Active content
 follows its own tail only until the reader scrolls upward, and resumes when they
 return to the bottom. Opening a sequence positions its internal viewport at the
 latest tool and resumes tail following, including after reading older calls or
