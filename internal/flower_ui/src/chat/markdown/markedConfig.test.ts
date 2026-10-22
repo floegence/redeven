@@ -70,6 +70,21 @@ describe('createFlowerMarkdownRenderer', () => {
     expect(marked.parse('![unsafe](javascript:alert(1))')).not.toContain('data-floe-markdown-media');
   });
 
+  it('previews complete HTML documents in plain html fences while keeping snippets as code', () => {
+    const marked = createMarkdownParser({ gfm: true, breaks: false });
+    marked.use({ renderer: createFlowerMarkdownRenderer({ media: true }) });
+    const document = '<!DOCTYPE html>\n<html lang="en"><head><title>Preview</title></head><body><button>Run</button></body></html>';
+    const preview = marked.parse(`\`\`\`html\n${document}\n\`\`\``);
+    const snippet = marked.parse('```html\n<button>Code only</button>\n```');
+
+    expect(preview).toContain('data-floe-markdown-media');
+    expect(preview).not.toContain('<iframe');
+    expect(preview).not.toContain('<button>');
+    expect(snippet).not.toContain('data-floe-markdown-media');
+    expect(snippet).toContain('<pre class="flower-chat-md-code-block">');
+    expect(snippet).toContain('&lt;button&gt;Code only&lt;/button&gt;');
+  });
+
   it('keeps external HTML pages navigable instead of creating an unsupported preview', () => {
     const marked = createMarkdownParser({ gfm: true });
     marked.use({ renderer: createFlowerMarkdownRenderer({ media: true }) });

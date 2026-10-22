@@ -97,6 +97,14 @@ function isExternalHTMLPage(href: string): boolean {
   return markdownMediaKind(href) === 'html' && /^https?:/i.test(href.trim());
 }
 
+export function isFlowerHTMLPreviewFence(token: Token): token is Tokens.Code {
+  if (token.type !== 'code') return false;
+  const language = token.lang?.trim().toLowerCase();
+  if (language === 'html preview') return true;
+  if (language !== 'html') return false;
+  return /^\uFEFF?\s*(?:<!doctype\s+html(?:\s+[^>]*)?\s*>\s*)?<html(?:\s|>)/i.test(token.text);
+}
+
 export function createFlowerMarkdownRenderer(options: { media?: boolean; sourceFence?: (token: Tokens.Code) => string | null } = {}): RendererObject<string, string> {
   return {
     text(token: Tokens.Text | Tokens.Escape) {
@@ -124,7 +132,7 @@ export function createFlowerMarkdownRenderer(options: { media?: boolean; sourceF
     code(token: Tokens.Code) {
       const sources = options.sourceFence?.(token);
       if (sources) return sources;
-      if (options.media && token.lang?.trim().toLowerCase() === 'html preview') {
+      if (options.media && isFlowerHTMLPreviewFence(token)) {
         return markdownMediaPlaceholder({ kind: 'html', html: token.text, title: '' });
       }
       const langClass = normalizeLanguageClass(token.lang);

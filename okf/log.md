@@ -23,3 +23,7 @@ A compact digest of updates from the last 30 days. Current contracts and evidenc
 - Preserve historical answer anchors through the shared Flower fork adapter
 - Tune terminal exec initial wait and model output read wait
 - Concepts: [Flower thread fork coordination](ai/flower-thread-fork-coordination.md), [terminal tool runtime](ai/terminal-tool-runtime.md)
+
+## 2026-10-22
+- Preview complete HTML documents in ordinary Flower `html` fences while preserving HTML snippets as code
+- Concepts: [Flower inline media](ui/flower-inline-media.md)
