@@ -86,6 +86,45 @@ function expectConnectorBetween(root: HTMLElement, previousID: string, nextID: s
 afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('consecutive tools in the shared Flower surface', () => {
+  it.each([
+    ['success', 'reduce'], ['success', 'no-preference'],
+    ['running', 'reduce'], ['running', 'no-preference'],
+  ] as const)('opens a collapsed %s sequence at its latest tool with %s motion', async (status, reducedMotion) => {
+    await media.emulateMediaPreferences({ reducedMotion });
+    const initial = Array.from({ length: 40 }, (_, index) => tool(`latest-${index}`, index === 39 ? status : 'success'));
+    const later = status === 'success' ? [item('later-prose', 'assistant'), tool('later-first'), tool('later-last')] : [];
+    const { root, push } = await mount([...initial, ...later]);
+    const header = toggle(root, 'latest-0');
+    const viewport = group(root, 'latest-0').querySelector<HTMLElement>('.flower-tool-sequence-scroll')!;
+    if (status === 'running') header.click();
+    await waitFor(() => group(root, 'latest-0').dataset.state === 'closed');
+    header.click();
+    await waitFor(() => group(root, 'latest-0').dataset.state === 'open');
+    expect(viewport.scrollHeight).toBeGreaterThan(viewport.clientHeight * 2);
+    await expect.poll(() => viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop).toBeLessThanOrEqual(1);
+
+    viewport.scrollTop = 40;
+    viewport.dispatchEvent(new Event('scroll'));
+    expect(viewport.hasAttribute('data-flower-reading-paused')).toBe(true);
+    header.click();
+    await waitFor(() => group(root, 'latest-0').dataset.state === 'closed');
+    const updated = [...initial.slice(0, -1), tool('latest-39'), tool('latest-40', status)];
+    push([...updated, ...later]);
+    await waitFor(() => Boolean(row(root, 'latest-40')));
+    header.click();
+    await waitFor(() => group(root, 'latest-0').dataset.state === 'open');
+    await expect.poll(() => viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop).toBeLessThanOrEqual(1);
+    expect(viewport.hasAttribute('data-flower-reading-paused')).toBe(false);
+    const latestRow = row(root, 'latest-40').getBoundingClientRect();
+    expect(latestRow.top).toBeGreaterThanOrEqual(viewport.getBoundingClientRect().top - 1);
+    expect(latestRow.bottom).toBeLessThanOrEqual(viewport.getBoundingClientRect().bottom + 1);
+    if (status === 'running') {
+      push([...updated.slice(0, -1), tool('latest-40'), tool('latest-41', 'running')]);
+      await waitFor(() => Boolean(row(root, 'latest-41')));
+      await expect.poll(() => viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop).toBeLessThanOrEqual(1);
+    }
+  });
+
   it('bounds a long expanded sequence and scrolls its complete contents below the reachable header', async () => {
     const { root } = await mount(Array.from({ length: 98 }, (_, index) => tool(`bounded-${index}`)));
     const header = toggle(root, 'bounded-0');
@@ -100,8 +139,9 @@ describe('consecutive tools in the shared Flower surface', () => {
     const transcript = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
     const transcriptTop = transcript.scrollTop;
     const wheel = commands as unknown as { wheelScrollRegion: (request: { regionSelector: string; deltaY: number }) => Promise<{ before: number; after: number }> };
-    const result = await wheel.wheelScrollRegion({ regionSelector: '.flower-tool-sequence-scroll', deltaY: 300 });
-    expect(result.after).toBeGreaterThan(result.before);
+    await expect.poll(() => viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop).toBeLessThanOrEqual(1);
+    const result = await wheel.wheelScrollRegion({ regionSelector: '.flower-tool-sequence-scroll', deltaY: -300 });
+    expect(result.after).toBeLessThan(result.before);
     expect(transcript.scrollTop).toBe(transcriptTop);
     expect(header.getBoundingClientRect().top).toBe(top);
     viewport.scrollTop = viewport.scrollHeight;
