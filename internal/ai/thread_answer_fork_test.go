@@ -21,7 +21,7 @@ func TestFlowerAnswerForkPinsHistoricalCompletedAnswer(t *testing.T) {
 	answer := func(text string) florettest.Step {
 		return florettest.Step{Events: []provider.Event{{Type: provider.EventDelta, Text: text}, {Type: provider.EventDone, Reason: "stop"}}}
 	}
-	gateway := florettest.NewScriptedGateway(provider.Identity{Provider: "test", Model: "answers", StateCompatibilityKey: "answers:v1"}, provider.Capabilities{Reasoning: provider.ReasoningUnsupported}, answer("First final answer."), answer("Later final answer."))
+	gateway := florettest.NewScriptedGateway(provider.Identity{Provider: "test", Model: "answers", StateCompatibilityKey: "answers:v1"}, provider.Capabilities{Reasoning: provider.ReasoningUnsupported}, answer("First final answer."), answer("Middle final answer."), answer("Later final answer."))
 	host, err := flruntime.Open(t.Context(), flruntime.Options{Storage: storage.SQLite(filepath.Join(t.TempDir(), "answers.sqlite"))})
 	if err != nil {
 		t.Fatal(err)
@@ -39,7 +39,8 @@ func TestFlowerAnswerForkPinsHistoricalCompletedAnswer(t *testing.T) {
 		t.Fatal(err)
 	}
 	var anchor string
-	for _, key := range []string{"first", "later"} {
+	var userAnchor string
+	for _, key := range []string{"first", "middle", "later"} {
 		sent, err := canonical.Send(t.Context(), flruntime.SendInput{ThreadID: identity.ThreadID(source.ThreadID), RequestKey: flruntime.RequestKey(key), Input: flruntime.UserInput{Text: key}})
 		if err != nil {
 			t.Fatal(err)
@@ -59,12 +60,21 @@ func TestFlowerAnswerForkPinsHistoricalCompletedAnswer(t *testing.T) {
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
-		if key == "first" {
-			if len(view.Turns) != 1 || len(view.Turns[0].FinalItemIDs) != 1 {
-				t.Fatalf("missing final answer: %+v", view)
+		if key == "middle" {
+			if len(view.Turns) != 2 || len(view.Turns[1].FinalItemIDs) != 1 {
+				t.Fatalf("missing middle final answer: %+v", view)
 			}
-			anchor = view.Turns[0].FinalItemIDs[0]
+			anchor = view.Turns[1].FinalItemIDs[0]
+			for _, item := range view.Items {
+				if item.Kind == flruntime.ThreadItemUser && item.Text == key {
+					userAnchor = item.ID
+					break
+				}
+			}
 		}
+	}
+	if userAnchor == "" {
+		t.Fatal("missing middle user item for invalid-anchor check")
 	}
 	request := ForkThreadRequest{ClientRequestID: "answer-fork", Title: "Answers · Fork", SourceItemID: anchor}
 	fork, err := svc.ForkThreadWithOptions(t.Context(), meta, source.ThreadID, request)
@@ -72,14 +82,14 @@ func TestFlowerAnswerForkPinsHistoricalCompletedAnswer(t *testing.T) {
 		t.Fatal(err)
 	}
 	view, err := canonical.View(t.Context(), identity.ThreadID(fork.ThreadID))
-	if err != nil || view.LastOutcome == nil || *view.LastOutcome != flruntime.TurnOutcomeCompleted || len(view.Turns) != 1 || !view.Turns[0].FinalBoundaryComplete {
+	if err != nil || view.LastOutcome == nil || *view.LastOutcome != flruntime.TurnOutcomeCompleted || len(view.Turns) != 2 || !view.Turns[1].FinalBoundaryComplete {
 		t.Fatalf("fork lost completed answer: %+v, %v", view, err)
 	}
 	var text strings.Builder
 	for _, item := range view.Items {
 		text.WriteString(item.Text)
 	}
-	if !strings.Contains(text.String(), "First final answer.") || strings.Contains(text.String(), "Later") {
+	if !strings.Contains(text.String(), "First final answer.") || !strings.Contains(text.String(), "Middle final answer.") || strings.Contains(text.String(), "Later") {
 		t.Fatalf("wrong answer boundary: %q", text.String())
 	}
 	replay, err := svc.ForkThreadWithOptions(t.Context(), meta, source.ThreadID, request)
@@ -89,6 +99,10 @@ func TestFlowerAnswerForkPinsHistoricalCompletedAnswer(t *testing.T) {
 	request.ClientRequestID, request.SourceItemID = "invalid-answer", "missing"
 	if _, err := svc.ForkThreadWithOptions(t.Context(), meta, source.ThreadID, request); err == nil {
 		t.Fatal("accepted an unknown answer")
+	}
+	request.ClientRequestID, request.SourceItemID = "invalid-user-anchor", userAnchor
+	if _, err := svc.ForkThreadWithOptions(t.Context(), meta, source.ThreadID, request); err == nil {
+		t.Fatal("accepted a user item as an answer anchor")
 	}
 	list, err := svc.ListThreads(t.Context(), meta, 100, "")
 	if err != nil || len(list.Threads) != 2 {
