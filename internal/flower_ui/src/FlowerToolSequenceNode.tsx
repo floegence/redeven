@@ -21,11 +21,6 @@ export function useFlowerToolSequenceMember(key: Accessor<string>) {
   return createMemo(() => context?.projection().members.get(key()));
 }
 
-export function useFlowerToolSequenceInline(key: Accessor<string>) {
-  const context = useContext(FlowerToolSequenceContext);
-  return createMemo(() => Boolean(context?.projection().members.has(key())));
-}
-
 export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; children: JSX.Element }>) {
   const context = useContext(FlowerToolSequenceContext);
   const member = useFlowerToolSequenceMember(() => props.nodeKey);

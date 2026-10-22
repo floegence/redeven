@@ -90,7 +90,7 @@ import { FlowerContextCompactionDivider } from './chat/FlowerContextCompactionDi
 import { compactionDividerDetail } from './chat/flowerContextPresentation';
 import { SubagentAvatar } from './SubagentAvatar';
 import { SubagentAvatarStack } from './SubagentAvatarStack';
-import { FlowerToolSequenceNode, useFlowerToolSequenceInline } from './FlowerToolSequenceNode';
+import { FlowerToolSequenceNode } from './FlowerToolSequenceNode';
 import { FlowerThinkingDisclosure } from './FlowerThinkingDisclosure';
 import { FlowerTurnTimeline } from './FlowerTurnTimeline';
 import { createFlowerTurnDisclosureStore } from './flowerTurnDisclosure';
@@ -10867,7 +10867,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ) => {
     const markdown = createMemo(() => block().block_type === 'markdown');
     const thinking = createMemo(() => block().block_type === 'thinking');
-    const sequenceInline = useFlowerToolSequenceInline(() => block().key);
     const thinkingLive = createMemo(() => thinking() && message().live === true);
     const thinkingEndsAbnormally = createMemo(() => {
       const currentThread = thread();
@@ -10962,7 +10961,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       >
         <FlowerToolSequenceNode nodeKey={block().key}>
           <FlowerThinkingDisclosure
-            inline={sequenceInline}
             contentID={block().key}
             manualExpanded={() => expandedDetails[detailDisclosureKey(message().thread_id ?? '', 'thinking', block().key)]}
             onManualExpanded={expanded => setExpandedDetails(detailDisclosureKey(message().thread_id ?? '', 'thinking', block().key), expanded)}
