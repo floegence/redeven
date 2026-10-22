@@ -1123,7 +1123,7 @@ describe('buildFlowerTimelineEntries', () => {
             id: 'choice',
             header: 'Decision',
             question: 'Continue?',
-            response_mode: 'select',
+            response_mode: 'select_or_write',
             choices: [{ choice_id: 'yes', value: 'yes', label: 'Yes', kind: 'select' }],
           },
         ],

@@ -253,6 +253,39 @@ describe('Flower bottom decision surface', () => {
 
   });
 
+  it('submits custom text when write_label is omitted', async () => {
+    const current = decisionFixtures.ask_sparse as FlowerRuntimeCurrentView;
+    const waiting = applyFlowerRuntimeCurrentView(thread({ thread_id: current.thread_id }), current);
+    const submitInput = vi.fn(async (input: { thread_id: string }) => ({
+      thread_id: input.thread_id,
+      consumed_prompt_id: 'decision-interaction',
+      current: { ...current, view_version: 2, interactions: [], activity: 'idle' as const, last_outcome: 'completed' as const },
+    }));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [waiting]),
+      loadThread: vi.fn(async () => ({ thread: waiting, current })),
+      submitInput,
+    });
+
+    Object.assign(runtime.style, { width: '1280px', height: '800px' });
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-fixture"] button')));
+    (runtime.querySelector('[data-thread-id="thread-fixture"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-input-answer-kind="custom"]')));
+
+    const custom = runtime.querySelector('[data-flower-input-answer-kind="custom"]') as HTMLButtonElement;
+    expect(custom.textContent).toContain('None of the above / Other');
+    custom.click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-input-custom-answer]')));
+    const answer = runtime.querySelector('[data-flower-input-custom-answer]') as HTMLTextAreaElement;
+    await userEvent.type(answer, 'Gamma channel');
+    const continueButton = runtime.querySelector('.flower-composer-continue') as HTMLButtonElement;
+    await waitFor(() => continueButton.disabled === false);
+    continueButton.click();
+    await waitFor(() => submitInput.mock.calls.length === 1);
+    expect(submitInput.mock.calls[0]?.[0]).toMatchObject({ answers: { channel: { text: 'Gamma channel' } } });
+  });
+
   it('keeps fixed and custom answers mutually exclusive while preserving the custom draft', async () => {
     const request = inputRequest({
       prompt_id: 'prompt-mutually-exclusive-answer',

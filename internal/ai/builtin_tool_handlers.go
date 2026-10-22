@@ -466,14 +466,14 @@ func redevenAskUserSignalInputSchema(base map[string]any) map[string]any {
 					"header":             map[string]any{"type": "string", "minLength": 1, "maxLength": 120},
 					"question":           map[string]any{"type": "string", "minLength": 1, "maxLength": 400},
 					"is_secret":          map[string]any{"type": "boolean"},
-					"response_mode":      map[string]any{"type": "string", "enum": []string{"select", "write", "select_or_write"}, "description": "select requires fixed choices and choices_exhaustive=true; write must omit choices; select_or_write requires fixed choices and choices_exhaustive=false."},
-					"choices_exhaustive": map[string]any{"type": "boolean", "description": "Required with choices; true for select, false for select_or_write."},
+					"response_mode":      map[string]any{"type": "string", "enum": []string{"write", "select_or_write"}, "description": "Use write for a direct text answer. Use select_or_write for fixed choices plus a separate custom-text answer."},
+					"choices_exhaustive": map[string]any{"type": "boolean", "description": "Use false with select_or_write; omit this field with write."},
 					"write_label":        map[string]any{"type": "string", "maxLength": 200, "description": "Custom/direct text input label."},
 					"write_placeholder":  map[string]any{"type": "string", "maxLength": 160},
 					"choices": map[string]any{
 						"type":        "array",
 						"maxItems":    4,
-						"description": "Fixed choices; custom text uses select_or_write instead of an Other choice.",
+						"description": "Fixed choices; select_or_write includes a separate custom-text answer.",
 						"items": map[string]any{
 							"type": "object",
 							"properties": map[string]any{

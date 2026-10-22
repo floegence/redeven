@@ -25,7 +25,7 @@ Flower reads persisted Activity first and otherwise uses a neutral label and ren
 Published Floret v7.26.0 owns `EstimateRenderedRequest` for local Responses, Chat Completions, Gemini signatures, Moonshot, and Anthropic. Verified model mappings select official vocabularies; unknown models use an explicit multilingual BPE proxy. These remain estimates because server rendering can differ; Redeven adds no network preflight or calibration ledger.
 
 ## Native request measurement
-Published Floret v7.73.0 owns [native request measurement](model-request-measurement.md), frozen-prefix pressure and schema 28. Redeven maps protocol facts without a second pressure policy or measurement store.
+Published Floret v7.78.2 owns [native request measurement](model-request-measurement.md), frozen-prefix pressure and schema 28. Redeven maps protocol facts without a second pressure policy or measurement store.
 
 ## Provider request recovery
 [Model request recovery](model-request-recovery.md) defines Engine-owned retry budgets, physical-request deadlines, attempt diagnostics and current-view feedback. Neither creates a second history owner.

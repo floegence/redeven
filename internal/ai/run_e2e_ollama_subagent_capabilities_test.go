@@ -68,7 +68,7 @@ func ollamaTaskSubagentDirectInstructionCapabilities(f *ollamaTaskFixture) {
 	if hasOllamaTaskToolActivity(gitParent.Current, "terminal.exec") {
 		f.t.Fatal("parent performed the delegated Git inspection")
 	}
-	gitChild := ollamaTaskCompletedChild(f, childrenBefore, gitParent.Current.TurnID, gitMessage, "terminal.exec")
+	gitChild := ollamaTaskFinishedChild(f, childrenBefore, gitParent.Current.TurnID, gitMessage, "terminal.exec")
 	gitReport := ollamaTaskText(gitChild.Current)
 	for _, expected := range []string{
 		"BASE_COMMON_SUBJECT", "REMOTE_ONLY_GIT_SUBJECT_7F2A", "LOCAL_ONLY_GIT_SUBJECT_39A1",
@@ -112,7 +112,7 @@ func ollamaTaskSubagentDirectInstructionCapabilities(f *ollamaTaskFixture) {
 	if hasOllamaTaskToolActivity(fileParent.Current, "terminal.exec") {
 		f.t.Fatal("parent performed the delegated file update")
 	}
-	ollamaTaskCompletedChild(f, fileChildrenBefore, fileParent.Current.TurnID, fileMessage, "terminal.exec")
+	ollamaTaskFinishedChild(f, fileChildrenBefore, fileParent.Current.TurnID, fileMessage, "terminal.exec")
 	f.file("child-authorized.txt", "AUTHORIZED_WRITE\n")
 
 	networkMessage := "You are authorized to use web_fetch to inspect the public page https://example.com/. Read the returned page title and content, then report the title and whether the page contains the phrase Example Domain."
@@ -121,7 +121,7 @@ func ollamaTaskSubagentDirectInstructionCapabilities(f *ollamaTaskFixture) {
 	if hasOllamaTaskToolActivity(networkParent.Current, "web_fetch") {
 		f.t.Fatal("parent performed the delegated network lookup")
 	}
-	networkChild := ollamaTaskCompletedChild(f, networkChildrenBefore, networkParent.Current.TurnID, networkMessage, "web_fetch")
+	networkChild := ollamaTaskFinishedChild(f, networkChildrenBefore, networkParent.Current.TurnID, networkMessage, "web_fetch")
 	if !strings.Contains(strings.ToLower(ollamaTaskText(networkChild.Current)), "example domain") {
 		f.t.Fatal("child network report omitted the fetched page content")
 	}
@@ -195,7 +195,7 @@ func loadSelectedFlowerTaskProfile(t *testing.T) (config.AIProvider, config.AIPr
 	return selected, model, key
 }
 
-func ollamaTaskCompletedChild(f *ollamaTaskFixture, previousCount int, parentTurnID identity.TurnID, expectedInput, expectedTool string) *FlowerSubagentDetailResponse {
+func ollamaTaskFinishedChild(f *ollamaTaskFixture, previousCount int, parentTurnID identity.TurnID, expectedInput, expectedTool string) *FlowerSubagentDetailResponse {
 	f.t.Helper()
 	children := f.children()
 	if len(children) != previousCount+1 {

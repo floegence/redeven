@@ -203,7 +203,7 @@ func TestMoonshotProvider_Turn_ToolCallResponse(t *testing.T) {
 								"type": "function",
 								"function": map[string]any{
 									"name":      "ask_user",
-									"arguments": `{"questions":[{"id":"direction","header":"Direction","question":"Which direction should I take?","is_secret":false,"response_mode":"select","choices_exhaustive":true,"choices":[{"choice_id":"a","label":"Option A","kind":"select"}]}],"reason_code":"user_decision_required","required_from_user":["Choose the next direction."],"evidence_refs":[]}`,
+									"arguments": `{"questions":[{"id":"direction","header":"Direction","question":"Which direction should I take?","is_secret":false,"response_mode":"select_or_write","choices_exhaustive":false,"choices":[{"choice_id":"a","label":"Option A","kind":"select"}]}],"reason_code":"user_decision_required","required_from_user":["Choose the next direction."],"evidence_refs":[]}`,
 								},
 							},
 						},

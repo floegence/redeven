@@ -25,9 +25,9 @@ const (
 	flowersecGoVersion   = "v5.11.1"
 	flowersecCorePackage = "@floegence/flowersec-core"
 	flowersecCoreVersion = "5.11.1"
-	floeWebappVersion    = "0.86.47"
+	floeWebappVersion    = "0.86.55"
 	floeEnvCoreVersion   = floeWebappVersion
-	floretVersion        = "v7.73.0"
+	floretVersion        = "v7.78.2"
 )
 
 var flowersecNPMPackages = []string{
@@ -653,13 +653,13 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 	expectedMarkers := map[string][]string{
 		filepath.Join("okf", "ai", "floret-thread-runtime.md"): {
 			"Floret v7 `ThreadService`",
-			"canonical journal is the only durable lifecycle fact source",
-			"`View`, `Send`, `Respond`, `Cancel`, `Retry`",
+			"sole owner of active and canonical thread lifecycle",
+			"Send, Respond, Cancel, Retry, and the optional independent CompactContext",
 		},
 		filepath.Join("okf", "ui", "flower-live-timeline.md"): {
-			"one workspace SSE",
-			"Summary updates are stripped of messages",
-			"without cursor replay or polling",
+			"one workspace stream",
+			"Missing authority or a broken sequence invalidates observation",
+			"Viewer read events and current-only updates cannot manufacture loaded-content coverage.",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
 			"Published Floret v7.18.2",

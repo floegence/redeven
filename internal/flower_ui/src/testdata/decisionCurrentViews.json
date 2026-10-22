@@ -116,13 +116,13 @@
             {
               "id": "channel",
               "prompt": "The current deployment has completed its checks. Before I prepare the next step, which release channel should Flower use for this workspace, considering whether you need the version tested for production or want to evaluate the upcoming features?",
-              "kind": "select",
+              "kind": "select_or_write",
               "options": [
                 "Stable",
                 "Beta"
               ],
               "header": "Choose how to continue",
-              "choices_exhaustive": true,
+              "choices_exhaustive": false,
               "choices": [
                 {
                   "choice_id": "stable",
@@ -223,13 +223,13 @@
             {
               "id": "channel",
               "prompt": "Which release channel should Flower use?",
-              "kind": "select",
+              "kind": "select_or_write",
               "options": [
                 "Stable",
                 "Beta"
               ],
               "header": "Release channel",
-              "choices_exhaustive": true,
+              "choices_exhaustive": false,
               "choices": [
                 {
                   "choice_id": "stable",

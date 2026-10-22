@@ -1,6 +1,6 @@
 module github.com/floegence/redeven
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/acobaugh/osrelease v0.1.0
@@ -11,7 +11,7 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/floegence/floe-native-apps v0.24.0
 	github.com/floegence/floeterm/terminal-go v0.19.2
-	github.com/floegence/floret/v7 v7.74.1
+	github.com/floegence/floret/v7 v7.78.2
 	github.com/floegence/flowersec/flowersec-go/v5 v5.11.1
 	github.com/floegence/redeven-service-templates v0.7.0
 	github.com/floegence/redevplugin/v3 v3.0.36

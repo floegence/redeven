@@ -21,7 +21,7 @@ import (
 )
 
 func writeComputerEvidenceQuestion(w http.ResponseWriter, flush http.Flusher, evidence, questionID, prompt, choice string) {
-	args, _ := json.Marshal(map[string]any{"reason_code": "missing_external_input", "required_from_user": []string{questionID}, "evidence_refs": []string{evidence}, "questions": []any{map[string]any{"id": questionID, "header": "Continue the task", "question": prompt, "response_mode": "select", "is_secret": false, "choices_exhaustive": true, "choices": []any{map[string]any{"choice_id": "continue", "label": choice, "kind": "select"}}}}})
+	args, _ := json.Marshal(map[string]any{"reason_code": "missing_external_input", "required_from_user": []string{questionID}, "evidence_refs": []string{evidence}, "questions": []any{map[string]any{"id": questionID, "header": "Continue the task", "question": prompt, "response_mode": "select_or_write", "is_secret": false, "choices_exhaustive": false, "choices": []any{map[string]any{"choice_id": "continue", "label": choice, "kind": "select"}}}}})
 	item := map[string]any{"type": "function_call", "id": "fc_ask_" + evidence, "call_id": "ask_" + evidence, "name": "ask_user", "arguments": string(args)}
 	writeOpenAISSEJSON(w, flush, map[string]any{"type": "response.output_item.added", "output_index": 0, "item": item})
 	writeOpenAISSEJSON(w, flush, map[string]any{"type": "response.output_item.done", "output_index": 0, "item": item})

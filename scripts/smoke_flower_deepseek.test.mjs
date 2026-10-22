@@ -254,7 +254,8 @@ test('runner requires one S15 and exactly fifteen passing scenarios', async () =
   assert.match(runner, /\.trim\(\) === finalText/u);
   assert.match(runner, /requestAnimationFrame\(\(\) => requestAnimationFrame\(resolve\)\)/u);
   assert.ok(runner.indexOf("`${label}-geometry.json`") < runner.indexOf('geometry overflowed the viewport'));
-  assert.match(runner, /response_mode "select", choices_exhaustive true, and exactly two fixed choices: Alpha and Beta/u);
+  assert.match(runner, /response_mode "select_or_write", choices_exhaustive false, and exactly two fixed choices: Alpha and Beta\. Leave write_label out/u);
+  assert.doesNotMatch(runner, /response_mode "select"/u);
   assert.match(runner, /response_mode "select_or_write", choices_exhaustive false, exactly two fixed choices Alpha and Beta, and write_label "Other"/u);
   assert.doesNotMatch(runner, /choices Alpha, Beta, and Other/u);
   assert.doesNotMatch(runner, /setViewportSize/u);

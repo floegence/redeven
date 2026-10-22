@@ -129,15 +129,20 @@ func TestOllamaAutomaticTitleUsesCapabilityAndSurvivesRestart(t *testing.T) {
 				if ready := nextFlowerLiveStreamFrame(t, subscription); ready.Kind != FlowerLiveStreamReady {
 					t.Fatalf("ready=%+v", ready)
 				}
+				summaries, summaryErrors, stopSummaryReader := startFlowerTitleSummaryReader(t, subscription)
+				defer stopSummaryReader()
 				_, err = svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ThreadID: created.ThreadID, ClientRequestID: "title-test-" + string(rune('0'+turn)), Input: RunInput{Text: "Research recent agent developments."}})
 				if err != nil {
+					stopSummaryReader()
+					subscription.Close()
 					t.Fatal(err)
 				}
 				want := flruntime.ThreadTitleStatusReady
 				if tc.recoverFailed && turn == 0 {
 					want = flruntime.ThreadTitleStatusFailed
 				}
-				settled := nextFlowerTitleSummary(t, subscription, created.ThreadID, want)
+				settled := nextFlowerTitleSummaryFromReader(t, summaries, summaryErrors, created.ThreadID, want)
+				stopSummaryReader()
 				subscription.Close()
 				if want == flruntime.ThreadTitleStatusReady && settled.Title != "Recent agent research" {
 					t.Fatalf("title=%q", settled.Title)
