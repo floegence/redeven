@@ -565,6 +565,7 @@
       "syncTimeout": "La synchronisation a expiré après 15 secondes. Réessayez.",
       "composerErrorTitle": "Flower n’a pas pu envoyer.",
       "thinkingLabel": "Raisonnement",
+      "thinkingActiveLabel": "Réflexion en cours...",
       "expandThinking": "Développer toute la réflexion",
       "collapseThinking": "Réduire la réflexion",
       "modelStatusPreparing": "Préparation de la requête au modèle…",
@@ -793,6 +794,13 @@
           "forms": {
             "one": "{count} appel d’outil en échec",
             "other": "{count} appels d’outils en échec"
+          }
+        },
+        "failedSubtaskUpdates": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} mise à jour de sous-agent échouée",
+            "other": "{count} mises à jour de sous-agent échouées"
           }
         },
         "thinkingSegments": {

@@ -5,7 +5,7 @@ import type { FlowerTurnProcessCopy } from './copy';
 import type { FlowerTimelineEntry } from './flowerTimelineProjection';
 import type { FlowerScrollTailController } from './flowerScrollTail';
 import type { FlowerTurnDisclosureStore } from './flowerTurnDisclosure';
-import { FlowerToolSequenceContext } from './FlowerToolSequenceNode';
+import { FlowerToolSequenceContext, FlowerToolSequenceNode } from './FlowerToolSequenceNode';
 import { projectFlowerToolSequences, type FlowerToolSequence, type FlowerToolSequenceProjection } from './flowerToolSequences';
 import { createFlowerActivityDisclosureMotion } from './activityDisclosure';
 import { flowerDurationParts, projectFlowerTurnProcess, type FlowerTurnProcessProjection } from './flowerTurnPresentation';
@@ -109,7 +109,7 @@ export function FlowerTurnTimeline(props: Readonly<{
   const sequenceIdentity = (key: string) => JSON.stringify([props.runtimeID, props.thread?.thread_id, 'tools', key]);
   let previousSequences: { threadID?: string; value: FlowerToolSequenceProjection } | undefined;
   const sequences = createMemo(() => {
-    const next = projectFlowerToolSequences(props.entries);
+    const next = projectFlowerToolSequences(props.entries, props.thread?.thread_id, props.thread?.turns ?? []);
     const previous = previousSequences?.threadID === props.thread?.thread_id ? previousSequences?.value : undefined;
     if (previous) untrack(() => {
       for (const group of next.groups.values()) {
@@ -252,7 +252,9 @@ export function FlowerTurnTimeline(props: Readonly<{
     // keep their subtree until closing has finished.
     const Content = () => {
       const content = untrack(() => props.renderEntry(entry, expanded));
-      return content;
+      return <Show when={entry().type === 'parent_event' && sequences().members.has(key)} fallback={content}>
+        <FlowerToolSequenceNode nodeKey={key}>{content}</FlowerToolSequenceNode>
+      </Show>;
     };
     return (
       <div class="flower-turn-row" data-flower-turn-id={group()?.turnID} data-flower-turn-process={process() ? 'true' : undefined}

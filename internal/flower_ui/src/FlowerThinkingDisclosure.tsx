@@ -13,6 +13,7 @@ export type FlowerThinkingDisclosureProps = Readonly<{
   liveConfirmed: Accessor<boolean>;
   preserveOnEnd: Accessor<boolean>;
   label: Accessor<string>;
+  elapsed?: Accessor<string>;
   expandLabel: Accessor<string>;
   collapseLabel: Accessor<string>;
   contentBody: Component;
@@ -36,9 +37,9 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
     setView('collapsed');
   };
 
-  createEffect(on(props.live, (isLive, wasLive) => {
-    if (isLive) setView('preview');
-    else if (wasLive && !props.preserveOnEnd()) {
+  createEffect(on(() => [props.live(), props.inline?.() ?? false] as const, ([isLive, inline], previous) => {
+    if (isLive) setView(inline ? props.manualExpanded?.() ? 'expanded' : 'collapsed' : 'preview');
+    else if (previous?.[0] && !props.preserveOnEnd()) {
       props.onManualExpanded?.(false);
       collapse();
     }
@@ -62,7 +63,9 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
 
   const toggle = () => {
     if (props.live()) {
-      setView((current) => current === 'expanded' ? 'preview' : 'expanded');
+      setView((current) => current === 'expanded'
+        ? (props.inline?.() ? 'collapsed' : 'preview')
+        : 'expanded');
       return;
     }
     const expanded = view() !== 'expanded';
@@ -93,7 +96,13 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
         <Show when={props.inline?.()} fallback={<ChevronRight class="flower-thinking-toggle-icon" aria-hidden="true" />}>
           <span class="flower-activity-inline-icon"><Brain size={16} strokeWidth={1.7} aria-hidden="true" /></span>
         </Show>
-        <span classList={{ 'flower-activity-inline-title': props.inline?.() ?? false }}>{props.label()}</span>
+        <span
+          classList={{ 'flower-activity-inline-title': props.inline?.() ?? false }}
+          data-floe-progress-shimmer={active() && (props.inline?.() ?? false) ? 'text' : undefined}
+        >{props.label()}</span>
+        <Show when={(props.inline?.() ?? false) && active() && props.elapsed?.()}>
+          <span class="flower-activity-inline-duration">{props.elapsed?.()}</span>
+        </Show>
         <Show when={props.inline?.()}><ChevronRight class="flower-thinking-toggle-icon" aria-hidden="true" /></Show>
         <span class="flower-visually-hidden">
           {view() === 'expanded' ? props.collapseLabel() : props.expandLabel()}

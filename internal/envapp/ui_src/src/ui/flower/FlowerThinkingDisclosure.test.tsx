@@ -16,20 +16,22 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function mount(initialLive = true) {
+function mount(initialLive = true, initialInline = false) {
   const root = document.createElement('div');
   document.body.append(root);
   const [live, setLive] = createSignal(initialLive);
   const [confirmed, setConfirmed] = createSignal(true);
   const [abnormal, setAbnormal] = createSignal(false);
   const [content, setContent] = createSignal('First reasoning line');
+  const [inline, setInline] = createSignal(initialInline);
   disposers.push(render(() => <FlowerThinkingDisclosure contentID="thinking-test" content={content}
+    inline={inline}
     live={live} liveConfirmed={confirmed} preserveOnEnd={abnormal}
-    label={() => live() && confirmed() ? 'Thinking...' : 'Thought process'}
+    label={() => live() && confirmed() ? 'Thinking...' : 'Thought process'} elapsed={() => '4s'}
     expandLabel={() => 'Expand full thinking'} collapseLabel={() => 'Collapse thinking'}
     contentBody={() => <><span>{content()}</span><button data-inner-control>Copy reasoning</button></>} />, root));
   return {
-    root, setLive, setConfirmed, setAbnormal, setContent,
+    root, setLive, setConfirmed, setAbnormal, setContent, setInline,
     view: () => root.querySelector('.flower-thinking-disclosure')?.getAttribute('data-flower-thinking-view'),
     button: () => root.querySelector<HTMLButtonElement>('.flower-thinking-toggle')!,
     content: () => root.querySelector<HTMLElement>('.flower-thinking-content'),
@@ -38,6 +40,23 @@ function mount(initialLive = true) {
 }
 
 describe('Thinking segment disclosure', () => {
+  it('keeps live thinking collapsed inside a tool sequence with a shimmer and elapsed time', () => {
+    const thinking = mount(true, true);
+    expect(thinking.view()).toBe('collapsed');
+    expect(thinking.button().getAttribute('aria-expanded')).toBe('false');
+    expect(thinking.button().textContent).toContain('Thinking...');
+    expect(thinking.button().textContent).toContain('4s');
+    expect(thinking.button().querySelector('[data-floe-progress-shimmer="text"]')?.textContent).toBe('Thinking...');
+    thinking.button().click();
+    expect(thinking.view()).toBe('expanded');
+    thinking.button().click();
+    expect(thinking.view()).toBe('collapsed');
+    thinking.button().click();
+    expect(thinking.view()).toBe('expanded');
+    thinking.setInline(false);
+    expect(thinking.view()).toBe('preview');
+  });
+
   it.each(['preview', 'expanded'] as const)('collapses a normally completed %s immediately and permits reopening', (view) => {
     const thinking = mount();
     expect(thinking.view()).toBe('preview');
