@@ -27,7 +27,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
   const context = useContext(FlowerToolSequenceContext);
   const member = useFlowerToolSequenceMember(() => props.nodeKey);
   const first = createMemo(() => member()?.first);
-  const last = () => member()?.last;
+  const last = createMemo(() => member()?.last);
   const expanded = createMemo(() => !member() || !context || context.expanded(member()!.group));
   let trigger: HTMLButtonElement | undefined;
   let content: HTMLDivElement | undefined;
