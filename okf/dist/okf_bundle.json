@@ -3605,7 +3605,7 @@
               "performance",
               "qualification"
             ],
-            "summary": "Redeven consumes published Floret v7.79.0. Each Engine execution reads canonical\nrequest history once for its initial turn surface and provider/model invariants,\nthen advances bounded facts only after successful writes. Latest-request checks\nuse the canonical point reader. Returning to an earlier render lineage still\nperforms the required historical lineage validation. Retry and restart create a\nnew execution owner and reload canonical facts.\n\nFlower sidebar preview projection stops at the newest nonempty preview. Stable\nsequence membership flags retain resize observers across unrelated snapshots.\nUnchanged groups and members retain their projection identities within the same\nthread, preventing historical layout work on content-only updates while preserving\nopen tools, selection, focus and manual reading. Every semantic field is compared;\nchanged groups are replaced without mutating earlier projections.",
+            "summary": "Published Floret v7.79.0 reads canonical request facts once per Engine execution\nand advances bounded state only after successful writes. Retry/restart reload\nfacts; historical render-lineage validation remains intact. Redeven stops sidebar\npreview work at the latest useful content and retains unchanged sequence groups,\nmembers and observers during streaming. Three real-Service/Electron samples\nreduce median backend CPU 80.3%, combined CPU 53.9% and allocations 87.0%, while\npreserving complete output, responsive controls, selection and manual reading.",
             "section_count": 2
           },
           {
@@ -22047,8 +22047,8 @@
         "title": "Flower request-history CPU qualification",
         "type": "Qualification Evidence"
       },
-      "body_length": 10019,
-      "summary": "Redeven consumes published Floret v7.79.0. Each Engine execution reads canonical\nrequest history once for its initial turn surface and provider/model invariants,\nthen advances bounded facts only after successful writes. Latest-request checks\nuse the canonical point reader. Returning to an earlier render lineage still\nperforms the required historical lineage validation. Retry and restart create a\nnew execution owner and reload canonical facts.\n\nFlower sidebar preview projection stops at the newest nonempty preview. Stable\nsequence membership flags retain resize observers across unrelated snapshots.\nUnchanged groups and members retain their projection identities within the same\nthread, preventing historical layout work on content-only updates while preserving\nopen tools, selection, focus and manual reading. Every semantic field is compared;\nchanged groups are replaced without mutating earlier projections.",
+      "body_length": 10139,
+      "summary": "Published Floret v7.79.0 reads canonical request facts once per Engine execution\nand advances bounded state only after successful writes. Retry/restart reload\nfacts; historical render-lineage validation remains intact. Redeven stops sidebar\npreview work at the latest useful content and retains unchanged sequence groups,\nmembers and observers during streaming. Three real-Service/Electron samples\nreduce median backend CPU 80.3%, combined CPU 53.9% and allocations 87.0%, while\npreserving complete output, responsive controls, selection and manual reading.",
       "sections": [
         {
           "id": "contract",
@@ -22065,7 +22065,7 @@
           "char_count": 929
         }
       ],
-      "snippet": "Redeven consumes published Floret v7.79.0. Each Engine execution reads canonical request history once for its initial turn surface and provider/model invariants, then advances bounded facts only after successful writes. Latest-request check",
+      "snippet": "Published Floret v7.79.0 reads canonical request facts once per Engine execution and advances bounded state only after successful writes. Retry/restart reload facts; historical render-lineage validation remains intact. Redeven stops sidebar",
       "links": [
         {
           "label": "storage boundary",
@@ -33482,5 +33482,5 @@
       ]
     }
   ],
-  "source_sha256": "fd3431cc5bca37cb655571cedc1016e83689eebbef7bc5dc59f4e37a8709e6ba"
+  "source_sha256": "1f1f066fbc833f52ac2f030e288bd62dd6b1124c6d1eb0975c0d9b65c49c8437"
 }
