@@ -49,7 +49,10 @@ export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[]
       continue;
     }
     if (entry.type !== 'message') continue;
-    if (facts.get(id)?.run_id === entry.message.run_id && entry.blocks.some((block) => block.type === 'input_response')) {
+    // A turn can continue in a new run after the user answers an interaction.
+    // The response still belongs to the same canonical turn even when its
+    // message retains the earlier run identity.
+    if (entry.blocks.some((block) => block.type === 'input_response')) {
       const responses = inputResponses.get(id) ?? [];
       responses.push(entry.key);
       inputResponses.set(id, responses);
@@ -87,7 +90,7 @@ export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[]
       const entry = entries[positions.get(key) ?? -1];
       if (entry?.type !== 'message') continue;
       for (const block of entry.blocks) {
-        if (block.type !== 'activity' || block.block.turn_id !== turnID || block.block.run_id !== turn?.run_id) continue;
+        if (block.type !== 'activity' || block.block.turn_id !== turnID) continue;
         for (const item of block.block.items) {
           if (item.kind !== 'tool' && item.kind !== 'hosted_tool') continue;
           toolCallCount += 1;

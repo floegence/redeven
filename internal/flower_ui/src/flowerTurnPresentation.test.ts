@@ -32,6 +32,13 @@ const inputResponse = (): MessageEntry => ({
     block: { type: 'input-response', questions: [{ question_id: 'retry', question: 'Retry the hook?', answer: 'Yes' }] },
   }],
 });
+const withRun = (value: MessageEntry, runID: string): MessageEntry => ({
+  ...value,
+  message: { ...value.message, run_id: runID },
+  blocks: value.blocks.map((block) => block.type === 'activity'
+    ? { ...block, block: { ...block.block, run_id: runID } }
+    : block),
+});
 
 describe('canonical turn process presentation', () => {
   it('treats goal continuation as business work with the existing disclosure owner', () => {
@@ -154,6 +161,14 @@ describe('canonical turn process presentation', () => {
       disclosure: 'none', staticOverview: true, inputResponseCount: 1, toolCallCount: 4, failedCallCount: 1,
       processKeys: [...before, ...after].map(value => value.key),
     });
+  });
+  it('keeps a static overview and counts work across a continuation run', () => {
+    const before = [withRun(toolEntry('before-one'), 'run-a'), withRun(toolEntry('before-two'), 'run-a')];
+    const answer = withRun(inputResponse(), 'run-a');
+    const after = [withRun(toolEntry('after-one'), 'run-b'), withRun(toolEntry('after-two', 'error'), 'run-b')];
+    const result = projectFlowerTurnProcess([...before, answer, ...after], [turn({ run_id: 'run-b', outcome: 'interrupted',
+      ended_at: '2026-10-11T12:02:18Z', intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })]).groups.get('turn');
+    expect(result).toMatchObject({ disclosure: 'none', staticOverview: true, inputResponseCount: 1, toolCallCount: 4, failedCallCount: 1 });
   });
   it('keeps ordinary dialogue outside the process without changing its disclosure', () => {
     const result = projectFlowerTurnProcess([toolEntry('before-one'), toolEntry('before-two'), entry('ordinary-user', 'user'), toolEntry('after-one')], [turn()]).groups.get('turn');

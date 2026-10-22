@@ -741,6 +741,45 @@ describe('completed turn process disclosure', () => {
     const label = overview()!.querySelector<HTMLElement>('.flower-turn-overview-copy')!;
     expect(label.getBoundingClientRect().right).toBeLessThanOrEqual(root.getBoundingClientRect().right + 1);
   });
+  it('keeps continuation-run tools folded while preserving the answered checkpoint', async () => {
+    const done = current(true);
+    const sourceUser = done.items!.find((item) => item.id === 'user')!;
+    const sourceTool = done.items!.find((item) => item.id === 'tool')!;
+    const toolItem = (id: string, ordinal: number, runID: string, status: 'success' | 'error' = 'success') => ({
+      ...sourceTool, id, turn_id: 'turn', run_id: runID, ordinal,
+      activity: {
+        ...sourceTool.activity!, item_id: id, tool_id: id, status,
+        severity: status === 'error' ? 'error' : 'quiet',
+      },
+    });
+    const receipt = { id: 'answer', turn_id: 'turn', run_id: 'run-a', ordinal: 4, kind: 'interaction' as const, interaction: {
+      id: 'input-1', turn_id: 'turn', run_id: 'run-a', kind: 'input' as const, resolved: true,
+      input: { summary: 'Choose a route', questions: [{ id: 'route', kind: 'write' as const, prompt: 'Which route?' }] },
+      resolution: { accepted: true, input: { route: 'Scenic' } },
+    } };
+    const initial = current(true, {
+      run_id: 'run-b', last_outcome: 'interrupted',
+      turns: [turn({ run_id: 'run-b', outcome: 'interrupted', intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })],
+      items: [
+        { ...sourceUser, run_id: 'run-a', ordinal: 1 },
+        toolItem('before-one', 2, 'run-a'), toolItem('before-two', 3, 'run-a'), receipt,
+        toolItem('after-one', 5, 'run-b'), toolItem('after-two', 6, 'run-b', 'error'),
+        { ...done.items!.find((item) => item.id === 'final-a')!, turn_id: 'turn', run_id: 'run-b', ordinal: 7,
+          text: 'The run stopped after the response.' },
+      ],
+    });
+    const { root } = await mount(initial);
+    const overview = () => root.querySelector<HTMLElement>('.flower-turn-summary-static');
+    const toolGroups = () => [...root.querySelectorAll<HTMLButtonElement>('.flower-tool-sequence-toggle')];
+    await waitFor(() => overview()?.textContent?.includes('4 tool calls') === true && toolGroups().length === 2
+      && toolGroups().every((button) => button.getAttribute('aria-expanded') === 'false'));
+    expect(overview()?.textContent).toContain('1 user response');
+    expect(overview()?.textContent).toContain('1 failed tool call');
+    expect(message(root, 'answer').textContent).toContain('Scenic');
+    expect(messageRow(root, 'answer').dataset.flowerInputCheckpoint).toBe('true');
+    expect(message(root, 'before-one')).not.toBeNull();
+    expect(message(root, 'after-one')).not.toBeNull();
+  });
   it.each(['canonical', 'legacy'] as const)('defaults %s child work to collapsed while preserving the parent background entry', async (history) => {
     await page.viewport(1280, 900);
     const child = subagentSummary({ parent_thread_id: 'parent', thread_id: 'process', status: 'completed' });
