@@ -138,8 +138,8 @@ export function FlowerTurnTimeline(props: Readonly<{
   const sequenceIdentity = (key: string) => JSON.stringify([props.runtimeID, props.thread?.thread_id, 'tools', key]);
   let previousSequences: { threadID?: string; value: FlowerToolSequenceProjection } | undefined;
   const sequences = createMemo(() => {
-    const next = projectFlowerToolSequences(props.entries, props.thread?.thread_id, props.thread?.turns ?? []);
     const previous = previousSequences?.threadID === props.thread?.thread_id ? previousSequences?.value : undefined;
+    const next = projectFlowerToolSequences(props.entries, props.thread?.thread_id, props.thread?.turns ?? [], previous);
     if (previous) untrack(() => {
       for (const group of next.groups.values()) {
         const addedKeys = new Set(group.nodeKeys.filter(key => !previous.members.has(key)));

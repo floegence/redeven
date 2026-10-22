@@ -70,6 +70,10 @@ Canonical row components retain their rendering owners when the sequence layout
 places their existing DOM under the first node's viewport. Membership changes
 preserve details, focus and selection; disposal restores borrowed rows to their
 original slots. The transcript controller continues to own outer scroll intent.
+Unchanged sequence groups and members retain their identities within one thread,
+so content-only streaming does not rerun historical layout or recreate resize
+observers. Membership, status, disclosure and source-order changes still replace
+the affected projection; previous projections are never mutated.
 Internal scrolling does not scroll or resume the outer transcript while the
 sequence can consume it. The transcript controller recognizes wheel, touch, and
 keyboard input handed off at a sequence edge: upward scrolling pauses outer
