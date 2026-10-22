@@ -46,6 +46,26 @@ func TestFlowerCPUQualification(t *testing.T) {
 	} else if len(entries) != 0 {
 		t.Fatal("qualification requires a fresh empty state directory; preserve earlier evidence and choose a new directory")
 	}
+	// A fork has a fresh prompt scope. Reusing the seed is necessary when
+	// qualifying historical provider-request reads, and each sample must use
+	// a fresh fixture so earlier measured work cannot alter its history.
+	retainSeedScope := os.Getenv("REDEVEN_CPU_RETAIN_SEED_SCOPE") == "1"
+	systemPrompt := "Preserve all evidence."
+	if raw := os.Getenv("REDEVEN_CPU_SYSTEM_PROMPT_BYTES"); raw != "" {
+		size, e := strconv.Atoi(raw)
+		if e != nil || size < len(systemPrompt) || size > 1<<20 {
+			t.Fatal("invalid qualification system prompt size")
+		}
+		systemPrompt += strings.Repeat("x", size-len(systemPrompt))
+	}
+	toolEvery := 400
+	if raw := os.Getenv("REDEVEN_CPU_TOOL_EVERY"); raw != "" {
+		value, e := strconv.Atoi(raw)
+		if e != nil || value < 40 || value > 10000 {
+			t.Fatal("invalid qualification tool cadence")
+		}
+		toolEvery = value
+	}
 	configValue := &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{ID: "openai", Type: "openai", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}}
 	service, err := NewServiceContext(t.Context(), Options{StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", Config: configValue, DeferExecution: true, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	if err != nil {
@@ -83,7 +103,7 @@ func TestFlowerCPUQualification(t *testing.T) {
 		return fltools.Result{Text: "Inspection complete."}, nil
 	})
 	makeAgent := func(gateway flprovider.Gateway) *flruntime.Agent {
-		agent, e := flruntime.NewAgent(flconfig.AgentConfig{Profile: flconfig.AgentProfile{ID: "qualification", Name: "Qualification"}, SystemPrompt: "Preserve all evidence.", Context: flconfig.ContextPolicy{ContextWindowTokens: 10000000}}, gateway, flruntime.WithAgentLoopLimits(flruntime.LoopLimits{DuplicateToolLimit: 10000, NoProgressLimit: 10000, WallTime: time.Hour}), flruntime.WithAgentTools(tool), flruntime.WithAgentEffectAuthorization(floretAllowTestEffect))
+		agent, e := flruntime.NewAgent(flconfig.AgentConfig{Profile: flconfig.AgentProfile{ID: "qualification", Name: "Qualification"}, SystemPrompt: systemPrompt, Context: flconfig.ContextPolicy{ContextWindowTokens: 10000000}}, gateway, flruntime.WithAgentLoopLimits(flruntime.LoopLimits{DuplicateToolLimit: 10000, NoProgressLimit: 10000, WallTime: time.Hour}), flruntime.WithAgentTools(tool), flruntime.WithAgentEffectAuthorization(floretAllowTestEffect))
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -235,7 +255,7 @@ func TestFlowerCPUQualification(t *testing.T) {
 					index := output.index
 					output.timings[index] = time.Now().UnixMilli()
 					evidenceMu.Unlock()
-					if mode.Load() == "mixed" && index%400 == 0 {
+					if mode.Load() == "mixed" && index%toolEvery == 0 {
 						select {
 						case events <- flprovider.Event{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: fmt.Sprintf("live-%d", index), Name: "qualification_inspect", Args: "{}"}}}:
 						case <-ctx.Done():
@@ -249,7 +269,7 @@ func TestFlowerCPUQualification(t *testing.T) {
 						return
 					}
 					kind := flprovider.EventDelta
-					if mode.Load() == "mixed" && index%400 < 40 {
+					if mode.Load() == "mixed" && index%toolEvery < min(40, toolEvery/10) {
 						kind = flprovider.EventReasoning
 					}
 					value := fmt.Sprintf("word%06d ", index)
@@ -295,7 +315,7 @@ func TestFlowerCPUQualification(t *testing.T) {
 	mux.HandleFunc("/fixture", func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Query().Get("op") {
 		case "setup":
-			encode(w, map[string]any{"threads": ids, "pid": os.Getpid(), "state": state, "ready": ready.Load(), "generation": generations.Load(), "history_turns": historyTurns, "history_messages": 2 * historyTurns, "history_completed_activities": 2 * historyTurns, "history_verified": true})
+			encode(w, map[string]any{"threads": ids, "pid": os.Getpid(), "state": state, "ready": ready.Load(), "generation": generations.Load(), "history_turns": historyTurns, "history_messages": 2 * historyTurns, "history_completed_activities": 2 * historyTurns, "history_verified": true, "retained_seed_scope": retainSeedScope, "system_prompt_bytes": len(systemPrompt), "tool_every": toolEvery})
 		case "list":
 			value, e := service.ListThreads(r.Context(), meta, 200, "")
 			if e != nil {
@@ -343,6 +363,15 @@ func TestFlowerCPUQualification(t *testing.T) {
 			}
 			mode.Store(pattern)
 			initialBytes.Store(size)
+			if retainSeedScope {
+				if count != 1 || childDetail || generations.Load() != 0 {
+					http.Error(w, "retained-scope qualification requires one root and a fresh fixture per sample", 400)
+					return
+				}
+				ids = []string{rootID, rootID}
+				encode(w, map[string]any{"threads": ids[1:], "hz": rate, "mode": pattern, "initial_bytes": size, "parent_thread": rootID, "child_detail": false})
+				return
+			}
 			// Each measurement forks the untouched seed. Prior live output must not
 			// change history size between alternating baseline/candidate rounds.
 			for _, id := range ids[1:] {
