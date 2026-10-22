@@ -98,8 +98,10 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(sequenceToggle.textContent).toContain('2 tool calls');
     expect(sequenceToggle.textContent).toContain('1 thinking segment');
     expect(group(root, 'goal').dataset.flowerSequence).toBe(sequenceKey);
-    expect(thinking.classList.contains('flower-thinking-disclosure-inline')).toBe(true);
-    expect(thinking.querySelector('.flower-activity-inline-icon svg')).not.toBeNull();
+    expect(thinking.closest<HTMLElement>('.flower-tool-sequence-node')?.dataset.flowerSequence).toBe(sequenceKey);
+    expect(thinking.querySelector('.flower-activity-inline-icon svg.lucide-brain')).not.toBeNull();
+    expect(getComputedStyle(thinking.querySelector('.flower-activity-inline-title')!).fontSize).toBe('12px');
+    expect(getComputedStyle(thinking.querySelector('.flower-activity-inline-title')!).lineHeight).toBe('18px');
 
     sequenceToggle.click();
     await waitFor(() => collapsed(root, 'search'));
@@ -120,7 +122,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     const nodes = [...root.querySelectorAll<HTMLElement>('.flower-tool-sequence-node[data-flower-sequence]')];
     expect(nodes).toHaveLength(ids.length);
     expect(root.querySelectorAll('.flower-tool-sequence-toggle')).toHaveLength(1);
-    expect(root.querySelectorAll('.flower-thinking-disclosure-inline')).toHaveLength(3);
+    expect(root.querySelectorAll('.flower-tool-sequence-node[data-flower-sequence] .flower-thinking-disclosure')).toHaveLength(3);
     expect(nodes.map(node => node.dataset.flowerSequence)).toEqual(Array(5).fill(nodes[0].dataset.flowerSequence));
     expect(nodes.map(node => node.dataset.flowerSequenceStart)).toEqual(['true', 'false', 'false', 'false', 'false']);
     expect(nodes.map(node => node.dataset.flowerSequenceEnd)).toEqual(['false', 'false', 'false', 'false', 'true']);
@@ -169,7 +171,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     } } };
     const activeThinking = { ...item('active-thinking', 'thinking'), live: true };
     const { root } = await mount([tool('before'), activeThinking, waiting, tool('after')]);
-    const thinking = root.querySelector<HTMLElement>('.flower-thinking-disclosure-inline')!;
+    const thinking = root.querySelector<HTMLElement>('[data-flower-message-id="active-thinking"] .flower-thinking-disclosure')!;
     expect(thinking.dataset.flowerThinkingView).toBe('collapsed');
     expect(thinking.querySelector('.flower-thinking-toggle')?.textContent).toContain('Thinking...');
     expect(thinking.querySelector('[data-floe-progress-shimmer="text"]')?.textContent).toContain('Thinking...');
@@ -191,10 +193,10 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(row(root, 'failure').closest('[inert]')).toBeNull();
     expect(root.querySelector('[data-flower-message-id="progress"]')?.closest('[inert]')).toBeNull();
     const thoughts = [...root.querySelectorAll<HTMLElement>('.flower-thinking-disclosure')];
-    expect(thoughts.map(node => node.classList.contains('flower-thinking-disclosure-inline'))).toEqual([true, true, true]);
+    expect(thoughts.map(node => Boolean(node.closest<HTMLElement>('.flower-tool-sequence-node')?.dataset.flowerSequence))).toEqual([true, true, true]);
     expect(thoughts[1].closest('[inert]')).not.toBeNull();
     expect(thoughts[2].closest('[inert]')).not.toBeNull();
-    expect(thoughts[1].querySelector('.flower-activity-inline-icon svg')?.getAttribute('stroke-width')).toBe('1.7');
+    expect(thoughts[1].querySelector('.flower-activity-inline-icon svg.lucide-brain')?.getAttribute('stroke-width')).toBe('1.7');
     firstToggle.click();
     await waitFor(() => firstToggle.closest('.flower-tool-sequence-node')?.getAttribute('data-state') === 'open');
     expect(collapsed(root, 'b')).toBe(false);

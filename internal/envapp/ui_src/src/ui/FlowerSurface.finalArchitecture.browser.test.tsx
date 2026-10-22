@@ -767,6 +767,9 @@ describe('Flower final thread cache and workspace transport', () => {
       },
     });
 
+    await waitFor(() => runtime.querySelector('.flower-thinking-disclosure') !== null);
+    expect(runtime.querySelector('.flower-thinking-disclosure')?.getAttribute('data-flower-thinking-view')).toBe('collapsed');
+    runtime.querySelector<HTMLButtonElement>('.flower-thinking-toggle')?.click();
     await waitFor(() => runtime.querySelector('.flower-thinking-content')?.textContent === thinkingText);
     const transcript = runtime.querySelector<HTMLElement>('.flower-chat-transcript');
     const blockStack = runtime.querySelector<HTMLElement>('.flower-message-block-stack-assistant');
@@ -826,14 +829,16 @@ describe('Flower final thread cache and workspace transport', () => {
         ],
       },
     });
-    await waitFor(() => runtime.querySelector('.flower-thinking-content')?.textContent?.includes('Inspecting files') === true);
+    await waitFor(() => runtime.querySelector('.flower-thinking-disclosure') !== null);
     const thinkingDisclosure = runtime.querySelector<HTMLElement>('.flower-thinking-disclosure');
     const thinkingToggle = runtime.querySelector<HTMLButtonElement>('.flower-thinking-toggle');
-    expect(thinkingDisclosure?.getAttribute('data-flower-thinking-view')).toBe('preview');
-    expect(runtime.querySelector('.flower-thinking-content')?.getAttribute('data-flower-thinking-view')).toBe('preview');
-    expect(thinkingToggle?.getAttribute('aria-expanded')).toBe('true');
+    expect(thinkingDisclosure?.getAttribute('data-flower-thinking-view')).toBe('collapsed');
+    expect(runtime.querySelector('.flower-thinking-content')).toBeNull();
+    expect(thinkingToggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(thinkingToggle?.querySelector('[data-floe-progress-shimmer="text"]')?.textContent).toContain('Thinking');
     thinkingToggle?.click();
-    await waitFor(() => thinkingDisclosure?.getAttribute('data-flower-thinking-view') === 'expanded');
+    await waitFor(() => runtime.querySelector('.flower-thinking-content')?.textContent?.includes('Inspecting files') === true);
+    expect(thinkingDisclosure?.getAttribute('data-flower-thinking-view')).toBe('expanded');
     expect(thinkingToggle?.getAttribute('aria-expanded')).toBe('true');
     expect(runtime.textContent).not.toContain('Final workspace explanation');
 
@@ -976,6 +981,9 @@ describe('Flower final thread cache and workspace transport', () => {
         ],
       },
     });
+    await waitFor(() => runtime.querySelector('.flower-thinking-disclosure') !== null);
+    expect(runtime.querySelector('.flower-thinking-disclosure')?.getAttribute('data-flower-thinking-view')).toBe('collapsed');
+    runtime.querySelector<HTMLButtonElement>('.flower-thinking-toggle')?.click();
     await waitFor(() => runtime.querySelector('.flower-thinking-content')?.textContent?.includes('Inspecting the next step') === true);
     expect(runtime.querySelector('.flower-model-status-indicator')).toBe(progressIndicator);
     expect(progressIndicator?.querySelector('.flower-model-status-flower')).toBe(progressFlower);

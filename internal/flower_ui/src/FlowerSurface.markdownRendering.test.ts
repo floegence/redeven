@@ -63,12 +63,19 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).not.toContain('<span>{block.content}</span>');
   });
 
-  it('defines the four-line thinking preview and overflow mask', () => {
+  it('uses the shared activity row without a separate thinking preview style', () => {
     const css = flowerCssSource();
+    const component = fs.readFileSync(path.join(repoRoot, 'internal/flower_ui/src/FlowerThinkingDisclosure.tsx'), 'utf8');
 
-    expect(css).toContain('--flower-thinking-visible-lines: 4');
-    expect(css).toContain(".flower-thinking-content[data-flower-thinking-view='preview']");
-    expect(css).toContain(".flower-thinking-content[data-flower-thinking-view='preview'][data-overflow='true']");
+    expect(component).toContain('class="flower-thinking-disclosure flower-activity-inline"');
+    expect(component).not.toContain('flower-thinking-disclosure-inline');
+    expect(component).not.toContain('inline?: Accessor<boolean>');
+    expect(component).toContain('class="flower-thinking-toggle flower-activity-inline-button"');
+    expect(component).toContain('class="flower-activity-inline-icon"');
+    expect(component).toContain('<Brain size={16} strokeWidth={1.7} aria-hidden="true" />');
+    expect(css).not.toContain('.flower-thinking-disclosure .flower-thinking-toggle {');
+    expect(css).not.toContain('--flower-thinking-visible-lines');
+    expect(css).not.toContain(".flower-thinking-content[data-flower-thinking-view='preview']");
   });
 
   it('binds activity row status to the timeline item status, not payload status', () => {

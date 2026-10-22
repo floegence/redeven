@@ -88,15 +88,38 @@ async function mount(presentation: 'full' | 'companion' = 'full', localized = fa
   return { root, live, initial };
 }
 
-it.each(['full', 'companion'] as const)('points thinking down while visible and right while collapsed in the %s surface', async presentation => {
+it('uses the tool activity row and Brain icon for standalone live thinking', async () => {
+  const { root } = await mount();
+  const row = disclosure(root);
+  const button = toggle(root);
+  expect(row.dataset.flowerThinkingView).toBe('collapsed');
+  expect(row.classList.contains('flower-activity-inline')).toBe(true);
+  expect(row.classList.contains('flower-thinking-disclosure-inline')).toBe(false);
+  expect(row.querySelector('.flower-activity-inline-row')).not.toBeNull();
+  expect(button.classList.contains('flower-activity-inline-button')).toBe(true);
+  expect(button.querySelector('.flower-activity-inline-icon svg.lucide-brain')).not.toBeNull();
+  expect(button.querySelector('.flower-activity-inline-title')?.textContent).toBe('Thinking...');
+  expect(button.querySelector('[data-floe-progress-shimmer="text"]')?.textContent).toBe('Thinking...');
+  expect(button.querySelector('.flower-activity-inline-duration')?.textContent).not.toBe('');
+  expect(getComputedStyle(button.querySelector('.flower-activity-inline-title')!).fontSize).toBe('12px');
+  expect(getComputedStyle(button.querySelector('.flower-activity-inline-title')!).lineHeight).toBe('18px');
+  expect(button.querySelector('.flower-thinking-toggle-icon')).not.toBeNull();
+  await page.viewport(360, 760);
+  expect(getComputedStyle(button.querySelector('.flower-activity-inline-duration')!).display).not.toBe('none');
+  expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth + 1);
+});
+
+it.each(['full', 'companion'] as const)('uses one tool-style disclosure for live thinking in the %s surface', async presentation => {
   const { root, live, initial } = await mount(presentation);
-  await expect.poll(() => chevronDirection(root)).toBe(90);
+  expect(disclosure(root).dataset.flowerThinkingView).toBe('collapsed');
+  await expect.poll(() => chevronDirection(root)).toBe(0);
   toggle(root).click();
   expect(disclosure(root).dataset.flowerThinkingView).toBe('expanded');
   await expect.poll(() => chevronDirection(root)).toBe(90);
   toggle(root).click();
-  expect(disclosure(root).dataset.flowerThinkingView).toBe('preview');
-  await expect.poll(() => chevronDirection(root)).toBe(90);
+  expect(disclosure(root).dataset.flowerThinkingView).toBe('collapsed');
+  await expect.poll(() => chevronDirection(root)).toBe(0);
+  toggle(root).click();
   live.push(sealed(initial));
   await waitFor(() => disclosure(root).dataset.flowerThinkingView === 'collapsed');
   await expect.poll(() => chevronDirection(root)).toBe(0);
@@ -110,10 +133,10 @@ it.each(['full', 'companion'] as const)('points thinking down while visible and 
 });
 
 it.each([
-  ['assistant', 'preview'], ['assistant', 'expanded'], ['tool', 'preview'], ['tool', 'expanded'],
+  ['assistant', 'collapsed'], ['assistant', 'expanded'], ['tool', 'collapsed'], ['tool', 'expanded'],
 ] as const)('collapses %s-bound %s thinking while the turn remains active', async (kind, view) => {
   const { root, live, initial } = await mount();
-  expect(disclosure(root).dataset.flowerThinkingView).toBe('preview');
+  expect(disclosure(root).dataset.flowerThinkingView).toBe('collapsed');
   if (view === 'expanded') toggle(root).click();
   expect(disclosure(root).dataset.flowerThinkingView).toBe(view);
   const next = sealed(initial, { items: [...sealed(initial).items!, kind === 'assistant'
@@ -136,20 +159,20 @@ it.each([
   expect(disclosure(root).dataset.flowerThinkingView).toBe('expanded');
 });
 
-it('closes the previous preview without closing a new thinking segment', async () => {
+it('keeps thinking segments independent while a later segment starts collapsed', async () => {
   const { root, live, initial } = await mount();
   live.push(sealed(initial, { items: [...sealed(initial).items!,
     { ...initial.items![1], id: 'thinking-next', ordinal: 3, text: 'A new independent thought.', live: true }] }));
   await waitFor(() => Boolean(disclosure(root, 'thinking-next')));
   expect(disclosure(root).dataset.flowerThinkingView).toBe('collapsed');
-  expect(disclosure(root, 'thinking-next').dataset.flowerThinkingView).toBe('preview');
+  expect(disclosure(root, 'thinking-next').dataset.flowerThinkingView).toBe('collapsed');
   toggle(root).click();
   live.push(sealed(live.current(), { view_version: 3 }));
   await waitFor(() => disclosure(root, 'thinking-next').dataset.flowerThinkingView === 'collapsed');
   expect(disclosure(root).dataset.flowerThinkingView).toBe('expanded');
 });
 
-it.each(['preview', 'expanded'] as const)('retains %s on disconnect and collapses only after a confirmed finished snapshot', async view => {
+it.each(['collapsed', 'expanded'] as const)('retains %s on disconnect and collapses only after a confirmed finished snapshot', async view => {
   const { root, live, initial } = await mount();
   if (view === 'expanded') toggle(root).click();
   live.fail();
@@ -200,7 +223,7 @@ it('preserves live thinking when exact cancellation is canonical before the term
   const { root, live, initial } = await mount();
   live.push(sealed(initial, { cancellation: { thread_id: initial.thread_id, turn_id: 'turn', run_id: 'run', source: 'user', mode: 'immediate', requested_at: '2026-10-12T12:00:30Z' } }));
   await waitFor(() => disclosure(root).dataset.flowerThinkingActive === 'false');
-  expect(disclosure(root).dataset.flowerThinkingView).toBe('preview');
+  expect(disclosure(root).dataset.flowerThinkingView).toBe('collapsed');
 });
 
 it.each(['full', 'companion'] as const)('supports a localized keyboard disclosure in a narrow %s surface', async presentation => {
@@ -244,7 +267,7 @@ it.each(['normal-child', 'failed-child'] as const)('uses the child thread facts 
   document.querySelector<HTMLButtonElement>('[data-flower-subagent-row="0"]')!.click();
   await waitFor(() => Boolean(document.querySelector('.flower-subagent-detail-transcript .flower-thinking-disclosure')));
   const transcript = document.querySelector<HTMLElement>('.flower-subagent-detail-transcript')!;
-  expect(disclosure(transcript).dataset.flowerThinkingView).toBe('preview');
+  expect(disclosure(transcript).dataset.flowerThinkingView).toBe('collapsed');
   toggle(transcript).click();
   live.envelope({ schema_version: 2, kind: 'thread.batch', thread_id: 'parent',
     subagent_current: sealed(initial, scenario === 'failed-child' ? { activity: 'idle', last_outcome: 'failed', turns: [turn('failed')] } : {}) });

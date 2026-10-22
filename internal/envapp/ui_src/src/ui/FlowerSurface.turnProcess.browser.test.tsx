@@ -451,15 +451,15 @@ describe('completed turn process disclosure', () => {
     expect(root.querySelector('.flower-error-card')).toBeNull();
     expect(root.querySelector('[data-flower-turn-id="turn"] .flower-turn-ended')).not.toBeNull();
   });
-  it.each(['failed', 'cancelled', 'interrupted'] as const)('keeps %s work and an active thinking preview visible', async (outcome) => {
+  it.each(['failed', 'cancelled', 'interrupted'] as const)('keeps %s work while active thinking stays folded', async (outcome) => {
     const { root, live } = await mount();
-    expect(root.querySelector('[data-flower-thinking-view="preview"]')).not.toBeNull();
+    expect(root.querySelector('[data-flower-thinking-view="collapsed"]')).not.toBeNull();
     live.push(current(true, { last_outcome: outcome, turns: [turn({ outcome, intermediate_item_ids: ['progress'], final_item_ids: [], final_boundary_complete: false })] }));
     const outcomeNotice = () => root.querySelector(outcome === 'cancelled' ? '.flower-turn-ended' : '.flower-run-error');
     await waitFor(() => Boolean(outcomeNotice()));
     expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
     expect(hidden(root, 'progress')).toBe(false);
-    expect(root.querySelector('[data-flower-thinking-view="preview"]')).not.toBeNull();
+    expect(root.querySelector('[data-flower-thinking-view="collapsed"]')).not.toBeNull();
     summary(root)!.click();
     expect(hidden(root, 'thinking')).toBe(true);
     expect(hidden(root, 'tool')).toBe(true);

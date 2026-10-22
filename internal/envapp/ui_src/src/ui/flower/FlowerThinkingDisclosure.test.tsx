@@ -16,22 +16,20 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function mount(initialLive = true, initialInline = false) {
+function mount(initialLive = true) {
   const root = document.createElement('div');
   document.body.append(root);
   const [live, setLive] = createSignal(initialLive);
   const [confirmed, setConfirmed] = createSignal(true);
   const [abnormal, setAbnormal] = createSignal(false);
   const [content, setContent] = createSignal('First reasoning line');
-  const [inline, setInline] = createSignal(initialInline);
   disposers.push(render(() => <FlowerThinkingDisclosure contentID="thinking-test" content={content}
-    inline={inline}
     live={live} liveConfirmed={confirmed} preserveOnEnd={abnormal}
     label={() => live() && confirmed() ? 'Thinking...' : 'Thought process'} elapsed={() => '4s'}
     expandLabel={() => 'Expand full thinking'} collapseLabel={() => 'Collapse thinking'}
     contentBody={() => <><span>{content()}</span><button data-inner-control>Copy reasoning</button></>} />, root));
   return {
-    root, setLive, setConfirmed, setAbnormal, setContent, setInline,
+    root, setLive, setConfirmed, setAbnormal, setContent,
     view: () => root.querySelector('.flower-thinking-disclosure')?.getAttribute('data-flower-thinking-view'),
     button: () => root.querySelector<HTMLButtonElement>('.flower-thinking-toggle')!,
     content: () => root.querySelector<HTMLElement>('.flower-thinking-content'),
@@ -40,10 +38,15 @@ function mount(initialLive = true, initialInline = false) {
 }
 
 describe('Thinking segment disclosure', () => {
-  it('keeps live thinking collapsed inside a tool sequence with a shimmer and elapsed time', () => {
-    const thinking = mount(true, true);
+  it('uses the shared activity row for live thinking', () => {
+    const thinking = mount();
     expect(thinking.view()).toBe('collapsed');
+    expect(thinking.root.querySelector('.flower-thinking-disclosure')?.classList.contains('flower-activity-inline')).toBe(true);
     expect(thinking.button().getAttribute('aria-expanded')).toBe('false');
+    expect(thinking.button().classList.contains('flower-activity-inline-button')).toBe(true);
+    expect(thinking.button().querySelector('.flower-activity-inline-icon')).not.toBeNull();
+    expect(thinking.button().querySelector('.flower-activity-inline-title')).not.toBeNull();
+    expect(thinking.button().querySelector('.flower-activity-inline-icon svg')?.classList.contains('lucide-brain')).toBe(true);
     expect(thinking.button().textContent).toContain('Thinking...');
     expect(thinking.button().textContent).toContain('4s');
     expect(thinking.button().querySelector('[data-floe-progress-shimmer="text"]')?.textContent).toBe('Thinking...');
@@ -53,14 +56,11 @@ describe('Thinking segment disclosure', () => {
     expect(thinking.view()).toBe('collapsed');
     thinking.button().click();
     expect(thinking.view()).toBe('expanded');
-    thinking.setInline(false);
-    expect(thinking.view()).toBe('preview');
   });
 
-  it.each(['preview', 'expanded'] as const)('collapses a normally completed %s immediately and permits reopening', (view) => {
+  it.each(['collapsed', 'expanded'] as const)('collapses a normally completed %s immediately and permits reopening', (view) => {
     const thinking = mount();
-    expect(thinking.view()).toBe('preview');
-    expect(thinking.button().getAttribute('aria-expanded')).toBe('true');
+    expect(thinking.view()).toBe('collapsed');
     if (view === 'expanded') thinking.button().click();
     expect(thinking.view()).toBe(view);
     thinking.finish();
@@ -79,21 +79,21 @@ describe('Thinking segment disclosure', () => {
     expect(thinking.view()).toBe('collapsed');
   });
 
-  it.each(['preview', 'expanded'] as const)('preserves the %s on abnormal completion without reopening older segments', (view) => {
+  it.each(['collapsed', 'expanded'] as const)('preserves the %s on abnormal completion without reopening older segments', (view) => {
     const thinking = mount();
     if (view === 'expanded') thinking.button().click();
     thinking.finish(true);
     expect(thinking.view()).toBe(view);
-    expect(thinking.content()).not.toBeNull();
+    expect(Boolean(thinking.content())).toBe(view === 'expanded');
     thinking.button().click();
-    if (view === 'preview') thinking.button().click();
+    if (view === 'collapsed') thinking.button().click();
     expect(thinking.view()).toBe('collapsed');
     thinking.setContent('Updated abnormal detail');
     thinking.setAbnormal(false);
     expect(thinking.view()).toBe('collapsed');
   });
 
-  it('starts completed history collapsed without a preview frame', () => {
+  it('starts completed history collapsed', () => {
     const thinking = mount(false);
     expect(thinking.view()).toBe('collapsed');
     expect(thinking.content()).toBeNull();
@@ -102,10 +102,10 @@ describe('Thinking segment disclosure', () => {
     expect(thinking.view()).toBe('expanded');
   });
 
-  it('preserves preview and manual expansion through disconnect and reconnect', () => {
+  it('preserves collapsed and manual expansion through disconnect and reconnect', () => {
     const thinking = mount();
     thinking.setConfirmed(false);
-    expect(thinking.view()).toBe('preview');
+    expect(thinking.view()).toBe('collapsed');
     expect(thinking.root.querySelector('[data-flower-thinking-active="false"]')).not.toBeNull();
     expect(thinking.button().textContent).toContain('Thought process');
     thinking.button().click();
@@ -122,7 +122,7 @@ describe('Thinking segment disclosure', () => {
     const second = mount();
     second.setContent('Next provider step');
     expect(first.view()).toBe('collapsed');
-    expect(second.view()).toBe('preview');
+    expect(second.view()).toBe('collapsed');
     first.button().click();
     second.finish();
     expect(first.view()).toBe('expanded');
@@ -131,6 +131,7 @@ describe('Thinking segment disclosure', () => {
 
   it('returns focus from completed content to its reachable disclosure button', () => {
     const thinking = mount();
+    thinking.button().click();
     const inner = thinking.root.querySelector<HTMLButtonElement>('[data-inner-control]')!;
     inner.focus();
     expect(document.activeElement).toBe(inner);
@@ -139,24 +140,25 @@ describe('Thinking segment disclosure', () => {
     expect(thinking.button().getAttribute('aria-expanded')).toBe('false');
   });
 
-  it('follows only confirmed live previews and exposes overflow without a transcript scroll writer', async () => {
+  it('follows confirmed active thinking only while the shared disclosure is expanded', async () => {
     const thinking = mount();
+    expect(thinking.view()).toBe('collapsed');
+    expect(thinking.content()).toBeNull();
+    thinking.button().click();
     const viewport = thinking.content()!;
     Object.defineProperties(viewport, { scrollHeight: { value: 400 }, clientHeight: { value: 80 } });
     thinking.setContent('More reasoning');
     await new Promise(resolve => requestAnimationFrame(resolve));
     expect(viewport.scrollTop).toBe(400);
-    expect(viewport.getAttribute('data-overflow')).toBe('true');
     viewport.scrollTop = 100;
     thinking.setConfirmed(false);
     thinking.setContent('Unconfirmed cached reasoning');
     await new Promise(resolve => requestAnimationFrame(resolve));
     expect(viewport.scrollTop).toBe(100);
     thinking.setConfirmed(true);
-    thinking.button().click();
     viewport.scrollTop = 50;
     thinking.setContent('Full reasoning expansion');
     await new Promise(resolve => requestAnimationFrame(resolve));
-    expect(viewport.scrollTop).toBe(50);
+    expect(viewport.scrollTop).toBe(400);
   });
 });

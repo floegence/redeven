@@ -3,11 +3,10 @@ import { Show, createEffect, createSignal, on, onCleanup } from 'solid-js';
 import { Brain } from 'lucide-solid';
 import { ChevronRight } from '@floegence/floe-webapp-core/icons';
 
-export type FlowerThinkingDisclosureView = 'preview' | 'expanded' | 'collapsed';
+export type FlowerThinkingDisclosureView = 'expanded' | 'collapsed';
 
 export type FlowerThinkingDisclosureProps = Readonly<{
   contentID: string;
-  inline?: Accessor<boolean>;
   content: Accessor<string>;
   live: Accessor<boolean>;
   liveConfirmed: Accessor<boolean>;
@@ -27,7 +26,6 @@ function safeContentID(value: string): string {
 
 export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> = (props) => {
   const [view, setView] = createSignal<FlowerThinkingDisclosureView>(props.manualExpanded?.() ? 'expanded' : 'collapsed');
-  const [overflowing, setOverflowing] = createSignal(false);
   let viewport: HTMLDivElement | undefined;
   let toggleButton: HTMLButtonElement | undefined;
   const contentID = `flower-thinking-content-${safeContentID(props.contentID)}`;
@@ -37,9 +35,9 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
     setView('collapsed');
   };
 
-  createEffect(on(() => [props.live(), props.inline?.() ?? false] as const, ([isLive, inline], previous) => {
-    if (isLive) setView(inline ? props.manualExpanded?.() ? 'expanded' : 'collapsed' : 'preview');
-    else if (previous?.[0] && !props.preserveOnEnd()) {
+  createEffect(on(props.live, (isLive, wasLive) => {
+    if (isLive && !wasLive) setView(props.manualExpanded?.() ? 'expanded' : 'collapsed');
+    else if (!isLive && wasLive && !props.preserveOnEnd()) {
       props.onManualExpanded?.(false);
       collapse();
     }
@@ -50,13 +48,11 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
     const currentView = view();
     const isActive = active();
     if (!viewport || currentView === 'collapsed') {
-      setOverflowing(false);
       return;
     }
     const frame = requestAnimationFrame(() => {
       if (!viewport) return;
-      setOverflowing(viewport.scrollHeight > viewport.clientHeight + 1);
-      if (isActive && currentView === 'preview') viewport.scrollTop = viewport.scrollHeight;
+      if (isActive) viewport.scrollTop = viewport.scrollHeight;
     });
     onCleanup(() => cancelAnimationFrame(frame));
   });
@@ -64,7 +60,7 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
   const toggle = () => {
     if (props.live()) {
       setView((current) => current === 'expanded'
-        ? (props.inline?.() ? 'collapsed' : 'preview')
+        ? 'collapsed'
         : 'expanded');
       return;
     }
@@ -76,49 +72,45 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
 
   return (
     <div
-      class="flower-thinking-disclosure"
-      classList={{ 'flower-thinking-disclosure-inline': props.inline?.() ?? false }}
+      class="flower-thinking-disclosure flower-activity-inline"
       data-state={view() === 'collapsed' ? 'closed' : 'open'}
       data-flower-thinking-view={view()}
       data-flower-thinking-active={active() ? 'true' : 'false'}
     >
-      <button
-        ref={toggleButton}
-        type="button"
-        class="flower-thinking-toggle"
-        classList={{ 'flower-activity-inline-button': props.inline?.() ?? false }}
-        data-flower-manual-open={view() === 'expanded' ? 'true' : undefined}
-        aria-controls={contentID}
-        aria-expanded={view() !== 'collapsed'}
-        aria-label={view() === 'expanded' ? props.collapseLabel() : props.expandLabel()}
-        onClick={toggle}
-      >
-        <Show when={props.inline?.()} fallback={<ChevronRight class="flower-thinking-toggle-icon" aria-hidden="true" />}>
-          <span class="flower-activity-inline-icon"><Brain size={16} strokeWidth={1.7} aria-hidden="true" /></span>
-        </Show>
-        <span
-          classList={{ 'flower-activity-inline-title': props.inline?.() ?? false }}
-          data-floe-progress-shimmer={active() && (props.inline?.() ?? false) ? 'text' : undefined}
-        >{props.label()}</span>
-        <Show when={(props.inline?.() ?? false) && active() && props.elapsed?.()}>
-          <span class="flower-activity-inline-duration">{props.elapsed?.()}</span>
-        </Show>
-        <Show when={props.inline?.()}><ChevronRight class="flower-thinking-toggle-icon" aria-hidden="true" /></Show>
-        <span class="flower-visually-hidden">
-          {view() === 'expanded' ? props.collapseLabel() : props.expandLabel()}
-        </span>
-      </button>
-      <Show when={view() !== 'collapsed'}>
-        <div
-          id={contentID}
-          class="flower-thinking-content"
-          data-flower-thinking-view={view()}
-          data-overflow={overflowing() ? 'true' : 'false'}
-          ref={viewport}
-        >
-          <div class="flower-thinking-content-body"><props.contentBody /></div>
+      <div class="flower-activity-inline-row flower-activity-inline-row-thinking" data-state={view() === 'collapsed' ? 'closed' : 'open'}>
+        <div class="flower-activity-inline-line">
+          <button
+            ref={toggleButton}
+            type="button"
+            class="flower-thinking-toggle flower-activity-inline-button"
+            data-flower-manual-open={view() === 'expanded' ? 'true' : undefined}
+            aria-controls={contentID}
+            aria-expanded={view() !== 'collapsed'}
+            aria-label={view() === 'expanded' ? props.collapseLabel() : props.expandLabel()}
+            onClick={toggle}
+          >
+            <span class="flower-activity-inline-icon"><Brain size={16} strokeWidth={1.7} aria-hidden="true" /></span>
+            <span class="flower-activity-inline-title" data-floe-progress-shimmer={active() ? 'text' : undefined}>{props.label()}</span>
+            <Show when={active() && props.elapsed?.()}>
+              <span class="flower-activity-inline-duration">{props.elapsed?.()}</span>
+            </Show>
+            <ChevronRight class="flower-thinking-toggle-icon" aria-hidden="true" />
+            <span class="flower-visually-hidden">
+              {view() === 'expanded' ? props.collapseLabel() : props.expandLabel()}
+            </span>
+          </button>
         </div>
-      </Show>
+        <Show when={view() !== 'collapsed'}>
+          <div
+            id={contentID}
+            class="flower-thinking-content"
+            data-flower-thinking-view={view()}
+            ref={viewport}
+          >
+            <div class="flower-thinking-content-body"><props.contentBody /></div>
+          </div>
+        </Show>
+      </div>
     </div>
   );
 };
