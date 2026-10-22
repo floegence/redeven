@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-10-22: Preserve ordered Flower deltas within existing queue budgets; reserve full-current convergence for actual pressure or sequence loss. Document same-route retirement and regression coverage.
+
 A compact digest of updates from the last 30 days. Current contracts and evidence live in the linked concepts; older detail remains in Git history.
 
 ## 2026-09-28

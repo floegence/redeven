@@ -27,7 +27,7 @@ Unknown command results retain their original request keys; a disconnect never r
 
 Initialization retains the complete authorized summary/read-state baseline as a byte-budgeted prefix. Concurrent runtime updates retain one dirty marker per `(runtime thread, wire thread, subagent route)` and the newest observed version. The consumer reads the authoritative current view outside the service lock after the prefix; it does not wait for a quiet producer. Publications newer than the captured view retain one marker for the next read.
 
-During normal delivery, consecutive appends with identical thread/item/turn/run identities and stable runtime facts merge only when actor versions and UTF-8 byte offsets are contiguous. Output-token counts and last-progress timestamps may advance monotonically within the same provider attempt; the merged update retains the newest values. Attempt, phase, first-output and semantic changes remain boundaries. Re-encoding is bounded to one 32 KiB fragment. Other pending runtime mutations converge through a current snapshot; summary, viewer read state, and subagent inventory keep their latest independently scoped value. Already-started envelopes are never replaced.
+During normal delivery, consecutive appends with identical thread/item/turn/run identities and stable runtime facts merge only when actor versions and UTF-8 byte offsets are contiguous. Output-token counts and last-progress timestamps may advance monotonically within the same provider attempt; the merged update retains the newest values. Attempt, phase, first-output and semantic changes remain boundaries. Re-encoding is bounded to one 32 KiB fragment. Nonmergeable contiguous updates stay in FIFO order while the existing count and byte budgets have capacity. Item switches, semantic boundaries, and a full append fragment alone must not read or retransmit historical content. Only a sequence gap, initialization, or exhausted budget converges through a current snapshot. A replacement retires every covered queued delta for its exact route; sibling routes and metadata retain their relative order. Summary, viewer read state, and subagent inventory keep their latest independently scoped value. Already-started envelopes are never replaced.
 
 A current view can advance ahead of the ordered publication pump. A transient, byte-accounted covered version suppresses already represented deltas until the pump catches up. A delta spanning that version requires another current view, never a partial text append. This is in-memory observation metadata, not a replay cursor or a second durable lifecycle.
 
@@ -58,5 +58,7 @@ The stream, frame queue and indexed cache are bounded observation mechanisms. Da
 - [Field-level public DTOs](../../internal/ai/flower_public_dto.go)
 
 - [Bounded stream and snapshot resolution](../../internal/ai/flower_live_stream.go)
+
+- [Mixed backlog without historical hydration, fragment boundaries, and capacity recovery](../../internal/ai/flower_live_incremental_pressure_test.go)
 
 - [Continuous initialization, slow-consumer Unicode soak, semantic state, route and budget tests](../../internal/ai/flower_live_backpressure_test.go)

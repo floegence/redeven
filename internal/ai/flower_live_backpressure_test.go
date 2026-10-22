@@ -86,9 +86,9 @@ func TestFlowerLiveBackpressureSnapshotAheadOfPumpSuppressesCoveredDeltas(t *tes
 			reads := 0
 			svc.threadRuntime = &authorityContinuityRuntime{view: func(context.Context, identity.ThreadID) (flruntime.ThreadView, error) { reads++; return current, nil }}
 			enqueueFlowerFragmentTest(t, svc, sub, flowerBackpressureAppend("thread", 0, 1, 0, "a"))
-			// A semantic boundary cannot be merged as text.
+			// An overlapping version range requires canonical convergence.
 			boundary := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: "thread",
-				Update: &flruntime.ThreadUpdate{ThreadID: "thread", BaseVersion: 1, ViewVersion: 2}})
+				Update: &flruntime.ThreadUpdate{ThreadID: "thread", BaseVersion: 0, ViewVersion: 2}})
 			enqueueFlowerFragmentTest(t, svc, sub, boundary)
 			if got := flowerBackpressureEnvelope(t, sub); got.Current == nil || got.Current.ViewVersion != 5 {
 				t.Fatal("missing authoritative current")
@@ -237,6 +237,7 @@ func TestFlowerLiveBackpressurePreservesSemanticSnapshotsAndSiblingRoutes(t *tes
 		result.ThreadID = id
 		return result, nil
 	}}
+	sub.subscriber.initializing = true
 	for _, id := range []string{"child1", "child2"} {
 		for version := uint64(1); version <= 3; version++ {
 			enqueueFlowerFragmentTest(t, svc, sub, newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
@@ -245,6 +246,7 @@ func TestFlowerLiveBackpressurePreservesSemanticSnapshotsAndSiblingRoutes(t *tes
 			}))
 		}
 	}
+	finalizeFlowerLiveSubscriberInitializationLocked(svc, sub.subscriber)
 	for _, id := range []string{"child1", "child2"} {
 		got := flowerBackpressureEnvelope(t, sub)
 		if got.ThreadID != "parent" || got.SubagentCurrent == nil || got.SubagentCurrent.ThreadID.String() != id ||
