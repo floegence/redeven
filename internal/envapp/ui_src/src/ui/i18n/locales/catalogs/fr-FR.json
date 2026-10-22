@@ -5686,6 +5686,10 @@
           "one": "{count} appel d’outil",
           "other": "{count} appels d’outils"
         },
+        "failedCalls": {
+          "one": "{count} appel d’outil en échec",
+          "other": "{count} appels d’outils en échec"
+        },
         "thinkingSegments": {
           "one": "{count} étape de réflexion",
           "other": "{count} étapes de réflexion"

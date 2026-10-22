@@ -32,8 +32,17 @@ describe('consecutive tool presentation', () => {
     expect([...result.groups.values()].map(group => group.disclosure)).toEqual(['automatic', 'manual', 'manual']);
     expect([...result.groups.values()][1].runningCount).toBe(1);
   });
+  it('groups failed and successful tool calls and reports failures without treating them as active', () => {
+    const failed = tool('failed', { status: 'error', severity: 'error', needs_attention: true, attention_reasons: ['error'], payload: { error: { message: 'Denied' } } });
+    const result = projectFlowerToolSequences([failed, tool('success')]);
+    const group = [...result.groups.values()][0];
+    expect(result.groups.size).toBe(1);
+    expect(group.toolCount).toBe(2);
+    expect(group.failedCount).toBe(1);
+    expect(group.runningCount).toBe(0);
+  });
   it.each<Partial<FlowerActivityItem>>([
-    { status: 'error' }, { status: 'waiting' }, { requires_approval: true }, { needs_attention: true },
+    { status: 'waiting' }, { requires_approval: true }, { needs_attention: true },
     { renderer: 'subagent_operation' }, { tool_name: 'subagent_events' }, { tool_name: 'goal' }, { kind: 'control' },
   ])('keeps attention and interactions as boundaries: %j', overrides => {
     expect(projectFlowerToolSequences([tool('a'), tool('boundary', overrides), tool('b')]).groups.size).toBe(0);

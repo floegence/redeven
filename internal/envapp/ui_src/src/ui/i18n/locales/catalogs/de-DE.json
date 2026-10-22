@@ -5686,6 +5686,10 @@
           "one": "{count} Werkzeugaufruf",
           "other": "{count} Werkzeugaufrufe"
         },
+        "failedCalls": {
+          "one": "{count} fehlgeschlagener Werkzeugaufruf",
+          "other": "{count} fehlgeschlagene Werkzeugaufrufe"
+        },
         "thinkingSegments": {
           "one": "{count} Denkabschnitt",
           "other": "{count} Denkabschnitte"

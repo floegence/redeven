@@ -788,6 +788,13 @@
             "other": "{count} 次工具调用"
           }
         },
+        "failedCalls": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} 次工具调用失败",
+            "other": "{count} 次工具调用失败"
+          }
+        },
         "thinkingSegments": {
           "kind": "plural",
           "forms": {

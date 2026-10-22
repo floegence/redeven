@@ -11,8 +11,8 @@ const media = commands as unknown as { emulateMediaPreferences: (input: { reduce
 const item = (id: string, kind: FlowerRuntimeCurrentItem['kind'], text = id): FlowerRuntimeCurrentItem => ({ id, kind, text, turn_id: 'turn', run_id: 'run', ordinal: 0 });
 const tool = (id: string, status: 'success' | 'running' | 'error' = 'success'): FlowerRuntimeCurrentItem => ({ ...item(id, 'tool'), activity: {
   item_id: id, tool_id: id, kind: 'tool', tool_name: 'terminal.exec', status, severity: status === 'error' ? 'error' : 'quiet',
-  needs_attention: false, requires_approval: false,
-  presentation: { label: `Execute ${id}`, renderer: 'terminal', payload: { operation: 'exec', command: `echo ${id}`, output: `${id} output` } },
+  needs_attention: status === 'error', requires_approval: false, ...(status === 'error' ? { attention_reasons: ['error'] } : {}),
+  presentation: { label: `Execute ${id}`, renderer: 'terminal', payload: { operation: 'exec', command: `echo ${id}`, output: `${id} output`, ...(status === 'error' ? { error: { message: `${id} failed` } } : {}) } },
 } });
 function current(items: FlowerRuntimeCurrentItem[], version = 1): FlowerRuntimeCurrentView {
   return { thread_id: 'sequences', turn_id: 'turn', run_id: 'run', view_version: version, activity: 'active', run_progress: { phase: 'streaming' },
@@ -39,7 +39,7 @@ async function mount(items: FlowerRuntimeCurrentItem[]) {
   root.style.height = '780px';
   await waitFor(() => Boolean(root.querySelector('[data-thread-id="sequences"] button')));
   root.querySelector<HTMLButtonElement>('[data-thread-id="sequences"] button')!.click();
-  await waitFor(() => Boolean(root.querySelector('[data-flower-activity-item-id="a"]')));
+  await waitFor(() => Boolean(root.querySelector('[data-flower-activity-item-id]')));
   await waitFor(() => root.querySelector('.flower-chat-transcript')?.getAttribute('data-flower-tail-preparing') !== 'true');
   return { root, push(next: FlowerRuntimeCurrentItem[]) { latest = current(next, latest.view_version + 1); values.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'sequences', current: latest }); wake?.(); } };
 }
@@ -50,15 +50,17 @@ const collapsed = (root: HTMLElement, id: string) => group(root, id).querySelect
 afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('consecutive tools in the shared Flower surface', () => {
-  it('folds older tools and bounded thinking, keeping prose, errors and outside thinking visible', async () => {
+  it('folds older tools and bounded thinking, keeping prose and outside thinking visible', async () => {
     const { root } = await mount([item('leading', 'thinking'), tool('a'), item('inside', 'thinking'), tool('b'), item('outside', 'thinking'),
       item('progress', 'assistant', 'A useful progress report.'), tool('failure', 'error'), tool('c'), tool('d', 'running')]);
     expect(toggle(root, 'a').textContent).toContain('2 tool calls');
     expect(toggle(root, 'a').textContent).toContain('1 thinking segment');
     expect(collapsed(root, 'a')).toBe(true);
     expect(collapsed(root, 'b')).toBe(true);
-    expect(collapsed(root, 'c')).toBe(false);
-    expect(toggle(root, 'c').textContent).toContain('1 running');
+    expect(collapsed(root, 'failure')).toBe(false);
+    expect(toggle(root, 'failure').textContent).toContain('3 tool calls');
+    expect(toggle(root, 'failure').textContent).toContain('1 failed tool call');
+    expect(toggle(root, 'failure').textContent).toContain('1 running');
     expect(row(root, 'failure').closest('[inert]')).toBeNull();
     expect(root.querySelector('[data-flower-message-id="progress"]')?.closest('[inert]')).toBeNull();
     const thoughts = [...root.querySelectorAll<HTMLElement>('.flower-thinking-disclosure')];
@@ -74,6 +76,26 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(getComputedStyle(row(root, 'a').querySelector('.flower-activity-inline-title')!).fontSize).toBe('12px');
     expect(getComputedStyle(row(root, 'a').querySelector('.flower-activity-inline-title')!).lineHeight).toBe('18px');
     await page.screenshot({ element: root, path: '__screenshots__/flower-tools-mixed.png' });
+  });
+
+  it('folds failed and successful calls together, keeps their failure count visible, and colors the tool glyph yellow', async () => {
+    const { root } = await mount([tool('failed', 'error'), tool('succeeded'), item('progress', 'assistant'), tool('c'), tool('d')]);
+    const failedGroup = group(root, 'failed');
+    expect(toggle(root, 'failed').textContent).toContain('2 tool calls');
+    expect(toggle(root, 'failed').textContent).toContain('1 failed tool call');
+    expect(collapsed(root, 'failed')).toBe(true);
+    expect(row(root, 'failed').closest('[inert]')).not.toBeNull();
+    toggle(root, 'failed').click();
+    await waitFor(() => failedGroup.getAttribute('data-state') === 'open');
+    const failedRow = row(root, 'failed');
+    const failedGlyph = failedRow.querySelector<HTMLElement>('.flower-tool-icon')!;
+    const warning = document.createElement('span'); warning.style.color = 'var(--redeven-status-warning)'; root.append(warning);
+    expect(failedRow.querySelectorAll('.flower-activity-inline-icon svg')).toHaveLength(1);
+    expect(getComputedStyle(failedGlyph).color).toBe(getComputedStyle(warning).color);
+    warning.remove();
+    failedRow.querySelector<HTMLButtonElement>('.flower-activity-inline-button')!.click();
+    await waitFor(() => Boolean(failedRow.querySelector('[data-state="open"]')));
+    expect(failedRow.textContent).toContain('failed failed');
   });
 
   it.each(['reduce', 'no-preference'] as const)('retains manual group and tool detail state through updates and navigation with %s motion', async reducedMotion => {
@@ -119,10 +141,10 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(collapsed(root, 'a')).toBe(false);
   });
 
-  it('reveals a failed call and restores focus when a two-call group dissolves', async () => {
+  it('reveals a waiting call and restores focus when a two-call group dissolves', async () => {
     const { root, push } = await mount([tool('a'), tool('b', 'running')]);
     const button = toggle(root, 'a'); button.focus(); button.click();
-    push([tool('a'), tool('b', 'error')]);
+    push([tool('a'), { ...tool('b'), activity: { ...tool('b').activity!, status: 'waiting' } }]);
     await waitFor(() => !root.querySelector('.flower-tool-sequence-toggle'));
     await waitFor(() => row(root, 'b').closest('[inert]') === null);
     expect(document.activeElement).toBe(row(root, 'a').querySelector('.flower-activity-inline-button'));

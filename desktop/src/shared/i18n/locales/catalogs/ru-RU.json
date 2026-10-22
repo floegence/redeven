@@ -805,6 +805,15 @@
             "other": "{count} вызовов инструментов"
           }
         },
+        "failedCalls": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} неудачный вызов инструмента",
+            "few": "{count} неудачных вызова инструмента",
+            "many": "{count} неудачных вызовов инструмента",
+            "other": "{count} неудачных вызовов инструмента"
+          }
+        },
         "thinkingSegments": {
           "kind": "plural",
           "forms": {

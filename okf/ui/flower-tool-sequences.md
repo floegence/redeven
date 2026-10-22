@@ -18,24 +18,30 @@ no upstream contract, canonical summary or backend migration.
 ## Boundaries and identity
 
 A sequence requires at least two tool calls with the same thread, turn and run.
-Only successful or active ordinary tool activity and argument previews qualify.
+Successful, active and failed ordinary tool activity and argument previews qualify.
 Leading and trailing thinking retain the existing standalone disclosure; only
 thinking between calls joins a sequence. Counts distinguish calls from thinking
-segments and do not generate semantic summaries. Even a newer single-call
-segment makes an earlier untouched sequence eligible for automatic collapse.
+segments and failed calls without generating semantic summaries. Even a newer
+single-call segment makes an earlier untouched sequence eligible for automatic
+collapse.
 
 Prose, user messages, interactions, parent events, compaction, Goal updates,
-SubAgent operations, errors, approvals and uncertain effects break sequences.
-Attention and waiting rows remain outside tool folding. Whole-turn disclosure
-continues to use its separate canonical eligibility and existing thinking policy.
-Sequence grouping never alters that order, the source blocks, or final output.
+SubAgent operations, approvals, uncertain effects and non-tool errors break
+sequences. Failed ordinary tool calls remain in the group, with a visible failed
+count and a yellow status color on the original tool glyph; expanding the group
+retains each call's original error details. Approval and waiting rows remain
+outside tool folding. Whole-turn disclosure continues to use its separate
+canonical eligibility and existing thinking policy. Sequence grouping never
+alters that order, the source blocks, or final output.
 
 Canonical tool identities and content-block keys own row lifetime. The first
 call owns the sequence identity through appends and status changes. A thought
 becoming bounded changes its presentation in place without reparenting its body.
-The existing tool trigger, semantic icon, independent details and secondary file
-actions remain intact. One thin line connects the existing icons. Completed rows
-use existing quiet theme tokens; active rows keep existing foreground treatment.
+The existing tool trigger, semantic type glyph, independent details and
+secondary file actions remain intact. Failed calls retain their type glyph and
+use the existing theme warning token as its status color. One thin line connects
+the existing icons. Completed rows use existing quiet theme tokens; active rows
+keep existing foreground treatment.
 Tool title font size and line height remain unchanged. Inline thinking uses a
 16px Lucide Brain glyph with a 1.7 stroke; standalone thinking keeps its chevron.
 
@@ -72,7 +78,7 @@ and [whole-turn disclosure](flower-turn-process-disclosure.md) for their owners.
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/flowerToolSequences.test.ts` - Bounded thinking, attention boundaries, recent-segment policy and stable identity.
+- `redeven:internal/flower_ui/src/flowerToolSequences.test.ts` - Bounded thinking, failed and active tool counts, interaction boundaries, recent-segment policy and stable identity.
 - `redeven:internal/flower_ui/src/FlowerToolSequenceNode.tsx` - Mounted stable rows, native group disclosure and existing motion integration.
 - `redeven:internal/flower_ui/src/FlowerTurnTimeline.tsx` - Existing store, reading protection and sole scroll owner.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.toolSequences.browser.test.tsx` - Live appends, focus, selection, gestures, detail retention, navigation, theme typography and reading anchors.

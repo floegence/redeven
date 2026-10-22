@@ -788,6 +788,13 @@
             "other": "{count} chamadas de ferramentas"
           }
         },
+        "failedCalls": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} chamada de ferramenta com falha",
+            "other": "{count} chamadas de ferramentas com falha"
+          }
+        },
         "thinkingSegments": {
           "kind": "plural",
           "forms": {

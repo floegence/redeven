@@ -5686,6 +5686,10 @@
           "one": "{count} 次工具呼叫",
           "other": "{count} 次工具呼叫"
         },
+        "failedCalls": {
+          "one": "{count} 次工具呼叫失敗",
+          "other": "{count} 次工具呼叫失敗"
+        },
         "thinkingSegments": {
           "one": "{count} 段思考",
           "other": "{count} 段思考"

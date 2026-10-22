@@ -788,6 +788,13 @@
             "other": "도구 호출 {count}회"
           }
         },
+        "failedCalls": {
+          "kind": "plural",
+          "forms": {
+            "one": "실패한 도구 호출 {count}건",
+            "other": "실패한 도구 호출 {count}건"
+          }
+        },
         "thinkingSegments": {
           "kind": "plural",
           "forms": {

@@ -1,5 +1,9 @@
 # Redeven OKF Update Log
 
+## 2026-10-21 — Keep failed calls in Flower tool sequences
+
+- Include failed ordinary tool calls in consecutive folding, expose the failed count in the collapsed summary, and color the original tool-type glyph with the theme's yellow warning token. Preserve expanded error details and keep interaction, approval, SubAgent, Goal, and uncertain-effect boundaries. See [Flower consecutive tool sequences](ui/flower-tool-sequences.md).
+
 ## 2026-10-21 — Isolated Flower provider saves and visible errors
 
 - Validate credentials only for changed provider bindings, requirements and explicit credential patches; preserve unaffected connection intent during atomic saves. Keep provider-dialog save failures in an accessible fixed footer with draft retry and exit. See [provider configuration](ui/flower-provider-configuration.md).

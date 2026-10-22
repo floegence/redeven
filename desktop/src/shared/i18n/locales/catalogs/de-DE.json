@@ -788,6 +788,13 @@
             "other": "{count} Werkzeugaufrufe"
           }
         },
+        "failedCalls": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} fehlgeschlagener Werkzeugaufruf",
+            "other": "{count} fehlgeschlagene Werkzeugaufrufe"
+          }
+        },
         "thinkingSegments": {
           "kind": "plural",
           "forms": {
