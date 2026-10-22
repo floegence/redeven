@@ -3666,7 +3666,7 @@
               "thinking",
               "ui"
             ],
-            "summary": "Flower groups consecutive tool calls in the shared Desktop and Env App timeline.\nThinking bounded by tools becomes an inline node in that sequence. Older settled\nsequences collapse while the newest sequence and active tools remain expanded.\nThis is product presentation over existing published Floret facts; it introduces\nno upstream contract, canonical summary or backend migration.",
+            "summary": "Flower groups consecutive tool calls in the shared Desktop and Env App timeline.\nThinking after the first tool becomes an inline node in that sequence, including\nthinking after the final tool. Older settled sequences collapse while the newest\nsequence and active tools remain expanded.\nThis is product presentation over existing published Floret facts; it introduces\nno upstream contract, canonical summary or backend migration.",
             "section_count": 2
           },
           {
@@ -42324,15 +42324,15 @@
         "title": "Flower consecutive tool sequences",
         "type": "UI Contract"
       },
-      "body_length": 5428,
-      "summary": "Flower groups consecutive tool calls in the shared Desktop and Env App timeline.\nThinking bounded by tools becomes an inline node in that sequence. Older settled\nsequences collapse while the newest sequence and active tools remain expanded.\nThis is product presentation over existing published Floret facts; it introduces\nno upstream contract, canonical summary or backend migration.",
+      "body_length": 5989,
+      "summary": "Flower groups consecutive tool calls in the shared Desktop and Env App timeline.\nThinking after the first tool becomes an inline node in that sequence, including\nthinking after the final tool. Older settled sequences collapse while the newest\nsequence and active tools remain expanded.\nThis is product presentation over existing published Floret facts; it introduces\nno upstream contract, canonical summary or backend migration.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Boundaries and identity\n\nA sequence requires at least two tool calls with the same thread, turn and run.\nSuccessful, active and failed ordinary tool activity and argument previews qualify.\nLeading and trailing thinking retain the existing standalone disclosure; only\nthinking between calls joins a sequence. Counts distinguish calls from thinking\nsegments and failed calls without generating semantic summaries. Even a newer\nsingle-call segment makes an earlier untouched sequence eligible for automatic\ncollapse.\n\nProse, user messages, interactions, parent events, compaction, Goal updates,\nSubAgent operations, approvals, uncertain effects and non-tool errors break\nsequences. Failed ordinary tool calls remain in the group, with a visible failed\ncount and a yellow status color on the original tool glyph; expanding the group\nretains each call's original error details. Approval and waiting rows remain\noutside tool folding. Whole-turn disclosure continues to use its separate\ncanonical eligibility and existing thinking policy. Sequence grouping never\nalters that order, the source blocks, or final output.\n\nEmpty assistant text placeholders between tool messages are transparent to\nsequence classification. This keeps running command rows connected while the\nprovider streams its next response; non-empty assistant text remains a boundary.\n\nCanonical tool identities and content-block keys own row lifetime. The first\ncall owns the sequence identity through appends and status changes. A thought\nbecoming bounded changes its presentation in place without reparenting its body.\nThe existing tool trigger, semantic type glyph, independent details and\nsecondary file actions remain intact. Failed calls retain their type glyph and\nuse the existing theme warning token as its status color. One thin line connects\nthe existing icons. Completed rows use existing quiet theme tokens; active rows\nkeep existing foreground treatment.\nTool title font size and line height remain unchanged. Inline thinking uses a\n16px Lucide Brain glyph with a 1.7 stroke; standalone thinking keeps its chevron.\n\n## Disclosure and reading\n\nThe existing interface-lifetime disclosure store owns sequence choices in a\nruntime/thread/tool namespace. Automatic collapse settles once. Explicit open or\nclosed choices survive new content, reconnects and navigation within the surface;\nrefresh restores defaults. Focus, selection, a pressed gesture, manually opened\ndetails or thinking, and visible reading away from the tail retain expansion.\nProtection also runs before previously independent content joins a closed group.\nThere is no delayed collapse retry.\n\nGroup collapse keeps existing rows mounted to preserve inner detail state while\nmaking them inert and inaccessible. Outer whole-turn closure still releases its\nbody after motion. The existing motion controller and the timeline's shared\ncompletion tracking report to the sole transcript scroll controller. Manual\ncollapse returns interior focus to the sequence button; automatic folding above\nthe reader preserves visible content position. User scrolling takes precedence.\n\nNative controls expose all controlled viewport IDs, localized counts and\nexpand/collapse labels. Hidden nodes leave no repeated inter-message gaps.\nReduced motion, visible focus, forced colors, narrow layouts and comfortable\npointer targets follow existing Flower rules. Both product catalogs explicitly\ntranslate the shared copy for every shipped locale.",
-          "char_count": 3464
+          "body": "## Boundaries and identity\n\nA sequence requires at least two nodes with the same thread, turn and run, and at\nleast one tool call. One tool and following thinking can form a sequence. Successful,\nactive and failed ordinary tool activity and argument previews qualify. Running\nattention is part of ordinary execution state and does not break the sequence;\nwaiting and approval attention remain interaction boundaries. Leading thinking\nretains the standalone disclosure; thinking from the first tool onward joins its\nsequence. Counts distinguish calls from thinking segments and failed calls without\ngenerating semantic summaries. Even a newer single-call segment makes an earlier\nuntouched sequence eligible for automatic collapse.\n\nProse, user messages, interactions, parent events, compaction, Goal state updates,\nSubAgent operations, approvals, uncertain effects and non-tool errors break\nsequences. Goal tool calls and Web Search remain ordinary tool nodes. Failed\nordinary tool calls remain in the group, with a visible failed count, a yellow\nstatus color on the original tool glyph, and warning-foreground row text; expanding\nthe group retains each call's original error details. Approval and waiting rows\nremain outside tool folding. Whole-turn disclosure continues to use its separate\ncanonical eligibility and existing thinking policy. Sequence grouping never\nalters that order, the source blocks, or final output.\n\nEmpty assistant text placeholders between tool messages are transparent to\nsequence classification. This keeps running command rows connected while the\nprovider streams its next response; non-empty assistant text remains a boundary.\n\nCanonical tool identities and content-block keys own row lifetime. The first\ncall owns the sequence identity through appends and status changes. A thought\nbecoming bounded changes its presentation in place without reparenting its body.\nThe existing tool trigger, semantic type glyph, independent details and\nsecondary file actions remain intact. Failed calls retain their type glyph and\nuse the existing theme warning token as its status color. One thin line connects\nadjacent tool icon centers, including the compact running-command loader. Completed\nrows use existing quiet theme tokens; active rows keep existing foreground\ntreatment.\nTool title font size and line height remain unchanged. Inline thinking uses a\n16px Lucide Brain glyph with a 1.7 stroke; standalone thinking keeps its chevron.\n\n## Disclosure and reading\n\nThe existing interface-lifetime disclosure store owns sequence choices in a\nruntime/thread/tool namespace. Automatic collapse settles once. Explicit open or\nclosed choices survive new content, reconnects and navigation within the surface;\nrefresh restores defaults. Focus, selection, a pressed gesture, manually opened\ndetails or thinking, and visible reading away from the tail retain expansion.\nProtection also runs before previously independent content joins a closed group.\nThere is no delayed collapse retry.\n\nGroup collapse keeps existing rows mounted to preserve inner detail state while\nmaking them inert and inaccessible. Outer whole-turn closure still releases its\nbody after motion. The existing motion controller and the timeline's shared\ncompletion tracking report to the sole transcript scroll controller. Manual\ncollapse returns interior focus to the sequence button; automatic folding above\nthe reader preserves visible content position. User scrolling takes precedence.\n\nNative controls expose all controlled viewport IDs, localized counts and\nexpand/collapse labels. Hidden nodes leave no repeated inter-message gaps.\nReduced motion, visible focus, forced colors, narrow layouts and comfortable\npointer targets follow existing Flower rules. Both product catalogs explicitly\ntranslate the shared copy for every shipped locale.",
+          "char_count": 3827
         },
         {
           "id": "boundaries",
@@ -42344,9 +42344,9 @@
       ],
       "evidence": [
         {
-          "id": "redeven:internal/flower_ui/src/flowerToolSequences.test.ts:0:bounded thinking, failed and active tool counts, interaction boundaries, recent-segment policy and stable identity.",
+          "id": "redeven:internal/flower_ui/src/flowerToolSequences.test.ts:0:leading and trailing thinking, running-attention classification, failed and active tool counts, interaction boundaries, recent-segment policy and stable identity.",
           "source": "redeven:internal/flower_ui/src/flowerToolSequences.test.ts",
-          "description": "Bounded thinking, failed and active tool counts, interaction boundaries, recent-segment policy and stable identity."
+          "description": "Leading and trailing thinking, running-attention classification, failed and active tool counts, interaction boundaries, recent-segment policy and stable identity."
         },
         {
           "id": "redeven:internal/flower_ui/src/FlowerToolSequenceNode.tsx:0:mounted stable rows, native group disclosure and existing motion integration.",
@@ -42359,9 +42359,9 @@
           "description": "Existing store, reading protection and sole scroll owner."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.toolSequences.browser.test.tsx:0:live appends, focus, selection, gestures, detail retention, navigation, theme typography and reading anchors.",
+          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.toolSequences.browser.test.tsx:0:running and completed row geometry, icon-center connectors, argument-preview transitions, failure colors, live appends, focus, selection, gestures, detail retention, navigation, theme typography and reading anchors.",
           "source": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.toolSequences.browser.test.tsx",
-          "description": "Live appends, focus, selection, gestures, detail retention, navigation, theme typography and reading anchors."
+          "description": "Running and completed row geometry, icon-center connectors, argument-preview transitions, failure colors, live appends, focus, selection, gestures, detail retention, navigation, theme typography and reading anchors."
         },
         {
           "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.turnProcess.browser.test.tsx:0:whole-turn disclosure and independent thinking regression coverage.",
@@ -42369,7 +42369,7 @@
           "description": "Whole-turn disclosure and independent thinking regression coverage."
         }
       ],
-      "snippet": "Flower groups consecutive tool calls in the shared Desktop and Env App timeline. Thinking bounded by tools becomes an inline node in that sequence. Older settled sequences collapse while the newest sequence and active tools remain expanded.",
+      "snippet": "Flower groups consecutive tool calls in the shared Desktop and Env App timeline. Thinking after the first tool becomes an inline node in that sequence, including thinking after the final tool. Older settled sequences collapse while the newe",
       "links": [
         {
           "label": "activity interaction",
@@ -46449,5 +46449,5 @@
       ]
     }
   ],
-  "source_sha256": "45ca9e20faa44448dd21d54ea4abda70038a652f3280c676bd936b3f8f67fabb"
+  "source_sha256": "1f2167db150dc9c34f313deacb37ee41bc0147593e0c9a82294d2b270cda1c0b"
 }
