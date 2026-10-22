@@ -32,6 +32,8 @@ is intentionally smaller than Floret's published general query API.
 - Reasoning, secrets and private provider state remain excluded. Tool arguments
   and confirmed results are available only through authorized content reads.
 
+# Boundaries
+
 ## Authorization owner
 
 Authenticated session authority supplies read permission, user, endpoint and
