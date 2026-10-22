@@ -4,6 +4,8 @@ title: OKF release assets
 description: Release workflow publishes OKF verification assets alongside CLI and desktop artifacts.
 tags: [release, security, supply-chain, okf]
 timestamp: 2026-06-17T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -16,7 +18,6 @@ The signed aggregate checksum remains the public integrity anchor for these stan
 # Contract
 
 ## Mechanism
-
 Build jobs copy the OKF verification files into per-platform package artifacts. The release job recollects them, includes them in `SHA256SUMS`, signs the checksum file with Cosign keyless OIDC, and uploads the OKF files as standalone GitHub Release assets.
 
 # Boundaries

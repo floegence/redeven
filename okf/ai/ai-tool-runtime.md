@@ -4,6 +4,8 @@ title: AI tool runtime
 description: Canonical navigation and ownership boundary for Redeven AI tools and Floret runtime integration.
 tags: [ai, tools, runtime, floret]
 timestamp: 2026-10-08T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -12,20 +14,11 @@ Redeven exposes typed AI tools through product-owned registration, policy, prese
 # Contract
 
 ## Mechanism
+This concept is the stable overview for the subject.
 
-This concept is the stable overview for the subject. Detailed contracts are maintained in the focused concepts below:
+Floret renders reference display content and snapshots into canonical model history for execution and compaction, preserving order across follow-ups.
 
-- [AI tool permissions and dispatch](tool-permission-runtime.md)
-- [AI tool approval runtime](tool-approval-runtime.md)
-- [AI terminal tool runtime](terminal-tool-runtime.md)
-- [Direct image reading and tool media retention](image-read-and-retention.md)
-- [AI model and context runtime](model-context-runtime.md)
-- [Floret thread runtime integration](floret-thread-runtime.md)
-- [Flower subagent runtime](subagent-runtime.md)
-
-Floret receives submitted references through `UserInput.References` and ordinary runtime snapshots through `UserInput.Context`. Redeven maps both once before admission and stores neither afterward. Floret renders reference display content and snapshots into canonical model history for execution and compaction, preserving order across follow-ups. Opaque `ResourceRef` stays inside Floret and outside model text and browser authority. `SupplementalContext` remains an explicit temporary-input contract, including secret answers. Attachments travel separately through `UserInput.Attachments`.
-
-Every accepted AI user turn holds a Runtime lifecycle workload lease from admission until the canonical thread view has no active turn and no queued input. A lifecycle fence rejects a new turn before Floret mutation. Lease release follows the canonical terminal view, not the HTTP response or Desktop connection lifetime, so an existing session cannot admit hidden work after the final lifecycle snapshot.
+Lease release follows the canonical terminal view, not the HTTP response or Desktop connection lifetime, so an existing session cannot admit hidden work after the final lifecycle snapshot.
 
 # Boundaries
 
@@ -34,8 +27,7 @@ Redeven must consume published Floret releases and must not persist a second cop
 # Evidence
 
 - `redeven:internal/ai/tools/registry.go:98` - Builtin tool definitions declare mutation, approval, and presentation specs.
+
 - `redeven:internal/ai/run.go` - `terminal.exec` dispatch starts the hosted terminal process lifecycle.
+
 - `redeven:internal/ai/tools/types.go:126` - `ToolPresentationSpec` carries renderer, operation, label, fallback, compact payload, result payload, and activity chip fields.
-- `redeven:internal/ai/builtin_tool_handlers.go:21` - Tool success summaries are normalized by builtin name or semantic activity category.
-- `redeven:internal/codeapp/appserver/server.go:4232` - Appserver exposes the parent-scoped subagent detail route.
-- `redeven:internal/ai/runtime_lifecycle_admission.go:1` - Binds AI admission and canonical terminal settlement to Runtime lifecycle workload leases.

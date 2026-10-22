@@ -4,6 +4,8 @@ title: macOS application capture process ownership
 description: Share one native capture process while preserving independent application channels, frame credit and lifecycle.
 tags: [runtime, applications, macos, capture, security]
 timestamp: 2026-09-22T01:30:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -19,62 +21,17 @@ permissions and process/window validation.
 # Contract
 
 ## Process and channel ownership
+The Runtime must not start a separate persistent capture helper for each application.
 
-The Runtime must not start a separate persistent capture helper for each
-application. On the tested macOS host, leaving one process alive after stopping
-its stream and then starting capture in another process reproduced `SC_-3805`
-and repeated replayd connection interruptions. Recreating applications, adding
-startup sleeps or repeatedly retrying the same conflicting processes does not
-resolve the ownership problem.
-
-One Runtime-owned process handles host-application protocol version 2. Each request
-and response carries an opaque `session_id` assigned by the Runtime's channel
-owner. The Runtime overwrites any supplied routing field before sending a request;
-the renderer never chooses a native channel. The helper dispatches control on its
-main run loop and routes asynchronous pictures and events back to their exact
-channel. This private protocol requires a matching Runtime/helper bundle. It does
-not change the browser WebSocket or Computer Use protocols.
-
-Each application channel retains its own client lease, bound OS process, window generation,
-capture/encoder, menu handles, held input and single-frame acknowledgement credit.
-Closing a viewer releases only that client's channel and input delivery.
-Ending one lease detaches only that channel and releases its resources; neither
-operation exits the shared helper or quits the native application. Normal startup
-keeps the existing immediate picture negotiation and low-latency first-frame path.
-
-Catalog, validation, native-open and permission requests use short-lived channels
-on the same process. They do not create additional AppKit helper processes. Empty
-channel inventory leaves the helper idle until the Runtime closes, so the next
-application uses the same ScreenCaptureKit process identity.
+Empty channel inventory leaves the helper idle until the Runtime closes, so the next application uses the same ScreenCaptureKit process identity.
 
 ## Physical desktop integration
-
-The exact released `FloeNativeDesktop` package owns reusable capture and native
-desktop input. Redeven retains application-specific process/window validation.
-One helper lease arbitrates human remote input across application and physical
-desktop channels. Takeover releases the previous controller's held state and
-reports its revoked authority while preserving sharing. Application window
-messages carry the actual control lease; a fresh window alone is not a grant.
-An explicit takeover may resume an already connected application viewer, while
-a duplicate ordinary resume remains invalid. Desktop media uses a separate
-binary pipe and bounded per-channel queues so pictures do not serialize behind
-control messages.
+The exact released `FloeNativeDesktop` package owns reusable capture and native desktop input. Desktop media uses a separate binary pipe and bounded per-channel queues so pictures do not serialize behind control messages.
 
 ## Failure and shutdown
+Each response channel has a bounded 128-message queue, preserving the supported operation-result burst.
 
-Each response channel has a bounded 128-message queue, preserving the supported
-operation-result burst. A stalled consumer closes only its own channel and cannot
-block another application's pictures or controls. Late messages for detached
-channels are ignored. Closing a channel prevents further commands from recreating
-its binding. Existing per-viewer authorization and response bounds still apply.
-
-Malformed native routing or helper exit closes all channels from that helper.
-Current sessions fail explicitly; the Runtime does not silently replay launches
-or input. A later new channel can acquire a fresh helper after the failed process
-has been reaped. Runtime shutdown first cancels session/viewer ownership, then
-closes the helper input, allows bounded cleanup, and reaps that exact process.
-Overlapping detach and host shutdown both receive completion after the native
-capture stops. Native applications and their unsaved work survive this shutdown.
+Native applications and their unsaved work survive this shutdown.
 
 # Boundaries
 
@@ -83,6 +40,7 @@ Sharing sessions retain separate authorization, input and frame credit despite u
 # Evidence
 
 - `internal/hostapps/macos_host.go` and `macos_host_test.go`: shared process ownership, routing, backpressure, closed-channel fencing and process reaping.
+
 - `desktop/native/computer-host/Sources/RedevenComputerHost/HostApplicationHost.swift` and `desktop/native/computer-host/Tests/RedevenComputerHostTests/HostApplicationHostTests.swift`: protocol admission and independent native channel lifecycle.
+
 - `scripts/check_macos_host_application_concurrency.py`: real suspend-then-open reproduction, alternating reconnects, independent frame credit, and detach while another application remains active.
-- `scripts/check_macos_host_application_startup.py`: unchanged single-application startup, negotiation and reconnect latency checks.

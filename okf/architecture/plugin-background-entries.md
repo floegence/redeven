@@ -4,6 +4,8 @@ title: Plugin background entries
 description: ReDevPlugin starts and recovers one headless background entry per plugin instance and environment without creating a Redeven visual surface.
 tags: [architecture, plugins, background, redevplugin]
 timestamp: 2026-10-07T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -17,30 +19,18 @@ recovered by Redeven.
 
 # Contract
 
-`runtime_start` entries are recovered after Host startup and runtime recovery;
-`on_demand` entries start only after the plugin requests them through its
-declared lifecycle. Starts are idempotent and concurrent starts are serialized.
-Closing a visible surface does not stop a running background entry. A failed
-entry becomes a diagnostic state that can be retried by the plugin or user;
-Redeven does not infer or recreate thread, turn, JSON-RPC, or external-service
-business state.
+`runtime_start` entries are recovered after Host startup and runtime recovery; `on_demand` entries start only after the plugin requests them through its declared lifecycle. Starts are idempotent and concurrent starts are serialized.
 
-The Env App projects background declarations during installation review and
-projects `Starting`, `Running`, `Exited`, `Blocked`, `Crashed`, and `Stream gap`
-for the latest process-related diagnostic. Status changes update only the
-owning plugin instance and do not lock Plugin Center, Activity, Workbench, or
-Composer.
+Status changes update only the owning plugin instance and do not lock Plugin Center, Activity, Workbench, or Composer.
 
 # Boundaries
 
-This concept owns headless plugin-entry lifecycle and recovery boundaries.
-Process stream ownership is defined by [Plugin process sessions](plugin-process-sessions.md);
-Redeven owns only the installation-review projection, permission state, and
-diagnostic presentation described by [Plugin platform integration](plugin-platform-integration.md).
+This concept owns headless plugin-entry lifecycle and recovery boundaries. Process stream ownership is defined by [Plugin process sessions](plugin-process-sessions.md); Redeven owns only the installation-review projection, permission state, and diagnostic presentation described by [Plugin platform integration](plugin-platform-integration.md).
 
 # Evidence
 
 - ReDevPlugin `pkg/background/manager.go` owns idempotent starts, recovery, owner cleanup, and shutdown.
+
 - ReDevPlugin `pkg/host/background_worker_runner.go` validates the declared worker, permissions, environment scope, and runtime invocation.
+
 - Redeven `internal/envapp/ui_src/src/ui/plugins/pluginProcessStatus.ts` projects redacted process diagnostics into user-facing status.
-- ReDevPlugin `pkg/background/manager_test.go` covers runtime-start recovery, on-demand exclusion, concurrent start serialization, and shutdown.

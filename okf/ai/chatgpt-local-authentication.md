@@ -4,8 +4,9 @@ title: Local ChatGPT plan authentication
 description: Admit official ChatGPT sign-in only through verified local host access and preserve provider history, credentials and billing choice.
 tags: [ai, flower, authentication, openai, desktop, security]
 timestamp: 2026-10-14T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
-
 # Summary
 
 OpenAI connections have one active authentication method: API key or ChatGPT
@@ -21,142 +22,28 @@ failures remain explicit through the canonical owner linked below.
 # Contract
 
 ## Local host admission
+The authenticated Runtime settings response publishes `auth_capabilities` with an `openai_chatgpt` availability, disabled reason and connection binding. Desktop identity, loopback URL text, renderer headers and client declarations cannot establish local access.
 
-The authenticated Runtime settings response publishes `auth_capabilities` with
-an `openai_chatgpt` availability, disabled reason and connection binding. The
-shared dialog consumes that result directly. Desktop identity, loopback URL text,
-renderer headers and client declarations cannot establish local access.
-
-Native Desktop main strips renderer-supplied host-access headers. Only the
-actual local-environment native bridge adds local proof alongside its private
-bridge credential. SSH, Gateway, remote Desktop, remote Web, forwarded services
-and missing proof remain disabled. Start, status, cancel, reauthorization,
-sign-out, acknowledgement, model discovery and provider-bundle writes enforce
-this same boundary. API-key operations retain their existing permission policy.
-Remote provider-bundle edits may preserve an existing account binding while
-editing API-key connections. They cannot create, replace, remove, rename or copy
-ChatGPT authentication, and the current authentication schema remains required.
-
-Desktop's existing **Open in browser** action can mint a one-use, one-minute
-handoff for the actual local Runtime's published origin. Redemption sets an
-HttpOnly, same-site cookie bound to that exact authority. The existing access
-gate and authenticated session are still required. The in-memory proof expires
-and disappears on Runtime restart; it is never restored from durable session
-metadata. Opening an arbitrary localhost URL does not grant local authentication.
-
-The remote Desktop Env adapter removes account callbacks, saved-account facts
-and the local binding even if a stale settings response claims availability.
-Global Env settings apply the same route restriction. Capability loss cancels
-in-progress dialog authorization; account-list responses are scoped to the
-current trusted binding.
-
-Remote conversations may use the existing Desktop model source. That source
-executes against the local account store; the remote settings page exposes no
-account login, credential transfer or account email.
+That source executes against the local account store; the remote settings page exposes no account login, credential transfer or account email.
 
 ## Account lifecycle
-
-The [ChatGPT account lifecycle](chatgpt-account-lifecycle.md) is the canonical
-owner of registration, verified sign-in persistence, issued-client retry,
-local saved-account selection, renewal, cancellation cleanup and logout.
-Provider configuration binds canonical account IDs; it never owns OAuth tokens
-or a credential draft. The local account API and every mutation retain the
-verified-host/admin admission described above. Connection saves and explicit
-logout have separate results.
+The [ChatGPT account lifecycle](chatgpt-account-lifecycle.md) is the canonical owner of registration, verified sign-in persistence, issued-client retry, local saved-account selection, renewal, cancellation cleanup and logout. Connection saves and explicit logout have separate results.
 
 ## Model and request contracts
+The public account model endpoint's listed models preserve server order and are intersected with reviewed adapter capabilities. ChatGPT connections reject custom endpoints, API credentials and custom model declarations.
 
-The public account model endpoint's listed models preserve server order and are
-intersected with reviewed adapter capabilities. ChatGPT connections reject
-custom endpoints, API credentials and custom model declarations. New catalog
-models stay unselected; unavailable selections remain explicit.
-Wire-name overrides must remain in the reviewed account inventory and inherit
-the target model's capabilities while preserving local identity and parameters.
-
-Requests use full canonical input, `store: false`, streaming, developer
-instructions and the `redeven` function namespace. Unsupported API parameters
-and server continuation IDs are omitted. Encrypted reasoning and native output
-are retained only in opaque provider state bound to exact canonical history;
-compaction and changed lineage prune ineligible native records. Authentication
-method and account enter state compatibility identity. API-key identities retain
-their previous hash. No separate conversation store or domain migration is added.
-Only a completed response commits provider state; incomplete responses, stream
-errors and disconnects fail explicitly.
-
-Native web search uses the current `web_search` tool contract. Completed output
-items retain their original provider bytes in output-index order. The terminal
-response may omit its output snapshot; it still must reach `response.completed`.
-When both item events and a terminal snapshot are present, they must agree.
-Missing indices, conflicting items and oversized output fail without committing
-provider state. Native history is never reconstructed from text deltas.
-
-Per-tool `Strict` intent survives the internal Runtime/Desktop model-source DTO.
-The OpenAI adapter copies canonical schemas before freezing the request, makes
-all object properties required, and gives originally optional non-nullable
-fields a null alternative. Objects and array elements are recursive; enum and
-existing nullable restrictions remain intact. Open objects, references and
-unsupported composition keywords fail preparation explicitly, without switching
-strict mode off or acquiring remote schemas. Configured non-strict policies stay
-explicit.
-
-Each frozen request owns its argument-restoration rules. Streaming completion and
-final tool calls remove only synthetic nulls, before Floret canonical validation.
-Original null, false, zero and empty strings remain values. Malformed argument
-JSON fails the model-source contract. Native output retains original provider
-bytes, while canonical tool arguments and replay fingerprints use restored
-values; restart, continuation and compaction retain one canonical meaning.
-
-HTTP and stream errors become a bounded `redeven_provider_failure_v1` envelope
-before entering Floret's existing failure record. It retains the actual adapter
-provider type, sanitized transport status, code, parameter path, request ID,
-response shape and explicit structured error message. Message whitespace is
-normalized, UTF-8 is limited to 1 KiB, and credential-shaped values and URLs are
-redacted before persistence. Raw bodies, metadata and request payloads stay private.
-Standard API errors, detail objects/strings and SDK stream errors share this
-boundary. Flower shows useful messages as literal text; generic wrappers retain
-localized guidance. Diagnostics remain collapsed and copyable after live updates
-or restart. HTTP 5xx offers deliberate retry with server-error guidance; transport
-failures retain network guidance. Historical status is reclassified without
-inventing messages discarded by earlier adapters.
-
-OpenRouter's explicit `upstream_provider_shared_pool` limit source is retained
-only for a 429 failure from that provider. Its localized guidance identifies
-shared upstream capacity and offers a deliberate retry, another model, or a
-user-owned provider key connected in OpenRouter. A numeric 400–599 error code
-inside an HTTP 200 stream is classified as a failure without rewriting the
-transport status. An HTTP failure status takes precedence over a conflicting
-body code. Unknown limit sources remain generic; neither upstream prose nor
-an unspecified 429 establishes an exhausted account quota or a reset time.
-Metadata prose, upstream names, remedy URLs and user identifiers stay private.
-
-The composer has no permanent plan-allowance notice. Provider settings retain
-[Manage usage](https://chatgpt.com/settings/usage), and the initial account
-confirmation explains eligible plan usage once before enablement. Explicit usage
-limit errors expose Manage usage; temporary usage/service failures offer deliberate
-later retry without assuming a whole-plan limit or reset time. The
-first-use confirmation stays in the existing provider modal with a Got it action.
-Missing permission and expired credentials direct users to provider settings. No error
-silently switches authentication or API billing.
+No error silently switches authentication or API billing.
 
 # Boundaries
 
 Floret owns canonical conversation, engine execution and opaque provider state.
-Redeven owns local account admission, credentials and product configuration;
-account fields never become engine domain records or a remote credential source.
 
-Runtime/Desktop compatibility epoch 57 and provider-bundle
-`auth_schema_version: 1` prevent an old client from erasing a saved account method.
 Old API-key-only saves remain supported.
 
 # Evidence
 
 - `redeven:internal/codeapp/appserver/chatgpt_auth.go` - Trusted local admission for account access and management.
+
 - `redeven:internal/localui/local_runtime_browser_test.go` - Native handoff, public spoof rejection and exact authority.
+
 - `redeven:internal/ai/model_gateway_strict_test.go` - Real Flower strict wire contract, optional argument restoration and frozen-request rules.
-- `redeven:internal/ai/provider_failure_test.go` - HTTP/stream evidence, bounded diagnostics and credential-leak rejection.
-- `redeven:internal/ai/model_gateway_chatgpt.go` - Responses namespace and canonical native replay.
-- `redeven:internal/ai/model_gateway_chatgpt_floret_test.go` - Published-engine tool history, restart and compaction.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.chatgpt.browser.test.tsx` - Shared local UI, translations, cancellation and preserved selection/focus.
-- [Official model and request contract](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference).
-- [Preview request limitations](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations).
-- [Official UI guidelines](https://developers.openai.com/siwc/ui-ux-guidelines).

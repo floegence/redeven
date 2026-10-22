@@ -4,6 +4,9 @@ title: Computer use qualification evidence
 description: Read measured browser and desktop outcomes without conflating adapter, model and final integration scopes.
 tags: [ai, computer-use, testing, evidence]
 timestamp: 2026-09-17T00:00:00Z
+lifecycle: retained_history
+retention_reason: "Retains platform qualification failures and scope boundaries that prevent unsupported claims about current Computer Use behavior."
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -15,149 +18,30 @@ successes. Private text and pixels are excluded from retained diagnostics.
 
 # Contract
 
-Keep measurements bound to their declared platform, provider and source build.
-Preserve failed runs as failed evidence and use the acceptance contract for
-required effects, privacy and cleanup. Never infer cross-platform success from
-one adapter or from a model request returning HTTP 200.
-
-# Evidence
-
-## Visible installation folders
-
-The 2026-09-18 guide refinement installed the packaged extension in an isolated
-real Google Chrome profile on macOS. The native picker used Home followed by
-visible `Redeven` and task-owned extension folders, then confirmed selection.
-No absolute path entry, hidden-file toggle, preloaded extension or sandbox
-override was used. The actual Chrome control read
-“加载未打包的扩展程序”. The test removes its exact profile and extension folder.
-The picker driver binds accessibility and input to the test Chrome PID.
-The opt-in runner is
-`redeven:internal/envapp/ui_src/scripts/computerExtensionInstall.node-test.mjs`
-with `REDEVEN_CHROME_INSTALL_QUALIFICATION=1`.
-
-English, Simplified Chinese, German and Japanese guide browser tests cover
-the visible route, host-specific shortcut, narrow layouts, optional path help,
-back/skip and handshake-only continuation. Both product catalogs are checked
-for parity across all ten locales. Linux staging and fixed reveal commands
-pass deterministic tests on the current host; Linux native GTK, Qt and portal
-pickers were not exercised on this macOS machine.
-
-## Observation recovery
-
-The 2026-09-18 observation repair reproduced a normal page losing an iframe
-between isolated-world creation and its safety read. Before the fix this became
-`TAKEOVER_REQUIRED`; after the fix the read is invalidated and a fresh observation
-succeeds. The reported user's sampling log recorded `inspection`, but did not
-retain the underlying CDP exception, so that historical event cannot be attributed
-to frame removal with certainty.
-
-Task-owned Chromium and real extension debugger checks cover bounded read
-recovery, stable failures before/after input, one confirmed click, and secret
-evidence surviving simultaneous frame changes. Go adapter, Runtime sampler and
-script tests verify closed results, completed prefixes and no false interaction.
-The browser/controller/script/extension suite passed 35 tests; the existing
-Stage, assistance and connection browser suites passed 32. Native Messaging
-also passed against a binary built from this worktree. These are isolated
-browser and component checks, not a new live Desktop qualification or a replay
-of the user's task. The user's Runtime and pending interaction were untouched.
-
-## System-browser and control repair
-
-The 2026-09-18 repair qualification uses task-owned built Desktop and Runtime,
-an isolated headful Chromium profile, the production extension and Native
-Messaging, and deterministic model responses. Desktop and Env App both pass
-connection assistance, independent task-tab creation, preservation of an
-unsaved form, decoded Stage pixels, exact-tab reveal and verified completion.
-It does not establish Safari support or a real model's browser-source choice.
-
-The private Desktop fixture passes all frame rates, delayed pixels (376ms),
-native text and IME, rejected handback, one safe continuation, one navigation,
-reload, narrow layout and historical viewing. A separate Runtime restart run
-preserves the canonical wait while a lost task tab fails closed, with no input,
-page recreation or provider continuation. Go/Floret integration verifies the
-sampler-first CAPTCHA path produces formal assistance with its original reason;
-browser tests verify public pixels are cleared and idle Stage has no spinner.
-The built Desktop sampler-first fixture also passes: a challenge appears on the
-existing page between tools, public pixels stop before a canonical interaction,
-the next tool produces the exact CAPTCHA card and private handback completes
-once. This caught and corrected a dropped assistance field in the shared live
-transport decoder; direct Surface fixtures alone had not covered that boundary.
-The macOS application fixture passes discovery, AX actions, double-click, Enter
-and scrolling with original application, window and pointer restored. The
-background fixture also passes occluded target-only pixels, excluded-owner
-filtering and unchanged foreground and pointer. These
-fixtures supplement the historical evidence below; they do not replace the
-exact-main push gate or qualify arbitrary sites and applications.
-
-## Real model product flows
-
-| Tested scope | Model requests | Decoded frames by turn | Distinct images by turn |
-| --- | ---: | --- | --- |
-| macOS native Desktop | 21 | 13 / 76 / 13 | 13 / 75 / 13 |
-| Managed browser Desktop after private restart | 43 | 56 / 65 / 412 | 38 / 38 / 189 |
-| Linux Webtop browser | Part of 82 total | 8 / 4 / 29 | 8 / 4 / 29 |
-| Linux Webtop X11 | Part of 82 total | 18 / 54 | 18 / 54 |
-
-Native Desktop confirms exact click counts of 2 then 4, canvas double-click,
-text/Enter, wheel scrolling, canonical target references and final screenshots.
-Incidental human input does not interrupt the sequence.
-
-The latest managed-browser Desktop run uses source commit `da614fbcd4a4`.
-Private takeover and Runtime restart run first; the complete real-model browser
-flow then uses that same Runtime. Semantic and visual input, navigation, hidden
-execution, Stage layout, settings, private ASCII/IME and safe handback pass.
-Explicit Stop during dispatched navigation records an unknown outcome without
-replay. Both cancellation paths support a new same-thread visual task.
-Recovery and ordinary preparation reuse one managed profile owner. The matching
-real Chromium regression verifies this owner and passive-sampling boundaries.
-
-The complete Linux scope confirms private handback, cancellation, media
-isolation, fork, Runtime restart and cleanup. Semantic target and requested-access
-references survive the public Activity projection. No error frames or failed
-public viewer/media responses were recorded. This does not qualify native macOS
-or connected Chrome.
-
-Task-owned Desktop/Runtime processes, ports and temporary state are removed
-after the latest Desktop qualification; source configuration and credential
-files remain byte-identical. The Linux runner separately verifies container and
-port removal and unchanged source configuration.
-
-## Native and private fixture results
-
-After console unlock and explicit continuation, macOS background and foreground
-fixtures pass. The background scope verifies AX labels, occluded target-only
-pixels, excluded-owner filtering and unchanged foreground/pointer. The native
-action scope verifies AX values/buttons, canvas double-click, Enter, scrolling
-and restoration of the original application, window and pointer after each
-operation. These fixtures do not establish universal AX background behavior.
-
-The latest built Desktop private fixture passes ordinary/private preview, every
-frame-rate choice, native IME, rejected and successful handback, single
-navigation, narrow layout and preference persistence. Delayed private pixels
-are decoded in 386ms. Restart resets the current view revision from 28 to 1,
-requires explicit recovery, preserves terminal collapse and supports deliberate
-historical viewing without live input controls.
-
-Earlier startup, scroll-region, input-pause and profile-owner failures remain
-failed historical evidence. The private fixture alone did not prove that a
-later ordinary model task could reuse the browser; the combined run above
-closes that regression. Lock-screen operation remains unsupported.
-
-## Performance scope
-
-[Paired measurements](computer-use-performance.md) own the complete benchmark
-series, thresholds and measurement limits. The latest managed headless browser
-pair meets all three efficiency thresholds with equal 9/9 success. These
-measurements do not establish native desktop or Chrome extension performance.
+Keep measurements bound to their declared platform, provider and source build. Never infer cross-platform success from one adapter or from a model request returning HTTP 200.
 
 # Boundaries
 
 The source runners, not these aggregate counts, define pass/fail invariants.
-Changed frame-rate preferences and task durations affect frame counts; counts
-cannot be compared as a performance benchmark. The exact-main integration gate
-separately covers packaged resources and the integrated source.
 
-Representative runners are `redeven:internal/envapp/ui_src/scripts/checkDesktopComputerStage.mjs`,
-`redeven:internal/envapp/ui_src/scripts/checkDesktopPrivateComputer.mjs` and
-`redeven:scripts/check_computer_use_webtop.sh`. See the acceptance contract for
-cleanup, evidence binding and scope restrictions.
+See the acceptance contract for cleanup, evidence binding and scope restrictions.
+
+# Evidence
+
+## Visible installation folders
+The 2026-09-18 guide refinement installed the packaged extension in an isolated real Google Chrome profile on macOS. Linux staging and fixed reveal commands pass deterministic tests on the current host; Linux native GTK, Qt and portal pickers were not exercised on this macOS machine.
+
+## Observation recovery
+The 2026-09-18 observation repair reproduced a normal page losing an iframe between isolated-world creation and its safety read. The user's Runtime and pending interaction were untouched.
+
+## System-browser and control repair
+The 2026-09-18 repair qualification uses task-owned built Desktop and Runtime, an isolated headful Chromium profile, the production extension and Native Messaging, and deterministic model responses. These fixtures supplement the historical evidence below; they do not replace the exact-main push gate or qualify arbitrary sites and applications.
+
+## Real model product flows
+Native Desktop confirms exact click counts of 2 then 4, canvas double-click, text/Enter, wheel scrolling, canonical target references and final screenshots. The Linux runner separately verifies container and port removal and unchanged source configuration.
+
+## Native and private fixture results
+After console unlock and explicit continuation, macOS background and foreground fixtures pass. Lock-screen operation remains unsupported.
+
+## Performance scope
+[Paired measurements](computer-use-performance.md) own the complete benchmark series, thresholds and measurement limits. These measurements do not establish native desktop or Chrome extension performance.

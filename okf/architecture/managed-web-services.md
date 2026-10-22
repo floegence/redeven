@@ -4,6 +4,8 @@ title: Managed Web Services
 description: Operate generic Host, Container, and Compose services from the current verified external template definitions.
 tags: [architecture, web-services, runtime, containers, security]
 timestamp: 2026-09-09T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -15,50 +17,24 @@ timestamp: 2026-09-09T00:00:00Z
 # Contract
 
 ## Catalog and installation
+Redeven loads the released `github.com/floegence/redeven-service-templates` bundle before opening the Registry or starting the Manager.
 
-Redeven loads the released `github.com/floegence/redeven-service-templates` bundle before opening the Registry or starting the Manager. Bundle schema, module version, manifest, SHA-256, template documents, localization coverage, icons, platforms, HTTPS sources, and exact OCI artifacts are strictly validated. Startup stops on any mismatch; there is no built-in fallback catalog.
+With no version choice it installs the template's recommended/default release; an explicit compatible source candidate overrides that default, and later template edits never replace the installed release identity.
 
-Install accepts one exact template ID and persists that ID, instance configuration, the selected release identity, RuntimeBinding v2, workspace ownership, the applied Runtime digest, and the first operation in the Registry transaction. It does not copy a template revision or snapshot into the service. With no version choice it installs the template's recommended/default release; an explicit compatible source candidate overrides that default, and later template edits never replace the installed release identity. A default workspace path is only a recommendation: Catalog and template reads are filesystem-free. Manager validates the selected path, persists the service, and creates a missing leaf during the install environment-check stage. The resulting ownership is `redeven_created` only when that worker created the leaf; existing or raced-in directories are `user_selected`. Install retry may recreate a missing saved directory but never changes established ownership.
-
-One execution resolver combines the current verified TemplateSpec, persisted instance configuration and secrets, selected release, RuntimeBinding, and workspace parameters before applying executable behavior. A shared read-only definition loader lets settings expose missing inputs for repair. Resource inspection and verified cleanup do not require a valid executable template. That resolved specification is the only executable behavior source. Host, Container, and Compose drivers do not inspect a template ID, family, package name, image name, display name, or asset to select behavior. A canonical Runtime digest identifies the behavior actually applied to the managed resource. Template name, description, revision, and other metadata-only edits do not change that digest; an executable template change does. Runtime-changing custom-template edits wait until every referencing instance has no active operation, while metadata-only edits remain independent. A verified journal target retains the digest of the Runtime it actually built even when the template changes before database commit, and the next explicit apply-and-restart action applies that pending behavior. Open preserves the current instance and its verified entrance.
-
-Host supports a verified HTTPS archive or exact npm release. npm installation uses a managed Node Runtime, exact package identity, temporary private Registry configuration, explicit lifecycle-script execution, and post-install verification. The verified executable is exposed through `REDEVEN_INSTALL_EXECUTABLE`. All application-specific startup and opening behavior belongs to [TemplateSpec v7](managed-web-service-templates.md). [Independent Host lifecycle](independent-host-services.md) owns process survival, stable native identity, private opening records, and legacy recovery.
-
-Container pulls an exact current-platform digest and validates image, mounts, ports, and runtime configuration when applying behavior. Ownership checks use exact container ID, the standard `redeven-mws-*` name, and service labels independently of configuration drift. `managed_web_service_resources` is the sole durable authority for volumes and other owned engine resources. Compose similarly validates its deterministic project, private configuration, service membership, images, and entry forward. No file marker, historical resource importer, alternate name, or product-specific driver exists.
-
-Runtime verification uses resolved shared-memory settings and the complete engine
-mount inventory, including tmpfs. Image-only exposed ports have no host binding
-and do not count as additional published ports; unexpected host bindings still
-fail closed. Configuration failures retain stable error codes and log only fixed
-names of mismatched fields, never inspected values. Failed creation removes only
-the verified new container, preserving retained volumes and the workspace for the
-next explicitly reviewed recovery.
+Failed creation removes only the verified new container, preserving retained volumes and the workspace for the next explicitly reviewed recovery.
 
 ## Runtime identity and operations
-
 Every service has one canonical RuntimeBinding v2 plus SHA-256:
-
-- Host records standard relative installation, instance-data, and log locations; existing family-data bindings remain valid, and launch identities follow the independent Host lifecycle.
-- Container records the one standard managed container name and exact resource IDs.
-- Compose records the deterministic project and managed configuration directory.
-
-All lifecycle paths verify the binding before touching a runtime. Runtime-mutating operations also verify that the saved workspace is the same regular directory inside a currently writable Environment root before any driver side effect, and every driver start repeats that verification at the launch boundary. A missing workspace fails with `WORKSPACE_MISSING`; ordinary start, restart, update, rollback, and recovery never create it implicitly. An explicit retry of a failed start or restart may recreate a missing path after the same scope and identity checks, then continues through the one normal lifecycle path. This repair applies to both ownership values and preserves the saved ownership, so it cannot expand later deletion authority. Existing files, symlinks, identity changes, and paths outside writable scope remain unchanged and fail closed. Stop, uninstall, and cleanup remain available without the workspace.
-
-Host adoption and legacy identity upgrades follow the independent Host lifecycle; PID or command-text similarity is never ownership. Container and Compose require complete persisted identity. Update and reconfigure stage a target and commit its verified binding through their existing journals. [Web Service management recovery](service-management-recovery.md) owns the unified facts/action model, preflight, per-resource uninstall transaction, and reversible management archives. [Service resource ownership](service-resource-ownership.md) owns instance allocation, external references, and legacy resource preservation. Data and workspace deletion are separate explicit choices, both off by default.
-
-One operation record and event stream own progress through the [Managed Service operation progress](managed-service-operation-progress.md) contract. Structured failures expose localized safe diagnostics and stable codes without raw commands, engine output, secrets, stacks, or private paths.
 
 [Managed opening](managed-web-service-opening.md) owns launch-bound authentication preparation and separates opening failure from process health.
 
 ## Manual recovery
-
-`ServiceView.actions`, status, and primary action are the backend's single presentation contract. The shared management drawer replaces generic retry as the entry point for uninstall, recovery, and ownership conflicts. Historical operation errors stay in recent history and never disable a currently healthy instance. The remaining retry API supports eligible non-destructive operation replay; uninstall requires a newly reviewed plan. Failed user operations are never automatically looped at Runtime startup. See the canonical [management recovery contract](service-management-recovery.md).
+`ServiceView.actions`, status, and primary action are the backend's single presentation contract. Historical operation errors stay in recent history and never disable a currently healthy instance. See the canonical [management recovery contract](service-management-recovery.md).
 
 ## Persistence baseline
+`portforward_registry_v2` schema version 6 preserves the permanent version-1 lineage for current-template resolution. A service row stores template ID, configuration, selected release, RuntimeBinding, workspace ownership, desired and observed state, protected Forward identity, managed Runtime identity, applied Runtime digest, artifact reference, and failure state; it stores no template revision, template snapshot, duplicated deployment, or service-family projection.
 
-`portforward_registry_v2` schema version 6 preserves the permanent version-1 lineage for current-template resolution. A service row stores template ID, configuration, selected release, RuntimeBinding, workspace ownership, desired and observed state, protected Forward identity, managed Runtime identity, applied Runtime digest, artifact reference, and failure state; it stores no template revision, template snapshot, duplicated deployment, or service-family projection. The atomic 2-to-3 migration converts strictly validated TemplateSpec v5 documents to v6 hooks while retaining static opening behavior and all user records. The 3-to-4 migration adds active/detached/uninstalled records, active-only template uniqueness, optional archived routes, and resource ownership metadata. The 4-to-5 migration adds the original GitHub template source index and active-directory pointer without persisting adapted execution definitions. The 5-to-6 migration atomically adapts Registry-owned TemplateSpec v6 execution documents to v7 and updates their validation digest, preserving source directories, applied identities, user records and all previous migration edges. The schema retains release-check v2, operation-progress v2, resource, operation, and retry-lineage state.
-
-Every `portforward_registry_v1` version and any other discarded kind, future version, or exact structure drift is rejected read-only and remains byte-for-byte unchanged. Once v2 version 1 is merged and released or distributed, the kind is permanent: every persistent change must append a contiguous transactional migration that preserves user state and verifies the exact source and target shape. Another reset is not permitted. Version 2 adds the ordinary-forward default application path through that migration lineage; Managed Service opening continues to use its authoritative `open-session` result, as described in [Web Service browser sessions](web-service-browser-sessions.md).
+Version 2 adds the ordinary-forward default application path through that migration lineage; Managed Service opening continues to use its authoritative `open-session` result, as described in [Web Service browser sessions](web-service-browser-sessions.md).
 
 # Boundaries
 
@@ -67,14 +43,7 @@ Redeven does not contain built-in service names, descriptions, notices, icons, t
 # Evidence
 
 - `redeven:internal/managedwebservice/builtin_templates.go` - Loads and strictly maps the released external catalog.
+
 - `redeven:internal/managedwebservice/runtime_resolution.go` - Resolves the current template with persisted instance state and computes the applied Runtime digest.
+
 - `redeven:internal/managedwebservice/runtime_binding.go` - Defines and validates the sole current RuntimeBinding format.
-- `redeven:internal/managedwebservice/manager.go` - Serializes lifecycle operations, capabilities, manual retry, recovery, and failure state.
-- `redeven:internal/managedwebservice/custom_host.go` - Owns generic independent Host execution and native process identity.
-- `redeven:internal/managedwebservice/host_runtime_output.go` - Validates process-bound private opening paths and collects only maintenance output.
-- `redeven:internal/managedwebservice/custom_container.go` - Owns exact current container identity and generic resource validation.
-- `redeven:internal/managedwebservice/container_docker_integration_test.go` - Verifies released-template lifecycle, recovery, retained data, and update rollback against an isolated real Docker instance.
-- `redeven:internal/managedwebservice/update.go` - Commits or restores release and binding state around health validation.
-- `redeven:internal/portforward/registry/schema.go` - Verifies exact historical shapes and retains contiguous default-URL and template-hook migrations.
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Renders backend capabilities, localized catalog content, progress, and safe diagnostics.
-- `redeven:scripts/check_managed_service_catalog_boundary.mjs` - Prevents service-specific catalog content from returning to Redeven runtime and Renderer source.

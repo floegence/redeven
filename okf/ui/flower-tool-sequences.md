@@ -4,6 +4,8 @@ title: Flower consecutive tool sequences
 description: Compact tools and bounded thinking without hiding dialogue or taking over active reading.
 tags: [ui, flower, activity, thinking, disclosure, accessibility]
 timestamp: 2026-10-21T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -18,84 +20,51 @@ no upstream contract, canonical summary or backend migration.
 
 ## Boundaries and identity
 
-A sequence requires at least two nodes with the same thread, turn and run, and at
-least one tool call. One tool and following thinking can form a sequence. Successful,
-active and failed ordinary tool activity and argument previews qualify. Running
-attention is part of ordinary execution state and does not break the sequence;
-waiting and approval attention remain interaction boundaries. Leading thinking
-retains the standalone disclosure; thinking from the first tool onward joins its
-sequence. Counts distinguish calls from thinking segments and failed calls without
-generating semantic summaries. Even a newer single-call segment makes an earlier
-untouched sequence eligible for automatic collapse.
+A sequence needs at least two nodes from the same thread, turn and run, including
+a tool call. One tool plus following thinking qualifies. Successful, active and
+failed calls and argument previews qualify. Running attention does not break a
+sequence; waiting and approval do. Leading thinking stays standalone; thinking
+from the first tool onward joins. Counts report calls, thinking segments and
+failures without generating summaries. A newer single-call segment can make an
+older untouched sequence eligible for collapse.
 
 Prose, user messages, interactions, parent events, compaction, Goal state updates,
 SubAgent operations, approvals, uncertain effects and non-tool errors break
-sequences. Goal tool calls and Web Search remain ordinary tool nodes. Failed
-ordinary tool calls remain in the group, with a visible failed count, a yellow
-status color on the original tool glyph, and warning-foreground row text; expanding
-the group retains each call's original error details. Approval and waiting rows
-remain outside tool folding. Whole-turn disclosure continues to use its separate
-canonical eligibility and existing thinking policy. Sequence grouping never
-alters that order, the source blocks, or final output.
+sequences. Goal calls and Web Search remain tool nodes. Failed calls retain their
+errors; summaries show the failure count and existing warning treatment. Whole-turn
+disclosure stays separate, and grouping preserves source order and final output.
 
-Empty assistant text placeholders between tool messages are transparent to
-sequence classification. This keeps running command rows connected while the
-provider streams its next response; non-empty assistant text remains a boundary.
-
-Canonical tool identities and content-block keys own row lifetime. The first
-call owns the sequence identity through appends and status changes. A thought
-becoming bounded changes its presentation in place without reparenting its body.
-The existing tool trigger, semantic type glyph, independent details and
-secondary file actions remain intact. Failed calls retain their type glyph and
-use the existing theme warning token as its status color. One thin line connects
-adjacent tool icon centers, including the compact running-command loader. Completed
-rows use existing quiet theme tokens; active rows keep existing foreground
-treatment.
-Tool title font size and line height remain unchanged. Inline thinking uses a
-16px Lucide Brain glyph with a 1.7 stroke; standalone thinking keeps its chevron.
+Empty assistant text placeholders between tool messages are transparent; non-empty
+text remains a boundary. Canonical tool identity owns row lifetime, the first call
+anchors the sequence through updates, and thinking changes presentation in place.
+Existing actions and details remain intact. Adjacent tool icons connect; theme
+tokens own active, completed and failure states.
 
 ## Disclosure and reading
 
-The existing interface-lifetime disclosure store owns sequence choices in a
-runtime/thread/tool namespace. Automatic collapse settles once. Explicit open or
-closed choices survive new content, reconnects and navigation within the surface;
-refresh restores defaults. Focus, selection, a pressed gesture, manually opened
-details or thinking, and visible reading away from the tail retain expansion.
-Protection also runs before previously independent content joins a closed group.
-There is no delayed collapse retry.
+Choices live for the interface session by runtime, thread and tool. Automatic
+collapse settles once; explicit choices persist through updates, reconnects and
+navigation, then reset on refresh. Focus, selection, gestures, open details or
+thinking, and reading away from the tail protect expansion.
 
-Group collapse keeps existing rows mounted to preserve inner detail state while
-making them inert and inaccessible. Outer whole-turn closure still releases its
-body after motion. The existing motion controller and the timeline's shared
-completion tracking report to the sole transcript scroll controller. Manual
-collapse returns interior focus to the sequence button; automatic folding above
-the reader preserves visible content position. User scrolling takes precedence.
+Collapsed groups stay mounted and inert so nested detail state survives. Whole-turn
+closure releases its body after motion. The timeline remains the sole scroll owner;
+manual collapse restores focus to the group button, while automatic collapse above
+the reader preserves position and user scrolling takes precedence.
 
-Native controls expose all controlled viewport IDs, localized counts and
-expand/collapse labels. Hidden nodes leave no repeated inter-message gaps.
-Reduced motion, visible focus, forced colors, narrow layouts and comfortable
-pointer targets follow existing Flower rules. Both product catalogs explicitly
-translate the shared copy for every shipped locale.
+Controls expose viewport IDs, localized counts and labels. Hidden nodes create no
+gaps. Focus, reduced motion, forced colors, narrow layouts and pointer targets
+follow shared Flower rules; both product catalogs translate all copy.
 
 # Boundaries
 
-Sequence state is ephemeral host UI state. It cannot authorize tools, summarize
-model context, infer execution outcomes or write another durable lifecycle.
-Published upstream components and the canonical timeline remain the sources of
-mechanics and facts. See [activity interaction](flower-activity-interaction.md)
-and [whole-turn disclosure](flower-turn-process-disclosure.md) for their owners.
+Sequence state is ephemeral presentation. It cannot authorize tools, summarize
+context, infer effects or persist lifecycle state. Published upstream components
+and the canonical timeline own behavior. See [activity interaction](flower-activity-interaction.md)
+and [whole-turn disclosure](flower-turn-process-disclosure.md).
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/flowerToolSequences.test.ts` - Leading and trailing thinking, running-attention classification, failed and active tool counts, interaction boundaries, recent-segment policy and stable identity.
-- `redeven:internal/flower_ui/src/FlowerToolSequenceNode.tsx` - Mounted stable rows, native group disclosure and existing motion integration.
-- `redeven:internal/flower_ui/src/FlowerTurnTimeline.tsx` - Existing store, reading protection and sole scroll owner.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.toolSequences.browser.test.tsx` - Running and completed row geometry, icon-center connectors, argument-preview transitions, failure colors, live appends, focus, selection, gestures, detail retention, navigation, theme typography and reading anchors.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.turnProcess.browser.test.tsx` - Whole-turn disclosure and independent thinking regression coverage.
-
-## Qualification limit
-
-The existing whole-turn Goal-editor browser case also fails on the unmodified
-feature base `69833567d`: the completed Goal tag is absent before its `closest`
-assertion. That baseline failure is excluded from passing evidence for this
-change; the focused sequence suite and remaining whole-turn regressions pass.
+- `redeven:internal/flower_ui/src/flowerToolSequences.test.ts` - Classification, counts, boundaries, collapse and stable identity.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.toolSequences.browser.test.tsx` - Running and completed row layout, updates, interaction state, details, navigation, theme and reading anchors.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.turnProcess.browser.test.tsx` - Whole-turn disclosure regression coverage.

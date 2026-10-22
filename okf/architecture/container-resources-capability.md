@@ -4,6 +4,8 @@ title: Native container resources
 description: Aggregate the active Docker and Podman runtimes behind one Redeven-owned execution and operation boundary.
 tags: [architecture, containers, docker, podman]
 timestamp: 2026-09-19T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -18,164 +20,38 @@ closed without replaying mutations.
 # Contract
 
 ## Runtime execution
-
 [Container runtime execution](container-runtime-execution.md) owns active Docker/Podman discovery, endpoint binding, typed CLI reads and shared resource normalization. Native mutations and product permissions use that single execution owner.
 
 ## Native service boundary
+Volume reference completeness and the independent disk usage read are owned by [Volume usage observation](container-volume-usage.md).
 
-Volume reference completeness and the independent disk usage read are owned by
-[Volume usage observation](container-volume-usage.md). They reuse this concept's
-endpoint, Read permission, and CLI execution boundaries.
+`containerresource` strictly decodes every mutation request and rejects unknown fields.
 
-`containerresource` strictly decodes every mutation request and rejects unknown
-fields. It recomputes a structured preflight immediately before admission and
-requires exact `request_hash` and `plan_hash` agreement. Resource-local locks
-serialize operations by engine, endpoint, resource kind, and canonical
-identity. A request ID is idempotent only for the same method and hashes;
-conflicting reuse fails visibly.
-
-Image and volume cleanup is server-owned. The client selects only the bound
-runtime; the current authoritative inventory determines the exact unused set.
-Image identity is resolved by ID, then digest, then reference, so multiple tag
-rows for one image produce one sorted target, one size contribution, one lock,
-and one mutation. The reviewed plan includes the same sorted, structured
-resource list: image references, canonical identity, and size, or volume name
-and driver. This display list is part of the plan digest rather than a separate
-client projection. The canonical preflight request owns the request hash,
-resource locks, queued execution, and reconciliation. No eligible target returns
-`NOTHING_TO_PRUNE`; incomplete reference inspection returns
-`REFERENCE_STATE_INCOMPLETE`. Neither condition starts an operation.
-
-The store kind is `container_resources_product_v1`. It persists operation
-identity, bounded state, sanitized errors, events, and redacted reconciliation
-evidence, but never raw mutation payloads, argv, engine output, secrets, URLs,
-or host paths. Schema v2 adds a separate saved Compose Project definition
-table. It stores exact canonical configuration file paths, an optional env-file
-path, profile names, and the internal target solely to reconstruct later
-user-requested lifecycle operations; these values never enter operation events,
-errors, reconciliation, or audit detail. The v1-to-v2 migration preserves every
-operation and fails atomically on drift. On startup, active records are observed
-through current engine inventory, then atomically marked interrupted. Startup
-never replays an operation whose terminal outcome was not recorded.
-
-Cancellation terminates the owned process group and transitions through the
-same operation record. A terminal state is published only after a fresh,
-endpoint-bound observation proves presence, absence, desired lifecycle state,
-or a bounded inventory snapshot. Unknown results remain explicit.
+Unknown results remain explicit.
 
 ## Product ownership and permissions
+The Local API is under `/_redeven_proxy/api/container-resources` and `/_redeven_proxy/api/container-resource-operations`. Server-side enforcement is authoritative; disabled UI controls are only a presentation aid.
 
-The Local API is under `/_redeven_proxy/api/container-resources` and
-`/_redeven_proxy/api/container-resource-operations`. Read covers inventory,
-redacted details, logs, statistics, operations, and streams. Raw container
-Inspect and every Podman volume file list, preview, or download require Read and
-Admin. Exec creation and closure use
-`/container-resources/containers/{id}/exec-sessions` and
-`/container-resources/exec-sessions/{session_id}`. They require Read and
-Execute, a running unmanaged container, and a runtime advertising Exec.
-Lifecycle requires Read and Execute. Creation, pull, removal, and cleanup
-require Read, Write, and Execute. High-risk preflights additionally require
-Admin and exact-name confirmation.
-Server-side enforcement is authoritative; disabled UI controls are only a
-presentation aid.
-
-Creating, changing, reading, or forgetting a saved Compose definition requires
-Admin; mutation also requires full RWX. Redeven canonicalizes one to eight
-regular Compose files, bounds their size, optionally accepts one bounded env
-file and up to sixteen safe profile names, and runs `docker compose config
---quiet` against the exact active Docker target before committing. Forgetting a
-definition does not stop or remove its containers.
-
-`GET /container-resources/runtimes` returns both engine detection states in one
-response. A ready item includes its internal endpoint ID and capabilities; a
-failed item never contains command output or endpoint presentation data. An
-individual engine failure still returns HTTP 200, while missing Redeven Read
-permission returns 403. Public endpoint-list and endpoint-detail routes do not
-exist; endpoint binding remains an internal routing and security contract.
-
-Web Services is the lifecycle owner of containers, images, Compose Projects,
-and volumes it creates. Native inventory labels owned mutable resources as
-managed, offers a direct jump to the owning service, and rejects mutation
-attempts on the server. Web Services projects each exact container, image, or
-Compose Project identity back to Containers. Navigation writes the established
-Activity selection and delivers that same selection to an already mounted
-Containers page, so a menu action opens the requested detail immediately
-without a second state owner or a stale remount. The two surfaces share identity
-and observed state, never parallel lifecycle implementations.
-
-Managed Service settings reuse this package's typed requests and preflight.
-After baseline and instance overrides resolve, `containerengine` produces the
-exact Resource Plan for journaled stopped-state reconfigure. Renderer cannot
-construct argv, skip validation, or use native mutation on managed resources.
+Renderer cannot construct argv, skip validation, or use native mutation on managed resources.
 
 ## Data and host safety
+DTOs expose only typed, redacted fields. They never return environment values, arbitrary label values, credentials, socket paths, certificates, remote URLs, or Compose file paths.
 
-DTOs expose only typed, redacted fields. They never return environment values,
-arbitrary label values, credentials, socket paths, certificates, remote URLs,
-or Compose file paths. Raw container Inspect is one explicit Admin-only,
-on-demand exception: it uses `Cache-Control: no-store`, is not prefetched or
-persisted, and its payload cannot enter errors, audit detail, Operations, or
-application logs. Public errors omit command arguments, stderr, raw output,
-tokens, URLs, and host paths.
-
-Container filesystem browsing is not a product capability. Podman volume files
-parse `volume export` as a bounded stream without buffering the full archive;
-Docker volume files are unavailable because Redeven does not inspect
-`/var/lib/docker` and does not create helper containers. Every
-path is absolute and canonical, `..` is rejected, archive paths and links must
-remain inside the export, and entry count, content bytes, command output, and
-execution time are bounded. File payloads are never written to product state.
-
-CLI execution uses explicit argv, bounded time, bounded output, and process
-group termination. Redeven does not elevate privileges, change socket
-permissions, add users to system groups, or silently switch engines. Host
-administrators remain responsible for engine access.
-
-Container Exec uses Floeterm terminal-go v0.19.2 program sessions. The engine
-constructs exact Docker or Podman argv for the bound target; no shell parses the
-request and no initialization script is injected. The request accepts at most
-32 argv entries and 8 KiB, rejects control characters, and defaults to
-`/bin/sh`. Audit and application logs record session and redacted target
-identity but never argv. Product Exec sessions are absent from the ordinary
-terminal catalog, belong to the creating user, close after 30 seconds without
-an attachment, retain only a 30-second reconnect window, and release their
-process group and workload lease on explicit close, natural exit, timeout, or
-application cleanup. Ordinary terminal sessions retain their Write and Execute
-permission contract.
+Ordinary terminal sessions retain their Write and Execute permission contract.
 
 ## Product surface
+The native Activity and Workbench interaction, loading, resource-navigation, Compose input, and responsive presentation contracts are owned by [Native container console](container-resources-console.md). That surface may project only the targets and capabilities established here; it cannot create a second routing, mutation, or ownership path.
 
-The native Activity and Workbench interaction, loading, resource-navigation,
-Compose input, and responsive presentation contracts are owned by
-[Native container console](container-resources-console.md). That surface may
-project only the targets and capabilities established here; it cannot create a
-second routing, mutation, or ownership path.
-
-Installation, host lifecycle, service configuration, non-elevation, and
-service-state reconciliation are owned by
-[Container service management](container-service-management.md). Both discovery
-surfaces use the same selected-endpoint CLI boundary and typed engine errors.
-Resource readiness observes engine reachability directly; host-service state
-additionally identifies management capabilities and never substitutes for a
-successful resource probe.
+Resource readiness observes engine reachability directly; host-service state additionally identifies management capabilities and never substitutes for a successful resource probe.
 
 # Boundaries
 
-- `containerengine` owns typed Docker and Podman execution and redaction.
-- `containerresource` owns native mutation admission, locking, persistence,
-  cancellation, events, and reconciliation.
-- Web Services owns the lifecycle of resources it created.
-- ReDevPlugin remains the platform for other plugins and has no Containers
-  capability, adapter, package, generated client, or native UI role.
-- The host administrator owns engine installation and operating-system access.
+- `containerengine` owns typed Docker and Podman execution and redaction. - `containerresource` owns native mutation admission, locking, persistence,   cancellation, events, and reconciliation. - Web Services owns the lifecycle of resources it created. - ReDevPlugin remains the platform for other plugins and has no Containers   capability, adapter, package, generated client, or native UI role. - The host administrator owns engine installation and operating-system access.
 
 # Evidence
 
 - `redeven:internal/containerengine/container_exec.go` - Validates running-container Exec and exact argv limits.
+
 - `redeven:internal/terminal/container_exec.go` - Owns hidden program-session access, attachment timeouts, and cleanup.
+
 - `redeven:internal/containerengine/resource_read.go` - Implements bounded batch statistics, raw Inspect, and safe Podman volume archive reads.
-- `redeven:internal/containerresource/service.go` - Owns strict preflight admission, operations, cancellation, and startup observation.
-- `redeven:internal/containerresource/compose_projects.go` - Validates and binds saved Compose Project definitions to exact Docker targets.
-- `redeven:internal/containerresource/schema.go` - Defines the Redeven-owned product database lineage.
-- `redeven:internal/codeapp/appserver/container_resources.go` - Enforces native Local API routes and RWX/Admin permissions.
-- `redeven:internal/managedwebservice/container_resources.go` - Resolves protected Web Services ownership.

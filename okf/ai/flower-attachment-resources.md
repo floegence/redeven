@@ -4,6 +4,8 @@ title: Flower attachment resources
 description: Owner-scoped uploads, canonical membership, provider reads, quotas, and last-reference cleanup.
 tags: [ai, flower, attachments, storage, security]
 timestamp: 2026-10-17T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -14,52 +16,28 @@ timestamp: 2026-10-17T00:00:00Z
 
 # Contract
 
-Redeven threadstore product v1 stores generated attachment identity, the authenticated user hash, a server-only relative storage name, sanitized detected media metadata, exact byte size, SHA-256, optional strict UTF-8 code-point and logical-line counts, source, state, idempotency identity, and retention claims. Every upload is written with its immutable digest and applicable text metadata from the start. User ownership is the only supported model, so no `owner_scope_kind` discriminator is persisted; channel and session identities remain request credentials. Declared media type and claim timestamps do not affect later authorization or presentation and are not stored.
+Redeven threadstore product v1 stores generated attachment identity, the authenticated user hash, a server-only relative storage name, sanitized detected media metadata, exact byte size, SHA-256, optional strict UTF-8 code-point and logical-line counts, source, state, idempotency identity, and retention claims.
 
-`attachment_id` is an opaque request identity. The canonical Floret `ResourceRef` is content-addressed and the display locator is `attachment://v1/<attachment-id>/<encoded-name>`. Neither value grants access. The upload directory and relative storage name are never returned. Staged transport requires one exact staging-scope id plus its plaintext capability in fixed headers; the server also binds endpoint, authenticated owner, target thread, expiry, and the stored capability hash. Missing, duplicate, mismatched, released, or expired headers fail closed. Queued transport requires exact `thread_id + queue_id`; canonical transport requires exact `thread_id + turn_id`. Preview changes only content disposition. Every canonical read obtains exact membership from public Floret authority before checking product claims, owner rules, metadata, size, and digest.
+The canonical Floret `ResourceRef` is content-addressed and the display locator is `attachment://v1/<attachment-id>/<encoded-name>`.
 
-Uploads are streamed through a bounded multipart request into a `0600` temporary file while Redeven computes size, digest, UTF-8 validity, code-point count, CRLF-aware logical line count, and a closed media classification. Every strict UTF-8 `text/*`, including active HTML and XML media, is stored and served canonically as `text/plain; charset=utf-8`. Commit requires the declared length, content digest, normalized display-name digest, and idempotency fingerprint to match. Response-loss replay returns the committed record for seven days; a conflicting replay fails explicitly. Receiving attempts first follow the existing 24-hour recovery rule, while complete and failed attempts are deleted after the seven-day window. Upload completion creates only an owner-bound staging claim. Clicking Send atomically validates canonical upload metadata and transfers the selected claims to one immutable queued command; it does not persist the editable text or attachment presentation as a draft.
-
-The authenticated preview route uses a closed inline allowlist: canonical plain text, PNG, JPEG, GIF, WebP, and PDF. Inline responses add a sandboxed content security policy that denies scripts, navigation bases, and form actions. Any unsupported or legacy media value is returned as `application/octet-stream` with attachment disposition, even when old metadata claims HTML, XML, SVG, or another browser-active type. Preview authorization and integrity checks are identical to download; disposition cannot weaken membership or ownership.
-
-Quota checks occur in the same SQLite write transaction as the state change. Staged quota is scoped to unique user-owned resources. First transfer into queued or thread ownership checks unique user live quota and unique thread live quota; duplicate claims do not double count. Releasing or expiring a staging scope deletes that scope row and only its claims, with no released tombstone. Releasing the final staging, queued, thread, or fork claim moves the resource to deleting and immediately releases live quota. Physical deletion and row removal are idempotent and retryable. Thread deletion releases its thread claim only after Floret deletion succeeds and preserves bytes still referenced by another thread, fork, queued command, or live staging scope.
-
-Every initial, queued, follow-up, replacement, RPC, and service admission path rechecks the exact staging capability when attachments are present, owner, target thread, attachment state, count, aggregate 25 MiB limit, model-scoped route, capability revision, and canonical upload metadata in the claiming transaction. Inline text over 50,000 Unicode code points is rejected with the stable `long_text_attachment_required` code even when a client bypasses the composer. A prepared long-text attachment is accepted only when its staged bytes and text statistics exactly match the submitted text. Initial and existing-thread sends use the same authorized staging claim before Floret input construction. An initial scope targets the immutable create request; an existing scope targets the exact thread. The product transaction transfers byte retention into thread ownership; Floret alone admits canonical membership and deduplicates the turn. Retention ownership does not authorize canonical reads.
+Retention ownership does not authorize canonical reads.
 
 ## Provider Preparation
+Redeven derives one model-scoped capability snapshot from the selected provider route and model modalities. Strict UTF-8 text may instead use the bounded `attachment.read` host tool.
 
-Redeven derives one model-scoped capability snapshot from the selected provider route and model modalities. The revision binds the exact MIME route matrix and product limits. A native image or file route is advertised only when the provider adapter can render and conservatively estimate that complete request. Strict UTF-8 text may instead use the bounded `attachment.read` host tool. Binary, image, and PDF content never use the text fallback.
-
-Floret v7 receives canonical attachment descriptors through typed `Send` and owns their durable association with the accepted user item, queue intent, retry lineage, and child Thread. A known-Turn attachment read uses one identity-bound exact typed view and never falls back to product history; only typed not-found is absence, while storage and corruption failures remain unavailable errors. Redeven opens and hashes bytes after Floret identifies the exact canonical input and before provider dispatch. The effect adapter freezes the rendered provider request for one attempt and closes it on every non-stream path. Historical reads repeat canonical membership and byte-integrity checks rather than trusting acceptance-time state.
+Historical reads repeat canonical membership and byte-integrity checks rather than trusting acceptance-time state.
 
 ## Canonical image recovery
-
-Floret v7.51.1 exposes user and confirmed tool attachment descriptors through
-one canonical view. Image locators use `media:v1:<sha256>` over the complete
-versioned descriptor; the existing `attachment://v1/...` text-read and upload
-presentation contract is unchanged. Both are opaque references, not grants.
-The shared [image resolver](image-read-and-retention.md) authorizes preview and
-`image.read(locator)` against current canonical membership and product owner
-scope before opening immutable bytes. Confirmed upload rereads remain typed
-native images and reuse the same resource. Upload retention recognizes tool
-media separately and never parses tool image references as upload records.
+Floret v7.51.1 exposes user and confirmed tool attachment descriptors through one canonical view. Upload retention recognizes tool media separately and never parses tool image references as upload records.
 
 # Boundaries
 
-Redeven does not inspect or migrate Floret storage, persist message ordering, expose a filesystem path, accept a client owner, authorize by locator, or infer canonical membership from its claim table. Floret does not upload, store, classify, quota, download, or delete Redeven resources. Desktop transports attachment bytes in offset-checked binary IPC chunks; Env App uses authenticated multipart XHR with progress and cancellation. Neither transport embeds bytes or a URL identity in a turn JSON body.
+Redeven does not inspect or migrate Floret storage, persist message ordering, expose a filesystem path, accept a client owner, authorize by locator, or infer canonical membership from its claim table. Neither transport embeds bytes or a URL identity in a turn JSON body.
 
 # Evidence
 
 - `redeven:internal/ai/threadstore/schema.go` - Product v1 declares user-owned attachment resources, attempts, claims, and neutral staging targets without legacy upload shapes.
+
 - `redeven:internal/ai/threadstore/upload_staging.go` - Staging capability hashes, exact claims, release, and atomic command transfer are enforced in the resource store.
+
 - `redeven:internal/ai/threadstore/uploads.go` - Transactional idempotency, quotas, claims, and last-reference deletion are enforced in the resource store.
-- `redeven:internal/ai/uploads.go` - Upload streaming, classification, integrity, locator, and canonical live reads are implemented at the host boundary.
-- `redeven:internal/ai/send_attachment_admission_test.go` - Initial and existing thread sends, request replay, and rejected ownership, target, capability, and duplicate inputs.
-- `redeven:internal/ai/upload_staging.go` - The service creates, authorizes, reads, deletes, and releases capability-bound staging scopes.
-- `redeven:internal/ai/floret_attachments.go` - Canonical descriptors and post-admission byte validation bridge Redeven resources into Floret requests.
-- `redeven:internal/ai/floret_provider.go` - Prepared provider requests freeze rendered attachment payloads and conservative estimates.
-- `redeven:internal/codeapp/appserver/server.go` - Authenticated upload, capability, download, range, restore, and delete routes expose stable envelopes.
-- `redeven:internal/ai/send_user_turn_flow_test.go` - Typed send and queue acceptance retain stable attachment command identity.
-- `redeven:internal/codeapp/appserver/server_ai_uploads_test.go` - Preview tests pin the closed inline media set, forced download fallback, and sandbox CSP.
-- `redeven:desktop/src/shared/runtimeFlowerAttachmentIPC.ts` - Desktop validates ordered binary attachment operations without JSON or base64 payloads.
-- `redeven:internal/envapp/ui_src/src/ui/services/localApi.ts` - Env App uses authenticated multipart XHR with progress and cancellation.

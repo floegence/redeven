@@ -17,7 +17,8 @@ func testBundle(t *testing.T) Bundle {
 func TestIndexBundleReturnsDeterministicSections(t *testing.T) {
 	t.Parallel()
 
-	result := IndexBundle(testBundle(t), IndexRequest{})
+	bundle := testBundle(t)
+	result := IndexBundle(bundle, IndexRequest{})
 	if result.OKFVersion != OKFVersion {
 		t.Fatalf("okf version=%q", result.OKFVersion)
 	}
@@ -37,6 +38,11 @@ func TestIndexBundleReturnsDeterministicSections(t *testing.T) {
 	found := false
 	for _, entry := range ai.Entries {
 		if entry.Path == "ai/okf-search-tool.md" && entry.ConceptID == "ai.okf-search-tool" {
+			for _, concept := range bundle.Concepts {
+				if concept.Path == entry.Path && entry.Summary != concept.Summary {
+					t.Fatalf("index summary=%q, want canonical concept summary %q", entry.Summary, concept.Summary)
+				}
+			}
 			found = true
 			break
 		}
@@ -45,7 +51,7 @@ func TestIndexBundleReturnsDeterministicSections(t *testing.T) {
 		t.Fatalf("AI section did not resolve okf search concept: %#v", ai.Entries)
 	}
 
-	filtered := IndexBundle(testBundle(t), IndexRequest{Section: "AI"})
+	filtered := IndexBundle(bundle, IndexRequest{Section: "AI"})
 	if len(filtered.Sections) != 1 || filtered.Sections[0].Slug != "ai" {
 		t.Fatalf("filtered sections=%#v", filtered.Sections)
 	}

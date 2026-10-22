@@ -4,6 +4,8 @@ title: Runtime Service snapshot
 description: Runtime identity, independent compatibility, access readiness, workload inventory, and optional Gateway supervision.
 tags: [architecture, desktop, runtime-service, compatibility]
 timestamp: 2026-08-27T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -11,62 +13,26 @@ The Runtime Service snapshot is a typed boundary between Runtime, Desktop, Local
 
 # Contract
 
-Runtime publishes its own service protocol and independent component version. Gateway compatibility is negotiated by protocol, epoch, capability set, signed manifest, and Runtime artifact digest; equal version strings are not required. A missing or incompatible Gateway fails closed only for lifecycle management. Runtime Connect, Workspace, terminal, files, web, and Runtime UI remain available according to their own gates.
+Runtime publishes its own service protocol and independent component version. A missing or incompatible Gateway fails closed only for lifecycle management.
 
-The snapshot includes target identity, generation-bound workload/process inventory, snapshot revision, inventory digest, lifecycle fence state, and typed `unknown` values when inventory is unavailable or malformed. A supervisor can begin/release a fence and perform token-bound shutdown, but Runtime does not create Gateway operations, permits, locks, or recovery records. Fence release requires the exact token while a fence is active. After a successful replacement starts a new Runtime process with no inherited fence, releasing the consumed non-empty token is idempotent so Gateway can persist the operation outcome without manufacturing cross-process Runtime state. External OS maintenance is outside the product lifecycle authority; the next Gateway enablement revalidates identity, protocol, epoch, capabilities, and digest.
+Runtime snapshot fields and generated wire schemas change together; an unknown response key must not turn a healthy Runtime into a reconnect loop.
 
-Runtime liveness and startup reporting remain independent from optional AI/model-source readiness. Building a Runtime Service snapshot reads the process-local binding and workload leases; it does not issue a model-source RPC or scan historical Floret threads. A temporarily unavailable model source therefore cannot make an already listening Runtime appear to have exited, and active workload counts come from the in-memory admission leases until their canonical terminal view releases them.
+Compatibility epoch 35 requires both Desktop and Runtime to understand explicit reasoning `on` alongside the existing default, off, effort, and budget choices. Earlier clients reject `on`; ordinary epoch admission prevents a mixed pair from accepting a Flower or Desktop model-source request it cannot interpret. See the [reasoning selection contract](../ui/flower-reasoning-selection.md) for model capability and control semantics.
 
-`sys.ping` carries the complete normalized Runtime Service snapshot. The Local UI wire contract must accept open and AI readiness, active workload, Desktop model-source, Provider-link and Runtime Gateway capabilities, plus bindings before its strict generated validator decodes the response. Runtime snapshot fields and generated wire schemas change together; an unknown response key must not turn a healthy Runtime into a reconnect loop.
+Epoch 59 pairs Runtime authorization requests with the shared Desktop and Env App OpenAI account picker. A saved registry requires an account selection or explicit new-registration intent; old Desktop clients must update before Flower access. Registration semantics belong to the [ChatGPT account lifecycle](../ai/chatgpt-account-lifecycle.md).
+
+Epoch 65 requires the model directory's backend-owned default_fetch_source field in provider search policies. See [model web search](../ai/model-web-search.md).
+
+Epoch 67 requires complete changed pin metadata in Flower pin confirmations. New pins append to the endpoint's existing order; Desktop and Runtime must agree on the changed ranks and revisions before a confirmation is accepted. See [sidebar pin ordering](../ui/flower-thread-sidebar.md).
 
 # Boundaries
 
-Portal `ControlChannelFence` fields protect the Provider control channel and are distinct from Gateway `target_generation`. Neither counter is a Desktop ownership marker. The Runtime Service has no hidden v1 lifecycle-owner fallback and does not require a Gateway endpoint, pairing, or operation store to start.
-
-# Reasoning selection compatibility
-
-Compatibility epoch 35 requires both Desktop and Runtime to understand explicit
-reasoning `on` alongside the existing default, off, effort, and budget choices.
-Earlier clients reject `on`; ordinary epoch admission prevents a mixed pair
-from accepting a Flower or Desktop model-source request it cannot interpret.
-The supported upgrade window includes epoch 34. Stored thread preferences and
-database migration lineages remain unchanged. See the
-[reasoning selection contract](../ui/flower-reasoning-selection.md) for model
-capability and control semantics.
-
-# ChatGPT registration compatibility
-
-Epoch 59 pairs Runtime authorization requests with the shared Desktop and Env App
-OpenAI account picker. A saved registry requires an account selection or explicit
-new-registration intent; old Desktop clients must update before Flower access.
-The upgrade window retains earlier reviewed epochs and includes 57 and 58.
-Runtime Service wire protocol and storage schemas do not change. Registration
-semantics belong to the [ChatGPT account lifecycle](../ai/chatgpt-account-lifecycle.md).
-
-# Web-default policy compatibility
-
-Epoch 65 requires the model directory's backend-owned default_fetch_source field
-in provider search policies. Earlier Desktop or Runtime peers enter the existing
-update flow before Flower configuration reads. Explicit user preferences and
-frozen Turn bindings retain their existing owners; Runtime protocol and storage
-schemas do not change. See [model web search](../ai/model-web-search.md).
-
-# Pin confirmation compatibility
-
-Epoch 67 requires complete changed pin metadata in Flower pin confirmations.
-New pins append to the endpoint's existing order; Desktop and Runtime must agree
-on the changed ranks and revisions before a confirmation is accepted. Older peers
-use the existing update flow. Product schema, Runtime protocol and Floret history
-remain unchanged. See [sidebar pin ordering](../ui/flower-thread-sidebar.md).
+Portal `ControlChannelFence` fields protect the Provider control channel and are distinct from Gateway `target_generation`. The Runtime Service has no hidden v1 lifecycle-owner fallback and does not require a Gateway endpoint, pairing, or operation store to start.
 
 # Evidence
 
 - `redeven:internal/runtimeservice/snapshot.go:1` - Runtime Service snapshot and independent protocol identifier.
+
 - `redeven:internal/runtimeservice/compatibility.go:1` - Signed/embedded Runtime compatibility contract.
+
 - `redeven:internal/runtimeservice/workload.go:1` - Protected workload admission, leases, revisions, and supervisor-facing impact snapshots.
-- `redeven:internal/runtimemanagement/process_inventory.go:1` - Exact workload identity and unknown inventory behavior.
-- `redeven:internal/localui/runtime_control.go:1` - Ordinary Runtime control remains a local Runtime interface.
-- `redeven:internal/agent/runtime_service.go:1` - Runtime snapshots use local model-source and workload state without historical thread scans.
-- `redeven:internal/ai/desktop_model_source.go:372` - Process-local Desktop model-source binding snapshot used by Runtime status.
-- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/wire/sys.ts:1` - Local UI wire shape for the complete `sys.ping` Runtime Service snapshot.
-- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/contract.test.ts:48` - Strict response decoding coverage for AI readiness and Runtime Gateway capability fields.

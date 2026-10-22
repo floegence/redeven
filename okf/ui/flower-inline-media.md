@@ -4,8 +4,9 @@ title: Flower inline media
 description: Display assistant media through released Floe previews and authorized Runtime resources.
 tags: [flower, media, preview, security]
 timestamp: 2026-10-20T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
-
 # Summary
 
 Flower displays assistant images, screenshots, video, audio, and self-contained
@@ -18,135 +19,26 @@ preview error without interrupting the conversation.
 # Contract
 
 ## Authoring and interaction
-
-- `![Title](source)` displays image, video, or audio. Ordinary HTTP(S) links stay
-  navigable. External `.html` / `.htm` URLs stay navigable even with image syntax.
-  Links whose filename identifies image, video, or audio display inline media;
-  local HTML links display interactive previews. Navigable prose, source cards,
-  and web Activity links use blue underlined text. Prose links expose visible
-  keyboard focus; user bubbles retain their contrast ink.
-- Assistant media capability is fixed at Markdown mount independently of label
-  readiness. Preview references always produce inert placeholders. Missing labels
-  use the English catalog until localized copy arrives without remounting or
-  reloading the preview. Loading reserves the bounded media viewport. HTML retains source inspection
-  and expansion while loading; executable and file actions appear only when
-  ready. Failure offers an in-place Retry.
-- Local sources use absolute Runtime paths; relative paths resolve against the
-  rendered thread's trusted working directory. Local files always cross the authenticated
-  filesystem scope. They are never interpreted as application routes.
-- A screenshot uses the exact `computer://target/digest` reference returned by
-  the tool. Loading uses the existing thread-authorized computer frame adapter.
-- `image.read` results use the exact `image://digest/format` snapshot reference.
-  Activity and assistant Markdown load it through the thread-authorized binary
-  media adapter. Preview failure offers retry; it never reopens the source file.
-- An `html preview` fence or a local `.html` / `.htm` link renders an interactive
-  preview. Ordinary `html` fences remain copyable source code. Raw HTML remains
-  escaped. External HTML pages open through links and do not mount a preview or
-  offer a retry that cannot load them.
-- HTML uses the published Floe dotted canvas with a restrained generating sheen.
-  Flower removes the canvas perimeter stroke for a borderless reading surface.
-  Generation shows only centered localized status text with the shared progress
-  shimmer over the dots; no skeleton card or placeholder bars frame the text.
-  Reduced motion stops both animations without hiding progress.
-  Circular expansion sits at the top right; source inspection and an actions menu
-  sit at the bottom left, outside the document. Source copying, reload, independent
-  preview, and authorized containing-folder navigation live in that menu. Loading,
-  failure, and completion keep the same bounded geometry. Source inspection makes
-  the retained iframe inert without destroying its form or script state.
-- Other media displays without outer cards or title bars, with a single rounded edge,
-  quiet captions, and named actions on hover or keyboard focus (always
-  visible on touch). Loading and retry states use the active locale.
-  Clicking a local image or its eye button opens the existing host file preview
-  with the same-file reuse policy. The folder button opens its containing
-  directory through the host file browser. Remote images, opaque computer frames,
-  and hosts without file navigation use Floe's shared floating preview; they do
-  not expose a fabricated folder action or a raw blob link. Labels follow the
-  active locale. Video/audio use native playback controls without autoplay.
-  Local HTML exposes the same host file-preview and containing-folder actions.
-  HTML expands without recreating its iframe; expansion and collapse use distinct
-  icons and accessible names.
-- Fenced HTML also offers an independent floating copy of the same source
-  snapshot. Floe's existing window owns dragging, resizing, maximization, narrow
-  layout, dismissal, and focus return. The inline iframe and chat position stay
-  intact; each copy has its own script and form state.
-- Fragment links scroll within their current document. Other real link clicks
-  pass their raw href through Floe's private lifecycle-bound port. Redeven binds
-  the thread, filesystem scope, adapter, and working directory; file HTML uses
-  its source directory while fences use the bound thread directory. Web links
-  use the existing browser entry, and file links use authorized reads and file
-  preview. Missing directories, unsupported protocols, permission failures,
-  missing files, and opening failures retain the source with explicit feedback.
-  A host without the relevant opening capability reports it as unavailable.
-- Top-level HTML preview fences own stable segments keyed by their source start,
-  from the opening fence through closure, completion, and later reply text. Open
-  fences pass partial source with a generating state; interrupted open fences pass
-  an incomplete state. Neither state mounts executable HTML. Ordinary code keeps
-  its streaming behavior. Canvas source inspection and expansion survive closure;
-  later reply text does not reload the ready iframe. Other unfinished media tails
-  stay inert. Media near the
-  viewport loads lazily. Disposal aborts pending observation and revokes blob URLs.
-- The resolver identity changes only with the adapter, filesystem scope, rendered
-  ThreadID, view validity, or trusted working directory. Published Floe owns request cancellation and ignores reactive reads
-  inside the resolver. Health snapshots, labels, and ordinary thread updates do
-  not reload a ready preview; a real context change cancels stale work.
+- `![Title](source)` displays image, video, or audio. Preview references always produce inert placeholders. Health snapshots, labels, and ordinary thread updates do not reload a ready preview; a real context change cancels stale work.
 
 ## Request lifecycle and thread ownership
+One media entry at each rendered thread boundary serves both assistant Markdown and Activity images. A child without a trusted working directory cannot resolve relative sources or HTML links against the parent's directory.
 
-One media entry at each rendered thread boundary serves both assistant Markdown
-and Activity images. Parent and open child views bind their own ThreadID. A child
-without a trusted working directory cannot resolve relative sources or HTML
-links against the parent's directory. Runtime membership and filesystem checks
-remain authoritative, including historical references and legitimate Forks.
-
-Floe compares all source values (`kind`, `src`, `html`, and `title`). Equal source
-objects and complete equal context arrays retain the decoded image, temporary
-URL, and open preview. A real source, adapter, scope, directory, thread, or view
-change invalidates the existing request and closes its preview.
-
-Every Flower media entry uses Floe's optional 15-second deadline across resolver
-and HTML loading. Timeout and decoding failures expose Retry and abort the same
-request that owns the temporary URL. Late responses cannot replace a newer
-request. Retry, folding, view removal, and disposal release their request resources.
-There is no media cache, automatic retry, or host-owned loading state machine.
-Window close and Escape return focus only from the closing window to its
-connected trigger, preserving navigation and composer focus.
+Window close and Escape return focus only from the closing window to its connected trigger, preserving navigation and composer focus.
 
 ## Resource and document boundaries
-
 The existing `/api/fs/file` route accepts `preview=1` for bounded chat previews.
-Media is limited to 64 MiB; HTML is limited to 1,000,000 bytes and served only as
-`text/plain; charset=utf-8` with `nosniff`. Ordinary HTML serving remains rejected.
-Existing read permission, filesystem roots, symlink policy, and media range
-behavior remain authoritative. Desktop admits only the closed GET route with one
-path and the preview flag; its HTTP reader enforces the media byte bound before
-IPC delivery. No credentials are exposed to the renderer.
 
-Floe renders HTML in an opaque `allow-scripts` sandbox with a leading CSP. Inline
-styles/scripts and embedded data images work; shell/storage access, network
-fetches, external scripts, frames, and forms do not. HTML bytes are never mounted
-in the trusted shell. HTML previews are self-contained and do not resolve sibling
-assets. Existing local SVG serving remains unavailable.
-The link port carries intent only. Page scripts cannot forge the private port,
-synthetic clicks cannot open targets, and other or retired iframe channels are
-rejected. No credentials, file-reading interface, or automatic sibling-resource
-loading is exposed to HTML. Asynchronous opens honor the frame's abort signal.
-
-Only assistant Markdown opts into resource resolution. Fetched web content and
-user messages cannot use this adapter to read local files. Presentation creates
-no second message store, lifecycle, or Floret API.
+Presentation creates no second message store, lifecycle, or Floret API.
 
 # Boundaries
 
-Canonical Floret messages remain the durable display source. Resource routes retain Redeven permission checks and released Floe HTML isolation. Unavailable, forbidden, oversized or mismatched media stays an explicit preview error without interrupting the conversation.
+Canonical Floret messages remain the durable display source. Unavailable, forbidden, oversized or mismatched media stays an explicit preview error without interrupting the conversation.
 
 # Evidence
 
 - [Isolated Electron acceptance for Welcome and built Env App](../../desktop/scripts/check-flower-media.mjs): build Env App, then run `pnpm --dir desktop test:flower-media`; records both 30-second observations under `desktop/dist/flower-media-acceptance`.
+
 - [Markdown integration](../../internal/flower_ui/src/chat/markdown/FlowerMarkdownBlock.tsx)
+
 - [Resource mapping](../../internal/flower_ui/src/chat/markdown/flowerMarkdownMedia.ts)
-- [Runtime preview checks](../../internal/codeapp/appserver/server_fs_file_test.go)
-- [Desktop transport](../../desktop/src/main/runtimeFlowerHTTP.ts)
-- [Conversation browser acceptance](../../internal/envapp/ui_src/src/ui/FlowerSurface.richMedia.browser.test.tsx)
-- [Desktop shell navigation boundary](../desktop/desktop-runtime-bridge.md)
-- [Streaming ownership](flower-streaming-stability.md)
-- [Computer media authority](../ai/computer-use-media.md)

@@ -4,15 +4,16 @@ title: Provider API and catalog review
 description: Match the shipped model catalog to official APIs, regional endpoints, and released adapter capabilities.
 tags: [ai, models, providers, compatibility]
 timestamp: 2026-10-12T00:00:00Z
+lifecycle: active_evidence
+reviewed_at: "2026-10-22"
 ---
-
 # Summary
 
 Redeven owns one model catalog shared by Runtime, Web, Desktop, and the native iOS client through the authenticated catalog API. Official provider documentation establishes model identities, API contracts, and capability corrections; the pinned models.dev snapshot supplies reproducible inventory metadata. A model must be supported by the released adapter before it becomes selectable. Catalog refreshes preserve user selections and never replace a conversation's stored model. Unsupported engine capabilities remain explicit integration blockers.
 
-# Reviewed APIs
+# Contract
 
-The 2026-10-12 review covers all existing provider types. Token ceilings describe provider capacity, not a request to increase user budgets. Audio, video, embeddings, and restricted-access specialized models are outside the default Agent directory.
+The 2026-10-12 review covers all existing provider types. Audio, video, embeddings, and restricted-access specialized models are outside the default Agent directory.
 
 | Provider | Current public Agent models reviewed | Runtime route and constraints |
 | --- | --- | --- |
@@ -29,65 +30,32 @@ The 2026-10-12 review covers all existing provider types. Token ceilings describ
 | Ollama | Installed local inventory | `/api/tags`, `/api/ps`, `/api/show`, then `/v1/chat/completions`; serving context and tools must be discovered. |
 | Custom compatible | User-defined models | Retain explicit endpoint, token limits, and capability configuration. |
 
-# Contract
-
-The generated catalog must include only models that have a released adapter, a reviewed endpoint and capability contract, positive provider limits, and a web-search declaration. Catalog metadata is authoritative for selectable model identity and user-visible status. Provider credentials, workspace IDs, regional endpoint choice, and per-thread model selection remain user-owned state. A new supplier model remains unavailable until the released upstream adapter and its replay, tool, image, and reasoning contracts are qualified.
+The generated catalog must include only models that have a released adapter, a reviewed endpoint and capability contract, positive provider limits, and a web-search declaration. A new supplier model remains unavailable until the released upstream adapter and its replay, tool, image, and reasoning contracts are qualified.
 
 ## October catalog refresh
-
-The Floret and Redeven refresh uses the same raw models.dev response, SHA-256
-`a6af79756a8a8efb5fd3144a83bd01f333e503043998d5f26f3c98bf9181d36c`.
-Haiku 5.5 adds 1M context, 128K output, images and adaptive thinking with off
-and a medium default. Both Sonnet 4.5 identifiers use 200K context. Other
-provider capabilities remain unchanged after official-source review.
-[ChatGPT plan authentication](chatgpt-local-authentication.md) discovers the
-account-specific listed inventory and intersects these reviewed capabilities.
+The Floret and Redeven refresh uses the same raw models.dev response, SHA-256 `a6af79756a8a8efb5fd3144a83bd01f333e503043998d5f26f3c98bf9181d36c`. [ChatGPT plan authentication](chatgpt-local-authentication.md) discovers the account-specific listed inventory and intersects these reviewed capabilities.
 
 ## Endpoint compatibility
+Anthropic's SDK appends `v1/messages`.
 
-Anthropic's SDK appends `v1/messages`. New presets use `https://api.anthropic.com`. The adapter accepts previously saved bases ending in `/v1` or `/v1/` by removing only that terminal version before SDK construction, preserving any proxy path prefix. The original configuration is not rewritten. This prevents `/v1/v1/messages` without changing credential or host selection.
-
-Qwen now recommends workspace-specific regional domains, for example `https://{WorkspaceId}.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1` for Singapore and `{WorkspaceId}.cn-beijing.maas.aliyuncs.com` for Beijing. Workspace identity and the API key's region are user-owned inputs. Preserve existing configured bases; never save the literal template or silently move a key between regions. The documented legacy Singapore base remains the existing preset while users can supply the new workspace URL. Native iOS settings link to official provider documentation for this choice.
+Preserve existing configured bases; never save the literal template or silently move a key between regions. Native iOS settings link to official provider documentation for this choice.
 
 ## Published-engine adoption
+Redeven currently consumes published Floret v7.29.2 with `GOWORK=off`; no sibling dependency or transport copy bypasses the upstream boundary.
 
-Redeven currently consumes published Floret v7.29.2 with `GOWORK=off`; no sibling
-dependency or transport copy bypasses the upstream boundary. The DeepSeek catalog
-and alias capability was introduced in Floret v7.19.0 and remains covered by the
-current gateway contract, so that historical release is retained only as adoption
-provenance rather than a current dependency claim.
-
-The supplier still accepts `deepseek-v4-flash` and `deepseek-v4-flash-vision-exp`
-as aliases for V4.1 Flash. Explicit overrides retain those identities, label
-them as legacy aliases, and align image/effort/output capabilities with the
-published engine. Existing conversations keep their selected ID and opaque
-state identity. No automatic model substitution occurs. All four models keep
-native search unsupported.
-
-Daybreak Blue/Red require separate OpenAI approval and provisioning and therefore remain outside the public default catalog. New catalog entries receive an explicit search review; supplier search support does not imply an implemented or qualified Redeven search adapter.
+New catalog entries receive an explicit search review; supplier search support does not imply an implemented or qualified Redeven search adapter.
 
 # Boundaries
 
-Runtime owns provider routing and the catalog projection. Floret owns provider-native request construction, opaque continuation state, and released model capability definitions. The iOS client consumes the authenticated projection and links to official configuration documentation; it does not embed a second supplier inventory or implement provider transports. `models.dev` is a reproducible directory input, not an authority to bypass official docs or released adapter support.
+Runtime owns provider routing and the catalog projection. `models.dev` is a reproducible directory input, not an authority to bypass official docs or released adapter support.
 
 ## Runtime inventory synchronization
-
-The Runtime uses native Anthropic and Google list authentication/pagination and OpenAI-compatible inventories for supported brands. Unsupported list endpoints keep reviewed or manual metadata. Unknown identities require explicit adapter-supported capability configuration. Successful complete inventory is separate from user selection and actual invocation authorization; supplier and cache failures retain previous metadata. See [Model directory and selection](model-directory-and-selection.md) for ownership, deadlines, and scope isolation.
+The Runtime uses native Anthropic and Google list authentication/pagination and OpenAI-compatible inventories for supported brands. Unknown identities require explicit adapter-supported capability configuration. See [Model directory and selection](model-directory-and-selection.md) for ownership, deadlines, and scope isolation.
 
 # Evidence
 
 - `redeven:scripts/model-catalog/upstream.json` - Pinned models.dev response projection and original response SHA-256.
+
 - `redeven:scripts/model-catalog/overrides.json` - Official-source corrections, search declarations, exclusions, and review dates.
+
 - `redeven:internal/ai/model_gateway.go` - Provider routing and Anthropic base normalization.
-- [Historical Floret v7.19.0](https://github.com/floegence/floret/releases/tag/v7.19.0) - Original DeepSeek catalog and alias capability adoption evidence; current runtime is v7.29.2.
-- `redeven:internal/ai/model_gateway_deepseek_test.go` - New Flash, aliases, Pro reasoning, image continuation, and historical search replay against the released gateway.
-- `redeven:internal/ai/model_gateway_anthropic_integration_test.go` - Exact Messages path assertion for saved versioned bases.
-- [OpenAI models](https://developers.openai.com/api/docs/models) and [GPT-6.1 Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol).
-- [Claude model overview](https://platform.claude.com/docs/en/models/overview) and [thinking configuration](https://platform.claude.com/docs/en/build-with-claude/thinking).
-- [Gemini models](https://ai.google.dev/gemini-api/docs/models) and [OpenAI compatibility](https://ai.google.dev/gemini-api/docs/openai).
-- [DeepSeek models and pricing](https://api-docs.deepseek.com/quick_start/pricing) and [Responses API](https://api-docs.deepseek.com/guides/responses_api/).
-- [Qwen compatibility](https://www.alibabacloud.com/help/en/model-studio/compatibility-of-openai-with-dashscope), [Omni Flash](https://www.alibabacloud.com/help/en/model-studio/qwen3-8-omni-flash), and [thinking](https://www.alibabacloud.com/help/en/model-studio/deep-thinking).
-- [Kimi models](https://platform.kimi.com/docs/models) and [K3 limits](https://platform.kimi.com/docs/guide/kimi-k3-quickstart).
-- [GLM-5.3 Flash/FlashX](https://docs.z.ai/guides/vlm/glm-5.3-flash) and [GLM thinking](https://docs.z.ai/guides/capabilities/thinking-mode).
-- [Grok 4.7](https://docs.x.ai/developers/models/grok-4.7) and [legacy Chat Completions](https://docs.x.ai/developers/model-capabilities/legacy/chat-completions).
-- [Groq models](https://console.groq.com/docs/models), [OpenRouter models](https://openrouter.ai/docs/guides/overview/models), and [Ollama compatibility](https://docs.ollama.com/api/openai-compatibility).

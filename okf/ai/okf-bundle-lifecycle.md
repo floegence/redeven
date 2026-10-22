@@ -4,6 +4,8 @@ title: OKF bundle lifecycle
 description: Redeven builds a deterministic embedded OKF bundle from source Markdown concepts.
 tags: [okf, provenance, release]
 timestamp: 2026-10-07T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -12,26 +14,30 @@ Redeven builds its embedded OKF bundle from curated source files under the top-l
 # Contract
 
 ## Mechanism
+`build_assets.sh` invokes `build_okf_bundle.sh`, which runs `cmd/okf-bundle` against explicit source and dist roots. The builder emits the bundle, manifest and checksum deterministically. Summary and section bodies are embedded as structured data; Evidence remains in its source file but is omitted from ordinary concept opening unless requested. `okf/dist/*` is generated from source and is never an authoring surface.
 
-`build_assets.sh` invokes `build_okf_bundle.sh`, which runs `cmd/okf-bundle` against explicit source and dist roots. The builder scans OKF Markdown concepts, parses Summary, Contract, Boundaries, section metadata, and structured Evidence, skips generated `dist/` while hashing the source tree into `source_sha256`, and writes the bundle, manifest, and checksum outputs. The schema 3 manifest records concept, section, and evidence counts.
+## Quality gates
+Report mode exposes layout, indexing, summary, evidence, duplication, lifecycle and budget issues without blocking cleanup. Strict mode fails structural and source-integrity violations, overdue reviews, and source totals above the hard cap. Final integration runs strict content quality after source integrity and before verifying the generated bundle.
 
-Authoring quality uses the same parser and builder rather than a second Markdown implementation. `check_content_quality.sh --report-only` reports legacy layout, index coverage, summary budgets, oversized contracts, evidence problems, and duplicate paragraphs without blocking migration. `--strict` turns structural, indexing, invalid evidence, duplicate large-paragraph, and over-budget violations into failures. The final integration gate runs strict quality after source integrity and before verifying the generated bundle.
+## Source budget
+Count Unicode characters in every source Markdown file under `okf/`, including the index and log, after CRLF-to-LF normalization; exclude `okf/dist/`. The report shows total, remaining capacity and index/concept/log usage. Exceeding 900,000 warns; strict quality accepts exactly 1,000,000 and fails above it. A per-concept `quality_exception` cannot waive this hard cap.
 
-Each source concept is a retrieval unit with Summary, Contract, Boundaries, and Evidence. Summary and section bodies are embedded as structured data; Evidence remains in the same source file but is omitted from ordinary concept opening unless explicitly requested. `okf/dist/*` is regenerated from the source tree and remains committed verification output rather than an authoring surface.
+## Review and log lifecycle
+Every concept declares `lifecycle` and `reviewed_at`: review contracts every 180 days, active measurements and operational evidence every 90 days, and retained history every 365 days. Retained history also needs a concise `retention_reason`. Report mode warns and strict mode fails on invalid or overdue metadata; expiry prompts review and never deletes a document automatically. Keep `log.md` to compact summaries from the last 30 days after durable knowledge moves into its concept.
+
+## Index and retention
+Keep categories and concept links in the index; the parser derives each retrieval summary from the concept's `# Summary`. Prefer an existing concept, preserve only decision-relevant historical conclusions and counterevidence, and remove obsolete detail from the current tree so Git history remains the recovery path.
 
 # Boundaries
 
-The bundle remains auditable only while OKF Markdown concepts are the sole authoring surface, quality rules are enforced through the shared parser, and `okf/dist/*` stays a generated verification artifact set rather than hand-edited truth. A `quality_exception` may document a justified cross-domain length exception, but it does not disable structural, evidence, indexing, or duplicate-content checks.
+The bundle remains auditable only while OKF Markdown concepts are the sole authoring surface, source and lifecycle budgets are enforced through the shared parser, and `okf/dist/*` stays a generated verification artifact set rather than hand-edited truth. A `quality_exception` may document a justified per-concept length exception, but it never waives the source cap or other quality checks.
 
 # Evidence
 
 - `redeven:scripts/build_assets.sh:53` - Embedded asset builds include the OKF bundle stage.
+
 - `redeven:scripts/build_okf_bundle.sh:19` - Bundle script resolves `okf` as source root and `okf/dist` as dist root.
-- `redeven:cmd/okf-bundle/main.go:14` - The standalone bundle command defaults to the top-level OKF source root.
-- `redeven:cmd/redeven/okf.go:39` - The main CLI exposes `redeven okf bundle` with the same default roots.
-- `redeven:internal/okf/builder.go:22` - BuildFromSource assembles the bundle from OKF concepts.
-- `redeven:okf/dist/embed.go:7` - Top-level dist files are embedded by the `okf/dist` package.
-- `redeven:internal/okf/embed.go:6` - Internal runtime OKF loading reads through the top-level embedded dist package.
-- `redeven:scripts/okf/check_source_integrity.sh:5` - Integrity checks validate the top-level OKF source before generated artifacts are trusted.
-- `redeven:scripts/okf/check_content_quality.sh:1` - Content quality exposes report-only and strict validation through the existing bundle command.
-- `redeven:internal/okf/quality.go:1` - Quality validation checks layout, budgets, Evidence, index coverage, and duplicate paragraphs.
+
+- `redeven:internal/okf/quality.go:1` - Enforces source character and lifecycle checks.
+
+- `redeven:scripts/okf/check_content_quality.sh:1` - Exposes report and strict quality modes.

@@ -50,6 +50,16 @@ func main() {
 			os.Exit(1)
 		}
 		if mode != okf.QualityOff && !*qualityJSON {
+			usage := report.SourceCharacterBreakdown
+			fmt.Printf("okf source characters: %d/%d (target %d, remaining %d; index %d, concepts %d, log %d)\n",
+				report.SourceCharacters,
+				report.SourceCharacterLimit,
+				report.SourceCharacterTarget,
+				report.SourceCharactersRemain,
+				usage.Index,
+				usage.Concepts,
+				usage.Log,
+			)
 			fmt.Printf("okf quality checked: %d errors, %d warnings\n", report.Errors, report.Warnings)
 		}
 		if !*qualityJSON {

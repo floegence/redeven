@@ -4,6 +4,8 @@ title: Web Services interface
 description: Read current service facts, open services, and resolve exceptions in compact Activity and Workbench surfaces.
 tags: [architecture, ui, desktop, accessibility]
 timestamp: 2026-09-09T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -14,44 +16,34 @@ Local inventory continuity follows [Env App resource snapshots](../ui/env-resour
 # Contract
 
 ## Collection
+Header, launcher, toolbar, and collection share a centered axis.
 
-Header, launcher, toolbar, and collection share a centered axis. The header has a short wrapping description plus template and creation actions; the launcher stays 40px high with input errors beneath it. Search, the counted archive menu, and refresh sit beside the collection title. Detached services and retained data have distinct archive views with a return action and an archive-specific empty state. Below 768 CSS pixels the description is omitted, the title and actions share one 56px row, and search, archive, and refresh remain a single 44px toolbar row with a 128px minimum search field. The page content owns horizontal overflow prevention so long localized labels do not push the list outside its surface.
+Rows have a 64px minimum, never a fixed height.
 
-Managed and ordinary services share one neutral divided list with content-sized, aligned action tracks. Rows have a 64px minimum, never a fixed height. Identity owns the name, one current release, workspace basename, and access mode; current-release details remain available from the version control. A textual update-available hint, including the actual target when supplied, and preview hints sit with that version. Backend status remains a short semantic label; current explanations occupy a wrapping support region inside the affected row. The owning surface's container width controls responsive placement, including narrow Workbench widgets inside wide windows. Open keeps its position among active services, while archived records expose their applicable management entry. The [management recovery contract](service-management-recovery.md) owns confirmed actions and resource authority.
-
-Previously loaded collection facts survive an unsuccessful refresh with an explicit stale-check explanation. Forward ordering uses creation identity instead of health or last-opened time, so opening and refresh do not reorder rows. Managed snapshots retain service-ID-keyed DOM. Hover feedback is 120ms, state color feedback 180ms, and explanatory expansion 220ms; refresh never replays row entry. Reduced motion removes these transitions without removing focus, progress, or status feedback. Diagnostics and per-service operation presentation follow the [operation progress contract](managed-service-operation-progress.md).
-
-Opening indicators keep the same icon footprint as idle and restricted states. The bounded status cell isolates asynchronous progress and explanatory feedback from neighboring rows under the [layout stability contract](../ui/asynchronous-layout-stability.md).
+The bounded status cell isolates asynchronous progress and explanatory feedback from neighboring rows under the [layout stability contract](../ui/asynchronous-layout-stability.md).
 
 ## Opening restrictions
+When Open is unavailable and the backend selects an executable Start action, Start uses the primary button style within existing management permissions.
 
-When Open is unavailable and the backend selects an executable Start action, Start uses the primary button style within existing management permissions. The restricted Open action guides the user to start the service. Once Open becomes available, it resumes the primary emphasis and lifecycle actions remain secondary.
-
-Managed and ordinary services share one Open action. Current access restrictions and backend action capability control availability; old opening errors and health-check failures do not permanently disable retries. A restricted action keeps its position and keyboard focusability, uses muted disabled styling, `aria-disabled`, and a yellow warning icon. Click, touch, Enter, or Space discloses the yellow reason tooltip without issuing an opening request. Hover and focus also expose the reason; Escape, a second activation, or outside interaction dismisses it. An associated accessible description retains the full reason independently of tooltip presence.
-
-Opening restrictions are not repeated in expanded yellow row notices. Pending configuration, blocked cleanup, and other management explanations remain in their existing support regions. The tooltip consumes the published visible viewport and `SurfaceFloatingLayer`; that layer owns Workbench projection and surface clamping. Long explanations wrap inside the visible boundary in either theme.
+Long explanations wrap inside the visible boundary in either theme.
 
 ## Review and focus
+One overlay drawer contains a concise service conclusion, compact resource facts, and recommended actions. A newer known inventory check may replace older inspection facts; unknown checks preserve the last known facts.
 
-One overlay drawer contains a concise service conclusion, compact resource facts, and recommended actions. The management surface is at most 36rem wide; the version surface is at most 46rem wide with 4rem of context retained on desktop, and becomes full width at or below 720px. In the management view, the shared Dialog footer groups logs, configuration, versions, and the alternative-action menu above contextual execution and Close controls. Restart review retains its impact in the body and confirmation in that footer. Closing an active operation explicitly means continued execution; cancellation is a separate footer action. Selecting Execution details switches the same drawer to a focused, read-only progress view with a return action; it does not create another operation or polling owner. The focused view keeps the drawer footer visible and offers cancellation only when the operation is cancellable. Alternative goals change the reviewed plan inside the same drawer. Data and network identities and their reference relations expand in place; resource problems remain visible without expansion, and the full workspace path remains visible and copyable. A newer known inventory check may replace older inspection facts; unknown checks preserve the last known facts. The selected service is highlighted while the drawer is open. Closing restores its surviving trigger; removing the record falls back to a neighboring service or the collection heading. Errors are readable without hover. Rechecking retains previously checked facts and their timestamp, but the previous digest cannot execute during loading or after a failed check.
-
-The last reviewed identity and facts remain visible during exit, avoiding an empty-content flash. The existing Floe Dialog owns the surface boundary, keyboard trap, 240ms entry and 180ms exit. Its footer remains visible while resource facts scroll. References disclose their related instances only when expanded. The footer menu owns alternate goals, including uninstall, stop, process verification, and administrator detachment. Hook bypass remains an explicit administrator choice within the reviewed plan. Recent operation diagnostics remain progressive disclosure rather than permanent collection warnings.
-
-Version review keeps an explicitly selected candidate list and a separate plan pane. Both panes scroll locally; narrow surfaces stack them without losing the fixed execution footer. Search and filters never clear the selected plan or its required acknowledgements. The plan shows the actual version transition, deployment, workspace, source identity, and safety notices; it does not manufacture release notes. Current runtime remains separate from operation outcome. Older or unknown targets retain the stop-first flow and require a second explicit update after stopping; an initially stopped service remains stopped after update.
+Older or unknown targets retain the stop-first flow and require a second explicit update after stopping; an initially stopped service remains stopped after update.
 
 # Boundaries
 
-The renderer maps existing backend status and capabilities to short localized labels and semantic icons. It does not infer alternate lifecycle actions, change Registry state, bypass confirmation, or create another operation framework. Request submission appears immediately in the owning row; backend progress replaces it after acceptance. A rejected submission stays in the existing operation presentation with a safe localized explanation, without changing observed state or manufacturing a backend operation. Opening transactions are scoped to their target; unrelated service actions and navigation remain available.
+The renderer maps existing backend status and capabilities to short localized labels and semantic icons.
 
-Details and diagnostics defaults to read-only inspection. Specific entrance errors remain readable; failed Open never prevents another attempt. Recovery becomes a reviewed mutation only after the user chooses it.
+Specific entrance errors remain readable; failed Open never prevents another attempt.
 
-Opening and authorization follow [Web Service browser sessions](web-service-browser-sessions.md). Resource preflight and execution follow [management recovery](service-management-recovery.md); streaming and historical operation ownership follow [operation progress](managed-service-operation-progress.md). Styling stays inside Web Services, reuses published components and theme variables, and adds no animation dependency. The shell retains only collection and loading-presentation styles; management and version-review styles load with the product page rather than the initial document graph.
+The shell retains only collection and loading-presentation styles; management and version-review styles load with the product page rather than the initial document graph.
 
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Shared collection, per-target opening, archive navigation, and refreshed facts.
+
 - `redeven:internal/envapp/ui_src/src/ui/pages/ManagedServiceManagementDrawer.tsx` - Reviewed actions, compact resource facts, and persistent execution footer.
+
 - `redeven:internal/envapp/ui_src/src/ui/pages/web-services.css` - Container-based layout, semantic surfaces, and reduced-motion handling.
-- `redeven:internal/envapp/ui_src/src/ui/pages/web-services-management.css` - Page-loaded management, execution-detail, and version-review composition.
-- `redeven:internal/envapp/ui_src/src/ui/pages/WebServicesPage.browser.test.tsx` - Locale, theme, zoom, archive, focus, failure, and operation outcome checks.
-- `redeven:internal/envapp/ui_src/src/ui/pages/WebServiceCollection.browser.test.tsx` - Real element boundaries and actionable exception rows inside narrow surfaces.

@@ -4,6 +4,8 @@ title: Private browser observation and input
 description: Fence secret-surface observation, private frames, ordered input and recovery checks around a canonical interaction.
 tags: [ai, computer-use, browser, privacy]
 timestamp: 2026-09-24T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -19,110 +21,18 @@ after a newly decoded frame matches the current observer, interaction and target
 # Contract
 
 ## Browser observation and private input
+The shared browser controller examines visible password fields, `one-time-code` input semantics, CAPTCHA text and explicit instruction-override signals in each frame. An unreadable frame is a technical observation failure, not a human requirement.
 
-The shared browser controller examines visible password fields, `one-time-code` input
-semantics, CAPTCHA text and explicit instruction-override signals in each frame.
-CDP DOM snapshots include rendered password and OTP inputs inside closed shadow
-roots. Isolated-world mutation observers cover the document and open shadow roots.
-An unreadable frame is a technical observation failure, not a human requirement.
-The shared controller retries only a read, at most once. Frame attachment,
-detachment and navigation invalidate observations. Stable read failure returns
-`TARGET_OBSERVATION_UNAVAILABLE` with confirmed `action_executed` and a closed
-`observation_stage`; no page data or pixels survive. Runtime does not latch a
-pause or create a question for this error. The next authorized observation
-may proceed. Viewer failure uses the existing unavailable/reconnect display.
-It inspects before input, after an action, and
-after capture. Secret DOM transitions are latched during observation so removing
-a field before the final check cannot expose the already captured image.
-Document changes during capture discard pixels and require a fresh observation;
-an otherwise safe navigation does not require user takeover. Confirmed secret
-evidence wins over concurrent frame invalidation. An unsafe result discards
-all captured bytes. These deterministic
-signals are bounded protections, not a claim of complete injection detection or
-atomic observation of all dynamic web content.
-
-The authenticated `POST /_redeven_proxy/api/ai/computer/input` accepts bounded
-click/type/key/scroll commands and returns only an acknowledgement. It requires
-the exact active workspace observer, viewer revision and unresolved interaction.
-Canonical provenance supplies the original target, turn and run; full read,
-write and execute permission is required. Authority is checked again after
-acquiring the target gate. Input never automatically replays.
-
-Continuous private viewing uses the shared sampler and workspace channel under
-that same authority. Only the requesting observer receives its descriptors.
-`GET /_redeven_proxy/api/ai/computer/private-frame` requires that observer,
-revision, thread, unresolved interaction and frame ID; it returns PNG with
-`Cache-Control: no-store`. Private pixels never receive `computer://` references,
-model attachments or durable media entries. Input, pixels and raw helper errors
-must not enter Activity, history, audit or debug logs. Desktop carries these
-bytes through its existing private IPC boundary.
-
-Submitting the canonical answer does not capture a screenshot or wait for the
-target gate. The answer reaches Floret's provider continuation unchanged; the
-answer only permits the Agent to check again. Floret admits the
-exact interaction before Runtime updates the matching target lease for the new
-Run. Queued private input rechecks canonical interaction authority after taking
-the gate, so late commands cannot reclaim control. If the resource is absent,
-the model receives explicit target/tool feedback and may discover or select a
-target. It does not infer success or replay the original action.
-
-The localized input card has a compact status heading, muted explanation and
-inline validation notice. Its wrapping footer groups Stop on the left and
-content-sized control actions on the right. Independent questions keep generated
-choices and ordinary submission. Existing tool-origin questions retain their
-canonical acknowledgement button. Stop retains canonical cancellation.
-Explicit takeover opens the media-only Stage. Keyboard and pointer actions go to the
-private endpoint; only the acknowledgement goes through `submitInput`. Images
-are decoded before replacement and Blob URLs are retired on disposal. Failed
-input does not replay automatically, and queued input is discarded after an
-unknown failure or a changed thread/interaction. Unsent adjacent text input is
-coalesced in order within a bounded batch; keys and pointer actions are barriers.
-An offscreen editable carrier receives native text, paste and IME composition.
-Only committed text reaches private input; composition drafts stay local and
-the carrier is cleared immediately after submission or a control-owner change.
-Non-text keys use the same ordered private queue. The image itself is not a
-text editor and synthetic composition events do not qualify IME support.
-A full command queue reports control failure and discards unsent input instead
-of silently losing characters. Failed viewing requires explicit recovery before
-further input. Hiding stops sampling, preserves target ownership and does not
-allow late results to reopen the window. Reopening rechecks canonical authority.
-
-A workspace connection boundary immediately disables private input, discards
-unsent commands, invalidates the observer/viewer revision and rejects late frames.
-The same interface retains its last decoded image with Connection lost. A new
-`ready` never resumes private control. Resource availability arrives as ephemeral
-`computer.status` metadata in the workspace stream and does not restore pixels or
-private authority. Resume control explicitly authorizes the latest interaction
-and observer; only a matching newly decoded private frame reenables input. An
-ended interaction collapses the viewer. Closing or switching threads during
-recovery cancels decoding and prevents reopening. A new client does not infer
-Runtime restart. No navigation, page restoration, or private input is replayed.
-Ordinary preview reconnection never grants private input. Historical display and
-terminal collapse follow the [media contract](computer-use-media.md).
-
-Every admitted computer tool returns factual safety failures, including
-pre-dispatch selection checks. Confirmed script steps and action outcomes survive.
-Sampling stops public frames with a closed assistance classification and creates
-no interaction. Flower may independently call `ask_user` with the actual tool ID.
-Diagnostics retain only target identity, source, reason and requested assistance.
-
-A system-browser request without a live connection returns connection facts.
-The independently requested guide establishes an extension connection without
-selecting a tab or enabling private control. An answer does not assert connection
-readiness; the resumed Agent discovers and selects its own task page through the
-existing authorization boundary. See [guided connection](computer-use-browser-connection.md).
+See [guided connection](computer-use-browser-connection.md).
 
 # Boundaries
 
-Browser observation is a bounded protection, not proof of atomic safety across
-all dynamic content. Public observation failure creates no private authority.
-Private pixels, commands and raw helper errors cannot enter model history,
-Activity or logs. Full product and native IME acceptance remain governed by
-[Computer use qualification](computer-use-qualification.md).
+Browser observation is a bounded protection, not proof of atomic safety across all dynamic content. Full product and native IME acceptance remain governed by [Computer use qualification](computer-use-qualification.md).
 
 # Evidence
 
 - `redeven:internal/ai/computer_user_control.go` - authenticated non-model input.
+
 - `redeven:scripts/check_computer_host_safety.mjs` - isolated real-browser safety and private form fixtures with cleanup.
+
 - `redeven:internal/envapp/ui_src/scripts/checkDesktopPrivateComputer.mjs` - isolated built Desktop, scripted provider, real private stream, delayed pixels, header FPS, paste, native IME and handback.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.computerStage.browser.test.tsx` - user-only Stage pixels, resource loss/recovery and chat-input separation.

@@ -4,6 +4,8 @@ title: Shared interface scale
 description: Apply one measured desktop reading and control scale across Flower, Env App, and Desktop without shrinking content viewers or touch targets.
 tags: [ui, flower, desktop, accessibility, typography]
 timestamp: 2026-09-26T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -12,54 +14,29 @@ Published Floe owns typography, control dimensions, responsive targets, settings
 # Contract
 
 ## Type roles and boundaries
+Env App and Desktop bundle Inter Variable and use the same platform fallback stack for unsupported scripts. Product guidance, error messages, settings labels, and dialog copy must use their published body or control roles rather than fixed 13–14px sizes or generic utility sizes.
 
-Env App and Desktop bundle Inter Variable and use the same platform fallback stack for unsupported scripts. Published Floe tokens define ordinary body and explanation text at 12px/20px, controls and navigation at 12px/18px, and secondary metadata at 11px/16px. Page titles use at most 16px/22px and weight 500; compact resource headers use 14px/20px. Product guidance, error messages, settings labels, and dialog copy must use their published body or control roles rather than fixed 13–14px sizes or generic utility sizes. A shared role must never enlarge existing desktop text under the same root size, zoom, and pointer conditions. Ordinary text uses weight 400; selected navigation and emphasized controls use 500. Metadata does not replace readable labels. Long localized labels wrap or retain exact accessible text.
-
-Flower uses the same published body role at 12px/20px on desktop. User messages, assistant messages, Markdown, composer text, setup guidance, settings copy and product dialogs use this compact role. Conversation titles, chat headers, settings titles and section headings use 13px; status badges and timestamps use 11px. Flower-specific headings retain their product mapping without overriding shared Floe tokens. Coarse-pointer reading copy retains the published 14px body role; editable touch fields retain at least 16px. Font family remains Inter Variable with platform fallback. Markdown H1 uses 16px/22px, H2 uses 14px/20px, and H3–H6 use 13px/20px; headings and strong text use weight 600. Paragraph spacing is 6px, list-item spacing is 2px, and heading margins are 12px above and 6px below. Commands and code use 12px/18px monospace text and retain exact copying and code semantics. Inline code uses the existing soft surface without a foreground-colored highlight.
-
-Terminal grids, editors, file/document previews, remote applications, and chart data keep their own content-font and zoom owners. Interface scale never changes PTY geometry policy, editor preferences, document zoom, or remote pointer coordinates. Root font size, browser zoom, and system magnification remain user-controlled.
+Root font size, browser zoom, and system magnification remain user-controlled.
 
 ## Controls and layout density
+Inline desktop actions use 28px targets; primary actions and ordinary fields use 32px.
 
-Inline desktop actions use 28px targets; primary actions and ordinary fields use 32px. The turn launcher's anchored send action uses the composer target size: 32px on desktop and 44px in narrow or touch layouts, with text clearance preserved while sending. Flower's full-page header has a 40px minimum. An empty standard composer is 84px high at the reference scale; attachments, references, multiline drafts, status, and errors grow naturally instead of being clipped to that height. Shared settings use Floe's released geometry rather than copied product-side sizing. Containers, Codespaces, Web Services, and Host Applications share a 40px title/action band with a 14px title and no subtitle or eyebrow; body content owns operational guidance. Their touch band grows to 56px. Container resource tabs occupy a separate row below the title band. Flower permission, model, and reasoning selectors are secondary controls: 24px high with 10px labels on desktop. This product-specific caption uses 0.625rem, scales with the browser root, and applies equally to visible controls and their hidden width measurements. Their resting appearance is transparent and borderless, with a shield beside the permission label, a subtle separator between controls, and a chevron beside the model. Model and reasoning remain independently operable, hover and keyboard focus remain visible, and narrow layouts retain the measured More-menu overflow. Menus use 11px desktop labels, compact padding, and complete model names. Touch selector and menu labels retain their existing 12px size. Permission descriptions wrap fully, including unbroken identifiers. The permission list scrolls within the measured host space above its anchor, stays inside horizontal host bounds, and retains keyboard focus and exact guidance across resizing. The ordinary thread heading omits static sorting guidance, while active loading keeps its status text.
+Groups stay 8px apart and the last action meets the trailing padding, so spare width never becomes an interior or trailing gap.
 
-Codespaces uses the common main canvas without an additional full-page panel. Neutral cards prioritize name, status, and workspace path. Details starts collapsed at every width and exposes the complete description, path, identifier, port, and last-opened time. Native disclosure state remains on the retained card through resize and inventory refresh. The primary Start or Open button absorbs the action row's remaining width, while its dropdown and secondary actions keep their intrinsic size. Groups stay 8px apart and the last action meets the trailing padding, so spare width never becomes an interior or trailing gap. Button height and typography remain unchanged. They preserve separate Start, Open, Stop, and Delete behavior; running state belongs to the status badge. Loading and loaded cards share the same layout boundaries.
+Input focus changes only the existing border color through Floe's published input-focus contract.
 
-Thread, file, and ordinary navigation rows have a 28px total pitch, with no extra per-row gap. Group separation is independent. Published Floe owns virtual file offsets and measures the same rendered row height, including fractional rem values and coarse-pointer overrides. A downstream row override must not contradict those offsets.
+Density is measured on real components with published dependencies after font loading, recording source identity, loaded Floe version, font family, root size, DPR, and zoom. The fixed mixed-script Markdown sample at 434px and 758px must occupy no more than 90% of its frozen pre-change height.
 
-Thread cards place selection and the trailing slot in normal layout. The slot bounds the summary width and shares its grid cell with independent pin/menu actions, so hover or keyboard focus does not resize the title. Attention remains marked while actions replace the summary. Every conversation remains one line, including long translations, operation progress, touch input and enlarged text. Status text truncates beside its semantic icon. At a row width of 12.5rem or less, only the icon remains; the threshold follows root text scaling. Narrow rows and touch layouts expose pinning through the menu, preserving title space. Touch status and the menu share one horizontal row. A 220px rail must retain at least 100px of title width for the reference Chinese waiting state. Exact status remains in the accessible name and tooltip. Menu ownership stays bound to ThreadID across summary updates.
-
-Native dialog fields, plugin installation and update reviews, browser-source options, file recovery and loading messages, download filenames, and Git guidance use the same body/control roles. Desktop access workflows and trusted standalone recovery/loading documents also consume published Floe styles. The standalone TypeScript artifact is generated from the public standalone CSS asset and checked against the official package in both Env App and Desktop builds; never copy token defaults into these documents. Semantic titles and viewer content retain their separate roles.
-
-Narrow containers change arrangement, never input modality: Files, container, plugin, terminal, Flower, settings, service, and host-application filters retain 12px text and 32px height on fine-pointer desktops. Only coarse-pointer rules enlarge editable text and targets. Coarse-pointer body text retains 14px/22px and navigation retains 13px/20px. Shared and product controls retain at least 44px targets; editable touch text is at least 16px. Browser zoom and enlarged text grow target geometry naturally. Conversation entries keep a single line; other content may wrap. Actions must not overlap, clip, or leave their owning surface. Input focus changes only the existing border color through Floe's published input-focus contract.
+Screenshots use matching content and dimensions; reference screenshots from another product do not establish its unmeasured CSS values.
 
 # Boundaries
 
-Scale is presentation only. Existing DOM and keyed approval identities remain mounted across theme changes, navigation, companion collapse, and resize. Pending commands lock only their existing action scope. Composer drafts, permissions, atomic approval batches, focus handoff, and exact command copying remain defined by their canonical Flower contracts. [Approval geometry](flower-approval-surface.md) constrains one scrolling list while retaining header and footer actions. Workbench wheel, reading selection, and floating coordinate ownership are unchanged.
-
-# Acceptance
-
-Density is measured on real components with published dependencies after font loading, recording source identity, loaded Floe version, font family, root size, DPR, and zoom. A diagram or HTML mockup is not product acceptance evidence. Ordinary adjacent rows have 28px pitch within 1px and a 560px list viewport shows 20 complete rows. The reference waiting title has at least 100px available and changes by at most 1px on hover. The fixed mixed-script Markdown sample at 434px and 758px must occupy no more than 90% of its frozen pre-change height.
-
-Tests measure actual header, composer, text, and control bounds, not just one token or button. Host desktop text stays at or below its measured pre-change size at equivalent conditions. Flower conversation titles intentionally increase from 12px to 13px for scanning, while reading copy decreases from 13px to 12px and chat/settings headers from 16px to 13px. The resource-header and narrow-filter checks enforce that distinction; a four-choice described reply fits within 320px on desktop and scrolls inside a shorter host. Chromium product checks and a real isolated Electron runtime cover full Flower, companion, Workbench, light/dark themes, both materials, narrow and low-height hosts, touch, retained drafts and focus, and 100%/125%/200% zoom. Approval checks include 1, 2, 10, and 50 items with final-row reachability and visible footer actions. Files/Git, settings, monitoring, and Desktop navigation retain their interaction contracts. Electron appearance checks select the real Desktop theme, initialize the published material preference, and verify computed colors as well as geometry; changing root attributes alone is not valid theme evidence. Screenshots use matching content and dimensions; reference screenshots from another product do not establish its unmeasured CSS values.
+Scale is presentation only. Composer drafts, permissions, atomic approval batches, focus handoff, and exact command copying remain defined by their canonical Flower contracts. Workbench wheel, reading selection, and floating coordinate ownership are unchanged.
 
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/BodyTypography.browser.test.tsx` - Real dialog/body/control roles, narrow fine-pointer versus touch fields, preserved headings and rename submission.
-- `redeven:desktop/scripts/check-body-typography.mjs` - Real Welcome/access workflow and generated recovery/loading documents in Chromium and isolated Electron, root scaling, touch targets, measurements and screenshots.
-- `redeven:internal/envapp/ui_src/src/ui/ResourceSurfacePolish.browser.test.tsx` - Complete permission guidance, host bounds, keyboard scrolling, and container title-band parity.
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvCodespacesPage.browser.test.tsx` - Shared canvas colors, compact cards, complete details, touch, and retained loading/refresh geometry.
-- `redeven:internal/envapp/ui_src/src/ui/InterfaceCoordination.browser.test.tsx` - Resource bands, narrow desktop versus touch inputs, composer menus, and compact reply geometry.
-- `redeven:internal/envapp/ui_src/src/ui/pages/resource-header.css` - Shared product header role without per-page title overrides.
 
-- `redeven:internal/flower_ui/src/styles/flower.css` - Product typography, controls, and responsive geometry.
-- `redeven:internal/flower_ui/src/threads/FlowerThreadList.tsx` - Intrinsic trailing slot and retained thread identity.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerCompactPresentation.browser.test.tsx` - Single-line localized status geometry, icon-only narrow rows, root scaling and independent menus.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSettingsSurface.presentation.browser.test.tsx` - Settings typography across locales, themes and container sizes.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.interfaceDensity.browser.test.tsx` - Frozen Markdown baselines, total row pitch, title space, header, and composer bounds.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.approvalLayout.browser.test.tsx` - Published companion and full-page approval containment.
-- `redeven:internal/envapp/ui_src/src/styles/fileSurfaceRefinement.browser.test.tsx` - File rows and input focus.
-- `redeven:internal/envapp/ui_src/src/ui/pages/RuntimeSettingsDesign.browser.test.tsx` - Settings scale and retained behavior.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerTurnLauncherWindow.browser.test.tsx` - Launcher typography, responsive send targets, text clearance and stable loading geometry.
-- `redeven:desktop/scripts/check-interface-density-electron.mjs` - Real Electron reading geometry, zoom, screenshots, and retained composer.
-- `redeven:desktop/scripts/check-welcome-toolbar.mjs` - Localized, enlarged, and narrow toolbar behavior.
+- `redeven:desktop/scripts/check-body-typography.mjs` - Real Welcome/access workflow and generated recovery/loading documents in Chromium and isolated Electron, root scaling, touch targets, measurements and screenshots.
+
+- `redeven:internal/envapp/ui_src/src/ui/ResourceSurfacePolish.browser.test.tsx` - Complete permission guidance, host bounds, keyboard scrolling, and container title-band parity.

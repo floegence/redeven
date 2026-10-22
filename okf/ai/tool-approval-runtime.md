@@ -4,6 +4,8 @@ title: AI tool approval and interaction runtime
 description: Floret v7 pending interactions, effect authorization, and Flower row-local outcomes.
 tags: [ai, tools, approvals, flower]
 timestamp: 2026-10-08T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -11,21 +13,20 @@ Pending approval and user input are typed Floret thread interactions. Redeven au
 
 # Contract
 
-Each interaction has one stable identity and belongs to one thread and tool call or input request. Respond validates all required answers and keeps secret values out of browser persistence and logs. Approval acceptance obtains an exact one-shot effect authorization before irreversible execution. Rejection resolves only the matching interaction, records a quiet declined tool result, and allows provider continuation without producing `MESSAGE FAILED` or a Flower-wide error card.
+Each interaction has one stable identity and belongs to one thread and tool call or input request.
 
-Effect attempts have stable identities. Canonical effect intent is written before an irreversible operation. A known result is canonical and deduplicated. Returned EffectOutcomeUncertain is a canonical tool error and continues the model without an automatic confirmation wait. An unsettled execution closes the Turn with effect_outcome_unknown. Flower offers Inspect and continue as a visible normal new message; the original turn and effect remain immutable and cannot replay.
+Canonical effect intent is written before an irreversible operation.
 
-Cancel atomically clears unresolved interactions, closes unfinished tool work, and writes one terminal aborted turn before returning. An unknown started effect instead converges to the distinct failed terminal state. Late provider, tool, and save-point work cannot reactivate either terminal Turn. Resolve and Cancel races converge through the single thread runtime owner. Redeven handlers return the typed terminal current view without waiting for provider continuation, receipt observation, authority release, or a legacy local handler.
+Redeven handlers return the typed terminal current view without waiting for provider continuation, receipt observation, authority release, or a legacy local handler.
 
 # Boundaries
 
-Floret owns canonical interaction identity, atomic answer settlement, effect-attempt state, cancellation, and unknown-outcome termination. Redeven owns endpoint authorization, current product permission revalidation, safe DTO mapping, and the concrete effect handler. Browser interaction state is presentation only and cannot authorize, settle, or replay an effect.
+Floret owns canonical interaction identity, atomic answer settlement, effect-attempt state, cancellation, and unknown-outcome termination. Browser interaction state is presentation only and cannot authorize, settle, or replay an effect.
 
 # Evidence
 
 - `redeven:go.mod` - Pins the released Floret v7.26.0 typed runtime.
+
 - `redeven:internal/session/floret_v7_dependency_contract_test.go` - Enforces published-v7 adoption without local replacement.
+
 - `redeven:internal/ai/approval_command.go` - Product approval authorization and typed mapping.
-- `redeven:internal/ai/floret_effect_authorization.go` - Revalidates product policy and transfers an invocation-bound proof exactly once.
-- `redeven:internal/ai/floret_approval_command_integration_test.go` - Exercises canonical approval and provider-correction behavior through the published runtime.
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Row-local interaction controls and nonblocking composer.

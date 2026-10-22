@@ -4,6 +4,8 @@ title: Flower storage ownership and migrations
 description: Keep canonical Floret storage opaque and preserve every supported product migration through deterministic imports.
 tags: [ai, storage, sqlite, migrations, floret]
 timestamp: 2026-10-08T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -15,128 +17,35 @@ timestamp: 2026-10-08T00:00:00Z
 # Contract
 
 ## Storage owners
+Redeven consumes published Floret v7.29.2 with `GOWORK=off`.
 
-Redeven consumes published Floret v7.29.2 with `GOWORK=off`. Floret owns journal,
-queue, interactions, context lineage, execution identity and recovery. Redeven
-uses public `InspectSQLite`, `BackupSQLite`, deferred `runtime.Open`, typed
-queue import, `Host.Activate` and `Host.PrepareRestore`; it neither queries nor
-repairs Floret tables.
+Ordinary Floret writes stage, validate and persist affected canonical records only; startup, migrations and explicit integrity checks still validate the complete repository.
 
-Ordinary Floret writes stage, validate and persist affected canonical records
-only; startup, migrations and explicit integrity checks still validate the
-complete repository. Redeven serializes settings mutation and admission per
-endpoint and ThreadID, so unrelated threads do not share a settings gate.
-Tool media uses the complete public retention inventory described by
-[direct image reading](image-read-and-retention.md); it never derives retention
-from a visible active path.
-
-Floret's physical SQLite format upgrade and incremental prompt-record migration
-run within its one startup transaction. Session-tree schema remains 13; public
-inspection reports the required physical and logical upgrade before Redeven
-creates the complete-set backup. Checkpoints write only relevant new cache
-records. History, continuation, usage, and compact policy remain upstream-owned.
-Redeven never opens or patches cache records and never clears cache as an upgrade.
-
-Product kind `ai_threadstore_product_v1` retains its entire contiguous v1-to-v10
-migration chain. Fresh version 10 has exactly seven tables: schema metadata,
-thread settings, execution authority, uploads, upload attempts, upload
-references and staging scopes. Version 7 adds a default-empty computer target
-selection to thread settings; it preserves all existing records and does not
-persist target readiness or control authority. The [target selection contract](computer-use-target-selection.md)
-owns its execution boundary. Version 8 adds nonnegative integer `pin_rank` and
-an endpoint/rank/creation/ThreadID index. Its v7-to-v8 transaction initializes
-ranks in the previous pin-time, creation-time and ThreadID order without changing
-pin timestamps, settings revisions or other user records. The
-[sidebar contract](../ui/flower-thread-sidebar.md) owns relative reorder semantics.
-Version 9 appends bounded task computer access with empty grants; forks do not
-inherit those grants. Version 10 records admission permission in execution
-authority as historical attribution; current tool authorization uses thread settings. Its v9-to-v10 transaction validates matching endpoint and namespace
-settings, backfills the permission, and preserves identities and timestamps;
-missing or invalid source authority fails without mutation. No Floret schema
-or Agent lifecycle state changes.
-Historical rows and shapes are accepted only by
-the exact migration edge that owns them. The read-state owner retains its
-supported v0-to-v4 lineage and moves the former path using a complete SQLite
-snapshot before removing the source. Existing compatibility does not expand to
-discarded experimental kinds.
-
-The [AI generation lifecycle](../architecture/ai-readiness-lifecycle.md) owns
-opening and closing all three stores plus attachment maintenance. AppServer
-read-state operations use its retained request lease. A read-state failure
-cannot become a core Runtime constructor failure or a synthetic read record.
+A read-state failure cannot become a core Runtime constructor failure or a synthetic read record.
 
 ## Readonly checks and owner transactions
+`sqliteutil` owns WAL-aware readonly preflight, integrity checks and complete SQLite snapshots for product and read-state owners. Inspection never creates missing data or runs a migration.
 
-`sqliteutil` owns WAL-aware readonly preflight, integrity checks and complete
-SQLite snapshots for product and read-state owners. Inspection never creates
-missing data or runs a migration. Existing main, WAL and SHM bytes and original
-sidecar existence are preserved. SQLite immutable mode is not used because it
-ignores committed WAL records. Missing and zero-length files use the reviewed
-fresh initialization path.
-
-Checks reject deterministic incompatibility before the first write. Each owner
-checks again inside its migration transaction; final schema validation, records
-and version metadata commit together or roll back. Required upgrade snapshots
-precede Floret space maintenance and all migrations, as specified by the
-[backup and recovery contract](flower-backup-and-recovery.md).
+Required upgrade snapshots precede Floret space maintenance and all migrations, as specified by the [backup and recovery contract](flower-backup-and-recovery.md).
 
 ## Frozen historical queue conversion
+The migration-only `pendinginputlegacy` package owns the complete interpretation of historical queue bytes: session identity, options, context shapes, default values, resource metadata and normalization limits.
 
-The migration-only `pendinginputlegacy` package owns the complete interpretation
-of historical queue bytes: session identity, options, context shapes, default
-values, resource metadata and normalization limits. It does not import current
-request DTOs, `session.Meta`, permission policy or business normalization.
-Historical resource scope is decoded from persisted facts; current execution
-permission still comes from the current authorization boundary.
-
-The v4-to-v5 product transaction imports canonical pending inputs through
-Floret's public idempotent import API, records necessary product authority and
-removes retired source tables before commit. Its thread settings reader uses a frozen v4 field projection, independent of later
-columns. The same source always produces
-the same RequestKey and normalized input. If Floret commits and the product
-transaction rolls back, another startup repeats the same import and continues
-without duplication. Different content under that key fails explicitly. No
-per-record migration ledger or production queue mirror exists. The upgrade
-operation contains only target build, original snapshot identity and completion;
-owner versions and canonical records remain the progress authority.
+The v4-to-v5 product transaction imports canonical pending inputs through Floret's public idempotent import API, records necessary product authority and removes retired source tables before commit. The upgrade operation contains only target build, original snapshot identity and completion; owner versions and canonical records remain the progress authority.
 
 ## Resource and authorization retention
+Product upload references retain resources for every canonical thread that contains them, including ordinary forks, nested forks and restored inputs.
 
-Product upload references retain resources for every canonical thread that
-contains them, including ordinary forks, nested forks and restored inputs.
-Missing retention may be filled only after canonical membership and immutable
-upload identity are verified. It grants no new user or endpoint access.
-
-Upload request idempotency and ordinary execution authority expire after seven
-days. Active/waiting Turns, queued RequestKeys and the latest failed Turn remain
-protected. Floret supplies the exact RequestKey and TurnID when an execution
-binds its product authority; an unbound authority remains protected during
-queue promotion. Missing/deleted canonical threads release authority, while
-other canonical read failures skip deletion. Bounded keyset maintenance and
-compaction stop and drain with their owning generation.
+Bounded keyset maintenance and compaction stop and drain with their owning generation.
 
 # Boundaries
 
-Floret is the sole authority for canonical history, execution and queue
-semantics. Redeven must use its published maintenance and import contracts.
-Product facts and read state remain separate owner transactions; deterministic
-imports provide retry continuity without claiming a distributed transaction.
-Historical byte interpretation never grants current execution permission.
+Floret is the sole authority for canonical history, execution and queue semantics. Historical byte interpretation never grants current execution permission.
 
 # Evidence
 
 - `redeven:internal/ai/threadstore/schema.go` - Stable product kind and contiguous migration registration.
-- `redeven:internal/threadreadstate/schema.go` - Read-state lineage and exact historical validation.
-- `redeven:internal/persistence/sqliteutil/preflight.go` - Shared readonly inspection.
-- `redeven:internal/persistence/sqliteutil/backup_test.go` - Committed WAL snapshots and source-sidecar preservation.
-- `redeven:internal/ai/pendinginputlegacy/input.go` - Frozen historical input interpretation.
-- `redeven:internal/ai/pending_input_migration_startup_test.go` - Canonical-commit/product-rollback retry and conflict coverage.
-- `redeven:internal/ai/floret_attachment_authority.go` - Canonical upload retention without access grants.
-- `redeven:internal/ai/execution_authority_maintenance_test.go` - Queue handoff and canonical authority protection.
-- `redeven:internal/ai/storage_compatibility_test.go` - Immutable writer upgrades, retained facts and real continuation.
-- `redeven:scripts/contracts/threadstore_boundary_manifest.json` - Reviewed SQL ownership inventory.
 
-The upstream v9 to v10 domain edge admits durable context and validation feedback
-without rewriting existing entries. Redeven neither opens those records nor
-reconstructs lost ephemeral history. References and runtime snapshots are submitted
-through public `UserInput`; Floret owns their fingerprints, replay, and compaction.
+- `redeven:internal/threadreadstate/schema.go` - Read-state lineage and exact historical validation.
+
+- `redeven:internal/persistence/sqliteutil/preflight.go` - Shared readonly inspection.

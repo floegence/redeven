@@ -4,6 +4,8 @@ title: Flower companion presence
 description: Project canonical Flower work into the compact companion without displacing drafts, stealing focus, or creating another lifecycle owner.
 tags: [ui, flower, companion, presence, floret]
 timestamp: 2026-10-12T00:00:00Z
+lifecycle: contract
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -12,47 +14,33 @@ Redeven projects canonical Floret summaries and matching current-run detail into
 # Contract
 
 ## Status and live output
+Floating companion presence is a pure canonical summary projection with active work first: running, queued, attention, unread failure, unread canceled, unread completed, unavailable, idle.
 
-Floating companion presence is a pure canonical summary projection with active work first: running, queued, attention, unread failure, unread canceled, unread completed, unavailable, idle. Every selected pending input request, approval, or Computer takeover has higher visual priority than that projection. The existing bottom-action mode remains the authority when multiple decision kinds coexist. The per-thread classifier uses the same active-first order, so a running or queued turn is not swallowed by an older waiting or terminal status on that thread. Counts for every canonical group remain available to the expanded Flower UI; running, queued, and canonical unread failure qualify for collapsed companion presentation. A displayed title consumes the non-empty canonical title in ready, pending, or failed automatic-title state because Floret retains the first-message fallback until provider success. Empty or missing titles and inferred preview text are not usable. Companion presence still covers the complete summary collection, including titleless threads filtered out of the sidebar list, and every displayable status carries its exact target thread identity.
-
-The collapsed visual line describes current work instead of exposing aggregate counters. Running shows its live progress, queued shows an explicit waiting-to-start summary, and an unread failed thread shows a localized task failure until the exact thread has genuinely been displayed and canonical read state clears it. While current detail remains cached, a documented safe error code may contribute its localized reason; unknown or reload-only failure detail falls back to the canonical title or generic localized Flower failure copy and never exposes an arbitrary provider message. Attention without a selected actionable composer, cancellation, and historical completion do not produce a collapsed summary, colored marker, tooltip, accessible name, or live announcement. Bare aggregate output such as `Failed · 1`, `Needs review`, or `One task needs your attention` remains forbidden. The expanded companion and dedicated Flower page remain the complete surfaces for inspecting and acting on all thread states.
-
-Running work is a live tail of the priority thread's current exact RunID, never its user input, an earlier run, or inferred thread-title text. Canonical `preparing`, `waiting_response`, `streaming`, `retrying`, `finalizing`, and `tool_execution` phases produce the localized status. Raw thinking content is not exposed. The phase always comes from Floret; a current-turn tool or assistant block may contribute only the collapsed presentation text. Block order decides which visible content is current.
-
-The running visual line contains only that status, tool summary, or output; the thread title and aggregate count do not compete for its single row. Assistant output uses a clipped normal-flow viewport. Only overflow enables the leading fade and ellipsis. Stable thread, exact active run, message, and block identity plus reliable rolling-window overlap reconstruct genuine appends locally, and one animation-frame follower advances smoothly toward the newest edge as tokens arrive. Identity changes, rewrites, current-view replacement, expansion, hidden state, reduced motion, or a large burst snap directly to the newest text. The reconstruction buffer has a hard bound and compensates scroll when trimming content already offscreen. Tool summaries preserve their action-leading text and use ordinary end ellipsis, as do status and queued summaries. The button tooltip and accessible name expose the complete current text and add any remaining running count. Phase, completion, and failure changes use a restrained polite atomic announcement, while high-frequency tool and output changes do not trigger repeated live announcements. Running uses a low-frequency status pulse and one-pixel flowing highlight. Completion settles once into a green wash, while failure flashes a red edge once and then stays static. Reduced motion disables flow, transition tracking, and arrival motion while retaining semantic color and text.
+Reduced motion disables flow, transition tracking, and arrival motion while retaining semantic color and text.
 
 ## Completion acknowledgement
-
-A successful transition for a run that the collapsed companion previously observed as running may temporarily replace the idle composer with one localized completion acknowledgement. This is ephemeral product feedback, not canonical completed presence: initial history, queued-only work, failures, cancellations, attention, mismatched or expired runs, and completion while any running or queued work remains never trigger it. A process-local observer binds only accepted `thread.batch current` exact RunIDs to a local generation and emits a receipt only for that same RunID's later accepted terminal view. The identity-bound completion controller tolerates the short gap between live terminal state and canonical summary, shows the acknowledgement for about four seconds without refresh extending it, and prevents an older timer from clearing a newer acknowledgement. New work, access loss, opening the companion, entering the dedicated Flower page, or disposal clears it immediately. The completion state uses a success point, soft wash, and one restrained settle motion; reduced motion keeps the same static semantic state. It sends one polite atomic announcement and selects its exact thread before opening Flower detail. Historical completion remains forbidden from the collapsed companion.
+A successful transition for a run that the collapsed companion previously observed as running may temporarily replace the idle composer with one localized completion acknowledgement. This is ephemeral product feedback, not canonical completed presence: initial history, queued-only work, failures, cancellations, attention, mismatched or expired runs, and completion while any running or queued work remains never trigger it. Historical completion remains forbidden from the collapsed companion.
 
 ## Observation and transport
+The companion consumes the same single workspace SSE as the full Flower surface. Shared summaries never manufacture personal read state.
 
-The companion consumes the same single workspace SSE as the full Flower surface. Complete summary batches remain the authority for lifecycle counts. Unread uses the shared [read-state projection](flower-read-state.md): activity from summaries, private server confirmation and actual local presentation. Shared summaries never manufacture personal read state. Matching cached typed current detail contributes only the active run's visible output, tool presentation, and documented safe localized failure reason; it never mutates or replaces the summary projection. Accepted typed current updates also feed the process-local terminal observer without adding a selection-specific connection. `LiveTransport` fences stale callbacks with its process-local connection epoch and reconnects with bounded backoff. After disconnect it refreshes summaries and the selected current view; it does not poll, replay cursors, or run a second companion transport.
-
-The visible presence owner performs one initial summary bootstrap and then relies on SSE `summary.batch` envelopes. There is no 1.8-second inventory timer, fixed live-event polling loop, or background full-history refresh. Heartbeats keep a healthy connection alive without application requests; inactivity aborts the reader after 45 seconds and lets the bounded reconnect policy recover. Hidden or disposed documents clear the reader and renderer work, so idle observation does not create a CPU or network loop. Expansion keeps the same connection and requests the selected thread current view rather than creating a second stream.
+Expansion keeps the same connection and requests the selected thread current view rather than creating a second stream.
 
 ## Composer precedence
+One derived entry description owns collapsed rendering and target identity.
 
-One derived entry description owns collapsed rendering and target identity. It selects, in order:
+- The current thread's pending decision entry, regardless of question kind, selected option, custom-answer mode, or draft content. - The ordinary chat editor when a draft, attachment, reference, focus, or IME session is present; an enabled inspection entry preserves access if editing is unavailable. - An eligible running, queued, unread-failure, or ephemeral-completion status button with its exact target thread. - The ordinary editor, or an inspection entry for a read-only or unavailable editor.
 
-- The current thread's pending decision entry, regardless of question kind, selected option, custom-answer mode, or draft content.
-- The ordinary chat editor when a draft, attachment, reference, focus, or IME session is present; an enabled inspection entry preserves access if editing is unavailable.
-- An eligible running, queued, unread-failure, or ephemeral-completion status button with its exact target thread.
-- The ordinary editor, or an inspection entry for a read-only or unavailable editor.
-
-The left thread-switcher entry exclusively owns the Flower glyph. A status button contains only its semantic marker and single-line summary. Buttons and adjacent unused space activate the same target. A pending decision always opens the selected thread even when another thread is running, and suppresses the unrelated summary live region. Ordinary chat intent cannot be displaced by background status. Question-answer drafts belong to the retained decision panel and do not change the pending entry into a collapsed editor.
-
-When a button replaces the compact editor, canonical composer content remains mounted but hidden, `inert`, and absent from accessibility navigation. Existing editor nodes, drafts, and selections survive presentation changes; choice-only requests do not manufacture a textarea. Entry text never includes answer values. [Flower Activity companion](flower-activity-companion.md) owns public question copy, activation, and one-shot focus handoffs.
+[Flower Activity companion](flower-activity-companion.md) owns public question copy, activation, and one-shot focus handoffs.
 
 # Boundaries
 
-Presence is a read-only projection of canonical work and local composer intent. It never admits work, changes lifecycle state, or acknowledges transcript reads. Placement and focus remain owned by the Activity companion contract; transport recovery remains owned by the shared Flower runtime boundary.
+Presence is a read-only projection of canonical work and local composer intent. Placement and focus remain owned by the Activity companion contract; transport recovery remains owned by the shared Flower runtime boundary.
 
 # Evidence
 
 - `redeven:internal/flower_ui/src/flowerCompanionPresence.ts` - canonical thread summaries produce mutually exclusive priority groups and fallback-preserving title selection.
+
 - `redeven:internal/flower_ui/src/flowerCompanionLiveTail.ts` - active-run blocks project waiting/thinking status, compact tool presentation, or latest assistant output without exposing raw thinking.
+
 - `redeven:internal/flower_ui/src/flowerCompanionRunTracker.ts` - accepted typed current views bind exact active RunIDs to process-local generations and emit matching terminal receipts.
-- `redeven:internal/flower_ui/src/flowerCompanionTailMotion.ts` - one bounded, identity-aware follower reconstructs rolling output tails and owns snap, trim, reduced-motion, and cleanup behavior.
-- `redeven:internal/envapp/ui_src/src/ui/activityFlowerSummary.ts` - semantic single-line and complete accessible summaries are projected independently of canonical state.
-- `redeven:internal/envapp/ui_src/src/ui/activityFlowerCompletionNotice.ts` - a generation-safe controller turns only a just-observed successful run into a short completion acknowledgement.

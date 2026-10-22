@@ -4,6 +4,8 @@ title: Computer use paired model measurements
 description: Compare visual primitives and semantic scripts through the production Service and report incomplete or failed evidence explicitly.
 tags: [ai, computer-use, browser-use, performance]
 timestamp: 2026-10-13T00:00:00Z
+lifecycle: active_evidence
+reviewed_at: "2026-10-22"
 ---
 # Summary
 
@@ -16,81 +18,18 @@ behavior; those remain separate [acceptance requirements](computer-use-qualifica
 
 # Contract
 
-The runner uses the same configured DeepSeek provider and
-`deepseek-v4-flash-vision-exp` model for both variants. Three repetitions cover a
-form, a dynamically revealed form and an iframe form. Variant order alternates.
-Each sample gets fresh application state, browser profile, thread and exact site
-grant. Both variants receive the same task and model configuration; only the
-semantic variant exposes `computer.observe` and `computer.exec`. Commands and
-direct HTTP cannot satisfy the GUI task. The fixture verifies submitted values;
-a model's assertion of completion alone cannot mark a run successful.
+The runner uses the same configured DeepSeek provider and `deepseek-v4-flash-vision-exp` model for both variants. Commands and direct HTTP cannot satisfy the GUI task.
 
-The runner records model requests, input image bytes, observation text bytes,
-provider input tokens, host-operation count and time, action waiting, total time,
-reported foreground operations and task success. Repeated history contributes
-to model input costs on each actual request. Title generation is excluded.
-Canonical fixture history is saved beside each sample for diagnosis. Credentials
-are passed only to the child environment and upstream authorization header, never
-to reports or logs.
-
-The benchmark measures the private browser-host transport without replacing
-Runtime-owned concrete adapters. Adapter identity remains authoritative for
-script resources, source ownership, recovery and grants. Initialization uses the
-installed catalog browser and occurs before timing in both variants. The proxy
-lets its upstream HTTP transport decode gzip before measuring SSE usage;
-compressed bytes must not silently produce zero provider-token measurements.
-
-Run explicitly with an existing configuration and an absolute evidence directory:
-
-```sh
-REDEVEN_COMPUTER_BENCHMARK=1 \
-REDEVEN_COMPUTER_CONFIG_ROOT=/absolute/runtime/configuration \
-REDEVEN_COMPUTER_EVIDENCE_DIR=/absolute/evidence \
-node scripts/run_computer_benchmark.mjs
-```
-
-The configuration directory contains the product's `config.json` and
-`secrets.json`. The runner reads them without changing them. Three repetitions
-are the default; `REDEVEN_COMPUTER_BENCHMARK_REPETITIONS=1` is only a diagnostic
-smoke run and cannot pass acceptance. `measurements.json` retains each sample;
-`comparison.json` reports the aggregate and pass/fail decision.
-
-Acceptance requires at least 40% fewer model requests, 70% fewer image bytes and
-30% lower median task time, all samples successful with measured provider usage,
-and zero reported foreground operations. A failed sample remains in the report;
-reruns after implementation changes use a new evidence directory.
+A failed sample remains in the report; reruns after implementation changes use a new evidence directory.
 
 # Boundaries
 
 ## Schema version 2 qualification
+On 2026-10-13, the first measured schema-v2 pair retained 18 samples with actual provider usage. The failed visual dynamic-form sample timed out while clicking Save and stopped with `floret_effect_outcome_unknown`; its action was never replayed.
 
-On 2026-10-13, the first measured schema-v2 pair retained 18 samples with actual
-provider usage. Semantic tasks succeeded 9/9 and visual tasks 8/9. Requests fell
-43.9%, image bytes 91.9%, and median duration 34.6%, with zero reported foreground
-operations. The failed visual dynamic-form sample timed out while clicking Save
-and stopped with `floret_effect_outcome_unknown`; its action was never replayed.
-Although the efficiency thresholds passed and semantic success did not fall,
-the report correctly remains incomplete because acceptance requires every sample
-to succeed. This is a measured limitation, not complete performance acceptance.
-
-A subsequent complete pair retained all 18 samples with actual provider usage;
-visual and semantic tasks both succeeded 9/9. Requests fell 48.5%, image bytes
-93.3%, and median duration 37.0%, with zero reported foreground operations. The
-same paired completeness and efficiency gates pass. The earlier incomplete
-report remains committed separately. This qualifies only the measured
-production-Service managed-browser fixtures; it does not establish universal
-model reliability or Desktop/extension performance.
-
-Earlier diagnostic runs are retained separately: a wrapper removed concrete
-adapter identity and disabled scripts; transport measurement restored scripts;
-the dispatched canonical-selector regression then exposed an unreachable
-Runtime conversion branch. Its focused failing test now verifies the actual
-script-to-adapter path. The subsequent successful-task pair still lacked usage
-because the proxy inspected compressed SSE bytes. Those runs cannot support
-performance claims. Historical September results below do not qualify schema v2.
+Historical September results below do not qualify schema v2.
 
 ## Earlier qualification
-
 Five complete three-repetition runs on 2026-09-17 retained the following results:
 
 | Run | Requests reduced | Image bytes reduced | Median time reduced | Visual / semantic success | Accepted |
@@ -102,34 +41,13 @@ Five complete three-repetition runs on 2026-09-17 retained the following results
 | 5 | 46.2% | 92.7% | 41.9% | 9/9 / 9/9 | Yes, managed-browser fixture scope |
 
 Run 1 missed a submission; return-shape and verification guidance followed.
-Run 2 exposed a completed navigation incorrectly classified as private takeover.
-The deterministic navigation-during-safety regression now discards the obsolete
-observation while retaining confirmed action facts. Run 3 confirmed successful
-execution, but extra model calls and invented script placeholders still missed
-the efficiency targets. Complete API examples, batching guidance and invalidated
-batch-result handling preceded run 4. Each changed implementation used a new
-evidence directory; failed reports were retained. Run 4 reported zero foreground
-operations. It does not qualify actual desktop or extension capability.
 
-Run 5 follows the Codex design comparison, local-only observation option, bounded
-AX output diffs, virtual-focus lifecycle and updated tool guidance. All 18
-samples pass; visual and semantic variants use 106 and 57 model requests,
-respectively. This is a fresh pair against visual primitives, not a controlled
-comparison of run 4 and run 5; variation between those runs must not be attributed
-solely to diffing. It reports zero foreground operations within the same narrow
-managed-browser scope.
-
-Observation token attribution is not exact: observation text bytes are measured,
-while provider input tokens cover the whole request. Host waiting time excludes
-model reasoning and transport. Headless operation counts do not measure actual
-OS focus or pointer changes. This small fixture set cannot establish universal
-speed or reliability across applications, models or network conditions.
+It reports zero foreground operations within the same narrow managed-browser scope.
 
 # Evidence
 
 - `redeven:internal/ai/computer_benchmark_test.go` - production Service fixtures and measurements.
+
 - `redeven:scripts/run_computer_benchmark.mjs` - explicit credentialed runner and evidence output.
+
 - `redeven:scripts/computer_benchmark_report.mjs` - paired completeness and threshold evaluation.
-- `redeven:scripts/computer_benchmark_report.test.mjs` - failed, missing, duplicate and unmeasured samples.
-- `redeven:scripts/fixtures/computer-semantic-v2-benchmark.json` - complete schema-v2 pair and passing efficiency report, with no provider credentials or private request content.
-- `redeven:scripts/fixtures/computer-semantic-v2-benchmark-incomplete.json` - earlier incomplete pair, retained without replaying an unknown Save effect.
