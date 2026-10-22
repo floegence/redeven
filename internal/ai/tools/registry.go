@@ -100,8 +100,9 @@ func cleanStringList(values []string) []string {
 }
 
 var builtinDefinitions = map[string]Definition{
-	"threads.query":            {Name: "threads.query", Presentation: withPresentationOptions(presentation(ToolPresentationResearch, "readonly", "structured", "research"), operation("threads.query"))},
-	"threads.read":             {Name: "threads.read", Presentation: withPresentationOptions(presentation(ToolPresentationResearch, "readonly", "structured", "research"), operation("threads.read"))},
+	"threads.query": {Name: "threads.query", Presentation: withPresentationOptions(presentation(ToolPresentationResearch, "readonly", "structured", "research"), operation("threads.query"))},
+	"threads.read":  {Name: "threads.read", Presentation: withPresentationOptions(presentation(ToolPresentationResearch, "readonly", "structured", "research"), operation("threads.read"))},
+	// Historical presentation only; this tool is no longer registered for execution.
 	"threads.aggregate":        {Name: "threads.aggregate", Presentation: withPresentationOptions(presentation(ToolPresentationResearch, "readonly", "structured", "research"), operation("threads.aggregate"))},
 	"tessiven.runtimes":        {Name: "tessiven.runtimes", Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("runtimes"))},
 	"tessiven.runtime.inspect": {Name: "tessiven.runtime.inspect", Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "tessiven", "args", "result"), operation("runtime.inspect"))},

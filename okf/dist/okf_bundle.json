@@ -4562,7 +4562,7 @@
             "path": "ai/flower-thread-queries.md",
             "type": "Integration Contract",
             "title": "Flower canonical thread queries",
-            "description": "Authorize canonical active-path search, counts and bounded content reads through released Floret tools.",
+            "description": "Find readable conversations and browse their canonical content through a minimal tool contract.",
             "tags": [
               "authorization",
               "floret",
@@ -4570,8 +4570,8 @@
               "queries",
               "tools"
             ],
-            "summary": "Floret v7.32.0 owns the canonical journal and its derived in-memory index.\nRedeven exposes `threads.query`, `threads.read` and `threads.aggregate` as\nread-only mappings to optional `runtime.ThreadQueryReader`. Every invocation\nrebuilds the current readable scope before search, sorting, counting or reading.\nReferences never grant access. Expired or invalidated cursors fail explicitly;\nthe model can narrow its query or start again.",
-            "section_count": 2
+            "summary": "Flower exposes two read-only tools for finding another readable conversation\nand reading its content: `threads.query` and `threads.read`. The tool contract\nis intentionally smaller than Floret's published general query API.\n`threads.aggregate` is not registered or dispatched.",
+            "section_count": 1
           },
           {
             "concept_id": "ai.floret-thread-runtime",
@@ -9633,7 +9633,7 @@
       "concept_id": "ai.flower-thread-queries",
       "type": "Integration Contract",
       "title": "Flower canonical thread queries",
-      "description": "Authorize canonical active-path search, counts and bounded content reads through released Floret tools.",
+      "description": "Find readable conversations and browse their canonical content through a minimal tool contract.",
       "tags": [
         "authorization",
         "floret",
@@ -9643,7 +9643,7 @@
       ],
       "timestamp": "2026-10-19T00:00:00Z",
       "frontmatter": {
-        "description": "Authorize canonical active-path search, counts and bounded content reads through released Floret tools.",
+        "description": "Find readable conversations and browse their canonical content through a minimal tool contract.",
         "lifecycle": "contract",
         "reviewed_at": "2026-10-22",
         "tags": [
@@ -9657,25 +9657,18 @@
         "title": "Flower canonical thread queries",
         "type": "Integration Contract"
       },
-      "body_length": 1950,
-      "summary": "Floret v7.32.0 owns the canonical journal and its derived in-memory index.\nRedeven exposes `threads.query`, `threads.read` and `threads.aggregate` as\nread-only mappings to optional `runtime.ThreadQueryReader`. Every invocation\nrebuilds the current readable scope before search, sorting, counting or reading.\nReferences never grant access. Expired or invalidated cursors fail explicitly;\nthe model can narrow its query or start again.",
+      "body_length": 3090,
+      "summary": "Flower exposes two read-only tools for finding another readable conversation\nand reading its content: `threads.query` and `threads.read`. The tool contract\nis intentionally smaller than Floret's published general query API.\n`threads.aggregate` is not registered or dispatched.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Authorization owner\nAuthenticated session authority supplies read permission, user, endpoint and namespace identity. These fields plus user identity bind the upstream scope; tool schemas cannot accept model-authored authority. Redeven never reads Floret SQL, canonical records or internal packages, and offers no arbitrary SQL tool.\n\n## Query and content boundary\nThe upstream public `threadquery` types define objects, filters, sorting, aggregation and pagination.\n\nSchema-invalid keys enter its bounded correction path before tool dispatch and do not create visible failed Activity rows.\n\nHistorical results remain readable after restart even when original query refs have expired.\n\n## Index and snapshots\nThe canonical log owner rebuilds its derived index after startup verification and updates it only after successful canonical commits.\n\nA new query uses current authority and never silently expands the old scope.",
-          "char_count": 922
-        },
-        {
-          "id": "boundaries",
-          "title": "Boundaries",
-          "level": 1,
-          "body": "Only published Floret contracts can supply canonical content. This capability adds no product persistence or runtime lifecycle.",
-          "char_count": 127
+          "body": "## Find, browse, read\n\n- `threads.query` defaults to `object: threads`, listing recently updated\n  conversations first. Optional `title` is one literal, case-insensitive title\n  fragment. Optional `thread_id` selects one exact conversation.\n- To browse `messages` or `tool_calls`, provide one `thread_id`. Records are\n  chronological; there are no model-controlled sort keys or detailed filters.\n- `limit` defaults to 50, with a maximum of 200. Continue with `next_cursor` and\n  unchanged input. Pass a record's `ref` to `threads.read` for complete content,\n  following its cursor until no continuation remains.\n- Nested `filter`, message-body matching, argument/result matching, keywords,\n  phrases, time/role/tool/status predicates, grouping and aggregation are not\n  accepted by the tool schema or handler. Unsupported inputs fail explicitly.\n- Reasoning, secrets and private provider state remain excluded. Tool arguments\n  and confirmed results are available only through authorized content reads.\n\n## Authorization owner\n\nAuthenticated session authority supplies read permission, user, endpoint and\nnamespace identity. Redeven reconstructs the readable scope for every page and\nread. Tool parameters and returned references never grant authority. Changed\nscope invalidates frozen cursors; a new query starts under current permission.\nThe adapter uses published Floret public APIs and never reads Floret SQL or\nreconstructs canonical records.\n\n## Historical results and presentation\n\nSaved query/read results remain previewable after restart and after their\noriginal refs expire. The historical aggregate result renderer remains solely\nfor immutable already-saved tool exchanges; it cannot dispatch aggregation.\nPrivate query contents are not added to Activity snapshots. The intent label\nand explicitly opened, bounded result preview remain the presentation boundary.\n\n## Storage and execution\n\nThe canonical owner stores source locators and metadata. Flower requires no\nfull-text index and schedules no startup or background indexing. Metadata-only\nbrowsing requests one thread's ordered records; canonical full content is read\nonly as needed. Floret's retired optional indexing declarations are not a\nproduct capability. The engine's published query API may retain compatibility\nfilters without exposing those filters to Flower's model tools.",
+          "char_count": 2350
         }
       ],
-      "snippet": "Floret v7.32.0 owns the canonical journal and its derived in-memory index. Redeven exposes `threads.query`, `threads.read` and `threads.aggregate` as read-only mappings to optional `runtime.ThreadQueryReader`. Every invocation",
+      "snippet": "Flower exposes two read-only tools for finding another readable conversation and reading its content: `threads.query` and `threads.read`. The tool contract is intentionally smaller than Floret's published general query API.",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -33360,5 +33353,5 @@
       ]
     }
   ],
-  "source_sha256": "dd7926150f00d1179642dd5e96372135c4121ff3f8add31d707f3889fb5dfda0"
+  "source_sha256": "0ccb40b2c5aee11afbc38c236f6cdfe613247bc13c38f1cf31b1eada08f71261"
 }

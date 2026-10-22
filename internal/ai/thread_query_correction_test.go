@@ -16,7 +16,7 @@ import (
 	fltools "github.com/floegence/floret/v7/tools"
 )
 
-func TestThreadQueryInvalidSortCorrectsBeforeDispatch(t *testing.T) {
+func TestThreadQueryUnsupportedFilterCorrectsBeforeDispatch(t *testing.T) {
 	def := builtInThreadQueryToolDefinitions()[0]
 	presentation, err := floretToolDefinitionForSnapshot(def, buildPermissionSnapshot(FlowerPermissionFullAccess, []ToolDef{def}, nil))
 	if err != nil {
@@ -25,14 +25,17 @@ func TestThreadQueryInvalidSortCorrectsBeforeDispatch(t *testing.T) {
 	var calls atomic.Int32
 	tool := fltools.Define[map[string]any](presentation, nil, nil, func(_ context.Context, inv fltools.Invocation[map[string]any]) (fltools.Result, error) {
 		calls.Add(1)
-		ordering, _ := inv.Args["sort"].(map[string]any)
-		if ordering["key"] != "time" {
+		if inv.Args["thread_id"] != "thread" || inv.Args["filter"] != nil {
 			t.Errorf("schema-invalid sort reached dispatch: %v", inv.Args)
 		}
 		return fltools.Result{Text: "Found canonical messages."}, nil
 	})
 	call := func(id, key string) florettest.Step {
-		args, err := json.Marshal(map[string]any{"object": "messages", "sort": map[string]any{"key": key, "descending": true}})
+		input := map[string]any{"object": "messages", "thread_id": "thread"}
+		if key != "time" {
+			input["filter"] = map[string]any{"text": map[string]any{"contains": "release"}}
+		}
+		args, err := json.Marshal(input)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -94,7 +97,7 @@ func TestThreadQueryInvalidSortCorrectsBeforeDispatch(t *testing.T) {
 	for _, message := range requests[1].Messages {
 		if message.ToolResult != nil && message.ToolResult.CallID == "invalid-sort" && message.ToolResult.ToolName == def.Name {
 			feedbackText = message.ToolResult.Text
-			pairedFeedback = strings.Contains(feedbackText, "sort.key") && strings.Contains(feedbackText, "must be one of") && strings.Contains(feedbackText, "time")
+			pairedFeedback = strings.Contains(feedbackText, "filter")
 		}
 	}
 	if !pairedFeedback {
