@@ -9,6 +9,7 @@ import { adapter, liveBootstrap, renderSurfaceWithAdapter, thread, waitFor } fro
 
 const media = commands as unknown as { emulateMediaPreferences: (input: { reducedMotion?: 'reduce' | 'no-preference'; forcedColors?: 'active' | 'none' }) => Promise<void> };
 const item = (id: string, kind: FlowerRuntimeCurrentItem['kind'], text = id): FlowerRuntimeCurrentItem => ({ id, kind, text, turn_id: 'turn', run_id: 'run', ordinal: 0 });
+const emptyLiveText = (id: string): FlowerRuntimeCurrentItem => ({ ...item(id, 'assistant', ''), live: true });
 const tool = (id: string, status: 'success' | 'running' | 'error' = 'success'): FlowerRuntimeCurrentItem => ({ ...item(id, 'tool'), activity: {
   item_id: id, tool_id: id, kind: 'tool', tool_name: 'terminal.exec', status, severity: status === 'error' ? 'error' : 'quiet',
   needs_attention: status === 'error', requires_approval: false, ...(status === 'error' ? { attention_reasons: ['error'] } : {}),
@@ -44,7 +45,7 @@ async function mount(items: FlowerRuntimeCurrentItem[]) {
   return { root, push(next: FlowerRuntimeCurrentItem[]) { latest = current(next, latest.view_version + 1); values.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'sequences', current: latest }); wake?.(); } };
 }
 const row = (root: HTMLElement, id: string) => root.querySelector<HTMLElement>(`[data-flower-activity-item-id="${id}"]`)!;
-const group = (root: HTMLElement, id: string) => row(root, id).closest('.flower-tool-sequence-node')!;
+const group = (root: HTMLElement, id: string) => row(root, id).closest<HTMLElement>('.flower-tool-sequence-node')!;
 const toggle = (root: HTMLElement, id: string) => group(root, id).querySelector<HTMLButtonElement>('.flower-tool-sequence-toggle')!;
 const collapsed = (root: HTMLElement, id: string) => group(root, id).querySelector('.flower-tool-sequence-viewport')!.getAttribute('aria-hidden') === 'true';
 afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
@@ -96,6 +97,31 @@ describe('consecutive tools in the shared Flower surface', () => {
     failedRow.querySelector<HTMLButtonElement>('.flower-activity-inline-button')!.click();
     await waitFor(() => Boolean(failedRow.querySelector('[data-state="open"]')));
     expect(failedRow.textContent).toContain('failed failed');
+  });
+
+  it('keeps running commands connected across empty live messages without layout jumps', async () => {
+    const initial = [tool('a'), tool('b'), emptyLiveText('live-empty-1'), tool('c', 'running'), emptyLiveText('live-empty-2'), tool('d', 'running')];
+    const { root, push } = await mount(initial);
+    const button = toggle(root, 'a');
+    const groupKey = group(root, 'a').dataset.flowerSequence;
+    const runningRows = [row(root, 'c'), row(root, 'd')];
+    const runningTops = runningRows.map(entry => entry.getBoundingClientRect().top);
+    expect(button.textContent).toContain('4 tool calls');
+    expect(button.textContent).toContain('2 running');
+    expect(group(root, 'c').dataset.flowerSequence).toBe(groupKey);
+    expect(group(root, 'd').dataset.flowerSequence).toBe(groupKey);
+    for (const id of ['b', 'live-empty-1', 'c', 'live-empty-2']) {
+      expect(root.querySelector(`[data-flower-row-message-id="${id}"]`)?.closest('.flower-turn-row')
+        ?.getAttribute('data-flower-sequence-continues')).toBe('true');
+    }
+
+    push([tool('a'), tool('b'), emptyLiveText('live-empty-1'), tool('c'), emptyLiveText('live-empty-2'), tool('d', 'success')]);
+    await waitFor(() => row(root, 'd').classList.contains('flower-activity-inline-row-success'));
+    expect(group(root, 'd').dataset.flowerSequence).toBe(groupKey);
+    expect(row(root, 'c')).toBe(runningRows[0]);
+    expect(row(root, 'd')).toBe(runningRows[1]);
+    expect(Math.abs(row(root, 'c').getBoundingClientRect().top - runningTops[0])).toBeLessThan(1);
+    expect(Math.abs(row(root, 'd').getBoundingClientRect().top - runningTops[1])).toBeLessThan(1);
   });
 
   it.each(['reduce', 'no-preference'] as const)('retains manual group and tool detail state through updates and navigation with %s motion', async reducedMotion => {

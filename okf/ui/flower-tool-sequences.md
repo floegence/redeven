@@ -34,6 +34,10 @@ outside tool folding. Whole-turn disclosure continues to use its separate
 canonical eligibility and existing thinking policy. Sequence grouping never
 alters that order, the source blocks, or final output.
 
+Empty assistant text placeholders between tool messages are transparent to
+sequence classification. This keeps running command rows connected while the
+provider streams its next response; non-empty assistant text remains a boundary.
+
 Canonical tool identities and content-block keys own row lifetime. The first
 call owns the sequence identity through appends and status changes. A thought
 becoming bounded changes its presentation in place without reparenting its body.

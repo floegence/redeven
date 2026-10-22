@@ -24,7 +24,6 @@ export type FlowerToolSequenceProjection = Readonly<{
 // Presentation only: source entries and canonical execution facts are never changed.
 export function projectFlowerToolSequences(entries: readonly FlowerTimelineEntry[]): FlowerToolSequenceProjection {
   const tokens: (SequenceNode | null)[] = [];
-  const tails = new Map<string, string>();
   for (const entry of entries) {
     if (entry.type !== 'message' || entry.message.role !== 'assistant' || entry.message.goal) {
       tokens.push(null);
@@ -34,8 +33,12 @@ export function projectFlowerToolSequences(entries: readonly FlowerTimelineEntry
     const sameScope = (threadID: string | undefined, turnID: string | undefined, runID: string | undefined) =>
       Boolean(threadID && turnID && runID) && scope === JSON.stringify([threadID, turnID, runID]);
     for (const block of entry.blocks) {
-      if (block.type === 'content' && block.block_type === 'thinking') {
-        tokens.push({ key: block.key, entryKey: entry.key, scope, thinking: true, active: entry.message.live === true, failed: false });
+      if (block.type === 'content') {
+        if (block.block_type === 'thinking') {
+          tokens.push({ key: block.key, entryKey: entry.key, scope, thinking: true, active: entry.message.live === true, failed: false });
+        } else if (block.content.trim()) {
+          tokens.push(null);
+        }
       } else if (block.type === 'tool_preview') {
         const call = block.block.call;
         tokens.push(sameScope(call.thread_id, call.turn_id, call.run_id) && !['ask_user', 'subagents', 'subagent_events', 'goal'].includes(call.name)
@@ -62,8 +65,6 @@ export function projectFlowerToolSequences(entries: readonly FlowerTimelineEntry
         }
       } else tokens.push(null);
     }
-    const tail = tokens.at(-1);
-    if (tail?.entryKey === entry.key) tails.set(entry.key, tail.key);
   }
   const runs: SequenceNode[][] = [];
   let pending: SequenceNode[] = [];
@@ -83,20 +84,23 @@ export function projectFlowerToolSequences(entries: readonly FlowerTimelineEntry
   flush();
   const groups = new Map<string, FlowerToolSequence>();
   const members = new Map<string, FlowerToolSequenceMember>();
+  const entryPositions = new Map(entries.map((entry, index) => [entry.key, index]));
+  const continuingEntries = new Set<string>();
   runs.forEach((nodes, index) => {
     const tools = nodes.filter(node => !node.thinking);
     if (tools.length < 2) return;
+    const firstEntry = Math.min(...nodes.map(node => entryPositions.get(node.entryKey) ?? 0));
+    const lastEntry = Math.max(...nodes.map(node => entryPositions.get(node.entryKey) ?? firstEntry));
+    const entryKeys = entries.slice(firstEntry, lastEntry + 1).map(entry => entry.key);
     const group: FlowerToolSequence = {
-      key: nodes[0].key, nodeKeys: nodes.map(node => node.key), entryKeys: [...new Set(nodes.map(node => node.entryKey))],
+      key: nodes[0].key, nodeKeys: nodes.map(node => node.key), entryKeys,
       toolCount: tools.length, failedCount: tools.filter(node => node.failed).length, thinkingCount: nodes.length - tools.length,
       runningCount: tools.filter(node => node.active).length,
       disclosure: index === runs.length - 1 || nodes.some(node => node.active) ? 'manual' : 'automatic',
     };
     groups.set(group.key, group);
+    entryKeys.slice(0, -1).forEach(key => continuingEntries.add(key));
     nodes.forEach((node, i) => members.set(node.key, { group, first: i === 0, last: i === nodes.length - 1 }));
   });
-  return { groups, members, continuingEntries: new Set([...tails].filter(([, key]) => {
-    const member = members.get(key);
-    return member && !member.last;
-  }).map(([key]) => key)) };
+  return { groups, members, continuingEntries };
 }
