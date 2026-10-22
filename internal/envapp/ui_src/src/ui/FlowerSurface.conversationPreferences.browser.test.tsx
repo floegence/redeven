@@ -54,12 +54,41 @@ async function chooseReasoning(surface: HTMLElement, label: string) {
   expect(item).toBeDefined();
   item!.click();
 }
+async function chooseModel(surface: HTMLElement, label: string) {
+  modelControl(surface)!.click();
+  await waitFor(() => Boolean(document.querySelector('.flower-model-menu-item')));
+  const item = Array.from(document.querySelectorAll<HTMLButtonElement>('.flower-model-menu-item')).find(button => button.textContent?.includes(label));
+  expect(item).toBeDefined();
+  item!.click();
+}
 function newChat(surface: HTMLElement) {
   surface.querySelector<HTMLButtonElement>('button[aria-label="New chat"]')!.click();
 }
 beforeEach(async () => { await page.viewport(1280, 900); });
 
 describe('Flower personal new-conversation preferences', () => {
+  it('keeps the active composer stable when its preference save notifies mounted surfaces', async () => {
+    const f = fixture();
+    const [revision, setRevision] = createSignal(0);
+    f.base.saveConversationPreferences = vi.fn(async patch => {
+      const saved = await f.save(patch);
+      setRevision(value => value + 1);
+      return saved;
+    });
+    const surface = renderSurfaceWithAdapterProps(f.base, { settingsRevision: revision });
+    await waitFor(() => reasoningControl(surface)?.textContent?.includes('High') === true);
+    await chooseReasoning(surface, 'Off');
+    await waitFor(() => f.save.mock.calls.length === 1 && revision() === 1);
+    expect(f.base.loadSettings.mock.calls.filter(([refresh]) => refresh === true)).toHaveLength(0);
+    expect(reasoningControl(surface)?.textContent).toContain('Off');
+    await chooseModel(surface, 'gpt-5.2-pro');
+    await waitFor(() => f.save.mock.calls.length === 2 && revision() === 2);
+    expect(f.base.loadSettings.mock.calls.filter(([refresh]) => refresh === true)).toHaveLength(0);
+    expect(modelControl(surface)?.textContent).toContain('gpt-5.2-pro');
+    setRevision(value => value + 1);
+    await waitFor(() => f.base.loadSettings.mock.calls.filter(([refresh]) => refresh === true).length === 1);
+  });
+
   it('does not remember thread hydration and restores the remembered configuration on New', async () => {
     const f = fixture();
     const surface = renderSurfaceWithDraftCoordinator(f.base, f.drafts);
