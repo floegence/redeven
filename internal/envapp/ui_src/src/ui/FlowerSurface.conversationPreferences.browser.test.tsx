@@ -33,7 +33,7 @@ function fixture() {
     return preferences;
   });
   const base = { ...adapter(true), runtime: { ...adapter(true).runtime, runtime_id: `preferences-${++fixtureID}` },
-    loadSettings: vi.fn(async () => settings()), saveConversationPreferences: save,
+    loadSettings: vi.fn(async (_refresh?: boolean) => settings()), saveConversationPreferences: save,
     listThreads: vi.fn(async () => [old]), loadThread: vi.fn(async () => liveBootstrap(old)),
     setThreadModel: vi.fn(async () => liveBootstrap(old)),
     setThreadReasoningSelection: vi.fn(async () => liveBootstrap({ ...old, reasoning_selection: { level: 'max' as const } })),
