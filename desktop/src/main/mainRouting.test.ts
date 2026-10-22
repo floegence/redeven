@@ -551,30 +551,28 @@ describe('main routing', () => {
 
   it('models Refresh Gateway as one visible launcher workflow with internal service, package, pairing, and catalog stages', () => {
     const mainSrc = readMainSource();
-    const stepsStart = mainSrc.indexOf('const GATEWAY_REFRESH_WORKFLOW_STEPS');
-    const stepsEnd = mainSrc.indexOf('function gatewayStepProgress(', stepsStart);
-    expect(stepsStart).toBeGreaterThanOrEqual(0);
-    expect(stepsEnd).toBeGreaterThan(stepsStart);
-    const stepsSrc = mainSrc.slice(stepsStart, stepsEnd);
+    const stepsSrc = readMainModuleSource('gatewayRefreshProgress.ts');
 
     expect(stepsSrc).toContain(
       "id: 'checking_gateway_service', label: 'Checking Gateway service', labelKey: 'progress.checkingGatewayService'",
     );
     expect(stepsSrc).toContain(
-      "id: 'checking_gateway_package', label: 'Checking Gateway package', labelKey: 'progress.checkingGatewayVersion'",
+      "id: 'checking_gateway_package', label: 'Checking Gateway package', labelKey: 'progress.checkingGatewayPackage'",
     );
     expect(stepsSrc).toContain(
-      "id: 'fetching_pairing_challenge', label: 'Fetching pairing challenge', labelKey: 'progress.checkingGatewayTrust'",
+      "id: 'fetching_pairing_challenge', label: 'Fetching pairing challenge', labelKey: 'progress.fetchingGatewayPairingChallenge'",
     );
     expect(stepsSrc).toContain(
-      "id: 'saving_trust_profile', label: 'Saving trust profile', labelKey: 'progress.checkingGatewayTrust'",
+      "id: 'saving_trust_profile', label: 'Saving trust profile', labelKey: 'progress.savingGatewayTrustProfile'",
     );
     expect(stepsSrc).toContain(
-      "id: 'refreshing_gateway_catalog', label: 'Refreshing Gateway catalog', labelKey: 'progress.checkingGatewayCatalog'",
+      "id: 'refreshing_gateway_catalog', label: 'Refreshing Gateway catalog', labelKey: 'progress.refreshingGatewayCatalog'",
     );
     expect(stepsSrc).toContain(
       "id: 'gateway_refreshed', label: 'Gateway refreshed', labelKey: 'progress.gatewayChecked'",
     );
+    expect(mainSrc).toContain("completeGatewayStepProgress(GATEWAY_REFRESH_WORKFLOW_STEPS, 'gateway_refreshed')");
+    expect(mainSrc).toContain('failGatewayStepProgress(GATEWAY_REFRESH_WORKFLOW_STEPS, phase, diagnosis.detail)');
     expect(mainSrc).not.toContain('const GATEWAY_CHECK_WORKFLOW_STEPS');
     expect(mainSrc).not.toContain('const GATEWAY_PAIR_WORKFLOW_STEPS');
   });
