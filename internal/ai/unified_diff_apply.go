@@ -1,6 +1,8 @@
 package ai
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -10,14 +12,20 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/floegence/redeven/internal/pathutil"
 )
 
 type unifiedDiffHunk struct {
-	oldStart int
-	oldCount int
-	newStart int
-	newCount int
-	lines    []string
+	oldStart   int
+	oldCount   int
+	newStart   int
+	newCount   int
+	lines      []string
+	anchor     string
+	endOfFile  bool
+	hasRange   bool
+	sourceLine int
 }
 
 type unifiedDiffFile struct {
@@ -46,6 +54,7 @@ type hunkMatchMode string
 const (
 	hunkMatchModeExact              hunkMatchMode = "exact"
 	hunkMatchModeTrimEnd            hunkMatchMode = "trim_end"
+	hunkMatchModeTrimSpace          hunkMatchMode = "trim_space"
 	hunkMatchModeUnicodePunctuation hunkMatchMode = "unicode_punctuation"
 )
 
@@ -57,6 +66,7 @@ type hunkMatchResult struct {
 var orderedHunkMatchModes = []hunkMatchMode{
 	hunkMatchModeExact,
 	hunkMatchModeTrimEnd,
+	hunkMatchModeTrimSpace,
 	hunkMatchModeUnicodePunctuation,
 }
 
@@ -145,6 +155,11 @@ func parseBeginPatch(patchText string) ([]unifiedDiffFile, error) {
 			if len(out) == 0 {
 				return nil, errors.New("invalid patch: no file operations")
 			}
+			for _, tail := range lines[i+1:] {
+				if strings.TrimSpace(tail) != "" {
+					return nil, errors.New("invalid patch: content after *** End Patch")
+				}
+			}
 			return out, nil
 		}
 
@@ -157,8 +172,7 @@ func parseBeginPatch(patchText string) ([]unifiedDiffFile, error) {
 			i++
 			var hunkLines []string
 			for i < len(lines) {
-				nextTrimmed := strings.TrimSpace(lines[i])
-				if isBeginPatchHeader(nextTrimmed) {
+				if isBeginPatchHeader(lines[i]) {
 					break
 				}
 				if strings.TrimSpace(lines[i]) == "*** End of File" {
@@ -220,8 +234,7 @@ func parseBeginPatch(patchText string) ([]unifiedDiffFile, error) {
 			}
 			body := make([]string, 0, 8)
 			for i < len(lines) {
-				nextTrimmed := strings.TrimSpace(lines[i])
-				if isBeginPatchHeader(nextTrimmed) {
+				if isBeginPatchHeader(lines[i]) {
 					break
 				}
 				body = append(body, lines[i])
@@ -229,7 +242,7 @@ func parseBeginPatch(patchText string) ([]unifiedDiffFile, error) {
 			}
 			hunks, err := parseBeginPatchUpdateHunks(body)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("%s: %w", oldPath, err)
 			}
 			out = append(out, unifiedDiffFile{
 				oldPath: oldPath,
@@ -245,65 +258,67 @@ func parseBeginPatch(patchText string) ([]unifiedDiffFile, error) {
 }
 
 func parseBeginPatchUpdateHunks(lines []string) ([]unifiedDiffHunk, error) {
-	if len(lines) == 0 {
-		return nil, nil
-	}
-	defaultHeader := unifiedDiffHunk{
-		oldStart: 1,
-		oldCount: 1,
-		newStart: 1,
-		newCount: 1,
-		lines:    nil,
-	}
-	var (
-		hunks []unifiedDiffHunk
-		cur   *unifiedDiffHunk
-	)
-
-	flushCurrent := func() {
+	var hunks []unifiedDiffHunk
+	var cur *unifiedDiffHunk
+	flush := func() error {
 		if cur == nil {
-			return
+			return nil
 		}
 		if len(cur.lines) == 0 {
-			return
+			return fmt.Errorf("invalid empty chunk at patch body line %d", cur.sourceLine)
 		}
 		hunks = append(hunks, *cur)
+		return nil
 	}
-
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
-			if line == "" {
-				return nil, fmt.Errorf("invalid update line: %q", line)
+	for i, line := range lines {
+		if line == "*** End of File" {
+			if cur == nil || len(cur.lines) == 0 || cur.endOfFile {
+				return nil, fmt.Errorf("invalid EOF marker at patch body line %d", i+1)
 			}
-		}
-		if trimmed == "*** End of File" {
+			cur.endOfFile = true
 			continue
 		}
 		if strings.HasPrefix(line, "@@") {
-			flushCurrent()
-			next := defaultHeader
-			if parsed, err := parseUnifiedDiffHunkHeader(line); err == nil {
+			if err := flush(); err != nil {
+				return nil, err
+			}
+			next := unifiedDiffHunk{sourceLine: i + 1}
+			switch {
+			case line == "@@":
+			case unifiedDiffHunkHeaderRE.MatchString(line):
+				parsed, err := parseUnifiedDiffHunkHeader(line)
+				if err != nil {
+					return nil, err
+				}
 				next = parsed
+				next.sourceLine = i + 1
+			case strings.HasPrefix(line, "@@ "):
+				next.anchor = strings.TrimPrefix(line, "@@ ")
+			default:
+				return nil, fmt.Errorf("invalid chunk header at patch body line %d: %q", i+1, line)
 			}
 			cur = &next
 			continue
 		}
-		if len(line) == 0 {
-			return nil, fmt.Errorf("invalid update line: %q", line)
+		if line == "" {
+			return nil, fmt.Errorf("invalid update line at patch body line %d: empty lines require a space prefix", i+1)
+		}
+		if cur == nil {
+			cur = &unifiedDiffHunk{sourceLine: i + 1}
+		}
+		if cur.endOfFile {
+			return nil, fmt.Errorf("unexpected content after EOF marker at patch body line %d", i+1)
 		}
 		switch line[0] {
 		case ' ', '+', '-', '\\':
-			if cur == nil {
-				next := defaultHeader
-				cur = &next
-			}
 			cur.lines = append(cur.lines, line)
 		default:
-			return nil, fmt.Errorf("invalid update line: %q", line)
+			return nil, fmt.Errorf("invalid update line at patch body line %d: %q", i+1, line)
 		}
 	}
-	flushCurrent()
+	if err := flush(); err != nil {
+		return nil, err
+	}
 	return hunks, nil
 }
 
@@ -360,6 +375,7 @@ func parseUnifiedDiff(patchText string) ([]unifiedDiffFile, error) {
 				continue
 			}
 			h, err := parseUnifiedDiffHunkHeader(l)
+			h.sourceLine = i + 1
 			if err != nil {
 				return nil, err
 			}
@@ -443,6 +459,7 @@ func parseUnifiedDiffHunkHeader(line string) (unifiedDiffHunk, error) {
 		newCount, _ = strconv.Atoi(m[4])
 	}
 	return unifiedDiffHunk{
+		hasRange: true,
 		oldStart: oldStart,
 		oldCount: oldCount,
 		newStart: newStart,
@@ -514,57 +531,189 @@ func classifyPatchFileChange(fd unifiedDiffFile) string {
 }
 
 type patchFilePlan struct {
-	oldAbs   string
-	newAbs   string
-	delete   bool
-	write    bool
-	perm     fs.FileMode
-	contents []byte
-	mutation FileMutationResult
+	oldAbs              string
+	newAbs              string
+	delete              bool
+	write               bool
+	perm                fs.FileMode
+	contents            []byte
+	mutation            FileMutationResult
+	baseline            []byte
+	destinationBaseline []byte
+	destinationExisted  bool
+}
+
+// patchApplyError distinguishes validation from a commit that may have changed
+// files. It never authorizes automatic replay, including after partial success.
+type patchApplyError struct {
+	cause     error
+	attempted bool
+	completed []string
+	path      string
+}
+
+func (e *patchApplyError) Error() string {
+	if !e.attempted {
+		return fmt.Sprintf("patch validation failed; no files changed: %v", e.cause)
+	}
+	return fmt.Sprintf("patch stopped at %s after %d completed file operations; files may have changed: %v; inspect affected files before continuing; do not repeat the patch blindly", e.path, len(e.completed), e.cause)
+}
+func (e *patchApplyError) Unwrap() error { return e.cause }
+
+func resolvePatchFiles(workingDir string, files []unifiedDiffFile) ([]unifiedDiffFile, error) {
+	resolved := append([]unifiedDiffFile(nil), files...)
+	for i := range resolved {
+		for _, path := range []*string{&resolved[i].oldPath, &resolved[i].newPath} {
+			target, err := resolvePatchPath(workingDir, *path)
+			if err != nil {
+				return nil, err
+			}
+			if target != "" {
+				*path = target
+			}
+		}
+	}
+	return resolved, nil
 }
 
 func applyUnifiedDiff(workingDirAbs string, patchText string) (parsedPatch, error) {
-	workingDirAbs = filepath.Clean(strings.TrimSpace(workingDirAbs))
-	if workingDirAbs == "" || !filepath.IsAbs(workingDirAbs) {
-		return parsedPatch{}, errors.New("invalid working dir")
-	}
-
 	parsed, err := parsePatchText(patchText)
+	if err != nil {
+		return parsedPatch{}, &patchApplyError{cause: err}
+	}
+	return applyParsedPatch(context.Background(), workingDirAbs, parsed)
+}
+
+func applyParsedPatch(ctx context.Context, workingDir string, parsed parsedPatch) (parsedPatch, error) {
+	files, err := resolvePatchFiles(workingDir, parsed.files)
+	if err != nil {
+		return parsedPatch{}, &patchApplyError{cause: err}
+	}
+	parsed.files = files
+	if err := validateAuthorizedPatchResources(ctx, parsed); err != nil {
+		return parsedPatch{}, err
+	}
+	plans := make([]patchFilePlan, 0, len(files))
+	seen := map[string]bool{}
+	for _, fd := range files {
+		plan, err := buildPatchFilePlan(workingDir, fd)
+		if err != nil {
+			return parsedPatch{}, &patchApplyError{cause: err}
+		}
+		if (fd.oldPath != "/dev/null" && plan.oldAbs != fd.oldPath) || (fd.newPath != "/dev/null" && plan.newAbs != fd.newPath) {
+			return parsedPatch{}, &patchApplyError{cause: fmt.Errorf("patch target changed while planning; inspect paths and submit a new patch")}
+		}
+		operationPaths := map[string]bool{}
+		for _, path := range []string{plan.oldAbs, plan.newAbs} {
+			if path == "" || operationPaths[path] {
+				continue
+			}
+			operationPaths[path] = true
+			if seen[path] {
+				return parsedPatch{}, &patchApplyError{cause: fmt.Errorf("patch touches %s in more than one file operation; combine its chunks into one operation", path)}
+			}
+			seen[path] = true
+		}
+		plans = append(plans, plan)
+	}
+	// Complete planning before the first effect. A single-file atomic replacement
+	// does not make a multi-file patch atomic; retain confirmed operations on error.
+	mutations, err := commitPatchPlans(ctx, workingDir, plans, atomicWriteFile, os.Remove)
 	if err != nil {
 		return parsedPatch{}, err
 	}
+	parsed.mutations = mutations
+	return parsed, nil
+}
 
-	plans := make([]patchFilePlan, 0, len(parsed.files))
-	for _, fd := range parsed.files {
-		plan, err := buildPatchFilePlan(workingDirAbs, fd)
-		if err != nil {
-			return parsedPatch{}, err
-		}
-		plans = append(plans, plan)
-		parsed.mutations = append(parsed.mutations, plan.mutation)
-	}
-
-	// Apply after full validation to avoid partially-applied patches on parse errors.
+func commitPatchPlans(ctx context.Context, workingDir string, plans []patchFilePlan, write func(string, []byte, fs.FileMode) error, remove func(string) error) ([]FileMutationResult, error) {
 	for _, plan := range plans {
-		if plan.delete {
-			if err := os.Remove(plan.oldAbs); err != nil && !errors.Is(err, os.ErrNotExist) {
-				return parsedPatch{}, err
-			}
-			continue
+		if err := validatePatchPlan(workingDir, plan); err != nil {
+			return nil, &patchApplyError{cause: err}
 		}
-		if plan.write {
-			if err := os.MkdirAll(filepath.Dir(plan.newAbs), 0o755); err != nil {
-				return parsedPatch{}, err
+	}
+	var mutations []FileMutationResult
+	var completed []string
+	attempted := false
+	for _, plan := range plans {
+		path := plan.newAbs
+		if path == "" {
+			path = plan.oldAbs
+		}
+		failure := func(err error) ([]FileMutationResult, error) {
+			return nil, &patchApplyError{cause: err, attempted: attempted, completed: append([]string(nil), completed...), path: path}
+		}
+		if err := ctx.Err(); err != nil {
+			return failure(err)
+		}
+		if err := validatePatchPlan(workingDir, plan); err != nil {
+			return failure(err)
+		}
+		attempted = true
+		if plan.delete {
+			if err := remove(plan.oldAbs); err != nil {
+				return failure(err)
 			}
-			if err := atomicWriteFile(plan.newAbs, plan.contents, plan.perm); err != nil {
-				return parsedPatch{}, err
+		} else if plan.write {
+			if err := os.MkdirAll(filepath.Dir(plan.newAbs), 0755); err != nil {
+				return failure(err)
+			}
+			if err := write(plan.newAbs, plan.contents, plan.perm); err != nil {
+				return failure(err)
 			}
 			if plan.oldAbs != "" && plan.oldAbs != plan.newAbs {
-				_ = os.Remove(plan.oldAbs)
+				if err := remove(plan.oldAbs); err != nil {
+					return failure(err)
+				}
 			}
 		}
+		completed = append(completed, path)
+		mutations = append(mutations, plan.mutation)
 	}
-	return parsed, nil
+	return mutations, nil
+}
+
+func validatePatchPlan(workingDir string, plan patchFilePlan) error {
+	for _, path := range []string{plan.oldAbs, plan.newAbs} {
+		if path == "" {
+			continue
+		}
+		current, err := resolvePatchPath(workingDir, path)
+		if err != nil {
+			return err
+		}
+		if current != path {
+			return fmt.Errorf("patch target changed before write: %s", path)
+		}
+		if info, err := os.Stat(path); err == nil && !info.Mode().IsRegular() {
+			return fmt.Errorf("patch target is not a regular file: %s", path)
+		} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	if plan.newAbs != "" && plan.newAbs != plan.oldAbs {
+		current, err := os.ReadFile(plan.newAbs)
+		if plan.destinationExisted {
+			if err != nil {
+				return err
+			}
+			if !bytes.Equal(current, plan.destinationBaseline) {
+				return fmt.Errorf("destination changed before patch could be applied: %s", plan.newAbs)
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("destination appeared before patch could be applied: %s", plan.newAbs)
+		}
+	}
+	if plan.oldAbs != "" {
+		current, err := os.ReadFile(plan.oldAbs)
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(current, plan.baseline) {
+			return fmt.Errorf("file changed before patch could be applied: %s; read the current file and regenerate the patch", plan.oldAbs)
+		}
+	}
+	return nil
 }
 
 func buildPatchFilePlan(workingDirAbs string, fd unifiedDiffFile) (patchFilePlan, error) {
@@ -594,6 +743,7 @@ func buildPatchFilePlan(workingDirAbs string, fd unifiedDiffFile) (patchFilePlan
 		return patchFilePlan{
 			oldAbs:   oldAbs,
 			delete:   true,
+			baseline: originalBytes,
 			mutation: newFileMutationResultWithPaths(oldAbs, oldAbs, "", "delete", string(originalBytes), ""),
 		}, nil
 	}
@@ -628,50 +778,38 @@ func buildPatchFilePlan(workingDirAbs string, fd unifiedDiffFile) (patchFilePlan
 		var applyErr error
 		next, applyErr = applyUnifiedDiffHunksToBytes(fileBytes, fd.hunks)
 		if applyErr != nil {
-			return patchFilePlan{}, applyErr
+			return patchFilePlan{}, fmt.Errorf("%s: %w", baselineAbs, applyErr)
 		}
 	}
-	mutation := newFileMutationResultWithPatch(newAbs, oldAbs, newAbs, patchMutationChangeType(fd), mutationPatchFromUnifiedDiffFile(fd))
+	var destinationBaseline []byte
+	destinationExisted := false
+	if newAbs != oldAbs {
+		destinationBaseline, err = os.ReadFile(newAbs)
+		if err == nil {
+			destinationExisted = true
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return patchFilePlan{}, err
+		}
+	}
+	before := fileBytes
+	changeType := patchMutationChangeType(fd)
+	if destinationExisted && oldAbs == "" {
+		before = destinationBaseline
+		changeType = "update"
+	}
+	mutation := newFileMutationResultWithPaths(newAbs, oldAbs, newAbs, changeType, string(before), string(next))
 	return patchFilePlan{
-		oldAbs:   oldAbs,
-		newAbs:   newAbs,
-		delete:   false,
-		write:    true,
-		perm:     perm,
-		contents: next,
-		mutation: mutation,
+		oldAbs:              oldAbs,
+		newAbs:              newAbs,
+		delete:              false,
+		write:               true,
+		perm:                perm,
+		contents:            next,
+		baseline:            fileBytes,
+		destinationBaseline: destinationBaseline,
+		destinationExisted:  destinationExisted,
+		mutation:            mutation,
 	}, nil
-}
-
-func mutationPatchFromUnifiedDiffFile(fd unifiedDiffFile) mutationPatchText {
-	hunks := make([]mutationDiffHunk, 0, len(fd.hunks))
-	for _, hunk := range fd.hunks {
-		renderHunk := mutationDiffHunk{
-			oldStart: hunk.oldStart,
-			oldCount: hunk.oldCount,
-			newStart: hunk.newStart,
-			newCount: hunk.newCount,
-		}
-		for _, line := range hunk.lines {
-			if line == "" {
-				continue
-			}
-			text := ""
-			if len(line) > 1 {
-				text = line[1:]
-			}
-			switch line[0] {
-			case ' ', '-', '+':
-				renderHunk.lines = append(renderHunk.lines, mutationDiffLine{prefix: line[0], text: text})
-			}
-		}
-		if len(renderHunk.lines) == 0 {
-			continue
-		}
-		hunks = append(hunks, renderHunk)
-	}
-	oldPath, newPath := mutationPatchPaths("", fd.oldPath, fd.newPath, patchMutationChangeType(fd))
-	return renderMutationPatch(oldPath, newPath, hunks)
 }
 
 func patchMutationChangeType(fd unifiedDiffFile) string {
@@ -689,169 +827,28 @@ func patchMutationChangeType(fd unifiedDiffFile) string {
 
 func resolvePatchPath(workingDirAbs string, raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
-	if raw == "" || raw == "/dev/null" {
+	if raw == "/dev/null" {
 		return "", nil
 	}
-	if filepath.IsAbs(raw) {
-		return "", fmt.Errorf("invalid path: absolute paths are not allowed in apply_patch: %s", raw)
+	if raw == "" {
+		return "", errors.New("invalid path: missing patch file path")
 	}
-	abs := filepath.Clean(filepath.Join(workingDirAbs, raw))
-	rel, err := filepath.Rel(workingDirAbs, abs)
+	root, err := pathutil.CanonicalizeExistingDirAbs(workingDirAbs)
 	if err != nil {
-		return "", fmt.Errorf("invalid path: cannot resolve %q: %w", raw, err)
+		return "", fmt.Errorf("invalid path: working directory: %w", err)
 	}
-	rel = filepath.Clean(rel)
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-		return "", fmt.Errorf("invalid path: patch path escapes working directory: %s", raw)
+	target := raw
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(root, target)
 	}
-	return abs, nil
-}
-
-func applyUnifiedDiffHunksToBytes(original []byte, hunks []unifiedDiffHunk) ([]byte, error) {
-	text := string(original)
-	text = strings.ReplaceAll(text, "\r\n", "\n")
-	text = strings.ReplaceAll(text, "\r", "\n")
-
-	hadTrailingNewline := strings.HasSuffix(text, "\n")
-	if hadTrailingNewline {
-		text = strings.TrimSuffix(text, "\n")
+	resolved, err := pathutil.ResolveTargetScopedPath(target, root)
+	if err != nil {
+		return "", fmt.Errorf("invalid path: patch target %q must resolve inside the run working directory: %w", raw, err)
 	}
-
-	var lines []string
-	if text != "" {
-		lines = strings.Split(text, "\n")
-	} else {
-		lines = nil
+	if resolved == root {
+		return "", fmt.Errorf("invalid path: patch target must name a file: %q", raw)
 	}
-
-	offset := 0
-	var err error
-	for _, h := range hunks {
-		preferred := h.oldStart - 1 + offset
-		if preferred < 0 {
-			preferred = 0
-		}
-		match, ok := findHunkStart(lines, h, preferred)
-		if !ok {
-			return nil, fmt.Errorf("hunk failed to apply near line %d", h.oldStart)
-		}
-		var delta int
-		lines, delta, err = applyOneHunk(lines, h, match)
-		if err != nil {
-			return nil, err
-		}
-		offset += delta
-	}
-
-	out := strings.Join(lines, "\n")
-	if hadTrailingNewline || len(lines) > 0 {
-		out += "\n"
-	}
-	return []byte(out), nil
-}
-
-func findHunkStart(lines []string, h unifiedDiffHunk, preferred int) (hunkMatchResult, bool) {
-	from := make([]string, 0, len(h.lines))
-	for _, l := range h.lines {
-		if l == "" {
-			continue
-		}
-		switch l[0] {
-		case ' ', '-':
-			from = append(from, l[1:])
-		}
-	}
-	if len(from) == 0 {
-		if preferred < 0 {
-			return hunkMatchResult{start: 0, mode: hunkMatchModeExact}, true
-		}
-		if preferred > len(lines) {
-			return hunkMatchResult{start: len(lines), mode: hunkMatchModeExact}, true
-		}
-		return hunkMatchResult{start: preferred, mode: hunkMatchModeExact}, true
-	}
-
-	tryAt := func(pos int, mode hunkMatchMode) bool {
-		if pos < 0 {
-			return false
-		}
-		if pos+len(from) > len(lines) {
-			return false
-		}
-		for i := 0; i < len(from); i++ {
-			if !comparePatchLine(mode, lines[pos+i], from[i]) {
-				return false
-			}
-		}
-		return true
-	}
-
-	const window = 80
-	start := preferred - window
-	if start < 0 {
-		start = 0
-	}
-	end := preferred + window
-	if end > len(lines) {
-		end = len(lines)
-	}
-	for _, mode := range orderedHunkMatchModes {
-		if tryAt(preferred, mode) {
-			return hunkMatchResult{start: preferred, mode: mode}, true
-		}
-		for pos := start; pos <= end; pos++ {
-			if tryAt(pos, mode) {
-				return hunkMatchResult{start: pos, mode: mode}, true
-			}
-		}
-		for pos := 0; pos <= len(lines); pos++ {
-			if pos >= start && pos <= end {
-				continue
-			}
-			if tryAt(pos, mode) {
-				return hunkMatchResult{start: pos, mode: mode}, true
-			}
-		}
-	}
-	return hunkMatchResult{}, false
-}
-
-func applyOneHunk(lines []string, h unifiedDiffHunk, match hunkMatchResult) ([]string, int, error) {
-	cursor := match.start
-	delta := 0
-	for _, l := range h.lines {
-		if l == "" {
-			continue
-		}
-		prefix := l[0]
-		text := ""
-		if len(l) > 1 {
-			text = l[1:]
-		}
-		switch prefix {
-		case ' ':
-			if cursor >= len(lines) || !comparePatchLine(match.mode, lines[cursor], text) {
-				return nil, 0, fmt.Errorf("hunk context mismatch at line %d", cursor+1)
-			}
-			cursor++
-		case '-':
-			if cursor >= len(lines) || !comparePatchLine(match.mode, lines[cursor], text) {
-				return nil, 0, fmt.Errorf("hunk delete mismatch at line %d", cursor+1)
-			}
-			lines = append(lines[:cursor], lines[cursor+1:]...)
-			delta--
-		case '+':
-			lines = append(lines[:cursor], append([]string{text}, lines[cursor:]...)...)
-			cursor++
-			delta++
-		case '\\':
-			// "\ No newline at end of file"
-			continue
-		default:
-			return nil, 0, fmt.Errorf("invalid hunk line: %q", l)
-		}
-	}
-	return lines, delta, nil
+	return resolved, nil
 }
 
 func comparePatchLine(mode hunkMatchMode, actual string, expected string) bool {
@@ -860,8 +857,10 @@ func comparePatchLine(mode hunkMatchMode, actual string, expected string) bool {
 		return actual == expected
 	case hunkMatchModeTrimEnd:
 		return trimPatchLineEnd(actual) == trimPatchLineEnd(expected)
+	case hunkMatchModeTrimSpace:
+		return strings.TrimSpace(actual) == strings.TrimSpace(expected)
 	case hunkMatchModeUnicodePunctuation:
-		return normalizePatchLineUnicode(trimPatchLineEnd(actual)) == normalizePatchLineUnicode(trimPatchLineEnd(expected))
+		return normalizePatchLineUnicode(strings.TrimSpace(actual)) == normalizePatchLineUnicode(strings.TrimSpace(expected))
 	default:
 		return actual == expected
 	}
@@ -912,12 +911,10 @@ func atomicWriteFile(path string, data []byte, perm fs.FileMode) error {
 		cleanup()
 		return err
 	}
-	_ = os.Chmod(tmpName, perm&0o777)
-	if err := os.Rename(tmpName, path); err == nil {
-		return nil
+	if err := os.Chmod(tmpName, perm&0777); err != nil {
+		_ = os.Remove(tmpName)
+		return err
 	}
-	// Best-effort replace for platforms where Rename cannot overwrite.
-	_ = os.Remove(path)
 	if err := os.Rename(tmpName, path); err != nil {
 		_ = os.Remove(tmpName)
 		return err

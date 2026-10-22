@@ -66,6 +66,9 @@ func buildFloretTools(r *run, activeTools []ToolDef, webBindings ...map[string]w
 				if isComputerUseTool(inv.Name) {
 					return floretComputerResources(r, inv)
 				}
+				if inv.Name == "apply_patch" && !r.shouldRouteTargetTool(inv.Name) {
+					return r.patchToolResources(anyToString(inv.Args["patch"]))
+				}
 				return floretToolResources(inv)
 			},
 			func(ctx context.Context, inv fltools.Invocation[map[string]any]) (fltools.Result, error) {
@@ -279,6 +282,11 @@ func toolErrorPayload(toolErr *aitools.ToolError) map[string]any {
 
 func modelToolErrorPayload(toolErr *aitools.ToolError, toolName string) map[string]any {
 	payload := toolErrorPayload(toolErr)
+	if toolName == "apply_patch" && toolErr != nil && len(toolErr.SuggestedFixes) > 0 {
+		meta := cloneAnyMap(toolErr.Meta)
+		meta["suggested_fixes"] = append([]string(nil), toolErr.SuggestedFixes...)
+		payload["meta"] = meta
+	}
 	if !isComputerUseTool(toolName) {
 		return payload
 	}
@@ -389,7 +397,21 @@ func modelToolResultPayload(result ToolResult) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	payload, bounded := boundedJSONMap(normalized.(map[string]any), 0)
+	modelPayload := normalized.(map[string]any)
+	if result.ToolName == "apply_patch" && status == toolResultStatusSuccess {
+		if data, ok := modelPayload["data"].(map[string]any); ok {
+			// The canonical Activity retains the full diff and format metadata. The
+			// provider needs the confirmed files and counts, not an echo of its patch.
+			data = cloneAnyMap(data)
+			delete(data, "input_format")
+			delete(data, "normalized_format")
+			delete(data, "mutations")
+			modelPayload["data"] = data
+			modelPayload["summary"] = "Patch applied successfully."
+			delete(modelPayload, "details")
+		}
+	}
+	payload, bounded := boundedJSONMap(modelPayload, 0)
 	payload["truncated"] = result.Truncated || bounded
 	return payload, nil
 }

@@ -1523,6 +1523,13 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	}
 
 	if toolErrRaw != nil {
+		var patchFailure *patchApplyError
+		if errors.As(toolErrRaw, &patchFailure) {
+			outcome.effectUncertain = patchFailure.attempted
+			outcome.executionFacts.completed = !patchFailure.attempted
+			setToolError(patchToolError(patchFailure), "", nil)
+			return outcome, nil
+		}
 		var partial any
 		var documentError *tessiven.ValidationError
 		if errors.As(toolErrRaw, &documentError) {
@@ -3380,7 +3387,11 @@ func (r *run) toolApplyPatch(ctx context.Context, patchText string) (any, error)
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	parsed, err := applyUnifiedDiff(workingDirAbs, patchText)
+	parsed, err := r.resolveToolPatch(patchText)
+	if err != nil {
+		return nil, err
+	}
+	parsed, err = applyParsedPatch(ctx, workingDirAbs, parsed)
 	if err != nil {
 		return nil, err
 	}

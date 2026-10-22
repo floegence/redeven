@@ -20,6 +20,37 @@ The registry includes readonly file/search helpers, standard mutation, patch, te
 
 The resolver validates MIME, size, and digest through the target-owned media store; it never stores image bytes in durable tool state.
 
+## File editing
+
+The active Flower patch executor belongs to Redeven. Local file edits use the
+filesystem registry; patch source and move destinations additionally remain
+inside the run working directory after canonical resolution. Relative and
+absolute spellings are accepted. Existing symlinks and new-file ancestors resolve
+before approval, and execution checks the approved canonical targets again.
+Readonly roots cannot be written. Target-routed tools retain target-owned policy.
+
+Use file.edit for small unique literal replacements, file.write for complete
+files, and apply_patch for multi-chunk or multi-file changes. The current provider
+surface uses one strict JSON patch argument plus declared routing fields; input
+and input_format are not accepted aliases. No endpoint is assumed to support
+freeform grammar based on its model name.
+
+Begin/End Patch preserves context anchors and EOF markers. Chunks search forward
+through original content, pure additions append, numeric ranges remain supported,
+and untouched lines retain their endings. Insertions use the first existing
+ending (LF for empty files); nonempty updates retain the established final-newline
+convention. Exact matching precedes whitespace and punctuation normalization.
+Explicit Add and Move preserve the existing replacement behavior for regular
+files. Multiple operations on one canonical path must be combined into one file
+operation with ordered chunks.
+
+All plans validate before writing and recheck source and destination snapshots
+before each commit. Validation errors confirm no writes. Filesystem commit errors
+report completed file operations and uncertain effects; they never authorize
+blind replay. Single-file replacement is atomic, but a multi-file patch is not a
+filesystem transaction. Model success retains confirmed paths and counts; actual
+before/after diffs and format metadata remain in canonical Activity presentation.
+
 # Boundaries
 
 Tool names are not aliases for deleted knowledge-era tools. OKF is an embedded project corpus and does not access the internet; external, current, recent, news, third-party, market, pricing, and general web facts must use direct authoritative URLs or web search discovery instead.
@@ -33,3 +64,6 @@ Flower must not infer remote execution from thread context alone; it can only cl
 - `redeven:internal/ai/floret_tools.go:91` - Redeven projects host builtins and selects the direct Floret-native path.
 
 - `redeven:internal/ai/floret_native_tools.go` - The unique native factory derives `web_fetch` from Floret and binds invocation product permission.
+
+- Redeven patch implementation: internal/ai/unified_diff_apply.go, patch_text.go and patch_tool.go.
+- Deterministic qualification: internal/ai/patch_correctness_test.go, patch_tool_test.go and patch_runtime_test.go cover placement, endings, authorization, collision semantics, injected commit failures, and the hosted write-then-patch tool chain.

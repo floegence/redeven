@@ -613,7 +613,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "file.edit",
-			Description:      "Replace exact text in a file; requires a unique match unless replace_all.",
+			Description:      "Prefer for small exact edits; unique match unless replace_all.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"file_path": map[string]any{"type": "string", "description": "Working-directory-relative or authorized absolute path."}, "old_string": map[string]any{"type": "string", "minLength": 1}, "new_string": map[string]any{"type": "string", "description": "Must differ from old_string."}, "replace_all": map[string]any{"type": "boolean"}}), "required": []string{"file_path", "old_string", "new_string"}, "additionalProperties": false}),
 			Mutating:         true,
 			RequiresApproval: true,
@@ -637,8 +637,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "apply_patch",
-			Description:      "Apply a Begin/End Patch document. Relative paths cannot escape the run working directory.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"patch": map[string]any{"type": "string", "description": "*** Begin Patch / *** End Patch envelope; relative paths in *** Add File:, *** Delete File:, *** Update File:, optional *** Move to:, and @@ hunks. Prefix added lines with +."}}), "required": []string{"patch"}, "additionalProperties": false}),
+			Description:      "Apply a Begin/End Patch; paths must resolve inside cwd.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"patch": map[string]any{"type": "string", "description": "*** Add File:, *** Delete File:, *** Update File:, *** Move to:. Prefix added lines with +, removals with -, context with space. @@ context anchors; *** End of File anchors EOF; additions alone append. JSON example: {\"patch\":\"*** Begin Patch\\n*** Add File: x\\n+hi\\n*** End Patch\"}. No input/input_format."}}), "required": []string{"patch"}, "additionalProperties": false}),
 			Mutating:         true,
 			RequiresApproval: true,
 			Visibility:       ToolVisibilityStandard,

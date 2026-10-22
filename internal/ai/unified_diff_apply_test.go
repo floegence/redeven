@@ -142,7 +142,7 @@ func TestApplyUnifiedDiff_ReportsInputAndNormalizedFormat(t *testing.T) {
 	}
 }
 
-func TestApplyUnifiedDiff_RejectsAbsoluteAndEscapingPatchPaths(t *testing.T) {
+func TestApplyUnifiedDiff_RejectsOutsideAndEscapingPatchPaths(t *testing.T) {
 	t.Parallel()
 
 	workingDir := t.TempDir()
@@ -246,7 +246,7 @@ func TestFindHunkStart_PrefersExactMatchMode(t *testing.T) {
 		},
 	}
 
-	match, ok := findHunkStart([]string{"alpha", "beta"}, hunk, 0)
+	match, ok := findPatchSequence([]string{"alpha", "beta"}, patchOldLines(hunk), 0, 0, 0)
 	if !ok {
 		t.Fatal("findHunkStart: want match")
 	}

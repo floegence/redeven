@@ -47,6 +47,8 @@ const (
 	ErrorCodeNavigationTimeout            ErrorCode = "NAVIGATION_TIMEOUT"
 	ErrorCodeTimeout                      ErrorCode = "TIMEOUT"
 	ErrorCodeCanceled                     ErrorCode = "CANCELED"
+	ErrorCodePatchValidationFailed        ErrorCode = "PATCH_VALIDATION_FAILED"
+	ErrorCodePatchCommitFailed            ErrorCode = "PATCH_COMMIT_FAILED"
 	ErrorCodeUnknown                      ErrorCode = "UNKNOWN"
 )
 
