@@ -318,11 +318,11 @@ func checkPromptQualificationTargetRules(root string) func(ModelGatewayResult) e
 
 func TestFlowerPromptSizeBudget(t *testing.T) {
 	prompt, _ := promptQualificationSurface(t, promptQualificationCase{})
-	assertFlowerIdentityPrompt(t, prompt)
+	assertFlowerSystemPrompt(t, prompt)
 	// A byte budget is deterministic and tokenizer-independent; provider usage is
 	// measured separately in the paid lane, including unchanged tool definitions.
-	if len(prompt) > 200 {
-		t.Fatalf("identity system prompt is %d bytes; budget=200", len(prompt))
+	if len(prompt) > 300 {
+		t.Fatalf("system prompt is %d bytes; budget=300", len(prompt))
 	}
 	for _, tutorial := range []string{
 		"Put headings, lists, blockquotes", "reason_code must be one of:", "*** Add File:", "Script example after observing",

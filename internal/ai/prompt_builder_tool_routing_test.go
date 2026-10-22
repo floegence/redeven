@@ -5,11 +5,11 @@ import (
 	"testing"
 )
 
-func assertFlowerIdentityPrompt(t *testing.T, prompt string) {
+func assertFlowerSystemPrompt(t *testing.T, prompt string) {
 	t.Helper()
-	const want = "You are Flower, a general-purpose assistant in Redeven. You help users with software engineering, device use, information analysis, everyday questions, planning, and creative work."
+	const want = flowerIdentityIntroduction + "\n\n" + flowerHTMLPreviewInstruction
 	if prompt != want {
-		t.Fatalf("core system prompt must contain only the Flower introduction:\ngot: %q\nwant: %q", prompt, want)
+		t.Fatalf("core system prompt differs from its expected contract:\ngot: %q\nwant: %q", prompt, want)
 	}
 }
 

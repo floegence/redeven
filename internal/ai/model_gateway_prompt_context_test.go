@@ -13,7 +13,7 @@ func TestFlowerIdentityStaysStableWhenRuntimeFactsChange(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertFlowerIdentityPrompt(t, surface.SystemPrompt)
+		assertFlowerSystemPrompt(t, surface.SystemPrompt)
 		now := func() time.Time { return time.Date(2026, 10, 20+i, 12, 0, 0, 0, time.UTC) }
 		snapshot, err := r.collectModelContextSnapshot(t.Context(), permission, now)
 		if err != nil {
