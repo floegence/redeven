@@ -123,7 +123,7 @@ func TestFlowerLiveFragmentsRetainActiveBytesAndNeverReplaceStartedEnvelope(t *t
 	if fragment.FragmentIndex != 0 || fragment.FragmentCount <= 1 || len(sub.subscriber.queue) != 0 || sub.subscriber.active != first {
 		t.Fatal("Next queued all fragments instead of advancing one active envelope")
 	}
-	if sub.subscriber.queuedBytes != len(first.data) || svc.flowerLiveQueuedBytes != len(first.data) {
+	if sub.subscriber.queuedBytes != first.bytes() || svc.flowerLiveQueuedBytes != first.bytes() {
 		t.Fatal("starting an envelope released its retained byte budget early")
 	}
 	after := before
@@ -169,7 +169,7 @@ func TestFlowerLiveFragmentsReleaseInitializationAndInterruptedAssemblyBytes(t *
 	if !enqueueFlowerLiveSubscriberLocked(svc, sub.subscriber, batch) {
 		t.Fatal("live initialization retention failed")
 	}
-	if sub.subscriber.queuedBytes != 2*len(batch.data) || svc.flowerLiveQueuedBytes != 2*len(batch.data) {
+	if sub.subscriber.queuedBytes != batch.bytes()+flowerLiveRefreshBatch(batch).bytes() || svc.flowerLiveQueuedBytes != sub.subscriber.queuedBytes {
 		t.Fatal("initialization bytes were not included in the retained budget")
 	}
 	finalizeFlowerLiveSubscriberInitializationLocked(svc, sub.subscriber)
@@ -226,8 +226,10 @@ func TestFlowerLiveFragmentsSlowObserverCannotBlockLargeCurrentProducer(t *testi
 			t.Fatal("slow observer blocked or corrupted the draining observer")
 		}
 	}
-	if _, err := slow.Next(context.Background()); !errors.Is(err, io.EOF) {
-		t.Fatalf("slow semantic queue error=%v, want reconnect fence", err)
+	frame := nextFlowerLiveStreamFrame(t, slow)
+	var latest FlowerLiveStreamEnvelope
+	if err := json.Unmarshal(frame.Data, &latest); err != nil || latest.Current == nil || latest.Current.ViewVersion != flowerLiveSubscriberBatchLimit+2 {
+		t.Fatalf("slow semantic queue latest=%s", frame.Data)
 	}
 	if fast.subscriber.closed {
 		t.Fatal("slow observer closed a healthy observer")

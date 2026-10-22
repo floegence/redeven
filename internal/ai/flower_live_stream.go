@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -239,6 +240,13 @@ type flowerLiveEncodedBatch struct {
 	data                []byte
 	id                  string
 	err                 error
+	route               flowerLiveRoute
+	mailbox             string
+	baseVersion         uint64
+	version             uint64
+	current             bool
+	refresh             bool
+	append              *flowerLiveAppend
 	encodingDiagnostics *flowerLiveEncodingDiagnostics
 }
 
@@ -256,29 +264,67 @@ type flowerLiveCurrentEncodingDiagnostics struct {
 }
 
 type flowerLiveSubscriber struct {
-	observerID      string
-	observerContext context.Context
-	viewerMu        sync.Mutex
-	viewerRevision  uint64
-	viewerRequest   ComputerViewerRequest
-	viewerCancel    context.CancelFunc
-	viewerStop      func()
-	id              uint64
-	endpointID      string
-	userPublicID    string
-	queue           []*flowerLiveEncodedBatch
-	media           chan *flowerLiveEncodedBatch
-	queuedBytes     int
-	mediaBytes      int
-	initializing    bool
-	initial         []*flowerLiveEncodedBatch
-	active          *flowerLiveEncodedBatch
-	activeIndex     int
-	activeAccounted bool
-	wake            chan struct{}
-	closeErr        error
-	closed          bool
+	observerID       string
+	observerContext  context.Context
+	viewerMu         sync.Mutex
+	viewerRevision   uint64
+	viewerRequest    ComputerViewerRequest
+	viewerCancel     context.CancelFunc
+	viewerStop       func()
+	id               uint64
+	endpointID       string
+	userPublicID     string
+	queue            []*flowerLiveEncodedBatch
+	media            chan *flowerLiveEncodedBatch
+	queuedBytes      int
+	mediaBytes       int
+	initializing     bool
+	initial          []*flowerLiveEncodedBatch
+	covered          map[flowerLiveRoute]uint64
+	pressureLoggedAt time.Time
+	active           *flowerLiveEncodedBatch
+	activeIndex      int
+	activeAccounted  bool
+	wake             chan struct{}
+	closeErr         error
+	closed           bool
 }
+
+// Only immutable public bytes and bounded routing metadata survive encoding.
+// Runtime/private view graphs never belong to a subscriber queue.
+type flowerLiveRoute struct {
+	threadID string
+	wireID   string
+	subagent bool
+}
+
+type flowerLiveAppend struct {
+	turnID         identity.TurnID
+	runID          identity.RunID
+	itemID         string
+	offset         int
+	text           string
+	facts          json.RawMessage
+	factsKey       [32]byte
+	outputTokens   int64
+	lastProgressAt time.Time
+}
+
+func (batch *flowerLiveEncodedBatch) bytes() int {
+	if batch == nil {
+		return 0
+	}
+	size := len(batch.data) + len(batch.route.threadID) + len(batch.route.wireID) + len(batch.mailbox)
+	if batch.route.threadID != "" || batch.mailbox != "" {
+		size += 256
+	}
+	if a := batch.append; a != nil {
+		size += 256 + len(a.text) + len(a.facts) + len(a.itemID) + len(a.turnID) + len(a.runID)
+	}
+	return size
+}
+
+func (route flowerLiveRoute) bytes() int { return 128 + len(route.threadID) + len(route.wireID) }
 
 type FlowerLiveStreamSubscription struct {
 	service    *Service
@@ -378,7 +424,11 @@ func (s *Service) SubscribeFlowerLiveStream(ctx context.Context, meta *session.M
 
 	s.mu.Lock()
 	finalizeFlowerLiveSubscriberInitializationLocked(s, subscriber)
+	closed := subscriber.closed
 	s.mu.Unlock()
+	if closed {
+		return nil, ErrFlowerLiveSync
+	}
 	return &FlowerLiveStreamSubscription{service: s, subscriber: subscriber}, nil
 }
 
@@ -517,19 +567,67 @@ func (s *Service) PublishFlowerViewerReadState(meta *session.Meta, threadID stri
 }
 
 func newFlowerLiveEncodedBatch(envelope FlowerLiveStreamEnvelope) *flowerLiveEncodedBatch {
-	data, err := json.Marshal(envelope)
+	sampledAt := time.Now()
+	data, err := marshalFlowerLiveEnvelopeAt(envelope, sampledAt)
+	batch := &flowerLiveEncodedBatch{kind: envelope.Kind, data: data, id: rand.Text()}
 	if err != nil {
-		return &flowerLiveEncodedBatch{
-			kind: envelope.Kind,
-			err:  errors.Join(ErrFlowerLiveSync, err),
-			encodingDiagnostics: &flowerLiveEncodingDiagnostics{
-				threadID:        flowerLiveDiagnosticIdentity(identity.ThreadID(envelope.ThreadID)),
-				current:         flowerLiveCurrentEncodingContext(envelope.Current),
-				subagentCurrent: flowerLiveCurrentEncodingContext(envelope.SubagentCurrent),
-			},
+		batch.err = errors.Join(ErrFlowerLiveSync, err)
+		batch.encodingDiagnostics = &flowerLiveEncodingDiagnostics{
+			threadID: flowerLiveDiagnosticIdentity(identity.ThreadID(envelope.ThreadID)),
+			current:  flowerLiveCurrentEncodingContext(envelope.Current), subagentCurrent: flowerLiveCurrentEncodingContext(envelope.SubagentCurrent),
+		}
+		return batch
+	}
+	switch envelope.Kind {
+	case FlowerLiveStreamSummaryBatch:
+		if len(envelope.Summaries) == 1 {
+			batch.mailbox = "summary:" + envelope.Summaries[0].ThreadID
+		}
+	case FlowerLiveStreamViewerReadState:
+		batch.mailbox = "read:" + envelope.ThreadID
+	case FlowerLiveStreamModelDirectoryChanged:
+		batch.mailbox = "models"
+	case FlowerLiveStreamComputerStatus:
+		if status := envelope.ComputerStatus; status != nil {
+			batch.mailbox = "computer:" + status.ThreadID + ":" + status.InteractionID + ":" + status.TargetID
+		}
+	case FlowerLiveStreamThreadBatch:
+		if envelope.Subagents != nil {
+			batch.mailbox = "subagents:" + envelope.ThreadID
+		}
+		update, current := envelope.Update, envelope.Current
+		subagent := envelope.SubagentUpdate != nil || envelope.SubagentCurrent != nil
+		if subagent {
+			update, current = envelope.SubagentUpdate, envelope.SubagentCurrent
+		}
+		if update != nil {
+			batch.route = flowerLiveRoute{update.ThreadID.String(), envelope.ThreadID, subagent}
+			batch.baseVersion, batch.version = update.BaseVersion, update.ViewVersion
+			if flowerLiveAppendOnlyUpdate(update) {
+				change := update.Items[0]
+				facts, _ := json.Marshal(projectFlowerFacts(update.Facts, update.ThreadID.String(), update.TurnID.String(), update.RunID.String(), sampledAt))
+				append := &flowerLiveAppend{turnID: update.TurnID, runID: update.RunID, itemID: change.ItemID,
+					offset: change.Append.OffsetBytes, text: change.Append.Text, facts: facts}
+				stableFacts := update.Facts
+				if progress := update.Facts.RunProgress; progress != nil && progress.Request != nil {
+					progressCopy, requestCopy := *progress, *progress.Request
+					append.outputTokens = requestCopy.EstimatedOutputTokens
+					if requestCopy.LastProgressAt != nil {
+						append.lastProgressAt = *requestCopy.LastProgressAt
+					}
+					requestCopy.EstimatedOutputTokens, requestCopy.LastProgressAt = 0, nil
+					progressCopy.Request, stableFacts.RunProgress = &requestCopy, &progressCopy
+				}
+				nativeFacts, _ := json.Marshal(stableFacts)
+				append.factsKey = sha256.Sum256(nativeFacts)
+				batch.append = append
+			}
+		} else if current != nil {
+			batch.route = flowerLiveRoute{current.ThreadID.String(), envelope.ThreadID, subagent}
+			batch.version, batch.current = current.ViewVersion, true
 		}
 	}
-	return &flowerLiveEncodedBatch{kind: envelope.Kind, data: data, id: rand.Text()}
+	return batch
 }
 
 func flowerLiveCurrentEncodingContext(current *flruntime.ThreadView) *flowerLiveCurrentEncodingDiagnostics {
@@ -571,7 +669,7 @@ func validateFlowerLiveBatchLocked(service *Service, subscriber *flowerLiveSubsc
 	if service == nil || subscriber == nil || subscriber.closed || batch == nil {
 		return false
 	}
-	if batch.err != nil || len(batch.data) == 0 {
+	if batch.err != nil || len(batch.data) == 0 && !batch.refresh {
 		subscriber.closeErr = ErrFlowerLiveSync
 		closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseEncoding, batch)
 		return false
@@ -588,16 +686,16 @@ func retainFlowerLiveBatchLocked(service *Service, subscriber *flowerLiveSubscri
 	if !validateFlowerLiveBatchLocked(service, subscriber, batch) {
 		return false
 	}
-	if subscriber.queuedBytes+subscriber.mediaBytes+len(batch.data) > flowerLiveEnvelopeByteLimit {
-		closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseByteQueueLimit)
+	if subscriber.queuedBytes+subscriber.mediaBytes+batch.bytes() > flowerLiveEnvelopeByteLimit {
+		closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseByteQueueLimit, batch)
 		return false
 	}
-	if service.flowerLiveQueuedBytes+len(batch.data) > flowerLiveGlobalQueuedByteLimit {
-		closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseGlobalQueueLimit)
+	if service.flowerLiveQueuedBytes+batch.bytes() > flowerLiveGlobalQueuedByteLimit {
+		closeFlowerLiveSubscriberLocked(service, subscriber, flowerLiveSubscriberCloseGlobalQueueLimit, batch)
 		return false
 	}
-	subscriber.queuedBytes += len(batch.data)
-	service.flowerLiveQueuedBytes += len(batch.data)
+	subscriber.queuedBytes += batch.bytes()
+	service.flowerLiveQueuedBytes += batch.bytes()
 	return true
 }
 
@@ -609,28 +707,88 @@ func replaceFlowerLiveSubscriberMediaLocked(service *Service, subscriber *flower
 	}
 	select {
 	case previous := <-subscriber.media:
-		subscriber.mediaBytes -= len(previous.data)
-		service.flowerLiveQueuedBytes -= len(previous.data)
+		subscriber.mediaBytes -= previous.bytes()
+		service.flowerLiveQueuedBytes -= previous.bytes()
 	default:
 	}
 	if batch.err != nil || len(batch.data) == 0 || len(batch.data) > flowerLiveEnvelopeByteLimit ||
-		subscriber.queuedBytes+subscriber.mediaBytes+len(batch.data) > flowerLiveEnvelopeByteLimit ||
-		service.flowerLiveQueuedBytes+len(batch.data) > flowerLiveGlobalQueuedByteLimit {
+		subscriber.queuedBytes+subscriber.mediaBytes+batch.bytes() > flowerLiveEnvelopeByteLimit ||
+		service.flowerLiveQueuedBytes+batch.bytes() > flowerLiveGlobalQueuedByteLimit {
 		return false
 	}
-	subscriber.mediaBytes += len(batch.data)
-	service.flowerLiveQueuedBytes += len(batch.data)
+	subscriber.mediaBytes += batch.bytes()
+	service.flowerLiveQueuedBytes += batch.bytes()
 	subscriber.media <- batch
 	wakeFlowerLiveSubscriberLocked(subscriber)
 	return true
 }
 
 func releaseFlowerLiveBatchLocked(service *Service, subscriber *flowerLiveSubscriber, batch *flowerLiveEncodedBatch) {
-	subscriber.queuedBytes -= len(batch.data)
-	service.flowerLiveQueuedBytes -= len(batch.data)
+	subscriber.queuedBytes -= batch.bytes()
+	service.flowerLiveQueuedBytes -= batch.bytes()
 }
 
 func enqueueFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSubscriber, batch *flowerLiveEncodedBatch) bool {
+	if !validateFlowerLiveBatchLocked(service, subscriber, batch) {
+		return false
+	}
+	if route := batch.route; route.threadID != "" {
+		if version := subscriber.covered[route]; version != 0 {
+			if batch.version >= version {
+				delete(subscriber.covered, route)
+				subscriber.queuedBytes -= route.bytes()
+				service.flowerLiveQueuedBytes -= route.bytes()
+			}
+			if batch.version <= version {
+				return true
+			}
+			// A delta spanning a frozen snapshot cannot be applied partially.
+			if !batch.current && batch.baseVersion < version {
+				batch = flowerLiveRefreshBatch(batch)
+			}
+		}
+		if subscriber.initializing {
+			batch = flowerLiveRefreshBatch(batch)
+		}
+		for index := len(subscriber.queue) - 1; index >= 0; index-- {
+			previous := subscriber.queue[index]
+			if previous.route != route {
+				continue
+			}
+			if batch.version <= previous.version {
+				return true
+			}
+			if previous.refresh || batch.refresh {
+				return replaceFlowerLiveQueuedBatchLocked(service, subscriber, index, flowerLiveRefreshBatch(batch))
+			}
+			if batch.current {
+				return replaceFlowerLiveQueuedBatchLocked(service, subscriber, index, batch)
+			}
+			if index == len(subscriber.queue)-1 {
+				if merged := mergeFlowerLiveAppendBatches(previous, batch); merged != nil {
+					return replaceFlowerLiveQueuedBatchLocked(service, subscriber, index, merged)
+				}
+			}
+			// Semantic changes, gaps, item switches and growth beyond a bounded
+			// append chunk converge from the canonical owner. No text is discarded.
+			return replaceFlowerLiveQueuedBatchLocked(service, subscriber, index, flowerLiveRefreshBatch(batch))
+		}
+	}
+	if batch.mailbox != "" {
+		for index, previous := range subscriber.queue {
+			if previous.mailbox == batch.mailbox {
+				return replaceFlowerLiveQueuedBatchLocked(service, subscriber, index, batch)
+			}
+		}
+	}
+	return appendFlowerLiveQueuedBatchLocked(service, subscriber, batch)
+}
+
+func flowerLiveRefreshBatch(batch *flowerLiveEncodedBatch) *flowerLiveEncodedBatch {
+	return &flowerLiveEncodedBatch{kind: FlowerLiveStreamThreadBatch, route: batch.route, version: batch.version, refresh: true}
+}
+
+func appendFlowerLiveQueuedBatchLocked(service *Service, subscriber *flowerLiveSubscriber, batch *flowerLiveEncodedBatch) bool {
 	if !validateFlowerLiveBatchLocked(service, subscriber, batch) {
 		return false
 	}
@@ -639,7 +797,7 @@ func enqueueFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveS
 		if subscriber.initializing {
 			reason = flowerLiveSubscriberCloseInitQueueLimit
 		}
-		closeFlowerLiveSubscriberLocked(service, subscriber, reason)
+		closeFlowerLiveSubscriberLocked(service, subscriber, reason, batch)
 		return false
 	}
 	if !retainFlowerLiveBatchLocked(service, subscriber, batch) {
@@ -650,12 +808,146 @@ func enqueueFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveS
 	return true
 }
 
+// Re-encoding is bounded to one fragment, independent of total streamed text.
+// Larger growth uses a current snapshot read by Next outside the service lock.
+func mergeFlowerLiveAppendBatches(before, after *flowerLiveEncodedBatch) *flowerLiveEncodedBatch {
+	a, b := before.append, after.append
+	if a == nil || b == nil || before.route != after.route || a.turnID != b.turnID || a.runID != b.runID || a.itemID != b.itemID ||
+		before.version != after.baseVersion || a.offset+len(a.text) != b.offset || a.factsKey != b.factsKey ||
+		b.outputTokens < a.outputTokens || b.lastProgressAt.Before(a.lastProgressAt) ||
+		len(before.data)+len(after.data) > flowerLiveFragmentByteLimit {
+		return nil
+	}
+	merged := *b
+	merged.offset, merged.text = a.offset, a.text+b.text
+	update := struct {
+		ThreadID    string                       `json:"thread_id"`
+		TurnID      identity.TurnID              `json:"turn_id,omitempty"`
+		RunID       identity.RunID               `json:"run_id,omitempty"`
+		BaseVersion uint64                       `json:"base_version"`
+		ViewVersion uint64                       `json:"view_version"`
+		Facts       json.RawMessage              `json:"facts"`
+		Items       []flruntime.ThreadItemChange `json:"items"`
+	}{after.route.threadID, b.turnID, b.runID, before.baseVersion, after.version, b.facts,
+		[]flruntime.ThreadItemChange{{Kind: flruntime.ThreadItemAppended, ItemID: b.itemID, Append: &flruntime.ThreadTextAppend{OffsetBytes: merged.offset, Text: merged.text}}}}
+	raw, err := json.Marshal(update)
+	envelope := struct {
+		SchemaVersion  int64                `json:"schema_version"`
+		Kind           FlowerLiveStreamKind `json:"kind"`
+		ThreadID       string               `json:"thread_id,omitempty"`
+		Update         json.RawMessage      `json:"update,omitempty"`
+		SubagentUpdate json.RawMessage      `json:"subagent_update,omitempty"`
+	}{SchemaVersion: FlowerLiveSchemaVersion, Kind: after.kind, ThreadID: after.route.wireID}
+	if after.route.subagent {
+		envelope.SubagentUpdate = raw
+	} else {
+		envelope.Update = raw
+	}
+	data, encodeErr := json.Marshal(envelope)
+	return &flowerLiveEncodedBatch{kind: after.kind, route: after.route, baseVersion: before.baseVersion, version: after.version,
+		data: data, id: rand.Text(), append: &merged, err: errors.Join(err, encodeErr)}
+}
+
+func flowerLiveAppendOnlyUpdate(update *flruntime.ThreadUpdate) bool {
+	return update != nil && len(update.Items) == 1 && update.Items[0].Kind == flruntime.ThreadItemAppended && update.Items[0].Append != nil &&
+		update.Items[0].Item == nil && update.Items[0].Body == nil &&
+		update.Facts.Activity == flruntime.ThreadActivityActive && update.Facts.Failure == nil && update.Facts.Cancellation == nil && update.Facts.LastOutcome == nil &&
+		update.Facts.Attention.ApprovalCount == 0 && update.Facts.Attention.InputCount == 0 &&
+		update.ItemOrder == nil && update.Context == nil && update.Goal == nil && update.ParentEvents == nil && update.Turns == nil &&
+		update.Queue == nil && update.Interactions == nil && update.ToolCallPreviews == nil && update.RestoredInputs == nil && update.Window == nil
+}
+
+func replaceFlowerLiveQueuedBatchLocked(service *Service, subscriber *flowerLiveSubscriber, index int, batch *flowerLiveEncodedBatch) bool {
+	if !validateFlowerLiveBatchLocked(service, subscriber, batch) {
+		return false
+	}
+	old := subscriber.queue[index]
+	if batch.refresh && service.log != nil && time.Since(subscriber.pressureLoggedAt) >= 5*time.Second {
+		subscriber.pressureLoggedAt = time.Now()
+		service.log.Info("ai: Flower live subscriber converging", "subscriber_id", subscriber.id,
+			"initializing", subscriber.initializing, "queued_batches", len(subscriber.queue),
+			"queued_bytes", subscriber.queuedBytes, "global_queued_bytes", service.flowerLiveQueuedBytes,
+			"batch_kind", old.kind, "batch_bytes", old.bytes(),
+			"thread_id", flowerLiveDiagnosticIdentity(identity.ThreadID(batch.route.threadID)),
+			"wire_thread_id", flowerLiveDiagnosticIdentity(identity.ThreadID(batch.route.wireID)),
+			"subagent", batch.route.subagent, "base_version", old.baseVersion, "view_version", batch.version)
+	}
+	// Release before retention so the replacement never needs two queue budgets.
+	releaseFlowerLiveBatchLocked(service, subscriber, old)
+	subscriber.queue[index] = nil
+	if !retainFlowerLiveBatchLocked(service, subscriber, batch) {
+		return false
+	}
+	subscriber.queue[index] = batch
+	wakeFlowerLiveSubscriberLocked(subscriber)
+	return true
+}
+
+// resolveFlowerLiveRefresh keeps the marker in the queue while reading. New
+// publications update that same slot. The snapshot covers old deltas; any newer
+// publication leaves one marker behind, without waiting for a quiet producer.
+func (s *FlowerLiveStreamSubscription) resolveFlowerLiveRefresh(ctx context.Context, marker *flowerLiveEncodedBatch) error {
+	if s.service.threadRuntime == nil {
+		return ErrFlowerLiveSync
+	}
+	current, err := s.service.threadRuntime.View(ctx, identity.ThreadID(marker.route.threadID))
+	if err != nil {
+		return errors.Join(ErrFlowerLiveSync, err)
+	}
+	envelope := FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: marker.route.wireID}
+	if marker.route.subagent {
+		envelope.SubagentCurrent = &current
+	} else {
+		envelope.Current = &current
+	}
+	batch := newFlowerLiveEncodedBatch(envelope)
+	s.service.mu.Lock()
+	defer s.service.mu.Unlock()
+	subscriber := s.subscriber
+	if subscriber.closed {
+		return ErrFlowerLiveSync
+	}
+	if current.ThreadID.String() != marker.route.threadID || current.ViewVersion < marker.version || !validateFlowerLiveBatchLocked(s.service, subscriber, batch) {
+		return ErrFlowerLiveSync
+	}
+	latest := subscriber.queue[0]
+	if latest.version <= current.ViewVersion {
+		releaseFlowerLiveBatchLocked(s.service, subscriber, latest)
+		subscriber.queue[0] = nil
+		subscriber.queue = subscriber.queue[1:]
+	} // Otherwise leave the updated marker for the next read after this snapshot.
+	// Only a view ahead of the ordered publication pump needs a watermark.
+	// If the marker already reached this version, all covered deltas arrived.
+	if current.ViewVersion > latest.version && subscriber.covered[marker.route] == 0 {
+		cost := marker.route.bytes()
+		if subscriber.queuedBytes+subscriber.mediaBytes+cost > flowerLiveEnvelopeByteLimit ||
+			s.service.flowerLiveQueuedBytes+cost > flowerLiveGlobalQueuedByteLimit {
+			closeFlowerLiveSubscriberLocked(s.service, subscriber, flowerLiveSubscriberCloseGlobalQueueLimit, marker)
+			return ErrFlowerLiveSync
+		}
+		subscriber.queuedBytes += cost
+		s.service.flowerLiveQueuedBytes += cost
+	}
+	if current.ViewVersion > latest.version {
+		if subscriber.covered == nil {
+			subscriber.covered = make(map[flowerLiveRoute]uint64)
+		}
+		subscriber.covered[marker.route] = current.ViewVersion
+	}
+	if !retainFlowerLiveBatchLocked(s.service, subscriber, batch) {
+		return ErrFlowerLiveSync
+	}
+	subscriber.active, subscriber.activeIndex, subscriber.activeAccounted = batch, 0, true
+	return nil
+}
+
 func closeFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSubscriber, reason flowerLiveSubscriberCloseReason, failedBatch ...*flowerLiveEncodedBatch) {
 	if subscriber == nil || subscriber.closed {
 		return
 	}
 	queuedBatches := len(subscriber.queue) + len(subscriber.initial)
 	queuedBytes := subscriber.queuedBytes + subscriber.mediaBytes
+	globalBytes := service.flowerLiveQueuedBytes
 	subscriber.closed = true
 	if subscriber.viewerCancel != nil {
 		subscriber.viewerCancel()
@@ -671,6 +963,7 @@ func closeFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSub
 	subscriber.initial = nil
 	subscriber.active = nil
 	subscriber.queue = nil
+	subscriber.covered = nil
 	delete(service.flowerLiveSubscribers, subscriber.id)
 	if service.flowerLiveSubscribersByEndpoint[subscriber.endpointID] > 0 {
 		service.flowerLiveSubscribersByEndpoint[subscriber.endpointID]--
@@ -684,6 +977,16 @@ func closeFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSub
 			"reason", reason,
 			"queued_batches", queuedBatches,
 			"queued_bytes", queuedBytes,
+			"initializing", subscriber.initializing,
+			"queue_limit", flowerLiveSubscriberBatchLimit,
+			"global_queued_bytes", globalBytes,
+		}
+		if len(failedBatch) > 0 && failedBatch[0] != nil {
+			batch := failedBatch[0]
+			attrs = append(attrs, "batch_kind", batch.kind, "batch_bytes", batch.bytes(),
+				"thread_id", flowerLiveDiagnosticIdentity(identity.ThreadID(batch.route.threadID)),
+				"wire_thread_id", flowerLiveDiagnosticIdentity(identity.ThreadID(batch.route.wireID)),
+				"subagent", batch.route.subagent, "refresh", batch.refresh, "base_version", batch.baseVersion, "view_version", batch.version)
 		}
 		if reason == flowerLiveSubscriberCloseEncoding && len(failedBatch) > 0 && failedBatch[0] != nil {
 			batch := failedBatch[0]
@@ -775,6 +1078,20 @@ func (s *FlowerLiveStreamSubscription) Next(ctx context.Context) (*FlowerLiveStr
 				subscriber.initial = subscriber.initial[1:]
 				subscriber.activeAccounted = true
 			} else if len(subscriber.queue) > 0 {
+				if marker := subscriber.queue[0]; marker.refresh {
+					s.service.mu.Unlock()
+					if err := s.resolveFlowerLiveRefresh(ctx, marker); err != nil {
+						if ctx.Err() != nil {
+							return nil, ctx.Err()
+						}
+						s.service.mu.Lock()
+						subscriber.closeErr = ErrFlowerLiveSync
+						closeFlowerLiveSubscriberLocked(s.service, subscriber, flowerLiveSubscriberCloseSummaryRefresh, marker)
+						s.service.mu.Unlock()
+						return nil, err
+					}
+					continue
+				}
 				subscriber.active = subscriber.queue[0]
 				subscriber.queue[0] = nil
 				subscriber.queue = subscriber.queue[1:]
@@ -802,8 +1119,8 @@ func (s *FlowerLiveStreamSubscription) Next(ctx context.Context) (*FlowerLiveStr
 				if subscriber.activeAccounted {
 					releaseFlowerLiveBatchLocked(s.service, subscriber, batch)
 				} else {
-					subscriber.mediaBytes -= len(batch.data)
-					s.service.flowerLiveQueuedBytes -= len(batch.data)
+					subscriber.mediaBytes -= batch.bytes()
+					s.service.flowerLiveQueuedBytes -= batch.bytes()
 				}
 				subscriber.active = nil
 				s.service.mu.Unlock()
@@ -831,8 +1148,8 @@ func (s *FlowerLiveStreamSubscription) Next(ctx context.Context) (*FlowerLiveStr
 				if subscriber.activeAccounted {
 					releaseFlowerLiveBatchLocked(s.service, subscriber, batch)
 				} else {
-					subscriber.mediaBytes -= len(batch.data)
-					s.service.flowerLiveQueuedBytes -= len(batch.data)
+					subscriber.mediaBytes -= batch.bytes()
+					s.service.flowerLiveQueuedBytes -= batch.bytes()
 				}
 				subscriber.active = nil
 			}

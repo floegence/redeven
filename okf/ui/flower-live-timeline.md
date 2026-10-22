@@ -25,6 +25,16 @@ Flower schema v2 has one decoder and one update pipeline. Larger envelopes retai
 
 Unknown command results retain their original request keys; a disconnect never repeats an effect automatically.
 
+Initialization retains the complete authorized summary/read-state baseline as a byte-budgeted prefix. Concurrent runtime updates retain one dirty marker per `(runtime thread, wire thread, subagent route)` and the newest observed version. The consumer reads the authoritative current view outside the service lock after the prefix; it does not wait for a quiet producer. Publications newer than the captured view retain one marker for the next read.
+
+During normal delivery, consecutive appends with identical thread/item/turn/run identities and stable runtime facts merge only when actor versions and UTF-8 byte offsets are contiguous. Output-token counts and last-progress timestamps may advance monotonically within the same provider attempt; the merged update retains the newest values. Attempt, phase, first-output and semantic changes remain boundaries. Re-encoding is bounded to one 32 KiB fragment. Other pending runtime mutations converge through a current snapshot; summary, viewer read state, and subagent inventory keep their latest independently scoped value. Already-started envelopes are never replaced.
+
+A current view can advance ahead of the ordered publication pump. A transient, byte-accounted covered version suppresses already represented deltas until the pump catches up. A delta spanning that version requires another current view, never a partial text append. This is in-memory observation metadata, not a replay cursor or a second durable lifecycle.
+
+Snapshots may cover transient phases such as preparing. The source still publishes admission before output; receivers apply the newest complete state without replaying an older phase over it. Pending approvals, interactions, tool results, cancellation, terminal facts, and full current text come from canonical authority. Missing, stale, or invalid authority fences the connection.
+
+The existing 16 pending-batch, 32 MiB per-envelope/subscriber, and 32 MiB global retained-reference budgets remain enforced, including routing and merge metadata. Coalescing bounds repeated work for the same routes; more than 16 independent pending routes can still require recovery. Sampled convergence logs and closure logs include initialization phase, queue depth/bytes, batch kind, route, and version range without transcript content.
+
 ## ThreadCache and independent authorities
 Workspace summary publication reads one authoritative Floret summary.
 
@@ -46,3 +56,7 @@ The stream, frame queue and indexed cache are bounded observation mechanisms. Da
 - [Projection and recovery tests](../../internal/ai/flower_runtime_update_test.go)
 
 - [Field-level public DTOs](../../internal/ai/flower_public_dto.go)
+
+- [Bounded stream and snapshot resolution](../../internal/ai/flower_live_stream.go)
+
+- [Continuous initialization, slow-consumer Unicode soak, semantic state, route and budget tests](../../internal/ai/flower_live_backpressure_test.go)

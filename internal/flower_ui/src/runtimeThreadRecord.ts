@@ -87,8 +87,9 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
           if (!before || !append || change.item || !before.item.live
             || !['assistant', 'thinking'].includes(before.item.kind)
             || before.item.turn_id !== update.turn_id || before.item.run_id !== update.run_id
-            || !Number.isSafeInteger(append.offset_bytes) || append.offset_bytes !== before.bytes
+            || !Number.isSafeInteger(append.offset_bytes) || append.offset_bytes < 0
             || typeof append.text !== 'string') invalid('runtime text append has invalid identity or UTF-8 offset');
+          if (append.offset_bytes !== before.bytes) throw new FlowerLiveSyncError('Flower runtime append lost its UTF-8 baseline.');
           staged.set(id, { item: { ...before.item, text: (before.item.text ?? '') + append.text }, bytes: before.bytes + utf8.encode(append.text).length });
         } else if (change.kind === 'remove') {
           if (!before || change.item || change.append) invalid('runtime removal requires an existing item');

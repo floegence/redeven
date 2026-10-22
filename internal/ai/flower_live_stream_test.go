@@ -173,10 +173,19 @@ func TestFlowerWorkspaceStreamEncodesActivityUpdatesThroughFinalAnswer(t *testin
 		if err := json.Unmarshal(frame.Data, &envelope); err != nil {
 			t.Fatalf("published envelope is invalid: %v", err)
 		}
-		if envelope.Update == nil || envelope.ThreadID != thread.ThreadID {
+		if envelope.ThreadID != thread.ThreadID {
 			continue
 		}
-		applyFlowerTestUpdate(t, &current, *envelope.Update)
+		if envelope.Current != nil {
+			if envelope.Current.ViewVersion <= current.ViewVersion {
+				continue
+			}
+			current = *envelope.Current
+		} else if envelope.Update != nil {
+			applyFlowerTestUpdate(t, &current, *envelope.Update)
+		} else {
+			continue
+		}
 		snapshots++
 		if current.TurnID != admitted.TurnID || current.RunID != admitted.RunID {
 			t.Fatalf("current execution identity changed: current=%s/%s admitted=%s/%s", current.TurnID, current.RunID, admitted.TurnID, admitted.RunID)
@@ -605,10 +614,20 @@ func TestFlowerWorkspaceTerminalBatchAndDetailRestoreCanonicalManualCompaction(t
 				terminalUpdates <- terminalUpdateResult{err: readErr}
 				return
 			}
-			if envelope.ThreadID != thread.ThreadID || envelope.Update == nil {
+			if envelope.ThreadID != thread.ThreadID {
 				continue
 			}
-			if envelope.Update.Context != nil {
+			var activity flruntime.ThreadActivity
+			if envelope.Current != nil {
+				activity = envelope.Current.Activity
+				currentContext = &flowerPublicContext{ModelContext: envelope.ModelContext, ContextUsage: envelope.ContextUsage,
+					ContextCompactions: envelope.ContextCompactions, TimelineDecorations: envelope.TimelineDecorations}
+			} else if envelope.Update != nil {
+				activity = envelope.Update.Facts.Activity
+			} else {
+				continue
+			}
+			if envelope.Update != nil && envelope.Update.Context != nil {
 				var projected struct {
 					Update struct {
 						Context *flruntime.ThreadComponent[flowerPublicContext]
@@ -623,7 +642,7 @@ func TestFlowerWorkspaceTerminalBatchAndDetailRestoreCanonicalManualCompaction(t
 					currentContext = &value
 				}
 			}
-			if envelope.Update.Facts.Activity == flruntime.ThreadActivityIdle && currentContext != nil && len(currentContext.ContextCompactions) > 0 {
+			if activity == flruntime.ThreadActivityIdle && currentContext != nil && len(currentContext.ContextCompactions) > 0 {
 				terminalUpdates <- terminalUpdateResult{context: *currentContext}
 				return
 			}
@@ -1257,7 +1276,71 @@ func TestFlowerLiveStreamInitializationKeepsLargeBaselineBeforeReady(t *testing.
 	}
 }
 
-func TestFlowerLiveStreamAdmissionAndSlowObserverReconnectFence(t *testing.T) {
+func TestFlowerLiveSubscriberCoalescesContiguousAppendBatches(t *testing.T) {
+	svc := newFlowerLiveMemoryTestService()
+	subscriber := &flowerLiveSubscriber{queue: make([]*flowerLiveEncodedBatch, 0, flowerLiveSubscriberBatchLimit)}
+	makeBatch := func(base, view uint64, offset int, text string) *flowerLiveEncodedBatch {
+		return newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
+			SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: "thread",
+			Update: &flruntime.ThreadUpdate{ThreadID: "thread", TurnID: "turn", RunID: "run", BaseVersion: base, ViewVersion: view,
+				Facts: flruntime.ThreadRuntimeFacts{Activity: flruntime.ThreadActivityActive},
+				Items: []flruntime.ThreadItemChange{{Kind: flruntime.ThreadItemAppended, ItemID: "answer", Append: &flruntime.ThreadTextAppend{OffsetBytes: offset, Text: text}}}},
+		})
+	}
+	if !enqueueFlowerLiveSubscriberLocked(svc, subscriber, makeBatch(0, 1, 0, "hello")) ||
+		!enqueueFlowerLiveSubscriberLocked(svc, subscriber, makeBatch(1, 2, len("hello"), " world")) {
+		t.Fatal("contiguous append enqueue failed")
+	}
+	if len(subscriber.queue) != 1 {
+		t.Fatalf("queue length=%d, want one merged batch", len(subscriber.queue))
+	}
+	var envelope FlowerLiveStreamEnvelope
+	if err := json.Unmarshal(subscriber.queue[0].data, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope.Update == nil || envelope.Update.BaseVersion != 0 || envelope.Update.ViewVersion != 2 ||
+		len(envelope.Update.Items) != 1 || envelope.Update.Items[0].Append == nil || envelope.Update.Items[0].Append.Text != "hello world" {
+		t.Fatalf("merged envelope=%s", subscriber.queue[0].data)
+	}
+}
+
+func TestFlowerLiveSubscriberKeepsSemanticBoundariesSeparate(t *testing.T) {
+	svc := newFlowerLiveMemoryTestService()
+	subscriber := &flowerLiveSubscriber{queue: make([]*flowerLiveEncodedBatch, 0, flowerLiveSubscriberBatchLimit)}
+	appendBatch := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
+		SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: "thread",
+		Update: &flruntime.ThreadUpdate{ThreadID: "thread", TurnID: "turn", RunID: "run", BaseVersion: 0, ViewVersion: 1,
+			Facts: flruntime.ThreadRuntimeFacts{Activity: flruntime.ThreadActivityActive}, Items: []flruntime.ThreadItemChange{{Kind: flruntime.ThreadItemAppended, ItemID: "answer", Append: &flruntime.ThreadTextAppend{OffsetBytes: 0, Text: "x"}}}},
+	})
+	boundary := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
+		SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: "thread",
+		Update: &flruntime.ThreadUpdate{ThreadID: "thread", TurnID: "turn", RunID: "run", BaseVersion: 1, ViewVersion: 2,
+			Facts: flruntime.ThreadRuntimeFacts{Activity: flruntime.ThreadActivityActive}, Interactions: &flruntime.ThreadComponent[[]flruntime.ThreadInteraction]{Value: []flruntime.ThreadInteraction{}}},
+	})
+	if !enqueueFlowerLiveSubscriberLocked(svc, subscriber, appendBatch) || !enqueueFlowerLiveSubscriberLocked(svc, subscriber, boundary) {
+		t.Fatal("boundary enqueue failed")
+	}
+	if len(subscriber.queue) != 1 || !subscriber.queue[0].refresh {
+		t.Fatalf("queue=%#v, want one authoritative refresh marker", subscriber.queue)
+	}
+}
+
+func TestFlowerLiveSubscriberRecordsInitializationDirtyThreads(t *testing.T) {
+	svc := newFlowerLiveMemoryTestService()
+	subscriber := &flowerLiveSubscriber{initializing: true, queue: make([]*flowerLiveEncodedBatch, 0, flowerLiveSubscriberBatchLimit)}
+	batch := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
+		SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: "thread",
+		Update: &flruntime.ThreadUpdate{ThreadID: "thread", BaseVersion: 1, ViewVersion: 2, Facts: flruntime.ThreadRuntimeFacts{Activity: flruntime.ThreadActivityActive}},
+	})
+	if !enqueueFlowerLiveSubscriberLocked(svc, subscriber, batch) {
+		t.Fatal("initialization update was rejected")
+	}
+	if len(subscriber.queue) != 1 || !subscriber.queue[0].refresh || subscriber.queue[0].route.threadID != "thread" || subscriber.queuedBytes == 0 {
+		t.Fatalf("initialization queue=%#v bytes=%d", subscriber.queue, subscriber.queuedBytes)
+	}
+}
+
+func TestFlowerLiveStreamAdmissionAndSlowObserverKeepsLatestCurrent(t *testing.T) {
 	t.Parallel()
 	svc := newFlowerLiveMemoryTestService()
 	meta := flowerLiveMemoryTestMeta("env_live_stream_admission")
@@ -1297,8 +1380,13 @@ func TestFlowerLiveStreamAdmissionAndSlowObserverReconnectFence(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	if frame, err := slow.Next(ctx); !errors.Is(err, io.EOF) || frame != nil {
-		t.Fatalf("slow observer frame=%#v error=%v, want immediate reconnect fence", frame, err)
+	frame, err := slow.Next(ctx)
+	if err != nil || frame == nil {
+		t.Fatalf("slow observer frame=%#v error=%v, want latest current snapshot", frame, err)
+	}
+	var envelope FlowerLiveStreamEnvelope
+	if err := json.Unmarshal(frame.Data, &envelope); err != nil || envelope.Current == nil || envelope.Current.ViewVersion != flowerLiveSubscriberBatchLimit+1 {
+		t.Fatalf("slow observer latest frame=%s error=%v", frame.Data, err)
 	}
 
 	before := svc.flowerLiveSubscriberCount(meta.EndpointID)
