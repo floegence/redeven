@@ -16,6 +16,8 @@ Desktop owns Gateway enrollment/management for managed Local, SSH, WSL and conta
 ## Runtime joining
 Creation offers Not now or After setup, add Gateway access. Unknown health, stopped processes or absent capabilities cannot hide the entry.
 
+The invitation address field keeps manual entry and offers a quick picker for eligible saved local Gateways. Options use confirmed Gateway share addresses from `member_endpoints`; choosing one fills the address and invalidates prior verification, but does not verify or authorize access. Gateway invitation verification and explicit Runtime consent remain required.
+
 Success clears the consumed code; reopening starts a fresh draft.
 
 ## Members and policy

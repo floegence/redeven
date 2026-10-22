@@ -3713,10 +3713,8 @@
     "codeHelpTitle": "如何使用访问码"
   },
   "gatewayDiscovery": {
-    "local": "本机",
-    "useAddress": "使用",
-    "filled": "已填入",
-    "useNamed": "使用本机 Gateway {name}：{address}"
+    "savedGateway": "已保存的 Gateway",
+    "chooseSavedGateway": "选择已保存的 Gateway"
   },
   "gatewayNetwork": {
     "listenTitle": "本机监听",

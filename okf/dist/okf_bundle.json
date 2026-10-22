@@ -21262,15 +21262,15 @@
         "title": "Gateway Desktop interactions",
         "type": "Interaction Contract"
       },
-      "body_length": 2099,
+      "body_length": 2466,
       "summary": "Desktop owns Gateway enrollment/management for managed Local, SSH, WSL and container targets, including before startup/inspection. Trusted Runtime control, invitation verification and local consent remain independent. Members appear only after joining; no Runtime URL form exists. Background observations cannot change enrollment steps or cancel requests. Confirmed faults retain the current step and pause submission; explicit recovery reuses launcher operations. UI state cannot expand authority.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Runtime joining\nCreation offers Not now or After setup, add Gateway access. Unknown health, stopped processes or absent capabilities cannot hide the entry.\n\nSuccess clears the consumed code; reopening starts a fresh draft.\n\n## Members and policy\nThe member dialog lists joined members and offers invitations. Failed refresh retains the list and invitation; cancellation cannot reopen another dialog or discard drafts.\n\nOpening settings or importing a client code grants neither Runtime permission nor Namespace approval.\n\n## Network settings\nConnection settings separates share endpoints, listener bindings and collapsed Host restriction. [Gateway network settings](gateway-network-settings.md) owns validation, persistence and restart.\n\n## Presentation and accessibility\nLocales have explicit translations.\n\nSettings/setup wizard use fixed, viewport-bounded panels.\n\nThey are never silently rewritten.",
-          "char_count": 905
+          "body": "## Runtime joining\nCreation offers Not now or After setup, add Gateway access. Unknown health, stopped processes or absent capabilities cannot hide the entry.\n\nThe invitation address field keeps manual entry and offers a quick picker for eligible saved local Gateways. Options use confirmed Gateway share addresses from `member_endpoints`; choosing one fills the address and invalidates prior verification, but does not verify or authorize access. Gateway invitation verification and explicit Runtime consent remain required.\n\nSuccess clears the consumed code; reopening starts a fresh draft.\n\n## Members and policy\nThe member dialog lists joined members and offers invitations. Failed refresh retains the list and invitation; cancellation cannot reopen another dialog or discard drafts.\n\nOpening settings or importing a client code grants neither Runtime permission nor Namespace approval.\n\n## Network settings\nConnection settings separates share endpoints, listener bindings and collapsed Host restriction. [Gateway network settings](gateway-network-settings.md) owns validation, persistence and restart.\n\n## Presentation and accessibility\nLocales have explicit translations.\n\nSettings/setup wizard use fixed, viewport-bounded panels.\n\nThey are never silently rewritten.",
+          "char_count": 1272
         },
         {
           "id": "boundaries",
@@ -32859,5 +32859,5 @@
       ]
     }
   ],
-  "source_sha256": "02f8fd98e85a5039e6726bf0bc00648031782a43f2393860fd4005e6f75c8ccd"
+  "source_sha256": "cc65b40a2958882ffe3ee1b33e6a79c83b0a5782b501fe20fd175f09ee02d21d"
 }

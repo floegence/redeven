@@ -31,6 +31,7 @@ function mount(perform: ReturnType<typeof vi.fn>, gateways: readonly DesktopGate
  };
 }
 function edit(index:number,value:string){const input=[...document.querySelectorAll<HTMLInputElement>('input:not([type="radio"])')][index]!;input.value=value;input.dispatchEvent(new Event('input',{bubbles:true}));}
+function chooseSavedGateway(address:string){const picker=document.querySelector<HTMLSelectElement>('[data-gateway-picker]');if(!picker)throw new Error('Missing saved Gateway picker');picker.value=address;picker.dispatchEvent(new Event('change',{bubbles:true}));}
 beforeEach(()=>{vi.stubGlobal('CSS',{escape:(v:string)=>v});HTMLElement.prototype.scrollIntoView=vi.fn();});
 afterEach(()=>{dispose?.();document.body.replaceChildren();vi.unstubAllGlobals();vi.restoreAllMocks();vi.useRealTimers();});
 
@@ -138,30 +139,30 @@ const localGateway: DesktopGatewaySource = {
  management_capability:'managed_local_host',capabilities:[],status:'online',trust_state:'paired',listener_running:true,
  created_at_ms:1,updated_at_ms:1,environments:[],member_endpoints:[{endpoint_id:'lan',address:'https://office.local:7443',scope:'lan',priority:0}],
 };
-describe('local Gateway quick fill',()=>{
+describe('local Gateway quick selection',()=>{
  it('offers known local addresses without replacing a draft or authorizing access',async()=>{
   const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
   mount(perform,[localGateway]);await settle();
   const inputs=document.querySelectorAll<HTMLInputElement>('input:not([type="radio"])');
   expect(inputs[0]?.value).toBe('https://gateway.internal:7443');
-  const suggestion=document.querySelector<HTMLButtonElement>('[data-gateway-suggestion]');
-  expect(suggestion?.textContent).toContain('Office Gateway');
-  expect(suggestion?.getAttribute('aria-pressed')).toBe('false');
-  expect(suggestion?.querySelector('[data-gateway-local-label]')).toBeTruthy();
-  expect(suggestion?.textContent).not.toContain('https://office.local:7443');
-  suggestion!.click();await settle();
+  const picker=document.querySelector<HTMLSelectElement>('[data-gateway-picker]');
+  expect(picker?.options[0]?.textContent).toBe(i18n.t('gatewayDiscovery.chooseSavedGateway'));
+  expect(picker?.options[1]?.textContent).toContain('Office Gateway');
+  expect(picker?.options[1]?.textContent).toContain('office.local:7443');
+  expect(picker?.value).toBe('');
+  chooseSavedGateway('https://office.local:7443');await settle();
   expect(inputs[0]?.value).toBe('https://office.local:7443');
-  expect(suggestion?.getAttribute('aria-pressed')).toBe('true');
+  expect(picker?.value).toBe('https://office.local:7443');
   expect(document.activeElement).toBe(inputs[1]);
   expect(perform.mock.calls.every(call=>call[0].operation==='status')).toBe(true);
   edit(0,'https://other.example:7443');await settle();
-  expect(suggestion?.getAttribute('aria-pressed')).toBe('false');
+  expect(picker?.value).toBe('');
   expect(document.body.textContent?.split(i18n.t('gatewayJoin.codeHelp')).length).toBe(2);
  });
- it('invalidates a verified preview when a suggestion is selected',async()=>{
+ it('invalidates a verified preview when a saved Gateway is selected',async()=>{
   const perform=vi.fn().mockResolvedValueOnce(status({joined:false,phase:'not_joined'})).mockResolvedValueOnce(verified());
   mount(perform,[localGateway]);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();
-  document.querySelector<HTMLButtonElement>('[data-gateway-suggestion]')!.click();await settle();
+  chooseSavedGateway('https://office.local:7443');await settle();
   expect(document.querySelector('.redeven-gateway-join-summary')).toBeNull();
   expect(button(i18n.t('gatewayJoin.verify'))).toBeDefined();
  });
@@ -169,19 +170,19 @@ describe('local Gateway quick fill',()=>{
   const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
   const alternate={endpoint_id:'public',address:'https://office.example:7443',scope:'public' as const,priority:1};
   mount(perform,[{...localGateway,member_endpoints:[...localGateway.member_endpoints!,alternate]}]);await settle();
-  const suggestions=[...document.querySelectorAll<HTMLButtonElement>('[data-gateway-suggestion]')];
-  expect(suggestions).toHaveLength(2);
-  expect(suggestions[0]?.textContent).toContain('office.local:7443');
-  expect(suggestions[1]?.textContent).toContain('office.example:7443');
-  suggestions[1]!.click();await settle();
+  const picker=document.querySelector<HTMLSelectElement>('[data-gateway-picker]');
+  expect(picker?.options).toHaveLength(3);
+  expect(picker?.options[1]?.textContent).toContain('office.local:7443');
+  expect(picker?.options[2]?.textContent).toContain('office.example:7443');
+  chooseSavedGateway(alternate.address);await settle();
   expect(document.querySelector<HTMLInputElement>('input')?.value).toBe(alternate.address);
-  expect(suggestions.map(item=>item.getAttribute('aria-pressed'))).toEqual(['false','true']);
+  expect(picker?.value).toBe(alternate.address);
   expect(perform.mock.calls.every(call=>call[0].operation==='status')).toBe(true);
  });
  it('excludes offline, disabled and remote Gateways and loopback addresses for remote Runtimes',async()=>{
   const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
   mount(perform,[{...localGateway,status:'offline'},{...localGateway,allowed_hosts:['other.example']},{...localGateway,local_enabled:false},{...localGateway,connection_kind:'ssh_host'},
    {...localGateway,member_endpoints:[{endpoint_id:'loopback',address:'https://127.0.0.1:7443',scope:'lan',priority:0}]}]);await settle();
-  expect(document.querySelector('[data-gateway-suggestion]')).toBeNull();
+  expect(document.querySelector('[data-gateway-picker]')).toBeNull();
  });
 });

@@ -3713,10 +3713,8 @@
     "codeHelpTitle": "如何使用存取碼"
   },
   "gatewayDiscovery": {
-    "local": "本機",
-    "useAddress": "使用",
-    "filled": "已填入",
-    "useNamed": "使用本機 Gateway {name}：{address}"
+    "savedGateway": "已儲存的 Gateway",
+    "chooseSavedGateway": "選擇已儲存的 Gateway"
   },
   "gatewayNetwork": {
     "listenTitle": "本機監聽",

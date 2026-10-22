@@ -3713,10 +3713,8 @@
     "codeHelpTitle": "접근 코드 사용 방법"
   },
   "gatewayDiscovery": {
-    "local": "로컬",
-    "useAddress": "사용",
-    "filled": "입력됨",
-    "useNamed": "로컬 Gateway {name} 사용: {address}"
+    "savedGateway": "저장된 Gateway",
+    "chooseSavedGateway": "저장된 Gateway 선택"
   },
   "gatewayNetwork": {
     "listenTitle": "로컬 리스너",
