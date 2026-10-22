@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
-import { flowerThreadHasActiveTurnEvidence } from './flowerSurfaceModel';
+import { flowerThreadHasActiveTurnEvidence, projectFlowerThreadListItem } from './flowerSurfaceModel';
 
 function snapshot(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnapshot {
   return {
@@ -40,5 +40,31 @@ describe('flowerThreadHasActiveTurnEvidence', () => {
 
   it('rejects a terminal snapshot without an active identity', () => {
     expect(flowerThreadHasActiveTurnEvidence(snapshot({ status: 'success' }))).toBe(false);
+  });
+});
+
+describe('projectFlowerThreadListItem preview', () => {
+  type Message = FlowerThreadSnapshot['messages'][number];
+  const message = (content: string, blocks: Message['blocks'] = []): Message => ({
+    id: 'message', role: 'assistant', content, blocks,
+  } as Message);
+
+  it('stops at the newest nonempty preview without reading older bodies', () => {
+    const older = message('historical');
+    Object.defineProperty(older, 'content', { get: () => { throw new Error('older content accessed'); } });
+    const thread = snapshot({ messages: [older, message(' latest '), message(' ')] });
+    expect(projectFlowerThreadListItem(thread).preview).toBe('latest');
+    expect(thread.messages[0]).toBe(older);
+  });
+
+  it.each([
+    { messages: [], expected: '' },
+    { messages: [message(' ')], expected: '' },
+    { messages: [message('earlier'), message('')], expected: 'earlier' },
+    { messages: [message('body', [{ type: 'text', content: 'block' }])], expected: 'body' },
+    { messages: [message('', [{ type: 'text', content: ' first ' }, { type: 'markdown', content: ' second ' }])], expected: 'first\n\nsecond' },
+    { messages: [message('earlier'), message(' ', [{ type: 'text', content: 'ignored by existing whitespace-body semantics' }])], expected: 'earlier' },
+  ])('preserves the existing preview result: $expected', ({ messages, expected }) => {
+    expect(projectFlowerThreadListItem(snapshot({ messages })).preview).toBe(expected);
   });
 });

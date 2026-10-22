@@ -32,7 +32,11 @@ function messagePreviewText(message: FlowerThreadSnapshot['messages'][number]): 
 }
 
 export function projectFlowerThreadListItem(thread: FlowerThreadSnapshot, untitled = ''): FlowerThreadListItem {
-  const lastMessage = [...thread.messages].reverse().map(messagePreviewText).find(Boolean);
+  let lastMessage = '';
+  for (let index = thread.messages.length - 1; index >= 0; index -= 1) {
+    lastMessage = messagePreviewText(thread.messages[index]);
+    if (lastMessage) break;
+  }
   return {
     thread_id: thread.thread_id,
     title: flowerThreadDisplayTitle(thread, untitled),
