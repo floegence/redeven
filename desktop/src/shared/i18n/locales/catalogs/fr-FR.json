@@ -788,6 +788,13 @@
             "other": "{count} appels d’outils"
           }
         },
+        "failedCalls": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} appel d’outil en échec",
+            "other": "{count} appels d’outils en échec"
+          }
+        },
         "thinkingSegments": {
           "kind": "plural",
           "forms": {

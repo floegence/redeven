@@ -5686,6 +5686,10 @@
           "one": "ツール呼び出し {count} 回",
           "other": "ツール呼び出し {count} 回"
         },
+        "failedCalls": {
+          "one": "失敗したツール呼び出し {count} 件",
+          "other": "失敗したツール呼び出し {count} 件"
+        },
         "thinkingSegments": {
           "one": "思考 {count} 件",
           "other": "思考 {count} 件"

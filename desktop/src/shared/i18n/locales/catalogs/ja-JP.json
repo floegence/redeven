@@ -788,6 +788,13 @@
             "other": "ツール呼び出し {count} 回"
           }
         },
+        "failedCalls": {
+          "kind": "plural",
+          "forms": {
+            "one": "失敗したツール呼び出し {count} 件",
+            "other": "失敗したツール呼び出し {count} 件"
+          }
+        },
         "thinkingSegments": {
           "kind": "plural",
           "forms": {

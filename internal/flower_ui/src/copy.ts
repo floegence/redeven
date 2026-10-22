@@ -15,6 +15,7 @@ import { localizedFlowerProviderTypeLabels } from './settings/providerTypeLabels
 
 export type FlowerTurnProcessCopy = Readonly<{
   toolCalls: (count: number) => string;
+  failedCalls: (count: number) => string;
   thinkingSegments: (count: number) => string;
   runningTools: (count: number) => string;
   expandTools: string;
@@ -1171,6 +1172,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     composerErrorTitle: 'Flower could not send.',
     turnProcess: {
       toolCalls: count => `${count} ${count === 1 ? 'tool call' : 'tool calls'}`,
+      failedCalls: count => `${count} ${count === 1 ? 'failed tool call' : 'failed tool calls'}`,
       thinkingSegments: count => `${count} ${count === 1 ? 'thinking segment' : 'thinking segments'}`,
       runningTools: count => `${count} running`,
       expandTools: 'Expand tool calls', collapseTools: 'Collapse tool calls',

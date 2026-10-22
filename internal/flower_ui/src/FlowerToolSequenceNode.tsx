@@ -39,7 +39,9 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
   onCleanup(() => context?.onMotionEnd(motionKey));
   const label = () => {
     const group = member()!.group, copy = context!.copy();
-    return copy.toolCalls(group.toolCount) + (group.thinkingCount ? ' · ' + copy.thinkingSegments(group.thinkingCount) : '');
+    return copy.toolCalls(group.toolCount)
+      + (group.failedCount ? ' · ' + copy.failedCalls(group.failedCount) : '')
+      + (group.thinkingCount ? ' · ' + copy.thinkingSegments(group.thinkingCount) : '');
   };
   const Toggle = () => {
     let button: HTMLButtonElement;
@@ -57,7 +59,11 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
         aria-label={`${expanded() ? context!.copy().collapseTools : context!.copy().expandTools}: ${label()}`}
         onClick={event => context!.toggle(member()!.group, event.currentTarget)}>
         <ChevronRight class="flower-tool-sequence-chevron" aria-hidden="true" />
-        <span class="flower-tool-sequence-label">{label()}</span>
+        <span class="flower-tool-sequence-label">
+          <span>{context!.copy().toolCalls(member()!.group.toolCount)}</span>
+          <Show when={member()!.group.failedCount}>{count => <span class="flower-tool-sequence-failures">{context!.copy().failedCalls(count())}</span>}</Show>
+          <Show when={member()!.group.thinkingCount}>{count => <span class="flower-tool-sequence-thinking">{context!.copy().thinkingSegments(count())}</span>}</Show>
+        </span>
         <Show when={member()!.group.runningCount}>{count => <span class="flower-tool-sequence-running">{context!.copy().runningTools(count())}</span>}</Show>
       </button>
     );

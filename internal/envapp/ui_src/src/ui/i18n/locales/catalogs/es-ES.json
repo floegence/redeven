@@ -5686,6 +5686,10 @@
           "one": "{count} llamada a herramienta",
           "other": "{count} llamadas a herramientas"
         },
+        "failedCalls": {
+          "one": "{count} llamada a herramienta fallida",
+          "other": "{count} llamadas a herramientas fallidas"
+        },
         "thinkingSegments": {
           "one": "{count} segmento de razonamiento",
           "other": "{count} segmentos de razonamiento"

@@ -5686,6 +5686,10 @@
           "one": "도구 호출 {count}회",
           "other": "도구 호출 {count}회"
         },
+        "failedCalls": {
+          "one": "실패한 도구 호출 {count}건",
+          "other": "실패한 도구 호출 {count}건"
+        },
         "thinkingSegments": {
           "one": "생각 과정 {count}개",
           "other": "생각 과정 {count}개"

@@ -130,6 +130,7 @@ describe('Flower activity status presentation', () => {
     expect(css).not.toContain('--flower-activity-tool-row-error');
     expect(css).not.toContain('.flower-activity-inline-row-error .flower-activity-inline-icon {');
     expect(css).not.toContain('.flower-activity-inline-row-canceled .flower-activity-inline-icon {');
+    expect(cssRule(css, '.flower-activity-inline-row-error .flower-tool-icon')).toContain('color: var(--redeven-status-warning)');
     expect(css).not.toContain('.flower-activity-inline-details::before');
     expect(css).not.toContain('.flower-activity-inline-row-running::before');
   });

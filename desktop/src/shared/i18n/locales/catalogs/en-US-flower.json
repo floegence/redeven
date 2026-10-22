@@ -642,6 +642,13 @@
           "other": "{count} tool calls"
         }
       },
+      "failedCalls": {
+        "kind": "plural",
+        "forms": {
+          "one": "{count} failed tool call",
+          "other": "{count} failed tool calls"
+        }
+      },
       "thinkingSegments": {
         "kind": "plural",
         "forms": {

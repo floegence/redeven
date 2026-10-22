@@ -340,6 +340,7 @@ export const flowerSurfaceEnUS = {
     composerErrorTitle: 'Flower could not send.',
     turnProcess: {
       toolCalls: { one: '{count} tool call', other: '{count} tool calls' },
+      failedCalls: { one: '{count} failed tool call', other: '{count} failed tool calls' },
       thinkingSegments: { one: '{count} thinking segment', other: '{count} thinking segments' },
       runningTools: { one: '{count} running', other: '{count} running' },
       expandTools: 'Expand tool calls', collapseTools: 'Collapse tool calls',
