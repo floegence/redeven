@@ -27500,6 +27500,7 @@
       "frontmatter": {
         "description": "Keep native tool activation, disclosure state, viewport following, and floating controls consistent during live updates.",
         "lifecycle": "contract",
+        "quality_exception": "One 12,163-character Activity interaction contract retains the inseparable native disclosure, safe-result, viewport, and gesture ownership invariants; placement and tool-sequence behavior remain in separate concepts, and strict quality still enforces the 20,000-character maximum.",
         "reviewed_at": "2026-10-22",
         "tags": [
           "accessibility",
@@ -33229,5 +33230,5 @@
       ]
     }
   ],
-  "source_sha256": "2c56fe6141225e49748f2ca08d7cf4565c96541ec14688addb6963a9e4a3de9c"
+  "source_sha256": "069c9b0072da7f0b423bea36bebd5be1b0a1aa8a4d09286386b7a574a05ce137"
 }

@@ -4,6 +4,7 @@ title: Flower activity disclosure interaction
 description: Keep native tool activation, disclosure state, viewport following, and floating controls consistent during live updates.
 tags: [ai, flower, activity, interaction, accessibility]
 timestamp: 2026-10-19T00:00:00Z
+quality_exception: One 12,163-character Activity interaction contract retains the inseparable native disclosure, safe-result, viewport, and gesture ownership invariants; placement and tool-sequence behavior remain in separate concepts, and strict quality still enforces the 20,000-character maximum.
 lifecycle: contract
 reviewed_at: "2026-10-22"
 ---
