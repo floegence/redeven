@@ -1,5 +1,6 @@
 # Redeven OKF Update Log
 
+- 2026-10-22: Let short Flower tool groups and outward scrolling at sequence edges reach the transcript, preserve internal reading, and coordinate native scroll input with tail following. See [tool sequences](ui/flower-tool-sequences.md).
 - 2026-10-22: Open collapsed Flower tool sequences at their latest call, resume internal tail following, and preserve manual reading during subsequent updates. See [tool sequences](ui/flower-tool-sequences.md).
 - 2026-10-22: Preserve ordered Flower deltas within existing queue budgets; reserve full-current convergence for actual pressure or sequence loss. Document same-route retirement and regression coverage.
 - 2026-10-22: Simplify Flower thread tools to title discovery, single-thread chronological browsing and explicit complete reads. Remove aggregate execution and advanced filters; preserve authorization and saved-result previews. See [thread tools](ai/flower-thread-queries.md).

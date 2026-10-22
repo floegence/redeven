@@ -12344,7 +12344,7 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 .flower-tool-sequence-scroll {
   max-height: min(24rem, 50dvh, var(--flower-detail-available-height, 50dvh));
   overflow-y: auto;
-  overscroll-behavior-y: contain;
+  overscroll-behavior-y: auto;
   scrollbar-width: thin;
   scrollbar-gutter: stable;
 }
