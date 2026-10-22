@@ -145,6 +145,22 @@ renderer heap +1.48%, backend heap +0.12%, stable node/listener counts and bound
 goroutines; every released subscriber and queue returned to zero. This soak
 precedes projection reuse and must not be represented as final-revision evidence.
 
+## Post-rebase confirmation
+
+After preserving main's 18c04d34c open-at-latest behavior, integrated-1 on
+production source e4a505bfc again passes: backend 20.95%, renderer 41.34%, combined
+71.35%, 16.411 GB allocated, input/click/output/Stop P95 16.2/15.0/87.0/13.4 ms
+and frame P95 18.6 ms. All 262 rendered items match, with exact canonical content
+and 100% marker coverage. This is a separate confirmation, not an extra sample
+silently folded into the three-run medians.
+
+An expanded browser pass found an older turn-disclosure test expecting an editor
+for a completed Goal, contrary to 2cf47fd8f. The regression now asserts that the
+completed control is absent, then admits an active Goal and verifies its editor
+remains outside collapsed content. Production Goal behavior is unchanged. All
+217 tests across seven relevant browser suites pass, including sequence/turn
+disclosure, thinking, streaming stability, Markdown, recovery and Goal behavior.
+
 # Boundaries
 
 The product fixture uses loopback NDJSON transport. It does not qualify encrypted

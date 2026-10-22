@@ -22047,7 +22047,7 @@
         "title": "Flower request-history CPU qualification",
         "type": "Qualification Evidence"
       },
-      "body_length": 9066,
+      "body_length": 10019,
       "summary": "Redeven consumes published Floret v7.79.0. Each Engine execution reads canonical\nrequest history once for its initial turn surface and provider/model invariants,\nthen advances bounded facts only after successful writes. Latest-request checks\nuse the canonical point reader. Returning to an earlier render lineage still\nperforms the required historical lineage validation. Retry and restart create a\nnew execution owner and reload canonical facts.\n\nFlower sidebar preview projection stops at the newest nonempty preview. Stable\nsequence membership flags retain resize observers across unrelated snapshots.\nUnchanged groups and members retain their projection identities within the same\nthread, preventing historical layout work on content-only updates while preserving\nopen tools, selection, focus and manual reading. Every semantic field is compared;\nchanged groups are replaced without mutating earlier projections.",
       "sections": [
         {
@@ -33482,5 +33482,5 @@
       ]
     }
   ],
-  "source_sha256": "961ca5f857448dacf2eb8c6980f2bed01ab1b95488646896c8d64261f992d0fb"
+  "source_sha256": "fd3431cc5bca37cb655571cedc1016e83689eebbef7bc5dc59f4e37a8709e6ba"
 }
