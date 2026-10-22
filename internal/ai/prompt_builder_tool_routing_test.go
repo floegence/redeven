@@ -11,6 +11,9 @@ func assertFlowerSystemPrompt(t *testing.T, prompt string) {
 	if prompt != want {
 		t.Fatalf("core system prompt differs from its expected contract:\ngot: %q\nwant: %q", prompt, want)
 	}
+	if !strings.Contains(prompt, "For 3D scenes, use WebGL directly; do not use Three.js.") {
+		t.Fatal("core system prompt must require direct WebGL and prohibit Three.js for 3D scenes")
+	}
 }
 
 func assertPromptContains(t *testing.T, prompt string, want string) {
