@@ -23,18 +23,14 @@ export function useFlowerToolSequenceMember(key: Accessor<string>) {
 
 export function useFlowerToolSequenceInline(key: Accessor<string>) {
   const context = useContext(FlowerToolSequenceContext);
-  return createMemo(() => {
-    const projection = context?.projection();
-    return Boolean(projection?.members.has(key()) || projection?.continuity.has(key()));
-  });
+  return createMemo(() => Boolean(context?.projection().members.has(key())));
 }
 
 export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; children: JSX.Element }>) {
   const context = useContext(FlowerToolSequenceContext);
   const member = useFlowerToolSequenceMember(() => props.nodeKey);
-  const continuity = createMemo(() => context?.projection().continuity.get(props.nodeKey));
-  const first = () => member()?.first ?? continuity()?.first;
-  const last = () => member()?.last ?? continuity()?.last;
+  const first = () => member()?.first;
+  const last = () => member()?.last;
   const expanded = createMemo(() => !member() || !context || context.expanded(member()!.group));
   let trigger: HTMLButtonElement | undefined;
   let content: HTMLDivElement | undefined;
@@ -50,9 +46,17 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
   onCleanup(() => context?.onMotionEnd(motionKey));
   const label = () => {
     const group = member()!.group, copy = context!.copy();
-    return copy.toolCalls(group.toolCount)
-      + (group.failedCount ? ' · ' + copy.failedCalls(group.failedCount) : '')
-      + (group.thinkingCount ? ' · ' + copy.thinkingSegments(group.thinkingCount) : '');
+    const summary = () => {
+      const parts = [
+        group.toolCount ? copy.toolCalls(group.toolCount) : '',
+        group.failedCount ? copy.failedCalls(group.failedCount) : '',
+        group.failedSubagentEventCount ? copy.failedSubtaskUpdates(group.failedSubagentEventCount) : '',
+        group.thinkingCount ? copy.thinkingSegments(group.thinkingCount) : '',
+        group.subagentEventCount ? copy.subtaskUpdates(group.subagentEventCount) : '',
+      ].filter(Boolean);
+      return parts.join(' · ');
+    };
+    return summary();
   };
   const Toggle = () => {
     let button: HTMLButtonElement;
@@ -71,9 +75,11 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
         onClick={event => context!.toggle(member()!.group, event.currentTarget)}>
         <ChevronRight class="flower-tool-sequence-chevron" aria-hidden="true" />
         <span class="flower-tool-sequence-label">
-          <span>{context!.copy().toolCalls(member()!.group.toolCount)}</span>
+          <Show when={member()!.group.toolCount}>{count => <span>{context!.copy().toolCalls(count())}</span>}</Show>
           <Show when={member()!.group.failedCount}>{count => <span class="flower-tool-sequence-failures">{context!.copy().failedCalls(count())}</span>}</Show>
+          <Show when={member()!.group.failedSubagentEventCount}>{count => <span class="flower-tool-sequence-subagent-failures">{context!.copy().failedSubtaskUpdates(count())}</span>}</Show>
           <Show when={member()!.group.thinkingCount}>{count => <span class="flower-tool-sequence-thinking">{context!.copy().thinkingSegments(count())}</span>}</Show>
+          <Show when={member()!.group.subagentEventCount}>{count => <span class="flower-tool-sequence-subtasks">{context!.copy().subtaskUpdates(count())}</span>}</Show>
         </span>
         <Show when={member()!.group.runningCount}>{count => <span class="flower-tool-sequence-running">{context!.copy().runningTools(count())}</span>}</Show>
       </button>
@@ -83,7 +89,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
   // when a trailing thought becomes bounded by the next invocation.
   return <div class="flower-tool-sequence-node" data-flower-tool-row-identity={props.nodeKey}
     classList={{ 'flower-activity-inline': Boolean(member()) }}
-    data-flower-sequence={member()?.group.key} data-flower-sequence-continuity={continuity()?.key}
+    data-flower-sequence={member()?.group.key}
     data-flower-sequence-start={first() === undefined ? undefined : String(first())}
     data-flower-sequence-end={last() === undefined ? undefined : String(last())} data-state={motion.state()}>
     <Show when={member()?.first && context}>

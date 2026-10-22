@@ -5482,6 +5482,7 @@
       "syncTimeout": "La sincronización agotó el tiempo de espera de 15 segundos. Inténtalo de nuevo.",
       "composerErrorTitle": "Flower no pudo enviar el mensaje.",
       "thinkingLabel": "Razonamiento",
+      "thinkingActiveLabel": "Pensando...",
       "expandThinking": "Expandir todo el razonamiento",
       "collapseThinking": "Contraer el razonamiento",
       "modelStatusPreparing": "Preparando solicitud al modelo...",
@@ -5689,6 +5690,10 @@
         "failedCalls": {
           "one": "{count} llamada a herramienta fallida",
           "other": "{count} llamadas a herramientas fallidas"
+        },
+        "failedSubtaskUpdates": {
+          "one": "{count} actualización de subagente fallida",
+          "other": "{count} actualizaciones de subagente fallidas"
         },
         "thinkingSegments": {
           "one": "{count} segmento de razonamiento",

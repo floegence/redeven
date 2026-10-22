@@ -10645,6 +10645,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return title.kind === 'web_search' ? title.operation : undefined;
     });
     const displayStatus = createMemo(() => item().status);
+    const progressShimmer = createMemo(() => {
+      const value = item();
+      const subagentWait = subagentOperation() && value.payload?.action === 'wait'
+        && (value.status === 'running' || value.status === 'waiting');
+      return livePresentationConfirmed() && (value.status === 'running' || subagentWait);
+    });
     const controlError = createMemo(() => (
       item().kind === 'control'
       && trimString(item().metadata?.control_error_code) === 'control_error'
@@ -10665,7 +10671,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <FlowerToolIcon toolName={item().tool_name} source={item().metadata?.source} webOperation={webOperation()} running={livePresentationConfirmed() && displayStatus() === 'running'} />
         </span>
         <div class="flower-activity-inline-copy">
-          <span class="flower-activity-inline-title" data-floe-progress-shimmer={livePresentationConfirmed() && displayStatus() === 'running' ? 'text' : undefined}>{activityTitle(displayTitle())}</span>
+          <span class="flower-activity-inline-title" data-floe-progress-shimmer={progressShimmer() ? 'text' : undefined}>{activityTitle(displayTitle())}</span>
           <Show when={presentation().subagentThreadIDs?.length}>
             <span class="flower-activity-report-sources">
               <For each={presentation().subagentThreadIDs}>{threadID => {
@@ -10964,7 +10970,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             live={thinkingLive}
             liveConfirmed={livePresentationConfirmed}
             preserveOnEnd={thinkingEndsAbnormally}
-            label={() => thinkingLive() && livePresentationConfirmed() ? copy().chat.modelStatus.streaming : copy().chat.thinkingLabel}
+            elapsed={() => formatActivityDuration(activityClockNow() - (message().created_at_ms ?? activityClockNow()))}
+            label={() => thinkingLive() && livePresentationConfirmed() ? copy().chat.thinkingActiveLabel : copy().chat.thinkingLabel}
             expandLabel={() => copy().chat.expandThinking}
             collapseLabel={() => copy().chat.collapseThinking}
             contentBody={ContentBody}

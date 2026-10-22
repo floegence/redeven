@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FlowerTimelineEntry } from './flowerTimelineProjection';
-import type { FlowerActivityItem } from './contracts/flowerSurfaceContracts';
+import type { FlowerActivityItem, FlowerParentEvent, FlowerRuntimeTurn } from './contracts/flowerSurfaceContracts';
 import { projectFlowerToolSequences } from './flowerToolSequences';
 
 type Message = Extract<FlowerTimelineEntry, { type: 'message' }>;
@@ -25,15 +25,26 @@ const toolPreview = (id: string, name: string): Message => ({ ...text(id), block
     attempt_id: 'attempt', attempt_epoch: 0, call_id: id, name, arguments_complete: true, preview: null,
   } },
 }] });
+const runtimeTurn = (changes: Partial<FlowerRuntimeTurn> = {}): FlowerRuntimeTurn => ({
+  turn_id: 'turn', run_id: 'run', started_at: '2026-10-21T10:00:00Z', elapsed_ms: 0, waiting_ms: 0,
+  work_duration_ms: 0, final_item_ids: [], final_boundary_complete: false, ...changes,
+});
+const parentEvent = (id: string, kind: FlowerParentEvent['kind'] = 'completed'): FlowerTimelineEntry => ({
+  type: 'parent_event', key: `parent-event:${id}`, event: {
+    id, parent_thread_id: 'thread', parent_turn_id: 'turn', source_thread_id: `child-${id}`,
+    source_turn_id: `child-turn-${id}`, source_run_id: `child-run-${id}`, source_entry_id: `child-entry-${id}`,
+    kind, received_at: '2026-10-21T10:00:00Z', admitted: true,
+  },
+});
 
 describe('consecutive tool presentation', () => {
-  it('keeps leading thinking independent and groups thinking after the first tool', () => {
+  it('groups adjacent leading, middle, and trailing thinking with tools', () => {
     const result = projectFlowerToolSequences([text('leading', true), tool('a'), text('middle', true), text('middle-two', true), tool('b'), text('trailing', true)]);
     const group = [...result.groups.values()][0];
     expect(result.groups.size).toBe(1);
     expect(group.toolCount).toBe(2);
-    expect(group.thinkingCount).toBe(3);
-    expect(result.members.has('leading')).toBe(false);
+    expect(group.thinkingCount).toBe(4);
+    expect(result.members.get('leading')?.group).toBe(group);
     expect(result.members.get('trailing')?.group).toBe(group);
     expect(result.members.get('middle')?.group).toBe(group);
   });
@@ -89,17 +100,24 @@ describe('consecutive tool presentation', () => {
     ]);
     expect([...result.groups.values()][0]).toMatchObject({ toolCount: 3, runningCount: 1 });
   });
+  it('keeps an active SubAgent wait foldable and counts it as running', () => {
+    const result = projectFlowerToolSequences([
+      tool('before'),
+      tool('wait', { tool_name: 'subagents', renderer: 'subagent_operation', status: 'waiting', severity: 'blocking',
+        needs_attention: true, attention_reasons: ['waiting'], payload: { action: 'wait' } }),
+      tool('after'),
+    ]);
+    expect([...result.groups.values()][0]).toMatchObject({ toolCount: 3, runningCount: 1 });
+  });
   it.each<Partial<FlowerActivityItem>>([
     { status: 'waiting' }, { requires_approval: true }, { needs_attention: true },
     { status: 'running', severity: 'normal', needs_attention: true, attention_reasons: ['approval'] },
     { status: 'running', severity: 'normal', needs_attention: true, attention_reasons: ['running', 'approval'] },
-    { renderer: 'subagent_operation' }, { tool_name: 'subagent_events' }, { tool_name: 'subagents' },
-    { tool_name: 'report_to_parent', target_refs: [{ kind: 'parent_event', label: 'parent' }] },
     { tool_name: 'ask_user' }, { kind: 'control' },
   ])('keeps attention and interactions as boundaries: %j', overrides => {
     expect(projectFlowerToolSequences([tool('a'), tool('boundary', overrides), tool('b')]).groups.size).toBe(0);
   });
-  it('connects SubAgent activity and adjacent thinking without folding it into tool calls', () => {
+  it('folds SubAgent activity, adjacent thinking, and ordinary tools as one sequence', () => {
     const result = projectFlowerToolSequences([
       text('leading', true),
       tool('subagent-a', { tool_name: 'subagents', renderer: 'subagent_operation' }),
@@ -107,20 +125,60 @@ describe('consecutive tool presentation', () => {
       tool('subagent-b', { tool_name: 'subagents', renderer: 'subagent_operation' }),
       text('trailing', true),
     ]);
-    expect(result.groups.size).toBe(0);
-    expect(result.continuity.size).toBe(5);
-    expect(result.continuity.get('leading')?.key).toBe(result.continuity.get('middle')?.key);
-    expect(result.continuity.get('middle')?.key).toBe(result.continuity.get('trailing')?.key);
-    expect([...result.continuity.values()].map(member => [member.first, member.last])).toEqual([
+    expect(result.groups.size).toBe(1);
+    const group = [...result.groups.values()][0];
+    expect(group).toMatchObject({ toolCount: 2, thinkingCount: 3, subagentEventCount: 0 });
+    expect([...result.members.values()].map(member => [member.first, member.last])).toEqual([
       [true, false], [false, false], [false, false], [false, false], [false, true],
     ]);
   });
-  it('keeps SubAgent continuity local to adjacent SubAgent and thinking activity', () => {
-    const subagent = { tool_name: 'subagents', renderer: 'subagent_operation' as const };
-    const separated = projectFlowerToolSequences([tool('subagent-a', subagent), tool('ordinary', { tool_name: 'terminal.exec' }), tool('subagent-b', subagent)]);
-    const proseBoundary = projectFlowerToolSequences([tool('subagent-a', subagent), text('prose'), tool('subagent-b', subagent)]);
-    expect(separated.continuity.size).toBe(0);
-    expect(proseBoundary.continuity.size).toBe(0);
+  it('folds canonical SubAgent reports and completion rows between tools and thinking', () => {
+    const entries = [
+      text('thinking-before', true),
+      tool('spawn', { tool_name: 'subagents', renderer: 'subagent_operation' }),
+      parentEvent('report', 'report'),
+      text('thinking-middle', true),
+      parentEvent('completed'),
+      tool('read-result', { tool_name: 'subagent_events', renderer: 'subagent' }),
+      parentEvent('failed', 'failed'),
+    ];
+    const result = projectFlowerToolSequences(entries, 'thread', [runtimeTurn()]);
+    const group = [...result.groups.values()][0];
+    expect(result.groups.size).toBe(1);
+    expect(group).toMatchObject({ toolCount: 2, thinkingCount: 2, subagentEventCount: 3, failedSubagentEventCount: 1 });
+    expect(group.entryKeys).toEqual(entries.map(entry => entry.key));
+    expect(group.disclosure).toBe('manual');
+    expect(result.members.get('parent-event:report')?.group).toBe(group);
+    expect(result.members.get('parent-event:completed')?.group).toBe(group);
+    expect(result.continuingEntries).toEqual(new Set(entries.slice(0, -1).map(entry => entry.key)));
+  });
+  it.each(['input_required', 'approval_required'] as const)('keeps parent %s events as sequence boundaries', kind => {
+    const entries = [tool('a'), parentEvent('interaction', kind), tool('b')];
+    expect(projectFlowerToolSequences(entries, 'thread', [runtimeTurn()]).groups.size).toBe(0);
+  });
+  it('auto-collapses an older SubAgent sequence and keeps the newest one available', () => {
+    const result = projectFlowerToolSequences([
+      tool('older-tool'), parentEvent('older-event'), tool('separating-tool'),
+      text('prose'), tool('newer-tool'), parentEvent('newer-event'),
+    ], 'thread', [runtimeTurn()]);
+    expect([...result.groups.values()].map(group => group.disclosure)).toEqual(['automatic', 'manual']);
+  });
+  it('requires exact parent-thread and turn-to-run authority for SubAgent event continuity', () => {
+    const event = parentEvent('completed');
+    const otherThread = { ...event, event: { ...(event as Extract<FlowerTimelineEntry, { type: 'parent_event' }>).event, parent_thread_id: 'other' } };
+    const otherTurn = { ...event, event: { ...(event as Extract<FlowerTimelineEntry, { type: 'parent_event' }>).event, parent_turn_id: 'missing' } };
+    const uncertain = { ...event, event: { ...(event as Extract<FlowerTimelineEntry, { type: 'parent_event' }>).event, reason_code: 'effect_outcome_unknown' } };
+    for (const candidate of [otherThread, otherTurn, uncertain]) {
+      expect(projectFlowerToolSequences([tool('a'), candidate, tool('b')], 'thread', [runtimeTurn()]).groups.size).toBe(0);
+    }
+    expect(projectFlowerToolSequences([tool('a'), event, tool('b')], 'thread').groups.size).toBe(0);
+    expect(projectFlowerToolSequences([tool('a'), event, tool('b')], 'thread', [runtimeTurn(), runtimeTurn({ run_id: 'other-run' })]).groups.size).toBe(0);
+  });
+  it('folds report_to_parent tool results while preserving interaction and uncertainty boundaries', () => {
+    const report = tool('report', { tool_name: 'report_to_parent', target_refs: [{ kind: 'parent_event', label: 'parent' }] });
+    expect(projectFlowerToolSequences([report, tool('next')]).groups.values().next().value?.toolCount).toBe(2);
+    const uncertain = tool('uncertain', { chips: [{ kind: 'effect_outcome', label: 'uncertain', value: 'uncertain' }] });
+    expect(projectFlowerToolSequences([tool('a'), uncertain, tool('b')]).groups.size).toBe(0);
   });
   it('keeps recorded goal state messages outside tool sequences', () => {
     const source = text('goal-state');

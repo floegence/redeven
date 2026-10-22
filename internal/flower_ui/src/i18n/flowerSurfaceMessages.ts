@@ -341,6 +341,7 @@ export const flowerSurfaceEnUS = {
     turnProcess: {
       toolCalls: { one: '{count} tool call', other: '{count} tool calls' },
       failedCalls: { one: '{count} failed tool call', other: '{count} failed tool calls' },
+      failedSubtaskUpdates: { one: '{count} failed subtask update', other: '{count} failed subtask updates' },
       thinkingSegments: { one: '{count} thinking segment', other: '{count} thinking segments' },
       runningTools: { one: '{count} running', other: '{count} running' },
       expandTools: 'Expand tool calls', collapseTools: 'Collapse tool calls',
@@ -353,6 +354,7 @@ export const flowerSurfaceEnUS = {
       second: { one: '{count} second', other: '{count} seconds' },
     },
     thinkingLabel: 'Thought process',
+    thinkingActiveLabel: 'Thinking...',
     expandThinking: 'Expand full thinking',
     collapseThinking: 'Collapse thinking',
     modelStatusPreparing: 'Preparing model request...',

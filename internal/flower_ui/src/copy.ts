@@ -16,6 +16,7 @@ import { localizedFlowerProviderTypeLabels } from './settings/providerTypeLabels
 export type FlowerTurnProcessCopy = Readonly<{
   toolCalls: (count: number) => string;
   failedCalls: (count: number) => string;
+  failedSubtaskUpdates: (count: number) => string;
   thinkingSegments: (count: number) => string;
   runningTools: (count: number) => string;
   expandTools: string;
@@ -689,6 +690,7 @@ export type FlowerSurfaceCopy = Readonly<{
     composerErrorTitle: string;
     turnProcess: FlowerTurnProcessCopy;
     thinkingLabel: string;
+    thinkingActiveLabel: string;
     expandThinking: string;
     collapseThinking: string;
     modelStatus: Readonly<{
@@ -1173,6 +1175,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     turnProcess: {
       toolCalls: count => `${count} ${count === 1 ? 'tool call' : 'tool calls'}`,
       failedCalls: count => `${count} ${count === 1 ? 'failed tool call' : 'failed tool calls'}`,
+      failedSubtaskUpdates: count => `${count} failed ${count === 1 ? 'subtask update' : 'subtask updates'}`,
       thinkingSegments: count => `${count} ${count === 1 ? 'thinking segment' : 'thinking segments'}`,
       runningTools: count => `${count} running`,
       expandTools: 'Expand tool calls', collapseTools: 'Collapse tool calls',
@@ -1185,6 +1188,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       second: (count) => `${count} ${count === 1 ? 'second' : 'seconds'}`,
     },
     thinkingLabel: 'Thought process',
+    thinkingActiveLabel: 'Thinking...',
     expandThinking: 'Expand full thinking',
     collapseThinking: 'Collapse thinking',
     modelStatus: {

@@ -567,6 +567,7 @@
       "syncTimeout": "同步在 15 秒后超时，请重试。",
       "composerErrorTitle": "Flower 发送失败。",
       "thinkingLabel": "思考过程",
+      "thinkingActiveLabel": "正在思考...",
       "expandThinking": "展开完整思考",
       "collapseThinking": "收起思考",
       "modelStatusPreparing": "正在准备模型请求...",
@@ -793,6 +794,13 @@
           "forms": {
             "one": "{count} 次工具调用失败",
             "other": "{count} 次工具调用失败"
+          }
+        },
+        "failedSubtaskUpdates": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} 条失败的子任务动态",
+            "other": "{count} 条失败的子任务动态"
           }
         },
         "thinkingSegments": {

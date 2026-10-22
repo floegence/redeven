@@ -5482,6 +5482,7 @@
       "syncTimeout": "A sincronização excedeu o limite de 15 segundos. Tente novamente.",
       "composerErrorTitle": "O Flower não pôde enviar.",
       "thinkingLabel": "Raciocínio",
+      "thinkingActiveLabel": "Pensando...",
       "expandThinking": "Expandir todo o raciocínio",
       "collapseThinking": "Recolher o raciocínio",
       "modelStatusPreparing": "Preparando solicitação ao modelo...",
@@ -5689,6 +5690,10 @@
         "failedCalls": {
           "one": "{count} chamada de ferramenta com falha",
           "other": "{count} chamadas de ferramentas com falha"
+        },
+        "failedSubtaskUpdates": {
+          "one": "{count} atualização de subtarefa com falha",
+          "other": "{count} atualizações de subtarefa com falha"
         },
         "thinkingSegments": {
           "one": "{count} etapa de raciocínio",

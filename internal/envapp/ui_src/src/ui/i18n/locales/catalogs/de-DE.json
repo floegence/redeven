@@ -5482,6 +5482,7 @@
       "syncTimeout": "Die Synchronisierung hat nach 15 Sekunden das Zeitlimit erreicht. Versuchen Sie es erneut.",
       "composerErrorTitle": "Flower konnte nicht senden.",
       "thinkingLabel": "Gedankengang",
+      "thinkingActiveLabel": "Denkt nach...",
       "expandThinking": "Vollständige Überlegungen anzeigen",
       "collapseThinking": "Überlegungen einklappen",
       "modelStatusPreparing": "Modellanfrage wird vorbereitet...",
@@ -5689,6 +5690,10 @@
         "failedCalls": {
           "one": "{count} fehlgeschlagener Werkzeugaufruf",
           "other": "{count} fehlgeschlagene Werkzeugaufrufe"
+        },
+        "failedSubtaskUpdates": {
+          "one": "{count} fehlgeschlagenes Unteraufgaben-Update",
+          "other": "{count} fehlgeschlagene Unteraufgaben-Updates"
         },
         "thinkingSegments": {
           "one": "{count} Denkabschnitt",

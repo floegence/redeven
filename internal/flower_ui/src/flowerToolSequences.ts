@@ -1,15 +1,23 @@
+import type { FlowerRuntimeTurn } from './contracts/flowerSurfaceContracts';
 import type { FlowerTimelineEntry } from './flowerTimelineProjection';
 import type { FlowerTurnDisclosurePolicy } from './flowerTurnPresentation';
 import { flowerActivityIdentity } from './flowerActivityIdentity';
 import { flowerToolCallPreviewIdentity } from './toolCallPreview';
 
-type SequenceNode = Readonly<{ key: string; entryKey: string; scope: string; thinking: boolean; active: boolean; failed: boolean }>;
-type ActivityContinuityNode = Readonly<{ key: string; entryKey: string; scope: string; subagent: boolean }>;
-const sequenceBoundaryToolNames = new Set(['ask_user', 'subagents', 'subagent_events', 'report_to_parent']);
-const sequenceBoundaryRenderers = new Set(['subagent', 'subagent_operation']);
+type SequenceNode = Readonly<{
+  key: string;
+  entryKey: string;
+  scope: string;
+  kind: 'tool' | 'thinking' | 'subagent_event';
+  active: boolean;
+  failed: boolean;
+}>;
 
-function isSequenceTool(toolName: string | undefined, renderer?: string): boolean {
-  return !sequenceBoundaryToolNames.has(toolName ?? '') && !sequenceBoundaryRenderers.has(renderer ?? '');
+const sequenceBoundaryToolNames = new Set(['ask_user']);
+const sequenceableParentEventKinds = new Set(['report', 'completed', 'failed', 'cancelled', 'interrupted', 'timed_out']);
+
+function isSequenceTool(toolName: string | undefined): boolean {
+  return !sequenceBoundaryToolNames.has(toolName ?? '');
 }
 
 export type FlowerToolSequence = Readonly<{
@@ -18,7 +26,9 @@ export type FlowerToolSequence = Readonly<{
   entryKeys: readonly string[];
   toolCount: number;
   failedCount: number;
+  failedSubagentEventCount: number;
   thinkingCount: number;
+  subagentEventCount: number;
   runningCount: number;
   disclosure: FlowerTurnDisclosurePolicy;
 }>;
@@ -26,124 +36,141 @@ export type FlowerToolSequenceMember = Readonly<{ group: FlowerToolSequence; fir
 export type FlowerToolSequenceProjection = Readonly<{
   groups: ReadonlyMap<string, FlowerToolSequence>;
   members: ReadonlyMap<string, FlowerToolSequenceMember>;
-  continuity: ReadonlyMap<string, Readonly<{ key: string; first: boolean; last: boolean }>>;
   continuingEntries: ReadonlySet<string>;
 }>;
 
-// Presentation only: source entries and canonical execution facts are never changed.
-export function projectFlowerToolSequences(entries: readonly FlowerTimelineEntry[]): FlowerToolSequenceProjection {
-  const tokens: (SequenceNode | null)[] = [];
-  const continuityTokens: (ActivityContinuityNode | null)[] = [];
-  for (const entry of entries) {
-    if (entry.type !== 'message' || entry.message.role !== 'assistant' || entry.message.goal) {
-      tokens.push(null);
-      continuityTokens.push(null);
+function uniqueTurnsByID(turns: readonly FlowerRuntimeTurn[]): ReadonlyMap<string, FlowerRuntimeTurn> {
+  const byID = new Map<string, FlowerRuntimeTurn>();
+  const ambiguous = new Set<string>();
+  for (const turn of turns) {
+    if (!turn.turn_id || !turn.run_id || ambiguous.has(turn.turn_id)) continue;
+    if (byID.has(turn.turn_id)) {
+      byID.delete(turn.turn_id);
+      ambiguous.add(turn.turn_id);
       continue;
     }
-    const scope = JSON.stringify([entry.message.thread_id, entry.message.turn_id, entry.message.run_id]);
-    const sameScope = (threadID: string | undefined, turnID: string | undefined, runID: string | undefined) =>
-      Boolean(threadID && turnID && runID) && scope === JSON.stringify([threadID, turnID, runID]);
+    byID.set(turn.turn_id, turn);
+  }
+  return byID;
+}
+
+// Presentation only: source entries and canonical execution facts are never changed.
+export function projectFlowerToolSequences(
+  entries: readonly FlowerTimelineEntry[],
+  threadID?: string,
+  turns: readonly FlowerRuntimeTurn[] = [],
+): FlowerToolSequenceProjection {
+  const tokens: (SequenceNode | null)[] = [];
+  const turnsByID = uniqueTurnsByID(turns);
+  const sequenceScope = (ownerThreadID: string | undefined, turnID: string | undefined, runID: string | undefined) =>
+    ownerThreadID && turnID && runID ? JSON.stringify([ownerThreadID, turnID, runID]) : '';
+  const parentEventNode = (entry: Extract<FlowerTimelineEntry, { type: 'parent_event' }>): SequenceNode | null => {
+    const { event } = entry;
+    if (!threadID || event.parent_thread_id !== threadID || !event.parent_turn_id
+      || !sequenceableParentEventKinds.has(event.kind) || event.reason_code === 'effect_outcome_unknown') return null;
+    const turn = turnsByID.get(event.parent_turn_id);
+    const scope = sequenceScope(event.parent_thread_id, turn?.turn_id, turn?.run_id);
+    return scope ? { key: entry.key, entryKey: entry.key, scope, kind: 'subagent_event', active: false,
+      failed: event.kind === 'failed' || event.kind === 'timed_out' } : null;
+  };
+
+  for (const entry of entries) {
+    if (entry.type === 'parent_event') {
+      tokens.push(parentEventNode(entry));
+      continue;
+    }
+    if (entry.type !== 'message' || entry.message.role !== 'assistant' || entry.message.goal) {
+      tokens.push(null);
+      continue;
+    }
+    const scope = sequenceScope(entry.message.thread_id, entry.message.turn_id, entry.message.run_id);
+    const sameScope = (ownerThreadID: string | undefined, turnID: string | undefined, runID: string | undefined) =>
+      Boolean(scope) && scope === sequenceScope(ownerThreadID, turnID, runID);
     for (const block of entry.blocks) {
       if (block.type === 'content') {
         if (block.block_type === 'thinking') {
-          tokens.push({ key: block.key, entryKey: entry.key, scope, thinking: true, active: entry.message.live === true, failed: false });
-          continuityTokens.push({ key: block.key, entryKey: entry.key, scope, subagent: false });
+          tokens.push({ key: block.key, entryKey: entry.key, scope, kind: 'thinking', active: entry.message.live === true, failed: false });
         } else if (block.content.trim()) {
           tokens.push(null);
-          continuityTokens.push(null);
         }
       } else if (block.type === 'tool_preview') {
         const call = block.block.call;
         tokens.push(sameScope(call.thread_id, call.turn_id, call.run_id) && isSequenceTool(call.name)
-          ? { key: flowerToolCallPreviewIdentity(call), entryKey: entry.key, scope, thinking: false, active: true, failed: false } : null);
-        continuityTokens.push(null);
+          ? { key: flowerToolCallPreviewIdentity(call), entryKey: entry.key, scope, kind: 'tool', active: true, failed: false } : null);
       } else if (block.type === 'activity') {
         for (const item of block.block.items) {
           const failed = item.status === 'error';
           const attentionReasons = item.attention_reasons ?? [];
+          const subagentWait = item.tool_name === 'subagents' && item.renderer === 'subagent_operation'
+            && item.payload?.action === 'wait' && (item.status === 'running' || item.status === 'waiting');
           const runningAttention = item.status === 'running' && attentionReasons.length > 0
             && attentionReasons.every(reason => reason === 'running');
-          const attentionAllowed = failed || runningAttention || !item.needs_attention && attentionReasons.length === 0;
+          const waitingAttention = subagentWait && item.status === 'waiting'
+            && attentionReasons.every(reason => reason === 'waiting' || reason === 'running');
+          const attentionAllowed = failed || runningAttention || waitingAttention || !item.needs_attention && attentionReasons.length === 0;
+          const statusAllowed = ['success', 'pending', 'running'].includes(item.status) || failed || subagentWait;
           const foldable = sameScope(block.block.thread_id, block.block.turn_id, block.block.run_id)
             && (item.kind === 'tool' || item.kind === 'hosted_tool')
-            && isSequenceTool(item.tool_name, item.renderer)
-            && (['success', 'pending', 'running'].includes(item.status) || failed)
+            && isSequenceTool(item.tool_name)
+            && statusAllowed
             && attentionAllowed
             && !item.requires_approval && !item.approval_state
             && (!item.payload?.error || failed)
-            && (!['warning', 'error', 'blocking'].includes(item.severity) || failed)
-            && !item.target_refs?.some(target => target.kind === 'parent_event')
+            && (!['warning', 'error', 'blocking'].includes(item.severity) || failed || waitingAttention)
             && !item.chips?.some(chip => chip.kind === 'effect_outcome' && chip.value === 'uncertain');
           tokens.push(foldable ? {
             key: flowerActivityIdentity({ threadID: block.block.thread_id, runID: block.block.run_id, turnID: block.block.turn_id,
               itemID: item.kind === 'tool' && item.tool_id ? item.tool_id : item.item_id }),
-            entryKey: entry.key, scope, thinking: false, active: item.status === 'pending' || item.status === 'running', failed,
-          } : null);
-          const subagent = sameScope(block.block.thread_id, block.block.turn_id, block.block.run_id)
-            && (item.kind === 'tool' || item.kind === 'hosted_tool')
-            && (item.tool_name === 'subagents' || item.renderer === 'subagent' || item.renderer === 'subagent_operation');
-          continuityTokens.push(subagent ? {
-            key: flowerActivityIdentity({ threadID: block.block.thread_id, runID: block.block.run_id, turnID: block.block.turn_id,
-              itemID: item.kind === 'tool' && item.tool_id ? item.tool_id : item.item_id }),
-            entryKey: entry.key, scope, subagent: true,
+            entryKey: entry.key, scope, kind: 'tool',
+            active: item.status === 'pending' || item.status === 'running' || subagentWait,
+            failed,
           } : null);
         }
       } else {
         tokens.push(null);
-        continuityTokens.push(null);
       }
     }
   }
+
   const runs: SequenceNode[][] = [];
   let pending: SequenceNode[] = [];
   const flush = () => {
-    const firstTool = pending.findIndex(node => !node.thinking);
-    if (firstTool >= 0) runs.push(pending.slice(firstTool));
+    if (pending.some(node => node.kind !== 'thinking')) runs.push(pending);
     pending = [];
   };
   for (const node of tokens) {
     if (!node || pending.length && pending[0].scope !== node.scope) flush();
-    if (!node) continue;
-    if (!node.thinking || pending.length) pending.push(node);
+    if (node) pending.push(node);
   }
   flush();
+
   const groups = new Map<string, FlowerToolSequence>();
   const members = new Map<string, FlowerToolSequenceMember>();
   const entryPositions = new Map(entries.map((entry, index) => [entry.key, index]));
   const continuingEntries = new Set<string>();
   runs.forEach((nodes, index) => {
-    const tools = nodes.filter(node => !node.thinking);
-    if (!tools.length || nodes.length < 2) return;
+    if (nodes.length < 2) return;
+    const tools = nodes.filter(node => node.kind === 'tool');
+    const thinking = nodes.filter(node => node.kind === 'thinking');
+    const subagentEvents = nodes.filter(node => node.kind === 'subagent_event');
     const firstEntry = Math.min(...nodes.map(node => entryPositions.get(node.entryKey) ?? 0));
     const lastEntry = Math.max(...nodes.map(node => entryPositions.get(node.entryKey) ?? firstEntry));
     const entryKeys = entries.slice(firstEntry, lastEntry + 1).map(entry => entry.key);
     const group: FlowerToolSequence = {
-      key: nodes[0].key, nodeKeys: nodes.map(node => node.key), entryKeys,
-      toolCount: tools.length, failedCount: tools.filter(node => node.failed).length, thinkingCount: nodes.length - tools.length,
+      key: nodes[0].key,
+      nodeKeys: nodes.map(node => node.key),
+      entryKeys,
+      toolCount: tools.length,
+      failedCount: tools.filter(node => node.failed).length,
+      failedSubagentEventCount: subagentEvents.filter(node => node.failed).length,
+      thinkingCount: thinking.length,
+      subagentEventCount: subagentEvents.length,
       runningCount: tools.filter(node => node.active).length,
       disclosure: index === runs.length - 1 || nodes.some(node => node.active) ? 'manual' : 'automatic',
     };
     groups.set(group.key, group);
     entryKeys.slice(0, -1).forEach(key => continuingEntries.add(key));
-    nodes.forEach((node, i) => members.set(node.key, { group, first: i === 0, last: i === nodes.length - 1 }));
+    nodes.forEach((node, nodeIndex) => members.set(node.key, { group, first: nodeIndex === 0, last: nodeIndex === nodes.length - 1 }));
   });
-  const continuity = new Map<string, Readonly<{ key: string; first: boolean; last: boolean }>>();
-  const continuityRuns: ActivityContinuityNode[][] = [];
-  let pendingContinuity: ActivityContinuityNode[] = [];
-  const flushContinuity = () => {
-    if (pendingContinuity.length >= 2 && pendingContinuity.some(node => node.subagent)) continuityRuns.push(pendingContinuity);
-    pendingContinuity = [];
-  };
-  for (const node of continuityTokens) {
-    if (!node || members.has(node.key) || pendingContinuity.length && pendingContinuity[0].scope !== node.scope) flushContinuity();
-    if (node && !members.has(node.key)) pendingContinuity.push(node);
-  }
-  flushContinuity();
-  continuityRuns.forEach(nodes => {
-    const firstEntry = Math.min(...nodes.map(node => entryPositions.get(node.entryKey) ?? 0));
-    const lastEntry = Math.max(...nodes.map(node => entryPositions.get(node.entryKey) ?? firstEntry));
-    entries.slice(firstEntry, lastEntry).forEach(entry => continuingEntries.add(entry.key));
-    nodes.forEach((node, index) => continuity.set(node.key, { key: nodes[0].key, first: index === 0, last: index === nodes.length - 1 }));
-  });
-  return { groups, members, continuity, continuingEntries };
+  return { groups, members, continuingEntries };
 }

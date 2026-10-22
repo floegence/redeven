@@ -565,6 +565,7 @@
       "syncTimeout": "同期が15秒でタイムアウトしました。再試行してください。",
       "composerErrorTitle": "Flower は送信できませんでした。",
       "thinkingLabel": "思考過程",
+      "thinkingActiveLabel": "思考中...",
       "expandThinking": "思考をすべて展開",
       "collapseThinking": "思考を折りたたむ",
       "modelStatusPreparing": "モデルリクエストを準備中...",
@@ -793,6 +794,13 @@
           "forms": {
             "one": "失敗したツール呼び出し {count} 件",
             "other": "失敗したツール呼び出し {count} 件"
+          }
+        },
+        "failedSubtaskUpdates": {
+          "kind": "plural",
+          "forms": {
+            "one": "{count} 件のサブタスク更新に失敗",
+            "other": "{count} 件のサブタスク更新に失敗"
           }
         },
         "thinkingSegments": {
