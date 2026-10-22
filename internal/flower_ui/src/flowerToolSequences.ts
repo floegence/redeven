@@ -4,6 +4,7 @@ import { flowerActivityIdentity } from './flowerActivityIdentity';
 import { flowerToolCallPreviewIdentity } from './toolCallPreview';
 
 type SequenceNode = Readonly<{ key: string; entryKey: string; scope: string; thinking: boolean; active: boolean; failed: boolean }>;
+type ActivityContinuityNode = Readonly<{ key: string; entryKey: string; scope: string; subagent: boolean }>;
 const sequenceBoundaryToolNames = new Set(['ask_user', 'subagents', 'subagent_events', 'report_to_parent']);
 const sequenceBoundaryRenderers = new Set(['subagent', 'subagent_operation']);
 
@@ -25,15 +26,18 @@ export type FlowerToolSequenceMember = Readonly<{ group: FlowerToolSequence; fir
 export type FlowerToolSequenceProjection = Readonly<{
   groups: ReadonlyMap<string, FlowerToolSequence>;
   members: ReadonlyMap<string, FlowerToolSequenceMember>;
+  continuity: ReadonlyMap<string, Readonly<{ key: string; first: boolean; last: boolean }>>;
   continuingEntries: ReadonlySet<string>;
 }>;
 
 // Presentation only: source entries and canonical execution facts are never changed.
 export function projectFlowerToolSequences(entries: readonly FlowerTimelineEntry[]): FlowerToolSequenceProjection {
   const tokens: (SequenceNode | null)[] = [];
+  const continuityTokens: (ActivityContinuityNode | null)[] = [];
   for (const entry of entries) {
     if (entry.type !== 'message' || entry.message.role !== 'assistant' || entry.message.goal) {
       tokens.push(null);
+      continuityTokens.push(null);
       continue;
     }
     const scope = JSON.stringify([entry.message.thread_id, entry.message.turn_id, entry.message.run_id]);
@@ -43,13 +47,16 @@ export function projectFlowerToolSequences(entries: readonly FlowerTimelineEntry
       if (block.type === 'content') {
         if (block.block_type === 'thinking') {
           tokens.push({ key: block.key, entryKey: entry.key, scope, thinking: true, active: entry.message.live === true, failed: false });
+          continuityTokens.push({ key: block.key, entryKey: entry.key, scope, subagent: false });
         } else if (block.content.trim()) {
           tokens.push(null);
+          continuityTokens.push(null);
         }
       } else if (block.type === 'tool_preview') {
         const call = block.block.call;
         tokens.push(sameScope(call.thread_id, call.turn_id, call.run_id) && isSequenceTool(call.name)
           ? { key: flowerToolCallPreviewIdentity(call), entryKey: entry.key, scope, thinking: false, active: true, failed: false } : null);
+        continuityTokens.push(null);
       } else if (block.type === 'activity') {
         for (const item of block.block.items) {
           const failed = item.status === 'error';
@@ -72,8 +79,19 @@ export function projectFlowerToolSequences(entries: readonly FlowerTimelineEntry
               itemID: item.kind === 'tool' && item.tool_id ? item.tool_id : item.item_id }),
             entryKey: entry.key, scope, thinking: false, active: item.status === 'pending' || item.status === 'running', failed,
           } : null);
+          const subagent = sameScope(block.block.thread_id, block.block.turn_id, block.block.run_id)
+            && (item.kind === 'tool' || item.kind === 'hosted_tool')
+            && (item.tool_name === 'subagents' || item.renderer === 'subagent' || item.renderer === 'subagent_operation');
+          continuityTokens.push(subagent ? {
+            key: flowerActivityIdentity({ threadID: block.block.thread_id, runID: block.block.run_id, turnID: block.block.turn_id,
+              itemID: item.kind === 'tool' && item.tool_id ? item.tool_id : item.item_id }),
+            entryKey: entry.key, scope, subagent: true,
+          } : null);
         }
-      } else tokens.push(null);
+      } else {
+        tokens.push(null);
+        continuityTokens.push(null);
+      }
     }
   }
   const runs: SequenceNode[][] = [];
@@ -109,5 +127,23 @@ export function projectFlowerToolSequences(entries: readonly FlowerTimelineEntry
     entryKeys.slice(0, -1).forEach(key => continuingEntries.add(key));
     nodes.forEach((node, i) => members.set(node.key, { group, first: i === 0, last: i === nodes.length - 1 }));
   });
-  return { groups, members, continuingEntries };
+  const continuity = new Map<string, Readonly<{ key: string; first: boolean; last: boolean }>>();
+  const continuityRuns: ActivityContinuityNode[][] = [];
+  let pendingContinuity: ActivityContinuityNode[] = [];
+  const flushContinuity = () => {
+    if (pendingContinuity.length >= 2 && pendingContinuity.some(node => node.subagent)) continuityRuns.push(pendingContinuity);
+    pendingContinuity = [];
+  };
+  for (const node of continuityTokens) {
+    if (!node || members.has(node.key) || pendingContinuity.length && pendingContinuity[0].scope !== node.scope) flushContinuity();
+    if (node && !members.has(node.key)) pendingContinuity.push(node);
+  }
+  flushContinuity();
+  continuityRuns.forEach(nodes => {
+    const firstEntry = Math.min(...nodes.map(node => entryPositions.get(node.entryKey) ?? 0));
+    const lastEntry = Math.max(...nodes.map(node => entryPositions.get(node.entryKey) ?? firstEntry));
+    entries.slice(firstEntry, lastEntry).forEach(entry => continuingEntries.add(entry.key));
+    nodes.forEach((node, index) => continuity.set(node.key, { key: nodes[0].key, first: index === 0, last: index === nodes.length - 1 }));
+  });
+  return { groups, members, continuity, continuingEntries };
 }

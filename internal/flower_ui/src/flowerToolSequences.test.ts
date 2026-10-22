@@ -99,6 +99,29 @@ describe('consecutive tool presentation', () => {
   ])('keeps attention and interactions as boundaries: %j', overrides => {
     expect(projectFlowerToolSequences([tool('a'), tool('boundary', overrides), tool('b')]).groups.size).toBe(0);
   });
+  it('connects SubAgent activity and adjacent thinking without folding it into tool calls', () => {
+    const result = projectFlowerToolSequences([
+      text('leading', true),
+      tool('subagent-a', { tool_name: 'subagents', renderer: 'subagent_operation' }),
+      text('middle', true),
+      tool('subagent-b', { tool_name: 'subagents', renderer: 'subagent_operation' }),
+      text('trailing', true),
+    ]);
+    expect(result.groups.size).toBe(0);
+    expect(result.continuity.size).toBe(5);
+    expect(result.continuity.get('leading')?.key).toBe(result.continuity.get('middle')?.key);
+    expect(result.continuity.get('middle')?.key).toBe(result.continuity.get('trailing')?.key);
+    expect([...result.continuity.values()].map(member => [member.first, member.last])).toEqual([
+      [true, false], [false, false], [false, false], [false, false], [false, true],
+    ]);
+  });
+  it('keeps SubAgent continuity local to adjacent SubAgent and thinking activity', () => {
+    const subagent = { tool_name: 'subagents', renderer: 'subagent_operation' as const };
+    const separated = projectFlowerToolSequences([tool('subagent-a', subagent), tool('ordinary', { tool_name: 'terminal.exec' }), tool('subagent-b', subagent)]);
+    const proseBoundary = projectFlowerToolSequences([tool('subagent-a', subagent), text('prose'), tool('subagent-b', subagent)]);
+    expect(separated.continuity.size).toBe(0);
+    expect(proseBoundary.continuity.size).toBe(0);
+  });
   it('keeps recorded goal state messages outside tool sequences', () => {
     const source = text('goal-state');
     const goalState: Message = { ...source, message: { ...source.message, goal: {

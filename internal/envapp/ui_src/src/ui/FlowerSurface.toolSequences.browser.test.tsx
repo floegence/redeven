@@ -14,7 +14,9 @@ const tool = (id: string, status: 'success' | 'running' | 'error' = 'success', t
   item_id: id, tool_id: id, kind: 'tool', tool_name: toolName, status, severity: status === 'error' ? 'error' : status === 'running' ? 'normal' : 'quiet',
   needs_attention: status !== 'success', requires_approval: false,
   ...(status === 'error' ? { attention_reasons: ['error'] } : status === 'running' ? { attention_reasons: ['running'] } : {}),
-  presentation: { label: `Execute ${id}`, renderer, payload: { operation: renderer === 'web_search' ? 'search' : 'exec', query: `query ${id}`, command: `echo ${id}`, output: `${id} output`, ...(status === 'error' ? { error: { message: `${id} failed` } } : {}) } },
+  presentation: { label: `Execute ${id}`, renderer, payload: renderer === 'subagent_operation'
+    ? { action: 'spawn', requested_count: 1 }
+    : { operation: renderer === 'web_search' ? 'search' : 'exec', query: `query ${id}`, command: `echo ${id}`, output: `${id} output`, ...(status === 'error' ? { error: { message: `${id} failed` } } : {}) } },
 } });
 function current(items: FlowerRuntimeCurrentItem[], version = 1): FlowerRuntimeCurrentView {
   return { thread_id: 'sequences', turn_id: 'turn', run_id: 'run', view_version: version, activity: 'active', run_progress: { phase: 'streaming' },
@@ -54,15 +56,14 @@ async function mount(items: FlowerRuntimeCurrentItem[], previews: readonly Flowe
   } };
 }
 const row = (root: HTMLElement, id: string) => root.querySelector<HTMLElement>(`[data-flower-activity-item-id="${id}"]`)!;
-const group = (root: HTMLElement, id: string) => row(root, id).closest<HTMLElement>('.flower-tool-sequence-node')!;
+const group = (root: HTMLElement, id: string) => root.querySelector<HTMLElement>(`[data-flower-tool-row-identity="${id}"]`)
+  ?? row(root, id).closest<HTMLElement>('.flower-tool-sequence-node')!;
 const toggle = (root: HTMLElement, id: string) => group(root, id).querySelector<HTMLButtonElement>('.flower-tool-sequence-toggle')!;
 const collapsed = (root: HTMLElement, id: string) => group(root, id).querySelector('.flower-tool-sequence-viewport')!.getAttribute('aria-hidden') === 'true';
-function expectConnectorBetween(root: HTMLElement, previousID: string, nextID: string) {
-  const previousIcon = row(root, previousID).querySelector('.flower-tool-icon, .flower-activity-inline-loader')!.getBoundingClientRect();
-  const previousCenter = previousIcon.top + previousIcon.height / 2;
-  const nextIcon = row(root, nextID).querySelector('.flower-tool-icon, .flower-activity-inline-loader')!.getBoundingClientRect();
-  const nextCenter = nextIcon.top + nextIcon.height / 2;
-  const content = group(root, previousID).querySelector('.flower-tool-sequence-content')!;
+function expectConnectorBetweenNodes(previousNode: HTMLElement, nextNode: HTMLElement) {
+  const previousIcon = previousNode.querySelector('.flower-activity-inline-icon')!.getBoundingClientRect();
+  const nextIcon = nextNode.querySelector('.flower-activity-inline-icon')!.getBoundingClientRect();
+  const content = previousNode.querySelector('.flower-tool-sequence-content')!;
   const rect = content.getBoundingClientRect();
   const connector = getComputedStyle(content, '::after');
   const connectorX = rect.left + Number.parseFloat(connector.left);
@@ -74,8 +75,11 @@ function expectConnectorBetween(root: HTMLElement, previousID: string, nextID: s
   expect(Number.parseFloat(connector.opacity)).toBeGreaterThan(0.5);
   expect(connector.content).not.toBe('none');
   expect(Math.abs(connectorX - (previousIcon.left + previousIcon.width / 2))).toBeLessThan(1);
-  expect(Math.abs(start - previousCenter)).toBeLessThan(1);
-  expect(Math.abs(end - nextCenter)).toBeLessThan(1);
+  expect(Math.abs(start - previousIcon.bottom)).toBeLessThan(1);
+  expect(Math.abs(end - nextIcon.top)).toBeLessThan(1);
+}
+function expectConnectorBetween(root: HTMLElement, previousID: string, nextID: string) {
+  expectConnectorBetweenNodes(group(root, previousID), group(root, nextID));
 }
 afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
@@ -100,6 +104,28 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(row(root, 'search').closest('[inert]')).not.toBeNull();
     expect(row(root, 'goal').closest('[inert]')).not.toBeNull();
     expect(thinking.closest('[inert]')).not.toBeNull();
+  });
+
+  it('connects SubAgent activity and surrounding thinking as compact inline nodes without folding them', async () => {
+    const { root } = await mount([
+      item('leading-thought', 'thinking'),
+      tool('subagent-a', 'success', 'subagents', 'subagent_operation'),
+      item('middle-thought', 'thinking'),
+      tool('subagent-b', 'success', 'subagents', 'subagent_operation'),
+      item('trailing-thought', 'thinking'),
+    ]);
+    const ids = ['leading-thought', 'subagent-a', 'middle-thought', 'subagent-b', 'trailing-thought'];
+    const nodes = [...root.querySelectorAll<HTMLElement>('.flower-tool-sequence-node[data-flower-sequence-continuity]')];
+    expect(nodes).toHaveLength(ids.length);
+    expect(root.querySelectorAll('.flower-tool-sequence-toggle')).toHaveLength(0);
+    expect(root.querySelectorAll('.flower-thinking-disclosure-inline')).toHaveLength(3);
+    expect(nodes.map(node => node.dataset.flowerSequenceContinuity)).toEqual(Array(5).fill(nodes[0].dataset.flowerSequenceContinuity));
+    expect(nodes.map(node => node.dataset.flowerSequenceStart)).toEqual(['true', 'false', 'false', 'false', 'false']);
+    expect(nodes.map(node => node.dataset.flowerSequenceEnd)).toEqual(['false', 'false', 'false', 'false', 'true']);
+    for (let index = 0; index < nodes.length - 1; index += 1) expectConnectorBetweenNodes(nodes[index]!, nodes[index + 1]!);
+    for (let index = 1; index < nodes.length; index += 1) {
+      expect(Math.abs(nodes[index]!.getBoundingClientRect().top - nodes[index - 1]!.getBoundingClientRect().bottom)).toBeLessThan(1);
+    }
   });
 
   it('folds older tools and bounded thinking, keeping prose and outside thinking visible', async () => {
@@ -203,14 +229,14 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(pendingRow.classList.contains('flower-activity-inline-row-generating')).toBe(true);
     expect(root.querySelector('.flower-tool-sequence-toggle')?.textContent).toContain('3 tool calls');
     expect(Math.abs(pendingRow.getBoundingClientRect().top - row(root, 'b').getBoundingClientRect().bottom)).toBeLessThan(1);
-    const previewIcon = pendingRow.querySelector('.flower-tool-icon')!.getBoundingClientRect();
-    const previousIcon = row(root, 'b').querySelector('.flower-tool-icon')!.getBoundingClientRect();
+    const previewIcon = pendingRow.querySelector('.flower-activity-inline-icon')!.getBoundingClientRect();
+    const previousIcon = row(root, 'b').querySelector('.flower-activity-inline-icon')!.getBoundingClientRect();
     const previousConnector = group(root, 'b').querySelector('.flower-tool-sequence-content')!;
     const previousConnectorStyle = getComputedStyle(previousConnector, '::after');
     const previousConnectorRect = previousConnector.getBoundingClientRect();
     expect(previousConnectorStyle.width).toBe('1px');
-    expect(Math.abs(previousConnectorRect.top + Number.parseFloat(previousConnectorStyle.top) - (previousIcon.top + previousIcon.height / 2))).toBeLessThan(1);
-    expect(Math.abs(previousConnectorRect.bottom - Number.parseFloat(previousConnectorStyle.bottom) - (previewIcon.top + previewIcon.height / 2))).toBeLessThan(1);
+    expect(Math.abs(previousConnectorRect.top + Number.parseFloat(previousConnectorStyle.top) - previousIcon.bottom)).toBeLessThan(1);
+    expect(Math.abs(previousConnectorRect.bottom - Number.parseFloat(previousConnectorStyle.bottom) - previewIcon.top)).toBeLessThan(1);
 
     push([tool('a'), tool('b'), tool('c', 'running')]);
     await waitFor(() => Boolean(row(root, 'c')));
