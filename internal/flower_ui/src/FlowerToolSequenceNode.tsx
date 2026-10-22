@@ -21,9 +21,20 @@ export function useFlowerToolSequenceMember(key: Accessor<string>) {
   return createMemo(() => context?.projection().members.get(key()));
 }
 
+export function useFlowerToolSequenceInline(key: Accessor<string>) {
+  const context = useContext(FlowerToolSequenceContext);
+  return createMemo(() => {
+    const projection = context?.projection();
+    return Boolean(projection?.members.has(key()) || projection?.continuity.has(key()));
+  });
+}
+
 export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; children: JSX.Element }>) {
   const context = useContext(FlowerToolSequenceContext);
   const member = useFlowerToolSequenceMember(() => props.nodeKey);
+  const continuity = createMemo(() => context?.projection().continuity.get(props.nodeKey));
+  const first = () => member()?.first ?? continuity()?.first;
+  const last = () => member()?.last ?? continuity()?.last;
   const expanded = createMemo(() => !member() || !context || context.expanded(member()!.group));
   let trigger: HTMLButtonElement | undefined;
   let content: HTMLDivElement | undefined;
@@ -72,8 +83,9 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
   // when a trailing thought becomes bounded by the next invocation.
   return <div class="flower-tool-sequence-node" data-flower-tool-row-identity={props.nodeKey}
     classList={{ 'flower-activity-inline': Boolean(member()) }}
-    data-flower-sequence={member()?.group.key} data-flower-sequence-start={member() ? String(member()!.first) : undefined}
-    data-flower-sequence-end={member() ? String(member()!.last) : undefined} data-state={motion.state()}>
+    data-flower-sequence={member()?.group.key} data-flower-sequence-continuity={continuity()?.key}
+    data-flower-sequence-start={first() === undefined ? undefined : String(first())}
+    data-flower-sequence-end={last() === undefined ? undefined : String(last())} data-state={motion.state()}>
     <Show when={member()?.first && context}>
       <Toggle />
     </Show>
