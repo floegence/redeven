@@ -29,8 +29,13 @@ pins in that mode's saved order. Workbench keeps Work Mode at the far left and
 places creation tools after the product widgets. Its trailing Tessiven and
 Launcher actions precede pinned shortcuts through released Floe Dock placement;
 Floe owns rendering, button interaction, hover slots, and drag placement.
-Desktop uses a centered modal with a search field,
-responsive icon grid and stable scrolling body without a summary footer; mobile uses a
+Desktop Activity uses a nonmodal, trigger-anchored side companion with a single-row
+toolbar, compact category selector, four-column icon grid, and stable scrolling body
+without a summary footer. The panel stays beside the Activity Bar entry, flips sides
+when the viewport edge requires it, and retains all sixteen tiles in a four-by-four
+grid at ordinary desktop sizes. Background content remains interactive; Escape closes
+the panel, Tab follows normal document order, and outside pointer input dismisses it
+without reclaiming focus. Mobile uses a
 released Floe Shell navigation panel with rounded corners, a visible handle, and
 at least 44px touch targets. Its title and actions share one row, followed by a
 full-width 16px search input. Initial focus goes to the close button so browsing
@@ -49,8 +54,9 @@ installed plugins and appear at six without changing category identity. Empty re
 clear-filters action. A launchable plugin tile's primary action opens its
 declared default surface directly; plugins that cannot launch fall back to
 their exact management detail by `inventoryKey`.
-Escape clears search before closing, focus stays within the active navigation boundary and is restored, background
-content is inert, and arrow/Home/End navigation remains within the visible grid.
+Escape clears search before closing, explicit dismissal restores the Activity
+trigger, and arrow/Home/End navigation remains within the visible grid. Mobile
+navigation remains isolated by the Shell drawer.
 Each plugin is a semantic list item containing a native primary button. The
 compact launcher header exposes one market icon action for Plugin Center;
 plugin tiles do not render a visible overflow button. Right-click, Context Menu,
@@ -90,17 +96,17 @@ projection and clamping to the shared floating layer, and inherits the Dock
 background, border, radius, shadow, blur, and theme material. Its product-owned
 content has no header or footer divider and omits the installed and attention
 summary. Size, content layout, search, focus loop, and close behavior remain
-product-owned. Activity placement keeps the existing Shell-root modal behavior,
-including its header divider; both placements omit the installed and attention
+product-owned. Activity placement uses the released `SurfaceAnchoredLayer` side
+placement and keeps product ownership of content, focus entry, dismissal,
+animation, and plugin actions. Both placements omit the installed and attention
 summary footer.
 
 [Plugin Center interaction](plugin-center-interaction.md) owns the shared directory,
 retained Workbench drawer, responsive details, modal input, and management focus.
 
 Plugin motion is progressive feedback rather than an interaction gate. The
-Launcher establishes backdrop depth before its content settles, and its panel
-uses reversible opacity and transform transitions rather than fixed keyframe
-replays. The desktop Activity Launcher derives its transform origin and small
+Launcher uses reversible opacity and transform transitions rather than fixed
+keyframe replays. The desktop Activity Launcher derives its transform origin and small
 directional offset from the current Activity Bar trigger; the Workbench companion retains a bottom-edge origin. Mobile uses the released Shell navigation panel with shared bottom-drawer motion and 180ms exit presence. Entry completes within 240ms,
 content follows after a bounded 35ms delay, and desktop exit completes within 150ms.
 A rapid close or reopen reverses from the current visual pose without snapping,
@@ -323,7 +329,7 @@ or call business adapters directly.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterItems.tsx:1` - Presents the compact Discover, Installed, and Updates card directory without owning selection or mutations.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1` - Consumes Host `action_state`, RecoverySnapshot, Execution, and Event DTOs.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/plugin-motion.css:1` - Defines the scoped subtle entrance and disclosure motion with a reduced-motion override.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginManagement.browser.test.tsx:1` - Verifies responsive plugin geometry, real motion timing, and reduced-motion operability.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginManagement.browser.test.tsx:1` - Verifies Activity side anchoring, nonmodal focus and dismissal, four-by-four plugin geometry, responsive edges, motion timing, and reduced-motion operability.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.ts:1` - Isolates official and external identity, trust, provenance, grants, and requirements.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/ActivityPluginSurfaceWindow.tsx:1` - Owns Activity floating chrome, mobile modality, focus, and close.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/ActivityPluginSurfacePage.tsx:1` - Projects a pinned surface into Activity KeepAlive activation and visibility lifecycle.

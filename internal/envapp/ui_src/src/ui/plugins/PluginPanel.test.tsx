@@ -119,6 +119,7 @@ function createWorkbenchTrigger(): { surface: HTMLDivElement; trigger: HTMLButto
 function mountPanel(props: Partial<Parameters<typeof PluginPanel>[0]> = {}) {
   const mount = document.createElement('div');
   document.body.append(mount);
+  const trigger = props.trigger ?? (!props.mobile && props.placement !== 'workbench' ? createTrigger() : undefined);
   dispose = render(() => (
     <PluginPanel
       open
@@ -128,6 +129,7 @@ function mountPanel(props: Partial<Parameters<typeof PluginPanel>[0]> = {}) {
       onOpenPluginDetails={vi.fn()}
       onOpenPluginSurface={vi.fn()}
       {...props}
+      trigger={trigger}
     />
   ), mount);
 }
@@ -140,7 +142,7 @@ describe('PluginPanel', () => {
     const mount = document.createElement('div');
     document.body.append(mount);
     dispose = render(() => (
-      <PluginPanel open model={model()} onClose={vi.fn()} onOpenCenter={vi.fn()} onOpenPluginDetails={vi.fn()} onOpenPluginSurface={vi.fn()} />
+      <PluginPanel open trigger={createTrigger()} model={model()} onClose={vi.fn()} onOpenCenter={vi.fn()} onOpenPluginDetails={vi.fn()} onOpenPluginSurface={vi.fn()} />
     ), mount);
 
     const tileBefore = document.querySelector('[data-plugin-panel-tile="instance:plugininst_metrics"]');
@@ -163,19 +165,16 @@ describe('PluginPanel', () => {
     expect(dialog.textContent).not.toContain('No installed plugins yet.');
   });
 
-  it('stages the desktop modal from the Activity trigger before settling open', () => {
+  it('stages the Activity flyout without a global backdrop', () => {
     const trigger = createTrigger();
     mountPanel({ trigger, placement: 'activity' });
 
-    const backdrop = document.querySelector<HTMLElement>('[data-plugin-launcher-backdrop]')!;
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
-    expect(backdrop.dataset.pluginLauncherMotionState).toBe('entering');
+    expect(document.querySelector('[data-plugin-launcher-backdrop]')).toBeNull();
     expect(dialog.dataset.pluginPanelMotionState).toBe('entering');
-    expect(dialog.dataset.pluginPanelMotionKind).toBe('modal');
+    expect(dialog.dataset.pluginPanelMotionKind).toBe('activity-popover');
     expect(dialog.querySelector('[data-plugin-panel-content]')).not.toBeNull();
-    expect(dialog.style.getPropertyValue('--redeven-plugin-panel-origin-x')).toBe('8%');
-    expect(Number.parseFloat(dialog.style.getPropertyValue('--redeven-plugin-panel-enter-x'))).toBeLessThan(0);
-    expect(Number.parseFloat(dialog.style.getPropertyValue('--redeven-plugin-panel-enter-y'))).toBeLessThan(0);
+    expect(dialog.parentElement?.className).toContain('plugin-activity-anchor');
   });
 
   it('keeps the popup mounted while it closes downward', async () => {
@@ -202,7 +201,7 @@ describe('PluginPanel', () => {
     const mount = document.createElement('div');
     document.body.append(mount);
     dispose = render(() => (
-      <PluginPanel open={open()} model={panelModel()} onClose={() => setOpen(false)} onOpenCenter={vi.fn()} onOpenPluginDetails={vi.fn()} onOpenPluginSurface={vi.fn()} />
+      <PluginPanel open={open()} trigger={createTrigger()} model={panelModel()} onClose={() => setOpen(false)} onOpenCenter={vi.fn()} onOpenPluginDetails={vi.fn()} onOpenPluginSurface={vi.fn()} />
     ), mount);
 
     setOpen(false);
@@ -217,15 +216,15 @@ describe('PluginPanel', () => {
     vi.useRealTimers();
   });
 
-  it('reopens through the stable Portal node after the close animation completes', async () => {
+  it('retains content nodes after closing and reopening the anchored layer', async () => {
     vi.useFakeTimers();
     const [open, setOpen] = createSignal(true);
     const mount = document.createElement('div');
     document.body.append(mount);
     dispose = render(() => (
-      <PluginPanel open={open()} model={panelModel()} onClose={() => setOpen(false)} onOpenCenter={vi.fn()} onOpenPluginDetails={vi.fn()} onOpenPluginSurface={vi.fn()} />
+      <PluginPanel open={open()} trigger={createTrigger()} model={panelModel()} onClose={() => setOpen(false)} onOpenCenter={vi.fn()} onOpenPluginDetails={vi.fn()} onOpenPluginSurface={vi.fn()} />
     ), mount);
-    const backdrop = document.querySelector('[data-plugin-launcher-backdrop]');
+    const search = document.querySelector('[data-plugin-launcher-search]');
 
     setOpen(false);
     await Promise.resolve();
@@ -236,7 +235,7 @@ describe('PluginPanel', () => {
     setOpen(true);
     await Promise.resolve();
     expect(document.querySelector('[data-plugin-panel-motion-state="open"]')).not.toBeNull();
-    expect(document.querySelector('[data-plugin-launcher-backdrop]')).toBe(backdrop);
+    expect(document.querySelector('[data-plugin-launcher-search]')).toBe(search);
     vi.useRealTimers();
   });
 
@@ -565,22 +564,23 @@ describe('PluginPanel', () => {
     expect(document.querySelector('[data-plugin-panel-tile="instance:plugininst_metrics"]')).toBeNull();
   });
 
-  it('renders the desktop launcher as an isolated centered modal', async () => {
+  it('renders a nonmodal Activity flyout with a compact toolbar', async () => {
     const trigger = createTrigger();
     mountPanel({ id: 'plugin-switcher', trigger });
 
     const dialog = document.querySelector('#plugin-switcher')!;
     expect(dialog.className).toContain('bg-popover');
     expect(dialog.className).not.toContain('backdrop-blur');
-    expect(dialog.getAttribute('aria-modal')).toBe('true');
-    expect(dialog.parentElement?.className).toContain('justify-center');
+    expect(dialog.getAttribute('aria-modal')).toBeNull();
+    expect(trigger.closest('[inert]')).toBeNull();
+    expect(dialog.parentElement?.className).toContain('plugin-activity-anchor');
     expect(dialog.querySelector('header')?.className).toContain('border-b');
     expect(dialog.querySelector('footer')).toBeNull();
     await Promise.resolve();
     expect(document.activeElement).toBe(document.querySelector('[data-plugin-launcher-search]'));
   });
 
-  it('traps focus and restores trigger focus after Escape', async () => {
+  it('allows Activity focus to leave the flyout and restores trigger focus after Escape', async () => {
     const trigger = createTrigger();
     trigger.focus();
     const [open, setOpen] = createSignal(true);
@@ -606,8 +606,7 @@ describe('PluginPanel', () => {
     close.focus();
     const previous = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true });
     document.dispatchEvent(previous);
-    expect(previous.defaultPrevented).toBe(true);
-    expect(document.activeElement).toBe(document.querySelector('[data-plugin-center-market-action]'));
+    expect(previous.defaultPrevented).toBe(false);
 
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(document.activeElement).toBe(trigger);
@@ -650,7 +649,9 @@ describe('PluginPanel', () => {
 
     search.value = '';
     search.dispatchEvent(new InputEvent('input', { bubbles: true }));
-    (document.querySelector('[data-plugin-launcher-category="infrastructure"]') as HTMLButtonElement).click();
+    const categories = document.querySelector<HTMLSelectElement>('[data-plugin-launcher-category-filter]')!;
+    categories.value = 'infrastructure';
+    categories.dispatchEvent(new Event('change', { bubbles: true }));
     expect(document.querySelector('[data-plugin-panel-tile="instance:plugininst_metrics"]')).not.toBeNull();
     expect(document.querySelector('[data-plugin-panel-tile="instance:plugininst_toolbox"]')).toBeNull();
 
@@ -671,7 +672,7 @@ describe('PluginPanel', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('closes on an outside click, restores focus, and lets the trigger own its toggle', () => {
+  it('dismisses on outside pointerdown without reclaiming focus and lets the trigger toggle', () => {
     const trigger = createTrigger();
     const [open, setOpen] = createSignal(true);
     const mount = document.createElement('div');
@@ -690,9 +691,12 @@ describe('PluginPanel', () => {
 
     trigger.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(open()).toBe(true);
-    document.querySelector('[data-plugin-launcher-backdrop]')?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    const outside = document.createElement('input');
+    document.body.append(outside);
+    outside.focus();
+    document.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
     expect(open()).toBe(false);
-    expect(document.activeElement).toBe(trigger);
+    expect(document.activeElement).toBe(outside);
   });
 
   it('supplies retained mobile content without owning a global modal', async () => {
