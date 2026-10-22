@@ -175,3 +175,26 @@ func sameStringSlice(left []string, right []string) bool {
 	}
 	return true
 }
+
+func TestCanonicalAIReasoningSelectionOmitsDefaultOnlyWithoutReasoningControls(t *testing.T) {
+	t.Parallel()
+
+	selection, err := CanonicalAIReasoningSelection(AIReasoningCapability{}, AIReasoningSelection{Level: " Default "})
+	if err != nil || !selection.IsZero() {
+		t.Fatalf("Default without controls=%+v err=%v, want omitted", selection, err)
+	}
+	for _, rejected := range []AIReasoningSelection{
+		{Level: AIReasoningLevelDefault, BudgetTokens: 4096},
+		{Level: AIReasoningLevelOff},
+		{Level: AIReasoningLevelHigh},
+	} {
+		if _, err := CanonicalAIReasoningSelection(AIReasoningCapability{}, rejected); err == nil {
+			t.Fatalf("%+v accepted without reasoning controls", rejected)
+		}
+	}
+	capability := AIReasoningCapabilityForModel("openai", "gpt-5.5")
+	selection, err = CanonicalAIReasoningSelection(capability, AIReasoningSelection{Level: AIReasoningLevelDefault})
+	if err != nil || selection != (AIReasoningSelection{Level: AIReasoningLevelDefault}) {
+		t.Fatalf("Default with controls=%+v err=%v, want explicit Default", selection, err)
+	}
+}

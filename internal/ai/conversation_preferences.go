@@ -129,7 +129,7 @@ func (s *Service) PatchConversationPreferences(ctx context.Context, meta *sessio
 		if err != nil {
 			return ConversationPreferences{}, err
 		}
-		selection, err := normalizeRequestedReasoningOrReject(capability, patch.Reasoning.Selection)
+		selection, err := config.CanonicalAIReasoningSelection(capability, patch.Reasoning.Selection)
 		if err != nil {
 			return ConversationPreferences{}, reasoningSelectionError(modelID, err)
 		}

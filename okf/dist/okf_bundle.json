@@ -10345,15 +10345,15 @@
         "title": "Model reasoning capabilities and transport",
         "type": "AI Runtime Contract"
       },
-      "body_length": 2090,
+      "body_length": 2934,
       "summary": "Published Floret owns the portable reasoning selection contract, Ollama metadata\nparser, and Ollama wire encoding. Redeven maps model metadata, product settings,\nand provider requests to that contract. Only verified capabilities create\ncontrols; Default, Off, On, named effort, and token budget retain distinct\nmeanings. Invalid selections fail before provider dispatch, while unknown\ncontrols retain the model's default behavior. Active Turns keep immutable\nsettings through continuation and restart.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Capability and transport\nOpenAI-compatible Chat reasoning is capability-driven. Redeven reads only response fields named by that result, emits their fragments as reasoning without trimming provider whitespace, and never treats reasoning-only output as assistant body text.\n\nBudget-only and fixed-thinking models never acquire synthetic effort names or a toggle merely because another model supports one.\n\n## Settings ownership\nThread model, reasoning and permission settings are Redeven product state. Execution authority records admission permission for historical attribution only, never as live tool authorization. The configured `current_model_id` initializes future threads only.\n\n## Automatic titles\nPublished Floret v7.26.0 owns title reasoning and output limits. They never change the thread's saved reasoning choice or the main response policy.\n\nThe [live timeline contract](../ui/flower-live-timeline.md) owns canonical title status, persistence, and workspace-summary presentation.",
-          "char_count": 995
+          "body": "## Capability and transport\nOpenAI-compatible Chat reasoning is capability-driven. Redeven reads only response fields named by that result, emits their fragments as reasoning without trimming provider whitespace, and never treats reasoning-only output as assistant body text.\n\nBudget-only and fixed-thinking models never acquire synthetic effort names or a toggle merely because another model supports one.\n\n## Default selection\nDefault asks for the model's own reasoning behavior. Thread creation, Thread\nedits, and every Turn canonicalize it once, in\n`config.CanonicalAIReasoningSelection`: on a model without verified reasoning\ncontrols a budget-free Default is the omitted selection and is neither stored\nnor sent. Default with a budget, Off, On, and named efforts remain explicit\nintent and are rejected for such a model; personal memory keeps no reasoning\nchoice for it. Clients may send Default without knowing the model's capability\nand must not drop or rewrite it themselves.\n\n## Settings ownership\nThread model, reasoning and permission settings are Redeven product state. Execution authority records admission permission for historical attribution only, never as live tool authorization. The configured `current_model_id` initializes future threads only.\n\n## Automatic titles\nPublished Floret v7.26.0 owns title reasoning and output limits. They never change the thread's saved reasoning choice or the main response policy.\n\nThe [live timeline contract](../ui/flower-live-timeline.md) owns canonical title status, persistence, and workspace-summary presentation.",
+          "char_count": 1573
         },
         {
           "id": "boundaries",
@@ -10378,6 +10378,16 @@
           "id": "redeven:internal/ai/model_gateway.go:0:provider request, stream, and approved history-field mapping.",
           "source": "redeven:internal/ai/model_gateway.go",
           "description": "Provider request, stream, and approved history-field mapping."
+        },
+        {
+          "id": "redeven:internal/config/ai_reasoning.go:0:selection validation and default canonicalization.",
+          "source": "redeven:internal/config/ai_reasoning.go",
+          "description": "Selection validation and Default canonicalization."
+        },
+        {
+          "id": "redeven:internal/ai/initial_turn_reasoning_test.go:0:default on an openai-compatible model without reasoning controls starts a turn without reasoning wire fields.",
+          "source": "redeven:internal/ai/initial_turn_reasoning_test.go",
+          "description": "Default on an OpenAI-compatible model without reasoning controls starts a turn without reasoning wire fields."
         }
       ],
       "snippet": "Published Floret owns the portable reasoning selection contract, Ollama metadata parser, and Ollama wire encoding. Redeven maps model metadata, product settings, and provider requests to that contract. Only verified capabilities create",
@@ -10400,6 +10410,12 @@
           "label": "Redeven OKF Bundle",
           "path": "index.md",
           "title": "Redeven OKF Bundle"
+        },
+        {
+          "label": "Flower personal conversation preferences",
+          "path": "ui/flower-conversation-preferences.md",
+          "concept_id": "ui.flower-conversation-preferences",
+          "title": "Flower personal conversation preferences"
         }
       ]
     },
@@ -28374,15 +28390,15 @@
         "title": "Flower personal conversation preferences",
         "type": "UI Contract"
       },
-      "body_length": 3098,
+      "body_length": 3383,
       "summary": "Flower remembers explicit choices for future root conversations in one\nRedeven-owned product store, scoped by authenticated namespace, endpoint, and\nuser. The existing controls and layout are unchanged. Loading or switching a\nThread never writes a preference. Existing Threads and immutable Turns keep\ntheir own confirmed settings; new conversations use explicit launch/draft\nchoices before personal memory and configured defaults.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Ownership and persistence\n`ai_conversation_preferences` belongs to `ai_threadstore_product_v1`, schema version 11. The v10-to-v11 transactional migration validates both historical and target shapes, preserves product data, and never infers a user's preference from old Threads.\n\nStable scope absence cannot read another user's defaults.\n\n## Selection events\nOnly the selected field is patched. Existing-Thread edits must succeed before personal memory is changed; a later memory failure does not roll back the confirmed Thread result.\n\nExplicit Default remains distinct from absent memory; existing Default/budget and Off/budget semantics are unchanged.\n\n## Drafts and admission\nShared drafts separate explicit `model_id_override`/`working_dir_override` from effective `model_id`/`working_dir` admission projections. Old Thread selection cannot seed the new draft.\n\nExisting busy/queued/unresolved-interaction edit restrictions are unchanged.\n\n## Concurrency and failure\nEach authenticated adapter orders captured field patches and loads the latest revision before writing. The product store atomically merges fields and uses compare-and-set revision; concurrent stale writes return HTTP 409 and are not automatically retried.\n\nThread/draft targets and model identities are captured before asynchronous work; a late response cannot retarget another draft or navigate the surface.\n\nSaving a conversation preference updates the active Flower surface from the\nauthoritative response. The originating surface consumes its own settings\nrevision notification without reloading the shared model settings resource;\nother mounted surfaces still refresh from the persisted preference. Provider and\nmodel catalog refreshes remain reserved for model configuration changes, so\nswitching a model or reasoning level does not replace the active composer with a\nloading state or move its layout.",
-          "char_count": 1881
+          "body": "## Ownership and persistence\n`ai_conversation_preferences` belongs to `ai_threadstore_product_v1`, schema version 11. The v10-to-v11 transactional migration validates both historical and target shapes, preserves product data, and never infers a user's preference from old Threads.\n\nStable scope absence cannot read another user's defaults.\n\n## Selection events\nOnly the selected field is patched. Existing-Thread edits must succeed before personal memory is changed; a later memory failure does not roll back the confirmed Thread result.\n\nExplicit Default remains distinct from absent memory; existing Default/budget and Off/budget semantics are unchanged.\n\n## Drafts and admission\nShared drafts separate explicit `model_id_override`/`working_dir_override` from effective `model_id`/`working_dir` admission projections. Old Thread selection cannot seed the new draft.\n\nA root launch without an explicit or remembered reasoning choice freezes\nexplicit Default, so a retry cannot pick up memory written after preparation.\nThe client does not inspect model capability for this; the server owns\n[Default canonicalization](../ai/model-reasoning-runtime.md).\n\nExisting busy/queued/unresolved-interaction edit restrictions are unchanged.\n\n## Concurrency and failure\nEach authenticated adapter orders captured field patches and loads the latest revision before writing. The product store atomically merges fields and uses compare-and-set revision; concurrent stale writes return HTTP 409 and are not automatically retried.\n\nThread/draft targets and model identities are captured before asynchronous work; a late response cannot retarget another draft or navigate the surface.\n\nSaving a conversation preference updates the active Flower surface from the\nauthoritative response. The originating surface consumes its own settings\nrevision notification without reloading the shared model settings resource;\nother mounted surfaces still refresh from the persisted preference. Provider and\nmodel catalog refreshes remain reserved for model configuration changes, so\nswitching a model or reasoning level does not replace the active composer with a\nloading state or move its layout.",
+          "char_count": 2166
         },
         {
           "id": "boundaries",
@@ -28410,6 +28426,14 @@
         }
       ],
       "snippet": "Flower remembers explicit choices for future root conversations in one Redeven-owned product store, scoped by authenticated namespace, endpoint, and user. The existing controls and layout are unchanged. Loading or switching a",
+      "links": [
+        {
+          "label": "Default canonicalization",
+          "path": "ai/model-reasoning-runtime.md",
+          "concept_id": "ai.model-reasoning-runtime",
+          "title": "Model reasoning capabilities and transport"
+        }
+      ],
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -33230,5 +33254,5 @@
       ]
     }
   ],
-  "source_sha256": "5d5f18347b7617391f92d9b9fe7dfce8392f864d7593cb66d6890766cf5f6a34"
+  "source_sha256": "d50895cbba4a7974b28a7eaf62b94a0e1a675eec59f636739719317fa70b9db4"
 }
