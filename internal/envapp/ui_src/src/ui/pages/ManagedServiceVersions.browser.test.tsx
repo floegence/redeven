@@ -132,7 +132,11 @@ describe('Managed service version drawer', () => {
     await expect.poll(() => document.querySelector('[data-testid="managed-service-version"]')).toBeTruthy();
     await userEvent.click(document.querySelector<HTMLButtonElement>('[data-testid="managed-service-version"]')!);
     await expect.poll(() => document.querySelector('[data-release-id="1.2.0"]')).toBeTruthy();
-    if (!workbench) await expect.poll(() => Math.round(document.querySelector('.managed-service-version-drawer')!.getBoundingClientRect().right)).toBe(width);
+    if (!workbench) {
+      const drawer = document.querySelector<HTMLElement>('.managed-service-version-drawer')!;
+      await expect.poll(() => Math.round(drawer.getBoundingClientRect().right)).toBe(width);
+      expect(Math.round(drawer.getBoundingClientRect().width)).toBe(width > 720 ? Math.min(736, width - 64) : width);
+    }
   }
   const submit = () => document.querySelector<HTMLButtonElement>('[data-testid="managed-release-submit"]')!;
   async function select(id = '1.2.0') {
@@ -167,6 +171,7 @@ describe('Managed service version drawer', () => {
 
   for (const dark of [false, true]) for (const width of [1440, 390]) it(`keeps a clear single-screen update at ${width}px in ${dark ? 'dark' : 'light'} mode`, async () => {
     await mount(width, dark);
+    expect(page.getByRole('heading', { name: 'Choose version', exact: true })).toBeTruthy();
     await select();
     assertGeometry();
     expect(submit().textContent).toContain('Update to 1.2.0');
@@ -396,13 +401,18 @@ describe('Managed service version drawer', () => {
     await mount(); await select();
     await userEvent.click(submit());
     await expect.poll(() => document.querySelector('[data-testid="managed-release-drawer-body"]')).toBeNull();
-    await userEvent.click(page.getByRole('button', { name: 'Workspace: More', exact: true }));
-    await userEvent.click(page.getByRole('menuitem', { name: 'Details and diagnostics', exact: true }));
+    await expect.poll(() => document.querySelector('[data-testid="service-management-drawer"]')).toBeTruthy();
     await expect.poll(() => document.querySelector('.service-management-conclusion')?.textContent).toBe('Running');
     expect(document.querySelector('.service-management-identity')?.textContent).toContain('1.0.0');
     expect(document.querySelector('.service-operation-heading')?.textContent).toContain('Update');
-    expect(document.querySelectorAll('.service-operation-track > span')).toHaveLength(7);
-    expect(document.querySelector('.service-operation-track > [data-state="failed"]')).not.toBeNull();
+    const releasePath = document.querySelector('.service-operation-release')?.textContent ?? '';
+    expect(releasePath).toContain('1.0.0');
+    expect(releasePath).toContain('1.2.0');
+    const operationTrack = document.querySelector('.service-management-panel .service-operation-track');
+    expect(operationTrack?.querySelectorAll(':scope > span')).toHaveLength(7);
+    expect(operationTrack?.querySelector(':scope > [data-state="failed"]')).not.toBeNull();
+    await userEvent.click(page.getByTestId('service-management-drawer').getByRole('button', { name: 'Execution details', exact: true }));
+    expect(document.querySelector('.service-management-execution .service-operation-release')?.textContent).toContain('1.2.0');
     expect(document.querySelector('.service-management-footer')?.textContent).not.toContain('Closing keeps the operation running.');
   });
 

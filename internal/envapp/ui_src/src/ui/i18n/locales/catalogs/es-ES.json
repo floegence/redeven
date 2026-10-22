@@ -3700,6 +3700,8 @@
       "importHint": "La plantilla se añadirá a tu biblioteca. La instalación del servicio se inicia por separado al desplegarlo."
     },
     "management": {
+      "backToService": "Volver a la gestión del servicio",
+      "notInstalled": "Sin instalar",
       "closeKeepsOperation": "La operación continúa al cerrar.",
       "executionDetails": "Detalles de ejecución",
       "references": "Referenciado por",

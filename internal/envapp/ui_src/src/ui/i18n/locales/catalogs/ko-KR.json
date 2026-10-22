@@ -3700,6 +3700,8 @@
       "importHint": "템플릿이 라이브러리에 추가됩니다. 서비스 설치는 별도로 배포할 때 시작됩니다."
     },
     "management": {
+      "backToService": "서비스 관리로 돌아가기",
+      "notInstalled": "설치되지 않음",
       "closeKeepsOperation": "닫아도 작업은 계속됩니다.",
       "executionDetails": "실행 세부 정보",
       "references": "참조하는 인스턴스",

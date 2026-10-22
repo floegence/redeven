@@ -12,6 +12,9 @@ export type ManagedOperation = Readonly<{
   stage: string;
   progress_current: number;
   progress_total: number;
+  created_at_unix_ms?: number;
+  updated_at_unix_ms?: number;
+  finished_at_unix_ms?: number;
   progress_detail?: Readonly<{
     schema_version: 2;
     stage_started_at_unix_ms?: number;

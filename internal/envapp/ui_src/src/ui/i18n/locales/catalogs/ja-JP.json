@@ -3700,6 +3700,8 @@
       "importHint": "テンプレートをライブラリに追加します。サービスのインストールは、別途デプロイする際に開始されます。"
     },
     "management": {
+      "backToService": "サービス管理に戻る",
+      "notInstalled": "未インストール",
       "closeKeepsOperation": "閉じても処理は継続します。",
       "executionDetails": "実行の詳細",
       "references": "参照しているインスタンス",
