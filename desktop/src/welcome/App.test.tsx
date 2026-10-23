@@ -316,7 +316,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('<TopBarIconButton label={topBarLogoLabel()} onClick={activateTopBarLogo}>');
   });
 
-  it('keeps a labeled Desktop update entry in the far-right titlebar corner', () => {
+  it('keeps an accessible icon-only Desktop update entry in the far-right titlebar corner', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
     const trailingActions = appSrc.slice(
@@ -336,13 +336,24 @@ describe('DesktopWelcomeShell', () => {
     expect(cornerActions).toContain('class="redeven-desktop-update-button"');
     expect(cornerActions).toContain('data-update-state={desktopUpdateSnapshot().state}');
     expect(cornerActions).toContain('onClick={checkForDesktopUpdates}');
-    expect(cornerActions).toContain("<span>{i18n().t('desktopUpdate.checkForUpdates')}</span>");
+    expect(cornerActions).not.toContain("<span>{i18n().t('desktopUpdate.checkForUpdates')}</span>");
+    expect(cornerActions).toContain('<DesktopTooltip');
+    expect(cornerActions).toContain('placement="bottom"');
+    expect(cornerActions).toContain('aria-label={desktopUpdateButtonLabel()}');
+    expect(cornerActions).toContain('content={desktopUpdateButtonLabel()}');
+    expect(cornerActions).toContain('aria-hidden="true"');
     expect(cornerActions).toContain("desktopUpdateSnapshot().state === 'checking' ? 'animate-spin' : ''");
     expect(cornerActions).toContain('class="redeven-desktop-update-button__indicator" aria-hidden="true"');
     expect(styles).toContain('.redeven-desktop-titlebar-corner-actions {');
     expect(styles).toContain('padding-inline-end: calc(0.75rem + var(--redeven-desktop-titlebar-end-inset, 0px));');
     expect(styles).toContain('app-region: no-drag;');
-    expect(styles).toContain('.redeven-desktop-update-button {');
+    const updateButton = cssRuleBlock(styles, '.redeven-desktop-update-button');
+    expect(updateButton).toContain('width: 1.75rem;');
+    expect(updateButton).toContain('height: 1.75rem;');
+    expect(updateButton).toContain('background: transparent;');
+    expect(updateButton).toContain('border: 0;');
+    expect(styles).toContain('.redeven-desktop-update-button:focus-visible {\n  outline: 2px solid var(--ring);');
+    expect(cssRuleBlock(styles, '.redeven-desktop-update-button__indicator')).toContain('position: absolute;');
     expect(styles).toContain(".redeven-desktop-update-button[data-update-state='available']");
   });
 

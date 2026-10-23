@@ -2580,6 +2580,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setDesktopUpdateSnapshot(response.snapshot);
   }
 
+  const desktopUpdateButtonLabel = () => i18n().t('desktopUpdate.statusButton', {
+    status: desktopUpdateStatusLabel(i18n(), desktopUpdateSnapshot()),
+  });
+
   function checkForDesktopUpdates(): void {
     const current = desktopUpdateSnapshot();
     if (current.platform !== 'macos_sparkle' || current.state === 'blocked') {
@@ -6361,27 +6365,24 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           </div>
         )}
         topBarCornerActions={(
-          <button
-            type="button"
-            class="redeven-desktop-update-button"
-            data-update-state={desktopUpdateSnapshot().state}
-            aria-label={i18n().t('desktopUpdate.statusButton', {
-              status: desktopUpdateStatusLabel(i18n(), desktopUpdateSnapshot()),
-            })}
-            title={i18n().t('desktopUpdate.statusButton', {
-              status: desktopUpdateStatusLabel(i18n(), desktopUpdateSnapshot()),
-            })}
-            onClick={checkForDesktopUpdates}
-          >
-            <Refresh
-              class={cn(
-                'h-3.5 w-3.5 shrink-0',
-                desktopUpdateSnapshot().state === 'checking' ? 'animate-spin' : '',
-              )}
-            />
-            <span>{i18n().t('desktopUpdate.checkForUpdates')}</span>
-            <span class="redeven-desktop-update-button__indicator" aria-hidden="true" style={{ visibility: desktopUpdateSnapshot().state === 'available' || desktopUpdateSnapshot().state === 'ready' ? 'visible' : 'hidden' }} />
-          </button>
+          <DesktopTooltip content={desktopUpdateButtonLabel()} placement="bottom" anchorClass="flex" class="w-max">
+            <button
+              type="button"
+              class="redeven-desktop-update-button"
+              data-update-state={desktopUpdateSnapshot().state}
+              aria-label={desktopUpdateButtonLabel()}
+              onClick={checkForDesktopUpdates}
+            >
+              <Refresh
+                aria-hidden="true"
+                class={cn(
+                  'h-4 w-4 shrink-0 motion-reduce:animate-none',
+                  desktopUpdateSnapshot().state === 'checking' ? 'animate-spin' : '',
+                )}
+              />
+              <span class="redeven-desktop-update-button__indicator" aria-hidden="true" style={{ visibility: desktopUpdateSnapshot().state === 'available' || desktopUpdateSnapshot().state === 'ready' ? 'visible' : 'hidden' }} />
+            </button>
+          </DesktopTooltip>
         )}
         bottomBarLeading={(
           <div class="flex items-center gap-1.5 min-w-0">

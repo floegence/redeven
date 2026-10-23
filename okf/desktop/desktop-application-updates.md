@@ -5,7 +5,7 @@ description: Signed macOS and Linux application updates with an explicitly unsup
 tags: [desktop, updates, sparkle, linux, windows, security, release]
 timestamp: 2026-08-25T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-23"
 ---
 # Summary
 
@@ -22,6 +22,8 @@ production feed.
 
 ## Check and presentation
 The coordinator owns the states `idle`, `checking`, `available`, `downloading`, `ready`, `installing`, `blocked`, and `error`. A check is serialized; repeated requests reuse the current operation and never start a second download.
+
+The permanent Welcome titlebar entry is a compact icon-only button with no resting border or label. Its localized state remains available through the accessible name and the shared tooltip on hover or keyboard focus. Checking animates the icon unless reduced motion is requested; available and ready updates add a small overlaid dot without changing the button width. Warning states tint the icon, and keyboard focus has a visible outline.
 
 No client request contains a GitHub token or a repository-specific credential.
 
@@ -40,6 +42,8 @@ The manual exact-main Windows workflow may publish only an Actions artifact whos
 Sparkle owns macOS update discovery, verification, download UI, and relaunch. The release workflow owns credentials and publication; Runtime, Provider, and Gateway services do not own Desktop application updates.
 
 # Evidence
+
+- `redeven:desktop/src/welcome/App.tsx:1` and `redeven:desktop/src/welcome/index.css:1` - Permanent icon entry, localized tooltip, and state presentation.
 
 - `redeven:desktop/src/main/desktopUpdateCoordinator.ts:1` - Unified state machine, concurrency, startup scheduling, and installation interlock.
 
