@@ -1,11 +1,11 @@
 import { batch, createSignal } from 'solid-js';
 import { createStore, type SetStoreFunction } from 'solid-js/store';
-import type { FlowerChatMessage, FlowerRuntimeCurrentItem, FlowerRuntimeCurrentView, FlowerRuntimeUpdate, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
+import type { FlowerChatMessage, FlowerHistoryBodyChunk, FlowerRuntimeCurrentItem, FlowerRuntimeCurrentView, FlowerRuntimeUpdate, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
 import { FlowerLiveSyncError } from './flowerLiveWire';
 import { retainEqualValue } from './presentationIdentity';
 import { projectFlowerRuntimeComponents, runtimeMessages, validateFlowerRuntimeTurns } from './runtimeCurrentView';
 
-type ItemRecord = { item: FlowerRuntimeCurrentItem; bytes: number; preview?: FlowerRuntimeCurrentItem };
+type ItemRecord = { item: FlowerRuntimeCurrentItem; bytes: number; preview?: FlowerRuntimeCurrentItem; retained?: boolean };
 type MutableMessage = { -readonly [K in keyof FlowerChatMessage]: FlowerChatMessage[K] };
 type MessageRecord = { value: FlowerChatMessage; set: SetStoreFunction<MutableMessage>; chunks: string[]; setRevision: (value: number) => number };
 const utf8 = new TextEncoder();
@@ -13,16 +13,33 @@ const utf8 = new TextEncoder();
 function invalid(message: string): never { throw new Error(`Flower contract error: ${message}.`); }
 function version(value: number) { return Number.isSafeInteger(value) && value >= 0; }
 
+function sameItem(a: FlowerRuntimeCurrentItem, b: FlowerRuntimeCurrentItem) {
+  return a.id === b.id && a.turn_id === b.turn_id && a.run_id === b.run_id && a.kind === b.kind;
+}
+function retainBody(before: ItemRecord | undefined, incoming: FlowerRuntimeCurrentItem): ItemRecord | undefined {
+  if (!before || !sameItem(before.item, incoming)) return;
+  if (before.preview && retainEqualValue(before.preview, incoming) === before.preview) return { ...before, preview: incoming };
+  const source = before.item.body ?? before.preview?.body;
+  const body = incoming.body;
+  if (!body || !['assistant', 'thinking', 'user'].includes(incoming.kind)
+    || source && (source.source_id !== body.source_id || source.entry_id !== body.entry_id || source.field !== body.field)
+    || body.run_id && body.run_id !== incoming.run_id
+    || body.run_id && !(before.item.text ?? '').startsWith(incoming.text ?? '')) return;
+  const sameLiveSource = Boolean(body.run_id) && body.run_id === (source?.run_id ?? before.item.run_id);
+  return { item: { ...incoming, text: before.item.text, body: sameLiveSource && before.bytes >= body.bytes ? undefined : body },
+    bytes: before.bytes, preview: incoming, retained: before.retained || !before.item.body || Boolean(incoming.live) };
+}
+
 // ThreadCache owns these records. There is no second raw current snapshot or
 // lifecycle: components supply the shared projection, and items are indexed once.
-export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, initial: FlowerThreadSnapshot, previous?: { findMessage(id: string): MessageRecord | undefined; retainedItem(item: FlowerRuntimeCurrentItem): FlowerRuntimeCurrentItem | undefined }) {
+export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, initial: FlowerThreadSnapshot, previous?: { findMessage(id: string): MessageRecord | undefined; retainedItem(item: FlowerRuntimeCurrentItem): ItemRecord | undefined }) {
   const threadID = current.thread_id;
   let acceptedVersion = current.view_version;
   const items = new Map<string, ItemRecord>();
   for (const item of current.items ?? []) {
     if (items.has(item.id)) invalid('duplicate runtime item');
     const retained = previous?.retainedItem(item);
-    items.set(item.id, { item: retained ?? item, bytes: utf8.encode((retained ?? item).text ?? '').length, ...(retained ? { preview: item } : {}) });
+    items.set(item.id, retained ?? { item, bytes: utf8.encode(item.text ?? '').length, retained: Boolean(item.live) });
   }
   let order = [...items.keys()];
   let components: FlowerRuntimeCurrentView = { ...current, items: undefined };
@@ -44,35 +61,76 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
     messages.set(message.id, record);
     return record;
   };
-  const retainedMessages = new Map(runtimeMessages(initial, { ...current, tool_call_previews: [], items: [...items.values()].filter(value => value.preview).map(value => value.item) }).map(message => [message.id, message]));
+  const present = (record: ItemRecord, message: FlowerChatMessage): FlowerChatMessage => message.body_pending && record.retained ? { ...message, body_pending: { ...message.body_pending, retained: true } } : message;
+  const retainedMessages = new Map(runtimeMessages(initial, { ...current, tool_call_previews: [], items: [...items.values()].filter(value => value.preview || value.item.body && value.retained).map(value => value.item) }).map(message => [message.id, present(items.get(message.id)!, message)]));
   let projectedMessages: readonly FlowerChatMessage[] = initial.messages.map(message => makeMessage(retainedMessages.get(message.id) ?? message).value);
   previous = undefined;
   const [thread, setThread] = createStore<{ -readonly [K in keyof FlowerThreadSnapshot]: FlowerThreadSnapshot[K] }>({ ...initial, messages: projectedMessages });
   projectedMessages = thread.messages;
+  const updateMessage = (message: FlowerChatMessage) => {
+    const prior = messages.get(message.id);
+    if (prior && !message.blocks?.length && !prior.value.blocks?.length && message.content.startsWith(prior.value.content)) {
+      const suffix = message.content.slice(prior.value.content.length);
+      if (suffix) prior.chunks.push(suffix);
+      for (const key of new Set([...Object.keys(prior.value), ...Object.keys(message)])) {
+        if (key !== 'text_source') prior.set({ [key]: message[key as keyof FlowerChatMessage] });
+      }
+      if (suffix) prior.setRevision(prior.chunks.length);
+      return;
+    }
+    const value = makeMessage(message).value;
+    projectedMessages = projectedMessages.map(previous => previous.id === value.id ? value : previous);
+    setThread('messages', projectedMessages);
+    projectedMessages = thread.messages;
+  };
 
   return {
     get version() { return acceptedVersion; },
     item(id: string) { return items.get(id)?.item; },
     retainedItem(item: FlowerRuntimeCurrentItem) {
-      const record = items.get(item.id);
-      return record?.preview && !record.item.live && retainEqualValue(record.preview, item) === record.preview ? record.item : undefined;
+      return retainBody(items.get(item.id), item);
     },
     hydrate(expected: FlowerRuntimeCurrentItem, loaded: FlowerRuntimeCurrentItem) {
       const before = items.get(expected.id);
       // A response may finish after a newer live replacement or navigation.
-      if (!before || before.item !== expected) return false;
+      if (!before || before.item !== expected && (!expected.body || !sameItem(before.item, expected)
+        || Boolean(before.item.live) !== Boolean(expected.live) || before.item.canonical_ordinal !== expected.canonical_ordinal
+        || !retainBody(before, expected))) return false;
       if (loaded.id !== expected.id || loaded.turn_id !== expected.turn_id || loaded.run_id !== expected.run_id
         || loaded.kind !== expected.kind || loaded.ordinal !== expected.ordinal || loaded.canonical_ordinal !== expected.canonical_ordinal || Boolean(loaded.live) !== Boolean(expected.live) || loaded.body || loaded.activity_bodies?.length) invalid('expanded item identity differs');
-      if (expected.body && !(loaded.text ?? '').startsWith(expected.text ?? '')) return false;
+      if (expected.body && !(loaded.text ?? '').startsWith((before.preview ?? expected).text ?? '')) return false;
+      const bytes = utf8.encode(loaded.text ?? '').length;
+      if (expected.body?.run_id && bytes < before.bytes) return false;
       if (expected.activity && (loaded.activity?.tool_id !== expected.activity.tool_id || loaded.activity?.status !== expected.activity.status || loaded.activity?.ended_at_unix_ms !== expected.activity.ended_at_unix_ms)) return false;
-      const projected = runtimeMessages(thread, { ...components, items: [loaded] }).find(message => message.id === loaded.id);
+      const pending = before.item.body;
+      const item = { ...loaded, ...(pending?.run_id && pending.bytes > bytes ? { body: pending } : {}) };
+      const after = { item, bytes, preview: before.preview ?? expected, retained: true };
+      const projected = runtimeMessages(thread, { ...components, items: [item] }).find(message => message.id === loaded.id);
       if (!projected) invalid('expanded item has no presentation');
       batch(() => {
-        items.set(loaded.id, { item: loaded, bytes: utf8.encode(loaded.text ?? '').length, preview: expected });
-        const message = makeMessage(projected).value;
-        projectedMessages = projectedMessages.map(value => value.id === message.id ? message : value);
-        setThread('messages', projectedMessages);
-        projectedMessages = thread.messages;
+        items.set(loaded.id, after);
+        updateMessage(present(after, projected));
+      });
+      return true;
+    },
+    bodyOffset(id: string) { return items.get(id)?.bytes; },
+    appendBody(chunk: FlowerHistoryBodyChunk) {
+      const before = items.get(chunk.source_id);
+      const body = before?.item.body;
+      if (!before || !body || chunk.thread_id !== threadID || chunk.run_id !== body.run_id
+        || chunk.source_id !== body.source_id || chunk.offset_bytes !== before.bytes) return false;
+      const size = utf8.encode(chunk.text).length;
+      if (!size || size > 16 * 1024 || !version(chunk.through_bytes)
+        || before.bytes + size > chunk.through_bytes || chunk.through_bytes > body.bytes) invalid('invalid body chunk extent');
+      const bytes = before.bytes + size;
+      const item = { ...before.item, text: (before.item.text ?? '') + chunk.text, body: bytes < body.bytes ? body : undefined };
+      const after = { item, bytes, preview: before.preview ?? before.item, retained: true };
+      batch(() => {
+        items.set(item.id, after);
+        const message = messages.get(item.id)!;
+        if (item.kind === 'thinking') message.set('blocks', [{ type: 'thinking', content: item.text }]);
+        else { message.set('content', item.text); message.chunks.push(chunk.text); message.setRevision(message.chunks.length); }
+        message.set('body_pending', item.body ? { kind: 'text', bytes: body.bytes, retained: true } : undefined);
       });
       return true;
     },
@@ -120,7 +178,11 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
         } else if (change.kind === 'body') {
           if (!before || !change.body || change.item || change.append) invalid('invalid body locator update');
           const preview = before.preview ?? before.item;
-          staged.set(id, { item: { ...preview, body: change.body }, bytes: utf8.encode(preview.text ?? '').length });
+          const source = before.item.body ?? before.preview?.body;
+          if (!source || change.body.run_id !== source.run_id || change.body.source_id !== source.source_id
+            || change.body.entry_id !== source.entry_id || change.body.field !== source.field
+            || !version(change.body.bytes) || change.body.bytes < source.bytes) invalid('body source changed during growth');
+          staged.set(id, { ...before, item: { ...before.item, body: change.body.bytes > before.bytes ? change.body : undefined }, preview: { ...preview, body: change.body } });
         } else if (change.kind === 'remove') {
           if (!before || change.item || change.append) invalid('runtime removal requires an existing item');
           staged.set(id, undefined); structure = true;
@@ -128,7 +190,7 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
           const item = change.item;
           if (!item || item.id !== id || change.append || (change.kind === 'add' ? Boolean(before) : !before)) invalid('runtime replacement has invalid item identity');
           if (!Number.isSafeInteger(item.ordinal) || item.ordinal < 0) invalid('runtime item requires an ordinal');
-          staged.set(id, { item, bytes: utf8.encode(item.text ?? '').length });
+          staged.set(id, retainBody(before, item) ?? { item, bytes: utf8.encode(item.text ?? '').length, retained: Boolean(item.live) });
           structure ||= change.kind === 'add' || before?.item.ordinal !== item.ordinal;
         } else invalid('unknown runtime item change');
       }
@@ -161,6 +223,8 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
       if (update.interactions || update.tool_call_previews) {
         for (const [id, record] of items) if (record.item.kind === 'tool') affected.add(id);
       }
+      const bodyOnly = new Set((update.items ?? []).filter(change => change.kind === 'body').map(change => change.item_id));
+      for (const change of update.items ?? []) if (change.kind !== 'body') bodyOnly.delete(change.item_id);
       const appendOnly = new Set((update.items ?? []).filter(change => change.kind === 'append').map(change => change.item_id));
       // A replacement followed by growth requires a complete local projection.
       for (const change of update.items ?? []) if (change.kind !== 'append') appendOnly.delete(change.item_id);
@@ -172,7 +236,7 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
           ? record.item.kind === 'thinking'
             ? { ...before, blocks: [{ type: 'thinking', content: record.item.text ?? '' }] }
             : { ...before, content: record.item.text ?? '' }
-          : record ? runtimeMessages(base, { ...next, items: [record.item] }).find(message => message.id === id) : undefined);
+          : record ? runtimeMessages(base, { ...next, items: [record.item] }).map(message => present(record, message)).find(message => message.id === id) : undefined);
       }
       let turns = base.turns;
       if (update.turns || structure || (update.items ?? []).some(change => change.kind === 'replace')) {
@@ -196,13 +260,14 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
         for (const message of projectedMessages) if (message.blocks?.[0]?.type === 'tool-call-preview') replacements.set(message.id, undefined);
         for (const message of previews) replacements.set(message.id, message);
       }
-      structure ||= (update.items ?? []).some(change => change.kind === 'replace' || change.kind === 'body') || Boolean(previews) || [...replacements].some(([id, message]) => Boolean(messages.has(id)) !== Boolean(message));
+      structure ||= (update.items ?? []).some(change => change.kind === 'replace') || Boolean(previews) || [...replacements].some(([id, message]) => Boolean(messages.has(id)) !== Boolean(message));
       let result!: FlowerThreadSnapshot;
       batch(() => {
         for (const [id, record] of staged) { if (record) items.set(id, record); else items.delete(id); }
         for (const [id, message] of replacements) {
           const previous = messages.get(id);
           if (!message) messages.delete(id);
+          else if (previous && bodyOnly.has(id)) previous.set('body_pending', message.body_pending);
           else if (previous && appendOnly.has(id)) {
             if (read(id)!.item.kind === 'thinking') previous.set('blocks', message.blocks);
             else {
@@ -211,6 +276,7 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
               previous.setRevision(previous.chunks.length);
             }
           }
+          else if (previous) updateMessage(message);
           else makeMessage(message);
         }
         if (structure || update.item_order) {

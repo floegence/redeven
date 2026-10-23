@@ -6,6 +6,29 @@ afterEach(() => vi.useRealTimers());
 const settle = async () => { for (let index = 0; index < 12; index++) await Promise.resolve(); };
 
 describe('history body request ownership', () => {
+  it('coalesces growth during slow reads and yields chunks to other visible items', async () => {
+    const loader = createHistoryBodyLoader(() => 'timeout');
+    const controller = new AbortController();
+    let finish!: (more: boolean) => void;
+    const order: string[] = [];
+    let count = 0;
+    const read = vi.fn(async () => {
+      order.push('growing');
+      if (++count === 1) return new Promise<boolean>(resolve => { finish = resolve; });
+      return false;
+    });
+    loader.request('growing', 'source', controller.signal, read);
+    loader.request('second', 'other', controller.signal, () => new Promise<void>(() => undefined));
+    loader.request('third', 'third', controller.signal, async () => { order.push('third'); });
+    for (let i = 0; i < 2000; i++) loader.request('growing', 'source', controller.signal, read);
+    await settle();
+    expect(read).toHaveBeenCalledOnce();
+    finish(true); await settle(); await settle(); await settle();
+    expect(order).toEqual(['growing', 'third', 'growing']);
+    expect(loader.state('growing')).toBeUndefined();
+    await settle(); expect(read).toHaveBeenCalledTimes(2);
+    controller.abort();
+  });
   it('limits concurrent body reads, deduplicates identities and drops queued invisible work', async () => {
     const loader = createHistoryBodyLoader(() => 'timeout');
     const controllers = Array.from({ length: 20 }, () => new AbortController());

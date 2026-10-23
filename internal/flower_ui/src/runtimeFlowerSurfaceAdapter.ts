@@ -119,6 +119,7 @@ export type FlowerRuntimeTransport = Readonly<{
   loadThread(threadID: string, signal: AbortSignal): Promise<unknown>;
   loadHistory?(threadID: string, input: FlowerHistoryRequest, signal: AbortSignal): Promise<unknown>;
   loadHistoryItem?(threadID: string, itemID: string, signal: AbortSignal): Promise<FlowerRuntimeCurrentItem>;
+  loadHistoryBody?(threadID: string, input: import('./contracts/flowerSurfaceContracts').FlowerHistoryBodyRequest, signal: AbortSignal): Promise<import('./contracts/flowerSurfaceContracts').FlowerHistoryBodyChunk>;
   connectLiveStream?: (input: FlowerLiveStreamConnectInput) => AsyncIterable<FlowerLiveTransportFrame>;
   readParentEvents?(threadID: string, query: FlowerParentEventQuery): Promise<FlowerParentEventPage>;
   loadSubagentDetail(parentThreadID: string, childThreadID: string): Promise<LoadSubagentDetailResponse>;
@@ -496,6 +497,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       return mapRuntimeThreadView(raw, options);
     } : undefined,
     loadHistoryItem: options.transport.loadHistoryItem,
+    loadHistoryBody: options.transport.loadHistoryBody,
     ...(options.transport.connectLiveStream ? {
       connectLiveStream: async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
         for await (const envelope of assembleFlowerLiveEnvelopes(options.transport.connectLiveStream!(input))) {

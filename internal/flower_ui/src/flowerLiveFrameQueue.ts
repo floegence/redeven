@@ -20,7 +20,7 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
 }>) {
   type Frame = { envelope: FlowerLiveStreamEnvelope; connectionEpoch: number; append?: {
     chunks: string[]; offset: number; endOffset: number; baseVersion: number; factsKey: string;
-  } };
+  }; body?: { baseVersion: number; factsKey: string; encodedBytes: number } };
   let pending: Frame[] = [];
   let pendingBytes = 0;
   let pendingStartedAt: number | undefined;
@@ -70,7 +70,12 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
   };
   const apply = (value: Frame) => {
     if (current(value)) {
-      if (value.append) {
+      if (value.body) {
+        const envelope = value.envelope;
+        const update = (envelope.update ?? envelope.subagent_update)!;
+        const merged = { ...update, base_version: value.body.baseVersion };
+        value.envelope = envelope.subagent_update ? { ...envelope, subagent_update: merged } : { ...envelope, update: merged };
+      } else if (value.append) {
         const envelope = value.envelope;
         const update = (envelope.update ?? envelope.subagent_update)!;
         const merged = { ...update, base_version: value.append.baseVersion,
@@ -118,6 +123,11 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
       && !update.item_order && !update.context && !update.goal && !update.parent_events && !update.turns
       && !update.queue && !update.interactions && !update.tool_call_previews && !update.restored_inputs;
   };
+  const bodyOnly = (value: FlowerLiveStreamEnvelope) => {
+    const update = value.update ?? value.subagent_update;
+    return update && update.items?.length === 1 && update.items[0]?.kind === 'body' && update.items[0].body
+      && !update.items[0].item && !update.items[0].append && !update.tool_call_previews;
+  };
   const factsKey = (value: FlowerLiveStreamEnvelope) => {
     const { sampled_at_ms: _sample, ...facts } = (value.update ?? value.subagent_update)!.facts;
     const progress = facts.run_progress;
@@ -139,7 +149,7 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
     const left = before.update ?? before.subagent_update;
     const right = after.update ?? after.subagent_update;
     return Boolean(appendOnly(before) && appendOnly(after) && Boolean(before.subagent_update) === Boolean(after.subagent_update)
-      && before.thread_id === after.thread_id && left?.thread_id === right?.thread_id && left?.turn_id === right?.turn_id
+      && before.reading_revision === after.reading_revision && before.thread_id === after.thread_id && left?.thread_id === right?.thread_id && left?.turn_id === right?.turn_id
       && left?.run_id === right?.run_id && left?.items?.[0]?.item_id === right?.items?.[0]?.item_id);
   };
   const interactionActive = () => options.interaction?.root.getAttribute(options.interaction.attribute)
@@ -196,7 +206,7 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
         const previewGrowth = update?.tool_call_previews && samePreviewAttempt(previewIdentities.get(update.thread_id), update.tool_call_previews.value);
         const growth = update && update.facts.activity === 'active' && update.facts.run_progress?.phase === 'streaming'
           && !update.facts.error && !update.facts.cancellation && !update.facts.last_outcome
-          && !update.facts.attention?.approval_count && !update.facts.attention?.input_count && (update.items?.length || previewGrowth) && (update.items ?? []).every(change => change.kind === 'append')
+          && !update.facts.attention?.approval_count && !update.facts.attention?.input_count && (update.items?.length || previewGrowth) && (update.items ?? []).every(change => change.kind === 'append' || change.kind === 'body')
           && !update.item_order && !update.turns && !update.goal && !update.parent_events && !update.context
           && !update.queue && !update.interactions && !update.restored_inputs
           && (!update.tool_call_previews || previewGrowth);
@@ -204,6 +214,24 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
           const last = pending.at(-1);
           const fragment = appendOnly(envelope) ? update.items![0]!.append! : undefined;
           const bytes = encodedBytes(envelope);
+          if (last?.body && bodyOnly(envelope)) {
+            const previous = (last.envelope.update ?? last.envelope.subagent_update)!;
+            const left = previous.items![0]!.body!;
+            const right = update.items![0]!.body!;
+            if (last.envelope.reading_revision === envelope.reading_revision && last.envelope.thread_id === envelope.thread_id
+              && Boolean(last.envelope.subagent_update) === Boolean(envelope.subagent_update)
+              && previous.thread_id === update.thread_id && previous.turn_id === update.turn_id && previous.run_id === update.run_id
+              && previous.items![0].item_id === update.items![0].item_id && previous.view_version === update.base_version
+              && left.run_id === right.run_id && left.source_id === right.source_id && left.entry_id === right.entry_id
+              && left.field === right.field && left.preview_bytes === right.preview_bytes && right.bytes >= left.bytes
+              && last.body.factsKey === factsKey(envelope) && progressAdvances(last.envelope, envelope)) {
+              if (pendingBytes + bytes - last.body.encodedBytes > MAX_PENDING_UPDATE_BYTES) throw new FlowerLiveSyncError('Flower presentation update byte budget exceeded.');
+              pendingBytes += bytes - last.body.encodedBytes;
+              last.body.encodedBytes = bytes; last.envelope = envelope;
+              maxPendingBytes = Math.max(maxPendingBytes, pendingBytes);
+              schedule(); return;
+            }
+          }
           // Count incoming bytes once. Chunks are joined once at presentation,
           // so merging a long frame never repeatedly serializes its full text.
           if (last?.append && fragment && sameAppendStream(last.envelope, envelope)) {
@@ -236,6 +264,7 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
           maxPendingBytes = Math.max(maxPendingBytes, pendingBytes);
           if (fragment) value.append = { chunks: [fragment.text], offset: fragment.offset_bytes,
             endOffset: fragment.offset_bytes + utf8.encode(fragment.text).byteLength, baseVersion: update.base_version, factsKey: factsKey(envelope) };
+          else if (bodyOnly(envelope)) value.body = { baseVersion: update.base_version, factsKey: factsKey(envelope), encodedBytes: bytes };
           pending.push(value);
           schedule();
           return;

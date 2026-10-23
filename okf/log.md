@@ -6,6 +6,8 @@
 
 - 2026-10-23: Preserve every new tool and thinking title reveal through live snapshots, fast completion, automatic folding and preview promotion; start text shimmer only after typing finishes. See [activity interaction](ui/flower-activity-interaction.md).
 
+- 2026-10-23: Retain visible Flower prose through body growth, authoritative refresh and canonical completion; resume live bodies in authorized 16 KiB chunks, coalesce extent notifications and preserve bounded two-slot read ownership. See [selection](ui/flower-thread-selection.md) and [live delivery](ui/flower-live-timeline.md).
+
 - 2026-10-23: Distinguish the three generated OKF bundle outputs from source-build inputs, allowing stable dirty-source builds while continuing to reject concurrent source edits and checkout advances. See [development bundles](desktop/desktop-development-bundles.md).
 - 2026-10-23: Add bounded 320 ms soft reveals for live Flower prose while retaining text nodes, selection, Markdown colors and immediate canonical completion. Verify motion preferences and cleanup in Chromium. See [streaming stability](ui/flower-streaming-stability.md).
 

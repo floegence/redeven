@@ -143,13 +143,13 @@ function contentBlocksFromMessage(threadID: string, message: FlowerChatMessage):
       }];
     }
     const content = String(block.content ?? '');
-    return content.trim() || message.live ? [{ type: 'content', key: `${message.id}:block:${index}`, block_index: index, block_type: block.type, get content() { return String((message.blocks?.[index] as { content?: string })?.content ?? ''); }, get sources() { return (message.blocks?.[index] as { sources?: readonly FlowerCitationSource[] })?.sources; } }] : [];
+    return content.trim() || message.live || message.body_pending?.kind === 'text' ? [{ type: 'content', key: `${message.id}:block:${index}`, block_index: index, block_type: block.type, get content() { return String((message.blocks?.[index] as { content?: string })?.content ?? ''); }, get sources() { return (message.blocks?.[index] as { sources?: readonly FlowerCitationSource[] })?.sources; } }] : [];
   });
   // Attachments do not represent the independent canonical message body.
   if (projectedBlocks.some(block => block.type !== 'image' && block.type !== 'file')) return projectedBlocks;
 
   const content = String(message.content ?? '');
-  return content.trim() || message.live
+  return content.trim() || message.live || message.body_pending?.kind === 'text'
     ? [...projectedBlocks, {
       type: 'content',
       key: `${message.id}:content`,
@@ -476,7 +476,9 @@ function projectFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | unde
     } else {
       const projectedMessage = activeCursor === message.active_cursor
         ? message
-        : { ...message, active_cursor: activeCursor };
+        // Cursor decoration must not snapshot reactive text/body fields.
+        // This view lives as long as the cached message projection.
+        : new Proxy(message, { get: (target, key, receiver) => key === 'active_cursor' ? activeCursor : Reflect.get(target, key, receiver) });
       entries = messageTimelineEntries(thread.thread_id, projectedMessage, decorations);
       messageProjections.set(message, { threadID: thread.thread_id, activeCursor, decorations: sourceDecorations, entries });
     }
