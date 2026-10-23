@@ -34,8 +34,10 @@ content. Initial history and corrected snapshots appear immediately. Headings,
 lists and emphasis can reveal their added suffix; links, code, media and controls
 keep their own colors and interaction behavior.
 
-Twenty fixed CSS paint phases avoid document-wide stylesheet mutation on each
-frame. Each active Markdown owner retains at most 32 transient range groups. Diff
+Twenty fixed CSS paint phases use `currentColor` from the originating text,
+avoiding document-wide stylesheet mutation, synchronous computed-style reads and
+inline color writes on animation frames. Theme changes remain CSS-owned. Each
+active Markdown owner retains at most 32 transient range groups. Diff
 inspection is limited to 8,192 characters and 128 text nodes per region; larger
 replacements and bursts remain immediately readable. Completion never waits for
 paint: remaining valid highlights settle naturally. Reset, unmount, hidden

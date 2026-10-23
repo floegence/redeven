@@ -2,6 +2,8 @@
 
 - 2026-10-23: Delay Flower loading feedback by 200 ms; retain immediate prepared-content reveal and cancel superseded feedback. See [selection](ui/flower-thread-selection.md).
 
+- 2026-10-23: Qualify bounded root/child recovery with exact content, filled-cache rendering and strict CPU/latency gates; remove per-frame computed-style reads from prose reveal. See [performance evidence](operations/flower-live-queue-performance.md) and [streaming stability](ui/flower-streaming-stability.md).
+
 - 2026-10-23: Position Flower resize geometry before paint, clear stale arrival motion, retain offscreen skipping and qualify mixed-history tail coordinates in Chromium and Electron. See [selection](ui/flower-thread-selection.md) and [qualification](operations/flower-thread-switch-qualification.md).
 
 - 2026-10-23: Bind source identities and installer pins to inspected file descriptors, sanitize AI diagnostics, synchronize patched dependency locks, retain lazy page styles and qualify Electron outline visibility. Document reviewed qualification data flows in [CI and release gates](release/ci-and-release-gates.md), [model request reuse](ai/model-request-reuse.md), [web dependencies](architecture/env-app-upstream-web-dependencies.md) and [Web Service windows](desktop/web-service-browser-window.md).

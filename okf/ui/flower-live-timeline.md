@@ -9,123 +9,109 @@ reviewed_at: "2026-10-23"
 ---
 # Summary
 
-Floret owns runtime state, canonical history, item identity and view versions. Redeven authorizes and projects public data; one workspace stream delivers it to ThreadCache. Ordinary text growth carries only the changed item and its UTF-8 append offset. It must not copy, scan, redact, encode or rebuild the complete history. Lost window continuity refreshes only the affected reading interest. Transport loss uses the existing connection owner. Execution, accepted prose and user drafts survive either recovery.
+Floret owns canonical history, identity and versions. Redeven authorizes public
+projection; one workspace stream delivers it to ThreadCache. Text growth changes
+one item at its UTF-8 offset, never copying, scanning or encoding complete history.
+Window loss refreshes that reading interest; transport loss uses the existing
+connection owner. Both preserve execution, accepted prose and drafts.
 
 # Contract
 
-## Publication and public data
-Redeven requires the released optional Floret observation contracts. The service consumes `ThreadFactsSource.SubscribeFacts` for cleanup and workspace facts without hydrating bodies. The selected conversation and optional child panel each own an authorized `ThreadWindowSource` reading interest. One worker coalesces dirty parent identities for child inventory refreshes; it retains at most 64 pending parents and never blocks the facts pump on child reads.
+## Ownership and initialization
 
-Account watches, workload leases and Computer cleanup consume lightweight authoritative facts even with no viewer.
+The service consumes released `ThreadFactsSource.SubscribeFacts` without body
+hydration for account watches, workload/Computer cleanup and workspace facts,
+including when nobody is viewing. Root and optional child each own one authorized
+`ThreadWindowSource` interest. One worker coalesces child inventory refreshes with
+at most 64 dirty parents; it never blocks the facts pump on child reads. See
+[adapter ownership](../ai/floret-redeven-adapter-and-projection.md).
 
-See [the adapter boundary](../ai/floret-redeven-adapter-and-projection.md).
+Observation registers before freezing authorized roots in navigation order.
+Frozen IDs and their backing array are budgeted and released as pages drain.
+Ready sends observer identity before canonical summary reads. One asynchronous
+reader loads at most 25 summaries per page, starting the next after the prior
+drains. Pages carry `baseline_complete`, true only on the last, followed by private
+read states. Accepted reading updates bypass unfinished sidebar preparation;
+ordinary concurrent facts stay behind its baseline. Close cancels the reader;
+canonical failure invalidates observation. There is no arbitrary ten-second
+sidebar cutoff, and pin changes cannot skip frozen roots.
 
-## Wire v3 and bounded delivery
-Flower schema v3 has one decoder and one update pipeline. Larger envelopes retain bounded fragments: envelope identity, zero-based fragment index/count, total bytes and Base64 payload.
+Pages merge immediately; only completion prunes roots, preserving selection and
+local creations. The first page, confirmed empty inventory or accepted selected
+detail admits the initial surface. Partial empty Ready does not. Explicit HTTP
+refresh uses cancellable 25-row pages with ten seconds per progressing page and
+retains delivered pages on failure. Desktop cancellation includes history/item
+POST reads. [Startup](../architecture/flower-startup-presentation.md) owns display.
 
-Unknown command results retain their original request keys; a disconnect never repeats an effect automatically.
+## Reading, bodies and delivery
 
-Initialization registers observation before freezing authorized roots in product
-navigation order. Frozen IDs count against global/subscriber budgets and are
-released as pages drain. Ready publishes the observer identity immediately, before
-any canonical summary read. One asynchronous reader loads at most 25 summaries;
-subsequent pages wait for their predecessor to drain. Each page has explicit
-baseline_complete (true only on the last), then private read states. Accepted
-reading-interest updates bypass an unfinished sidebar baseline. Observer close
-cancels page reads; canonical failures invalidate observation. Sidebar preparation
-has no arbitrary ten-second cutoff. Pin changes cannot skip frozen roots.
+Root and child slots use independent monotonic revisions. Each HTTP baseline and
+its deltas come from the same subscription; replacing a page replaces interest.
+Old revisions cannot change the page. Latest/earlier/newer controls select at most
+150 items within the 512 KiB window budget without truncating canonical history.
+Command receipts refresh the accepted interval rather than installing a latest
+page over historical reading.
 
-Sidebar pages merge immediately; only completion prunes roots, retaining selection
-and locally created roots. A first sidebar result or accepted selected detail ends initial loading. Explicit refresh
-uses cancellable 25-row HTTP pages with ten seconds per progressing page; failure
-keeps delivered pages. Desktop cancellation covers history/item POST reads.
+Only unseen historical text uses skeletons. Accepted prose remains mounted during
+body growth, refresh and completion. One viewport observer admits demand within
+160 pixels; text and explicitly opened tools share two read slots and a fifteen-
+second deadline. Offscreen/navigation cancellation removes queued demand and
+aborts reads. The normal renderer retains attachments/references, while the scroll
+owner retains anchors and user-selected tail-follow. Failures offer local Retry.
 
-Unselected roots publish coalesced facts without bodies. The selected root owns
-one workspace reading interest with monotonic reading revision; the child panel owns a separate slot. HTTP baseline
-and later changes use the same Floret subscription. Page changes replace interest;
-older revisions cannot update the displayed page.
+ThreadCache alone retains expanded bodies by valid item/turn/run/source identity.
+Freshly authorized ItemBody and ReadLiveBody return at most 16 KiB from the accepted
+UTF-8 offset. One source task coalesces extents, accepts earlier in-flight prefixes
+and yields between chunks. No polling, full-prefix downloads, whole-thread fetches
+or duplicate transcript store. Completion retains prose through canonical
+verification; stale runs and expired locators cannot overwrite it.
 
-Reading starts at the latest interval: at most 150 items within Floret's 512 KiB
-window budget. Earlier, newer and latest controls replace it explicitly without
-truncating canonical history. Only cold historical text uses a skeleton. Live or
-previously displayed prose stays mounted during growth, refresh and completion.
-One viewport observer admits reads within 160 pixels. Text and explicitly opened
-tool details share two slots and a fifteen-second deadline. Offscreen/navigation
-cancellation removes queued demand and aborts active reads. The normal renderer
-preserves attachments and references; the scroll owner preserves reading anchors
-and user-selected tail-follow. Failures expose local Retry without stopping sync.
+Schema v3 has one decoder/update pipeline. Fragmented envelopes carry identity,
+zero-based index/count, total bytes and Base64. Appends merge within one 32 KiB
+fragment only for matching revision, thread/item/turn/run, contiguous version and
+UTF-8 offset. Body growth sends locators, not prefixes. Same-source extents
+coalesce server-side/per browser frame with constant storage, original base version
+and semantic boundaries. Budgets remain 16 pending batches, 32 MiB per envelope/
+subscriber and 32 MiB globally retained references. Started frames are immutable;
+byte-accounted covered versions suppress represented deltas. Summary, private
+read-state and child inventory keep independent mailboxes.
 
-ThreadCache alone retains expanded bodies for valid item/turn/run/source identity.
-Live reads resolve ItemBody with fresh authorization, then ReadLiveBody returns
-at most 16 KiB from the accepted UTF-8 offset. One task per source coalesces
-extents, accepts older in-flight prefixes and yields between chunks. No polling,
-full-prefix re-download, whole-thread fetch or second transcript store exists.
-Canonical completion retains prose until canonical verification; stale runs and
-expired live locators cannot overwrite it.
+Pending controls are independent of page membership. Server-only authorized
+canonical evidence validates Computer tools outside the interval and publishes
+status without sending historical bodies. Missing authority fences observation.
 
-Updates affect only accepted membership and bodies. Appends merge within one
-32 KiB fragment only for matching reading revision, thread/item/turn/run,
-contiguous versions and UTF-8 offsets. Body growth sends locators, not prefixes.
-Contiguous same-source extents coalesce server-side and per browser frame with
-constant queue storage, the original base version and all semantic boundaries.
-Command latest-page receipts cannot replace historical reading interest; the
-authorized detail loader refreshes that interest.
+## Recovery and interaction
 
-Budgets remain: 16 pending batches, 32 MiB per envelope/subscriber and 32 MiB
-globally retained references. Lost window continuity emits revision-fenced
-history_invalidated for that interest. The browser attempts one bounded read
-per selection or manual action; repeated loss exposes local Retry without a loop.
-Failed HTTP history reads and page moves keep accepted content and anchors;
-revision-fenced history-release cancels installed or pending interests without
-waiting on slow reads. Closing a child releases only its slot. Never combine a
-one-shot window with an old subscription's membership. Transport loss, stream
-handshake deadlines and workspace sequence gaps reconnect through the existing
-owner with bounded exponential backoff. Authorization,
-capacity, version incompatibility and malformed contracts remain terminal.
-Fetch/bridge classification precedes mapping: mapper exceptions are not retries.
-Diagnostics contain category, HTTP status and connection epoch, never response
-bodies or arbitrary server messages. Execution and drafts survive recovery.
-Initial SSE sync loss returns 503; baseline timeout 504; invalid request 400;
-observer capacity 429. These codes use the same recovery owner during rebind.
+Window loss emits revision-fenced `history_invalidated`. One automatic bounded
+read is allowed per selection/manual action; repeated loss offers local Retry
+without looping. Failed HTTP/page reads preserve accepted content and anchors.
+Revision-fenced `history-release` cancels installed or pending interest without
+waiting for slow reads; child close releases only its slot. A one-shot window
+must never reuse an old subscription's membership.
 
-After selection, the composer status lane localizes connecting, reconnecting and
-unconfirmed status. It never animates stale progress. Terminal failure offers
-Resync; a fresh baseline restores canonical progress without composer remount.
+Transport loss, handshake deadlines and workspace sequence gaps use the existing
+bounded exponential-backoff owner. Authorization, capacity, incompatible versions
+and malformed contracts remain terminal. Fetch/bridge classification precedes
+mapping; mapper exceptions are not retried. Diagnostics expose category, HTTP
+status and epoch, never bodies/arbitrary server messages. Initial SSE sync loss
+is 503, baseline timeout 504, invalid request 400, capacity 429. Unknown command
+results keep request keys; disconnect never automatically repeats an effect.
 
-Child detail uses the same bounded history and body readers, with independent pagination and revision fencing. Canonical command receipts refresh the accepted child interval instead of replacing it. Byte-accounted covered versions suppress already represented deltas. Summary, viewer read state and subagent inventory retain independent mailboxes. Already-started frames are never replaced. These are ephemeral observations, not durable cursors or a second lifecycle.
-
-Pending controls remain available independently of the selected page. Computer assistance may cite a tool outside the interval: authorized server-only canonical evidence validates provenance and publishes status, while the historical body stays off the wire. Missing authority fences observation.
-
-## ThreadCache and independent authorities
-Workspace summary publication reads one authoritative Floret summary.
-
-Viewer read events and current-only updates cannot manufacture loaded-content coverage.
-
-## Commands and interaction
-Canonical cancellation plus active state owns Stopping feedback.
-
-See [approval/input contracts](flower-approval-context.md), [read state](flower-read-state.md) and [terminal disclosure](flower-turn-process-disclosure.md).
+The mounted composer localizes connecting/reconnecting/unconfirmed status without
+animating stale progress; terminal failure offers Resync. Canonical cancellation
+and active state own Stopping. Summary publication reads one canonical summary;
+viewer-read/current-only updates cannot manufacture loaded-content coverage.
+See [approvals/input](flower-approval-context.md), [read state](flower-read-state.md)
+and [process disclosure](flower-turn-process-disclosure.md).
 
 # Boundaries
 
-The stream, frame queue and indexed cache are bounded observation mechanisms. Database kinds and all released migration edges remain unchanged.
+Streams, queues and cache are bounded ephemeral observation, never durable cursors
+or another lifecycle. Database kinds and all released migration edges remain.
 
 # Evidence
 
-- [Isolated Electron startup acceptance](../../desktop/scripts/check-flower-startup.mjs): run `pnpm --dir desktop test:flower-startup` to verify preparation, partial selection, final membership, draft retention and cleanup against a built renderer. Reports and screenshots are written to `desktop/dist/flower-startup-acceptance`.
-- [English and Chinese navigation acceptance](../../desktop/scripts/check-flower-navigation.mjs): verifies that navigation retains the selected conversation and draft while later baseline pages arrive, with one live stream and no duplicate HTTP list scan.
-
-- [Native pump and recovery](../../internal/ai/flower_runtime_update.go)
-
-- [Projection and recovery tests](../../internal/ai/flower_runtime_update_test.go)
-
-- [Field-level public DTOs](../../internal/ai/flower_public_dto.go)
-
-- [Bounded stream and snapshot resolution](../../internal/ai/flower_live_stream.go)
-
-- [Mixed backlog without historical hydration, fragment boundaries, and capacity recovery](../../internal/ai/flower_live_incremental_pressure_test.go)
-
-- [Continuous initialization, slow-consumer Unicode soak, semantic state, route and budget tests](../../internal/ai/flower_live_backpressure_test.go)
-
-- [History and body boundary](../../internal/ai/flower_history.go) and [observer ownership](../../internal/ai/flower_history_observer.go).
-- [Bounded history regressions](../../internal/ai/flower_history_test.go) and [browser interactions](../../internal/envapp/ui_src/src/ui/FlowerSurface.history.browser.test.tsx).
+- [Electron startup](../../desktop/scripts/check-flower-startup.mjs) and [localized navigation](../../desktop/scripts/check-flower-navigation.mjs): partial/final baselines, selection, drafts, one stream, no duplicate list scan, owned cleanup.
+- [Facts pump](../../internal/ai/flower_runtime_update.go), [recovery tests](../../internal/ai/flower_runtime_update_test.go), [public DTOs](../../internal/ai/flower_public_dto.go).
+- [Bounded stream](../../internal/ai/flower_live_stream.go), [mixed pressure](../../internal/ai/flower_live_incremental_pressure_test.go), [slow-consumer/Unicode/budget tests](../../internal/ai/flower_live_backpressure_test.go).
+- [History](../../internal/ai/flower_history.go), [interest ownership](../../internal/ai/flower_history_observer.go), [backend regressions](../../internal/ai/flower_history_test.go), [browser history](../../internal/envapp/ui_src/src/ui/FlowerSurface.history.browser.test.tsx).
