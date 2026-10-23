@@ -5,7 +5,7 @@ description: Present trusted browser chrome around an isolated authorized applic
 tags: [desktop, managed-services, security, ui]
 timestamp: 2026-09-22T02:30:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-23"
 ---
 # Summary
 
@@ -20,6 +20,11 @@ When the trusted Desktop Shell bridge is present, Env App requests a semantic We
 The semantic forward-window request optionally selects `presentation: application`. The same forward admission, isolated partition, request routing, window reuse, and teardown remain authoritative.
 
 The [application titlebar contract](host-application-titlebar.md) owns control layout, backend command routing and recovery presentation.
+
+Electron qualification checks that the compound address boundary has no visible
+outline by asserting `outline-style: none`, alongside stable border width and
+focus contrast across every published theme. Chromium may report a nonzero
+computed outline width even when that outline is disabled.
 
 # Boundaries
 

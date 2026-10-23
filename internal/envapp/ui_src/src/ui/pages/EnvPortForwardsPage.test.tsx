@@ -75,7 +75,8 @@ vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
   useNotification: () => notificationMocks,
 }));
 
-vi.mock('@floegence/floe-webapp-core/icons', () => ({
+vi.mock('@floegence/floe-webapp-core/icons', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/icons')>(),
   Filter: (props: any) => <span class={props.class} data-testid="filter-icon" />,
   ArrowLeft: (props: any) => <span class={props.class} data-testid="arrow-left-icon" />,
   AlertTriangle: (props: any) => <span class={props.class} data-testid="alert-triangle-icon" />,
@@ -151,7 +152,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async importOriginal => ({
     <div>
       {props.trigger}
       {props.items?.map((item: any) => item.separator ? <hr /> : (
-        <button type="button" title={item.label} disabled={item.disabled} onClick={() => props.onSelect?.(item.id)}>{item.label}</button>
+        <button type="button" title={item.label} data-menu-action={item.id} disabled={item.disabled} onClick={() => props.onSelect?.(item.id)}>{item.label}</button>
       ))}
     </div>
   ),
@@ -767,7 +768,6 @@ describe('web service metadata and template validation', () => {
   it('replaces stale service status with contextual operation details', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
-    const cancel = vi.fn();
     const dispose = render(() => (
       <ManagedServiceRow
         service={{
@@ -784,7 +784,6 @@ describe('web service metadata and template validation', () => {
         onOpen={() => undefined}
         onOpenResource={() => undefined}
         onAction={() => undefined}
-        onCancelOperation={cancel}
         onLogs={() => undefined}
         onUninstall={() => undefined}
       />
@@ -793,7 +792,7 @@ describe('web service metadata and template validation', () => {
       const row = host.querySelector<HTMLElement>('[data-testid="managed-service-row"]')!;
       const progress = row.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
       expect(controlText(progress)).toContain('Pulling image');
-      expect(controlText(progress)).toContain('2.00 KB / 5.00 KB');
+      expect(controlText(row.querySelector('[data-testid="managed-operation-header"]'))).toContain('2/7');
       expect(row.querySelector('[data-testid="managed-operation-progress"]')).toBeNull();
       expect(controlText(row)).not.toContain('Error');
       expect(row.querySelector<HTMLButtonElement>('[data-testid="managed-service-primary"]')?.disabled).toBe(false);
@@ -802,14 +801,14 @@ describe('web service metadata and template validation', () => {
       const details = row.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
       expect(progress.getAttribute('aria-expanded')).toBe('true');
       expect(controlText(details)).toContain('ghcr.io/runzhliu/example-service');
+      expect(controlText(details)).toContain('2.00 KB');
+      expect(controlText(details)).toContain('5.00 KB');
       expect(controlText(details)).toContain('1.00 KB/s');
       expect(controlText(details)).toContain('2 / 5');
       expect(controlText(details)).toContain('2s');
       expect(details.querySelectorAll('[data-managed-operation-step]')).toHaveLength(7);
       expect(details.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('2000');
       expect(row.querySelector('[role="dialog"]')).toBeNull();
-      Array.from(row.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Cancel operation')?.click();
-      expect(cancel).toHaveBeenCalledOnce();
     } finally {
       dispose();
       host.remove();
@@ -857,11 +856,13 @@ describe('web service metadata and template validation', () => {
     ), host);
     try {
       const trigger = host.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
-      expect(controlText(trigger)).toContain('2.00 KB / 5.00 KB');
+      expect(controlText(trigger)).toContain('Downloading package');
       trigger.click();
       const details = host.querySelector<HTMLElement>('[data-testid="managed-service-operation-details"]')!;
       expect(controlText(details)).toContain('Software package');
       expect(controlText(details)).toContain('node-v24.19.0-darwin-arm64.tar.gz@sha256:reviewed');
+      expect(controlText(details)).toContain('2.00 KB');
+      expect(controlText(details)).toContain('5.00 KB');
       expect(controlText(details)).toContain('1.00 KB/s');
       expect(controlText(details)).not.toContain('Container image');
       expect(controlText(details)).not.toContain('Layers');
@@ -1832,7 +1833,8 @@ describe('EnvPortForwardsPage', () => {
     expect(install?.disabled).toBe(false);
     install?.click();
     await waitForAssertion(() => expect(createBody).toMatchObject({ template_id: 'example-webtop', target_release_id: 'verified-release' }));
-    expect(host.querySelector('[data-testid="env-app-drawer-mock"]')).toBeNull();
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="service-template-drawer"]')).toBeNull());
+    expect(host.querySelector('[data-testid="service-management-drawer"]')).toBeTruthy();
   });
 
   it('hands an accepted install to its service row and lets the drawer close without cancelling', async () => {
@@ -1909,7 +1911,10 @@ describe('EnvPortForwardsPage', () => {
 
       await waitForAssertion(() => expect(host.querySelector('[data-managed-service-id="mws-background-install"]')).toBeTruthy());
       const serviceRow = host.querySelector<HTMLElement>('[data-managed-service-id="mws-background-install"]')!;
-      expect(controlText(serviceRow.querySelector('[data-testid="managed-service-operation-trigger"]'))).toContain('2/5 layers');
+      const progress = serviceRow.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
+      expect(controlText(progress)).toContain('Pulling image');
+      progress.click();
+      expect(controlText(serviceRow.querySelector('[data-testid="managed-service-operation-details"]'))).toContain('2 / 5');
       expect(serviceRow.querySelectorAll('[data-testid="managed-operation-disclosure"]')).toHaveLength(1);
       expect(streamSignal?.aborted).toBe(false);
       expect(localApiMocks.fetchLocalApiJSON.mock.calls.some(([url]) => String(url).includes('/cancel'))).toBe(false);
@@ -2337,7 +2342,9 @@ describe('EnvPortForwardsPage', () => {
       expect(trigger).toBeTruthy();
       expect(controlText(host)).not.toContain('Error');
       trigger.click();
-      expect(controlText(host.querySelector('[data-testid="managed-operation-artifact"]'))).toContain('ghcr.io/runzhliu/example-service');
+      expect(controlText(host.querySelector('[data-testid="managed-operation-stage-detail"]'))).toContain('ghcr.io/runzhliu/example-service');
+      host.querySelector<HTMLButtonElement>('[data-managed-service-id="mws-1"] [data-menu-action="inspect"]')!.click();
+      await waitForAssertion(() => expect(host.querySelector('[data-testid="service-management-drawer"]')).toBeTruthy());
       const cancel = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Cancel operation');
       expect(cancel).toBeTruthy();
       cancel?.click();
@@ -2465,7 +2472,7 @@ describe('EnvPortForwardsPage', () => {
       const rows = Array.from(host.querySelectorAll<HTMLElement>('[data-testid="managed-service-row"]'));
       const firstRow = rows.find((row) => row.dataset.managedServiceId === 'mws-one')!;
       firstRow.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')?.click();
-      expect(controlText(firstRow.querySelector('[data-testid="managed-operation-artifact"]'))).toContain('example-service');
+      expect(controlText(firstRow.querySelector('[data-testid="managed-operation-stage-detail"]'))).toContain('example-service');
       expect(firstRow.querySelector('[role="progressbar"]')?.getAttribute('data-indeterminate')).toBe('true');
       expect(firstRow.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBeNull();
       expect(rows.find((row) => row.dataset.managedServiceId === 'mws-idle')?.querySelector('[data-testid="managed-service-operation-trigger"]')).toBeNull();
@@ -2574,7 +2581,7 @@ describe('EnvPortForwardsPage', () => {
 
       const submitting = host.querySelector<HTMLButtonElement>('[data-testid="managed-service-operation-trigger"]')!;
       expect(controlText(submitting)).toContain('Submitting request');
-      expect(controlText(submitting)).toContain('0/3');
+      expect(controlText(host.querySelector('[data-testid="managed-operation-header"]'))).toContain('0/3');
       expect(controlText(host.querySelector('[data-managed-service-id="mws-retry"]'))).not.toContain('Error');
 
       operationRequest.resolve(running);

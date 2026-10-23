@@ -209,7 +209,7 @@ fi
 if [[ "$group" == releases ]]; then
 run_step "testing controlled release archive extraction" ./scripts/safe_extract_tar.py --self-test
 run_step "testing controlled Desktop runtime extraction" ./scripts/extract_desktop_runtime.py --self-test
-run_step "testing Desktop bundle source identity" node --test scripts/desktop_bundle_build_contract.test.mjs scripts/verify_desktop_runtime_source.test.mjs scripts/desktop_signed_manifest.test.mjs
+run_step "testing Desktop bundle source identity" node --test scripts/desktop_bundle_build_contract.test.mjs scripts/verify_desktop_runtime_source.test.mjs scripts/desktop_signed_manifest.test.mjs scripts/security_scan_boundaries.test.mjs
 run_step "testing portable macOS package verification" node --test scripts/verify_macos_desktop_update_package.test.mjs
 run_step "testing official Node archive acquisition" node --test scripts/resolve_node_archive.test.mjs
 run_step "checking release artifact collector syntax" node --check scripts/collect_release_artifacts.mjs

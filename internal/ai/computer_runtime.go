@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/browserinstall"
+	"github.com/floegence/redeven/internal/logsafe"
 )
 
 // ComputerUseRuntime owns the adapters and the only target readiness path.
@@ -424,8 +425,8 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 	}
 	if errors.Is(err, errComputerEffectUnknown) {
 		payload, _ := result.Result.(map[string]any)
-		slog.Info("computer effect unconfirmed", "thread_id", call.ThreadID, "turn_id", call.TurnID, "run_id", call.RunID,
-			"tool_call_id", call.ToolCallID, "target_id", call.TargetID, "stage", computerDiagnosticValue("stage", payload["stage"]),
+		slog.Info("computer effect unconfirmed", "thread_id", logsafe.Text(call.ThreadID, 256), "turn_id", logsafe.Text(call.TurnID, 256), "run_id", logsafe.Text(call.RunID, 256),
+			"tool_call_id", logsafe.Text(call.ToolCallID, 256), "target_id", logsafe.Text(call.TargetID, 256), "stage", computerDiagnosticValue("stage", payload["stage"]),
 			"reason", computerDiagnosticValue("reason", payload["reason"]), "input_progress", computerInputProgress(payload["input_progress"]))
 	}
 	var observationFailure *targetToolPolicyError

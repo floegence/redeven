@@ -44,7 +44,7 @@ func mergeAnyFields(base map[string]any, next map[string]any) map[string]any {
 	if len(next) == 0 {
 		return base
 	}
-	out := make(map[string]any, len(base)+len(next))
+	out := make(map[string]any, max(len(base), len(next)))
 	for key, value := range base {
 		out[key] = value
 	}

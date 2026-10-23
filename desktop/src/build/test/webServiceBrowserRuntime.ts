@@ -92,7 +92,7 @@ export async function verifyWebServiceBrowserRuntime(preload: string, screenshot
           resolve({ theme: root.dataset.floeShellTheme, titleBackground: getComputedStyle(title).backgroundColor,
             barBackground: getComputedStyle(bar).backgroundColor, chrome: rgb(getComputedStyle(bar).backgroundColor),
             address: rgb(getComputedStyle(wrap).backgroundColor), foreground: rgb(getComputedStyle(input).color),
-            focus: rgb(getComputedStyle(wrap).borderColor), outlineWidth: getComputedStyle(wrap).outlineWidth, borderWidth: getComputedStyle(wrap).borderWidth,
+            focus: rgb(getComputedStyle(wrap).borderColor), outlineWidth: getComputedStyle(wrap).outlineWidth, outlineStyle: getComputedStyle(wrap).outlineStyle, borderWidth: getComputedStyle(wrap).borderWidth,
             activeIcon: rgb(getComputedStyle(document.getElementById('browser-devtools')).color), activeBackground: rgb(getComputedStyle(document.getElementById('browser-devtools')).backgroundColor),
             barBottom: bar.getBoundingClientRect().bottom, titleHeight: title.getBoundingClientRect().height,
             value: input.value, start: input.selectionStart, end: input.selectionEnd, focused: document.activeElement === input,
@@ -108,7 +108,7 @@ export async function verifyWebServiceBrowserRuntime(preload: string, screenshot
         assert.ok(contrast(result.foreground, result.chrome) >= 4.5, `${name}: title contrast`);
         assert.ok(contrast(result.activeIcon, result.activeBackground) >= 3, `${name}: active icon contrast ${contrast(result.activeIcon, result.activeBackground)}`);
         if (i === 0) {
-          assert.equal(result.outlineWidth, '0px', `${name}: no extra address outline`);
+          assert.equal(result.outlineStyle, 'none', `${name}: no extra address outline`);
           assert.equal(result.borderWidth, '1px', `${name}: stable address border`);
           assert.ok(contrast(result.focus, result.chrome) >= 3, `${name}: focus contrast ${contrast(result.focus, result.chrome)}`);
         }

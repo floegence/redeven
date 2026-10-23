@@ -82,7 +82,9 @@ def hash_path(path, boundary=None):
 
 
 def environment(root, definition, memo):
-    ignored = {"PWD", "OLDPWD", "SHLVL", "_", "TERM", "TERM_SESSION_ID", "GIT_PREFIX", "GIT_INDEX_FILE", "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_AUTHOR_DATE", "GIT_EDITOR", "GIT_EXEC_PATH"}
+    # macOS may populate manual-page paths when entering a Git hook shell.
+    # They do not select executables or change any repository validation input.
+    ignored = {"PWD", "OLDPWD", "SHLVL", "_", "TERM", "TERM_SESSION_ID", "MANPATH", "GIT_PREFIX", "GIT_INDEX_FILE", "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_AUTHOR_DATE", "GIT_EDITOR", "GIT_EXEC_PATH"}
     values = {k: v for k, v in os.environ.items() if k not in ignored and not k.startswith(("CODEX_", "XPC_", "__CF", "LOCAL_GATE_"))}
     git_helpers = subprocess.check_output(["git", "--exec-path"], text=True).strip()
     values["PATH"] = os.pathsep.join(p for p in values.get("PATH", "").split(os.pathsep) if p != git_helpers)

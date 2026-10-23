@@ -1456,9 +1456,9 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 				"channel_id", r.channelID,
 				"endpoint_id", r.endpointID,
 				"tool_id", toolID,
-				"tool_name", toolName,
-				"error_code", string(toolErr.Code),
-				"error", toolErr.Message,
+				"tool_name", logsafe.Text(toolName, 128),
+				"error_code", logsafe.Text(string(toolErr.Code), 128),
+				"error", logsafe.Text(toolErr.Message, 512),
 			)
 		}
 	}

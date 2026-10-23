@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { lstatSync, readFileSync, readlinkSync, realpathSync } from 'node:fs';
+import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, readlinkSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -34,8 +34,17 @@ export function captureSourceBuildIdentity(root, expectedCommit) {
     digest.update(JSON.stringify(name) + '\0');
     if (stat.isSymbolicLink()) digest.update('link\0' + readlinkSync(file));
     else if (stat.isFile()) {
-      digest.update(`${stat.mode & 0o111}\0${stat.size}\0`);
-      digest.update(readFileSync(file));
+      const fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+      try {
+        const opened = fstatSync(fd);
+        if (!opened.isFile() || opened.dev !== stat.dev || opened.ino !== stat.ino) {
+          throw new Error(`Source changed during build identity capture: ${name}`);
+        }
+        digest.update(`${opened.mode & 0o111}\0${opened.size}\0`);
+        digest.update(readFileSync(fd));
+      } finally {
+        closeSync(fd);
+      }
     } else throw new Error(`Unsupported source build input: ${name}`);
     digest.update('\0');
   }
