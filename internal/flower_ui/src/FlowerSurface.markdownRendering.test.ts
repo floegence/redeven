@@ -72,7 +72,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(component).not.toContain('inline?: Accessor<boolean>');
     expect(component).toContain('class="flower-thinking-toggle flower-activity-inline-button"');
     expect(component).toContain('class="flower-activity-inline-icon"');
-    expect(component).toContain('<Brain size={16} strokeWidth={1.7} aria-hidden="true" />');
+    expect(component).toContain('<FlowerThinkingIcon />');
     expect(css).not.toContain('.flower-thinking-disclosure .flower-thinking-toggle {');
     expect(css).not.toContain('--flower-thinking-visible-lines');
     expect(css).not.toContain(".flower-thinking-content[data-flower-thinking-view='preview']");

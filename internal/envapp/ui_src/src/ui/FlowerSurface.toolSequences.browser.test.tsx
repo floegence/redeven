@@ -469,7 +469,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(sequenceToggle.textContent).toContain('1 thinking segment');
     expect(group(root, 'goal').dataset.flowerSequence).toBe(sequenceKey);
     expect(thinking.closest<HTMLElement>('.flower-tool-sequence-node')?.dataset.flowerSequence).toBe(sequenceKey);
-    expect(thinking.querySelector('.flower-activity-inline-icon svg.lucide-brain')).not.toBeNull();
+    expect(thinking.querySelector('.flower-activity-inline-icon .flower-thinking-flower')).not.toBeNull();
     expect(getComputedStyle(thinking.querySelector('.flower-activity-inline-title')!).fontSize).toBe('12px');
     expect(getComputedStyle(thinking.querySelector('.flower-activity-inline-title')!).lineHeight).toBe('18px');
 
@@ -535,7 +535,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(root.querySelector('[data-parent-event="completed"]')!.closest('[inert]')).not.toBeNull();
   });
 
-  it('keeps active inline thinking closed and shimmers both thinking and SubAgent waits', async () => {
+  it('keeps active inline thinking closed with petal motion and shimmers SubAgent waits', async () => {
     const baseWait = tool('wait', 'running', 'subagents', 'subagent_operation');
     const waiting: FlowerRuntimeCurrentItem = { ...baseWait, activity: { ...baseWait.activity!, presentation: {
       ...baseWait.activity!.presentation!, payload: { action: 'wait', requested_count: 2 },
@@ -545,7 +545,8 @@ describe('consecutive tools in the shared Flower surface', () => {
     const thinking = root.querySelector<HTMLElement>('[data-flower-thinking-id="active-thinking:block:0"]')!;
     expect(thinking.dataset.flowerThinkingView).toBe('collapsed');
     expect(thinking.querySelector('.flower-thinking-toggle')?.textContent).toContain('Thinking...');
-    expect(thinking.querySelector('[data-floe-progress-shimmer="text"]')?.textContent).toContain('Thinking...');
+    expect(thinking.querySelector('[data-floe-progress-shimmer]')).toBeNull();
+    expect(thinking.querySelector('.flower-thinking-flower')!.getAnimations({ subtree: true })).toHaveLength(6);
     expect(row(root, 'wait').querySelector('[data-floe-progress-shimmer="text"]')?.textContent).not.toBe('');
   });
 
@@ -568,7 +569,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     await waitFor(() => firstToggle.closest('.flower-tool-sequence-node')?.getAttribute('data-state') === 'open');
     const thoughts = [...root.querySelectorAll<HTMLElement>('.flower-thinking-disclosure')];
     expect(thoughts.map(node => Boolean(node.closest<HTMLElement>('.flower-tool-sequence-node')?.dataset.flowerSequence))).toEqual([true, true, true]);
-    expect(thoughts[1].querySelector('.flower-activity-inline-icon svg.lucide-brain')?.getAttribute('stroke-width')).toBe('1.7');
+    expect(thoughts[1].querySelectorAll('.flower-thinking-petal')).toHaveLength(5);
     expect(collapsed(root, 'b')).toBe(false);
     expect(row(root, 'a').getBoundingClientRect().height).toBe(32);
     expect(Math.abs(row(root, 'b').getBoundingClientRect().top - thoughts[1].getBoundingClientRect().bottom)).toBeLessThan(1);

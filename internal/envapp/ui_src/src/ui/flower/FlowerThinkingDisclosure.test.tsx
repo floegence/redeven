@@ -46,10 +46,11 @@ describe('Thinking segment disclosure', () => {
     expect(thinking.button().classList.contains('flower-activity-inline-button')).toBe(true);
     expect(thinking.button().querySelector('.flower-activity-inline-icon')).not.toBeNull();
     expect(thinking.button().querySelector('.flower-activity-inline-title')).not.toBeNull();
-    expect(thinking.button().querySelector('.flower-activity-inline-icon svg')?.classList.contains('lucide-brain')).toBe(true);
+    expect(thinking.button().querySelector('.flower-thinking-flower')?.getAttribute('aria-hidden')).toBe('true');
+    expect(thinking.button().querySelectorAll('.flower-thinking-petal')).toHaveLength(5);
     expect(thinking.button().textContent).toContain('Thinking...');
     expect(thinking.button().textContent).toContain('4s');
-    expect(thinking.button().querySelector('[data-floe-progress-shimmer="text"]')?.textContent).toBe('Thinking...');
+    expect(thinking.button().querySelector('[data-floe-progress-shimmer]')).toBeNull();
     thinking.button().click();
     expect(thinking.view()).toBe('expanded');
     thinking.button().click();

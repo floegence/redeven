@@ -835,7 +835,9 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(thinkingDisclosure?.getAttribute('data-flower-thinking-view')).toBe('collapsed');
     expect(runtime.querySelector('.flower-thinking-content')).toBeNull();
     expect(thinkingToggle?.getAttribute('aria-expanded')).toBe('false');
-    expect(thinkingToggle?.querySelector('[data-floe-progress-shimmer="text"]')?.textContent).toContain('Thinking');
+    expect(thinkingToggle?.querySelector('.flower-activity-inline-title')?.textContent).toContain('Thinking');
+    expect(thinkingToggle?.querySelector('[data-floe-progress-shimmer]')).toBeNull();
+    expect(thinkingToggle?.querySelector('.flower-thinking-flower')!.getAnimations({ subtree: true })).toHaveLength(6);
     thinkingToggle?.click();
     await waitFor(() => runtime.querySelector('.flower-thinking-content')?.textContent?.includes('Inspecting files') === true);
     expect(thinkingDisclosure?.getAttribute('data-flower-thinking-view')).toBe('expanded');

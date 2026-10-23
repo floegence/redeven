@@ -5,6 +5,7 @@
 - 2026-10-23: Keep Flower sidebar resizing local to grid geometry, coalesce pointer samples, and persist only settled widths; qualify cancellation, keyboard and responsive layouts plus bounded Electron style recalculation. See [conversation sidebar](ui/flower-thread-sidebar.md).
 
 - 2026-10-23: Keep apply_patch guidance to syntax and source-order constraints; remove generic reminders and the JSON tutorial while retaining strict schema validation and corrective diagnostics. See [tool permissions and dispatch](ai/tool-permission-runtime.md).
+- 2026-10-23: Replace the thinking brain glyph with theme-aware clockwise petal fills and a light cream-gold center; preserve confirmed-live lifecycle, disclosure interaction, reduced motion and high contrast. See [activity interaction](ui/flower-activity-interaction.md).
 
 - 2026-10-23: Teach ordered non-overlapping patch chunks and one canonical file operation, distinguish source-order/context failures with actionable no-effect diagnostics, and qualify schema recovery plus synthetic model patch generation. See [tool permissions and dispatch](ai/tool-permission-runtime.md).
 
