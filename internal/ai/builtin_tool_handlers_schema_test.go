@@ -187,7 +187,7 @@ func TestBuiltInToolDefinitions_ApplyPatchContractIsCanonical(t *testing.T) {
 	if !strings.Contains(description, "*** Update File:") || !strings.Contains(description, "@@") {
 		t.Fatalf("patch property description missing file op guidance: %q", description)
 	}
-	if !strings.Contains(description, "Prefix added lines with +") {
+	if !strings.Contains(description, "Lines: + added, - removed, space context") {
 		t.Fatalf("patch property description missing add-file content-line prefix rule: %q", description)
 	}
 }

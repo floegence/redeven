@@ -26,6 +26,11 @@ func TestPatchHostedRunWritesAndPatchesAbsolutePath(t *testing.T) {
 	var calls atomic.Int32
 	var outputMu sync.Mutex
 	var outputs []openAIFunctionOutput
+	patch := "*** Begin Patch\n*** Update File: " + path + "\n@@ beta:\n-same\n+changed\n*** End of File\n*** End Patch"
+	alpha := "@@ alpha:\n-same\n+ALPHA\n"
+	beta := "@@ beta:\n-changed\n+BETA\n"
+	ordered := "*** Begin Patch\n*** Update File: " + path + "\n" + alpha + beta + "*** End Patch"
+	backwards := "*** Begin Patch\n*** Update File: " + path + "\n" + beta + alpha + "*** End Patch"
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -38,8 +43,23 @@ func TestPatchHostedRunWritesAndPatchesAbsolutePath(t *testing.T) {
 			writeAskUserIntegrationTextResponse(w, flusher, "title", "Patch path qualification")
 			return
 		}
+		assertPatchProviderContract(t, request)
 		step := calls.Add(1)
-		if step > 2 {
+		if step == 3 || step == 5 {
+			want, feedback := "alpha:\nsame\nbeta:\nsame\n", "input_format"
+			if step == 5 {
+				want, feedback = "alpha:\nsame\nbeta:\nchanged\n", "out_of_order"
+			}
+			got, err := os.ReadFile(path)
+			if err != nil || string(got) != want {
+				t.Errorf("failed call changed file: %q, %v", got, err)
+			}
+			results := collectOpenAIFunctionOutputs(request["input"])
+			if len(results) == 0 || !strings.Contains(results[len(results)-1].Output, feedback) {
+				t.Errorf("missing corrective feedback %q: %+v", feedback, results)
+			}
+		}
+		if step > 5 {
 			outputMu.Lock()
 			outputs = collectOpenAIFunctionOutputs(request["input"])
 			outputMu.Unlock()
@@ -48,9 +68,15 @@ func TestPatchHostedRunWritesAndPatchesAbsolutePath(t *testing.T) {
 		}
 		name, id := "file_write", "write"
 		args := map[string]any{"file_path": path, "content": "alpha:\nsame\nbeta:\nsame\n"}
-		if step == 2 {
-			name, id = "apply_patch", "patch"
-			args = map[string]any{"patch": "*** Begin Patch\n*** Update File: " + path + "\n@@ beta:\n-same\n+changed\n*** End of File\n*** End Patch"}
+		switch step {
+		case 2:
+			name, id, args = "apply_patch", "invalid-schema", map[string]any{"patch": patch, "input_format": "patch"}
+		case 3:
+			name, id, args = "apply_patch", "patch", map[string]any{"patch": patch}
+		case 4:
+			name, id, args = "apply_patch", "out-of-order", map[string]any{"patch": backwards}
+		case 5:
+			name, id, args = "apply_patch", "reordered", map[string]any{"patch": ordered}
 		}
 		raw, err := json.Marshal(args)
 		if err != nil {
@@ -94,19 +120,68 @@ func TestPatchHostedRunWritesAndPatchesAbsolutePath(t *testing.T) {
 		t.Fatalf("patch turn: %v; failure=%+v", err, terminal.Failure)
 	}
 	got, err := os.ReadFile(path)
-	if err != nil || string(got) != "alpha:\nsame\nbeta:\nchanged\n" {
+	if err != nil || string(got) != "alpha:\nALPHA\nbeta:\nBETA\n" {
 		t.Fatalf("patched file=%q error=%v", got, err)
 	}
 	outputMu.Lock()
 	defer outputMu.Unlock()
-	if calls.Load() != 3 || len(outputs) != 2 || outputs[1].CallID != "patch" {
+	if calls.Load() != 6 || len(outputs) != 5 || outputs[4].CallID != "reordered" {
 		t.Fatalf("provider calls=%d outputs=%+v", calls.Load(), outputs)
 	}
 	var patchResult map[string]any
-	if err := json.Unmarshal([]byte(outputs[1].Output), &patchResult); err != nil {
+	if err := json.Unmarshal([]byte(outputs[4].Output), &patchResult); err != nil {
 		t.Fatal(err)
 	}
-	if patchResult["status"] != "success" || strings.Contains(outputs[1].Output, "mutations") || !strings.Contains(outputs[1].Output, "note.txt") {
-		t.Fatalf("patch result=%s", outputs[1].Output)
+	if patchResult["status"] != "success" || strings.Contains(outputs[4].Output, "mutations") || !strings.Contains(outputs[4].Output, "note.txt") {
+		t.Fatalf("patch result=%s", outputs[4].Output)
 	}
+}
+
+// Inspect the final serialized provider request, after host and Floret shaping.
+func assertPatchProviderContract(t *testing.T, request map[string]any) {
+	t.Helper()
+	for _, raw := range request["tools"].([]any) {
+		tool := raw.(map[string]any)
+		if tool["name"] != "apply_patch" {
+			continue
+		}
+		parameters, ok := tool["parameters"].(map[string]any)
+		if !ok || parameters["additionalProperties"] != false {
+			t.Errorf("patch schema is not strict: %+v", parameters)
+			return
+		}
+		properties := parameters["properties"].(map[string]any)
+		for _, extra := range []string{"input", "input_format"} {
+			if _, exists := properties[extra]; exists {
+				t.Errorf("unexpected patch argument %s", extra)
+			}
+		}
+		description := properties["patch"].(map[string]any)["description"].(string)
+		for _, want := range []string{"Read current text", "One file header per canonical path", "non-overlapping chunks in original file order"} {
+			if !strings.Contains(description, want) {
+				t.Errorf("provider lost patch guidance %q", want)
+			}
+		}
+		_, example, ok := strings.Cut(description, "JSON example: ")
+		if !ok {
+			t.Error("missing patch example")
+			return
+		}
+		var args struct{ Patch string }
+		if err := json.Unmarshal([]byte(strings.TrimSuffix(example, ".")), &args); err != nil {
+			t.Errorf("invalid JSON example: %v", err)
+			return
+		}
+		parsed, err := parsePatchText(args.Patch)
+		if err != nil || len(parsed.files) != 1 || len(parsed.files[0].hunks) != 2 {
+			t.Errorf("example must teach two chunks under one header: %v", err)
+			return
+		}
+		got, err := applyUnifiedDiffHunksToBytes([]byte("a\nb\nc\n"), parsed.files[0].hunks)
+		if err != nil || string(got) != "A\nb\nC\n" {
+			t.Errorf("example does not apply as documented: %q, %v", got, err)
+		}
+		return
+	}
+	t.Error("provider request omitted apply_patch")
 }

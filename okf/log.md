@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-10-23: Teach ordered non-overlapping patch chunks and one canonical file operation, distinguish source-order/context failures with actionable no-effect diagnostics, and qualify schema recovery plus synthetic model patch generation. See [tool permissions and dispatch](ai/tool-permission-runtime.md).
+
 - 2026-10-23: Keep temporary Flower subscription recovery retryable over HTTP and preserve localized connection feedback in the composer status lane. Verify automatic recovery, keyboard resync and draft retention; see [Flower live timeline](ui/flower-live-timeline.md).
 
 ## 2026-10-23 — Readable bounded conversation history

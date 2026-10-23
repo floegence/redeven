@@ -45,6 +45,7 @@ func applyUnifiedDiffHunksToBytes(original []byte, hunks []unifiedDiffHunk) ([]b
 		lines[i] = line.text
 	}
 	var output []patchSourceLine
+	var matched []patchMatchedRange
 	cursor := 0
 	for index, h := range hunks {
 		start := cursor
@@ -54,7 +55,7 @@ func applyUnifiedDiffHunksToBytes(original []byte, hunks []unifiedDiffHunk) ([]b
 		if h.anchor != "" {
 			found, ok := findPatchSequence(lines, []string{h.anchor}, cursor, cursor, len(lines)-1)
 			if !ok {
-				return fail(fmt.Sprintf("context anchor %q was not found", boundedPatchContext(h.anchor)))
+				return nil, diagnosePatchContext(lines, []string{h.anchor}, h, index+1, cursor, true, matched)
 			}
 			start = found.start + 1
 		}
@@ -79,7 +80,7 @@ func applyUnifiedDiffHunksToBytes(original []byte, hunks []unifiedDiffHunk) ([]b
 			}
 			if h.endOfFile {
 				if end < start {
-					return fail("EOF context precedes an earlier chunk or anchor")
+					return nil, diagnosePatchContext(lines, old, h, index+1, start, false, matched)
 				}
 				start = end
 				preferred = end
@@ -88,8 +89,11 @@ func applyUnifiedDiffHunksToBytes(original []byte, hunks []unifiedDiffHunk) ([]b
 			match, ok = findPatchSequence(lines, old, start, preferred, end)
 
 			if !ok {
-				return fail(fmt.Sprintf("expected context was not found: %q", boundedPatchContext(strings.Join(old, "\n"))))
+				return nil, diagnosePatchContext(lines, old, h, index+1, start, false, matched)
 			}
+		}
+		if len(old) > 0 {
+			matched = append(matched, patchMatchedRange{match.start, match.start + len(old)})
 		}
 		output = append(output, source[cursor:match.start]...)
 		cursor = match.start

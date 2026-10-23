@@ -5,7 +5,7 @@ description: Tool registration, scheduling, permission, readonly, and target-rou
 tags: [ai, tools, permissions, dispatch]
 timestamp: 2026-10-15T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-23"
 ---
 # Summary
 
@@ -43,6 +43,18 @@ convention. Exact matching precedes whitespace and punctuation normalization.
 Explicit Add and Move preserve the existing replacement behavior for regular
 files. Multiple operations on one canonical path must be combined into one file
 operation with ordered chunks.
+The provider-visible definition states these requirements and demonstrates two
+ordered update chunks under one file header. Small exact edits prefer file.edit
+after reading the current text.
+
+Rejected patch diagnostics distinguish out-of-order chunks, overlapping context,
+context before an anchor, incorrect EOF context, repeated earlier occurrences,
+missing text, and duplicate canonical file operations. They report the chunk,
+patch-body line and original-source search boundary, plus an exact source line
+when available. An exact diagnostic search never selects an application location
+or changes matching rules. Repeated occurrences require unique context rather
+than guessing the intended location. Model feedback carries the reason and a
+specific repair instruction; strict JSON argument rejection remains in Floret.
 
 All plans validate before writing and recheck source and destination snapshots
 before each commit. Validation errors confirm no writes. Filesystem commit errors
@@ -66,4 +78,5 @@ Flower must not infer remote execution from thread context alone; it can only cl
 - `redeven:internal/ai/floret_native_tools.go` - The unique native factory derives `web_fetch` from Floret and binds invocation product permission.
 
 - Redeven patch implementation: internal/ai/unified_diff_apply.go, patch_text.go and patch_tool.go.
-- Deterministic qualification: internal/ai/patch_correctness_test.go, patch_tool_test.go and patch_runtime_test.go cover placement, endings, authorization, collision semantics, injected commit failures, and the hosted write-then-patch tool chain.
+- Deterministic qualification: internal/ai/patch_correctness_test.go, patch_diagnostics_test.go, patch_tool_test.go and patch_runtime_test.go cover placement, endings, authorization, collision semantics, zero-effect diagnostics, injected commit failures, final provider schemas and hosted invalid-argument/order correction.
+- Synthetic live-model cases in internal/ai/patch_prompt_qualification_test.go check multi-chunk construction, ordering recovery and duplicate-header recovery. They use the configured isolated prompt qualification lane and only evaluate proposed patches in memory; they never execute model-proposed tools. A small passing sample does not establish a production failure rate.

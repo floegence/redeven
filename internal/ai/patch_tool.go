@@ -86,6 +86,19 @@ func patchToolError(failure *patchApplyError) *aitools.ToolError {
 	classified.Retryable = false
 	classified.Meta = map[string]any{"effect": "none"}
 	classified.SuggestedFixes = []string{"Read the reported file or directory, correct the patch using its current content and permitted path, then submit a new call."}
+	var diagnostic *patchDiagnostic
+	if errors.As(failure.cause, &diagnostic) {
+		classified.Meta["reason"] = diagnostic.reason
+		if diagnostic.chunk > 0 {
+			classified.Meta["chunk"] = diagnostic.chunk
+			classified.Meta["patch_body_line"] = diagnostic.patchLine
+			classified.Meta["search_from_line"] = diagnostic.searchLine
+		}
+		if diagnostic.sourceLine > 0 {
+			classified.Meta["source_line"] = diagnostic.sourceLine
+		}
+		classified.SuggestedFixes = []string{diagnostic.fix}
+	}
 	if classified.Code == aitools.ErrorCodePermissionDenied {
 		classified.SuggestedFixes = []string{"The target is not writable under the current permissions; report the denied operation to the user."}
 	}
