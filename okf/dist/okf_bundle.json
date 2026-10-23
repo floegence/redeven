@@ -28906,7 +28906,7 @@
       "frontmatter": {
         "description": "One turn-level failure owner and bounded manual recovery without replaying uncertain effects.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-23",
         "tags": [
           "ai",
           "flower",
@@ -28917,15 +28917,15 @@
         "title": "Flower failure recovery",
         "type": "UI Contract"
       },
-      "body_length": 1894,
+      "body_length": 2200,
       "summary": "Floret owns canonical execution outcomes and retry checkpoints. Flower keeps\naccepted messages readable and provides one turn-level failure and recovery\nsurface. Navigation, settings exit, drafts and queue editing remain available.\nTransport uncertainty never proves backend success or authorizes replay.\nReadiness timeouts use the shared bounded request helpers and expose a status\nrefresh without replaying Prepare or Stop. Deterministic migration failures\nremain diagnostic/admin recovery states; supported compaction history is\nautomatically migrated by published Floret v7.74.0 through schema 29. See\n[historical compatibility](../ai/flower-upgrade-compatibility.md).",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Automatic stream recovery displays only canonical run_progress attempts and deadlines.\n\nHistorical-thread loading and failure keep New chat and conversation navigation reachable; embedded conversations omit global navigation. Leaving a pending read invalidates its late completion through the existing detail owner. Recovery preserves the shell-owned draft and does not replay work automatically.\n\nFull child reports bypass the ordinary tool preview limit while retaining the provider request budget; canonical retry therefore reuses the complete confirmed reports without dispatching tools.",
-          "char_count": 591
+          "body": "Automatic stream recovery displays only canonical run_progress attempts and deadlines.\n\nHistorical-thread loading shows only progress in the transcript. Before accepted detail exists, read failure has one centered notice and Retry action; workspace and composer sync notices do not repeat it. Unconfirmed Stop remains independently visible. Loaded conversations retain live-sync recovery notices. New chat and conversation navigation stay in their existing sidebar or header controls; embedded conversations omit global navigation. Leaving a pending read invalidates its late completion through the existing detail owner. Recovery preserves the shell-owned draft and does not replay work automatically.\n\nFull child reports bypass the ordinary tool preview limit while retaining the provider request budget; canonical retry therefore reuses the complete confirmed reports without dispatching tools.",
+          "char_count": 897
         },
         {
           "id": "boundaries",
@@ -33629,5 +33629,5 @@
       ]
     }
   ],
-  "source_sha256": "49adb0cff52de0d7ae3465f9e0096cee5d3f6335dc4abdd7d639df2490cc933b"
+  "source_sha256": "7cb4a815a9d91ff78286bd303a7d1df04fe9902c89a45fc0d5823903fd79d4d7"
 }

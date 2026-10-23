@@ -4610,6 +4610,21 @@
   text-align: center;
 }
 
+.flower-thread-load-error > .flower-error-card {
+  width: min(24rem, 100%);
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  gap: 0.75rem;
+  text-align: center;
+}
+
+.flower-thread-load-error .flower-error-icon { padding-top: 0; }
+
+.flower-thread-load-error .flower-error-actions {
+  justify-content: center;
+  margin-top: 1rem;
+}
+
 .flower-thread-loading-eyebrow {
   color: var(--muted-foreground);
   font-size: 0.6875rem;

@@ -198,7 +198,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
   RadioOption: actual.RadioOption,
   DialogPlacementProvider: actual.DialogPlacementProvider,
   Button: (props: any) => {
-    if (props.class?.includes('flower-composer-approval-decision') || props.class?.includes('flower-composer-submit') || props.class?.startsWith('flower-model-menu-') || props['data-computer-control-action']) return <Dynamic component={actual.Button} {...props} />;
+    if (props.class?.includes('flower-composer-approval-decision') || props.class?.includes('flower-composer-submit') || props.class === 'flower-thread-load-retry' || props.class?.startsWith('flower-model-menu-') || props['data-computer-control-action']) return <Dynamic component={actual.Button} {...props} />;
     return (
       <button
         type={props.type ?? "button"}
