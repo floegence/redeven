@@ -67,6 +67,7 @@ export function MarkdownPreviewPane(props: MarkdownPreviewPaneProps) {
       content={props.text}
       filePath={props.path}
       showToc={true}
+      tocPresentation={props.surface === 'window' ? 'drawer' : 'sidebar'}
       textScalePercent={markdownPreviewPreferences.textScalePercent()}
       onTextScalePercentChange={markdownPreviewPreferences.setTextScalePercent}
       onOpenFileLink={(target) => {

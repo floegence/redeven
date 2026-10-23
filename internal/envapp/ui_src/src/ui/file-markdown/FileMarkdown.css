@@ -702,7 +702,26 @@ html.dark .fm-toolbar-floating-inline {
   box-shadow: none;
 }
 
-/* TOC sidebar */
+/* Contents drawer and sidebar */
+.fm-toc-drawer {
+  width: min(320px, calc(100% - 24px));
+  max-width: calc(100% - 24px);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.fm-toc-drawer .fm-toc-link {
+  padding-top: 6px;
+  padding-bottom: 6px;
+  overflow-wrap: anywhere;
+}
+
+.fm-toc-link:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 45%, transparent);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
 .fm-toc-panel {
   position: sticky;
   top: 0;

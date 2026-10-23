@@ -5,7 +5,7 @@ description: Fit documents and images to their actual reading area and isolate a
 tags: [ui, files, preview, viewport, rendering]
 timestamp: 2026-10-01T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-23"
 ---
 # Summary
 
@@ -39,6 +39,8 @@ The [HTML file preview contract](file-preview-html.md) owns page-first opening, 
 ## Markdown enhancements
 Mermaid processing checks for diagram elements before resolving theme colors or allocating a rendering sandbox. Diagram rendering retains theme-specific caching and rejects stale document work.
 
+Floating Markdown previews start with Contents closed. The Contents control opens a right-side drawer inside the reading area through the published Floe Dialog surface contract. Opening and closing the drawer preserves document width, rendered nodes, and scroll position; it never reserves a sidebar column. The drawer stays within the preview at narrow window sizes and uses the published focus, dismissal, and motion behavior. Escape, its close button, or the reading-area backdrop dismisses Contents without closing the preview. Choosing a heading scrolls only the Markdown body and closes the drawer; switching files starts closed again. Documents without headings disable the Contents control. Main-surface previews retain their sidebar presentation.
+
 # Boundaries
 
 The [window actions contract](file-preview-window-actions.md) owns title-bar file actions, drafts, and dismissal. Fit and renderer fixes must not grant an unselected widget local wheel ownership or alter file authorization, editability, or native attachment PDF behavior.
@@ -50,3 +52,6 @@ The [window actions contract](file-preview-window-actions.md) owns title-bar fil
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewZoomControls.tsx` - Compact floating controls shared by sized preview renderers.
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/PdfPreviewPane.tsx` - Product virtualization and controls over the published layered PDF surface.
+
+- `redeven:internal/envapp/ui_src/src/ui/widgets/MarkdownPreviewPane.tsx` - Selects the contained drawer for floating previews.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/MarkdownPreviewPane.browser.test.tsx` - Real floating-window coverage for default disclosure, unchanged document geometry, drawer bounds, focus, dismissal, and local heading navigation at three widths in light and dark themes.
