@@ -77,6 +77,35 @@ describe('LiveTransport', () => {
 });
 
 describe('LiveTransport recovery ownership', () => {
+  it.each([503, 504])('recovers a lost subscription through HTTP %i handshakes without user action', async status => {
+    vi.useFakeTimers();
+    const fixture = controlledConnections<{ kind: string }>();
+    const onCurrent = vi.fn(); const terminal = vi.fn();
+    const transport = createLiveTransport<{ kind: string }>();
+    const stop = transport.start({ ...fixture, onCurrent, onTerminalError: terminal, isReady: value => value.kind === 'ready' });
+    fixture.connections[0].push({ kind: 'ready' });
+    await vi.advanceTimersByTimeAsync(0);
+    const firstEpoch = transport.connectionEpoch();
+    fixture.connections[0].reject(new FlowerLiveSyncError('subscription overflow'));
+    await vi.advanceTimersByTimeAsync(301);
+    fixture.connections[1].reject(Object.assign(new Error('baseline temporarily unavailable'), { status, code: 'unexpected_status' }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(transport.state().status).toBe('reconnecting');
+    expect(fixture.connections[1].signal.aborted).toBe(true);
+    await vi.advanceTimersByTimeAsync(601);
+    expect(fixture.connect).toHaveBeenCalledTimes(3);
+    fixture.connections[2].push({ kind: 'ready' });
+    fixture.connections[0].push({ kind: 'stale' });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(transport.state()).toEqual({ status: 'ready', connectionEpoch: transport.connectionEpoch() });
+    expect(transport.connectionEpoch()).toBeGreaterThan(firstEpoch);
+    expect(onCurrent.mock.calls.map(call => call[0])).toEqual([{ kind: 'ready' }, { kind: 'ready' }]);
+    expect(terminal).not.toHaveBeenCalled();
+    expect(fixture.connect).toHaveBeenCalledTimes(3);
+    stop();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('restarts through the same owner, aborts superseded connections, and rejects late frames and failures', async () => {
     vi.useFakeTimers();
     const fixture = controlledConnections<{ kind: string }>();
@@ -168,7 +197,7 @@ describe('LiveTransport recovery ownership', () => {
     stop();
   });
 
-  it.each([401, 403, 423, 426, 429])('keeps HTTP %i actionable until an explicit restart', async status => {
+  it.each([400, 401, 403, 423, 426, 429])('keeps HTTP %i actionable until an explicit restart', async status => {
     vi.useFakeTimers();
     const fixture = controlledConnections<{ kind: string }>();
     const onTerminalError = vi.fn();

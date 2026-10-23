@@ -30,16 +30,26 @@ func serveAIFlowerLiveStreamWithTiming(
 ) {
 	subscription, err := aiSvc.SubscribeFlowerLiveStream(r.Context(), meta, ai.FlowerLiveStreamRequest{})
 	if err != nil {
-		if errors.Is(err, ai.ErrFlowerLiveTooManySubscribers) {
-			w.Header().Set("Retry-After", "10")
-			writeJSON(w, http.StatusTooManyRequests, apiResp{OK: false, Error: err.Error()})
-			return
-		}
-		writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+		writeFlowerLiveSubscriptionError(w, err)
 		return
 	}
 	defer subscription.Close()
 	serveFlowerLiveStreamFrames(w, r, subscription, heartbeatInterval, writeTimeout)
+}
+
+func writeFlowerLiveSubscriptionError(w http.ResponseWriter, err error) {
+	status := http.StatusBadRequest
+	switch {
+	case errors.Is(err, ai.ErrFlowerLiveTooManySubscribers):
+		w.Header().Set("Retry-After", "10")
+		status = http.StatusTooManyRequests
+	case errors.Is(err, ai.ErrFlowerLiveSync):
+		// A recovering runtime subscription needs a fresh baseline, not user action.
+		status = http.StatusServiceUnavailable
+	case errors.Is(err, context.DeadlineExceeded):
+		status = http.StatusGatewayTimeout
+	}
+	writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
 }
 
 type flowerLiveStreamReader interface {

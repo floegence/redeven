@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-10-23: Keep temporary Flower subscription recovery retryable over HTTP and preserve localized connection feedback in the composer status lane. Verify automatic recovery, keyboard resync and draft retention; see [Flower live timeline](ui/flower-live-timeline.md).
+
 ## 2026-10-23 — Readable bounded conversation history
 
 - Ordinary visible message bodies load automatically through a two-slot cancellable queue and render complete Markdown without moving the reading anchor; tools retain explicit disclosure.

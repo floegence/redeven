@@ -127,6 +127,62 @@ function failedStream(summaries: readonly FlowerThreadSnapshot[]) {
 }
 
 describe('Flower workspace synchronization recovery', () => {
+  it('keeps reconnect status visible through a 503 handshake and restores canonical progress automatically', async () => {
+    const running = thread({ thread_id: 'thread-rebind', status: 'running' });
+    const disconnect = deferred<void>(); const recovered = deferred<void>();
+    let attempts = 0;
+    const launchTurn = vi.fn(); const stopThread = vi.fn();
+    const connectLiveStream = vi.fn(async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
+      const attempt = ++attempts;
+      if (attempt === 2) throw Object.assign(new Error('runtime subscription recovering'), { status: 503, code: 'unexpected_status' });
+      if (attempt > 2) await recovered.promise;
+      yield { schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [running] };
+      if (attempt === 1) { await disconnect.promise; return; }
+      await waitForAbort(input);
+    });
+    const surface = renderSurfaceWithAdapter({ ...adapter(true), connectLiveStream, launchTurn, stopThread,
+      loadThread: vi.fn(async () => liveBootstrap(running, attempts > 1 ? 10 : 9)) });
+    await waitFor(() => Boolean(surface.querySelector('[data-thread-id="thread-rebind"] button')));
+    selectThread(surface, running.thread_id);
+    await waitFor(() => Boolean(surface.querySelector('[data-flower-progress-kind]')));
+    const editor = surface.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
+    editor.value = 'Keep this draft while reconnecting';
+    editor.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    disconnect.resolve();
+    await waitFor(() => attempts === 3, 2000);
+    expect(surface.querySelector('.flower-model-status-lane [role="status"]')?.textContent).toContain('Reconnecting live updates');
+    expect(surface.querySelector('[data-flower-progress-kind]')).toBeNull();
+    expect(surface.querySelector('[data-flower-sync-state="failed"]')).toBeNull();
+    expect(surface.textContent).toContain('Plan deploy');
+    recovered.resolve();
+    await waitFor(() => !surface.querySelector('.flower-workspace-sync') && Boolean(surface.querySelector('[data-flower-progress-kind]')));
+    expect(surface.querySelector('[data-flower-progress-sync-state]')).toBeNull();
+    expect(surface.querySelector('.flower-composer textarea')).toBe(editor);
+    expect(editor.value).toBe('Keep this draft while reconnecting');
+    expect(launchTurn).not.toHaveBeenCalled(); expect(stopThread).not.toHaveBeenCalled();
+  });
+
+  it('keeps a terminal sync failure actionable in the progress lane without showing stale execution', async () => {
+    const running = thread({ thread_id: 'thread-sync-indicator', status: 'running' });
+    const stream = failedStream([running]);
+    const surface = renderSurfaceWithAdapter({ ...adapter(true), connectLiveStream: stream.connectLiveStream,
+      loadThread: vi.fn(async () => liveBootstrap(running, stream.attempts.length > 1 ? 10 : 9)) });
+    await waitFor(() => Boolean(surface.querySelector('[data-thread-id="thread-sync-indicator"] button')));
+    selectThread(surface, running.thread_id);
+    await waitFor(() => Boolean(surface.querySelector('[data-flower-progress-kind]')));
+    stream.fail();
+    await waitFor(() => Boolean(surface.querySelector('[data-flower-sync-state="failed"]')));
+    const lane = surface.querySelector('.flower-model-status-lane')!;
+    expect(lane.querySelector('[role="status"]')?.textContent).toContain('Status unconfirmed');
+    expect(lane.querySelector('[data-flower-progress-kind]')).toBeNull();
+    expect(lane.querySelector('[data-floe-progress-shimmer]')).toBeNull();
+    const retry = lane.querySelector<HTMLButtonElement>('button')!;
+    expect(retry?.textContent).toBe('Resync');
+    retry.click();
+    await waitFor(() => stream.attempts.length === 2 && Boolean(surface.querySelector('[data-flower-progress-kind]')));
+    expect(surface.querySelector('[data-flower-progress-sync-state]')).toBeNull();
+  });
+
   it.each([
     [426, 'matching app and runtime version'],
     [429, 'Close unused Flower views'],

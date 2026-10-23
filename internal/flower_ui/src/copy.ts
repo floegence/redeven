@@ -689,6 +689,9 @@ export type FlowerSurfaceCopy = Readonly<{
     syncVersion: string;
     syncCapacity: string;
     syncResync: string;
+    syncStatusConnecting: string;
+    syncStatusReconnecting: string;
+    syncStatusFailed: string;
     stopUnconfirmed: string;
     syncTimeout: string;
     composerErrorTitle: string;
@@ -1176,6 +1179,9 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     syncVersion: "Flower live updates require a matching app and runtime version. Refresh the app, or update both before resyncing.",
     syncCapacity: "Flower live update capacity is full. Close unused Flower views, then resync. Your draft is preserved.",
     syncResync: "Resync",
+    syncStatusConnecting: "Connecting live updates…",
+    syncStatusReconnecting: "Reconnecting live updates…",
+    syncStatusFailed: "Sync interrupted · Status unconfirmed",
     stopUnconfirmed: "Stop status is unconfirmed. Resync before trying again.",
     syncTimeout: "Synchronization timed out after 15 seconds. Try again.",
     composerErrorTitle: 'Flower could not send.',

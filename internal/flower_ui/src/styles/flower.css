@@ -4274,6 +4274,20 @@
   padding: 0 0.375rem 0.35rem;
 }
 
+/* Connection feedback occupies the progress lane without claiming execution. */
+.flower-model-status-sync {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 0.38rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+.flower-model-status-sync > span { min-width: 0; overflow-wrap: anywhere; }
+.flower-model-status-sync > button { flex-shrink: 0; }
+
 .flower-model-status-lane--conversation {
   flex-shrink: 0;
   padding: 0.5rem 1rem 0.75rem;

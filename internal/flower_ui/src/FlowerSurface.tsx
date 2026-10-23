@@ -13069,12 +13069,27 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const progressLane = (conversation = false) => (
     <div class={cn('flower-model-status-lane', conversation && 'flower-model-status-lane--conversation')}>
-      <Show when={selectedThreadStopPending()} fallback={<FlowerProgressIndicator
-        progress={selectedRunProgress()}
-        outputCopy={copy().chat.outputProgress}
-        label={selectedRunProgress() ? liveProgressLabel(selectedRunProgress()!.kind, selectedRunProgress()!.retry)
-          : ''}
-      />}><span class="flower-turn-stopping text-xs text-muted-foreground" role="status" aria-live="polite">{copy().chat.stopping}</span></Show>
+      <Show when={selectedThreadStopPending()} fallback={
+        <Show when={selectedThreadID() && props.adapter.connectLiveStream && !livePresentationConfirmed() && liveSyncState().status !== 'stopped'} fallback={
+          <FlowerProgressIndicator
+            progress={selectedRunProgress()}
+            outputCopy={copy().chat.outputProgress}
+            label={selectedRunProgress() ? liveProgressLabel(selectedRunProgress()!.kind, selectedRunProgress()!.retry) : ''}
+          />
+        }>
+          <div class="flower-model-status-sync" data-flower-progress-sync-state={liveSyncState().status}>
+            <Show when={liveSyncState().status === 'failed'} fallback={<Refresh class="size-3.5 shrink-0" aria-hidden="true" />}>
+              <AlertCircle class="size-3.5 shrink-0" aria-hidden="true" />
+            </Show>
+            <span role="status" aria-live="polite" aria-atomic="true">{liveSyncState().status === 'failed'
+              ? copy().chat.syncStatusFailed : liveSyncState().status === 'reconnecting'
+                ? copy().chat.syncStatusReconnecting : copy().chat.syncStatusConnecting}</span>
+            <Show when={liveSyncState().status === 'failed'}>
+              <Button size="xs" variant="ghost" onClick={resyncWorkspace}>{copy().chat.syncResync}</Button>
+            </Show>
+          </div>
+        </Show>
+      }><span class="flower-turn-stopping text-xs text-muted-foreground" role="status" aria-live="polite">{copy().chat.stopping}</span></Show>
       {goalControls()}
     </div>
   );
