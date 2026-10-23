@@ -156,15 +156,17 @@ export function createFlowerScrollTailController(
   const ownsScrollInput = (target: EventTarget | null, direction: number): boolean => {
     if (!node) return false;
     if (target === node) return true;
-    // Tool sequences chain native scrolling into the transcript at their edges.
-    // Terminals, editors and other nested viewports retain their own input.
+    // Match the browser's native scroll chain, including nested reading regions.
+    // A region owns input while it can scroll in that direction; explicit CSS
+    // containment stops the chain even when its content fits without scrolling.
     let element = target instanceof Element ? target : null;
     while (element && element !== node) {
       const style = window.getComputedStyle(element);
-      if (/(auto|scroll)/.test(style.overflowY) && element.scrollHeight > element.clientHeight) {
-        if (!element.classList.contains('flower-tool-sequence-scroll')) return false;
+      if (/(auto|scroll)/.test(style.overflowY)) {
+        if (style.overscrollBehaviorY === 'contain' || style.overscrollBehaviorY === 'none') return false;
         const remaining = element.scrollHeight - element.clientHeight - element.scrollTop;
-        if (direction === 0 || direction < 0 && element.scrollTop > 1 || direction > 0 && remaining > 1) return false;
+        if (element.scrollHeight > element.clientHeight
+          && (direction === 0 || direction < 0 && element.scrollTop > 1 || direction > 0 && remaining > 1)) return false;
       }
       element = element.parentElement;
     }

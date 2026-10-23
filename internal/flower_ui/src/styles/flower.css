@@ -5056,7 +5056,7 @@ button.flower-composer-context-source:focus-visible,
 .flower-thinking-content[data-flower-thinking-view='expanded'] {
   max-height: min(20rem, 45dvh, var(--flower-detail-available-height, 45dvh));
   overflow-y: auto;
-  overscroll-behavior-y: contain;
+  overscroll-behavior-y: auto;
 }
 
 .flower-thinking-content:focus-visible,

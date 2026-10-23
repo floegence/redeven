@@ -182,10 +182,11 @@ describe('Flower viewport input ownership', () => {
     expect(viewport.scrollTop).toBe(400);
   });
 
-  it('leaves wheel and keyboard input in a nested terminal with its own viewport', () => {
+  it('leaves wheel and keyboard input in an explicitly contained viewport', () => {
     const { viewport, grow } = harness();
     const terminal = document.createElement('div');
     terminal.style.overflowY = 'auto';
+    terminal.style.overscrollBehaviorY = 'contain';
     Object.defineProperties(terminal, { scrollHeight: { value: 500 }, clientHeight: { value: 100 } });
     viewport.append(terminal);
     terminal.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 100 }));
@@ -196,10 +197,9 @@ describe('Flower viewport input ownership', () => {
     expect(viewport.scrollTop).toBe(400);
   });
 
-  it.each(['wheel', 'touch', 'keyboard'])('pauses transcript following when %s leaves the top of a tool sequence', source => {
+  it.each(['wheel', 'touch', 'keyboard'])('hands nested reading edges to the transcript for %s input', source => {
     const { controller, viewport, grow } = harness();
     const sequence = document.createElement('div');
-    sequence.className = 'flower-tool-sequence-scroll';
     sequence.style.overflowY = 'auto';
     Object.defineProperties(sequence, { scrollHeight: { value: 500 }, clientHeight: { value: 100 } });
     const row = document.createElement('button');
@@ -217,7 +217,7 @@ describe('Flower viewport input ownership', () => {
     expect(viewport.scrollTop).toBe(200);
   });
 
-  it('resumes transcript following when scrolling past the last tool reaches the conversation tail', () => {
+  it('resumes transcript following when scrolling past nested content reaches the conversation tail', () => {
     const { controller, viewport, grow } = harness();
     const sequence = document.createElement('div');
     sequence.className = 'flower-tool-sequence-scroll';
@@ -233,7 +233,7 @@ describe('Flower viewport input ownership', () => {
     expect(viewport.scrollTop).toBe(520);
   });
 
-  it('keeps interior tool scrolling and embedded terminal boundaries out of transcript following', () => {
+  it('keeps interior scrolling and explicit containment out of transcript following', () => {
     const { controller, viewport } = harness();
     const sequence = document.createElement('div');
     sequence.className = 'flower-tool-sequence-scroll';
@@ -246,10 +246,43 @@ describe('Flower viewport input ownership', () => {
     expect(controller.followingLatest()).toBe(true);
     const terminal = document.createElement('div');
     terminal.style.overflowY = 'auto';
+    terminal.style.overscrollBehaviorY = 'contain';
     Object.defineProperties(terminal, { scrollHeight: { value: 300 }, clientHeight: { value: 100 } });
     sequence.append(terminal);
     sequence.scrollTop = 0;
     terminal.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -100 }));
+    expect(controller.followingLatest()).toBe(true);
+  });
+
+  it.each(['auto', 'contain', 'none'])('respects %s chaining across thinking, a sequence and the transcript', overscroll => {
+    const { controller, viewport } = harness();
+    const sequence = document.createElement('div');
+    const thinking = document.createElement('div');
+    for (const region of [sequence, thinking]) {
+      region.style.overflowY = 'auto';
+      Object.defineProperties(region, { scrollHeight: { value: 500 }, clientHeight: { value: 100 } });
+    }
+    thinking.style.overscrollBehaviorY = overscroll;
+    sequence.append(thinking); viewport.append(sequence);
+    controller.startFollowing();
+    thinking.scrollTop = 200;
+    thinking.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -100 }));
+    expect(controller.followingLatest()).toBe(true);
+    thinking.scrollTop = 0; sequence.scrollTop = 200;
+    thinking.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -100 }));
+    expect(controller.followingLatest()).toBe(true);
+    sequence.scrollTop = 0;
+    thinking.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -100 }));
+    expect(controller.followingLatest()).toBe(overscroll !== 'auto');
+  });
+
+  it.each(['contain', 'none'])('does not claim input through a short %s region', overscroll => {
+    const { controller, viewport } = harness();
+    const region = document.createElement('div');
+    region.style.overflowY = 'auto'; region.style.overscrollBehaviorY = overscroll;
+    Object.defineProperties(region, { scrollHeight: { value: 100 }, clientHeight: { value: 100 } });
+    viewport.append(region); controller.startFollowing();
+    region.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: -100 }));
     expect(controller.followingLatest()).toBe(true);
   });
 
