@@ -28,7 +28,7 @@ function fixtureAdapter(adapter: TestFlowerSurfaceAdapter): FlowerSurfaceAdapter
   const fixture: FlowerSurfaceAdapter = {
     ...adapter,
     get canMutate() { return adapter.canMutate; },
-    connectLiveStream: adapter.connectLiveStream ?? ((input) => testLiveStreamFromLegacyFixture(adapter, input)),
+    connectLiveStream: adapter.disableLiveStream ? undefined : adapter.connectLiveStream ?? ((input) => testLiveStreamFromLegacyFixture(adapter, input)),
     loadSettings: async (refresh, signal) => withModelDirectoryFixture(await adapter.loadSettings(refresh, signal)),
     loadModelDirectory: adapter.loadModelDirectory ?? (async () => withModelDirectoryFixture(await adapter.loadSettings()).model_directory!),
     saveDefaultPermission: async (permission) => withModelDirectoryFixture(await adapter.saveDefaultPermission(permission)),
@@ -67,6 +67,7 @@ import type {
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
 export type TestFlowerSurfaceAdapter = FlowerSurfaceAdapter & Readonly<{
+  disableLiveStream?: boolean;
   listThreadLiveEvents?: (threadID: string, afterSeq: number, limit?: number) => Promise<Readonly<{
     events: readonly Readonly<{ seq: number }>[];
     next_cursor: number;
@@ -80,8 +81,8 @@ async function* testLiveStreamFromLegacyFixture(
   const summaries = await adapter.listThreads();
   const cursors = new Map<string, number>();
   yield {
-    schema_version: 2,
-    kind: 'ready',
+    schema_version: 3,
+    kind: 'ready', baseline_complete: true,
     summaries,
   };
   if (!adapter.listThreadLiveEvents) {
@@ -98,8 +99,8 @@ async function* testLiveStreamFromLegacyFixture(
           cursors.set(threadID, Math.max(cursors.get(threadID) ?? 0, event.seq));
         }
         yield {
-          schema_version: 2,
-          kind: 'ready',
+          schema_version: 3,
+          kind: 'ready', baseline_complete: true,
           summaries: await adapter.listThreads(),
         };
       }

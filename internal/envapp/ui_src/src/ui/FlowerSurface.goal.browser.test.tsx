@@ -69,7 +69,7 @@ function goalFixture(initialText = 'Current goal', initialVersion = 2) {
   const view = () => ({ ...liveBootstrap(snapshot, viewVersion), current: { ...liveBootstrap(snapshot, viewVersion).current, goal: snapshot.goal } });
   const publish = (goal: FlowerThreadSnapshot['goal']) => {
     snapshot = { ...snapshot, goal }; viewVersion++;
-    values.push({ schema_version: 2, kind: 'thread.batch', thread_id: snapshot.thread_id, current: view().current }); wake?.();
+    values.push({ schema_version: 3, kind: 'thread.batch', thread_id: snapshot.thread_id, current: view().current }); wake?.();
   };
   const loadThread = vi.fn(async () => read ? read() : view());
   const manageGoal = vi.fn(async (input: FlowerGoalInput): Promise<FlowerGoalResult> => {
@@ -79,7 +79,7 @@ function goalFixture(initialText = 'Current goal', initialVersion = 2) {
   });
   const surface = renderSurfaceWithDraftCoordinator({ ...base, listThreads: async () => [snapshot], loadThread, manageGoal,
     connectLiveStream: async function* ({ signal }) {
-      yield { schema_version: 2, kind: 'ready', summaries: [snapshot] };
+      yield { schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [snapshot] };
       const abort = () => wake?.(); signal.addEventListener('abort', abort, { once: true });
       try {
         while (!signal.aborted) {

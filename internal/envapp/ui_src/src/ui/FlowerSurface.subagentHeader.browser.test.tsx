@@ -24,7 +24,7 @@ for (const theme of ['light', 'dark'] as const) {
     const runtime = renderSurfaceWithAdapterProps({
       ...adapter(true), listThreads: vi.fn(async () => [parent]), loadThread: vi.fn(async () => liveBootstrap(parent)),
       async *connectLiveStream({ signal }) {
-        yield { schema_version: 2, kind: 'ready', summaries: [parent] };
+        yield { schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [parent] };
         while (!signal.aborted) {
           const event = await new Promise<FlowerLiveStreamEnvelope | null>(resolve => {
             emit = resolve;
@@ -54,7 +54,7 @@ for (const theme of ['light', 'dark'] as const) {
     expect(stack.getAnimations({ subtree: true })).toHaveLength(0);
     const push = async (completed: number) => {
       await waitFor(() => emit !== undefined);
-      emit!({ schema_version: 2, kind: 'thread.batch', thread_id: parent.thread_id,
+      emit!({ schema_version: 3, kind: 'thread.batch', thread_id: parent.thread_id,
         subagents: children.map((child, index) => ({ ...child, status: index < completed ? 'completed' : 'running' })),
       });
       await waitFor(() => stack.dataset.flowerSubagentStack === (completed === 6 ? 'settled' : 'running')

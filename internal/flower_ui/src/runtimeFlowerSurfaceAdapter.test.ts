@@ -176,7 +176,7 @@ describe('runtime Flower surface adapter read state', () => {
     const base = adapterOptions();
     const adapter = createRuntimeFlowerSurfaceAdapter({ ...base, transport: {
       ...base.transport,
-      connectLiveStream: async function* () { yield* flowerLiveWireFixture({ schema_version: 2, kind: 'thread.batch', thread_id: 'large', current }); },
+      connectLiveStream: async function* () { yield* flowerLiveWireFixture({ schema_version: 3, kind: 'thread.batch', thread_id: 'large', current }); },
     } });
     const iterator = adapter.connectLiveStream!({ signal: new AbortController().signal })[Symbol.asyncIterator]();
     expect(await iterator.next()).toMatchObject({ done: false, value: { current } });
@@ -195,7 +195,7 @@ describe('runtime Flower surface adapter read state', () => {
     const update = { thread_id: 'task', base_version: 1, view_version: 2,
       facts: { activity: 'idle', queue_count: 0 }, context: { value: { model_context: null, context_usage: null, context_compactions: [], timeline_decorations: [] } } };
     const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ connectLiveStream: async function* () {
-      yield { schema_version: 2, kind: 'thread.batch', thread_id: 'task', update };
+      yield { schema_version: 3, kind: 'thread.batch', thread_id: 'task', update };
     } }));
     const received = await adapter.connectLiveStream!({ signal: new AbortController().signal })[Symbol.asyncIterator]().next();
     expect(received.value?.update?.context?.value).toEqual(update.context.value);
@@ -209,7 +209,7 @@ describe('runtime Flower surface adapter read state', () => {
   ])('rejects malformed changes before an uncached thread can ignore them', async patch => {
     const update = { thread_id: 'task', base_version: 1, view_version: 2, facts: { activity: 'idle', queue_count: 0 }, ...patch };
     const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ connectLiveStream: async function* () {
-      yield { schema_version: 2, kind: 'thread.batch', thread_id: 'task', update };
+      yield { schema_version: 3, kind: 'thread.batch', thread_id: 'task', update };
     } }));
     await expect(adapter.connectLiveStream!({ signal: new AbortController().signal })[Symbol.asyncIterator]().next()).rejects.toMatchObject({ code: 'flower_live_contract_error' });
   });
@@ -217,8 +217,8 @@ describe('runtime Flower surface adapter read state', () => {
   it('preserves closed safety classifications from the real frame transport', async () => {
     const frame = { session_id: 'observer', target_id: 'task-page', viewer_revision: 1, sequence: 1, mime_type: 'image/png', error_code: 'computer_control_required' };
     const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ connectLiveStream: async function* () {
-      yield { schema_version: 2, kind: 'computer.frame', thread_id: 'task', computer_frame: { ...frame, assistance_kind: 'captcha' } };
-      yield { schema_version: 2, kind: 'computer.frame', thread_id: 'task', computer_frame: { ...frame, assistance_kind: 'untrusted arbitrary page text' } };
+      yield { schema_version: 3, kind: 'computer.frame', thread_id: 'task', computer_frame: { ...frame, assistance_kind: 'captcha' } };
+      yield { schema_version: 3, kind: 'computer.frame', thread_id: 'task', computer_frame: { ...frame, assistance_kind: 'untrusted arbitrary page text' } };
     } }));
     const frames = [];
     for await (const envelope of adapter.connectLiveStream!({ signal: new AbortController().signal })) frames.push(envelope.computer_frame);
@@ -232,7 +232,7 @@ describe('runtime Flower surface adapter read state', () => {
       { thread_id: 'task', interaction_id: 'input-1', target_id: 'browser-1', state: 'unavailable', reason_code: 'password=secret', at_unix_ms: 11 },
     ];
     const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ connectLiveStream: async function* () {
-      for (const computer_status of statuses) yield { schema_version: 2, kind: 'computer.status', thread_id: 'task', computer_status };
+      for (const computer_status of statuses) yield { schema_version: 3, kind: 'computer.status', thread_id: 'task', computer_status };
     } }));
     const received = [];
     for await (const envelope of adapter.connectLiveStream!({ signal: new AbortController().signal })) received.push(envelope.computer_status);
@@ -531,8 +531,8 @@ describe('runtime Flower surface adapter read state', () => {
 		it('maps the published SSE transport into typed Flower envelopes', async () => {
 			const connectLiveStream = vi.fn(async function* () {
 				yield {
-					schema_version: 2,
-					kind: 'ready',
+					schema_version: 3,
+					kind: 'ready', baseline_complete: true,
 					summaries: [{
 						thread_id: 'thread_stream',
 						title: 'Streaming',
@@ -551,7 +551,7 @@ describe('runtime Flower surface adapter read state', () => {
 					}],
 				};
 				yield {
-					schema_version: 2,
+					schema_version: 3,
 					kind: 'thread.batch',
 					thread_id: 'thread_stream',
 					context_compactions: [{
@@ -586,13 +586,13 @@ describe('runtime Flower surface adapter read state', () => {
 					},
 				};
 				yield {
-					schema_version: 2,
+					schema_version: 3,
 					kind: 'viewer.read_state',
 					thread_id: 'thread_stream',
 					read_status: readStatus(),
 				};
 				yield {
-					schema_version: 2,
+					schema_version: 3,
 					kind: 'thread.batch',
 					thread_id: 'thread_stream',
 					subagents: [{
@@ -606,7 +606,7 @@ describe('runtime Flower surface adapter read state', () => {
 					}],
 				};
 				yield {
-					schema_version: 2,
+					schema_version: 3,
 					kind: 'thread.batch',
 					thread_id: 'thread_stream',
 					subagent_current: {
@@ -623,7 +623,7 @@ describe('runtime Flower surface adapter read state', () => {
 
 			expect(frames).toHaveLength(5);
 			expect(frames[0]).toMatchObject({
-				kind: 'ready',
+				kind: 'ready', baseline_complete: true,
 				summaries: [{ thread_id: 'thread_stream', messages: [] }],
 			});
 			expect(frames[1]).toMatchObject({
@@ -656,8 +656,8 @@ describe('runtime Flower surface adapter read state', () => {
 	it('maps summary-only SSE frames without requiring viewer read state', async () => {
 		const connectLiveStream = vi.fn(async function* () {
 			yield {
-				schema_version: 2,
-				kind: 'ready',
+				schema_version: 3,
+				kind: 'ready', baseline_complete: true,
 				summaries: [{
 					thread_id: 'thread_failed',
 					title: 'Fallback title',
@@ -683,7 +683,7 @@ describe('runtime Flower surface adapter read state', () => {
 
 		expect(frames).toHaveLength(1);
 		expect(frames[0]).toMatchObject({
-			kind: 'ready',
+			kind: 'ready', baseline_complete: true,
 			summaries: [{ thread_id: 'thread_failed', status: 'failed', messages: [] }],
 		});
     expect(frames[0]?.summaries?.[0]).not.toHaveProperty('read_status');
@@ -1060,4 +1060,31 @@ it.each(['revoked', 'disposed'] as const)('does not retry a lost take-back respo
   const adapter = createRuntimeFlowerSurfaceAdapter({ ...adapterOptions({ prepareQueuedTurnDraft: vi.fn(), takeBackQueuedTurn }), signal: lifetime.signal, get canMutate() { return allowed; } });
   await expect(adapter.takeBackQueuedTurn!('thread', 'queued', 'fingerprint')).rejects.toMatchObject({ admission_kind: 'unknown' });
   expect(takeBackQueuedTurn).toHaveBeenCalledOnce();
+});
+
+
+describe('progressive conversation list', () => {
+  it('publishes each page, follows cursors, and deduplicates repeated identities', async () => {
+    const listThreads = vi.fn().mockResolvedValueOnce({ threads: [{ thread_id: 'a', title: 'A', title_status: 'ready', title_generation: 1, read_status: readStatus(), created_at_unix_ms: 1, updated_at_unix_ms: 1 }], next_cursor: 'page-2' })
+      .mockResolvedValueOnce({ threads: [{ thread_id: 'a', title: 'Updated', title_status: 'ready', title_generation: 2, read_status: readStatus(), created_at_unix_ms: 1, updated_at_unix_ms: 2 }, { thread_id: 'b', title: '', title_status: '', title_generation: 0, read_status: readStatus(), created_at_unix_ms: 1, updated_at_unix_ms: 1 }] });
+    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ listThreads }));
+    const pages: string[][] = [];
+    const result = await adapter.listThreads({ onPage: rows => pages.push(rows.map(row => row.thread_id)) });
+    expect(pages).toEqual([['a'], ['a', 'b']]);
+    expect(result.map(row => row.thread_id)).toEqual(['a', 'b']);
+    expect(listThreads.mock.calls.map(([request]) => [request.cursor, request.limit])).toEqual([['', 25], ['page-2', 25]]);
+  });
+  it('rejects repeated cursors and aborts when either lifetime ends', async () => {
+    const listThreads = vi.fn(async () => ({ threads: [], next_cursor: 'same' }));
+    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ listThreads }));
+    await expect(adapter.listThreads()).rejects.toThrow('pagination did not advance');
+    expect(listThreads).toHaveBeenCalledTimes(2);
+    for (const lifetime of ['adapter', 'read']) {
+      const controller = new AbortController();
+      const read = vi.fn(async ({ signal }) => { controller.abort(); signal.throwIfAborted(); return { threads: [] }; });
+      const scoped = createRuntimeFlowerSurfaceAdapter(adapterOptions({ listThreads: read }, lifetime === 'adapter' ? { signal: controller.signal } : {}));
+      await expect(scoped.listThreads(lifetime === 'read' ? { signal: controller.signal } : {})).rejects.toMatchObject({ name: 'AbortError' });
+      expect(read).toHaveBeenCalledTimes(1);
+    }
+  });
 });

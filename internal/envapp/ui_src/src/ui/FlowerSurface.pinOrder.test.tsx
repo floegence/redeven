@@ -22,7 +22,12 @@ async function setup(initialPins = ['first', 'second', 'third']) {
   const movePinnedThread = vi.fn(() => result.promise);
   const setThreadPinned = vi.fn(async (): Promise<readonly FlowerThreadPinMetadata[]> => [{ thread_id: 'third', pinned_at_ms: 0, pin_rank: 0, settings_revision: 2 }]);
   const runtime = renderSurfaceWithDraftCoordinator({ ...base, listThreads, loadThread,
-    connectLiveStream: stream.adapter.connectLiveStream, movePinnedThread,
+    connectLiveStream: async function* (input) {
+      yield { schema_version: 3, kind: 'ready' as const, baseline_complete: true, summaries };
+      for await (const envelope of stream.adapter.connectLiveStream!(input)) {
+        if (envelope.kind !== 'ready') yield envelope;
+      }
+    }, movePinnedThread,
     setThreadPinned,
   }, createFlowerComposerDraftCoordinator());
   const row = (id: string) => runtime.querySelector<HTMLElement>(`[data-thread-id="${id}"]`)!;
@@ -36,7 +41,7 @@ async function setup(initialPins = ['first', 'second', 'third']) {
   };
   const emit = async (next: FlowerThreadSnapshot[]) => {
     summaries = next;
-    stream.emit({ schema_version: 2, kind: 'summary.batch', summaries });
+    stream.emit({ schema_version: 3, kind: 'summary.batch', summaries });
     await waitFor(() => row(next[0].thread_id)?.textContent?.includes(next[0].title) === true);
     await flush();
   };
@@ -90,7 +95,7 @@ describe('Flower pin operation convergence', () => {
       { thread_id: 'third', pinned_at_ms: 40, pin_rank: 2, settings_revision: 3 },
       { thread_id: 'second', pinned_at_ms: 41, pin_rank: 1, settings_revision: 2 },
     ]);
-    await waitFor(() => ui.listThreads.mock.calls.length === 2);
+    await waitFor(() => ui.listThreads.mock.calls.length === 1);
     await flush();
     expect(ui.order()).toEqual(['first', 'third', 'second']);
     expect(ui.row('third')).toBe(third);
@@ -132,7 +137,7 @@ describe('Flower pin operation convergence', () => {
     await ui.moveDown();
     ui.listThreads.mockImplementationOnce(() => refresh.promise);
     ui.result.resolve(acknowledgement);
-    await waitFor(() => ui.listThreads.mock.calls.length === 2);
+    await waitFor(() => ui.listThreads.mock.calls.length === 1);
     const button = ui.row('third').querySelector<HTMLButtonElement>('.flower-thread-card-pin-button')!;
     expect(button.disabled).toBe(false);
     button.click();
@@ -210,7 +215,7 @@ describe('Flower pin operation convergence', () => {
     await ui.moveDown();
     ui.listThreads.mockImplementationOnce(() => refresh.promise).mockImplementationOnce(() => nextRead.promise);
     ui.result.resolve(acknowledgement);
-    await waitFor(() => ui.listThreads.mock.calls.length === 2);
+    await waitFor(() => ui.listThreads.mock.calls.length === 1);
     const pin = deferred<readonly FlowerThreadPinMetadata[]>();
     ui.setThreadPinned.mockImplementationOnce(() => pin.promise);
     ui.row('third').querySelector<HTMLButtonElement>('.flower-thread-card-pin-button')!.click();
@@ -219,7 +224,7 @@ describe('Flower pin operation convergence', () => {
     pin.resolve([{ thread_id: 'third', pinned_at_ms: 0, pin_rank: 0, settings_revision: 5 }]);
     await flush();
     refresh.resolve(ui.summaries().map(entry => ({ ...entry, settings_revision: 1 })));
-    await waitFor(() => ui.listThreads.mock.calls.length === 3);
+    await waitFor(() => ui.listThreads.mock.calls.length === 2);
     expect(ui.row('third').dataset.pinned).toBe('false');
     expect(ui.row('third').textContent).toContain('third latest');
     await ui.emit(ui.summaries().map(entry => ({ ...entry, settings_revision: 6 })));

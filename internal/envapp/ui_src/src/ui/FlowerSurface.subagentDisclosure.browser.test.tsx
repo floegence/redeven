@@ -268,7 +268,7 @@ describe('Subagent inline capsules', () => {
     const creationOrder = [summaries[3]!, summaries[1]!, ...summaries.filter((_, index) => index !== 3 && index !== 1)];
     const createdAt = summaries[0]!.created_at_ms!;
     const inventory = creationOrder.map((summary, index) => ({ ...summary, created_at_ms: createdAt + Math.floor(index / 2) }));
-    emit!({ schema_version: 2, kind: 'thread.batch', thread_id: parentID, subagents: inventory });
+    emit!({ schema_version: 3, kind: 'thread.batch', thread_id: parentID, subagents: inventory });
     await waitFor(() => Boolean(emit));
     row(runtime, 'spawn').querySelector<HTMLButtonElement>('[data-flower-subagent-capsule]')!.click();
     await waitFor(() => Boolean(document.querySelector('.flower-subagent-detail-transcript')));
@@ -279,7 +279,7 @@ describe('Subagent inline capsules', () => {
     const positions = buttons.map(button => button.getBoundingClientRect().x);
     const focused = buttons.find(button => button.dataset.flowerSubagentSwitch === summaries[0]!.thread_id)!;
     focused.focus();
-    emit!({ schema_version: 2, kind: 'thread.batch', thread_id: parentID,
+    emit!({ schema_version: 3, kind: 'thread.batch', thread_id: parentID,
       subagents: [...inventory].reverse().map((summary, index) => ({ ...summary, status: index === 0 ? 'running' : 'completed', task_name: 'Renamed task ' + index, updated_at_ms: Date.now() + index * 100 })) });
     await waitFor(() => Boolean(emit) && focused.title.includes('Completed'));
     expect([...switcher.querySelectorAll<HTMLButtonElement>('button')].map(button => button.dataset.flowerSubagentSwitch))
@@ -311,7 +311,7 @@ describe('Subagent inline capsules', () => {
     const title = activity.querySelector('.flower-activity-inline-title')!.textContent;
     const capsule = activity.querySelector<HTMLButtonElement>('[data-flower-subagent-capsule="capsule-child-0"]')!;
     capsule.focus();
-    emit!({ schema_version: 2, kind: 'thread.batch', thread_id: parentID, subagents: summaries.map(summary => ({ ...summary, status: 'completed' })) });
+    emit!({ schema_version: 3, kind: 'thread.batch', thread_id: parentID, subagents: summaries.map(summary => ({ ...summary, status: 'completed' })) });
     await waitFor(() => Boolean(emit));
     expect(capsule.dataset.flowerSubagentStatus).toBe('running');
     expect(document.activeElement).toBe(capsule);

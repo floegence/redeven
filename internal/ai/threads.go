@@ -558,6 +558,10 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 	if err != nil {
 		return nil, err
 	}
+	return s.threadListFromSettings(ctx, list, strings.TrimSpace(next))
+}
+
+func (s *Service) threadListFromSettings(ctx context.Context, list []threadstore.ThreadSettings, next string) (*ListThreadsResponse, error) {
 	typed, err := s.typedFloretRuntime()
 	if err != nil {
 		return nil, err

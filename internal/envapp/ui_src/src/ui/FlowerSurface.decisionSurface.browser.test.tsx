@@ -31,11 +31,11 @@ function decisionLiveStream(summaries: () => ReturnType<typeof thread>[]) {
   let wake: (() => void) | undefined;
   return {
     publish(current: FlowerRuntimeCurrentView) {
-      queue.push({ schema_version: 2, kind: 'thread.batch', thread_id: current.thread_id, current });
+      queue.push({ schema_version: 3, kind: 'thread.batch', thread_id: current.thread_id, current });
       wake?.();
     },
     async *connect({ signal }: { signal: AbortSignal }) {
-      yield { schema_version: 2 as const, kind: 'ready' as const, summaries: summaries() };
+      yield { schema_version: 3 as const, kind: 'ready' as const, baseline_complete: true, summaries: summaries() };
       const abort = () => wake?.();
       signal.addEventListener('abort', abort, { once: true });
       try {
@@ -1046,14 +1046,14 @@ describe('Flower bottom decision surface', () => {
       stopThread,
       submitApproval,
       connectLiveStream: async function* ({ signal }) {
-        yield { schema_version: 2, kind: 'ready' as const, summaries: [approvalThread] };
+        yield { schema_version: 3, kind: 'ready' as const, baseline_complete: true, summaries: [approvalThread] };
         await Promise.race([
           publishStopped.promise,
           new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true })),
         ]);
         if (signal.aborted) return;
         yield {
-          schema_version: 2,
+          schema_version: 3,
           kind: 'thread.batch' as const,
           thread_id: approvalThread.thread_id,
           current: runtimeCurrentView(stoppedThread, 22),

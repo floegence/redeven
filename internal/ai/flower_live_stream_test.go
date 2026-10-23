@@ -507,26 +507,46 @@ func TestFlowerWorkspaceStreamReconnectsWithCompletePagedBaseline(t *testing.T) 
 	}
 	assertCompleteBaseline := func(subscription *FlowerLiveStreamSubscription) {
 		t.Helper()
-		frame := nextFlowerLiveStreamFrame(t, subscription)
-		if frame.Kind != FlowerLiveStreamReady {
-			t.Fatalf("baseline frame kind=%q, want ready", frame.Kind)
-		}
-		var envelope FlowerLiveStreamEnvelope
-		if err := json.Unmarshal(frame.Data, &envelope); err != nil {
-			t.Fatal(err)
-		}
-		if len(envelope.Summaries) != len(wantThreadIDs) {
-			t.Fatalf("baseline summaries=%d, want %d", len(envelope.Summaries), len(wantThreadIDs))
-		}
-		seen := make(map[string]struct{}, len(envelope.Summaries))
-		for _, summary := range envelope.Summaries {
-			if _, expected := wantThreadIDs[summary.ThreadID]; !expected {
-				t.Fatalf("baseline contains unexpected thread %q", summary.ThreadID)
+		seen := make(map[string]struct{})
+		pages := 0
+		for {
+			frame := nextFlowerLiveStreamFrame(t, subscription)
+			if frame.Kind == FlowerLiveStreamViewerReadState {
+				continue
 			}
-			if _, duplicate := seen[summary.ThreadID]; duplicate {
-				t.Fatalf("baseline contains duplicate thread %q", summary.ThreadID)
+			wantKind := FlowerLiveStreamSummaryBatch
+			if pages == 0 {
+				wantKind = FlowerLiveStreamReady
 			}
-			seen[summary.ThreadID] = struct{}{}
+			if frame.Kind != wantKind {
+				t.Fatalf("baseline kind=%q, want %q", frame.Kind, wantKind)
+			}
+			var envelope FlowerLiveStreamEnvelope
+			if err := json.Unmarshal(frame.Data, &envelope); err != nil {
+				t.Fatal(err)
+			}
+			if envelope.BaselineComplete == nil || len(envelope.Summaries) > flowerLiveBaselinePageLimit {
+				t.Fatalf("unbounded baseline: %+v", envelope)
+			}
+			for _, summary := range envelope.Summaries {
+				if _, expected := wantThreadIDs[summary.ThreadID]; !expected {
+					t.Fatalf("unexpected thread %q", summary.ThreadID)
+				}
+				if _, duplicate := seen[summary.ThreadID]; duplicate {
+					t.Fatalf("duplicate thread %q", summary.ThreadID)
+				}
+				seen[summary.ThreadID] = struct{}{}
+			}
+			pages++
+			if *envelope.BaselineComplete {
+				break
+			}
+			if !subscription.subscriber.initializing || len(seen) >= len(wantThreadIDs) {
+				t.Fatal("invalid partial baseline boundary")
+			}
+		}
+		if len(seen) != len(wantThreadIDs) || pages < 2 || subscription.subscriber.initializing {
+			t.Fatalf("baseline=%d/%d pages=%d", len(seen), len(wantThreadIDs), pages)
 		}
 	}
 

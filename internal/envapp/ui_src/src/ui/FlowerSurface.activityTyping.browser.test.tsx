@@ -30,7 +30,7 @@ async function mount() {
   let latest = current([tool('history', 'success')]);
   const seed = applyFlowerRuntimeCurrentView(thread({ thread_id: 'typing', title: 'Activity typing', messages: [] }), latest);
   const peer = thread({ thread_id: 'peer', title: 'Another conversation' });
-  const values: FlowerLiveStreamEnvelope[] = [{ schema_version: 2, kind: 'ready', summaries: [seed, peer] }];
+  const values: FlowerLiveStreamEnvelope[] = [{ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [seed, peer] }];
   let wake: (() => void) | undefined;
   const root = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [applyFlowerRuntimeCurrentView(seed, latest), peer]),
     loadThread: vi.fn(async id => id === peer.thread_id ? liveBootstrap(peer) : { thread: applyFlowerRuntimeCurrentView(seed, latest), current: latest }),
@@ -47,7 +47,7 @@ async function mount() {
   await waitFor(() => root.querySelector('.flower-chat-transcript')?.getAttribute('data-flower-tail-preparing') !== 'true');
   return { root, push(items: FlowerRuntimeCurrentItem[], previews: readonly FlowerToolCallPreview[] = []) {
     latest = { ...current(items, latest.view_version + 1), tool_call_previews: previews };
-    values.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'typing', current: latest }); wake?.();
+    values.push({ schema_version: 3, kind: 'thread.batch', thread_id: 'typing', current: latest }); wake?.();
   } };
 }
 const row = (root: HTMLElement, id: string) => root.querySelector<HTMLElement>(`[data-flower-activity-item-id="${id}"]`)!;

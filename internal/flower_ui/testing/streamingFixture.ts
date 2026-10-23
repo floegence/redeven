@@ -61,10 +61,10 @@ export function streamingFixture(messageCount = 72, toolCount = 20) {
       const revision = streamRevision;
       const abort = () => wake?.(); signal.addEventListener('abort', abort, { once: true });
       try {
-        yield { schema_version: 2, kind: 'ready', summaries };
+        yield { schema_version: 3, kind: 'ready', baseline_complete: true, summaries };
         if (revision > 0) {
           for (const summary of summaries) {
-            yield { schema_version: 2, kind: 'thread.batch', thread_id: summary.thread_id, current: { ...current, thread_id: summary.thread_id } };
+            yield { schema_version: 3, kind: 'thread.batch', thread_id: summary.thread_id, current: { ...current, thread_id: summary.thread_id } };
             calls.baselines++;
           }
         }
@@ -83,11 +83,11 @@ export function streamingFixture(messageCount = 72, toolCount = 20) {
       streamRevision++;
       wake?.();
     },
-    replace(next: FlowerRuntimeCurrentView, extras: Partial<FlowerLiveStreamEnvelope> = {}) { current = next; emit({ schema_version: 2, kind: 'thread.batch', thread_id: threadID, current, ...extras }); },
+    replace(next: FlowerRuntimeCurrentView, extras: Partial<FlowerLiveStreamEnvelope> = {}) { current = next; emit({ schema_version: 3, kind: 'thread.batch', thread_id: threadID, current, ...extras }); },
     append(text: string) { const baseVersion = current.view_version; const offset = new TextEncoder().encode(current.items?.find(item => item.id === 'streaming-tail')?.text ?? '').length; current = { ...current, view_version: current.view_version + 1,
       ...(current.run_progress?.request ? { sampled_at_ms: Date.now(), run_progress: { ...current.run_progress, request: { ...current.run_progress.request, estimated_output_tokens: current.run_progress.request.estimated_output_tokens + Math.ceil(text.length / 4) } },
         tool_call_previews: current.tool_call_previews?.map(call => ({ ...call, preview: { ...call.preview, additions: (call.preview?.additions ?? 0) + 1 } })) } : {}),
-      items: current.items?.map((item) => item.id === 'streaming-tail' ? { ...item, text: `${item.text}${text}` } : item) }; emit({ schema_version: 2, kind: 'thread.batch', thread_id: threadID, update: {
+      items: current.items?.map((item) => item.id === 'streaming-tail' ? { ...item, text: `${item.text}${text}` } : item) }; emit({ schema_version: 3, kind: 'thread.batch', thread_id: threadID, update: {
         thread_id: threadID, turn_id: turnID, run_id: runID, base_version: baseVersion, view_version: current.view_version,
         facts: { activity: current.activity, queue_count: current.queue?.length ?? 0, run_progress: current.run_progress, sampled_at_ms: current.sampled_at_ms },
         items: [{ kind: 'append', item_id: 'streaming-tail', append: { offset_bytes: offset, text } }],

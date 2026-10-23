@@ -13,7 +13,7 @@ export function canvasFlowerAdapter(): FlowerSurfaceAdapter {
         items: [{ id: `user:${input.client_request_id}`, turn_id: 'turn', run_id: 'run', ordinal: 1, kind: 'user', text: input.prompt }] },
     }),
     connectLiveStream: async function* ({ signal }) {
-      yield { schema_version: 2, kind: 'ready', summaries: [] };
+      yield { schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [] };
       if (!signal.aborted) await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
     },
   } satisfies FlowerSurfaceAdapter;

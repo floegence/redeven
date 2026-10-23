@@ -1,3 +1,5 @@
+import { createFlowerThreadBaseline } from './threadBaseline';
+import { loadFlowerThreadList } from './threadListLoad';
 import { createThreadReadSync } from './threadReadSync';
 import { scheduleThreadSelectionCommit } from './threadSelectionSchedule';
 import { createThreadDetailLoader } from './threadDetailLoader';
@@ -512,28 +514,6 @@ export {
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-const FLOWER_THREAD_LIST_TIMEOUT_MS = 10_000;
-
-function flowerThreadListTimeout(): Error {
-  const error = new Error('Conversations could not be loaded in time.');
-  Object.assign(error, { code: 'flower_thread_list_timeout' });
-  return error;
-}
-
-async function withFlowerThreadListTimeout<T>(promise: Promise<T>): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        timer = setTimeout(() => reject(flowerThreadListTimeout()), FLOWER_THREAD_LIST_TIMEOUT_MS);
-      }),
-    ]);
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
-  }
 }
 
 const FLOWER_APPROVAL_CONFLICT_ERROR_CODE = 'AI_APPROVAL_CONFLICT';
@@ -1130,7 +1110,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let threadLoadSequence = 0;
   let engagementBootstrapSequence = 0;
   let threadsRefreshSequence = 0;
+  let threadsReadController: AbortController | undefined;
   let flowerLiveReadyCount = 0;
+  const flowerBaseline = createFlowerThreadBaseline();
   let navigationReadController = new AbortController();
   const releaseNavigationReads = () => {
     navigationReadController.abort();
@@ -3505,7 +3487,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         pinRefreshNotify = false;
         try {
           // Coalesce post-command reads independently of writes and interaction.
-          const summaries = await withFlowerThreadListTimeout(props.adapter.listThreads());
+          const summaries = await loadFlowerThreadList(props.adapter);
           if (generation !== pinMutationGeneration) return;
           setThreadCache(cache => cache.replaceSummaries(summaries.filter(thread => !retiredThreadIDs.has(thread.thread_id))));
         } catch {
@@ -4493,12 +4475,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const performThreadsRefresh = async (): Promise<boolean> => {
     const refreshSequence = ++threadsRefreshSequence;
+    const adapter = props.adapter;
+    threadsReadController?.abort();
+    const controller = new AbortController();
+    threadsReadController = controller;
     setThreadsRefreshing(true);
     setThreadListState('loading');
     setThreadListError('');
     try {
-      const next = (await withFlowerThreadListTimeout(props.adapter.listThreads())).filter((thread) => !retiredThreadIDs.has(trimString(thread.thread_id)));
-      if (refreshSequence !== threadsRefreshSequence) {
+      const next = (await loadFlowerThreadList(adapter, page => {
+        if (surfaceDisposed || props.adapter !== adapter || refreshSequence !== threadsRefreshSequence) return;
+        setThreadListState('ready');
+        setThreadCache(cache => page.reduce((next, thread) => retiredThreadIDs.has(trimString(thread.thread_id)) ? next : next.replaceSummary(thread), cache));
+      }, controller.signal)).filter((thread) => !retiredThreadIDs.has(trimString(thread.thread_id)));
+      if (surfaceDisposed || props.adapter !== adapter || refreshSequence !== threadsRefreshSequence) {
         return false;
       }
       setThreadListState('ready');
@@ -4525,12 +4515,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       return true;
     } catch (error) {
+      if (surfaceDisposed || props.adapter !== adapter || controller.signal.aborted || refreshSequence !== threadsRefreshSequence) return false;
       const message = getErrorMessage(error);
       setThreadListState('error');
       setThreadListError(message);
       return false;
     } finally {
-      setThreadsRefreshing(false);
+      if (threadsReadController === controller) {
+        threadsReadController = undefined;
+        setThreadsRefreshing(false);
+      }
     }
   };
 
@@ -4619,7 +4613,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }).catch(() => undefined);
   };
   const loadSurface = async () => {
-    void refreshThreads();
+    if (!props.adapter.connectLiveStream) void refreshThreads();
     void resolveHandlerDecision().catch(() => undefined);
     try { await refreshSettingsForRevision(); } catch {
       // Configuration errors do not gate conversation history or navigation.
@@ -4650,6 +4644,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   onCleanup(() => {
     settingsRefreshGeneration += 1;
+    threadsReadController?.abort();
     settingsReadController?.abort();
     settingsRefreshRequest = null;
     accountRefresh = null;
@@ -5133,16 +5128,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const selectedID = selectedThreadID();
       const incoming = (envelope.summaries ?? [])
         .filter((summary) => !retiredThreadIDs.has(summary.thread_id));
-      if (envelope.kind === 'ready') {
-        setThreadCache((cache) => cache.resetRootSummaries(incoming));
-        if (selectedID && !threadCache().selectedId) {
-          closeSubagentOverlays();
-          setSelectedThreadID('');
-        }
-      } else {
-        // A workspace batch publishes once, so unrelated summaries do not
-        // repeatedly invalidate the selected conversation's reactive graph.
-        setThreadCache(cache => incoming.reduce((next, summary) => next.replaceSummary(summary), cache));
+      setThreadListState('ready');
+      setThreadListError('');
+      setThreadCache(cache => flowerBaseline.apply(cache, envelope, incoming));
+      if (envelope.baseline_complete === true && selectedID && !threadCache().selectedId) {
+        closeSubagentOverlays();
+        setSelectedThreadID('');
       }
       if (selectedID) {
         void requestThreadDetail(selectedID, 'summary_update', envelope.kind === 'ready');
@@ -5233,6 +5224,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       onState: setLiveSyncState,
       onBoundary: () => {
         frames.boundary();
+        flowerBaseline.reset();
         releaseNavigationReads();
         referenceReadController?.abort();
         detailLoader.reset();
@@ -6192,6 +6184,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       cancelThreadSelectionTransaction();
     }
     threadsRefreshSequence += 1;
+    threadsReadController?.abort();
+    threadsRefreshRequest = null;
     if (retiringSelected) engagementBootstrapSequence += 1;
 
     detailLoader.forget(tid);

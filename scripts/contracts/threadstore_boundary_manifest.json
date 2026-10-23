@@ -228,6 +228,7 @@
             "threadstore.d8f24aba80dce36d",
             "threadstore.e701ee742dfbb7ff",
             "threadstore.efea620c691ef4b7",
+            "threadstore.f2260fd53714b391",
             "threadstore.f342f95195e324d0",
             "threadstore.f87ecba020551579",
             "threadstore.fc22a153538a5454"
@@ -271,6 +272,7 @@
             "threadstore.d8f24aba80dce36d",
             "threadstore.e701ee742dfbb7ff",
             "threadstore.efea620c691ef4b7",
+            "threadstore.f2260fd53714b391",
             "threadstore.f342f95195e324d0",
             "threadstore.f87ecba020551579",
             "threadstore.fc22a153538a5454"
@@ -788,7 +790,7 @@
       "path": "internal/persistence/sqliteutil/engine.go",
       "function": "ensureSchema",
       "method": "Exec",
-      "builder_sha256": "1b8de216d6b10fb8b97d66569ec38b7d3fc0367b70bd078c63355572a8e96b58",
+      "builder_sha256": "43e2737e30466abe0dcf4a47cddb5b458b469bd2b502b1541bcffe6f09f4f56d",
       "action": "execute",
       "consumer": "ensureSchema",
       "consumer_kind": "schema_maintenance",
@@ -800,7 +802,7 @@
       "path": "internal/ai/threadstore/uploads.go",
       "function": "Store.RescheduleUploadDeletion",
       "method": "ExecContext",
-      "builder_sha256": "1b8de216d6b10fb8b97d66569ec38b7d3fc0367b70bd078c63355572a8e96b58",
+      "builder_sha256": "43e2737e30466abe0dcf4a47cddb5b458b469bd2b502b1541bcffe6f09f4f56d",
       "tables": [
         "ai_uploads"
       ],
@@ -825,7 +827,7 @@
       "path": "internal/ai/threadstore/store.go",
       "function": "Store.ListThreadSettings",
       "method": "QueryContext",
-      "builder_sha256": "1b8de216d6b10fb8b97d66569ec38b7d3fc0367b70bd078c63355572a8e96b58",
+      "builder_sha256": "43e2737e30466abe0dcf4a47cddb5b458b469bd2b502b1541bcffe6f09f4f56d",
       "tables": [
         "ai_thread_settings"
       ],
@@ -1070,7 +1072,7 @@
       "path": "internal/ai/threadstore/orphan_adoption.go",
       "function": "Store.GetThreadSettingsByCanonicalThreadID",
       "method": "QueryRowContext",
-      "builder_sha256": "1b8de216d6b10fb8b97d66569ec38b7d3fc0367b70bd078c63355572a8e96b58",
+      "builder_sha256": "43e2737e30466abe0dcf4a47cddb5b458b469bd2b502b1541bcffe6f09f4f56d",
       "tables": [
         "ai_thread_settings"
       ],
@@ -1119,7 +1121,7 @@
       "path": "internal/ai/threadstore/uploads.go",
       "function": "Store.PrepareExpiredUploadsForDeletion",
       "method": "ExecContext",
-      "builder_sha256": "1b8de216d6b10fb8b97d66569ec38b7d3fc0367b70bd078c63355572a8e96b58",
+      "builder_sha256": "43e2737e30466abe0dcf4a47cddb5b458b469bd2b502b1541bcffe6f09f4f56d",
       "tables": [
         "ai_uploads"
       ],
@@ -1289,7 +1291,7 @@
       "path": "internal/ai/threadstore/store.go",
       "function": "Store.ListThreadSettingsForRecoveryPage",
       "method": "QueryContext",
-      "builder_sha256": "1b8de216d6b10fb8b97d66569ec38b7d3fc0367b70bd078c63355572a8e96b58",
+      "builder_sha256": "43e2737e30466abe0dcf4a47cddb5b458b469bd2b502b1541bcffe6f09f4f56d",
       "tables": [
         "ai_thread_settings"
       ],
@@ -1445,7 +1447,7 @@
       "path": "internal/persistence/sqliteutil/inspect.go",
       "function": "TableColumnNamesTx",
       "method": "Query",
-      "builder_sha256": "1b8de216d6b10fb8b97d66569ec38b7d3fc0367b70bd078c63355572a8e96b58",
+      "builder_sha256": "43e2737e30466abe0dcf4a47cddb5b458b469bd2b502b1541bcffe6f09f4f56d",
       "action": "read",
       "consumer": "TableColumnNamesTx",
       "consumer_kind": "schema_maintenance",
@@ -1625,7 +1627,7 @@
       "path": "internal/ai/threadstore/orphan_adoption.go",
       "function": "Store.AdoptCanonicalRootSettings",
       "method": "QueryRowContext",
-      "builder_sha256": "1b8de216d6b10fb8b97d66569ec38b7d3fc0367b70bd078c63355572a8e96b58",
+      "builder_sha256": "43e2737e30466abe0dcf4a47cddb5b458b469bd2b502b1541bcffe6f09f4f56d",
       "tables": [
         "ai_thread_settings"
       ],
@@ -1738,7 +1740,7 @@
       "path": "internal/ai/threadstore/reviewed_schema.go",
       "function": "inspectReviewedTableTx",
       "method": "Query",
-      "builder_sha256": "1b8de216d6b10fb8b97d66569ec38b7d3fc0367b70bd078c63355572a8e96b58",
+      "builder_sha256": "43e2737e30466abe0dcf4a47cddb5b458b469bd2b502b1541bcffe6f09f4f56d",
       "action": "read",
       "consumer": "inspectReviewedTableTx",
       "consumer_kind": "product_operation",
@@ -1978,7 +1980,7 @@
       "path": "internal/ai/threadstore/uploads.go",
       "function": "Store.FinalizeDeletedUploads",
       "method": "ExecContext",
-      "builder_sha256": "1b8de216d6b10fb8b97d66569ec38b7d3fc0367b70bd078c63355572a8e96b58",
+      "builder_sha256": "43e2737e30466abe0dcf4a47cddb5b458b469bd2b502b1541bcffe6f09f4f56d",
       "tables": [
         "ai_uploads"
       ],
@@ -2009,7 +2011,7 @@
       "path": "internal/ai/threadstore/uploads.go",
       "function": "Store.MaybeCompact",
       "method": "ExecContext",
-      "builder_sha256": "1b8de216d6b10fb8b97d66569ec38b7d3fc0367b70bd078c63355572a8e96b58",
+      "builder_sha256": "43e2737e30466abe0dcf4a47cddb5b458b469bd2b502b1541bcffe6f09f4f56d",
       "action": "execute",
       "consumer": "Store.MaybeCompact",
       "consumer_kind": "product_operation",
@@ -2803,7 +2805,7 @@
       "path": "internal/ai/threadstore/uploads.go",
       "function": "Store.FinalizeDeletedUploads",
       "method": "ExecContext",
-      "builder_sha256": "1b8de216d6b10fb8b97d66569ec38b7d3fc0367b70bd078c63355572a8e96b58",
+      "builder_sha256": "43e2737e30466abe0dcf4a47cddb5b458b469bd2b502b1541bcffe6f09f4f56d",
       "tables": [
         "ai_upload_refs"
       ],
@@ -2929,7 +2931,7 @@
       "path": "internal/ai/threadstore/store.go",
       "function": "Store.GetThreadSettings",
       "method": "QueryRowContext",
-      "builder_sha256": "1b8de216d6b10fb8b97d66569ec38b7d3fc0367b70bd078c63355572a8e96b58",
+      "builder_sha256": "43e2737e30466abe0dcf4a47cddb5b458b469bd2b502b1541bcffe6f09f4f56d",
       "tables": [
         "ai_thread_settings"
       ],
@@ -3229,7 +3231,7 @@
       "path": "internal/persistence/sqliteutil/engine.go",
       "function": "setUserVersionTx",
       "method": "Exec",
-      "builder_sha256": "1b8de216d6b10fb8b97d66569ec38b7d3fc0367b70bd078c63355572a8e96b58",
+      "builder_sha256": "43e2737e30466abe0dcf4a47cddb5b458b469bd2b502b1541bcffe6f09f4f56d",
       "action": "execute",
       "consumer": "setUserVersionTx",
       "consumer_kind": "schema_maintenance",
@@ -3509,7 +3511,7 @@
       "path": "internal/ai/threadstore/reviewed_schema.go",
       "function": "inspectReviewedIndexTx",
       "method": "Query",
-      "builder_sha256": "1b8de216d6b10fb8b97d66569ec38b7d3fc0367b70bd078c63355572a8e96b58",
+      "builder_sha256": "43e2737e30466abe0dcf4a47cddb5b458b469bd2b502b1541bcffe6f09f4f56d",
       "action": "read",
       "consumer": "inspectReviewedIndexTx",
       "consumer_kind": "product_operation",
@@ -3521,7 +3523,7 @@
       "path": "internal/ai/threadstore/reviewed_schema.go",
       "function": "inspectReviewedTableTx",
       "method": "Query",
-      "builder_sha256": "1b8de216d6b10fb8b97d66569ec38b7d3fc0367b70bd078c63355572a8e96b58",
+      "builder_sha256": "43e2737e30466abe0dcf4a47cddb5b458b469bd2b502b1541bcffe6f09f4f56d",
       "action": "read",
       "consumer": "inspectReviewedTableTx",
       "consumer_kind": "product_operation",
@@ -3830,7 +3832,7 @@
       "path": "internal/ai/threadstore/uploads.go",
       "function": "collectUnreferencedUploadsTx",
       "method": "ExecContext",
-      "builder_sha256": "1b8de216d6b10fb8b97d66569ec38b7d3fc0367b70bd078c63355572a8e96b58",
+      "builder_sha256": "43e2737e30466abe0dcf4a47cddb5b458b469bd2b502b1541bcffe6f09f4f56d",
       "tables": [
         "ai_uploads"
       ],
@@ -3896,7 +3898,7 @@
       "path": "internal/ai/threadstore/uploads.go",
       "function": "collectUnreferencedUploadsTx",
       "method": "QueryContext",
-      "builder_sha256": "1b8de216d6b10fb8b97d66569ec38b7d3fc0367b70bd078c63355572a8e96b58",
+      "builder_sha256": "43e2737e30466abe0dcf4a47cddb5b458b469bd2b502b1541bcffe6f09f4f56d",
       "tables": [
         "ai_upload_refs",
         "ai_uploads"
@@ -4233,6 +4235,30 @@
       "consumer_kind": "product_operation"
     },
     {
+      "id": "threadstore.f2260fd53714b391",
+      "path": "internal/ai/threadstore/store.go",
+      "function": "Store.ListRootThreadIDs",
+      "method": "QueryContext",
+      "sql_sha256": "367e1efa777fb5f8a3571c293b786057113442957074d816776d480b237ecf0c",
+      "tables": [
+        "ai_thread_settings"
+      ],
+      "lookup_keys": [
+        "endpoint_id",
+        "parent_thread_id"
+      ],
+      "read_columns": [
+        "endpoint_id",
+        "parent_thread_id",
+        "pin_rank",
+        "settings_created_at_unix_ms",
+        "thread_id"
+      ],
+      "action": "read",
+      "consumer": "Store.ListRootThreadIDs",
+      "consumer_kind": "product_operation"
+    },
+    {
       "id": "threadstore.f342f95195e324d0",
       "path": "internal/ai/threadstore/computer_access.go",
       "function": "Store.SetComputerAccess",
@@ -4351,7 +4377,7 @@
       "path": "internal/ai/threadstore/thread_lifecycle.go",
       "function": "deleteThreadScopedRowsTx",
       "method": "ExecContext",
-      "builder_sha256": "1b8de216d6b10fb8b97d66569ec38b7d3fc0367b70bd078c63355572a8e96b58",
+      "builder_sha256": "43e2737e30466abe0dcf4a47cddb5b458b469bd2b502b1541bcffe6f09f4f56d",
       "tables": [
         "ai_flower_execution_authority",
         "ai_upload_staging_scopes"

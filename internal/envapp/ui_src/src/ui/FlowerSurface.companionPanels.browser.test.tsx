@@ -43,7 +43,7 @@ function mountPanels(options: {
     listThreads: vi.fn(async () => threads),
     loadThread: vi.fn(async () => liveBootstrap(thread())),
     connectLiveStream: vi.fn(async function* (input) {
-      yield { schema_version: 2 as const, kind: 'ready' as const, summaries: threads };
+      yield { schema_version: 3 as const, kind: 'ready' as const, baseline_complete: true, summaries: threads };
       await new Promise<void>(resolve => input.signal.addEventListener('abort', () => resolve(), { once: true }));
     }),
     ...mutations,

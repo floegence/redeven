@@ -14,6 +14,7 @@ import (
 
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/threadreadstate"
@@ -21,7 +22,8 @@ import (
 
 const (
 	flowerLiveMaxSubscribersPerEndpoint = 256
-	flowerLiveBaselinePageLimit         = 200
+	flowerLiveBaselinePageLimit         = 25
+	flowerLiveBaselinePageTimeout       = 10 * time.Second
 	flowerLiveSubscriberBatchLimit      = 16
 	flowerLivePendingFrameByteLimit     = 1 << 20
 	flowerLiveFragmentByteLimit         = 32 << 10
@@ -76,6 +78,7 @@ func (s *Service) publishModelDirectoryChanged() {
 type FlowerLiveStreamRequest struct{}
 
 type FlowerLiveStreamEnvelope struct {
+	BaselineComplete    *bool                   `json:"baseline_complete,omitempty"`
 	ReadingRevision     uint64                  `json:"reading_revision,omitempty"`
 	Window              *FlowerHistoryWindow    `json:"window,omitempty"`
 	FactsOnly           bool                    `json:"facts_only,omitempty"`
@@ -275,6 +278,8 @@ type flowerLiveSubscriber struct {
 	historyCancel     context.CancelFunc
 	observerID        string
 	observerContext   context.Context
+	observerCancel    context.CancelFunc
+	baselineThreadIDs []string
 	viewerMu          sync.Mutex
 	viewerRevision    uint64
 	viewerRequest     ComputerViewerRequest
@@ -371,8 +376,9 @@ func (s *Service) SubscribeFlowerLiveStream(ctx context.Context, meta *session.M
 		s.flowerLiveSubscribers = make(map[uint64]*flowerLiveSubscriber)
 	}
 	s.flowerLiveSubscriberSeq++
+	observerContext, observerCancel := context.WithCancel(ctxOrBackground(ctx))
 	subscriber := &flowerLiveSubscriber{
-		observerID: rand.Text(), observerContext: ctx,
+		observerID: rand.Text(), observerContext: observerContext, observerCancel: observerCancel,
 		id: s.flowerLiveSubscriberSeq, endpointID: endpointID, userPublicID: userPublicID, namespacePublicID: meta.NamespacePublicID,
 		media: make(chan *flowerLiveEncodedBatch, 1), wake: make(chan struct{}, 1),
 		initializing: true,
@@ -382,63 +388,117 @@ func (s *Service) SubscribeFlowerLiveStream(ctx context.Context, meta *session.M
 	s.flowerLiveMetrics.subscriberOpened()
 	s.mu.Unlock()
 
-	var summaries []ThreadView
+	subscription := &FlowerLiveStreamSubscription{service: s, subscriber: subscriber}
 	if s.threadsDB != nil {
-		var err error
-		summaries, err = s.listFlowerLiveBaseline(ctxOrBackground(ctx), meta)
+		ids, err := s.threadsDB.ListRootThreadIDs(observerContext, endpointID, flowerLiveEnvelopeByteLimit)
 		if err != nil {
 			closeFlowerLiveSubscription(s, subscriber)
 			return nil, err
 		}
-	}
-	retainInitial := func(batch *flowerLiveEncodedBatch) bool {
 		s.mu.Lock()
-		defer s.mu.Unlock()
-		if !retainFlowerLiveBatchLocked(s, subscriber, batch) {
-			return false
+		cost := 0
+		for _, id := range ids {
+			cost += len(id) + 16
 		}
-		subscriber.initial = append(subscriber.initial, batch)
-		return true
+		if subscriber.closed || subscriber.queuedBytes+cost > flowerLiveEnvelopeByteLimit || s.flowerLiveQueuedBytes+cost > flowerLiveGlobalQueuedByteLimit {
+			closeFlowerLiveSubscriberLocked(s, subscriber, flowerLiveSubscriberCloseGlobalQueueLimit)
+			s.mu.Unlock()
+			return nil, ErrFlowerLiveSync
+		}
+		subscriber.queuedBytes += cost
+		s.flowerLiveQueuedBytes += cost
+		subscriber.baselineThreadIDs = ids
+		s.mu.Unlock()
 	}
-	ready := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
-		SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamReady, Summaries: summaries, ObserverID: subscriber.observerID,
-	})
-	retained := retainInitial(ready)
-	if retained && s.ThreadReadState() != nil {
+	if err := subscription.loadBaselinePage(ctxOrBackground(ctx), true); err != nil {
+		closeFlowerLiveSubscription(s, subscriber)
+		return nil, err
+	}
+	return subscription, nil
+}
+
+// Each page is read only after the previous page drains. Concurrent events stay
+// behind the baseline, preserving the subscription-before-snapshot boundary
+// without retaining or waiting for every historical summary before ready.
+func (subscription *FlowerLiveStreamSubscription) loadBaselinePage(ctx context.Context, first bool) error {
+	s, subscriber := subscription.service, subscription.subscriber
+	var summaries []ThreadView
+	ctx, cancel := context.WithTimeout(ctx, flowerLiveBaselinePageTimeout)
+	stop := context.AfterFunc(subscriber.observerContext, cancel)
+	defer func() { stop(); cancel() }()
+	s.mu.Lock()
+	if subscriber.closed {
+		s.mu.Unlock()
+		return ErrFlowerLiveSync
+	}
+	count := min(len(subscriber.baselineThreadIDs), flowerLiveBaselinePageLimit)
+	ids := append([]string(nil), subscriber.baselineThreadIDs[:count]...)
+	complete := count == len(subscriber.baselineThreadIDs)
+	s.mu.Unlock()
+	if s.threadsDB != nil {
+		settings := make([]threadstore.ThreadSettings, 0, count)
+		for _, id := range ids {
+			item, err := s.threadsDB.GetThreadSettings(ctx, subscriber.endpointID, id)
+			if err != nil {
+				return err
+			}
+			if item != nil && item.ParentThreadID == "" {
+				settings = append(settings, *item)
+			}
+		}
+		page, err := s.threadListFromSettings(ctx, settings, "")
+		if err != nil {
+			return err
+		}
+		summaries = page.Threads
+	}
+	kind := FlowerLiveStreamSummaryBatch
+	if first {
+		kind = FlowerLiveStreamReady
+	}
+	batches := []*flowerLiveEncodedBatch{newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
+		SchemaVersion: FlowerLiveSchemaVersion, Kind: kind, Summaries: summaries, ObserverID: subscriber.observerID, BaselineComplete: &complete,
+	})}
+	if s.ThreadReadState() != nil {
 		snapshots := make(map[string]threadreadstate.FlowerSnapshot, len(summaries))
 		for _, summary := range summaries {
 			snapshots[summary.ThreadID] = threadreadstate.FlowerSnapshot{ActivityRevision: summary.FlowerActivity.ActivityRevision}
 		}
-		records, err := s.ThreadReadState().EnsureFlower(ctxOrBackground(ctx), endpointID, userPublicID, snapshots)
+		records, err := s.ThreadReadState().EnsureFlower(ctx, subscriber.endpointID, subscriber.userPublicID, snapshots)
 		if err != nil {
-			closeFlowerLiveSubscription(s, subscriber)
-			return nil, err
+			return err
 		}
 		for _, summary := range summaries {
 			seen := records[summary.ThreadID].LastSeenActivityRevision
-			status := FlowerThreadReadView{
-				IsUnread:  summary.FlowerActivity.ActivityRevision > seen,
-				Snapshot:  summary.FlowerActivity,
-				ReadState: FlowerThreadReadRecord{LastSeenActivityRevision: seen},
-			}
-			retained = retainInitial(newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
-				SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamViewerReadState,
-				ThreadID: summary.ThreadID, ReadStatus: &status,
-			}))
-			if !retained {
-				break
-			}
+			status := FlowerThreadReadView{IsUnread: summary.FlowerActivity.ActivityRevision > seen, Snapshot: summary.FlowerActivity, ReadState: FlowerThreadReadRecord{LastSeenActivityRevision: seen}}
+			batches = append(batches, newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamViewerReadState, ThreadID: summary.ThreadID, ReadStatus: &status}))
 		}
 	}
-
-	s.mu.Lock()
-	finalizeFlowerLiveSubscriberInitializationLocked(s, subscriber)
-	closed := subscriber.closed
-	s.mu.Unlock()
-	if closed {
-		return nil, ErrFlowerLiveSync
+	if err := ctx.Err(); err != nil {
+		return err
 	}
-	return &FlowerLiveStreamSubscription{service: s, subscriber: subscriber}, nil
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if subscriber.closed {
+		return ErrFlowerLiveSync
+	}
+	for _, batch := range batches {
+		if !retainFlowerLiveBatchLocked(s, subscriber, batch) {
+			return ErrFlowerLiveSync
+		}
+		subscriber.initial = append(subscriber.initial, batch)
+	}
+	for index, id := range subscriber.baselineThreadIDs[:count] {
+		cost := len(id) + 16
+		subscriber.queuedBytes -= cost
+		s.flowerLiveQueuedBytes -= cost
+		subscriber.baselineThreadIDs[index] = ""
+	}
+	subscriber.baselineThreadIDs = subscriber.baselineThreadIDs[count:]
+	if complete {
+		finalizeFlowerLiveSubscriberInitializationLocked(s, subscriber)
+	}
+	return nil
 }
 
 func (s *Service) refreshPendingComputerStatus(ctx context.Context, meta *session.Meta, targetID string) {
@@ -489,7 +549,7 @@ func finalizeFlowerLiveSubscriberInitializationLocked(service *Service, subscrib
 	if service == nil || subscriber == nil || subscriber.closed {
 		return
 	}
-	// The complete, byte-budgeted baseline remains a prefix. Concurrent live
+	// The paged, byte-budgeted baseline remains a prefix. Concurrent live
 	// work uses the same bounded FIFO during and after initialization.
 	subscriber.initializing = false
 	wakeFlowerLiveSubscriberLocked(subscriber)
@@ -1017,6 +1077,10 @@ func closeFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSub
 	queuedBytes := subscriber.queuedBytes + subscriber.mediaBytes
 	globalBytes := service.flowerLiveQueuedBytes
 	subscriber.closed = true
+	if subscriber.observerCancel != nil {
+		subscriber.observerCancel()
+	}
+	subscriber.baselineThreadIDs = nil
 	if subscriber.historyCancel != nil {
 		subscriber.historyCancel()
 	}
@@ -1148,6 +1212,19 @@ func (s *FlowerLiveStreamSubscription) Next(ctx context.Context) (*FlowerLiveStr
 				subscriber.initial[0] = nil
 				subscriber.initial = subscriber.initial[1:]
 				subscriber.activeAccounted = true
+			} else if subscriber.initializing && len(subscriber.baselineThreadIDs) > 0 {
+				s.service.mu.Unlock()
+				if err := s.loadBaselinePage(ctx, false); err != nil {
+					if ctx.Err() != nil {
+						return nil, ctx.Err()
+					}
+					s.service.mu.Lock()
+					subscriber.closeErr = ErrFlowerLiveSync
+					closeFlowerLiveSubscriberLocked(s.service, subscriber, flowerLiveSubscriberCloseSummaryRefresh)
+					s.service.mu.Unlock()
+					return nil, err
+				}
+				continue
 			} else if len(subscriber.queue) > 0 {
 				if marker := subscriber.queue[0]; marker.refresh {
 					s.service.mu.Unlock()

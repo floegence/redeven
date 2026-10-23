@@ -5,7 +5,7 @@ description: One workspace stream, actor-native updates, and one indexed ThreadC
 tags: [ui, flower, live, threads]
 timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-23"
 ---
 # Summary
 
@@ -20,12 +20,16 @@ Account watches, workload leases and Computer cleanup consume lightweight author
 
 See [the adapter boundary](../ai/floret-redeven-adapter-and-projection.md).
 
-## Wire v2 and bounded delivery
-Flower schema v2 has one decoder and one update pipeline. Larger envelopes retain bounded fragments: envelope identity, zero-based fragment index/count, total bytes and Base64 payload.
+## Wire v3 and bounded delivery
+Flower schema v3 has one decoder and one update pipeline. Larger envelopes retain bounded fragments: envelope identity, zero-based fragment index/count, total bytes and Base64 payload.
 
 Unknown command results retain their original request keys; a disconnect never repeats an effect automatically.
 
-Initialization delivers the authorized summary/read-state baseline. Unselected root conversations publish coalesced runtime facts without item bodies. The selected root establishes one reading interest on its workspace observer using a monotonically increasing reading revision. Its HTTP baseline is consumed from the same Floret subscription that supplies subsequent changes. Changing pages replaces that interest; older revisions cannot update the displayed page.
+Initialization registers observation before freezing authorized root IDs in product navigation order. It reads at most 25 canonical summaries before the first ready envelope, then reads each subsequent page as the previous page drains. Every baseline page carries an explicit boolean baseline_complete; only the final page is true. Frozen IDs count against subscriber and global memory budgets and are released as pages drain. Each page precedes its private viewer read states; concurrent live publications follow the complete baseline. Each page has a ten-second read deadline; a stalled page fails the observer rather than extending startup indefinitely. Closing observation cancels in-flight reads. Pin changes during loading cannot skip frozen roots.
+
+The sidebar merges partial pages immediately and prunes old roots only at completion, preserving selection and roots created locally during loading. The live baseline owns initial list loading. Explicit list refresh uses cancellable 25-row HTTP pages with the existing ten-second deadline applied to each progressing page; delivered pages remain usable on failure. History and item POST reads participate in Desktop read cancellation.
+
+Unselected root conversations publish coalesced runtime facts without item bodies. The selected root establishes one reading interest on its workspace observer using a monotonically increasing reading revision. Its HTTP baseline is consumed from the same Floret subscription that supplies subsequent changes. Changing pages replaces that interest; older revisions cannot update the displayed page.
 
 The initial page contains the latest interval, at most 150 items under Floret's 512 KiB item-window budget. Earlier, newer and latest controls replace the interval explicitly. Canonical history remains complete. Large text is a raw UTF-8 preview inside the ordinary message shell, retaining references and attachments; it is never parsed as an independent Markdown document. Tool presentation and complete text load only when opened. Expanded immutable items remain in ThreadCache while their canonical preview and identity remain unchanged; navigation cancels outstanding body requests, and stale completions cannot overwrite newer content.
 

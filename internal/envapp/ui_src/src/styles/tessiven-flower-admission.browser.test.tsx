@@ -72,7 +72,7 @@ function mount(overrides: Partial<FlowerSurfaceAdapter> = {}, savedThread = '') 
   const adapter: FlowerSurfaceAdapter = {
     ...base, launchTurn: sent,
     connectLiveStream: async function* ({ signal }) {
-      yield { schema_version: 2, kind: 'ready', summaries: await base.listThreads() };
+      yield { schema_version: 3, kind: 'ready', baseline_complete: true, summaries: await base.listThreads() };
       while (!signal.aborted) {
         const next = queued.shift();
         if (next) { yield next; continue; }
@@ -139,7 +139,7 @@ it.each(['current-first', 'receipt-first'])('settles selection and canvas bindin
   await send();
   await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
   const receipt = await canvasFlowerAdapter().launchTurn(runtime.sent.mock.calls[0][0]);
-  const pushCurrent = () => runtime.push({ schema_version: 2, kind: 'thread.batch', thread_id: receipt.thread_id, current: receipt.current! });
+  const pushCurrent = () => runtime.push({ schema_version: 3, kind: 'thread.batch', thread_id: receipt.thread_id, current: receipt.current! });
   if (order === 'current-first') pushCurrent();
   else accept({ client_request_id: receipt.client_request_id, thread_id: receipt.thread_id });
   await expect.poll(referenceText).toBeUndefined();
@@ -166,7 +166,7 @@ it('consumes references when the canonical queue accepts a send before its turn 
     items: [], interactions: [],
     queue: [{ id: `queue:${input.client_request_id}`, request_key: input.client_request_id, input: { text: input.prompt } }],
   };
-  runtime.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'canvas-thread', current });
+  runtime.push({ schema_version: 3, kind: 'thread.batch', thread_id: 'canvas-thread', current });
   await expect.poll(referenceText).toBeUndefined();
   await expect.element(editor()).toHaveValue('');
   expect(current.queue).toHaveLength(1);

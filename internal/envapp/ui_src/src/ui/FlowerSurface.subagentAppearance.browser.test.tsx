@@ -109,7 +109,7 @@ it('preserves disclosure choice during live updates and keeps keyboard focus on 
   const runtime = renderSurfaceWithAdapterProps({
     ...adapter(true), listThreads: vi.fn(async () => [parent]), loadThread: vi.fn(async () => liveBootstrap(parent)),
     async *connectLiveStream({ signal }) {
-      yield { schema_version: 2, kind: 'ready', summaries: [parent] };
+      yield { schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [parent] };
       while (!signal.aborted) {
         const event = await new Promise<FlowerLiveStreamEnvelope | null>((resolve) => {
           emit = resolve;
@@ -124,7 +124,7 @@ it('preserves disclosure choice during live updates and keeps keyboard focus on 
   runtime.style.height = '800px';
   const push = async (subagents: typeof children) => {
     await waitFor(() => emit !== undefined);
-    emit!({ schema_version: 2, kind: 'thread.batch', thread_id: parent.thread_id, subagents });
+    emit!({ schema_version: 3, kind: 'thread.batch', thread_id: parent.thread_id, subagents });
     await waitFor(() => Number(runtime.querySelector('[data-flower-subagent-count]')?.getAttribute('data-flower-subagent-count') ?? 0) === subagents.length);
   };
   await waitFor(() => runtime.querySelector('[data-flower-subagent-count]')?.getAttribute('data-flower-subagent-count') === '1');

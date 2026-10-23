@@ -356,7 +356,7 @@ describe('Local Environment Flower surface adapter', () => {
     let streamListener: ((event: RuntimeFlowerStreamEvent) => void) | undefined;
     const startRuntimeFlowerStream = vi.fn(async (request: RuntimeFlowerStreamRequest) => {
       queueMicrotask(() => {
-        const data = flowerLiveWireFixture({ schema_version: 2, kind: 'ready' })[0]!.data;
+        const data = flowerLiveWireFixture({ schema_version: 3, kind: 'ready', baseline_complete: true })[0]!.data;
         streamListener?.({ stream_id: request.stream_id, kind: 'chunk', chunk: new TextEncoder().encode(`data: ${data}\n\n`) });
         streamListener?.({ stream_id: request.stream_id, kind: 'end' });
       });
@@ -379,8 +379,8 @@ describe('Local Environment Flower surface adapter', () => {
     for await (const frame of adapter.connectLiveStream!({ signal: controller.signal })) frames.push(frame);
 
     expect(frames).toEqual([{
-      schema_version: 2,
-      kind: 'ready',
+      schema_version: 3,
+      kind: 'ready', baseline_complete: true,
     }]);
     expect(startRuntimeFlowerStream).toHaveBeenCalledWith(expect.objectContaining({
       path: '/_redeven_proxy/api/ai/flower/stream',
@@ -406,7 +406,7 @@ describe('Local Environment Flower surface adapter', () => {
     await vi.waitFor(() => expect(id).not.toBe(''));
     for (let index = 0; index < 3; index++) {
       const next = index ? iterator.next() : first;
-      const value = { schema_version: 2, kind: 'thread.batch', thread_id: 'thread-1', current: {
+      const value = { schema_version: 3, kind: 'thread.batch', thread_id: 'thread-1', current: {
         thread_id: 'thread-1', view_version: index + 1, activity: 'active', turn_id: 'turn', run_id: 'run',
         queue: [], interactions: [], items: [{ id: 'reply', kind: 'assistant', ordinal: 1, turn_id: 'turn', run_id: 'run', live: true, text: 'Live reply '.repeat(index + 1) }],
       } };
@@ -706,7 +706,7 @@ describe('Local Environment Flower surface adapter', () => {
       calls.push(request);
       if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
       if (request.path === '/_redeven_proxy/api/ai/models?mode=baseline') return { current_model: 'default/gpt-4.1', models: [{ id: 'default/gpt-4.1' }] };
-      if (request.path === '/_redeven_proxy/api/ai/threads?limit=200') return { threads: [threadView()] };
+      if (request.path === '/_redeven_proxy/api/ai/threads?limit=25') return { threads: [threadView()] };
       if (request.path === '/_redeven_proxy/api/ai/turns') {
         return {
           client_request_id: 'client_desktop-message',
@@ -735,7 +735,7 @@ describe('Local Environment Flower surface adapter', () => {
     expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
       'GET /_redeven_proxy/api/settings',
       'GET /_redeven_proxy/api/ai/models?mode=baseline',
-      'GET /_redeven_proxy/api/ai/threads?limit=200',
+      'GET /_redeven_proxy/api/ai/threads?limit=25',
       'POST /_redeven_proxy/api/ai/turns',
     ]);
     expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/turns')?.body).toMatchObject({
@@ -1440,9 +1440,9 @@ describe('Local Environment Flower surface adapter', () => {
     });
   });
 
-  it('loads a typed current view from the canonical thread detail endpoint', async () => {
+  it('loads a typed current view from the canonical history endpoint', async () => {
     const bridge = bridgeFor((request) => {
-      if (request.path === '/_redeven_proxy/api/ai/threads/thread-1') {
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/history') {
         return detailView({
           run_status: 'running',
           active_run_id: 'run-1',

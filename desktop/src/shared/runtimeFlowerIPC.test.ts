@@ -8,6 +8,11 @@ import {
 } from './runtimeFlowerIPC';
 
 describe('runtime Flower read cancellation', () => {
+  it.each(['history', 'history-item'])('cancels the canonical %s read without authorizing mutation routes', suffix => {
+    expect(isRuntimeFlowerCancellableRead({ method: 'POST', path: `/_redeven_proxy/api/ai/threads/thread-1/${suffix}`, body: {} })).toBe(true);
+    expect(isRuntimeFlowerCancellableRead({ method: 'POST', path: `/_redeven_proxy/api/ai/threads/thread-1/${suffix}/extra`, body: {} })).toBe(false);
+    expect(isRuntimeFlowerCancellableRead({ method: 'POST', path: `/_redeven_proxy/api/ai/threads/thread-1/${suffix}`, staging_scope_id: 'scope', body: {} })).toBe(false);
+  });
   it.each([
     '/_redeven_proxy/api/settings',
     '/_redeven_proxy/api/ai/models?mode=baseline',

@@ -71,7 +71,7 @@ describe('Flower workspace stream visibility', () => {
   it('never acknowledges summary or response revisions before their body renders', async () => {
     const initial = thread({ thread_id: 'read-presented-body', updated_at_ms: 7, status: 'success', read_status: readStatus(true, 7) });
     const unseen = { ...initial, updated_at_ms: 9, read_status: readStatus(true, 9) };
-    const stream = controlledWorkspaceStream([{ schema_version: 2, kind: 'ready', summaries: [initial] }]);
+    const stream = controlledWorkspaceStream([{ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [initial] }]);
     const nextDetail = deferred<ReturnType<typeof liveBootstrap>>();
     const firstAck = deferred<ReturnType<typeof readStatus>>();
     const markThreadRead = vi.fn(async (_id: string, snapshot: { activity_revision: number }) => snapshot.activity_revision === 7 ? firstAck.promise : readStatus(false, snapshot.activity_revision));
@@ -80,7 +80,7 @@ describe('Flower workspace stream visibility', () => {
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="read-presented-body"] button')));
     (runtime.querySelector('[data-thread-id="read-presented-body"] button') as HTMLButtonElement).click();
     await waitFor(() => markThreadRead.mock.calls.length === 1);
-    stream.push({ schema_version: 2, kind: 'summary.batch', summaries: [unseen] });
+    stream.push({ schema_version: 3, kind: 'summary.batch', summaries: [unseen] });
     await waitFor(() => loadThread.mock.calls.length === 2);
     firstAck.resolve({ ...readStatus(false, 7), snapshot: { activity_revision: 9 } });
     await wait(80);
@@ -125,7 +125,7 @@ describe('Flower workspace stream visibility', () => {
     const first = thread({ thread_id: 'read-late-first', updated_at_ms: 7, status: 'success', read_status: readStatus(true, 7) });
     const other = thread({ thread_id: 'read-late-other', title: 'Other conversation' });
     const ack = deferred<ReturnType<typeof readStatus>>();
-    const stream = controlledWorkspaceStream([{ schema_version: 2, kind: 'ready', summaries: [first, other] }]);
+    const stream = controlledWorkspaceStream([{ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [first, other] }]);
     const markThreadRead = vi.fn(() => ack.promise);
     const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [first, other]), loadThread: vi.fn(async id => liveBootstrap(id === first.thread_id ? first : other, id === first.thread_id ? 7 : 1)), connectLiveStream: stream.connect, markThreadRead });
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="read-late-first"] button')));
@@ -134,7 +134,7 @@ describe('Flower workspace stream visibility', () => {
     (runtime.querySelector('[data-thread-id="read-late-other"] button') as HTMLButtonElement).click();
     await waitFor(() => runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === other.thread_id);
     ack.resolve(readStatus(false, 7));
-    stream.push({ schema_version: 2, kind: 'summary.batch', summaries: [first] });
+    stream.push({ schema_version: 3, kind: 'summary.batch', summaries: [first] });
     await wait(100);
     expect(runtime.querySelector('[data-thread-id="read-late-first"]')?.getAttribute('data-flower-thread-unread-dot')).toBe('false');
     expect(markThreadRead).toHaveBeenCalledTimes(1);
@@ -143,7 +143,7 @@ describe('Flower workspace stream visibility', () => {
   it('confirms a completed reply only after its final body loads while still viewing', async () => {
     const running = thread({ thread_id: 'read-running-completion', updated_at_ms: 7, status: 'running', active_run_id: 'run-fixture', run_progress: { phase: 'streaming', run_id: 'run-fixture', turn_id: 'turn-fixture' }, read_status: readStatus(true, 7) });
     const completed = { ...running, status: 'success' as const, active_run_id: undefined, run_progress: undefined, updated_at_ms: 9, read_status: readStatus(true, 9) };
-    const stream = controlledWorkspaceStream([{ schema_version: 2, kind: 'ready', summaries: [running] }]);
+    const stream = controlledWorkspaceStream([{ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [running] }]);
     const finalBody = deferred<ReturnType<typeof liveBootstrap>>();
     const markThreadRead = vi.fn(async (_id: string, snapshot: { activity_revision: number }) => readStatus(false, snapshot.activity_revision));
     const loadThread = vi.fn().mockResolvedValueOnce(liveBootstrap(running, 7)).mockImplementation(() => finalBody.promise);
@@ -151,7 +151,7 @@ describe('Flower workspace stream visibility', () => {
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="read-running-completion"] button')));
     (runtime.querySelector('[data-thread-id="read-running-completion"] button') as HTMLButtonElement).click();
     await waitFor(() => markThreadRead.mock.calls.length === 1);
-    stream.push({ schema_version: 2, kind: 'summary.batch', summaries: [completed] });
+    stream.push({ schema_version: 3, kind: 'summary.batch', summaries: [completed] });
     await waitFor(() => loadThread.mock.calls.length === 2);
     expect(markThreadRead.mock.calls.map(call => call[1].activity_revision)).toEqual([7]);
     finalBody.resolve(liveBootstrap(completed, 9));
@@ -161,7 +161,7 @@ describe('Flower workspace stream visibility', () => {
 
   it('keeps one Desktop workspace SSE while the document is hidden', async () => {
     const connectLiveStream = vi.fn(async function* (input: FlowerLiveStreamConnectInput) {
-      yield { schema_version: 2 as const, kind: 'ready' as const, summaries: [] };
+      yield { schema_version: 3 as const, kind: 'ready' as const, baseline_complete: true, summaries: [] };
       await waitForAbort(input);
     });
     renderSurfaceWithAdapter({
@@ -192,7 +192,7 @@ describe('Flower workspace stream visibility', () => {
       }],
     });
     const connectLiveStream = vi.fn(async function* (input: FlowerLiveStreamConnectInput) {
-      yield { schema_version: 2 as const, kind: 'ready' as const, summaries: [cached] };
+      yield { schema_version: 3 as const, kind: 'ready' as const, baseline_complete: true, summaries: [cached] };
       await waitForAbort(input);
     });
     const runtime = renderSurfaceWithAdapter({
@@ -229,8 +229,8 @@ describe('Flower workspace stream visibility', () => {
       messages: [],
     });
     const stream = controlledWorkspaceStream([{
-      schema_version: 2,
-      kind: 'ready',
+      schema_version: 3,
+      kind: 'ready', baseline_complete: true,
       summaries: [summary],
     }]);
     const connectLiveStream = vi.fn(stream.connect);
@@ -247,7 +247,7 @@ describe('Flower workspace stream visibility', () => {
 
     await waitFor(() => presences.some((presence) => presence.priority_thread_id === threadID));
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: threadID,
       current: {
@@ -274,7 +274,7 @@ describe('Flower workspace stream visibility', () => {
     expect(first?.priority_run_generation).toBeGreaterThan(0);
 
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: threadID,
       current: {
@@ -314,7 +314,7 @@ describe('Flower workspace stream visibility', () => {
       run_progress: null,
       read_status: readStatus(true, 3, 'failed'),
     });
-    const stream = controlledWorkspaceStream([{ schema_version: 2, kind: 'ready', summaries: [running] }]);
+    const stream = controlledWorkspaceStream([{ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [running] }]);
     const connectLiveStream = vi.fn(stream.connect);
     const presences: FlowerCompanionPresenceProjection[] = [];
     renderSurfaceWithAdapterProps({
@@ -329,7 +329,7 @@ describe('Flower workspace stream visibility', () => {
 
     await waitFor(() => presences.some((presence) => presence.priority_thread_id === threadID));
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: threadID,
       current: {
@@ -345,7 +345,7 @@ describe('Flower workspace stream visibility', () => {
     const generation = latestPresence(presences, (presence) => Number.isFinite(presence.priority_run_generation))?.priority_run_generation;
 
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: threadID,
       current: {
@@ -368,7 +368,7 @@ describe('Flower workspace stream visibility', () => {
       outcome: 'failed',
     });
 
-    stream.push({ schema_version: 2, kind: 'summary.batch', summaries: [failed] });
+    stream.push({ schema_version: 3, kind: 'summary.batch', summaries: [failed] });
     await waitFor(() => presences.some((presence) => presence.priority_status === 'failed'));
     const visibleFailure = latestPresence(presences, (presence) => presence.priority_status === 'failed');
     expect(visibleFailure).toMatchObject({
@@ -381,7 +381,7 @@ describe('Flower workspace stream visibility', () => {
     expect(visibleFailure?.priority_thread_progress).not.toContain('Raw provider response');
 
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'viewer.read_state',
       thread_id: threadID,
       read_status: readStatus(false, 3, 'failed'),
