@@ -637,8 +637,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "apply_patch",
-			Description:      "Begin/End Patch inside cwd; use only declared JSON fields. Small edits: file.edit.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"patch": map[string]any{"type": "string", "description": "*** Add File:, *** Delete File:, *** Update File:, *** Move to:. Lines: + added, - removed, space context. @@ context anchors; *** End of File anchors EOF; additions alone append. Read current text. One file header per canonical path; non-overlapping chunks in original file order. JSON example: {\"patch\":\"*** Begin Patch\\n*** Update File: x\\n@@\\n-a\\n+A\\n@@\\n-c\\n+C\\n*** End Patch\"}."}}), "required": []string{"patch"}, "additionalProperties": false}),
+			Description:      "Apply a Begin/End Patch inside cwd.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"patch": map[string]any{"type": "string", "description": "*** Begin Patch ... *** End Patch. Operations: *** Add File:, *** Delete File:, *** Update File:, *** Move to:. Lines: + added, - removed, space context. @@ context anchors; *** End of File anchors EOF; additions alone append. One file header per canonical path; non-overlapping chunks in original file order."}}), "required": []string{"patch"}, "additionalProperties": false}),
 			Mutating:         true,
 			RequiresApproval: true,
 			Visibility:       ToolVisibilityStandard,
