@@ -19,6 +19,7 @@
     "test:interaction-continuity": "node ../scripts/check_interaction_continuity.mjs",
     "test:interaction-continuity:browser": "node scripts/check-interaction-continuity.mjs",
     "test:startup-continuity": "node scripts/check-startup-continuity.mjs",
+    "test:flower-startup": "node scripts/check-flower-startup.mjs",
     "test:flower-media": "node scripts/check-flower-media.mjs",
     "test": "vitest run && vitest run --config vitest.client.config.ts",
     "package": "npm run typecheck && npm run build && npm run prepare:bundled-runtime && npm run prepare:macos-updater && npm run prepare:windows-ssh && electron-builder --config electron-builder.config.mjs --publish never"

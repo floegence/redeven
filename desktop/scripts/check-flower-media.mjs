@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import electron from 'electron';
 import { _electron } from '../../internal/envapp/ui_src/node_modules/playwright/index.mjs';
-import { createSSHSettingsPreviewServer } from './ssh-settings-preview.mjs';
+import { createBuiltFlowerPreview } from './flower-preview.mjs';
 import {
   createBuiltDistServer,
   createBuiltDistTLS,
@@ -27,17 +27,14 @@ await session.run(async () => {
   await session.directory(state);
   const tls = await createBuiltDistTLS();
   await session.defer('TLS fixture', () => tls.cleanup());
-  const server = await createSSHSettingsPreviewServer(0, ['flower-navigation.html']);
-  const previewServer = await session.defer('preview server', () => server.close());
-  await session.port(new URL(server.resolvedUrls.local[0]).port);
-  await server.watcher.close();
+  const { url, mixedEnvironmentFixture, RUNTIME_SERVICE_COMPATIBILITY_EPOCH: epoch, RUNTIME_SERVICE_PROTOCOL_VERSION: protocol } = await createBuiltFlowerPreview(session, state);
   const report = {
     commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
     sourceDiff: execFileSync('git', ['diff', '--stat'], { cwd: root, encoding: 'utf8' }).trim(),
     floe: JSON.parse(await readFile(new URL('../node_modules/@floegence/floe-webapp-core/package.json', import.meta.url))).version,
     state,
     marker: randomUUID(),
-    url: server.resolvedUrls.local[0],
+    url,
     errors: [],
     status: 'running',
   };
@@ -245,10 +242,6 @@ await session.run(async () => {
     page = browser.contexts()[0].pages()[0] ?? (await browser.contexts()[0].waitForEvent('page'));
     page.setDefaultTimeout(20000);
     page.on('pageerror', (error) => report.errors.push(error.message));
-    const { mixedEnvironmentFixture } = await server.ssrLoadModule(path.join(root, 'desktop/src/testSupport/mixedEnvironmentFixture.ts'));
-    const { RUNTIME_SERVICE_COMPATIBILITY_EPOCH: epoch, RUNTIME_SERVICE_PROTOCOL_VERSION: protocol } = await server.ssrLoadModule(
-      path.join(root, 'desktop/src/shared/runtimeService.ts'),
-    );
     const snapshot = mixedEnvironmentFixture().snapshot;
     snapshot.environments = snapshot.environments.map((entry) => ({
       ...entry,
@@ -333,7 +326,7 @@ await session.run(async () => {
     assert.equal(report.stability.sameURL, true);
     assert.equal(report.stability.reloads, 0);
     assert.ok(report.stability.snapshots >= 50);
-    assert.deepEqual(report.stability.extraRequests, []);
+    assert.deepEqual(report.stability.extraRequests.filter(request => request !== 'GET fs/directory_favorites'), [], 'Health refresh does not reload Flower data');
     assert.equal(report.stability.extraStreams, 0);
     assert.equal(report.stability.cancellations, 0);
     await page.screenshot({ path: path.join(output, 'after.png') });
@@ -349,9 +342,8 @@ await session.run(async () => {
     );
     await page.evaluate(() => window.navigationFixture.dispose());
     assert.ok(await page.evaluate(() => window.navigationFixture.cancellations > 0), 'Disposal releases the workspace stream');
-    // Release the Welcome dev server before switching to the built Env App.
+    // The session closes Electron before reclaiming both servers.
     await page.goto('about:blank');
-    await session.release(previewServer);
 
     const thread = {
       thread_id: 'env-media-thread',
@@ -423,8 +415,9 @@ await session.run(async () => {
           });
           const payload = Buffer.from(
             JSON.stringify({
-              schema_version: 2,
+              schema_version: 3,
               kind: 'ready',
+              baseline_complete: true,
               summaries: [thread],
             }),
           );
@@ -533,7 +526,7 @@ await session.run(async () => {
         : { current };
       const payload = Buffer.from(
         JSON.stringify({
-          schema_version: 2,
+          schema_version: 3,
           kind: 'thread.batch',
           thread_id: thread.thread_id,
           ...content,

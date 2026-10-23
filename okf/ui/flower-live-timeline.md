@@ -57,6 +57,9 @@ The stream, frame queue and indexed cache are bounded observation mechanisms. Da
 
 # Evidence
 
+- [Isolated Electron startup acceptance](../../desktop/scripts/check-flower-startup.mjs): run `pnpm --dir desktop test:flower-startup` to verify preparation, partial selection, final membership, draft retention and cleanup against a built renderer. Reports and screenshots are written to `desktop/dist/flower-startup-acceptance`.
+- [English and Chinese navigation acceptance](../../desktop/scripts/check-flower-navigation.mjs): verifies that navigation retains the selected conversation and draft while later baseline pages arrive, with one live stream and no duplicate HTTP list scan.
+
 - [Native pump and recovery](../../internal/ai/flower_runtime_update.go)
 
 - [Projection and recovery tests](../../internal/ai/flower_runtime_update_test.go)

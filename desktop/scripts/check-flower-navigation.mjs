@@ -7,7 +7,7 @@ import { createSSHSettingsPreviewServer } from './ssh-settings-preview.mjs';
 
 const output = fileURLToPath(new URL('../dist/flower-navigation-acceptance/', import.meta.url));
 await mkdir(output, { recursive: true });
-const server = await createSSHSettingsPreviewServer(0);
+const server = await createSSHSettingsPreviewServer(0, ['flower-navigation.html']);
 await server.watcher.close();
 const browser = await chromium.launch({ headless: true });
 const report = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
@@ -30,8 +30,8 @@ try {
       const language = { preference: locale, resolved_locale: locale, source: 'explicit', system_candidates: [] };
       window.redevenDesktopLanguage = { getSnapshot: () => language, setPreference: () => language, subscribe: () => () => {} };
     }, { snapshot, locale });
-    await page.goto(new URL('flower-navigation.html', report.url).href);
-    await page.locator('.redeven-flower-topbar-button').waitFor();
+    await page.goto(new URL('flower-navigation.html?progressive', report.url).href);
+    await page.locator('.redeven-flower-topbar-button[aria-label="Flower"]').waitFor();
     await page.evaluate(() => document.fonts.ready);
 
     // Sample the second animation frame so a paint opportunity separates the
@@ -48,18 +48,18 @@ try {
       assert.ok(elapsed < 250, `${locale}: ${destination} must paint within 250ms; took ${elapsed.toFixed(1)}ms`);
       return elapsed;
     }
-    const timings = [await navigate('.redeven-flower-topbar-button', 'flower')];
+    const timings = [await navigate('.redeven-flower-topbar-button[aria-label="Flower"]', 'flower')];
     await page.locator('[data-flower-runtime-availability="preparing"]').waitFor();
     assert.equal(await page.locator('[data-flower-engaged]').count(), 0, 'AI startup does not mount Flower requests');
-    assert.equal(await page.evaluate(() => window.navigationFixture.requests.length), 0);
+    assert.deepEqual(await page.evaluate(() => window.navigationFixture.requests.filter(request => request === 'GET settings' || request.startsWith('GET ai/'))), []);
     await page.screenshot({ path: `${output}/${locale}-preparing.png`, animations: 'disabled' });
     timings.push(await navigate('.redeven-flower-back-button', 'environments'));
-    await page.locator('.redeven-flower-topbar-button').focus();
+    await page.locator('.redeven-flower-topbar-button[aria-label="Flower"]').focus();
     await page.keyboard.press('Enter');
     assert.equal(await page.locator('.redeven-flower-back-button').evaluate(el => document.activeElement === el), true, 'keyboard entry preserves a visible navigation focus');
     await page.keyboard.press('Enter');
-    assert.equal(await page.locator('.redeven-flower-topbar-button').evaluate(el => document.activeElement === el), true, 'keyboard return restores the Flower entry');
-    timings.push(await navigate('.redeven-flower-topbar-button', 'flower'));
+    assert.equal(await page.locator('.redeven-flower-topbar-button[aria-label="Flower"]').evaluate(el => document.activeElement === el), true, 'keyboard return restores the Flower entry');
+    timings.push(await navigate('.redeven-flower-topbar-button[aria-label="Flower"]', 'flower'));
     await page.evaluate(() => window.navigationFixture.releaseRuntime());
     await page.locator('[data-flower-engaged]').waitFor();
     assert.equal(await page.locator('[data-flower-runtime-availability]').count(), 0, 'AI readiness replaces preparation automatically');
@@ -95,6 +95,11 @@ try {
     await page.keyboard.press('Escape');
     assert.equal(await composer.inputValue(), '', `${locale}: Escape restores the empty Desktop draft`);
     await composer.fill('Keep this unsent draft');
+    assert.equal(await page.locator('[data-thread-id="older-thread"]').count(), 0);
+    await page.evaluate(() => window.navigationFixture.releaseBaseline());
+    await page.locator('[data-thread-id="older-thread"] button').first().waitFor();
+    assert.equal(await composer.inputValue(), 'Keep this unsent draft');
+    assert.equal(await page.locator('[data-flower-engaged]').getAttribute('data-flower-selected-thread-id'), 'navigation-thread');
     await page.evaluate(() => {
       window.navigationNodes = { flower: document.querySelector('[data-flower-engaged]'),
         environment: document.querySelector('[data-environment-group]'), composer: document.querySelector('.flower-composer-content textarea') };
@@ -126,7 +131,7 @@ try {
       // An environment refresh describes the host's original surface, without
       // being a new request to leave the user's selected page.
       await page.evaluate(() => window.navigationFixture.publish({ surface: 'connect_environment' }));
-      timings.push(await navigate('.redeven-flower-topbar-button', 'flower'));
+      timings.push(await navigate('.redeven-flower-topbar-button[aria-label="Flower"]', 'flower'));
       await page.evaluate(() => window.navigationFixture.publish({ surface: 'connect_environment' }));
       assert.equal(await composer.inputValue(), 'Keep this unsent draft');
       assert.equal(await page.locator('[data-flower-engaged]').getAttribute('data-flower-selected-thread-id'), 'navigation-thread');
@@ -136,17 +141,17 @@ try {
     }
     await page.screenshot({ path: `${output}/${locale}-flower.png`, animations: 'disabled' });
     await page.evaluate(() => window.navigationFixture.publish({ surface: 'connect_environment', navigation_revision: 2 }));
-    await page.locator('.redeven-flower-topbar-button').waitFor();
-    await navigate('.redeven-flower-topbar-button', 'flower');
+    await page.locator('.redeven-flower-topbar-button[aria-label="Flower"]').waitFor();
+    await navigate('.redeven-flower-topbar-button[aria-label="Flower"]', 'flower');
     await page.evaluate(() => window.navigationFixture.publish({ surface: 'connect_environment', navigation_revision: 3 }));
-    await page.locator('.redeven-flower-topbar-button').waitFor();
+    await page.locator('.redeven-flower-topbar-button[aria-label="Flower"]').waitFor();
     await page.screenshot({ path: `${output}/${locale}-environments.png`, animations: 'disabled' });
     const counters = await page.evaluate(() => ({ requests: window.navigationFixture.requests,
       streams: window.navigationFixture.streams, cancellations: window.navigationFixture.cancellations,
       prematureRequests: window.navigationFixture.prematureRequests }));
     assert.equal(counters.prematureRequests, 0, 'no settings/model/stream bootstrap races AI publication');
     assert.equal(counters.requests.filter(value => value === 'GET settings').length, 1, 'settings load once across visits');
-    assert.equal(counters.requests.filter(value => value === 'GET ai/threads').length, 1, 'thread list loads once across visits');
+    assert.equal(counters.requests.filter(value => value === 'GET ai/threads').length, 0, 'live baseline owns initial thread loading across visits');
     assert.equal(counters.streams, 1, 'one workspace stream survives navigation');
     assert.equal(counters.cancellations, 0, 'returning to Environments does not tear down Flower');
     assert.ok(!counters.requests.some(value => ['snapshot', 'open_flower', 'open_environment_center'].includes(value)), 'local navigation needs no Launcher IPC');

@@ -337,16 +337,17 @@ func (s *Store) ListRootThreadIDs(ctx context.Context, endpointID string, maxByt
 	}
 	defer rows.Close()
 	var ids []string
+	idBytes := 0
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
-		maxBytes -= len(id) + 16
-		if maxBytes < 0 {
+		ids = append(ids, id)
+		idBytes += len(id)
+		if idBytes+cap(ids)*16 > maxBytes {
 			return nil, errors.New("root identity inventory exceeds observer budget")
 		}
-		ids = append(ids, id)
 	}
 	return ids, rows.Err()
 }
