@@ -21,13 +21,18 @@ const fullBody = (id: string): FlowerRuntimeCurrentItem => {
   return { ...item, text: 'Preview\n\n' + 'Complete historical paragraph.\n\n'.repeat(40) };
 };
 
-async function fixture(options: { delayedDetail?: boolean; delayedBodies?: boolean; failBody?: boolean; empty?: boolean; failDetail?: boolean } = {}) {
+async function fixture(options: { delayedDetail?: boolean; delayedBodies?: boolean; failBody?: boolean; empty?: boolean; failDetail?: boolean; settled?: boolean; fullText?: boolean; count?: number } = {}) {
   await page.viewport(1280, 900);
   const target = thread({ thread_id: 'target', title: 'Target', messages: [] });
   const peer = thread({ thread_id: 'peer', title: 'Peer', messages: [{ id: 'peer-message', turn_id: 'peer-turn', role: 'assistant', content: 'Peer content', status: 'complete', created_at_ms: 1 }] });
+  const items = options.empty ? [] : options.fullText ? pendingItems.slice(-(options.count ?? 2)).map(item => fullBody(item.id)) : pendingItems;
   const current: FlowerRuntimeCurrentView = { thread_id: 'target', view_version: 1, activity: 'idle', last_outcome: 'completed',
-    items: options.empty ? [] : pendingItems, turns: [], interactions: [], queue: [],
-    window: { first_item_id: 'body-0', last_item_id: 'body-23', has_before: true, has_after: false } };
+    items, turns: options.settled ? items.map(item => ({
+      turn_id: item.turn_id!, run_id: item.run_id!, outcome: 'completed' as const,
+      started_at: '2026-10-23T12:00:00Z', ended_at: '2026-10-23T12:00:01Z', work_duration_ms: 1000, elapsed_ms: 1000, waiting_ms: 0,
+      intermediate_item_ids: [], final_item_ids: [item.id], final_boundary_complete: true,
+    })) : [], interactions: [], queue: [],
+    window: { first_item_id: items[0]?.id, last_item_id: items.at(-1)?.id, has_before: true, has_after: false } };
   const detail = deferred<FlowerThreadView>();
   const bodies = new Map<string, ReturnType<typeof deferred<FlowerRuntimeCurrentItem>>>();
   const events: string[] = [];
@@ -57,6 +62,34 @@ async function fixture(options: { delayedDetail?: boolean; delayedBodies?: boole
 }
 
 describe('Flower destination presentation', () => {
+  it.each([2, 24])('positions %i settled full-body rows before every exposed frame on cold and cached navigation', async (count) => {
+    const { root, resolveDetail, loadHistoryItem } = await fixture({ settled: true, fullText: true, count, delayedDetail: true });
+    const inspectPresentation = async () => {
+      const exposed: { top: number; height: number; bottom: number }[] = [];
+      for (let frame = 0; frame < 24; frame++) {
+        await afterPaint();
+        if (preparing(root) || !root.querySelector('[data-flower-message-id="body-23"]')) continue;
+        exposed.push({ top: viewport(root).scrollTop, height: viewport(root).scrollHeight, bottom: bottomDistance(root) });
+      }
+      expect(exposed.length).toBeGreaterThan(0);
+      expect(exposed.every(sample => sample.bottom <= 1), JSON.stringify(exposed)).toBe(true);
+      expect(exposed[0].top).toBeGreaterThan(0);
+    };
+    resolveDetail();
+    await inspectPresentation();
+    expect(root.querySelector('[data-flower-turn-settled="true"]')).not.toBeNull();
+    select(root, 'peer');
+    await waitFor(() => !preparing(root) && Boolean(root.querySelector('[data-flower-message-id="peer-message"]')));
+    select(root, 'target');
+    await inspectPresentation();
+    expect(loadHistoryItem).not.toHaveBeenCalled();
+    // Offscreen history keeps native layout skipping; preparation must not
+    // permanently render every row or add per-row observers.
+    const rows = [...root.querySelectorAll<HTMLElement>('[data-flower-turn-settled="true"]')];
+    expect(rows.every(row => getComputedStyle(row).contentVisibility === 'auto')).toBe(true);
+    if (count === 24) expect(rows[0].querySelector('.flower-turn-row-content')!.checkVisibility({ contentVisibilityAuto: true })).toBe(false);
+  });
+
   it('keeps delayed detail behind a stable loading surface until actual content can be positioned', async () => {
     const { root, resolveDetail, events } = await fixture({ delayedDetail: true });
     await pause(180);

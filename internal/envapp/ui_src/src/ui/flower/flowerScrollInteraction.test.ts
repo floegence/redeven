@@ -60,6 +60,27 @@ function touchMove(target: Element, clientY: number) {
 }
 
 describe('Flower viewport input ownership', () => {
+  it('coalesces historical layout notifications and releases the capture listener on disposal', () => {
+    const { controller, viewport, title, frame } = harness();
+    controller.startFollowing();
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 800 });
+    title.dispatchEvent(new Event('contentvisibilityautostatechange'));
+    title.dispatchEvent(new Event('contentvisibilityautostatechange'));
+    expect(viewport.scrollTop).toBe(300);
+    frame();
+    expect(viewport.scrollTop).toBe(700);
+    controller.stopFollowing();
+    viewport.scrollTop = 200;
+    title.dispatchEvent(new Event('contentvisibilityautostatechange'));
+    frame();
+    expect(viewport.scrollTop).toBe(200);
+    controller.dispose();
+    controller.startFollowing();
+    title.dispatchEvent(new Event('contentvisibilityautostatechange'));
+    frame();
+    expect(viewport.scrollTop).toBe(200);
+  });
+
   it.each(['wheel', 'touch', 'keyboard'])('keeps following short content after a %s input that cannot scroll', (source) => {
     const { controller, viewport, frame, grow } = harness();
     Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 100 });

@@ -1452,6 +1452,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     // Prepare only text in the positioned destination, newest first. Earlier
     // placeholders must not occupy read slots ahead of the visible tail.
     const bounds = viewport.getBoundingClientRect();
+    // content-visibility:auto can report only intrinsic placeholder geometry
+    // even after all message bodies have loaded. Wait for the browser to lay
+    // out destination-visible rows before using that geometry to reveal them.
+    // The scroll owner receives content-visibility and resize notifications.
+    const visibleRows = viewport.querySelectorAll<HTMLElement>('.flower-turn-row[data-flower-turn-settled="true"]');
+    for (const row of visibleRows) {
+      const rect = row.getBoundingClientRect();
+      if (rect.bottom <= bounds.top || rect.top >= bounds.bottom) continue;
+      const content = row.querySelector<HTMLElement>('.flower-turn-row-viewport:not([data-state="closed"]) > .flower-turn-row-content');
+      if (content && !content.checkVisibility({ contentVisibilityAuto: true })) {
+        return;
+      }
+    }
     const needed: string[] = [];
     if (props.adapter.loadHistoryItem) {
       const placeholders = viewport.querySelectorAll<HTMLElement>('.flower-history-text-loading');
