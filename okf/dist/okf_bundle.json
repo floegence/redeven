@@ -29040,15 +29040,15 @@
         "title": "Flower inline media",
         "type": "UI Contract"
       },
-      "body_length": 2209,
+      "body_length": 2825,
       "summary": "Flower displays assistant images, screenshots, video, audio, and self-contained\nHTML directly in the conversation. Released Floe chat components own media\npresentation and HTML isolation. Redeven owns resource routing and permission\nchecks; Floret's canonical message remains the only durable display source.\nUnavailable, forbidden, oversized, or mismatched resources show a retryable\npreview error without interrupting the conversation.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Authoring and interaction\n- `![Title](source)` displays image, video, or audio. Preview references always produce inert placeholders. Health snapshots, labels, and ordinary thread updates do not reload a ready preview; a real context change cancels stale work.\n- An `html preview` code fence previews an HTML fragment or document. A plain `html` fence previews when its content starts with a complete HTML document (`\u003c!doctype html\u003e` and `\u003chtml\u003e`); standalone HTML snippets remain visible as source.\n\n## Request lifecycle and thread ownership\nOne media entry at each rendered thread boundary serves both assistant Markdown and Activity images. A child without a trusted working directory cannot resolve relative sources or HTML links against the parent's directory.\n\nWindow close and Escape return focus only from the closing window to its connected trigger, preserving navigation and composer focus.\n\n## Resource and document boundaries\nThe existing `/api/fs/file` route accepts `preview=1` for bounded chat previews.\n\nPresentation creates no second message store, lifecycle, or Floret API.",
-          "char_count": 1094
+          "body": "## Authoring and interaction\n- `![Title](source)` displays image, video, or audio. Preview references always produce inert placeholders. Health snapshots, labels, and ordinary thread updates do not reload a ready preview; a real context change cancels stale work.\n- An `html preview` code fence previews an HTML fragment or document. A plain `html` fence previews when its content starts with a complete HTML document (`\u003c!doctype html\u003e` and `\u003chtml\u003e`); standalone HTML snippets remain visible as source.\n- HTML previews expose a circular arrow at the top right to open the authorized file preview or an independent floating copy directly. The action is disabled until the document is ready. Source and more actions share one compact top row with preview and expansion; narrow side and bottom insets leave the remaining canvas for content without covering the document.\n\n## Request lifecycle and thread ownership\nOne media entry at each rendered thread boundary serves both assistant Markdown and Activity images. A child without a trusted working directory cannot resolve relative sources or HTML links against the parent's directory.\n\nWindow close and Escape return focus only from the closing window to its connected trigger, preserving navigation and composer focus.\n\n## Resource and document boundaries\nThe existing `/api/fs/file` route accepts `preview=1` for bounded chat previews.\n\nPresentation creates no second message store, lifecycle, or Floret API.",
+          "char_count": 1459
         },
         {
           "id": "boundaries",
@@ -33511,5 +33511,5 @@
       ]
     }
   ],
-  "source_sha256": "7a28362ba23ffae0ff75b6e5fbccd608cc442747fd498cda7f740b7ed1e9f54c"
+  "source_sha256": "e57bd7bcdb5a3ca2177864fd2ace89c9071562197971cad3d55bc542e35a95e6"
 }

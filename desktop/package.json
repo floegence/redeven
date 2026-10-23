@@ -32,7 +32,7 @@
     "@electron/asar": "^4.2.1",
     "@electron/universal": "^3.0.6",
     "brace-expansion": "^5.0.12",
-    "dompurify": "^3.4.16",
+    "dompurify": "^3.4.17",
     "katex": "0.18.10",
     "form-data": "^4.0.6",
     "filelist": "^2.0.2",
@@ -72,7 +72,7 @@
       "@electron/asar": "^4.2.1",
       "@electron/universal": "^3.0.6",
       "brace-expansion": "^5.0.12",
-      "dompurify": "^3.4.16",
+      "dompurify": "^3.4.17",
       "katex": "0.18.10",
       "form-data": "^4.0.6",
       "filelist": "^2.0.2",
@@ -123,11 +123,11 @@
     "typescript": "^5.9.3",
     "vite": "^8.0.16",
     "vite-plugin-solid": "^2.11.10",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   },
   "dependencies": {
-    "@floegence/floe-webapp-boot": "0.86.55",
-    "@floegence/floe-webapp-core": "0.86.55",
+    "@floegence/floe-webapp-boot": "0.86.57",
+    "@floegence/floe-webapp-core": "0.86.57",
     "@floegence/flowersec-core": "5.11.1",
     "@floegence/redeven-service-templates": "https://github.com/floegence/redeven-service-templates/releases/download/v0.7.0/floegence-redeven-service-templates-0.7.0.tgz",
     "builder-util-runtime": "^9.7.0",

@@ -34,8 +34,8 @@ async function imageBlob(): Promise<Blob> {
 }
 
 describe('Flower inline media', () => {
-  it('previews a complete HTML document fenced as plain html', async () => {
-    await page.viewport(1000, 800);
+  it.each([1000, 360])('previews a complete HTML document in a content-first canvas at %ipx', async (width) => {
+    await page.viewport(width, 800);
     const root = document.createElement('div'); document.body.appendChild(root);
     const html = '<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8"></head><body><button>Live preview</button></body></html>';
     const content = ['```html', html, '```'].join('\n');
@@ -44,6 +44,19 @@ describe('Flower inline media', () => {
     onTestFinished(() => { dispose(); root.remove(); });
 
     await waitFor(() => Boolean(root.querySelector('.chat-html-canvas iframe')));
+    const canvas = root.querySelector<HTMLElement>('.chat-html-canvas')!.getBoundingClientRect();
+    const sheet = root.querySelector<HTMLElement>('.chat-html-sheet')!.getBoundingClientRect();
+    const preview = root.querySelector<HTMLButtonElement>('[data-chat-media-action=preview]')!;
+    const button = preview.getBoundingClientRect();
+    expect(preview.disabled).toBe(false);
+    expect(preview.getAttribute('aria-label')).toBe(markdownMediaEnUS.previewHTMLWindow);
+    expect(button.width).toBe(button.height);
+    expect(getComputedStyle(preview).borderRadius).toBe('50%');
+    expect(button.x).toBeGreaterThan(canvas.x + canvas.width / 2);
+    expect(button.bottom).toBeLessThan(sheet.y);
+    expect(sheet.width / canvas.width).toBeGreaterThan(.92);
+    expect(sheet.height / canvas.height).toBeGreaterThan(.82);
+    expect(root.scrollWidth).toBeLessThanOrEqual(width);
     expect(root.querySelector('.flower-chat-md-code-block')).toBeNull();
     expect(root.querySelector('.chat-html-canvas iframe')?.getAttribute('sandbox')).toBe('allow-scripts');
     await userEvent.click(root.querySelector<HTMLButtonElement>('[data-chat-media-action="source"]')!);
@@ -56,7 +69,7 @@ describe('Flower inline media', () => {
     root.style.maxWidth = '680px';
     const fence = '```html preview\n';
     const html = '<button onclick="this.textContent=String(Number(this.textContent)+1)">0</button>';
-    const [content, setContent] = createSignal(fence + '<main>Partial');
+    const [content, setContent] = createSignal(fence + html.slice(0, 16));
     const [streaming, setStreaming] = createSignal(true);
     const dispose = render(() => <FlowerMarkdownBlock content={content()} streaming={streaming()} mediaEnabled
       copyCodeLabel="Copy code" codeCopiedLabel="Copied" mediaLabels={markdownMediaEnUS} />, root);
@@ -66,6 +79,8 @@ describe('Flower inline media', () => {
     const height = canvas.getBoundingClientRect().height;
     expect(getComputedStyle(canvas).borderWidth).toBe('0px');
     expect(canvas.dataset.state).toBe('generating');
+    const preview = canvas.querySelector<HTMLButtonElement>('[data-chat-media-action=preview]')!;
+    expect(preview.disabled).toBe(true);
     expect(root.querySelector('iframe')).toBeNull();
     expect(canvas.querySelector('.chat-html-skeleton')).toBeNull();
     expect(getComputedStyle(canvas.querySelector('.chat-html-sheet')!).visibility).toBe('hidden');
@@ -83,6 +98,7 @@ describe('Flower inline media', () => {
     expect(canvas.querySelector('pre')?.textContent).toBe(html);
     setStreaming(false);
     expect(canvas.dataset.state).toBe('incomplete');
+    expect(preview.disabled).toBe(true);
     expect(root.querySelector('iframe')).toBeNull();
     await userEvent.click(canvas.querySelector<HTMLButtonElement>('[data-chat-media-action=source]')!);
     expect(canvas.querySelector('[data-floe-progress-shimmer]')).toBeNull();
@@ -91,6 +107,7 @@ describe('Flower inline media', () => {
     setStreaming(true);
     setContent(fence + html + '\n```');
     await waitFor(() => Boolean(canvas.querySelector('iframe')));
+    expect(preview.disabled).toBe(false);
     expect(root.querySelector('.chat-html-canvas')).toBe(canvas);
     expect(canvas.dataset.view).toBe('source');
     expect(canvas.getBoundingClientRect().height).toBe(height);
@@ -122,7 +139,7 @@ describe('Flower inline media', () => {
     runtime.querySelector<HTMLButtonElement>('[data-thread-id="html-links"] button')!.click();
     await waitFor(() => Boolean(runtime.querySelector('[data-media-kind="html"] iframe')));
     const frame = runtime.querySelector('iframe');
-    const trigger = runtime.querySelector<HTMLElement>('[aria-label="More actions"]');
+    const trigger = runtime.querySelector<HTMLButtonElement>('[data-chat-media-action=preview]');
     expect(trigger, 'Fenced HTML needs an independent preview action').toBeTruthy();
     const clickLink = (commands as unknown as { clickHtmlPreviewLink: (selector: string, name: string) => Promise<{ url: string; scrollY: number }> }).clickHtmlPreviewLink;
     const anchor = await clickLink('.chat-html-sheet iframe', 'Economy');
@@ -136,7 +153,6 @@ describe('Flower inline media', () => {
     await vi.waitFor(() => expect(runtime.querySelector('[role="alert"]')?.textContent).toContain('protocol'));
     expect(runtime.querySelector('iframe')).toBe(frame);
     await userEvent.click(trigger!);
-    await userEvent.click(page.getByRole('menuitem', { name: 'Open preview window' }));
     await waitFor(() => Boolean(document.querySelector('.chat-media-preview-window iframe')));
     expect(runtime.querySelector('iframe')).toBe(frame);
     await clickLink('.chat-media-preview-window iframe', 'Related file');
@@ -361,8 +377,9 @@ describe('Flower inline media', () => {
     await userEvent.click(expansion);
     expect(expansion.getAttribute('aria-expanded')).toBe('false');
     const more = media.querySelector<HTMLElement>('[aria-label="More actions"]')!;
-    await userEvent.click(more);
-    await userEvent.click(page.getByRole('menuitem', { name: 'Open file preview' }));
+    const preview = media.querySelector<HTMLButtonElement>('[data-chat-media-action=preview]')!;
+    expect(preview.getAttribute('aria-label')).toBe('Open file preview');
+    await userEvent.click(preview);
     await waitFor(() => Boolean(document.querySelector('.file-preview-floating-window iframe.html-preview-frame')));
     const window = document.querySelector<HTMLElement>('.file-preview-floating-window')!;
     expect(openFilePreview).toHaveBeenLastCalledWith(expect.objectContaining({ path: '/workspace/reports/report.html' }), { focus: true, reusePolicy: 'same_file_or_create' });

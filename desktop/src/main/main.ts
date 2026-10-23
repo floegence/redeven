@@ -683,8 +683,6 @@ import {
   DESKTOP_LAUNCHER_SNAPSHOT_UPDATED_CHANNEL,
   type DesktopLauncherActionProgress,
   type DesktopLauncherOperationSnapshot,
-  type DesktopStepProgress,
-  type DesktopStepProgressStepStatus,
   normalizeDesktopLauncherActionRequest,
   type DesktopLauncherActionFailure,
   type DesktopLauncherActionFailureCode,

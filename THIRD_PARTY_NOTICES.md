@@ -3039,9 +3039,9 @@ SOFTWARE.
 | @fast-csv/format | 4.3.5 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fformat/v/4.3.5 |  |
 | @fast-csv/parse | 4.3.6 | MIT | Env App UI | https://www.npmjs.com/package/%40fast-csv%2Fparse/v/4.3.6 |  |
 | @floegence/floe-webapp-boot | 0.81.5 | MIT | Code App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.81.5 |  |
-| @floegence/floe-webapp-boot | 0.86.55 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.86.55 |  |
-| @floegence/floe-webapp-core | 0.86.55 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.86.55 |  |
-| @floegence/floe-webapp-protocol | 0.86.55 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.86.55 |  |
+| @floegence/floe-webapp-boot | 0.86.57 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.86.57 |  |
+| @floegence/floe-webapp-core | 0.86.57 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.86.57 |  |
+| @floegence/floe-webapp-protocol | 0.86.57 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.86.57 |  |
 | @floegence/floebrowser | 0.1.27 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloebrowser/v/0.1.27 |  |
 | @floegence/floeterm-terminal-web | 0.19.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.19.2 | Built-in theme attribution and license texts are reproduced below from the verified 0.19.2 package. |
 | @floegence/flowersec-core | 5.11.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.11.1 |  |
@@ -3322,15 +3322,22 @@ SOFTWARE.
 | @ungap/structured-clone | 1.3.1 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/%40ungap%2Fstructured-clone/v/1.3.1 | License verified from the exact registry package manifest. |
 | @ungap/structured-clone | 1.4.0 | ISC | Env App UI | https://www.npmjs.com/package/%40ungap%2Fstructured-clone/v/1.4.0 |  |
 | @upsetjs/venn.js | 2.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40upsetjs%2Fvenn.js/v/2.0.0 |  |
-| @vitest/browser-playwright | 4.1.11 | MIT | Env App UI | https://www.npmjs.com/package/%40vitest%2Fbrowser-playwright/v/4.1.11 |  |
-| @vitest/browser | 4.1.11 | MIT | Env App UI | https://www.npmjs.com/package/%40vitest%2Fbrowser/v/4.1.11 |  |
-| @vitest/expect | 4.1.11 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40vitest%2Fexpect/v/4.1.11 |  |
-| @vitest/mocker | 4.1.11 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40vitest%2Fmocker/v/4.1.11 |  |
-| @vitest/pretty-format | 4.1.11 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40vitest%2Fpretty-format/v/4.1.11 |  |
-| @vitest/runner | 4.1.11 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40vitest%2Frunner/v/4.1.11 |  |
-| @vitest/snapshot | 4.1.11 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40vitest%2Fsnapshot/v/4.1.11 |  |
-| @vitest/spy | 4.1.11 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40vitest%2Fspy/v/4.1.11 |  |
-| @vitest/utils | 4.1.11 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40vitest%2Futils/v/4.1.11 |  |
+| @vitest/browser-playwright | 4.1.12 | MIT | Env App UI | https://www.npmjs.com/package/%40vitest%2Fbrowser-playwright/v/4.1.12 |  |
+| @vitest/browser | 4.1.12 | MIT | Env App UI | https://www.npmjs.com/package/%40vitest%2Fbrowser/v/4.1.12 |  |
+| @vitest/expect | 4.1.11 | MIT | Code App UI | https://www.npmjs.com/package/%40vitest%2Fexpect/v/4.1.11 |  |
+| @vitest/expect | 4.1.12 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40vitest%2Fexpect/v/4.1.12 |  |
+| @vitest/mocker | 4.1.11 | MIT | Code App UI | https://www.npmjs.com/package/%40vitest%2Fmocker/v/4.1.11 |  |
+| @vitest/mocker | 4.1.12 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40vitest%2Fmocker/v/4.1.12 |  |
+| @vitest/pretty-format | 4.1.11 | MIT | Code App UI | https://www.npmjs.com/package/%40vitest%2Fpretty-format/v/4.1.11 |  |
+| @vitest/pretty-format | 4.1.12 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40vitest%2Fpretty-format/v/4.1.12 |  |
+| @vitest/runner | 4.1.11 | MIT | Code App UI | https://www.npmjs.com/package/%40vitest%2Frunner/v/4.1.11 |  |
+| @vitest/runner | 4.1.12 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40vitest%2Frunner/v/4.1.12 |  |
+| @vitest/snapshot | 4.1.11 | MIT | Code App UI | https://www.npmjs.com/package/%40vitest%2Fsnapshot/v/4.1.11 |  |
+| @vitest/snapshot | 4.1.12 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40vitest%2Fsnapshot/v/4.1.12 |  |
+| @vitest/spy | 4.1.11 | MIT | Code App UI | https://www.npmjs.com/package/%40vitest%2Fspy/v/4.1.11 |  |
+| @vitest/spy | 4.1.12 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40vitest%2Fspy/v/4.1.12 |  |
+| @vitest/utils | 4.1.11 | MIT | Code App UI | https://www.npmjs.com/package/%40vitest%2Futils/v/4.1.11 |  |
+| @vitest/utils | 4.1.12 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40vitest%2Futils/v/4.1.12 |  |
 | @xmldom/xmldom | 0.8.15 | MIT | Desktop shell | https://www.npmjs.com/package/%40xmldom%2Fxmldom/v/0.8.15 |  |
 | @xmldom/xmldom | 0.9.12 | MIT | Desktop shell | https://www.npmjs.com/package/%40xmldom%2Fxmldom/v/0.9.12 | License verified from the exact registry package manifest. |
 | @xstate/fsm | 1.6.5 | MIT | Env App UI | https://www.npmjs.com/package/%40xstate%2Ffsm/v/1.6.5 |  |
@@ -3384,6 +3391,7 @@ SOFTWARE.
 | caniuse-lite | 1.0.30001812 | CC-BY-4.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/caniuse-lite/v/1.0.30001812 |  |
 | ccount | 2.0.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/ccount/v/2.0.1 |  |
 | chai | 6.2.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/chai/v/6.2.2 |  |
+| chai | 6.3.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/chai/v/6.3.0 |  |
 | chalk | 4.1.2 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/chalk/v/4.1.2 |  |
 | character-entities-html4 | 2.1.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/character-entities-html4/v/2.1.0 |  |
 | character-entities-legacy | 3.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/character-entities-legacy/v/3.0.0 |  |
@@ -3477,7 +3485,7 @@ SOFTWARE.
 | diff | 8.0.4 | BSD-3-Clause | Desktop shell, Env App UI | https://www.npmjs.com/package/diff/v/8.0.4 |  |
 | dmg-builder | 26.15.3 | MIT | Desktop shell | https://www.npmjs.com/package/dmg-builder/v/26.15.3 |  |
 | docx-preview | 0.3.7 | Apache-2.0 | Env App UI | https://www.npmjs.com/package/docx-preview/v/0.3.7 |  |
-| dompurify | 3.4.16 | (MPL-2.0 OR Apache-2.0) | Desktop shell, Env App UI | https://www.npmjs.com/package/dompurify/v/3.4.16 |  |
+| dompurify | 3.4.17 | (MPL-2.0 OR Apache-2.0) | Desktop shell, Env App UI | https://www.npmjs.com/package/dompurify/v/3.4.17 |  |
 | dotenv-expand | 11.0.7 | BSD-2-Clause | Desktop shell | https://www.npmjs.com/package/dotenv-expand/v/11.0.7 |  |
 | dotenv | 16.6.1 | BSD-2-Clause | Desktop shell | https://www.npmjs.com/package/dotenv/v/16.6.1 |  |
 | dunder-proto | 1.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/dunder-proto/v/1.0.1 |  |
@@ -3901,6 +3909,7 @@ SOFTWARE.
 | tinyglobby | 0.2.17 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/tinyglobby/v/0.2.17 |  |
 | tinyrainbow | 3.1.0 | MIT | Env App UI | https://www.npmjs.com/package/tinyrainbow/v/3.1.0 |  |
 | tinyrainbow | 3.1.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/tinyrainbow/v/3.1.1 |  |
+| tinyrainbow | 3.2.0 | MIT | Desktop shell | https://www.npmjs.com/package/tinyrainbow/v/3.2.0 |  |
 | tldts-core | 6.1.86 | MIT | Env App UI | https://www.npmjs.com/package/tldts-core/v/6.1.86 |  |
 | tldts-core | 7.0.27 | MIT | Desktop shell | https://www.npmjs.com/package/tldts-core/v/7.0.27 |  |
 | tldts-core | 7.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/tldts-core/v/7.4.0 | License verified from the exact registry package manifest. |
@@ -3950,7 +3959,8 @@ SOFTWARE.
 | vite | 8.0.16 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/vite/v/8.0.16 |  |
 | vite | 8.3.1 | MIT | Code App UI | https://www.npmjs.com/package/vite/v/8.3.1 |  |
 | vitefu | 1.1.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/vitefu/v/1.1.3 |  |
-| vitest | 4.1.11 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/vitest/v/4.1.11 |  |
+| vitest | 4.1.11 | MIT | Code App UI | https://www.npmjs.com/package/vitest/v/4.1.11 |  |
+| vitest | 4.1.12 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/vitest/v/4.1.12 |  |
 | w3c-xmlserializer | 5.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/w3c-xmlserializer/v/5.0.0 |  |
 | webcrypto-core | 1.9.2 | MIT | Desktop shell | https://www.npmjs.com/package/webcrypto-core/v/1.9.2 |  |
 | webidl-conversions | 7.0.0 | BSD-2-Clause | Env App UI | https://www.npmjs.com/package/webidl-conversions/v/7.0.0 |  |
@@ -7610,7 +7620,7 @@ libavoid-js is maintained by Vladyslav Hnatiuk.
 
 Corresponding source, build scripts, and license are included at
 `dist/licenses/libavoid-sources.tar.gz` in the exact published Floe package:
-https://registry.npmjs.org/@floegence/floe-webapp-core/-/floe-webapp-core-0.86.55.tgz
+https://registry.npmjs.org/@floegence/floe-webapp-core/-/floe-webapp-core-0.86.57.tgz
 The source revisions are
 https://github.com/Aksem/libavoid-js/tree/5062a42fbd82fff562afeebcbb7b1ed45eed8e75
 and https://github.com/Aksem/adaptagrams/tree/0ab3467b4ed3523bb3e404a0dd7da7647d9eb13d.
@@ -8131,7 +8141,7 @@ That's all there is to it!
 Floe supplies the standalone browser artifact of @aiden0z/pptx-renderer 1.3.0 under Apache-2.0. Its embedded mtx-decompressor 1.4.2 remains MPL-2.0; that license applies to the covered files and does not replace Redeven's license. The renderer is used without source changes. System fonts are not redistributed.
 
 The exact unmodified MPL source and original notices are included under dist/licenses/pptx/ in the published Floe package:
-https://registry.npmjs.org/@floegence/floe-webapp-core/-/floe-webapp-core-0.86.55.tgz
+https://registry.npmjs.org/@floegence/floe-webapp-core/-/floe-webapp-core-0.86.57.tgz
 Corresponding source: https://github.com/ChristopherVR/mtx-decompressor/archive/refs/tags/v1.4.2.tar.gz
 Source archive SHA-256: e4edf429b1614a8f7366a55cffe58b35c58e784f0d4719d209cc3aa28ef3d970
 

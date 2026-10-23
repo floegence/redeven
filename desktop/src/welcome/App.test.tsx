@@ -955,8 +955,10 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('onOpenFlower={openFlowerConversation}');
     expect(appSrc).not.toContain("showActionToast(i18n().t('toast.flowerPromptQueued')");
     expect(appSrc).toContain(
-      'context_action: buildEnvironmentFlowerContextAction(environment, contextSummary, cleanLabel)',
+      'context_action: buildEnvironmentFlowerContextAction(environment, contextSummary, cleanLabel, {',
     );
+    expect(appSrc).toContain('progressItems: activeActionProgress(),');
+    expect(appSrc).toContain('busyState: busyState(),');
     expect(appSrc).not.toContain('context_action: buildEnvironmentFlowerContextEnvelope(environment).raw');
     expect(appSrc).toContain('function openFlowerSurface(): void');
     expect(appSrc).toContain("navigateWelcomeSurface('flower')");

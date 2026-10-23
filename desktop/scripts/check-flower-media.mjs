@@ -103,6 +103,17 @@ await session.run(async () => {
     const canvas = page.locator('.chat-html-canvas');
     assert.equal(await canvas.evaluate((element) => getComputedStyle(element).borderWidth), '0px');
     await canvas.scrollIntoViewIfNeeded();
+    const contentGeometry = async () => {
+      const area = await canvas.boundingBox();
+      const sheet = await canvas.locator('.chat-html-sheet').boundingBox();
+      const button = canvas.locator('[data-chat-media-action=preview]');
+      const action = await button.boundingBox();
+      assert.ok(sheet.width / area.width > .92 && sheet.height / area.height > .82);
+      assert.ok(action.x > area.x + area.width / 2 && action.y + action.height < sheet.y);
+      assert.equal(action.width, action.height);
+      assert.equal(await button.evaluate((element) => getComputedStyle(element).borderRadius), '50%');
+    };
+    await contentGeometry();
     await page.screenshot({ path: path.join(output, `${surface}-html-canvas.png`) });
     const inline = page.frameLocator('.chat-html-sheet iframe');
     const original = await page.locator('.chat-html-sheet iframe').elementHandle();
@@ -124,7 +135,7 @@ await session.run(async () => {
     await page.locator('.chat-html-sheet [role="alert"]').waitFor();
     assert.equal(page.url(), sourceURL);
 
-    const trigger = page.locator('[data-media-kind="html"] [aria-label="More actions"]');
+    const trigger = canvas.locator('[data-chat-media-action=preview]');
     await trigger.focus();
     const scrollBefore = await trigger.evaluate((element) => {
       const positions = [];
@@ -132,7 +143,6 @@ await session.run(async () => {
       return positions;
     });
     await page.keyboard.press('Enter');
-    await page.getByRole('menuitem', { name: 'Open preview window' }).click();
     const popup = page.locator('.chat-media-preview-window');
     await popup.waitFor();
     await page.waitForFunction(
@@ -168,6 +178,7 @@ await session.run(async () => {
 
     await page.setViewportSize({ width: 390, height: 844 });
     await trigger.scrollIntoViewIfNeeded();
+    await contentGeometry();
     const cdp = await browser.contexts()[0].newCDPSession(page);
     const bounds = await trigger.boundingBox();
     await cdp.send('Input.dispatchTouchEvent', {
@@ -178,7 +189,6 @@ await session.run(async () => {
       type: 'touchEnd',
       touchPoints: [],
     });
-    await page.getByRole('menuitem', { name: 'Open preview window' }).click();
     await popup.waitFor();
     await page.waitForFunction(
       () => document.querySelector('.chat-media-preview-window')?.getAttribute('data-floating-presence') === 'open',
@@ -196,6 +206,8 @@ await session.run(async () => {
     await cdp.detach();
     await page.setViewportSize({ width: 1240, height: 900 });
     return {
+      directPreview: true,
+      contentGeometry: true,
       sourceRetained: true,
       independentCopy: true,
       localAnchors: true,
