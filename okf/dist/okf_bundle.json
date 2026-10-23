@@ -1953,7 +1953,7 @@
               "retention",
               "storage"
             ],
-            "summary": "- Authority: the development launcher owns its selected Desktop session, local Runtime, saved local host Gateways, and immutable generated packages.\n- Outcome: development services run current checkout code and stop together; repeated launches remove obsolete packages after publishing the next complete bundle.\n- Invariants: preserve service identity and data; keep recent, selected, and live bundles; never stop unrelated services or remove user data.\n- Failure boundary: service preparation failures prevent Desktop launch and trigger cleanup; incomplete process inventory prevents bundle deletion.",
+            "summary": "- Authority: the launcher owns its Desktop session, local Runtime, saved local host Gateways, and immutable bundles.\n- Outcome: run current checkout code, stop together, and prune obsolete bundles after publication.\n- Invariants: preserve identities, user data, unrelated services, and recent, selected or live bundles.\n- Failure boundary: preparation failure prevents launch and triggers cleanup; incomplete inventory prevents pruning.",
             "section_count": 2
           },
           {
@@ -18947,15 +18947,15 @@
         "title": "Desktop development sessions and bundles",
         "type": "Development Contract"
       },
-      "body_length": 3118,
-      "summary": "- Authority: the development launcher owns its selected Desktop session, local Runtime, saved local host Gateways, and immutable generated packages.\n- Outcome: development services run current checkout code and stop together; repeated launches remove obsolete packages after publishing the next complete bundle.\n- Invariants: preserve service identity and data; keep recent, selected, and live bundles; never stop unrelated services or remove user data.\n- Failure boundary: service preparation failures prevent Desktop launch and trigger cleanup; incomplete process inventory prevents bundle deletion.",
+      "body_length": 2534,
+      "summary": "- Authority: the launcher owns its Desktop session, local Runtime, saved local host Gateways, and immutable bundles.\n- Outcome: run current checkout code, stop together, and prune obsolete bundles after publication.\n- Invariants: preserve identities, user data, unrelated services, and recent, selected or live bundles.\n- Failure boundary: preparation failure prevents launch and triggers cleanup; incomplete inventory prevents pruning.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Development service lifecycle\n`scripts/dev_desktop.sh` builds Desktop and its Runtime bundle from the current checkout, including uncommitted source.\n\nDesktop and source-built Runtime bundles capture HEAD and the actual tracked\nand non-ignored untracked inputs before compilation, including intentional\nlocal edits. Verification after asset and Runtime builds and before service\nstartup rejects concurrent source edits or checkout advances. The three\nregenerated OKF bundle files are outputs, even though they are committed;\nthey are excluded by exact path alongside ignored generated assets. OKF\nMarkdown, its builder, and the Go embed source remain protected inputs.\n\nNormal Electron exit, startup failure after service preparation begins, Ctrl+C, and SIGTERM stop the development Runtime and local Gateways.\n\nDevelopment coordination belongs to the launcher, not to product shutdown.\n\nElectron's package owns binary resolution and any first-use download. The\nshared shell helper returns only its exported executable path, routing package\nand installer diagnostics to stderr. Development launch and runtime preflight\nuse that helper, preserve download failures, and retain executable validation.\nThe launcher resolves Electron after asset and bundle preparation, because\nthose builds may reinstall Desktop dependencies and replace the package path.\n\n## Bundle retention\n`scripts/dev_desktop.sh` publishes each complete bundle below `\u003cdevelopment-state-root\u003e/desktop/bundles/\u003cmanifest-sha256\u003e` and then runs retention before launching Electron. The selected bundle is always retained, including reuse of an older build.\n\nRetention is a count bound on inactive verified packages, not a byte quota; active processes and unverified entries can require additional space.",
-          "char_count": 1770
+          "body": "## Development service lifecycle\n`scripts/dev_desktop.sh` builds Desktop and its Runtime bundle from the current checkout, including uncommitted source.\n\nDesktop and Runtime builds capture HEAD, tracked and non-ignored untracked\ninputs, including local edits. Verification after builds and before startup\nrejects concurrent edits or checkout advances. The three generated OKF bundles\nare outputs excluded by exact path alongside ignored assets. OKF Markdown,\nits builder and Go embed source remain protected inputs.\n\nNormal Electron exit, startup failure after service preparation begins, Ctrl+C, and SIGTERM stop the development Runtime and local Gateways.\n\nDevelopment coordination belongs to the launcher, not to product shutdown.\n\nLaunch and preflight use the shared Electron resolver: package/installer logs\ngo to stderr; only the exported path returns. Download failures propagate and\nexecutability is checked. Launch resolves after builds, which may reinstall\nDesktop dependencies.\n\n## Bundle retention\n`scripts/dev_desktop.sh` publishes each complete bundle below `\u003cdevelopment-state-root\u003e/desktop/bundles/\u003cmanifest-sha256\u003e` and then runs retention before launching Electron. The selected bundle is always retained, including reuse of an older build.\n\nRetention is a count bound on inactive verified packages, not a byte quota; active processes and unverified entries can require additional space.",
+          "char_count": 1405
         },
         {
           "id": "boundaries",
@@ -18982,17 +18982,17 @@
           "description": "Checkout advance, dirty sources, and preserved staging boundaries."
         },
         {
-          "id": "redeven:scripts/ui_package_common_node_test.sh:0:electron resolution, first-use diagnostics, failure propagation, and runtime preflight.",
+          "id": "redeven:scripts/ui_package_common_node_test.sh:0:resolution, diagnostics, failure and preflight.",
           "source": "redeven:scripts/ui_package_common_node_test.sh",
-          "description": "Electron resolution, first-use diagnostics, failure propagation, and runtime preflight."
+          "description": "Resolution, diagnostics, failure and preflight."
         },
         {
-          "id": "redeven:scripts/dev_desktop_signal_cleanup_test.sh:0:first-use electron launch and session cleanup.",
+          "id": "redeven:scripts/dev_desktop_signal_cleanup_test.sh:0:download, reinstall and cleanup.",
           "source": "redeven:scripts/dev_desktop_signal_cleanup_test.sh",
-          "description": "First-use Electron launch and session cleanup."
+          "description": "Download, reinstall and cleanup."
         }
       ],
-      "snippet": "- Authority: the development launcher owns its selected Desktop session, local Runtime, saved local host Gateways, and immutable generated packages. - Outcome: development services run current checkout code and stop together; repeated launc",
+      "snippet": "- Authority: the launcher owns its Desktop session, local Runtime, saved local host Gateways, and immutable bundles. - Outcome: run current checkout code, stop together, and prune obsolete bundles after publication. - Invariants: preserve i",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -33630,5 +33630,5 @@
       ]
     }
   ],
-  "source_sha256": "ee0968d1a0ebbf4960cfc714af2ad239ef96f1486bc246dd0b25f0d78f6a1711"
+  "source_sha256": "a3b6e0b0d0e1c8e732a3217a768ade2e636ff1d0600e737a1ee98be31e40fb88"
 }
