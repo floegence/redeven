@@ -64,7 +64,9 @@ each transcript retains at most 12 animations and shows older burst titles fully
 The transcript owns transient arrival claims only for the current execution.
 Initial history, conversation switches, reconnect baselines, hidden disclosures,
 and arrivals first mounted more than 450 ms later remain static. A title is
-claimed once across preview promotion and disclosure remounts. Failures and
+claimed once across preview promotion and disclosure remounts. Arrival claims
+observe sequence disclosure before lazy content mounts, so opening a sequence
+does not animate rows received while it was folded. Failures and
 approval requests appear immediately. Content/status changes, navigation,
 disposal, a hidden document or enabling reduced motion remove active clipping.
 There are no character timers, per-frame reactive updates, persisted animation

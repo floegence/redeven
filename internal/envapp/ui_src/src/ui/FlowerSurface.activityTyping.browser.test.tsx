@@ -199,8 +199,9 @@ it('keeps newly received hidden rows static when their sequence is reopened', as
   group.click();
   await waitFor(() => root.querySelector('.flower-tool-sequence-viewport')?.getAttribute('data-state') === 'closed');
   push([tool('history', 'success'), tool('fresh'), tool('hidden')]);
-  await waitFor(() => Boolean(title(root, 'hidden')));
-  expect(reveals(title(root, 'hidden')!)).toHaveLength(0);
+  await waitFor(() => group.getAttribute('aria-controls')?.split(' ').length === 3);
+  expect(title(root, 'hidden')).toBeUndefined();
   group.click();
+  await waitFor(() => Boolean(title(root, 'hidden')));
   expect(reveals(title(root, 'hidden')!)).toHaveLength(0);
 });
