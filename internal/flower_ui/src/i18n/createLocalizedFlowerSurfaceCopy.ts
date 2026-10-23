@@ -115,6 +115,8 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       modelUnavailableMissingKeys: t(i18n, k('chat.modelUnavailableMissingKeys')),
       modelUnavailableProviderDisabled: t(i18n, k('chat.modelUnavailableProviderDisabled')),
       modelUnavailableModelMissing: t(i18n, k('chat.modelUnavailableModelMissing')),
+      initialAuthorization: t(i18n, k('chat.initialAuthorization')),
+      initialLocked: t(i18n, k('chat.initialLocked')),
       warmupTitle: t(i18n, k('chat.warmupTitle')),
       warmupDetail: t(i18n, k('chat.warmupDetail')),
       warmupComposerPlaceholder: t(i18n, k('chat.warmupComposerPlaceholder')),

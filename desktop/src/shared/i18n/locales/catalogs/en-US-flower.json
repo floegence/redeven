@@ -109,6 +109,8 @@
     "defaultModelUpdateFailedTitle": "Default model was not updated.",
     "reasoningAdjusted": "Reasoning adjusted for this model.",
     "modelsUnavailable": "This model is unavailable. Refresh the list, select another model, or open settings.",
+    "initialAuthorization": "Restore access to load your conversations, then try again.",
+    "initialLocked": "Unlock access to load your conversations, then try again.",
     "warmupTitle": "Preparing Flower",
     "warmupDetail": "Desktop is starting the Local Environment runtime before Flower loads conversations.",
     "warmupComposerPlaceholder": "Preparing Flower on Local Environment...",

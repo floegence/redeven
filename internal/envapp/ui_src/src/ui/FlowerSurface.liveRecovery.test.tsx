@@ -324,9 +324,10 @@ describe('Flower workspace synchronization recovery', () => {
     });
     const loadThread = vi.fn(async () => liveBootstrap(selected, 9));
     const surface = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [selected]), loadThread, connectLiveStream });
-    await waitFor(() => surface.querySelector('[data-flower-sync-state="failed"]') !== null);
-    (surface.querySelector('.flower-workspace-sync button') as HTMLButtonElement).click();
-    await waitFor(() => connectLiveStream.mock.calls.length === 2 && surface.querySelector('.flower-workspace-sync') === null);
+    await waitFor(() => Boolean(surface.querySelector('.flower-warmup button')));
+    expect(surface.textContent).toContain('Synchronization timed out after 15 seconds. Try again.');
+    (surface.querySelector('.flower-warmup button') as HTMLButtonElement).click();
+    await waitFor(() => connectLiveStream.mock.calls.length === 2 && surface.querySelector('.flower-warmup') === null);
     selectThread(surface, selected.thread_id);
     await waitFor(() => surface.textContent?.includes('Plan deploy') ?? false);
     expect(attempts[0].signal.aborted).toBe(true);

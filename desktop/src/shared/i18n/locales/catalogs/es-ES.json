@@ -255,6 +255,8 @@
       "defaultModelUpdateFailedTitle": "No se actualizó el modelo predeterminado.",
       "reasoningAdjusted": "Se ajustó el razonamiento para este modelo.",
       "modelsUnavailable": "Este modelo no está disponible. Actualiza la lista, selecciona otro modelo o abre la configuración.",
+      "initialAuthorization": "Restablece el acceso y vuelve a intentar cargar tus conversaciones.",
+      "initialLocked": "Desbloquea el acceso y vuelve a intentar cargar tus conversaciones.",
       "warmupTitle": "Preparando Flower",
       "warmupDetail": "Desktop está iniciando el tiempo de ejecución del entorno local antes de que Flower cargue las conversaciones.",
       "warmupComposerPlaceholder": "Preparando Flower en el entorno local...",

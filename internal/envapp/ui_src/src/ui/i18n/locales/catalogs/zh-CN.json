@@ -5166,6 +5166,8 @@
       "defaultModelUpdateFailedTitle": "未能更新默认模型。",
       "reasoningAdjusted": "已为此模型调整推理设置。",
       "modelsUnavailable": "此模型暂不可用。请刷新列表、选择其他模型或打开设置。",
+      "initialAuthorization": "恢复访问权限后，重试加载对话。",
+      "initialLocked": "解锁访问权限后，重试加载对话。",
       "warmupTitle": "正在准备 Flower",
       "warmupDetail": "Desktop 在 Flower 加载对话之前启动本地环境运行时。",
       "warmupComposerPlaceholder": "正在本地环境中准备 Flower...",

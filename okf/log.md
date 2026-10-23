@@ -70,3 +70,7 @@ A compact digest of updates from the last 30 days. Current contracts and evidenc
 
 - Adopt published Floret v7.80.1 so Stop and shutdown settle from canonical control records without reading conversation bodies; retain the upstream cancellation deadlines.
 - Concept: [storage ownership](ai/flower-storage-ownership-and-migrations.md)
+
+## 2026-10-23
+- Keep the initial Flower conversation inventory inside its existing loading presentation until the first authoritative page; retain admitted content and drafts through subsequent reconnects.
+- Concept: [Flower startup presentation](architecture/flower-startup-presentation.md)

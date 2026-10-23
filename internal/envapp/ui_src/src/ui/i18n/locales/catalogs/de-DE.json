@@ -5166,6 +5166,8 @@
       "defaultModelUpdateFailedTitle": "Das Standardmodell wurde nicht aktualisiert.",
       "reasoningAdjusted": "Die Denkeinstellungen wurden an dieses Modell angepasst.",
       "modelsUnavailable": "Dieses Modell ist nicht verfügbar. Aktualisiere die Liste, wähle ein anderes Modell oder öffne die Einstellungen.",
+      "initialAuthorization": "Stelle den Zugriff wieder her und versuche dann erneut, deine Unterhaltungen zu laden.",
+      "initialLocked": "Entsperre den Zugriff und versuche dann erneut, deine Unterhaltungen zu laden.",
       "warmupTitle": "Flower wird vorbereitet",
       "warmupDetail": "Desktop startet die Laufzeit der lokalen Umgebung, bevor Flower Unterhaltungen lädt.",
       "warmupComposerPlaceholder": "Flower wird in der lokalen Umgebung vorbereitet...",

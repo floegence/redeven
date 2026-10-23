@@ -1129,12 +1129,13 @@ describe('Flower final thread cache and workspace transport', () => {
       listThreads: vi.fn(() => listResponse.promise),
     });
 
-    await waitFor(() => runtime.querySelector('.flower-thread-warmup-list') !== null);
+    await waitFor(() => runtime.querySelector('.flower-warmup') !== null);
+    expect(runtime.querySelector('.flower-chat-shell')).toBeNull();
     expect(runtime.querySelector('.flower-thread-empty')).toBeNull();
 
     listResponse.resolve([]);
     await waitFor(() => runtime.querySelector('.flower-thread-empty') !== null);
-    expect(runtime.querySelector('.flower-thread-warmup-list')).toBeNull();
+    expect(runtime.querySelector('.flower-warmup')).toBeNull();
   });
 
   it('retains the new-thread draft until canonical admission wins the launch race', async () => {

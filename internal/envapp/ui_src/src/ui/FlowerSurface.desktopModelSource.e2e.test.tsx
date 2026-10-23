@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { desktopSessionContextSnapshotFromTarget } from '../../../../../desktop/src/main/desktopSessionContext';
 import { buildSSHDesktopTarget } from '../../../../../desktop/src/main/desktopTarget';
 import { createEnvLocalFlowerSurfaceAdapter } from './flower/envLocalFlowerSurfaceAdapter';
 import { modelDirectoryWireFixture } from '../test/modelDirectoryWireFixture';
+import { flowerLiveWireFixture } from '../../../../flower_ui/src/test/flowerLiveWireFixture';
+import { bindSessionHTTP } from './services/sessionHTTP';
 import {
   composerModelTrigger,
   renderSurfaceWithAdapter,
@@ -128,7 +130,7 @@ describe('Flower Desktop model source E2E', () => {
           media_types: [{ media_type: 'text/plain', mode: 'tool_read' }],
         });
       }
-      if (url === '/_redeven_proxy/api/ai/threads?limit=200' && init?.method === 'GET') {
+      if (url === '/_redeven_proxy/api/ai/threads?limit=25' && init?.method === 'GET') {
         return jsonResponse({ threads: [] });
       }
       if (url === '/_redeven_proxy/api/ai/turns' && init?.method === 'POST') {
@@ -149,6 +151,13 @@ describe('Flower Desktop model source E2E', () => {
       throw new Error(`unexpected fetch: ${url} ${init?.method ?? ''}`);
     });
     vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+    onTestFinished(bindSessionHTTP({
+      fetch: fetchMock as unknown as typeof fetch,
+      events: async function* (_path, options) {
+        yield* flowerLiveWireFixture({ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [] });
+        if (!options?.signal?.aborted) await new Promise<void>(resolve => options?.signal?.addEventListener('abort', () => resolve(), { once: true }));
+      },
+    }));
 
     const subscribeThread = vi.fn(async () => ({ runId: '' }));
     const desktopSession = desktopSessionContextSnapshotFromTarget(buildSSHDesktopTarget({

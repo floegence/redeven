@@ -38,12 +38,18 @@ await session.run(async () => {
     if (window.top !== window) return;
     window.navigationSnapshot = { ...snapshot, navigation_revision: 1 };
     const language = { preference: 'zh-CN', resolved_locale: 'zh-CN', source: 'explicit', system_candidates: [] };
-    window.redevenDesktopLanguage = { getSnapshot: () => language, subscribe: () => () => {} };
+    window.redevenDesktopLanguage = { getSnapshot: () => language, setPreference: () => language, subscribe: () => () => {} };
   }, snapshot);
-  await page.goto(new URL('flower-navigation.html?progressive', url).href);
+  await page.goto(new URL('flower-navigation.html?progressive&delayed-first-page', url).href);
   await page.getByRole('button', { name: 'Flower', exact: true }).click();
   await page.locator('[data-flower-runtime-availability=preparing]').waitFor();
   await page.evaluate(() => window.navigationFixture.releaseRuntime());
+  await page.locator('#redeven-flower-surface .flower-warmup[aria-busy=true]').waitFor();
+  assert.equal(await page.locator('.flower-chat-shell').count(), 0);
+  assert.equal(await page.locator('.flower-workspace-sync').count(), 0);
+  assert.equal(await page.locator('.flower-composer textarea').count(), 0);
+  await page.screenshot({ path: path.join(output, 'initial-loading.png') });
+  await page.evaluate(() => window.navigationFixture.releaseFirstPage());
   await page.locator('[data-thread-id=navigation-thread] button').first().click();
   await page.locator('[data-flower-selected-thread-id=navigation-thread][data-flower-selected-thread-loading=false]').waitFor();
   const composer = page.locator('.flower-composer-content textarea').first();
@@ -65,6 +71,6 @@ await session.run(async () => {
   await session.closeElectron(application);
   await session.writeEvidence(path.join(output, 'report.json'), JSON.stringify({
     commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
-    status: 'passed', pid, partialSelection: true, draftPreserved: true, ...counters, errors,
+    status: 'passed', pid, initialLoading: true, partialSelection: true, draftPreserved: true, ...counters, errors,
   }, null, 2));
 });

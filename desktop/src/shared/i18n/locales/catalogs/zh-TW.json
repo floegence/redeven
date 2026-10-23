@@ -255,6 +255,8 @@
       "defaultModelUpdateFailedTitle": "無法更新預設模型。",
       "reasoningAdjusted": "已為此模型調整推理設定。",
       "modelsUnavailable": "此模型暫時無法使用。請重新整理清單、選擇其他模型或開啟設定。",
+      "initialAuthorization": "恢復存取權限後，重試載入對話。",
+      "initialLocked": "解除存取鎖定後，重試載入對話。",
       "warmupTitle": "正在準備 Flower",
       "warmupDetail": "Desktop 會先啟動本機環境的執行階段，再讓 Flower 載入對話。",
       "warmupComposerPlaceholder": "正在本機環境中準備 Flower...",

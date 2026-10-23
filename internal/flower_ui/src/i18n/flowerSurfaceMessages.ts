@@ -70,6 +70,8 @@ export const flowerSurfaceEnUS = {
     modelUnavailableMissingKeys: "This model provider has no credentials configured. Add credentials in settings.",
     modelUnavailableProviderDisabled: "This model provider is disabled. Enable it in settings or select another model.",
     modelUnavailableModelMissing: "This model is absent from the provider model list. Check its model ID in settings or select another model.",
+    initialAuthorization: "Restore access to load your conversations, then try again.",
+    initialLocked: "Unlock access to load your conversations, then try again.",
     warmupTitle: 'Preparing Flower',
     warmupDetail: 'Desktop is starting the Local Environment runtime before Flower loads conversations.',
     warmupComposerPlaceholder: 'Preparing Flower on Local Environment...',
