@@ -32,7 +32,7 @@ func (s *Service) ReadTerminalProcess(ctx context.Context, meta *session.Meta, r
 	if !ok || proc == nil {
 		return nil, errors.New("terminal process not found")
 	}
-	snapshot, err := proc.ReadAfter(terminalProcessReadRequest{
+	snapshot, err := proc.ReadAfter(ctx, terminalProcessReadRequest{
 		ProcessID: strings.TrimSpace(processID),
 		AfterSeq:  afterSeq,
 		WaitMS:    terminalProcessUIReadWaitMS,

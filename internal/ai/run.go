@@ -1548,6 +1548,9 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 			return outcome, nil
 		}
 		if errors.Is(toolErrRaw, context.Canceled) {
+			// A returned local read only observed bytes; canceling it has no
+			// uncertain process effect. Command execution still requires exit proof.
+			outcome.cancellationConfirmed = toolName == "terminal.read" && !r.shouldRouteTargetTool(toolName)
 			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Canceled", Retryable: false}, "", partial)
 			return outcome, nil
 		}
@@ -2007,7 +2010,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		if utf8.RuneCountInString(description) > terminalDescriptionMaxRunes {
 			return nil, errors.New("invalid args: description is too long")
 		}
-		return r.toolTerminalRead(p.ProcessID, p.AfterSeq)
+		return r.toolTerminalRead(ctx, p.ProcessID, p.AfterSeq)
 
 	case "terminal.write":
 		if !session.AllowsProcessLaunch(meta) {
@@ -3601,16 +3604,16 @@ func (r *run) terminalProcessForTool(processID string) (*terminalProcess, error)
 	return proc, nil
 }
 
-func (r *run) toolTerminalRead(processID string, afterSeq int64) (any, error) {
-	return r.toolTerminalReadWithWait(processID, afterSeq, terminalProcessModelReadWaitMS)
+func (r *run) toolTerminalRead(ctx context.Context, processID string, afterSeq int64) (any, error) {
+	return r.toolTerminalReadWithWait(ctx, processID, afterSeq, terminalProcessModelReadWaitMS)
 }
 
-func (r *run) toolTerminalReadWithWait(processID string, afterSeq int64, waitMS int64) (any, error) {
+func (r *run) toolTerminalReadWithWait(ctx context.Context, processID string, afterSeq int64, waitMS int64) (any, error) {
 	proc, err := r.terminalProcessForTool(processID)
 	if err != nil {
 		return nil, err
 	}
-	snapshot, err := proc.ReadAfter(terminalProcessReadRequest{
+	snapshot, err := proc.ReadAfter(ctx, terminalProcessReadRequest{
 		ProcessID: strings.TrimSpace(processID),
 		AfterSeq:  afterSeq,
 		WaitMS:    waitMS,
@@ -3622,6 +3625,8 @@ func (r *run) toolTerminalReadWithWait(processID string, afterSeq int64, waitMS 
 	r.observeTerminalOutputEncodingRepair(snapshot, "read")
 	payload := terminalProcessResultPayload(snapshot)
 	payload["operation"] = "read"
+	payload["wait_ms"] = waitMS
+	payload["wait_expired"] = snapshot.readWaitExpired
 	return payload, nil
 }
 

@@ -661,7 +661,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "terminal.read",
-			Description:      "Read new output after after_seq, waiting up to 10 seconds and returning sooner when output arrives or the process ends. On timeout with no new output, returns status=running, process_id, and an unchanged cursor. If has_more, read again; status=running remains active even with empty output.",
+			Description:      "Read new output after after_seq, waiting up to 60 seconds and returning sooner when output arrives or the process ends. wait_expired means only the read window ended; it does not time out or stop the command. data.status describes the process: running remains active even with empty output and an unchanged cursor. If has_more or you still need the running command's result, call terminal.read again with the same process_id and the returned last_seq. Do not restart the command or add sleeps to wait for it. Cancellation interrupts the read; terminal.terminate explicitly stops the process.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string"}, "description": map[string]any{"type": "string", "minLength": 1, "maxLength": terminalDescriptionMaxRunes, "description": "User-facing command/task description in the user's language."}, "after_seq": map[string]any{"type": "integer", "minimum": 0, "description": "0 for the first read; then the previous result's last_seq unchanged."}}, "required": []string{"process_id", "description", "after_seq"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,

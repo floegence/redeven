@@ -23,7 +23,7 @@ const (
 	terminalProcessDefaultYieldMS   = 5_000
 	terminalProcessMaxYieldMS       = 30_000
 	terminalProcessOutputChunkBytes = 4_000
-	terminalProcessModelReadWaitMS  = 10_000
+	terminalProcessModelReadWaitMS  = 60_000
 	terminalProcessModelReadBytes   = 8_000
 	terminalProcessUIReadWaitMS     = 1_000
 	terminalProcessUIReadBytes      = 256_000
@@ -101,6 +101,7 @@ type terminalProcessSnapshot struct {
 	ExecutionLocation  string             `json:"execution_location"`
 	Error              *aitools.ToolError `json:"error,omitempty"`
 	outputUTF8Repaired bool
+	readWaitExpired    bool
 }
 
 type terminalProcess struct {
@@ -341,12 +342,12 @@ func (m *terminalProcessManager) ProcessesForRun(endpointID string, threadID str
 	return matched
 }
 
-func (m *terminalProcessManager) ReadAfter(req terminalProcessReadRequest) (terminalProcessSnapshot, error) {
+func (m *terminalProcessManager) ReadAfter(ctx context.Context, req terminalProcessReadRequest) (terminalProcessSnapshot, error) {
 	proc, ok := m.Get(req.ProcessID)
 	if !ok {
 		return terminalProcessSnapshot{}, errors.New("terminal process not found")
 	}
-	return proc.ReadAfter(req)
+	return proc.ReadAfter(ctx, req)
 }
 
 func (m *terminalProcessManager) Write(processID string, input string) (terminalProcessSnapshot, error) {
@@ -409,7 +410,7 @@ func (p *terminalProcess) Snapshot() terminalProcessSnapshot {
 	return snapshot
 }
 
-func (p *terminalProcess) ReadAfter(req terminalProcessReadRequest) (terminalProcessSnapshot, error) {
+func (p *terminalProcess) ReadAfter(ctx context.Context, req terminalProcessReadRequest) (terminalProcessSnapshot, error) {
 	if p == nil {
 		return terminalProcessSnapshot{}, errors.New("terminal process not found")
 	}
@@ -417,36 +418,43 @@ func (p *terminalProcess) ReadAfter(req terminalProcessReadRequest) (terminalPro
 		return terminalProcessSnapshot{}, errors.New("invalid after_seq")
 	}
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	if req.AfterSeq > p.lastSeq {
-		p.mu.Unlock()
 		return terminalProcessSnapshot{}, errors.New("invalid after_seq: exceeds latest sequence")
 	}
 	waitMS := req.WaitMS
 	if waitMS < 0 {
-		p.mu.Unlock()
 		return terminalProcessSnapshot{}, errors.New("invalid terminal read wait")
 	}
 	maxBytes := req.MaxBytes
 	if maxBytes < terminalProcessOutputChunkBytes {
-		p.mu.Unlock()
 		return terminalProcessSnapshot{}, errors.New("invalid terminal read size")
 	}
+	if err := ctx.Err(); err != nil {
+		return terminalProcessSnapshot{}, err
+	}
 	deadline := time.Now().Add(time.Duration(waitMS) * time.Millisecond)
-	for p.lastSeq <= req.AfterSeq && p.status == terminalProcessStatusRunning {
-		remaining := time.Until(deadline)
-		if remaining <= 0 {
-			break
-		}
-		timer := time.AfterFunc(remaining, func() {
+	if waitMS > 0 && p.lastSeq <= req.AfterSeq && p.status == terminalProcessStatusRunning {
+		wake := func() {
 			p.mu.Lock()
 			p.cond.Broadcast()
 			p.mu.Unlock()
-		})
-		p.cond.Wait()
-		timer.Stop()
+		}
+		// One deadline and the caller's cancellation wake the same observation.
+		// Neither changes the process lifecycle or grants permission to replay it.
+		timer := time.AfterFunc(time.Until(deadline), wake)
+		defer timer.Stop()
+		stopCancellation := context.AfterFunc(ctx, wake)
+		defer stopCancellation()
+		for p.lastSeq <= req.AfterSeq && p.status == terminalProcessStatusRunning && ctx.Err() == nil && time.Now().Before(deadline) {
+			p.cond.Wait()
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return terminalProcessSnapshot{}, err
 	}
 	snapshot := p.readAfterLocked(req.AfterSeq, maxBytes)
-	p.mu.Unlock()
+	snapshot.readWaitExpired = waitMS > 0 && p.lastSeq <= req.AfterSeq && p.status == terminalProcessStatusRunning && !time.Now().Before(deadline)
 	return snapshot, nil
 }
 
