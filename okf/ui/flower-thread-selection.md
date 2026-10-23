@@ -31,7 +31,15 @@ shows separate loading feedback confined to the transcript region; failed body
 reads expose local Retry. The composer and navigation remain available.
 
 Cached destinations flush that same layout pass after render effects and before
-the task's paint, avoiding a transient loading frame. The two-slot body loader
+the task's paint. Completed historical rows use `content-visibility: auto`;
+intrinsic placeholder heights do not establish layout readiness, even when all
+text is cached. Destination-visible row content must pass the browser's
+`checkVisibility({ contentVisibilityAuto: true })` check before reveal. The
+scroll owner's one capture listener receives non-bubbling
+`contentvisibilityautostatechange` notifications and coalesces them with resize
+notifications into its existing layout pass. No timed reveal, polling, per-row
+observer or disabling of offscreen layout is allowed. A cached destination may
+retain preparation until that native layout is available. The two-slot body loader
 prepares the latest visible text first, including its existing viewport margin,
 and cancels obsolete demand on navigation or transport boundaries. Immutable
 bodies remain in ThreadCache; no additional content cache or polling loop exists.

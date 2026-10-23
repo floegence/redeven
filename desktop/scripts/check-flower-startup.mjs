@@ -40,7 +40,7 @@ await session.run(async () => {
     const language = { preference: 'zh-CN', resolved_locale: 'zh-CN', source: 'explicit', system_candidates: [] };
     window.redevenDesktopLanguage = { getSnapshot: () => language, setPreference: () => language, subscribe: () => () => {} };
   }, snapshot);
-  await page.goto(new URL('flower-navigation.html?progressive&delayed-first-page', url).href);
+  await page.goto(new URL('flower-navigation.html?progressive&delayed-first-page&settled-history', url).href);
   await page.getByRole('button', { name: 'Flower', exact: true }).click();
   await page.locator('[data-flower-runtime-availability=preparing]').waitFor();
   await page.evaluate(() => window.navigationFixture.releaseRuntime());
@@ -67,7 +67,8 @@ await session.run(async () => {
   assert.deepEqual(errors, []);
   await page.screenshot({ path: path.join(output, 'complete.png') });
   // Sample rendering opportunities in the built native renderer. Cached
-  // navigation must never paint an intermediate loading or top position.
+  // navigation must never expose intrinsic placeholder geometry as content.
+  assert.ok(await page.locator('[data-flower-turn-settled=true]').count() > 0);
   const warmSwitches = [];
   for (let attempt = 0; attempt < 3; attempt++) {
     await page.locator('.flower-sidebar-actions .flower-new-chat-button').click();
@@ -82,12 +83,15 @@ await session.run(async () => {
         if (surface?.getAttribute('data-flower-selected-thread-id') !== 'navigation-thread') continue;
         const viewport = surface.querySelector('.flower-chat-transcript');
         frames.push({ time: performance.now() - started, preparing: viewport.dataset.flowerTailPreparing === 'true',
+          top: viewport.scrollTop, height: viewport.scrollHeight,
           distance: viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop });
       }
       return frames;
     });
     assert.ok(result.length > 0);
-    assert.ok(result.every(frame => !frame.preparing && Math.abs(frame.distance) <= 1));
+    const exposed = result.filter(frame => !frame.preparing);
+    assert.ok(exposed.length > 0);
+    assert.ok(exposed.every(frame => frame.top > 1000 && Math.abs(frame.distance) <= 1), JSON.stringify(result));
     warmSwitches.push(result);
   }
   await page.evaluate(() => window.navigationFixture.dispose());

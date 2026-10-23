@@ -345,6 +345,9 @@ export function createFlowerScrollTailController(
     document.addEventListener('click', onClick, true);
     window.addEventListener('blur', onBlur);
     node.addEventListener('scrollend', endUserScroll);
+    // Historical rows may acquire real layout without a message mutation.
+    // Capture their non-bubbling notification and reuse the same layout pass.
+    node.addEventListener('contentvisibilityautostatechange', measureAfterLayout, true);
     const resizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(measureAfterLayout) : undefined;
     resizeObserver?.observe(node);
     if (node.firstElementChild) resizeObserver?.observe(node.firstElementChild);
@@ -356,6 +359,7 @@ export function createFlowerScrollTailController(
       document.removeEventListener('click', onClick, true);
       window.removeEventListener('blur', onBlur);
       boundNode.removeEventListener('scrollend', endUserScroll);
+      boundNode.removeEventListener('contentvisibilityautostatechange', measureAfterLayout, true);
       resizeObserver?.disconnect();
       disconnect = undefined;
     };

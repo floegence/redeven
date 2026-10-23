@@ -39,6 +39,7 @@ let aiReady = false;
 const goalMode = new URLSearchParams(location.search).has('goal');
 const progressiveMode = new URLSearchParams(location.search).has('progressive');
 const delayedFirstPage = new URLSearchParams(location.search).has('delayed-first-page');
+const settledHistory = new URLSearchParams(location.search).has('settled-history');
 let goal: FlowerGoal = { version: 1, text: 'Confirm the release and preserve every requirement.', actor: 'user', status: 'active' };
 let releaseGoalRead: ((fail: boolean) => void) | undefined;
 const unavailable = () => ({ ok: false as const, error: { code: 'AI_SERVICE_UNAVAILABLE', status: 503,
@@ -105,6 +106,13 @@ const mediaRef = `computer://browser-main/${'a'.repeat(64)}`;
 const mediaHTML = '<h1>Daily brief</h1><input aria-label="Reading note"><button onclick="this.textContent=\'Updated\'">Update report</button><a href="#economy">Economy</a><a href="https://example.com/news">News source</a><a href="javascript:alert(1)">Unsupported link</a><section id="economy" style="margin-top:1200px">Economy section</section>';
 
 let current: FlowerRuntimeCurrentView = { thread_id: thread.thread_id, view_version: 1, activity: 'idle', items: [{ id: 'navigation-input', kind: 'user', turn_id: 'navigation-turn', run_id: 'navigation-run', ordinal: 1, text: 'Inspect this workspace' }, { id: 'density-reading', kind: 'assistant', turn_id: 'navigation-turn', run_id: 'navigation-run', ordinal: 2, text: mediaMode ? `Here is the workspace preview.\n\n![Workspace](${mediaRef})\n\n\`\`\`html preview\n${mediaHTML}\n\`\`\`\n\nReady for your next step.` : INTERFACE_DENSITY_MARKDOWN }], queue: [], interactions: [] };
+if (settledHistory) current = { ...current, last_outcome: 'completed',
+  items: current.items?.map(item => item.id === 'density-reading' ? { ...item, text: `${item.text}\n\n${'Completed historical paragraph.\n\n'.repeat(60)}` } : item),
+  turns: [{
+  turn_id: 'navigation-turn', run_id: 'navigation-run', started_at: '2026-10-23T12:00:00Z', ended_at: '2026-10-23T12:01:00Z',
+  outcome: 'completed', elapsed_ms: 60000, waiting_ms: 0, work_duration_ms: 60000,
+  intermediate_item_ids: [], final_item_ids: ['density-reading'], final_boundary_complete: true,
+}] };
 const settings: DesktopWelcomeRuntime['settings'] = {
   async load() { return { ok: false, error: 'No environment settings in this fixture.' }; },
   async save() { return { ok: false, error: 'No settings mutations in this fixture.' }; },

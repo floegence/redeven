@@ -36,6 +36,29 @@ The item-window budget excludes product metadata and pending controls. Cold back
 
 # Evidence
 
+## Completed-history layout correction, 2026-10-23
+
+The earlier destination tests and native fixture omitted terminal turn metadata,
+so they did not exercise the historical row `content-visibility: auto` path.
+Complete inline or cached text also bypassed the body-placeholder measurements
+that happened to trigger layout in the hydration fixture. The earlier results
+therefore did not establish first-frame stability for ordinary completed history.
+
+A geometry-only trace of the reported development renderer (bundle commit
+`0abb96b3a416`, including the prior presentation fix) reproduced visible content
+at scrollTop 0 and scrollHeight 584, then height 3246 at top 0, then top 2661.5.
+Changing hidden visibility to opacity did not repair it. Disabling historical
+content visibility eliminated it, isolating native skipped layout as the cause;
+all temporary instrumentation was removed and no conversation text was retained.
+
+Canonical completed-turn fixtures with full inline text now assert every exposed
+frame on cold and cached selection for two and twenty-four long rows. They also
+assert zero body reads and retained offscreen layout skipping. The layout-event
+test covers capture of non-bubbling notifications, manual reading ownership and
+listener disposal. Built Electron acceptance uses a completed long response and
+requires the first exposed frame to be more than 1000 px from the top and within
+one pixel of the bottom on three repeated cached selections.
+
 ## Destination presentation qualification, 2026-10-23
 
 A paired local Chromium diagnostic used twenty synthetic historical text items,
