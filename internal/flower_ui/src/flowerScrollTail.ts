@@ -24,6 +24,7 @@ export type FlowerScrollTailController = Readonly<{
   onWheel: (event: WheelEvent) => void;
   measureAfterLayout: () => void;
   flushLayout: () => void;
+  prepareArrival: () => number;
   scheduleTailScroll: (options?: Readonly<{ smooth?: boolean; force?: boolean }>) => void;
   scrollToBottom: (options?: Readonly<{ smooth?: boolean }>) => void;
   dispose: () => void;
@@ -116,15 +117,15 @@ export function createFlowerScrollTailController(
     pendingScroll = undefined;
     if (request?.smooth && !options.reducedMotionPreferred()) {
       smoothScroll = { startedAt: timestamp, startTop: scrollTop };
-    } else if (request) smoothScroll = undefined;
+    }
     let nextTop = scrollTop + anchorDelta;
     if (followingLatest() && (options.canFollowLatest?.() ?? true)) {
       const bottom = Math.max(0, scrollHeight - viewportHeight);
-      if (smoothScroll) {
+      if (smoothScroll && !options.reducedMotionPreferred()) {
         const progress = Math.min(1, Math.max(0, (timestamp - smoothScroll.startedAt) / FLOWER_TRANSCRIPT_SCROLL_TO_LATEST_MS));
         nextTop = smoothScroll.startTop + (bottom - smoothScroll.startTop) * (1 - (1 - progress) ** 3);
         if (progress >= 1) smoothScroll = undefined;
-      } else nextTop = bottom;
+      } else { smoothScroll = undefined; nextTop = bottom; }
     }
     if (nextTop !== scrollTop) setScrollTop(target, nextTop);
     setNearBottom(scrollHeight - nextTop - viewportHeight <= FLOWER_TRANSCRIPT_NEAR_BOTTOM_THRESHOLD_PX);
@@ -151,7 +152,7 @@ export function createFlowerScrollTailController(
   const scheduleTailScroll = (scrollOptions: Readonly<{ smooth?: boolean; force?: boolean }> = {}) => {
     if (!scrollOptions.force && !followingLatest()) return;
     if (scrollOptions.force) startFollowing();
-    pendingScroll = scrollOptions;
+    pendingScroll = { ...scrollOptions, smooth: scrollOptions.smooth || pendingScroll?.smooth };
     scheduleLayout();
   };
   const measureAfterLayout = scheduleLayout;
@@ -387,6 +388,14 @@ export function createFlowerScrollTailController(
     flushLayout: () => {
       layoutFrame = clearFrame(layoutFrame);
       layout(performance.now());
+    },
+    prepareArrival: () => {
+      if (!node || !followingLatest() || !(options.canFollowLatest?.() ?? true) || options.reducedMotionPreferred()
+        || node.scrollHeight - node.clientHeight - node.scrollTop <= 1) return 0;
+      // A burst shares the current motion deadline. Ordinary layout notices
+      // retarget its destination without turning it back into a one-frame jump.
+      if (!smoothScroll && !pendingScroll?.smooth) scheduleTailScroll({ smooth: true });
+      return FLOWER_TRANSCRIPT_SCROLL_TO_LATEST_MS;
     },
     scheduleTailScroll,
     scrollToBottom,

@@ -10759,7 +10759,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         : presentation().title;
     });
     const revealTitle = useFlowerActivityTitleReveal(disclosureKey,
-      () => [displayTitle(), item().status, item().requires_approval, item().approval_state]);
+      () => [displayTitle(), item().status, item().requires_approval, item().approval_state],
+      () => !['pending', 'running', 'success'].includes(item().status) || Boolean(item().requires_approval || item().approval_state));
     const terminalDisclosure = createMemo(() => presentation().detailBlocks.some((block) => block.kind === 'terminal_output'));
     const detailKeys = createMemo(() => presentation().detailBlocks.map((block) => `${disclosureKey()}:${block.kind}:${block.kind === 'structured_rows' ? block.section ?? '' : ''}`));
     const detailsByKey = createMemo(() => {

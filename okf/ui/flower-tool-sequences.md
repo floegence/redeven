@@ -75,6 +75,11 @@ Canonical row components retain their rendering owners when the sequence layout
 places their existing DOM under the first node's viewport. Membership changes
 preserve details, focus and selection; disposal restores borrowed rows to their
 original slots. The transcript controller continues to own outer scroll intent.
+Fresh live arrivals coordinate with both viewport owners after placement: make
+room with a bounded upward scroll, then reveal the new row. Resize notifications
+retarget the existing movement without snapping or restarting it; manual reading
+and reduced-motion preferences retain their existing ownership. See
+[activity motion](flower-activity-interaction.md#visual-motion).
 Unchanged sequence groups and members retain their identities within one thread,
 so content-only streaming does not rerun historical layout or recreate resize
 observers. Membership, status, disclosure and source-order changes still replace
