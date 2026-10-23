@@ -93,7 +93,7 @@ func serveFlowerLiveStreamFrames(w http.ResponseWriter, r *http.Request, subscri
 		}
 		if err != nil {
 			if errors.Is(err, ai.ErrFlowerLiveSync) {
-				// Invalid logical envelopes cannot recover through reconnect.
+				// Lost observation continuity requires a fresh authorized baseline.
 				// Keep this fixed public message independent of private data.
 				_ = write("event: error\ndata: ", []byte(`{"code":"flower_live_sync_error","message":"Flower live stream synchronization failed"}`))
 			}

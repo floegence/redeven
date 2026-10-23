@@ -2,6 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { FlowerReadDeadlineError } from './requestDeadline';
 import { FlowerLiveSyncError } from './flowerLiveWire';
 import { createLiveTransport } from './liveTransport';
 
@@ -102,32 +103,24 @@ describe('LiveTransport recovery ownership', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('releases a stalled handshake after 15 seconds and keeps the failure until a manually restarted ready', async () => {
+  it('retries a stalled handshake through the existing owner and accepts a fresh ready', async () => {
     vi.useFakeTimers();
     const fixture = controlledConnections<{ kind: string }>();
-    const onTerminalError = vi.fn(); const onState = vi.fn();
+    const onTerminalError = vi.fn();
     const transport = createLiveTransport<{ kind: string }>();
-    const stop = transport.start({ ...fixture, onCurrent: vi.fn(), onTerminalError, onState, isReady: value => value.kind === 'ready' });
+    const stop = transport.start({ ...fixture, onCurrent: vi.fn(), onTerminalError, isReady: value => value.kind === 'ready' });
     fixture.connections[0]!.push({ kind: 'summary.batch' });
-    await vi.advanceTimersByTimeAsync(14_999);
-    expect(transport.state().status).toBe('connecting');
-    await vi.advanceTimersByTimeAsync(1);
-    expect(transport.state()).toMatchObject({ status: 'failed', error: { code: 'flower_live_handshake_timeout' } });
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(transport.state()).toMatchObject({ status: 'reconnecting', error: { code: 'flower_live_handshake_timeout' } });
     expect(fixture.connections[0]!.signal.aborted).toBe(true);
-    expect(onTerminalError).toHaveBeenCalledOnce();
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(fixture.connect).toHaveBeenCalledOnce();
-    const failure = transport.state().error;
-    transport.restart();
-    expect(transport.state()).toMatchObject({ status: 'connecting', error: failure });
+    await vi.advanceTimersByTimeAsync(301);
+    expect(fixture.connect).toHaveBeenCalledTimes(2);
     fixture.connections[1]!.push({ kind: 'ready' });
-    await vi.advanceTimersByTimeAsync(0);
-    expect(transport.state()).toEqual({ status: 'ready', connectionEpoch: transport.connectionEpoch() });
-    await vi.advanceTimersByTimeAsync(120_000);
-    expect(onTerminalError).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(onTerminalError).not.toHaveBeenCalled();
     expect(transport.state().status).toBe('ready');
-    expect(onState.mock.calls.map(([value]) => value.status)).toEqual(['connecting', 'failed', 'connecting', 'ready']);
     stop();
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('routes asynchronous application failure through one terminal boundary and cancels all observation', async () => {
@@ -274,4 +267,28 @@ it('recovers sync gaps through the same transport owner and fences repeated late
   transport.fail(new FlowerLiveSyncError('late gap'), epoch);
   await vi.advanceTimersByTimeAsync(301); expect(h.connect).toHaveBeenCalledTimes(2);
   stop(); expect(vi.getTimerCount()).toBe(0);
+});
+
+// HTTP reading-interest baselines use the same owner as the stream. A transient
+// read failure must fence old frames and reconnect, not leave the workspace dead.
+it.each([
+  new FlowerReadDeadlineError('read timed out'),
+  Object.assign(new Error('read transport failed'), { code: 'transport' }),
+  Object.assign(new Error('temporary HTTP failure'), { status: 503, code: 'HTTP_ERROR' }),
+])('recovers a transient asynchronous baseline failure', async error => {
+  vi.useFakeTimers();
+  const fixture = controlledConnections<{ kind: string }>();
+  const terminal = vi.fn(); const boundary = vi.fn();
+  const transport = createLiveTransport<{ kind: string }>();
+  const stop = transport.start({ ...fixture, onCurrent: vi.fn(), onTerminalError: terminal, onBoundary: boundary });
+  const epoch = transport.connectionEpoch();
+  transport.fail(error, epoch);
+  expect(transport.state().status).toBe('reconnecting');
+  expect(fixture.connections[0].signal.aborted).toBe(true);
+  transport.fail(error, epoch);
+  await vi.advanceTimersByTimeAsync(301);
+  expect(fixture.connect).toHaveBeenCalledTimes(2);
+  expect(boundary).toHaveBeenCalledOnce();
+  expect(terminal).not.toHaveBeenCalled();
+  stop();
 });

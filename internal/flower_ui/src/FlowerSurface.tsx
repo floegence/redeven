@@ -1,3 +1,4 @@
+import { createHistoryBodyLoader, createHistoryBodyVisibility } from './historyBodyLoader';
 import { createFlowerThreadBaseline } from './threadBaseline';
 import { loadFlowerThreadList } from './threadListLoad';
 import { createThreadReadSync } from './threadReadSync';
@@ -990,7 +991,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let historyReadingInput: import('./contracts/flowerSurfaceContracts').FlowerHistoryRequest = {};
   const [historyBusy, setHistoryBusy] = createSignal(false);
   const [historyError, setHistoryError] = createSignal('');
-  const [historyBodies, setHistoryBodies] = createSignal<ReadonlyMap<string, 'loading' | 'failed'>>(new Map());
+  const [historyBodyRevision, setHistoryBodyRevision] = createSignal(0);
+  const historyBodies = createHistoryBodyLoader(() => copy().chat.syncTimeout, () => setHistoryBodyRevision(value => value + 1));
+  const historyBodyVisibility = createHistoryBodyVisibility();
   const [threadDetailLoadingIDs, setThreadDetailLoadingIDs] = createSignal<ReadonlySet<string>>(new Set());
   const [localReadVisibilityRevision, setLocalReadVisibilityRevision] = createSignal(0);
   const [threadActionBusy, setThreadActionBusy] = createSignal<{ threadID: string; action: FlowerThreadMenuAction } | null>(null);
@@ -3934,35 +3937,41 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const historyBodyKey = (threadID: string, itemID: string) => JSON.stringify([threadID, itemID]);
-  const loadHistoryItem = async (threadID: string, itemID: string) => {
+  const loadHistoryItem = (threadID: string, itemID: string, visibleSignal?: AbortSignal, retry = false, viewportScope?: FlowerScrollTailController) => {
     const expected = threadCache().runtimeItem(threadID, itemID);
     if (!expected || (!expected.body && !expected.activity_bodies?.length) || !props.adapter.loadHistoryItem) return;
-    const key = historyBodyKey(threadID, itemID);
-    if (historyBodies().get(key) === 'loading') return;
-    const signal = navigationReadController.signal;
+    const signal = visibleSignal ? AbortSignal.any([navigationReadController.signal, visibleSignal]) : navigationReadController.signal;
     const epoch = liveTransport.connectionEpoch();
-    setHistoryBodies(previous => new Map(previous).set(key, 'loading'));
-    try {
-      const item = await props.adapter.loadHistoryItem(threadID, itemID, signal);
-      signal.throwIfAborted();
+    historyBodies.request(historyBodyKey(threadID, itemID), expected, signal, async readSignal => {
+      const item = await props.adapter.loadHistoryItem!(threadID, itemID, readSignal);
+      readSignal.throwIfAborted();
       if (epoch !== liveTransport.connectionEpoch()) throw new DOMException('Read was superseded.', 'AbortError');
+      const viewport = viewportScope?.viewport();
+      const bounds = viewport?.getBoundingClientRect();
+      const anchor = viewport && bounds && !viewportScope!.followingLatest()
+        ? [...viewport.querySelectorAll<HTMLElement>('[data-flower-message-id]')].find(element => {
+          const top = element.getBoundingClientRect().top;
+          return top >= bounds.top && top < bounds.bottom;
+        }) : undefined;
+      if (anchor) {
+        viewportScope!.preserveLayoutAnchor(anchor);
+        requestTranscriptAnimationFrame(() => viewportScope!.finishDisclosure(anchor));
+      }
       if (!threadCache().hydrateItem(threadID, expected, item)) {
-        if (selectedThreadID() === threadID && (threadCache().runtimeItem(threadID, itemID)?.body || threadCache().runtimeItem(threadID, itemID)?.activity_bodies?.length)) throw new Error('Body changed during read.');
-        setHistoryBodies(previous => { const next = new Map(previous); next.delete(key); return next; });
+        if (threadCache().runtimeItem(threadID, itemID)?.body || threadCache().runtimeItem(threadID, itemID)?.activity_bodies?.length) throw new Error('Body changed during read.');
         return;
       }
-      setHistoryBodies(previous => { const next = new Map(previous); next.delete(key); return next; });
       setTranscriptLayoutRevision(value => value + 1);
-    } catch {
-      setHistoryBodies(previous => { const next = new Map(previous); if (signal.aborted) next.delete(key); else next.set(key, 'failed'); return next; });
-    }
+    }, retry);
   };
-  const historyBodyControl = (threadID: Accessor<string>, itemID: Accessor<string>) => {
-    const state = () => historyBodies().get(historyBodyKey(threadID(), itemID()));
-    return <div class="flower-history-body-control" role="status">
-      <Show when={state() === 'failed'}><span>{copy().chat.history.failed}</span></Show>
-      <button type="button" class="flower-parent-event-action" disabled={state() === 'loading'} aria-busy={state() === 'loading'}
-        onClick={() => void loadHistoryItem(threadID(), itemID())}>{state() === 'loading' ? copy().chat.history.loading : state() === 'failed' ? copy().chat.handlerRetry : copy().chat.history.expand}</button>
+  const historyBodyControl = (threadID: Accessor<string>, itemID: Accessor<string>, viewportScope: FlowerScrollTailController) => {
+    const state = () => { historyBodyRevision(); return historyBodies.state(historyBodyKey(threadID(), itemID())); };
+    return <div class="flower-history-body-control" role="status" aria-busy={state() !== 'failed'}>
+      <Show when={state() === 'failed'} fallback={<span>{copy().chat.history.loading}</span>}>
+        <span>{copy().chat.history.failed}</span>
+        <button type="button" class="flower-parent-event-action"
+          onClick={() => loadHistoryItem(threadID(), itemID(), undefined, true, viewportScope)}>{copy().chat.handlerRetry}</button>
+      </Show>
     </div>;
   };
   const readHistory = async (tid: string, input: import('./contracts/flowerSurfaceContracts').FlowerHistoryRequest, signal: AbortSignal, foreground: boolean) => {
@@ -4401,7 +4410,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       closeSubagentOverlays();
       cancelPresentedSelectionSchedule();
       setPresentedSelection(null);
-      historyReadingRevision++; historyReadingInput = {}; historyReadingThreadID = tid; setHistoryBusy(false); setHistoryError(''); setHistoryBodies(new Map());
+      historyReadingRevision++; historyReadingInput = {}; historyReadingThreadID = tid; setHistoryBusy(false); setHistoryError('');
       beginThreadDetailDisplayCycle(tid);
       setThreadLoadError('');
       transcriptScroll.startFollowing();
@@ -5247,7 +5256,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         setActiveComputerViewerRevision(++computerViewerRevision);
         setComputerObserverID(''); setComputerLiveFrame(undefined);
       },
-      onTerminalError: () => undefined,
+      onTerminalError: error => {
+        const failure = error as { name?: unknown; code?: unknown; status?: unknown } | null;
+        // Never log payloads, credentials or arbitrary server error messages.
+        console.error('Flower live synchronization stopped.', {
+          connection_epoch: liveTransport.connectionEpoch(),
+          error_name: typeof failure?.name === 'string' ? failure.name.slice(0, 80) : 'Error',
+          error_code: typeof failure?.code === 'string' ? failure.code.slice(0, 80) : 'unclassified',
+          http_status: Number(failure?.status) || 0,
+        });
+      },
     });
     onCleanup(() => { frames.dispose(); stop(); });
   });
@@ -10769,9 +10787,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       || item().renderer === 'web_search' && !item().tool_name?.startsWith('okf.')) ? hasDetails() : item().kind === 'tool' || hasDetails()));
     const open = () => expandable() && disclosureControl.open();
     createEffect(() => {
-      if (open() && item().body_pending && !untrack(() => historyBodies().has(historyBodyKey(timeline().thread_id ?? '', messageID())))) {
-        void loadHistoryItem(timeline().thread_id ?? '', messageID());
-      }
+      void liveSyncState().connectionEpoch;
+      if (!open() || !item().body_pending) return;
+      const tid = timeline().thread_id ?? '';
+      const id = messageID();
+      const controller = new AbortController();
+      untrack(() => loadHistoryItem(tid, id, controller.signal, false, viewportScope));
+      onCleanup(() => controller.abort());
     });
     const threadPreviewTool = () => item().status === 'success' && ['threads.query', 'threads.read', 'threads.aggregate'].includes(item().tool_name ?? '') && Boolean(props.adapter.loadToolPreview);
     const [previewRequest, setPreviewRequest] = createSignal<FlowerToolPreviewRequest>();
@@ -10931,7 +10953,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   terminalDisclosure() && 'flower-activity-inline-details-content-terminal',
                 )}
               >
-                <Show when={item().body_pending}>{historyBodyControl(() => timeline().thread_id ?? '', messageID)}</Show>
+                <Show when={item().body_pending}>{historyBodyControl(() => timeline().thread_id ?? '', messageID, viewportScope)}</Show>
                 <Show when={item().approval_state === 'rejected' && !terminalDisclosure()}>
                   <div class="flower-activity-approval-rejected-detail">
                     {copy().chat.toolApprovalRejectedDetail}
@@ -11330,12 +11352,33 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 const showCopyAction = () => !message().body_pending && message().role === 'assistant'
                   && contentBlock().key === assistantCopyBlockKey();
                 const streaming = () => streamingBlockKey() === contentBlock().key;
-                return <Show when={message().body_pending?.kind === 'text'} fallback={messageContentBubble(message, contentBlock, streaming, showCopyAction, copyText, thread, media)}>
-                  <div class={cn('flower-history-text-preview', 'flower-message-bubble', message().role === 'user' && 'flower-message-bubble-user')}>
-                    <pre>{contentBlock().content}</pre>
-                    {historyBodyControl(() => thread()?.thread_id ?? '', () => message().id)}
-                  </div>
-                </Show>;
+                let shell!: HTMLDivElement;
+                const [visible, setVisible] = createSignal(false);
+                onMount(() => createEffect(() => {
+                  if (message().body_pending?.kind !== 'text') return;
+                  const viewport = viewportScope.viewport();
+                  if (viewport) onCleanup(historyBodyVisibility.observe(shell, viewport, setVisible));
+                }));
+                createEffect(() => {
+                  const pending = message().body_pending;
+                  const tid = thread()?.thread_id ?? '';
+                  const itemID = message().id;
+                  // Reconnection establishes new read authority even when the same
+                  // retained message stays mounted. Failed reads wait for Retry.
+                  void liveSyncState().connectionEpoch;
+                  if (!visible() || pending?.kind !== 'text') return;
+                  const controller = new AbortController();
+                  untrack(() => loadHistoryItem(tid, itemID, controller.signal, false, viewportScope));
+                  onCleanup(() => controller.abort());
+                });
+                return <div ref={shell} class="flower-history-message">
+                  <Show when={message().body_pending?.kind === 'text'} fallback={messageContentBubble(message, contentBlock, streaming, showCopyAction, copyText, thread, media)}>
+                    <div class={cn('flower-history-text-loading', 'flower-message-bubble', message().role === 'user' && 'flower-message-bubble-user')}>
+                      <div class="flower-history-text-skeleton" aria-hidden="true"><span /><span /><span /></div>
+                      {historyBodyControl(() => thread()?.thread_id ?? '', () => message().id, viewportScope)}
+                    </div>
+                  </Show>
+                </div>;
               }}
           </Show>
         )}

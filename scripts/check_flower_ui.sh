@@ -123,6 +123,7 @@ main() {
     ui_pkg_log "Flower UI: shared timeline projection contracts..."
     ui_pkg_run_pnpm exec vitest run --root "$ROOT_DIR" --config "$dir/vite.config.ts" --environment=node --maxWorkers=2 --testTimeout=10000 \
       internal/flower_ui/src/requestDeadline.test.ts \
+      internal/flower_ui/src/historyBodyLoader.test.ts \
       internal/flower_ui/src/conversationPreferences.test.ts \
       internal/flower_ui/src/providerRequestProgress.test.ts \
       internal/flower_ui/src/flowerToolMotion.test.ts \

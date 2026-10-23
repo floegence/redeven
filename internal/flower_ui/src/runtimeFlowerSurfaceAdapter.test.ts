@@ -1088,3 +1088,20 @@ describe('progressive conversation list', () => {
     }
   });
 });
+
+it.each([
+  new TypeError('Failed to fetch'),
+  Object.assign(new Error('bridge response lost'), { failureKind: 'transport_unknown' }),
+])('classifies a failed history transport separately from mapping', async error => {
+  const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ loadHistory: async () => { throw error; } }));
+  await expect(adapter.loadHistory!('thread', {}, new AbortController().signal)).rejects.toMatchObject({ code: 'transport', cause: error });
+});
+
+it.each([
+  Object.assign(new Error('denied'), { status: 403, code: 'ACCESS_DENIED' }),
+  Object.assign(new Error('invalid JSON'), { status: 200, code: 'INVALID_JSON_RESPONSE' }),
+  new Error('contract failure'),
+])('preserves non-transport history errors', async error => {
+  const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ loadHistory: async () => { throw error; } }));
+  await expect(adapter.loadHistory!('thread', {}, new AbortController().signal)).rejects.toBe(error);
+});
