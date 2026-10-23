@@ -1,3 +1,4 @@
+import { createThreadRailResize, loadThreadRailWidth, saveThreadRailWidth, THREAD_RAIL_WIDTH_DEFAULT, THREAD_RAIL_WIDTH_MIN, THREAD_RAIL_WIDTH_MAX } from './threadRailResize';
 import { createHistoryBodyLoader, createHistoryBodyVisibility } from './historyBodyLoader';
 import { createFlowerThreadBaseline } from './threadBaseline';
 import { loadFlowerThreadList } from './threadListLoad';
@@ -422,10 +423,6 @@ type PendingAdmissionHandoff = Readonly<{
   settle: (threadID: string, transferDraftScope: boolean) => void;
 }>;
 
-const THREAD_RAIL_WIDTH_STORAGE_KEY = 'redeven.flower.threadRailWidth';
-const THREAD_RAIL_WIDTH_DEFAULT = 272;
-const THREAD_RAIL_WIDTH_MIN = 220;
-const THREAD_RAIL_WIDTH_MAX = 380;
 const SIDEBAR_STABLE_LIVE_STATUSES = new Set<FlowerThreadStatus>(['running']);
 const PENDING_NEW_THREAD_ID = '__new_thread__';
 const FLOWER_PERMISSION_TYPES: readonly FlowerPermissionType[] = ['readonly', 'approval_required', 'full_access'];
@@ -539,16 +536,6 @@ function flowerApprovalRequest(
     approved,
     ...(rejectAll ? { reject_all: true } : {}),
   };
-}
-
-function clampThreadRailWidth(width: number): number {
-  return Math.min(THREAD_RAIL_WIDTH_MAX, Math.max(THREAD_RAIL_WIDTH_MIN, Math.round(width)));
-}
-
-function loadThreadRailWidth(): number {
-  if (typeof window === 'undefined') return THREAD_RAIL_WIDTH_DEFAULT;
-  const stored = Number(window.localStorage.getItem(THREAD_RAIL_WIDTH_STORAGE_KEY));
-  return Number.isFinite(stored) ? clampThreadRailWidth(stored) : THREAD_RAIL_WIDTH_DEFAULT;
 }
 
 function normalizeSubagentPanelStatus(value: unknown): FlowerSubagentPanelStatus {
@@ -1057,7 +1044,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [deleteSubmitting, setDeleteSubmitting] = createSignal(false);
   const [deleteError, setDeleteError] = createSignal('');
   const [selectedThreadTailReveal, setSelectedThreadTailReveal] = createSignal<SelectedThreadTailReveal | null>(null);
-  const [threadRailResizing, setThreadRailResizing] = createSignal(false);
   const [threadSwitcherOpen, setThreadSwitcherOpen] = createSignal(false);
   const [threadSwitcherQuery, setThreadSwitcherQuery] = createSignal('');
   const [presentedSelection, setPresentedSelection] = createSignal<Readonly<{ threadID: string; sequence: number; contentRevision: number }> | null>(null);
@@ -4671,11 +4657,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
 
   createEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(THREAD_RAIL_WIDTH_STORAGE_KEY, String(threadRailWidth()));
-  });
-
-  createEffect(() => {
     const request = props.focusThreadRequest;
     const requestID = trimString(request?.request_id);
     const focusedThreadID = trimString(request?.thread_id);
@@ -6273,30 +6254,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     untrack(() => requestComposerFocus(document.activeElement, presentation() === 'companion' && !surfaceEngaged()));
   });
 
-  const startThreadRailResize = (event: PointerEvent) => {
-    event.preventDefault();
-    setThreadRailResizing(true);
-    const startX = event.clientX;
-    const startWidth = threadRailWidth();
-    const onPointerMove = (moveEvent: PointerEvent) => {
-      setThreadRailWidth(clampThreadRailWidth(startWidth + moveEvent.clientX - startX));
-    };
-    const onPointerUp = () => {
-      setThreadRailResizing(false);
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
-      window.removeEventListener('pointercancel', onPointerUp);
-      window.removeEventListener('blur', onPointerUp);
-    };
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp);
-    window.addEventListener('pointercancel', onPointerUp);
-    window.addEventListener('blur', onPointerUp);
-  };
-
-  const nudgeThreadRailWidth = (delta: number) => {
-    setThreadRailWidth((width) => clampThreadRailWidth(width + delta));
-  };
+  const threadRailResize = createThreadRailResize({
+    width: threadRailWidth, setWidth: setThreadRailWidth, save: saveThreadRailWidth,
+  });
+  createEffect(() => {
+    if (navigationOverlay() || presentation() !== 'full' || props.embeddedConversation || !surfaceEngaged()) threadRailResize.stop();
+  });
+  onCleanup(threadRailResize.stop);
 
   const selectThread = (threadID: string) => batch(() => {
     const focusOwner = typeof document === 'undefined' ? null : document.activeElement;
@@ -14081,7 +14045,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         'flower-component-shell flower-surface',
         presentation() === 'companion' && 'flower-surface-companion',
         companionCollapsed() && 'flower-surface-companion-collapsed',
-        threadRailResizing() && 'flower-component-shell-resizing',
         props.embeddedConversation && 'flower-surface-embedded',
         props.class,
       )}
@@ -14100,7 +14063,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       data-flower-selected-thread-loading={selectedThreadLoading() ? 'true' : 'false'}
       data-flower-warmup={surfaceWarmupActive() ? 'true' : 'false'}
       data-flower-side-panel={sidePanel()}
-      style={{ '--flower-thread-rail-width': `${threadRailWidth()}px` }}
+      style={{
+        'grid-template-columns': presentation() === 'full' && !navigationOverlay() && !props.embeddedConversation ? `${threadRailWidth()}px 0 minmax(0, 1fr)` : undefined,
+        '--flower-thread-drawer-width': navigationOverlay() && !mobileNavigation() ? `${threadRailWidth()}px` : undefined,
+      }}
     >
       <Show when={!initialConversationPending()} fallback={warmupPanel(true)}>
       <Show when={!settingsDialogPresent()}><div hidden inert aria-hidden="true"><SettingsContent /></div></Show>
@@ -14305,15 +14271,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         aria-valuemax={THREAD_RAIL_WIDTH_MAX}
         aria-valuenow={threadRailWidth()}
         title={copy().chat.resizeConversationsLabel}
-        onPointerDown={startThreadRailResize}
+        onPointerDown={threadRailResize.start}
         onKeyDown={(event) => {
           if (event.key === 'ArrowLeft') {
             event.preventDefault();
-            nudgeThreadRailWidth(-16);
+            threadRailResize.nudge(-16);
           }
           if (event.key === 'ArrowRight') {
             event.preventDefault();
-            nudgeThreadRailWidth(16);
+            threadRailResize.nudge(16);
           }
         }}
       >

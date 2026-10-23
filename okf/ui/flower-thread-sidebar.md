@@ -5,7 +5,7 @@ description: Select conversations clearly and reorder endpoint-owned pins withou
 tags: [flower, sidebar, navigation, pins, interaction]
 timestamp: 2026-10-19T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-23"
 ---
 # Summary
 
@@ -17,6 +17,25 @@ failures undo only the current operation's presentation and reconcile through th
 existing workspace summary stream or one explicit post-command read.
 
 # Contract
+
+## Resizing
+
+One width signal owns the 220–380 CSS pixel sidebar preference. Inline desktop
+resizing updates the grid track directly, at most once per animation frame,
+without propagating a changing inherited variable through the transcript. The
+desktop drawer receives its saved width only in overlay presentation; mobile,
+companion and embedded layouts retain their own sizing.
+
+One transient gesture captures the primary pointer, retains the latest sample,
+and flushes the final coordinate on release. Cancellation, lost capture, blur,
+layout changes and unmount settle the latest sample and release all listeners,
+frames and the temporary cursor/selection shield. Width changes persist once
+at gesture completion; keyboard changes persist immediately. Unavailable
+preference storage cannot interrupt interaction.
+
+Live updates, conversation identity, focus and scrolling remain owned by their
+existing controllers. Resizing must not reparse unchanged Markdown or invalidate
+styles across the entire mounted transcript.
 
 ## Rename from the conversation header
 The header's pencil renames an existing ThreadID when supported, including during execution and detail loading.
@@ -57,6 +76,10 @@ The [storage contract](../ai/flower-storage-ownership-and-migrations.md) owns au
 Read confirmation and loaded-content revisions follow the canonical [read-state contract](flower-read-state.md). A successful detail fetch alone does not acknowledge unseen content.
 
 # Evidence
+
+- `redeven:internal/flower_ui/src/threadRailResize.test.ts` - Frame coalescing, final coordinates, cancellation, pointer identity, cleanup and preference failures.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.sidebarResize.browser.test.tsx` - Real layout widths, keyboard persistence and presentation transitions.
+- `redeven:scripts/check_flower_sidebar_responsiveness.mjs --resize-only` - Isolated Electron pointer dragging, bounded style invalidation, one persistence write and Markdown retention across small/large histories; live delivery preserves draft, transcript identity and detached scrolling.
 
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.titleRename.browser.test.tsx` - Header rename, save/cancel focus, failed saves, narrow titles and host capability.
 
