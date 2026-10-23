@@ -71,7 +71,7 @@ describe('file markdown marked renderer', () => {
 
     expect(html).toContain('<a class="fm-link" href="https://github.com/coder/code-server" target="_blank" rel="noopener noreferrer"><code class="fm-inline-code">code-server</code></a>');
     expect(fileMarkdownStyles).toContain('.file-markdown-body a.fm-link code.fm-inline-code {');
-    expect(fileMarkdownStyles).toMatch(/\.file-markdown-body a\.fm-link \{[\s\S]*color: var\(--redeven-link-fg\);[\s\S]*cursor: pointer;/);
+    expect(fileMarkdownStyles).toMatch(/\.file-markdown-body a\.fm-link \{[\s\S]*color: var\(--fm-link-ink\);[\s\S]*cursor: pointer;/);
     expect(fileMarkdownStyles).toMatch(/\.file-markdown-body a\.fm-link code\.fm-inline-code \{[\s\S]*color: inherit;/);
   });
 });

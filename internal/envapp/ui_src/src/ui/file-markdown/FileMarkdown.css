@@ -1,19 +1,31 @@
 /* FileMarkdown — document-style markdown preview, uses app theme variables */
 
 .file-markdown-body {
+  /* Reading roles derive from the published palette, including neutral shells. */
+  --fm-heading-accent: color-mix(in srgb, var(--ring) 60%, var(--info) 40%);
+  --fm-heading-ink: color-mix(in srgb, var(--fm-heading-accent) 72%, var(--foreground) 28%);
+  --fm-secondary-ink: color-mix(in srgb, var(--highlight-block-tip-accent) 60%, var(--foreground) 40%);
+  --fm-emphasis-ink: color-mix(in srgb, var(--highlight-block-note-accent) 40%, var(--foreground) 60%);
+  --fm-muted-ink: color-mix(in srgb, var(--muted-foreground) 20%, var(--foreground) 80%);
+  --fm-link-ink: color-mix(in srgb, var(--info) 48%, var(--foreground) 52%);
+  --fm-link-hover-ink: color-mix(in srgb, var(--info) 40%, var(--foreground) 60%);
+  --fm-quote-bg: color-mix(in srgb, var(--highlight-block-tip-accent) 7%, var(--background));
+  --fm-quote-ink: color-mix(in srgb, var(--highlight-block-tip-accent) 38%, var(--foreground) 62%);
+  --fm-table-heading-bg: color-mix(in srgb, var(--fm-heading-accent) 6%, var(--background));
+  --fm-table-stripe-bg: color-mix(in srgb, var(--fm-heading-accent) 3%, var(--background));
   --fm-code-surface: var(--redeven-code-surface, var(--background));
-  --fm-code-chrome: var(--redeven-code-chrome, var(--card));
+  --fm-code-chrome: color-mix(in srgb, var(--fm-heading-accent) 6%, var(--redeven-code-chrome, var(--card)));
   --fm-code-border: var(--redeven-code-border, var(--border));
   --fm-code-muted: var(--redeven-code-muted, var(--muted-foreground));
   --fm-code-fallback-text: var(--redeven-code-foreground, var(--foreground));
-  --fm-code-accent: var(--redeven-chat-accent, var(--primary));
+  --fm-code-accent: var(--fm-link-ink);
   --fm-code-shadow: var(--redeven-shadow-soft, 0 1px 2px color-mix(in srgb, var(--foreground) 10%, transparent));
   --fm-code-copy-bg: color-mix(in srgb, var(--redeven-code-chrome, var(--card)) 82%, transparent);
   --fm-code-copy-hover-bg: color-mix(in srgb, var(--redeven-code-chrome, var(--card)) 92%, var(--foreground) 8%);
-  --fm-inline-code-bg: color-mix(in srgb, var(--primary) 10%, transparent);
-  --fm-inline-code-border: color-mix(in srgb, var(--primary) 22%, var(--border));
+  --fm-inline-code-bg: color-mix(in srgb, var(--inline-code-foreground) 7%, var(--background));
+  --fm-inline-code-border: color-mix(in srgb, var(--inline-code-foreground) 24%, var(--border));
   --fm-inline-code-highlight: color-mix(in srgb, var(--background) 54%, transparent);
-  --fm-inline-code-ink: color-mix(in srgb, var(--primary) 78%, var(--foreground) 22%);
+  --fm-inline-code-ink: color-mix(in srgb, var(--inline-code-foreground) 65%, var(--foreground) 35%);
   --fm-inline-code-shadow: inset 0 1px 0 color-mix(in srgb, var(--background) 52%, transparent);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   font-size: var(--fm-markdown-font-size, 15.5px);
@@ -28,13 +40,17 @@
 }
 
 /* Headings */
-.file-markdown-body h1 { font-size: 2em; font-weight: 700; margin: 1.25em 0 0.5em; color: var(--foreground); display: table; border-bottom: 2px solid var(--primary); padding-bottom: 0.3em; }
-.file-markdown-body h2 { font-size: 1.5em; font-weight: 700; margin: 1.2em 0 0.4em; color: var(--foreground); display: table; border-bottom: 1.5px solid var(--primary); padding-bottom: 0.25em; }
-.file-markdown-body h3 { font-size: 1.25em; font-weight: 700; margin: 1.1em 0 0.3em; color: var(--foreground); border-left: 4px solid var(--primary); padding-left: 12px; }
-.file-markdown-body h4 { font-size: 1.1em; font-weight: 700; margin: 1em 0 0.25em; color: var(--foreground); }
-.file-markdown-body h5 { font-size: 1em; font-weight: 700; margin: 0.9em 0 0.2em; color: var(--foreground); }
-.file-markdown-body h6 { font-size: 0.9em; font-weight: 700; margin: 0.8em 0 0.2em; color: var(--muted-foreground); }
+.file-markdown-body h1 { font-size: 2em; font-weight: 700; margin: 1.25em 0 0.5em; color: var(--fm-heading-ink); display: table; border-bottom: 2px solid var(--fm-heading-accent); padding-bottom: 0.3em; }
+.file-markdown-body h2 { font-size: 1.5em; font-weight: 700; margin: 1.2em 0 0.4em; color: var(--fm-heading-ink); display: table; border-bottom: 1.5px solid color-mix(in srgb, var(--fm-heading-accent) 45%, var(--border)); padding-bottom: 0.25em; }
+.file-markdown-body h3 { font-size: 1.25em; font-weight: 700; margin: 1.1em 0 0.3em; color: var(--fm-secondary-ink); border-left: 4px solid var(--highlight-block-tip-accent); padding-left: 12px; }
+.file-markdown-body h4 { font-size: 1.1em; font-weight: 700; margin: 1em 0 0.25em; color: var(--fm-heading-ink); }
+.file-markdown-body h5 { font-size: 1em; font-weight: 700; margin: 0.9em 0 0.2em; color: var(--fm-secondary-ink); }
+.file-markdown-body h6 { font-size: 0.9em; font-weight: 700; margin: 0.8em 0 0.2em; color: var(--fm-muted-ink); }
 .file-markdown-body > :first-child { margin-top: 0; }
+
+.file-markdown-body :is(p, li, td) strong { color: var(--fm-emphasis-ink); }
+.file-markdown-body :is(p, li, td) em { color: var(--fm-quote-ink); }
+.file-markdown-body li::marker { color: var(--fm-secondary-ink); }
 
 /* Paragraphs and lists */
 .file-markdown-body p { margin-bottom: 0.75rem; }
@@ -196,10 +212,10 @@
 .file-markdown-body blockquote.fm-blockquote {
   margin: 1em 0;
   padding: 12px 16px;
-  border-left: 3px solid var(--primary);
-  background: var(--muted);
+  border-left: 3px solid var(--highlight-block-tip-accent);
+  background: var(--fm-quote-bg);
   border-radius: 0 6px 6px 0;
-  color: var(--muted-foreground);
+  color: var(--fm-quote-ink);
   font-style: italic;
 }
 
@@ -209,39 +225,31 @@
 .file-markdown-body blockquote.fm-alert {
   margin: 1em 0;
   padding: 12px 16px;
-  border-left: 4px solid;
+  border-left: 4px solid var(--fm-alert-accent);
+  background: color-mix(in srgb, var(--fm-alert-accent) 5%, var(--background));
+  color: var(--foreground);
   border-radius: 6px;
   font-style: normal;
 }
 
 .file-markdown-body blockquote.fm-alert-note {
-  background: var(--redeven-status-info-soft, color-mix(in srgb, var(--info) 8%, transparent));
-  border-color: var(--redeven-status-info, var(--info));
-  color: var(--redeven-status-info-foreground, var(--info));
+  --fm-alert-accent: var(--highlight-block-info-accent);
 }
 
 .file-markdown-body blockquote.fm-alert-tip {
-  background: var(--redeven-status-success-soft, color-mix(in srgb, var(--success) 8%, transparent));
-  border-color: var(--redeven-status-success, var(--success));
-  color: var(--redeven-status-success-foreground, var(--success));
+  --fm-alert-accent: var(--highlight-block-success-accent);
 }
 
 .file-markdown-body blockquote.fm-alert-important {
-  background: var(--redeven-status-primary-soft, color-mix(in srgb, var(--primary) 8%, transparent));
-  border-color: var(--redeven-status-primary, var(--primary));
-  color: var(--redeven-status-primary-foreground, var(--primary));
+  --fm-alert-accent: var(--highlight-block-note-accent);
 }
 
 .file-markdown-body blockquote.fm-alert-warning {
-  background: var(--redeven-status-warning-soft, color-mix(in srgb, var(--warning) 8%, transparent));
-  border-color: var(--redeven-status-warning, var(--warning));
-  color: var(--redeven-status-warning-foreground, var(--warning));
+  --fm-alert-accent: var(--highlight-block-warning-accent);
 }
 
 .file-markdown-body blockquote.fm-alert-caution {
-  background: var(--redeven-status-error-soft, color-mix(in srgb, var(--error) 8%, transparent));
-  border-color: var(--redeven-status-error, var(--error));
-  color: var(--redeven-status-error-foreground, var(--error));
+  --fm-alert-accent: var(--highlight-block-error-accent);
 }
 
 .file-markdown-body .fm-alert-heading {
@@ -251,6 +259,7 @@
   font-weight: 700;
   font-size: 0.9em;
   margin-bottom: 4px;
+  color: color-mix(in srgb, var(--fm-alert-accent) 40%, var(--foreground) 60%);
 }
 
 .file-markdown-body .fm-alert-heading .fm-alert-icon { flex-shrink: 0; }
@@ -258,22 +267,25 @@
 
 /* Links */
 .file-markdown-body a.fm-link {
-  color: var(--redeven-link-fg);
-  text-decoration: none;
-  border-bottom: 1px solid var(--redeven-link-underline);
+  color: var(--fm-link-ink);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--fm-link-ink) 46%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s, background-color 0.15s;
+  transition: color 0.15s, text-decoration-color 0.15s, background-color 0.15s;
 }
 
-.file-markdown-body a.fm-link:hover { color: var(--redeven-link-hover-fg); border-bottom-color: var(--redeven-link-underline-hover); }
+.file-markdown-body a.fm-link:hover { color: var(--fm-link-hover-ink); text-decoration-color: currentColor; }
+.file-markdown-body a.fm-link :is(strong, em) { color: inherit; }
 .file-markdown-body a.fm-link:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--redeven-link-fg) 48%, transparent);
+  outline: 2px solid var(--fm-link-ink);
   outline-offset: 2px;
   border-radius: 0.1875rem;
 }
 .file-markdown-body a.fm-link code.fm-inline-code {
-  border: 1px solid var(--redeven-link-code-border);
-  background-color: var(--redeven-link-code-bg);
+  border-color: color-mix(in srgb, var(--fm-link-ink) 28%, var(--border));
+  background-color: color-mix(in srgb, var(--fm-link-ink) 7%, var(--background));
   color: inherit;
 }
 .file-markdown-body a.fm-image-link {
@@ -326,7 +338,8 @@
 }
 
 .file-markdown-body table.fm-table th {
-  background: var(--muted);
+  background: var(--fm-table-heading-bg);
+  color: var(--fm-heading-ink);
   font-weight: 700;
   text-align: left;
   padding: 8px 12px;
@@ -338,7 +351,7 @@
   border-bottom: 1px solid var(--border);
 }
 
-.file-markdown-body table.fm-table tr:nth-child(even) td { background: color-mix(in srgb, var(--muted) 50%, var(--background)); }
+.file-markdown-body table.fm-table tr:nth-child(even) td { background: var(--fm-table-stripe-bg); }
 .file-markdown-body table.fm-table tr:last-child td { border-bottom: none; }
 
 /* Frontmatter */
@@ -366,24 +379,24 @@
   font-weight: 700;
   white-space: nowrap;
   width: 1%;
-  background: var(--muted);
-  color: var(--primary);
+  background: var(--fm-table-heading-bg);
+  color: var(--fm-heading-ink);
 }
 
-.file-markdown-body .fm-frontmatter-value { color: var(--muted-foreground); }
+.file-markdown-body .fm-frontmatter-value { color: var(--fm-muted-ink); }
 
 .file-markdown-body .fm-frontmatter-tag {
   display: inline-block;
   margin: 1px 2px;
   padding: 1px 7px;
-  background: color-mix(in srgb, var(--primary) 12%, transparent);
-  color: var(--primary);
+  background: var(--fm-inline-code-bg);
+  color: var(--fm-inline-code-ink);
   border-radius: 4px;
   font-size: 0.95em;
 }
 
-.file-markdown-body .fm-frontmatter-bool { color: var(--primary); font-weight: 600; }
-.file-markdown-body .fm-frontmatter-number { color: var(--primary); }
+.file-markdown-body .fm-frontmatter-bool { color: var(--fm-secondary-ink); font-weight: 600; }
+.file-markdown-body .fm-frontmatter-number { color: var(--fm-inline-code-ink); }
 
 /* Mermaid */
 .file-markdown-body .mermaid {
@@ -567,12 +580,53 @@
 }
 
 /* Task lists */
-.file-markdown-body input[type="checkbox"] { margin-right: 0.4em; accent-color: var(--primary); }
+.file-markdown-body input[type="checkbox"] { margin-right: 0.4em; accent-color: var(--fm-secondary-ink); }
 
 /* Footnotes */
-.file-markdown-body .footnote-item { font-size: 0.85em; color: var(--muted-foreground); }
+.file-markdown-body .footnote-item { font-size: 0.85em; color: var(--fm-muted-ink); }
 .file-markdown-body .footnote-item p { display: inline; }
 .file-markdown-body .footnote-backref { margin-left: 4px; }
+
+.file-markdown-body ::selection {
+  color: var(--selection-fg);
+  background: var(--selection-bg);
+  text-shadow: none;
+}
+
+.file-markdown-body :is(code, code *)::selection {
+  color: var(--selection-code-fg);
+  background: var(--selection-code-bg);
+}
+
+/* Raised dark windows need lighter heading ink than the shell reading area. */
+@media (forced-colors: none) {
+  :root.dark .file-markdown-body {
+    --fm-heading-ink: oklch(from var(--fm-heading-accent) max(l, 0.86) c h);
+  }
+}
+
+@media (forced-colors: active) {
+  .file-markdown-body {
+    --fm-heading-accent: CanvasText;
+    --fm-heading-ink: CanvasText;
+    --fm-secondary-ink: CanvasText;
+    --fm-emphasis-ink: CanvasText;
+    --fm-muted-ink: CanvasText;
+    --fm-quote-ink: CanvasText;
+    --fm-inline-code-ink: CanvasText;
+    --fm-link-ink: LinkText;
+    --fm-link-hover-ink: LinkText;
+  }
+
+  .file-markdown-body :is(.fm-blockquote, .fm-alert, .fm-table-wrap, .fm-frontmatter, .fm-inline-code, .fm-code-block) {
+    border-color: CanvasText;
+    background: Canvas;
+    box-shadow: none;
+  }
+
+  .file-markdown-body .fm-alert-heading { color: CanvasText; }
+  .file-markdown-body a.fm-link { text-decoration-color: LinkText; }
+}
 
 /* Reading mode */
 .file-markdown-body.file-markdown-reading {
