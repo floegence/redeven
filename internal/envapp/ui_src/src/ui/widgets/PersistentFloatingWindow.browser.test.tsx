@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FloeConfigProvider, LayoutProvider } from '@floegence/floe-webapp-core';
 import { Dialog, InfiniteCanvas } from '@floegence/floe-webapp-core/ui';
 
-import { PersistentFloatingWindow } from './PersistentFloatingWindow';
+import { floatingWindowStorageKey, PersistentFloatingWindow } from './PersistentFloatingWindow';
 
 function Providers(props: Readonly<{ children: JSX.Element }>) {
   return (
@@ -170,6 +170,55 @@ beforeEach(async () => {
 });
 
 describe('PersistentFloatingWindow browser behavior', () => {
+  it('consumes upstream elastic dragging and maximize restore, persisting only the settled placement', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => <Providers><PersistentFloatingWindow
+      open onOpenChange={() => undefined} title="Elastic window" persistenceKey="elastic-browser-test"
+      defaultPosition={{ x: 160, y: 120 }} defaultSize={{ width: 420, height: 280 }}
+      viewportInsets={{ top: 48, right: 20, bottom: 24, left: 16 }}
+    ><textarea aria-label="Retained draft" /></PersistentFloatingWindow></Providers>, host);
+    try {
+      await settle();
+      await new Promise((resolve) => setTimeout(resolve, 220));
+      const root = document.querySelector<HTMLElement>('[data-floe-geometry-surface="floating-window"]')!;
+      const header = root.querySelector<HTMLElement>('[data-floe-floating-window-titlebar]')!;
+      const draft = root.querySelector('textarea')!;
+      draft.value = 'Keep this draft';
+      header.dispatchEvent(createPointerEvent('pointerdown', 41, 240, 136));
+      document.dispatchEvent(createPointerEvent('pointermove', 41, -600, -600));
+      await settle();
+      const held = root.getBoundingClientRect();
+      expect(held.x).toBeLessThan(16);
+      expect(held.x).toBeGreaterThan(16 - 160);
+      expect(held.y).toBeLessThan(48);
+      expect(header.getBoundingClientRect().bottom).toBeGreaterThan(48 + 23);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(JSON.parse(localStorage.getItem(floatingWindowStorageKey('elastic-browser-test')) ?? 'null'))
+        .toEqual({ x: 160, y: 120, width: 420, height: 280 });
+      document.dispatchEvent(createPointerEvent('pointerup', 41, -600, -600));
+      await expect.poll(() => root.getAnimations().some((animation) => animation.playState === 'running')).toBe(false);
+      await expect.poll(() => Math.round(root.getBoundingClientRect().x)).toBe(16);
+      await expect.poll(() => Math.round(root.getBoundingClientRect().y)).toBe(48);
+      await expect.poll(() => JSON.parse(localStorage.getItem(floatingWindowStorageKey('elastic-browser-test')) ?? 'null'))
+        .toEqual({ x: 16, y: 48, width: 420, height: 280 });
+      root.querySelector<HTMLButtonElement>('[data-floe-floating-window-control="maximize"]')!.click();
+      const maximized = root.getBoundingClientRect();
+      const from = { x: maximized.x + maximized.width / 2, y: maximized.y + 16 };
+      header.dispatchEvent(createPointerEvent('pointerdown', 42, from.x, from.y));
+      document.dispatchEvent(createPointerEvent('pointermove', 42, from.x + 40, from.y + 80));
+      await settle();
+      const restored = root.getBoundingClientRect();
+      expect(restored.width).toBe(420);
+      expect(restored.height).toBe(280);
+      expect(restored.x).toBeCloseTo(from.x + 40 - 210, 0);
+      expect(restored.y).toBeCloseTo(from.y + 80 - 16, 0);
+      document.dispatchEvent(createPointerEvent('pointerup', 42, from.x + 40, from.y + 80));
+      expect(root.querySelector('textarea')).toBe(draft);
+      expect(draft.value).toBe('Keep this draft');
+    } finally { dispose(); }
+  });
+
   it('uses the global product modal boundary for nested Activity dialogs', async () => {
     const host = document.createElement('div');
     host.style.position = 'fixed';
