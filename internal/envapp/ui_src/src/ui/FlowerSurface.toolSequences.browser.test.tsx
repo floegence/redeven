@@ -5,6 +5,7 @@ import { commands, page, userEvent } from 'vitest/browser';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FlowerLiveStreamEnvelope, FlowerParentEvent, FlowerRuntimeCurrentView, FlowerRuntimeCurrentItem, FlowerToolCallPreview } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
+import { flowerActivityIdentity } from '../../../../flower_ui/src/flowerActivityIdentity';
 import { adapter, liveBootstrap, renderSurfaceWithAdapter, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
 const media = commands as unknown as { emulateMediaPreferences: (input: { reducedMotion?: 'reduce' | 'no-preference'; forcedColors?: 'active' | 'none' }) => Promise<void> };
@@ -59,6 +60,7 @@ async function mount(items: FlowerRuntimeCurrentItem[], previews: readonly Flowe
 }
 const row = (root: HTMLElement, id: string) => root.querySelector<HTMLElement>(`[data-flower-activity-item-id="${id}"]`)!;
 const group = (root: HTMLElement, id: string) => root.querySelector<HTMLElement>(`[data-flower-tool-row-identity="${id}"]`)
+  ?? root.querySelector<HTMLElement>(`[data-flower-tool-row-identity="${CSS.escape(flowerActivityIdentity({ threadID: 'sequences', runID: 'run', turnID: 'turn', itemID: id }))}"]`)
   ?? row(root, id).closest<HTMLElement>('.flower-tool-sequence-node')!;
 const toggle = (root: HTMLElement, id: string) => group(root, id).querySelector<HTMLButtonElement>('.flower-tool-sequence-toggle')!;
 const collapsed = (root: HTMLElement, id: string) => group(root, id).querySelector('.flower-tool-sequence-viewport')!.getAttribute('aria-hidden') === 'true';
@@ -86,6 +88,32 @@ function expectConnectorBetween(root: HTMLElement, previousID: string, nextID: s
 afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('consecutive tools in the shared Flower surface', () => {
+  it('defers unopened historical tool details until expansion and retains inspected content', async () => {
+    const history = Array.from({ length: 300 }, (_, index) => tool(`deferred-${index}`));
+    const tail = [item('progress', 'assistant'), tool('active-a'), tool('active-b', 'running')];
+    const { root, push } = await mount([...history, ...tail]);
+    const header = toggle(root, 'deferred-0');
+    expect(header.textContent).toContain('300 tool calls');
+    expect(collapsed(root, 'deferred-0')).toBe(true);
+    expect(root.querySelector('[data-flower-activity-item-id="deferred-0"]')).toBeNull();
+    expect(root.querySelector('[data-flower-activity-item-id="deferred-299"]')).toBeNull();
+    expect(root.querySelectorAll('[data-flower-activity-item-id]')).toHaveLength(2);
+    push([...history, tool('deferred-300'), ...tail]);
+    await waitFor(() => header.textContent?.includes('301 tool calls') === true);
+    expect(row(root, 'deferred-300')).toBeNull();
+    header.click();
+    await waitFor(() => group(root, 'deferred-0').dataset.state === 'open');
+    const inspected = row(root, 'deferred-299');
+    expect(inspected).not.toBeNull();
+    expect(root.querySelectorAll('[data-flower-activity-item-id]')).toHaveLength(303);
+    expect(row(root, 'deferred-300')).not.toBeNull();
+    header.click();
+    await waitFor(() => group(root, 'deferred-0').dataset.state === 'closed');
+    header.click();
+    await waitFor(() => group(root, 'deferred-0').dataset.state === 'open');
+    expect(row(root, 'deferred-299')).toBe(inspected);
+  });
+
   it.each([
     ['success', false, 1280], ['running', false, 1280],
     ['success', true, 1280], ['running', false, 390],
@@ -193,7 +221,8 @@ describe('consecutive tools in the shared Flower surface', () => {
     await waitFor(() => group(root, 'latest-0').dataset.state === 'closed');
     const updated = [...initial.slice(0, -1), tool('latest-39'), tool('latest-40', status)];
     push([...updated, ...later]);
-    await waitFor(() => Boolean(row(root, 'latest-40')));
+    await waitFor(() => Boolean(group(root, 'latest-40')));
+    expect(row(root, 'latest-40')).toBeNull();
     header.click();
     await waitFor(() => group(root, 'latest-0').dataset.state === 'open');
     await expect.poll(() => viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop).toBeLessThanOrEqual(1);
@@ -430,13 +459,12 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(toggle(root, 'failure').textContent).toContain('1 running');
     expect(row(root, 'failure').closest('[inert]')).toBeNull();
     expect(root.querySelector('[data-flower-message-id="progress"]')?.closest('[inert]')).toBeNull();
-    const thoughts = [...root.querySelectorAll<HTMLElement>('.flower-thinking-disclosure')];
-    expect(thoughts.map(node => Boolean(node.closest<HTMLElement>('.flower-tool-sequence-node')?.dataset.flowerSequence))).toEqual([true, true, true]);
-    expect(thoughts[1].closest('[inert]')).not.toBeNull();
-    expect(thoughts[2].closest('[inert]')).not.toBeNull();
-    expect(thoughts[1].querySelector('.flower-activity-inline-icon svg.lucide-brain')?.getAttribute('stroke-width')).toBe('1.7');
+    expect(root.querySelectorAll('.flower-thinking-disclosure')).toHaveLength(0);
     firstToggle.click();
     await waitFor(() => firstToggle.closest('.flower-tool-sequence-node')?.getAttribute('data-state') === 'open');
+    const thoughts = [...root.querySelectorAll<HTMLElement>('.flower-thinking-disclosure')];
+    expect(thoughts.map(node => Boolean(node.closest<HTMLElement>('.flower-tool-sequence-node')?.dataset.flowerSequence))).toEqual([true, true, true]);
+    expect(thoughts[1].querySelector('.flower-activity-inline-icon svg.lucide-brain')?.getAttribute('stroke-width')).toBe('1.7');
     expect(collapsed(root, 'b')).toBe(false);
     expect(row(root, 'a').getBoundingClientRect().height).toBe(32);
     expect(Math.abs(row(root, 'b').getBoundingClientRect().top - thoughts[1].getBoundingClientRect().bottom)).toBeLessThan(1);
@@ -452,7 +480,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(toggle(root, 'failed').textContent).toContain('2 tool calls');
     expect(toggle(root, 'failed').textContent).toContain('1 failed tool call');
     expect(collapsed(root, 'failed')).toBe(true);
-    expect(row(root, 'failed').closest('[inert]')).not.toBeNull();
+    expect(row(root, 'failed')).toBeNull();
     toggle(root, 'failed').click();
     await waitFor(() => failedGroup.getAttribute('data-state') === 'open');
     const failedRow = row(root, 'failed');
