@@ -4624,7 +4624,7 @@
 }
 
 .flower-thread-loading-indicator {
-  width: min(11rem, 100%);
+  width: min(8rem, 100%);
   height: 3px;
   border-radius: 9999px;
   overflow: hidden;
