@@ -648,3 +648,25 @@ func TestFlowerCurrentPreservesCanonicalHistoricalTurnPresentation(t *testing.T)
 		t.Fatalf("turn facts lost: %+v", decoded.Turns)
 	}
 }
+
+func TestFlowerChildWindowRetainsComputerAuthorityOutsideMembership(t *testing.T) {
+	evidence, interaction := computerEvidenceFixture()
+	current := evidence
+	current.Items = nil
+	current.Interactions = []flruntime.ThreadInteraction{interaction}
+	for _, value := range []any{
+		FlowerSubagentDetailResponse{Current: current, ComputerEvidence: &evidence, Window: &FlowerHistoryWindow{}},
+		FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, SubagentCurrent: &current, updateEvidence: &evidence},
+	} {
+		raw, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(raw), "computer_assistance") {
+			t.Fatalf("lost authorized pending control: %s", raw)
+		}
+		if strings.Contains(string(raw), "browser.navigate") {
+			t.Fatalf("out-of-window tool body leaked: %s", raw)
+		}
+	}
+}

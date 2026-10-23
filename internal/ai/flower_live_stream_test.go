@@ -338,7 +338,7 @@ func TestFlowerWorkspaceStreamBaselinesAndBroadcastsCanonicalComputerStatus(t *t
 	if err := json.Unmarshal(statusFrame.Data, &update); err != nil {
 		t.Fatal(err)
 	}
-	if update.Kind != FlowerLiveStreamComputerStatus || update.ThreadID != thread.ThreadID || update.ComputerStatus == nil || update.ComputerStatus.InteractionID != interactionID {
+	if !update.FactsOnly || update.ThreadID != thread.ThreadID || update.Update == nil || update.Update.Interactions != nil {
 		t.Fatalf("computer status update=%#v", update)
 	}
 	if strings.Contains(string(statusFrame.Data), "password") || strings.Contains(string(statusFrame.Data), "secret") {
@@ -877,7 +877,14 @@ func TestFlowerLiveSummaryFailureReconnectsToCanonicalBaseline(t *testing.T) {
 	if err := json.Unmarshal(ready.Data, &envelope); err != nil {
 		t.Fatal(err)
 	}
-	if ready.Kind != FlowerLiveStreamReady || len(envelope.Summaries) != 1 {
+	if ready.Kind != FlowerLiveStreamReady {
+		t.Fatal("missing immediate ready")
+	}
+	page := nextFlowerLiveStreamFrame(t, reconnected)
+	if err := json.Unmarshal(page.Data, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if page.Kind != FlowerLiveStreamSummaryBatch || len(envelope.Summaries) != 1 {
 		t.Fatalf("reconnected baseline=%s", ready.Data)
 	}
 	if got := envelope.Summaries[0]; got.ThreadID != thread.ThreadID || got.Title != "Canonical reconnect title" || got.TitleStatus != string(flruntime.ThreadTitleStatusReady) {
@@ -931,7 +938,14 @@ func TestFlowerWorkspaceReadyKeepsDetailOnTheExplicitReadBoundary(t *testing.T) 
 	if err := json.Unmarshal(ready.Data, &envelope); err != nil {
 		t.Fatal(err)
 	}
-	if ready.Kind != FlowerLiveStreamReady || len(envelope.Summaries) != 1 {
+	if ready.Kind != FlowerLiveStreamReady {
+		t.Fatal("missing immediate ready")
+	}
+	page := nextFlowerLiveStreamFrame(t, subscription)
+	if err := json.Unmarshal(page.Data, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if page.Kind != FlowerLiveStreamSummaryBatch || len(envelope.Summaries) != 1 {
 		t.Fatalf("ready frame=%s", ready.Data)
 	}
 	if got := envelope.Summaries[0]; got.ThreadID != thread.ThreadID || got.RunStatus != string(RunStateRunning) {
@@ -1021,6 +1035,9 @@ func TestFlowerLiveViewerReadBaselineIsPrivateAndRestoredOnReconnect(t *testing.
 			t.Fatalf("shared baseline leaks read state: %s", ready.Data)
 		}
 		frame := nextFlowerLiveStreamFrame(t, subscription)
+		if frame.Kind == FlowerLiveStreamSummaryBatch {
+			frame = nextFlowerLiveStreamFrame(t, subscription)
+		}
 		var envelope FlowerLiveStreamEnvelope
 		if err := json.Unmarshal(frame.Data, &envelope); err != nil {
 			t.Fatal(err)
@@ -1046,6 +1063,9 @@ func TestFlowerLiveViewerReadBaselineIsPrivateAndRestoredOnReconnect(t *testing.
 	defer subscription.Close()
 	_ = nextFlowerLiveStreamFrame(t, subscription)
 	frame := nextFlowerLiveStreamFrame(t, subscription)
+	if frame.Kind == FlowerLiveStreamSummaryBatch {
+		frame = nextFlowerLiveStreamFrame(t, subscription)
+	}
 	var envelope FlowerLiveStreamEnvelope
 	if err := json.Unmarshal(frame.Data, &envelope); err != nil {
 		t.Fatal(err)
@@ -1113,6 +1133,9 @@ func TestFlowerLiveViewerReadStateIsSharedOnlyWithSameUser(t *testing.T) {
 func assertFlowerViewerReadBaseline(t *testing.T, subscription *FlowerLiveStreamSubscription, threadID string) {
 	t.Helper()
 	frame := nextFlowerLiveStreamFrame(t, subscription)
+	if frame.Kind == FlowerLiveStreamSummaryBatch {
+		frame = nextFlowerLiveStreamFrame(t, subscription)
+	}
 	var envelope FlowerLiveStreamEnvelope
 	if err := json.Unmarshal(frame.Data, &envelope); err != nil {
 		t.Fatal(err)

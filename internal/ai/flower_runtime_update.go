@@ -17,9 +17,9 @@ func (s *Service) startFlowerRuntimeViewPump() error {
 	if s == nil || s.threadRuntime == nil || s.lifecycleCtx == nil {
 		return errors.New("Flower runtime update pump is unavailable")
 	}
-	source, ok := s.threadRuntime.(flruntime.ThreadUpdateSource)
+	source, ok := s.threadRuntime.(flruntime.ThreadFactsSource)
 	if !ok {
-		return errors.New("published Floret ThreadUpdateSource contract is unavailable")
+		return errors.New("published Floret ThreadFactsSource contract is unavailable")
 	}
 	s.mu.Lock()
 	if s.serviceClosing {
@@ -30,12 +30,16 @@ func (s *Service) startFlowerRuntimeViewPump() error {
 		s.mu.Unlock()
 		return errors.New("Flower runtime update pump is already running")
 	}
-	subscription, err := source.SubscribeUpdates(s.lifecycleCtx)
+	subscription, err := source.SubscribeFacts(s.lifecycleCtx)
 	if err != nil {
 		s.mu.Unlock()
 		return err
 	}
 	s.flowerRuntimePumpRunning = true
+	s.flowerSubagentRefreshPending = make(map[string]string)
+	s.flowerSubagentRefreshWake = make(chan struct{}, 1)
+	s.serviceWorkers.Add(1)
+	go s.runFlowerSubagentRefreshes()
 	s.serviceWorkers.Add(1)
 	s.mu.Unlock()
 	go func() {
@@ -69,7 +73,7 @@ func (s *Service) startFlowerRuntimeViewPump() error {
 			// Subscription failure invalidates the workspace connection. Rebinding
 			// owns only the service subscription; LiveTransport owns browser recovery.
 			for {
-				subscription, err = source.SubscribeUpdates(s.lifecycleCtx)
+				subscription, err = source.SubscribeFacts(s.lifecycleCtx)
 				if err == nil {
 					err = s.reconcileFlowerRuntimeRecovery(s.lifecycleCtx)
 					if err != nil {
@@ -106,11 +110,6 @@ func (s *Service) reconcileFlowerRuntimeRecovery(ctx context.Context) error {
 		return errors.New("published Floret summary recovery contract is unavailable")
 	}
 	ids := map[string]struct{}{}
-	s.mu.Lock()
-	for id := range s.flowerRuntimeEndpointByThread {
-		ids[id] = struct{}{}
-	}
-	s.mu.Unlock()
 	s.accountMu.Lock()
 	for id := range s.accountTasks {
 		ids[id] = struct{}{}
@@ -201,75 +200,82 @@ func (s *Service) handleFlowerRuntimeUpdate(update flruntime.ThreadUpdate) {
 		s.flowerSubagentBoundaryByThread[threadID] = boundary
 		s.mu.Unlock()
 		if changed {
-			s.publishFlowerSubagentsPatch(s.lifecycleCtx, endpointID, parentID)
+			s.scheduleFlowerSubagentsPatch(endpointID, parentID)
 		}
 	}
 }
 
 func (s *Service) broadcastFlowerRuntimeUpdate(endpointID, parentID string, update flruntime.ThreadUpdate) {
-	// Authorization precedes projection. A subscriber belongs to one authorized
-	// endpoint; viewer-private state continues on its separate scoped envelopes.
 	if s.flowerLiveSubscriberCount(endpointID) == 0 {
 		return
 	}
-	if parentID == "" {
-		if update.Interactions != nil {
-			evidence, err := s.flowerHistoryComputerEvidence(s.lifecycleCtx, update.ThreadID, update.Interactions.Value)
-			if err != nil {
-				s.fenceFlowerLiveEndpoint(endpointID)
-				return
-			}
-			if evidence != nil {
-				for _, status := range s.flowerComputerStatusesForCurrent(s.lifecycleCtx, *evidence, "") {
-					s.broadcastFlowerComputerStatus(endpointID, status)
-				}
-			}
-		}
-		facts := update
-		facts.Items, facts.ItemOrder, facts.Turns, facts.Context, facts.Queue, facts.Interactions, facts.RestoredInputs, facts.ToolCallPreviews, facts.ParentEvents, facts.Window = nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
-		batch := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: update.ThreadID.String(), Update: &facts, FactsOnly: true})
-		s.mu.Lock()
-		for _, subscriber := range s.flowerLiveSubscribers {
-			if !subscriber.closed && subscriber.endpointID == endpointID {
-				enqueueFlowerLiveSubscriberLocked(s, subscriber, batch)
-			}
-		}
-		s.mu.Unlock()
-		return
-	}
-	envelope := FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: parentID, SubagentUpdate: &update}
-	// Computer assistance is canonical evidence, read only when interactions
-	// change. Ordinary text and progress never request a complete runtime view.
-	needsEvidence := false
-	if update.Interactions != nil {
-		for _, value := range update.Interactions.Value {
-			needsEvidence = needsEvidence || value.Kind == flruntime.ThreadInteractionInput
-		}
-	}
-	for _, change := range update.Items {
-		if change.Item != nil && change.Item.Interaction != nil && change.Item.Interaction.Kind == flruntime.ThreadInteractionInput {
-			needsEvidence = true
-		}
-	}
-	if needsEvidence {
-		current, err := s.threadRuntime.View(s.lifecycleCtx, update.ThreadID)
-		if err != nil {
-			s.fenceFlowerLiveEndpoint(endpointID)
-			return
-		}
-		envelope.updateEvidence = &current
-	}
-	batch := newFlowerLiveEncodedBatch(envelope)
+	// Global observation carries facts only. Reading subscriptions own all
+	// presentation and pending controls, including the open child panel.
+	facts := update
+	facts.Window, facts.Items, facts.ItemOrder = nil, nil, nil
+	facts.Context, facts.Goal, facts.ParentEvents = nil, nil, nil
+	facts.Turns, facts.Queue, facts.Interactions = nil, nil, nil
+	facts.RestoredInputs, facts.ToolCallPreviews = nil, nil
+	batch := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: update.ThreadID.String(), Update: &facts, FactsOnly: true})
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	for _, subscriber := range s.flowerLiveSubscribers {
 		if !subscriber.closed && subscriber.endpointID == endpointID {
 			enqueueFlowerLiveSubscriberLocked(s, subscriber, batch)
 		}
 	}
-	s.mu.Unlock()
-	if envelope.updateEvidence != nil {
-		for _, status := range s.flowerComputerStatusesForCurrent(s.lifecycleCtx, *envelope.updateEvidence, "") {
-			s.broadcastFlowerComputerStatus(endpointID, status)
+}
+
+// One worker owns child inventory reads. Only dirty parent identities are retained;
+// repeated boundaries coalesce without spawning goroutines or retaining views.
+func (s *Service) scheduleFlowerSubagentsPatch(endpointID, parentID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.serviceClosing || s.flowerSubagentRefreshWake == nil || s.flowerLiveSubscribersByEndpoint[endpointID] == 0 {
+		return
+	}
+	if _, exists := s.flowerSubagentRefreshPending[parentID]; !exists && len(s.flowerSubagentRefreshPending) >= 64 {
+		for _, subscriber := range s.flowerLiveSubscribers {
+			if subscriber.endpointID == endpointID {
+				subscriber.closeErr = ErrFlowerLiveSync
+				closeFlowerLiveSubscriberLocked(s, subscriber, flowerLiveSubscriberCloseSummaryRefresh)
+			}
+		}
+		return
+	}
+	s.flowerSubagentRefreshPending[parentID] = endpointID
+	select {
+	case s.flowerSubagentRefreshWake <- struct{}{}:
+	default:
+	}
+}
+
+func (s *Service) runFlowerSubagentRefreshes() {
+	defer s.serviceWorkers.Done()
+	for {
+		select {
+		case <-s.lifecycleCtx.Done():
+			return
+		case <-s.flowerSubagentRefreshWake:
+		}
+		for {
+			s.mu.Lock()
+			var parentID, endpointID string
+			for parent, endpoint := range s.flowerSubagentRefreshPending {
+				parentID, endpointID = parent, endpoint
+				delete(s.flowerSubagentRefreshPending, parent)
+				break
+			}
+			s.mu.Unlock()
+			if parentID == "" {
+				break
+			}
+			if s.flowerLiveSubscriberCount(endpointID) == 0 {
+				continue
+			}
+			ctx, cancel := context.WithTimeout(s.lifecycleCtx, s.persistTimeout())
+			s.publishFlowerSubagentsPatch(ctx, endpointID, parentID)
+			cancel()
 		}
 	}
 }

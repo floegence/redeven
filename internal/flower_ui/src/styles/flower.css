@@ -5396,27 +5396,27 @@ button.flower-composer-context-source:focus-visible,
   margin-top: 0;
 }
 
-/* Fixed paint phases avoid invalidating the document stylesheet per frame. */
-.flower-chat-md-content::highlight(flower-stream-0) { color: color-mix(in srgb, var(--flower-stream-ink) 12.000%, transparent); }
-.flower-chat-md-content::highlight(flower-stream-1) { color: color-mix(in srgb, var(--flower-stream-ink) 24.551%, transparent); }
-.flower-chat-md-content::highlight(flower-stream-2) { color: color-mix(in srgb, var(--flower-stream-ink) 35.848%, transparent); }
-.flower-chat-md-content::highlight(flower-stream-3) { color: color-mix(in srgb, var(--flower-stream-ink) 45.957%, transparent); }
-.flower-chat-md-content::highlight(flower-stream-4) { color: color-mix(in srgb, var(--flower-stream-ink) 54.944%, transparent); }
-.flower-chat-md-content::highlight(flower-stream-5) { color: color-mix(in srgb, var(--flower-stream-ink) 62.875%, transparent); }
-.flower-chat-md-content::highlight(flower-stream-6) { color: color-mix(in srgb, var(--flower-stream-ink) 69.816%, transparent); }
-.flower-chat-md-content::highlight(flower-stream-7) { color: color-mix(in srgb, var(--flower-stream-ink) 75.833%, transparent); }
-.flower-chat-md-content::highlight(flower-stream-8) { color: color-mix(in srgb, var(--flower-stream-ink) 80.992%, transparent); }
-.flower-chat-md-content::highlight(flower-stream-9) { color: color-mix(in srgb, var(--flower-stream-ink) 85.359%, transparent); }
-.flower-chat-md-content::highlight(flower-stream-10) { color: color-mix(in srgb, var(--flower-stream-ink) 89.000%, transparent); }
-.flower-chat-md-content::highlight(flower-stream-11) { color: color-mix(in srgb, var(--flower-stream-ink) 91.981%, transparent); }
-.flower-chat-md-content::highlight(flower-stream-12) { color: color-mix(in srgb, var(--flower-stream-ink) 94.368%, transparent); }
-.flower-chat-md-content::highlight(flower-stream-13) { color: color-mix(in srgb, var(--flower-stream-ink) 96.227%, transparent); }
-.flower-chat-md-content::highlight(flower-stream-14) { color: color-mix(in srgb, var(--flower-stream-ink) 97.624%, transparent); }
-.flower-chat-md-content::highlight(flower-stream-15) { color: color-mix(in srgb, var(--flower-stream-ink) 98.625%, transparent); }
-.flower-chat-md-content::highlight(flower-stream-16) { color: color-mix(in srgb, var(--flower-stream-ink) 99.296%, transparent); }
-.flower-chat-md-content::highlight(flower-stream-17) { color: color-mix(in srgb, var(--flower-stream-ink) 99.703%, transparent); }
-.flower-chat-md-content::highlight(flower-stream-18) { color: color-mix(in srgb, var(--flower-stream-ink) 99.912%, transparent); }
-.flower-chat-md-content::highlight(flower-stream-19) { color: color-mix(in srgb, var(--flower-stream-ink) 99.989%, transparent); }
+/* Fixed paint phases inherit the originating text color without per-frame style reads. */
+.flower-chat-md-content::highlight(flower-stream-0) { color: color-mix(in srgb, currentColor 12.000%, transparent); }
+.flower-chat-md-content::highlight(flower-stream-1) { color: color-mix(in srgb, currentColor 24.551%, transparent); }
+.flower-chat-md-content::highlight(flower-stream-2) { color: color-mix(in srgb, currentColor 35.848%, transparent); }
+.flower-chat-md-content::highlight(flower-stream-3) { color: color-mix(in srgb, currentColor 45.957%, transparent); }
+.flower-chat-md-content::highlight(flower-stream-4) { color: color-mix(in srgb, currentColor 54.944%, transparent); }
+.flower-chat-md-content::highlight(flower-stream-5) { color: color-mix(in srgb, currentColor 62.875%, transparent); }
+.flower-chat-md-content::highlight(flower-stream-6) { color: color-mix(in srgb, currentColor 69.816%, transparent); }
+.flower-chat-md-content::highlight(flower-stream-7) { color: color-mix(in srgb, currentColor 75.833%, transparent); }
+.flower-chat-md-content::highlight(flower-stream-8) { color: color-mix(in srgb, currentColor 80.992%, transparent); }
+.flower-chat-md-content::highlight(flower-stream-9) { color: color-mix(in srgb, currentColor 85.359%, transparent); }
+.flower-chat-md-content::highlight(flower-stream-10) { color: color-mix(in srgb, currentColor 89.000%, transparent); }
+.flower-chat-md-content::highlight(flower-stream-11) { color: color-mix(in srgb, currentColor 91.981%, transparent); }
+.flower-chat-md-content::highlight(flower-stream-12) { color: color-mix(in srgb, currentColor 94.368%, transparent); }
+.flower-chat-md-content::highlight(flower-stream-13) { color: color-mix(in srgb, currentColor 96.227%, transparent); }
+.flower-chat-md-content::highlight(flower-stream-14) { color: color-mix(in srgb, currentColor 97.624%, transparent); }
+.flower-chat-md-content::highlight(flower-stream-15) { color: color-mix(in srgb, currentColor 98.625%, transparent); }
+.flower-chat-md-content::highlight(flower-stream-16) { color: color-mix(in srgb, currentColor 99.296%, transparent); }
+.flower-chat-md-content::highlight(flower-stream-17) { color: color-mix(in srgb, currentColor 99.703%, transparent); }
+.flower-chat-md-content::highlight(flower-stream-18) { color: color-mix(in srgb, currentColor 99.912%, transparent); }
+.flower-chat-md-content::highlight(flower-stream-19) { color: color-mix(in srgb, currentColor 99.989%, transparent); }
 
 .flower-chat-md-code-chunk {
   display: inline-block;

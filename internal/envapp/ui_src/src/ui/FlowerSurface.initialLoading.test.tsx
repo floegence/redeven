@@ -14,8 +14,9 @@ describe('Flower initial conversation loading', () => {
     const remaining = deferred<void>();
     const surface = renderSurfaceWithAdapter({ ...adapter(true),
       connectLiveStream: async function* (input): AsyncIterable<FlowerLiveStreamEnvelope> {
+        yield { schema_version: 3, kind: 'ready', baseline_complete: false, observer_id: 'observer' };
         await first.promise;
-        yield { schema_version: 3, kind: 'ready', baseline_complete: false, summaries: [thread({ thread_id: 'recent' })] };
+        yield { schema_version: 3, kind: 'summary.batch', baseline_complete: false, summaries: [thread({ thread_id: 'recent' })] };
         await remaining.promise;
         yield { schema_version: 3, kind: 'summary.batch', baseline_complete: true, summaries: [thread({ thread_id: 'older' })] };
         await waitForAbort(input);

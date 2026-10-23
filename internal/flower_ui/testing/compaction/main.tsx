@@ -9,9 +9,9 @@ import '../../src/styles/flower.css';
 
 const id = new URLSearchParams(location.search).get('thread')!;
 const readStatus = { is_unread: false, snapshot: { activity_revision: 1 }, read_state: { last_seen_activity_revision: 1 } };
-async function api(op: string, threadID = id, body?: unknown) {
+async function api(op: string, threadID = id, body?: unknown, signal?: AbortSignal) {
   const response = await fetch('/fixture?op=' + op + '&id=' + encodeURIComponent(threadID), {
-    method: body ? 'POST' : 'GET',
+    method: body ? 'POST' : 'GET', signal,
     ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
   });
   if (!response.ok) throw new Error(await response.text());
@@ -52,10 +52,16 @@ const adapter = createRuntimeFlowerSurfaceAdapter({
       } finally { await reader.cancel(); }
     }
     } : {}),
-    loadThread: threadID => api('detail', threadID),
+    loadThread: (threadID, signal) => api('detail', threadID, undefined, signal),
+    ...(new URLSearchParams(location.search).has('cpu') ? {
+      loadHistory: (threadID: string, input: unknown, signal: AbortSignal) => api('history', threadID, input, signal),
+      loadHistoryItem: (threadID: string, itemID: string, signal: AbortSignal) => api('history_item', threadID, { item_id: itemID }, signal),
+      loadHistoryBody: (threadID: string, input: unknown, signal: AbortSignal) => api('history_body', threadID, input, signal),
+      releaseHistory: async (threadID: string, input: unknown) => { await api('history_release', threadID, input); },
+    } : {}),
     forkThread: unavailable,
 
-    loadSubagentDetail: (_parentID, childID) => api('subagent_detail', childID),
+    loadSubagentDetail: (parentID, childID, input, signal) => api('subagent_detail', childID, input ? { ...input, parent: parentID } : undefined, signal),
     markThreadRead: async () => ({ read_status: readStatus }),
     patchThread: unavailable, submitApproval: unavailable,
   },

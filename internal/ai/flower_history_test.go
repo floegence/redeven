@@ -20,7 +20,7 @@ import (
 
 type flowerHistoryNoFullView struct {
 	flruntime.ThreadService
-	flruntime.ThreadUpdateSource
+	flruntime.ThreadFactsSource
 	flruntime.ThreadWindowSource
 	flruntime.ThreadSummaryReader
 	flruntime.ThreadBodyReader
@@ -31,7 +31,7 @@ type flowerHistoryNoFullView struct {
 
 type flowerHistoryChunkRuntime struct {
 	flruntime.ThreadService
-	flruntime.ThreadUpdateSource
+	flruntime.ThreadFactsSource
 	flruntime.ThreadSummaryReader
 	body  flruntime.ThreadItemBody
 	reads []flruntime.ThreadLiveBodyInput
@@ -56,7 +56,7 @@ func (r *flowerHistoryChunkRuntime) View(context.Context, identity.ThreadID) (fl
 
 func TestFlowerHistoryBodyBoundedAuthorizedResume(t *testing.T) {
 	svc := newSendTurnTestServiceWithActivation(t, true)
-	runtime := &flowerHistoryChunkRuntime{ThreadService: svc.threadRuntime, ThreadUpdateSource: svc.threadRuntime.(flruntime.ThreadUpdateSource), ThreadSummaryReader: svc.threadRuntime.(flruntime.ThreadSummaryReader), body: flruntime.ThreadItemBody{RunID: "run", SourceID: "output", Field: flruntime.ThreadBodyContent, Bytes: 100000}}
+	runtime := &flowerHistoryChunkRuntime{ThreadService: svc.threadRuntime, ThreadFactsSource: svc.threadRuntime.(flruntime.ThreadFactsSource), ThreadSummaryReader: svc.threadRuntime.(flruntime.ThreadSummaryReader), body: flruntime.ThreadItemBody{RunID: "run", SourceID: "output", Field: flruntime.ThreadBodyContent, Bytes: 100000}}
 	svc.threadRuntime = runtime
 	if err := svc.Activate(t.Context()); err != nil {
 		t.Fatal(err)
@@ -118,7 +118,7 @@ func TestFlowerHistoryBoundedPagesAndExactBodies(t *testing.T) {
 	// Install the guard before activation starts workers. Only fixture setup
 	// may read the complete view; history reads keep the same runtime owner.
 	svc.threadRuntime = flowerHistoryNoFullView{
-		ThreadService: runtime, ThreadUpdateSource: runtime.(flruntime.ThreadUpdateSource),
+		ThreadService: runtime, ThreadFactsSource: runtime.(flruntime.ThreadFactsSource),
 		ThreadWindowSource: runtime.(flruntime.ThreadWindowSource), ThreadSummaryReader: runtime.(flruntime.ThreadSummaryReader),
 		ThreadBodyReader: runtime.(flruntime.ThreadBodyReader), ThreadBodyManifestReader: runtime.(flruntime.ThreadBodyManifestReader),
 		ThreadLiveBodyReader: runtime.(flruntime.ThreadLiveBodyReader), allowFullView: &allowFullView,
@@ -285,7 +285,7 @@ func TestFlowerHistoryObserverOwnershipAndSupersession(t *testing.T) {
 	if _, err = svc.GetFlowerThreadHistory(t.Context(), meta, thread.ThreadID, request); err != nil {
 		t.Fatal(err)
 	}
-	first := sub.subscriber.history
+	first := sub.subscriber.history.subscription
 	if _, err = svc.GetFlowerThreadHistory(t.Context(), meta, thread.ThreadID, request); err == nil {
 		t.Fatal("accepted obsolete revision")
 	}
@@ -296,7 +296,7 @@ func TestFlowerHistoryObserverOwnershipAndSupersession(t *testing.T) {
 	if _, err = svc.GetFlowerThreadHistory(t.Context(), meta, thread.ThreadID, invalid); err == nil {
 		t.Fatal("accepted unavailable anchor")
 	}
-	if sub.subscriber.history != first || sub.subscriber.historyRevision != 1 {
+	if sub.subscriber.history.subscription != first || sub.subscriber.history.revision != 1 {
 		t.Fatal("failed read replaced accepted interest")
 	}
 	foreign := *meta
@@ -308,7 +308,7 @@ func TestFlowerHistoryObserverOwnershipAndSupersession(t *testing.T) {
 	if _, err = svc.GetFlowerThreadHistory(t.Context(), meta, thread.ThreadID, request); err != nil {
 		t.Fatal(err)
 	}
-	if sub.subscriber.history == first || sub.subscriber.historyRevision != 2 {
+	if sub.subscriber.history.subscription == first || sub.subscriber.history.revision != 2 {
 		t.Fatal("new interest not installed")
 	}
 	canceled, cancel := context.WithCancel(t.Context())
@@ -350,9 +350,20 @@ func TestFlowerHistoryBackgroundFactsExcludeBodies(t *testing.T) {
 
 func TestFlowerHistoryPressureRecoveryNeverReadsFullView(t *testing.T) {
 	svc := &Service{threadRuntime: flowerHistoryNoFullView{}}
-	stream := &FlowerLiveStreamSubscription{service: svc}
-	if err := stream.resolveFlowerLiveRefresh(t.Context(), &flowerLiveEncodedBatch{readingRevision: 1}); !errors.Is(err, ErrFlowerLiveSync) {
-		t.Fatalf("bounded pressure must re-establish the reading interest: %v", err)
+	subscriber := &flowerLiveSubscriber{history: flowerHistoryInterest{revision: 1}}
+	stream := &FlowerLiveStreamSubscription{service: svc, subscriber: subscriber}
+	if err := stream.resolveFlowerLiveRefresh(t.Context(), &flowerLiveEncodedBatch{readingRevision: 1, route: flowerLiveRoute{threadID: "thread", wireID: "thread"}}); err != nil {
+		t.Fatal(err)
+	}
+	if subscriber.closed || len(subscriber.queue) != 1 {
+		t.Fatal("window failure invalidated workspace")
+	}
+	var envelope FlowerLiveStreamEnvelope
+	if err := json.Unmarshal(subscriber.queue[0].data, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope.HistoryInvalidated == nil || envelope.ReadingRevision != 1 {
+		t.Fatal("missing bounded recovery notice")
 	}
 }
 
@@ -406,5 +417,106 @@ func TestFlowerHistoryCoalescesBodyGrowth(t *testing.T) {
 	}
 	if mergeFlowerLiveGrowthBatches(merged, makeBatch(2001, 71000, "run")) != nil {
 		t.Fatal("accepted shrinking extent")
+	}
+}
+
+func TestFlowerHistoryInterestWaitHonorsCancellation(t *testing.T) {
+	interest := &flowerHistoryInterest{}
+	release, err := interest.lock(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err = interest.lock(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("blocked reader cancellation: %v", err)
+	}
+}
+
+func TestFlowerHistoryReleaseFencesPendingAndPreservesOtherInterest(t *testing.T) {
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(t.Context(), meta, "release", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream, err := svc.SubscribeFlowerLiveStream(t.Context(), meta, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Close()
+	input := FlowerHistoryRequest{ObserverID: stream.subscriber.observerID, ReadingRevision: 1}
+	if _, err := svc.GetFlowerThreadHistory(t.Context(), meta, thread.ThreadID, input); err != nil {
+		t.Fatal(err)
+	}
+	old := stream.subscriber.history.subscription
+	childCtx, childCancel := context.WithCancel(t.Context())
+	defer childCancel()
+	svc.mu.Lock()
+	stream.subscriber.subagentHistory.cancel = childCancel
+	svc.mu.Unlock()
+	if err := svc.ReleaseFlowerHistory(t.Context(), meta, thread.ThreadID, FlowerHistoryRelease{ObserverID: input.ObserverID, ReadingRevision: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if stream.subscriber.closed || stream.subscriber.history.subscription != nil || childCtx.Err() != nil {
+		t.Fatal("release affected workspace or other interest")
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	for {
+		if _, err := old.Next(ctx); err != nil {
+			if ctx.Err() != nil {
+				t.Fatal("released observer remains active")
+			}
+			break
+		}
+	}
+	if _, err := svc.GetFlowerThreadHistory(t.Context(), meta, thread.ThreadID, input); err == nil {
+		t.Fatal("released revision reinstalled")
+	}
+	input.ReadingRevision = 3
+	if _, err := svc.GetFlowerThreadHistory(t.Context(), meta, thread.ThreadID, input); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.ReleaseFlowerHistory(t.Context(), meta, thread.ThreadID, FlowerHistoryRelease{ObserverID: input.ObserverID, ReadingRevision: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if stream.subscriber.history.subscription == nil {
+		t.Fatal("stale release canceled newer reading")
+	}
+}
+
+func TestFlowerHistoryChildInterestIsBoundedAndIndependent(t *testing.T) {
+	f := newParentEventForkFixture(t)
+	meta := testSendTurnMeta()
+	if err := f.service.ensureChildThreadSettings(t.Context(), &run{sessionMeta: meta, endpointID: meta.EndpointID, threadID: f.source, permissionType: FlowerPermissionReadonly}, f.child.String(), f.source); err != nil {
+		t.Fatal(err)
+	}
+	stream, err := f.service.SubscribeFlowerLiveStream(t.Context(), meta, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Close()
+	rootRequest := FlowerHistoryRequest{ObserverID: stream.subscriber.observerID, ReadingRevision: 1, Limit: 1}
+	if _, err := f.service.GetFlowerThreadHistory(t.Context(), meta, f.source, rootRequest); err != nil {
+		t.Fatal(err)
+	}
+	root := stream.subscriber.history.subscription
+	child, err := f.service.GetFlowerSubagentHistory(t.Context(), meta, f.source, f.child.String(), rootRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if child.Window == nil || len(child.Current.Items) > 1 || child.Summary.ParentThreadID != f.source {
+		t.Fatal("child did not use bounded canonical membership")
+	}
+	if stream.subscriber.history.subscription != root || stream.subscriber.subagentHistory.subscription == nil {
+		t.Fatal("child replaced root interest")
+	}
+	if err := f.service.ReleaseFlowerHistory(t.Context(), meta, f.child.String(), FlowerHistoryRelease{ObserverID: rootRequest.ObserverID, ReadingRevision: 2, Subagent: true}); err != nil {
+		t.Fatal(err)
+	}
+	if stream.subscriber.history.subscription != root || stream.subscriber.subagentHistory.subscription != nil || stream.subscriber.closed {
+		t.Fatal("closing child affected root")
 	}
 }

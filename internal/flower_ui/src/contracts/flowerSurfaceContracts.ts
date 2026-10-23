@@ -859,6 +859,7 @@ export type FlowerSubagentInputOperation = Readonly<{
 }>;
 
 export type FlowerSubagentDetail = Readonly<{
+  window?: FlowerHistoryWindow;
   model_context?: FlowerModelContext | null;
   context_usage?: FlowerContextUsage | null;
   context_compactions?: readonly FlowerContextCompaction[];
@@ -1133,6 +1134,7 @@ export type FlowerRuntimeUpdate = Readonly<{
 export type FlowerLiveStreamEnvelope = Readonly<{
   baseline_complete?: boolean;
   facts_only?: boolean;
+  history_invalidated?: Readonly<{ thread_id: string; parent_thread_id?: string }>;
   reading_revision?: number;
   window?: FlowerHistoryWindow;
   schema_version: number;
@@ -1682,12 +1684,13 @@ export type FlowerSurfaceAdapter = Readonly<{
   saveModelProfile: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
   listThreads: (options?: { signal?: AbortSignal; onPage?: (threads: readonly FlowerThreadSnapshot[]) => void }) => Promise<readonly FlowerThreadSnapshot[]>;
   loadThread: (threadID: string, signal: AbortSignal) => Promise<FlowerThreadView>;
+  releaseHistory?: (threadID: string, input: { observer_id: string; reading_revision: number; subagent?: boolean }) => Promise<void>;
   loadHistory?: (threadID: string, input: FlowerHistoryRequest, signal: AbortSignal) => Promise<FlowerThreadView>;
   loadHistoryItem?: (threadID: string, itemID: string, signal: AbortSignal) => Promise<FlowerRuntimeCurrentItem>;
   loadHistoryBody?: (threadID: string, input: FlowerHistoryBodyRequest, signal: AbortSignal) => Promise<FlowerHistoryBodyChunk>;
   connectLiveStream?: (input: FlowerLiveStreamConnectInput) => AsyncIterable<FlowerLiveStreamEnvelope>;
   readParentEvents?: (threadID: string, query: FlowerParentEventQuery) => Promise<FlowerParentEventPage>;
-  loadSubagentDetail: (parentThreadID: string, childThreadID: string) => Promise<FlowerSubagentDetail>;
+  loadSubagentDetail: (parentThreadID: string, childThreadID: string, input?: FlowerHistoryRequest, signal?: AbortSignal) => Promise<FlowerSubagentDetail>;
   operateSubagentInput?: (parentThreadID: string, childThreadID: string, input: FlowerSubagentInputOperation) => Promise<FlowerSubagentDetail>;
   markThreadRead: (threadID: string, snapshot: FlowerThreadActivitySnapshot) => Promise<FlowerThreadReadStatus>;
   renameThread?: (threadID: string, title: string) => Promise<FlowerThreadView>;

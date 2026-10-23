@@ -974,6 +974,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [handlerState, setHandlerState] = createSignal<FlowerHandlerResolutionState>({ status: 'starting' });
   const [threadLoadError, setThreadLoadError] = createSignal('');
   let historyReadingRevision = 0;
+  let subagentReadingRevision = 0;
+  let historyRecoveryUsed = false;
+  let subagentHistoryRecoveryUsed = false;
+  let subagentReadingInput: import('./contracts/flowerSurfaceContracts').FlowerHistoryRequest = {};
   let historyReadingThreadID = '';
   let historyReadingInput: import('./contracts/flowerSurfaceContracts').FlowerHistoryRequest = {};
   const [historyBusy, setHistoryBusy] = createSignal(false);
@@ -1417,6 +1421,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const closeSubagentOverlays = () => {
     setSubagentDropdownOpen(false);
     subagentDetailGeneration += 1;
+    const childID = activeSubagentDetail()?.childThreadID;
+    subagentReadingRevision++;
+    if (childID) releaseHistoryInterest(childID, subagentReadingRevision, true);
+    subagentReadingInput = {};
     subagentDetailReadController?.abort();
     setActiveSubagentDetail(null);
     setSubagentInputCommands({});
@@ -2241,7 +2249,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   // once. Embedded conversations retain their own detail loading boundary.
   // Refresh and reconnect never replace an admitted surface.
   const initialConversationPending = createMemo<boolean>(pending => (
-    pending && !props.embeddedConversation && threadListState() !== 'ready'
+    pending && !props.embeddedConversation && threadListState() !== 'ready' && !selectedThreadDetailMatches(selectedThreadID())
   ), true);
   const initialConversationFailed = () => props.adapter.connectLiveStream
     ? liveSyncState().status === 'failed'
@@ -4030,6 +4038,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       </Show>
     </div>;
   };
+  const releaseHistoryInterest = (threadID: string, revision: number, subagent = false) => {
+    const observer = computerObserverID();
+    if (threadID && observer) void props.adapter.releaseHistory?.(threadID, { observer_id: observer, reading_revision: revision, subagent }).catch(() => undefined);
+  };
   const readHistory = async (tid: string, input: import('./contracts/flowerSurfaceContracts').FlowerHistoryRequest, signal: AbortSignal, foreground: boolean) => {
     if (!props.adapter.loadHistory) return props.adapter.loadThread(tid, signal);
     const observer = foreground ? computerObserverID() : '';
@@ -4037,11 +4049,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (observer) {
       historyReadingThreadID = tid;
     }
-    const view = await props.adapter.loadHistory(tid, { ...input, ...(observer ? { observer_id: observer, reading_revision: revision } : {}) }, signal);
-    signal.throwIfAborted();
-    if (observer && (revision !== historyReadingRevision || observer !== computerObserverID())) throw new DOMException('History read was superseded.', 'AbortError');
-    if (observer) historyReadingInput = input;
-    return view;
+    const fence = () => {
+      if (observer && revision === historyReadingRevision && observer === computerObserverID()) releaseHistoryInterest(tid, ++historyReadingRevision);
+    };
+    signal.addEventListener('abort', fence, { once: true });
+    try {
+      signal.throwIfAborted();
+      const view = await props.adapter.loadHistory(tid, { ...input, ...(observer ? { observer_id: observer, reading_revision: revision } : {}) }, signal);
+      signal.throwIfAborted();
+      if (observer && (revision !== historyReadingRevision || observer !== computerObserverID())) throw new DOMException('History read was superseded.', 'AbortError');
+      if (observer) historyReadingInput = input;
+      return view;
+    } catch (error) { fence(); throw error; }
+    finally { signal.removeEventListener('abort', fence); }
   };
   const moveHistory = async (direction: 'before' | 'after' | 'latest') => {
     const tid = selectedThreadID();
@@ -4051,6 +4071,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const signal = navigationReadController.signal;
     const epoch = liveTransport.connectionEpoch();
     const release = threadCache().beginRuntimeRead(tid);
+    historyRecoveryUsed = false;
     setHistoryBusy(true); setHistoryError('');
     try {
       const view = await readHistory(tid, input, signal, true);
@@ -4067,7 +4088,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     } catch (error) {
       if (!signal.aborted && tid === selectedThreadID()) {
         setHistoryError(copy().chat.history.failed);
-        if (computerObserverID()) liveTransport.restart();
         if ((error as { code?: string })?.code === 'flower_live_sync_error') liveTransport.fail(error, epoch);
       }
     } finally { release(); setHistoryBusy(false); }
@@ -4114,9 +4134,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (surfaceDisposed || retiredThreadIDs.has(tid) || target.epoch !== liveTransport.connectionEpoch()) return;
       if ((error as { code?: unknown })?.code === 'flower_live_sync_error') { liveTransport.fail(error, target.epoch); return; }
       if ((error as { name?: string })?.name === 'AbortError') return;
-      // A failed HTTP baseline may already have installed a different server
-      // interest. Fence that observation until the user retries the read.
-      if (props.adapter.loadHistory && selectedThreadID() === tid && computerObserverID()) liveTransport.fail(error, target.epoch);
+      // readHistory fences a failed attempt locally. Only an explicit live
+      // continuity error invalidates the workspace connection.
       reportThreadDetailDiagnostic(tid, 'request_or_mapping', target.source as ThreadDetailSource, error);
       if (target.source !== 'goal_popup' && selectedThreadID() === tid && !pendingThreadSelection()) setThreadLoadError(threadDetailUserError(error));
     },
@@ -4466,7 +4485,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       closeSubagentOverlays();
       cancelPresentedSelectionSchedule();
       setPresentedSelection(null);
-      historyReadingRevision++; historyReadingInput = {}; historyReadingThreadID = tid; setHistoryBusy(false); setHistoryError('');
+      historyRecoveryUsed = false;
+      releaseHistoryInterest(historyReadingThreadID, ++historyReadingRevision); historyReadingInput = {}; historyReadingThreadID = tid; setHistoryBusy(false); setHistoryError('');
       beginThreadDetailDisplayCycle(tid);
       setThreadLoadError('');
       transcriptScroll.startFollowing();
@@ -5121,7 +5141,26 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
 
   const applyFlowerLiveStreamEnvelope = (envelope: FlowerLiveStreamEnvelope): void => {
-    if (envelope.reading_revision !== undefined && envelope.reading_revision !== historyReadingRevision) return;
+    const readingRevision = envelope.subagent_update || envelope.subagent_current || envelope.history_invalidated?.parent_thread_id ? subagentReadingRevision : historyReadingRevision;
+    if (envelope.reading_revision !== undefined && envelope.reading_revision !== readingRevision) return;
+    if (envelope.history_invalidated) {
+      const invalidated = envelope.history_invalidated;
+      if (invalidated.parent_thread_id) {
+        const active = untrack(activeSubagentDetail);
+        if (active?.childThreadID === invalidated.thread_id && active.parentThreadID === invalidated.parent_thread_id) {
+          subagentReadingRevision++;
+          if (subagentHistoryRecoveryUsed) { setActiveSubagentDetail(value => value ? { ...value, error: copy().chat.history.failed } : value); return; }
+          subagentHistoryRecoveryUsed = true;
+          void refreshActiveSubagentDetail();
+        }
+      } else if (selectedThreadID() === invalidated.thread_id) {
+        historyReadingRevision++;
+        if (historyRecoveryUsed) { setThreadLoadError(copy().chat.history.failed); return; }
+        historyRecoveryUsed = true;
+        void requestThreadDetail(invalidated.thread_id, 'background_refresh', true).catch(() => undefined);
+      }
+      return;
+    }
     if (envelope.facts_only) {
       const update = envelope.update;
       if (!update || retiredThreadIDs.has(update.thread_id)
@@ -5131,11 +5170,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         : facts.attention?.approval_count ? 'waiting_approval' : facts.activity === 'active' ? 'running'
           : facts.last_outcome === 'failed' || facts.last_outcome === 'interrupted' ? 'failed'
             : facts.last_outcome === 'cancelled' ? 'canceled' : facts.last_outcome === 'completed' ? 'success' : 'idle';
-      setThreadCache(cache => cache.updateSummaryAdjuncts(update.thread_id, summary => ({ ...summary,
-        status, active_run_id: facts.activity === 'active' ? update.run_id : undefined,
+      const adjunct = { status, active_run_id: facts.activity === 'active' ? update.run_id : undefined,
         approval_pending: Boolean(facts.attention?.approval_count), approval_pending_count: facts.attention?.approval_count ?? 0,
-        queued_turn_count: facts.queue_count,
-      })));
+        queued_turn_count: facts.queue_count };
+      const summary = threadCache().summaries.get(update.thread_id);
+      // Text growth can repeat the same facts at streaming cadence. Preserve
+      // cache identity unless a sidebar-visible fact actually changes.
+      if (!summary || summary.status === adjunct.status && summary.active_run_id === adjunct.active_run_id
+        && summary.approval_pending === adjunct.approval_pending && summary.approval_pending_count === adjunct.approval_pending_count
+        && summary.queued_turn_count === adjunct.queued_turn_count) return;
+      setThreadCache(cache => cache.updateSummaryAdjuncts(update.thread_id, summary => ({ ...summary, ...adjunct })));
       return;
     }
     const update = envelope.update ?? envelope.subagent_update;
@@ -5204,7 +5248,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const incoming = (envelope.summaries ?? [])
         .filter((summary) => !retiredThreadIDs.has(summary.thread_id));
       setThreadCache(cache => flowerBaseline.apply(cache, envelope, incoming));
-      setThreadListState('ready');
+      if (incoming.length > 0 || envelope.baseline_complete === true) setThreadListState('ready');
       setThreadListError('');
       if (envelope.baseline_complete === true && selectedID && !threadCache().selectedId) {
         closeSubagentOverlays();
@@ -5235,7 +5279,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     if (envelope.kind === 'thread.batch' && envelope.subagent_current) {
       const parentThreadID = trimString(envelope.thread_id);
-      acceptActiveSubagentCurrent(parentThreadID, envelope.subagent_current, undefined, envelope.model_context, envelope.context_usage, envelope.context_compactions, envelope.timeline_decorations);
+      acceptActiveSubagentCurrent(parentThreadID, envelope.window ? { ...envelope.subagent_current, window: envelope.window } : envelope.subagent_current, undefined, envelope.model_context, envelope.context_usage, envelope.context_compactions, envelope.timeline_decorations);
       const navigation = attentionNavigation();
       if (navigation?.parentThreadID === parentThreadID && navigation.childThreadID === selectedThreadID() && navigation.childThreadID === envelope.subagent_current.thread_id) {
         applyRuntimeCurrent(envelope.subagent_current, envelope.context_usage, envelope.context_compactions, envelope.timeline_decorations, 'live_current', undefined, envelope.model_context);
@@ -5303,6 +5347,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         releaseNavigationReads();
         referenceReadController?.abort();
         detailLoader.reset();
+        subagentReadingRevision++;
         subagentDetailReadController?.abort();
         setThreadCache(cache => cache.invalidateRuntimeVersions());
         if (untrack(privateControlRequested)) setComputerControlDisconnected(true);
@@ -5605,9 +5650,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return accepted;
   };
 
-  const refreshActiveSubagentDetail = async (scrollToBottom = false): Promise<void> => {
+  const refreshActiveSubagentDetail = async (scrollToBottom = false, input = subagentReadingInput): Promise<boolean> => {
     const active = untrack(activeSubagentDetail);
-    if (!active) return;
+    if (!active) return false;
     subagentDetailReadController?.abort();
     const readController = new AbortController();
     subagentDetailReadController = readController;
@@ -5616,8 +5661,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const request = { ...active, generation, requestStatus: 'loading' as const, error: '' };
     setActiveSubagentDetail(request);
     const releaseRead = threadCache().beginRuntimeRead(request.childThreadID);
+    const observer = computerObserverID();
+    const revision = ++subagentReadingRevision;
+    const fence = () => {
+      if (revision === subagentReadingRevision && observer === computerObserverID()) releaseHistoryInterest(request.childThreadID, ++subagentReadingRevision, true);
+    };
+    readController.signal.addEventListener('abort', fence, { once: true });
     try {
-      const detail = await readDetail(() => props.adapter.loadSubagentDetail(request.parentThreadID, request.childThreadID), readController.signal);
+      const detail = await readDetail(signal => props.adapter.loadSubagentDetail(request.parentThreadID, request.childThreadID,
+        props.adapter.loadHistory ? { ...input, ...(observer ? { observer_id: observer, reading_revision: revision } : {}) } : undefined, signal), readController.signal);
+      readController.signal.throwIfAborted();
+      if (revision !== subagentReadingRevision || observer !== computerObserverID()) return false;
+      subagentReadingInput = input;
       const parentThreadID = trimString(detail.summary.parent_thread_id);
       const childThreadID = trimString(detail.summary.thread_id);
       if (
@@ -5633,23 +5688,52 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         throw new Error('Subagent detail is invalid.');
       }
       const current = untrack(activeSubagentDetail);
-      if (!current || current.generation !== generation || requestEpoch !== liveTransport.connectionEpoch()) return;
-      acceptActiveSubagentCurrent(request.parentThreadID, detail.current, detail.summary, detail.model_context, detail.context_usage, detail.context_compactions, detail.timeline_decorations);
+      if (!current || current.generation !== generation || requestEpoch !== liveTransport.connectionEpoch()) return false;
+      acceptActiveSubagentCurrent(request.parentThreadID, { ...detail.current, ...(detail.window ? { window: detail.window } : {}) }, detail.summary, detail.model_context, detail.context_usage, detail.context_compactions, detail.timeline_decorations);
       setActiveSubagentDetail((latest) => (
         latest?.generation === generation ? { ...latest, requestStatus: 'idle', error: '' } : latest
       ));
       if (scrollToBottom) {
         requestTranscriptAnimationFrame(() => subagentDetailScroll.scrollToBottom({ smooth: false }));
       }
+      return true;
     } catch (error) {
+      fence();
       if ((error as { code?: unknown })?.code === 'flower_live_sync_error') liveTransport.fail(error, requestEpoch);
       setActiveSubagentDetail((current) => (
         current?.generation === generation
           ? { ...current, requestStatus: 'idle', error: readController.signal.aborted ? '' : threadDetailUserError(error) }
           : current
       ));
-    } finally { releaseRead(); }
+      return false;
+    } finally { readController.signal.removeEventListener('abort', fence); releaseRead(); }
   };
+
+  const moveSubagentHistory = async (direction: 'before' | 'after' | 'latest') => {
+    const active = untrack(activeSubagentDetail);
+    const window = subagentDetailThread()?.history_window;
+    if (!active || !window || active.requestStatus === 'loading') return;
+    const input = direction === 'latest' ? {} : { direction, anchor_id: direction === 'before' ? window.first_item_id : window.last_item_id };
+    subagentHistoryRecoveryUsed = false;
+    const accepted = await refreshActiveSubagentDetail(direction === 'latest', input);
+    if (!accepted || activeSubagentID() !== active.childThreadID) return;
+    if (direction === 'latest') subagentDetailScroll.startFollowing();
+    else {
+      subagentDetailScroll.stopFollowing();
+      requestTranscriptAnimationFrame(() => { const viewport = subagentDetailScroll.viewport(); if (viewport) viewport.scrollTop = direction === 'before' ? viewport.scrollHeight : 0; });
+    }
+  };
+  const subagentHistoryNavigation = (placement: 'before' | 'after') => <Show when={subagentDetailThread()?.history_window}>
+    <nav class="flower-history-navigation" aria-label={copy().chat.history.label}>
+      <Show when={placement === 'before' && subagentDetailThread()?.history_window?.has_before}>
+        <button type="button" class="flower-parent-event-action" disabled={activeSubagentDetail()?.requestStatus === 'loading'} onClick={() => void moveSubagentHistory('before')}>{copy().chat.history.older}</button>
+      </Show>
+      <Show when={placement === 'after' && subagentDetailThread()?.history_window?.has_after}>
+        <button type="button" class="flower-parent-event-action" disabled={activeSubagentDetail()?.requestStatus === 'loading'} onClick={() => void moveSubagentHistory('after')}>{copy().chat.history.newer}</button>
+        <button type="button" class="flower-parent-event-action" disabled={activeSubagentDetail()?.requestStatus === 'loading'} onClick={() => void moveSubagentHistory('latest')}>{copy().chat.history.latest}</button>
+      </Show>
+    </nav>
+  </Show>;
 
   const operateSubagentInput = async (action: SubagentInputAction, itemID: string, fingerprint?: string): Promise<void> => {
     const selected = untrack(activeSubagentDetail);
@@ -5675,7 +5759,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (!stillSelected()) return;
       if (detail.summary.parent_thread_id !== selected.parentThreadID || detail.summary.thread_id !== selected.childThreadID
         || detail.current.thread_id !== selected.childThreadID) throw new Error('Subagent input response identity mismatch.');
-      acceptActiveSubagentCurrent(selected.parentThreadID, detail.current, detail.summary, detail.model_context, detail.context_usage, detail.context_compactions, detail.timeline_decorations);
+      // Command receipts cannot replace a bounded historical reading interval.
+      if (props.adapter.loadHistory) void refreshActiveSubagentDetail();
+      else acceptActiveSubagentCurrent(selected.parentThreadID, detail.current, detail.summary, detail.model_context, detail.context_usage, detail.context_compactions, detail.timeline_decorations);
       setSubagentInputCommands((commands) => { const next = { ...commands }; delete next[key]; return next; });
     } catch (error) {
       if (!stillSelected()) return;
@@ -5694,7 +5780,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const parentID = trimString(selectedThread()?.thread_id);
     const childID = trimString(item.threadID);
     if (!parentID || item.parentThreadID !== parentID || !selectedSubagentItems().some(child => child.parentThreadID === parentID && child.threadID === childID)) return;
+    const previousChildID = activeSubagentDetail()?.childThreadID;
+    if (previousChildID && previousChildID !== childID) releaseHistoryInterest(previousChildID, ++subagentReadingRevision, true);
     subagentDetailGeneration += 1;
+    subagentReadingInput = {};
+    subagentHistoryRecoveryUsed = false;
     setSubagentInputCommands({});
     resetSubagentDetailScroll();
     setActiveSubagentDetail({
@@ -11475,7 +11565,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ) => {
     const message = createMemo(() => entry().message);
     const activeCursor = createMemo(() => (
-      livePresentationConfirmed() && selectedThreadLiveStatus() === 'running'
+      livePresentationConfirmed() && (viewportScope === transcriptScroll ? selectedThreadLiveStatus() : subagentDetailActiveStatus()) === 'running'
       && message().role === 'assistant'
       && message().active_cursor === true
     ));
@@ -12067,6 +12157,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     && subagentDetailScroll.showLatest()
   ));
   const retrySubagentDetailLoad = () => {
+    subagentHistoryRecoveryUsed = false;
     void refreshActiveSubagentDetail(true);
   };
   const bindSubagentDetailViewport = (node: HTMLDivElement) => {
@@ -12144,11 +12235,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       </Show></>}
 
       contextIndicator={<Show when={subagentDetailThread()?.model_context}><FlowerComposerContextIndicator placement="below-start" usage={subagentDetailThread()?.context_usage ?? {}} modelContext={subagentDetailThread()?.model_context} copy={copy()} /></Show>}
-      renderTimeline={() => <FlowerTurnTimeline thread={subagentDetailThread()} entries={subagentDetailTimelineEntries()}
+      renderTimeline={() => <>{subagentHistoryNavigation('before')}<FlowerTurnTimeline thread={subagentDetailThread()} entries={subagentDetailTimelineEntries()}
         failureNoticeVisible={runErrorNoticeVisible(subagentDetailThread())}
         runtimeID={props.adapter.runtime.runtime_id} scope="subagent" choices={turnDisclosureChoices}
         scroll={subagentDetailScroll} reducedMotion={reducedMotionPreferred} liveConfirmed={livePresentationConfirmed} copy={copy().chat.turnProcess}
-        renderEntry={(entry, visible) => timelineEntry(entry, subagentDetailScroll, subagentDetailThread, subagentThreadMedia, visible)} />}
+        renderEntry={(entry, visible) => timelineEntry(entry, subagentDetailScroll, subagentDetailThread, subagentThreadMedia, visible)} />{subagentHistoryNavigation('after')}</>}
       bindScroll={bindSubagentDetailViewport}
       onScroll={subagentDetailScroll.onScroll}
       onWheel={subagentDetailScroll.onWheel}
@@ -12192,6 +12283,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   );
 
   const retrySelectedThreadDetail = () => {
+    historyRecoveryUsed = false;
     if (props.adapter.loadHistory && props.adapter.connectLiveStream && liveSyncState().status === 'failed') { liveTransport.restart(); return; }
     const threadID = trimString(selectedThreadID());
     if (!threadID || retiredThreadIDs.has(threadID)) return;

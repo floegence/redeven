@@ -26,7 +26,7 @@ Keep artifacts locally; never commit user databases or credentials.
 
 Synthetic and copied released-writer qualification stays outside CI and hooks. Backend point-read and loopback timings are separate and must not be added.
 
-Root detail now uses Floret's window subscription; the initial interval and explicit body expansion bound network demand. GET detail, PATCH detail, command receipts and root live observation use the same public projection. The service's cold actor initialization can still load complete canonical state. Child detail retains its existing full-view transport. Explicitly expanding a single very large item transfers that requested item in full.
+Root detail now uses Floret's window subscription; the initial interval and explicit body expansion bound network demand. GET detail, PATCH detail, command receipts and root live observation use the same public projection. The service's cold actor initialization can still load complete canonical state. Child detail uses an independent bounded reading interest with the same body readers. Explicitly expanding a single very large item transfers that requested item in full.
 
 Window budgets exclude metadata and pending controls. Cold backend timings are isolated reads, not remote rendering latency. Lazy tools and bounded transport address separate costs.
 

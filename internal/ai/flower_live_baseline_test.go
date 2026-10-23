@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"testing"
+	"time"
 
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
@@ -29,8 +31,8 @@ func TestFlowerLiveBaselineFreezesMembershipAndQueuesConcurrentChanges(t *testin
 		t.Fatal(err)
 	}
 	defer sub.Close()
-	if got := counter.summaries.Load(); got != flowerLiveBaselinePageLimit {
-		t.Fatalf("startup read %d summaries before ready", got)
+	if got := counter.summaries.Load(); got != 0 {
+		t.Fatalf("handshake read %d summaries before ready", got)
 	}
 	// Consuming a prefix releases string contents, but the backing array stays
 	// live until the complete inventory has drained. Keep its capacity budgeted.
@@ -39,7 +41,7 @@ func TestFlowerLiveBaselineFreezesMembershipAndQueuesConcurrentChanges(t *testin
 		initialBytes += batch.bytes()
 	}
 	remainingIDBytes := 0
-	for _, id := range ids[flowerLiveBaselinePageLimit:] {
+	for _, id := range ids {
 		remainingIDBytes += len(id)
 	}
 	if retained := sub.subscriber.queuedBytes - initialBytes; retained < remainingIDBytes+16*len(ids) {
@@ -66,7 +68,7 @@ func TestFlowerLiveBaselineFreezesMembershipAndQueuesConcurrentChanges(t *testin
 		}
 		if envelope.BaselineComplete == nil {
 			if !complete || len(envelope.Summaries) != 1 || envelope.Summaries[0].ThreadID != "concurrent-root" {
-				t.Fatal("live change overtook baseline")
+				t.Fatalf("live change overtook baseline: complete=%v envelope=%+v", complete, envelope)
 			}
 			break
 		}
@@ -128,10 +130,49 @@ func TestFlowerLiveBaselineCloseCancelsInFlightPage(t *testing.T) {
 	go func() { _, err := sub.Next(t.Context()); done <- err }()
 	<-runtime.entered
 	sub.Close()
-	if err := <-done; !errors.Is(err, context.Canceled) {
+	if err := <-done; !errors.Is(err, io.EOF) {
 		t.Fatalf("page cancellation=%v", err)
 	}
 	if svc.flowerLiveQueuedBytes != 0 || sub.subscriber.baselineThreadIDs != nil {
 		t.Fatal("cancelled observer retained baseline")
+	}
+}
+
+func TestFlowerLiveReadingUpdatesBypassSlowSidebarPage(t *testing.T) {
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(t.Context(), meta, "slow sidebar", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime := &cancellingBaselineRuntime{ThreadService: svc.threadRuntime, entered: make(chan struct{})}
+	svc.threadRuntime = runtime
+	sub, err := svc.SubscribeFlowerLiveStream(t.Context(), meta, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sub.Close()
+	if frame := nextFlowerLiveStreamFrame(t, sub); frame.Kind != FlowerLiveStreamReady {
+		t.Fatal("handshake missing")
+	}
+	done := make(chan *FlowerLiveStreamFrame, 1)
+	go func() {
+		frame, err := sub.Next(t.Context())
+		if err != nil {
+			t.Errorf("stream read: %v", err)
+		}
+		done <- frame
+	}()
+	<-runtime.entered
+	svc.mu.Lock()
+	enqueueFlowerLiveSubscriberLocked(svc, sub.subscriber, newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: thread.ThreadID, ReadingRevision: 1, Update: &flruntime.ThreadUpdate{ThreadID: identity.ThreadID(thread.ThreadID), BaseVersion: 1, ViewVersion: 2, Facts: flruntime.ThreadRuntimeFacts{Activity: flruntime.ThreadActivityIdle}}}))
+	svc.mu.Unlock()
+	select {
+	case frame := <-done:
+		if frame == nil || frame.Kind != FlowerLiveStreamThreadBatch {
+			t.Fatalf("reading update blocked: %+v", frame)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("reading update waited for sidebar")
 	}
 }

@@ -231,6 +231,8 @@ type FlowerSubagentSummary struct {
 }
 
 type FlowerSubagentDetailResponse struct {
+	ComputerEvidence    *flruntime.ThreadView         `json:"-"`
+	Window              *FlowerHistoryWindow          `json:"window,omitempty"`
 	ContextCompactions  []FlowerContextCompaction     `json:"context_compactions"`
 	TimelineDecorations []FlowerTimelineDecoration    `json:"timeline_decorations"`
 	ModelContext        *flruntime.ThreadModelContext `json:"model_context,omitempty"`

@@ -414,7 +414,7 @@ describe('runtime Flower surface adapter read state', () => {
 
 		const detail = await adapter.loadSubagentDetail(' parent-detail ', ' child-detail ');
 
-		expect(loadSubagentDetail).toHaveBeenCalledWith('parent-detail', 'child-detail');
+		expect(loadSubagentDetail).toHaveBeenCalledWith('parent-detail', 'child-detail', undefined, undefined);
 		expect(detail.current.view_version).toBe(4);
         expect(detail.model_context?.snapshot.sections[0].text).toBe('Child catalog');
 		expect(detail).toEqual(expect.not.objectContaining({ timeline: expect.anything(), generated_at_ms: expect.anything() }));
@@ -1104,4 +1104,16 @@ it.each([
 ])('preserves non-transport history errors', async error => {
   const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ loadHistory: async () => { throw error; } }));
   await expect(adapter.loadHistory!('thread', {}, new AbortController().signal)).rejects.toBe(error);
+});
+
+it('validates bounded child windows at the same boundary as root windows', async () => {
+  const detail = { summary: { parent_thread_id: 'parent', thread_id: 'child', task_name: 'Review', title: 'Review', title_status: 'ready' as const, title_generation: 1, status: 'running', can_send_input: true, can_interrupt: true, can_close: true }, current: { thread_id: 'child', activity: 'idle' as const, view_version: 1, items: [] }, window: { has_before: false, has_after: false } };
+  const loadSubagentDetail = vi.fn(async () => ({ detail }));
+  const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ loadSubagentDetail }));
+  const signal = new AbortController().signal;
+  const request = { observer_id: 'observer', reading_revision: 2, limit: 1 };
+  expect(await adapter.loadSubagentDetail('parent', 'child', request, signal)).toMatchObject({ window: detail.window });
+  expect(loadSubagentDetail).toHaveBeenCalledWith('parent', 'child', request, signal);
+  Object.assign(detail.window, { has_before: 'false' });
+  await expect(adapter.loadSubagentDetail('parent', 'child', request, signal)).rejects.toThrow('invalid history window');
 });

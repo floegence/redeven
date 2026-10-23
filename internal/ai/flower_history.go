@@ -25,6 +25,7 @@ type FlowerHistoryWindow struct {
 }
 
 type FlowerHistoryRequest struct {
+	ParentThreadID  string                          `json:"-"`
 	ObserverID      string                          `json:"observer_id,omitempty"`
 	ReadingRevision uint64                          `json:"reading_revision,omitempty"`
 	AnchorID        string                          `json:"anchor_id,omitempty"`
@@ -159,6 +160,12 @@ func (s *Service) GetFlowerThreadHistory(ctx context.Context, meta *session.Meta
 	}
 	runtime, err := s.typedFloretRuntime()
 	if err != nil {
+		return nil, err
+	}
+	// Prepare the canonical actor before Summary. Read the accepted window after
+	// Summary so the read watermark cannot claim unseen content. This bounded
+	// preparation never materializes a complete View.
+	if _, _, err := readFlowerHistory(ctx, runtime, scope, flruntime.ThreadWindowInput{ThreadID: identity.ThreadID(threadID), Limit: 1}); err != nil {
 		return nil, err
 	}
 	summary, err := threadSummaryFromRuntime(ctx, runtime, identity.ThreadID(threadID))

@@ -1,7 +1,7 @@
 ---
 type: UI Contract
 title: Flower incremental live state
-description: One workspace stream, actor-native updates, and one indexed ThreadCache.
+description: One workspace facts stream, two bounded reading interests, and one indexed ThreadCache.
 tags: [ui, flower, live, threads]
 timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
@@ -9,12 +9,12 @@ reviewed_at: "2026-10-23"
 ---
 # Summary
 
-Floret owns runtime state, canonical history, item identity and view versions. Redeven authorizes and projects public data; one workspace stream delivers it to ThreadCache. Ordinary text growth carries only the changed item and its UTF-8 append offset. It must not copy, scan, redact, encode or rebuild the complete history. Missing authority or a broken sequence invalidates observation and refreshes summaries plus the required current view through the existing connection owner. Execution and user drafts survive that recovery.
+Floret owns runtime state, canonical history, item identity and view versions. Redeven authorizes and projects public data; one workspace stream delivers it to ThreadCache. Ordinary text growth carries only the changed item and its UTF-8 append offset. It must not copy, scan, redact, encode or rebuild the complete history. Lost window continuity refreshes only the affected reading interest. Transport loss uses the existing connection owner. Execution, accepted prose and user drafts survive either recovery.
 
 # Contract
 
 ## Publication and public data
-Redeven requires the released optional Floret observation contracts. The service consumes runtime updates for cleanup and workspace facts; the selected root conversation uses an authorized `ThreadWindowSource` reading interest.
+Redeven requires the released optional Floret observation contracts. The service consumes `ThreadFactsSource.SubscribeFacts` for cleanup and workspace facts without hydrating bodies. The selected conversation and optional child panel each own an authorized `ThreadWindowSource` reading interest. One worker coalesces dirty parent identities for child inventory refreshes; it retains at most 64 pending parents and never blocks the facts pump on child reads.
 
 Account watches, workload leases and Computer cleanup consume lightweight authoritative facts even with no viewer.
 
@@ -27,19 +27,21 @@ Unknown command results retain their original request keys; a disconnect never r
 
 Initialization registers observation before freezing authorized roots in product
 navigation order. Frozen IDs count against global/subscriber budgets and are
-released as pages drain. At most 25 canonical summaries precede ready; subsequent
-pages wait for their predecessor to drain. Each page has a ten-second deadline
-and explicit baseline_complete (true only on the last), then private read states.
-Live publication follows the complete baseline. Close cancels reads; stalled
-pages fail observation. Pin changes cannot skip frozen roots.
+released as pages drain. Ready publishes the observer identity immediately, before
+any canonical summary read. One asynchronous reader loads at most 25 summaries;
+subsequent pages wait for their predecessor to drain. Each page has explicit
+baseline_complete (true only on the last), then private read states. Accepted
+reading-interest updates bypass an unfinished sidebar baseline. Observer close
+cancels page reads; canonical failures invalidate observation. Sidebar preparation
+has no arbitrary ten-second cutoff. Pin changes cannot skip frozen roots.
 
 Sidebar pages merge immediately; only completion prunes roots, retaining selection
-and locally created roots. This baseline owns initial loading. Explicit refresh
+and locally created roots. A first sidebar result or accepted selected detail ends initial loading. Explicit refresh
 uses cancellable 25-row HTTP pages with ten seconds per progressing page; failure
 keeps delivered pages. Desktop cancellation covers history/item POST reads.
 
 Unselected roots publish coalesced facts without bodies. The selected root owns
-one workspace reading interest with monotonic reading revision. HTTP baseline
+one workspace reading interest with monotonic reading revision; the child panel owns a separate slot. HTTP baseline
 and later changes use the same Floret subscription. Page changes replace interest;
 older revisions cannot update the displayed page.
 
@@ -70,11 +72,15 @@ Command latest-page receipts cannot replace historical reading interest; the
 authorized detail loader refreshes that interest.
 
 Budgets remain: 16 pending batches, 32 MiB per envelope/subscriber and 32 MiB
-globally retained references. Pressure or lost reading continuity invalidates
-observation before bounded baseline recovery. Never combine a one-shot window
-with an old subscription's membership. Failed page moves retain accepted anchors.
-Transport loss, read/handshake deadlines, HTTP 408/5xx and sequence gaps reconnect
-through the existing owner with bounded exponential backoff. Authorization,
+globally retained references. Lost window continuity emits revision-fenced
+history_invalidated for that interest. The browser attempts one bounded read
+per selection or manual action; repeated loss exposes local Retry without a loop.
+Failed HTTP history reads and page moves keep accepted content and anchors;
+revision-fenced history-release cancels installed or pending interests without
+waiting on slow reads. Closing a child releases only its slot. Never combine a
+one-shot window with an old subscription's membership. Transport loss, stream
+handshake deadlines and workspace sequence gaps reconnect through the existing
+owner with bounded exponential backoff. Authorization,
 capacity, version incompatibility and malformed contracts remain terminal.
 Fetch/bridge classification precedes mapping: mapper exceptions are not retries.
 Diagnostics contain category, HTTP status and connection epoch, never response
@@ -86,7 +92,7 @@ After selection, the composer status lane localizes connecting, reconnecting and
 unconfirmed status. It never animates stale progress. Terminal failure offers
 Resync; a fresh baseline restores canonical progress without composer remount.
 
-Child detail retains the existing full-view transport. Its initialization/pressure markers converge through a canonical current snapshot; byte-accounted covered versions suppress already represented deltas. Summary, viewer read state and subagent inventory retain independent mailboxes. Already-started frames are never replaced. These are ephemeral observations, not durable cursors or a second lifecycle.
+Child detail uses the same bounded history and body readers, with independent pagination and revision fencing. Canonical command receipts refresh the accepted child interval instead of replacing it. Byte-accounted covered versions suppress already represented deltas. Summary, viewer read state and subagent inventory retain independent mailboxes. Already-started frames are never replaced. These are ephemeral observations, not durable cursors or a second lifecycle.
 
 Pending controls remain available independently of the selected page. Computer assistance may cite a tool outside the interval: authorized server-only canonical evidence validates provenance and publishes status, while the historical body stays off the wire. Missing authority fences observation.
 

@@ -22,8 +22,8 @@ require_source() {
 }
 
 echo "[INFO] checking published Floret v7 dependency"
-rg -q '^\s*github\.com/floegence/floret/v7 v7\.80\.2$' go.mod \
-  || fail "go.mod must consume github.com/floegence/floret/v7 v7.80.2"
+rg -q '^\s*github\.com/floegence/floret/v7 v7\.80\.3-0\.20261023160735-6389f55946e3$' go.mod \
+  || fail "go.mod must consume github.com/floegence/floret/v7 v7.80.3-0.20261023160735-6389f55946e3"
 redeven_go_version=$(GOWORK=off go list -m -f '{{.GoVersion}}')
 floret_go_version=$(GOWORK=off go list -m -f '{{.GoVersion}}' github.com/floegence/floret/v7)
 [[ "$redeven_go_version" == "$floret_go_version" ]] \
@@ -81,8 +81,8 @@ require_source internal/ai/queue.go 'controller.SendQueuedNow'
 require_source internal/ai/queue.go 'editor.EditQueued'
 require_source internal/ai/approval_command.go '.Respond('
 require_source internal/ai/retry_thread_continuation.go '.Retry('
-require_source internal/ai/flower_runtime_update.go 'flruntime.ThreadUpdateSource'
-require_source internal/ai/flower_runtime_update.go 'source.SubscribeUpdates'
+require_source internal/ai/flower_runtime_update.go 'flruntime.ThreadFactsSource'
+require_source internal/ai/flower_runtime_update.go 'source.SubscribeFacts'
 require_source internal/ai/floret_runtime.go 'floretEffectAuthorizationGateForRun'
 require_source internal/ai/floret_runtime.go 'flruntime.WithAgentRunLabels(labels)'
 require_source internal/ai/subagents_floret.go 'ThreadScope{ParentID:'
