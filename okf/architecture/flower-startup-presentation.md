@@ -9,11 +9,10 @@ reviewed_at: "2026-10-23"
 ---
 # Summary
 
-Env App and Desktop render canonical readiness facts and explicit safe recovery actions.
-The single readiness owner controls Flower admission while navigation and shell-owned
-drafts remain available. No surface starts another availability controller. Stop and
-retry follow typed safety facts; a close failure requires application restart, and
-unknown or contradictory facts expose a non-retryable contract failure.
+Env App/Desktop render one owner’s readiness and typed Stop/Retry facts while
+navigation and drafts remain available. Close failure requires application restart;
+unknown or contradictory facts are non-retryable contract failures. Surfaces add
+no parallel availability controller.
 
 # Contract
 
@@ -21,9 +20,9 @@ Env App shares one readiness controller across Activity, Workbench, and Settings
 
 After runtime readiness, the workspace stays in the existing Flower loading presentation until the first authoritative conversation-list page or selected conversation detail has been applied. A confirmed empty list also admits the workspace. Remaining baseline pages load progressively; the initial boundary does not wait for the complete history inventory. No welcome suggestions, composer, or stale-state reconnect banner appears before this first content result. An empty partial ready envelope only establishes live authority; it does not admit a false empty workspace. Embedded conversations retain their own detail loading and retry boundary; they do not wait for a sidebar inventory.
 
-Initial connection retries keep the same loading presentation. A terminal failure stops its indicator and offers Retry in place, with localized access, version, capacity, or timeout guidance where applicable. Raw diagnostics and error cards are not part of this entry presentation. The workspace-stream or HTTP list owner still owns reads, deadlines, cancellation and retries; the UI adds no availability controller or timer.
+Initial connection retries keep the same loading presentation. A terminal failure stops its indicator and offers Retry in place, with localized access, version, capacity, or timeout guidance where applicable. Raw diagnostics and error cards are not part of this entry presentation. Existing stream/HTTP owners retain reads, deadlines, cancellation and retries; UI adds no controller or timer.
 
-Once admitted, the surface never returns to initial loading on refresh or reconnect. Conversation selection, mounted transcript, drafts and navigation remain available; existing synchronization notices describe subsequent connection failures.
+Once admitted, the surface never returns to initial loading on refresh or reconnect. Selection, transcript, drafts and navigation remain mounted; existing notices describe connection failures.
 
 [Message continuity](../ui/flower-live-timeline.md) also preserves displayed
 prose during body growth and canonical completion. Body locators never restart
@@ -33,7 +32,7 @@ An operational generation stays mounted during historical thread preparation. A 
 
 Unconfirmed, failed or revoked permissions cannot authorize new mutations; renewed authority reopens the same controls.
 
-The boundary shows completed/total counts only for a known total and preserves shell-owned drafts.
+Show completed/total counts only when total is known.
 
 # Boundaries
 
