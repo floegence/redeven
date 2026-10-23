@@ -53,6 +53,23 @@ Hidden controls do not enter the focus or hit-test order.
 ## Visual motion
 The disclosure motion owner uses one current Web Animation: opening takes 180 ms and closing takes 140 ms. Reversal cancels the prior animation, and its obsolete completion cannot change presence.
 
+New tool, argument-preview and thinking titles in a confirmed active transcript
+use a short stepped text reveal. The complete text and fixed row geometry are
+present immediately, including accessible names, selection and click targets.
+Only the title is visually clipped; runtime delivery, results, durations and
+disclosure controls never wait for animation. The reveal takes 168–360 ms,
+adapting to visible width with at most 32 steps. Concurrent arrivals do not queue;
+each transcript retains at most 12 animations and shows older burst titles fully.
+
+The transcript owns transient arrival claims only for the current execution.
+Initial history, conversation switches, reconnect baselines, hidden disclosures,
+and arrivals first mounted more than 450 ms later remain static. A title is
+claimed once across preview promotion and disclosure remounts. Failures and
+approval requests appear immediately. Content/status changes, navigation,
+disposal, a hidden document or enabling reduced motion remove active clipping.
+There are no character timers, per-frame reactive updates, persisted animation
+facts or runtime changes. Desktop and Env App use the same implementation.
+
 [SubAgent detail](flower-subagent-detail.md) owns child grouping and projection; its viewport controller cannot affect the parent transcript.
 
 # Boundaries
@@ -66,3 +83,7 @@ This is Flower presentation policy, not a Floret public API or another execution
 - `redeven:internal/ai/computer_activity.go` - Candidate and semantic page facts without redundant status or platform details.
 
 - `redeven:internal/flower_ui/src/FlowerActivityRows.tsx` - Published code display, localized copy feedback and stable row expansion.
+
+- [Title reveal owner](../../internal/flower_ui/src/flowerActivityTitleReveal.ts)
+  and [browser regression checks](../../internal/envapp/ui_src/src/ui/FlowerSurface.activityTyping.browser.test.tsx)
+  cover concurrent arrival, geometry, history, navigation, motion preferences and cleanup.

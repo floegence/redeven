@@ -10,6 +10,7 @@ import { projectFlowerToolSequences, type FlowerToolSequence, type FlowerToolSeq
 import { createFlowerActivityDisclosureMotion } from './activityDisclosure';
 import { createFlowerToolSequenceLayout } from './flowerToolSequenceLayout';
 import { flowerDurationParts, projectFlowerTurnProcess, type FlowerTurnProcessProjection } from './flowerTurnPresentation';
+import { createFlowerActivityTitleReveal, FlowerActivityTitleRevealContext } from './flowerActivityTitleReveal';
 
 export function FlowerTurnTimeline(props: Readonly<{
   thread: FlowerThreadSnapshot | null | undefined;
@@ -20,9 +21,14 @@ export function FlowerTurnTimeline(props: Readonly<{
   choices: FlowerTurnDisclosureStore;
   scroll: FlowerScrollTailController;
   reducedMotion: Accessor<boolean>;
+  liveConfirmed?: Accessor<boolean>;
   copy: FlowerTurnProcessCopy;
   renderEntry: (entry: Accessor<FlowerTimelineEntry>, visible: Accessor<boolean>) => JSX.Element;
 }>) {
+  const titleReveal = createFlowerActivityTitleReveal({
+    thread: () => props.thread, entries: () => props.entries,
+    liveConfirmed: () => props.liveConfirmed?.() ?? false, reducedMotion: props.reducedMotion,
+  });
   const keys = createMemo(() => props.entries.map((entry) => JSON.stringify([props.thread?.thread_id, entry.key])));
   const entries = createMemo(() => new Map(props.entries.map((entry) => [entry.key, entry])));
   const failureTurnID = createMemo(() => props.failureNoticeVisible
@@ -323,9 +329,9 @@ export function FlowerTurnTimeline(props: Readonly<{
       </div>
     );
   };
-  return <FlowerToolSequenceContext.Provider value={sequenceContext}><div class="flower-turn-timeline" ref={timeline}><For each={keys()}>{(token) => {
+  return <FlowerActivityTitleRevealContext.Provider value={titleReveal}><FlowerToolSequenceContext.Provider value={sequenceContext}><div class="flower-turn-timeline" ref={timeline}><For each={keys()}>{(token) => {
     const key = (JSON.parse(token) as [string, string])[1];
     const entry = createMemo(() => entries().get(key)!);
     return row(key, entry);
-  }}</For></div></FlowerToolSequenceContext.Provider>;
+  }}</For></div></FlowerToolSequenceContext.Provider></FlowerActivityTitleRevealContext.Provider>;
 }
