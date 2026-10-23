@@ -32,6 +32,45 @@ type FlowerHistoryRequest struct {
 	Limit           int                             `json:"limit,omitempty"`
 }
 
+// FlowerHistoryBodyRequest resumes one live source at an accepted UTF-8 offset.
+// The server resolves the source again; client locators never grant access.
+type FlowerHistoryBodyRequest struct {
+	ItemID       string         `json:"item_id"`
+	RunID        identity.RunID `json:"run_id"`
+	SourceID     string         `json:"source_id"`
+	ThroughBytes int            `json:"through_bytes"`
+	OffsetBytes  int            `json:"offset_bytes"`
+}
+
+func (s *Service) GetFlowerHistoryBody(ctx context.Context, meta *session.Meta, threadID string, input FlowerHistoryBodyRequest) (flruntime.ThreadLiveBodyChunk, error) {
+	var empty flruntime.ThreadLiveBodyChunk
+	scope, err := s.flowerHistoryScope(ctx, meta, threadID)
+	if err != nil {
+		return empty, err
+	}
+	if input.ItemID == "" || input.RunID == "" || input.SourceID == "" || input.OffsetBytes < 0 || input.ThroughBytes <= input.OffsetBytes {
+		return empty, threadquery.ErrInvalidQuery
+	}
+	locator, ok := s.threadRuntime.(flruntime.ThreadItemBodyReader)
+	if !ok {
+		return empty, errors.New("published Floret item body contract is unavailable")
+	}
+	reader, ok := s.threadRuntime.(flruntime.ThreadLiveBodyReader)
+	if !ok {
+		return empty, errors.New("published Floret live body contract is unavailable")
+	}
+	body, err := locator.ItemBody(ctx, scope, flruntime.ThreadItemBodyInput{ThreadID: identity.ThreadID(threadID), ItemID: input.ItemID})
+	if err != nil {
+		return empty, err
+	}
+	if body.RunID != input.RunID || body.SourceID != input.SourceID || input.ThroughBytes > body.Bytes {
+		return empty, threadquery.ErrRecordUnavailable
+	}
+	// One request reads at most 16 KiB, with no window subscription, full View,
+	// prefix re-download, or host-owned durable body cache.
+	return reader.ReadLiveBody(ctx, scope, flruntime.ThreadLiveBodyInput{ThreadID: identity.ThreadID(threadID), RunID: body.RunID, SourceID: body.SourceID, ThroughBytes: input.ThroughBytes, OffsetBytes: input.OffsetBytes, LimitBytes: 16 << 10})
+}
+
 func (s *Service) flowerHistoryScope(ctx context.Context, meta *session.Meta, threadID string) (threadquery.Scope, error) {
 	settings, err := s.threadSettingsForRead(ctx, meta, threadID)
 	if err != nil {

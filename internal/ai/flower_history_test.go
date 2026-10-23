@@ -29,6 +29,80 @@ type flowerHistoryNoFullView struct {
 	allowFullView *atomic.Bool
 }
 
+type flowerHistoryChunkRuntime struct {
+	flruntime.ThreadService
+	flruntime.ThreadUpdateSource
+	flruntime.ThreadSummaryReader
+	body  flruntime.ThreadItemBody
+	reads []flruntime.ThreadLiveBodyInput
+}
+
+func (r *flowerHistoryChunkRuntime) ItemBody(ctx context.Context, scope threadquery.Scope, input flruntime.ThreadItemBodyInput) (flruntime.ThreadItemBody, error) {
+	if err := ctx.Err(); err != nil {
+		return flruntime.ThreadItemBody{}, err
+	}
+	if len(scope.ThreadIDs) != 1 || scope.ThreadIDs[0] != input.ThreadID || input.ItemID != "output" {
+		return flruntime.ThreadItemBody{}, threadquery.ErrRecordUnavailable
+	}
+	return r.body, nil
+}
+func (r *flowerHistoryChunkRuntime) ReadLiveBody(_ context.Context, _ threadquery.Scope, input flruntime.ThreadLiveBodyInput) (flruntime.ThreadLiveBodyChunk, error) {
+	r.reads = append(r.reads, input)
+	return flruntime.ThreadLiveBodyChunk{ThreadID: input.ThreadID, RunID: input.RunID, SourceID: input.SourceID, ThroughBytes: input.ThroughBytes, OffsetBytes: input.OffsetBytes, Text: "🌸"}, nil
+}
+func (r *flowerHistoryChunkRuntime) View(context.Context, identity.ThreadID) (flruntime.ThreadView, error) {
+	panic("chunk read must not load history")
+}
+
+func TestFlowerHistoryBodyBoundedAuthorizedResume(t *testing.T) {
+	svc := newSendTurnTestServiceWithActivation(t, true)
+	runtime := &flowerHistoryChunkRuntime{ThreadService: svc.threadRuntime, ThreadUpdateSource: svc.threadRuntime.(flruntime.ThreadUpdateSource), ThreadSummaryReader: svc.threadRuntime.(flruntime.ThreadSummaryReader), body: flruntime.ThreadItemBody{RunID: "run", SourceID: "output", Field: flruntime.ThreadBodyContent, Bytes: 100000}}
+	svc.threadRuntime = runtime
+	if err := svc.Activate(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(t.Context(), meta, "Body resume", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := FlowerHistoryBodyRequest{ItemID: "output", RunID: "run", SourceID: "output", OffsetBytes: 65536, ThroughBytes: 90000}
+	chunk, err := svc.GetFlowerHistoryBody(t.Context(), meta, thread.ThreadID, input)
+	if err != nil || chunk.OffsetBytes != input.OffsetBytes || chunk.ThroughBytes != input.ThroughBytes || chunk.Text != "🌸" {
+		t.Fatalf("chunk=%+v err=%v", chunk, err)
+	}
+	if len(runtime.reads) != 1 || runtime.reads[0].LimitBytes != 16<<10 {
+		t.Fatal("unbounded read")
+	}
+	for _, invalid := range []FlowerHistoryBodyRequest{
+		{ItemID: "output", RunID: "old", SourceID: "output", ThroughBytes: 90000},
+		{ItemID: "output", RunID: "run", SourceID: "another", ThroughBytes: 90000},
+		{ItemID: "output", RunID: "run", SourceID: "output", ThroughBytes: 100001},
+		{ItemID: "output", RunID: "run", SourceID: "output", OffsetBytes: -1, ThroughBytes: 90000},
+	} {
+		if _, err := svc.GetFlowerHistoryBody(t.Context(), meta, thread.ThreadID, invalid); err == nil {
+			t.Fatal("invalid locator accepted")
+		}
+	}
+	other := *meta
+	other.NamespacePublicID = "unauthorized"
+	if _, err := svc.GetFlowerHistoryBody(t.Context(), &other, thread.ThreadID, input); err == nil {
+		t.Fatal("unauthorized read accepted")
+	}
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := svc.GetFlowerHistoryBody(canceled, meta, thread.ThreadID, input); err == nil {
+		t.Fatal("canceled read accepted")
+	}
+	runtime.body.RunID = ""
+	if _, err := svc.GetFlowerHistoryBody(t.Context(), meta, thread.ThreadID, input); err == nil {
+		t.Fatal("expired live locator accepted")
+	}
+	if len(runtime.reads) != 1 {
+		t.Fatal("invalid requests read body bytes")
+	}
+}
+
 func (r flowerHistoryNoFullView) View(ctx context.Context, threadID identity.ThreadID) (flruntime.ThreadView, error) {
 	if r.allowFullView != nil && r.allowFullView.Load() {
 		return r.ThreadService.View(ctx, threadID)
@@ -290,7 +364,7 @@ func TestFlowerHistoryMergedAppendsRetainReadingRevision(t *testing.T) {
 		return newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: "thread", Update: &update, ReadingRevision: revision})
 	}
 	first, second := makeBatch(1, 0, "one", 4), makeBatch(2, 3, "two", 4)
-	merged := mergeFlowerLiveAppendBatches(first, second)
+	merged := mergeFlowerLiveGrowthBatches(first, second)
 	if merged == nil || merged.readingRevision != 4 {
 		t.Fatal("compatible window appends did not merge")
 	}
@@ -301,7 +375,36 @@ func TestFlowerHistoryMergedAppendsRetainReadingRevision(t *testing.T) {
 	if envelope.ReadingRevision != 4 || envelope.Update.Items[0].Append.Text != "onetwo" {
 		t.Fatal("merged wire append lost its reading revision or text")
 	}
-	if mergeFlowerLiveAppendBatches(first, makeBatch(2, 3, "two", 5)) != nil {
+	if mergeFlowerLiveGrowthBatches(first, makeBatch(2, 3, "two", 5)) != nil {
 		t.Fatal("appends crossed reading interests")
+	}
+}
+
+func TestFlowerHistoryCoalescesBodyGrowth(t *testing.T) {
+	makeBatch := func(base uint64, size int, run identity.RunID) *flowerLiveEncodedBatch {
+		update := flruntime.ThreadUpdate{ThreadID: "thread", TurnID: "turn", RunID: run, BaseVersion: base, ViewVersion: base + 1,
+			Facts: flruntime.ThreadRuntimeFacts{Activity: flruntime.ThreadActivityActive},
+			Items: []flruntime.ThreadItemChange{{Kind: flruntime.ThreadItemBodyUpdated, ItemID: "output", Body: &flruntime.ThreadItemBody{RunID: run, SourceID: "output", Field: flruntime.ThreadBodyContent, Bytes: size, PreviewBytes: 100}}}}
+		return newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: "thread", Update: &update, ReadingRevision: 3})
+	}
+	merged := makeBatch(1, 70000, "run")
+	for i := 2; i <= 2000; i++ {
+		merged = mergeFlowerLiveGrowthBatches(merged, makeBatch(uint64(i), 70000+i, "run"))
+		if merged == nil {
+			t.Fatal("body growth did not coalesce")
+		}
+	}
+	var envelope FlowerLiveStreamEnvelope
+	if err := json.Unmarshal(merged.data, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if len(merged.data) > 4096 || envelope.Update.BaseVersion != 1 || envelope.Update.ViewVersion != 2001 || envelope.Update.Items[0].Body.Bytes != 72000 || envelope.ReadingRevision != 3 {
+		t.Fatalf("invalid merged extent: %s", merged.data)
+	}
+	if mergeFlowerLiveGrowthBatches(merged, makeBatch(2001, 72001, "other-run")) != nil {
+		t.Fatal("merged across runs")
+	}
+	if mergeFlowerLiveGrowthBatches(merged, makeBatch(2001, 71000, "run")) != nil {
+		t.Fatal("accepted shrinking extent")
 	}
 }

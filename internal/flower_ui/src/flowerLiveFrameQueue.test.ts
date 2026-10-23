@@ -22,6 +22,21 @@ function harness() {
 }
 
 describe('ordered native live frame queue', () => {
+  it('coalesces 2000 body extents into one constant-size frame without polling', () => {
+    const h = harness();
+    for (let version = 1; version <= 2000; version++) {
+      const value = append(version);
+      h.queue.push({ ...value, reading_revision: 3, update: { ...value.update!, items: [{ kind: 'body', item_id: 'answer', body: { field: 'content', source_id: 'answer', run_id: 'run', bytes: 70000 + version, preview_bytes: 100 } }] } });
+    }
+    expect(h.apply).not.toHaveBeenCalled(); expect(h.callbacks.size).toBe(1);
+    h.flush();
+    expect(h.onError).not.toHaveBeenCalled(); expect(h.apply).toHaveBeenCalledOnce();
+    const value = h.apply.mock.calls[0][0];
+    expect(value.update).toMatchObject({ base_version: 0, view_version: 2000, items: [{ kind: 'body', body: { bytes: 72000 } }] });
+    expect(value.reading_revision).toBe(3);
+    expect(h.metrics.mock.calls[0][0].bytes).toBeLessThan(4096);
+    expect(h.callbacks.size).toBe(0); h.queue.dispose();
+  });
   it('uses one host-owned reactive batch for a queued frame', () => {
     let inside = false;
     const apply = vi.fn(() => expect(inside).toBe(true));

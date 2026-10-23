@@ -25,6 +25,11 @@ Initial connection retries keep the same loading presentation. A terminal failur
 
 Once admitted, the surface never returns to initial loading on refresh or reconnect. Conversation selection, mounted transcript, drafts and navigation remain available; existing synchronization notices describe subsequent connection failures.
 
+The same continuity applies within a displayed message. Body growth and
+canonical completion retain accepted prose while missing bytes load through the
+existing bounded reader. A body locator is read demand, not permission to clear
+visible content or restart the conversation loading presentation.
+
 An operational generation stays mounted during historical thread preparation. A selected thread uses its ordinary loading and retry surface, with New chat and conversation navigation available. The oldest snapshot stores may wait for their identity scan before admitting new threads. A thread-local failure does not return the whole product to startup.
 
 Unconfirmed, failed or revoked permissions cannot authorize new mutations; renewed authority reopens the same controls.

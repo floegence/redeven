@@ -180,7 +180,7 @@ func TestFlowerLiveBackpressureMergesRequestGrowthButNotAttemptBoundaries(t *tes
 		})
 	}
 	first, second := makeBatch(1, "attempt", 1), makeBatch(2, "attempt", 2)
-	merged := mergeFlowerLiveAppendBatches(first, second)
+	merged := mergeFlowerLiveGrowthBatches(first, second)
 	if merged == nil {
 		t.Fatal("growing output counters blocked append coalescing")
 	}
@@ -192,7 +192,7 @@ func TestFlowerLiveBackpressureMergesRequestGrowthButNotAttemptBoundaries(t *tes
 		!envelope.Update.Facts.RunProgress.Request.LastProgressAt.Equal(started.Add(2*time.Second)) {
 		t.Fatal("coalescing lost text or latest progress")
 	}
-	if mergeFlowerLiveAppendBatches(second, makeBatch(3, "retry", 3)) != nil || mergeFlowerLiveAppendBatches(second, makeBatch(3, "attempt", 1)) != nil {
+	if mergeFlowerLiveGrowthBatches(second, makeBatch(3, "retry", 3)) != nil || mergeFlowerLiveGrowthBatches(second, makeBatch(3, "attempt", 1)) != nil {
 		t.Fatal("append coalescing hid an attempt boundary or counter regression")
 	}
 }

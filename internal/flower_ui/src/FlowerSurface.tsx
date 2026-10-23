@@ -3968,12 +3968,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const historyBodyKey = (threadID: string, itemID: string) => JSON.stringify([threadID, itemID]);
   const loadHistoryItem = (threadID: string, itemID: string, visibleSignal?: AbortSignal, retry = false, viewportScope?: FlowerScrollTailController) => {
-    const expected = threadCache().runtimeItem(threadID, itemID);
-    if (!expected || (!expected.body && !expected.activity_bodies?.length) || !props.adapter.loadHistoryItem) return;
+    const initial = threadCache().runtimeItem(threadID, itemID);
+    if (!initial || (!initial.body && !initial.activity_bodies?.length) || !props.adapter.loadHistoryItem) return;
     const signal = visibleSignal ? AbortSignal.any([navigationReadController.signal, visibleSignal]) : navigationReadController.signal;
     const epoch = liveTransport.connectionEpoch();
-    historyBodies.request(historyBodyKey(threadID, itemID), expected, signal, async readSignal => {
-      const item = await props.adapter.loadHistoryItem!(threadID, itemID, readSignal);
+    const identity = initial.body ? JSON.stringify([initial.turn_id, initial.run_id, initial.body.run_id, initial.body.source_id, initial.body.entry_id, initial.body.field]) : initial;
+    historyBodies.request(historyBodyKey(threadID, itemID), identity, signal, async readSignal => {
+      const expected = threadCache().runtimeItem(threadID, itemID);
+      if (!expected || !expected.body && !expected.activity_bodies?.length) return;
+      const body = expected.body;
+      const offset = threadCache().bodyOffset(threadID, itemID);
+      const incremental = Boolean(body?.run_id && body.source_id && offset !== undefined && props.adapter.loadHistoryBody);
+      const chunk = incremental ? await props.adapter.loadHistoryBody!(threadID, { item_id: itemID, run_id: body!.run_id!, source_id: body!.source_id!, through_bytes: body!.bytes, offset_bytes: offset! }, readSignal) : undefined;
+      const item = chunk ? undefined : await props.adapter.loadHistoryItem!(threadID, itemID, readSignal);
       readSignal.throwIfAborted();
       if (epoch !== liveTransport.connectionEpoch()) throw new DOMException('Read was superseded.', 'AbortError');
       const viewport = viewportScope?.viewport();
@@ -3987,11 +3994,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         viewportScope!.preserveLayoutAnchor(anchor);
         requestTranscriptAnimationFrame(() => viewportScope!.finishDisclosure(anchor));
       }
-      if (!threadCache().hydrateItem(threadID, expected, item)) {
+      if (!(chunk ? threadCache().appendBody(threadID, chunk) : threadCache().hydrateItem(threadID, expected, item!))) {
         if (threadCache().runtimeItem(threadID, itemID)?.body || threadCache().runtimeItem(threadID, itemID)?.activity_bodies?.length) throw new Error('Body changed during read.');
         return;
       }
       setTranscriptLayoutRevision(value => value + 1);
+      const remaining = threadCache().runtimeItem(threadID, itemID);
+      return Boolean(remaining?.body || remaining?.activity_bodies?.length);
     }, retry);
   };
   const historyBodyControl = (threadID: Accessor<string>, itemID: Accessor<string>, viewportScope: FlowerScrollTailController) => {
@@ -11370,13 +11379,27 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 const streaming = () => streamingBlockKey() === contentBlock().key;
                 let shell!: HTMLDivElement;
                 const [visible, setVisible] = createSignal(false);
+                const hasPendingText = createMemo(() => message().body_pending?.kind === 'text');
                 onMount(() => createEffect(() => {
-                  if (message().body_pending?.kind !== 'text') return;
+                  if (!hasPendingText()) return;
                   const viewport = viewportScope.viewport();
                   if (viewport) onCleanup(historyBodyVisibility.observe(shell, viewport, setVisible));
                 }));
+                // Read ownership changes only on visibility/navigation/connection,
+                // never on a new byte extent. Slow reads can finish during growth.
+                const readOwner = createMemo(() => JSON.stringify([thread()?.thread_id, message().id, liveSyncState().connectionEpoch]));
+                const readController = createMemo(() => {
+                  readOwner();
+                  if (!visible() || !hasPendingText()) return;
+                  const controller = new AbortController();
+                  onCleanup(() => controller.abort());
+                  return controller;
+                });
                 createEffect(() => {
                   const pending = message().body_pending;
+                  void pending?.bytes;
+                  void message().live;
+                  void message().canonical_ordinal;
                   const tid = thread()?.thread_id ?? '';
                   const itemID = message().id;
                   // Reconnection establishes new read authority even when the same
@@ -11391,16 +11414,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   const bounds = viewport.getBoundingClientRect();
                   const rect = shell.getBoundingClientRect();
                   if (rect.height <= 0 || rect.bottom <= bounds.top - HISTORY_BODY_VIEWPORT_MARGIN_PX || rect.top >= bounds.bottom + HISTORY_BODY_VIEWPORT_MARGIN_PX) return;
-                  const controller = new AbortController();
-                  untrack(() => loadHistoryItem(tid, itemID, controller.signal, false, viewportScope));
-                  onCleanup(() => controller.abort());
+                  const controller = readController();
+                  if (controller) untrack(() => loadHistoryItem(tid, itemID, controller.signal, false, viewportScope));
                 });
                 return <div ref={shell} class="flower-history-message">
-                  <Show when={message().body_pending?.kind === 'text'} fallback={messageContentBubble(message, contentBlock, streaming, showCopyAction, copyText, thread, media)}>
+                  <Show when={message().body_pending?.kind === 'text' && !message().body_pending?.retained && !message().live} fallback={messageContentBubble(message, contentBlock, streaming, showCopyAction, copyText, thread, media)}>
                     <div class={cn('flower-history-text-loading', 'flower-message-bubble', message().role === 'user' && 'flower-message-bubble-user')}>
                       <div class="flower-history-text-skeleton" aria-hidden="true"><span /><span /><span /></div>
                       {historyBodyControl(() => thread()?.thread_id ?? '', () => message().id, viewportScope)}
                     </div>
+                  </Show>
+                  <Show when={message().body_pending?.kind === 'text' && (message().body_pending?.retained || message().live) && (() => { historyBodyRevision(); return historyBodies.state(historyBodyKey(thread()?.thread_id ?? '', message().id)) === 'failed'; })()}>
+                    {historyBodyControl(() => thread()?.thread_id ?? '', () => message().id, viewportScope)}
                   </Show>
                 </div>;
               }}

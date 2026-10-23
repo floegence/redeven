@@ -2,7 +2,7 @@ import '../index.css';
 import './flower-feature.css';
 import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
-import type { FlowerRuntimeCurrentItem, FlowerRuntimeCurrentView, FlowerHistoryRequest, FlowerLiveStreamEnvelope } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerRuntimeCurrentItem, FlowerRuntimeCurrentView, FlowerHistoryRequest, FlowerLiveStreamEnvelope, FlowerSurfaceAdapter } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import { adapter, renderSurfaceWithAdapter, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
@@ -10,11 +10,14 @@ function fixture(id: string, partial = false): FlowerRuntimeCurrentItem {
   return { id, kind: 'assistant', text: partial ? 'Preview text' : 'Older conversation', ordinal: id === 'latest' ? 2 : 1,
     turn_id: 'turn', run_id: 'run', ...(partial ? { body: { field: 'content', source_id: id, bytes: 28, preview_bytes: 12 } } : {}) };
 }
-async function mount(tool = false, pending = false, options: { count?: number; text?: string; fail?: boolean; kind?: 'user' | 'assistant' } = {}) {
+async function mount(tool = false, pending = false, options: { count?: number; text?: string; fail?: boolean; kind?: 'user' | 'assistant'; live?: boolean; loadHistoryBody?: FlowerSurfaceAdapter['loadHistoryBody'] } = {}) {
   await page.viewport(1280, 900);
   const seed = thread({ thread_id: 'history', title: 'Bounded history', messages: [] });
   const peer = thread({ thread_id: 'peer', title: 'Another conversation' });
-  const message = (id: string, partial = false): FlowerRuntimeCurrentItem => ({ ...fixture(id, partial), kind: options.kind ?? 'assistant' });
+  const message = (id: string, partial = false): FlowerRuntimeCurrentItem => {
+    const item = { ...fixture(id, partial), kind: options.kind ?? 'assistant', ...(options.live ? { live: true } : {}) };
+    return options.live && item.body ? { ...item, body: { ...item.body, run_id: 'run' } } : item;
+  };
   const body = vi.fn(async (_tid: string, _id: string, _signal: AbortSignal): Promise<FlowerRuntimeCurrentItem> => ({ ...message(_id), ...(options.count ? { ordinal: Number(_id) + 1 } : {}), text: options.text ?? 'Preview text expanded body!!' }));
   let complete!: (item: FlowerRuntimeCurrentItem) => void;
   if (pending) body.mockImplementationOnce(async () => new Promise<FlowerRuntimeCurrentItem>(resolve => { complete = resolve; }));
@@ -29,7 +32,7 @@ async function mount(tool = false, pending = false, options: { count?: number; t
       activity: { item_id: 'history-tool', tool_id: 'history-tool', tool_name: 'terminal.exec', kind: 'tool', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false } }
       : message(older ? 'old' : 'latest', !older);
     if (!tool && !older && options.text && item.body) item = { ...item, body: { ...item.body, bytes: new TextEncoder().encode(options.text).length } };
-    const current: FlowerRuntimeCurrentView = { thread_id: id, turn_id: 'turn', run_id: 'run', view_version: 7, activity: 'idle', last_outcome: 'completed',
+    const current: FlowerRuntimeCurrentView = { thread_id: id, turn_id: 'turn', run_id: 'run', view_version: 7, activity: options.live ? 'active' : 'idle', ...(options.live ? { run_progress: { phase: 'streaming' as const } } : { last_outcome: 'completed' as const }),
       items: options.count ? Array.from({ length: options.count }, (_, index) => ({ ...message(String(index), true), ordinal: index + 1 })) : [item], turns: [], interactions: [], queue: [], window: { first_item_id: options.count ? '0' : item.id, last_item_id: options.count ? String(options.count - 1) : item.id, has_before: !older, has_after: older } };
     return { thread: applyFlowerRuntimeCurrentView(id === 'peer' ? peer : seed, current), current };
   });
@@ -37,7 +40,7 @@ async function mount(tool = false, pending = false, options: { count?: number; t
     const receipt = await history(id, {});
     return { ...receipt, thread: { ...receipt.thread, title, title_status: 'ready' as const, title_generation: 2 } };
   });
-  const root = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [seed, peer]), loadThread: full, loadHistory: history, loadHistoryItem: body, renameThread: rename,
+  const root = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [seed, peer]), loadThread: full, loadHistory: history, loadHistoryItem: body, loadHistoryBody: options.loadHistoryBody, renameThread: rename,
     async *connectLiveStream({ signal }) {
       const abort = () => wake?.(); signal.addEventListener('abort', abort, { once: true });
       try { while (!signal.aborted) { const next = values.shift(); if (next) yield next; else await new Promise<void>(resolve => { wake = resolve; }); } }
@@ -52,6 +55,45 @@ async function mount(tool = false, pending = false, options: { count?: number; t
 }
 
 describe('bounded Flower history', () => {
+  it('keeps visible live prose through slow reads, burst growth, and canonical completion', async () => {
+    let finish!: (text: string) => void;
+    const incremental = vi.fn<NonNullable<FlowerSurfaceAdapter['loadHistoryBody']>>(async (_tid, input) => ({ thread_id: 'history', ...input, text: await new Promise<string>(resolve => { finish = resolve; }) }));
+    const { root, body, push, history } = await mount(false, false, { live: true, loadHistoryBody: incremental });
+    await waitFor(() => incremental.mock.calls.length === 1);
+    const bubble = root.querySelector('.flower-history-message .flower-message-bubble')!;
+    expect(bubble.textContent).toContain('Preview text');
+    expect(root.querySelector('.flower-history-text-loading')).toBeNull();
+    let version = 7;
+    const readingRevision = history.mock.calls.at(-1)![1].reading_revision;
+    const grow = (bytes: number) => push({ schema_version: 3, kind: 'thread.batch', thread_id: 'history', reading_revision: readingRevision, update: { thread_id: 'history', turn_id: 'turn', run_id: 'run', base_version: version++, view_version: version, facts: { activity: 'active', attention: {}, queue_count: 0, run_progress: { phase: 'streaming' } }, items: [{ kind: 'body', item_id: 'latest', body: { field: 'content', source_id: 'latest', run_id: 'run', bytes, preview_bytes: 12 } }] } });
+    for (let bytes = 29; bytes <= 128; bytes++) grow(bytes);
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    expect(incremental).toHaveBeenCalledOnce();
+    expect(incremental.mock.calls[0][2].aborted).toBe(false);
+    finish('x'.repeat(16));
+    await waitFor(() => incremental.mock.calls.length === 2);
+    expect(incremental.mock.calls[1][1]).toMatchObject({ offset_bytes: 28, through_bytes: 128 });
+    expect(bubble.textContent).toContain('Preview text' + 'x'.repeat(16));
+    expect(root.querySelector('.flower-history-message .flower-message-bubble')).toBe(bubble);
+    finish('y'.repeat(100));
+    await waitFor(() => bubble.textContent?.includes('y'.repeat(100)) === true);
+    const text = 'Preview text' + 'x'.repeat(16) + 'y'.repeat(100);
+    let complete!: (item: FlowerRuntimeCurrentItem) => void;
+    body.mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
+    const canonical = { ...fixture('latest', true), body: { field: 'content', source_id: 'latest', bytes: 128, preview_bytes: 12 } };
+    const terminal: FlowerRuntimeCurrentView = { thread_id: 'history', turn_id: 'turn', run_id: 'run', view_version: version + 1, activity: 'idle', last_outcome: 'completed', items: [canonical], turns: [], interactions: [], queue: [], window: { first_item_id: 'latest', last_item_id: 'latest', has_before: true, has_after: false } };
+    const snapshot = applyFlowerRuntimeCurrentView(thread({ thread_id: 'history', title: 'Bounded history', messages: [] }), terminal);
+    history.mockResolvedValue({ thread: snapshot, current: terminal });
+    push({ schema_version: 3, kind: 'summary.batch', summaries: [snapshot] });
+    push({ schema_version: 3, kind: 'thread.batch', thread_id: 'history', reading_revision: readingRevision, update: { thread_id: 'history', turn_id: 'turn', run_id: 'run', base_version: version++, view_version: version, facts: { activity: 'idle', attention: {}, queue_count: 0, last_outcome: 'completed' }, items: [{ kind: 'replace', item_id: 'latest', item: canonical }] } });
+    await waitFor(() => body.mock.calls.length === 1);
+    expect(bubble.textContent).toContain(text);
+    expect(root.querySelector('.flower-history-text-loading')).toBeNull();
+    complete({ ...canonical, body: undefined, text });
+    await waitFor(() => !root.querySelector('.flower-history-body-control'));
+    expect(root.querySelector('.flower-history-message .flower-message-bubble')).toBe(bubble);
+    expect(incremental).toHaveBeenCalledTimes(2);
+  });
   it('keeps user loading placeholders and hydrated text aligned to the transcript right edge', async () => {
     const text = 'Preview text ' + 'Review the complete historical request and preserve its references. '.repeat(8);
     const { root, body, complete } = await mount(false, true, { kind: 'user', text });

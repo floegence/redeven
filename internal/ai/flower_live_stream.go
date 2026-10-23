@@ -319,6 +319,7 @@ type flowerLiveAppend struct {
 	itemID         string
 	offset         int
 	text           string
+	body           *flruntime.ThreadItemBody
 	facts          json.RawMessage
 	factsKey       [32]byte
 	outputTokens   int64
@@ -683,11 +684,13 @@ func newFlowerLiveEncodedBatch(envelope FlowerLiveStreamEnvelope) *flowerLiveEnc
 		if update != nil {
 			batch.route = flowerLiveRoute{update.ThreadID.String(), envelope.ThreadID, subagent}
 			batch.baseVersion, batch.version = update.BaseVersion, update.ViewVersion
-			if flowerLiveAppendOnlyUpdate(update) {
+			if flowerLiveGrowthOnlyUpdate(update) {
 				change := update.Items[0]
 				facts, _ := json.Marshal(projectFlowerFacts(update.Facts, update.ThreadID.String(), update.TurnID.String(), update.RunID.String(), sampledAt))
-				append := &flowerLiveAppend{turnID: update.TurnID, runID: update.RunID, itemID: change.ItemID,
-					offset: change.Append.OffsetBytes, text: change.Append.Text, facts: facts}
+				append := &flowerLiveAppend{turnID: update.TurnID, runID: update.RunID, itemID: change.ItemID, body: change.Body, facts: facts}
+				if change.Append != nil {
+					append.offset, append.text = change.Append.OffsetBytes, change.Append.Text
+				}
 				stableFacts := update.Facts
 				if progress := update.Facts.RunProgress; progress != nil && progress.Request != nil {
 					progressCopy, requestCopy := *progress, *progress.Request
@@ -845,7 +848,7 @@ func enqueueFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveS
 				return convergeFlowerLiveRouteLocked(service, subscriber, flowerLiveRefreshBatch(batch))
 			}
 			if index == len(subscriber.queue)-1 {
-				if merged := mergeFlowerLiveAppendBatches(previous, batch); merged != nil {
+				if merged := mergeFlowerLiveGrowthBatches(previous, batch); merged != nil {
 					return replaceFlowerLiveQueuedBatchLocked(service, subscriber, index, merged)
 				}
 			}
@@ -854,7 +857,7 @@ func enqueueFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveS
 			// every item switch into a historical view amplifies a small backlog.
 			continuous := previous.version == batch.baseVersion
 			if a, b := previous.append, batch.append; a != nil && b != nil &&
-				a.turnID == b.turnID && a.runID == b.runID && a.itemID == b.itemID {
+				a.body == nil && b.body == nil && a.turnID == b.turnID && a.runID == b.runID && a.itemID == b.itemID {
 				continuous = continuous && a.offset+len(a.text) == b.offset
 			}
 			if continuous && len(subscriber.queue) < flowerLiveSubscriberBatchLimit &&
@@ -926,19 +929,31 @@ func appendFlowerLiveQueuedBatchLocked(service *Service, subscriber *flowerLiveS
 
 // Re-encoding is bounded to one fragment, independent of total streamed text.
 // Larger growth remains in separate ordered chunks while queue capacity allows.
-func mergeFlowerLiveAppendBatches(before, after *flowerLiveEncodedBatch) *flowerLiveEncodedBatch {
+func mergeFlowerLiveGrowthBatches(before, after *flowerLiveEncodedBatch) *flowerLiveEncodedBatch {
 	if before.readingRevision != after.readingRevision {
 		return nil
 	}
 	a, b := before.append, after.append
 	if a == nil || b == nil || before.route != after.route || a.turnID != b.turnID || a.runID != b.runID || a.itemID != b.itemID ||
-		before.version != after.baseVersion || a.offset+len(a.text) != b.offset || a.factsKey != b.factsKey ||
+		before.version != after.baseVersion || a.factsKey != b.factsKey ||
 		b.outputTokens < a.outputTokens || b.lastProgressAt.Before(a.lastProgressAt) ||
 		len(before.data)+len(after.data) > flowerLiveFragmentByteLimit {
 		return nil
 	}
 	merged := *b
-	merged.offset, merged.text = a.offset, a.text+b.text
+	var change flruntime.ThreadItemChange
+	if a.body != nil || b.body != nil {
+		if a.body == nil || b.body == nil || a.body.RunID != b.body.RunID || a.body.SourceID != b.body.SourceID || a.body.EntryID != b.body.EntryID || a.body.Field != b.body.Field || a.body.PreviewBytes != b.body.PreviewBytes || b.body.Bytes < a.body.Bytes {
+			return nil
+		}
+		change = flruntime.ThreadItemChange{Kind: flruntime.ThreadItemBodyUpdated, ItemID: b.itemID, Body: b.body}
+	} else {
+		if a.offset+len(a.text) != b.offset {
+			return nil
+		}
+		merged.offset, merged.text = a.offset, a.text+b.text
+		change = flruntime.ThreadItemChange{Kind: flruntime.ThreadItemAppended, ItemID: b.itemID, Append: &flruntime.ThreadTextAppend{OffsetBytes: merged.offset, Text: merged.text}}
+	}
 	update := struct {
 		ThreadID    string                       `json:"thread_id"`
 		TurnID      identity.TurnID              `json:"turn_id,omitempty"`
@@ -948,7 +963,7 @@ func mergeFlowerLiveAppendBatches(before, after *flowerLiveEncodedBatch) *flower
 		Facts       json.RawMessage              `json:"facts"`
 		Items       []flruntime.ThreadItemChange `json:"items"`
 	}{after.route.threadID, b.turnID, b.runID, before.baseVersion, after.version, b.facts,
-		[]flruntime.ThreadItemChange{{Kind: flruntime.ThreadItemAppended, ItemID: b.itemID, Append: &flruntime.ThreadTextAppend{OffsetBytes: merged.offset, Text: merged.text}}}}
+		[]flruntime.ThreadItemChange{change}}
 	raw, err := json.Marshal(update)
 	envelope := struct {
 		ReadingRevision uint64               `json:"reading_revision,omitempty"`
@@ -968,9 +983,10 @@ func mergeFlowerLiveAppendBatches(before, after *flowerLiveEncodedBatch) *flower
 		data: data, id: rand.Text(), append: &merged, err: errors.Join(err, encodeErr)}
 }
 
-func flowerLiveAppendOnlyUpdate(update *flruntime.ThreadUpdate) bool {
-	return update != nil && len(update.Items) == 1 && update.Items[0].Kind == flruntime.ThreadItemAppended && update.Items[0].Append != nil &&
-		update.Items[0].Item == nil && update.Items[0].Body == nil &&
+func flowerLiveGrowthOnlyUpdate(update *flruntime.ThreadUpdate) bool {
+	return update != nil && len(update.Items) == 1 && update.Items[0].Item == nil &&
+		(update.Items[0].Kind == flruntime.ThreadItemAppended && update.Items[0].Append != nil && update.Items[0].Body == nil ||
+			update.Items[0].Kind == flruntime.ThreadItemBodyUpdated && update.Items[0].Body != nil && update.Items[0].Append == nil) &&
 		update.Facts.Activity == flruntime.ThreadActivityActive && update.Facts.Failure == nil && update.Facts.Cancellation == nil && update.Facts.LastOutcome == nil &&
 		update.Facts.Attention.ApprovalCount == 0 && update.Facts.Attention.InputCount == 0 &&
 		update.ItemOrder == nil && update.Context == nil && update.Goal == nil && update.ParentEvents == nil && update.Turns == nil &&

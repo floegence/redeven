@@ -6,8 +6,8 @@ import type { FlowerLiveStreamEnvelope, FlowerRuntimeCurrentItem, FlowerRuntimeC
 import { streamingFixture } from '../../../../flower_ui/testing/streamingFixture';
 import { adapter, deferred, inputRequest, liveBootstrap, renderSurfaceWithAdapter, renderSurfaceWithAdapterProps, runtimeCurrentView, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
-function liveStream() {
-  const values: FlowerLiveStreamEnvelope[] = [];
+function liveStream(summary: ReturnType<typeof thread>) {
+  const values: FlowerLiveStreamEnvelope[] = [{ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [summary] }];
   let wake: (() => void) | undefined;
   return {
     push(current: FlowerRuntimeCurrentView) { values.push({ schema_version: 3, kind: 'thread.batch', thread_id: current.thread_id, current }); wake?.(); },
@@ -78,7 +78,7 @@ describe('Flower streaming presentation stability', () => {
       queued_turn_count: 2,
       queued_turns: [{ queue_id: 'q1', prompt: 'Next task', created_at_ms: 10 }, { queue_id: 'q2', prompt: 'Another task', created_at_ms: 11 }],
     });
-    const live = liveStream();
+    const live = liveStream(seed);
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true), listThreads: vi.fn(async () => [seed]), loadThread: vi.fn(async () => liveBootstrap(seed, 1)), connectLiveStream: live.connect,
       deleteQueuedTurn: vi.fn(async () => undefined),

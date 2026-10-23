@@ -5221,13 +5221,27 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 
 		switch {
 
-		case (action == "history" || action == "history-item") && r.Method == http.MethodPost && len(parts) == 2:
+		case (action == "history" || action == "history-item" || action == "history-body") && r.Method == http.MethodPost && len(parts) == 2:
 			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
 			if !ok || !g.requireAIService(w, aiSvc) {
 				return
 			}
 			dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10))
 			dec.DisallowUnknownFields()
+			if action == "history-body" {
+				var input ai.FlowerHistoryBodyRequest
+				if err := dec.Decode(&input); err != nil || input.ItemID == "" || dec.Decode(&struct{}{}) != io.EOF {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid history body"})
+					return
+				}
+				chunk, err := aiSvc.GetFlowerHistoryBody(r.Context(), meta, threadID, input)
+				if err != nil {
+					writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
+					return
+				}
+				writeJSON(w, http.StatusOK, apiResp{OK: true, Data: chunk})
+				return
+			}
 			if action == "history-item" {
 				var input struct {
 					ItemID string `json:"item_id"`

@@ -800,6 +800,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
 		loadThread: (threadID, signal) => runtimeJSON(bridge, 'GET', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}`, undefined, undefined, options.runtimeEnvironmentID, signal),
       loadHistory: (threadID, input, signal) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history', input, undefined, options.runtimeEnvironmentID, signal),
       loadHistoryItem: (threadID, itemID, signal) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history-item', { item_id: itemID }, undefined, options.runtimeEnvironmentID, signal),
+      loadHistoryBody: (threadID, input, signal) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history-body', input, undefined, options.runtimeEnvironmentID, signal),
       connectLiveStream: async function* (input: FlowerLiveStreamConnectInput) {
         const path = '/_redeven_proxy/api/ai/flower/stream';
         const streamID = `flower-${globalThis.crypto.randomUUID()}`;

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createRuntimeThreadRecord } from './runtimeThreadRecord';
 import { FlowerLiveSyncError } from './flowerLiveWire';
 import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
@@ -80,15 +80,16 @@ describe('bounded history body residency', () => {
     expect(next.initializeThread().messages[0].content).toBe('中文🌸');
     expect(next.initializeThread().messages[0].body_pending).toBeUndefined();
   });
-  it('rejects stale body completions and renders a growing body locator immediately', () => {
+  it('accepts an in-flight prefix while preserving the newer body extent', () => {
     const { current, initial } = fixture();
     const preview = { ...current.items![0], text: '中文', body: { field: 'content' as const, source_id: 'one', run_id: 'run', bytes: 10, preview_bytes: 6 } };
     const page = { ...current, items: [preview] };
     const record = createRuntimeThreadRecord(page, applyFlowerRuntimeCurrentView(initial, page));
     record.apply(record.initializeThread(), { ...append(), items: [{ kind: 'body', item_id: 'one', body: { ...preview.body, bytes: 11 } }] });
     expect(record.initializeThread().messages[0].body_pending?.bytes).toBe(11);
-    expect(record.hydrate(preview, { ...preview, body: undefined, text: '中文🌸' })).toBe(false);
-    expect(record.initializeThread().messages[0].content).toBe('中文');
+    expect(record.hydrate(preview, { ...preview, body: undefined, text: '中文🌸' })).toBe(true);
+    expect(record.initializeThread().messages[0].content).toBe('中文🌸');
+    expect(record.initializeThread().messages[0].body_pending?.bytes).toBe(11);
   });
 });
 
@@ -102,5 +103,85 @@ describe('history page anchors', () => {
     expect(record.initializeThread().history_window).toEqual({ first_item_id: 'one', last_item_id: 'two', has_before: true, has_after: false });
     record.apply(record.initializeThread(), { ...append(2), items: [{ kind: 'remove', item_id: 'one' }] });
     expect(record.initializeThread().history_window?.first_item_id).toBe('two');
+  });
+});
+
+
+describe('continuous visible bodies', () => {
+  it('keeps an ahead-of-observation read and settles trimmed canonical output once', () => {
+    const { current, initial } = fixture();
+    const preview = { ...current.items![0], text: '中文', body: { field: 'content', source_id: 'one', run_id: 'run', bytes: 10, preview_bytes: 6 } };
+    const page = { ...current, items: [preview] };
+    const record = createRuntimeThreadRecord(page, applyFlowerRuntimeCurrentView(initial, page));
+    expect(record.hydrate(preview, { ...preview, body: undefined, text: '中文🌸!!  ' })).toBe(true);
+    record.apply(record.initializeThread(), { ...append(), items: [{ kind: 'body', item_id: 'one', body: { ...preview.body, bytes: 11 } }] });
+    expect(record.initializeThread().messages[0].content).toBe('中文🌸!!  ');
+    expect(record.initializeThread().messages[0].body_pending).toBeUndefined();
+    const canonical = { ...preview, live: false, canonical_ordinal: 2, body: { ...preview.body, run_id: undefined, bytes: 14 } };
+    record.apply(record.initializeThread(), { ...append(2), items: [{ kind: 'replace', item_id: 'one', item: canonical }] });
+    expect(record.hydrate(preview, { ...preview, body: undefined, text: '中文🌸wrong' })).toBe(false);
+    expect(record.hydrate(record.item('one')!, { ...canonical, body: undefined, text: '中文🌸!!' })).toBe(true);
+    expect(record.initializeThread().messages[0].content).toBe('中文🌸!!');
+    expect(record.initializeThread().messages[0].body_pending).toBeUndefined();
+  });
+  it('advances only missing UTF-8 bytes and rejects duplicate or obsolete chunks', () => {
+    const { current, initial } = fixture();
+    const preview = { ...current.items![0], text: '中文', body: { field: 'content', source_id: 'one', run_id: 'run', bytes: 10, preview_bytes: 6 } };
+    const page = { ...current, items: [preview] };
+    const record = createRuntimeThreadRecord(page, applyFlowerRuntimeCurrentView(initial, page));
+    const messages = record.initializeThread().messages;
+    record.apply(record.initializeThread(), { ...append(), items: [{ kind: 'body', item_id: 'one', body: { ...preview.body, bytes: 11 } }] });
+    const chunk = { thread_id: 'thread', run_id: 'run', source_id: 'one', offset_bytes: 6, through_bytes: 10, text: '🌸' };
+    expect(record.appendBody({ ...chunk, run_id: 'obsolete' })).toBe(false);
+    expect(record.appendBody(chunk)).toBe(true);
+    expect(record.appendBody(chunk)).toBe(false);
+    expect(record.bodyOffset('one')).toBe(10);
+    expect(record.initializeThread().messages).toBe(messages);
+    expect(messages[0].body_pending?.bytes).toBe(11);
+    expect(record.appendBody({ ...chunk, offset_bytes: 10, through_bytes: 11, text: '!' })).toBe(true);
+    expect(messages[0].content).toBe('中文🌸!');
+    expect(messages[0].body_pending).toBeUndefined();
+    expect(messages[0].text_source!.read(0)).toEqual(['🌸', '!']);
+    const canonical = { ...preview, live: false, canonical_ordinal: 4, body: { ...preview.body, run_id: undefined, bytes: 11 } };
+    record.apply(record.initializeThread(), { ...append(2), items: [{ kind: 'replace', item_id: 'one', item: canonical }] });
+    expect(record.initializeThread().messages[0]).toBe(messages[0]);
+    expect(messages[0].content).toBe('中文🌸!');
+    expect(messages[0].body_pending?.retained).toBe(true);
+    expect(record.appendBody({ ...chunk, offset_bytes: 11, through_bytes: 12, text: '?' })).toBe(false);
+    expect(record.hydrate(record.item('one')!, { ...canonical, body: undefined, text: '中文🌸!' })).toBe(true);
+    expect(messages[0].body_pending).toBeUndefined();
+  });
+
+  it('keeps accepted live text and message identity while its body grows', () => {
+    const { current, initial } = fixture();
+    const preview = { ...current.items![0], text: '中文', body: { field: 'content' as const, source_id: 'one', run_id: 'run', bytes: 10, preview_bytes: 6 } };
+    const page = { ...current, items: [preview] };
+    const record = createRuntimeThreadRecord(page, applyFlowerRuntimeCurrentView(initial, page));
+    expect(record.hydrate(preview, { ...preview, body: undefined, text: '中文🌸' })).toBe(true);
+    const message = record.initializeThread().messages[0];
+    const messages = record.initializeThread().messages;
+    const encode = vi.spyOn(TextEncoder.prototype, 'encode');
+    encode.mockClear();
+    try {
+      for (let version = 1; version <= 2000; version++) {
+        record.apply(record.initializeThread(), { ...append(version), items: [{ kind: 'body', item_id: 'one', body: { ...preview.body, bytes: 10 + version } }] });
+        expect(record.initializeThread().messages).toBe(messages);
+        expect(record.initializeThread().messages[0]).toBe(message);
+        expect(message.content).toBe('中文🌸');
+        expect(message.body_pending).toMatchObject({ retained: true, bytes: 10 + version });
+      }
+      expect(encode).not.toHaveBeenCalled();
+    } finally { encode.mockRestore(); }
+  });
+
+  it('retains expanded live text across an identical authoritative baseline', () => {
+    const { current, initial } = fixture();
+    const preview = { ...current.items![0], text: '中文', body: { field: 'content' as const, source_id: 'one', run_id: 'run', bytes: 10, preview_bytes: 6 } };
+    const page = { ...current, items: [preview] };
+    const record = createRuntimeThreadRecord(page, applyFlowerRuntimeCurrentView(initial, page));
+    record.hydrate(preview, { ...preview, body: undefined, text: '中文🌸' });
+    const next = createRuntimeThreadRecord({ ...page, view_version: 2 }, applyFlowerRuntimeCurrentView(initial, page), record);
+    expect(next.initializeThread().messages[0].content).toBe('中文🌸');
+    expect(next.initializeThread().messages[0].body_pending).toBeUndefined();
   });
 });

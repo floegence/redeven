@@ -4,11 +4,12 @@ export const HISTORY_BODY_CONCURRENCY = 2;
 export const HISTORY_BODY_VIEWPORT_MARGIN_PX = 160;
 
 type BodyRead = {
-  identity: object;
+  identity: object | string;
   signal: AbortSignal;
-  read: (signal: AbortSignal) => Promise<void>;
+  read: (signal: AbortSignal) => Promise<void | boolean>;
   state: 'queued' | 'loading' | 'failed';
   cancel: () => void;
+  controller: AbortController;
 };
 
 // One surface owns the queue. Visible text and explicit tool disclosures share
@@ -18,6 +19,7 @@ export function createHistoryBodyLoader(timeoutMessage: () => string, changed: (
   let active = 0;
   const remove = (key: string, entry: BodyRead) => {
     entry.signal.removeEventListener('abort', entry.cancel);
+    entry.controller.abort();
     if (reads.get(key) === entry) { reads.delete(key); changed(); }
   };
   const pump = () => {
@@ -27,7 +29,13 @@ export function createHistoryBodyLoader(timeoutMessage: () => string, changed: (
       if (entry.signal.aborted) { remove(key, entry); continue; }
       active++; entry.state = 'loading'; changed();
       void withFlowerReadDeadline(entry.read, timeoutMessage(), entry.signal).then(
-        () => remove(key, entry),
+        more => {
+          if (more && !entry.signal.aborted && reads.get(key) === entry) {
+            // A chunk yields its slot to queued visible items. New extent
+            // notifications coalesce into the same read owner.
+            entry.state = 'queued'; reads.delete(key); reads.set(key, entry);
+          } else remove(key, entry);
+        },
         () => {
           if (entry.signal.aborted) remove(key, entry);
           else if (reads.get(key) === entry) { entry.state = 'failed'; changed(); }
@@ -40,14 +48,16 @@ export function createHistoryBodyLoader(timeoutMessage: () => string, changed: (
       const state = reads.get(key)?.state;
       return state === 'queued' ? 'loading' : state;
     },
-    request(key: string, identity: object, signal: AbortSignal, read: BodyRead['read'], retry = false) {
+    request(key: string, identity: object | string, signal: AbortSignal, read: BodyRead['read'], retry = false) {
       if (signal.aborted) return;
       const previous = reads.get(key);
       if (previous?.identity === identity && (!retry || previous.state !== 'failed')) return;
       if (previous) remove(key, previous);
-      const entry: BodyRead = { identity, signal, read, state: 'queued', cancel: () => { remove(key, entry); pump(); } };
+      const controller = new AbortController();
+      const ownedSignal = AbortSignal.any([signal, controller.signal]);
+      const entry: BodyRead = { identity, signal: ownedSignal, controller, read, state: 'queued', cancel: () => { remove(key, entry); pump(); } };
       reads.set(key, entry);
-      signal.addEventListener('abort', entry.cancel, { once: true });
+      ownedSignal.addEventListener('abort', entry.cancel, { once: true });
       changed(); pump();
     },
   };

@@ -267,7 +267,7 @@ export type FlowerMessageTextSource = Readonly<{
 }>;
 
 export type FlowerChatMessage = Readonly<{
-  body_pending?: Readonly<{ kind: 'text' | 'activity'; bytes: number }>;
+  body_pending?: Readonly<{ kind: 'text' | 'activity'; bytes: number; retained?: boolean }>;
   /** In-memory append source owned by ThreadCache, never serialized. */
   text_source?: FlowerMessageTextSource;
   goal?: FlowerGoalChange;
@@ -929,6 +929,8 @@ export type FlowerGoalInput = Readonly<{
 export type FlowerGoalResult = Readonly<{ client_request_id: string; thread_id: string; current: FlowerRuntimeCurrentView; goal: FlowerGoal; conflict: boolean; replayed?: boolean }>;
 
 export type FlowerHistoryWindow = Readonly<{ first_item_id?: string; last_item_id?: string; has_before: boolean; has_after: boolean }>;
+export type FlowerHistoryBodyRequest = Readonly<{ item_id: string; run_id: string; source_id: string; through_bytes: number; offset_bytes: number }>;
+export type FlowerHistoryBodyChunk = Readonly<{ thread_id: string; run_id: string; source_id: string; through_bytes: number; offset_bytes: number; text: string }>;
 export type FlowerHistoryRequest = Readonly<{ anchor_id?: string; direction?: 'before' | 'after' | 'around'; limit?: number; observer_id?: string; reading_revision?: number }>;
 export type FlowerItemBody = Readonly<{ run_id?: string; entry_id?: string; source_id?: string; field: string; bytes: number; preview_bytes: number }>;
 export type FlowerRuntimeCurrentItem = Readonly<{
@@ -1680,6 +1682,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   loadThread: (threadID: string, signal: AbortSignal) => Promise<FlowerThreadView>;
   loadHistory?: (threadID: string, input: FlowerHistoryRequest, signal: AbortSignal) => Promise<FlowerThreadView>;
   loadHistoryItem?: (threadID: string, itemID: string, signal: AbortSignal) => Promise<FlowerRuntimeCurrentItem>;
+  loadHistoryBody?: (threadID: string, input: FlowerHistoryBodyRequest, signal: AbortSignal) => Promise<FlowerHistoryBodyChunk>;
   connectLiveStream?: (input: FlowerLiveStreamConnectInput) => AsyncIterable<FlowerLiveStreamEnvelope>;
   readParentEvents?: (threadID: string, query: FlowerParentEventQuery) => Promise<FlowerParentEventPage>;
   loadSubagentDetail: (parentThreadID: string, childThreadID: string) => Promise<FlowerSubagentDetail>;
