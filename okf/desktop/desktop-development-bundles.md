@@ -9,34 +9,30 @@ reviewed_at: "2026-10-23"
 ---
 # Summary
 
-- Authority: the development launcher owns its selected Desktop session, local Runtime, saved local host Gateways, and immutable generated packages.
-- Outcome: development services run current checkout code and stop together; repeated launches remove obsolete packages after publishing the next complete bundle.
-- Invariants: preserve service identity and data; keep recent, selected, and live bundles; never stop unrelated services or remove user data.
-- Failure boundary: service preparation failures prevent Desktop launch and trigger cleanup; incomplete process inventory prevents bundle deletion.
+- Authority: the launcher owns its Desktop session, local Runtime, saved local host Gateways, and immutable bundles.
+- Outcome: run current checkout code, stop together, and prune obsolete bundles after publication.
+- Invariants: preserve identities, user data, unrelated services, and recent, selected or live bundles.
+- Failure boundary: preparation failure prevents launch and triggers cleanup; incomplete inventory prevents pruning.
 
 # Contract
 
 ## Development service lifecycle
 `scripts/dev_desktop.sh` builds Desktop and its Runtime bundle from the current checkout, including uncommitted source.
 
-Desktop and source-built Runtime bundles capture HEAD and the actual tracked
-and non-ignored untracked inputs before compilation, including intentional
-local edits. Verification after asset and Runtime builds and before service
-startup rejects concurrent source edits or checkout advances. The three
-regenerated OKF bundle files are outputs, even though they are committed;
-they are excluded by exact path alongside ignored generated assets. OKF
-Markdown, its builder, and the Go embed source remain protected inputs.
+Desktop and Runtime builds capture HEAD, tracked and non-ignored untracked
+inputs, including local edits. Verification after builds and before startup
+rejects concurrent edits or checkout advances. The three generated OKF bundles
+are outputs excluded by exact path alongside ignored assets. OKF Markdown,
+its builder and Go embed source remain protected inputs.
 
 Normal Electron exit, startup failure after service preparation begins, Ctrl+C, and SIGTERM stop the development Runtime and local Gateways.
 
 Development coordination belongs to the launcher, not to product shutdown.
 
-Electron's package owns binary resolution and any first-use download. The
-shared shell helper returns only its exported executable path, routing package
-and installer diagnostics to stderr. Development launch and runtime preflight
-use that helper, preserve download failures, and retain executable validation.
-The launcher resolves Electron after asset and bundle preparation, because
-those builds may reinstall Desktop dependencies and replace the package path.
+Launch and preflight use the shared Electron resolver: package/installer logs
+go to stderr; only the exported path returns. Download failures propagate and
+executability is checked. Launch resolves after builds, which may reinstall
+Desktop dependencies.
 
 ## Bundle retention
 `scripts/dev_desktop.sh` publishes each complete bundle below `<development-state-root>/desktop/bundles/<manifest-sha256>` and then runs retention before launching Electron. The selected bundle is always retained, including reuse of an older build.
@@ -55,6 +51,6 @@ Only generated packages within the selected development profile participate. In-
 
 - `redeven:scripts/desktop_bundle_build_contract.test.mjs` - Checkout advance, dirty sources, and preserved staging boundaries.
 
-- `redeven:scripts/ui_package_common_node_test.sh` - Electron resolution, first-use diagnostics, failure propagation, and runtime preflight.
+- `redeven:scripts/ui_package_common_node_test.sh` - Resolution, diagnostics, failure and preflight.
 
-- `redeven:scripts/dev_desktop_signal_cleanup_test.sh` - First-use Electron launch and session cleanup.
+- `redeven:scripts/dev_desktop_signal_cleanup_test.sh` - Download, reinstall and cleanup.
