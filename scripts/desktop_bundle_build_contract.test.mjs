@@ -9,6 +9,39 @@ import { captureSourceBuildIdentity, verifySourceBuildIdentity } from './source_
 
 const source = readFileSync(new URL('./build_desktop_bundled_runtime.sh', import.meta.url), 'utf8');
 
+test('allows generated OKF bundles to refresh while protecting their sources and embed code', () => {
+  const root = mkdtempSync(join(tmpdir(), 'redeven-okf-source-build-'));
+  try {
+    const git = (...args) => {
+      const result = spawnSync('git', args, { cwd: root, encoding: 'utf8' });
+      assert.equal(result.status, 0, result.stderr);
+    };
+    git('init', '-q');
+    git('config', 'user.name', 'Build fixture');
+    git('config', 'user.email', 'build@example.invalid');
+    mkdirSync(join(root, 'okf', 'dist'), { recursive: true });
+    writeFileSync(join(root, 'okf', 'index.md'), 'original knowledge');
+    writeFileSync(join(root, 'okf', 'dist', 'embed.go'), 'package dist');
+    const outputs = ['okf_bundle.json', 'okf_bundle.manifest.json', 'okf_bundle.sha256'];
+    for (const name of outputs) writeFileSync(join(root, 'okf', 'dist', name), 'old bundle');
+    git('add', '.'); git('commit', '-qm', 'fixture');
+    writeFileSync(join(root, 'okf', 'index.md'), 'intentional local knowledge edit');
+    const identity = captureSourceBuildIdentity(root);
+    for (const name of outputs) {
+      writeFileSync(join(root, 'okf', 'dist', name), 'regenerated bundle');
+      assert.doesNotThrow(() => verifySourceBuildIdentity(root, identity));
+    }
+    for (const name of ['okf/index.md', 'okf/dist/embed.go']) {
+      const original = readFileSync(join(root, name));
+      writeFileSync(join(root, name), 'changed during build');
+      assert.throws(() => verifySourceBuildIdentity(root, identity), /source changed during build/iu);
+      writeFileSync(join(root, name), original);
+    }
+    writeFileSync(join(root, 'okf', 'dist', 'unexpected.json'), 'new source input');
+    assert.throws(() => verifySourceBuildIdentity(root, identity), /source changed during build/iu);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test('accepts stable dirty sources, ignores build output, and rejects later edits or stale commit labels', () => {
   const root = mkdtempSync(join(tmpdir(), 'redeven-source-build-'));
   try {
@@ -53,7 +86,7 @@ test('accepts stable dirty sources, ignores build output, and rejects later edit
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-for (const phase of ['assets', 'runtime']) test(`rejects a checkout advance during ${phase} compilation`, () => {
+for (const phase of ['assets', 'runtime', 'generated-assets']) test(`validates source identity during ${phase} compilation`, () => {
   const root = mkdtempSync(join(tmpdir(), 'redeven-mixed-source-'));
   try {
     const scripts = join(root, 'scripts');
@@ -63,6 +96,10 @@ for (const phase of ['assets', 'runtime']) test(`rejects a checkout advance duri
       writeFileSync(join(scripts, name), readFileSync(join(originalScripts, name)));
     }
     writeFileSync(join(root, 'flower.ts'), 'export const compactionTurn = false;\n');
+    writeFileSync(join(root, '.gitignore'), 'compiled\n');
+    mkdirSync(join(root, 'okf', 'dist'), { recursive: true });
+    writeFileSync(join(root, 'okf', 'index.md'), 'original knowledge');
+    writeFileSync(join(root, 'okf', 'dist', 'okf_bundle.json'), 'old bundle');
     const git = (...args) => {
       const result = spawnSync('git', args, { cwd: root, encoding: 'utf8' });
       assert.equal(result.status, 0, result.stderr);
@@ -73,6 +110,7 @@ for (const phase of ['assets', 'runtime']) test(`rejects a checkout advance duri
     git('config', 'user.email', 'build@example.invalid');
     git('add', '.');
     git('commit', '-qm', 'fixture');
+    writeFileSync(join(root, 'okf', 'index.md'), 'intentional local knowledge edit');
     const entrypoint = '\nmain "$@"';
     const script = join(scripts, 'build_desktop_bundled_runtime.sh');
     const advanceCheckout = `
@@ -93,12 +131,18 @@ set -eu
 cd "$(dirname "$0")/.."
 ROOT_DIR="$PWD"
 ${phase === 'assets' ? advanceCheckout : ''}
+${phase === 'generated-assets' ? 'printf regenerated > "$ROOT_DIR/okf/dist/okf_bundle.json"' : ''}
 `, { mode: 0o755 });
     const result = spawnSync('/bin/bash', [script], { cwd: root, encoding: 'utf8',
       env: { ...process.env, FIXTURE_COMMIT: git('rev-parse', '--short=12', 'HEAD') } });
-    assert.notEqual(result.status, 0, 'a mixed source bundle must never succeed');
-    assert.match(result.stderr, /source changed during build/iu);
-    assert.equal(readdirSync(root).includes('compiled'), phase === 'runtime', 'reject asset drift before compiling the backend');
+    if (phase === 'generated-assets') {
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(readFileSync(join(root, 'compiled'), 'utf8'), 'compiled\n');
+    } else {
+      assert.notEqual(result.status, 0, 'a mixed source bundle must never succeed');
+      assert.match(result.stderr, /source changed during build/iu);
+      assert.equal(readdirSync(root).includes('compiled'), phase === 'runtime', 'reject asset drift before compiling the backend');
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

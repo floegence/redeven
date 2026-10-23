@@ -5,7 +5,7 @@ description: Run current-source local development services together and bound ge
 tags: [desktop, development, storage, retention]
 timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-23"
 ---
 # Summary
 
@@ -18,6 +18,14 @@ reviewed_at: "2026-10-22"
 
 ## Development service lifecycle
 `scripts/dev_desktop.sh` builds Desktop and its Runtime bundle from the current checkout, including uncommitted source.
+
+Desktop and source-built Runtime bundles capture HEAD and the actual tracked
+and non-ignored untracked inputs before compilation, including intentional
+local edits. Verification after asset and Runtime builds and before service
+startup rejects concurrent source edits or checkout advances. The three
+regenerated OKF bundle files are outputs, even though they are committed;
+they are excluded by exact path alongside ignored generated assets. OKF
+Markdown, its builder, and the Go embed source remain protected inputs.
 
 Normal Electron exit, startup failure after service preparation begins, Ctrl+C, and SIGTERM stop the development Runtime and local Gateways.
 
