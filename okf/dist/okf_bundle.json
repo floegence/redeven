@@ -29301,7 +29301,7 @@
       "frontmatter": {
         "description": "Keep assistant reading and sent user messages readable in every shell theme without changing content or interaction.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-23",
         "tags": [
           "accessibility",
           "flower",
@@ -29312,15 +29312,15 @@
         "title": "Flower message appearance",
         "type": "UI Contract"
       },
-      "body_length": 3337,
+      "body_length": 3881,
       "summary": "Flower owns transcript message presentation in the shared Env App and Desktop\nUI. Published Floe theme tokens own the palette. Sent user messages use the\ntheme's text-selection accent with readable foreground text. Native selection\nmust remain visible within a filled bubble and its insets. Theme changes alter\npaint only, preserving message DOM, geometry and active selection. Queued input\nkeeps its quieter pending presentation; forced colors use system roles.\nTranscript messages retain their original compact reading scale; composer\ncontrols retain the published control scale. Source destinations and copy follow\n[Flower citations](flower-citations.md), including safe authored bibliographies.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Transcript reading scale\nAssistant and user bubbles share the original `0.875rem` body size and unitless `1.75` line height (14px and 24.5px at the standard 16px root).\n\nTheir `1.6` line height keeps wrapped content readable, while the status label uses `0.75rem` with `1.4` line height.\n\n## Assistant reading roles\nAssistant body and headings retain the published foreground on the chat surface.\n\nAuthored bold text, dates, identifiers, source labels and destinations remain unchanged; presentation does not infer metadata from prose or rewrite admitted Markdown.\n\n## Filled messages and content\nSent user text and answered-question receipts use `selection-bg` and `selection-fg`.\n\nTheir text and selection use the inset reading roles so the error background cannot leave selection-colored message text unreadable.\n\nCode retains theme-colored insets; its text derives from the theme foreground with bounded lightness.\n\n## User media and resources\nEach submitted user message presents image thumbnails first, then one wrapping row of resource cards, then its text bubble and existing timestamp/copy actions. Resource-only and image-only messages never create an empty text bubble.\n\nCanonical reference previews retain exact thread, turn and reference identity; queued context actions retain their distinct authority and pending-click guard.\n\n## Native text selection\nFilled bubble text, including transparent table headers, uses Floe's contrasting `selection-on-primary` pair. Selecting text never changes parsing, content, copy behavior or transport state.\n\nBrowser coverage measures actual rendered colors across all 26 published presets and both surface materials. Ordinary and selected message text must reach 4.5:1. Code highlighting retains its independent [stable-content contract](flower-code-highlighting.md).",
-          "char_count": 1821
+          "body": "## Transcript reading scale\nAssistant and user bubbles share the original `0.875rem` body size and unitless `1.75` line height (14px and 24.5px at the standard 16px root).\n\nTheir `1.6` line height keeps wrapped content readable, while the status label uses `0.75rem` with `1.4` line height.\n\n## Assistant reading roles\nAssistant body and headings retain the published foreground on the chat surface.\n\nAuthored bold text, dates, identifiers, source labels and destinations remain unchanged; presentation does not infer metadata from prose or rewrite admitted Markdown.\n\n## Filled messages and content\nSent user text and answered-question receipts use `selection-bg` and `selection-fg`.\n\nUser text, loading placeholders and timestamp/copy actions share the transcript's\nright edge. The history observation wrapper spans the message row and right-aligns\nits content, so the bubble's 78% desktop width limit is relative to the transcript\ncolumn rather than an intrinsic text-width wrapper. Short messages fit their text;\nnarrow viewports retain the existing full-column limit.\n\nTheir text and selection use the inset reading roles so the error background cannot leave selection-colored message text unreadable.\n\nCode retains theme-colored insets; its text derives from the theme foreground with bounded lightness.\n\n## User media and resources\nEach submitted user message presents image thumbnails first, then one wrapping row of resource cards, then its text bubble and existing timestamp/copy actions. Resource-only and image-only messages never create an empty text bubble.\n\nCanonical reference previews retain exact thread, turn and reference identity; queued context actions retain their distinct authority and pending-click guard.\n\n## Native text selection\nFilled bubble text, including transparent table headers, uses Floe's contrasting `selection-on-primary` pair. Selecting text never changes parsing, content, copy behavior or transport state.\n\nBrowser coverage measures actual rendered colors across all 26 published presets and both surface materials. Ordinary and selected message text must reach 4.5:1. Code highlighting retains its independent [stable-content contract](flower-code-highlighting.md).",
+          "char_count": 2209
         },
         {
           "id": "boundaries",
@@ -33526,5 +33526,5 @@
       ]
     }
   ],
-  "source_sha256": "cc9f986b356e97f2b4ad8c28e86451b2b44016fb1b875e24aa8b6113ff8fd035"
+  "source_sha256": "bb3871176e05dc6b4e8cb0ea89379fd75253fec749720efe6aaf6f95ddc1334a"
 }

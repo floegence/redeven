@@ -12421,6 +12421,11 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
   font-size: 0.8125rem;
 }
 .flower-history-message { min-width: 0; }
+.flower-message-block-stack-user > .flower-history-message {
+  display: flex;
+  width: 100%;
+  justify-content: flex-end;
+}
 .flower-history-text-loading { padding: 1rem; min-height: 9rem; }
 .flower-history-text-skeleton { display: grid; gap: 0.625rem; padding: 0.25rem 0; }
 .flower-history-text-skeleton span { height: 0.75rem; border-radius: 0.25rem; background: currentColor; opacity: 0.07; }
