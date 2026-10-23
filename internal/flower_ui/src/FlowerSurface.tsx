@@ -11092,6 +11092,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const markdown = createMemo(() => block().block_type === 'markdown');
     const thinking = createMemo(() => block().block_type === 'thinking');
     const thinkingLive = createMemo(() => thinking() && message().live === true);
+    const thinkingElapsed = createMemo(() => {
+      const timing = message().thinking_timing;
+      if (!timing) return '';
+      const endedAt = timing.ended_at_ms ?? (thinkingLive() ? activityClockNow() : undefined);
+      return endedAt === undefined ? '' : formatActivityDuration(endedAt - timing.started_at_ms);
+    });
     const thinkingEndsAbnormally = createMemo(() => {
       const currentThread = thread();
       const currentMessage = message();
@@ -11192,7 +11198,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             live={thinkingLive}
             liveConfirmed={livePresentationConfirmed}
             preserveOnEnd={thinkingEndsAbnormally}
-            elapsed={() => formatActivityDuration(activityClockNow() - (message().created_at_ms ?? activityClockNow()))}
+            elapsed={thinkingElapsed}
             label={() => thinkingLive() && livePresentationConfirmed() ? copy().chat.thinkingActiveLabel : copy().chat.thinkingLabel}
             expandLabel={() => copy().chat.expandThinking}
             collapseLabel={() => copy().chat.collapseThinking}

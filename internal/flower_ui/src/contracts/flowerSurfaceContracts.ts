@@ -285,6 +285,8 @@ export type FlowerChatMessage = Readonly<{
   content: string;
   status: FlowerChatMessageStatus;
   created_at_ms: number;
+  /** In-memory observed thinking interval; unavailable for unobserved sealed history. */
+  thinking_timing?: Readonly<{ started_at_ms: number; ended_at_ms?: number }>;
   blocks?: readonly FlowerChatMessageBlock[];
   references?: readonly FlowerMessageReference[];
   /** Test and legacy input shape only; admitted messages are projected from references. */

@@ -21,6 +21,46 @@ function append(base = 1, text = '!', offset = 10): FlowerRuntimeUpdate {
 }
 
 describe('runtime item records', () => {
+  it('freezes observed thinking across replacement, hydration and reconnect without inventing historical timing', () => {
+    const started = Date.parse('2026-10-23T12:00:00Z');
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(started + 4000);
+      const { current, initial } = fixture();
+      const thinking = { ...current.items![0], kind: 'thinking' as const, created_at: new Date(started).toISOString() };
+      const live = { ...current, items: [thinking] };
+      const projected = applyFlowerRuntimeCurrentView(initial, live);
+      const record = createRuntimeThreadRecord(live, projected);
+      expect(record.initializeThread().messages[0].thinking_timing).toEqual({ started_at_ms: started });
+      record.apply(record.initializeThread(), append());
+      vi.setSystemTime(started + 9000);
+      // Canonical installation may replace the draft creation timestamp.
+      const sealed = { ...thinking, live: false, text: '中文', created_at: new Date(started + 9000).toISOString(),
+        body: { field: 'reasoning', source_id: thinking.id, bytes: 10, preview_bytes: 6 } };
+      const update = { ...append(2), items: [{ kind: 'replace' as const, item_id: thinking.id, item: sealed }] };
+      record.apply(record.initializeThread(), update);
+      const expected = { started_at_ms: started, ended_at_ms: started + 9000 };
+      expect(record.initializeThread().messages[0].thinking_timing).toEqual(expected);
+      vi.setSystemTime(started + 120_000);
+      expect(record.hydrate(sealed, { ...sealed, body: undefined, text: '中文🌸' })).toBe(true);
+      expect(record.initializeThread().messages[0].thinking_timing).toEqual(expected);
+      const history = { ...live, view_version: 4, items: [sealed] };
+      const refreshed = applyFlowerRuntimeCurrentView(record.initializeThread(), history);
+      expect(refreshed.messages[0].thinking_timing).toEqual(expected);
+      const reconnected = createRuntimeThreadRecord(history, applyFlowerRuntimeCurrentView(initial, history), record);
+      expect(reconnected.initializeThread().messages[0].thinking_timing).toEqual(expected);
+      expect(applyFlowerRuntimeCurrentView(initial, history).messages[0].thinking_timing).toBeUndefined();
+      const otherRun = { ...history, items: [{ ...sealed, run_id: 'other-run' }] };
+      expect(applyFlowerRuntimeCurrentView(refreshed, otherRun).messages[0].thinking_timing).toBeUndefined();
+      const accepted = applyFlowerRuntimeCurrentView(projected, history);
+      vi.setSystemTime(started + 180_000);
+      const delayed = createRuntimeThreadRecord(history, accepted, createRuntimeThreadRecord(live, projected));
+      expect(delayed.initializeThread().messages[0].thinking_timing).toEqual(accepted.messages[0].thinking_timing);
+      const resumed = applyFlowerRuntimeCurrentView(refreshed, { ...live, view_version: 5 });
+      expect(resumed.messages[0].thinking_timing).toEqual({ started_at_ms: started });
+    } finally { vi.useRealTimers(); }
+  });
+
   it('appends using UTF-8 offsets and retains message and list identity', () => {
     const { record } = fixture();
     const thread = record.initializeThread();

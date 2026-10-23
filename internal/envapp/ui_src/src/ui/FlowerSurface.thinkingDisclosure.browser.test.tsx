@@ -1,7 +1,7 @@
 import '../index.css';
 import outputSources from '../../../../flower_ui/src/testdata/outputSourceCurrentViews.json';
 import './flower-feature.css';
-import { expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import type { FlowerLiveStreamConnectInput, FlowerLiveStreamEnvelope, FlowerRuntimeCurrentView, FlowerRuntimeTurn } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
@@ -14,6 +14,7 @@ const turn = (outcome?: FlowerRuntimeTurn['outcome']): FlowerRuntimeTurn => ({
   ...(outcome ? { outcome, ended_at: '2026-10-12T12:01:00Z' } : {}),
   elapsed_ms: outcome ? 60000 : 0, waiting_ms: 0, work_duration_ms: outcome ? 60000 : 0, final_item_ids: [], final_boundary_complete: false,
 });
+afterEach(() => vi.useRealTimers());
 function current(changes: Partial<FlowerRuntimeCurrentView> = {}): FlowerRuntimeCurrentView {
   return {
     thread_id: 'thinking-thread', view_version: 1, turn_id: 'turn', run_id: 'run', activity: 'active',
@@ -69,9 +70,8 @@ function chevronDirection(root: ParentNode): number {
   const end = path.getPointAtLength(length).matrixTransform(transform);
   return Math.round(Math.atan2(tip.y - (start.y + end.y) / 2, tip.x - (start.x + end.x) / 2) * 180 / Math.PI);
 }
-async function mount(presentation: 'full' | 'companion' = 'full', localized = false) {
+async function mount(presentation: 'full' | 'companion' = 'full', localized = false, initial = current()) {
   await page.viewport(1280, 900);
-  const initial = current();
   const seed = thread({ thread_id: initial.thread_id, title: 'Thinking disclosure', messages: [] });
   const summary = () => applyFlowerRuntimeCurrentView(seed, live.current());
   const live = stream(initial, () => ({ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [summary()] }));
@@ -87,6 +87,51 @@ async function mount(presentation: 'full' | 'companion' = 'full', localized = fa
   await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   return { root, live, initial };
 }
+
+it.each(['full', 'companion'] as const)('retains completed thinking duration while later work continues in %s', async presentation => {
+  const started = Date.parse('2026-10-23T12:00:00Z');
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(started + 4000);
+  const seed = current();
+  const initial = { ...seed, items: seed.items?.map(item => ({ ...item, created_at: new Date(started).toISOString() })) };
+  const { root, live } = await mount(presentation, true, initial);
+  const duration = (id = 'thinking') => disclosure(root, id).querySelector('.flower-activity-inline-duration')?.textContent;
+  expect(duration()).toBe('4s');
+  vi.setSystemTime(started + 9000);
+  const completed = sealed(initial, { items: [
+    ...initial.items!.map(item => ({ ...item, live: false, created_at: new Date(started + 9000).toISOString() })),
+    { id: 'answer', kind: 'assistant', turn_id: 'turn', run_id: 'run', ordinal: 3, text: 'Checking the result.', created_at: new Date(started + 9000).toISOString() },
+    { id: 'thinking-next', kind: 'thinking', turn_id: 'turn', run_id: 'run', ordinal: 4, text: 'Next step.', live: true, created_at: new Date(started + 9000).toISOString() },
+  ] });
+  live.push(completed);
+  await waitFor(() => disclosure(root).dataset.flowerThinkingActive === 'false');
+  expect(duration()).toBe('9s');
+  expect(toggle(root).querySelector('.flower-activity-inline-title')?.textContent).toBe('思考过程');
+  toggle(root).click();
+  expect(duration()).toBe('9s');
+  expect(disclosure(root).dataset.flowerThinkingView).toBe('expanded');
+  toggle(root).click();
+  vi.setSystemTime(started + 69_000);
+  await waitFor(() => duration('thinking-next') === '1m');
+  expect(duration()).toBe('9s');
+  live.push({ ...completed, view_version: 3 });
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  expect(duration()).toBe('9s');
+  if (presentation === 'full') {
+    root.querySelector<HTMLButtonElement>('.flower-new-chat-button')!.click();
+    await waitFor(() => !disclosure(root));
+    root.querySelector<HTMLButtonElement>(`[data-thread-id="${initial.thread_id}"] button`)!.click();
+    await waitFor(() => Boolean(disclosure(root)));
+    expect(duration()).toBe('9s');
+  }
+  if (import.meta.env.VITE_FLOWER_THINKING_SCREENSHOTS === '1') {
+    await page.screenshot({ element: root, path: `__screenshots__/thinking-duration-${presentation}.png` });
+  }
+  await page.viewport(360, 760);
+  const button = toggle(root);
+  expect(getComputedStyle(button.querySelector('.flower-activity-inline-duration')!).display).not.toBe('none');
+  expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth + 1);
+});
 
 it('uses the tool activity row and flower animation for standalone live thinking', async () => {
   const { root } = await mount();
@@ -153,6 +198,7 @@ it.each([
   expect(disclosure(root).querySelector('.flower-thinking-flower')!.getAnimations({ subtree: true })).toHaveLength(0);
   expect(root.querySelector('.flower-turn-summary-button')).toBeNull();
   expect(toggle(root).textContent).toContain('Thought process');
+  expect(toggle(root).querySelector('.flower-activity-inline-duration')?.textContent).toBeTruthy();
   expect(disclosure(root).querySelector('.flower-thinking-content')).toBeNull();
   await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   toggle(root).focus();
