@@ -31,6 +31,13 @@ Normal Electron exit, startup failure after service preparation begins, Ctrl+C, 
 
 Development coordination belongs to the launcher, not to product shutdown.
 
+Electron's package owns binary resolution and any first-use download. The
+shared shell helper returns only its exported executable path, routing package
+and installer diagnostics to stderr. Development launch and runtime preflight
+use that helper, preserve download failures, and retain executable validation.
+The launcher resolves Electron after asset and bundle preparation, because
+those builds may reinstall Desktop dependencies and replace the package path.
+
 ## Bundle retention
 `scripts/dev_desktop.sh` publishes each complete bundle below `<development-state-root>/desktop/bundles/<manifest-sha256>` and then runs retention before launching Electron. The selected bundle is always retained, including reuse of an older build.
 
@@ -47,3 +54,7 @@ Only generated packages within the selected development profile participate. In-
 - `redeven:scripts/source_build_identity.mjs` - Shared source identity and mixed-build rejection.
 
 - `redeven:scripts/desktop_bundle_build_contract.test.mjs` - Checkout advance, dirty sources, and preserved staging boundaries.
+
+- `redeven:scripts/ui_package_common_node_test.sh` - Electron resolution, first-use diagnostics, failure propagation, and runtime preflight.
+
+- `redeven:scripts/dev_desktop_signal_cleanup_test.sh` - First-use Electron launch and session cleanup.

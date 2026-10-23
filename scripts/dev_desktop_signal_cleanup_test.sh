@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." &> /dev/null && pwd)
 if [ "${FAKE_SESSION_CASE:-}" = "" ]; then
-  for session_case in interrupt terminate normal gateway-failure gateway-interrupt source-drift; do
+  for session_case in interrupt terminate normal electron-download electron-reinstall gateway-failure gateway-interrupt source-drift; do
     FAKE_SESSION_CASE="$session_case" "$0"
   done
   exit 0
@@ -22,7 +22,7 @@ FAKE_ELECTRON_STOPPED="$TEST_ROOT/electron-stopped"
 FAKE_RUNTIME_STOPPED="$TEST_ROOT/runtime-stopped"
 FAKE_GATEWAY_STOPPED="$TEST_ROOT/gateway-stopped"
 FAKE_GATEWAY_PREPARING="$TEST_ROOT/gateway-preparing"
-FAKE_ELECTRON_PATH="$TEST_ROOT/fake-electron"
+FAKE_ELECTRON_PATH="$TEST_ROOT/fake Electron"
 SESSION_PID=""
 
 cleanup() {
@@ -41,7 +41,13 @@ cp "$ROOT_DIR/scripts/prune_dev_desktop_bundles.mjs" "$FAKE_SCRIPTS/"
 cp "$ROOT_DIR/scripts/dev_desktop_gateways.mjs" "$FAKE_SCRIPTS/"
 cp "$ROOT_DIR/.node-version" "$FAKE_CHECKOUT/.node-version"
 printf '%s\n' '{"name":"@floegence/redeven-desktop"}' > "$FAKE_DESKTOP/package.json"
-printf '%s\n' 'module.exports = process.env.FAKE_ELECTRON_PATH;' > "$FAKE_DESKTOP/node_modules/electron/index.js"
+cat > "$FAKE_DESKTOP/node_modules/electron/index.js" <<'JS'
+if (process.env.FAKE_SESSION_CASE === 'electron-download') {
+  console.log('Downloading Electron binary...');
+  require('node:child_process').spawnSync(process.execPath, ['-e', 'console.log("Electron installer output")'], { stdio: 'inherit' });
+}
+module.exports = process.env.FAKE_ELECTRON_PATH;
+JS
 
 printf '%s\n' \
   '#!/usr/bin/env bash' \
@@ -53,7 +59,7 @@ printf '%s\n' \
   '  exit 0' \
   '}' \
   'trap on_signal INT TERM' \
-  'if [ "$FAKE_SESSION_CASE" = normal ] || [ "$FAKE_SESSION_CASE" = gateway-failure ]; then sleep 0.2; exit 0; fi' \
+  'if [ "$FAKE_SESSION_CASE" = normal ] || [ "$FAKE_SESSION_CASE" = electron-download ] || [ "$FAKE_SESSION_CASE" = electron-reinstall ] || [ "$FAKE_SESSION_CASE" = gateway-failure ]; then sleep 0.2; exit 0; fi' \
   'while :; do sleep 0.05; done' > "$FAKE_ELECTRON_PATH"
 chmod 700 "$FAKE_ELECTRON_PATH"
 
@@ -66,6 +72,10 @@ printf '%s\n' \
   '    exit 0' \
   '    ;;' \
   '  run:prepare:bundled-runtime)' \
+  '    if [ "$FAKE_SESSION_CASE" = electron-reinstall ]; then' \
+  '      mv "$FAKE_ELECTRON_PATH" "$FAKE_ELECTRON_PATH.rebuilt"' \
+  '      printf "module.exports = process.env.FAKE_ELECTRON_PATH + \".rebuilt\";\n" > node_modules/electron/index.js' \
+  '    fi' \
   '    mkdir -p "$REDEVEN_DESKTOP_BUNDLE_OUTPUT_DIR"' \
   '    printf "%s\\n" "{\\"schema_version\\":1}" > "$REDEVEN_DESKTOP_BUNDLE_OUTPUT_DIR/desktop-bundle-manifest.json"' \
   '    printf "%s\\n" "#!/usr/bin/env bash" "if [ \"\${1:-}\" = desktop-runtime-stop ]; then printf \"%s %s\\n\" \"\$1\" \"\$*\" >> \"\$FAKE_RUNTIME_STOPPED\"; fi" > "$REDEVEN_DESKTOP_BUNDLE_OUTPUT_DIR/redeven"' \
@@ -172,6 +182,10 @@ if [ "$FAKE_SESSION_CASE" != gateway-interrupt ] && [ ! -f "$FAKE_ELECTRON_START
   cat "$TEST_ROOT/session.log" >&2
   printf 'dev Desktop did not reach the Electron process\n' >&2
   exit 1
+fi
+if [ "$FAKE_SESSION_CASE" = electron-download ]; then
+  rg -Fxq 'Downloading Electron binary...' "$TEST_ROOT/session.log"
+  rg -Fxq 'Electron installer output' "$TEST_ROOT/session.log"
 fi
 
 bundle_count=$(node -e 'process.stdout.write(String(require("node:fs").readdirSync(process.argv[1]).filter(name => /^[a-f0-9]{64}$/.test(name)).length))' "$STATE_ROOT/desktop/bundles")

@@ -9,6 +9,13 @@ ui_pkg_die() {
   exit 1
 }
 
+ui_pkg_electron_binary() (
+  cd -- "$1" || return 1
+  # Electron can download lazily during require(), including inherited installer
+  # output. Keep those diagnostics on stderr and return only its exported path.
+  node -e 'require("node:fs").writeFileSync(3, require("electron"))' 3>&1 1>&2
+)
+
 ui_pkg_require_node_26() {
   local root_dir="${1:-${ROOT_DIR:-}}"
   local required_version

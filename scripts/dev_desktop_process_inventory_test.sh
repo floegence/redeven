@@ -228,11 +228,6 @@ if rg -q 'cmd=\("\./node_modules/\.bin/electron"\)' "$ROOT_DIR/scripts/dev_deskt
 	printf 'development launch must record the actual Electron executable PID, not its Node CLI wrapper\n' >&2
 	exit 1
 fi
-if ! rg -q 'process\.stdout\.write\(require\("electron"\)\)' "$ROOT_DIR/scripts/dev_desktop.sh"; then
-	printf 'development launch must resolve the actual Electron executable\n' >&2
-	exit 1
-fi
-
 override_root=$(node -e 'process.stdout.write(require("node:path").resolve(process.argv[1]))' "$TEST_ROOT/explicit-state")
 override_output=$(HOME="$TEST_HOME" REDEVEN_STATE_ROOT="$override_root" "$ROOT_DIR/scripts/dev_desktop.sh" --dry-run --stop-only)
 case "$override_output" in
