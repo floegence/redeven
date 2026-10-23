@@ -25,17 +25,66 @@ Flower schema v3 has one decoder and one update pipeline. Larger envelopes retai
 
 Unknown command results retain their original request keys; a disconnect never repeats an effect automatically.
 
-Initialization registers observation before freezing authorized root IDs in product navigation order. It reads at most 25 canonical summaries before the first ready envelope, then reads each subsequent page as the previous page drains. Every baseline page carries an explicit boolean baseline_complete; only the final page is true. Frozen IDs count against subscriber and global memory budgets and are released as pages drain. Each page precedes its private viewer read states; concurrent live publications follow the complete baseline. Each page has a ten-second read deadline; a stalled page fails the observer rather than extending startup indefinitely. Closing observation cancels in-flight reads. Pin changes during loading cannot skip frozen roots.
+Initialization registers observation before freezing authorized roots in product
+navigation order. Frozen IDs count against global/subscriber budgets and are
+released as pages drain. At most 25 canonical summaries precede ready; subsequent
+pages wait for their predecessor to drain. Each page has a ten-second deadline
+and explicit baseline_complete (true only on the last), then private read states.
+Live publication follows the complete baseline. Close cancels reads; stalled
+pages fail observation. Pin changes cannot skip frozen roots.
 
-The sidebar merges partial pages immediately and prunes old roots only at completion, preserving selection and roots created locally during loading. The live baseline owns initial list loading. Explicit list refresh uses cancellable 25-row HTTP pages with the existing ten-second deadline applied to each progressing page; delivered pages remain usable on failure. History and item POST reads participate in Desktop read cancellation.
+Sidebar pages merge immediately; only completion prunes roots, retaining selection
+and locally created roots. This baseline owns initial loading. Explicit refresh
+uses cancellable 25-row HTTP pages with ten seconds per progressing page; failure
+keeps delivered pages. Desktop cancellation covers history/item POST reads.
 
-Unselected root conversations publish coalesced runtime facts without item bodies. The selected root establishes one reading interest on its workspace observer using a monotonically increasing reading revision. Its HTTP baseline is consumed from the same Floret subscription that supplies subsequent changes. Changing pages replaces that interest; older revisions cannot update the displayed page.
+Unselected roots publish coalesced facts without bodies. The selected root owns
+one workspace reading interest with monotonic reading revision. HTTP baseline
+and later changes use the same Floret subscription. Page changes replace interest;
+older revisions cannot update the displayed page.
 
-The initial page contains the latest interval, at most 150 items under Floret's 512 KiB item-window budget. Earlier, newer and latest controls replace the interval explicitly. Canonical history remains complete. Cold historical text uses a loading placeholder until its first body read. Live and already displayed text stays mounted during body growth, refresh and canonical completion; a locator never replaces accepted prose with a skeleton. One viewport observer requests complete bodies when their message enters the viewport or its 160-pixel margin. Text and explicitly opened tool details share one two-slot request queue with a fifteen-second read deadline. Leaving the viewport or conversation cancels automatic reads; queued offscreen requests never start. Complete text uses the ordinary Markdown/media renderer, preserving references and attachments. Hydration preserves the current reading anchor through the existing scroll owner; tail-follow remains active only when the reader chose it. Tool presentation remains disclosure-driven. A failed body read offers local Retry without stopping workspace synchronization. Expanded items remain in the existing bounded-window ThreadCache while their exact item/turn/run and source authority remain valid. Live extent changes retain the accepted prefix and byte offset; a slow read may finish against an older extent of that same source. Canonical completion keeps displayed prose until its canonical body is verified. Stale runs and expired live locators cannot overwrite new authority. Live reads use server-resolved ItemBody plus ReadLiveBody, returning at most 16 KiB from the missing UTF-8 offset. Extent notifications share one source-owned task within the existing two slots, yield between chunks, and never start polling or re-download the full growing prefix. No whole-thread download or duplicate transcript store is introduced.
+Reading starts at the latest interval: at most 150 items within Floret's 512 KiB
+window budget. Earlier, newer and latest controls replace it explicitly without
+truncating canonical history. Only cold historical text uses a skeleton. Live or
+previously displayed prose stays mounted during growth, refresh and completion.
+One viewport observer admits reads within 160 pixels. Text and explicitly opened
+tool details share two slots and a fifteen-second deadline. Offscreen/navigation
+cancellation removes queued demand and aborts active reads. The normal renderer
+preserves attachments and references; the scroll owner preserves reading anchors
+and user-selected tail-follow. Failures expose local Retry without stopping sync.
 
-Native changes update only accepted membership and bodies. Contiguous appends merge only within the same reading revision and exact thread/item/turn/run identities, actor versions and UTF-8 offsets. Merge work stays within one 32 KiB fragment. Bounded body growth advances its locator rather than retransmitting the prefix. Contiguous same-source body extents coalesce to the newest size on the server and within one browser frame, retaining the original base version and all semantic boundaries. Their queue storage stays constant as notification counts grow. A command's latest-page receipt cannot replace an active historical interval; the authorized detail loader refreshes that reading interest instead.
+ThreadCache alone retains expanded bodies for valid item/turn/run/source identity.
+Live reads resolve ItemBody with fresh authorization, then ReadLiveBody returns
+at most 16 KiB from the accepted UTF-8 offset. One task per source coalesces
+extents, accepts older in-flight prefixes and yields between chunks. No polling,
+full-prefix re-download, whole-thread fetch or second transcript store exists.
+Canonical completion retains prose until canonical verification; stale runs and
+expired live locators cannot overwrite it.
 
-The existing 16 pending-batch, 32 MiB per-envelope/subscriber and 32 MiB global retained-reference budgets remain enforced. Pressure or lost continuity on a bounded reading route invalidates observation and reconnects through the normal bounded baseline path. A separate one-shot window must not be combined with the old subscription's different membership. Reading failures fence observation before recovery; failed page movement retains its prior accepted anchor. Transport loss, read/handshake timeouts, HTTP 408/5xx and lost sequence continuity reconnect through the same owner with bounded exponential backoff. Authorization, capacity, incompatible versions and malformed contracts remain actionable terminal failures. Fetch/bridge failures are classified before history mapping, so mapper exceptions cannot become transport retries. Terminal diagnostics include only error category, HTTP status and connection epoch, never response bodies or arbitrary server messages. Execution and drafts survive recovery. A failed initial SSE subscription maps runtime synchronization loss to HTTP 503 and baseline deadlines to HTTP 504, so the same recovery owner retries while the backend rebinds. Invalid requests remain HTTP 400 and observer capacity remains HTTP 429. After conversation selection, the composer status lane shows localized connecting, reconnecting or status-unconfirmed feedback while observation is unavailable. It never animates stale execution progress; terminal failure offers Resync through the existing workspace owner. A fresh baseline restores canonical progress without remounting the composer.
+Updates affect only accepted membership and bodies. Appends merge within one
+32 KiB fragment only for matching reading revision, thread/item/turn/run,
+contiguous versions and UTF-8 offsets. Body growth sends locators, not prefixes.
+Contiguous same-source extents coalesce server-side and per browser frame with
+constant queue storage, the original base version and all semantic boundaries.
+Command latest-page receipts cannot replace historical reading interest; the
+authorized detail loader refreshes that interest.
+
+Budgets remain: 16 pending batches, 32 MiB per envelope/subscriber and 32 MiB
+globally retained references. Pressure or lost reading continuity invalidates
+observation before bounded baseline recovery. Never combine a one-shot window
+with an old subscription's membership. Failed page moves retain accepted anchors.
+Transport loss, read/handshake deadlines, HTTP 408/5xx and sequence gaps reconnect
+through the existing owner with bounded exponential backoff. Authorization,
+capacity, version incompatibility and malformed contracts remain terminal.
+Fetch/bridge classification precedes mapping: mapper exceptions are not retries.
+Diagnostics contain category, HTTP status and connection epoch, never response
+bodies or arbitrary server messages. Execution and drafts survive recovery.
+Initial SSE sync loss returns 503; baseline timeout 504; invalid request 400;
+observer capacity 429. These codes use the same recovery owner during rebind.
+
+After selection, the composer status lane localizes connecting, reconnecting and
+unconfirmed status. It never animates stale progress. Terminal failure offers
+Resync; a fresh baseline restores canonical progress without composer remount.
 
 Child detail retains the existing full-view transport. Its initialization/pressure markers converge through a canonical current snapshot; byte-accounted covered versions suppress already represented deltas. Summary, viewer read state and subagent inventory retain independent mailboxes. Already-started frames are never replaced. These are ephemeral observations, not durable cursors or a second lifecycle.
 
