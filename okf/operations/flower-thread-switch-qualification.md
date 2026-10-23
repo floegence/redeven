@@ -9,15 +9,11 @@ reviewed_at: "2026-10-23"
 ---
 # Summary
 
-Published Floret v7.79.0 owns canonical windows, bodies, View and Summary. Redeven consumes a
-point summary and coordinates ephemeral read demand through one loader. The
-[sidebar contract](../ui/flower-thread-sidebar.md) and
-[Desktop bridge](../desktop/desktop-runtime-bridge.md) own the behavior.
-Qualification uses copied released-writer fixtures and synthetic conversations;
-it never continues real user tasks. The short-detail P95 target is at least a
-70% reduction, with warm selection synchronous P95 below 8 ms and actual
-selection feedback presented before transcript commit. These checks are local
-qualification, outside ordinary CI and hooks.
+Published Floret v7.79.0 owns windows, bodies, View and Summary. Redeven owns
+bounded reads and presentation through the [sidebar](../ui/flower-thread-sidebar.md)
+and [Desktop bridge](../desktop/desktop-runtime-bridge.md). Local qualification
+targets >=70% lower short-detail P95, warm synchronous P95 <8 ms, and feedback
+before commit. Fixtures never continue real user tasks.
 
 # Contract
 
@@ -28,11 +24,11 @@ Keep artifacts locally; never commit user databases or credentials.
 
 # Boundaries
 
-Measurements use synthetic conversations and copied released-writer fixtures. Backend point-read timings and the loopback transport fixture are separate experiments; their durations must not be added. These explicit qualification suites stay outside ordinary CI and hooks.
+Synthetic and copied released-writer qualification stays outside CI and hooks. Backend point-read and loopback timings are separate and must not be added.
 
 Root detail now uses Floret's window subscription; the initial interval and explicit body expansion bound network demand. GET detail, PATCH detail, command receipts and root live observation use the same public projection. The service's cold actor initialization can still load complete canonical state. Child detail retains its existing full-view transport. Explicitly expanding a single very large item transfers that requested item in full.
 
-The item-window budget excludes product metadata and pending controls. Cold backend timings below are isolated read timings, not remote end-to-end rendering measurements. Lazy collapsed tool content and bounded transport address separate costs.
+Window budgets exclude metadata and pending controls. Cold backend timings are isolated reads, not remote rendering latency. Lazy tools and bounded transport address separate costs.
 
 # Evidence
 
