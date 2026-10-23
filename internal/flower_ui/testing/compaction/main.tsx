@@ -59,6 +59,7 @@ const adapter = createRuntimeFlowerSurfaceAdapter({
       loadHistoryBody: (threadID: string, input: unknown, signal: AbortSignal) => api('history_body', threadID, input, signal),
       releaseHistory: async (threadID: string, input: unknown) => { await api('history_release', threadID, input); },
     } : {}),
+    readParentEvents: (threadID, query) => api('parent_events', threadID, query),
     forkThread: unavailable,
 
     loadSubagentDetail: (parentID, childID, input, signal) => api('subagent_detail', childID, input ? { ...input, parent: parentID } : undefined, signal),

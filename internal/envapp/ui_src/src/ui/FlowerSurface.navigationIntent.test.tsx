@@ -48,7 +48,8 @@ describe('Flower navigation intent', () => {
     expect(committed(host)).toBe('b');
     expect(loadThread).toHaveBeenCalledTimes(1);
     expect(host.querySelector('.flower-thread-navigation-status')).toBeNull();
-    expect(host.querySelector('.flower-thread-loading')).not.toBeNull();
+    expect(host.querySelector('.flower-thread-loading')).toBeNull();
+    await waitFor(() => Boolean(host.querySelector('.flower-thread-loading')));
     detail.resolve(liveBootstrap(summaries[1]));
     await waitFor(() => host.textContent?.includes('Body B') ?? false);
     expect(host.querySelector<HTMLElement>('[data-flower-panel="chat"]')?.inert).toBe(false);

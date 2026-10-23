@@ -4,6 +4,7 @@ export type ThreadDetailTarget = Readonly<{
   settingsRevision: number;
   runtimeKey: string;
   source: string;
+  force?: boolean;
 }>;
 type Target = ThreadDetailTarget & Readonly<{ cycle: number }>;
 type Waiter<T> = { resolve: (value: T | null) => void; release: () => void };
@@ -18,7 +19,7 @@ function advanced(next: Target, previous: Target): boolean {
 }
 function merge(next: Target, previous: Target): Target {
   if (next.epoch !== previous.epoch) return next;
-  return { ...next, cycle: Math.max(next.cycle, previous.cycle),
+  return { ...next, force: next.force || previous.force, cycle: Math.max(next.cycle, previous.cycle),
     activityRevision: Math.max(next.activityRevision, previous.activityRevision),
     settingsRevision: Math.max(next.settingsRevision, previous.settingsRevision),
     runtimeKey: next.activityRevision >= previous.activityRevision ? next.runtimeKey : previous.runtimeKey };

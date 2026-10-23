@@ -74,3 +74,22 @@ it('bounds idle records to retained detail cache entries after many reads', asyn
   }
   expect(loader.size()).toBe(0);
 });
+
+it('preserves forced command confirmation when later summary demand merges into it', async () => {
+  const reads: ThreadDetailTarget[] = [];
+  let complete!: (value: string) => void;
+  const loader = createThreadDetailLoader<string>({ onError: vi.fn(), onLoading: vi.fn(), read: async (_id, target) => {
+    reads.push(target);
+    if (reads.length === 1) return new Promise(resolve => { complete = resolve; });
+    return 'confirmed';
+  } });
+  const initial = loader.request('a', target()); await tick();
+  loader.invalidate('a');
+  const confirmation = loader.request('a', { ...target(), force: true });
+  const summary = loader.request('a', target(2));
+  complete('initial'); await initial; await tick();
+  expect(reads).toHaveLength(2);
+  expect(reads[1]).toMatchObject({ force: true, activityRevision: 2 });
+  expect(await confirmation).toBe('confirmed'); expect(await summary).toBe('confirmed');
+  loader.dispose();
+});
