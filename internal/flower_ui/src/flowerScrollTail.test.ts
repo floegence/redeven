@@ -75,6 +75,24 @@ function createController() {
 }
 
 describe('Flower scroll tail controller', () => {
+  it.each([false, true])('clears prior arrival motion before starting a new destination: started=%s', (started) => {
+    const raf = createRafHarness();
+    const controller = createFlowerScrollTailController({ reducedMotionPreferred: () => false,
+      requestAnimationFrame: raf.requestAnimationFrame, cancelAnimationFrame: raf.cancelAnimationFrame });
+    const metrics = createViewport();
+    controller.bind(metrics.viewport);
+    metrics.setScrollHeight(700);
+    controller.prepareArrival();
+    if (started) raf.flushFrame();
+    metrics.setScrollHeight(1200);
+    metrics.setScrollTop(0);
+    controller.startFollowing();
+    controller.flushLayout();
+    expect(metrics.scrollTop()).toBe(1100);
+    expect(raf.pending()).toBe(0);
+    controller.dispose();
+  });
+
   it('keeps arrival motion through layout notifications and retargets a burst without restarting', () => {
     const raf = createRafHarness();
     const controller = createFlowerScrollTailController({ reducedMotionPreferred: () => false,

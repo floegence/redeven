@@ -36,21 +36,23 @@ The item-window budget excludes product metadata and pending controls. Cold back
 
 # Evidence
 
-## Completed-history layout correction, 2026-10-23
+## Native layout and paint correction, 2026-10-23
 
-Earlier fixtures omitted completed-turn metadata, missing historical
-`content-visibility: auto`. Inline/cached bodies also skipped hydration measurements.
-In dev bundle `0abb96b3a416` (with the earlier fix), geometry-only tracing exposed
-(top, height) `(0, 584)`, then `(0, 3246)`, then top `2661.5`. Opacity did not
-help; disabling content visibility eliminated the flash. Instrumentation was
-removed without retaining conversation text.
+Completed-turn fixtures exposed skipped `content-visibility: auto` geometry.
+Visible-row readiness fixed the all-historical case but missed skipped rows
+above a current tail. Dev bundle at `319e7d3b1` still revealed height 1156,
+then expanded to 1703 before the scheduled scroll correction. A synthetic
+mixed-history regression reproduced a 1424 px exposed bottom error.
 
-Completed-history browser fixtures cover 2/24 long rows, cold/cached selection,
-every exposed frame, zero body reads and retained offscreen skipping. Unit tests
-cover non-bubbling layout events, reading ownership and disposal. Built Electron
-42.11.9 repeated three cached selections: first exposure 56.2–57.8 ms, top 2245,
-height 2861, bottom distance 0; no page errors or owned process leaks. These are
-local diagnostic samples, not population latency guarantees.
+Resize delivery now positions scroll before the same paint. Reveal/body work
+remains scheduled outside ResizeObserver, avoiding resize loops. Navigation
+also cancels pending and active arrival motion from the old destination.
+The 2/24-row browser cases check cold/cached exposure and actual tail coordinates;
+unit cases retain bounded scheduling, manual reading and observer cleanup.
+Built Electron 42.11.9 mixed-history selection exposed in 26.8–38.2 ms across
+three samples, with <=0.5 px bottom error and <0.15 px tail displacement even
+as skipped history expanded. No page errors or owned processes remained.
+These are local diagnostic samples, not population latency guarantees.
 
 ## Destination presentation qualification, 2026-10-23
 
@@ -78,10 +80,10 @@ Browser regressions cover delayed/stale detail and bodies, failed/empty detail,
 local Retry, programmatic versus explicit input, warm reuse and bounded requests.
 Scroll unit tests retain the 300-notification single-pass and idle-stop checks.
 
-Unrelated legacy disclosure fixtures timed out waiting for initial live state
-on both baseline and candidate; the queued-control streaming fixture likewise
-failed before its update assertions on both. These are reported separately and
-are not counted as passing qualification.
+Legacy disclosure fixtures fail initial readiness on baseline and candidate.
+With identical temporary ready envelopes, both retain the same eight failures
+and six passes; temporary fixture edits are removed. They are not passing
+qualification. The current streaming suite passes separately.
 
 - GOWORK=off go test ./internal/ai -count=1 -timeout=15m
 

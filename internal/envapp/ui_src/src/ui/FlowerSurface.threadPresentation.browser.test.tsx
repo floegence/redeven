@@ -21,16 +21,18 @@ const fullBody = (id: string): FlowerRuntimeCurrentItem => {
   return { ...item, text: 'Preview\n\n' + 'Complete historical paragraph.\n\n'.repeat(40) };
 };
 
-async function fixture(options: { delayedDetail?: boolean; delayedBodies?: boolean; failBody?: boolean; empty?: boolean; failDetail?: boolean; settled?: boolean; fullText?: boolean; count?: number } = {}) {
+async function fixture(options: { delayedDetail?: boolean; delayedBodies?: boolean; failBody?: boolean; empty?: boolean; failDetail?: boolean; settled?: boolean; fullText?: boolean; count?: number; activeTail?: boolean } = {}) {
   await page.viewport(1280, 900);
   const target = thread({ thread_id: 'target', title: 'Target', messages: [] });
   const peer = thread({ thread_id: 'peer', title: 'Peer', messages: [{ id: 'peer-message', turn_id: 'peer-turn', role: 'assistant', content: 'Peer content', status: 'complete', created_at_ms: 1 }] });
   const items = options.empty ? [] : options.fullText ? pendingItems.slice(-(options.count ?? 2)).map(item => fullBody(item.id)) : pendingItems;
   const current: FlowerRuntimeCurrentView = { thread_id: 'target', view_version: 1, activity: 'idle', last_outcome: 'completed',
+    ...(options.activeTail ? { activity: 'active' as const, turn_id: items.at(-1)!.turn_id, run_id: items.at(-1)!.run_id, run_progress: { phase: 'streaming' as const } } : {}),
     items, turns: options.settled ? items.map(item => ({
       turn_id: item.turn_id!, run_id: item.run_id!, outcome: 'completed' as const,
       started_at: '2026-10-23T12:00:00Z', ended_at: '2026-10-23T12:00:01Z', work_duration_ms: 1000, elapsed_ms: 1000, waiting_ms: 0,
       intermediate_item_ids: [], final_item_ids: [item.id], final_boundary_complete: true,
+      ...(options.activeTail && item === items.at(-1) ? { outcome: undefined, ended_at: undefined, work_duration_ms: 0, elapsed_ms: 0, final_item_ids: [], final_boundary_complete: false } : {}),
     })) : [], interactions: [], queue: [],
     window: { first_item_id: items[0]?.id, last_item_id: items.at(-1)?.id, has_before: true, has_after: false } };
   const detail = deferred<FlowerThreadView>();
@@ -62,6 +64,29 @@ async function fixture(options: { delayedDetail?: boolean; delayedBodies?: boole
 }
 
 describe('Flower destination presentation', () => {
+  it.each([2, 24])('positions an active tail below %i rows before paint when skipped history acquires real size', async (count) => {
+    const { root, resolveDetail } = await fixture({ settled: true, fullText: true, count, activeTail: true, delayedDetail: true });
+    const exposed: { top: number; height: number; bottom: number; tailTop: number; tailBottom: number }[] = [];
+    const inspectPresentation = async () => {
+      for (let frame = 0; frame < 24; frame++) {
+        await afterPaint();
+        if (preparing(root) || !root.querySelector('[data-flower-message-id="body-23"]')) continue;
+        const tail = root.querySelector('.flower-turn-row:last-child')!.getBoundingClientRect();
+        exposed.push({ top: viewport(root).scrollTop, height: viewport(root).scrollHeight, bottom: bottomDistance(root), tailTop: tail.top, tailBottom: tail.bottom });
+      }
+    };
+    resolveDetail();
+    await inspectPresentation();
+    select(root, 'peer');
+    await waitFor(() => !preparing(root) && Boolean(root.querySelector('[data-flower-message-id="peer-message"]')));
+    select(root, 'target');
+    await inspectPresentation();
+    expect(exposed.length).toBeGreaterThan(0);
+    expect(exposed.every(sample => sample.bottom <= 1), JSON.stringify(exposed)).toBe(true);
+    expect(exposed.every(sample => Math.abs(sample.tailTop - exposed.at(-1)!.tailTop) <= 1
+      && Math.abs(sample.tailBottom - exposed.at(-1)!.tailBottom) <= 1), JSON.stringify(exposed)).toBe(true);
+  });
+
   it.each([2, 24])('positions %i settled full-body rows before every exposed frame on cold and cached navigation', async (count) => {
     const { root, resolveDetail, loadHistoryItem } = await fixture({ settled: true, fullText: true, count, delayedDetail: true });
     const inspectPresentation = async () => {

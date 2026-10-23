@@ -80,6 +80,8 @@ export function createFlowerScrollTailController(
   const startFollowing = () => {
     clearAnchor();
     endUserScroll();
+    cancelScheduledScroll();
+    cancelSmoothScroll();
     setFollowingLatest(true);
     setNearBottom(isNearBottom());
   };
@@ -103,7 +105,7 @@ export function createFlowerScrollTailController(
   };
   // Resize, tail-follow, smooth scrolling and disclosure anchoring share one
   // read/write pass. Notifications never cancel and restart the frame deadline.
-  const layout = (timestamp: number) => {
+  const layout = (timestamp: number, notify = true) => {
     layoutFrame = 0;
     const target = node;
     if (!target) return;
@@ -129,12 +131,16 @@ export function createFlowerScrollTailController(
     }
     if (nextTop !== scrollTop) setScrollTop(target, nextTop);
     setNearBottom(scrollHeight - nextTop - viewportHeight <= FLOWER_TRANSCRIPT_NEAR_BOTTOM_THRESHOLD_PX);
-    options.onLayout?.();
+    if (notify) options.onLayout?.();
     if (anchor?.finished) clearAnchor();
     if (gesture() || anchor || smoothScroll) scheduleLayout();
   };
   const scheduleLayout = () => {
     if (!layoutFrame) layoutFrame = options.requestAnimationFrame(layout);
+  };
+  const flushLayout = () => {
+    layoutFrame = clearFrame(layoutFrame);
+    layout(performance.now());
   };
   const scrollToBottom = (scrollOptions: Readonly<{ smooth?: boolean }> = {}) => {
     if (!node || !(options.canFollowLatest?.() ?? true)) return;
@@ -348,7 +354,16 @@ export function createFlowerScrollTailController(
     // Historical rows may acquire real layout without a message mutation.
     // Capture their non-bubbling notification and reuse the same layout pass.
     node.addEventListener('contentvisibilityautostatechange', measureAfterLayout, true);
-    const resizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(measureAfterLayout) : undefined;
+    // ResizeObserver runs after layout and before paint. Deferring this pass
+    // to rAF would paint new content geometry with the previous scroll offset,
+    // including skipped historical rows that become relevant above the tail.
+    // Consume the queued pass without revealing/loading DOM inside this resize
+    // delivery. Presentation mutations stay in rAF to avoid observer loops.
+    const resizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(() => {
+      layoutFrame = clearFrame(layoutFrame);
+      layout(performance.now(), false);
+      if (options.onLayout) scheduleLayout();
+    }) : undefined;
     resizeObserver?.observe(node);
     if (node.firstElementChild) resizeObserver?.observe(node.firstElementChild);
     const boundNode = node;
@@ -389,10 +404,7 @@ export function createFlowerScrollTailController(
     onScroll,
     onWheel,
     measureAfterLayout,
-    flushLayout: () => {
-      layoutFrame = clearFrame(layoutFrame);
-      layout(performance.now());
-    },
+    flushLayout,
     prepareArrival: () => {
       if (!node || !followingLatest() || !(options.canFollowLatest?.() ?? true) || options.reducedMotionPreferred()
         || node.scrollHeight - node.clientHeight - node.scrollTop <= 1) return 0;

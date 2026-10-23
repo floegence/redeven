@@ -40,6 +40,7 @@ const goalMode = new URLSearchParams(location.search).has('goal');
 const progressiveMode = new URLSearchParams(location.search).has('progressive');
 const delayedFirstPage = new URLSearchParams(location.search).has('delayed-first-page');
 const settledHistory = new URLSearchParams(location.search).has('settled-history');
+const activeTail = new URLSearchParams(location.search).has('active-tail');
 let goal: FlowerGoal = { version: 1, text: 'Confirm the release and preserve every requirement.', actor: 'user', status: 'active' };
 let releaseGoalRead: ((fail: boolean) => void) | undefined;
 const unavailable = () => ({ ok: false as const, error: { code: 'AI_SERVICE_UNAVAILABLE', status: 503,
@@ -113,6 +114,13 @@ if (settledHistory) current = { ...current, last_outcome: 'completed',
   outcome: 'completed', elapsed_ms: 60000, waiting_ms: 0, work_duration_ms: 60000,
   intermediate_item_ids: [], final_item_ids: ['density-reading'], final_boundary_complete: true,
 }] };
+if (activeTail) current = { ...current, activity: 'active', turn_id: 'active-turn', run_id: 'active-run',
+  run_progress: { phase: 'streaming' },
+  items: [...(current.items ?? []), { id: 'active-reading', kind: 'assistant', turn_id: 'active-turn', run_id: 'active-run', ordinal: 3,
+    text: 'Current response paragraph.\n\n'.repeat(40) }],
+  turns: [...(current.turns ?? []), { turn_id: 'active-turn', run_id: 'active-run', started_at: '2026-10-23T12:02:00Z',
+    elapsed_ms: 0, waiting_ms: 0, work_duration_ms: 0, final_item_ids: [], final_boundary_complete: false }],
+};
 const settings: DesktopWelcomeRuntime['settings'] = {
   async load() { return { ok: false, error: 'No environment settings in this fixture.' }; },
   async save() { return { ok: false, error: 'No settings mutations in this fixture.' }; },
