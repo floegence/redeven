@@ -21,7 +21,7 @@ const fullBody = (id: string): FlowerRuntimeCurrentItem => {
   return { ...item, text: 'Preview\n\n' + 'Complete historical paragraph.\n\n'.repeat(40) };
 };
 
-async function fixture(options: { delayedDetail?: boolean; delayedBodies?: boolean; failBody?: boolean; empty?: boolean; failDetail?: boolean; settled?: boolean; fullText?: boolean; count?: number; activeTail?: boolean } = {}) {
+async function fixture(options: { delayedDetail?: boolean; delayedBodies?: boolean; failBody?: boolean; empty?: boolean; failDetail?: boolean; settled?: boolean; fullText?: boolean; count?: number; activeTail?: boolean; startFromPeer?: boolean } = {}) {
   await page.viewport(1280, 900);
   const target = thread({ thread_id: 'target', title: 'Target', messages: [] });
   const peer = thread({ thread_id: 'peer', title: 'Peer', messages: [{ id: 'peer-message', turn_id: 'peer-turn', role: 'assistant', content: 'Peer content', status: 'complete', created_at_ms: 1 }] });
@@ -57,13 +57,52 @@ async function fixture(options: { delayedDetail?: boolean; delayedBodies?: boole
   }, { onThreadSelectionEvent: event => events.push(`${event.value}:${event.phase}`) });
   root.style.height = '780px';
   await waitFor(() => Boolean(root.querySelector('[data-thread-id="target"] button')), 5000);
+  if (options.startFromPeer) {
+    select(root, 'peer');
+    await waitFor(() => !preparing(root) && Boolean(root.querySelector('[data-flower-message-id="peer-message"]')));
+  }
   select(root, 'target');
-  await waitFor(() => loadHistory.mock.calls.length > 0);
+  await waitFor(() => loadHistory.mock.calls.some(call => call[0] === 'target'));
   return { root, loadHistory, loadHistoryItem, bodies, events,
     resolveDetail: () => detail.resolve({ thread: applyFlowerRuntimeCurrentView(target, current), current }) };
 }
 
 describe('Flower destination presentation', () => {
+  it('keeps a quick switch free of loading feedback while preserving first-paint positioning', async () => {
+    const { root, resolveDetail } = await fixture({ delayedDetail: true, fullText: true, startFromPeer: true });
+    const composer = root.querySelector('.flower-composer');
+    await pause(70);
+    expect(preparing(root)).toBe(true);
+    expect(viewport(root).getAttribute('aria-busy')).toBe('true');
+    expect(root.querySelector('.flower-thread-loading')).toBeNull();
+    resolveDetail();
+    await waitFor(() => !preparing(root));
+    expect(root.querySelector('.flower-composer')).toBe(composer);
+    expect(bottomDistance(root)).toBeLessThanOrEqual(1);
+    await pause(220);
+    expect(root.querySelector('.flower-thread-loading')).toBeNull();
+  });
+
+  it('cancels delayed feedback when another thread or New chat supersedes navigation', async () => {
+    const { root, resolveDetail } = await fixture({ delayedDetail: true, startFromPeer: true });
+    await pause(60);
+    expect(root.querySelector('.flower-thread-loading')).toBeNull();
+    select(root, 'peer');
+    await waitFor(() => !preparing(root) && Boolean(root.querySelector('[data-flower-message-id="peer-message"]')));
+    await pause(220);
+    expect(root.querySelector('.flower-thread-loading')).toBeNull();
+    select(root, 'target');
+    await waitFor(() => preparing(root));
+    const newChat = [...root.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.trim() === 'New chat');
+    expect(newChat).toBeDefined();
+    newChat!.click();
+    await waitFor(() => !preparing(root));
+    resolveDetail();
+    await pause(220);
+    expect(root.querySelector('.flower-thread-loading')).toBeNull();
+    expect(root.querySelector('[data-flower-message-id="body-23"]')).toBeNull();
+  });
+
   it.each([2, 24])('positions an active tail below %i rows before paint when skipped history acquires real size', async (count) => {
     const { root, resolveDetail } = await fixture({ settled: true, fullText: true, count, activeTail: true, delayedDetail: true });
     const exposed: { top: number; height: number; bottom: number; tailTop: number; tailBottom: number }[] = [];
@@ -117,11 +156,12 @@ describe('Flower destination presentation', () => {
 
   it('keeps delayed detail behind a stable loading surface until actual content can be positioned', async () => {
     const { root, resolveDetail, events } = await fixture({ delayedDetail: true });
-    await pause(180);
+    await waitFor(() => Boolean(root.querySelector('.flower-thread-preparing [role="status"]')));
     expect(preparing(root)).toBe(true);
     expect(events).not.toContain('target:content_presented');
     const loading = root.querySelector<HTMLElement>('.flower-thread-preparing [role="status"]');
     expect(loading).not.toBeNull();
+    expect(root.querySelectorAll('.flower-thread-loading')).toHaveLength(1);
     expect(getComputedStyle(loading!).visibility).toBe('visible');
     const panel = root.querySelector('.flower-thread-preparing')!.getBoundingClientRect();
     const bounds = viewport(root).getBoundingClientRect();
@@ -130,6 +170,29 @@ describe('Flower destination presentation', () => {
     resolveDetail();
     await waitFor(() => !preparing(root) && Boolean(root.querySelector('[data-flower-message-id="body-23"]')), 5000);
     expect(bottomDistance(root)).toBeLessThanOrEqual(1);
+    expect(root.querySelector('.flower-thread-loading')).toBeNull();
+  });
+
+  it('shares one feedback deadline across detail and tail-body preparation', async () => {
+    const timeout = vi.spyOn(window, 'setTimeout');
+    try {
+      const { root, resolveDetail, bodies, loadHistoryItem } = await fixture({ delayedDetail: true, delayedBodies: true });
+      const feedbackTimers = () => timeout.mock.calls.filter(call => call[1] === 200);
+      expect(feedbackTimers()).toHaveLength(1);
+      expect(root.querySelector('.flower-thread-loading')).toBeNull();
+      resolveDetail();
+      await waitFor(() => loadHistoryItem.mock.calls.length === 2);
+      expect(feedbackTimers()).toHaveLength(1);
+      await waitFor(() => Boolean(root.querySelector('.flower-thread-preparing [role="status"]')));
+      expect(preparing(root)).toBe(true);
+      expect(root.querySelectorAll('.flower-thread-loading')).toHaveLength(1);
+      for (const [id, body] of bodies) body.resolve(fullBody(id));
+      await waitFor(() => !preparing(root));
+      expect(root.querySelector('.flower-thread-loading')).toBeNull();
+      expect(bottomDistance(root)).toBeLessThanOrEqual(1);
+    } finally {
+      timeout.mockRestore();
+    }
   });
 
   it('prioritizes destination tail bodies and exposes complete text only after positioning', async () => {

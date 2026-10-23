@@ -432,6 +432,7 @@ const FLOWER_COMPOSER_CONTROL_ORDER: readonly FlowerComposerControlID[] = ['perm
 const FLOWER_COMPOSER_CONTROL_OVERFLOW_ORDER: readonly FlowerComposerControlID[] = ['model_reasoning', 'read_only', 'permission'];
 const FLOWER_COMPOSER_CONTROL_GAP_PX = 6;
 const MESSAGE_COPY_RESET_MS = 1600;
+const THREAD_LOADING_FEEDBACK_DELAY_MS = 200;
 const FLOWER_COMPOSER_REFERENCE_MENU_ID = 'flower-composer-reference-menu';
 const FLOWER_COMPOSER_REFERENCE_OPTION_PREFIX = 'flower-composer-reference-option-';
 const FLOWER_COMPOSER_REFERENCE_MENU_FALLBACK_HEIGHT = 240;
@@ -1722,6 +1723,22 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const selectedThreadLoading = createMemo(() => (
     threadDetailLoadingIDs().has(trimString(selectedThreadID()))
   ));
+  // Delay feedback, never data or first-paint readiness. Keep one deadline
+  // through detail, visible body reads and layout; a new selection owns its own.
+  const threadLoadingFeedbackKey = createMemo(() => {
+    if (threadLoadError()) return null;
+    if (selectedThreadTailPreparing()) return selectedThreadTailReveal();
+    return selectedThreadDetailPending() ? selectedThreadID() : null;
+  });
+  const [visibleThreadLoadingKey, setVisibleThreadLoadingKey] = createSignal<ReturnType<typeof threadLoadingFeedbackKey>>(null);
+  createEffect(on(threadLoadingFeedbackKey, (key) => {
+    setVisibleThreadLoadingKey(null);
+    if (!key) return;
+    const timer = window.setTimeout(() => setVisibleThreadLoadingKey(key), THREAD_LOADING_FEEDBACK_DELAY_MS);
+    onCleanup(() => window.clearTimeout(timer));
+  }));
+  const threadLoadingFeedbackVisible = () => Boolean(threadLoadingFeedbackKey()
+    && threadLoadingFeedbackKey() === visibleThreadLoadingKey());
 	const attachmentControllers = new Map<string, FlowerAttachmentController>();
 	const attachmentControllerUnsubscribers = new Map<string, () => void>();
 	const draftSessions = new Map<string, FlowerComposerDraftSession>();
@@ -12257,7 +12274,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       );
     }
     if (selectedThread()) return threadEmptyState();
-    if (selectedThreadLoading() || selectedThreadID()) return threadLoadingState();
+    if (selectedThreadLoading() || selectedThreadID()) return (
+      <Show when={!selectedThreadTailPreparing() && threadLoadingFeedbackVisible()}>{threadLoadingState()}</Show>
+    );
     if (props.embeddedConversation?.emptyContent && !needsSetup() && !surfaceWarmupActive()) return props.embeddedConversation.emptyContent;
     if (showSetupWelcome()) return (
       <FlowerSetupWelcome copy={copy()} actions={noModelProfileSetupActions()} onOpenSettings={openSettings}
@@ -13955,7 +13974,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             </Show>
           </div>
         </div>
-        <Show when={selectedThreadTailPreparing()}>
+        <Show when={selectedThreadTailPreparing() && threadLoadingFeedbackVisible()}>
           <div class="flower-thread-preparing">{threadLoadingState()}</div>
         </Show>
         </div>
