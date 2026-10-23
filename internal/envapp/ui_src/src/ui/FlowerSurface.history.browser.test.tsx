@@ -10,11 +10,12 @@ function fixture(id: string, partial = false): FlowerRuntimeCurrentItem {
   return { id, kind: 'assistant', text: partial ? 'Preview text' : 'Older conversation', ordinal: id === 'latest' ? 2 : 1,
     turn_id: 'turn', run_id: 'run', ...(partial ? { body: { field: 'content', source_id: id, bytes: 28, preview_bytes: 12 } } : {}) };
 }
-async function mount(tool = false, pending = false, options: { count?: number; text?: string; fail?: boolean } = {}) {
+async function mount(tool = false, pending = false, options: { count?: number; text?: string; fail?: boolean; kind?: 'user' | 'assistant' } = {}) {
   await page.viewport(1280, 900);
   const seed = thread({ thread_id: 'history', title: 'Bounded history', messages: [] });
   const peer = thread({ thread_id: 'peer', title: 'Another conversation' });
-  const body = vi.fn(async (_tid: string, _id: string, _signal: AbortSignal): Promise<FlowerRuntimeCurrentItem> => ({ ...fixture(_id), ...(options.count ? { ordinal: Number(_id) + 1 } : {}), text: options.text ?? 'Preview text expanded body!!' }));
+  const message = (id: string, partial = false): FlowerRuntimeCurrentItem => ({ ...fixture(id, partial), kind: options.kind ?? 'assistant' });
+  const body = vi.fn(async (_tid: string, _id: string, _signal: AbortSignal): Promise<FlowerRuntimeCurrentItem> => ({ ...message(_id), ...(options.count ? { ordinal: Number(_id) + 1 } : {}), text: options.text ?? 'Preview text expanded body!!' }));
   let complete!: (item: FlowerRuntimeCurrentItem) => void;
   if (pending) body.mockImplementationOnce(async () => new Promise<FlowerRuntimeCurrentItem>(resolve => { complete = resolve; }));
   if (options.fail) body.mockRejectedValueOnce(new Error('offline'));
@@ -26,10 +27,10 @@ async function mount(tool = false, pending = false, options: { count?: number; t
     let item: FlowerRuntimeCurrentItem = tool ? { id: 'history-tool', kind: 'tool', ordinal: 1, turn_id: 'turn', run_id: 'run',
       activity_bodies: [{ entry_id: 'activity', bytes: 10000, sha256: 'hash' }],
       activity: { item_id: 'history-tool', tool_id: 'history-tool', tool_name: 'terminal.exec', kind: 'tool', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false } }
-      : fixture(older ? 'old' : 'latest', !older);
+      : message(older ? 'old' : 'latest', !older);
     if (!tool && !older && options.text && item.body) item = { ...item, body: { ...item.body, bytes: new TextEncoder().encode(options.text).length } };
     const current: FlowerRuntimeCurrentView = { thread_id: id, turn_id: 'turn', run_id: 'run', view_version: 7, activity: 'idle', last_outcome: 'completed',
-      items: options.count ? Array.from({ length: options.count }, (_, index) => ({ ...fixture(String(index), true), ordinal: index + 1 })) : [item], turns: [], interactions: [], queue: [], window: { first_item_id: options.count ? '0' : item.id, last_item_id: options.count ? String(options.count - 1) : item.id, has_before: !older, has_after: older } };
+      items: options.count ? Array.from({ length: options.count }, (_, index) => ({ ...message(String(index), true), ordinal: index + 1 })) : [item], turns: [], interactions: [], queue: [], window: { first_item_id: options.count ? '0' : item.id, last_item_id: options.count ? String(options.count - 1) : item.id, has_before: !older, has_after: older } };
     return { thread: applyFlowerRuntimeCurrentView(id === 'peer' ? peer : seed, current), current };
   });
   const rename = vi.fn(async (id: string, title: string) => {
@@ -51,6 +52,25 @@ async function mount(tool = false, pending = false, options: { count?: number; t
 }
 
 describe('bounded Flower history', () => {
+  it('keeps user loading placeholders and hydrated text aligned to the transcript right edge', async () => {
+    const text = 'Preview text ' + 'Review the complete historical request and preserve its references. '.repeat(8);
+    const { root, body, complete } = await mount(false, true, { kind: 'user', text });
+    await waitFor(() => body.mock.calls.length === 1);
+    const row = root.querySelector<HTMLElement>('.flower-message-row-user')!;
+    const shell = row.querySelector('.flower-history-message')!;
+    const right = row.getBoundingClientRect().right;
+    const loading = row.querySelector('.flower-history-text-loading')!;
+    expect(Math.abs(loading.getBoundingClientRect().right - right)).toBeLessThanOrEqual(1);
+    complete({ ...fixture('latest'), kind: 'user', text });
+    await waitFor(() => !row.querySelector('.flower-history-text-loading'));
+    const bubble = row.querySelector<HTMLElement>('.flower-message-bubble-user')!;
+    expect(row.querySelector('.flower-history-message')).toBe(shell);
+    expect(bubble.textContent?.trim()).toBe(text.trim());
+    expect(Math.abs(bubble.getBoundingClientRect().right - right)).toBeLessThanOrEqual(1);
+    expect(bubble.getBoundingClientRect().width).toBeCloseTo(row.getBoundingClientRect().width * 0.78, 0);
+    expect(bubble.scrollWidth).toBeLessThanOrEqual(bubble.clientWidth + 1);
+  });
+
   it('keeps tool output off the wire until disclosure, retries failures, and retains expanded content', async () => {
     const { root, body } = await mount(true);
     body.mockImplementationOnce(async () => { throw new Error('offline'); });

@@ -5,7 +5,7 @@ description: Keep assistant reading and sent user messages readable in every she
 tags: [flower, themes, accessibility, selection]
 timestamp: 2026-10-18T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-23"
 ---
 # Summary
 
@@ -34,6 +34,12 @@ Authored bold text, dates, identifiers, source labels and destinations remain un
 ## Filled messages and content
 Sent user text and answered-question receipts use `selection-bg` and `selection-fg`.
 
+User text, loading placeholders and timestamp/copy actions share the transcript's
+right edge. The history observation wrapper spans the message row and right-aligns
+its content, so the bubble's 78% desktop width limit is relative to the transcript
+column rather than an intrinsic text-width wrapper. Short messages fit their text;
+narrow viewports retain the existing full-column limit.
+
 Their text and selection use the inset reading roles so the error background cannot leave selection-colored message text unreadable.
 
 Code retains theme-colored insets; its text derives from the theme foreground with bounded lightness.
@@ -53,6 +59,8 @@ Browser coverage measures actual rendered colors across all 26 published presets
 Forced colors map sent bubbles to `Highlight` / `HighlightText`, pending input and insets to native reading surfaces, and selection to contrasting system roles. Palette and material ownership remain with [Desktop shell theme state](../desktop/desktop-shell-theme-state.md) and [shared surface material](surface-material.md).
 
 # Evidence
+
+- [User-message alignment, intrinsic widths and responsive wrapping](../../internal/envapp/ui_src/src/ui/FlowerSurface.userMessageLayout.browser.test.tsx)
 
 - [Resource placement, responsive cards and canonical preview identity](../../internal/envapp/ui_src/src/ui/FlowerSurface.canonicalReferences.browser.test.tsx)
 
