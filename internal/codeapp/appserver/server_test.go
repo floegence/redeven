@@ -2871,6 +2871,30 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 		t.Fatalf("PATCH current=%+v, want authoritative current view", permissionResponse.Data.Current)
 	}
 
+	historyPath := "/_redeven_proxy/api/ai/threads/" + url.PathEscape(thread.ThreadID) + "/history"
+	page := performServerRequest(srv, http.MethodPost, historyPath, originUser1, "{}")
+	if page.Code != http.StatusOK {
+		t.Fatalf("history page status=%d body=%s", page.Code, page.Body.String())
+	}
+	var pageResponse struct {
+		Data struct {
+			Window *ai.FlowerHistoryWindow `json:"window"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(page.Body.Bytes(), &pageResponse); err != nil || pageResponse.Data.Window == nil {
+		t.Fatalf("history response omitted reading bounds: %v %s", err, page.Body.String())
+	}
+	for _, body := range []string{`{"unknown":true}`, `{}{}`, `{"limit":151}`, `{"limit":-1}`} {
+		rr := performServerRequest(srv, http.MethodPost, historyPath, originUser1, body)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("invalid history request %q: status=%d", body, rr.Code)
+		}
+	}
+	missingItem := performServerRequest(srv, http.MethodPost, historyPath+"-item", originUser1, "{}")
+	if missingItem.Code != http.StatusBadRequest {
+		t.Fatalf("missing history item status=%d", missingItem.Code)
+	}
+
 	readList := func(origin string) aiListResponse {
 		t.Helper()
 		rr := performServerRequest(srv, http.MethodGet, "/_redeven_proxy/api/ai/threads?limit=20", origin, "")

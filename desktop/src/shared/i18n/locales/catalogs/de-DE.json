@@ -898,7 +898,16 @@
       "goalReviewChecked": "Ziel geprüft",
       "goalReviewFailed": "Zielprüfung fehlgeschlagen",
       "goalReviewUnavailable": "Zielprüfung · Keine Details verfügbar",
-      "goalReviewCanceled": "Zielprüfung abgebrochen"
+      "goalReviewCanceled": "Zielprüfung abgebrochen",
+      "history": {
+        "label": "Gesprächsverlauf",
+        "older": "Ältere Nachrichten",
+        "newer": "Neuere Nachrichten",
+        "latest": "Zur neuesten Nachricht",
+        "loading": "Wird geladen…",
+        "expand": "Vollständigen Inhalt anzeigen",
+        "failed": "Der Inhalt konnte nicht geladen werden. Versuchen Sie es erneut."
+      }
     },
     "threadList": {
       "title": "Unterhaltungen",

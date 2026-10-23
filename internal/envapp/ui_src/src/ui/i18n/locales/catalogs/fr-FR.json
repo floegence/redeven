@@ -5779,7 +5779,16 @@
       "goalReviewChecked": "Objectif vérifié",
       "goalReviewFailed": "Échec de la vérification de l’objectif",
       "goalReviewUnavailable": "Vérification de l’objectif · Aucun détail disponible",
-      "goalReviewCanceled": "Vérification de l’objectif annulée"
+      "goalReviewCanceled": "Vérification de l’objectif annulée",
+      "history": {
+        "label": "Historique de la conversation",
+        "older": "Messages précédents",
+        "newer": "Messages suivants",
+        "latest": "Revenir au plus récent",
+        "loading": "Chargement…",
+        "expand": "Afficher tout le contenu",
+        "failed": "Impossible de charger le contenu. Réessayez."
+      }
     },
     "threadList": {
       "title": "Discussions",

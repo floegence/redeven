@@ -212,13 +212,32 @@ func (s *Service) broadcastFlowerRuntimeUpdate(endpointID, parentID string, upda
 	if s.flowerLiveSubscriberCount(endpointID) == 0 {
 		return
 	}
-	envelope := FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: update.ThreadID.String()}
 	if parentID == "" {
-		envelope.Update = &update
-	} else {
-		envelope.ThreadID = parentID
-		envelope.SubagentUpdate = &update
+		if update.Interactions != nil {
+			evidence, err := s.flowerHistoryComputerEvidence(s.lifecycleCtx, update.ThreadID, update.Interactions.Value)
+			if err != nil {
+				s.fenceFlowerLiveEndpoint(endpointID)
+				return
+			}
+			if evidence != nil {
+				for _, status := range s.flowerComputerStatusesForCurrent(s.lifecycleCtx, *evidence, "") {
+					s.broadcastFlowerComputerStatus(endpointID, status)
+				}
+			}
+		}
+		facts := update
+		facts.Items, facts.ItemOrder, facts.Turns, facts.Context, facts.Queue, facts.Interactions, facts.RestoredInputs, facts.ToolCallPreviews, facts.ParentEvents, facts.Window = nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
+		batch := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: update.ThreadID.String(), Update: &facts, FactsOnly: true})
+		s.mu.Lock()
+		for _, subscriber := range s.flowerLiveSubscribers {
+			if !subscriber.closed && subscriber.endpointID == endpointID {
+				enqueueFlowerLiveSubscriberLocked(s, subscriber, batch)
+			}
+		}
+		s.mu.Unlock()
+		return
 	}
+	envelope := FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: parentID, SubagentUpdate: &update}
 	// Computer assistance is canonical evidence, read only when interactions
 	// change. Ordinary text and progress never request a complete runtime view.
 	needsEvidence := false

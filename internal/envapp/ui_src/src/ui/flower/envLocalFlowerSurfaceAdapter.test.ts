@@ -1168,6 +1168,7 @@ describe('Env local Flower surface adapter', () => {
   it('maps typed current detail into the shared Flower surface state', async () => {
     const bootstrap = {
       ...liveBootstrap('thread_context', 'running'),
+      window: { first_item_id: 'user:req-context', last_item_id: 'assistant:turn-context', has_before: true, has_after: false },
       current: {
         thread_id: 'thread_context',
         view_version: 11,
@@ -1184,7 +1185,7 @@ describe('Env local Flower surface adapter', () => {
       },
     };
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
-      if (url === '/_redeven_proxy/api/ai/threads/thread_context' && init?.method === 'GET') {
+      if (url === '/_redeven_proxy/api/ai/threads/thread_context/history' && init?.method === 'POST') {
         return jsonResponse(bootstrap);
       }
       throw new Error(`unexpected fetch: ${url}`);
@@ -1198,6 +1199,8 @@ describe('Env local Flower surface adapter', () => {
     const mapped = await adapter.loadThread('thread_context', new AbortController().signal);
 
     expect(mapped.current.view_version).toBe(11);
+    expect(mapped.thread.history_window).toEqual(bootstrap.window);
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'POST', body: '{}' });
     expect(mapped.thread.status).toBe('running');
     expect(mapped.thread.active_run_id).toBe('run_context');
     expect(mapped.thread.messages).toEqual(expect.arrayContaining([

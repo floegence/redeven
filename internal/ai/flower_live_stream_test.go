@@ -155,6 +155,9 @@ func TestFlowerWorkspaceStreamEncodesActivityUpdatesThroughFinalAnswer(t *testin
 		t.Fatal(err)
 	}
 	defer subscription.Close()
+	if _, err := svc.GetFlowerThreadHistory(ctx, meta, thread.ThreadID, FlowerHistoryRequest{ObserverID: subscription.subscriber.observerID, ReadingRevision: 1}); err != nil {
+		t.Fatal(err)
+	}
 	if ready := nextFlowerLiveStreamFrame(t, subscription); ready.Kind != FlowerLiveStreamReady {
 		t.Fatalf("ready kind=%q", ready.Kind)
 	}
@@ -173,7 +176,7 @@ func TestFlowerWorkspaceStreamEncodesActivityUpdatesThroughFinalAnswer(t *testin
 		if err := json.Unmarshal(frame.Data, &envelope); err != nil {
 			t.Fatalf("published envelope is invalid: %v", err)
 		}
-		if envelope.ThreadID != thread.ThreadID {
+		if envelope.ThreadID != thread.ThreadID || envelope.FactsOnly {
 			continue
 		}
 		if envelope.Current != nil {
@@ -314,7 +317,22 @@ func TestFlowerWorkspaceStreamBaselinesAndBroadcastsCanonicalComputerStatus(t *t
 		t.Fatalf("computer status baseline=%#v", baseline)
 	}
 
-	svc.publishFlowerComputerStatus(meta.EndpointID, FlowerComputerStatus{ThreadID: thread.ThreadID, TargetID: "browser-main"})
+	bounded := current
+	bounded.Items = nil
+	evidence, err := svc.flowerHistoryComputerEvidence(ctx, current.ThreadID, current.Interactions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	public, err := MarshalFlowerCurrentView(bounded, evidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(public), "computer_assistance") || strings.Contains(string(public), "browser.navigate") {
+		t.Fatalf("bounded page lost assistance or exposed its historical tool: %s", public)
+	}
+	svc.broadcastFlowerRuntimeUpdate(meta.EndpointID, "", flruntime.ThreadUpdate{ThreadID: current.ThreadID, TurnID: current.TurnID, RunID: current.RunID,
+		BaseVersion: 1, ViewVersion: 2, Facts: flruntime.ThreadRuntimeFacts{Activity: current.Activity, Attention: current.Attention},
+		Interactions: &flruntime.ThreadComponent[[]flruntime.ThreadInteraction]{Value: current.Interactions}})
 	statusFrame = nextFlowerLiveStreamFrame(t, subscription)
 	var update FlowerLiveStreamEnvelope
 	if err := json.Unmarshal(statusFrame.Data, &update); err != nil {
@@ -605,6 +623,9 @@ func TestFlowerWorkspaceTerminalBatchAndDetailRestoreCanonicalManualCompaction(t
 		t.Fatal(err)
 	}
 	defer subscription.Close()
+	if _, err := svc.GetFlowerThreadHistory(ctx, meta, thread.ThreadID, FlowerHistoryRequest{ObserverID: subscription.subscriber.observerID, ReadingRevision: 1}); err != nil {
+		t.Fatal(err)
+	}
 	if ready := nextFlowerLiveStreamFrame(t, subscription); ready.Kind != FlowerLiveStreamReady {
 		t.Fatalf("ready kind=%q", ready.Kind)
 	}
@@ -632,7 +653,7 @@ func TestFlowerWorkspaceTerminalBatchAndDetailRestoreCanonicalManualCompaction(t
 				terminalUpdates <- terminalUpdateResult{err: readErr}
 				return
 			}
-			if envelope.ThreadID != thread.ThreadID {
+			if envelope.ThreadID != thread.ThreadID || envelope.FactsOnly {
 				continue
 			}
 			var activity flruntime.ThreadActivity
@@ -775,6 +796,10 @@ func TestFlowerWorkspaceSummaryFrameContainsSnapshotNotProjectionEvent(t *testin
 		}
 		if frame.Kind == FlowerLiveStreamSummaryBatch {
 			break
+		}
+		if envelope.FactsOnly && envelope.Update != nil && envelope.Current == nil && envelope.Update.ThreadID.String() == thread.ThreadID && envelope.Update.Facts.Activity == flruntime.ThreadActivityIdle && len(envelope.Update.Items) == 0 && envelope.Update.Turns == nil && len(envelope.Summaries) == 0 {
+			envelope = FlowerLiveStreamEnvelope{}
+			continue
 		}
 		if frame.Kind != FlowerLiveStreamThreadBatch || envelope.Kind != frame.Kind || envelope.ThreadID != thread.ThreadID || envelope.Current == nil || envelope.Current.ThreadID.String() != thread.ThreadID || envelope.Current.Activity != flruntime.ThreadActivityIdle || len(envelope.Current.Turns) != 0 || len(envelope.Summaries) != 0 {
 			t.Fatalf("unexpected frame before requested summary: %s", frame.Data)

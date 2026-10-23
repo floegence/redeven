@@ -57,7 +57,7 @@
               "performance",
               "qualification"
             ],
-            "summary": "Published Floret v7.69.1 owns canonical View and Summary. Redeven consumes a\npoint summary and coordinates ephemeral read demand through one loader. The\n[sidebar contract](../ui/flower-thread-sidebar.md) and\n[Desktop bridge](../desktop/desktop-runtime-bridge.md) own the behavior.\nQualification uses copied released-writer fixtures and synthetic conversations;\nit never continues real user tasks. The short-detail P95 target is at least a\n70% reduction, with warm selection synchronous P95 below 8 ms and actual\nselection feedback presented before transcript commit. These checks are local\nqualification, outside ordinary CI and hooks.",
+            "summary": "Published Floret v7.79.0 owns canonical windows, bodies, View and Summary. Redeven consumes a\npoint summary and coordinates ephemeral read demand through one loader. The\n[sidebar contract](../ui/flower-thread-sidebar.md) and\n[Desktop bridge](../desktop/desktop-runtime-bridge.md) own the behavior.\nQualification uses copied released-writer fixtures and synthetic conversations;\nit never continues real user tasks. The short-detail P95 target is at least a\n70% reduction, with warm selection synchronous P95 below 8 ms and actual\nselection feedback presented before transcript commit. These checks are local\nqualification, outside ordinary CI and hooks.",
             "section_count": 2
           },
           {
@@ -8619,15 +8619,15 @@
         "title": "Floret Redeven adapter and projection",
         "type": "AI Runtime Contract"
       },
-      "body_length": 2594,
+      "body_length": 3607,
       "summary": "Redeven's adapter is a thin typed boundary over published Floret. It authorizes endpoint and thread ownership, resolves resources, sanitizes Activity, maps typed views, native updates and failures, and projects live summaries. Floret remains the only lifecycle, persistence, migration, cancellation, and provider-state owner; Redeven never waits on provider work or mirrors a receipt, authority barrier, transcript, or execution projection.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "[Flower Goals](flower-goals.md) use the optional published Goal controller. Ordinary executable items retain strict identity.\n\n## Incremental observation and public projection\nPublished Floret v7.71.0 supplies optional `ThreadUpdateSource`. Floret alone owns text cadence, versions, append buffers, Activity reduction and canonical reads.\n\nNo database schema or migration changes are part of this optimization.\n\n## Model output and presentation\n[tool_result_encoding.go](../../internal/ai/tool_result_encoding.go) owns the single final result encoder: execution facts, tool content policy, final JSON, then Text and an independent Decoder.UseNumber Structured snapshot. Activity independently projects valid source data; its display truncation never changes model output.\n\nIts `request_key` remains the send idempotency identity used only to settle the short-lived browser outbox; the two values are not interchangeable.\n\nFlower ask_user exposes only write and select_or_write. The latter always presents fixed choices with a separate custom-text answer, even when write_label is omitted. Floret owns normalization of historical select requests; Redeven does not add a second compatibility path. Ordinary InputRequired selection remains a separate contract.",
-          "char_count": 1257
+          "body": "[Flower Goals](flower-goals.md) use the optional published Goal controller. Ordinary executable items retain strict identity.\n\n## Incremental observation and public projection\nPublished Floret v7.79.0 supplies optional `ThreadUpdateSource`, `ThreadWindowSource` and canonical body readers. Floret alone owns text cadence, versions, append buffers, Activity reduction and canonical reads.\n\nRoot detail and command receipts use the bounded window projection. POST history selects an authorized page and, when an observer is supplied, installs its reading interest on the same ordered Floret subscription. POST history-item expands one canonical item by its published body locators: frozen live extent, manifest parts or hash-verified field chunks. Every read refreshes endpoint, namespace and user authorization. The client never supplies raw entry locators as authority. Historical zero-byte Activity sources are synthesized only by Floret on explicit expansion; Redeven must not duplicate those defaults.\n\nUnselected root updates carry facts only. Child detail retains its existing transport. Computer assistance outside the selected interval uses server-only canonical evidence, which is not included in the bounded response. See [live delivery](../ui/flower-live-timeline.md) and [qualification](../operations/flower-thread-switch-qualification.md).\n\nNo database schema or migration changes are part of this optimization.\n\n## Model output and presentation\n[tool_result_encoding.go](../../internal/ai/tool_result_encoding.go) owns the single final result encoder: execution facts, tool content policy, final JSON, then Text and an independent Decoder.UseNumber Structured snapshot. Activity independently projects valid source data; its display truncation never changes model output.\n\nIts `request_key` remains the send idempotency identity used only to settle the short-lived browser outbox; the two values are not interchangeable.\n\nFlower ask_user exposes only write and select_or_write. The latter always presents fixed choices with a separate custom-text answer, even when write_label is omitted. Floret owns normalization of historical select requests; Redeven does not add a second compatibility path. Ordinary InputRequired selection remains a separate contract.",
+          "char_count": 2270
         },
         {
           "id": "boundaries",
@@ -8656,6 +8656,18 @@
           "path": "ai/flower-goals.md",
           "concept_id": "ai.flower-goals",
           "title": "Flower thread Goals"
+        },
+        {
+          "label": "qualification",
+          "path": "operations/flower-thread-switch-qualification.md",
+          "concept_id": "operations.flower-thread-switch-qualification",
+          "title": "Flower conversation switch performance qualification"
+        },
+        {
+          "label": "live delivery",
+          "path": "ui/flower-live-timeline.md",
+          "concept_id": "ui.flower-live-timeline",
+          "title": "Flower incremental live state"
         }
       ],
       "backlinks": [
@@ -22217,8 +22229,8 @@
         "title": "Flower conversation switch performance qualification",
         "type": "Qualification Evidence"
       },
-      "body_length": 3490,
-      "summary": "Published Floret v7.69.1 owns canonical View and Summary. Redeven consumes a\npoint summary and coordinates ephemeral read demand through one loader. The\n[sidebar contract](../ui/flower-thread-sidebar.md) and\n[Desktop bridge](../desktop/desktop-runtime-bridge.md) own the behavior.\nQualification uses copied released-writer fixtures and synthetic conversations;\nit never continues real user tasks. The short-detail P95 target is at least a\n70% reduction, with warm selection synchronous P95 below 8 ms and actual\nselection feedback presented before transcript commit. These checks are local\nqualification, outside ordinary CI and hooks.",
+      "body_length": 5486,
+      "summary": "Published Floret v7.79.0 owns canonical windows, bodies, View and Summary. Redeven consumes a\npoint summary and coordinates ephemeral read demand through one loader. The\n[sidebar contract](../ui/flower-thread-sidebar.md) and\n[Desktop bridge](../desktop/desktop-runtime-bridge.md) own the behavior.\nQualification uses copied released-writer fixtures and synthetic conversations;\nit never continues real user tasks. The short-detail P95 target is at least a\n70% reduction, with warm selection synchronous P95 below 8 ms and actual\nselection feedback presented before transcript commit. These checks are local\nqualification, outside ordinary CI and hooks.",
       "sections": [
         {
           "id": "contract",
@@ -22231,11 +22243,11 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Measurements use synthetic conversations and copied released-writer fixtures. Backend point-read timings and the loopback transport fixture are separate experiments; their durations must not be added. These explicit qualification suites stay outside ordinary CI and hooks.\n\nThe detail endpoint still calls the complete Floret `ThreadService.View`.\nPoint-summary reads avoid unrelated conversations; they do not bound the selected\nconversation's body, response size, decoding, timeline projection or mounted row\nshells. Floret's window subscription is not yet the Flower detail transport.\nLazy content inside collapsed tool sequences reduces first presentation work\nwithout claiming end-to-end pagination or a constant-time cold load.",
-          "char_count": 733
+          "body": "Measurements use synthetic conversations and copied released-writer fixtures. Backend point-read timings and the loopback transport fixture are separate experiments; their durations must not be added. These explicit qualification suites stay outside ordinary CI and hooks.\n\nRoot detail now uses Floret's window subscription; the initial interval and explicit body expansion bound network demand. GET detail, PATCH detail, command receipts and root live observation use the same public projection. The service's cold actor initialization can still load complete canonical state. Child detail retains its existing full-view transport. Explicitly expanding a single very large item transfers that requested item in full.\n\nThe item-window budget excludes product metadata and pending controls. Cold backend timings below are isolated read timings, not remote end-to-end rendering measurements. Lazy collapsed tool content and bounded transport address separate costs.",
+          "char_count": 963
         }
       ],
-      "snippet": "Published Floret v7.69.1 owns canonical View and Summary. Redeven consumes a point summary and coordinates ephemeral read demand through one loader. The Qualification uses copied released-writer fixtures and synthetic conversations;",
+      "snippet": "Published Floret v7.79.0 owns canonical windows, bodies, View and Summary. Redeven consumes a point summary and coordinates ephemeral read demand through one loader. The Qualification uses copied released-writer fixtures and synthetic conve",
       "links": [
         {
           "label": "Desktop bridge",
@@ -22251,6 +22263,12 @@
         }
       ],
       "backlinks": [
+        {
+          "label": "Floret Redeven adapter and projection",
+          "path": "ai/floret-redeven-adapter-and-projection.md",
+          "concept_id": "ai.floret-redeven-adapter-and-projection",
+          "title": "Floret Redeven adapter and projection"
+        },
         {
           "label": "Redeven OKF Bundle",
           "path": "index.md",
@@ -29158,15 +29176,15 @@
         "title": "Flower incremental live state",
         "type": "UI Contract"
       },
-      "body_length": 5116,
+      "body_length": 5687,
       "summary": "Floret owns runtime state, canonical history, item identity and view versions. Redeven authorizes and projects public data; one workspace stream delivers it to ThreadCache. Ordinary text growth carries only the changed item and its UTF-8 append offset. It must not copy, scan, redact, encode or rebuild the complete history. Missing authority or a broken sequence invalidates observation and refreshes summaries plus the required current view through the existing connection owner. Execution and user drafts survive that recovery.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Publication and public data\nRedeven requires the released optional Floret `ThreadUpdateSource` contract at startup.\n\nAccount watches, workload leases and Computer cleanup consume lightweight authoritative facts even with no viewer.\n\nSee [the adapter boundary](../ai/floret-redeven-adapter-and-projection.md).\n\n## Wire v2 and bounded delivery\nFlower schema v2 has one decoder and one update pipeline. Larger envelopes retain bounded fragments: envelope identity, zero-based fragment index/count, total bytes and Base64 payload.\n\nUnknown command results retain their original request keys; a disconnect never repeats an effect automatically.\n\nInitialization retains the complete authorized summary/read-state baseline as a byte-budgeted prefix. Concurrent runtime updates retain one dirty marker per `(runtime thread, wire thread, subagent route)` and the newest observed version. The consumer reads the authoritative current view outside the service lock after the prefix; it does not wait for a quiet producer. Publications newer than the captured view retain one marker for the next read.\n\nDuring normal delivery, consecutive appends with identical thread/item/turn/run identities and stable runtime facts merge only when actor versions and UTF-8 byte offsets are contiguous. Output-token counts and last-progress timestamps may advance monotonically within the same provider attempt; the merged update retains the newest values. Attempt, phase, first-output and semantic changes remain boundaries. Re-encoding is bounded to one 32 KiB fragment. Nonmergeable contiguous updates stay in FIFO order while the existing count and byte budgets have capacity. Item switches, semantic boundaries, and a full append fragment alone must not read or retransmit historical content. Only a sequence gap, initialization, or exhausted budget converges through a current snapshot. A replacement retires every covered queued delta for its exact route; sibling routes and metadata retain their relative order. Summary, viewer read state, and subagent inventory keep their latest independently scoped value. Already-started envelopes are never replaced.\n\nA current view can advance ahead of the ordered publication pump. A transient, byte-accounted covered version suppresses already represented deltas until the pump catches up. A delta spanning that version requires another current view, never a partial text append. This is in-memory observation metadata, not a replay cursor or a second durable lifecycle.\n\nSnapshots may cover transient phases such as preparing. The source still publishes admission before output; receivers apply the newest complete state without replaying an older phase over it. Pending approvals, interactions, tool results, cancellation, terminal facts, and full current text come from canonical authority. Missing, stale, or invalid authority fences the connection.\n\nThe existing 16 pending-batch, 32 MiB per-envelope/subscriber, and 32 MiB global retained-reference budgets remain enforced, including routing and merge metadata. Coalescing bounds repeated work for the same routes; more than 16 independent pending routes can still require recovery. Sampled convergence logs and closure logs include initialization phase, queue depth/bytes, batch kind, route, and version range without transcript content.\n\n## ThreadCache and independent authorities\nWorkspace summary publication reads one authoritative Floret summary.\n\nViewer read events and current-only updates cannot manufacture loaded-content coverage.\n\n## Commands and interaction\nCanonical cancellation plus active state owns Stopping feedback.\n\nSee [approval/input contracts](flower-approval-context.md), [read state](flower-read-state.md) and [terminal disclosure](flower-turn-process-disclosure.md).",
-          "char_count": 3775
+          "body": "## Publication and public data\nRedeven requires the released optional Floret observation contracts. The service consumes runtime updates for cleanup and workspace facts; the selected root conversation uses an authorized `ThreadWindowSource` reading interest.\n\nAccount watches, workload leases and Computer cleanup consume lightweight authoritative facts even with no viewer.\n\nSee [the adapter boundary](../ai/floret-redeven-adapter-and-projection.md).\n\n## Wire v2 and bounded delivery\nFlower schema v2 has one decoder and one update pipeline. Larger envelopes retain bounded fragments: envelope identity, zero-based fragment index/count, total bytes and Base64 payload.\n\nUnknown command results retain their original request keys; a disconnect never repeats an effect automatically.\n\nInitialization delivers the authorized summary/read-state baseline. Unselected root conversations publish coalesced runtime facts without item bodies. The selected root establishes one reading interest on its workspace observer using a monotonically increasing reading revision. Its HTTP baseline is consumed from the same Floret subscription that supplies subsequent changes. Changing pages replaces that interest; older revisions cannot update the displayed page.\n\nThe initial page contains the latest interval, at most 150 items under Floret's 512 KiB item-window budget. Earlier, newer and latest controls replace the interval explicitly. Canonical history remains complete. Large text is a raw UTF-8 preview inside the ordinary message shell, retaining references and attachments; it is never parsed as an independent Markdown document. Tool presentation and complete text load only when opened. Expanded immutable items remain in ThreadCache while their canonical preview and identity remain unchanged; navigation cancels outstanding body requests, and stale completions cannot overwrite newer content.\n\nNative changes update only accepted membership and bodies. Contiguous appends merge only within the same reading revision and exact thread/item/turn/run identities, actor versions and UTF-8 offsets. Merge work stays within one 32 KiB fragment. Bounded body growth advances its locator rather than retransmitting the prefix. A command's latest-page receipt cannot replace an active historical interval; the authorized detail loader refreshes that reading interest instead.\n\nThe existing 16 pending-batch, 32 MiB per-envelope/subscriber and 32 MiB global retained-reference budgets remain enforced. Pressure or lost continuity on a bounded reading route invalidates observation and reconnects through the normal bounded baseline path. A separate one-shot window must not be combined with the old subscription's different membership. Reading failures fence observation until retry; failed page movement retains its prior accepted anchor. Execution and drafts survive recovery.\n\nChild detail retains the existing full-view transport. Its initialization/pressure markers converge through a canonical current snapshot; byte-accounted covered versions suppress already represented deltas. Summary, viewer read state and subagent inventory retain independent mailboxes. Already-started frames are never replaced. These are ephemeral observations, not durable cursors or a second lifecycle.\n\nPending controls remain available independently of the selected page. Computer assistance may cite a tool outside the interval: authorized server-only canonical evidence validates provenance and publishes status, while the historical body stays off the wire. Missing authority fences observation.\n\n## ThreadCache and independent authorities\nWorkspace summary publication reads one authoritative Floret summary.\n\nViewer read events and current-only updates cannot manufacture loaded-content coverage.\n\n## Commands and interaction\nCanonical cancellation plus active state owns Stopping feedback.\n\nSee [approval/input contracts](flower-approval-context.md), [read state](flower-read-state.md) and [terminal disclosure](flower-turn-process-disclosure.md).",
+          "char_count": 4028
         },
         {
           "id": "boundaries",
@@ -29204,6 +29222,12 @@
         }
       ],
       "backlinks": [
+        {
+          "label": "Floret Redeven adapter and projection",
+          "path": "ai/floret-redeven-adapter-and-projection.md",
+          "concept_id": "ai.floret-redeven-adapter-and-projection",
+          "title": "Floret Redeven adapter and projection"
+        },
         {
           "label": "Model reasoning capabilities and transport",
           "path": "ai/model-reasoning-runtime.md",
@@ -33482,5 +33506,5 @@
       ]
     }
   ],
-  "source_sha256": "3e8810188de0e6f9bbea78460ff6c76699fd23026f12ad60c60b6b7ea584cedc"
+  "source_sha256": "adbf18f65e55fced22ec5c5f2d5b1640e22bd15f5b68f65346aa3121ecc09b29"
 }

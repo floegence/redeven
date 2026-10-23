@@ -187,7 +187,7 @@ function mergeResolvedApproval(activity: FlowerActivityItem, interaction: Flower
 }
 
 function activityBlock(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentView, item: FlowerRuntimeCurrentItem, identity: RuntimeExecutionIdentity): FlowerActivityTimelineBlock {
-  let activity = activityItem(item.activity ?? {});
+  let activity = { ...activityItem(item.activity ?? {}), ...(item.activity_bodies?.length ? { body_pending: true } : {}) };
   const toolCallID = trim(item.activity?.tool_id);
   const resolvedApproval = toolCallID ? (view.interactions ?? []).find((interaction) => (
     interaction.kind === 'approval'
@@ -294,7 +294,13 @@ export function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeC
       blocks: [{ type: 'tool-call-preview', call }],
     });
   }
-  return messages;
+  const byID = new Map((view.items ?? []).map(item => [item.id, item]));
+  return messages.map(message => {
+    const item = byID.get(message.id);
+    const pending = item?.body ? { kind: 'text' as const, bytes: item.body.bytes }
+      : item?.activity_bodies?.length ? { kind: 'activity' as const, bytes: item.activity_bodies.reduce((size, part) => size + part.bytes, 0) } : undefined;
+    return pending ? { ...message, body_pending: pending } : message;
+  });
 }
 
 function runtimeApprovalActions(
@@ -437,7 +443,7 @@ export function applyFlowerRuntimeCurrentView(
 ): FlowerThreadSnapshot {
   const projected = projectFlowerRuntimeComponents(base, current, context);
   return retainThreadPresentation(base, retainThreadFileActivityTargets(base, {
-    ...projected, messages: runtimeMessages(base, current), turns: validateFlowerRuntimeTurns(current),
+    ...projected, history_window: current.window, messages: runtimeMessages(base, current), turns: validateFlowerRuntimeTurns(current),
   }));
 }
 

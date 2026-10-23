@@ -39,7 +39,7 @@ import type {
   FlowerThreadPinPosition,
   FlowerLiveStreamConnectInput,
   FlowerLiveStreamEnvelope,
-  FlowerRuntimeCurrentView, FlowerRuntimeUpdate, FlowerParentEventQuery, FlowerParentEventPage,
+  FlowerHistoryRequest, FlowerRuntimeCurrentItem, FlowerRuntimeCurrentView, FlowerRuntimeUpdate, FlowerParentEventQuery, FlowerParentEventPage,
 } from './contracts/flowerSurfaceContracts';
 import {
   mapFlowerContextCompactions,
@@ -116,6 +116,8 @@ type RuntimeApprovalSubmitInput = FlowerSubmitApprovalRequest;
 export type FlowerRuntimeTransport = Readonly<{
   listThreads(): Promise<ListThreadsResponse>;
   loadThread(threadID: string, signal: AbortSignal): Promise<unknown>;
+  loadHistory?(threadID: string, input: FlowerHistoryRequest, signal: AbortSignal): Promise<unknown>;
+  loadHistoryItem?(threadID: string, itemID: string, signal: AbortSignal): Promise<FlowerRuntimeCurrentItem>;
   connectLiveStream?: (input: FlowerLiveStreamConnectInput) => AsyncIterable<FlowerLiveTransportFrame>;
   readParentEvents?(threadID: string, query: FlowerParentEventQuery): Promise<FlowerParentEventPage>;
   loadSubagentDetail(parentThreadID: string, childThreadID: string): Promise<LoadSubagentDetailResponse>;
@@ -230,6 +232,14 @@ function mapRuntimeSummaryThread(thread: ThreadView, options: RuntimeFlowerSurfa
   return mapFlowerThreadSummary({ ...thread, updated_at_unix_ms: Math.max(updatedAt, lastMessageAt) }, [], options.mapperOptions);
 }
 
+function mapHistoryWindow(raw: unknown): NonNullable<FlowerRuntimeCurrentView['window']> {
+  const value = raw as NonNullable<FlowerRuntimeCurrentView['window']> | undefined;
+  if (!value || typeof value.has_before !== 'boolean' || typeof value.has_after !== 'boolean'
+    || value.first_item_id !== undefined && typeof value.first_item_id !== 'string'
+    || value.last_item_id !== undefined && typeof value.last_item_id !== 'string') throw new Error('Flower contract error: invalid history window.');
+  return value;
+}
+
 function mapRuntimeThreadView(raw: unknown, options: RuntimeFlowerSurfaceAdapterOptions): FlowerThreadView {
   const value = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
   const current = value.current && typeof value.current === 'object'
@@ -240,8 +250,9 @@ function mapRuntimeThreadView(raw: unknown, options: RuntimeFlowerSurfaceAdapter
     : undefined;
   if (current && productThread) {
     const base = mapRuntimeThreadDetailBase(productThread, options);
-    const thread = applyFlowerRuntimeCurrentView(base, current);
-    return { thread, current };
+    const bounded = value.window ? { ...current, window: mapHistoryWindow(value.window) } : current;
+    const thread = applyFlowerRuntimeCurrentView(base, bounded);
+    return { thread, current: bounded };
   }
   throw new Error('Flower thread detail requires product metadata and a typed current view.');
 }
@@ -275,6 +286,9 @@ function mapRuntimeUpdate(raw: unknown): FlowerRuntimeUpdate {
           || !['user', 'steering', 'thinking', 'assistant', 'tool', 'interaction', 'goal'].includes(String(item.kind))
           || item.kind !== 'goal' && (!identity(item.turn_id) || !identity(item.run_id))
           || item.text !== undefined && typeof item.text !== 'string' || item.live !== undefined && typeof item.live !== 'boolean') fail();
+      } else if (change.kind === 'body') {
+        const body = record(change.body);
+        if (change.item !== undefined || change.append !== undefined || !integer(body.bytes) || !integer(body.preview_bytes) || body.bytes < body.preview_bytes) fail();
       } else if (change.kind !== 'remove' || change.item !== undefined || change.append !== undefined) fail();
     }
   }
@@ -368,6 +382,9 @@ function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfac
   const subagents = mapFlowerSubagents(value.subagents, 'live.subagents');
   return {
     schema_version: Math.floor(Number(value.schema_version)),
+    ...(value.facts_only === true ? { facts_only: true } : {}),
+    ...(Number.isSafeInteger(value.reading_revision) ? { reading_revision: Number(value.reading_revision) } : {}),
+    ...(value.window ? { window: mapHistoryWindow(value.window) } : {}),
     kind,
     ...(trim(value.observer_id) ? { observer_id: trim(value.observer_id) } : {}),
     ...(trim(value.thread_id) ? { thread_id: trim(value.thread_id) } : {}),
@@ -399,7 +416,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     const tid = trim(threadID);
     if (!tid) throw new Error(missingThreadIDMessage(options));
     signal.throwIfAborted();
-    const raw = await options.transport.loadThread(tid, signal);
+    const raw = await (options.transport.loadHistory ? options.transport.loadHistory(tid, {}, signal) : options.transport.loadThread(tid, signal));
     signal.throwIfAborted();
     return mapRuntimeThreadView(raw, options);
   };
@@ -436,6 +453,13 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       return (result.threads ?? []).map((thread) => mapRuntimeThread(thread, options));
     },
     loadThread,
+    loadHistory: options.transport.loadHistory ? async (threadID, input, signal) => {
+      signal.throwIfAborted();
+      const raw = await options.transport.loadHistory!(threadID, input, signal);
+      signal.throwIfAborted();
+      return mapRuntimeThreadView(raw, options);
+    } : undefined,
+    loadHistoryItem: options.transport.loadHistoryItem,
     ...(options.transport.connectLiveStream ? {
       connectLiveStream: async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
         for await (const envelope of assembleFlowerLiveEnvelopes(options.transport.connectLiveStream!(input))) {

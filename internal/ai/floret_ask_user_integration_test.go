@@ -476,7 +476,7 @@ func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderC
 	defer live.Close()
 	_ = nextFlowerLiveStreamFrame(t, live)
 	assertFlowerViewerReadBaseline(t, live, thread.ThreadID)
-	baseline, err := svc.GetFlowerThreadDetail(t.Context(), meta, thread.ThreadID)
+	baseline, err := svc.GetFlowerThreadHistory(t.Context(), meta, thread.ThreadID, FlowerHistoryRequest{ObserverID: live.subscriber.observerID, ReadingRevision: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -637,7 +637,7 @@ func assertAskUserContinuationLiveThinking(t *testing.T, live *FlowerLiveStreamS
 		if err := json.Unmarshal(frame.Data, &envelope); err != nil {
 			t.Fatalf("decode continuation live frame: %v", err)
 		}
-		if envelope.ThreadID != current.ThreadID.String() {
+		if envelope.ThreadID != current.ThreadID.String() || envelope.FactsOnly {
 			continue
 		}
 		if envelope.Current != nil {

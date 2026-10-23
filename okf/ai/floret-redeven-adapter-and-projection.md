@@ -17,7 +17,11 @@ Redeven's adapter is a thin typed boundary over published Floret. It authorizes 
 [Flower Goals](flower-goals.md) use the optional published Goal controller. Ordinary executable items retain strict identity.
 
 ## Incremental observation and public projection
-Published Floret v7.71.0 supplies optional `ThreadUpdateSource`. Floret alone owns text cadence, versions, append buffers, Activity reduction and canonical reads.
+Published Floret v7.79.0 supplies optional `ThreadUpdateSource`, `ThreadWindowSource` and canonical body readers. Floret alone owns text cadence, versions, append buffers, Activity reduction and canonical reads.
+
+Root detail and command receipts use the bounded window projection. POST history selects an authorized page and, when an observer is supplied, installs its reading interest on the same ordered Floret subscription. POST history-item expands one canonical item by its published body locators: frozen live extent, manifest parts or hash-verified field chunks. Every read refreshes endpoint, namespace and user authorization. The client never supplies raw entry locators as authority. Historical zero-byte Activity sources are synthesized only by Floret on explicit expansion; Redeven must not duplicate those defaults.
+
+Unselected root updates carry facts only. Child detail retains its existing transport. Computer assistance outside the selected interval uses server-only canonical evidence, which is not included in the bounded response. See [live delivery](../ui/flower-live-timeline.md) and [qualification](../operations/flower-thread-switch-qualification.md).
 
 No database schema or migration changes are part of this optimization.
 

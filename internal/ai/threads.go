@@ -488,9 +488,9 @@ func (s *Service) threadSettingsForRead(ctx context.Context, meta *session.Meta,
 	return th, nil
 }
 
-// GetFlowerThreadDetail is the single detail read boundary for Flower. The
-// product thread metadata remains owned by Redeven while Floret supplies the
-// renderable current view; callers must replace both fields together.
+// GetFlowerThreadDetail provides a complete canonical view for internal
+// inspection. Product transports use GetFlowerThreadHistory to keep reading
+// bounded. Redeven owns product metadata; Floret owns the current view.
 func (s *Service) GetFlowerThreadDetail(ctx context.Context, meta *session.Meta, threadID string) (*FlowerThreadDetail, error) {
 	settings, err := s.threadSettingsForRead(ctx, meta, threadID)
 	if err != nil || settings == nil {

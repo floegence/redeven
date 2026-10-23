@@ -66,3 +66,41 @@ describe('runtime item records', () => {
     expect(next.queued_turns).toEqual([]); expect(next.approval_actions).toEqual([]);
   });
 });
+
+describe('bounded history body residency', () => {
+  it('retains an expanded immutable body across an identical baseline without another fetch', () => {
+    const { current, initial } = fixture();
+    const preview = { ...current.items![0], live: false, text: '中文', body: { field: 'content' as const, source_id: 'one', bytes: 10, preview_bytes: 6 } };
+    const page = { ...current, items: [preview] };
+    const first = createRuntimeThreadRecord(page, applyFlowerRuntimeCurrentView(initial, page));
+    expect(first.hydrate(preview, { ...preview, body: undefined, text: '中文🌸' })).toBe(true);
+    expect(first.initializeThread().messages[0].body_pending).toBeUndefined();
+    const next = createRuntimeThreadRecord({ ...page, view_version: 2 }, applyFlowerRuntimeCurrentView(initial, page), first);
+    expect(next.item('one')!.text).toBe('中文🌸');
+    expect(next.initializeThread().messages[0].content).toBe('中文🌸');
+    expect(next.initializeThread().messages[0].body_pending).toBeUndefined();
+  });
+  it('rejects stale body completions and renders a growing body locator immediately', () => {
+    const { current, initial } = fixture();
+    const preview = { ...current.items![0], text: '中文', body: { field: 'content' as const, source_id: 'one', run_id: 'run', bytes: 10, preview_bytes: 6 } };
+    const page = { ...current, items: [preview] };
+    const record = createRuntimeThreadRecord(page, applyFlowerRuntimeCurrentView(initial, page));
+    record.apply(record.initializeThread(), { ...append(), items: [{ kind: 'body', item_id: 'one', body: { ...preview.body, bytes: 11 } }] });
+    expect(record.initializeThread().messages[0].body_pending?.bytes).toBe(11);
+    expect(record.hydrate(preview, { ...preview, body: undefined, text: '中文🌸' })).toBe(false);
+    expect(record.initializeThread().messages[0].content).toBe('中文');
+  });
+});
+
+
+describe('history page anchors', () => {
+  it('advances page edges with accepted membership changes', () => {
+    const { current, initial } = fixture();
+    const page = { ...current, window: { first_item_id: 'one', last_item_id: 'one', has_before: true, has_after: false } };
+    const record = createRuntimeThreadRecord(page, applyFlowerRuntimeCurrentView(initial, page));
+    record.apply(record.initializeThread(), { ...append(), items: [{ kind: 'add', item_id: 'two', item: { ...current.items![0], id: 'two', ordinal: 2 } }] });
+    expect(record.initializeThread().history_window).toEqual({ first_item_id: 'one', last_item_id: 'two', has_before: true, has_after: false });
+    record.apply(record.initializeThread(), { ...append(2), items: [{ kind: 'remove', item_id: 'one' }] });
+    expect(record.initializeThread().history_window?.first_item_id).toBe('two');
+  });
+});

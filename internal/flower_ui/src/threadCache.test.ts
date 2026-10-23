@@ -750,3 +750,26 @@ describe('ThreadCache native baseline reads', () => {
     expect(() => cache.receiveUpdate(update)).not.toThrow();
   });
 });
+
+describe('bounded history windows', () => {
+  it('accepts same-version page movement and applies deltas delivered before its baseline', () => {
+    const make = (id: string, version = 7): FlowerRuntimeCurrentView => ({ thread_id: 'a', turn_id: 'turn', run_id: 'run', view_version: version,
+      activity: 'active', run_progress: { phase: 'streaming' }, items: [{ id, kind: 'assistant', text: id, ordinal: 1, turn_id: 'turn', run_id: 'run', live: true }],
+      window: { first_item_id: id, last_item_id: id, has_before: id === 'new', has_after: id === 'old' } });
+    const first = make('new');
+    const project = (current: FlowerRuntimeCurrentView) => ({ ...thread('a', current.view_version, current.items![0].text!), history_window: current.window,
+      messages: [{ ...thread('a', 7, '').messages[0], id: current.items![0].id, content: current.items![0].text! }] });
+    let cache = createThreadCache().receiveView({ thread: project(first), version: 7 }, { current: first }).cache;
+    const release = cache.beginRuntimeRead('a');
+    const next = make('old');
+    cache.receiveUpdate({ thread_id: 'a', turn_id: 'turn', run_id: 'run', base_version: 7, view_version: 8,
+      facts: { activity: 'active', attention: {}, queue_count: 0, run_progress: { phase: 'streaming' } },
+      items: [{ kind: 'append', item_id: 'old', append: { offset_bytes: 3, text: '!' } }] });
+    cache = cache.receiveView({ thread: project(next), version: 7 }, { current: next }).cache;
+    release();
+    expect(cache.views.get('a')!.version).toBe(8);
+    expect(cache.views.get('a')!.thread.messages[0].content).toBe('old!');
+    expect(cache.views.get('a')!.thread.history_window?.has_after).toBe(true);
+    expect(cache.summaries.get('a')!.history_window).toBeUndefined();
+  });
+});

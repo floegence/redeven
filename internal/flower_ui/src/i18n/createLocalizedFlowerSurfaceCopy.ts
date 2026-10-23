@@ -65,6 +65,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       modelSupportUnavailable: t(i18n, k('attachments.modelSupportUnavailable')),
     },
     chat: {
+      history: {label: t(i18n, k('chat.history.label')), older: t(i18n, k('chat.history.older')), newer: t(i18n, k('chat.history.newer')), latest: t(i18n, k('chat.history.latest')), loading: t(i18n, k('chat.history.loading')), expand: t(i18n, k('chat.history.expand')), failed: t(i18n, k('chat.history.failed'))},
       media: {
         generating: t(i18n, k('chat.media.generating')),
         incomplete: t(i18n, k('chat.media.incomplete')),

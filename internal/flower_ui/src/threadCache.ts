@@ -2,7 +2,7 @@ import type {
   FlowerThreadSnapshot,
   FlowerThreadSummary,
   FlowerThreadReadStatus,
-  FlowerRuntimeCurrentView, FlowerRuntimeUpdate,
+  FlowerRuntimeCurrentItem, FlowerRuntimeCurrentView, FlowerRuntimeUpdate,
 } from './contracts/flowerSurfaceContracts';
 import { mergeThreadTitle, threadTitleSnapshot, type ThreadTitleSnapshot } from './threadTitleSnapshot';
 import { retainEqualValue, retainThreadPresentation } from './presentationIdentity';
@@ -49,6 +49,7 @@ export function classifyThreadView(
   if (!current) return 'accepted';
   if (candidate.version > current.version) return 'accepted';
   if (candidate.version < current.version) return 'stale';
+  if (candidate.thread.history_window && JSON.stringify(candidate.thread.history_window) !== JSON.stringify(current.thread.history_window)) return 'accepted';
   return 'unchanged';
 }
 
@@ -193,6 +194,8 @@ export type ThreadCache = {
   replaceSummaries(summaries: readonly FlowerThreadSummary[]): ThreadCache;
   resetRootSummaries(summaries: readonly FlowerThreadSummary[]): ThreadCache;
   beginRuntimeRead(id: string): () => void;
+  runtimeItem(threadID: string, itemID: string): FlowerRuntimeCurrentItem | undefined;
+  hydrateItem(threadID: string, expected: FlowerRuntimeCurrentItem, loaded: FlowerRuntimeCurrentItem): boolean;
   receiveView(
     view: ThreadView,
     options?: Readonly<{ preserveSummary?: boolean; current?: FlowerRuntimeCurrentView }>,
@@ -210,6 +213,7 @@ type BaselineReads = Map<string, { readers: number; updates: FlowerRuntimeUpdate
 
 function summaryOnly(thread: FlowerThreadSnapshot): FlowerThreadSnapshot {
   const summary = { ...thread, messages: [] };
+  delete summary.history_window;
   delete summary.current_execution;
   delete summary.turns;
   delete summary.queued_turns;
@@ -273,7 +277,9 @@ function createCache(
     const enriched = stored ? retainThreadFileActivityTargets(view.thread, stored.thread) : undefined;
     const navigationChanged = !!stored && enriched !== stored.thread;
     const current = stored && navigationChanged ? { ...stored, thread: enriched! } : stored;
-    const runtimeState = classifyThreadView(current, view);
+    const classified = classifyThreadView(current, view);
+    if (classified === 'stale' && options?.current?.window && reads.has(id)) throw new FlowerLiveSyncError('History read was overtaken by a newer baseline.');
+    const runtimeState = classified === 'unchanged' && options?.current?.window && reads.has(id) ? 'accepted' : classified;
     const activityState = classifyThreadActivity(current, view);
     const settingsState = classifyThreadSettings(current, view);
     const currentSummary = summaries.get(id);
@@ -339,11 +345,14 @@ function createCache(
     const observations: FlowerRuntimeCurrentView[] = [];
     if (runtimeState === 'accepted' && options?.current) {
       const pending = reads.get(id)?.updates.splice(0) ?? [];
+      const owner = reads.get(id);
+      reads.delete(id);
       for (const update of pending) {
         const received = acceptedCache.receiveUpdate(update);
         acceptedCache = received.cache;
         if (received.observation) observations.push(received.observation);
       }
+      if (owner) reads.set(id, owner);
     }
     return {
       cache: acceptedCache,
@@ -363,6 +372,8 @@ function createCache(
   const cache: ThreadCache = {
     selectedId,
     summaries,
+    runtimeItem(threadID, itemID) { return views.get(threadID)?.runtime?.item(itemID); },
+    hydrateItem(threadID, expected, loaded) { return views.get(threadID)?.runtime?.hydrate(expected, loaded) ?? false; },
     beginRuntimeRead(id) {
       const entry = reads.get(id);
       const owned = entry ?? { readers: 0, updates: [] };
@@ -429,6 +440,12 @@ function createCache(
     },
     receiveUpdate(update) {
       const entry = views.get(update.thread_id);
+      const pending = reads.get(update.thread_id);
+      if (pending && entry?.view.thread.history_window) {
+        if (pending.updates.length >= 64) throw new FlowerLiveSyncError('Flower baseline update queue overflow.');
+        pending.updates.push(update);
+        return { cache, accepted: false };
+      }
       // Unvisited threads retain only workspace summaries. Reconnection also
       // fences old actor versions until the normal detail read establishes them.
       if (!entry?.runtime || entry.view.version === 0) {
