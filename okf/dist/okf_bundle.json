@@ -16740,7 +16740,7 @@
       "frontmatter": {
         "description": "Identify the target host, explain connection readiness and open its desktop through one concise, localized flow.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-23",
         "tags": [
           "accessibility",
           "applications",
@@ -16751,15 +16751,15 @@
         "title": "Remote desktop connection launcher",
         "type": "Interaction Contract"
       },
-      "body_length": 2270,
+      "body_length": 2770,
       "summary": "The Env App launcher owns the remote desktop connection flow in Host Applications\nand Workbench. It names the actual target, presents current readiness and offers\none primary action. Additional authorization advances inside that same surface.\nPermission and platform limits remain enforced by the\n[desktop session contract](remote-desktop.md). Failure stays visible with an\nappropriate recovery step; dismissal before session creation finishes releases\nthat session. A successfully opened viewer retains its independent lifetime.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Target and readiness\nRemote Desktop uses one monitor-and-pointer silhouette in its launcher and Workbench Dock. Their identities must remain distinct at Dock and widget-header sizes, in every shipped theme and high-contrast mode.\n\nFailure retains its diagnostic and retry action, while cancellation stops only the selected setup operation; neither requires reloading the application.\n\n## Continuous connection setup\nWhen a target needs SSH service preparation, authorization and desktop opening remain one continuous flow in the existing Remote desktop dialog. The current step, operation-bound authorization challenge, progress, failure diagnostic and next action stay visible together.\n\nAdministrator scope and credential lifetime follow the [SSH deployment contract](remote-desktop-ssh-deployment.md).\n\n## Connection options\nThe initial dialog presents host identity, readiness and one connect action. Opening the launcher never changes system permission.\n\nTurning off reuse means each future connection requests host confirmation; it does not revoke the system grant.",
-          "char_count": 1074
+          "body": "## Target and readiness\nRemote Desktop uses one monitor-and-pointer silhouette in its launcher and Workbench Dock. Their identities must remain distinct at Dock and widget-header sizes, in every shipped theme and high-contrast mode.\n\nFailure retains its diagnostic and retry action, while cancellation stops only the selected setup operation; neither requires reloading the application.\n\n## Continuous connection setup\nWhen a target needs SSH service preparation, authorization and desktop opening remain one continuous flow in the existing Remote desktop dialog. The current step, operation-bound authorization challenge, progress, failure diagnostic and next action stay visible together.\n\nAdministrator scope and credential lifetime follow the [SSH deployment contract](remote-desktop-ssh-deployment.md).\n\n## Connection options\nThe initial dialog presents host identity, readiness and one connect action. Opening the launcher never changes system permission.\n\nAdministrator-method and display selectors retain native keyboard selection and their visible labels. Their decorative chevrons stay 12 CSS pixels inside the field edge, with separate text padding, including narrow windows and forced-color presentation. The arrow does not intercept pointer input.\n\nTurning off reuse means each future connection requests host confirmation; it does not revoke the system grant.",
+          "char_count": 1373
         },
         {
           "id": "boundaries",
@@ -33541,5 +33541,5 @@
       ]
     }
   ],
-  "source_sha256": "974f9257cc56567d946763a7b51f98e8f86acfec22a8015bceb74e9b9d3e5540"
+  "source_sha256": "2fdaf01e5ca1d9df5f4f556119d4b1786c279e449b8dc7ee9ec53915cb00b676"
 }
