@@ -28,7 +28,7 @@ await session.run(async () => {
   const tls = await createBuiltDistTLS();
   await session.defer('TLS fixture', () => tls.cleanup());
   const server = await createSSHSettingsPreviewServer(0, ['flower-navigation.html']);
-  await session.defer('preview server', () => server.close());
+  const previewServer = await session.defer('preview server', () => server.close());
   await session.port(new URL(server.resolvedUrls.local[0]).port);
   await server.watcher.close();
   const report = {
@@ -282,7 +282,7 @@ await session.run(async () => {
         },
       };
     }, snapshot);
-    await page.goto(new URL('flower-navigation.html?media=1', report.url).href);
+    await page.goto(new URL('flower-navigation.html?media=1', report.url).href, { timeout: 60000 });
     await page.getByRole('button', { name: 'Flower', exact: true }).click();
     await page.evaluate(() => window.navigationFixture.releaseRuntime());
     await page.locator('[data-thread-id="navigation-thread"] button').first().click();
@@ -349,6 +349,9 @@ await session.run(async () => {
     );
     await page.evaluate(() => window.navigationFixture.dispose());
     assert.ok(await page.evaluate(() => window.navigationFixture.cancellations > 0), 'Disposal releases the workspace stream');
+    // Release the Welcome dev server before switching to the built Env App.
+    await page.goto('about:blank');
+    await session.release(previewServer);
 
     const thread = {
       thread_id: 'env-media-thread',
@@ -387,6 +390,8 @@ await session.run(async () => {
     };
     const requests = [];
     const streams = new Set();
+    let streamReady;
+    const liveReady = new Promise((resolve) => { streamReady = resolve; });
     envServer = await createBuiltDistServer({
       accessReady: true,
       fileContinuity: true,
@@ -432,6 +437,7 @@ await session.run(async () => {
           };
           response.write('data: ' + JSON.stringify(frame) + '\n\n');
           streams.add(response);
+          streamReady();
           request.on('close', () => streams.delete(response));
           return true;
         } else return false;
@@ -462,6 +468,9 @@ await session.run(async () => {
     await page.goto(new URL('_redeven_proxy/env/', envServer.baseURL).href);
     await page.locator(`[data-thread-id="${thread.thread_id}"] button`).first().click();
     await page.waitForFunction(() => document.querySelector('.chat-media-image')?.naturalWidth > 0);
+    await liveReady;
+    await page.waitForFunction(() => document.querySelector('[data-flower-selected-thread-loading="false"]')
+      && !document.querySelector('[data-flower-sync-state]'));
     await page.locator('.chat-media-image').scrollIntoViewIfNeeded();
     await page.screenshot({ path: path.join(output, 'env-before.png') });
     const requestCount = requests.length;
