@@ -21,6 +21,7 @@ declare global {
       releaseGoalRead: (fail?: boolean) => void;
       publishGoal: (text: string, live?: boolean) => void;
       releaseRuntime: () => void;
+      releaseBaseline: () => void;
       refreshHealth: () => void;
       publishHTML: (text: string, generating: boolean) => void;
       publish: (patch: Partial<DesktopWelcomeSnapshot>) => void;
@@ -35,6 +36,7 @@ let receiveStream: ((event: RuntimeFlowerStreamEvent) => void) | undefined;
 let receiveStreamID = '';
 let aiReady = false;
 const goalMode = new URLSearchParams(location.search).has('goal');
+const progressiveMode = new URLSearchParams(location.search).has('progressive');
 let goal: FlowerGoal = { version: 1, text: 'Confirm the release and preserve every requirement.', actor: 'user', status: 'active' };
 let releaseGoalRead: ((fail: boolean) => void) | undefined;
 const unavailable = () => ({ ok: false as const, error: { code: 'AI_SERVICE_UNAVAILABLE', status: 503,
@@ -47,7 +49,11 @@ const fixture = window.navigationFixture = {
     goal = { version: goal.version + 1, text, status: 'active', actor: 'model' };
     thread.goal = goal;
     current = { ...current, view_version: current.view_version + 1, goal };
-    if (live) for (const frame of flowerLiveWireFixture({ schema_version: 2, kind: 'thread.batch', thread_id: thread.thread_id, current }, 'goal-' + current.view_version))
+    if (live) for (const frame of flowerLiveWireFixture({ schema_version: 3, kind: 'thread.batch', thread_id: thread.thread_id, current }, 'goal-' + current.view_version))
+      receiveStream?.({ stream_id: receiveStreamID, kind: 'chunk', chunk: new TextEncoder().encode('data: ' + frame.data + '\n\n') });
+  },
+  releaseBaseline() {
+    for (const frame of flowerLiveWireFixture({ schema_version: 3, kind: 'summary.batch', baseline_complete: true, summaries: [{ ...thread, thread_id: 'older-thread', title: 'Older conversation' }] }, 'navigation-complete'))
       receiveStream?.({ stream_id: receiveStreamID, kind: 'chunk', chunk: new TextEncoder().encode('data: ' + frame.data + '\n\n') });
   },
   releaseRuntime() {
@@ -68,7 +74,7 @@ const fixture = window.navigationFixture = {
         facts: { activity: 'active', queue_count: 0, run_progress: { phase: 'streaming' } },
         items: [{ kind: 'append', item_id: 'density-reading', append: { offset_bytes: new TextEncoder().encode(previousText).length, text: text.slice(previousText.length) } }] } }
       : { current };
-    for (const frame of flowerLiveWireFixture({ schema_version: 2, kind: 'thread.batch', thread_id: thread.thread_id, ...content }, 'html-'+current.view_version)) {
+    for (const frame of flowerLiveWireFixture({ schema_version: 3, kind: 'thread.batch', thread_id: thread.thread_id, ...content }, 'html-'+current.view_version)) {
       receiveStream?.({ stream_id: receiveStreamID, kind: 'chunk', chunk: new TextEncoder().encode('data: '+frame.data+'\n\n') });
     }
   },
@@ -154,7 +160,7 @@ const settings: DesktopWelcomeRuntime['settings'] = {
     receiveStreamID = request.stream_id;
     if (!aiReady) { fixture.prematureRequests++; return unavailable(); }
     queueMicrotask(() => {
-      for (const frame of flowerLiveWireFixture({ schema_version: 2, kind: 'ready', summaries: [thread] }, 'navigation-ready')) {
+      for (const frame of flowerLiveWireFixture({ schema_version: 3, kind: 'ready', baseline_complete: !progressiveMode, summaries: [thread] }, 'navigation-ready')) {
         receiveStream?.({ stream_id: request.stream_id, kind: 'chunk', chunk: new TextEncoder().encode('data: '+frame.data+'\n\n') });
       }
     });

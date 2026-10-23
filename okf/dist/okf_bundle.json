@@ -29181,7 +29181,7 @@
         "title": "Flower incremental live state",
         "type": "UI Contract"
       },
-      "body_length": 6811,
+      "body_length": 7398,
       "summary": "Floret owns runtime state, canonical history, item identity and view versions. Redeven authorizes and projects public data; one workspace stream delivers it to ThreadCache. Ordinary text growth carries only the changed item and its UTF-8 append offset. It must not copy, scan, redact, encode or rebuild the complete history. Missing authority or a broken sequence invalidates observation and refreshes summaries plus the required current view through the existing connection owner. Execution and user drafts survive that recovery.",
       "sections": [
         {
@@ -33511,5 +33511,5 @@
       ]
     }
   ],
-  "source_sha256": "a19bfeab9ad6d14b469c35b20fb25a423a62c265b1c8e221af73dd5517bfccd9"
+  "source_sha256": "c4076b3ba0dec9f3a0fe0657ac62adcba1b98a9d9ee8b6f1fcae66ce4a817be9"
 }

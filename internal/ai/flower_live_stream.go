@@ -271,37 +271,38 @@ type flowerLiveCurrentEncodingDiagnostics struct {
 }
 
 type flowerLiveSubscriber struct {
-	namespacePublicID string
-	historyMu         sync.Mutex
-	historyRevision   uint64
-	history           *flruntime.ThreadUpdateSubscription
-	historyCancel     context.CancelFunc
-	observerID        string
-	observerContext   context.Context
-	observerCancel    context.CancelFunc
-	baselineThreadIDs []string
-	viewerMu          sync.Mutex
-	viewerRevision    uint64
-	viewerRequest     ComputerViewerRequest
-	viewerCancel      context.CancelFunc
-	viewerStop        func()
-	id                uint64
-	endpointID        string
-	userPublicID      string
-	queue             []*flowerLiveEncodedBatch
-	media             chan *flowerLiveEncodedBatch
-	queuedBytes       int
-	mediaBytes        int
-	initializing      bool
-	initial           []*flowerLiveEncodedBatch
-	covered           map[flowerLiveRoute]uint64
-	pressureLoggedAt  time.Time
-	active            *flowerLiveEncodedBatch
-	activeIndex       int
-	activeAccounted   bool
-	wake              chan struct{}
-	closeErr          error
-	closed            bool
+	namespacePublicID  string
+	historyMu          sync.Mutex
+	historyRevision    uint64
+	history            *flruntime.ThreadUpdateSubscription
+	historyCancel      context.CancelFunc
+	observerID         string
+	observerContext    context.Context
+	observerCancel     context.CancelFunc
+	baselineThreadIDs  []string
+	baselineArrayBytes int
+	viewerMu           sync.Mutex
+	viewerRevision     uint64
+	viewerRequest      ComputerViewerRequest
+	viewerCancel       context.CancelFunc
+	viewerStop         func()
+	id                 uint64
+	endpointID         string
+	userPublicID       string
+	queue              []*flowerLiveEncodedBatch
+	media              chan *flowerLiveEncodedBatch
+	queuedBytes        int
+	mediaBytes         int
+	initializing       bool
+	initial            []*flowerLiveEncodedBatch
+	covered            map[flowerLiveRoute]uint64
+	pressureLoggedAt   time.Time
+	active             *flowerLiveEncodedBatch
+	activeIndex        int
+	activeAccounted    bool
+	wake               chan struct{}
+	closeErr           error
+	closed             bool
 }
 
 // Only immutable public bytes and bounded routing metadata survive encoding.
@@ -396,9 +397,10 @@ func (s *Service) SubscribeFlowerLiveStream(ctx context.Context, meta *session.M
 			return nil, err
 		}
 		s.mu.Lock()
-		cost := 0
+		arrayBytes := cap(ids) * 16
+		cost := arrayBytes
 		for _, id := range ids {
-			cost += len(id) + 16
+			cost += len(id)
 		}
 		if subscriber.closed || subscriber.queuedBytes+cost > flowerLiveEnvelopeByteLimit || s.flowerLiveQueuedBytes+cost > flowerLiveGlobalQueuedByteLimit {
 			closeFlowerLiveSubscriberLocked(s, subscriber, flowerLiveSubscriberCloseGlobalQueueLimit)
@@ -408,6 +410,7 @@ func (s *Service) SubscribeFlowerLiveStream(ctx context.Context, meta *session.M
 		subscriber.queuedBytes += cost
 		s.flowerLiveQueuedBytes += cost
 		subscriber.baselineThreadIDs = ids
+		subscriber.baselineArrayBytes = arrayBytes
 		s.mu.Unlock()
 	}
 	if err := subscription.loadBaselinePage(ctxOrBackground(ctx), true); err != nil {
@@ -489,13 +492,17 @@ func (subscription *FlowerLiveStreamSubscription) loadBaselinePage(ctx context.C
 		subscriber.initial = append(subscriber.initial, batch)
 	}
 	for index, id := range subscriber.baselineThreadIDs[:count] {
-		cost := len(id) + 16
+		cost := len(id)
 		subscriber.queuedBytes -= cost
 		s.flowerLiveQueuedBytes -= cost
 		subscriber.baselineThreadIDs[index] = ""
 	}
 	subscriber.baselineThreadIDs = subscriber.baselineThreadIDs[count:]
 	if complete {
+		subscriber.queuedBytes -= subscriber.baselineArrayBytes
+		s.flowerLiveQueuedBytes -= subscriber.baselineArrayBytes
+		subscriber.baselineArrayBytes = 0
+		subscriber.baselineThreadIDs = nil
 		finalizeFlowerLiveSubscriberInitializationLocked(s, subscriber)
 	}
 	return nil
@@ -1081,6 +1088,7 @@ func closeFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSub
 		subscriber.observerCancel()
 	}
 	subscriber.baselineThreadIDs = nil
+	subscriber.baselineArrayBytes = 0
 	if subscriber.historyCancel != nil {
 		subscriber.historyCancel()
 	}

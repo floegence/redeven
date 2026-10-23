@@ -32,6 +32,19 @@ func TestFlowerLiveBaselineFreezesMembershipAndQueuesConcurrentChanges(t *testin
 	if got := counter.summaries.Load(); got != flowerLiveBaselinePageLimit {
 		t.Fatalf("startup read %d summaries before ready", got)
 	}
+	// Consuming a prefix releases string contents, but the backing array stays
+	// live until the complete inventory has drained. Keep its capacity budgeted.
+	initialBytes := 0
+	for _, batch := range sub.subscriber.initial {
+		initialBytes += batch.bytes()
+	}
+	remainingIDBytes := 0
+	for _, id := range ids[flowerLiveBaselinePageLimit:] {
+		remainingIDBytes += len(id)
+	}
+	if retained := sub.subscriber.queuedBytes - initialBytes; retained < remainingIDBytes+16*len(ids) {
+		t.Fatalf("inventory retains its backing array but accounts for only %d bytes", retained)
+	}
 	first := flowerBackpressureEnvelope(t, sub)
 	if first.Kind != FlowerLiveStreamReady || first.BaselineComplete == nil || *first.BaselineComplete {
 		t.Fatal("missing partial ready")
@@ -64,6 +77,9 @@ func TestFlowerLiveBaselineFreezesMembershipAndQueuesConcurrentChanges(t *testin
 			seen[summary.ThreadID] = true
 		}
 		complete = *envelope.BaselineComplete
+		if complete && sub.subscriber.baselineThreadIDs != nil {
+			t.Fatal("completed baseline retains its identity array")
+		}
 	}
 	if len(seen) != len(ids) {
 		t.Fatalf("retained %d/%d roots", len(seen), len(ids))
