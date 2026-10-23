@@ -9,6 +9,8 @@
 
 - 2026-10-23: Teach ordered non-overlapping patch chunks and one canonical file operation, distinguish source-order/context failures with actionable no-effect diagnostics, and qualify schema recovery plus synthetic model patch generation. See [tool permissions and dispatch](ai/tool-permission-runtime.md).
 
+- 2026-10-23: Position Flower destinations before exposure, prepare visible tail text through the existing bounded loader, remove elapsed-time reveal, and verify cached first frames in Chromium and Electron. See [selection](ui/flower-thread-selection.md), [read state](ui/flower-read-state.md), and [qualification](operations/flower-thread-switch-qualification.md).
+
 - 2026-10-23: Keep temporary Flower subscription recovery retryable over HTTP and preserve localized connection feedback in the composer status lane. Verify automatic recovery, keyboard resync and draft retention; see [Flower live timeline](ui/flower-live-timeline.md).
 
 ## 2026-10-23 — Readable bounded conversation history

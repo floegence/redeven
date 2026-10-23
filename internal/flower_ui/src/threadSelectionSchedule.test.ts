@@ -10,9 +10,9 @@ function fixture(hidden = false) {
   const frame = () => { const entries = [...frames]; frames.clear(); for (const [, fn] of entries) fn(0); };
   return { document, frames, frame, presented, commit, cancel };
 }
-it('preserves four feedback frames and commits exactly once', async () => {
+it('commits once after a feedback rendering opportunity without extra frame delays', async () => {
   vi.useFakeTimers(); const f = fixture();
-  for (let i = 0; i < 3; i++) f.frame(); expect(f.commit).not.toHaveBeenCalled(); expect(f.presented).not.toHaveBeenCalled();
+  f.frame(); expect(f.commit).not.toHaveBeenCalled(); expect(f.presented).not.toHaveBeenCalled();
   f.frame(); expect(f.presented).toHaveBeenCalledOnce(); await vi.runAllTimersAsync(); expect(f.commit).toHaveBeenCalledOnce();
   f.document.dispatchEvent(new Event('visibilitychange')); expect(f.frames.size).toBe(0); expect(vi.getTimerCount()).toBe(0);
 });

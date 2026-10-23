@@ -1,5 +1,8 @@
 import { withFlowerReadDeadline } from './requestDeadline';
 
+export const HISTORY_BODY_CONCURRENCY = 2;
+export const HISTORY_BODY_VIEWPORT_MARGIN_PX = 160;
+
 type BodyRead = {
   identity: object;
   signal: AbortSignal;
@@ -19,7 +22,7 @@ export function createHistoryBodyLoader(timeoutMessage: () => string, changed: (
   };
   const pump = () => {
     for (const [key, entry] of reads) {
-      if (active >= 2) break;
+      if (active >= HISTORY_BODY_CONCURRENCY) break;
       if (entry.state !== 'queued') continue;
       if (entry.signal.aborted) { remove(key, entry); continue; }
       active++; entry.state = 'loading'; changed();
@@ -61,7 +64,7 @@ export function createHistoryBodyVisibility() {
         const callbacks = new Map<Element, (visible: boolean) => void>();
         const observer = new IntersectionObserver(entries => {
           for (const entry of entries) callbacks.get(entry.target)?.(entry.isIntersecting);
-        }, { root, rootMargin: '160px 0px' });
+        }, { root, rootMargin: `${HISTORY_BODY_VIEWPORT_MARGIN_PX}px 0px` });
         owner = { observer, callbacks }; roots.set(root, owner);
       }
       owner.callbacks.set(element, callback); owner.observer.observe(element);

@@ -69,6 +69,27 @@ function createController() {
 }
 
 describe('Flower scroll tail controller', () => {
+  it('flushes a cached destination before reveal and cancels its redundant scheduled pass', () => {
+    const raf = createRafHarness();
+    const metrics = createViewport(900);
+    metrics.setScrollTop(0);
+    const positions: number[] = [];
+    const controller = createFlowerScrollTailController({
+      reducedMotionPreferred: () => true,
+      requestAnimationFrame: raf.requestAnimationFrame,
+      cancelAnimationFrame: raf.cancelAnimationFrame,
+      onLayout: () => positions.push(metrics.scrollTop()),
+    });
+    controller.bind(metrics.viewport);
+    controller.measureAfterLayout();
+    controller.flushLayout();
+    expect(positions).toEqual([800]);
+    expect(raf.pending()).toBe(0);
+    raf.flushAll();
+    expect(positions).toEqual([800]);
+    controller.dispose();
+  });
+
   it('keeps empty presentation at its reading position and follows actual content', () => {
     const raf = createRafHarness();
     let hasContent = false;

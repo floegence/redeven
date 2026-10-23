@@ -22233,7 +22233,7 @@
       "frontmatter": {
         "description": "Reproduce point-read scaling, bounded read recovery and actual sidebar presentation with synthetic data.",
         "lifecycle": "active_evidence",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-23",
         "tags": [
           "flower",
           "navigation",
@@ -22244,7 +22244,7 @@
         "title": "Flower conversation switch performance qualification",
         "type": "Qualification Evidence"
       },
-      "body_length": 5486,
+      "body_length": 7446,
       "summary": "Published Floret v7.79.0 owns canonical windows, bodies, View and Summary. Redeven consumes a\npoint summary and coordinates ephemeral read demand through one loader. The\n[sidebar contract](../ui/flower-thread-sidebar.md) and\n[Desktop bridge](../desktop/desktop-runtime-bridge.md) own the behavior.\nQualification uses copied released-writer fixtures and synthetic conversations;\nit never continues real user tasks. The short-detail P95 target is at least a\n70% reduction, with warm selection synchronous P95 below 8 ms and actual\nselection feedback presented before transcript commit. These checks are local\nqualification, outside ordinary CI and hooks.",
       "sections": [
         {
@@ -30007,7 +30007,7 @@
       "frontmatter": {
         "description": "Keep unread indicators monotonic and acknowledge only rendered content through silent background recovery.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-23",
         "tags": [
           "flower",
           "read-state",
@@ -30018,15 +30018,15 @@
         "title": "Flower read state",
         "type": "UI Contract"
       },
-      "body_length": 1295,
+      "body_length": 1610,
       "summary": "Redeven owns per-user read confirmation. Unread indicators compare current activity with server confirmation and actual local presentation. Old responses never restore a dot for an already read version; new unseen activity remains unread. Temporary synchronization failures recover silently in the background, without blocking any user operation.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Flower read state is a Redeven-owned per-user activity watermark. A separate loaded-content revision prevents metadata or private confirmations from qualifying stale body content as current.\n\nNo storage format or historical watermark is reset.",
-          "char_count": 243
+          "body": "Flower read state is a Redeven-owned per-user activity watermark. A separate loaded-content revision prevents metadata or private confirmations from qualifying stale body content as current.\n\nNo storage format or historical watermark is reset.\n\nNeither a detail response nor a hidden measuring transcript qualifies as\npresentation. Selection telemetry and read acknowledgement wait until the\n[destination presentation boundary](flower-thread-selection.md) releases its\nprepared viewport, then retain the existing visible-document and content-revision\nchecks.",
+          "char_count": 558
         },
         {
           "id": "boundaries",
@@ -30054,6 +30054,14 @@
         }
       ],
       "snippet": "Redeven owns per-user read confirmation. Unread indicators compare current activity with server confirmation and actual local presentation. Old responses never restore a dot for an already read version; new unseen activity remains unread. T",
+      "links": [
+        {
+          "label": "destination presentation boundary",
+          "path": "ui/flower-thread-selection.md",
+          "concept_id": "ui.flower-thread-selection",
+          "title": "Flower conversation selection and detail reads"
+        }
+      ],
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -30719,7 +30727,7 @@
       "frontmatter": {
         "description": "Present navigation feedback before committing content and coordinate bounded canonical detail reads.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-23",
         "tags": [
           "cancellation",
           "detail",
@@ -30731,15 +30739,15 @@
         "title": "Flower conversation selection and detail reads",
         "type": "UI Contract"
       },
-      "body_length": 1651,
+      "body_length": 3412,
       "summary": "Flower presents the latest selection intent before transcript work and uses one\ncoordinator for navigation, command confirmation and reference preflight reads.\nThreadCache owns committed selection and accepted detail; the loader owns only\nbounded ephemeral demand.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Selection and navigation\nThe rail acknowledges a selection with a short-lived navigation intent before committing the conversation. Foreground detail requests cannot bypass this boundary through summary effects.\n\nOrdinary conversations remain ordered by creation time descending, then ThreadID ascending.\n\n## Detail read ownership\nPublished Floret v7.69.1 already supplies ThreadSummaryReader.Summary.\n\nThreadCache remains the sole owner of accepted detail and committed selection, bounded to twelve detail entries.\n\nNeither selection nor detail cancellation reconnects the workspace stream.",
-          "char_count": 594
+          "body": "## Selection and navigation\nThe rail acknowledges a selection with a short-lived navigation intent before committing the conversation. Foreground detail requests cannot bypass this boundary through summary effects.\n\nVisible selection schedules commit after one feedback rendering opportunity\n(two animation callbacks and a task); hidden documents commit without waiting\nfor animation frames. Latest intent supersedes earlier scheduled work.\n\nThe destination transcript is exposed only after accepted detail, measurable\nlayout and destination-visible historical text have settled. The existing scroll\ncontroller positions and reveals it in one layout pass, without smooth initial\nscrolling. Preparation has no elapsed-time reveal fallback. Cold navigation\nshows separate loading feedback confined to the transcript region; failed body\nreads expose local Retry. The composer and navigation remain available.\n\nCached destinations flush that same layout pass after render effects and before\nthe task's paint, avoiding a transient loading frame. The two-slot body loader\nprepares the latest visible text first, including its existing viewport margin,\nand cancels obsolete demand on navigation or transport boundaries. Immutable\nbodies remain in ThreadCache; no additional content cache or polling loop exists.\nNative scroll events do not prove user intent. The scroll controller's explicit\nwheel, touch, scrollbar and keyboard ownership may interrupt preparation.\n\nSelection continues to open the latest interval. Per-thread reading-position\nrestoration is a separate product policy, not part of presentation stabilization.\n\nOrdinary conversations remain ordered by creation time descending, then ThreadID ascending.\n\n## Detail read ownership\nPublished Floret v7.69.1 already supplies ThreadSummaryReader.Summary.\n\nThreadCache remains the sole owner of accepted detail and committed selection, bounded to twelve detail entries.\n\nNeither selection nor detail cancellation reconnects the workspace stream.",
+          "char_count": 1998
         },
         {
           "id": "boundaries",
@@ -30764,6 +30772,16 @@
           "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.test.tsx:0:latest selection, retained drafts and interaction ownership.",
           "source": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.test.tsx",
           "description": "Latest selection, retained drafts and interaction ownership."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.threadPresentation.browser.test.tsx:0:first exposed destination, delayed reads, cached switches, cancellation, explicit input and failure recovery.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.threadPresentation.browser.test.tsx",
+          "description": "First exposed destination, delayed reads, cached switches, cancellation, explicit input and failure recovery."
+        },
+        {
+          "id": "redeven:desktop/scripts/check-flower-startup.mjs:0:built electron rendering opportunities on repeated cached selection, with owned-process cleanup.",
+          "source": "redeven:desktop/scripts/check-flower-startup.mjs",
+          "description": "Built Electron rendering opportunities on repeated cached selection, with owned-process cleanup."
         }
       ],
       "snippet": "Flower presents the latest selection intent before transcript work and uses one coordinator for navigation, command confirmation and reference preflight reads. ThreadCache owns committed selection and accepted detail; the loader owns only",
@@ -30780,6 +30798,12 @@
           "label": "Redeven OKF Bundle",
           "path": "index.md",
           "title": "Redeven OKF Bundle"
+        },
+        {
+          "label": "Flower read state",
+          "path": "ui/flower-read-state.md",
+          "concept_id": "ui.flower-read-state",
+          "title": "Flower read state"
         },
         {
           "label": "Flower conversation sidebar",
@@ -33541,5 +33565,5 @@
       ]
     }
   ],
-  "source_sha256": "25c9d8ee61a0ec211eb21066aaaefe6906a52a22fc0fbbfdd758e64547b36054"
+  "source_sha256": "9f6c7b45d62d32e78a4e0e486733a3f480c79e7c230dc9c024a159c097c97a8d"
 }

@@ -66,11 +66,35 @@ await session.run(async () => {
   assert.equal(counters.requests.filter(request => request === 'GET ai/threads').length, 0);
   assert.deepEqual(errors, []);
   await page.screenshot({ path: path.join(output, 'complete.png') });
+  // Sample rendering opportunities in the built native renderer. Cached
+  // navigation must never paint an intermediate loading or top position.
+  const warmSwitches = [];
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await page.locator('.flower-sidebar-actions .flower-new-chat-button').click();
+    await page.waitForFunction(() => !document.querySelector('[data-flower-engaged]')?.getAttribute('data-flower-selected-thread-id'));
+    const result = await page.evaluate(async () => {
+      const started = performance.now();
+      document.querySelector('[data-thread-id=navigation-thread] button').click();
+      const frames = [];
+      for (let frame = 0; frame < 12; frame++) {
+        await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+        const surface = document.querySelector('[data-flower-engaged]');
+        if (surface?.getAttribute('data-flower-selected-thread-id') !== 'navigation-thread') continue;
+        const viewport = surface.querySelector('.flower-chat-transcript');
+        frames.push({ time: performance.now() - started, preparing: viewport.dataset.flowerTailPreparing === 'true',
+          distance: viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop });
+      }
+      return frames;
+    });
+    assert.ok(result.length > 0);
+    assert.ok(result.every(frame => !frame.preparing && Math.abs(frame.distance) <= 1));
+    warmSwitches.push(result);
+  }
   await page.evaluate(() => window.navigationFixture.dispose());
   assert.ok(await page.evaluate(() => window.navigationFixture.cancellations > 0));
   await session.closeElectron(application);
   await session.writeEvidence(path.join(output, 'report.json'), JSON.stringify({
     commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
-    status: 'passed', pid, initialLoading: true, partialSelection: true, draftPreserved: true, ...counters, errors,
+    status: 'passed', pid, initialLoading: true, partialSelection: true, draftPreserved: true, warmSwitches, ...counters, errors,
   }, null, 2));
 });

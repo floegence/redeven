@@ -23,6 +23,7 @@ export type FlowerScrollTailController = Readonly<{
   onScroll: () => void;
   onWheel: (event: WheelEvent) => void;
   measureAfterLayout: () => void;
+  flushLayout: () => void;
   scheduleTailScroll: (options?: Readonly<{ smooth?: boolean; force?: boolean }>) => void;
   scrollToBottom: (options?: Readonly<{ smooth?: boolean }>) => void;
   dispose: () => void;
@@ -34,6 +35,7 @@ export type FlowerScrollTailControllerOptions = Readonly<{
   requestAnimationFrame: (callback: FrameRequestCallback) => number;
   cancelAnimationFrame: (handle: number) => void;
   onUserInteraction?: () => void;
+  onLayout?: () => void;
 }>;
 
 export function createFlowerScrollTailController(
@@ -100,37 +102,38 @@ export function createFlowerScrollTailController(
   };
   // Resize, tail-follow, smooth scrolling and disclosure anchoring share one
   // read/write pass. Notifications never cancel and restart the frame deadline.
+  const layout = (timestamp: number) => {
+    layoutFrame = 0;
+    const target = node;
+    if (!target) return;
+    if (gesture() && !gesture()!.target.isConnected) finishGesture();
+    if (anchor && (!anchor.title.isConnected || !target.contains(anchor.title))) clearAnchor();
+    const scrollTop = target.scrollTop;
+    const scrollHeight = target.scrollHeight;
+    const viewportHeight = target.clientHeight;
+    const anchorDelta = anchor ? anchor.title.getBoundingClientRect().top - anchor.top : 0;
+    const request = pendingScroll;
+    pendingScroll = undefined;
+    if (request?.smooth && !options.reducedMotionPreferred()) {
+      smoothScroll = { startedAt: timestamp, startTop: scrollTop };
+    } else if (request) smoothScroll = undefined;
+    let nextTop = scrollTop + anchorDelta;
+    if (followingLatest() && (options.canFollowLatest?.() ?? true)) {
+      const bottom = Math.max(0, scrollHeight - viewportHeight);
+      if (smoothScroll) {
+        const progress = Math.min(1, Math.max(0, (timestamp - smoothScroll.startedAt) / FLOWER_TRANSCRIPT_SCROLL_TO_LATEST_MS));
+        nextTop = smoothScroll.startTop + (bottom - smoothScroll.startTop) * (1 - (1 - progress) ** 3);
+        if (progress >= 1) smoothScroll = undefined;
+      } else nextTop = bottom;
+    }
+    if (nextTop !== scrollTop) setScrollTop(target, nextTop);
+    setNearBottom(scrollHeight - nextTop - viewportHeight <= FLOWER_TRANSCRIPT_NEAR_BOTTOM_THRESHOLD_PX);
+    options.onLayout?.();
+    if (anchor?.finished) clearAnchor();
+    if (gesture() || anchor || smoothScroll) scheduleLayout();
+  };
   const scheduleLayout = () => {
-    if (layoutFrame) return;
-    layoutFrame = options.requestAnimationFrame((timestamp) => {
-      layoutFrame = 0;
-      const target = node;
-      if (!target) return;
-      if (gesture() && !gesture()!.target.isConnected) finishGesture();
-      if (anchor && (!anchor.title.isConnected || !target.contains(anchor.title))) clearAnchor();
-      const scrollTop = target.scrollTop;
-      const scrollHeight = target.scrollHeight;
-      const viewportHeight = target.clientHeight;
-      const anchorDelta = anchor ? anchor.title.getBoundingClientRect().top - anchor.top : 0;
-      const request = pendingScroll;
-      pendingScroll = undefined;
-      if (request?.smooth && !options.reducedMotionPreferred()) {
-        smoothScroll = { startedAt: timestamp, startTop: scrollTop };
-      } else if (request) smoothScroll = undefined;
-      let nextTop = scrollTop + anchorDelta;
-      if (followingLatest() && (options.canFollowLatest?.() ?? true)) {
-        const bottom = Math.max(0, scrollHeight - viewportHeight);
-        if (smoothScroll) {
-          const progress = Math.min(1, Math.max(0, (timestamp - smoothScroll.startedAt) / FLOWER_TRANSCRIPT_SCROLL_TO_LATEST_MS));
-          nextTop = smoothScroll.startTop + (bottom - smoothScroll.startTop) * (1 - (1 - progress) ** 3);
-          if (progress >= 1) smoothScroll = undefined;
-        } else nextTop = bottom;
-      }
-      if (nextTop !== scrollTop) setScrollTop(target, nextTop);
-      setNearBottom(scrollHeight - nextTop - viewportHeight <= FLOWER_TRANSCRIPT_NEAR_BOTTOM_THRESHOLD_PX);
-      if (anchor?.finished) clearAnchor();
-      if (gesture() || anchor || smoothScroll) scheduleLayout();
-    });
+    if (!layoutFrame) layoutFrame = options.requestAnimationFrame(layout);
   };
   const scrollToBottom = (scrollOptions: Readonly<{ smooth?: boolean }> = {}) => {
     if (!node || !(options.canFollowLatest?.() ?? true)) return;
@@ -381,6 +384,10 @@ export function createFlowerScrollTailController(
     onScroll,
     onWheel,
     measureAfterLayout,
+    flushLayout: () => {
+      layoutFrame = clearFrame(layoutFrame);
+      layout(performance.now());
+    },
     scheduleTailScroll,
     scrollToBottom,
     dispose: () => {
