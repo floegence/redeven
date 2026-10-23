@@ -43,13 +43,9 @@ margin and cancels obsolete navigation/transport demand. ThreadCache retains
 immutable bodies. Explicit wheel, touch, scrollbar or keyboard ownership can
 interrupt preparation; native scroll events alone cannot.
 
-Already displayed text also remains visible when a live body grows, an accepted
-baseline refreshes, or a source becomes canonical. These transitions do not
-restart selection preparation or replace prose with a loading skeleton.
-Live bodies resume from the accepted UTF-8 byte offset in at most 16 KiB reads
-through published Floret ItemBody and ReadLiveBody. The same two-slot loader
-coalesces extent changes, lets in-flight chunks finish, and yields between
-chunks. Failed reads retain text and expose local Retry; idle bodies do no work.
+Growth, refresh and canonical completion preserve displayed prose without
+restarting selection. [Live delivery](flower-live-timeline.md) owns incremental
+body reads, source validation and local Retry.
 
 Selection continues to open the latest interval. Per-thread reading-position
 restoration is a separate product policy, not part of presentation stabilization.
