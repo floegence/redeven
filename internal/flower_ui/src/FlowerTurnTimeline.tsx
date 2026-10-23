@@ -25,10 +25,6 @@ export function FlowerTurnTimeline(props: Readonly<{
   copy: FlowerTurnProcessCopy;
   renderEntry: (entry: Accessor<FlowerTimelineEntry>, visible: Accessor<boolean>) => JSX.Element;
 }>) {
-  const titleReveal = createFlowerActivityTitleReveal({
-    thread: () => props.thread, entries: () => props.entries,
-    liveConfirmed: () => props.liveConfirmed?.() ?? false, reducedMotion: props.reducedMotion,
-  });
   const keys = createMemo(() => props.entries.map((entry) => JSON.stringify([props.thread?.thread_id, entry.key])));
   const entries = createMemo(() => new Map(props.entries.map((entry) => [entry.key, entry])));
   const failureTurnID = createMemo(() => props.failureNoticeVisible
@@ -228,6 +224,14 @@ export function FlowerTurnTimeline(props: Readonly<{
     copy: () => props.copy,
     reducedMotion: props.reducedMotion,
   };
+  const titleReveal = createFlowerActivityTitleReveal({
+    thread: () => props.thread, entries: () => props.entries,
+    liveConfirmed: () => props.liveConfirmed?.() ?? false, reducedMotion: props.reducedMotion,
+    isVisible: key => {
+      const group = sequences().members.get(key)?.group;
+      return !group || sequenceContext.expanded(group);
+    },
+  });
   const row = (key: string, entry: Accessor<FlowerTimelineEntry>) => {
     const group = createMemo(() => processes().rows.get(key));
     const process = createMemo(() => group()?.processKeys.includes(key) ?? false);

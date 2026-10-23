@@ -14,6 +14,7 @@ export function createFlowerActivityTitleReveal(options: {
   entries: Accessor<readonly FlowerTimelineEntry[]>;
   liveConfirmed: Accessor<boolean>;
   reducedMotion: Accessor<boolean>;
+  isVisible: (key: string) => boolean;
 }) {
   let threadID: string | undefined;
   let wasLive = false;
@@ -38,7 +39,7 @@ export function createFlowerActivityTitleReveal(options: {
         || entry.message.turn_id !== execution.turn_id || entry.message.run_id !== execution.run_id) continue;
       const fresh = sameThread && wasLive && live && !document.hidden && thread?.status === 'running';
       const add = (key: string, eligible = true) => next.set(key,
-        !eligible ? 0 : sameThread && live && known.has(key) ? known.get(key)! : fresh ? now + FRESH_WINDOW_MS : 0);
+        !eligible || !options.isVisible(key) ? 0 : sameThread && live && known.has(key) ? known.get(key)! : fresh ? now + FRESH_WINDOW_MS : 0);
       for (const block of entry.blocks) {
         if (block.type === 'content' && block.block_type === 'thinking') add(block.key);
         else if (block.type === 'tool_preview') add(flowerToolCallPreviewIdentity(block.block.call));
