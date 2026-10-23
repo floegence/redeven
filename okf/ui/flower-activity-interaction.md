@@ -9,10 +9,10 @@ reviewed_at: "2026-10-23"
 ---
 # Summary
 
-Shared Flower UI uses canonical Floret execution facts and one transcript
-viewport owner. Live updates cannot move pressed triggers or introduce floating
-hit targets before native clicks finish. Canceled gestures never activate tools;
-view disposal releases transient ownership.
+Shared Flower UI uses canonical Floret facts and one transcript viewport owner.
+Live updates cannot move pressed triggers or add hit targets before clicks finish.
+Canceled gestures never activate tools; disposal releases transient ownership.
+Desktop and Env App share this contract.
 
 # Contract
 
@@ -48,20 +48,17 @@ Thinking, tool sequences and read-only detail previews follow the [sequence read
 Hidden controls do not enter the focus or hit-test order.
 
 ## Thinking duration
-Floret v7.81.0 owns each output source's first and last received-chunk timestamps.
-Flower passes these canonical facts through the public DTO and projects them
-into the existing message record. Cold history, body hydration, reconnect,
-restart and Fork retain the same interval, even if no live chunk reached the UI.
-Canonical timing supersedes previously observed presentation timing. A resumed
-native source reopens its interval; completion freezes at the last source chunk,
-not the later delivery, tool completion or journal commit. The tooltip identifies
-received-output timing rather than provider compute time.
+Floret v7.81.0 owns first/last chunk-receipt times per output source. Flower
+projects the public DTO into its message cache; cold history, hydration,
+reconnect, restart and Fork preserve the interval without live UI observation.
+Canonical timing replaces page observations. Native continuation reopens it;
+completion ends at the last chunk, not delivery, tool completion or commit.
+The tooltip distinguishes received-output time from provider compute time.
 
-Measured submillisecond intervals display <1ms. Historical sources without
-recorded timing show a localized Not recorded label and explanation; the UI
-never guesses their duration from neighboring events or turn totals. Previously
-observed intervals remain available within the existing in-memory cache for
-older output, but there is no local persistence or second runtime timing store.
+Measured intervals below 1ms display <1ms. Missing history shows localized
+Not recorded with an explanation; neighboring events and turn totals never
+supply timing. Older page observations remain only in the existing memory cache,
+without another store.
 
 ## Visual motion
 Confirmed live thinking uses a 2.4-second cycle: five petals fill clockwise from
@@ -76,21 +73,15 @@ or extra state.
 The disclosure motion owner uses one current Web Animation: opening takes 180 ms and closing takes 140 ms. Reversal cancels the prior animation, and its obsolete completion cannot change presence.
 
 New tool, argument-preview and thinking titles in a confirmed active transcript
-use a short stepped text reveal. The complete text and fixed row geometry are
-present immediately, including accessible names, selection and click targets.
-After sequence placement, a fresh row asks the existing sequence and transcript
-viewport owners to make room. Following viewports move upward over 220 ms before
-the row fades in and its title reveals; rows do not flash at the old position.
-Concurrent growth retargets that motion without restarting its deadline. Reading
-pauses stay paused, user scrolling interrupts motion, and reduced motion skips
-both scrolling animation and reveal. Runtime delivery, results and disclosure
-controls never wait for animation. The text reveal takes 168–360 ms,
-adapting to visible width with at most 32 steps. Concurrent arrivals do not queue
-or evict one another; each visible new title completes its bounded animation.
-Running tool and thinking titles begin the shared glyph-only shimmer only after
-their reveal finishes. A fast result completes its reveal without starting
-shimmer. Active typography is independent of shimmer so the handoff never
-changes the title's width.
+reveal in 168–360 ms with at most 32 width-adapted steps. Full text, fixed geometry,
+accessible names, selection and click targets exist immediately. After sequence
+placement, existing viewport owners make room over 220 ms before row fade/reveal;
+rows never flash at their old position. Growth retargets without extending the
+deadline. Reading stays paused; user scrolling interrupts; reduced motion skips
+scrolling animation and reveal. Delivery, results and controls never wait.
+Concurrent arrivals neither queue nor evict each other. Running titles start
+glyph-only shimmer after reveal; fast results finish revealing without shimmer.
+Typography stays fixed across that handoff.
 
 The transcript owns transient arrival claims only for the current execution.
 Initial history, conversation switches, reconnect baselines, hidden disclosures,
