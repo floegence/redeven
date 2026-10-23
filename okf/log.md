@@ -1,6 +1,6 @@
 # Redeven OKF Update Log
 
-- 2026-10-23: Require native layout readiness for completed Flower history before revealing a selected conversation; preserve content-visibility optimization and use the existing scroll owner for layout notifications. Correct the previous fixture gap with cold, cached, long-history and built Electron first-frame regressions. See [selection](ui/flower-thread-selection.md) and [qualification](operations/flower-thread-switch-qualification.md).
+- 2026-10-23: Gate Flower history reveal on native layout, retain offscreen skipping and cover completed cold/cached history in Chromium and Electron. See [selection](ui/flower-thread-selection.md) and [qualification](operations/flower-thread-switch-qualification.md).
 
 - 2026-10-23: Bind source identities and installer pins to inspected file descriptors, sanitize AI diagnostics, synchronize patched dependency locks, retain lazy page styles and qualify Electron outline visibility. Document reviewed qualification data flows in [CI and release gates](release/ci-and-release-gates.md), [model request reuse](ai/model-request-reuse.md), [web dependencies](architecture/env-app-upstream-web-dependencies.md) and [Web Service windows](desktop/web-service-browser-window.md).
 
