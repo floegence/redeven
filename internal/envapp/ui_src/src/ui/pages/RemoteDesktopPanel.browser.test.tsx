@@ -82,6 +82,94 @@ it.each(SUPPORTED_LOCALES)('centers the primary label and keeps SSH authorizatio
   await expect.poll(() => flow.querySelector('[data-phase=authorizing]')).not.toBeNull();
 });
 
+it.each([
+  { width: 1000, locale: 'en-US', theme: 'light', forcedColors: 'none' },
+  { width: 1000, locale: 'zh-CN', theme: 'dark', forcedColors: 'none' },
+  { width: 320, locale: 'zh-CN', theme: 'dark', forcedColors: 'none' },
+  { width: 320, locale: 'en-US', theme: 'light', forcedColors: 'active' },
+] as const)('insets the authorization arrow at $width px in $locale with $theme/$forcedColors colors', async ({ width, locale, theme, forcedColors }) => {
+  const media = commands as unknown as { emulateMediaPreferences: (preferences: { forcedColors: 'active' | 'none' }) => Promise<void> };
+  const previousTheme = document.documentElement.getAttribute('data-theme');
+  const previousDark = document.documentElement.classList.contains('dark');
+  document.documentElement.setAttribute('data-theme', theme);
+  document.documentElement.classList.toggle('dark', theme === 'dark');
+  await media.emulateMediaPreferences({ forcedColors });
+  try {
+    await page.viewport(width, 850);
+    await loadEnvAppDictionary(locale); writeStoredLanguagePreference(locale);
+    const host = document.createElement('main'); document.body.append(host);
+    dispose = render(() => <I18nProvider><RemoteDesktopLauncher /></I18nProvider>, host);
+    await expect.poll(() => document.documentElement.lang).toBe(locale);
+    await expect.poll(() => host.querySelector('button')).not.toBeNull();
+    await userEvent.click(host.querySelector('button')!);
+    const dialog = document.querySelector<HTMLElement>('.remote-desktop-dialog')!;
+    await expect.poll(() => dialog.querySelector<HTMLButtonElement>('.remote-desktop-connect')?.disabled).toBe(false);
+    await userEvent.click(dialog.querySelector<HTMLButtonElement>('.remote-desktop-connect')!);
+    await Promise.allSettled(dialog.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished));
+    const select = dialog.querySelector<HTMLSelectElement>('.remote-desktop-credential select')!;
+    expect(select.labels?.[0]?.textContent).toContain(locale === 'zh-CN' ? '管理员授权方式' : 'Administrator authorization');
+    await page.screenshot({ element: dialog, path: '__screenshots__/remote-desktop-authorization-' + width + '-' + locale + '-' + theme + '-' + forcedColors + '.png' });
+    const arrow = select.parentElement!.querySelector('svg');
+    expect(arrow, 'The dropdown arrow needs its own inset inside the field').not.toBeNull();
+    const field = select.getBoundingClientRect(), icon = arrow!.getBoundingClientRect();
+    const style = getComputedStyle(select);
+    expect(style.appearance).toBe('none');
+    expect(field.right - icon.right).toBeGreaterThanOrEqual(10);
+    expect(field.right - icon.right).toBeLessThanOrEqual(14);
+    expect(Math.abs(icon.y + icon.height / 2 - field.y - field.height / 2)).toBeLessThan(1);
+    expect(field.right - Number.parseFloat(style.paddingInlineEnd)).toBeLessThanOrEqual(icon.left - 6);
+    expect(arrow!.closest('[aria-hidden=true]')).not.toBeNull();
+    expect(getComputedStyle(arrow!).pointerEvents).toBe('none');
+    expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
+    expect(field.left).toBeGreaterThanOrEqual(0);
+    expect(field.right).toBeLessThanOrEqual(width);
+    select.focus();
+    await userEvent.keyboard('{Tab}');
+    expect(document.activeElement).toBe(dialog.querySelector('.remote-desktop-flow-footer > button:first-child'));
+    await userEvent.keyboard('{Shift>}{Tab}{/Shift}');
+    expect(document.activeElement).toBe(select);
+    await userEvent.selectOptions(select, 'root');
+    expect(select.value).toBe('root');
+    await userEvent.click(dialog.querySelector<HTMLButtonElement>('.remote-desktop-flow-footer > button:last-child')!);
+    await expect.poll(() => state.deployment.mock.calls.find(([request]) => request.action === 'manage')?.[0].administratorMethod).toBe('root');
+  } finally {
+    if (previousTheme === null) document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', previousTheme);
+    document.documentElement.classList.toggle('dark', previousDark);
+    await media.emulateMediaPreferences({ forcedColors: 'none' });
+  }
+});
+
+it.each([320, 1000])('keeps long display choices inset and connects the selected display at %s px', async width => {
+  await page.viewport(width, 850);
+  await loadEnvAppDictionary('en-US'); writeStoredLanguagePreference('en-US');
+  state.status.mockResolvedValue({ ...setupNeeded,
+    capabilities: { ...setupNeeded.capabilities, state: 'ready', screen: true, input: true, displays: [
+      { id: 'one', name: 'Primary display', width: 1920, height: 1080, scale: 1, primary: true },
+      { id: 'two', name: 'External ultrawide presentation display with a long name', width: 3840, height: 2160, scale: 1 },
+    ] }, login_service: { ...setupNeeded.login_service, state: 'active' },
+  });
+  let finishConnection!: (value: object) => void;
+  state.create.mockImplementation(() => new Promise(resolve => { finishConnection = resolve; }));
+  const host = document.createElement('main'); document.body.append(host);
+  dispose = render(() => <I18nProvider><RemoteDesktopLauncher /></I18nProvider>, host);
+  await expect.poll(() => document.documentElement.lang).toBe('en-US');
+  await userEvent.click(host.querySelector('button')!);
+  const dialog = document.querySelector<HTMLElement>('.remote-desktop-dialog')!;
+  await expect.poll(() => dialog.querySelector('.remote-desktop-display select')).not.toBeNull();
+  await Promise.allSettled(dialog.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished));
+  const select = dialog.querySelector<HTMLSelectElement>('.remote-desktop-display select')!;
+  const arrow = select.parentElement!.querySelector<HTMLElement>('.remote-desktop-select-icon')!;
+  await userEvent.selectOptions(select, 'two');
+  expect(select.getBoundingClientRect().right - arrow.getBoundingClientRect().right).toBeCloseTo(12);
+  expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
+  await userEvent.click(dialog.querySelector<HTMLButtonElement>('.remote-desktop-connect')!);
+  await userEvent.click(dialog.querySelector<HTMLButtonElement>('.remote-desktop-flow-footer > button:last-child')!);
+  await expect.poll(() => state.create.mock.calls[0]?.[0].display_id).toBe('two');
+  finishConnection({ id: 'one', forward_id: 'pf-one', target_url: 'http://127.0.0.1:40201' });
+  await expect.poll(() => document.querySelector('.remote-desktop-dialog')).toBeNull();
+});
+
 it.each(['no-preference', 'reduce'] as const)('advances one dialog with visible credentials and accessible %s motion', async reducedMotion => {
   const media = commands as unknown as { emulateMediaPreferences: (preferences: { reducedMotion: 'reduce' | 'no-preference' }) => Promise<void> };
   await media.emulateMediaPreferences({ reducedMotion });

@@ -5,7 +5,7 @@ description: Identify the target host, explain connection readiness and open its
 tags: [desktop, applications, interaction, accessibility]
 timestamp: 2026-10-09T17:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-23"
 ---
 # Summary
 
@@ -32,6 +32,8 @@ Administrator scope and credential lifetime follow the [SSH deployment contract]
 ## Connection options
 The initial dialog presents host identity, readiness and one connect action. Opening the launcher never changes system permission.
 
+Administrator-method and display selectors retain native keyboard selection and their visible labels. Their decorative chevrons stay 12 CSS pixels inside the field edge, with separate text padding, including narrow windows and forced-color presentation. The arrow does not intercept pointer input.
+
 Turning off reuse means each future connection requests host confirmation; it does not revoke the system grant.
 
 # Boundaries
@@ -42,6 +44,8 @@ Status refreshes never erase a connection failure.
 Desktop retains origin-only target validation and environment-scoped route admission; product adapters must not weaken either boundary to accept malformed session data.
 
 # Evidence
+
+- `internal/envapp/ui_src/src/ui/pages/RemoteDesktopPanel.browser.test.tsx`: selector geometry, keyboard focus, authorization method selection, localized narrow layouts and forced-color presentation.
 
 - `internal/envapp/ui_src/src/ui/icons/RemoteDesktopIcon.tsx`: shared monitor-and-pointer silhouette and compact launcher rendering.
 

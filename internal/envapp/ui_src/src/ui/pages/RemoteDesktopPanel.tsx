@@ -1,5 +1,5 @@
 import { Button, StableText, Switch } from '@floegence/floe-webapp-core/ui';
-import { Refresh, ChevronRight, ArrowRight, AlertCircle, Check } from '@floegence/floe-webapp-core/icons';
+import { Refresh, ChevronDown, ChevronRight, ArrowRight, AlertCircle, Check } from '@floegence/floe-webapp-core/icons';
 import { RemoteDesktopIcon } from '../icons/RemoteDesktopIcon';
 import { For, Match, Show, Switch as MatchSwitch, createMemo, createSignal, createUniqueId, onCleanup, onMount } from 'solid-js';
 import { Dialog } from '../primitives/EnvAppModal';
@@ -385,9 +385,15 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
       <Show when={mode() === 'control' && !capabilities()?.input}><Button variant="outline" disabled={!full() || !!busy()} onClick={() => void runAction('permission', 'remoteDesktop.permissionFailed', () => requestHostApplicationPermission('accessibility'))}>{i18n.t('hostApplications.macAllowAccessibility')}</Button></Show>
     </div></Show>
     <Show when={displays().length > 1}>
-      <label class="remote-desktop-display"><span>{i18n.t('remoteDesktop.display')}</span><select disabled={!!busy()} value={display()} onChange={event => setDisplay(event.currentTarget.value)}>
-        <For each={displays()}>{(item, index) => <option value={item.id}>{item.name || `${i18n.t('remoteDesktop.display')} ${index() + 1}`} · {item.width} × {item.height}</option>}</For>
-      </select></label>
+      <label class="remote-desktop-display">
+        <span>{i18n.t('remoteDesktop.display')}</span>
+        <span class="remote-desktop-select">
+          <select disabled={!!busy()} value={display()} onChange={event => setDisplay(event.currentTarget.value)}>
+            <For each={displays()}>{(item, index) => <option value={item.id}>{item.name || `${i18n.t('remoteDesktop.display')} ${index() + 1}`} · {item.width} × {item.height}</option>}</For>
+          </select>
+          <span class="remote-desktop-select-icon" aria-hidden="true"><ChevronDown size={16} /></span>
+        </span>
+      </label>
     </Show>
     <Show when={!sshManaged() && capabilities()?.backend === 'wayland' && capabilities()?.unattended}><div class="remote-desktop-option remote-desktop-sharing"><Switch checked={pendingApproval() ?? status()?.unattended ?? false} disabled={!full() || !!busy() || refreshing()} onChange={rememberApproval} label={i18n.t('remoteDesktop.unattended')} description={i18n.t('remoteDesktop.unattendedHint')} /></div></Show>
     <Show when={sshManaged() && loginService()?.state === 'active'}><p class="remote-desktop-service-status">{i18n.t('remoteDesktop.serviceActive')}</p></Show>
@@ -453,7 +459,16 @@ export function RemoteDesktopPanel(props: { onConnected?: () => void } = {}) {
               <p>{i18n.t('remoteDesktop.deployScope')}</p>
               <Show when={deploymentConnectIntent()}><p class="remote-desktop-flow-note">{i18n.t('remoteDesktop.deployHint')}</p></Show>
             </div>
-            <label class="remote-desktop-credential"><span>{i18n.t('remoteDesktop.deployAuthMethod')}</span><select value={deployment()?.method} onChange={event=>void changeAdministratorMethod(event.currentTarget.value as DesktopAdministratorMethod)}><option value="sudo">{i18n.t('remoteDesktop.deploySudoPassword')}</option><option value="root">{i18n.t('remoteDesktop.deployRootPassword')}</option></select></label>
+            <label class="remote-desktop-credential">
+              <span>{i18n.t('remoteDesktop.deployAuthMethod')}</span>
+              <span class="remote-desktop-select">
+                <select value={deployment()?.method} onChange={event=>void changeAdministratorMethod(event.currentTarget.value as DesktopAdministratorMethod)}>
+                  <option value="sudo">{i18n.t('remoteDesktop.deploySudoPassword')}</option>
+                  <option value="root">{i18n.t('remoteDesktop.deployRootPassword')}</option>
+                </select>
+                <span class="remote-desktop-select-icon" aria-hidden="true"><ChevronDown size={16} /></span>
+              </span>
+            </label>
             <Show when={deploymentPhase()==='password'}><label class="remote-desktop-credential"><span>{i18n.t(deployment()?.method==='root'?'remoteDesktop.deployRootPassword':'remoteDesktop.deploySudoPassword')}</span>
               <input ref={focusStep} type="password" autocomplete="off" disabled={deploymentPhase()!=='password'} value={administratorPassword()} onInput={event => setAdministratorPassword(event.currentTarget.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void respondDeployment(); } }} />
               <span class="remote-desktop-credential-hint">{i18n.t('remoteDesktop.deployPasswordHint')}</span>
