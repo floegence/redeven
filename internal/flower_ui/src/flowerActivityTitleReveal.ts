@@ -15,13 +15,14 @@ export function createFlowerActivityTitleReveal(options: {
   liveConfirmed: Accessor<boolean>;
   reducedMotion: Accessor<boolean>;
   isVisible: (key: string) => boolean;
+  prepareArrival: (key: string) => number;
 }) {
   let threadID: string | undefined;
   let wasLive = false;
   let known = new Map<string, number>();
-  const animations = new Set<Animation>();
+  const animations = new Map<Animation, () => void>();
   const finishAll = () => {
-    for (const animation of animations) animation.cancel();
+    for (const cancel of animations.values()) cancel();
     animations.clear();
     for (const key of known.keys()) known.set(key, 0);
   };
@@ -68,7 +69,7 @@ export function createFlowerActivityTitleReveal(options: {
   });
   onCleanup(finishAll);
   return {
-    reveal(key: string, node: HTMLElement): () => void {
+    reveal(key: string, node: HTMLElement): (immediate?: boolean) => void {
       const pending = arrivals();
       const deadline = pending.get(key) ?? 0;
       // Claim once even when hidden, so opening old disclosures never replays.
@@ -78,30 +79,49 @@ export function createFlowerActivityTitleReveal(options: {
       const width = node.getBoundingClientRect().width;
       if (width <= 0) return () => {};
       if (animations.size >= MAX_ACTIVE_REVEALS) {
-        const oldest = animations.values().next().value!;
-        animations.delete(oldest);
-        oldest.cancel();
+        animations.values().next().value!();
       }
       const steps = Math.max(6, Math.min(32, Math.ceil(width / 9)));
       const animation = node.animate([
         { clipPath: 'inset(0 100% 0 0)' },
         { clipPath: 'inset(0 0% 0 0)' },
       ], { duration: Math.min(MAX_REVEAL_MS, 120 + steps * 8), easing: `steps(${steps}, end)` });
-      animations.add(animation);
-      const cancel = () => { animations.delete(animation); animation.cancel(); };
-      void animation.finished.then(cancel, () => animations.delete(animation));
-      return cancel;
+      // Keep the complete row measurable and accessible while placement and
+      // both viewport owners make room. Nothing paints at the stale position.
+      animation.pause();
+      // The line survives a tool gaining details and replacing its static
+      // title with a button. Fast results must not expose it mid-scroll.
+      const trigger = node.closest<HTMLElement>('.flower-activity-inline-line, .flower-thinking-toggle') ?? node;
+      const entrance = trigger.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 80, fill: 'backwards' });
+      entrance.pause();
+      let cancelled = false;
+      queueMicrotask(() => {
+        if (cancelled) return;
+        const delay = options.prepareArrival(key);
+        animation.effect!.updateTiming({ delay });
+        entrance.effect!.updateTiming({ delay });
+        if (animation.playState !== 'idle') animation.play();
+        entrance.play();
+      });
+      const cancel = () => { cancelled = true; animations.delete(animation); animation.cancel(); entrance.cancel(); };
+      animations.set(animation, cancel);
+      void Promise.allSettled([animation.finished, entrance.finished]).then(cancel);
+      return (immediate = false) => {
+        animation.cancel();
+        if (immediate) cancel();
+        else queueMicrotask(() => { if (!trigger.isConnected) cancel(); });
+      };
     },
   };
 }
 
 export const FlowerActivityTitleRevealContext = createContext<ReturnType<typeof createFlowerActivityTitleReveal>>();
 
-export function useFlowerActivityTitleReveal(key: Accessor<string>, content: Accessor<unknown>) {
+export function useFlowerActivityTitleReveal(key: Accessor<string>, content: Accessor<unknown>, immediate: Accessor<boolean> = () => false) {
   const context = useContext(FlowerActivityTitleRevealContext);
   return (node: HTMLElement) => {
-    let cancel: (() => void) | undefined;
-    createEffect(on([key, content], () => cancel?.(), { defer: true }));
+    let cancel: ((immediate?: boolean) => void) | undefined;
+    createEffect(on([key, content, immediate], () => cancel?.(immediate()), { defer: true }));
     onMount(() => { cancel = context?.reveal(key(), node); });
     onCleanup(() => cancel?.());
   };

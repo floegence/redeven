@@ -5,6 +5,7 @@ export type FlowerToolSequenceElement = Readonly<{
   node: HTMLDivElement;
   slot: HTMLDivElement;
   body: HTMLDivElement;
+  prepareArrival: () => number;
 }>;
 
 // Rendering remains with each canonical row's Solid owner. Only placement is
@@ -70,6 +71,10 @@ export function createFlowerToolSequenceLayout(projection: Accessor<FlowerToolSe
   });
   onCleanup(() => { disposed = true; elements.clear(); });
   return {
+    prepareArrival: (key: string) => {
+      const member = untrack(projection).members.get(key);
+      return member ? elements.get(member.group.key)?.prepareArrival() ?? 0 : 0;
+    },
     element: (key: string) => elements.get(key)?.node,
     register: (key: string, element: FlowerToolSequenceElement) => {
       elements.set(key, element);

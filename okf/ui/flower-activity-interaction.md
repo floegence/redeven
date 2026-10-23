@@ -68,10 +68,15 @@ The disclosure motion owner uses one current Web Animation: opening takes 180 ms
 New tool, argument-preview and thinking titles in a confirmed active transcript
 use a short stepped text reveal. The complete text and fixed row geometry are
 present immediately, including accessible names, selection and click targets.
-Only the title is visually clipped; runtime delivery, results, durations and
-disclosure controls never wait for animation. The reveal takes 168–360 ms,
+After sequence placement, a fresh row asks the existing sequence and transcript
+viewport owners to make room. Following viewports move upward over 220 ms before
+the row fades in and its title reveals; rows do not flash at the old position.
+Concurrent growth retargets that motion without restarting its deadline. Reading
+pauses stay paused, user scrolling interrupts motion, and reduced motion skips
+both scrolling animation and reveal. Runtime delivery, results and disclosure
+controls never wait for animation. The text reveal takes 168–360 ms,
 adapting to visible width with at most 32 steps. Concurrent arrivals do not queue;
-each transcript retains at most 12 animations and shows older burst titles fully.
+each transcript retains at most 12 animated arrivals and shows older burst titles fully.
 
 The transcript owns transient arrival claims only for the current execution.
 Initial history, conversation switches, reconnect baselines, hidden disclosures,
@@ -81,6 +86,9 @@ observe sequence disclosure before lazy content mounts, so opening a sequence
 does not animate rows received while it was folded. Failures and
 approval requests appear immediately. Content/status changes, navigation,
 disposal, a hidden document or enabling reduced motion remove active clipping.
+Ordinary result updates preserve the row's pending entrance, including when a
+static title becomes an expandable result button. Errors and approval requests
+cancel that entrance immediately as well.
 There are no character timers, per-frame reactive updates, persisted animation
 facts or runtime changes. Desktop and Env App use the same implementation.
 

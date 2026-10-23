@@ -227,6 +227,7 @@ export function FlowerTurnTimeline(props: Readonly<{
   const titleReveal = createFlowerActivityTitleReveal({
     thread: () => props.thread, entries: () => props.entries,
     liveConfirmed: () => props.liveConfirmed?.() ?? false, reducedMotion: props.reducedMotion,
+    prepareArrival: key => Math.max(sequenceLayout.prepareArrival(key), props.scroll.prepareArrival()),
     isVisible: key => {
       const group = sequences().members.get(key)?.group;
       return !group || sequenceContext.expanded(group);

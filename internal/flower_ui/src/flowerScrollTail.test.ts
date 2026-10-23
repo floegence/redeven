@@ -18,6 +18,12 @@ function createRafHarness() {
       queue.delete(id);
     },
     pending: () => queue.size,
+    flushFrame(): void {
+      const callbacks = [...queue.values()];
+      queue.clear();
+      timestamp += 16;
+      callbacks.forEach(callback => callback(timestamp));
+    },
     flushAll(): void {
       while (queue.size > 0) {
         const [id, callback] = queue.entries().next().value as [number, RafCallback];
@@ -69,6 +75,57 @@ function createController() {
 }
 
 describe('Flower scroll tail controller', () => {
+  it('keeps arrival motion through layout notifications and retargets a burst without restarting', () => {
+    const raf = createRafHarness();
+    const controller = createFlowerScrollTailController({ reducedMotionPreferred: () => false,
+      requestAnimationFrame: raf.requestAnimationFrame, cancelAnimationFrame: raf.cancelAnimationFrame });
+    const metrics = createViewport();
+    controller.bind(metrics.viewport);
+    metrics.setScrollHeight(600);
+    expect(controller.prepareArrival()).toBe(220);
+    controller.scheduleTailScroll({ smooth: false });
+    raf.flushFrame();
+    raf.flushFrame();
+    expect(metrics.scrollTop()).toBeGreaterThan(400);
+    expect(metrics.scrollTop()).toBeLessThan(500);
+    metrics.setScrollHeight(700);
+    controller.prepareArrival();
+    for (let index = 0; index < 13; index++) {
+      controller.scheduleTailScroll({ smooth: false });
+      controller.measureAfterLayout();
+      raf.flushFrame();
+    }
+    expect(metrics.scrollTop()).toBe(600);
+    expect(raf.pending()).toBe(0);
+    controller.dispose();
+  });
+
+  it('interrupts arrival scrolling on user input and reduced motion changes', () => {
+    const raf = createRafHarness();
+    let reduced = false;
+    const controller = createFlowerScrollTailController({ reducedMotionPreferred: () => reduced,
+      requestAnimationFrame: raf.requestAnimationFrame, cancelAnimationFrame: raf.cancelAnimationFrame });
+    const metrics = createViewport();
+    controller.bind(metrics.viewport);
+    metrics.setScrollHeight(600);
+    controller.prepareArrival();
+    raf.flushFrame();
+    raf.flushFrame();
+    controller.onWheel({ deltaY: -1, target: metrics.viewport } as unknown as WheelEvent);
+    const reading = metrics.scrollTop();
+    expect(controller.prepareArrival()).toBe(0);
+    raf.flushAll();
+    expect(metrics.scrollTop()).toBe(reading);
+    controller.startFollowing();
+    controller.prepareArrival();
+    raf.flushFrame();
+    reduced = true;
+    raf.flushFrame();
+    expect(metrics.scrollTop()).toBe(500);
+    expect(raf.pending()).toBe(0);
+    controller.dispose();
+  });
+
   it('flushes a cached destination before reveal and cancels its redundant scheduled pass', () => {
     const raf = createRafHarness();
     const metrics = createViewport(900);

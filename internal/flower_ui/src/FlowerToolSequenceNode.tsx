@@ -4,6 +4,7 @@ import type { FlowerTurnProcessCopy } from './copy';
 import type { FlowerToolSequence, FlowerToolSequenceProjection } from './flowerToolSequences';
 import { createFlowerActivityDisclosureMotion } from './activityDisclosure';
 import type { FlowerToolSequenceElement } from './flowerToolSequenceLayout';
+import { FLOWER_TRANSCRIPT_SCROLL_TO_LATEST_MS } from './flowerScrollTail';
 
 export const FlowerToolSequenceContext = createContext<Readonly<{
   projection: Accessor<FlowerToolSequenceProjection>;
@@ -41,10 +42,37 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
   let following = true;
   let previousHeight = 0;
   let previousScrollTop = 0;
-  const scrollToLatest = () => {
-    body.scrollTop = body.scrollHeight;
+  let arrivalFrame = 0;
+  let arrivalMotion: { startTop: number; startedAt: number } | undefined;
+  const cancelArrival = () => {
+    cancelAnimationFrame(arrivalFrame);
+    arrivalFrame = 0;
+    arrivalMotion = undefined;
+  };
+  const writeScrollTop = (top: number) => {
+    body.scrollTop = top;
     previousScrollTop = body.scrollTop;
   };
+  const scrollToLatest = () => {
+    if (!arrivalMotion) writeScrollTop(body.scrollHeight);
+  };
+  const prepareArrival = () => {
+    if (!following || !expanded() || context?.reducedMotion() || body.scrollHeight - body.clientHeight - body.scrollTop <= 1) return 0;
+    if (!arrivalMotion) {
+      arrivalMotion = { startTop: body.scrollTop, startedAt: performance.now() };
+      const advance = (now: number) => {
+        if (!arrivalMotion) return;
+        const progress = context?.reducedMotion() ? 1 : Math.min(1, Math.max(0, (now - arrivalMotion.startedAt) / FLOWER_TRANSCRIPT_SCROLL_TO_LATEST_MS));
+        const bottom = Math.max(0, body.scrollHeight - body.clientHeight);
+        writeScrollTop(arrivalMotion.startTop + (bottom - arrivalMotion.startTop) * (1 - (1 - progress) ** 3));
+        if (progress < 1) arrivalFrame = requestAnimationFrame(advance);
+        else cancelArrival();
+      };
+      arrivalFrame = requestAnimationFrame(advance);
+    }
+    return FLOWER_TRANSCRIPT_SCROLL_TO_LATEST_MS;
+  };
+  onCleanup(cancelArrival);
   const motionKey = `tools:${props.nodeKey}`;
   const motion = createFlowerActivityDisclosureMotion(expanded, {
     initialOpen: untrack(expanded), reducedMotion: context?.reducedMotion,
@@ -56,7 +84,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
   });
   onCleanup(() => context?.onMotionEnd(motionKey));
   onMount(() => {
-    const unregister = context?.register(props.nodeKey, { node, slot, body });
+    const unregister = context?.register(props.nodeKey, { node, slot, body, prepareArrival });
     onCleanup(() => unregister?.());
   });
   createEffect(() => {
@@ -145,6 +173,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
           const element = event.currentTarget;
           // A queued tail-scroll event can arrive after another row is added.
           if (element.scrollTop === previousScrollTop) return;
+          cancelArrival();
           previousScrollTop = element.scrollTop;
           following = element.scrollHeight - element.clientHeight - element.scrollTop <= 24;
           element.toggleAttribute('data-flower-reading-paused', !following);
