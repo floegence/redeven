@@ -27,7 +27,7 @@ await session.run(async () => {
   await session.directory(state);
   const tls = await createBuiltDistTLS();
   await session.defer('TLS fixture', () => tls.cleanup());
-  const server = await createSSHSettingsPreviewServer(0);
+  const server = await createSSHSettingsPreviewServer(0, ['flower-navigation.html']);
   await session.defer('preview server', () => server.close());
   await session.port(new URL(server.resolvedUrls.local[0]).port);
   await server.watcher.close();
@@ -50,12 +50,12 @@ await session.run(async () => {
 
   async function qualifyHtmlGeneration(surface, publish) {
     const canvas = page.locator('.chat-html-canvas');
-    const original = await canvas.elementHandle();
-    const height = (await canvas.boundingBox()).height;
     const prefix = 'Here is the workspace preview.\n\n![Workspace](computer://browser-main/' + 'a'.repeat(64) + ')\n\n';
     const fence = '```html preview\n';
-    await publish(prefix + fence + '<main>Partial', true);
+    await publish(prefix + fence + html.slice(0, 16), true);
     await page.waitForFunction(() => document.querySelector('.chat-html-canvas')?.dataset.state === 'generating');
+    const original = await canvas.elementHandle();
+    const height = (await canvas.boundingBox()).height;
     assert.equal(await canvas.locator('.chat-html-skeleton').count(), 0);
     assert.equal(await canvas.locator('iframe').count(), 0);
     assert.equal(await canvas.locator('.chat-html-sheet').isVisible(), false);
@@ -82,11 +82,13 @@ await session.run(async () => {
     assert.equal(await canvas.locator('.chat-html-sheen').evaluate((element) => getComputedStyle(element).animationName), 'none');
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.setViewportSize({ width: 1240, height: 900 });
-    await publish(prefix + fence + html + '\n```', false);
+    await publish(prefix + fence + html + '\n```', true);
     await canvas.locator('iframe').waitFor();
     assert.equal(await canvas.evaluate((element, original) => element === original, original), true);
     assert.equal((await canvas.boundingBox()).height, height);
     assert.equal(await canvas.locator('.chat-html-loading').count(), 0);
+    await publish(prefix + fence + html + '\n```', false);
+    await canvas.locator('iframe').waitFor();
     return {
       noSkeleton: true,
       centered: true,
@@ -395,8 +397,15 @@ await session.run(async () => {
         let value;
         if (route.endsWith('/ai/threads')) value = { threads: [thread] };
         else if (route.endsWith('/ai/conversation_preferences')) value = { revision: 0, reasoning_by_model: {} };
-        else if (route.endsWith(`/ai/threads/${thread.thread_id}`)) value = { thread, current };
-        else if (route.endsWith(`/ai/threads/${thread.thread_id}/read`)) value = thread.read_status;
+        else if (route.endsWith(`/ai/threads/${thread.thread_id}`) || route.endsWith(`/ai/threads/${thread.thread_id}/history`)) value = { thread, current };
+        else if (route.endsWith(`/ai/threads/${thread.thread_id}/read`)) {
+          let body = '';
+          for await (const chunk of request) body += chunk;
+          const { snapshot } = JSON.parse(body);
+          thread.read_status = { is_unread: false, snapshot,
+            read_state: { last_seen_activity_revision: snapshot.activity_revision } };
+          value = { read_status: thread.read_status };
+        }
         else if (route.endsWith('/ai/attachments/capabilities')) value = { model_id: thread.model_id, revision: '1', enabled: false };
         else if (route.includes('/computer-media/')) {
           response.writeHead(200, { 'content-type': 'image/png' });
@@ -409,7 +418,7 @@ await session.run(async () => {
           });
           const payload = Buffer.from(
             JSON.stringify({
-              schema_version: 1,
+              schema_version: 2,
               kind: 'ready',
               summaries: [thread],
             }),
@@ -492,6 +501,8 @@ await session.run(async () => {
     assert.deepEqual(report.envStability.extraRequests, []);
     await page.screenshot({ path: path.join(output, 'env-after.png') });
     report.envGeneration = await qualifyHtmlGeneration('env', async (text, generating) => {
+      const previous = current;
+      const previousText = previous.items[0].text;
       current = {
         ...current,
         view_version: current.view_version + 1,
@@ -505,12 +516,18 @@ await session.run(async () => {
           live: generating,
         })),
       };
+      const content = generating && previous.activity === 'active' && text.startsWith(previousText)
+        ? { update: { thread_id: thread.thread_id, turn_id: 'env-turn', run_id: 'env-run',
+          base_version: previous.view_version, view_version: current.view_version,
+          facts: { activity: 'active', queue_count: 0, run_progress: { phase: 'streaming' } },
+          items: [{ kind: 'append', item_id: 'env-reply', append: { offset_bytes: Buffer.byteLength(previousText), text: text.slice(previousText.length) } }] } }
+        : { current };
       const payload = Buffer.from(
         JSON.stringify({
-          schema_version: 1,
+          schema_version: 2,
           kind: 'thread.batch',
           thread_id: thread.thread_id,
-          current,
+          ...content,
         }),
       );
       const frame = {

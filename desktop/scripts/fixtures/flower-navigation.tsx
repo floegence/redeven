@@ -47,7 +47,7 @@ const fixture = window.navigationFixture = {
     goal = { version: goal.version + 1, text, status: 'active', actor: 'model' };
     thread.goal = goal;
     current = { ...current, view_version: current.view_version + 1, goal };
-    if (live) for (const frame of flowerLiveWireFixture({ schema_version: 1, kind: 'thread.batch', thread_id: thread.thread_id, current }, 'goal-' + current.view_version))
+    if (live) for (const frame of flowerLiveWireFixture({ schema_version: 2, kind: 'thread.batch', thread_id: thread.thread_id, current }, 'goal-' + current.view_version))
       receiveStream?.({ stream_id: receiveStreamID, kind: 'chunk', chunk: new TextEncoder().encode('data: ' + frame.data + '\n\n') });
   },
   releaseRuntime() {
@@ -57,10 +57,18 @@ const fixture = window.navigationFixture = {
     })) });
   },
   publishHTML(text: string, generating: boolean) {
+    const previous = current;
+    const previousText = previous.items?.find(item => item.id === 'density-reading')?.text ?? '';
     current = { ...current, view_version: current.view_version + 1, activity: generating ? 'active' : 'idle',
       turn_id: 'navigation-turn', run_id: 'navigation-run', run_progress: generating ? { phase: 'streaming' } : null,
       items: current.items?.map(item => item.id === 'density-reading' ? { ...item, text, live: generating } : item) };
-    for (const frame of flowerLiveWireFixture({ schema_version: 1, kind: 'thread.batch', thread_id: thread.thread_id, current }, 'html-'+current.view_version)) {
+    const content = generating && previous.activity === 'active' && text.startsWith(previousText)
+      ? { update: { thread_id: thread.thread_id, turn_id: 'navigation-turn', run_id: 'navigation-run',
+        base_version: previous.view_version, view_version: current.view_version,
+        facts: { activity: 'active', queue_count: 0, run_progress: { phase: 'streaming' } },
+        items: [{ kind: 'append', item_id: 'density-reading', append: { offset_bytes: new TextEncoder().encode(previousText).length, text: text.slice(previousText.length) } }] } }
+      : { current };
+    for (const frame of flowerLiveWireFixture({ schema_version: 2, kind: 'thread.batch', thread_id: thread.thread_id, ...content }, 'html-'+current.view_version)) {
       receiveStream?.({ stream_id: receiveStreamID, kind: 'chunk', chunk: new TextEncoder().encode('data: '+frame.data+'\n\n') });
     }
   },
@@ -101,6 +109,7 @@ const settings: DesktopWelcomeRuntime['settings'] = {
     } };
     if (route.startsWith('ai/') && !aiReady) { fixture.prematureRequests++; return unavailable(); }
     if (route === 'ai/models') return { ok: true, data: { current_model: 'fixture/model', models: [{ id: 'fixture/model' }] } };
+    if (route === 'ai/conversation_preferences') return { ok: true, data: { revision: 0, reasoning_by_model: {} } };
     if (route === 'ai/threads') return { ok: true, data: { threads: [thread] } };
     if (route === 'ai/storage-generation') return { ok: true, data: { storage_generation: 'a'.repeat(32) } };
     if (route === 'ai/thread-goal' && goalMode) {
@@ -114,7 +123,7 @@ const settings: DesktopWelcomeRuntime['settings'] = {
       }
       return { ok: true, data: { client_request_id: input.client_request_id, thread_id: thread.thread_id, goal, current, conflict } };
     }
-    if (route === `ai/threads/${thread.thread_id}`) {
+    if (route === `ai/threads/${thread.thread_id}` || route === `ai/threads/${thread.thread_id}/history`) {
       fixture.goalReads++;
       if (fixture.holdGoalReads) {
         const failed = await new Promise<boolean>(resolve => { releaseGoalRead = resolve; });
@@ -122,7 +131,12 @@ const settings: DesktopWelcomeRuntime['settings'] = {
       }
       return { ok: true, data: { thread, current: { ...current, ...(goalMode ? { goal } : {}) } } };
     }
-    if (route === `ai/threads/${thread.thread_id}/read`) return { ok: true, data: thread.read_status };
+    if (route === `ai/threads/${thread.thread_id}/read`) {
+      const body = request.body as { snapshot: { activity_revision: number } };
+      thread.read_status = { is_unread: false, snapshot: body.snapshot,
+        read_state: { last_seen_activity_revision: body.snapshot.activity_revision } };
+      return { ok: true, data: { read_status: thread.read_status } };
+    }
     if (route === `ai/threads/${thread.thread_id}/computer-media/browser-main/${'a'.repeat(64)}`) {
       const canvas = document.createElement('canvas'); canvas.width = 960; canvas.height = 440;
       const context = canvas.getContext('2d')!;
@@ -140,7 +154,7 @@ const settings: DesktopWelcomeRuntime['settings'] = {
     receiveStreamID = request.stream_id;
     if (!aiReady) { fixture.prematureRequests++; return unavailable(); }
     queueMicrotask(() => {
-      for (const frame of flowerLiveWireFixture({ schema_version: 1, kind: 'ready', summaries: [thread] }, 'navigation-ready')) {
+      for (const frame of flowerLiveWireFixture({ schema_version: 2, kind: 'ready', summaries: [thread] }, 'navigation-ready')) {
         receiveStream?.({ stream_id: request.stream_id, kind: 'chunk', chunk: new TextEncoder().encode('data: '+frame.data+'\n\n') });
       }
     });
