@@ -162,7 +162,7 @@ it('keeps a quickly completed tool hidden until its arrival scroll has made room
   await expect.poll(() => getComputedStyle(title(root, 'fast')!.closest('.flower-activity-inline-line')!).opacity).toBe('1');
 });
 
-it.each([false, true])('keeps web fetch titles revealing through routine live snapshots (child=%s)', async child => {
+it.each([false, true])('keeps web fetch titles revealing through routine current-view updates (child=%s)', async child => {
   const items = Array.from({ length: 24 }, (_, index) => tool(`history-${index}`, 'success'));
   const fetchTool = (id: string, elapsed: number): FlowerRuntimeCurrentItem => ({
     ...tool(id), activity: { ...tool(id).activity!, tool_name: 'web_search',
