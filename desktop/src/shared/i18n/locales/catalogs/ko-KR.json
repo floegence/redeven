@@ -255,6 +255,8 @@
       "defaultModelUpdateFailedTitle": "기본 모델을 업데이트하지 못했습니다.",
       "reasoningAdjusted": "이 모델에 맞게 추론 설정을 조정했습니다.",
       "modelsUnavailable": "이 모델을 사용할 수 없습니다. 목록을 새로 고치거나 다른 모델을 선택하거나 설정을 여세요.",
+      "initialAuthorization": "접근 권한을 복원한 후 대화 불러오기를 다시 시도하세요.",
+      "initialLocked": "접근 잠금을 해제한 후 대화 불러오기를 다시 시도하세요.",
       "warmupTitle": "Flower 준비 중",
       "warmupDetail": "Desktop은 Flower가 대화를 로드하기 전에 로컬 환경 런타임을 시작합니다.",
       "warmupComposerPlaceholder": "로컬 환경에서 Flower 준비 중...",

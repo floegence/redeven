@@ -1689,9 +1689,10 @@ describe('FlowerSurface navigation', () => {
       disableLiveStream: true,
     });
 
-    await waitFor(() => runtime.textContent?.includes('Flower waiting input request is incomplete.') ?? false);
+    await waitFor(() => Boolean(runtime.querySelector('.flower-warmup button')));
+    expect(runtime.textContent).not.toContain('Flower waiting input request is incomplete.');
 
-    (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
+    (runtime.querySelector('.flower-warmup button') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-after-list-recovery"] button')));
 
     expect(runtime.textContent).not.toContain('Flower could not load.');
@@ -1768,7 +1769,7 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('Flower could not finish this reply.');
   });
 
-  it('leaves the sidebar skeleton and offers retry when the conversation inventory times out', async () => {
+  it('stops the initial loading indicator and offers retry when the conversation inventory times out', async () => {
     vi.useFakeTimers();
     try {
       const listThreads = vi.fn(() => new Promise<never>(() => undefined));
@@ -1776,12 +1777,13 @@ describe('FlowerSurface navigation', () => {
 
       await Promise.resolve();
       await vi.advanceTimersByTimeAsync(0);
-      expect(runtime.querySelector('.flower-thread-warmup-list')).not.toBeNull();
+      expect(runtime.querySelector('.flower-warmup-indicator')).not.toBeNull();
+      expect(runtime.querySelector('.flower-chat-shell')).toBeNull();
 
       await vi.advanceTimersByTimeAsync(10_000);
-      expect(runtime.querySelector('.flower-thread-warmup-list')).toBeNull();
-      expect(runtime.querySelector('[role="alert"]')?.textContent).toContain('Conversations');
-      expect(Array.from(runtime.querySelectorAll('button')).some((button) => button.textContent?.includes('Refresh'))).toBe(true);
+      expect(runtime.querySelector('.flower-warmup-indicator')).toBeNull();
+      expect(runtime.querySelector('.flower-warmup')?.textContent).toContain('Conversations');
+      expect(runtime.querySelector('.flower-warmup button')?.textContent).toBe('Retry');
     } finally {
       vi.useRealTimers();
     }
@@ -1799,9 +1801,9 @@ describe('FlowerSurface navigation', () => {
       disableLiveStream: true,
     });
 
-    await waitFor(() => Boolean(runtime.querySelector('.flower-thread-empty[role="alert"]')));
-    const retry = Array.from(runtime.querySelectorAll('.flower-thread-empty[role="alert"] button')).find((button) => button.textContent?.includes('Refresh')) as HTMLButtonElement | undefined;
-    expect(retry).toBeDefined();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-warmup button')));
+    const retry = runtime.querySelector<HTMLButtonElement>('.flower-warmup button');
+    expect(retry).not.toBeNull();
     retry?.click();
     await waitFor(() => runtime.querySelector('.flower-thread-empty')?.textContent?.includes('No conversations') ?? false);
     expect(attempt).toBe(2);

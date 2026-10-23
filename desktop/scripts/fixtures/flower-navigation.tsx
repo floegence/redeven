@@ -22,6 +22,7 @@ declare global {
       publishGoal: (text: string, live?: boolean) => void;
       releaseRuntime: () => void;
       releaseBaseline: () => void;
+      releaseFirstPage: () => void;
       refreshHealth: () => void;
       publishHTML: (text: string, generating: boolean) => void;
       publish: (patch: Partial<DesktopWelcomeSnapshot>) => void;
@@ -37,6 +38,7 @@ let receiveStreamID = '';
 let aiReady = false;
 const goalMode = new URLSearchParams(location.search).has('goal');
 const progressiveMode = new URLSearchParams(location.search).has('progressive');
+const delayedFirstPage = new URLSearchParams(location.search).has('delayed-first-page');
 let goal: FlowerGoal = { version: 1, text: 'Confirm the release and preserve every requirement.', actor: 'user', status: 'active' };
 let releaseGoalRead: ((fail: boolean) => void) | undefined;
 const unavailable = () => ({ ok: false as const, error: { code: 'AI_SERVICE_UNAVAILABLE', status: 503,
@@ -50,6 +52,10 @@ const fixture = window.navigationFixture = {
     thread.goal = goal;
     current = { ...current, view_version: current.view_version + 1, goal };
     if (live) for (const frame of flowerLiveWireFixture({ schema_version: 3, kind: 'thread.batch', thread_id: thread.thread_id, current }, 'goal-' + current.view_version))
+      receiveStream?.({ stream_id: receiveStreamID, kind: 'chunk', chunk: new TextEncoder().encode('data: ' + frame.data + '\n\n') });
+  },
+  releaseFirstPage() {
+    for (const frame of flowerLiveWireFixture({ schema_version: 3, kind: 'ready', baseline_complete: !progressiveMode, summaries: [thread] }, 'navigation-ready'))
       receiveStream?.({ stream_id: receiveStreamID, kind: 'chunk', chunk: new TextEncoder().encode('data: ' + frame.data + '\n\n') });
   },
   releaseBaseline() {
@@ -159,11 +165,7 @@ const settings: DesktopWelcomeRuntime['settings'] = {
     fixture.streams++;
     receiveStreamID = request.stream_id;
     if (!aiReady) { fixture.prematureRequests++; return unavailable(); }
-    queueMicrotask(() => {
-      for (const frame of flowerLiveWireFixture({ schema_version: 3, kind: 'ready', baseline_complete: !progressiveMode, summaries: [thread] }, 'navigation-ready')) {
-        receiveStream?.({ stream_id: request.stream_id, kind: 'chunk', chunk: new TextEncoder().encode('data: '+frame.data+'\n\n') });
-      }
-    });
+    if (!delayedFirstPage) queueMicrotask(() => fixture.releaseFirstPage());
     return { ok: true, status: 200, content_type: 'text/event-stream' };
   },
   cancelRuntimeFlowerStream() { fixture.cancellations++; },

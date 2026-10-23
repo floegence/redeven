@@ -13025,7 +13025,7 @@
       "frontmatter": {
         "description": "Keep navigation and drafts available while the single readiness owner prepares, stops or restores Flower.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-23",
         "tags": [
           "flower",
           "readiness",
@@ -13037,15 +13037,15 @@
         "title": "Flower startup and recovery presentation",
         "type": "Interaction Contract"
       },
-      "body_length": 1762,
+      "body_length": 3363,
       "summary": "Env App and Desktop render canonical readiness facts and explicit safe recovery actions.\nThe single readiness owner controls Flower admission while navigation and shell-owned\ndrafts remain available. No surface starts another availability controller. Stop and\nretry follow typed safety facts; a close failure requires application restart, and\nunknown or contradictory facts expose a non-retryable contract failure.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Env App shares one readiness controller across Activity, Workbench, and Settings.\n\nAn operational generation stays mounted during historical thread preparation. A selected thread uses its ordinary loading and retry surface, with New chat and conversation navigation available. The oldest snapshot stores may wait for their identity scan before admitting new threads. A thread-local failure does not return the whole product to startup.\n\nUnconfirmed, failed or revoked permissions cannot authorize new mutations; renewed authority reopens the same controls.\n\nThe boundary shows completed/total counts only for a known total and preserves shell-owned drafts.",
-          "char_count": 656
+          "body": "Env App shares one readiness controller across Activity, Workbench, and Settings.\n\nAfter runtime readiness, the workspace stays in the existing Flower loading presentation until the first authoritative conversation-list page has been applied. A confirmed empty list also admits the workspace. Remaining baseline pages load progressively; the initial boundary does not wait for the complete history inventory. No welcome suggestions, composer, or stale-state reconnect banner appears before this first result. Embedded conversations retain their own detail loading and retry boundary; they do not wait for a sidebar inventory.\n\nInitial connection retries keep the same loading presentation. A terminal failure stops its indicator and offers Retry in place, with localized access, version, capacity, or timeout guidance where applicable. Raw diagnostics and error cards are not part of this entry presentation. The workspace-stream or HTTP list owner still owns reads, deadlines, cancellation and retries; the UI adds no availability controller or timer.\n\nOnce admitted, the surface never returns to initial loading on refresh or reconnect. Conversation selection, mounted transcript, drafts and navigation remain available; existing synchronization notices describe subsequent connection failures.\n\nAn operational generation stays mounted during historical thread preparation. A selected thread uses its ordinary loading and retry surface, with New chat and conversation navigation available. The oldest snapshot stores may wait for their identity scan before admitting new threads. A thread-local failure does not return the whole product to startup.\n\nUnconfirmed, failed or revoked permissions cannot authorize new mutations; renewed authority reopens the same controls.\n\nThe boundary shows completed/total counts only for a known total and preserves shell-owned drafts.",
+          "char_count": 1871
         },
         {
           "id": "boundaries",
@@ -13056,6 +13056,16 @@
         }
       ],
       "evidence": [
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.initialLoading.test.tsx:0:delayed first page, empty inventory, initial retry, access guidance and subsequent reconnect continuity.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.initialLoading.test.tsx",
+          "description": "Delayed first page, empty inventory, initial retry, access guidance and subsequent reconnect continuity."
+        },
+        {
+          "id": "redeven:desktop/scripts/check-flower-startup.mjs:0:built electron renderer keeps the existing loading presentation before its first page, then retains selection and drafts through later pages.",
+          "source": "redeven:desktop/scripts/check-flower-startup.mjs",
+          "description": "Built Electron renderer keeps the existing loading presentation before its first page, then retains selection and drafts through later pages."
+        },
         {
           "id": "redeven:internal/envapp/ui_src/src/ui/flower/AIReadinessBoundary.browser.test.tsx:1:browser interaction, reflow and recovery coverage.",
           "source": "redeven:internal/envapp/ui_src/src/ui/flower/AIReadinessBoundary.browser.test.tsx",
@@ -33511,5 +33521,5 @@
       ]
     }
   ],
-  "source_sha256": "c4076b3ba0dec9f3a0fe0657ac62adcba1b98a9d9ee8b6f1fcae66ce4a817be9"
+  "source_sha256": "09def1e7281a0c5b44afaf0daa99764513aac876bb709b38e61972a571098c2c"
 }

@@ -2187,7 +2187,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return key === currentComposerSessionKey() && selectedThreadDetailMatches(trimString(selectedThreadID()));
   };
   const warmupState = createMemo(() => props.warmup?.active ? props.warmup : null);
-  const surfaceWarmupActive = createMemo(() => warmupState() !== null);
+  // The first applied list page (including an empty list) admits the surface
+  // once. Embedded conversations retain their own detail loading boundary.
+  // Refresh and reconnect never replace an admitted surface.
+  const initialConversationPending = createMemo<boolean>(pending => (
+    pending && !props.embeddedConversation && threadListState() !== 'ready'
+  ), true);
+  const initialConversationFailed = () => props.adapter.connectLiveStream
+    ? liveSyncState().status === 'failed'
+    : threadListState() === 'error';
+  const surfaceWarmupActive = createMemo(() => warmupState() !== null || initialConversationPending());
   createEffect(() => {
     const ordinaryComposerBlocked = Boolean(selectedInputRequest())
       || Boolean(selectedComposerApprovalDisplayAction())
@@ -3269,7 +3278,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       measureComposerControls();
     });
   };
-  onMount(() => {
+  createEffect(() => {
+    if (initialConversationPending()) return;
     scheduleComposerControlMeasure();
     const resizeObserver = typeof ResizeObserver === 'undefined'
       ? null
@@ -4485,13 +4495,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     try {
       const next = (await loadFlowerThreadList(adapter, page => {
         if (surfaceDisposed || props.adapter !== adapter || refreshSequence !== threadsRefreshSequence) return;
-        setThreadListState('ready');
         setThreadCache(cache => page.reduce((next, thread) => retiredThreadIDs.has(trimString(thread.thread_id)) ? next : next.replaceSummary(thread), cache));
+        setThreadListState('ready');
       }, controller.signal)).filter((thread) => !retiredThreadIDs.has(trimString(thread.thread_id)));
       if (surfaceDisposed || props.adapter !== adapter || refreshSequence !== threadsRefreshSequence) {
         return false;
       }
-      setThreadListState('ready');
       const selectedID = selectedThreadID();
       const selectedSummary = next.find((thread) => thread.thread_id === selectedID) ?? null;
       const selectedDetailCurrent = !selectedID || threadCache().views.has(selectedID);
@@ -4503,6 +4512,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         setSelectedThreadID('');
       }
       setThreadCache((cache) => cache.replaceSummaries(next));
+      setThreadListState('ready');
       const currentSelection = selectedThreadID();
       if (currentSelection && !next.some((thread) => thread.thread_id === currentSelection) && !threadCache().views.has(currentSelection) && attentionNavigation()?.childThreadID !== currentSelection) {
         cancelDeferredThreadSelection();
@@ -5128,9 +5138,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const selectedID = selectedThreadID();
       const incoming = (envelope.summaries ?? [])
         .filter((summary) => !retiredThreadIDs.has(summary.thread_id));
+      setThreadCache(cache => flowerBaseline.apply(cache, envelope, incoming));
       setThreadListState('ready');
       setThreadListError('');
-      setThreadCache(cache => flowerBaseline.apply(cache, envelope, incoming));
       if (envelope.baseline_complete === true && selectedID && !threadCache().selectedId) {
         closeSubagentOverlays();
         setSelectedThreadID('');
@@ -12204,21 +12214,41 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </div>
   );
 
-  const warmupPanel = () => (
-    <div class="flower-warmup" role="status" aria-live="polite" aria-label={warmupTitle()}>
-      <div class="flower-warmup-panel">
-        <FlowerSoftAuraIcon class="redeven-flower-soft-aura-lg h-14 w-14" />
-        <div class="flower-warmup-copy">
-          <div class="flower-warmup-eyebrow">{warmupPhaseLabel()}</div>
-          <h2>{warmupTitle()}</h2>
-          <p>{warmupDetail()}</p>
-        </div>
-        <div class="flower-warmup-indicator" aria-hidden="true">
-          <div class="flower-warmup-indicator-bar" />
+  const initialConversationFailureMessage = () => {
+    const error = liveSyncState().error as { status?: number; code?: string } | undefined;
+    if (props.adapter.connectLiveStream) {
+      if ([401, 403].includes(Number(error?.status))) return copy().chat.initialAuthorization;
+      if (Number(error?.status) === 423) return copy().chat.initialLocked;
+      if (Number(error?.status) === 426 || error?.code === 'flower_live_version_error') return copy().chat.syncVersion;
+      if (Number(error?.status) === 429) return copy().chat.syncCapacity;
+      if (error?.code === 'flower_live_handshake_timeout') return copy().chat.syncTimeout;
+    }
+    return copy().chat.history.failed;
+  };
+  const warmupPanel = (initial = false) => {
+    const failed = () => initial && initialConversationFailed();
+    const title = () => failed() ? copy().threadList.title : warmupTitle();
+    return (
+      <div class={cn('flower-warmup', initial && 'h-full col-span-full')} role="status" aria-live="polite" aria-label={title()} aria-busy={!failed()}>
+        <div class="flower-warmup-panel">
+          <FlowerSoftAuraIcon class="redeven-flower-soft-aura-lg h-14 w-14" />
+          <div class="flower-warmup-copy">
+            <Show when={!initial}><div class="flower-warmup-eyebrow">{warmupPhaseLabel()}</div></Show>
+            <h2>{title()}</h2>
+            <p>{failed() ? initialConversationFailureMessage() : initial ? copy().chat.threadLoading : warmupDetail()}</p>
+          </div>
+          <Show when={!failed()} fallback={
+            <Button size="sm" variant="outline" icon={Refresh} onClick={() => {
+              if (props.adapter.connectLiveStream) liveTransport.restart();
+              else void refreshThreads();
+            }}>{copy().chat.handlerRetry}</Button>
+          }>
+            <div class="flower-warmup-indicator" aria-hidden="true"><div class="flower-warmup-indicator-bar" /></div>
+          </Show>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const modelMenuItem = (option: ComposerModelOption) => {
     const selected = () => option.id === selectedComposerModelID();
@@ -14014,6 +14044,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       data-flower-side-panel={sidePanel()}
       style={{ '--flower-thread-rail-width': `${threadRailWidth()}px` }}
     >
+      <Show when={!initialConversationPending()} fallback={warmupPanel(true)}>
       <Show when={!settingsDialogPresent()}><div hidden inert aria-hidden="true"><SettingsContent /></div></Show>
       <DialogPlacementProvider mode="global">
         <Dialog open={sidePanel() === 'settings' && !companionCollapsed() && surfaceEngaged()}
@@ -14334,6 +14365,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             />
           );
         }}
+      </Show>
       </Show>
     </main>
   );

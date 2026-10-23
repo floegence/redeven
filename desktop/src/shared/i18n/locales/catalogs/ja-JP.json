@@ -255,6 +255,8 @@
       "defaultModelUpdateFailedTitle": "デフォルトモデルを更新できませんでした。",
       "reasoningAdjusted": "このモデルに合わせて推論設定を調整しました。",
       "modelsUnavailable": "このモデルは利用できません。一覧を更新するか、別のモデルを選択するか、設定を開いてください。",
+      "initialAuthorization": "アクセス権を復元してから、会話の読み込みを再試行してください。",
+      "initialLocked": "アクセスのロックを解除してから、会話の読み込みを再試行してください。",
       "warmupTitle": "Flower を準備しています",
       "warmupDetail": "Flower が会話を読み込む前に、デスクトップがローカル環境のランタイムを起動しています。",
       "warmupComposerPlaceholder": "ローカル環境で Flower を準備しています...",
