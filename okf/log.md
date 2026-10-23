@@ -4,6 +4,7 @@
 
 - 2026-10-22: Unify cancellable terminal reads, explicit read deadlines, and published Floret repeat protection; retain concise incremental model output. See [terminal tool runtime](ai/terminal-tool-runtime.md).
 
+- 2026-10-22: Defer unopened Flower tool-sequence content while retaining inspected DOM; distinguish this rendering improvement from complete detail transport. See [tool sequences](ui/flower-tool-sequences.md) and [switch qualification](operations/flower-thread-switch-qualification.md).
 - 2026-10-22: Let short Flower tool groups and outward scrolling at sequence edges reach the transcript, preserve internal reading, and coordinate native scroll input with tail following. See [tool sequences](ui/flower-tool-sequences.md).
 - 2026-10-22: Open collapsed Flower tool sequences at their latest call, resume internal tail following, and preserve manual reading during subsequent updates. See [tool sequences](ui/flower-tool-sequences.md).
 - 2026-10-22: Adopt published Floret v7.79.0 execution-owned request facts; short-circuit sidebar previews and retain tool-sequence observers across unrelated updates. See [request-history performance](operations/flower-request-history-performance.md).

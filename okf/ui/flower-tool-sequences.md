@@ -53,7 +53,10 @@ collapse settles once; explicit choices persist through updates, reconnects and
 navigation, then reset on refresh. Focus, selection, gestures, open details or
 thinking, and reading away from the tail protect expansion.
 
-Collapsed groups stay mounted and inert so nested detail state survives. Whole-turn
+An initially collapsed sequence mounts its stable row shells and summary only.
+Tool and thinking content mounts on first expansion; inspected content then stays
+mounted and inert when folded so nested detail state survives. Newly arriving
+members of a manually closed sequence also wait for expansion. Whole-turn
 closure releases its body after motion. Expanded sequences share one internal
 scroll viewport below their reachable summary button. Its height is bounded by
 24rem, half the window height, and 65% of the actual transcript height, whichever

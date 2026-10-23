@@ -1,4 +1,4 @@
-import { Show, createContext, createEffect, createMemo, onCleanup, onMount, untrack, useContext, type Accessor, type JSX } from 'solid-js';
+import { Show, createContext, createEffect, createMemo, createSignal, onCleanup, onMount, untrack, useContext, type Accessor, type JSX } from 'solid-js';
 import { ChevronRight } from '@floegence/floe-webapp-core/icons';
 import type { FlowerTurnProcessCopy } from './copy';
 import type { FlowerToolSequence, FlowerToolSequenceProjection } from './flowerToolSequences';
@@ -29,6 +29,10 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
   const first = createMemo(() => member()?.first);
   const last = createMemo(() => member()?.last);
   const expanded = createMemo(() => !member() || !context || context.expanded(member()!.group));
+  // Unopened history needs only its disclosure shell. Once inspected, retain
+  // the same subtree so folding and regrouping preserve local reading state.
+  const [contentMounted, setContentMounted] = createSignal(untrack(expanded));
+  createEffect(() => { if (expanded()) setContentMounted(true); });
   let trigger: HTMLButtonElement | undefined;
   let content: HTMLDivElement | undefined;
   let slot!: HTMLDivElement;
@@ -146,7 +150,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
           element.toggleAttribute('data-flower-reading-paused', !following);
         }}>
         <div class="flower-tool-sequence-content" ref={content}>
-          {props.children}
+          <Show when={contentMounted()}>{props.children}</Show>
         </div>
       </div>
     </div>

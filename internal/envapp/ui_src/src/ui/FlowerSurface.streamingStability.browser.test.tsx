@@ -353,6 +353,8 @@ describe('Flower complete interaction subtree stability', () => {
 
     fixture.replace({ ...current, items: current.items?.map((item) => item.id !== 'tool-0' ? item : { ...item, activity: { ...item.activity, status: 'running', presentation: { ...item.activity?.presentation as object, payload: { operation: 'exec', command: 'git status', process_id: 'fixture-process', output: 'Stable terminal output', first_seq: 1, last_seq: 1 } } } }) });
     const runtime = await mountFixture(fixture);
+    for (const button of runtime.querySelectorAll<HTMLButtonElement>('.flower-tool-sequence-toggle[aria-expanded="false"]')) button.click();
+    await waitFor(() => runtime.querySelectorAll('[data-flower-activity-item-id]').length === 11);
     for (const button of runtime.querySelectorAll<HTMLButtonElement>('[data-flower-disclosure-trigger][aria-expanded="false"]')) button.click();
     await waitFor(() => runtime.querySelectorAll('.flower-activity-inline-details[data-state="open"]').length === 10);
     const roots = [...runtime.querySelectorAll('.flower-activity-inline-details')];

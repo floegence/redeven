@@ -30,6 +30,13 @@ Keep artifacts locally; never commit user databases or credentials.
 
 Measurements use synthetic conversations and copied released-writer fixtures. Backend point-read timings and the loopback transport fixture are separate experiments; their durations must not be added. These explicit qualification suites stay outside ordinary CI and hooks.
 
+The detail endpoint still calls the complete Floret `ThreadService.View`.
+Point-summary reads avoid unrelated conversations; they do not bound the selected
+conversation's body, response size, decoding, timeline projection or mounted row
+shells. Floret's window subscription is not yet the Flower detail transport.
+Lazy content inside collapsed tool sequences reduces first presentation work
+without claiming end-to-end pagination or a constant-time cold load.
+
 # Evidence
 
 - GOWORK=off go test ./internal/ai -count=1 -timeout=15m
@@ -43,3 +50,22 @@ Apple M5 Pro, macOS arm64, Go 1.27.2, Node 26.7.0; synthetic paired samples: The
 
 ## Reproduction and regression
 Run explicitly from the repository root: Private baseline frames are explicitly validated before shared-frame assertions; tests never discard arbitrary frames to pass.
+
+## Unopened tool content
+
+The tool-sequence browser regression mounts 300 historical calls followed by an
+active two-call sequence. Only the two visible activity rows initially exist.
+Another historical call arrives while folded; expansion exposes all 303, and
+folding and reopening preserves inspected DOM identity.
+Streaming regressions open the outer sequence before its nested controls and
+continue to verify selection, focus, readers and observer identity.
+
+A local production-build Chromium diagnostic used 355 sidebar rows and 2,000
+synthetic calls in twenty groups, separated by prose. Each variant used eight
+selections, with the first reported separately as cold. On the same machine,
+the seven warm-selection medians changed from 511.8 to 379.3 ms; mounted activity
+rows changed from 2,000 to 100 and total surface elements from 57,320 to 30,720.
+Median longest task per warm selection changed from 277 to 142 ms. These sequential
+baseline/candidate samples include selection scheduling and rendering, exclude
+backend/network latency, and are diagnostic rather than a smooth-frame release
+gate. Canonical history and row shells remain complete.
