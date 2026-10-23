@@ -45,11 +45,6 @@ describe('Flower navigation intent', () => {
     expect(host.querySelector('.flower-chat-bottom-dock')?.hasAttribute('inert')).toBe(false);
     expect(host.querySelector('.flower-thread-navigation-status')).toBeNull();
     await flush();
-    expect(committed(host)).toBe('');
-    expect(loadThread).not.toHaveBeenCalled();
-    presentFrame(); await flush();
-    expect(committed(host)).toBe('');
-    presentFrame(); await flush();
     expect(committed(host)).toBe('b');
     expect(loadThread).toHaveBeenCalledTimes(1);
     expect(host.querySelector('.flower-thread-navigation-status')).toBeNull();
@@ -166,10 +161,6 @@ describe('Flower navigation intent', () => {
     presentFrame(); await flush();
     expect(committed(host)).toBe('a');
     select(host, 'c');
-    presentFrame(); await flush();
-    expect(committed(host)).toBe('a');
-    presentFrame(); await flush();
-    expect(committed(host)).toBe('a');
     presentFrame(); await flush();
     expect(committed(host)).toBe('a');
     presentFrame(); await flush();

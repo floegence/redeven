@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { createSignal } from 'solid-js';
-import { describe, expect, it, onTestFinished, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import type { FlowerLiveStreamConnectInput, FlowerLiveStreamEnvelope, FlowerRuntimeCurrentView, FlowerSubagentDetail, FlowerThreadSnapshot, FlowerTurnLaunchInput } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import {
@@ -20,6 +20,13 @@ import {
 
 const syncFailure = 'Live updates stopped because data could not be read or applied. Displayed state may be outdated.';
 const stopUnconfirmed = 'Stop status is unconfirmed. Resync before trying again.';
+
+beforeEach(() => {
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains('flower-chat-transcript') ? 600 : 0;
+  });
+});
+afterEach(() => vi.restoreAllMocks());
 
 describe('parent event synchronization boundaries', () => {
   it('offers canonical resynchronization when report reading is unavailable', async () => {

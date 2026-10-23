@@ -59,6 +59,7 @@ main() {
       src/ui/FlowerSurface.emptyStatePresentation.test.tsx \
       src/ui/FlowerSurface.uncertainRecovery.test.tsx \
       src/ui/FlowerSurface.navigation.test.tsx \
+      src/ui/FlowerSurface.navigationIntent.test.tsx \
       src/ui/FlowerSurface.liveRecovery.test.tsx \
       src/ui/FlowerComposerContextIndicator.test.tsx \
       src/ui/FlowerContextCompactionDivider.test.tsx \
@@ -162,6 +163,7 @@ main() {
       internal/flower_ui/src/flowerCompanionRunTracker.test.ts \
       internal/flower_ui/src/flowerCompanionTailMotion.test.ts \
       internal/flower_ui/src/flowerScrollTail.test.ts \
+      internal/flower_ui/src/threadSelectionSchedule.test.ts \
       internal/flower_ui/src/flowerTurnPresentation.test.ts \
       internal/flower_ui/src/flowerTurnDisclosure.test.ts \
       internal/flower_ui/src/subagentAvatarCatalog.test.ts \
@@ -201,6 +203,8 @@ main() {
       # Restart Chromium between bounded groups so large suites do not retain
       # every transformed module and mock graph in one browser process.
       local browser_tests=(
+        src/ui/FlowerSurface.threadPresentation.browser.test.tsx
+        src/ui/FlowerSurface.history.browser.test.tsx
         src/ui/FlowerContextCompactionDivider.browser.test.tsx
         src/ui/EnvAppShell.flowerCompanion.browser.test.tsx
         src/ui/flowerCompanionTailMotion.browser.test.tsx

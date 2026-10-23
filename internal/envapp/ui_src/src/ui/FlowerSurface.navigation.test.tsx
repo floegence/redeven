@@ -284,6 +284,9 @@ describe('FlowerSurface navigation', () => {
     });
 
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${unreadThread.thread_id}"] button`)));
+    // Read acknowledgement requires a measurable, presented viewport. jsdom
+    // does not perform layout, so this test supplies its visible geometry.
+    Object.defineProperty(runtime.querySelector('.flower-chat-transcript'), 'clientHeight', { configurable: true, value: 600 });
     (runtime.querySelector(`[data-thread-id="${unreadThread.thread_id}"] button`) as HTMLButtonElement).click();
     await waitFor(() => markThreadRead.mock.calls.length === 1);
     await wait(50);

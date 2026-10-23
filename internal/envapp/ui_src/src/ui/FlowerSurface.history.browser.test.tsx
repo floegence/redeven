@@ -124,20 +124,26 @@ describe('bounded Flower history', () => {
   });
 
   it('preserves the visible reading position when a message above it finishes loading', async () => {
-    const { root, body, complete } = await mount(false, true, { count: 44 });
-    body.mockImplementation(async (_tid, _id, signal) => new Promise<FlowerRuntimeCurrentItem>((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true })));
+    const { root, body } = await mount(false, true, { count: 44 });
+    const reads = new Map<string, (item: FlowerRuntimeCurrentItem) => void>();
+    body.mockImplementation(async (_tid, id, signal) => new Promise<FlowerRuntimeCurrentItem>((resolve, reject) => {
+      reads.set(id, resolve);
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    }));
     await waitFor(() => body.mock.calls.length >= 2);
-    const first = body.mock.calls[0];
-    const firstMessage = root.querySelector<HTMLElement>('[data-flower-message-id="' + first[1] + '"]')!;
     const viewport = root.querySelector<HTMLDivElement>('.flower-chat-transcript')!;
     viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -1, bubbles: true }));
+    viewport.scrollTop = 0;
+    viewport.dispatchEvent(new Event('scroll'));
+    await waitFor(() => reads.has('0'));
+    const firstMessage = root.querySelector<HTMLElement>('[data-flower-message-id="0"]')!;
     viewport.scrollTop += firstMessage.getBoundingClientRect().bottom - viewport.getBoundingClientRect().top - 40;
     viewport.dispatchEvent(new Event('scroll'));
     await new Promise(resolve => setTimeout(resolve, 75));
     const anchor = [...root.querySelectorAll<HTMLElement>('[data-flower-message-id]')].find(element => element.getBoundingClientRect().top > viewport.getBoundingClientRect().top + 40)!;
     expect(anchor).toBeDefined();
     const top = anchor.getBoundingClientRect().top;
-    complete({ ...fixture(first[1]), ordinal: Number(first[1]) + 1, text: 'Preview text\n\n' + 'Expanded paragraph.\n\n'.repeat(40) });
+    reads.get('0')!({ ...fixture('0'), ordinal: 1, text: 'Preview text\n\n' + 'Expanded paragraph.\n\n'.repeat(40) });
     await waitFor(() => firstMessage.textContent?.includes('Expanded paragraph') === true);
     await new Promise(resolve => setTimeout(resolve, 100));
     expect(Math.abs(anchor.getBoundingClientRect().top - top)).toBeLessThanOrEqual(2);

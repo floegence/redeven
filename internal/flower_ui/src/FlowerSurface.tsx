@@ -1,5 +1,5 @@
 import { createThreadRailResize, loadThreadRailWidth, saveThreadRailWidth, THREAD_RAIL_WIDTH_DEFAULT, THREAD_RAIL_WIDTH_MIN, THREAD_RAIL_WIDTH_MAX } from './threadRailResize';
-import { createHistoryBodyLoader, createHistoryBodyVisibility } from './historyBodyLoader';
+import { createHistoryBodyLoader, createHistoryBodyVisibility, HISTORY_BODY_CONCURRENCY, HISTORY_BODY_VIEWPORT_MARGIN_PX } from './historyBodyLoader';
 import { createFlowerThreadBaseline } from './threadBaseline';
 import { loadFlowerThreadList } from './threadListLoad';
 import { createThreadReadSync } from './threadReadSync';
@@ -440,7 +440,6 @@ const FLOWER_COMPOSER_REFERENCE_VIEWPORT_MARGIN = 8;
 const FLOWER_COMPOSER_MORE_PANEL_ESTIMATED_WIDTH = 352;
 const FLOWER_COMPOSER_MORE_PANEL_ROW_HEIGHT = 44;
 const FLOWER_COMPOSER_MORE_PANEL_VERTICAL_CHROME = 12;
-const SELECTED_THREAD_TAIL_REVEAL_FALLBACK_MS = 120;
 const FLOWER_TERMINAL_THREAD_STATUSES = new Set<FlowerThreadStatus>(['idle', 'failed', 'success', 'canceled', 'read_only']);
 const FLOWER_ACTIVE_THREAD_STATUSES = new Set<FlowerThreadStatus>(['running', 'waiting_approval', 'waiting_user']);
 const SUBAGENT_DROPDOWN_ESTIMATED_SIZE = { width: 400, height: 480 } as const;
@@ -1105,6 +1104,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let navigationReadController = new AbortController();
   const releaseNavigationReads = () => {
     navigationReadController.abort();
+    for (const controller of preparingBodyReads.values()) controller.abort();
+    preparingBodyReads.clear();
     navigationReadController = new AbortController();
   };
   let startedFocusThreadRequestID = '';
@@ -1160,8 +1161,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let headerRenameTriggerRef: HTMLButtonElement | undefined;
   let threadSwitcherTriggerRef: HTMLButtonElement | undefined;
   let threadSwitcherRef: HTMLDivElement | undefined;
-  let selectedThreadTailRevealFrame = 0;
-  let selectedThreadTailRevealTimer: number | undefined;
+  const preparingBodyReads = new Map<string, AbortController>();
   let cancelSelectionCommit: (() => void) | undefined;
   const composerReferenceIndex = props.adapter.listWorkingDirectoryEntries
     ? createFlowerComposerReferenceIndex({
@@ -1319,7 +1319,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       threadSelectionContentFrame = 0;
       threadSelectionContentTimer = window.setTimeout(() => {
         threadSelectionContentTimer = undefined;
-        if (threadSelectionTransaction !== transaction) return;
+        if (threadSelectionTransaction !== transaction || selectedThreadTailReveal()) return;
 		if (!threadCache().views.has(transaction.value)) return;
         emitThreadSelectionEvent(transaction, 'content_presented');
         threadSelectionTransaction = null;
@@ -1357,7 +1357,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         presentedSelectionTimer = undefined;
         if (!readPresentationVisible()) return;
 			if (sequence !== threadLoadSequence || selectedThreadID() !== tid || !threadCache().views.has(tid)) return;
-        if (threadLoadError() || threadDetailLoadingIDs().has(tid) || pendingThreadSelection()) return;
+        if (threadLoadError() || threadDetailLoadingIDs().has(tid) || pendingThreadSelection() || selectedThreadTailReveal()) return;
         if (threadCache().views.get(tid)?.contentRevision !== contentRevision) return;
         setPresentedSelection({ threadID: tid, sequence, contentRevision });
       }, 0);
@@ -1378,6 +1378,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       readPresentationVisible(),
       threadDetailLoadingIDs().has(selectedThreadID()),
       pendingThreadSelection(),
+      selectedThreadTailReveal(),
     ] as const,
 			([threadID, detailReady, error, , engaged, loading, pending]) => {
       cancelPresentedSelectionSchedule();
@@ -1394,6 +1395,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const transcriptScroll = createFlowerScrollTailController({
     canFollowLatest: () => selectedThreadHasContent() || selectedThreadHasLiveProgress() || visibleTransportOutbox().length > 0,
     onUserInteraction: () => { if (selectedThreadTailPreparing()) cancelSelectedThreadTailReveal(); },
+    onLayout: () => {
+      const pending = selectedThreadTailReveal();
+      if (pending) settleSelectedThreadTailReveal(pending.threadID, pending.sequence);
+    },
     reducedMotionPreferred,
     requestAnimationFrame: requestTranscriptAnimationFrame,
     cancelAnimationFrame: cancelTranscriptAnimationFrame,
@@ -1423,48 +1428,74 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const selectedThreadTailRevealIsCurrent = (threadID: string, sequence: number): boolean => {
     const pending = selectedThreadTailReveal();
     return Boolean(
-      pending
+      !surfaceDisposed && pending
       && pending.threadID === threadID
       && pending.sequence === sequence
       && sequence === threadLoadSequence
       && selectedThreadID() === threadID,
     );
   };
-  const clearSelectedThreadTailRevealSchedule = () => {
-    if (selectedThreadTailRevealFrame) {
-      cancelTranscriptAnimationFrame(selectedThreadTailRevealFrame);
-      selectedThreadTailRevealFrame = 0;
+  const releasePreparingBodyReads = () => {
+    for (const [itemID, controller] of preparingBodyReads) {
+      // A failed read keeps its local Retry state until navigation cancels it.
+      const pending = selectedThreadTailReveal();
+      if (!pending || historyBodies.state(historyBodyKey(pending.threadID, itemID)) !== 'failed') controller.abort();
     }
-    if (selectedThreadTailRevealTimer !== undefined) {
-      window.clearTimeout(selectedThreadTailRevealTimer);
-      selectedThreadTailRevealTimer = undefined;
-    }
+    preparingBodyReads.clear();
   };
   const settleSelectedThreadTailReveal = (threadID: string, sequence: number) => {
     if (!selectedThreadTailRevealIsCurrent(threadID, sequence)) return;
-    clearSelectedThreadTailRevealSchedule();
-    transcriptScroll.scrollToBottom({ smooth: false });
+    if (threadLoadError()) { cancelSelectedThreadTailReveal(); return; }
+    if (!selectedThread()) return;
+    const viewport = transcriptScroll.viewport();
+    if (!viewport?.isConnected || viewport.clientHeight <= 0) return;
+    // Prepare only text in the positioned destination, newest first. Earlier
+    // placeholders must not occupy read slots ahead of the visible tail.
+    const bounds = viewport.getBoundingClientRect();
+    const needed: string[] = [];
+    if (props.adapter.loadHistoryItem) {
+      const placeholders = viewport.querySelectorAll<HTMLElement>('.flower-history-text-loading');
+      for (let index = placeholders.length - 1; index >= 0; index--) {
+        const element = placeholders[index];
+        const rect = element.getBoundingClientRect();
+        if (rect.height <= 0 || rect.bottom <= bounds.top - HISTORY_BODY_VIEWPORT_MARGIN_PX || rect.top >= bounds.bottom + HISTORY_BODY_VIEWPORT_MARGIN_PX) continue;
+        const id = element.closest<HTMLElement>('[data-flower-message-id]')?.dataset.flowerMessageId;
+        if (id && historyBodies.state(historyBodyKey(threadID, id)) !== 'failed') needed.push(id);
+        if (needed.length === HISTORY_BODY_CONCURRENCY) break;
+      }
+    }
+    const wanted = new Set(needed);
+    for (const [id, controller] of preparingBodyReads) {
+      if (!wanted.has(id)) {
+        if (historyBodies.state(historyBodyKey(threadID, id)) !== 'failed') controller.abort();
+        preparingBodyReads.delete(id);
+      }
+    }
+    if (needed.length) {
+      for (const id of wanted) {
+        if (preparingBodyReads.has(id)) continue;
+        const controller = new AbortController();
+        preparingBodyReads.set(id, controller);
+        loadHistoryItem(threadID, id, controller.signal, false, transcriptScroll);
+      }
+      return;
+    }
+    releasePreparingBodyReads();
     setSelectedThreadTailReveal(null);
+    scheduleThreadSelectionContentPresented(threadID);
   };
   const scheduleSelectedThreadTailReveal = (threadID: string, sequence: number) => {
-    if (!selectedThreadTailRevealIsCurrent(threadID, sequence)) return;
-    clearSelectedThreadTailRevealSchedule();
-    selectedThreadTailRevealFrame = requestTranscriptAnimationFrame(() => {
-      selectedThreadTailRevealFrame = 0;
-      settleSelectedThreadTailReveal(threadID, sequence);
-    });
-    selectedThreadTailRevealTimer = window.setTimeout(() => {
-      selectedThreadTailRevealTimer = undefined;
-      settleSelectedThreadTailReveal(threadID, sequence);
-    }, SELECTED_THREAD_TAIL_REVEAL_FALLBACK_MS);
+    if (selectedThreadTailRevealIsCurrent(threadID, sequence)) transcriptScroll.measureAfterLayout();
   };
   const beginSelectedThreadTailReveal = (threadID: string, sequence: number) => {
-    clearSelectedThreadTailRevealSchedule();
+    releasePreparingBodyReads();
     setSelectedThreadTailReveal({ threadID, sequence });
   };
   const cancelSelectedThreadTailReveal = () => {
-    clearSelectedThreadTailRevealSchedule();
+    releasePreparingBodyReads();
+    const pending = selectedThreadTailReveal();
     setSelectedThreadTailReveal(null);
+    if (pending && selectedThreadID() === pending.threadID) scheduleThreadSelectionContentPresented(pending.threadID);
   };
 
 	const selectedThread = createMemo(() => {
@@ -4092,7 +4123,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     requestTranscriptAnimationFrame(() => {
       if (sequence !== threadLoadSequence || selectedThreadID() !== tid) return;
       if (selectedThreadTailRevealIsCurrent(tid, sequence)) {
-        settleSelectedThreadTailReveal(tid, sequence);
+        scheduleSelectedThreadTailReveal(tid, sequence);
         return;
       }
       if (transcriptScroll.userInterruptionRevision() !== interruptionRevision) return;
@@ -4410,6 +4441,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     scheduleSelectedThreadTailReveal(tid, sequence);
     returnToChat();
     if (detailAvailable) {
+      // Cached DOM is mounted by this batch's render effects. Position and
+      // reveal it in the same task, before a loading frame can be painted.
+      queueMicrotask(() => {
+        if (selectedThreadTailRevealIsCurrent(tid, sequence)) transcriptScroll.flushLayout();
+      });
       if (!mobileNavigation()) requestComposerFocus(focusOwner);
       if (props.adapter.loadHistory || revalidateWarmDetail || threadNeedsFileActivityTargets(threadCache().views.get(tid)!.thread)) {
         void requestThreadDetail(
@@ -6342,10 +6378,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
   }));
 
-  const updateTranscriptNearBottom = (event?: Event) => {
-    if (selectedThreadTailPreparing() && event?.isTrusted) {
-      cancelSelectedThreadTailReveal();
-    }
+  const updateTranscriptNearBottom = () => {
     transcriptScroll.onScroll();
   };
   const scrollTranscriptToBottom = (options: Readonly<{ smooth?: boolean }> = {}) => transcriptScroll.scrollToBottom(options);
@@ -6354,7 +6387,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     cancelDeferredThreadSelection();
     cancelThreadSelectionTransaction();
     cancelPresentedSelectionSchedule();
-    clearSelectedThreadTailRevealSchedule();
+    releasePreparingBodyReads();
     transcriptScroll.dispose();
     subagentDetailScroll.dispose();
     setThreadCache(cache => cache.retainDetails([]));
@@ -7831,6 +7864,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     parentEventReading.events();
     selectedThreadHasLiveProgress();
     transcriptLayoutRevision();
+    if (selectedThreadTailPreparing()) {
+      historyBodyRevision();
+      threadLoadError();
+      documentVisible();
+    }
     measureTranscriptNearBottomAfterLayout();
   });
   function modelStatusLabel(phase: FlowerRunProgressPhase): string {
@@ -11330,7 +11368,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   // Reconnection establishes new read authority even when the same
                   // retained message stays mounted. Failed reads wait for Retry.
                   void liveSyncState().connectionEpoch;
-                  if (!visible() || pending?.kind !== 'text') return;
+                  if (!visible() || pending?.kind !== 'text'
+                    || viewportScope === transcriptScroll && selectedThreadTailPreparing()) return;
+                  // Hydration can move a previously intersecting placeholder
+                  // offscreen before the observer delivers its next notification.
+                  const viewport = viewportScope.viewport();
+                  if (!viewport) return;
+                  const bounds = viewport.getBoundingClientRect();
+                  const rect = shell.getBoundingClientRect();
+                  if (rect.height <= 0 || rect.bottom <= bounds.top - HISTORY_BODY_VIEWPORT_MARGIN_PX || rect.top >= bounds.bottom + HISTORY_BODY_VIEWPORT_MARGIN_PX) return;
                   const controller = new AbortController();
                   untrack(() => loadHistoryItem(tid, itemID, controller.signal, false, viewportScope));
                   onCleanup(() => controller.abort());
@@ -13815,6 +13861,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       </Show>
       {settingsReadNotice()}
       <div class="flower-chat-main" data-flower-action-layout={bottomActionMode()} data-setup-welcome={showSetupWelcome() && !companionCollapsed() ? 'true' : undefined}>
+        <div class="flower-transcript-region">
         <div
           ref={(node) => {
             setComputerLauncherBoundary(node);
@@ -13843,7 +13890,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             transcriptScroll.onTouchMove(event);
           }}
         >
-          <div class="flower-transcript-stack">
+          <div class="flower-transcript-stack" inert={selectedThreadTailPreparing()}>
             <Show when={livePresentationConfirmed() && selectedThreadTerminalSyncing() && !threadLoadError()}>
               {threadSyncingLatestState()}
             </Show>
@@ -13873,6 +13920,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 onClick={() => void parentEventReading.more()}>{subagentsCopy().events.more}</button>
             </Show>
           </div>
+        </div>
+        <Show when={selectedThreadTailPreparing()}>
+          <div class="flower-thread-preparing">{threadLoadingState()}</div>
+        </Show>
         </div>
         <Show when={props.embeddedConversation}>{progressLane(true)}</Show>
         <Show when={!props.embeddedConversation}>{composerPanel()}</Show>

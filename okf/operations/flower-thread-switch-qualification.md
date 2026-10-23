@@ -5,7 +5,7 @@ description: Reproduce point-read scaling, bounded read recovery and actual side
 tags: [flower, performance, qualification, navigation]
 timestamp: 2026-10-19T00:00:00Z
 lifecycle: active_evidence
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-23"
 ---
 # Summary
 
@@ -35,6 +35,37 @@ Root detail now uses Floret's window subscription; the initial interval and expl
 The item-window budget excludes product metadata and pending controls. Cold backend timings below are isolated read timings, not remote end-to-end rendering measurements. Lazy collapsed tool content and bounded transport address separate costs.
 
 # Evidence
+
+## Destination presentation qualification, 2026-10-23
+
+A paired local Chromium diagnostic used twenty synthetic historical text items,
+220 ms detail latency and 160 ms body latency with published dependencies.
+Baseline `a6f63f972` requested bodies 15 through 19; preparation requests bodies
+19 and 18 first and exposes only the final destination geometry. Body requests
+fell from five to two. The final readable destination was sampled at 437.3 ms
+instead of 799.7 ms after selection. The baseline had exposed placeholders at
+300.0 ms and then three successive height changes; the candidate first exposed
+its completed viewport at 437.3 ms. This trades earlier incomplete placeholders
+for stable readable content; it does not eliminate network latency.
+
+Warm long/body selections emitted presented at 38.5/51.4 ms versus 72.0/93.3 ms
+in the paired diagnostic, with no additional body reads. These are sequential
+development-build samples, not population percentiles or a universal latency
+guarantee. After-frame samples in both variants were bottom-aligned; they do not
+prove a universal baseline top flash. The demonstrated regression was premature
+reveal and successive exposed hydration geometry.
+
+Built Electron qualification repeated cached navigation three times and observed
+first destination frames at 21.1–32.1 ms, no preparing frame, and at most 0.5 px
+bottom distance. No page errors or remaining owned processes were recorded.
+Browser regressions cover delayed/stale detail and bodies, failed/empty detail,
+local Retry, programmatic versus explicit input, warm reuse and bounded requests.
+Scroll unit tests retain the 300-notification single-pass and idle-stop checks.
+
+Unrelated legacy disclosure fixtures timed out waiting for initial live state
+on both baseline and candidate; the queued-control streaming fixture likewise
+failed before its update assertions on both. These are reported separately and
+are not counted as passing qualification.
 
 - GOWORK=off go test ./internal/ai -count=1 -timeout=15m
 

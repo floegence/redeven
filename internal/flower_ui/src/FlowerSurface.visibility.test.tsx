@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
   FlowerLiveStreamConnectInput,
@@ -65,7 +65,14 @@ function latestPresence(
   return [...presences].reverse().find(predicate);
 }
 
-afterEach(() => setDocumentVisible(true));
+// jsdom has no layout; these tests explicitly model an available viewport.
+// Document and host visibility remain independent presentation requirements.
+beforeEach(() => {
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains('flower-chat-transcript') ? 600 : 0;
+  });
+});
+afterEach(() => { setDocumentVisible(true); vi.restoreAllMocks(); });
 
 describe('Flower workspace stream visibility', () => {
   it('never acknowledges summary or response revisions before their body renders', async () => {

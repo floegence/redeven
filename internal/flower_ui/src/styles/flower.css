@@ -627,6 +627,7 @@
 }
 
 .flower-surface-companion-collapsed .flower-chat-header,
+.flower-surface-companion-collapsed .flower-transcript-region,
 .flower-surface-companion-collapsed .flower-chat-transcript,
 .flower-surface-companion-collapsed .flower-model-status-lane,
 .flower-surface-companion-collapsed .flower-thread-sync-error,
@@ -3395,6 +3396,14 @@
   overflow: hidden;
 }
 
+.flower-transcript-region {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
 .flower-chat-transcript {
   /* Confine live text paint to the existing clipped scroll viewport. */
   contain: paint;
@@ -3418,6 +3427,21 @@
 .flower-chat-transcript[data-flower-tail-preparing="true"] .flower-transcript-stack {
   visibility: hidden;
   pointer-events: none;
+}
+
+/* Loading feedback stays outside the hidden, measurable transcript. */
+.flower-thread-preparing {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.flower-thread-preparing .flower-error-actions {
+  pointer-events: auto;
 }
 
 .flower-chat-bottom-dock {
@@ -8513,7 +8537,7 @@ button.flower-composer-context-source:focus-visible,
 }
 
 /* Content padding lets the transcript shrink to zero in a short approval host. */
-.flower-chat-main[data-flower-action-layout='approval'] > .flower-chat-transcript {
+.flower-chat-main[data-flower-action-layout='approval'] .flower-chat-transcript {
   padding-block: 0;
 }
 
@@ -8791,7 +8815,7 @@ button.flower-composer-context-source:focus-visible,
 .flower-surface:not(.flower-surface-companion-collapsed) .flower-chat-main[data-flower-action-layout='input_request'] {
   container: flower-reply-host / size;
 }
-.flower-chat-main[data-flower-action-layout='input_request'] > .flower-chat-transcript { padding-block: 0; }
+.flower-chat-main[data-flower-action-layout='input_request'] .flower-chat-transcript { padding-block: 0; }
 .flower-surface:not(.flower-surface-companion-collapsed) .flower-chat-bottom-dock[data-flower-action-layout='input_request']:has(.flower-input-request-surface:not(.flower-computer-control-panel)) {
   display: flex;
   min-height: 0;
