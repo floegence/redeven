@@ -33,6 +33,7 @@ type aiSendUserTurnReq struct {
 }
 
 type aiSendUserTurnResp struct {
+	PublicCurrent         json.RawMessage      `json:"-"`
 	ClientRequestID       string               `json:"client_request_id,omitempty"`
 	RunID                 string               `json:"run_id"`
 	TurnID                string               `json:"turn_id"`
@@ -52,6 +53,7 @@ type aiSubmitRequestUserInputResponseReq struct {
 }
 
 type aiSubmitRequestUserInputResponseResp struct {
+	PublicCurrent           json.RawMessage      `json:"-"`
 	Kind                    string               `json:"kind"`
 	ConsumedWaitingPromptID string               `json:"consumed_waiting_prompt_id,omitempty"`
 	AppliedPermissionType   string               `json:"applied_permission_type,omitempty"`
@@ -139,7 +141,12 @@ func RegisterRPCServiceProviderWithAccessGate(r *sessionrpc.Router, meta *sessio
 		if err != nil {
 			return nil, toAIRPCError(err)
 		}
+		public, err := service.MarshalFlowerHistoryCurrent(leaseCtx, meta, resp.Current.ThreadID.String())
+		if err != nil {
+			return nil, toAIRPCError(err)
+		}
 		return &aiSendUserTurnResp{
+			PublicCurrent:         public,
 			ClientRequestID:       strings.TrimSpace(resp.ClientRequestID),
 			RunID:                 strings.TrimSpace(resp.RunID),
 			TurnID:                strings.TrimSpace(resp.TurnID),
@@ -176,7 +183,12 @@ func RegisterRPCServiceProviderWithAccessGate(r *sessionrpc.Router, meta *sessio
 		if err != nil {
 			return nil, toAIRPCError(err)
 		}
+		public, err := service.MarshalFlowerHistoryCurrent(leaseCtx, meta, resp.Current.ThreadID.String())
+		if err != nil {
+			return nil, toAIRPCError(err)
+		}
 		return &aiSubmitRequestUserInputResponseResp{
+			PublicCurrent:           public,
 			Kind:                    strings.TrimSpace(resp.Kind),
 			ConsumedWaitingPromptID: strings.TrimSpace(resp.ConsumedWaitingPromptID),
 			AppliedPermissionType:   strings.TrimSpace(resp.AppliedPermissionType),

@@ -12395,3 +12395,22 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
   .flower-tool-sequence-toggle { color: ButtonText; }
   .flower-tool-sequence-node[data-flower-sequence-end='false'] > .flower-tool-sequence-viewport > .flower-tool-sequence-body > .flower-tool-sequence-content::after { background: GrayText; opacity: 1; }
 }
+
+.flower-history-navigation,
+.flower-history-body-control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.8125rem;
+}
+.flower-history-text-preview { padding: 1rem; }
+.flower-history-text-preview pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  max-height: 24rem;
+  overflow: auto;
+}

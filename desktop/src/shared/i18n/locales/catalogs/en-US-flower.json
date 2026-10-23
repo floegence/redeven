@@ -752,7 +752,16 @@
     "goalReviewChecked": "Goal checked",
     "goalReviewFailed": "Goal check failed",
     "goalReviewUnavailable": "Goal check · Details unavailable",
-    "goalReviewCanceled": "Goal check canceled"
+    "goalReviewCanceled": "Goal check canceled",
+    "history": {
+      "label": "Conversation history",
+      "older": "Earlier messages",
+      "newer": "Newer messages",
+      "latest": "Back to latest",
+      "loading": "Loading…",
+      "expand": "Show full content",
+      "failed": "Could not load this content. Try again."
+    }
   },
   "threadList": {
     "title": "Conversations",

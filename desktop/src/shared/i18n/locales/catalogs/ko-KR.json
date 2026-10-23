@@ -898,7 +898,16 @@
       "goalReviewChecked": "목표 확인됨",
       "goalReviewFailed": "목표 확인 실패",
       "goalReviewUnavailable": "목표 확인 · 세부 정보 없음",
-      "goalReviewCanceled": "목표 확인 취소됨"
+      "goalReviewCanceled": "목표 확인 취소됨",
+      "history": {
+        "label": "대화 기록",
+        "older": "이전 메시지",
+        "newer": "다음 메시지",
+        "latest": "최신 메시지로 이동",
+        "loading": "불러오는 중…",
+        "expand": "전체 내용 보기",
+        "failed": "내용을 불러오지 못했습니다. 다시 시도하세요."
+      }
     },
     "threadList": {
       "title": "대화",

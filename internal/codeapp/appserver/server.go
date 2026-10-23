@@ -4964,7 +4964,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, status, apiResp{OK: false, Error: err.Error(), ErrorCode: code})
 			return
 		}
-		public, err := ai.MarshalFlowerCurrentView(current)
+		public, err := aiSvc.MarshalFlowerHistoryCurrent(r.Context(), meta, current.ThreadID.String())
 		if err != nil {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error(), ErrorCode: ai.ThreadGoalOutcomeUnknownErrorCode})
 			return
@@ -5192,6 +5192,11 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			"kind":      strings.TrimSpace(resp.Kind),
 			"model":     strings.TrimSpace(body.Model),
 		}, nil)
+		resp.PublicCurrent, err = aiSvc.MarshalFlowerHistoryCurrent(r.Context(), meta, resp.Current.ThreadID.String())
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error()})
+			return
+		}
 		writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: resp})
 		return
 
@@ -5215,6 +5220,47 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 
 		switch {
+
+		case (action == "history" || action == "history-item") && r.Method == http.MethodPost && len(parts) == 2:
+			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+			if !ok || !g.requireAIService(w, aiSvc) {
+				return
+			}
+			dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10))
+			dec.DisallowUnknownFields()
+			if action == "history-item" {
+				var input struct {
+					ItemID string `json:"item_id"`
+				}
+				if err := dec.Decode(&input); err != nil || input.ItemID == "" || dec.Decode(&struct{}{}) != io.EOF {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid history item"})
+					return
+				}
+				item, err := aiSvc.GetFlowerHistoryItem(r.Context(), meta, threadID, input.ItemID)
+				if err != nil {
+					writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
+					return
+				}
+				writeJSON(w, http.StatusOK, apiResp{OK: true, Data: item})
+				return
+			}
+			var input ai.FlowerHistoryRequest
+			if err := dec.Decode(&input); err != nil || dec.Decode(&struct{}{}) != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid history window"})
+				return
+			}
+			detail, err := aiSvc.GetFlowerThreadHistory(r.Context(), meta, threadID, input)
+			if err != nil {
+				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			view, err := g.buildAIFlowerThreadDetailEnvelope(r.Context(), meta, detail)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
+			return
 		case action == "" && r.Method == http.MethodGet:
 			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
 			if !ok {
@@ -5223,9 +5269,9 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !g.requireAIService(w, aiSvc) {
 				return
 			}
-			detail, err := aiSvc.GetFlowerThreadDetail(r.Context(), meta, threadID)
+			detail, err := aiSvc.GetFlowerThreadHistory(r.Context(), meta, threadID, ai.FlowerHistoryRequest{})
 			if err != nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
 				return
 			}
 			if detail == nil {
@@ -5455,9 +5501,9 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 			}
-			detail, err := aiSvc.GetFlowerThreadDetail(r.Context(), meta, threadID)
+			detail, err := aiSvc.GetFlowerThreadHistory(r.Context(), meta, threadID, ai.FlowerHistoryRequest{})
 			if err != nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
 				return
 			}
 			if detail == nil {
@@ -5584,7 +5630,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error(), ErrorCode: code})
 				return
 			}
-			public, err := ai.MarshalFlowerCurrentView(current)
+			public, err := aiSvc.MarshalFlowerHistoryCurrent(r.Context(), meta, current.ThreadID.String())
 			if err != nil {
 				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
 				return
@@ -5647,6 +5693,11 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				"kind":      strings.TrimSpace(resp.Kind),
 				"model":     strings.TrimSpace(body.Model),
 			}, nil)
+			resp.PublicCurrent, err = aiSvc.MarshalFlowerHistoryCurrent(r.Context(), meta, resp.Current.ThreadID.String())
+			if err != nil {
+				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error()})
+				return
+			}
 			writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: resp})
 			return
 
@@ -5694,6 +5745,11 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				"approved":        body.Approved,
 				"reject_all":      body.RejectAll,
 			}, nil)
+			resp.PublicCurrent, err = aiSvc.MarshalFlowerHistoryCurrent(r.Context(), meta, resp.Current.ThreadID.String())
+			if err != nil {
+				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error()})
+				return
+			}
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: resp})
 			return
 
@@ -5787,6 +5843,11 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				} else {
 					writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
 				}
+				return
+			}
+			resp.PublicCurrent, err = aiSvc.MarshalFlowerHistoryCurrent(r.Context(), meta, resp.Current.ThreadID.String())
+			if err != nil {
+				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error()})
 				return
 			}
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: resp})
@@ -5924,7 +5985,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				var view flruntime.ThreadView
 				view, err = aiSvc.TakeBackQueuedInput(r.Context(), meta, threadID, parts[2], body.ExpectedInputFingerprint)
 				if err == nil {
-					data, err = ai.MarshalFlowerCurrentView(view)
+					data, err = aiSvc.MarshalFlowerHistoryCurrent(r.Context(), meta, view.ThreadID.String())
 				}
 			}
 			if err != nil {
@@ -5970,7 +6031,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: message})
 				return
 			}
-			public, err := ai.MarshalFlowerCurrentView(view)
+			public, err := aiSvc.MarshalFlowerHistoryCurrent(r.Context(), meta, view.ThreadID.String())
 			if err != nil {
 				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
 				return
@@ -6002,7 +6063,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
 				return
 			}
-			public, err := ai.MarshalFlowerCurrentView(view)
+			public, err := aiSvc.MarshalFlowerHistoryCurrent(r.Context(), meta, view.ThreadID.String())
 			if err != nil {
 				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
 				return

@@ -898,7 +898,16 @@
       "goalReviewChecked": "已檢查目標",
       "goalReviewFailed": "目標檢查失敗",
       "goalReviewUnavailable": "目標檢查 · 暫無詳細結果",
-      "goalReviewCanceled": "目標檢查已取消"
+      "goalReviewCanceled": "目標檢查已取消",
+      "history": {
+        "label": "對話記錄",
+        "older": "較早的訊息",
+        "newer": "較新的訊息",
+        "latest": "返回最新訊息",
+        "loading": "載入中…",
+        "expand": "查看完整內容",
+        "failed": "無法載入內容，請重試。"
+      }
     },
     "threadList": {
       "title": "對話",

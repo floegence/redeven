@@ -898,7 +898,16 @@
       "goalReviewChecked": "目標を確認しました",
       "goalReviewFailed": "目標の確認に失敗しました",
       "goalReviewUnavailable": "目標の確認 · 詳細情報なし",
-      "goalReviewCanceled": "目標の確認をキャンセルしました"
+      "goalReviewCanceled": "目標の確認をキャンセルしました",
+      "history": {
+        "label": "会話履歴",
+        "older": "以前のメッセージ",
+        "newer": "新しいメッセージ",
+        "latest": "最新に戻る",
+        "loading": "読み込み中…",
+        "expand": "全文を表示",
+        "failed": "内容を読み込めませんでした。再試行してください。"
+      }
     },
     "threadList": {
       "title": "会話",

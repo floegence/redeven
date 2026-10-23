@@ -88,6 +88,8 @@ type flowerPublicInteraction struct {
 	ComputerAssistance *ComputerInputAssistance         `json:"computer_assistance,omitempty"`
 }
 type flowerPublicItem struct {
+	Body             *flruntime.ThreadItemBody      `json:"body,omitempty"`
+	ActivityBodies   []flruntime.ThreadActivityBody `json:"activity_bodies,omitempty"`
 	Goal             *flruntime.ThreadGoalChange    `json:"goal,omitempty"`
 	Steering         *flruntime.ThreadSteering      `json:"steering,omitempty"`
 	Sources          []provider.Source              `json:"sources,omitempty"`
@@ -173,7 +175,7 @@ func projectFlowerInteraction(value flruntime.ThreadInteraction, evidence *flrun
 	return out
 }
 func projectFlowerItem(value flruntime.ThreadItem, threadID string, evidence *flruntime.ThreadView) flowerPublicItem {
-	out := flowerPublicItem{Goal: value.Goal, Steering: value.Steering, Sources: value.Sources, ID: value.ID, TurnID: value.TurnID, RunID: value.RunID, CanonicalOrdinal: value.CanonicalOrdinal, Ordinal: value.Ordinal, Kind: value.Kind, Text: value.Text, Live: value.Live, CreatedAt: value.CreatedAt, Attachments: projectFlowerAttachments(value.Attachments, threadID, value.TurnID.String(), ""), References: publicRuntimeReferences(value.References), Context: value.Context}
+	out := flowerPublicItem{Body: value.Body, ActivityBodies: value.ActivityBodies, Goal: value.Goal, Steering: value.Steering, Sources: value.Sources, ID: value.ID, TurnID: value.TurnID, RunID: value.RunID, CanonicalOrdinal: value.CanonicalOrdinal, Ordinal: value.Ordinal, Kind: value.Kind, Text: value.Text, Live: value.Live, CreatedAt: value.CreatedAt, Attachments: projectFlowerAttachments(value.Attachments, threadID, value.TurnID.String(), ""), References: publicRuntimeReferences(value.References), Context: value.Context}
 	if value.Activity != nil {
 		activity := projectFlowerActivity(*value.Activity)
 		out.Activity = &activity
@@ -218,7 +220,11 @@ func projectFlowerFacts(facts flruntime.ThreadRuntimeFacts, threadID, turnID, ru
 	}
 	return out
 }
-func projectFlowerCurrent(current flruntime.ThreadView, sampledAt time.Time) (flowerPublicCurrent, error) {
+func projectFlowerCurrent(current flruntime.ThreadView, sampledAt time.Time, evidence ...*flruntime.ThreadView) (flowerPublicCurrent, error) {
+	source := &current
+	if len(evidence) > 0 && evidence[0] != nil {
+		source = evidence[0]
+	}
 	if err := validateFlowerCurrentIdentity(current); err != nil {
 		return flowerPublicCurrent{}, err
 	}
@@ -226,19 +232,20 @@ func projectFlowerCurrent(current flruntime.ThreadView, sampledAt time.Time) (fl
 	if current.Items != nil {
 		out.Items = make([]flowerPublicItem, len(current.Items))
 		for i, value := range current.Items {
-			out.Items[i] = projectFlowerItem(value, current.ThreadID.String(), &current)
+			out.Items[i] = projectFlowerItem(value, current.ThreadID.String(), source)
 		}
 	}
 	if current.Interactions != nil {
 		out.Interactions = make([]flowerPublicInteraction, len(current.Interactions))
 		for i, value := range current.Interactions {
-			out.Interactions[i] = projectFlowerInteraction(value, &current)
+			out.Interactions[i] = projectFlowerInteraction(value, source)
 		}
 	}
 	return out, nil
 }
 
 type flowerPublicItemChange struct {
+	Body   *flruntime.ThreadItemBody      `json:"body,omitempty"`
 	Kind   flruntime.ThreadItemChangeKind `json:"kind"`
 	ItemID string                         `json:"item_id"`
 	Item   *flowerPublicItem              `json:"item,omitempty"`
@@ -278,7 +285,7 @@ func flowerUpdateJSONAt(update flruntime.ThreadUpdate, sampledAt time.Time, evid
 	}
 	out := flowerPublicUpdate{ThreadID: update.ThreadID, TurnID: update.TurnID, RunID: update.RunID, BaseVersion: update.BaseVersion, ViewVersion: update.ViewVersion, Facts: projectFlowerFacts(update.Facts, update.ThreadID.String(), update.TurnID.String(), update.RunID.String(), sampledAt), ItemOrder: update.ItemOrder, Goal: update.Goal, ParentEvents: update.ParentEvents, Turns: update.Turns, ToolCallPreviews: update.ToolCallPreviews}
 	for _, change := range update.Items {
-		value := flowerPublicItemChange{Kind: change.Kind, ItemID: change.ItemID, Append: change.Append}
+		value := flowerPublicItemChange{Kind: change.Kind, ItemID: change.ItemID, Append: change.Append, Body: change.Body}
 		if change.Item != nil {
 			if change.Item.ID != change.ItemID {
 				return nil, errors.New("Flower update item identity differs")

@@ -5779,7 +5779,16 @@
       "goalReviewChecked": "Objetivo revisado",
       "goalReviewFailed": "Error al revisar el objetivo",
       "goalReviewUnavailable": "Revisión del objetivo · Sin detalles disponibles",
-      "goalReviewCanceled": "Revisión del objetivo cancelada"
+      "goalReviewCanceled": "Revisión del objetivo cancelada",
+      "history": {
+        "label": "Historial de conversación",
+        "older": "Mensajes anteriores",
+        "newer": "Mensajes más recientes",
+        "latest": "Volver al más reciente",
+        "loading": "Cargando…",
+        "expand": "Mostrar contenido completo",
+        "failed": "No se pudo cargar el contenido. Inténtalo de nuevo."
+      }
     },
     "threadList": {
       "title": "Conversaciones",

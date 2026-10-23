@@ -51,6 +51,7 @@ export const flowerSurfaceEnUS = {
     modelSupportUnavailable: 'Could not check attachment support',
   },
   chat: {
+    history: {"label": "Conversation history", "older": "Earlier messages", "newer": "Newer messages", "latest": "Back to latest", "loading": "Loading…", "expand": "Show full content", "failed": "Could not load this content. Try again."},
     inspectAndContinue: "Inspect and continue",
     inspectAndContinuePrompt: "The previous turn stopped with unconfirmed effects. First inspect current state and existing artifacts using read-only tools, then continue the remaining task from the evidence. Do not blindly repeat earlier actions.",
     media: markdownMediaEnUS,

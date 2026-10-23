@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -46,6 +47,7 @@ type SendUserTurnRequest struct {
 }
 
 type SendUserTurnResponse struct {
+	PublicCurrent         json.RawMessage      `json:"-"`
 	ClientRequestID       string               `json:"client_request_id"`
 	ThreadID              string               `json:"thread_id"`
 	RunID                 string               `json:"run_id"`

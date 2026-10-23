@@ -42,31 +42,23 @@ type aiThreadEnvelope struct {
 }
 
 type aiFlowerThreadDetailEnvelope struct {
-	ClientRequestID string               `json:"client_request_id,omitempty"`
-	Thread          aiThreadView         `json:"thread"`
-	Current         flruntime.ThreadView `json:"current"`
+	ComputerEvidence *flruntime.ThreadView   `json:"-"`
+	Window           *ai.FlowerHistoryWindow `json:"window,omitempty"`
+	ClientRequestID  string                  `json:"client_request_id,omitempty"`
+	Thread           aiThreadView            `json:"thread"`
+	Current          flruntime.ThreadView    `json:"current"`
 }
 
 func (e aiFlowerThreadDetailEnvelope) MarshalJSON() ([]byte, error) {
+	current, err := ai.MarshalFlowerCurrentView(e.Current, e.ComputerEvidence)
+	if err != nil {
+		return nil, err
+	}
 	type wire aiFlowerThreadDetailEnvelope
-	encoded, err := json.Marshal(wire(e))
-	if err != nil {
-		return nil, err
-	}
-	current, err := ai.MarshalFlowerCurrentView(e.Current)
-	if err != nil {
-		return nil, err
-	}
-	var currentValue any
-	if err := json.Unmarshal(current, &currentValue); err != nil {
-		return nil, err
-	}
-	var root map[string]any
-	if err := json.Unmarshal(encoded, &root); err != nil {
-		return nil, err
-	}
-	root["current"] = currentValue
-	return json.Marshal(root)
+	return json.Marshal(struct {
+		wire
+		Current json.RawMessage `json:"current"`
+	}{wire(e), current})
 }
 
 type aiMarkThreadReadRequest struct {
@@ -138,8 +130,10 @@ func (g *Server) buildAIFlowerThreadDetailEnvelope(
 		return nil, err
 	}
 	return &aiFlowerThreadDetailEnvelope{
-		Thread:  buildAIThreadView(detail.Thread, records[strings.TrimSpace(detail.Thread.ThreadID)]),
-		Current: detail.Current,
+		ComputerEvidence: detail.ComputerEvidence,
+		Window:           detail.Window,
+		Thread:           buildAIThreadView(detail.Thread, records[strings.TrimSpace(detail.Thread.ThreadID)]),
+		Current:          detail.Current,
 	}, nil
 }
 

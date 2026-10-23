@@ -898,7 +898,16 @@
       "goalReviewChecked": "已检查目标",
       "goalReviewFailed": "目标检查失败",
       "goalReviewUnavailable": "目标检查 · 暂无详细结果",
-      "goalReviewCanceled": "目标检查已取消"
+      "goalReviewCanceled": "目标检查已取消",
+      "history": {
+        "label": "对话历史",
+        "older": "更早的消息",
+        "newer": "更新的消息",
+        "latest": "返回最新消息",
+        "loading": "正在加载…",
+        "expand": "查看完整内容",
+        "failed": "无法加载内容，请重试。"
+      }
     },
     "threadList": {
       "title": "对话",

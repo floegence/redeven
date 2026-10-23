@@ -362,6 +362,7 @@ type SubmitFlowerApprovalRequest struct {
 }
 
 type SubmitFlowerApprovalResponse struct {
-	OK      bool                 `json:"ok"`
-	Current flruntime.ThreadView `json:"current"`
+	PublicCurrent json.RawMessage      `json:"-"`
+	OK            bool                 `json:"ok"`
+	Current       flruntime.ThreadView `json:"current"`
 }

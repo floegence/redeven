@@ -5,7 +5,7 @@ import { FlowerLiveSyncError } from './flowerLiveWire';
 import { retainEqualValue } from './presentationIdentity';
 import { projectFlowerRuntimeComponents, runtimeMessages, validateFlowerRuntimeTurns } from './runtimeCurrentView';
 
-type ItemRecord = { item: FlowerRuntimeCurrentItem; bytes: number };
+type ItemRecord = { item: FlowerRuntimeCurrentItem; bytes: number; preview?: FlowerRuntimeCurrentItem };
 type MutableMessage = { -readonly [K in keyof FlowerChatMessage]: FlowerChatMessage[K] };
 type MessageRecord = { value: FlowerChatMessage; set: SetStoreFunction<MutableMessage>; chunks: string[]; setRevision: (value: number) => number };
 const utf8 = new TextEncoder();
@@ -15,13 +15,14 @@ function version(value: number) { return Number.isSafeInteger(value) && value >=
 
 // ThreadCache owns these records. There is no second raw current snapshot or
 // lifecycle: components supply the shared projection, and items are indexed once.
-export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, initial: FlowerThreadSnapshot, previous?: { findMessage(id: string): MessageRecord | undefined }) {
+export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, initial: FlowerThreadSnapshot, previous?: { findMessage(id: string): MessageRecord | undefined; retainedItem(item: FlowerRuntimeCurrentItem): FlowerRuntimeCurrentItem | undefined }) {
   const threadID = current.thread_id;
   let acceptedVersion = current.view_version;
   const items = new Map<string, ItemRecord>();
   for (const item of current.items ?? []) {
     if (items.has(item.id)) invalid('duplicate runtime item');
-    items.set(item.id, { item, bytes: utf8.encode(item.text ?? '').length });
+    const retained = previous?.retainedItem(item);
+    items.set(item.id, { item: retained ?? item, bytes: utf8.encode((retained ?? item).text ?? '').length, ...(retained ? { preview: item } : {}) });
   }
   let order = [...items.keys()];
   let components: FlowerRuntimeCurrentView = { ...current, items: undefined };
@@ -43,13 +44,38 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
     messages.set(message.id, record);
     return record;
   };
-  let projectedMessages: readonly FlowerChatMessage[] = initial.messages.map(message => makeMessage(message).value);
+  const retainedMessages = new Map(runtimeMessages(initial, { ...current, tool_call_previews: [], items: [...items.values()].filter(value => value.preview).map(value => value.item) }).map(message => [message.id, message]));
+  let projectedMessages: readonly FlowerChatMessage[] = initial.messages.map(message => makeMessage(retainedMessages.get(message.id) ?? message).value);
   previous = undefined;
   const [thread, setThread] = createStore<{ -readonly [K in keyof FlowerThreadSnapshot]: FlowerThreadSnapshot[K] }>({ ...initial, messages: projectedMessages });
   projectedMessages = thread.messages;
 
   return {
     get version() { return acceptedVersion; },
+    item(id: string) { return items.get(id)?.item; },
+    retainedItem(item: FlowerRuntimeCurrentItem) {
+      const record = items.get(item.id);
+      return record?.preview && !record.item.live && retainEqualValue(record.preview, item) === record.preview ? record.item : undefined;
+    },
+    hydrate(expected: FlowerRuntimeCurrentItem, loaded: FlowerRuntimeCurrentItem) {
+      const before = items.get(expected.id);
+      // A response may finish after a newer live replacement or navigation.
+      if (!before || before.item !== expected) return false;
+      if (loaded.id !== expected.id || loaded.turn_id !== expected.turn_id || loaded.run_id !== expected.run_id
+        || loaded.kind !== expected.kind || loaded.ordinal !== expected.ordinal || loaded.canonical_ordinal !== expected.canonical_ordinal || Boolean(loaded.live) !== Boolean(expected.live) || loaded.body || loaded.activity_bodies?.length) invalid('expanded item identity differs');
+      if (expected.body && !(loaded.text ?? '').startsWith(expected.text ?? '')) return false;
+      if (expected.activity && (loaded.activity?.tool_id !== expected.activity.tool_id || loaded.activity?.status !== expected.activity.status || loaded.activity?.ended_at_unix_ms !== expected.activity.ended_at_unix_ms)) return false;
+      const projected = runtimeMessages(thread, { ...components, items: [loaded] }).find(message => message.id === loaded.id);
+      if (!projected) invalid('expanded item has no presentation');
+      batch(() => {
+        items.set(loaded.id, { item: loaded, bytes: utf8.encode(loaded.text ?? '').length, preview: expected });
+        const message = makeMessage(projected).value;
+        projectedMessages = projectedMessages.map(value => value.id === message.id ? message : value);
+        setThread('messages', projectedMessages);
+        projectedMessages = thread.messages;
+      });
+      return true;
+    },
     findMessage(id: string) { return messages.get(id); },
     initializeThread(): FlowerThreadSnapshot { return thread; },
     syncAdjuncts(source: FlowerThreadSnapshot) {
@@ -91,6 +117,10 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
             || typeof append.text !== 'string') invalid('runtime text append has invalid identity or UTF-8 offset');
           if (append.offset_bytes !== before.bytes) throw new FlowerLiveSyncError('Flower runtime append lost its UTF-8 baseline.');
           staged.set(id, { item: { ...before.item, text: (before.item.text ?? '') + append.text }, bytes: before.bytes + utf8.encode(append.text).length });
+        } else if (change.kind === 'body') {
+          if (!before || !change.body || change.item || change.append) invalid('invalid body locator update');
+          const preview = before.preview ?? before.item;
+          staged.set(id, { item: { ...preview, body: change.body }, bytes: utf8.encode(preview.text ?? '').length });
         } else if (change.kind === 'remove') {
           if (!before || change.item || change.append) invalid('runtime removal requires an existing item');
           staged.set(id, undefined); structure = true;
@@ -109,7 +139,7 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
         nextOrder = update.item_order ? [...update.item_order.value] : [...all].sort((a, b) => a[1].item.ordinal - b[1].item.ordinal).map(([id]) => id);
         if (new Set(nextOrder).size !== all.size || nextOrder.length !== all.size || nextOrder.some(id => !all.has(id))) invalid('runtime item order is incomplete');
       }
-      const next: FlowerRuntimeCurrentView = {
+      let next: FlowerRuntimeCurrentView = {
         ...components, ...update.facts, thread_id: update.thread_id, turn_id: update.turn_id, run_id: update.run_id, view_version: update.view_version,
         turn_kind: update.facts.turn_kind, last_outcome: update.facts.last_outcome, cancellation: update.facts.cancellation,
         run_progress: update.facts.run_progress, sampled_at_ms: update.facts.sampled_at_ms, error: update.facts.error,
@@ -122,6 +152,9 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
         ...(update.tool_call_previews ? { tool_call_previews: update.tool_call_previews.value ?? [] } : {}),
         ...(update.restored_inputs ? { restored_inputs: update.restored_inputs.value ?? [] } : {}),
       };
+      if (next.window && (structure || update.item_order)) {
+        next = { ...next, window: { ...next.window, first_item_id: nextOrder[0], last_item_id: nextOrder.at(-1) } };
+      }
       const affected = new Set(staged.keys());
       // Tool decoration depends on interactions and argument previews, never on
       // ordinary text growth. Revisit only tools at these explicit boundaries.
@@ -163,7 +196,7 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
         for (const message of projectedMessages) if (message.blocks?.[0]?.type === 'tool-call-preview') replacements.set(message.id, undefined);
         for (const message of previews) replacements.set(message.id, message);
       }
-      structure ||= (update.items ?? []).some(change => change.kind === 'replace') || Boolean(previews) || [...replacements].some(([id, message]) => Boolean(messages.has(id)) !== Boolean(message));
+      structure ||= (update.items ?? []).some(change => change.kind === 'replace' || change.kind === 'body') || Boolean(previews) || [...replacements].some(([id, message]) => Boolean(messages.has(id)) !== Boolean(message));
       let result!: FlowerThreadSnapshot;
       batch(() => {
         for (const [id, record] of staged) { if (record) items.set(id, record); else items.delete(id); }
@@ -185,7 +218,7 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
             ...(previews ?? projectedMessages.filter(message => message.blocks?.[0]?.type === 'tool-call-preview')).flatMap(message => messages.has(message.id) ? [messages.get(message.id)!.value] : [])];
         }
         components = next; order = nextOrder; acceptedVersion = update.view_version;
-        const incoming = { ...projected, messages: projectedMessages, turns };
+        const incoming = { ...projected, history_window: next.window, messages: projectedMessages, turns };
         for (const key of Object.keys(incoming) as (keyof FlowerThreadSnapshot)[]) {
           if (!Object.is(thread[key], incoming[key])) setThread({ [key]: incoming[key] });
         }

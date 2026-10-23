@@ -3,6 +3,7 @@
 - 2026-10-22: Add bounded stepped reveals for newly arriving Flower activity titles, preserving immediate content, stable row geometry and static historical reading. See [activity interaction](ui/flower-activity-interaction.md).
 
 - 2026-10-22: Unify cancellable terminal reads, explicit read deadlines, and published Floret repeat protection; retain concise incremental model output. See [terminal tool runtime](ai/terminal-tool-runtime.md).
+- 2026-10-22: Bound Flower root history transport with authorized reading windows, explicit body expansion, facts-only background updates and bounded command receipts; record complete paging and bandwidth qualification in [live delivery](ui/flower-live-timeline.md), [adapter boundary](ai/floret-redeven-adapter-and-projection.md) and [switch qualification](operations/flower-thread-switch-qualification.md).
 
 - 2026-10-22: Defer unopened Flower tool-sequence content while retaining inspected DOM; distinguish this rendering improvement from complete detail transport. See [tool sequences](ui/flower-tool-sequences.md) and [switch qualification](operations/flower-thread-switch-qualification.md).
 - 2026-10-22: Let short Flower tool groups and outward scrolling at sequence edges reach the transcript, preserve internal reading, and coordinate native scroll input with tail following. See [tool sequences](ui/flower-tool-sequences.md).

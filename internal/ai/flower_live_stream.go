@@ -76,6 +76,9 @@ func (s *Service) publishModelDirectoryChanged() {
 type FlowerLiveStreamRequest struct{}
 
 type FlowerLiveStreamEnvelope struct {
+	ReadingRevision     uint64                  `json:"reading_revision,omitempty"`
+	Window              *FlowerHistoryWindow    `json:"window,omitempty"`
+	FactsOnly           bool                    `json:"facts_only,omitempty"`
 	ObserverID          string                  `json:"observer_id,omitempty"`
 	SchemaVersion       int64                   `json:"schema_version"`
 	Kind                FlowerLiveStreamKind    `json:"kind"`
@@ -236,6 +239,7 @@ type FlowerLiveStreamFragment struct {
 }
 
 type flowerLiveEncodedBatch struct {
+	readingRevision     uint64
 	kind                FlowerLiveStreamKind
 	data                []byte
 	id                  string
@@ -264,30 +268,35 @@ type flowerLiveCurrentEncodingDiagnostics struct {
 }
 
 type flowerLiveSubscriber struct {
-	observerID       string
-	observerContext  context.Context
-	viewerMu         sync.Mutex
-	viewerRevision   uint64
-	viewerRequest    ComputerViewerRequest
-	viewerCancel     context.CancelFunc
-	viewerStop       func()
-	id               uint64
-	endpointID       string
-	userPublicID     string
-	queue            []*flowerLiveEncodedBatch
-	media            chan *flowerLiveEncodedBatch
-	queuedBytes      int
-	mediaBytes       int
-	initializing     bool
-	initial          []*flowerLiveEncodedBatch
-	covered          map[flowerLiveRoute]uint64
-	pressureLoggedAt time.Time
-	active           *flowerLiveEncodedBatch
-	activeIndex      int
-	activeAccounted  bool
-	wake             chan struct{}
-	closeErr         error
-	closed           bool
+	namespacePublicID string
+	historyMu         sync.Mutex
+	historyRevision   uint64
+	history           *flruntime.ThreadUpdateSubscription
+	historyCancel     context.CancelFunc
+	observerID        string
+	observerContext   context.Context
+	viewerMu          sync.Mutex
+	viewerRevision    uint64
+	viewerRequest     ComputerViewerRequest
+	viewerCancel      context.CancelFunc
+	viewerStop        func()
+	id                uint64
+	endpointID        string
+	userPublicID      string
+	queue             []*flowerLiveEncodedBatch
+	media             chan *flowerLiveEncodedBatch
+	queuedBytes       int
+	mediaBytes        int
+	initializing      bool
+	initial           []*flowerLiveEncodedBatch
+	covered           map[flowerLiveRoute]uint64
+	pressureLoggedAt  time.Time
+	active            *flowerLiveEncodedBatch
+	activeIndex       int
+	activeAccounted   bool
+	wake              chan struct{}
+	closeErr          error
+	closed            bool
 }
 
 // Only immutable public bytes and bounded routing metadata survive encoding.
@@ -364,7 +373,7 @@ func (s *Service) SubscribeFlowerLiveStream(ctx context.Context, meta *session.M
 	s.flowerLiveSubscriberSeq++
 	subscriber := &flowerLiveSubscriber{
 		observerID: rand.Text(), observerContext: ctx,
-		id: s.flowerLiveSubscriberSeq, endpointID: endpointID, userPublicID: userPublicID,
+		id: s.flowerLiveSubscriberSeq, endpointID: endpointID, userPublicID: userPublicID, namespacePublicID: meta.NamespacePublicID,
 		media: make(chan *flowerLiveEncodedBatch, 1), wake: make(chan struct{}, 1),
 		initializing: true,
 	}
@@ -569,13 +578,17 @@ func (s *Service) PublishFlowerViewerReadState(meta *session.Meta, threadID stri
 func newFlowerLiveEncodedBatch(envelope FlowerLiveStreamEnvelope) *flowerLiveEncodedBatch {
 	sampledAt := time.Now()
 	data, err := marshalFlowerLiveEnvelopeAt(envelope, sampledAt)
-	batch := &flowerLiveEncodedBatch{kind: envelope.Kind, data: data, id: rand.Text()}
+	batch := &flowerLiveEncodedBatch{kind: envelope.Kind, data: data, id: rand.Text(), readingRevision: envelope.ReadingRevision}
 	if err != nil {
 		batch.err = errors.Join(ErrFlowerLiveSync, err)
 		batch.encodingDiagnostics = &flowerLiveEncodingDiagnostics{
 			threadID: flowerLiveDiagnosticIdentity(identity.ThreadID(envelope.ThreadID)),
 			current:  flowerLiveCurrentEncodingContext(envelope.Current), subagentCurrent: flowerLiveCurrentEncodingContext(envelope.SubagentCurrent),
 		}
+		return batch
+	}
+	if envelope.FactsOnly {
+		batch.mailbox = "facts:" + envelope.ThreadID
 		return batch
 	}
 	switch envelope.Kind {
@@ -798,7 +811,7 @@ func enqueueFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveS
 }
 
 func flowerLiveRefreshBatch(batch *flowerLiveEncodedBatch) *flowerLiveEncodedBatch {
-	return &flowerLiveEncodedBatch{kind: FlowerLiveStreamThreadBatch, route: batch.route, version: batch.version, refresh: true}
+	return &flowerLiveEncodedBatch{kind: FlowerLiveStreamThreadBatch, route: batch.route, version: batch.version, refresh: true, readingRevision: batch.readingRevision}
 }
 
 // One canonical replacement covers every queued delta for this exact route.
@@ -847,6 +860,9 @@ func appendFlowerLiveQueuedBatchLocked(service *Service, subscriber *flowerLiveS
 // Re-encoding is bounded to one fragment, independent of total streamed text.
 // Larger growth remains in separate ordered chunks while queue capacity allows.
 func mergeFlowerLiveAppendBatches(before, after *flowerLiveEncodedBatch) *flowerLiveEncodedBatch {
+	if before.readingRevision != after.readingRevision {
+		return nil
+	}
 	a, b := before.append, after.append
 	if a == nil || b == nil || before.route != after.route || a.turnID != b.turnID || a.runID != b.runID || a.itemID != b.itemID ||
 		before.version != after.baseVersion || a.offset+len(a.text) != b.offset || a.factsKey != b.factsKey ||
@@ -868,19 +884,20 @@ func mergeFlowerLiveAppendBatches(before, after *flowerLiveEncodedBatch) *flower
 		[]flruntime.ThreadItemChange{{Kind: flruntime.ThreadItemAppended, ItemID: b.itemID, Append: &flruntime.ThreadTextAppend{OffsetBytes: merged.offset, Text: merged.text}}}}
 	raw, err := json.Marshal(update)
 	envelope := struct {
-		SchemaVersion  int64                `json:"schema_version"`
-		Kind           FlowerLiveStreamKind `json:"kind"`
-		ThreadID       string               `json:"thread_id,omitempty"`
-		Update         json.RawMessage      `json:"update,omitempty"`
-		SubagentUpdate json.RawMessage      `json:"subagent_update,omitempty"`
-	}{SchemaVersion: FlowerLiveSchemaVersion, Kind: after.kind, ThreadID: after.route.wireID}
+		ReadingRevision uint64               `json:"reading_revision,omitempty"`
+		SchemaVersion   int64                `json:"schema_version"`
+		Kind            FlowerLiveStreamKind `json:"kind"`
+		ThreadID        string               `json:"thread_id,omitempty"`
+		Update          json.RawMessage      `json:"update,omitempty"`
+		SubagentUpdate  json.RawMessage      `json:"subagent_update,omitempty"`
+	}{SchemaVersion: FlowerLiveSchemaVersion, Kind: after.kind, ThreadID: after.route.wireID, ReadingRevision: after.readingRevision}
 	if after.route.subagent {
 		envelope.SubagentUpdate = raw
 	} else {
 		envelope.Update = raw
 	}
 	data, encodeErr := json.Marshal(envelope)
-	return &flowerLiveEncodedBatch{kind: after.kind, route: after.route, baseVersion: before.baseVersion, version: after.version,
+	return &flowerLiveEncodedBatch{kind: after.kind, route: after.route, baseVersion: before.baseVersion, version: after.version, readingRevision: after.readingRevision,
 		data: data, id: rand.Text(), append: &merged, err: errors.Join(err, encodeErr)}
 }
 
@@ -926,6 +943,12 @@ func (s *FlowerLiveStreamSubscription) resolveFlowerLiveRefresh(ctx context.Cont
 	if s.service.threadRuntime == nil {
 		return ErrFlowerLiveSync
 	}
+	if marker.readingRevision != 0 {
+		// A fresh one-shot window could select different membership from the
+		// existing subscription. Reconnect to install one atomic reading
+		// baseline and its matching interest through the normal read path.
+		return ErrFlowerLiveSync
+	}
 	current, err := s.service.threadRuntime.View(ctx, identity.ThreadID(marker.route.threadID))
 	if err != nil {
 		return errors.Join(ErrFlowerLiveSync, err)
@@ -936,6 +959,11 @@ func (s *FlowerLiveStreamSubscription) resolveFlowerLiveRefresh(ctx context.Cont
 	} else {
 		envelope.Current = &current
 	}
+	evidence, err := s.service.flowerHistoryComputerEvidence(ctx, current.ThreadID, current.Interactions)
+	if err != nil {
+		return err
+	}
+	envelope.updateEvidence = evidence
 	batch := newFlowerLiveEncodedBatch(envelope)
 	s.service.mu.Lock()
 	defer s.service.mu.Unlock()
@@ -945,6 +973,10 @@ func (s *FlowerLiveStreamSubscription) resolveFlowerLiveRefresh(ctx context.Cont
 	}
 	if current.ThreadID.String() != marker.route.threadID || current.ViewVersion < marker.version || !validateFlowerLiveBatchLocked(s.service, subscriber, batch) {
 		return ErrFlowerLiveSync
+	}
+	// A page switch can retire this marker while its canonical read runs.
+	if len(subscriber.queue) == 0 || subscriber.queue[0].route != marker.route || subscriber.queue[0].readingRevision != marker.readingRevision || (marker.readingRevision != 0 && subscriber.historyRevision != marker.readingRevision) {
+		return nil
 	}
 	latest := subscriber.queue[0]
 	if latest.version <= current.ViewVersion {
@@ -985,6 +1017,9 @@ func closeFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSub
 	queuedBytes := subscriber.queuedBytes + subscriber.mediaBytes
 	globalBytes := service.flowerLiveQueuedBytes
 	subscriber.closed = true
+	if subscriber.historyCancel != nil {
+		subscriber.historyCancel()
+	}
 	if subscriber.viewerCancel != nil {
 		subscriber.viewerCancel()
 	}

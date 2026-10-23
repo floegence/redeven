@@ -9,7 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Published Floret v7.69.1 owns canonical View and Summary. Redeven consumes a
+Published Floret v7.79.0 owns canonical windows, bodies, View and Summary. Redeven consumes a
 point summary and coordinates ephemeral read demand through one loader. The
 [sidebar contract](../ui/flower-thread-sidebar.md) and
 [Desktop bridge](../desktop/desktop-runtime-bridge.md) own the behavior.
@@ -30,12 +30,9 @@ Keep artifacts locally; never commit user databases or credentials.
 
 Measurements use synthetic conversations and copied released-writer fixtures. Backend point-read timings and the loopback transport fixture are separate experiments; their durations must not be added. These explicit qualification suites stay outside ordinary CI and hooks.
 
-The detail endpoint still calls the complete Floret `ThreadService.View`.
-Point-summary reads avoid unrelated conversations; they do not bound the selected
-conversation's body, response size, decoding, timeline projection or mounted row
-shells. Floret's window subscription is not yet the Flower detail transport.
-Lazy content inside collapsed tool sequences reduces first presentation work
-without claiming end-to-end pagination or a constant-time cold load.
+Root detail now uses Floret's window subscription; the initial interval and explicit body expansion bound network demand. GET detail, PATCH detail, command receipts and root live observation use the same public projection. The service's cold actor initialization can still load complete canonical state. Child detail retains its existing full-view transport. Explicitly expanding a single very large item transfers that requested item in full.
+
+The item-window budget excludes product metadata and pending controls. Cold backend timings below are isolated read timings, not remote end-to-end rendering measurements. Lazy collapsed tool content and bounded transport address separate costs.
 
 # Evidence
 
@@ -69,3 +66,13 @@ Median longest task per warm selection changed from 277 to 142 ms. These sequent
 baseline/candidate samples include selection scheduling and rendering, exclude
 backend/network latency, and are diagnostic rather than a smooth-frame release
 gate. Canonical history and row shells remain complete.
+
+## Bounded transport qualification
+
+The deterministic fixture runs 180 calls with large UTF-8 Activity output and a large final answer. Its initial public response decreases from 2,015,243 to 136,355 bytes (93.2%). All 182 items remain reachable, and explicit expansion reconstructs exact Unicode tool and assistant bodies. The test runtime rejects full View calls during ordinary page and body reads. Ownership, cancellation, superseded interests, bounded pressure recovery, append revision preservation and background facts have focused regressions.
+
+An isolated consistent copy of a long local conversation was opened and inspected read-only with the published runtime; no real task was continued. The public full detail was 11,058,337 bytes and the first page 183,597 bytes, a 98.34% reduction. Twenty pages covered all 2,945 items exactly once. First read was 5.159 seconds including cold runtime initialization; a warm bounded read was 4.939 milliseconds. Only aggregate measurements are retained here; user content and databases are never committed.
+
+Browser regression coverage includes initial bounded loading, same-version page movement, explicit text expansion, tool disclosure retry and retained expansion, background status without detail fetch, and navigation cancellation with stale body completion. Existing disclosure/scroll failures were reproduced against the committed baseline separately; they are not evidence of a bounded transport regression.
+
+Run focused qualification with GOWORK=off Go tests matching TestFlowerHistory, shared ThreadCache/runtime record unit tests, and FlowerSurface.history.browser.test.tsx plus streaming and tool-sequence browser suites. Typecheck both hosts and validate all shipped locale catalogs.

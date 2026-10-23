@@ -129,6 +129,7 @@ type SubmitRequestUserInputResponseRequest struct {
 }
 
 type SubmitRequestUserInputResponseResponse struct {
+	PublicCurrent           json.RawMessage      `json:"-"`
 	Kind                    string               `json:"kind"`
 	ConsumedWaitingPromptID string               `json:"consumed_waiting_prompt_id,omitempty"`
 	AppliedPermissionType   string               `json:"applied_permission_type,omitempty"`
@@ -203,8 +204,10 @@ type ListThreadsResponse struct {
 // The two fields have distinct owners and are replaced atomically by the detail
 // endpoint; summary updates never write Current.
 type FlowerThreadDetail struct {
-	Thread  ThreadView           `json:"thread"`
-	Current flruntime.ThreadView `json:"current"`
+	ComputerEvidence *flruntime.ThreadView `json:"-"`
+	Window           *FlowerHistoryWindow  `json:"window,omitempty"`
+	Thread           ThreadView            `json:"thread"`
+	Current          flruntime.ThreadView  `json:"current"`
 }
 
 type FlowerSubagentSummary struct {

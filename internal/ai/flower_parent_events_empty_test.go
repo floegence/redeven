@@ -73,6 +73,9 @@ func TestFlowerHiEmptyParentEventsThroughLiveAndDetail(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer subscription.Close()
+	if _, err := svc.GetFlowerThreadHistory(ctx, meta, thread.ThreadID, FlowerHistoryRequest{ObserverID: subscription.subscriber.observerID, ReadingRevision: 1}); err != nil {
+		t.Fatal(err)
+	}
 	if ready := nextFlowerLiveStreamFrame(t, subscription); ready.Kind != FlowerLiveStreamReady {
 		t.Fatalf("ready kind=%q", ready.Kind)
 	}
@@ -91,7 +94,7 @@ func TestFlowerHiEmptyParentEventsThroughLiveAndDetail(t *testing.T) {
 		if err := json.Unmarshal(frame.Data, &envelope); err != nil {
 			t.Fatal(err)
 		}
-		if envelope.ThreadID != thread.ThreadID {
+		if envelope.ThreadID != thread.ThreadID || envelope.FactsOnly {
 			continue
 		}
 		if envelope.Current != nil {
