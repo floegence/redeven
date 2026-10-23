@@ -251,11 +251,6 @@ func TestPatchToolSchemaHasOnePatchInput(t *testing.T) {
 			t.Fatalf("accepted unsupported input: %+v", args)
 		}
 	}
-	for _, want := range []string{"@@ context", "*** End of File", "JSON example"} {
-		if !strings.Contains(string(definition.InputSchema), want) {
-			t.Fatalf("missing guidance %q", want)
-		}
-	}
 }
 
 func TestPatchRenameDeleteFailureRemainsUncertain(t *testing.T) {

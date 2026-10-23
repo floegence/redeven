@@ -43,9 +43,8 @@ convention. Exact matching precedes whitespace and punctuation normalization.
 Explicit Add and Move preserve the existing replacement behavior for regular
 files. Multiple operations on one canonical path must be combined into one file
 operation with ordered chunks.
-The provider-visible definition states these requirements and demonstrates two
-ordered update chunks under one file header. Small exact edits prefer file.edit
-after reading the current text.
+The provider-visible definition contains the patch syntax and ordering rules;
+JSON field constraints remain in the schema.
 
 Rejected patch diagnostics distinguish out-of-order chunks, overlapping context,
 context before an anchor, incorrect EOF context, repeated earlier occurrences,

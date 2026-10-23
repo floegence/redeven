@@ -157,29 +157,10 @@ func assertPatchProviderContract(t *testing.T, request map[string]any) {
 			}
 		}
 		description := properties["patch"].(map[string]any)["description"].(string)
-		for _, want := range []string{"Read current text", "One file header per canonical path", "non-overlapping chunks in original file order"} {
+		for _, want := range []string{"One file header per canonical path", "non-overlapping chunks in original file order"} {
 			if !strings.Contains(description, want) {
 				t.Errorf("provider lost patch guidance %q", want)
 			}
-		}
-		_, example, ok := strings.Cut(description, "JSON example: ")
-		if !ok {
-			t.Error("missing patch example")
-			return
-		}
-		var args struct{ Patch string }
-		if err := json.Unmarshal([]byte(strings.TrimSuffix(example, ".")), &args); err != nil {
-			t.Errorf("invalid JSON example: %v", err)
-			return
-		}
-		parsed, err := parsePatchText(args.Patch)
-		if err != nil || len(parsed.files) != 1 || len(parsed.files[0].hunks) != 2 {
-			t.Errorf("example must teach two chunks under one header: %v", err)
-			return
-		}
-		got, err := applyUnifiedDiffHunksToBytes([]byte("a\nb\nc\n"), parsed.files[0].hunks)
-		if err != nil || string(got) != "A\nb\nC\n" {
-			t.Errorf("example does not apply as documented: %q, %v", got, err)
 		}
 		return
 	}
