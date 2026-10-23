@@ -18925,7 +18925,7 @@
       "frontmatter": {
         "description": "Run current-source local development services together and bound generated packages without removing live bundles.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-23",
         "tags": [
           "desktop",
           "development",
@@ -18936,15 +18936,15 @@
         "title": "Desktop development sessions and bundles",
         "type": "Development Contract"
       },
-      "body_length": 1888,
+      "body_length": 2407,
       "summary": "- Authority: the development launcher owns its selected Desktop session, local Runtime, saved local host Gateways, and immutable generated packages.\n- Outcome: development services run current checkout code and stop together; repeated launches remove obsolete packages after publishing the next complete bundle.\n- Invariants: preserve service identity and data; keep recent, selected, and live bundles; never stop unrelated services or remove user data.\n- Failure boundary: service preparation failures prevent Desktop launch and trigger cleanup; incomplete process inventory prevents bundle deletion.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Development service lifecycle\n`scripts/dev_desktop.sh` builds Desktop and its Runtime bundle from the current checkout, including uncommitted source.\n\nNormal Electron exit, startup failure after service preparation begins, Ctrl+C, and SIGTERM stop the development Runtime and local Gateways.\n\nDevelopment coordination belongs to the launcher, not to product shutdown.\n\n## Bundle retention\n`scripts/dev_desktop.sh` publishes each complete bundle below `\u003cdevelopment-state-root\u003e/desktop/bundles/\u003cmanifest-sha256\u003e` and then runs retention before launching Electron. The selected bundle is always retained, including reuse of an older build.\n\nRetention is a count bound on inactive verified packages, not a byte quota; active processes and unverified entries can require additional space.",
-          "char_count": 787
+          "body": "## Development service lifecycle\n`scripts/dev_desktop.sh` builds Desktop and its Runtime bundle from the current checkout, including uncommitted source.\n\nDesktop and source-built Runtime bundles capture HEAD and the actual tracked\nand non-ignored untracked inputs before compilation, including intentional\nlocal edits. Verification after asset and Runtime builds and before service\nstartup rejects concurrent source edits or checkout advances. The three\nregenerated OKF bundle files are outputs, even though they are committed;\nthey are excluded by exact path alongside ignored generated assets. OKF\nMarkdown, its builder, and the Go embed source remain protected inputs.\n\nNormal Electron exit, startup failure after service preparation begins, Ctrl+C, and SIGTERM stop the development Runtime and local Gateways.\n\nDevelopment coordination belongs to the launcher, not to product shutdown.\n\n## Bundle retention\n`scripts/dev_desktop.sh` publishes each complete bundle below `\u003cdevelopment-state-root\u003e/desktop/bundles/\u003cmanifest-sha256\u003e` and then runs retention before launching Electron. The selected bundle is always retained, including reuse of an older build.\n\nRetention is a count bound on inactive verified packages, not a byte quota; active processes and unverified entries can require additional space.",
+          "char_count": 1306
         },
         {
           "id": "boundaries",
@@ -33581,5 +33581,5 @@
       ]
     }
   ],
-  "source_sha256": "494e4e316d35a63287825e43d00882507f21956691e5ffd69e41a4aeadc0652a"
+  "source_sha256": "b11d4b86b979c8a291b818aceb87b2980285897b8250d7d762342ad4ee771d08"
 }

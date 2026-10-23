@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-10-23: Distinguish the three generated OKF bundle outputs from source-build inputs, allowing stable dirty-source builds while continuing to reject concurrent source edits and checkout advances. See [development bundles](desktop/desktop-development-bundles.md).
+
 - 2026-10-23: Restore native scrolling over expanded thinking and align transcript follow intent with nested read-only detail boundaries, including short content, both edges and streaming updates. See [tool sequence reading](ui/flower-tool-sequences.md) and [activity interaction](ui/flower-activity-interaction.md).
 
 - 2026-10-23: Keep Flower sidebar resizing local to grid geometry, coalesce pointer samples, and persist only settled widths; qualify cancellation, keyboard and responsive layouts plus bounded Electron style recalculation. See [conversation sidebar](ui/flower-thread-sidebar.md).
