@@ -9442,15 +9442,15 @@
         "title": "Flower storage ownership and migrations",
         "type": "Storage Contract"
       },
-      "body_length": 2690,
+      "body_length": 3292,
       "summary": "- Authority: Floret owns canonical Agent data and its physical and logical formats; Redeven owns product facts, read state and uploaded resources.\n- Outcome: supported existing data upgrades automatically and remains usable for new conversations.\n- Invariants: stable database kinds, contiguous transactional migrations, immutable historical decoders, public Floret APIs and one service generation.\n- Failure boundary: unknown formats, future versions, drift or failed validation block Flower without resetting data or disabling the core Runtime.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Storage owners\nRedeven consumes published Floret v7.79.0 with `GOWORK=off`.\n\nOrdinary Floret writes stage, validate and persist affected canonical records only; startup, migrations and explicit integrity checks still validate the complete repository.\n\nA read-state failure cannot become a core Runtime constructor failure or a synthetic read record.\n\n## Readonly checks and owner transactions\n`sqliteutil` owns WAL-aware readonly preflight, integrity checks and complete SQLite snapshots for product and read-state owners. Inspection never creates missing data or runs a migration.\n\nRequired upgrade snapshots precede Floret space maintenance and all migrations, as specified by the [backup and recovery contract](flower-backup-and-recovery.md).\n\n## Frozen historical queue conversion\nThe migration-only `pendinginputlegacy` package owns the complete interpretation of historical queue bytes: session identity, options, context shapes, default values, resource metadata and normalization limits.\n\nThe v4-to-v5 product transaction imports canonical pending inputs through Floret's public idempotent import API, records necessary product authority and removes retired source tables before commit. The upgrade operation contains only target build, original snapshot identity and completion; owner versions and canonical records remain the progress authority.\n\n## Resource and authorization retention\nProduct upload references retain resources for every canonical thread that contains them, including ordinary forks, nested forks and restored inputs.\n\nBounded keyset maintenance and compaction stop and drain with their owning generation.",
-          "char_count": 1637
+          "body": "## Storage owners\nRedeven consumes the exact published Floret version in go.mod with `GOWORK=off`.\n\nFloret owns bounded startup recognition and background per-thread migration. Each validated dependency closure publishes atomically; retained sources retire only after complete verification. The oldest v2-v5 snapshots reserve historical identities through a resumable scan before new-thread admission. Segmented stores admit new threads immediately. Redeven uses public status, thread preparation and per-thread media contracts and never decodes upstream records.\n\nA read-state failure cannot become a core Runtime constructor failure or a synthetic read record.\n\n## Readonly checks and owner transactions\n`sqliteutil` owns WAL-aware readonly preflight, integrity checks and complete SQLite snapshots for product and read-state owners. Inspection never creates missing data or runs a migration.\n\nRequired upgrade snapshots precede Floret space maintenance and all migrations, as specified by the [backup and recovery contract](flower-backup-and-recovery.md).\n\n## Frozen historical queue conversion\nThe migration-only `pendinginputlegacy` package owns the complete interpretation of historical queue bytes: session identity, options, context shapes, default values, resource metadata and normalization limits.\n\nThe v4-to-v5 product transaction imports canonical pending inputs through Floret's public idempotent import API, records necessary product authority and removes retired source tables before commit. The upgrade operation contains only target build, original snapshot identity and completion; owner versions and canonical records remain the progress authority.\n\n## Resource and authorization retention\nProduct upload references retain resources for every canonical thread that contains them, including ordinary forks, nested forks and restored inputs.\n\nAfter activation, product recovery pages settings, retains each thread's complete descriptors and promotes eligible admitted input. Failures retain the cleanup gate while independent threads recover. Tool-media collection keeps its complete global inventory, write gate and idle constraint.\n\nBounded keyset maintenance and compaction stop and drain with their owning generation.",
+          "char_count": 2239
         },
         {
           "id": "boundaries",
@@ -11820,15 +11820,15 @@
         "title": "AI readiness and service generation lifecycle",
         "type": "Architecture Contract"
       },
-      "body_length": 2607,
+      "body_length": 3417,
       "summary": "- Authority: Floret owns durable Agent and Store facts; Redeven owns process-local AI availability and presentation.\n- Outcome: non-AI product surfaces remain usable while AI startup inspects, migrates, verifies, recovers, or blocks.\n- Invariants: one controller owns construction, retry, generation publication, request leases, drain, and close; each AI request stays on one generation.\n- Failure boundary: unavailable or blocked startup returns a sanitized typed envelope, publishes no partial service, repairs no Store data, and never becomes durable Agent state.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Process-local readiness\nThe Code App composition layer owns the only AI readiness controller.\n\nThe startup order is unfinished replacement recovery, owner open and migration, canonical validation and persistent index reuse or first build, product preparation, explicit activation, then publication.\n\nRetry is explicit, asynchronous, and admits at most one startup owner.\n\n## Generation leases\nEvery ready service is published as one monotonically identified generation. The controller waits for every idempotent release, closes the old service once, and only then constructs and publishes a replacement.\n\nLong-lived model-source calls receive the generation context so replacement can cancel their work before waiting for release.\n\n## Route availability\nAI lifecycle routes return HTTP 503 with machine code `AI_SERVICE_UNAVAILABLE` and the current sanitized snapshot when no generation can be leased. Readiness, retry, stop, and administrator-only snapshot and restore routes never acquire a service.\n\nIncomplete provider leases fail closed, release any supplied resource, and cannot be presented as `ready`.\n\n## Maintenance presentation\nSee [Flower startup and recovery presentation](flower-startup-presentation.md) for Env App and Desktop admission, phase progress, stop/retry, focus and draft continuity.",
-          "char_count": 1311
+          "body": "## Process-local readiness\nThe Code App composition layer owns the only AI readiness controller.\n\nStartup performs unfinished replacement recovery, bounded Floret owner open, product database migration, explicit activation, then generation publication. Historical thread preparation continues in Floret's worker. Product recovery begins only after activation, pages settings in batches of 200, retains each thread's complete media inventory and resumes eligible admitted queues. One thread failure does not starve later pages; ownership review runs afterward. Incomplete recovery gates destructive maintenance and retries on the next maintenance pass. Each waiter retains the result of its own recovery attempt; a concurrent retry cannot turn a failed attempt into successful readiness.\n\nBackground phase callbacks cannot return a published generation to startup or unmount Flower. Background orphan discovery updates the controller's degraded state and retry path; known issues clear only after successful reconciliation or explicit repair. Shutdown cancels and joins generation workers before closing storage.\n\nRetry is explicit, asynchronous, and admits at most one startup owner.\n\n## Generation leases\nEvery ready service is published as one monotonically identified generation. The controller waits for every idempotent release, closes the old service once, and only then constructs and publishes a replacement.\n\nLong-lived model-source calls receive the generation context so replacement can cancel their work before waiting for release.\n\n## Route availability\nAI lifecycle routes return HTTP 503 with machine code `AI_SERVICE_UNAVAILABLE` and the current sanitized snapshot when no generation can be leased. Readiness, retry, stop, and administrator-only snapshot and restore routes never acquire a service.\n\nIncomplete provider leases fail closed, release any supplied resource, and cannot be presented as `ready`.\n\n## Maintenance presentation\nSee [Flower startup and recovery presentation](flower-startup-presentation.md) for Env App and Desktop admission, phase progress, stop/retry, focus and draft continuity.",
+          "char_count": 2121
         },
         {
           "id": "boundaries",
@@ -13020,15 +13020,15 @@
         "title": "Flower startup and recovery presentation",
         "type": "Interaction Contract"
       },
-      "body_length": 1408,
+      "body_length": 1762,
       "summary": "Env App and Desktop render canonical readiness facts and explicit safe recovery actions.\nThe single readiness owner controls Flower admission while navigation and shell-owned\ndrafts remain available. No surface starts another availability controller. Stop and\nretry follow typed safety facts; a close failure requires application restart, and\nunknown or contradictory facts expose a non-retryable contract failure.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Env App shares one readiness controller across Activity, Workbench, and Settings.\n\nUnconfirmed, failed or revoked permissions cannot authorize new mutations; renewed authority reopens the same controls.\n\nThe boundary shows completed/total counts only for a known total and preserves shell-owned drafts.",
-          "char_count": 302
+          "body": "Env App shares one readiness controller across Activity, Workbench, and Settings.\n\nAn operational generation stays mounted during historical thread preparation. A selected thread uses its ordinary loading and retry surface, with New chat and conversation navigation available. The oldest snapshot stores may wait for their identity scan before admitting new threads. A thread-local failure does not return the whole product to startup.\n\nUnconfirmed, failed or revoked permissions cannot authorize new mutations; renewed authority reopens the same controls.\n\nThe boundary shows completed/total counts only for a known total and preserves shell-owned drafts.",
+          "char_count": 656
         },
         {
           "id": "boundaries",
@@ -28839,15 +28839,15 @@
         "title": "Flower failure recovery",
         "type": "UI Contract"
       },
-      "body_length": 1584,
+      "body_length": 1894,
       "summary": "Floret owns canonical execution outcomes and retry checkpoints. Flower keeps\naccepted messages readable and provides one turn-level failure and recovery\nsurface. Navigation, settings exit, drafts and queue editing remain available.\nTransport uncertainty never proves backend success or authorizes replay.\nReadiness timeouts use the shared bounded request helpers and expose a status\nrefresh without replaying Prepare or Stop. Deterministic migration failures\nremain diagnostic/admin recovery states; supported compaction history is\nautomatically migrated by published Floret v7.74.0 through schema 29. See\n[historical compatibility](../ai/flower-upgrade-compatibility.md).",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Automatic stream recovery displays only canonical run_progress attempts and deadlines.\n\nFull child reports bypass the ordinary tool preview limit while retaining the provider request budget; canonical retry therefore reuses the complete confirmed reports without dispatching tools.",
-          "char_count": 281
+          "body": "Automatic stream recovery displays only canonical run_progress attempts and deadlines.\n\nHistorical-thread loading and failure keep New chat and conversation navigation reachable; embedded conversations omit global navigation. Leaving a pending read invalidates its late completion through the existing detail owner. Recovery preserves the shell-owned draft and does not replay work automatically.\n\nFull child reports bypass the ordinary tool preview limit while retaining the provider request budget; canonical retry therefore reuses the complete confirmed reports without dispatching tools.",
+          "char_count": 591
         },
         {
           "id": "boundaries",
@@ -33482,5 +33482,5 @@
       ]
     }
   ],
-  "source_sha256": "81ed3d764eae522304fff428935c927b789f072a1e942955e2b897ecf7707a63"
+  "source_sha256": "ea79a6ae86492e949d04943922db61010b303369710776b650936e711276a6be"
 }

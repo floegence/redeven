@@ -196,24 +196,22 @@ type Service struct {
 	mcpManager         *mcpManager
 	terminalProcesses  *terminalProcessManager
 
-	flowerReadStateCleaner   FlowerReadStateCleaner
-	maintenanceStopCh        chan struct{}
-	maintenanceDoneCh        chan struct{}
-	startupPreparationMu     sync.Mutex
-	startupPreparationDone   chan struct{}
-	startupPreparationErr    error
-	startupPreparationRun    bool
-	startupPreparationReady  bool
-	uploadRecoveryMu         sync.Mutex
-	uploadRecoveryRunning    bool
-	uploadRecoveryReady      bool
-	uploadRecoveryDone       chan struct{}
-	uploadRecoveryErr        error
-	compactionScheduled      bool
-	uploadAttemptPruneCursor threadstore.UploadAttemptPruneCursor
-	executionAuthorityCursor threadstore.ExecutionAuthorityCursor
-	lifecycleCtx             context.Context
-	lifecycleCancel          context.CancelFunc
+	flowerReadStateCleaner    FlowerReadStateCleaner
+	maintenanceStopCh         chan struct{}
+	maintenanceDoneCh         chan struct{}
+	startupPreparationMu      sync.Mutex
+	startupPreparationAttempt *serviceRecoveryAttempt
+	startupPreparationRun     bool
+	startupPreparationReady   bool
+	uploadRecoveryMu          sync.Mutex
+	uploadRecoveryRunning     bool
+	uploadRecoveryReady       bool
+	uploadRecoveryAttempt     *serviceRecoveryAttempt
+	compactionScheduled       bool
+	uploadAttemptPruneCursor  threadstore.UploadAttemptPruneCursor
+	executionAuthorityCursor  threadstore.ExecutionAuthorityCursor
+	lifecycleCtx              context.Context
+	lifecycleCancel           context.CancelFunc
 }
 
 // ConnectComputerBrowser exposes the explicit user-authorized browser bridge

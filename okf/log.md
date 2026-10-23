@@ -54,3 +54,6 @@ A compact digest of updates from the last 30 days. Current contracts and evidenc
 - Concepts: [turn-process projection](ui/flower-turn-process-disclosure.md), [Flower consecutive tool sequences](ui/flower-tool-sequences.md)
 - Require writeable answers for Flower ask_user fixed choices
 - Concepts: [Flower inline media](ui/flower-inline-media.md), [Floret Redeven adapter and projection](ai/floret-redeven-adapter-and-projection.md), [Floret storage ownership](ai/flower-storage-ownership-and-migrations.md), [provider API review](ai/provider-api-catalog-review.md)
+
+- Adopt published Floret v7.80.0 for bounded startup and background per-thread preparation; keep product recovery after activation, isolate failed histories, and preserve results for concurrent recovery waiters.
+- Concepts: [storage ownership](ai/flower-storage-ownership-and-migrations.md), [readiness lifecycle](architecture/ai-readiness-lifecycle.md), [startup presentation](architecture/flower-startup-presentation.md), [failure recovery](ui/flower-failure-recovery.md)

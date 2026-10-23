@@ -12,6 +12,13 @@ import (
 	"github.com/floegence/redeven/internal/threadreadstate"
 )
 
+// serviceRecoveryAttempt publishes one immutable result when done closes.
+// Waiters retain their attempt even if a later caller starts another retry.
+type serviceRecoveryAttempt struct {
+	done chan struct{}
+	err  error
+}
+
 // ThreadReadState belongs to this service generation. Callers must retain their
 // generation lease until all reads and writes through this handle complete.
 func (s *Service) ThreadReadState() *threadreadstate.Store {
@@ -160,16 +167,15 @@ func (s *Service) startUploadRecovery() {
 		return
 	}
 	s.uploadRecoveryRunning = true
-	s.uploadRecoveryErr = nil
-	done := make(chan struct{})
-	s.uploadRecoveryDone = done
+	attempt := &serviceRecoveryAttempt{done: make(chan struct{})}
+	s.uploadRecoveryAttempt = attempt
 	s.uploadRecoveryMu.Unlock()
 	finish := func(err error) {
 		s.uploadRecoveryMu.Lock()
 		s.uploadRecoveryRunning = false
 		s.uploadRecoveryReady = err == nil
-		s.uploadRecoveryErr = err
-		close(done)
+		attempt.err = err
+		close(attempt.done)
 		s.uploadRecoveryMu.Unlock()
 	}
 	if !s.startServiceWorker(func() {
@@ -218,16 +224,15 @@ func (s *Service) startStartupPreparation() {
 		return
 	}
 	s.startupPreparationRun = true
-	s.startupPreparationErr = nil
-	done := make(chan struct{})
-	s.startupPreparationDone = done
+	attempt := &serviceRecoveryAttempt{done: make(chan struct{})}
+	s.startupPreparationAttempt = attempt
 	s.startupPreparationMu.Unlock()
 	finish := func(err error) {
 		s.startupPreparationMu.Lock()
 		s.startupPreparationRun = false
-		s.startupPreparationErr = err
+		attempt.err = err
 		s.startupPreparationReady = err == nil
-		close(done)
+		close(attempt.done)
 		s.startupPreparationMu.Unlock()
 	}
 	if !s.startServiceWorker(func() {
@@ -265,20 +270,17 @@ func (s *Service) waitForStartupPreparation(ctx context.Context) error {
 		s.startupPreparationMu.Unlock()
 		return nil
 	}
-	done := s.startupPreparationDone
-	err := s.startupPreparationErr
+	attempt := s.startupPreparationAttempt
 	s.startupPreparationMu.Unlock()
-	if done == nil {
-		return err
+	if attempt == nil {
+		return errors.New("service recovery has not started")
 	}
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-done:
+	case <-attempt.done:
 	}
-	s.startupPreparationMu.Lock()
-	defer s.startupPreparationMu.Unlock()
-	return s.startupPreparationErr
+	return attempt.err
 }
 
 func (s *Service) waitForUploadRecovery(ctx context.Context) error {
@@ -291,18 +293,15 @@ func (s *Service) waitForUploadRecovery(ctx context.Context) error {
 		s.uploadRecoveryMu.Unlock()
 		return nil
 	}
-	done := s.uploadRecoveryDone
-	err := s.uploadRecoveryErr
+	attempt := s.uploadRecoveryAttempt
 	s.uploadRecoveryMu.Unlock()
-	if done == nil {
-		return err
+	if attempt == nil {
+		return errors.New("service recovery has not started")
 	}
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-done:
+	case <-attempt.done:
 	}
-	s.uploadRecoveryMu.Lock()
-	defer s.uploadRecoveryMu.Unlock()
-	return s.uploadRecoveryErr
+	return attempt.err
 }

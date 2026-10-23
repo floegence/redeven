@@ -198,9 +198,9 @@ func TestThreadQueryIndexNotReadyIsRetryableAndNeverLooksPartial(t *testing.T) {
 	meta := testSendTurnMeta()
 	base := svc.threadRuntime
 	defer func() { svc.threadRuntime = base }()
-	for _, tool := range []string{"threads.query", "threads.read", "threads.aggregate"} {
+	for _, tool := range []string{"threads.query", "threads.read"} {
 		svc.threadRuntime = threadQueryFailureRuntime{ThreadService: base, failure: threadquery.ErrThreadQueryIndexNotReady}
-		args := map[string]any{"object": "messages"}
+		args := map[string]any{"object": "messages", "thread_id": "thread"}
 		if tool == "threads.read" {
 			args = map[string]any{"ref": "opaque"}
 		}

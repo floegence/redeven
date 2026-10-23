@@ -136,3 +136,92 @@ func TestStartupPreparationRetriesAfterTransientFailure(t *testing.T) {
 		t.Fatalf("calls=%d ready=%v", calls.Load(), service.startupPreparationReady)
 	}
 }
+
+type pausedRecoveryWaitContext struct {
+	context.Context
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (ctx pausedRecoveryWaitContext) Done() <-chan struct{} {
+	close(ctx.entered)
+	<-ctx.release
+	return ctx.Context.Done()
+}
+
+func TestStartupPreparationWaitKeepsItsAttemptFailureDuringRetry(t *testing.T) {
+	db, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := db.CreateThreadSettings(t.Context(), threadstore.ThreadSettings{ThreadID: "recovering", EndpointID: "endpoint", NamespacePublicID: "namespace", PermissionType: "readonly"}); err != nil {
+		t.Fatal(err)
+	}
+	failure := errors.New("first attempt failed")
+	firstRelease, secondStarted, secondRelease := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var calls atomic.Int32
+	service := &Service{lifecycleCtx: t.Context(), threadsDB: db, threadRuntime: startupFailureRuntime{}}
+	service.floretThreadMediaInventory = func(context.Context, identity.ThreadID) (flruntime.MediaInventory, error) {
+		if calls.Add(1) == 1 {
+			<-firstRelease
+			return flruntime.MediaInventory{}, failure
+		}
+		close(secondStarted)
+		<-secondRelease
+		return flruntime.MediaInventory{}, flruntime.ErrThreadDeleted
+	}
+	waitCtx := pausedRecoveryWaitContext{Context: t.Context(), entered: make(chan struct{}), release: make(chan struct{})}
+	result := make(chan error, 1)
+	go func() { result <- service.waitForStartupPreparation(waitCtx) }()
+	<-waitCtx.entered
+	close(firstRelease)
+	service.serviceWorkers.Wait()
+	service.startStartupPreparation()
+	<-secondStarted
+	close(waitCtx.release)
+	got := <-result
+	close(secondRelease)
+	service.serviceWorkers.Wait()
+	if !errors.Is(got, failure) {
+		t.Fatalf("original waiter observed retry result %v, want %v", got, failure)
+	}
+}
+
+func TestUploadRecoveryWaitKeepsItsAttemptFailureDuringRetry(t *testing.T) {
+	db, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	firstCtx, cancelFirst := context.WithCancel(t.Context())
+	defer cancelFirst()
+	firstRelease, secondStarted, secondRelease := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var calls atomic.Int32
+	service := &Service{lifecycleCtx: firstCtx, threadsDB: db, uploadsDir: t.TempDir()}
+	service.storeStartupProgress = func(FloretStoreStartupPhase) {
+		if calls.Add(1) == 1 {
+			<-firstRelease
+			return
+		}
+		close(secondStarted)
+		<-secondRelease
+	}
+	waitCtx := pausedRecoveryWaitContext{Context: t.Context(), entered: make(chan struct{}), release: make(chan struct{})}
+	result := make(chan error, 1)
+	go func() { result <- service.waitForUploadRecovery(waitCtx) }()
+	<-waitCtx.entered
+	cancelFirst()
+	close(firstRelease)
+	service.serviceWorkers.Wait()
+	service.lifecycleCtx = t.Context()
+	service.startUploadRecovery()
+	<-secondStarted
+	close(waitCtx.release)
+	got := <-result
+	close(secondRelease)
+	service.serviceWorkers.Wait()
+	if !errors.Is(got, context.Canceled) {
+		t.Fatalf("original upload waiter observed retry result %v, want cancellation", got)
+	}
+}
