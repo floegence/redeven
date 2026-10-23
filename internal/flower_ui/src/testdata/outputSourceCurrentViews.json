@@ -25,6 +25,8 @@
         "created_at": "0001-01-01T00:00:00Z"
       },
       {
+        "output_started_at": "2023-11-14T22:13:22Z",
+        "output_ended_at": "2023-11-14T22:13:23Z",
         "id": "source-2",
         "turn_id": "source-turn",
         "run_id": "source-run",
@@ -61,6 +63,8 @@
         "created_at": "0001-01-01T00:00:00Z"
       },
       {
+        "output_started_at": "2023-11-14T22:13:22Z",
+        "output_ended_at": "2023-11-14T22:13:23Z",
         "id": "source-2",
         "turn_id": "source-turn",
         "run_id": "source-run",
@@ -71,6 +75,8 @@
         "created_at": "0001-01-01T00:00:00Z"
       },
       {
+        "output_started_at": "2023-11-14T22:13:23Z",
+        "output_ended_at": "2023-11-14T22:13:24Z",
         "id": "source-3",
         "turn_id": "source-turn",
         "run_id": "source-run",
@@ -107,6 +113,8 @@
         "created_at": "0001-01-01T00:00:00Z"
       },
       {
+        "output_started_at": "2023-11-14T22:13:22Z",
+        "output_ended_at": "2023-11-14T22:13:23Z",
         "id": "source-2",
         "turn_id": "source-turn",
         "run_id": "source-run",
@@ -117,6 +125,8 @@
         "created_at": "0001-01-01T00:00:00Z"
       },
       {
+        "output_started_at": "2023-11-14T22:13:23Z",
+        "output_ended_at": "2023-11-14T22:13:24Z",
         "id": "source-3",
         "turn_id": "source-turn",
         "run_id": "source-run",
@@ -127,6 +137,8 @@
         "created_at": "0001-01-01T00:00:00Z"
       },
       {
+        "output_started_at": "2023-11-14T22:13:24Z",
+        "output_ended_at": "2023-11-14T22:13:25Z",
         "id": "source-4",
         "turn_id": "source-turn",
         "run_id": "source-run",
@@ -163,6 +175,8 @@
         "created_at": "0001-01-01T00:00:00Z"
       },
       {
+        "output_started_at": "2023-11-14T22:13:22Z",
+        "output_ended_at": "2023-11-14T22:13:23Z",
         "id": "source-2",
         "turn_id": "source-turn",
         "run_id": "source-run",
@@ -173,6 +187,8 @@
         "created_at": "0001-01-01T00:00:00Z"
       },
       {
+        "output_started_at": "2023-11-14T22:13:23Z",
+        "output_ended_at": "2023-11-14T22:13:24Z",
         "id": "source-3",
         "turn_id": "source-turn",
         "run_id": "source-run",
@@ -183,6 +199,8 @@
         "created_at": "0001-01-01T00:00:00Z"
       },
       {
+        "output_started_at": "2023-11-14T22:13:24Z",
+        "output_ended_at": "2023-11-14T22:13:25Z",
         "id": "source-4",
         "turn_id": "source-turn",
         "run_id": "source-run",
@@ -232,6 +250,8 @@
         }
       },
       {
+        "output_started_at": "2023-11-14T22:13:26Z",
+        "output_ended_at": "2023-11-14T22:13:27Z",
         "id": "source-6",
         "turn_id": "source-turn",
         "run_id": "source-run",
@@ -266,6 +286,8 @@
         "created_at": "0001-01-01T00:00:00Z"
       },
       {
+        "output_started_at": "2023-11-14T22:13:22Z",
+        "output_ended_at": "2023-11-14T22:13:23Z",
         "id": "source-2",
         "turn_id": "source-turn",
         "run_id": "source-run",
@@ -276,6 +298,8 @@
         "created_at": "0001-01-01T00:00:00Z"
       },
       {
+        "output_started_at": "2023-11-14T22:13:23Z",
+        "output_ended_at": "2023-11-14T22:13:24Z",
         "id": "source-3",
         "turn_id": "source-turn",
         "run_id": "source-run",
@@ -286,6 +310,8 @@
         "created_at": "0001-01-01T00:00:00Z"
       },
       {
+        "output_started_at": "2023-11-14T22:13:24Z",
+        "output_ended_at": "2023-11-14T22:13:25Z",
         "id": "source-4",
         "turn_id": "source-turn",
         "run_id": "source-run",
@@ -335,6 +361,8 @@
         }
       },
       {
+        "output_started_at": "2023-11-14T22:13:26Z",
+        "output_ended_at": "2023-11-14T22:13:27Z",
         "id": "source-6",
         "turn_id": "source-turn",
         "run_id": "source-run",
@@ -384,6 +412,8 @@
         }
       },
       {
+        "output_started_at": "2023-11-14T22:13:28Z",
+        "output_ended_at": "2023-11-14T22:13:29Z",
         "id": "source-8",
         "turn_id": "source-turn",
         "run_id": "source-run",

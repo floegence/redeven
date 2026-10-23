@@ -133,13 +133,14 @@ func TestFlowerHistoryBoundedPagesAndExactBodies(t *testing.T) {
 	}
 	output := strings.Repeat("Unicode 中文🌸 tool output.\n", 300)
 	answer := strings.Repeat("Final answer 中文🌸.\n", 4000)
+	thought := strings.Repeat("Reasoning segment 中文🌸.\n", 1000)
 	tool := tools.Define[struct{}](tools.Definition{Name: "inspect_history", ReadOnly: true, InputSchema: tools.StrictObject(map[string]any{}, nil), Permission: tools.PermissionSpec{Mode: tools.PermissionAllow}}, nil, nil,
 		func(context.Context, tools.Invocation[struct{}]) (tools.Result, error) {
 			return tools.Result{Text: "Inspection completed.", Activity: &tools.ActivityPresentation{Label: "Inspect history", Renderer: tools.ActivityRendererTerminal, Payload: tools.TerminalActivityPayload{Operation: "exec", Command: "inspect", Output: output, Status: "success"}}}, nil
 		})
 	count := 0
 	gateway := testFloretGatewayFunc(func(context.Context, flprovider.Request) (<-chan flprovider.Event, error) {
-		events := make(chan flprovider.Event, 2)
+		events := make(chan flprovider.Event, 3)
 		count++
 		if count == 1 {
 			calls := make([]flprovider.ToolCall, 180)
@@ -149,6 +150,7 @@ func TestFlowerHistoryBoundedPagesAndExactBodies(t *testing.T) {
 			events <- flprovider.Event{Type: flprovider.EventToolCalls, ToolCalls: calls}
 			events <- flprovider.Event{Type: flprovider.EventDone, Reason: "tool_calls"}
 		} else {
+			events <- flprovider.Event{Type: flprovider.EventReasoning, Text: thought}
 			events <- flprovider.Event{Type: flprovider.EventDelta, Text: answer}
 			events <- flprovider.Event{Type: flprovider.EventDone, Reason: "stop"}
 		}
@@ -191,7 +193,8 @@ func TestFlowerHistoryBoundedPagesAndExactBodies(t *testing.T) {
 	input := FlowerHistoryRequest{}
 	pages := 0
 	firstBytes := 0
-	var toolID, answerID string
+	var toolID, answerID, thinkingID string
+	timing := make(map[string][2]time.Time)
 	for {
 		page, e := svc.GetFlowerThreadHistory(t.Context(), meta, thread.ThreadID, input)
 		if e != nil {
@@ -212,6 +215,15 @@ func TestFlowerHistoryBoundedPagesAndExactBodies(t *testing.T) {
 				t.Fatalf("duplicate pagination item %s", item.ID)
 			}
 			seen[item.ID] = true
+			if item.Kind == flruntime.ThreadItemThinking || item.Kind == flruntime.ThreadItemAssistant {
+				if item.OutputStartedAt == nil || item.OutputEndedAt == nil || !item.OutputStartedAt.Equal(*item.OutputEndedAt) {
+					t.Fatalf("single-chunk timing lost in bounded history: %+v", item)
+				}
+				timing[item.ID] = [2]time.Time{*item.OutputStartedAt, *item.OutputEndedAt}
+				if item.Kind == flruntime.ThreadItemThinking {
+					thinkingID = item.ID
+				}
+			}
 			if item.Kind == flruntime.ThreadItemTool && len(item.ActivityBodies) > 0 {
 				toolID = item.ID
 			}
@@ -225,10 +237,10 @@ func TestFlowerHistoryBoundedPagesAndExactBodies(t *testing.T) {
 		}
 		input.AnchorID = page.Window.FirstItemID
 	}
-	if len(seen) != len(full.Current.Items) || pages < 2 || toolID == "" || answerID == "" {
+	if len(seen) != len(full.Current.Items) || pages < 2 || toolID == "" || answerID == "" || thinkingID == "" {
 		t.Fatalf("history lost: got=%d full=%d pages=%d tool=%q answer=%q", len(seen), len(full.Current.Items), pages, toolID, answerID)
 	}
-	for _, id := range []string{toolID, answerID} {
+	for _, id := range []string{toolID, answerID, thinkingID} {
 		item, e := svc.GetFlowerHistoryItem(t.Context(), meta, thread.ThreadID, id)
 		if e != nil {
 			t.Fatal(e)
@@ -239,6 +251,14 @@ func TestFlowerHistoryBoundedPagesAndExactBodies(t *testing.T) {
 		}
 		if expanded.Body != nil || len(expanded.ActivityBodies) > 0 {
 			t.Fatal("expanded body remained partial")
+		}
+		if want, ok := timing[id]; ok {
+			if expanded.OutputStartedAt == nil || expanded.OutputEndedAt == nil || !expanded.OutputStartedAt.Equal(want[0]) || !expanded.OutputEndedAt.Equal(want[1]) {
+				t.Fatalf("hydration changed source timing: %+v", expanded)
+			}
+		}
+		if id == thinkingID && expanded.Text != thought {
+			t.Fatal("thinking body changed")
 		}
 		if id == answerID && expanded.Text != answer {
 			t.Fatal("answer body changed")

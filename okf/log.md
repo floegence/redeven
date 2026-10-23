@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-10-23: Display canonical Floret output timing across cold history and reconnect, including submillisecond and unrecorded states. See [thinking duration](ui/flower-activity-interaction.md#thinking-duration).
+
 - 2026-10-23: Clean up AI terminal process groups before reaping command roots; preserve exit results, stop completed watchdogs, and define foreground execution and daemonization boundaries. See [terminal runtime](ai/terminal-tool-runtime.md).
 
 - 2026-10-23: Delay Flower loading feedback by 200 ms; retain immediate prepared-content reveal and cancel superseded feedback. See [selection](ui/flower-thread-selection.md).

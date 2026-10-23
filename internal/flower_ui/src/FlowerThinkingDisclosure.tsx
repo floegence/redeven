@@ -14,6 +14,7 @@ export type FlowerThinkingDisclosureProps = Readonly<{
   preserveOnEnd: Accessor<boolean>;
   label: Accessor<string>;
   elapsed?: Accessor<string>;
+  elapsedTitle?: Accessor<string>;
   expandLabel: Accessor<string>;
   collapseLabel: Accessor<string>;
   contentBody: Component;
@@ -97,7 +98,7 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
             <span class="flower-activity-inline-icon"><FlowerThinkingIcon /></span>
             <span ref={revealTitle.bind} class="flower-activity-inline-title" data-floe-progress-shimmer={active() && !revealTitle.revealing() ? 'text' : undefined}>{props.label()}</span>
             <Show when={(!props.live() || active()) && props.elapsed?.()}>
-              <span class="flower-activity-inline-duration">{props.elapsed?.()}</span>
+              <span class="flower-activity-inline-duration" title={props.elapsedTitle?.()}>{props.elapsed?.()}</span>
             </Show>
             <ChevronRight class="flower-thinking-toggle-icon" aria-hidden="true" />
             <span class="flower-visually-hidden">

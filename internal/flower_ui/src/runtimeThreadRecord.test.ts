@@ -21,6 +21,39 @@ function append(base = 1, text = '!', offset = 10): FlowerRuntimeUpdate {
 }
 
 describe('runtime item records', () => {
+  it('retains canonical timing from a first sealed baseline across cold loads and hydration', () => {
+    const { current, initial } = fixture();
+    const start = '2026-10-23T12:00:00.123456Z';
+    const end = '2026-10-23T12:00:03.623456Z';
+    const item = { ...current.items![0], kind: 'thinking' as const, live: false, output_started_at: start, output_ended_at: end,
+      created_at: '2026-10-23T12:01:00Z', text: '中文', body: { field: 'reasoning', source_id: 'one', bytes: 10, preview_bytes: 6 } };
+    const sealed = { ...current, items: [item] };
+    const expected = { started_at_ms: Date.parse(start), ended_at_ms: Date.parse(end), source: 'runtime' };
+    const cold = applyFlowerRuntimeCurrentView(initial, sealed);
+    expect(cold.messages[0].thinking_timing).toEqual(expected);
+    const record = createRuntimeThreadRecord(sealed, cold);
+    expect(record.hydrate(item, { ...item, body: undefined, text: '中文🌸' })).toBe(true);
+    expect(record.initializeThread().messages[0].thinking_timing).toEqual(expected);
+    const observed = { ...initial, messages: [{ ...cold.messages[0], thinking_timing: { started_at_ms: Date.parse(start) - 1000, ended_at_ms: Date.parse(end) + 60000 } }] };
+    expect(applyFlowerRuntimeCurrentView(observed, sealed).messages[0].thinking_timing).toEqual(expected);
+    const zero = { ...sealed, items: [{ ...item, output_ended_at: start }] };
+    expect(applyFlowerRuntimeCurrentView(initial, zero).messages[0].thinking_timing).toEqual({ started_at_ms: Date.parse(start), ended_at_ms: Date.parse(start), source: 'runtime' });
+    const resumed = { ...sealed, items: [{ ...item, live: true, output_ended_at: undefined }] };
+    expect(applyFlowerRuntimeCurrentView(cold, resumed).messages[0].thinking_timing).toEqual({ started_at_ms: Date.parse(start), source: 'runtime' });
+  });
+
+  it('rejects incomplete or reversed canonical output timing', () => {
+    const { current, initial } = fixture();
+    for (const timing of [
+      { output_started_at: 'bad', output_ended_at: 'bad' },
+      { output_started_at: '2026-10-23T12:00:02Z', output_ended_at: '2026-10-23T12:00:01Z' },
+      { output_started_at: '2026-10-23T12:00:01Z' },
+      { output_ended_at: '2026-10-23T12:00:01Z' },
+    ]) {
+      expect(() => applyFlowerRuntimeCurrentView(initial, { ...current, items: [{ ...current.items![0], kind: 'thinking', live: false, ...timing }] })).toThrow('invalid output timing');
+    }
+  });
+
   it('freezes observed thinking across replacement, hydration and reconnect without inventing historical timing', () => {
     const started = Date.parse('2026-10-23T12:00:00Z');
     vi.useFakeTimers({ toFake: ['Date'] });

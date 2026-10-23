@@ -88,6 +88,8 @@ type flowerPublicInteraction struct {
 	ComputerAssistance *ComputerInputAssistance         `json:"computer_assistance,omitempty"`
 }
 type flowerPublicItem struct {
+	OutputStartedAt  *time.Time                     `json:"output_started_at,omitempty"`
+	OutputEndedAt    *time.Time                     `json:"output_ended_at,omitempty"`
 	Body             *flruntime.ThreadItemBody      `json:"body,omitempty"`
 	ActivityBodies   []flruntime.ThreadActivityBody `json:"activity_bodies,omitempty"`
 	Goal             *flruntime.ThreadGoalChange    `json:"goal,omitempty"`
@@ -175,7 +177,7 @@ func projectFlowerInteraction(value flruntime.ThreadInteraction, evidence *flrun
 	return out
 }
 func projectFlowerItem(value flruntime.ThreadItem, threadID string, evidence *flruntime.ThreadView) flowerPublicItem {
-	out := flowerPublicItem{Body: value.Body, ActivityBodies: value.ActivityBodies, Goal: value.Goal, Steering: value.Steering, Sources: value.Sources, ID: value.ID, TurnID: value.TurnID, RunID: value.RunID, CanonicalOrdinal: value.CanonicalOrdinal, Ordinal: value.Ordinal, Kind: value.Kind, Text: value.Text, Live: value.Live, CreatedAt: value.CreatedAt, Attachments: projectFlowerAttachments(value.Attachments, threadID, value.TurnID.String(), ""), References: publicRuntimeReferences(value.References), Context: value.Context}
+	out := flowerPublicItem{OutputStartedAt: value.OutputStartedAt, OutputEndedAt: value.OutputEndedAt, Body: value.Body, ActivityBodies: value.ActivityBodies, Goal: value.Goal, Steering: value.Steering, Sources: value.Sources, ID: value.ID, TurnID: value.TurnID, RunID: value.RunID, CanonicalOrdinal: value.CanonicalOrdinal, Ordinal: value.Ordinal, Kind: value.Kind, Text: value.Text, Live: value.Live, CreatedAt: value.CreatedAt, Attachments: projectFlowerAttachments(value.Attachments, threadID, value.TurnID.String(), ""), References: publicRuntimeReferences(value.References), Context: value.Context}
 	if value.Activity != nil {
 		activity := projectFlowerActivity(*value.Activity)
 		out.Activity = &activity

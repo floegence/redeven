@@ -1,8 +1,20 @@
-import type { FlowerChatMessage } from './contracts/flowerSurfaceContracts';
+import type { FlowerChatMessage, FlowerRuntimeCurrentItem } from './contracts/flowerSurfaceContracts';
 
-/** Keep observed timing in the existing message cache; sealed history has no source duration. */
+/** Project source timestamps without inferring timing from commit or arrival times. */
+export function runtimeThinkingTiming(item: FlowerRuntimeCurrentItem): FlowerChatMessage['thinking_timing'] {
+  if (item.output_started_at === undefined && item.output_ended_at === undefined) return undefined;
+  const start = Date.parse(item.output_started_at ?? '');
+  const end = item.output_ended_at === undefined ? undefined : Date.parse(item.output_ended_at);
+  if (!Number.isFinite(start) || start <= 0 || (end !== undefined && (!Number.isFinite(end) || end < start))
+    || (!item.live && end === undefined)) {
+    throw new Error('Flower contract error: invalid output timing.');
+  }
+  return { started_at_ms: start, ...(end === undefined ? {} : { ended_at_ms: end }), source: 'runtime' };
+}
+
+/** Canonical timing always supersedes observations retained for older runtime output. */
 export function retainThinkingTiming(message: FlowerChatMessage, previous?: FlowerChatMessage, now = Date.now()): FlowerChatMessage {
-  if (!message.blocks?.some(block => block.type === 'thinking')) return message;
+  if (!message.blocks?.some(block => block.type === 'thinking') || message.thinking_timing?.source === 'runtime') return message;
   const sameSource = previous?.id === message.id && previous.thread_id === message.thread_id
     && previous.turn_id === message.turn_id && previous.run_id === message.run_id;
   const timing = sameSource ? previous.thinking_timing : undefined;

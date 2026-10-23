@@ -48,12 +48,20 @@ Thinking, tool sequences and read-only detail previews follow the [sequence read
 Hidden controls do not enter the focus or hit-test order.
 
 ## Thinking duration
-The message cache retains observed start and first sealed times by thread, turn,
-run and item. Completion freezes the shared-clock duration, including collapsed
-and abnormal endings. Hydration, snapshots, navigation and reconnects preserve
-it; canonical replacement timestamps cannot reset it. This measures observed
-presentation, not provider compute. Published history lacks segment timing, so
-unobserved history and full reloads cannot reconstruct it.
+Floret v7.81.0 owns each output source's first and last received-chunk timestamps.
+Flower passes these canonical facts through the public DTO and projects them
+into the existing message record. Cold history, body hydration, reconnect,
+restart and Fork retain the same interval, even if no live chunk reached the UI.
+Canonical timing supersedes previously observed presentation timing. A resumed
+native source reopens its interval; completion freezes at the last source chunk,
+not the later delivery, tool completion or journal commit. The tooltip identifies
+received-output timing rather than provider compute time.
+
+Measured submillisecond intervals display <1ms. Historical sources without
+recorded timing show a localized Not recorded label and explanation; the UI
+never guesses their duration from neighboring events or turn totals. Previously
+observed intervals remain available within the existing in-memory cache for
+older output, but there is no local persistence or second runtime timing store.
 
 ## Visual motion
 Confirmed live thinking uses a 2.4-second cycle: five petals fill clockwise from
