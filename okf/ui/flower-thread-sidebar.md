@@ -79,7 +79,7 @@ Read confirmation and loaded-content revisions follow the canonical [read-state 
 
 - `redeven:internal/flower_ui/src/threadRailResize.test.ts` - Frame coalescing, final coordinates, cancellation, pointer identity, cleanup and preference failures.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.sidebarResize.browser.test.tsx` - Real layout widths, keyboard persistence and presentation transitions.
-- `redeven:scripts/check_flower_sidebar_responsiveness.mjs --resize-only` - Isolated Electron pointer dragging, bounded style invalidation, one persistence write and Markdown retention across small/large histories; live delivery preserves draft, transcript identity and detached scrolling.
+- `redeven:scripts/check_flower_sidebar_responsiveness.mjs` - Run with `--resize-only` for isolated Electron pointer dragging, bounded style invalidation, one persistence write and Markdown retention across small/large histories; live delivery preserves draft, transcript identity and detached scrolling.
 
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.titleRename.browser.test.tsx` - Header rename, save/cancel focus, failed saves, narrow titles and host capability.
 
