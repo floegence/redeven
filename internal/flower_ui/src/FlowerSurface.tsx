@@ -12150,16 +12150,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     />
   );
 
-  const threadRecoveryNavigation = () => <>
-    <Show when={!props.embeddedConversation}>
-      <Button size="sm" variant="ghost" icon={Menu} onClick={() => setThreadNavigationOpen(true)}>
-        {copy().chat.conversationsAria}
-      </Button>
-    </Show>
-    <Button size="sm" variant="ghost" icon={Plus} disabled={surfaceWarmupActive()} onClick={startCompose}>
-      {copy().chat.newChat}
-    </Button>
-  </>;
+  // A failed initial read owns recovery in the transcript, before detail exists.
+  const selectedThreadLoadFailed = () => Boolean(selectedThreadID() && !selectedThread() && threadLoadError());
 
   const threadLoadingState = () => (
     <div class="flower-thread-loading" role="status" aria-live="polite">
@@ -12169,7 +12161,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <div class="flower-thread-loading-indicator-bar" />
         </div>
         <div class="flower-thread-loading-message">{copy().chat.threadLoading}</div>
-        <div class="flower-error-actions">{threadRecoveryNavigation()}</div>
       </div>
     </div>
   );
@@ -12246,23 +12237,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   );
 
   const selectedThreadFallbackState = () => {
-    if (threadLoadError() && !selectedThread()) {
+    if (selectedThreadLoadFailed()) {
       return (
         <div class="flower-thread-load-error">
           {errorNotice(
             createdForkThreadID() === selectedThreadID() ? copy().threadList.forkLoadFailed : copy().chat.threadLoadErrorTitle,
             threadLoadError(),
-            <>
             <Button
+              class="flower-thread-load-retry"
               size="sm"
               variant="outline"
               icon={Refresh}
               onClick={retrySelectedThreadDetail}
             >
               {copy().chat.handlerRetry}
-            </Button>
-            {threadRecoveryNavigation()}
-            </>,
+            </Button>,
           )}
         </div>
       );
@@ -13125,7 +13114,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const progressLane = (conversation = false) => (
     <div class={cn('flower-model-status-lane', conversation && 'flower-model-status-lane--conversation')}>
       <Show when={selectedThreadStopPending()} fallback={
-        <Show when={selectedThreadID() && props.adapter.connectLiveStream && !livePresentationConfirmed() && liveSyncState().status !== 'stopped'} fallback={
+        <Show when={selectedThread() && props.adapter.connectLiveStream && !livePresentationConfirmed() && liveSyncState().status !== 'stopped'} fallback={
           <FlowerProgressIndicator
             progress={selectedRunProgress()}
             outputCopy={copy().chat.outputProgress}
@@ -13900,7 +13889,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         unavailableLabel={copy().chat.media.unavailable}
         onClose={() => setAttachmentPreview(null)}
       />
-      {workspaceSyncNotice()}
+      <Show when={!selectedThreadLoadFailed() || unconfirmedStops().size > 0}>{workspaceSyncNotice()}</Show>
       <Show when={attentionNavigation() && selectedThreadID() === attentionNavigation()?.childThreadID}>
         <div class="flower-error-actions"><Button size="sm" variant="ghost" onClick={() => { const navigation = attentionNavigation(); if (navigation) { selectThread(navigation.parentThreadID); setAttentionNavigation(null); } }}>{copy().chat.subagentReturnParent}</Button></div>
       </Show>
