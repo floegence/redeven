@@ -101,7 +101,7 @@ it('uses the tool activity row and flower animation for standalone live thinking
   expect(button.querySelectorAll('.flower-thinking-petal')).toHaveLength(5);
   expect(button.querySelector('.flower-thinking-flower')!.getAnimations({ subtree: true })).toHaveLength(6);
   expect(button.querySelector('.flower-activity-inline-title')?.textContent).toBe('Thinking...');
-  expect(button.querySelector('[data-floe-progress-shimmer]')).toBeNull();
+  expect(button.querySelector('[data-floe-progress-shimmer="text"]')?.textContent).toBe('Thinking...');
   expect(button.querySelector('.flower-activity-inline-duration')?.textContent).not.toBe('');
   expect(getComputedStyle(button.querySelector('.flower-activity-inline-title')!).fontSize).toBe('12px');
   expect(getComputedStyle(button.querySelector('.flower-activity-inline-title')!).lineHeight).toBe('18px');

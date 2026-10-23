@@ -163,10 +163,22 @@ export function FlowerTurnTimeline(props: Readonly<{
   const sequenceLayout = createFlowerToolSequenceLayout(sequences);
   createEffect(() => {
     const groups = processes();
+    titleReveal.revealingEntries();
     const threadID = props.thread?.thread_id;
-    untrack(() => {
+    const execution = props.thread?.current_execution;
+    if (threadID && execution && props.thread?.status === 'running') {
+      props.choices.observe(identity(execution.turn_id), 'none', () => false);
+    }
+    let cancelled = false;
+    onCleanup(() => { cancelled = true; });
+    // Let this snapshot mount its fresh titles before settling automatic folds.
+    queueMicrotask(() => untrack(() => {
+      if (cancelled) return;
+      const revealing = titleReveal.revealingEntries();
       if (!threadID) return;
       for (const group of groups.groups.values()) {
+        // Automatic folding must not hide a title that has just arrived.
+        if (group.disclosure === 'automatic' && group.processKeys.some(key => revealing.has(key))) continue;
         // Check protection after content commits, when defaults first settle or change.
         props.choices.observe(identity(group.turnID), group.disclosure,
           () => inspectionProtected(group.turnID, group.processKeys),
@@ -182,19 +194,25 @@ export function FlowerTurnTimeline(props: Readonly<{
             }
           });
       }
-    });
+    }));
   });
 
   createEffect(() => {
     const projection = sequences();
-    untrack(() => {
+    titleReveal.revealingEntries();
+    let cancelled = false;
+    onCleanup(() => { cancelled = true; });
+    queueMicrotask(() => untrack(() => {
+      if (cancelled) return;
+      const revealing = titleReveal.revealingEntries();
       for (const group of projection.groups.values()) {
+        if (group.disclosure === 'automatic' && group.entryKeys.some(key => revealing.has(key))) continue;
         const turnID = processes().rows.get(group.entryKeys[0])?.turnID ?? '';
         props.choices.observe(sequenceIdentity(group.key), group.disclosure,
           () => inspectionProtected(turnID, group.entryKeys, true),
           () => preserveReadingAnchor(group.entryKeys));
       }
-    });
+    }));
   });
   const finishMotion = (key: string) => {
     motions.delete(key);

@@ -554,7 +554,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     const thinking = root.querySelector<HTMLElement>('[data-flower-thinking-id="active-thinking:block:0"]')!;
     expect(thinking.dataset.flowerThinkingView).toBe('collapsed');
     expect(thinking.querySelector('.flower-thinking-toggle')?.textContent).toContain('Thinking...');
-    expect(thinking.querySelector('[data-floe-progress-shimmer]')).toBeNull();
+    expect(thinking.querySelector('[data-floe-progress-shimmer="text"]')?.textContent).toContain('Thinking...');
     expect(thinking.querySelector('.flower-thinking-flower')!.getAnimations({ subtree: true })).toHaveLength(6);
     expect(row(root, 'wait').querySelector('[data-floe-progress-shimmer="text"]')?.textContent).not.toBe('');
   });

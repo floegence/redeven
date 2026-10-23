@@ -54,9 +54,9 @@ Hidden controls do not enter the focus or hit-test order.
 Thinking uses a decorative five-petal flower in the shared activity row. Only
 confirmed live thinking animates: petals fill clockwise from their bases, retain
 color, then fill a light cream-gold center in a 2.4-second cycle. The completed
-flower briefly holds and fades together. The icon replaces the thinking title's
-repeating shimmer; the existing one-time title reveal and disclosure behavior
-remain intact. Sealed history, cancellation and disconnected observations are
+flower briefly holds and fades together. The thinking title types in once, then
+uses the shared text shimmer while thinking remains live. Sealed history,
+cancellation and disconnected observations are
 static, even when a later tool or thinking segment runs. Theme tokens own petal
 color and outlines; the center never borrows a dark petal shade. Reduced motion
 shows a fully filled static flower. High-contrast themes use solid fills, and
@@ -75,20 +75,28 @@ Concurrent growth retargets that motion without restarting its deadline. Reading
 pauses stay paused, user scrolling interrupts motion, and reduced motion skips
 both scrolling animation and reveal. Runtime delivery, results and disclosure
 controls never wait for animation. The text reveal takes 168–360 ms,
-adapting to visible width with at most 32 steps. Concurrent arrivals do not queue;
-each transcript retains at most 12 animated arrivals and shows older burst titles fully.
+adapting to visible width with at most 32 steps. Concurrent arrivals do not queue
+or evict one another; each visible new title completes its bounded animation.
+Running tool and thinking titles begin the shared glyph-only shimmer only after
+their reveal finishes. A fast result completes its reveal without starting
+shimmer. Active typography is independent of shimmer so the handoff never
+changes the title's width.
 
 The transcript owns transient arrival claims only for the current execution.
 Initial history, conversation switches, reconnect baselines, hidden disclosures,
 and arrivals first mounted more than 450 ms later remain static. A title is
 claimed once across preview promotion and disclosure remounts. Arrival claims
 observe sequence disclosure before lazy content mounts, so opening a sequence
-does not animate rows received while it was folded. Failures and
-approval requests appear immediately. Content/status changes, navigation,
-disposal, a hidden document or enabling reduced motion remove active clipping.
-Ordinary result updates preserve the row's pending entrance, including when a
-static title becomes an expandable result button. Errors and approval requests
-cancel that entrance immediately as well.
+does not animate rows received while it was folded. New tools in the final
+snapshot of a previously active execution still receive their reveal. Runtime
+snapshot replacement, content updates and completion never cancel an admitted
+title reveal. Automatic turn and sequence folding waits for these active title
+animations, then resumes its existing reading-protection policy. Manual folding
+and final replies remain immediate. The title node survives static-to-expandable trigger changes;
+preview promotion transfers the same animation and remaining time by call
+identity. Failures and approvals expose status and actions immediately while
+the title finishes. Navigation, disposal, a hidden document or enabling reduced
+motion remove active clipping.
 There are no character timers, per-frame reactive updates, persisted animation
 facts or runtime changes. Desktop and Env App use the same implementation.
 

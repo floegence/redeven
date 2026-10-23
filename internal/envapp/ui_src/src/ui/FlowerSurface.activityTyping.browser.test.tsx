@@ -61,10 +61,16 @@ async function mount(initial = [tool('history', 'success')], child = false) {
     await waitFor(() => window.dataset.floatingPresence === 'open');
     await Promise.all(window.getAnimations().map(animation => animation.finished));
   }
-  await waitFor(() => Boolean(surface.querySelector('[data-flower-activity-item-id]')));
+  await waitFor(() => Boolean(surface.querySelector(initial.length ? '[data-flower-activity-item-id]' : '.flower-turn-timeline')));
   await waitFor(() => root.querySelector('.flower-chat-transcript')?.getAttribute('data-flower-tail-preparing') !== 'true');
-  return { root: surface, parentRoot: root, push(items: FlowerRuntimeCurrentItem[], previews: readonly FlowerToolCallPreview[] = []) {
-    latest = { ...current(items, latest.view_version + 1), tool_call_previews: previews };
+  return { root: surface, parentRoot: root, push(items: FlowerRuntimeCurrentItem[], previews: readonly FlowerToolCallPreview[] = [], completed = false) {
+    latest = { ...current(items, latest.view_version + 1), tool_call_previews: previews,
+      ...(completed ? { activity: 'idle', last_outcome: 'completed', run_progress: null } as const : {}),
+    };
+    if (completed) latest = { ...latest, turns: latest.turns!.map(turn => ({ ...turn, outcome: 'completed',
+      ended_at: '2026-10-22T12:00:01Z', elapsed_ms: 1000, work_duration_ms: 1000,
+      final_item_ids: items.filter(item => item.kind === 'assistant').map(item => item.id), final_boundary_complete: true,
+    })) };
     values.push(child ? { schema_version: 3, kind: 'thread.batch', thread_id: parent.thread_id, subagent_current: latest }
       : { schema_version: 3, kind: 'thread.batch', thread_id: 'typing', current: latest }); wake?.();
   } };
@@ -154,6 +160,125 @@ it('keeps a quickly completed tool hidden until its arrival scroll has made room
   expect(getComputedStyle(title(root, 'fast')!.closest('.flower-activity-inline-line')!).opacity).toBe('0');
   await expect.poll(() => sequence.scrollHeight - sequence.clientHeight - sequence.scrollTop).toBeLessThanOrEqual(1);
   await expect.poll(() => getComputedStyle(title(root, 'fast')!.closest('.flower-activity-inline-line')!).opacity).toBe('1');
+});
+
+it.each([false, true])('keeps web fetch titles revealing through routine live snapshots (child=%s)', async child => {
+  const items = Array.from({ length: 24 }, (_, index) => tool(`history-${index}`, 'success'));
+  const fetchTool = (id: string, elapsed: number): FlowerRuntimeCurrentItem => ({
+    ...tool(id), activity: { ...tool(id).activity!, tool_name: 'web_search',
+      started_at_unix_ms: Date.now() - elapsed,
+      presentation: { label: 'Fetch webpage', renderer: 'web_search',
+        payload: { operation: 'fetch', url: `https://example.com/research/${id}` } },
+    },
+  });
+  const { root, push } = await mount(items, child);
+  const arrivals = Array.from({ length: 6 }, (_, index) => fetchTool(`fetch-${index}`, 0));
+  push([...items, ...arrivals]);
+  await waitFor(() => Boolean(title(root, 'fetch-5')));
+  const animations = arrivals.map(item => reveals(title(root, item.id)!)[0]);
+  expect(animations.every(Boolean)).toBe(true);
+  animations.forEach(animation => animation.pause());
+  push([...items, ...arrivals.map((item, index) => fetchTool(item.id, 50 + index))]);
+  await waitFor(() => Boolean(row(root, 'fetch-5').querySelector('.flower-activity-inline-duration')));
+  expect(animations.map(animation => animation.playState)).toEqual(arrivals.map(() => 'paused'));
+  animations.forEach(animation => animation.finish());
+});
+
+it('continues a fast tool title on its replacement result button', async () => {
+  const items = Array.from({ length: 24 }, (_, index) => tool(`history-${index}`, 'success'));
+  const { root, push } = await mount(items);
+  push([...items, tool('fast')]);
+  await waitFor(() => Boolean(title(root, 'fast')));
+  const originalTitle = title(root, 'fast')!;
+  const animation = reveals(originalTitle)[0];
+  expect(animation).toBeDefined();
+  animation.pause();
+  push([...items, tool('fast', 'success')]);
+  await waitFor(() => row(root, 'fast').dataset.flowerActivityStatus === 'success');
+  const resultTitle = title(root, 'fast')!;
+  expect(resultTitle.closest('button')).not.toBeNull();
+  expect(reveals(resultTitle)).toEqual([animation]);
+  expect(animation.playState).toBe('paused');
+  expect(resultTitle.hasAttribute('data-floe-progress-shimmer')).toBe(false);
+  animation.finish();
+  await expect.poll(() => reveals(resultTitle).length).toBe(0);
+  expect(resultTitle.hasAttribute('data-floe-progress-shimmer')).toBe(false);
+});
+
+it('starts tool shimmer only after the complete title reveal', async () => {
+  const { root, push } = await mount();
+  push([tool('history', 'success'), tool('running')]);
+  await waitFor(() => Boolean(title(root, 'running')));
+  const label = title(root, 'running')!;
+  const animation = reveals(label)[0];
+  expect(animation).toBeDefined();
+  animation.pause();
+  animation.currentTime = Number(animation.effect!.getTiming().delay) + 100;
+  expect(label.hasAttribute('data-floe-progress-shimmer')).toBe(false);
+  animation.finish();
+  await expect.poll(() => label.getAttribute('data-floe-progress-shimmer')).toBe('text');
+  push([tool('history', 'success'), tool('running', 'success')]);
+  await waitFor(() => row(root, 'running').dataset.flowerActivityStatus === 'success');
+  expect(title(root, 'running')!.hasAttribute('data-floe-progress-shimmer')).toBe(false);
+});
+
+it('reveals tools first received in the completed runtime snapshot', async () => {
+  const { root, push } = await mount();
+  push([tool('history', 'success'), tool('instant', 'success')], [], true);
+  await waitFor(() => Boolean(title(root, 'instant')));
+  const label = title(root, 'instant')!;
+  expect(reveals(label)).toHaveLength(1);
+  expect(label.hasAttribute('data-floe-progress-shimmer')).toBe(false);
+  await Promise.all(reveals(label).map(animation => animation.finished));
+  expect(label.textContent).toContain(titleText);
+});
+
+it.each([false, true])('preserves visible typing when tools and the final answer arrive together (child=%s)', async child => {
+  const { root, push } = await mount(undefined, child);
+  push([tool('history', 'success'), tool('last', 'success'), { id: 'final', kind: 'assistant',
+    turn_id: 'turn', run_id: 'run', ordinal: 3, text: 'Completed the search.' }], [], true);
+  await waitFor(() => root.textContent!.includes('Completed the search.'));
+  const label = title(root, 'last')!;
+  expect(label).toBeDefined();
+  expect(reveals(label)).toHaveLength(1);
+  expect(label.closest('[inert]')).toBeNull();
+  await Promise.all(reveals(label).map(animation => animation.finished));
+  expect(label.textContent).toContain(titleText);
+  expect(label.hasAttribute('data-floe-progress-shimmer')).toBe(false);
+  await waitFor(() => Boolean(root.querySelector('.flower-turn-summary-button')));
+  await expect.poll(() => root.querySelector('.flower-turn-summary-button')?.getAttribute('aria-expanded')).toBe('false');
+});
+
+it('finishes the first tool title even when an empty conversation completes in one snapshot', async () => {
+  const { root, push } = await mount([]);
+  push([tool('only', 'success')], [], true);
+  await waitFor(() => Boolean(title(root, 'only')));
+  const label = title(root, 'only')!;
+  expect(reveals(label)).toHaveLength(1);
+  expect(label.closest('[inert]')).toBeNull();
+  await Promise.all(reveals(label).map(animation => animation.finished));
+  await expect.poll(() => root.querySelector('.flower-turn-summary-button')?.getAttribute('aria-expanded')).toBe('false');
+});
+
+it('allows manual folding during typing while deferring automatic completion folding', async () => {
+  const { root, push } = await mount();
+  push([tool('history', 'success'), tool('last')]);
+  await waitFor(() => Boolean(title(root, 'last')));
+  const label = title(root, 'last')!;
+  const animation = reveals(label)[0];
+  expect(animation).toBeDefined();
+  animation.pause();
+  push([tool('history', 'success'), tool('last', 'success')], [], true);
+  await waitFor(() => row(root, 'last').dataset.flowerActivityStatus === 'success');
+  expect(reveals(label)).toEqual([animation]);
+  expect(label.closest('[inert]')).toBeNull();
+  root.querySelector<HTMLButtonElement>('.flower-tool-sequence-toggle')!.click();
+  expect(label.closest('[inert]')).not.toBeNull();
+  animation.finish();
+  await expect.poll(() => reveals(label).length).toBe(0);
+  expect(root.querySelector('.flower-tool-sequence-toggle')?.getAttribute('aria-expanded')).toBe('false');
+  // The explicit interaction keeps the parent disclosure available for reading.
+  await expect.poll(() => root.querySelector('.flower-turn-summary-button')?.getAttribute('aria-expanded')).toBe('true');
 });
 
 it('shows a failure immediately even when it replaces a tool during its arrival', async () => {
@@ -259,17 +384,32 @@ it('reveals a new thinking label and presents failures immediately', async () =>
   await waitFor(() => Boolean(title(root, 'failed')));
   const thinking = root.querySelector<HTMLElement>('.flower-thinking-toggle .flower-activity-inline-title')!;
   expect(reveals(thinking)).toHaveLength(1);
-  expect(reveals(title(root, 'failed')!)).toHaveLength(0);
+  expect(thinking.hasAttribute('data-floe-progress-shimmer')).toBe(false);
+  const animation = reveals(thinking)[0];
+  animation.finish();
+  await expect.poll(() => thinking.getAttribute('data-floe-progress-shimmer')).toBe('text');
+  expect(row(root, 'failed').dataset.flowerActivityStatus).toBe('error');
 });
 
-it('bounds burst animations and completes naturally without queued delays', async () => {
+it('types the first thinking label in an otherwise empty active conversation before shimmering', async () => {
+  const { root, push } = await mount([]);
+  push([{ id: 'first-thinking', kind: 'thinking', text: 'Reason through the first step.',
+    live: true, turn_id: 'turn', run_id: 'run', ordinal: 1 }]);
+  await waitFor(() => Boolean(root.querySelector('.flower-thinking-toggle')));
+  const label = root.querySelector<HTMLElement>('.flower-thinking-toggle .flower-activity-inline-title')!;
+  expect(reveals(label)).toHaveLength(1);
+  expect(label.hasAttribute('data-floe-progress-shimmer')).toBe(false);
+  await Promise.all(reveals(label).map(animation => animation.finished));
+  await expect.poll(() => label.getAttribute('data-floe-progress-shimmer')).toBe('text');
+});
+
+it('reveals every fast result in a burst without eviction or queued delays', async () => {
   const { root, push } = await mount();
   push([tool('history', 'success'), ...Array.from({ length: 40 }, (_, i) => tool(`burst-${i}`, 'success'))]);
   await waitFor(() => Boolean(title(root, 'burst-39')));
   const labels = Array.from({ length: 40 }, (_, i) => title(root, `burst-${i}`)!);
   expect(labels.every(label => label.textContent!.includes(titleText))).toBe(true);
-  expect(labels.flatMap(reveals).length).toBeGreaterThan(0);
-  expect(labels.flatMap(reveals).length).toBeLessThanOrEqual(12);
+  expect(labels.flatMap(reveals)).toHaveLength(40);
   const animations = labels.flatMap(reveals);
   const start = performance.now();
   await Promise.all(animations.map(animation => animation.finished));
@@ -277,7 +417,7 @@ it('bounds burst animations and completes naturally without queued delays', asyn
   expect(labels.flatMap(reveals)).toHaveLength(0);
 });
 
-it('cancels stale text motion on updates and cleans active animations on navigation', async () => {
+it('keeps title motion through failure updates and cleans animations on navigation', async () => {
   const { root, push } = await mount();
   push([tool('history', 'success'), tool('fresh')]);
   await waitFor(() => Boolean(title(root, 'fresh')));
@@ -286,13 +426,14 @@ it('cancels stale text motion on updates and cleans active animations on navigat
   first.pause();
   push([tool('history', 'success'), tool('fresh', 'error'), tool('next')]);
   await waitFor(() => Boolean(title(root, 'next')));
-  expect(first.playState).toBe('idle');
+  expect(first.playState).toBe('paused');
   const second = reveals(title(root, 'next')!)[0];
   expect(second).toBeDefined();
   second.pause();
   root.querySelector<HTMLButtonElement>('[data-thread-id="peer"] button')!.click();
   await waitFor(() => !title(root, 'next'));
   expect(second.playState).toBe('idle');
+  expect(first.playState).toBe('idle');
 });
 
 it('claims argument previews once when the same call becomes canonical', async () => {
@@ -309,8 +450,30 @@ it('claims argument previews once when the same call becomes canonical', async (
   push([tool('history', 'success'), { ...tool('preview'), activity: { ...tool('preview').activity!, tool_name: 'apply_patch',
     presentation: { label: 'Edit src/browser.ts', renderer: 'patch', payload: {} } } }]);
   await waitFor(() => Boolean(title(root, 'preview')));
-  expect(reveals(title(root, 'preview')!)).toHaveLength(0);
-  expect(animation.playState).toBe('idle');
+  expect(reveals(title(root, 'preview')!)).toEqual([animation]);
+  expect(animation.playState).toBe('paused');
+  animation.finish();
+  await expect.poll(() => reveals(title(root, 'preview')!).length).toBe(0);
+});
+
+it('finishes a thinking title even when thinking stops before its reveal', async () => {
+  const { root, push } = await mount();
+  const thinking: FlowerRuntimeCurrentItem = { id: 'brief-thinking', kind: 'thinking', text: 'Consider the results.',
+    live: true, turn_id: 'turn', run_id: 'run', ordinal: 2 };
+  push([tool('history', 'success'), thinking]);
+  await waitFor(() => Boolean(root.querySelector('.flower-thinking-toggle')));
+  const label = root.querySelector<HTMLElement>('.flower-thinking-toggle .flower-activity-inline-title')!;
+  const animation = reveals(label)[0];
+  expect(animation).toBeDefined();
+  animation.pause();
+  push([tool('history', 'success'), { ...thinking, live: false }, tool('after-thinking')]);
+  await waitFor(() => Boolean(title(root, 'after-thinking')));
+  expect(animation.playState).toBe('paused');
+  expect(reveals(label)).toEqual([animation]);
+  expect(label.hasAttribute('data-floe-progress-shimmer')).toBe(false);
+  animation.finish();
+  await expect.poll(() => reveals(label).length).toBe(0);
+  expect(label.hasAttribute('data-floe-progress-shimmer')).toBe(false);
 });
 
 it('keeps newly received hidden rows static when their sequence is reopened', async () => {

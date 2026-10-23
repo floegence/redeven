@@ -32,7 +32,7 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
   let following = true;
   const contentID = `flower-thinking-content-${safeContentID(props.contentID)}`;
   const active = () => props.live() && props.liveConfirmed();
-  const revealTitle = useFlowerActivityTitleReveal(() => props.contentID, props.label);
+  const revealTitle = useFlowerActivityTitleReveal(() => props.contentID);
   const collapse = () => {
     if (viewport?.contains(document.activeElement)) toggleButton?.focus({ preventScroll: true });
     setView('collapsed');
@@ -82,7 +82,7 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
       data-flower-thinking-id={props.contentID}
       data-flower-thinking-active={active() ? 'true' : 'false'}
     >
-      <div class="flower-activity-inline-row flower-activity-inline-row-thinking" data-state={view() === 'collapsed' ? 'closed' : 'open'}>
+      <div class="flower-activity-inline-row flower-activity-inline-row-thinking" data-state={view() === 'collapsed' ? 'closed' : 'open'} data-flower-activity-active={active() ? 'true' : undefined}>
         <div class="flower-activity-inline-line">
           <button
             ref={toggleButton}
@@ -95,7 +95,7 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
             onClick={toggle}
           >
             <span class="flower-activity-inline-icon"><FlowerThinkingIcon /></span>
-            <span ref={revealTitle} class="flower-activity-inline-title">{props.label()}</span>
+            <span ref={revealTitle.bind} class="flower-activity-inline-title" data-floe-progress-shimmer={active() && !revealTitle.revealing() ? 'text' : undefined}>{props.label()}</span>
             <Show when={active() && props.elapsed?.()}>
               <span class="flower-activity-inline-duration">{props.elapsed?.()}</span>
             </Show>
