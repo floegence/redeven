@@ -11,7 +11,7 @@ func configureTerminalExecProcessGroup(cmd *exec.Cmd) {
 	// Not supported in this simplified Windows implementation.
 }
 
-func terminateTerminalExecProcessTree(cmd *exec.Cmd) error {
+func terminateTerminalExecProcessGroup(cmd *exec.Cmd) error {
 	if cmd == nil || cmd.Process == nil {
 		return errors.New("terminal process handle is unavailable")
 	}

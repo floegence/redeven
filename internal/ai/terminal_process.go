@@ -29,6 +29,7 @@ const (
 	terminalProcessUIReadBytes      = 256_000
 	terminalProcessTailCapBytes     = 1_000_000
 	terminalProcessOutputDrainWait  = 500 * time.Millisecond
+	terminalProcessGroupCleanupWait = 2 * time.Second
 	terminalProcessRecoveryTimeout  = 10 * time.Second
 	terminalProcessMaxRuntime       = 30 * time.Minute
 	terminalProcessMaxActive        = 64
@@ -118,6 +119,8 @@ type terminalProcess struct {
 	command              string
 	cwd                  string
 	cmd                  *exec.Cmd
+	waitForExit          func() error
+	groupSignalsClosed   bool
 	tty                  *os.File
 	readDone             chan struct{}
 	startedAt            time.Time
@@ -226,6 +229,7 @@ func (m *terminalProcessManager) Start(req terminalProcessStartRequest) (*termin
 		command:         command,
 		cwd:             cwd,
 		cmd:             cmd,
+		waitForExit:     terminalExecExitWaiter(cmd),
 		tty:             tty,
 		readDone:        make(chan struct{}),
 		reapedDone:      make(chan struct{}),
@@ -242,7 +246,7 @@ func (m *terminalProcessManager) Start(req terminalProcessStartRequest) (*termin
 
 	go proc.readLoop()
 	go proc.waitLoop()
-	go proc.maxRuntimeLoop()
+	go proc.maxRuntimeLoop(terminalProcessMaxRuntime)
 	return completeTerminalProcessStart(proc, tty, req.Stdin)
 }
 
@@ -556,12 +560,12 @@ func (p *terminalProcess) requestTermination() error {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.status != terminalProcessStatusRunning || p.terminationRequested {
+	if p.groupSignalsClosed || p.status != terminalProcessStatusRunning || p.terminationRequested {
 		return nil
 	}
 	// Serialize the signal outcome with process exit classification. A stop
 	// request cannot turn a concurrent normal exit or command failure into cancel.
-	err := terminateTerminalExecProcessTree(p.cmd)
+	err := terminateTerminalExecProcessGroup(p.cmd)
 	if errors.Is(err, os.ErrProcessDone) {
 		return nil
 	}
@@ -624,7 +628,29 @@ func (p *terminalProcess) waitLoop() {
 	if p == nil || p.cmd == nil {
 		return
 	}
-	err := p.cmd.Wait()
+	var cleanupErr error
+	if p.waitForExit != nil {
+		if err := p.waitForExit(); err != nil {
+			cleanupErr = fmt.Errorf("observe terminal exit: %w", err)
+		}
+	}
+	var err error
+	if p.waitForExit != nil {
+		p.mu.Lock()
+		// Keep the root unreaped while signaling its group, including on normal
+		// exit. This pins the PID/PGID and serializes the final signal with Stop.
+		signalErr := terminateTerminalExecProcessGroup(p.cmd)
+		// Retire numeric group signaling before Wait can release the root PID.
+		p.groupSignalsClosed = true
+		p.mu.Unlock()
+		cleanupErr = errors.Join(cleanupErr, p.waitForGroupExit(signalErr))
+		err = p.cmd.Wait()
+	} else {
+		err = p.cmd.Wait()
+		p.mu.Lock()
+		p.groupSignalsClosed = true
+		p.mu.Unlock()
+	}
 	_ = p.tty.Close()
 	drainErr := p.waitForOutputDrain()
 	status := terminalProcessStatusSuccess
@@ -643,6 +669,10 @@ func (p *terminalProcess) waitLoop() {
 			status = terminalProcessStatusError
 			toolErr = &aitools.ToolError{Code: aitools.ErrorCodeTerminalRuntimeFailure, Message: err.Error(), Retryable: false}
 		}
+	}
+	if cleanupErr == nil {
+		p.managerProcessEnded()
+		p.releaseWorkload()
 	}
 	p.mu.Lock()
 	if p.initialInputFailed {
@@ -670,13 +700,40 @@ func (p *terminalProcess) waitLoop() {
 			p.err = toolErr
 		}
 	}
-	p.settlementErr = drainErr
+	if cleanupErr != nil {
+		p.status = terminalProcessStatusError
+		p.err = &aitools.ToolError{Code: aitools.ErrorCodeTerminalRuntimeFailure, Message: "Terminal process cleanup could not be confirmed: " + cleanupErr.Error(), Retryable: false}
+	}
+	p.settlementErr = errors.Join(cleanupErr, drainErr)
 	p.reaped = true
 	p.cond.Broadcast()
 	p.mu.Unlock()
-	p.managerProcessEnded()
-	p.releaseWorkload()
 	close(p.reapedDone)
+}
+
+func (p *terminalProcess) waitForGroupExit(signalErr error) error {
+	if errors.Is(signalErr, os.ErrProcessDone) {
+		signalErr = nil
+	} else if signalErr != nil {
+		signalErr = fmt.Errorf("clean up terminal process group: %w", signalErr)
+	}
+	deadline := time.Now().Add(terminalProcessGroupCleanupWait)
+	for {
+		running, err := terminalExecGroupRunning(p.cmd.Process.Pid)
+		if err != nil {
+			return errors.Join(signalErr, fmt.Errorf("inspect terminal process group: %w", err))
+		}
+		if !running {
+			// A concurrent Stop may already have killed the group. On Darwin,
+			// another signal can return EPERM while its members are exiting.
+			// Only verified absence of live members supersedes a signal error.
+			return nil
+		}
+		if !time.Now().Before(deadline) {
+			return errors.Join(signalErr, errors.New("terminal process group did not exit after termination"))
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func (p *terminalProcess) releaseWorkload() {
@@ -704,13 +761,17 @@ func (p *terminalProcess) waitForOutputDrain() error {
 	}
 }
 
-func (p *terminalProcess) maxRuntimeLoop() {
+func (p *terminalProcess) maxRuntimeLoop(maxRuntime time.Duration) {
 	if p == nil {
 		return
 	}
-	timer := time.NewTimer(terminalProcessMaxRuntime)
+	timer := time.NewTimer(maxRuntime)
 	defer timer.Stop()
-	<-timer.C
+	select {
+	case <-p.reapedDone:
+		return
+	case <-timer.C:
+	}
 	p.mu.Lock()
 	running := p.status == terminalProcessStatusRunning
 	p.mu.Unlock()
