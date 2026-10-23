@@ -17,6 +17,8 @@ Recent changes only. The linked concepts own current contracts and evidence; Git
 
 ## 2026-10-23
 
+- Bind initial history to the ready observer, coalesce covered demand and preserve forced confirmations, reconnect and drafts; see [live delivery](ui/flower-live-timeline.md).
+
 - Bound conversation loading and rendering: authoritative paged inventory, workspace readiness independent of sidebar reads, cancellable two-slot body loading, stable reading anchors, local history failures and complete Markdown. Contracts: [live timeline](ui/flower-live-timeline.md), [selection](ui/flower-thread-selection.md), [read state](ui/flower-read-state.md), [sidebar](ui/flower-thread-sidebar.md), [startup](architecture/flower-startup-presentation.md) and [adapter ownership](ai/floret-redeven-adapter-and-projection.md).
 - Retain streamed prose and activity titles through snapshot reconciliation, completion and disclosure; preserve measured thinking duration. Evidence: [activity interaction](ui/flower-activity-interaction.md), [streaming stability](ui/flower-streaming-stability.md), [switch qualification](operations/flower-thread-switch-qualification.md) and [live queue performance](operations/flower-live-queue-performance.md).
 - Keep temporary subscription loss retryable through the existing owner, preserving drafts and localized manual resync. See [failure recovery](ui/flower-failure-recovery.md).

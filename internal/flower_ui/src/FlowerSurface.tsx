@@ -845,6 +845,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   );
   let subagentDetailReadController: AbortController | undefined;
   const [computerObserverID, setComputerObserverID] = createSignal('');
+  let historyObserverEpoch = -1;
+  const historyObserverWaiters = new Set<() => void>();
+  const waitForHistoryObserver = (signal: AbortSignal): Promise<void> => {
+    signal.throwIfAborted();
+    if (historyObserverEpoch === liveTransport.connectionEpoch()) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const release = () => { historyObserverWaiters.delete(ready); signal.removeEventListener('abort', abort); };
+      const ready = () => { release(); resolve(); };
+      const abort = () => { release(); reject(new DOMException('Read was superseded.', 'AbortError')); };
+      historyObserverWaiters.add(ready);
+      signal.addEventListener('abort', abort, { once: true });
+    });
+  };
   const [computerLiveFrame, setComputerLiveFrame] = createSignal<FlowerLiveStreamEnvelope>();
   let computerViewerRevision = 0;
   const companionRunTracker = new FlowerCompanionRunTracker();
@@ -4099,6 +4112,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     ? JSON.stringify([thread.status, thread.active_run_id, thread.approval_pending, thread.approval_pending_count]) : '';
   const detailLoader = createThreadDetailLoader<FlowerThreadSnapshot>({
     read: async (tid, target, signal) => {
+      // A baseline revision can arrive during the initial request. Its queued
+      // demand is satisfied if that response already includes the newer state.
+      const cached = threadCache().views.get(tid);
+      if (!target.force && cached?.version && target.epoch === liveTransport.connectionEpoch()
+        && !threadSummaryNeedsDetail(threadCache().summaries.get(tid), cached.thread, cached.contentRevision)) return cached.thread;
       const releaseRead = threadCache().beginRuntimeRead(tid);
       try {
       const foreground = tid === selectedThreadID() && target.source !== 'goal_popup';
@@ -4143,8 +4161,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     demandSignal?: AbortSignal,
   ): Promise<FlowerThreadSnapshot | null> => {
     const tid = trimString(threadID);
-    if (!tid || surfaceDisposed || retiredThreadIDs.has(tid)
+    if (!tid || surfaceDisposed || demandSignal?.aborted || retiredThreadIDs.has(tid)
       || (!background && (pendingThreadSelection() || tid !== selectedThreadID()))) return Promise.resolve(null);
+    // A foreground bounded read installs interest on the live observer. Wait
+    // for that observer once, before creating loader demand, so the ready
+    // baseline and navigation share one read and the same revision fence.
+    if (!background && props.adapter.loadHistory && props.adapter.connectLiveStream
+      && historyObserverEpoch !== liveTransport.connectionEpoch()) {
+      const signal = demandSignal ? AbortSignal.any([navigationReadController.signal, demandSignal]) : navigationReadController.signal;
+      return waitForHistoryObserver(signal).then(
+        () => requestThreadDetail(tid, source, force, background, signal),
+        () => null,
+      );
+    }
     const cached = threadCache().views.get(tid);
     const summary = threadCache().summaries.get(tid);
     if (!force && cached?.version && !threadSummaryNeedsDetail(summary, cached.thread, cached.contentRevision)) return Promise.resolve(cached.thread);
@@ -4152,7 +4181,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const signal = background ? demandSignal : demandSignal
       ? AbortSignal.any([navigationReadController.signal, demandSignal]) : navigationReadController.signal;
     const target = { epoch: liveTransport.connectionEpoch(), activityRevision: threadSnapshotRevision(summary),
-      settingsRevision: threadSettingsRevision(summary), runtimeKey: threadDetailRuntimeKey(summary), source };
+      settingsRevision: threadSettingsRevision(summary), runtimeKey: threadDetailRuntimeKey(summary), source, force };
     return detailLoader.request(tid, target, signal);
   };
 
@@ -5230,7 +5259,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       return;
     }
-    if (envelope.kind === 'ready') { setComputerObserverID(envelope.observer_id ?? ''); setComputerLiveFrame(undefined); }
+    if (envelope.kind === 'ready') {
+      setComputerObserverID(envelope.observer_id ?? ''); setComputerLiveFrame(undefined);
+      historyObserverEpoch = liveTransport.connectionEpoch();
+    }
     if (envelope.kind === 'ready' || envelope.kind === 'summary.batch') {
       if (envelope.kind === 'ready') { flowerLiveReadyCount += 1; readSync.setAvailable(readSyncOnline(), true); }
       const selectedID = selectedThreadID();
@@ -5244,9 +5276,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         setSelectedThreadID('');
       }
       if (selectedID) {
-        void requestThreadDetail(selectedID, 'summary_update', envelope.kind === 'ready');
+        void requestThreadDetail(selectedID, 'summary_update', envelope.kind === 'ready' && !props.adapter.loadHistory);
       }
       if (envelope.kind === 'ready') {
+        for (const ready of historyObserverWaiters) ready();
         for (const threadID of unconfirmedStops()) {
           if (threadID !== selectedID) { void requestThreadDetail(threadID, 'user_action', true, true); }
         }

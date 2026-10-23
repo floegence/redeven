@@ -25,6 +25,8 @@ Register observation before freezing authorized roots in navigation order. Budge
 Merge pages immediately; prune only at completion, preserving selection/local creations. First page, confirmed empty inventory or accepted selected detail admits the initial surface; partial empty Ready does not. Explicit HTTP refresh uses cancellable 25-row pages with ten seconds per progressing page and preserves delivered pages on failure. Desktop also cancels history/item POST reads. [Startup](../architecture/flower-startup-presentation.md) owns display.
 
 ## Reading, bodies and delivery
+Foreground history waits for the current live observer. Ready installs its baseline before releasing navigation into the shared loader. A covered response coalesces later baseline demand; explicit command confirmation remains forced. Navigation, disposal and transport changes cancel obsolete waiters. Reconnect binds a fresh read to the new observer while retaining accepted content, scroll state and unsent drafts.
+
 Root/child slots have independent monotonic revisions. Baseline and deltas share a subscription; replacing a page replaces its interest and fences older revisions. Latest/earlier/newer reads select at most 150 items within 512 KiB; receipts refresh the accepted interval, never replace historical reading with Latest.
 
 Only unseen text uses skeletons. Accepted prose, attachments/references, anchors and chosen follow state survive growth, refresh and completion. One observer admits demand within 160 pixels; text/open tools share two slots and a fifteen-second deadline. Offscreen/navigation cancellation removes demand and aborts reads; failures offer local Retry.

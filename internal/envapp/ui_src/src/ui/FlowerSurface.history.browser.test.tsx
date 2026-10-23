@@ -4,7 +4,8 @@ import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 import type { FlowerRuntimeCurrentItem, FlowerRuntimeCurrentView, FlowerHistoryRequest, FlowerLiveStreamEnvelope, FlowerSurfaceAdapter } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
-import { adapter, renderSurfaceWithAdapter, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+import { adapter, deferred, disposeRenderedSurface, renderSurfaceWithAdapter, renderSurfaceWithAdapterProps, renderSurfaceWithDraftCoordinator, renderSurfaceWithFocusController, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+import { createFlowerComposerDraftCoordinator } from '../../../../flower_ui/src';
 
 function fixture(id: string, partial = false): FlowerRuntimeCurrentItem {
   return { id, kind: 'assistant', text: partial ? 'Preview text' : 'Older conversation', ordinal: id === 'latest' ? 2 : 1,
@@ -55,6 +56,131 @@ async function mount(tool = false, pending = false, options: { count?: number; t
 }
 
 describe('bounded Flower history', () => {
+  it('rebinds bounded history once after reconnect while retaining the transcript and draft', async () => {
+    const seed = thread({ thread_id: 'rebind-history', title: 'Reconnect history', messages: [] });
+    const disconnect = deferred<void>();
+    const ready = deferred<void>();
+    let attempts = 0;
+    const current: FlowerRuntimeCurrentView = { thread_id: seed.thread_id, turn_id: 'turn', run_id: 'run', view_version: 7,
+      activity: 'idle', last_outcome: 'completed', items: [fixture('latest')], turns: [], interactions: [], queue: [],
+      window: { first_item_id: 'latest', last_item_id: 'latest', has_before: false, has_after: false } };
+    const history = vi.fn(async (_id: string, _request: FlowerHistoryRequest) => ({ thread: applyFlowerRuntimeCurrentView(seed, current), current }));
+    const root = renderSurfaceWithAdapterProps({ ...adapter(true), loadHistory: history, listThreads: async () => [seed],
+      async *connectLiveStream({ signal }) {
+        const attempt = ++attempts;
+        if (attempt > 1) await ready.promise;
+        if (signal.aborted) return;
+        yield { schema_version: 3, kind: 'ready', baseline_complete: true, observer_id: 'observer-' + attempt, summaries: [seed] };
+        if (attempt === 1) { await disconnect.promise; return; }
+        if (!signal.aborted) await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+      },
+    }, { focusThreadRequest: { request_id: 'open-rebind', thread_id: seed.thread_id } });
+    await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="latest"]')));
+    const bubble = root.querySelector('.flower-history-message .flower-message-bubble');
+    const editor = root.querySelector<HTMLTextAreaElement>('textarea')!;
+    editor.value = 'Preserve this unsent draft';
+    editor.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    disconnect.resolve();
+    await waitFor(() => attempts === 2);
+    expect(history).toHaveBeenCalledOnce();
+    expect(root.querySelector('.flower-history-message .flower-message-bubble')).toBe(bubble);
+    expect(root.querySelector('.flower-thread-loading')).toBeNull();
+    ready.resolve();
+    await waitFor(() => history.mock.calls.length === 2);
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect(history).toHaveBeenCalledTimes(2);
+    expect(history.mock.calls[1][1]).toMatchObject({ observer_id: 'observer-2', reading_revision: expect.any(Number) });
+    expect(root.querySelector('.flower-history-message .flower-message-bubble')).toBe(bubble);
+    expect(root.querySelector('textarea')).toBe(editor);
+    expect(editor.value).toBe('Preserve this unsent draft');
+    expect(root.querySelector('.flower-thread-sync-error')).toBeNull();
+  });
+
+  it('releases pre-handshake navigation demand when another thread or disposal supersedes it', async () => {
+    const seeds = ['a', 'b'].map(id => thread({ thread_id: 'waiting-' + id, messages: [] }));
+    const ready = deferred<void>();
+    const history = vi.fn(async (id: string) => {
+      const current: FlowerRuntimeCurrentView = { thread_id: id, view_version: 1, activity: 'idle',
+        items: [{ ...fixture('latest'), id: id + '-message' }], turns: [], interactions: [], queue: [] };
+      return { thread: applyFlowerRuntimeCurrentView(seeds.find(seed => seed.thread_id === id)!, current), current };
+    });
+    const configured = { ...adapter(true), loadHistory: history, listThreads: async () => seeds,
+      async *connectLiveStream({ signal }: { signal: AbortSignal }): AsyncIterable<FlowerLiveStreamEnvelope> {
+        await ready.promise;
+        if (signal.aborted) return;
+        yield { schema_version: 3, kind: 'ready', baseline_complete: true, observer_id: 'wait-observer', summaries: seeds };
+        if (!signal.aborted) await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+      },
+    };
+    const control = renderSurfaceWithFocusController(configured, { request_id: 'wait-a', thread_id: seeds[0].thread_id });
+    await waitFor(() => control.runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === seeds[0].thread_id);
+    control.setFocusThreadRequest({ request_id: 'wait-b', thread_id: seeds[1].thread_id });
+    await waitFor(() => control.runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === seeds[1].thread_id);
+    const drafts = createFlowerComposerDraftCoordinator();
+    const disposed = renderSurfaceWithDraftCoordinator(configured, drafts, { focusThreadRequest: { request_id: 'dispose-a', thread_id: seeds[0].thread_id } });
+    await waitFor(() => disposed.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === seeds[0].thread_id);
+    disposeRenderedSurface(disposed); drafts.dispose();
+    expect(history).not.toHaveBeenCalled();
+    ready.resolve();
+    await waitFor(() => Boolean(control.runtime.querySelector('[data-flower-message-id="waiting-b-message"]')));
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect(history).toHaveBeenCalledOnce();
+    expect(history.mock.calls[0][0]).toBe(seeds[1].thread_id);
+  });
+
+  it('opens a deep link with one observer-bound history read after a delayed live handshake', async () => {
+    const seed = thread({ thread_id: 'deep-history', title: 'Direct history', messages: [] });
+    const ready = deferred<void>();
+    const current: FlowerRuntimeCurrentView = { thread_id: seed.thread_id, turn_id: 'turn', run_id: 'run', view_version: 7,
+      activity: 'idle', last_outcome: 'completed', items: [fixture('latest')], turns: [], interactions: [], queue: [],
+      window: { first_item_id: 'latest', last_item_id: 'latest', has_before: false, has_after: false } };
+    const history = vi.fn(async (_id: string, _request: FlowerHistoryRequest) => ({ thread: applyFlowerRuntimeCurrentView(seed, current), current }));
+    const root = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [seed], loadHistory: history,
+      async *connectLiveStream({ signal }) {
+        await ready.promise;
+        if (signal.aborted) return;
+        yield { schema_version: 3, kind: 'ready', baseline_complete: true, observer_id: 'deep-observer', summaries: [seed] };
+        if (!signal.aborted) await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+      },
+    }, { focusThreadRequest: { request_id: 'open-deep-history', thread_id: seed.thread_id } });
+    await waitFor(() => root.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === seed.thread_id);
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect(history).not.toHaveBeenCalled();
+    ready.resolve();
+    await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="latest"]')));
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect(history).toHaveBeenCalledOnce();
+    expect(history.mock.calls[0][1]).toMatchObject({ observer_id: 'deep-observer', reading_revision: expect.any(Number) });
+    expect(root.querySelector('.flower-thread-sync-error')).toBeNull();
+  });
+
+  it('satisfies a newer baseline received during the initial history request without fetching twice', async () => {
+    const seed = thread({ thread_id: 'baseline-history', title: 'Delayed baseline', messages: [], updated_at_ms: 1 });
+    const latest = thread({ ...seed, updated_at_ms: 10, read_status: { is_unread: false, snapshot: { activity_revision: 10 }, read_state: { last_seen_activity_revision: 10 } } });
+    const complete = deferred<void>();
+    const baseline = deferred<void>();
+    const current: FlowerRuntimeCurrentView = { thread_id: seed.thread_id, turn_id: 'turn', run_id: 'run', view_version: 7,
+      activity: 'idle', last_outcome: 'completed', items: [fixture('latest')], turns: [], interactions: [], queue: [],
+      window: { first_item_id: 'latest', last_item_id: 'latest', has_before: false, has_after: false } };
+    const history = vi.fn(async () => { await complete.promise; return { thread: applyFlowerRuntimeCurrentView(latest, current), current }; });
+    const root = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [seed], loadHistory: history,
+      async *connectLiveStream({ signal }) {
+        yield { schema_version: 3, kind: 'ready', baseline_complete: false, observer_id: 'baseline-observer', summaries: [seed] };
+        await baseline.promise;
+        if (signal.aborted) return;
+        yield { schema_version: 3, kind: 'summary.batch', baseline_complete: true, summaries: [latest] };
+        if (!signal.aborted) await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+      },
+    }, { focusThreadRequest: { request_id: 'open-baseline-history', thread_id: seed.thread_id } });
+    await waitFor(() => history.mock.calls.length === 1);
+    baseline.resolve();
+    await new Promise(resolve => setTimeout(resolve, 100));
+    complete.resolve();
+    await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="latest"]')));
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect(history).toHaveBeenCalledOnce();
+  });
+
   it('recovers one invalidated window without clearing content or looping on repeated pressure', async () => {
     const { root, history, push } = await mount();
     await waitFor(() => root.textContent?.includes('Preview text expanded body!!') === true);
