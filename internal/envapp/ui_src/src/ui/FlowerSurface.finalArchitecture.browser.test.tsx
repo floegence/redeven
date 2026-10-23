@@ -824,8 +824,8 @@ describe('Flower final thread cache and workspace transport', () => {
         turn_id: turnID,
         run_progress: { phase: 'streaming' },
         items: [
-          { id: 'user:progressive-thinking', turn_id: turnID, run_id: 'run-fixture', ordinal: 1, kind: 'user', text: 'Explain the workspace' },
-          { id: 'thinking:progressive-thinking', turn_id: turnID, run_id: 'run-fixture', ordinal: 2, kind: 'thinking', text: 'Inspecting files', live: true },
+          { id: 'user:progressive-thinking', turn_id: turnID, run_id: runID, ordinal: 1, kind: 'user', text: 'Explain the workspace' },
+          { id: 'thinking:progressive-thinking', turn_id: turnID, run_id: runID, ordinal: 2, kind: 'thinking', text: 'Inspecting files', live: true },
         ],
       },
     });
@@ -836,7 +836,10 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(runtime.querySelector('.flower-thinking-content')).toBeNull();
     expect(thinkingToggle?.getAttribute('aria-expanded')).toBe('false');
     expect(thinkingToggle?.querySelector('.flower-activity-inline-title')?.textContent).toContain('Thinking');
-    expect(thinkingToggle?.querySelector('[data-floe-progress-shimmer]')).toBeNull();
+    const thinkingLabel = thinkingToggle!.querySelector<HTMLElement>('.flower-activity-inline-title')!;
+    await Promise.all(thinkingLabel.getAnimations().filter(animation =>
+      (animation.effect as KeyframeEffect).getKeyframes().some(frame => 'clipPath' in frame)).map(animation => animation.finished));
+    await expect.poll(() => thinkingLabel.getAttribute('data-floe-progress-shimmer')).toBe('text');
     expect(thinkingToggle?.querySelector('.flower-thinking-flower')!.getAnimations({ subtree: true })).toHaveLength(6);
     thinkingToggle?.click();
     await waitFor(() => runtime.querySelector('.flower-thinking-content')?.textContent?.includes('Inspecting files') === true);
@@ -856,8 +859,8 @@ describe('Flower final thread cache and workspace transport', () => {
         turn_id: turnID,
         run_progress: { phase: 'streaming' },
         items: [
-          { id: 'user:progressive-thinking', turn_id: turnID, run_id: 'run-fixture', ordinal: 1, kind: 'user', text: 'Explain the workspace' },
-          { id: 'thinking:progressive-thinking', turn_id: turnID, run_id: 'run-fixture', ordinal: 2, kind: 'thinking', text: 'Inspecting files and configuration', live: true },
+          { id: 'user:progressive-thinking', turn_id: turnID, run_id: runID, ordinal: 1, kind: 'user', text: 'Explain the workspace' },
+          { id: 'thinking:progressive-thinking', turn_id: turnID, run_id: runID, ordinal: 2, kind: 'thinking', text: 'Inspecting files and configuration', live: true },
         ],
       },
     });
@@ -875,9 +878,9 @@ describe('Flower final thread cache and workspace transport', () => {
         turn_id: turnID,
         last_outcome: 'completed',
         items: [
-          { id: 'user:progressive-thinking', turn_id: turnID, run_id: 'run-fixture', ordinal: 1, kind: 'user', text: 'Explain the workspace' },
-          { id: 'thinking:progressive-thinking', turn_id: turnID, run_id: 'run-fixture', ordinal: 2, kind: 'thinking', text: 'Inspecting files and configuration' },
-          { id: 'assistant:progressive-thinking', turn_id: turnID, run_id: 'run-fixture', ordinal: 3, kind: 'assistant', text: 'Final workspace explanation' },
+          { id: 'user:progressive-thinking', turn_id: turnID, run_id: runID, ordinal: 1, kind: 'user', text: 'Explain the workspace' },
+          { id: 'thinking:progressive-thinking', turn_id: turnID, run_id: runID, ordinal: 2, kind: 'thinking', text: 'Inspecting files and configuration' },
+          { id: 'assistant:progressive-thinking', turn_id: turnID, run_id: runID, ordinal: 3, kind: 'assistant', text: 'Final workspace explanation' },
         ],
       },
     });

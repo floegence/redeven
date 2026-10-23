@@ -10707,15 +10707,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   );
 
   const argumentPreviewRow = (block: Accessor<FlowerToolCallPreviewBlock>) => {
-    const revealTitle = useFlowerActivityTitleReveal(() => flowerToolCallPreviewIdentity(block().call),
-      () => block().call.preview?.display_name);
+    const revealTitle = useFlowerActivityTitleReveal(() => flowerToolCallPreviewIdentity(block().call));
     return (
-      <div class="flower-activity-inline-row flower-activity-inline-row-generating" data-flower-tool-call-id={block().call.call_id} data-flower-argument-generation="true">
+      <div class="flower-activity-inline-row flower-activity-inline-row-generating" data-flower-tool-call-id={block().call.call_id} data-flower-argument-generation="true" data-flower-activity-active={livePresentationConfirmed() ? 'true' : undefined}>
         <div class="flower-activity-inline-line">
           <div class="flower-activity-inline-button flower-activity-inline-button-static">
             <span class="flower-activity-inline-icon"><FlowerToolIcon toolName={block().call.name} running={livePresentationConfirmed()} /></span>
             <span class="flower-activity-inline-copy">
-              <span ref={revealTitle} class="flower-activity-inline-title" data-floe-progress-shimmer={livePresentationConfirmed() ? 'text' : undefined}>
+              <span ref={revealTitle.bind} class="flower-activity-inline-title" data-floe-progress-shimmer={livePresentationConfirmed() && !revealTitle.revealing() ? 'text' : undefined}>
                 <span class="flower-activity-inline-title-verb">{block().call.name === 'goal' ? copy().chat.goalTitle : block().call.name === 'apply_patch' ? copy().chat.toolActivity.patch : copy().chat.toolActivity.edit}</span>
                 <Show when={block().call.preview?.display_name}>{(name) => <span class="flower-activity-inline-title-target" title={name()}>{name()}</span>}</Show>
               </span>
@@ -10759,7 +10758,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         : presentation().title;
     });
     const revealTitle = useFlowerActivityTitleReveal(disclosureKey,
-      () => [displayTitle(), item().status, item().requires_approval, item().approval_state],
       () => !['pending', 'running', 'success'].includes(item().status) || Boolean(item().requires_approval || item().approval_state));
     const terminalDisclosure = createMemo(() => presentation().detailBlocks.some((block) => block.kind === 'terminal_output'));
     const detailKeys = createMemo(() => presentation().detailBlocks.map((block) => `${disclosureKey()}:${block.kind}:${block.kind === 'structured_rows' ? block.section ?? '' : ''}`));
@@ -10866,13 +10864,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (value.status !== 'running' && value.status !== 'waiting') return '';
       return formatActivityDuration(activityClockNow() - start);
     });
-    const activityRowContent = () => (
+    // Keep the title and its arrival animation when results make the row expandable.
+    const activityRowContent = (
       <>
         <span class="flower-activity-inline-icon">
           <FlowerToolIcon toolName={item().tool_name} source={item().metadata?.source} webOperation={webOperation()} running={livePresentationConfirmed() && displayStatus() === 'running'} />
         </span>
         <div class="flower-activity-inline-copy">
-          <span ref={revealTitle} class="flower-activity-inline-title" data-floe-progress-shimmer={progressShimmer() ? 'text' : undefined}>{activityTitle(displayTitle())}</span>
+          <span ref={revealTitle.bind} class="flower-activity-inline-title" data-floe-progress-shimmer={progressShimmer() && !revealTitle.revealing() ? 'text' : undefined}>{activityTitle(displayTitle())}</span>
           <Show when={presentation().subagentThreadIDs?.length}>
             <span class="flower-activity-report-sources">
               <For each={presentation().subagentThreadIDs}>{threadID => {
@@ -10906,6 +10905,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         title={subagentReadHint()}
         aria-description={subagentReadHint()}
         data-flower-activity-status={displayStatus()}
+        data-flower-activity-active={progressShimmer() ? 'true' : undefined}
         data-flower-activity-approval-state={item().approval_state}
         data-flower-control-error={controlError() ? 'true' : undefined}
         data-state={disclosure.state()}
@@ -10914,7 +10914,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         <div class="flower-activity-inline-line">
           <Show
             when={expandable()}
-            fallback={<div ref={staticActivityRef} tabindex={-1} class="flower-activity-inline-button flower-activity-inline-button-static">{activityRowContent()}</div>}
+            fallback={<div ref={staticActivityRef} tabindex={-1} class="flower-activity-inline-button flower-activity-inline-button-static">{activityRowContent}</div>}
           >
             <button
               ref={toggleButtonRef}
@@ -10926,7 +10926,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               aria-controls={`flower-activity-detail-${disclosureKey()}`}
               onClick={toggleDisclosure}
             >
-              {activityRowContent()}
+              {activityRowContent}
             </button>
           </Show>
           {fileActionButtons(rowFileAction, rowAttachmentPreviewTarget)}

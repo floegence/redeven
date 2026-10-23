@@ -50,7 +50,7 @@ describe('Thinking segment disclosure', () => {
     expect(thinking.button().querySelectorAll('.flower-thinking-petal')).toHaveLength(5);
     expect(thinking.button().textContent).toContain('Thinking...');
     expect(thinking.button().textContent).toContain('4s');
-    expect(thinking.button().querySelector('[data-floe-progress-shimmer]')).toBeNull();
+    expect(thinking.button().querySelector('[data-floe-progress-shimmer="text"]')?.textContent).toBe('Thinking...');
     thinking.button().click();
     expect(thinking.view()).toBe('expanded');
     thinking.button().click();

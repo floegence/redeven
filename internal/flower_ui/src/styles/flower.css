@@ -6427,13 +6427,13 @@ button.flower-composer-context-source:focus-visible,
   white-space: nowrap;
 }
 
-.flower-activity-inline-row:has([data-floe-progress-shimmer='text']) .flower-activity-inline-title {
+.flower-activity-inline-row[data-flower-activity-active='true'] .flower-activity-inline-title {
   font-weight: 500;
   will-change: transform;
 }
 
 
-.flower-activity-inline-row:has([data-floe-progress-shimmer='text']) .flower-activity-inline-button {
+.flower-activity-inline-row[data-flower-activity-active='true'] .flower-activity-inline-button {
   color: var(--flower-activity-tool-row-foreground-strong);
 }
 
