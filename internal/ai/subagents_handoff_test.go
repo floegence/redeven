@@ -105,7 +105,7 @@ func completedSubagentTestView(summary flruntime.ThreadSummary, content string) 
 
 func newSubagentHandoffTestAdapter(t *testing.T, summaries []flruntime.ThreadSummary, views map[identity.ThreadID]flruntime.ThreadView) (*floretSubagentRuntime, *subagentHandoffTestRuntime) {
 	t.Helper()
-	service := newSendTurnTestService(t)
+	service := newSendTurnTestServiceWithActivation(t, true)
 	threadRuntime := &subagentHandoffTestRuntime{
 		ThreadService: service.threadRuntime,
 		summaries:     summaries,

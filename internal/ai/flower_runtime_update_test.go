@@ -203,7 +203,7 @@ func TestFlowerRuntimePumpRebindsAndReconcilesMissedCleanupWithoutViews(t *testi
 }
 
 func TestFlowerRuntimeWithoutObserversDoesNotRequestPresentationEvidence(t *testing.T) {
-	service := newSendTurnTestService(t)
+	service := newSendTurnTestServiceWithActivation(t, true)
 	source := &flowerRecoveryRuntime{ThreadService: service.threadRuntime}
 	service.threadRuntime = source
 	service.broadcastFlowerRuntimeUpdate("endpoint", "", flruntime.ThreadUpdate{ThreadID: "thread", BaseVersion: 1, ViewVersion: 2,

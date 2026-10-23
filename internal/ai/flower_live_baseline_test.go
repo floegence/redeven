@@ -13,7 +13,8 @@ import (
 )
 
 func TestFlowerLiveBaselineFreezesMembershipAndQueuesConcurrentChanges(t *testing.T) {
-	svc := newSendTurnTestService(t)
+	// Drive this queue explicitly; startup facts are a separate asynchronous owner.
+	svc := newSendTurnTestServiceWithActivation(t, true)
 	meta := testSendTurnMeta()
 	for i := range flowerLiveBaselinePageLimit + 5 {
 		if _, err := svc.CreateThread(t.Context(), meta, fmt.Sprintf("baseline %d", i), "", "", ""); err != nil {
@@ -55,18 +56,29 @@ func TestFlowerLiveBaselineFreezesMembershipAndQueuesConcurrentChanges(t *testin
 	if _, err := svc.threadsDB.SetThreadPinned(t.Context(), meta.EndpointID, ids[len(ids)-1], true); err != nil {
 		t.Fatal(err)
 	}
+	svc.broadcastFlowerRuntimeUpdate(meta.EndpointID, "", flruntime.ThreadUpdate{ThreadID: identity.ThreadID(ids[0]), BaseVersion: 1, ViewVersion: 2, Facts: flruntime.ThreadRuntimeFacts{Activity: flruntime.ThreadActivityIdle}})
 	svc.publishFlowerLiveSummary(meta.EndpointID, ThreadView{ThreadID: "concurrent-root", Title: "concurrent"})
 	seen := map[string]bool{}
 	for _, summary := range first.Summaries {
 		seen[summary.ThreadID] = true
 	}
 	complete := false
+	factsSeen := false
 	for {
 		envelope := flowerBackpressureEnvelope(t, sub)
 		if envelope.Kind == FlowerLiveStreamViewerReadState {
 			continue
 		}
 		if envelope.BaselineComplete == nil {
+			// Creation facts may still be in the runtime pump. Both facts and
+			// summary changes must follow the complete sidebar baseline.
+			if envelope.FactsOnly {
+				if !complete {
+					t.Fatal("runtime facts overtook baseline")
+				}
+				factsSeen = true
+				continue
+			}
 			if !complete || len(envelope.Summaries) != 1 || envelope.Summaries[0].ThreadID != "concurrent-root" {
 				t.Fatalf("live change overtook baseline: complete=%v envelope=%+v", complete, envelope)
 			}
@@ -82,6 +94,9 @@ func TestFlowerLiveBaselineFreezesMembershipAndQueuesConcurrentChanges(t *testin
 		if complete && sub.subscriber.baselineThreadIDs != nil {
 			t.Fatal("completed baseline retains its identity array")
 		}
+	}
+	if !factsSeen {
+		t.Fatal("concurrent facts were lost")
 	}
 	if len(seen) != len(ids) {
 		t.Fatalf("retained %d/%d roots", len(seen), len(ids))
