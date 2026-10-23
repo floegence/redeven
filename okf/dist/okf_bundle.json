@@ -2688,7 +2688,7 @@
             "path": "ui/file-preview-viewport-and-rendering.md",
             "type": "UI Contract",
             "title": "File preview viewport and rendering",
-            "description": "Fit documents and images to their actual reading area and isolate asynchronous renderer work.",
+            "description": "Preview fit, renderer ownership, and Markdown reading colors.",
             "tags": [
               "files",
               "preview",
@@ -2696,7 +2696,7 @@
               "ui",
               "viewport"
             ],
-            "summary": "Redeven owns preview modes, file identity, and renderer lifetimes. Published Floe\nWebapp owns measurement, fit scales, synchronized PDF layers, and static PPTX rendering. PDF, PPTX, DOCX, and\nimages initially fit the reading area, including enlargement; resizing updates\nautomatic fit but preserves manual zoom. Each PDF or PPTX page has one rendering owner.\nStale work cannot replace the current document; cancellation is neutral, and real\npage failures remain local and retryable. Markdown without Mermaid skips diagram\ntheme sampling. HTML opens as an isolated page through published Floe document\nisolation; source editing is explicit, and incomplete HTML never executes.",
+            "summary": "Redeven owns preview modes, identity, and renderer lifetimes; published Floe owns sizing, PDF layers, and static PPTX. Documents/images initially fit, including enlargement. Resize updates automatic fit, preserving manual zoom. PDF/PPTX pages have one rendering owner. Stale work cannot replace current content; cancellation is neutral and failures stay local/retryable. HTML uses published isolation; source editing is explicit and incomplete HTML never executes.",
             "section_count": 2
           },
           {
@@ -27159,7 +27159,7 @@
       "concept_id": "ui.file-preview-viewport-and-rendering",
       "type": "UI Contract",
       "title": "File preview viewport and rendering",
-      "description": "Fit documents and images to their actual reading area and isolate asynchronous renderer work.",
+      "description": "Preview fit, renderer ownership, and Markdown reading colors.",
       "tags": [
         "files",
         "preview",
@@ -27169,7 +27169,7 @@
       ],
       "timestamp": "2026-10-01T00:00:00Z",
       "frontmatter": {
-        "description": "Fit documents and images to their actual reading area and isolate asynchronous renderer work.",
+        "description": "Preview fit, renderer ownership, and Markdown reading colors.",
         "lifecycle": "contract",
         "reviewed_at": "2026-10-23",
         "tags": [
@@ -27183,52 +27183,57 @@
         "title": "File preview viewport and rendering",
         "type": "UI Contract"
       },
-      "body_length": 3778,
-      "summary": "Redeven owns preview modes, file identity, and renderer lifetimes. Published Floe\nWebapp owns measurement, fit scales, synchronized PDF layers, and static PPTX rendering. PDF, PPTX, DOCX, and\nimages initially fit the reading area, including enlargement; resizing updates\nautomatic fit but preserves manual zoom. Each PDF or PPTX page has one rendering owner.\nStale work cannot replace the current document; cancellation is neutral, and real\npage failures remain local and retryable. Markdown without Mermaid skips diagram\ntheme sampling. HTML opens as an isolated page through published Floe document\nisolation; source editing is explicit, and incomplete HTML never executes.",
+      "body_length": 3601,
+      "summary": "Redeven owns preview modes, identity, and renderer lifetimes; published Floe owns sizing, PDF layers, and static PPTX. Documents/images initially fit, including enlargement. Resize updates automatic fit, preserving manual zoom. PDF/PPTX pages have one rendering owner. Stale work cannot replace current content; cancellation is neutral and failures stay local/retryable. HTML uses published isolation; source editing is explicit and incomplete HTML never executes.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Window boundary\nThe [floating layer contract](env-app-floating-layer-order.md) owns window placement and visible viewport constraints. The preview title, close action and document toolbar remain reachable while the document scrolls in its own reading area.\n\n## Reading area and zoom\nSizing uses local CSS pixels, excluding padding and scrollbars. Ancestor CSS transforms, including Workbench projection, must not change intrinsic document size.\n\nFlower attachment windows retain native browser PDF controls and image containment; their document containers must shrink with the window.\n\n## Rendering ownership\nPDF uses the lazy published `@floegence/floe-webapp-core/pdf` entrypoint. Its scoped CSS must not affect unrelated surfaces.\n\nImage load and error callbacks must match the currently displayed resource.\n\n## HTML pages\nThe [HTML file preview contract](file-preview-html.md) owns page-first opening, source editing, bounded content, and isolated document interaction.\n\n## Markdown enhancements\nMermaid processing checks for diagram elements before resolving theme colors or allocating a rendering sandbox. Diagram rendering retains theme-specific caching and rejects stale document work.\n\nFloating Markdown previews start with Contents closed. The Contents control opens a right-side drawer inside the reading area through the published Floe Dialog surface contract. Opening and closing the drawer preserves document width, rendered nodes, and scroll position; it never reserves a sidebar column. The drawer stays within the preview at narrow window sizes and uses the published focus, dismissal, and motion behavior. Escape, its close button, or the reading-area backdrop dismisses Contents without closing the preview. Choosing a heading scrolls only the Markdown body and closes the drawer; switching files starts closed again. Documents without headings disable the Contents control. Main-surface previews retain their sidebar presentation.",
-          "char_count": 1953
+          "body": "## Window boundary\nThe [floating layer contract](env-app-floating-layer-order.md) owns placement and viewport constraints. Title, close, and toolbar stay reachable while documents scroll locally.\n\n## Reading area and zoom\nSizing excludes padding/scrollbars in local CSS pixels. Ancestor transforms, including Workbench projection, cannot change intrinsic size.\n\nFlower attachments retain native PDF controls and contained images; containers shrink with the window.\n\n## Rendering ownership\nPDF uses the lazy published `@floegence/floe-webapp-core/pdf` entrypoint. Its scoped CSS must not affect unrelated surfaces.\n\nImage load and error callbacks must match the currently displayed resource.\n\n## HTML pages\nThe [HTML contract](file-preview-html.md) owns page-first opening, source editing, bounds, and isolation.\n\n## Markdown enhancements\nMermaid skips theme sampling/sandbox allocation without diagrams, retains theme caching, and rejects stale work.\n\nFloating Contents starts closed. A published Floe Dialog right drawer preserves document width, nodes, and scroll without reserving a sidebar. It fits narrow windows with published focus/dismissal/motion. Escape, close, or backdrop dismisses only Contents; heading selection scrolls only Markdown and closes it. File changes reset it; headingless documents disable it. Main previews keep their sidebar.\n\nBoth reading modes use published Floe colors: headings use interaction/info accents, lower headings and quotes use tip, emphasis uses note, links use info, and inline code uses its dedicated foreground. Dark headings retain hue with a lightness floor for raised windows. Tables and metadata use subtle tints; GFM alerts distinguish info, success, note, warning, and error.\n\nText and inset titles meet 4.5:1 contrast against actual backgrounds in every preset and both materials, including floating windows. Links retain underlines/focus; selection stays readable. Forced colors use system text, links, and boundaries. Theme changes preserve nodes, geometry, selection, focus, and scroll; theme state and syntax-highlighting ownership stay shared.",
+          "char_count": 2102
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "The [window actions contract](file-preview-window-actions.md) owns title-bar file actions, drafts, and dismissal. Fit and renderer fixes must not grant an unselected widget local wheel ownership or alter file authorization, editability, or native attachment PDF behavior.",
-          "char_count": 271
+          "body": "The [window actions contract](file-preview-window-actions.md) owns actions, drafts, and dismissal. Rendering preserves unselected-widget wheel ownership, authorization, editability, and native attachment PDF behavior.",
+          "char_count": 217
         }
       ],
       "evidence": [
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/createPreviewZoom.ts:0:shared product zoom policy over published floe geometry.",
+          "id": "redeven:internal/envapp/ui_src/src/ui/file-markdown/FileMarkdown.themes.browser.test.tsx:0:all-theme contrast, distinct roles, floating windows, continuity, and forced colors.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/file-markdown/FileMarkdown.themes.browser.test.tsx",
+          "description": "All-theme contrast, distinct roles, floating windows, continuity, and forced colors."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/createPreviewZoom.ts:0:zoom policy.",
           "source": "redeven:internal/envapp/ui_src/src/ui/widgets/createPreviewZoom.ts",
-          "description": "Shared product zoom policy over published Floe geometry."
+          "description": "Zoom policy."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewZoomControls.tsx:0:compact floating controls shared by sized preview renderers.",
+          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewZoomControls.tsx:0:shared zoom controls.",
           "source": "redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewZoomControls.tsx",
-          "description": "Compact floating controls shared by sized preview renderers."
+          "description": "Shared zoom controls."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/PdfPreviewPane.tsx:0:product virtualization and controls over the published layered pdf surface.",
+          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/PdfPreviewPane.tsx:0:pdf virtualization over published layers.",
           "source": "redeven:internal/envapp/ui_src/src/ui/widgets/PdfPreviewPane.tsx",
-          "description": "Product virtualization and controls over the published layered PDF surface."
+          "description": "PDF virtualization over published layers."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/MarkdownPreviewPane.tsx:0:selects the contained drawer for floating previews.",
+          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/MarkdownPreviewPane.tsx:0:contained contents drawer.",
           "source": "redeven:internal/envapp/ui_src/src/ui/widgets/MarkdownPreviewPane.tsx",
-          "description": "Selects the contained drawer for floating previews."
+          "description": "Contained Contents drawer."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/MarkdownPreviewPane.browser.test.tsx:0:real floating-window coverage for default disclosure, unchanged document geometry, drawer bounds, focus, dismissal, and local heading navigation at three widths in light and dark themes.",
+          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/MarkdownPreviewPane.browser.test.tsx:0:drawer geometry, focus, dismissal, and local navigation at three widths in both modes.",
           "source": "redeven:internal/envapp/ui_src/src/ui/widgets/MarkdownPreviewPane.browser.test.tsx",
-          "description": "Real floating-window coverage for default disclosure, unchanged document geometry, drawer bounds, focus, dismissal, and local heading navigation at three widths in light and dark themes."
+          "description": "Drawer geometry, focus, dismissal, and local navigation at three widths in both modes."
         }
       ],
-      "snippet": "Redeven owns preview modes, file identity, and renderer lifetimes. Published Floe Webapp owns measurement, fit scales, synchronized PDF layers, and static PPTX rendering. PDF, PPTX, DOCX, and images initially fit the reading area, including",
+      "snippet": "Redeven owns preview modes, identity, and renderer lifetimes; published Floe owns sizing, PDF layers, and static PPTX. Documents/images initially fit, including enlargement. Resize updates automatic fit, preserving manual zoom. PDF/PPTX pag",
       "links": [
         {
           "label": "floating layer contract",
@@ -27237,7 +27242,7 @@
           "title": "Env App floating layer order"
         },
         {
-          "label": "HTML file preview contract",
+          "label": "HTML contract",
           "path": "ui/file-preview-html.md",
           "concept_id": "ui.file-preview-html",
           "title": "HTML file preview"
@@ -33629,5 +33634,5 @@
       ]
     }
   ],
-  "source_sha256": "7e80f64cb75fc46747250b6c9d487601e4e936c1c02d65d07097f8b5f3543d4d"
+  "source_sha256": "9b2946c67176d7dcca7ed389192a6f450a03778800bc63944ef88fa4e175d850"
 }

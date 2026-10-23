@@ -1,7 +1,7 @@
 ---
 type: UI Contract
 title: File preview viewport and rendering
-description: Fit documents and images to their actual reading area and isolate asynchronous renderer work.
+description: Preview fit, renderer ownership, and Markdown reading colors.
 tags: [ui, files, preview, viewport, rendering]
 timestamp: 2026-10-01T00:00:00Z
 lifecycle: contract
@@ -9,24 +9,17 @@ reviewed_at: "2026-10-23"
 ---
 # Summary
 
-Redeven owns preview modes, file identity, and renderer lifetimes. Published Floe
-Webapp owns measurement, fit scales, synchronized PDF layers, and static PPTX rendering. PDF, PPTX, DOCX, and
-images initially fit the reading area, including enlargement; resizing updates
-automatic fit but preserves manual zoom. Each PDF or PPTX page has one rendering owner.
-Stale work cannot replace the current document; cancellation is neutral, and real
-page failures remain local and retryable. Markdown without Mermaid skips diagram
-theme sampling. HTML opens as an isolated page through published Floe document
-isolation; source editing is explicit, and incomplete HTML never executes.
+Redeven owns preview modes, identity, and renderer lifetimes; published Floe owns sizing, PDF layers, and static PPTX. Documents/images initially fit, including enlargement. Resize updates automatic fit, preserving manual zoom. PDF/PPTX pages have one rendering owner. Stale work cannot replace current content; cancellation is neutral and failures stay local/retryable. HTML uses published isolation; source editing is explicit and incomplete HTML never executes.
 
 # Contract
 
 ## Window boundary
-The [floating layer contract](env-app-floating-layer-order.md) owns window placement and visible viewport constraints. The preview title, close action and document toolbar remain reachable while the document scrolls in its own reading area.
+The [floating layer contract](env-app-floating-layer-order.md) owns placement and viewport constraints. Title, close, and toolbar stay reachable while documents scroll locally.
 
 ## Reading area and zoom
-Sizing uses local CSS pixels, excluding padding and scrollbars. Ancestor CSS transforms, including Workbench projection, must not change intrinsic document size.
+Sizing excludes padding/scrollbars in local CSS pixels. Ancestor transforms, including Workbench projection, cannot change intrinsic size.
 
-Flower attachment windows retain native browser PDF controls and image containment; their document containers must shrink with the window.
+Flower attachments retain native PDF controls and contained images; containers shrink with the window.
 
 ## Rendering ownership
 PDF uses the lazy published `@floegence/floe-webapp-core/pdf` entrypoint. Its scoped CSS must not affect unrelated surfaces.
@@ -34,24 +27,30 @@ PDF uses the lazy published `@floegence/floe-webapp-core/pdf` entrypoint. Its sc
 Image load and error callbacks must match the currently displayed resource.
 
 ## HTML pages
-The [HTML file preview contract](file-preview-html.md) owns page-first opening, source editing, bounded content, and isolated document interaction.
+The [HTML contract](file-preview-html.md) owns page-first opening, source editing, bounds, and isolation.
 
 ## Markdown enhancements
-Mermaid processing checks for diagram elements before resolving theme colors or allocating a rendering sandbox. Diagram rendering retains theme-specific caching and rejects stale document work.
+Mermaid skips theme sampling/sandbox allocation without diagrams, retains theme caching, and rejects stale work.
 
-Floating Markdown previews start with Contents closed. The Contents control opens a right-side drawer inside the reading area through the published Floe Dialog surface contract. Opening and closing the drawer preserves document width, rendered nodes, and scroll position; it never reserves a sidebar column. The drawer stays within the preview at narrow window sizes and uses the published focus, dismissal, and motion behavior. Escape, its close button, or the reading-area backdrop dismisses Contents without closing the preview. Choosing a heading scrolls only the Markdown body and closes the drawer; switching files starts closed again. Documents without headings disable the Contents control. Main-surface previews retain their sidebar presentation.
+Floating Contents starts closed. A published Floe Dialog right drawer preserves document width, nodes, and scroll without reserving a sidebar. It fits narrow windows with published focus/dismissal/motion. Escape, close, or backdrop dismisses only Contents; heading selection scrolls only Markdown and closes it. File changes reset it; headingless documents disable it. Main previews keep their sidebar.
+
+Both reading modes use published Floe colors: headings use interaction/info accents, lower headings and quotes use tip, emphasis uses note, links use info, and inline code uses its dedicated foreground. Dark headings retain hue with a lightness floor for raised windows. Tables and metadata use subtle tints; GFM alerts distinguish info, success, note, warning, and error.
+
+Text and inset titles meet 4.5:1 contrast against actual backgrounds in every preset and both materials, including floating windows. Links retain underlines/focus; selection stays readable. Forced colors use system text, links, and boundaries. Theme changes preserve nodes, geometry, selection, focus, and scroll; theme state and syntax-highlighting ownership stay shared.
 
 # Boundaries
 
-The [window actions contract](file-preview-window-actions.md) owns title-bar file actions, drafts, and dismissal. Fit and renderer fixes must not grant an unselected widget local wheel ownership or alter file authorization, editability, or native attachment PDF behavior.
+The [window actions contract](file-preview-window-actions.md) owns actions, drafts, and dismissal. Rendering preserves unselected-widget wheel ownership, authorization, editability, and native attachment PDF behavior.
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/createPreviewZoom.ts` - Shared product zoom policy over published Floe geometry.
+- `redeven:internal/envapp/ui_src/src/ui/file-markdown/FileMarkdown.themes.browser.test.tsx` - All-theme contrast, distinct roles, floating windows, continuity, and forced colors.
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewZoomControls.tsx` - Compact floating controls shared by sized preview renderers.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/createPreviewZoom.ts` - Zoom policy.
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/PdfPreviewPane.tsx` - Product virtualization and controls over the published layered PDF surface.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewZoomControls.tsx` - Shared zoom controls.
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/MarkdownPreviewPane.tsx` - Selects the contained drawer for floating previews.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/MarkdownPreviewPane.browser.test.tsx` - Real floating-window coverage for default disclosure, unchanged document geometry, drawer bounds, focus, dismissal, and local heading navigation at three widths in light and dark themes.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/PdfPreviewPane.tsx` - PDF virtualization over published layers.
+
+- `redeven:internal/envapp/ui_src/src/ui/widgets/MarkdownPreviewPane.tsx` - Contained Contents drawer.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/MarkdownPreviewPane.browser.test.tsx` - Drawer geometry, focus, dismissal, and local navigation at three widths in both modes.
