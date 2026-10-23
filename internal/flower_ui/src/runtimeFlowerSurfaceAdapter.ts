@@ -117,12 +117,13 @@ type RuntimeApprovalSubmitInput = FlowerSubmitApprovalRequest;
 export type FlowerRuntimeTransport = Readonly<{
   listThreads(input?: { cursor?: string; limit?: number; signal?: AbortSignal }): Promise<ListThreadsResponse>;
   loadThread(threadID: string, signal: AbortSignal): Promise<unknown>;
+  releaseHistory?(threadID: string, input: { observer_id: string; reading_revision: number; subagent?: boolean }): Promise<void>;
   loadHistory?(threadID: string, input: FlowerHistoryRequest, signal: AbortSignal): Promise<unknown>;
   loadHistoryItem?(threadID: string, itemID: string, signal: AbortSignal): Promise<FlowerRuntimeCurrentItem>;
   loadHistoryBody?(threadID: string, input: import('./contracts/flowerSurfaceContracts').FlowerHistoryBodyRequest, signal: AbortSignal): Promise<import('./contracts/flowerSurfaceContracts').FlowerHistoryBodyChunk>;
   connectLiveStream?: (input: FlowerLiveStreamConnectInput) => AsyncIterable<FlowerLiveTransportFrame>;
   readParentEvents?(threadID: string, query: FlowerParentEventQuery): Promise<FlowerParentEventPage>;
-  loadSubagentDetail(parentThreadID: string, childThreadID: string): Promise<LoadSubagentDetailResponse>;
+  loadSubagentDetail(parentThreadID: string, childThreadID: string, input?: FlowerHistoryRequest, signal?: AbortSignal): Promise<LoadSubagentDetailResponse>;
   operateSubagentInput?(parentThreadID: string, childThreadID: string, input: FlowerSubagentInputOperation): Promise<LoadSubagentDetailResponse>;
   loadToolPreview?(input: FlowerToolPreviewRequest): Promise<FlowerToolPreview>;
   readTerminalProcess?(runID: string, processID: string, input: { after_seq: number }): Promise<FlowerTerminalProcessSnapshot>;
@@ -385,9 +386,14 @@ function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfac
   if ((update || subagentUpdate) && (kind !== 'thread.batch' || !trim(value.thread_id) || current || subagentCurrent || update && subagentUpdate || update && update.thread_id !== value.thread_id)) {
     throw Object.assign(new Error('Flower live update envelope has conflicting identity or payloads.'), { code: 'flower_live_contract_error' });
   }
+  const invalidated = value.history_invalidated === undefined ? undefined : (value.history_invalidated && typeof value.history_invalidated === 'object' ? value.history_invalidated as Record<string, unknown> : {});
+  if (invalidated && (kind !== 'thread.batch' || typeof invalidated.thread_id !== 'string' || invalidated.parent_thread_id !== undefined && (typeof invalidated.parent_thread_id !== 'string' || !trim(invalidated.parent_thread_id)) || !trim(invalidated.thread_id) || invalidated.thread_id !== value.thread_id || !Number.isSafeInteger(value.reading_revision) || Number(value.reading_revision) <= 0 || update || subagentUpdate || current || subagentCurrent)) {
+    throw Object.assign(new Error('Flower history invalidation is invalid.'), { code: 'flower_live_contract_error' });
+  }
   const subagents = mapFlowerSubagents(value.subagents, 'live.subagents');
   return {
     schema_version: Math.floor(Number(value.schema_version)),
+    ...(invalidated ? { history_invalidated: { thread_id: trim(invalidated.thread_id), ...(trim(invalidated.parent_thread_id) ? { parent_thread_id: trim(invalidated.parent_thread_id) } : {}) } } : {}),
     ...(value.facts_only === true ? { facts_only: true } : {}),
     ...(typeof value.baseline_complete === 'boolean' ? { baseline_complete: value.baseline_complete } : {}),
     ...(Number.isSafeInteger(value.reading_revision) ? { reading_revision: Number(value.reading_revision) } : {}),
@@ -415,7 +421,7 @@ function mapSubagentDetail(raw: LoadSubagentDetailResponse): FlowerSubagentDetai
   if (!raw.detail?.current || !raw.detail.summary) throw new Error('Missing subagent detail.');
   const summary = mapFlowerSubagents([raw.detail.summary], 'subagent.detail.summary')?.[0];
   if (!summary) throw new Error('Flower contract error: missing subagent summary.');
-  return { ...raw.detail, summary, model_context: raw.detail.model_context === undefined ? undefined : mapModelContext(raw.detail.model_context) ?? null, context_usage: raw.detail.context_usage === undefined ? undefined : mapContextUsage(raw.detail.context_usage), context_compactions: mapFlowerContextCompactions(raw.detail.context_compactions), timeline_decorations: mapFlowerTimelineDecorations(raw.detail.timeline_decorations) };
+  return { ...raw.detail, ...(raw.detail.window ? { window: mapHistoryWindow(raw.detail.window) } : {}), summary, model_context: raw.detail.model_context === undefined ? undefined : mapModelContext(raw.detail.model_context) ?? null, context_usage: raw.detail.context_usage === undefined ? undefined : mapContextUsage(raw.detail.context_usage), context_compactions: mapFlowerContextCompactions(raw.detail.context_compactions), timeline_decorations: mapFlowerTimelineDecorations(raw.detail.timeline_decorations) };
 }
 
 export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceAdapterOptions): FlowerSurfaceAdapter {
@@ -477,6 +483,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       return [...threads.values()];
     },
     loadThread,
+    releaseHistory: options.transport.releaseHistory,
     loadHistory: options.transport.loadHistory ? async (threadID, input, signal) => {
       signal.throwIfAborted();
       let raw: unknown;
@@ -506,11 +513,11 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       },
     } : {}),
     readParentEvents: options.transport.readParentEvents ? (threadID, query) => options.transport.readParentEvents!(threadID, query) : undefined,
-    loadSubagentDetail: async (parentThreadID, childThreadID) => {
+    loadSubagentDetail: async (parentThreadID, childThreadID, input, signal) => {
       const parentID = trim(parentThreadID);
       const childID = trim(childThreadID);
       if (!parentID || !childID) throw new Error(missingThreadIDMessage(options));
-      return mapSubagentDetail(await options.transport.loadSubagentDetail(parentID, childID));
+      return mapSubagentDetail(await options.transport.loadSubagentDetail(parentID, childID, input, signal));
     },
     ...(options.transport.operateSubagentInput ? {
       operateSubagentInput: async (parentThreadID: string, childThreadID: string, input: FlowerSubagentInputOperation) => {

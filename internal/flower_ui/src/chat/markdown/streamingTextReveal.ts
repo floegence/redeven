@@ -9,7 +9,6 @@ export function createStreamingTextReveal(root: HTMLElement) {
   const preference = window.matchMedia?.('(prefers-reduced-motion: reduce), (forced-colors: active)');
   const supported = typeof Highlight !== 'undefined' && typeof CSS !== 'undefined' && !!CSS.highlights;
   const groups = new Map<number, { ranges: Range[]; born: number; phase: number }>();
-  let ink = '';
   let frame = 0;
   let initialized = false;
   let enabled = false;
@@ -32,8 +31,6 @@ export function createStreamingTextReveal(root: HTMLElement) {
   const clear = () => {
     cancelAnimationFrame(frame); frame = 0;
     for (const slot of groups.keys()) remove(slot);
-    if (ink) root.style.removeProperty('--flower-stream-ink');
-    ink = '';
     preference?.removeEventListener('change', preferenceChanged);
     document.removeEventListener('visibilitychange', preferenceChanged);
   };
@@ -41,8 +38,6 @@ export function createStreamingTextReveal(root: HTMLElement) {
   const tick = (now: number) => {
     frame = 0;
     if (!allowed() || !root.isConnected) { clear(); return; }
-    const color = getComputedStyle(root).color;
-    if (color !== ink) { ink = color; root.style.setProperty('--flower-stream-ink', ink); }
     for (const [slot, group] of groups) {
       // A callback's frame timestamp can precede additions in that same frame.
       const phase = Math.max(0, Math.floor((now - group.born) / duration * phases));
@@ -59,8 +54,7 @@ export function createStreamingTextReveal(root: HTMLElement) {
     // A burst is already in the DOM; older paint effects may settle early.
     // Neither provider delivery nor canonical completion waits for animation.
     if (groups.size === maxGroups) remove(groups.keys().next().value!);
-    if (!ink) {
-      ink = getComputedStyle(root).color; root.style.setProperty('--flower-stream-ink', ink);
+    if (!groups.size) {
       preference?.addEventListener('change', preferenceChanged);
       document.addEventListener('visibilitychange', preferenceChanged);
     }

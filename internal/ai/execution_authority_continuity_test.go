@@ -26,8 +26,8 @@ type authorityContinuityRuntime struct {
 	importPendingInputs func(context.Context, flruntime.ImportPendingInputsInput) (flruntime.ImportResult, error)
 }
 
-func (runtime *authorityContinuityRuntime) SubscribeUpdates(ctx context.Context) (*flruntime.ThreadUpdateSubscription, error) {
-	return runtime.ThreadService.(flruntime.ThreadUpdateSource).SubscribeUpdates(ctx)
+func (runtime *authorityContinuityRuntime) SubscribeFacts(ctx context.Context) (*flruntime.ThreadUpdateSubscription, error) {
+	return runtime.ThreadService.(flruntime.ThreadFactsSource).SubscribeFacts(ctx)
 }
 
 func (runtime *authorityContinuityRuntime) Create(ctx context.Context, input flruntime.CreateThreadInput) (flruntime.ThreadView, error) {

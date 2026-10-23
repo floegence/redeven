@@ -798,6 +798,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       readParentEvents: (threadID, query) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/subagent-events', query),
       listThreads: input => runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/ai/threads?' + new URLSearchParams({ limit: String(input?.limit ?? 25), ...(input?.cursor ? { cursor: input.cursor } : {}) }), undefined, undefined, options.runtimeEnvironmentID, input?.signal),
 		loadThread: (threadID, signal) => runtimeJSON(bridge, 'GET', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}`, undefined, undefined, options.runtimeEnvironmentID, signal),
+      releaseHistory: async (threadID, input) => { await runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history-release', input, undefined, options.runtimeEnvironmentID); },
       loadHistory: (threadID, input, signal) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history', input, undefined, options.runtimeEnvironmentID, signal),
       loadHistoryItem: (threadID, itemID, signal) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history-item', { item_id: itemID }, undefined, options.runtimeEnvironmentID, signal),
       loadHistoryBody: (threadID, input, signal) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history-body', input, undefined, options.runtimeEnvironmentID, signal),
@@ -829,10 +830,10 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
           bridge.cancelRuntimeFlowerStream(streamID);
         }
       },
-	      loadSubagentDetail: (parentThreadID, childThreadID) => runtimeJSON<Readonly<{ detail?: FlowerSubagentDetail }>>(
+	      loadSubagentDetail: (parentThreadID, childThreadID, input, signal) => runtimeJSON<Readonly<{ detail?: FlowerSubagentDetail }>>(
 	        bridge,
-	        'GET',
-	        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(parentThreadID)}/subagents/${encodeURIComponent(childThreadID)}/detail`,
+	        input ? 'POST' : 'GET',
+	        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(parentThreadID)}/subagents/${encodeURIComponent(childThreadID)}/detail`, input, undefined, options.runtimeEnvironmentID, signal,
 	      ),
       operateSubagentInput: (parentThreadID, childThreadID, input) => runtimeJSON<Readonly<{ detail?: FlowerSubagentDetail }>>(
         bridge, 'POST',

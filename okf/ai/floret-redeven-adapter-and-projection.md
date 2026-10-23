@@ -6,7 +6,7 @@ tags: [ai, floret, adapter, projection]
 timestamp: 2026-10-20T00:00:00Z
 quality_exception: Cross-boundary adapter contract spanning authorization, live projections, Activity sanitization, recovery, and browser ordering.
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-23"
 ---
 # Summary
 
@@ -17,11 +17,11 @@ Redeven's adapter is a thin typed boundary over published Floret. It authorizes 
 [Flower Goals](flower-goals.md) use the optional published Goal controller. Ordinary executable items retain strict identity.
 
 ## Incremental observation and public projection
-Published Floret v7.79.0 supplies optional `ThreadUpdateSource`, `ThreadWindowSource` and canonical body readers. Floret alone owns text cadence, versions, append buffers, Activity reduction and canonical reads.
+Floret supplies optional `ThreadFactsSource`, `ThreadWindowSource` and canonical body readers. The pinned remote module `v7.80.3-0.20261023160735-6389f55946e3` includes prepared-thread startup reuse and valid absent Goals before the first entry; it is an immutable checksummed pseudo-version, not a tagged v7.80.3 release. Blank-module adoption opens released-writer fixtures and verifies historical continuation and restart. Floret alone owns text cadence, versions, append buffers, Activity reduction and canonical reads.
 
-Root detail and command receipts use the bounded window projection. POST history selects an authorized page and, when an observer is supplied, installs its reading interest on the same ordered Floret subscription. POST history-item expands one canonical item by its published body locators: frozen live extent, manifest parts or hash-verified field chunks. Every read refreshes endpoint, namespace and user authorization. The client never supplies raw entry locators as authority. Historical zero-byte Activity sources are synthesized only by Floret on explicit expansion; Redeven must not duplicate those defaults.
+Root detail, child detail and command receipts use the bounded window projection. Before a potentially cold Summary read, a one-item window prepares the canonical actor; the accepted final window follows Summary so the read watermark cannot claim content absent from the displayed baseline. POST history selects an authorized page and, when an observer is supplied, installs its reading interest on the same ordered Floret subscription. POST history-item expands one canonical item by its published body locators: frozen live extent, manifest parts or hash-verified field chunks. Every read refreshes endpoint, namespace and user authorization. The client never supplies raw entry locators as authority. Historical zero-byte Activity sources are synthesized only by Floret on explicit expansion; Redeven must not duplicate those defaults.
 
-Unselected root updates carry facts only. Child detail retains its existing transport. Computer assistance outside the selected interval uses server-only canonical evidence, which is not included in the bounded response. See [live delivery](../ui/flower-live-timeline.md) and [qualification](../operations/flower-thread-switch-qualification.md).
+Workspace updates carry facts only; unchanged sidebar-visible facts preserve cache identity at text-stream cadence. Each observer has exactly two cancellable reading slots, for the conversation and optional child panel. Computer assistance outside the selected interval uses server-only canonical evidence, which is not included in the bounded response. See [live delivery](../ui/flower-live-timeline.md) and [qualification](../operations/flower-thread-switch-qualification.md).
 
 No database schema or migration changes are part of this optimization.
 

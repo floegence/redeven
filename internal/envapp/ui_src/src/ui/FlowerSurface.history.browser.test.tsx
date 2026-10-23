@@ -55,6 +55,25 @@ async function mount(tool = false, pending = false, options: { count?: number; t
 }
 
 describe('bounded Flower history', () => {
+  it('recovers one invalidated window without clearing content or looping on repeated pressure', async () => {
+    const { root, history, push } = await mount();
+    await waitFor(() => root.textContent?.includes('Preview text expanded body!!') === true);
+    const bubble = root.querySelector('.flower-history-message .flower-message-bubble');
+    const calls = history.mock.calls.length;
+    const invalidate = () => push({ schema_version: 3, kind: 'thread.batch', thread_id: 'history', reading_revision: history.mock.calls.at(-1)![1].reading_revision, history_invalidated: { thread_id: 'history' } });
+    invalidate();
+    await waitFor(() => history.mock.calls.length === calls + 1);
+    expect(root.querySelector('.flower-thread-loading')).toBeNull();
+    expect(root.querySelector('.flower-history-message .flower-message-bubble')).toBe(bubble);
+    invalidate();
+    await waitFor(() => Boolean(root.querySelector('.flower-thread-sync-error')));
+    await new Promise(resolve => setTimeout(resolve, 300));
+    expect(history.mock.calls.length).toBe(calls + 1);
+    expect(root.querySelector('.flower-workspace-sync')).toBeNull();
+    root.querySelector<HTMLButtonElement>('.flower-thread-sync-error button')!.click();
+    await waitFor(() => history.mock.calls.length === calls + 2);
+  });
+
   it('keeps visible live prose through slow reads, burst growth, and canonical completion', async () => {
     let finish!: (text: string) => void;
     const incremental = vi.fn<NonNullable<FlowerSurfaceAdapter['loadHistoryBody']>>(async (_tid, input) => ({ thread_id: 'history', ...input, text: await new Promise<string>(resolve => { finish = resolve; }) }));

@@ -112,6 +112,23 @@ it('fades smoothly in place, leaves earlier ranges fixed and releases paint stat
   expect(root.textContent).toBe('Stable first second');
 });
 
+it('follows text color changes without synchronously reading styles during animation', async () => {
+  root = document.createElement('div'); root.className = 'flower-chat-md-content';
+  root.style.color = 'rgb(35,65,48)'; document.body.append(root);
+  const reveal = createStreamingTextReveal(root); dispose = reveal.dispose;
+  reveal.begin(true, false); reveal.begin(true, false);
+  const readStyle = window.getComputedStyle.bind(window);
+  const styleReads = vi.spyOn(window, 'getComputedStyle');
+  reveal.append(root, 5, () => root.append('Hello'));
+  await frame();
+  const first = readStyle(root, '::highlight(' + highlights()[0][0] + ')').color;
+  root.style.color = 'rgb(180,30,90)';
+  await frame();
+  expect(readStyle(root, '::highlight(' + highlights()[0][0] + ')').color).not.toBe(first);
+  expect(styleReads).not.toHaveBeenCalled();
+  expect(root.textContent).toBe('Hello');
+});
+
 it('keeps link colors, code and media controls outside the prose effect', async () => {
   const { setContent } = mount('Intro\n\n');
   const fence = String.fromCharCode(96).repeat(3);

@@ -107,7 +107,14 @@ func TestPlatformGatewayRunSurvivesCallerDisconnectAndHistoryRestart(t *testing.
 	if err := json.Unmarshal(ready.Data, &envelope); err != nil {
 		t.Fatal(err)
 	}
-	if ready.Kind != FlowerLiveStreamReady || len(envelope.Summaries) != 1 || envelope.Summaries[0].ActiveRunID != sent.RunID {
+	if ready.Kind != FlowerLiveStreamReady {
+		t.Fatal("missing handshake")
+	}
+	page := nextFlowerLiveStreamFrame(t, reconnected)
+	if err := json.Unmarshal(page.Data, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if page.Kind != FlowerLiveStreamSummaryBatch || len(envelope.Summaries) != 1 || envelope.Summaries[0].ActiveRunID != sent.RunID {
 		t.Fatal("reconnection did not restore the same running task")
 	}
 	finishOnce.Do(func() { close(finish) })

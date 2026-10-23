@@ -20,6 +20,10 @@ type subagentScopeTestRuntime struct {
 	writes  int
 }
 
+func (s *subagentScopeTestRuntime) Summary(ctx context.Context, id identity.ThreadID) (flruntime.ThreadSummary, error) {
+	return s.ThreadService.(flruntime.ThreadSummaryReader).Summary(ctx, id)
+}
+
 func (s *subagentScopeTestRuntime) List(ctx context.Context, scope flruntime.ThreadScope) ([]flruntime.ThreadSummary, error) {
 	if s.listErr != nil {
 		return nil, s.listErr

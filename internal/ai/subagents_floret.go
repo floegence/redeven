@@ -876,6 +876,15 @@ func (service *Service) publishFlowerSubagentsPatch(ctx context.Context, endpoin
 }
 
 func (service *Service) GetFlowerSubagentDetail(ctx context.Context, meta *session.Meta, parentThreadID, childThreadID string) (*FlowerSubagentDetailResponse, error) {
+	return service.getFlowerSubagentDetail(ctx, meta, parentThreadID, childThreadID, FlowerHistoryRequest{})
+}
+
+func (service *Service) GetFlowerSubagentHistory(ctx context.Context, meta *session.Meta, parentThreadID, childThreadID string, input FlowerHistoryRequest) (*FlowerSubagentDetailResponse, error) {
+	input.ParentThreadID = parentThreadID
+	return service.getFlowerSubagentDetail(ctx, meta, parentThreadID, childThreadID, input)
+}
+
+func (service *Service) getFlowerSubagentDetail(ctx context.Context, meta *session.Meta, parentThreadID, childThreadID string, input FlowerHistoryRequest) (*FlowerSubagentDetailResponse, error) {
 	if service == nil {
 		return nil, errors.New("nil service")
 	}
@@ -889,22 +898,33 @@ func (service *Service) GetFlowerSubagentDetail(ctx context.Context, meta *sessi
 	if err := service.requireEndpointThreadAuthority(ctx, meta.EndpointID, parentThreadID); err != nil {
 		return nil, err
 	}
-	parentID := identity.ThreadID(parentThreadID)
-	summaries, err := service.threadRuntime.List(ctxOrBackground(ctx), flruntime.ThreadScope{ParentID: &parentID})
+	if input.ParentThreadID != "" {
+		scope, err := service.flowerHistoryScope(ctx, meta, childThreadID)
+		if err != nil {
+			return nil, err
+		}
+		if _, _, err := readFlowerHistory(ctx, service.threadRuntime, scope, flruntime.ThreadWindowInput{ThreadID: identity.ThreadID(childThreadID), Limit: 1}); err != nil {
+			return nil, err
+		}
+	}
+	summary, err := threadSummaryFromRuntime(ctx, service.threadRuntime, identity.ThreadID(childThreadID))
 	if err != nil {
 		return nil, err
 	}
-	var summary *flruntime.ThreadSummary
-	for index := range summaries {
-		if summaries[index].ID.String() == childThreadID {
-			summary = &summaries[index]
-			break
-		}
-	}
-	if summary == nil {
+	if summary.ParentThreadID.String() != parentThreadID {
 		return nil, sql.ErrNoRows
 	}
-	view, err := service.threadRuntime.View(ctxOrBackground(ctx), summary.ID)
+	var view flruntime.ThreadView
+	var window *FlowerHistoryWindow
+	if input.ParentThreadID != "" {
+		scope, scopeErr := service.flowerHistoryScope(ctx, meta, childThreadID)
+		if scopeErr != nil {
+			return nil, scopeErr
+		}
+		view, window, err = service.readFlowerHistoryForObserver(ctx, meta, scope, input, flruntime.ThreadWindowInput{ThreadID: summary.ID, AnchorID: input.AnchorID, Direction: input.Direction, Limit: input.Limit})
+	} else {
+		view, err = service.threadRuntime.View(ctxOrBackground(ctx), summary.ID)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -912,12 +932,16 @@ func (service *Service) GetFlowerSubagentDetail(ctx context.Context, meta *sessi
 	if err != nil {
 		return nil, err
 	}
-	snapshot := subagentSnapshotFromThread(*summary, view)
+	snapshot := subagentSnapshotFromThread(summary, view)
 	view.Items, err = service.hydrateActivityTargets(ctx, meta, childThreadID, view.Items)
 	if err != nil {
 		return nil, err
 	}
-	return &FlowerSubagentDetailResponse{
+	evidence, err := service.flowerHistoryComputerEvidence(ctx, view.ThreadID, view.Interactions)
+	if err != nil {
+		return nil, err
+	}
+	return &FlowerSubagentDetailResponse{Window: window, ComputerEvidence: evidence,
 		ModelContext: projection.ModelContext, ContextUsage: projection.Usage,
 		ContextCompactions: projection.Compactions, TimelineDecorations: projection.Decorations,
 		Summary: flowerSubagentSummaryFromSnapshot(snapshot),

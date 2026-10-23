@@ -313,14 +313,37 @@ if (process.argv.includes('--build')) {
         // A turn can contain several independently folded process groups. Open
         // the control for this row rather than repeatedly opening the first one.
         const wrapper = page.locator(bodySelector + '[data-flower-row-message-id=' + JSON.stringify(item.id) + ']').first();
+        // Window membership is bounded. Inspect older generated rows through
+        // the product's history controls after timing, then scroll to admit
+        // lazy body hydration before opening the thinking/message content.
+        const navigation = page.locator(bodySelector ? '.flower-subagent-detail-window .flower-history-navigation' : '.flower-transcript-stack .flower-history-navigation');
+        const latest = navigation.getByRole('button', { name: 'Back to latest', exact: true });
+        if (!await wrapper.count() && await latest.count()) { await latest.click(); await page.waitForTimeout(100); }
+        for (let moves = 0; !await wrapper.count() && moves < 100; moves++) {
+          const older = navigation.getByRole('button', { name: 'Earlier messages', exact: true });
+          if (!await older.count()) break;
+          await older.click();
+          await page.waitForTimeout(100);
+        }
         await wrapper.waitFor({ state: 'attached', timeout: 15000 });
+        await wrapper.scrollIntoViewIfNeeded();
         const viewportID = await wrapper.locator('.flower-turn-row-viewport').getAttribute('id');
         const disclosure = page.locator(bodySelector + '.flower-turn-summary-button[aria-controls~=' + JSON.stringify(viewportID) + ']').first();
         if (await disclosure.count() && await disclosure.getAttribute('aria-expanded') === 'false') await disclosure.click();
+        // Sequence members move into their first row's disclosure. Open that
+        // parent before locating a member that has intentionally unmounted.
+        for (const sequence of await page.locator(turnSelector + ' .flower-tool-sequence-toggle').all()) {
+          if (await sequence.getAttribute('aria-expanded') === 'false') await sequence.click();
+        }
         const row = page.locator(bodySelector + (item.kind === 'thinking'
           ? '[data-flower-thinking-id=' + JSON.stringify(`${item.id}:block:0`) + ']'
           : '[data-flower-message-id=' + JSON.stringify(item.id) + ']')).first();
-        await row.waitFor({ state: 'attached', timeout: 15000 });
+        await wrapper.scrollIntoViewIfNeeded();
+        try { await row.waitFor({ state: 'attached', timeout: 15000 }); } catch (error) {
+          await writeFile(output + '.dom.html', await page.content());
+          await page.screenshot({ path: output + '.png' });
+          throw error;
+        }
         const sequenceIDs = await row.evaluate(node => [...node.querySelectorAll('.flower-tool-sequence-viewport'), node.closest('.flower-tool-sequence-viewport')]
           .filter(Boolean).map(viewport => viewport.id));
         for (const sequenceID of sequenceIDs) {

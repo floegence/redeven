@@ -5221,6 +5221,24 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 
 		switch {
 
+		case action == "history-release" && r.Method == http.MethodPost && len(parts) == 2:
+			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+			if !ok || !g.requireAIService(w, aiSvc) {
+				return
+			}
+			var input ai.FlowerHistoryRelease
+			dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10))
+			dec.DisallowUnknownFields()
+			if err := dec.Decode(&input); err != nil || dec.Decode(&struct{}{}) != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid history release"})
+				return
+			}
+			if err := aiSvc.ReleaseFlowerHistory(r.Context(), meta, threadID, input); err != nil {
+				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true})
+			return
 		case (action == "history" || action == "history-item" || action == "history-body") && r.Method == http.MethodPost && len(parts) == 2:
 			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
 			if !ok || !g.requireAIService(w, aiSvc) {
@@ -5352,7 +5370,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: map[string]any{"detail": detail}})
 			return
 
-		case action == "subagents" && r.Method == http.MethodGet && len(parts) == 4 && strings.TrimSpace(parts[3]) == "detail":
+		case action == "subagents" && (r.Method == http.MethodGet || r.Method == http.MethodPost) && len(parts) == 4 && strings.TrimSpace(parts[3]) == "detail":
 			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
 			if !ok {
 				return
@@ -5365,7 +5383,20 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			childID := strings.TrimSpace(parts[2])
-			resp, err := aiSvc.GetFlowerSubagentDetail(r.Context(), meta, threadID, childID)
+			var resp *ai.FlowerSubagentDetailResponse
+			var err error
+			if r.Method == http.MethodPost {
+				var input ai.FlowerHistoryRequest
+				dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10))
+				dec.DisallowUnknownFields()
+				if err = dec.Decode(&input); err != nil || dec.Decode(&struct{}{}) != io.EOF {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid history request"})
+					return
+				}
+				resp, err = aiSvc.GetFlowerSubagentHistory(r.Context(), meta, threadID, childID, input)
+			} else {
+				resp, err = aiSvc.GetFlowerSubagentDetail(r.Context(), meta, threadID, childID)
+			}
 			if err != nil {
 				status := http.StatusBadRequest
 				if errors.Is(err, sql.ErrNoRows) {

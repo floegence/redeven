@@ -323,6 +323,42 @@ func TestFlowerCPUQualification(t *testing.T) {
 				return
 			}
 			encode(w, value)
+		case "history", "history_release", "history_body", "history_item":
+			var value any
+			var err error
+			id := r.URL.Query().Get("id")
+			switch r.URL.Query().Get("op") {
+			case "history":
+				var input FlowerHistoryRequest
+				err = json.NewDecoder(r.Body).Decode(&input)
+				if err == nil {
+					value, err = service.GetFlowerThreadHistory(r.Context(), meta, id, input)
+				}
+			case "history_release":
+				var input FlowerHistoryRelease
+				err = json.NewDecoder(r.Body).Decode(&input)
+				if err == nil {
+					err = service.ReleaseFlowerHistory(r.Context(), meta, id, input)
+					value = true
+				}
+			case "history_body":
+				var input FlowerHistoryBodyRequest
+				err = json.NewDecoder(r.Body).Decode(&input)
+				if err == nil {
+					value, err = service.GetFlowerHistoryBody(r.Context(), meta, id, input)
+				}
+			case "history_item":
+				var input map[string]string
+				err = json.NewDecoder(r.Body).Decode(&input)
+				if err == nil {
+					value, err = service.GetFlowerHistoryItem(r.Context(), meta, id, input["item_id"])
+				}
+			}
+			if err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			encode(w, value)
 		case "detail":
 			value, e := service.GetFlowerThreadDetail(r.Context(), meta, r.URL.Query().Get("id"))
 			if e != nil {
@@ -419,7 +455,17 @@ func TestFlowerCPUQualification(t *testing.T) {
 			}
 			encode(w, map[string]any{"threads": ids[1 : count+1], "hz": rate, "mode": pattern, "initial_bytes": size, "parent_thread": rootID, "visited_roots": visitedRoots, "child_detail": childDetail})
 		case "subagent_detail":
-			value, e := service.GetFlowerSubagentDetail(r.Context(), meta, rootID, r.URL.Query().Get("id"))
+			var value *FlowerSubagentDetailResponse
+			var e error
+			if r.Method == http.MethodPost {
+				var input FlowerHistoryRequest
+				e = json.NewDecoder(r.Body).Decode(&input)
+				if e == nil {
+					value, e = service.GetFlowerSubagentHistory(r.Context(), meta, rootID, r.URL.Query().Get("id"), input)
+				}
+			} else {
+				value, e = service.GetFlowerSubagentDetail(r.Context(), meta, rootID, r.URL.Query().Get("id"))
+			}
 			if e != nil {
 				http.Error(w, e.Error(), 500)
 				return

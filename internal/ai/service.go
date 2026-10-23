@@ -170,6 +170,8 @@ type Service struct {
 	flowerLiveSubscribers           map[uint64]*flowerLiveSubscriber
 	flowerRuntimeUpdatesUnavailable bool
 	flowerRuntimePumpRunning        bool
+	flowerSubagentRefreshPending    map[string]string
+	flowerSubagentRefreshWake       chan struct{}
 	flowerLiveQueuedBytes           int
 	flowerLiveMetrics               flowerLiveMetrics
 	flowerThreadSummaryPublisher    *flowerThreadSummaryPublisher

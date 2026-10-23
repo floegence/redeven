@@ -26,12 +26,17 @@ function detailFor(summary: ReturnType<typeof subagentSummary>) {
   return { ...base, current: { ...base.current, run_progress: { phase: 'streaming' as const }, items: base.current.items!.filter(item => item.kind !== 'tool') } };
 }
 
-function mount(messages = [operation('spawn', 'spawn', 1)], count = 1, options: Partial<ReturnType<typeof adapter>> = {}) {
+function mount(messages = [operation('spawn', 'spawn', 1)], count = 1, options: Partial<ReturnType<typeof adapter>> = {}, parentStatus: 'running' | 'idle' = 'running') {
   const summaries = targets.slice(0, count).map(target => subagentSummary({ ...target, parent_thread_id: parentID, title: target.task_name, created_at_ms: Date.now() - 60_000, updated_at_ms: Date.now() }));
-  const snapshot = thread({ thread_id: parentID, status: 'running', messages, subagents: summaries });
+  const snapshot = thread({ thread_id: parentID, status: parentStatus, messages, subagents: summaries });
   const loadDetail = vi.fn(async (_parent: string, child: string) => detailFor(summaries.find(summary => summary.thread_id === child)!));
   const runtime = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [snapshot]),
-    loadThread: vi.fn(async () => liveBootstrap(snapshot)), loadSubagentDetail: loadDetail, ...options },
+    loadThread: vi.fn(async () => liveBootstrap(snapshot)), loadSubagentDetail: loadDetail, ...options,
+    ...(options.connectLiveStream ? { async *connectLiveStream(input) {
+      yield { schema_version: 3 as const, kind: 'ready' as const, baseline_complete: true, summaries: [snapshot] };
+      yield* options.connectLiveStream!(input);
+    } } : {}),
+  },
   { focusThreadRequest: { request_id: 'focus-capsules', thread_id: parentID } });
   runtime.style.height = '850px';
   return { runtime, summaries, loadDetail };
@@ -49,6 +54,17 @@ function row(runtime: HTMLElement, id: string) {
 afterEach(() => document.documentElement.classList.remove('dark', 'light'));
 
 describe('Subagent inline capsules', () => {
+  it('renders live child text at streaming cadence while the parent is idle', async () => {
+    const summary = subagentSummary({ ...targets[0]!, parent_thread_id: parentID, title: targets[0]!.task_name });
+    const base = detailFor(summary);
+    const detail = { ...base, current: { ...base.current, activity: 'active' as const, items: [{ id: 'live-child', kind: 'assistant' as const, turn_id: base.current.turn_id!, run_id: base.current.run_id!, ordinal: 1, text: 'Child remains live', live: true }] } };
+    const { runtime } = mount(undefined, 1, { loadSubagentDetail: vi.fn(async () => detail) }, 'idle');
+    await waitFor(() => Boolean(row(runtime, 'spawn')));
+    row(runtime, 'spawn').querySelector<HTMLButtonElement>('[data-flower-subagent-capsule]')!.click();
+    await waitFor(() => Boolean(document.querySelector('[data-flower-message-id="live-child"]')));
+    expect(document.querySelector('[data-flower-message-id="live-child"] .flower-message-bubble-streaming')).not.toBeNull();
+  });
+
   it('renders inherited child activity without a broken source-child action', async () => {
     const loadDetail = vi.fn();
     const { runtime } = mount([operation('inherited', 'spawn', 1)], 0, { loadSubagentDetail: loadDetail });
@@ -161,7 +177,7 @@ describe('Subagent inline capsules', () => {
       second.click();
       await waitFor(() => second.getAttribute('aria-pressed') === 'true');
       expect(header.textContent).toContain(targets[1]!.task_description);
-      expect(loadDetail).toHaveBeenLastCalledWith(parentID, 'capsule-child-1');
+      expect(loadDetail).toHaveBeenLastCalledWith(parentID, 'capsule-child-1', undefined, expect.any(AbortSignal));
       expect(document.querySelectorAll('[data-flower-subagent-detail="open"]')).toHaveLength(1);
       expect(document.querySelector('.flower-subagent-detail-window')).toBe(window);
       await page.screenshot({ path: '__screenshots__/subagent-capsules/window-' + theme + '.png' });

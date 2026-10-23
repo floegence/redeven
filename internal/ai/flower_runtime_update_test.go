@@ -103,8 +103,8 @@ type flowerRecoveryRuntime struct {
 	views         int
 }
 
-func (r *flowerRecoveryRuntime) SubscribeUpdates(ctx context.Context) (*flruntime.ThreadUpdateSubscription, error) {
-	sub, err := r.ThreadService.(flruntime.ThreadUpdateSource).SubscribeUpdates(ctx)
+func (r *flowerRecoveryRuntime) SubscribeFacts(ctx context.Context) (*flruntime.ThreadUpdateSubscription, error) {
+	sub, err := r.ThreadService.(flruntime.ThreadFactsSource).SubscribeFacts(ctx)
 	if err == nil {
 		r.mu.Lock()
 		r.subscriptions = append(r.subscriptions, sub)

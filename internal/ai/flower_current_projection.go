@@ -129,6 +129,10 @@ func (d FlowerThreadDetail) MarshalJSON() ([]byte, error) {
 }
 
 func (d FlowerSubagentDetailResponse) MarshalJSON() ([]byte, error) {
+	public, err := MarshalFlowerCurrentView(d.Current, d.ComputerEvidence)
+	if err != nil {
+		return nil, err
+	}
 	context, err := projectFlowerContext(d.Current)
 	if err != nil {
 		return nil, err
@@ -137,8 +141,8 @@ func (d FlowerSubagentDetailResponse) MarshalJSON() ([]byte, error) {
 	if context == nil {
 		return json.Marshal(struct {
 			wire
-			Current flowerCurrentJSONView `json:"current"`
-		}{wire(d), flowerCurrentJSONView(d.Current)})
+			Current json.RawMessage `json:"current"`
+		}{wire(d), public})
 	}
 	return json.Marshal(struct {
 		wire
@@ -146,8 +150,8 @@ func (d FlowerSubagentDetailResponse) MarshalJSON() ([]byte, error) {
 		ContextUsage        *FlowerContextUsage           `json:"context_usage"`
 		ContextCompactions  []FlowerContextCompaction     `json:"context_compactions"`
 		TimelineDecorations []FlowerTimelineDecoration    `json:"timeline_decorations"`
-		Current             flowerCurrentJSONView         `json:"current"`
-	}{wire(d), context.ModelContext, context.ContextUsage, context.ContextCompactions, context.TimelineDecorations, flowerCurrentJSONView(d.Current)})
+		Current             json.RawMessage               `json:"current"`
+	}{wire(d), context.ModelContext, context.ContextUsage, context.ContextCompactions, context.TimelineDecorations, public})
 }
 
 func (r SendUserTurnResponse) MarshalJSON() ([]byte, error) {
@@ -244,7 +248,7 @@ func marshalFlowerLiveEnvelopeAt(e FlowerLiveStreamEnvelope, sampledAt time.Time
 		}
 	}
 	if e.SubagentCurrent != nil {
-		subagentCurrent, err = flowerCurrentJSONAt(*e.SubagentCurrent, sampledAt)
+		subagentCurrent, err = flowerCurrentJSONAt(*e.SubagentCurrent, sampledAt, e.updateEvidence)
 		if err != nil {
 			return nil, err
 		}

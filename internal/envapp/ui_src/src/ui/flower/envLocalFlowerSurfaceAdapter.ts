@@ -582,6 +582,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     transport: {
       listThreads: input => fetchLocalApiJSON('/_redeven_proxy/api/ai/threads?' + new URLSearchParams({ limit: String(input?.limit ?? 25), ...(input?.cursor ? { cursor: input.cursor } : {}) }), { method: 'GET', signal: input?.signal }),
       loadThread: (threadID, signal) => fetchLocalApiJSON<unknown>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}`, { method: 'GET', signal }),
+      releaseHistory: async (threadID, input) => { await fetchLocalApiJSON('/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history-release', { method: 'POST', body: JSON.stringify(input) }); },
       loadHistory: (threadID, input, signal) => fetchLocalApiJSON('/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history', { method: 'POST', body: JSON.stringify(input), signal }),
       loadHistoryItem: (threadID, itemID, signal) => fetchLocalApiJSON('/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history-item', { method: 'POST', body: JSON.stringify({ item_id: itemID }), signal }),
       loadHistoryBody: (threadID, input, signal) => fetchLocalApiJSON('/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history-body', { method: 'POST', body: JSON.stringify(input), signal }),
@@ -598,9 +599,9 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/subagent-events',
         { method: 'POST', body: JSON.stringify(query) },
       ),
-      loadSubagentDetail: (parentThreadID, childThreadID) => fetchLocalApiJSON(
+      loadSubagentDetail: (parentThreadID, childThreadID, input, signal) => fetchLocalApiJSON(
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(parentThreadID)}/subagents/${encodeURIComponent(childThreadID)}/detail`,
-        { method: 'GET' },
+        { method: input ? 'POST' : 'GET', ...(input ? { body: JSON.stringify(input) } : {}), signal },
       ),
       loadToolPreview: (input) => fetchLocalApiJSON<FlowerToolPreview>(
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(input.thread_id)}/tool-preview`,

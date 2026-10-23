@@ -14,12 +14,14 @@ function fixture() {
   ], queue: ['first', 'second'].map(id => ({ id, request_key: id, created_at: '2026-10-14T00:00:00Z', input_fingerprint: `fingerprint-${id}`, input: { text: `Instruction ${id}` } })) } };
   return { parent, detail };
 }
-async function mount(operate: (parent: string, child: string, input: FlowerSubagentInputOperation) => Promise<FlowerSubagentDetail>, load?: () => Promise<FlowerSubagentDetail>) {
+async function mount(operate: (parent: string, child: string, input: FlowerSubagentInputOperation) => Promise<FlowerSubagentDetail>, load?: () => Promise<FlowerSubagentDetail>, bounded = false) {
   await page.viewport(1280, 1000);
   const { parent, detail } = fixture();
   let presented = false;
   const call = vi.fn(operate), loadDetail = vi.fn(load ?? (async () => detail));
-  const runtime = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [parent]), loadThread: vi.fn(async () => liveBootstrap(parent, 1)), loadSubagentDetail: loadDetail, operateSubagentInput: call }, { onThreadSelectionEvent: event => { if (event.phase === 'content_presented') presented = true; } });
+  const runtime = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [parent]), loadThread: vi.fn(async () => liveBootstrap(parent, 1)), loadSubagentDetail: loadDetail, operateSubagentInput: call,
+    ...(bounded ? { loadHistory: vi.fn(async () => liveBootstrap(parent, 1)) } : {}),
+  }, { onThreadSelectionEvent: event => { if (event.phase === 'content_presented') presented = true; } });
   runtime.style.height = '850px';
   await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${parent.thread_id}"] button`)));
   (runtime.querySelector(`[data-thread-id="${parent.thread_id}"] button`) as HTMLButtonElement).click();
@@ -60,6 +62,24 @@ describe('Subagent immediate guidance controls', () => {
     expect(window.scrollWidth).toBeLessThanOrEqual(window.clientWidth + 1);
     for (const button of buttons('second')) { expect(getComputedStyle(button).cursor).toBe('pointer'); expect(getComputedStyle(button).whiteSpace).toBe('nowrap'); }
     await page.screenshot({ element: window, path: '__screenshots__/subagent-steering/narrow.png' });
+  });
+  it('keeps a bounded child interval while refreshing after a command receipt', async () => {
+    const source = fixture().detail;
+    const bounded: FlowerSubagentDetail = { ...source, window: { first_item_id: 'guide', last_item_id: 'guide', has_before: true, has_after: true } };
+    const reload = deferred<FlowerSubagentDetail>();
+    let reads = 0;
+    const { loadDetail } = await mount(async () => ({ ...source, current: { ...source.current, view_version: 40, items: [] } }), async () => ++reads === 1 ? bounded : reload.promise, true);
+    const window = document.querySelector<HTMLElement>('.flower-subagent-detail-window')!;
+    const message = window.querySelector('[data-flower-message-id="guide"]');
+    buttons()[0].click();
+    await waitFor(() => loadDetail.mock.calls.length === 2);
+    expect(window.querySelector('[data-flower-message-id="guide"]')).toBe(message);
+    expect(window.textContent).toContain('Earlier messages');
+    expect(window.textContent).toContain('Newer messages');
+    expect(window.querySelector('.flower-subagent-detail-loading')).toBeNull();
+    reload.resolve({ ...bounded, current: { ...bounded.current, view_version: 41, queue: bounded.current.queue!.slice(1) } });
+    await waitFor(() => !document.querySelector('[data-flower-subagent-input-id="first"]'));
+    expect(window.querySelector('[data-flower-message-id="guide"]')).toBe(message);
   });
   it('refreshes a conflict and keeps removal and a stable retry available', async () => {
     let attempts = 0;

@@ -108,3 +108,6 @@ A compact digest of updates from the last 30 days. Current contracts and evidenc
 - Concept: [Flower activity interaction](ui/flower-activity-interaction.md)
 - Keep the initial Flower conversation inventory inside its existing loading presentation until the first authoritative page; retain admitted content and drafts through subsequent reconnects.
 - Concept: [Flower startup presentation](architecture/flower-startup-presentation.md)
+
+- Make workspace ready independent of sidebar reads; consume body-free facts, bound root/child reading interests, and keep history failures local without retry loops.
+- Concepts: [live state](ui/flower-live-timeline.md), [startup presentation](architecture/flower-startup-presentation.md), [failure recovery](ui/flower-failure-recovery.md), [adapter ownership](ai/floret-redeven-adapter-and-projection.md)

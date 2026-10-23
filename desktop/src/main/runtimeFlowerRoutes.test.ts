@@ -4,7 +4,7 @@ import { isRuntimeFlowerReadinessPath, runtimeFlowerMethodAllowed, runtimeFlower
 
 const base = '/_redeven_proxy/api/ai/computer';
 
-it.each(['history', 'history-item', 'history-body'])('allows only exact POST %s reads', suffix => {
+it.each(['history', 'history-item', 'history-body', 'history-release'])('allows only exact POST %s reads', suffix => {
   const path = `/_redeven_proxy/api/ai/threads/thread-1/${suffix}`;
   expect(runtimeFlowerPath(path)).toBe(path);
   for (const method of ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'] as const) expect(runtimeFlowerMethodAllowed(path, method)).toBe(method === 'POST');
