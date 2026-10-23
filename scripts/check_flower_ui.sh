@@ -216,6 +216,7 @@ main() {
         src/ui/FlowerSurface.turnProcess.browser.test.tsx
         src/ui/FlowerSurface.thinkingDisclosure.browser.test.tsx
         src/ui/FlowerMarkdown.streamingStability.browser.test.tsx
+        src/ui/FlowerMarkdown.softReveal.browser.test.tsx
         src/ui/FlowerMarkdown.readingThemes.browser.test.tsx
         src/ui/FlowerMarkdown.citations.browser.test.tsx
         src/ui/FlowerMarkdown.tables.browser.test.tsx
