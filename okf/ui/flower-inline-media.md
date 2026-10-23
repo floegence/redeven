@@ -21,6 +21,7 @@ preview error without interrupting the conversation.
 ## Authoring and interaction
 - `![Title](source)` displays image, video, or audio. Preview references always produce inert placeholders. Health snapshots, labels, and ordinary thread updates do not reload a ready preview; a real context change cancels stale work.
 - An `html preview` code fence previews an HTML fragment or document. A plain `html` fence previews when its content starts with a complete HTML document (`<!doctype html>` and `<html>`); standalone HTML snippets remain visible as source.
+- HTML previews expose a circular arrow at the top right to open the authorized file preview or an independent floating copy directly. The action is disabled until the document is ready. Source and more actions share one compact top row with preview and expansion; narrow side and bottom insets leave the remaining canvas for content without covering the document.
 
 ## Request lifecycle and thread ownership
 One media entry at each rendered thread boundary serves both assistant Markdown and Activity images. A child without a trusted working directory cannot resolve relative sources or HTML links against the parent's directory.
@@ -37,6 +38,8 @@ Presentation creates no second message store, lifecycle, or Floret API.
 Canonical Floret messages remain the durable display source. Unavailable, forbidden, oversized or mismatched media stays an explicit preview error without interrupting the conversation.
 
 # Evidence
+
+- [Inline media browser acceptance](../../internal/envapp/ui_src/src/ui/FlowerSurface.richMedia.browser.test.tsx): direct floating and file preview actions, focus restoration, retained inline state, and content geometry at desktop and narrow widths.
 
 - [Isolated Electron acceptance for Welcome and built Env App](../../desktop/scripts/check-flower-media.mjs): build Env App, then run `pnpm --dir desktop test:flower-media`; records both 30-second observations under `desktop/dist/flower-media-acceptance`.
 

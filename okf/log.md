@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-10-22: Adopt the direct HTML floating-preview action and compact content-first canvas from published Floe. See [inline media](ui/flower-inline-media.md).
+
 - 2026-10-22: Compact model-facing subagent coordination metadata, retain full reports and control metadata, and specify the local browser observation shape. See [subagent runtime](ai/subagent-runtime.md).
 
 - 2026-10-22: Add bounded stepped reveals for newly arriving Flower activity titles, preserving immediate content, stable row geometry and static historical reading. See [activity interaction](ui/flower-activity-interaction.md).
