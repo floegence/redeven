@@ -88,7 +88,7 @@ async function mount(presentation: 'full' | 'companion' = 'full', localized = fa
   return { root, live, initial };
 }
 
-it('uses the tool activity row and Brain icon for standalone live thinking', async () => {
+it('uses the tool activity row and flower animation for standalone live thinking', async () => {
   const { root } = await mount();
   const row = disclosure(root);
   const button = toggle(root);
@@ -97,9 +97,11 @@ it('uses the tool activity row and Brain icon for standalone live thinking', asy
   expect(row.classList.contains('flower-thinking-disclosure-inline')).toBe(false);
   expect(row.querySelector('.flower-activity-inline-row')).not.toBeNull();
   expect(button.classList.contains('flower-activity-inline-button')).toBe(true);
-  expect(button.querySelector('.flower-activity-inline-icon svg.lucide-brain')).not.toBeNull();
+  expect(button.querySelector('.flower-thinking-flower')?.getAttribute('aria-hidden')).toBe('true');
+  expect(button.querySelectorAll('.flower-thinking-petal')).toHaveLength(5);
+  expect(button.querySelector('.flower-thinking-flower')!.getAnimations({ subtree: true })).toHaveLength(6);
   expect(button.querySelector('.flower-activity-inline-title')?.textContent).toBe('Thinking...');
-  expect(button.querySelector('[data-floe-progress-shimmer="text"]')?.textContent).toBe('Thinking...');
+  expect(button.querySelector('[data-floe-progress-shimmer]')).toBeNull();
   expect(button.querySelector('.flower-activity-inline-duration')?.textContent).not.toBe('');
   expect(getComputedStyle(button.querySelector('.flower-activity-inline-title')!).fontSize).toBe('12px');
   expect(getComputedStyle(button.querySelector('.flower-activity-inline-title')!).lineHeight).toBe('18px');
@@ -122,6 +124,7 @@ it.each(['full', 'companion'] as const)('uses one tool-style disclosure for live
   toggle(root).click();
   live.push(sealed(initial));
   await waitFor(() => disclosure(root).dataset.flowerThinkingView === 'collapsed');
+  expect(disclosure(root).querySelector('.flower-thinking-flower')!.getAnimations({ subtree: true })).toHaveLength(0);
   await expect.poll(() => chevronDirection(root)).toBe(0);
   toggle(root).focus();
   await userEvent.keyboard('{Enter}');
@@ -147,6 +150,7 @@ it.each([
     } }] });
   live.push(next);
   await waitFor(() => disclosure(root).dataset.flowerThinkingView === 'collapsed');
+  expect(disclosure(root).querySelector('.flower-thinking-flower')!.getAnimations({ subtree: true })).toHaveLength(0);
   expect(root.querySelector('.flower-turn-summary-button')).toBeNull();
   expect(toggle(root).textContent).toContain('Thought process');
   expect(disclosure(root).querySelector('.flower-thinking-content')).toBeNull();
@@ -179,11 +183,13 @@ it.each(['collapsed', 'expanded'] as const)('retains %s on disconnect and collap
   await waitFor(() => Boolean(root.querySelector('[data-flower-sync-state="failed"]')));
   expect(disclosure(root).dataset.flowerThinkingView).toBe(view);
   expect(disclosure(root).dataset.flowerThinkingActive).toBe('false');
+  expect(disclosure(root).querySelector('.flower-thinking-flower')!.getAnimations({ subtree: true })).toHaveLength(0);
   expect(toggle(root).textContent).toContain('Thought process');
   live.setCurrent(sealed(initial));
   const resync = root.querySelector<HTMLButtonElement>('.flower-workspace-sync button')!;
   resync.focus(); await userEvent.keyboard('{Enter}');
   await waitFor(() => disclosure(root).dataset.flowerThinkingView === 'collapsed');
+  expect(disclosure(root).querySelector('.flower-thinking-flower')!.getAnimations({ subtree: true })).toHaveLength(0);
   expect(live.connections).toHaveLength(2);
   expect(live.connections[0].input.signal.aborted).toBe(true);
   live.push({ ...sealed(initial), view_version: 3 });
@@ -195,6 +201,7 @@ it('keeps already sealed thinking closed when a later segment fails', async () =
   const { root, live, initial } = await mount();
   live.push(sealed(initial));
   await waitFor(() => disclosure(root).dataset.flowerThinkingView === 'collapsed');
+  expect(disclosure(root).querySelector('.flower-thinking-flower')!.getAnimations({ subtree: true })).toHaveLength(0);
   const next = { ...initial.items![1], id: 'thinking-next', ordinal: 3, live: true };
   live.push({ ...sealed(initial), view_version: 3, items: [...sealed(initial).items!, next] });
   await waitFor(() => Boolean(disclosure(root, 'thinking-next')));
@@ -214,6 +221,7 @@ it('does not attribute a later failed run to older thinking in the same turn', a
   live.setCurrent(resumed);
   root.querySelector<HTMLButtonElement>('.flower-workspace-sync button')!.click();
   await waitFor(() => disclosure(root).dataset.flowerThinkingView === 'collapsed');
+  expect(disclosure(root).querySelector('.flower-thinking-flower')!.getAnimations({ subtree: true })).toHaveLength(0);
   expect(root.querySelectorAll('.flower-run-error')).toHaveLength(1);
   expect(root.querySelector('.flower-run-error')?.textContent).toContain('Flower could not finish this reply.');
   expect(root.querySelector('.flower-turn-ended')).toBeNull();
@@ -223,6 +231,7 @@ it('preserves live thinking when exact cancellation is canonical before the term
   const { root, live, initial } = await mount();
   live.push(sealed(initial, { cancellation: { thread_id: initial.thread_id, turn_id: 'turn', run_id: 'run', source: 'user', mode: 'immediate', requested_at: '2026-10-12T12:00:30Z' } }));
   await waitFor(() => disclosure(root).dataset.flowerThinkingActive === 'false');
+  expect(disclosure(root).querySelector('.flower-thinking-flower')!.getAnimations({ subtree: true })).toHaveLength(0);
   expect(disclosure(root).dataset.flowerThinkingView).toBe('collapsed');
 });
 
@@ -232,6 +241,7 @@ it.each(['full', 'companion'] as const)('supports a localized keyboard disclosur
   Object.assign(root.style, { width: '360px', height: '760px' });
   live.push(sealed(initial));
   await waitFor(() => disclosure(root).dataset.flowerThinkingView === 'collapsed');
+  expect(disclosure(root).querySelector('.flower-thinking-flower')!.getAnimations({ subtree: true })).toHaveLength(0);
   const button = toggle(root);
   expect(button.textContent).toContain('思考过程');
   expect(button.getAttribute('aria-expanded')).toBe('false');

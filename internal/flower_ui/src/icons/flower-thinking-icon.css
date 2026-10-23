@@ -1,0 +1,145 @@
+.flower-thinking-flower {
+  --flower-thinking-fill: var(--primary);
+  --flower-thinking-empty: var(--background);
+  --flower-thinking-outline: var(--muted-foreground);
+  --flower-thinking-light: color-mix(in srgb, var(--flower-thinking-fill) 84%, var(--redeven-surface-highlight-source));
+  /* The center stays cream gold in every palette, including dark themes. */
+  --flower-thinking-gold: color-mix(in srgb, var(--color-amber-300) 68%, var(--redeven-surface-highlight-source));
+  --flower-thinking-cream: color-mix(in srgb, var(--flower-thinking-gold) 58%, var(--redeven-surface-highlight-source));
+  position: relative;
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 1rem;
+  isolation: isolate;
+}
+
+.flower-thinking-petal {
+  position: absolute;
+  left: 34%;
+  top: 2%;
+  width: 32%;
+  height: 49%;
+  border: 0.75px solid var(--flower-thinking-outline);
+  border-radius: 54% 54% 47% 47%;
+  background: var(--flower-thinking-empty);
+  overflow: hidden;
+  transform-origin: 50% 98%;
+}
+
+.flower-thinking-ink {
+  position: absolute;
+  inset: -23% 0 0;
+  background: radial-gradient(ellipse at 28% 42%, color-mix(in srgb, var(--redeven-surface-highlight-source) 12%, transparent), transparent 55%),
+    linear-gradient(155deg, var(--flower-thinking-light) 18%, var(--flower-thinking-fill) 80%);
+  mask-image: linear-gradient(to bottom, transparent, var(--foreground) 19%, var(--foreground));
+}
+
+.flower-thinking-center {
+  position: absolute;
+  z-index: 1;
+  left: 36%;
+  top: 36%;
+  width: 28%;
+  height: 28%;
+  border: 0.75px solid var(--flower-thinking-outline);
+  border-radius: 50%;
+  background: var(--flower-thinking-empty);
+  box-shadow: 0 0 0 0.75px var(--flower-thinking-empty);
+  overflow: hidden;
+}
+
+.flower-thinking-center-ink {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle at 32% 27%, var(--flower-thinking-cream), var(--flower-thinking-gold) 70%);
+}
+
+/* One shared cycle retains earlier petals, fills the center last, then fades.
+   No timers or additional execution state: the disclosure owns liveness. */
+[data-flower-thinking-active='true'] .flower-thinking-ink,
+[data-flower-thinking-active='true'] .flower-thinking-center-ink {
+  animation-duration: 2.4s;
+  animation-timing-function: cubic-bezier(0.22, 0.65, 0.32, 1);
+  animation-iteration-count: infinite;
+  animation-fill-mode: both;
+}
+
+[data-flower-thinking-active='true'] .flower-thinking-petal:nth-child(1) .flower-thinking-ink { animation-name: flower-thinking-fill-one; }
+[data-flower-thinking-active='true'] .flower-thinking-petal:nth-child(2) .flower-thinking-ink { animation-name: flower-thinking-fill-two; }
+[data-flower-thinking-active='true'] .flower-thinking-petal:nth-child(3) .flower-thinking-ink { animation-name: flower-thinking-fill-three; }
+[data-flower-thinking-active='true'] .flower-thinking-petal:nth-child(4) .flower-thinking-ink { animation-name: flower-thinking-fill-four; }
+[data-flower-thinking-active='true'] .flower-thinking-petal:nth-child(5) .flower-thinking-ink { animation-name: flower-thinking-fill-five; }
+[data-flower-thinking-active='true'] .flower-thinking-center-ink { animation-name: flower-thinking-fill-center; }
+
+@keyframes flower-thinking-fill-one {
+  0%, 3% { transform: translateY(100%); opacity: 0; }
+  6% { opacity: 1; }
+  17%, 80% { transform: translateY(0); opacity: 1; }
+  96%, 100% { transform: translateY(0); opacity: 0; }
+}
+@keyframes flower-thinking-fill-two {
+  0%, 13% { transform: translateY(100%); opacity: 0; }
+  16% { opacity: 1; }
+  27%, 80% { transform: translateY(0); opacity: 1; }
+  96%, 100% { transform: translateY(0); opacity: 0; }
+}
+@keyframes flower-thinking-fill-three {
+  0%, 23% { transform: translateY(100%); opacity: 0; }
+  26% { opacity: 1; }
+  37%, 80% { transform: translateY(0); opacity: 1; }
+  96%, 100% { transform: translateY(0); opacity: 0; }
+}
+@keyframes flower-thinking-fill-four {
+  0%, 33% { transform: translateY(100%); opacity: 0; }
+  36% { opacity: 1; }
+  47%, 80% { transform: translateY(0); opacity: 1; }
+  96%, 100% { transform: translateY(0); opacity: 0; }
+}
+@keyframes flower-thinking-fill-five {
+  0%, 43% { transform: translateY(100%); opacity: 0; }
+  46% { opacity: 1; }
+  57%, 80% { transform: translateY(0); opacity: 1; }
+  96%, 100% { transform: translateY(0); opacity: 0; }
+}
+@keyframes flower-thinking-fill-center {
+  0%, 60% { transform: scale(0.35); opacity: 0; }
+  72%, 80% { transform: scale(1); opacity: 1; }
+  96%, 100% { transform: scale(1); opacity: 0; }
+}
+
+:root[data-floe-shell-theme^='hc-'] .flower-thinking-flower {
+  --flower-thinking-outline: var(--foreground);
+}
+
+:root[data-floe-shell-theme^='hc-'] .flower-thinking-ink {
+  background: var(--flower-thinking-fill);
+  mask-image: none;
+}
+
+:root[data-floe-shell-theme^='hc-'] .flower-thinking-center-ink {
+  background: var(--flower-thinking-gold);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-flower-thinking-active] .flower-thinking-ink,
+  [data-flower-thinking-active] .flower-thinking-center-ink {
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .flower-thinking-flower {
+    --flower-thinking-empty: Canvas;
+    --flower-thinking-outline: CanvasText;
+    forced-color-adjust: none;
+  }
+  .flower-thinking-flower .flower-thinking-ink {
+    background: Highlight;
+    mask-image: none;
+  }
+  .flower-thinking-flower .flower-thinking-center-ink {
+    background: Canvas;
+  }
+}

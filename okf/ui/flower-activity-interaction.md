@@ -51,6 +51,18 @@ Thinking, tool sequences and read-only detail previews follow the [sequence read
 Hidden controls do not enter the focus or hit-test order.
 
 ## Visual motion
+Thinking uses a decorative five-petal flower in the shared activity row. Only
+confirmed live thinking animates: petals fill clockwise from their bases, retain
+color, then fill a light cream-gold center in a 2.4-second cycle. The completed
+flower briefly holds and fades together. The icon replaces the thinking title's
+repeating shimmer; the existing one-time title reveal and disclosure behavior
+remain intact. Sealed history, cancellation and disconnected observations are
+static, even when a later tool or thinking segment runs. Theme tokens own petal
+color and outlines; the center never borrows a dark petal shade. Reduced motion
+shows a fully filled static flower. High-contrast themes use solid fills, and
+forced colors use system colors with an outlined center. CSS follows the existing
+disclosure liveness attribute without timers or another execution state.
+
 The disclosure motion owner uses one current Web Animation: opening takes 180 ms and closing takes 140 ms. Reversal cancels the prior animation, and its obsolete completion cannot change presence.
 
 New tool, argument-preview and thinking titles in a confirmed active transcript
@@ -89,3 +101,7 @@ This is Flower presentation policy, not a Floret public API or another execution
 - [Title reveal owner](../../internal/flower_ui/src/flowerActivityTitleReveal.ts)
   and [browser regression checks](../../internal/envapp/ui_src/src/ui/FlowerSurface.activityTyping.browser.test.tsx)
   cover concurrent arrival, geometry, history, navigation, motion preferences and cleanup.
+
+- [Thinking disclosure](../../internal/flower_ui/src/FlowerThinkingDisclosure.tsx) and
+  [petal animation browser checks](../../internal/envapp/ui_src/src/ui/flower/FlowerThinkingIcon.browser.test.tsx)
+  cover fill order, timing, every shipped theme, reduced motion and forced colors.

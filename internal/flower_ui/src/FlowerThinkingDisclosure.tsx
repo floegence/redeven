@@ -1,7 +1,7 @@
 import type { Accessor, Component } from 'solid-js';
 import { Show, createEffect, createSignal, on, onCleanup } from 'solid-js';
-import { Brain } from 'lucide-solid';
 import { ChevronRight } from '@floegence/floe-webapp-core/icons';
+import { FlowerThinkingIcon } from './icons/FlowerThinkingIcon';
 import { useFlowerActivityTitleReveal } from './flowerActivityTitleReveal';
 
 export type FlowerThinkingDisclosureView = 'expanded' | 'collapsed';
@@ -94,8 +94,8 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
             aria-label={view() === 'expanded' ? props.collapseLabel() : props.expandLabel()}
             onClick={toggle}
           >
-            <span class="flower-activity-inline-icon"><Brain size={16} strokeWidth={1.7} aria-hidden="true" /></span>
-            <span ref={revealTitle} class="flower-activity-inline-title" data-floe-progress-shimmer={active() ? 'text' : undefined}>{props.label()}</span>
+            <span class="flower-activity-inline-icon"><FlowerThinkingIcon /></span>
+            <span ref={revealTitle} class="flower-activity-inline-title">{props.label()}</span>
             <Show when={active() && props.elapsed?.()}>
               <span class="flower-activity-inline-duration">{props.elapsed?.()}</span>
             </Show>
