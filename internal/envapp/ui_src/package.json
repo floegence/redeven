@@ -147,7 +147,7 @@
     "react-dom": "^18.2.0",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.2",
-    "vite": "^8.0.16",
+    "vite": "^8.1.6",
     "vite-plugin-solid": "^2.11.12",
     "vitest": "4.1.12",
     "ws": "8.21.0"
