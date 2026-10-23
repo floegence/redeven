@@ -70,6 +70,30 @@ afterEach(() => {
 });
 
 describe('PersistentFloatingWindow', () => {
+  it('waits for the upstream gesture and return animation before persisting resting geometry', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => <PersistentFloatingWindow open onOpenChange={() => undefined}
+      title="Elastic window" persistenceKey="elastic-unit-test"><div>content</div></PersistentFloatingWindow>, host);
+    try {
+      const root = host.querySelector<HTMLElement>('[data-testid="floating-root"]')!;
+      let animating = false;
+      const surface = root.querySelector<HTMLElement>('[data-testid="floating-surface"]')!;
+      surface.setAttribute('data-floe-surface-interacting', 'true');
+      Object.defineProperty(root, 'getAnimations', { value: () => animating ? [{ playState: 'running' }] : [] });
+      Object.defineProperty(root, 'getBoundingClientRect', { value: () => ({ x: animating ? -50 : 16, y: 48, width: 420, height: 280 }) });
+      vi.advanceTimersByTime(160);
+      expect(readUIStorageJSON(floatingWindowStorageKey('elastic-unit-test'), null)).toBeNull();
+      surface.removeAttribute('data-floe-surface-interacting');
+      animating = true;
+      vi.advanceTimersByTime(160);
+      expect(readUIStorageJSON(floatingWindowStorageKey('elastic-unit-test'), null)).toBeNull();
+      animating = false;
+      vi.advanceTimersByTime(160);
+      expect(readUIStorageJSON(floatingWindowStorageKey('elastic-unit-test'), null)).toEqual({ x: 16, y: 48, width: 420, height: 280 });
+    } finally { dispose(); }
+  });
+
   it('restores the persisted default position and size', () => {
     writeUIStorageJSON(floatingWindowStorageKey('demo'), { x: 140, y: 96, width: 720, height: 480 });
 

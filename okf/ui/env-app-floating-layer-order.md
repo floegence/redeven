@@ -5,7 +5,7 @@ description: One product-owned stacking contract orders movable windows, Flower,
 tags: [ui, floating-windows, flower, plugins, dialogs, focus]
 timestamp: 2026-10-19T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-23"
 ---
 # Summary
 
@@ -40,6 +40,15 @@ Published Floe Webapp owns the visible viewport, safe areas, Safari fixed-origin
 
 Temporary viewport constraints do not replace upstream's live preferred window size.
 
+Published Floe Webapp owns elastic titlebar dragging: movement beyond the safe
+viewport has increasing resistance and retains a reachable header; release or
+interruption returns the entire window inside the current safe boundary. Dragging
+a maximized header restores its preferred size at the pointer's grab position
+and continues the same gesture. Titlebar controls and double-click behavior remain
+independent, and the window body stays mounted. Redeven passes its desktop safe
+area through the existing insets contract and persists geometry after the upstream
+return animation completes, never an intermediate animated frame.
+
 ## Movable window order
 One Shell-lifetime provider registers every open movable window under a stable identifier.
 
@@ -53,6 +62,8 @@ The Flower companion remains above ordinary movable windows while expanded; its 
 This contract governs cross-surface Env App stacking and the Activity-versus-Workbench Dialog boundary. New global UI must select an existing band or update this contract and its browser hit-testing evidence; arbitrary escape values, document-level dismissal patches, per-Dialog placement branches, and component-specific global counters are forbidden.
 
 # Evidence
+
+- `redeven:internal/envapp/ui_src/src/ui/widgets/PersistentFloatingWindow.browser.test.tsx` - Published elastic drag, reachable header, settled persistence, maximize drag restore, and retained draft.
 
 - `redeven:desktop/src/preload/desktopEmbeddedDragHost.test.ts` - No self-triggered frame after overlay creation or clearing, stable region identity, frame replacement and externally removed overlay recovery.
 

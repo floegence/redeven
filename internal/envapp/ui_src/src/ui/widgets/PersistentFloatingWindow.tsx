@@ -270,18 +270,26 @@ export function PersistentFloatingWindow(props: PersistentFloatingWindowProps): 
     };
 
     const persistNow = () => {
-      const rect = readRectFromElement(findGeometryRootForMarker(markerClass));
+      const root = findGeometryRootForMarker(markerClass);
+      // Upstream commits the resting geometry before its elastic return finishes.
+      // Persist that resting placement, never a visual frame from the animation.
+      if (root?.querySelector('[data-floe-surface-interacting="true"]')
+        || root?.getAnimations?.().some((animation) => animation.playState === 'running')) {
+        return false;
+      }
+      const rect = readRectFromElement(root);
       if (!rect) {
-        return;
+        return true;
       }
       writePersistentRect(key, rect);
+      return true;
     };
 
     const schedulePersist = () => {
       clearSaveTimer();
       saveTimer = window.setTimeout(() => {
         saveTimer = null;
-        persistNow();
+        if (!persistNow() && !disposed) schedulePersist();
       }, FLOATING_WINDOW_PERSIST_DELAY_MS);
     };
 

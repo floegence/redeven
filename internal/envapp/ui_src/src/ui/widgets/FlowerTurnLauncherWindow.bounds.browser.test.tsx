@@ -57,6 +57,7 @@ async function movePointer(target: HTMLElement, root: HTMLElement, dx: number, d
   root.dispatchEvent(new PointerEvent('pointermove', { ...options, ...end }));
   await settle();
   root.dispatchEvent(new PointerEvent('pointerup', { ...options, ...end, buttons: 0 }));
+  await expect.poll(() => root.getAnimations().some((animation) => animation.playState === 'running')).toBe(false);
   await settle();
 }
 
