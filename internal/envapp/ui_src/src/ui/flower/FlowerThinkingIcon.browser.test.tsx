@@ -131,6 +131,30 @@ it('keeps every shipped theme legible with a light warm center, including live t
   }
 });
 
+it('fills the entire center without a dark rim or separating halo in every theme', () => {
+  const { center, seek, setLive } = mount();
+  const expectSeamlessCenter = () => {
+    const surface = center.parentElement!;
+    const style = getComputedStyle(surface);
+    expect(style.borderTopWidth).toBe('0px');
+    expect(style.boxShadow).toBe('none');
+    expect(getComputedStyle(center).opacity).toBe('1');
+    expect(center.getBoundingClientRect().width).toBeCloseTo(surface.getBoundingClientRect().width);
+    expect(center.getBoundingClientRect().height).toBeCloseTo(surface.getBoundingClientRect().height);
+  };
+  for (const theme of builtInShellThemePresets) {
+    document.documentElement.dataset.floeShellTheme = theme.name;
+    document.documentElement.classList.toggle('dark', theme.mode === 'dark');
+    document.documentElement.classList.toggle('light', theme.mode === 'light');
+    for (const fraction of [0.72, 0.8]) {
+      seek(fraction);
+      expectSeamlessCenter();
+    }
+  }
+  setLive(false);
+  expectSeamlessCenter();
+});
+
 it('shows a static full flower for reduced motion and system boundaries in forced colors', async () => {
   const { animations, petals, center } = mount();
   await media.emulateMediaPreferences({ reducedMotion: 'reduce' });
@@ -139,6 +163,8 @@ it('shows a static full flower for reduced motion and system boundaries in force
     expect(getComputedStyle(ink).opacity).toBe('1');
     expect(getComputedStyle(ink).transform).toBe('none');
   }
+  expect(getComputedStyle(center.parentElement!).borderTopWidth).toBe('0px');
+  expect(getComputedStyle(center.parentElement!).boxShadow).toBe('none');
   await media.emulateMediaPreferences({ forcedColors: 'active' });
   expect(getComputedStyle(petals[0]).backgroundImage).toBe('none');
   expect(getComputedStyle(petals[0]).maskImage).toBe('none');

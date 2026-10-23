@@ -56,14 +56,14 @@ presentation, not provider compute. Published history lacks segment timing, so
 unobserved history and full reloads cannot reconstruct it.
 
 ## Visual motion
-Only confirmed live thinking animates its decorative five-petal flower: petals
-fill clockwise from their bases and retain color, then the cream-gold center
-fills, holds and fades with them in a 2.4-second cycle. The title reveals once,
-then shimmers while live. Sealed, cancelled and disconnected rows stay static
-during later work. Theme tokens own petals and outlines; the center never uses
-a dark petal shade. Reduced motion shows a filled static flower. High contrast
-uses solid fills; forced colors use system colors and an outlined center. CSS
-uses existing disclosure liveness without timers or another execution state.
+Confirmed live thinking uses a 2.4-second cycle: five petals fill clockwise from
+their bases and retain color; the cream-gold center fills last, then all hold
+and fade. Titles reveal once, then shimmer while live. Sealed, cancelled and
+disconnected rows remain static. Theme tokens color petals and outlines; the
+light center covers its empty outline without a halo. Reduced motion shows a
+filled static flower; high contrast uses solid fills; forced colors use system
+colors and an outlined center. CSS follows disclosure liveness without timers
+or extra state.
 
 The disclosure motion owner uses one current Web Animation: opening takes 180 ms and closing takes 140 ms. Reversal cancels the prior animation, and its obsolete completion cannot change presence.
 

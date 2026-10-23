@@ -42,11 +42,18 @@
   top: 36%;
   width: 28%;
   height: 28%;
-  border: 0.75px solid var(--flower-thinking-outline);
   border-radius: 50%;
   background: var(--flower-thinking-empty);
-  box-shadow: 0 0 0 0.75px var(--flower-thinking-empty);
   overflow: hidden;
+}
+
+/* Keep the empty outline beneath the ink so a filled center has no rim. */
+.flower-thinking-center::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 0.75px solid var(--flower-thinking-outline);
+  border-radius: inherit;
 }
 
 .flower-thinking-center-ink {
@@ -141,5 +148,11 @@
   }
   .flower-thinking-flower .flower-thinking-center-ink {
     background: Canvas;
+  }
+  .flower-thinking-flower .flower-thinking-center {
+    border: 0.75px solid var(--flower-thinking-outline);
+  }
+  .flower-thinking-flower .flower-thinking-center::before {
+    display: none;
   }
 }
