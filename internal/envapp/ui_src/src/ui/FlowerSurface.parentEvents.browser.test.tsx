@@ -133,7 +133,7 @@ it('preserves the mounted report, expansion and keyboard focus across canonical 
   const parent = thread({ thread_id: 'parent', subagents: [child], parent_events: events });
   const base = liveBootstrap(parent, 1);
   const current = { ...base.current, parent_events: events };
-  const queued: FlowerLiveStreamEnvelope[] = [{ schema_version: 2, kind: 'ready', summaries: [parent] }];
+  const queued: FlowerLiveStreamEnvelope[] = [{ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [parent] }];
   let wake: (() => void) | undefined;
   const connectLiveStream = async function* ({ signal }: { signal: AbortSignal }): AsyncIterable<FlowerLiveStreamEnvelope> {
     while (!signal.aborted) {
@@ -151,7 +151,7 @@ it('preserves the mounted report, expansion and keyboard focus across canonical 
   const disclosure = row.querySelector<HTMLButtonElement>('.flower-parent-event-disclosure')!;
   disclosure.click(); disclosure.focus();
   const body = row.querySelector('[data-parent-event-body]');
-  queued.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'parent', current: { ...current, view_version: 2,
+  queued.push({ schema_version: 3, kind: 'thread.batch', thread_id: 'parent', current: { ...current, view_version: 2,
     parent_events: { ...events, events: [{ ...event('report'), admitted: true }, event('completed', 'completed')], last_event_id: 'completed' } } });
   wake?.();
   await waitFor(() => Boolean(runtime.querySelector('[data-parent-event="completed"]')));

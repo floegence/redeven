@@ -10,7 +10,7 @@ function liveStream() {
   const values: FlowerLiveStreamEnvelope[] = [];
   let wake: (() => void) | undefined;
   return {
-    push(current: FlowerRuntimeCurrentView) { values.push({ schema_version: 2, kind: 'thread.batch', thread_id: current.thread_id, current }); wake?.(); },
+    push(current: FlowerRuntimeCurrentView) { values.push({ schema_version: 3, kind: 'thread.batch', thread_id: current.thread_id, current }); wake?.(); },
     async *connect({ signal }: { signal: AbortSignal }) {
       const abort = () => wake?.();
       signal.addEventListener('abort', abort, { once: true });
@@ -167,7 +167,7 @@ describe('Flower complete interaction subtree stability', () => {
         const connection = ++connections;
         if (connection > 1) await ready.promise;
         if (signal.aborted) return;
-        yield { schema_version: 2, kind: 'ready', summaries: [fixture.thread] };
+        yield { schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [fixture.thread] };
         if (connection === 1) {
           await disconnected.promise;
           if (!signal.aborted) throw Object.assign(new Error('Test live transport disconnected'), { code: 'envelope_encoding_failed' });
@@ -416,7 +416,7 @@ describe('Flower complete interaction subtree stability', () => {
     if (mode !== 'subagents') fixture.replace({ ...current, interactions: [{ id: mode === 'input' ? request.prompt_id : 'approval-stability', turn_id: current.turn_id!, run_id: current.run_id!, kind: mode === 'input' ? 'input' : 'approval', ...(mode === 'input' ? { input: { summary: 'Choose a channel', questions: [{ id: 'channel', prompt: 'Choose a channel', kind: 'select_or_write', options: ['Stable', 'Beta'], write_label: 'Custom' }] } } : { approval: { label: 'Inspect directory', command: 'ls', tool_name: 'terminal.exec', tool_call_id: 'approve-tool' } }) }] });
     const runtime = await mountFixture(fixture);
     if (mode === 'subagents') {
-      fixture.emit({ schema_version: 2, kind: 'thread.batch', thread_id: fixture.thread.thread_id, subagents: [subagentSummary({ parent_thread_id: fixture.thread.thread_id, thread_id: 'child-stability', status: 'completed' })] });
+      fixture.emit({ schema_version: 3, kind: 'thread.batch', thread_id: fixture.thread.thread_id, subagents: [subagentSummary({ parent_thread_id: fixture.thread.thread_id, thread_id: 'child-stability', status: 'completed' })] });
       await waitFor(() => Boolean(runtime.querySelector('[aria-controls="flower-subagents-dropdown"]')));
       runtime.querySelector<HTMLButtonElement>('[aria-controls="flower-subagents-dropdown"]')!.click();
     }

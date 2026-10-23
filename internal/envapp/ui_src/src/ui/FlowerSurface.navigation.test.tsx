@@ -224,10 +224,10 @@ describe('FlowerSurface navigation', () => {
       listThreads: vi.fn(async () => [initialSummary]),
       loadThread,
       connectLiveStream: async function* ({ signal }) {
-        yield { schema_version: 2, kind: 'ready' as const, summaries: [initialSummary] };
+        yield { schema_version: 3, kind: 'ready' as const, baseline_complete: true, summaries: [initialSummary] };
         await publishUpdate.promise;
-        yield { schema_version: 2, kind: 'summary.batch' as const, summaries: [updatedSummary] };
-        yield { schema_version: 2, kind: 'summary.batch' as const, summaries: [updatedSummary] };
+        yield { schema_version: 3, kind: 'summary.batch' as const, summaries: [updatedSummary] };
+        yield { schema_version: 3, kind: 'summary.batch' as const, summaries: [updatedSummary] };
         await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
       },
     });
@@ -384,14 +384,14 @@ describe('FlowerSurface navigation', () => {
       listThreads: vi.fn(async () => [initialThread]),
       loadThread: vi.fn(async () => liveBootstrap(initialThread, 1)),
       connectLiveStream: async function* ({ signal }) {
-        yield { schema_version: 2, kind: 'ready' as const, summaries: [initialThread] };
+        yield { schema_version: 3, kind: 'ready' as const, baseline_complete: true, summaries: [initialThread] };
         await Promise.race([
           publishUpdate.promise,
           new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true })),
         ]);
         if (signal.aborted) return;
         yield {
-          schema_version: 2,
+          schema_version: 3,
           kind: 'thread.batch' as const,
           thread_id: initialThread.thread_id,
           current: runtimeCurrentView(updatedThread, 2),
@@ -499,9 +499,9 @@ describe('FlowerSurface navigation', () => {
 			listThreads: vi.fn(async () => [fallback]),
 			loadThread: vi.fn(async () => liveBootstrap(fallback)),
 			connectLiveStream: async function* ({ signal }) {
-				yield { schema_version: 2, kind: 'ready' as const, summaries: [fallback] };
+				yield { schema_version: 3, kind: 'ready' as const, baseline_complete: true, summaries: [fallback] };
 				await publishProviderTitle.promise;
-				yield { schema_version: 2, kind: 'summary.batch' as const, summaries: [provider] };
+				yield { schema_version: 3, kind: 'summary.batch' as const, summaries: [provider] };
 				await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
 			},
 		});
@@ -1686,10 +1686,7 @@ describe('FlowerSurface navigation', () => {
       ...adapter(true),
       listThreads,
       loadThread: vi.fn(async () => liveBootstrap(visibleThread)),
-      connectLiveStream: async function* ({ signal }) {
-        await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
-		yield* [];
-      },
+      disableLiveStream: true,
     });
 
     await waitFor(() => runtime.textContent?.includes('Flower waiting input request is incomplete.') ?? false);
@@ -1775,7 +1772,7 @@ describe('FlowerSurface navigation', () => {
     vi.useFakeTimers();
     try {
       const listThreads = vi.fn(() => new Promise<never>(() => undefined));
-      const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads });
+      const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads, disableLiveStream: true });
 
       await Promise.resolve();
       await vi.advanceTimersByTimeAsync(0);
@@ -1799,10 +1796,7 @@ describe('FlowerSurface navigation', () => {
         if (attempt === 1) throw new Error('temporary inventory failure');
         return [];
       }),
-      connectLiveStream: async function* (input) {
-        await new Promise<void>((resolve) => input.signal.addEventListener('abort', () => resolve(), { once: true }));
-        yield* [];
-      },
+      disableLiveStream: true,
     });
 
     await waitFor(() => Boolean(runtime.querySelector('.flower-thread-empty[role="alert"]')));

@@ -58,7 +58,7 @@ function terminalStream(summaries: readonly FlowerThreadSnapshot[], recoveredSum
   const attempts: FlowerLiveStreamConnectInput[] = [];
   const connectLiveStream = vi.fn(async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
     attempts.push(input);
-    yield { schema_version: 2, kind: 'ready', summaries: attempts.length > 1 ? recoveredSummaries : summaries };
+    yield { schema_version: 3, kind: 'ready', baseline_complete: true, summaries: attempts.length > 1 ? recoveredSummaries : summaries };
     if (attempts.length === 1) {
       await failure.promise;
       throw Object.assign(new Error('private encoding diagnostic'), { code: 'envelope_encoding_failed' });

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createFlowerThreadBaseline } from './threadBaseline';
 import type { FlowerThreadSnapshot, FlowerRuntimeCurrentView, FlowerRuntimeUpdate } from './contracts/flowerSurfaceContracts';
 import {
   classifyThreadView,
@@ -771,5 +772,34 @@ describe('bounded history windows', () => {
     expect(cache.views.get('a')!.thread.messages[0].content).toBe('old!');
     expect(cache.views.get('a')!.thread.history_window?.has_after).toBe(true);
     expect(cache.summaries.get('a')!.history_window).toBeUndefined();
+  });
+});
+
+
+describe('progressive root baseline', () => {
+  it('retains selection and old roots until complete, preserves new local roots and viewer state', () => {
+    const baseline = createFlowerThreadBaseline();
+    let cache = receive(createThreadCache(), view('selected', 9, 'retained body')).select('selected');
+    cache = cache.replaceSummary(thread('deleted', 1, ''));
+    cache = baseline.apply(cache, { schema_version: 3, kind: 'ready', baseline_complete: false }, [thread('first', 1, '')]);
+    expect(cache.selectedId).toBe('selected');
+    expect(cache.views.get('selected')?.thread.messages[0]?.content).toBe('retained body');
+    expect(cache.summaries.has('deleted')).toBe(true);
+    cache = cache.replaceSummary(thread('created-during-load', 1, ''));
+    cache = cache.applyReadStatus('selected', { is_unread: false, snapshot: { activity_revision: 9 }, read_state: { last_seen_activity_revision: 9 } });
+    cache = baseline.apply(cache, { schema_version: 3, kind: 'summary.batch', baseline_complete: true }, [thread('selected', 9, '')]);
+    expect(cache.selectedId).toBe('selected');
+    expect([...cache.summaries.keys()].sort()).toEqual(['created-during-load', 'first', 'selected']);
+    expect(cache.summaries.get('selected')?.read_status.read_state.last_seen_activity_revision).toBe(9);
+  });
+  it('discards interrupted membership before reconnect and clears removed selection only on completion', () => {
+    const baseline = createFlowerThreadBaseline();
+    let cache = receive(createThreadCache(), view('removed', 1, 'body')).select('removed');
+    cache = baseline.apply(cache, { schema_version: 3, kind: 'ready', baseline_complete: false }, [thread('stale-page', 1, '')]);
+    baseline.reset();
+    expect(() => baseline.apply(cache, { schema_version: 3, kind: 'summary.batch', baseline_complete: true }, [])).toThrow();
+    cache = baseline.apply(cache, { schema_version: 3, kind: 'ready', baseline_complete: true }, [thread('current', 1, '')]);
+    expect([...cache.summaries.keys()]).toEqual(['current']);
+    expect(cache.selectedId).toBeNull();
   });
 });

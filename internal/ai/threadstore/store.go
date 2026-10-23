@@ -325,6 +325,32 @@ LIMIT ?
 	return out, next, nil
 }
 
+// ListRootThreadIDs freezes only product membership and navigation order.
+// Canonical summaries are read separately in bounded pages by the observer.
+func (s *Store) ListRootThreadIDs(ctx context.Context, endpointID string, maxBytes int) ([]string, error) {
+	if s == nil || s.db == nil || ctx == nil || strings.TrimSpace(endpointID) == "" || maxBytes < 1 {
+		return nil, errors.New("invalid root identity inventory request")
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT thread_id FROM ai_thread_settings WHERE endpoint_id = ? AND parent_thread_id = '' ORDER BY pin_rank DESC, settings_created_at_unix_ms DESC, thread_id ASC`, endpointID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		maxBytes -= len(id) + 16
+		if maxBytes < 0 {
+			return nil, errors.New("root identity inventory exceeds observer budget")
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 // ListThreadSettingsForRecoveryPage returns a stable page of host-owned root
 // identities for startup reconciliation. It does not project Agent state.
 func (s *Store) ListThreadSettingsForRecoveryPage(ctx context.Context, cursor ThreadSettingsRecoveryCursor, limit int) ([]ThreadSettings, ThreadSettingsRecoveryCursor, bool, error) {

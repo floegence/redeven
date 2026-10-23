@@ -34,9 +34,9 @@ it('updates the directory from live transport without reloading settings or repl
   const loadSettings = vi.fn(async () => settingsSnapshot());
   const loadDirectory = vi.fn(async () => directory);
   const connectLiveStream = vi.fn(async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
-    yield { schema_version: 2, kind: 'ready', summaries: [] };
+    yield { schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [] };
     await changed.promise;
-    yield { schema_version: 2, kind: 'model_directory.changed' };
+    yield { schema_version: 3, kind: 'model_directory.changed' };
     if (!input.signal.aborted) await new Promise<void>(resolve => input.signal.addEventListener('abort', () => resolve(), { once: true }));
   });
   const surface = renderSurfaceWithAdapterProps({ ...adapter(), loadSettings, loadModelDirectory: loadDirectory, connectLiveStream, listThreads: async () => [] }, {});

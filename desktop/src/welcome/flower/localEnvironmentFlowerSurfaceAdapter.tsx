@@ -796,7 +796,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     },
     transport: {
       readParentEvents: (threadID, query) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/subagent-events', query),
-      listThreads: () => runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/ai/threads?limit=200'),
+      listThreads: input => runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/ai/threads?' + new URLSearchParams({ limit: String(input?.limit ?? 25), ...(input?.cursor ? { cursor: input.cursor } : {}) }), undefined, undefined, options.runtimeEnvironmentID, input?.signal),
 		loadThread: (threadID, signal) => runtimeJSON(bridge, 'GET', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}`, undefined, undefined, options.runtimeEnvironmentID, signal),
       loadHistory: (threadID, input, signal) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history', input, undefined, options.runtimeEnvironmentID, signal),
       loadHistoryItem: (threadID, itemID, signal) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history-item', { item_id: itemID }, undefined, options.runtimeEnvironmentID, signal),

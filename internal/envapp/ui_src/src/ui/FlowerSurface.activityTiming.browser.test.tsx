@@ -67,16 +67,16 @@ describe('Flower management operation execution timing', () => {
       listThreads: vi.fn(async () => [summary]),
       loadThread: vi.fn(async () => ({ thread: { ...applyFlowerRuntimeCurrentView(summary, latest), subagents: [child] }, current: latest })),
       connectLiveStream: vi.fn(async function* (input: FlowerLiveStreamConnectInput) {
-        yield { schema_version: 2, kind: 'ready' as const, summaries: [summary] };
+        yield { schema_version: 3, kind: 'ready' as const, baseline_complete: true, summaries: [summary] };
         await childRerun.promise;
         child = { ...child, status: 'running', updated_at_ms: now + 60_000 };
         latest = current(2);
-        yield { schema_version: 2, kind: 'thread.batch' as const, thread_id: parentID, current: latest, subagents: [child] };
+        yield { schema_version: 3, kind: 'thread.batch' as const, thread_id: parentID, current: latest, subagents: [child] };
         childRerunDelivered = true;
         await completeParent.promise;
         latest = current(3, true);
         summary = { ...summary, status: 'idle', active_run_id: undefined, run_progress: undefined };
-        yield { schema_version: 2, kind: 'thread.batch' as const, thread_id: parentID, current: latest, subagents: [child] };
+        yield { schema_version: 3, kind: 'thread.batch' as const, thread_id: parentID, current: latest, subagents: [child] };
         await new Promise<void>((resolve) => input.signal.addEventListener('abort', () => resolve(), { once: true }));
       }),
     } satisfies Parameters<typeof renderSurfaceWithAdapter>[0];

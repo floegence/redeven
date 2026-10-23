@@ -103,7 +103,7 @@ describe('Flower final thread cache and workspace transport', () => {
     const detail = subagentDetail({ summary: child, current: { thread_id: child.thread_id, view_version: 3, activity: 'active',
       turn_id: 'retained-turn', run_id: 'retained-run', run_progress: { phase: 'streaming' },
       items: [{ kind: 'assistant', id: 'retained-output', turn_id: 'retained-turn', run_id: 'retained-run', ordinal: 1, text: 'Canonical retained work', live: true }] } });
-    const stream = controlledWorkspaceStream([{ schema_version: 2, kind: 'ready', summaries: roots }]);
+    const stream = controlledWorkspaceStream([{ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: roots }]);
     const loadSubagentDetail = vi.fn().mockImplementationOnce(() => firstDetail.promise).mockResolvedValue(detail);
     const setThreadPinned = vi.fn(async () => [{ thread_id: parentID, pinned_at_ms: 10, pin_rank: 1, settings_revision: 2 }]);
     const listThreads = vi.fn(async () => roots);
@@ -129,10 +129,10 @@ describe('Flower final thread cache and workspace transport', () => {
     await waitFor(() => listThreads.mock.calls.length > listReads);
     expect(setThreadPinned).toHaveBeenCalledExactlyOnceWith(parentID, true);
     expect(document.querySelector('.flower-subagent-detail-transcript')?.textContent).toContain('Canonical retained work');
-    stream.push({ schema_version: 2, kind: 'ready', summaries: roots });
+    stream.push({ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: roots });
     await waitFor(() => loadSubagentDetail.mock.calls.length === 2);
     expect(document.querySelector('.flower-subagent-detail-transcript')?.textContent).toContain('Canonical retained work');
-    stream.push({ schema_version: 2, kind: 'thread.batch', thread_id: parent.thread_id, subagent_update: {
+    stream.push({ schema_version: 3, kind: 'thread.batch', thread_id: parent.thread_id, subagent_update: {
       thread_id: child.thread_id, turn_id: 'retained-turn', run_id: 'retained-run', base_version: 3, view_version: 4,
       facts: { activity: 'active', queue_count: 0, run_progress: { phase: 'streaming' } },
       items: [{ kind: 'append', item_id: 'retained-output', append: { offset_bytes: new TextEncoder().encode('Canonical retained work').length, text: ' plus streamed work' } }],
@@ -147,7 +147,7 @@ describe('Flower final thread cache and workspace transport', () => {
     const running = thread({ thread_id: 'thread-graceful-stop', status: 'running', active_run_id: 'run-stop', run_progress: { phase: 'tool_execution', run_id: 'run-stop', turn_id: 'turn-stop' }, messages: [{ id: 'user-stop', turn_id: 'turn-stop', role: 'user', content: 'Inspect device', status: 'complete', created_at_ms: 1 }] });
     const other = thread({ thread_id: 'thread-other-stop', title: 'Other conversation' });
     const cancellation = { thread_id: running.thread_id, turn_id: 'turn-stop', run_id: 'run-stop', source: 'user_stop', mode: 'graceful' as const, requested_at: '2026-09-10T03:00:00Z' };
-    const stream = controlledWorkspaceStream([{ schema_version: 2, kind: 'ready', summaries: [running, other] }]);
+    const stream = controlledWorkspaceStream([{ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [running, other] }]);
     const stopping = { ...runtimeCurrentView(running, 2), cancellation, turn_id: 'turn-stop', run_id: 'run-stop' };
     let stopAccepted = false;
     const stopThread = vi.fn(async () => { stopAccepted = true; });
@@ -165,7 +165,7 @@ describe('Flower final thread cache and workspace transport', () => {
     (runtime.querySelector('[data-flower-primary-action="stop"]') as HTMLButtonElement).click();
     await waitFor(() => runtime.querySelector('.flower-turn-stopping')?.textContent === 'Stopping...');
     await wait(50);
-    stream.push({ schema_version: 2, kind: 'thread.batch', thread_id: running.thread_id, current: stopping });
+    stream.push({ schema_version: 3, kind: 'thread.batch', thread_id: running.thread_id, current: stopping });
     expect((runtime.querySelector('[data-flower-primary-action="stop"]') as HTMLButtonElement).disabled).toBe(true);
     expect(runtime.querySelector('.flower-error-card')).toBeNull();
     const draft = runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement;
@@ -176,7 +176,7 @@ describe('Flower final thread cache and workspace transport', () => {
     await select(running.thread_id);
     await waitFor(() => Boolean(runtime.querySelector('.flower-turn-stopping')));
     expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).value).toBe('Keep this draft');
-    stream.push({ schema_version: 2, kind: 'thread.batch', thread_id: running.thread_id, current: { ...stopping, view_version: 3, activity: 'idle', run_progress: undefined, last_outcome: 'cancelled' } });
+    stream.push({ schema_version: 3, kind: 'thread.batch', thread_id: running.thread_id, current: { ...stopping, view_version: 3, activity: 'idle', run_progress: undefined, last_outcome: 'cancelled' } });
     await waitFor(() => runtime.querySelector('.flower-turn-stopping') === null);
     expect(runtime.querySelector('.flower-turn-stop-notice')).toBeNull();
     expect(runtime.querySelector('.flower-error-card')).toBeNull();
@@ -233,8 +233,8 @@ describe('Flower final thread cache and workspace transport', () => {
       read_status: readStatus(true, 7, 'success'),
     });
     const stream = controlledWorkspaceStream([{
-      schema_version: 2,
-      kind: 'ready',
+      schema_version: 3,
+      kind: 'ready', baseline_complete: true,
       summaries: [initial],
     }]);
     const firstAcknowledgement = deferred<ReturnType<typeof readStatus>>();
@@ -266,7 +266,7 @@ describe('Flower final thread cache and workspace transport', () => {
       read_status: readStatus(true, 8, 'success'),
     });
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'summary.batch',
       summaries: [latestThread],
     });
@@ -277,7 +277,7 @@ describe('Flower final thread cache and workspace transport', () => {
       read_status: readStatus(true, 9, 'success'),
     });
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'summary.batch',
       summaries: [latestThread],
     });
@@ -312,8 +312,8 @@ describe('Flower final thread cache and workspace transport', () => {
       status: 'running',
     });
     const stream = controlledWorkspaceStream([{
-      schema_version: 2,
-      kind: 'ready',
+      schema_version: 3,
+      kind: 'ready', baseline_complete: true,
       summaries: [parent, peer],
     }]);
     const surfaceAdapter = adapter(true);
@@ -387,7 +387,7 @@ describe('Flower final thread cache and workspace transport', () => {
     (runtime.querySelector(`[data-thread-id="${parent.thread_id}"] button`) as HTMLButtonElement).click();
     await waitFor(() => runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === parent.thread_id && runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-loading') === 'false');
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: parent.thread_id,
       subagents: [child],
@@ -434,7 +434,7 @@ describe('Flower final thread cache and workspace transport', () => {
 
     expect(loadSubagentDetail).toHaveBeenCalledTimes(1);
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: parent.thread_id,
       subagents: [],
@@ -443,7 +443,7 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(document.querySelector('[data-flower-subagent-detail="open"]')).not.toBeNull();
 
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: parent.thread_id,
       subagent_current: {
@@ -457,7 +457,7 @@ describe('Flower final thread cache and workspace transport', () => {
     });
     await waitFor(() => document.body.textContent?.includes('Live child content.') === true);
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: parent.thread_id,
       subagent_current: runningChildCurrent(9, 'stream chunk 1'),
@@ -509,7 +509,7 @@ describe('Flower final thread cache and workspace transport', () => {
     Object.defineProperty(childViewport, 'scrollHeight', { configurable: true, value: 1_600 });
     for (let viewVersion = 10; viewVersion <= 309; viewVersion += 1) {
       stream.push({
-        schema_version: 2,
+        schema_version: 3,
         kind: 'thread.batch',
         thread_id: parent.thread_id,
         subagent_current: runningChildCurrent(viewVersion, `stream chunk ${viewVersion - 8}`),
@@ -530,7 +530,7 @@ describe('Flower final thread cache and workspace transport', () => {
     Object.defineProperty(parentViewport, 'scrollHeight', { configurable: true, value: 1_600 });
     parentDetailVersion = 2;
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: parent.thread_id,
       current: {
@@ -559,7 +559,7 @@ describe('Flower final thread cache and workspace transport', () => {
     childViewport.dispatchEvent(new Event('scroll'));
     Object.defineProperty(childViewport, 'scrollHeight', { configurable: true, value: 1_800 });
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: parent.thread_id,
       subagent_current: runningChildCurrent(310, 'stream chunk 302'),
@@ -601,19 +601,19 @@ describe('Flower final thread cache and workspace transport', () => {
     vi.useRealTimers();
 
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: 'other-parent',
       subagent_current: { thread_id: child.thread_id, view_version: 399, items: [] },
     });
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: parent.thread_id,
       subagent_current: { thread_id: 'other-child', view_version: 399, items: [] },
     });
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: parent.thread_id,
       subagent_current: {
@@ -628,7 +628,7 @@ describe('Flower final thread cache and workspace transport', () => {
 
     await waitFor(() => runtime.querySelector('[data-flower-sync-state="failed"]') !== null);
     runtime.querySelector<HTMLButtonElement>('.flower-workspace-sync button')!.click();
-    stream.push({ schema_version: 2, kind: 'ready', summaries: [parent, peer] });
+    stream.push({ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [parent, peer] });
     await waitFor(() => loadSubagentDetail.mock.calls.length === 2);
     await waitFor(() => document.body.textContent?.includes('Reconnected final child result.') === true);
 
@@ -654,8 +654,8 @@ describe('Flower final thread cache and workspace transport', () => {
       status: 'running',
     });
     const stream = controlledWorkspaceStream([{
-      schema_version: 2,
-      kind: 'ready',
+      schema_version: 3,
+      kind: 'ready', baseline_complete: true,
       summaries: [parent],
     }]);
     const firstDetail = deferred<FlowerSubagentDetail>();
@@ -693,7 +693,7 @@ describe('Flower final thread cache and workspace transport', () => {
     (runtime.querySelector(`[data-thread-id="${parent.thread_id}"] button`) as HTMLButtonElement).click();
     await waitFor(() => runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === parent.thread_id && runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-loading') === 'false');
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: parent.thread_id,
       subagents: [child],
@@ -735,8 +735,8 @@ describe('Flower final thread cache and workspace transport', () => {
       }],
     });
     const stream = controlledWorkspaceStream([{
-      schema_version: 2,
-      kind: 'ready',
+      schema_version: 3,
+      kind: 'ready', baseline_complete: true,
       summaries: [runningThread],
     }]);
     const runtime = renderSurfaceWithAdapterProps({
@@ -750,7 +750,7 @@ describe('Flower final thread cache and workspace transport', () => {
 
     await waitFor(() => runtime.querySelector('[data-flower-message-id="user:thinking-wrap"]') !== null);
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: threadID,
       current: {
@@ -798,8 +798,8 @@ describe('Flower final thread cache and workspace transport', () => {
       }],
     });
     const stream = controlledWorkspaceStream([{
-      schema_version: 2,
-      kind: 'ready',
+      schema_version: 3,
+      kind: 'ready', baseline_complete: true,
       summaries: [runningThread],
     }]);
     const runtime = renderSurfaceWithAdapter({
@@ -813,7 +813,7 @@ describe('Flower final thread cache and workspace transport', () => {
     (runtime.querySelector(`[data-thread-id="${threadID}"] button`) as HTMLButtonElement).click();
     await waitFor(() => runtime.querySelector('[data-flower-message-id="user:progressive-thinking"]') !== null);
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: threadID,
       current: {
@@ -843,7 +843,7 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(runtime.textContent).not.toContain('Final workspace explanation');
 
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: threadID,
       current: {
@@ -863,7 +863,7 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(runtime.textContent).not.toContain('Final workspace explanation');
 
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: threadID,
       current: {
@@ -903,8 +903,8 @@ describe('Flower final thread cache and workspace transport', () => {
       }],
     });
     const stream = controlledWorkspaceStream([{
-      schema_version: 2,
-      kind: 'ready',
+      schema_version: 3,
+      kind: 'ready', baseline_complete: true,
       summaries: [runningThread],
     }]);
     const connectLiveStream = vi.fn(stream.connect);
@@ -925,7 +925,7 @@ describe('Flower final thread cache and workspace transport', () => {
     await waitFor(() => stopThread.mock.calls.length === 1);
 
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: threadID,
       current: {
@@ -934,7 +934,7 @@ describe('Flower final thread cache and workspace transport', () => {
       },
     });
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: threadID,
       current: {
@@ -957,7 +957,7 @@ describe('Flower final thread cache and workspace transport', () => {
 
     // A late terminal view from the stopped turn cannot replace the newer turn.
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: threadID,
       current: {
@@ -969,7 +969,7 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(runtime.querySelector('[data-flower-progress-run-id="run-continued"]')).toBe(progressIndicator);
 
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: threadID,
       current: {
@@ -1004,7 +1004,7 @@ describe('Flower final thread cache and workspace transport', () => {
       },
     };
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: threadID,
       current: {
@@ -1044,7 +1044,7 @@ describe('Flower final thread cache and workspace transport', () => {
       },
     };
     const assistantCurrent = (version: number, text: string): FlowerLiveStreamEnvelope & { current: FlowerRuntimeCurrentView } => ({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: threadID,
       current: {
@@ -1076,7 +1076,7 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(runtime.querySelector('.flower-model-status-indicator')).toBe(progressIndicator);
 
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: threadID,
       current: {
@@ -1089,7 +1089,7 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(runtime.querySelector('.flower-model-status-indicator')).toBe(progressIndicator);
 
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: threadID,
       current: {
@@ -1104,7 +1104,7 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(progressIndicator?.querySelector('.flower-model-status-dots')).toBe(progressDots);
 
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: threadID,
       current: {
@@ -1138,7 +1138,7 @@ describe('Flower final thread cache and workspace transport', () => {
   });
 
   it('retains the new-thread draft until canonical admission wins the launch race', async () => {
-    const stream = controlledWorkspaceStream([{ schema_version: 2, kind: 'ready', summaries: [] }]);
+    const stream = controlledWorkspaceStream([{ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [] }]);
     const launchResponse = deferred<FlowerTurnLaunchReceipt>();
     const launchTurn = vi.fn((_input: FlowerTurnLaunchInput) => launchResponse.promise);
     const runtime = renderSurfaceWithAdapter({
@@ -1198,7 +1198,7 @@ describe('Flower final thread cache and workspace transport', () => {
     observeVisibleRows();
 
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: receipt.thread_id,
       current,
@@ -1222,7 +1222,7 @@ describe('Flower final thread cache and workspace transport', () => {
   });
 
   it('keeps a newer New Chat draft selected when an earlier admission arrives late', async () => {
-    const stream = controlledWorkspaceStream([{ schema_version: 2, kind: 'ready', summaries: [] }]);
+    const stream = controlledWorkspaceStream([{ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [] }]);
     const launchResponse = deferred<FlowerTurnLaunchReceipt>();
     const launchTurn = vi.fn((_input: FlowerTurnLaunchInput) => launchResponse.promise);
     const runtime = renderSurfaceWithAdapter({
@@ -1262,7 +1262,7 @@ describe('Flower final thread cache and workspace transport', () => {
       }],
     };
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: receipt.thread_id,
       current,
@@ -1564,7 +1564,7 @@ describe('Flower final thread cache and workspace transport', () => {
         },
       }],
     });
-    const stream = controlledWorkspaceStream([{ schema_version: 2, kind: 'ready', summaries: [activeThread] }]);
+    const stream = controlledWorkspaceStream([{ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [activeThread] }]);
     const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [activeThread]), loadThread: vi.fn(async () => ({ thread: applyFlowerRuntimeCurrentView(activeThread, current(1, 'running')), current: current(1, 'running') })), connectLiveStream: stream.connect });
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${threadID}"] button`)));
     (runtime.querySelector(`[data-thread-id="${threadID}"] button`) as HTMLButtonElement).click();
@@ -1588,7 +1588,7 @@ describe('Flower final thread cache and workspace transport', () => {
     selection.addRange(range);
     expect(selection.toString()).toBe('printf READY');
 
-    stream.push({ schema_version: 2, kind: 'thread.batch', thread_id: threadID, current: current(2, 'error', 'Diagnostic output') });
+    stream.push({ schema_version: 3, kind: 'thread.batch', thread_id: threadID, current: current(2, 'error', 'Diagnostic output') });
     await waitFor(() => row.textContent?.includes('Diagnostic output') === true);
     expect(row.querySelector('.flower-activity-terminal-command')).toBe(command);
     expect(selection.toString()).toBe('printf READY');
@@ -1597,7 +1597,7 @@ describe('Flower final thread cache and workspace transport', () => {
     selection.removeAllRanges();
     toggle.click();
     await waitFor(() => toggle.getAttribute('aria-expanded') === 'false');
-    stream.push({ schema_version: 2, kind: 'thread.batch', thread_id: threadID, current: current(3, 'error', 'Diagnostic output updated') });
+    stream.push({ schema_version: 3, kind: 'thread.batch', thread_id: threadID, current: current(3, 'error', 'Diagnostic output updated') });
     await wait(40);
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
   });
@@ -1674,8 +1674,8 @@ describe('Flower final thread cache and workspace transport', () => {
     });
     const idle = thread({ thread_id: 'thread-b', title: 'Thread B', status: 'idle' });
     const stream = controlledWorkspaceStream([{
-      schema_version: 2,
-      kind: 'ready',
+      schema_version: 3,
+      kind: 'ready', baseline_complete: true,
       summaries: [waiting, idle],
     }]);
     const surfaceAdapter = {
@@ -1701,7 +1701,7 @@ describe('Flower final thread cache and workspace transport', () => {
     await waitFor(() => cardB.getAttribute('data-flower-thread-active') === 'true');
 
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: 'thread-a',
       current: {
@@ -1755,8 +1755,8 @@ describe('Flower final thread cache and workspace transport', () => {
       updated_at_ms: 4,
     });
     const stream = controlledWorkspaceStream([{
-      schema_version: 2,
-      kind: 'ready',
+      schema_version: 3,
+      kind: 'ready', baseline_complete: true,
       summaries: [running],
     }]);
     let latest = running;
@@ -1773,7 +1773,7 @@ describe('Flower final thread cache and workspace transport', () => {
     await waitFor(() => surfaceAdapter.loadThread.mock.calls.length === 1 && runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-loading') === 'false' && runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === running.thread_id);
 
     latest = waiting;
-    stream.push({ schema_version: 2, kind: 'summary.batch', summaries: [waiting] });
+    stream.push({ schema_version: 3, kind: 'summary.batch', summaries: [waiting] });
 
     await waitFor(() => runtime.querySelector('[data-flower-bottom-mode="approval"]') !== null);
     expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
@@ -1799,8 +1799,8 @@ describe('Flower final thread cache and workspace transport', () => {
       read_status: readStatus(false, initial.updated_at_ms, 'success'),
     });
     const stream = controlledWorkspaceStream([{
-      schema_version: 2,
-      kind: 'ready',
+      schema_version: 3,
+      kind: 'ready', baseline_complete: true,
       summaries: [initial],
     }]);
     let latest = initial;
@@ -1817,7 +1817,7 @@ describe('Flower final thread cache and workspace transport', () => {
     await waitFor(() => loadThread.mock.calls.length === 1 && runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-loading') === 'false' && runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type') === 'approval_required');
 
     latest = updated;
-    stream.push({ schema_version: 2, kind: 'summary.batch', summaries: [updated] });
+    stream.push({ schema_version: 3, kind: 'summary.batch', summaries: [updated] });
     await waitFor(() => loadThread.mock.calls.length === 2);
     await waitFor(() => runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type') === 'full_access');
 
@@ -1834,7 +1834,7 @@ describe('Flower final thread cache and workspace transport', () => {
     const intermediate = thread({ ...initial, settings_revision: 2, permission_type: 'readonly' });
     const latest = thread({ ...initial, settings_revision: 3, permission_type: 'full_access' });
     const pending = deferred<ReturnType<typeof liveBootstrap>>();
-    const stream = controlledWorkspaceStream([{ schema_version: 2, kind: 'ready', summaries: [initial] }]);
+    const stream = controlledWorkspaceStream([{ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [initial] }]);
     const loadThread = vi.fn()
       .mockResolvedValueOnce(liveBootstrap(initial, 5))
       .mockImplementationOnce(() => pending.promise)
@@ -1843,10 +1843,10 @@ describe('Flower final thread cache and workspace transport', () => {
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${initial.thread_id}"] button`)));
     (runtime.querySelector(`[data-thread-id="${initial.thread_id}"] button`) as HTMLButtonElement).click();
     await waitFor(() => loadThread.mock.calls.length === 1 && runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-loading') === 'false' && runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type') === 'approval_required');
-    stream.push({ schema_version: 2, kind: 'summary.batch', summaries: [intermediate] });
+    stream.push({ schema_version: 3, kind: 'summary.batch', summaries: [intermediate] });
     await waitFor(() => loadThread.mock.calls.length === 2);
-    stream.push({ schema_version: 2, kind: 'summary.batch', summaries: [latest] });
-    stream.push({ schema_version: 2, kind: 'summary.batch', summaries: [intermediate] });
+    stream.push({ schema_version: 3, kind: 'summary.batch', summaries: [latest] });
+    stream.push({ schema_version: 3, kind: 'summary.batch', summaries: [intermediate] });
     await wait(80);
     expect(loadThread).toHaveBeenCalledTimes(2);
     expect(runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type')).toBe('approval_required');
@@ -1856,9 +1856,9 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(loadThread).toHaveBeenCalledTimes(3);
     expect(runtime.querySelector('.flower-thread-sync-error')).toBeNull();
     // A duplicate summary, stale reconnect inventory, and old current cannot undo accepted settings.
-    stream.push({ schema_version: 2, kind: 'summary.batch', summaries: [latest] });
-    stream.push({ schema_version: 2, kind: 'ready', summaries: [intermediate] });
-    stream.push({ schema_version: 2, kind: 'thread.batch', thread_id: initial.thread_id, current: runtimeCurrentView(initial, 4) });
+    stream.push({ schema_version: 3, kind: 'summary.batch', summaries: [latest] });
+    stream.push({ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [intermediate] });
+    stream.push({ schema_version: 3, kind: 'thread.batch', thread_id: initial.thread_id, current: runtimeCurrentView(initial, 4) });
     await wait(80);
     expect(runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type')).toBe('full_access');
     expect(runtime.querySelector('.flower-thread-sync-error')).toBeNull();
@@ -1870,7 +1870,7 @@ describe('Flower final thread cache and workspace transport', () => {
     const initial = thread({ thread_id: 'thread-failed-settings', title: 'Failed settings', settings_revision: 1, updated_at_ms: 10, read_status: readStatus(false, 10, 'idle') });
     const intermediate = thread({ ...initial, settings_revision: 2, permission_type: 'readonly' });
     const latest = thread({ ...initial, settings_revision: 3, permission_type: 'full_access' });
-    const stream = controlledWorkspaceStream([{ schema_version: 2, kind: 'ready', summaries: [initial] }]);
+    const stream = controlledWorkspaceStream([{ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [initial] }]);
     const loadThread = vi.fn()
       .mockResolvedValueOnce(liveBootstrap(initial, 5))
       .mockRejectedValueOnce(new Error('Request failed'))
@@ -1879,12 +1879,12 @@ describe('Flower final thread cache and workspace transport', () => {
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${initial.thread_id}"] button`)));
     (runtime.querySelector(`[data-thread-id="${initial.thread_id}"] button`) as HTMLButtonElement).click();
     await waitFor(() => loadThread.mock.calls.length === 1 && runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-loading') === 'false' && Boolean(runtime.querySelector('.flower-permission-trigger')));
-    stream.push({ schema_version: 2, kind: 'summary.batch', summaries: [intermediate] });
+    stream.push({ schema_version: 3, kind: 'summary.batch', summaries: [intermediate] });
     await waitFor(() => Boolean(runtime.querySelector('.flower-thread-sync-error')));
-    stream.push({ schema_version: 2, kind: 'summary.batch', summaries: [intermediate] });
+    stream.push({ schema_version: 3, kind: 'summary.batch', summaries: [intermediate] });
     await wait(80);
     expect(loadThread).toHaveBeenCalledTimes(2);
-    stream.push({ schema_version: 2, kind: 'summary.batch', summaries: [latest] });
+    stream.push({ schema_version: 3, kind: 'summary.batch', summaries: [latest] });
     await waitFor(() => runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type') === 'full_access');
     expect(runtime.querySelector('.flower-thread-sync-error')).toBeNull();
     expect(loadThread).toHaveBeenCalledTimes(3);
@@ -1931,7 +1931,7 @@ describe('Flower final thread cache and workspace transport', () => {
         summary: { label: 'Run deployment' },
       }],
     });
-    const stream = controlledWorkspaceStream([{ schema_version: 2, kind: 'ready', summaries: [running] }]);
+    const stream = controlledWorkspaceStream([{ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [running] }]);
     const loadThread = vi.fn(async () => liveBootstrap(running, 1));
     const surfaceAdapter = {
       ...adapter(true),
@@ -1946,7 +1946,7 @@ describe('Flower final thread cache and workspace transport', () => {
     await waitFor(() => loadThread.mock.calls.length === 1 && runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-loading') === 'false' && runtime.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === threadID);
 
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: threadID,
       current: complete ? {
@@ -1972,7 +1972,7 @@ describe('Flower final thread cache and workspace transport', () => {
       expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
 
       stream.push({
-        schema_version: 2, kind: 'thread.batch', thread_id: threadID,
+        schema_version: 3, kind: 'thread.batch', thread_id: threadID,
         current: runtimeCurrentView(running, 3),
       });
       await waitFor(() => runtime.querySelector('.flower-model-status-indicator') !== null);
@@ -1984,13 +1984,13 @@ describe('Flower final thread cache and workspace transport', () => {
       expect(runtime.textContent).toContain('Run the deployment');
       expect(loadThread).toHaveBeenCalledTimes(1);
       stream.push({
-        schema_version: 2, kind: 'thread.batch', thread_id: threadID,
+        schema_version: 3, kind: 'thread.batch', thread_id: threadID,
         current: runtimeCurrentView(running, 3),
       });
       expect(runtime.querySelector('[data-flower-sync-state="failed"]')).not.toBeNull();
       expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
       runtime.querySelector<HTMLButtonElement>('.flower-workspace-sync button')!.click();
-      stream.push({ schema_version: 2, kind: 'ready', summaries: [running] });
+      stream.push({ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [running] });
       await waitFor(() => runtime.querySelector('.flower-workspace-sync') === null);
       await waitFor(() => loadThread.mock.calls.length === 2);
       expect(runtime.querySelector('.flower-model-status-indicator')).not.toBeNull();
@@ -2014,7 +2014,7 @@ describe('Flower final thread cache and workspace transport', () => {
       run_progress: { phase: 'streaming', run_id: 'turn-terminal', turn_id: 'turn-terminal' },
       messages: completed.messages.slice(0, 1),
     });
-    const stream = controlledWorkspaceStream([{ schema_version: 2, kind: 'ready', summaries: [running] }]);
+    const stream = controlledWorkspaceStream([{ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [running] }]);
     const recoveredRequest = deferred<ReturnType<typeof liveBootstrap>>();
     let loadCount = 0;
     const surfaceAdapter = {
@@ -2034,16 +2034,16 @@ describe('Flower final thread cache and workspace transport', () => {
     (runtime.querySelector(`[data-thread-id="${completed.thread_id}"] button`) as HTMLButtonElement).click();
     await waitFor(() => runtime.querySelector('.flower-model-status-indicator') !== null);
 
-    stream.push({ schema_version: 2, kind: 'summary.batch', summaries: [completed] });
+    stream.push({ schema_version: 3, kind: 'summary.batch', summaries: [completed] });
 
     await waitFor(() => runtime.textContent?.includes('Flower could not sync the latest reply. Try again.') ?? false);
     expect(surfaceAdapter.loadThread).toHaveBeenCalledTimes(2);
 
-    stream.push({ schema_version: 2, kind: 'summary.batch', summaries: [completed] });
+    stream.push({ schema_version: 3, kind: 'summary.batch', summaries: [completed] });
     await wait(120);
     expect(surfaceAdapter.loadThread).toHaveBeenCalledTimes(2);
 
-    stream.push({ schema_version: 2, kind: 'summary.batch', summaries: [advanced] });
+    stream.push({ schema_version: 3, kind: 'summary.batch', summaries: [advanced] });
     await waitFor(() => surfaceAdapter.loadThread.mock.calls.length === 3);
     recoveredRequest.resolve(liveBootstrap(advanced, 797));
     await waitFor(() => runtime.querySelectorAll('[data-flower-message-id]').length === 6, 2_000);
@@ -2074,7 +2074,7 @@ describe('Flower final thread cache and workspace transport', () => {
       run_progress: { phase: 'streaming', run_id: 'turn-terminal', turn_id: 'turn-terminal' },
       messages: completed.messages.slice(0, 1),
     });
-    const stream = controlledWorkspaceStream([{ schema_version: 2, kind: 'ready', summaries: [running] }]);
+    const stream = controlledWorkspaceStream([{ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [running] }]);
     let loadCount = 0;
     const surfaceAdapter = {
       ...adapter(true),
@@ -2094,13 +2094,13 @@ describe('Flower final thread cache and workspace transport', () => {
     await waitFor(() => runtime.querySelector('.flower-model-status-indicator') !== null);
 
     stream.push({
-      schema_version: 2,
+      schema_version: 3,
       kind: 'thread.batch',
       thread_id: completed.thread_id,
       current: runtimeCurrentView(completed, 81),
     });
     await waitFor(() => runtime.textContent?.includes('Hello from Flower.') ?? false);
-    stream.push({ schema_version: 2, kind: 'summary.batch', summaries: [completed] });
+    stream.push({ schema_version: 3, kind: 'summary.batch', summaries: [completed] });
 
     await waitFor(() => surfaceAdapter.loadThread.mock.calls.length === 2);
     await waitFor(() => runtime.querySelector(`[data-thread-id="${completed.thread_id}"]`)?.getAttribute('data-flower-thread-status') === 'success');
@@ -2122,7 +2122,7 @@ describe('Flower final thread cache and workspace transport', () => {
       messages: completed.messages.slice(0, 1),
     });
     const staleRequest = deferred<ReturnType<typeof liveBootstrap>>();
-    const stream = controlledWorkspaceStream([{ schema_version: 2, kind: 'ready', summaries: [running] }]);
+    const stream = controlledWorkspaceStream([{ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [running] }]);
     let loadCount = 0;
     const surfaceAdapter = {
       ...adapter(true),
@@ -2138,7 +2138,7 @@ describe('Flower final thread cache and workspace transport', () => {
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${completed.thread_id}"] button`)));
     (runtime.querySelector(`[data-thread-id="${completed.thread_id}"] button`) as HTMLButtonElement).click();
     await waitFor(() => surfaceAdapter.loadThread.mock.calls.length === 1);
-    stream.push({ schema_version: 2, kind: 'summary.batch', summaries: [completed] });
+    stream.push({ schema_version: 3, kind: 'summary.batch', summaries: [completed] });
 
     await wait(120);
     expect(surfaceAdapter.loadThread).toHaveBeenCalledTimes(1);
@@ -2161,7 +2161,7 @@ describe('Flower final thread cache and workspace transport', () => {
       run_progress: { phase: 'streaming', run_id: 'turn-terminal', turn_id: 'turn-terminal' },
       messages: completed.messages.slice(0, 1),
     });
-    const stream = controlledWorkspaceStream([{ schema_version: 2, kind: 'ready', summaries: [running] }]);
+    const stream = controlledWorkspaceStream([{ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [running] }]);
     const recoveryRequest = deferred<ReturnType<typeof liveBootstrap>>();
     const launchTurn = vi.fn(async (input: FlowerTurnLaunchInput) => launchReceipt(
       input.thread_id ?? running.thread_id,
@@ -2187,7 +2187,7 @@ describe('Flower final thread cache and workspace transport', () => {
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${completed.thread_id}"] button`)));
     (runtime.querySelector(`[data-thread-id="${completed.thread_id}"] button`) as HTMLButtonElement).click();
     await waitFor(() => runtime.querySelector('.flower-model-status-indicator') !== null);
-    stream.push({ schema_version: 2, kind: 'summary.batch', summaries: [completed] });
+    stream.push({ schema_version: 3, kind: 'summary.batch', summaries: [completed] });
 
     await waitFor(() => runtime.textContent?.includes('Flower could not sync the latest reply. Try again.') ?? false, 2_500);
     expect(runtime.querySelectorAll('[data-flower-message-id]')).toHaveLength(1);

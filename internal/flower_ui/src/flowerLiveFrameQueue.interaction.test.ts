@@ -5,7 +5,7 @@ import type { FlowerLiveStreamEnvelope } from './contracts/flowerSurfaceContract
 
 const attribute = 'data-floe-hot-interaction';
 const envelope = (version: number): FlowerLiveStreamEnvelope => ({
-  schema_version: 2, kind: 'thread.batch', thread_id: 'thread', update: {
+  schema_version: 3, kind: 'thread.batch', thread_id: 'thread', update: {
     thread_id: 'thread', turn_id: 'turn', run_id: 'run', base_version: version - 1, view_version: version,
     facts: { activity: 'active', queue_count: 0, run_progress: { phase: 'streaming' } },
     items: [{ kind: 'append', item_id: 'message', append: { offset_bytes: version - 1, text: 'x' } }],
@@ -43,7 +43,7 @@ describe('native live update interaction scheduling', () => {
   it.each(['drag', 'resize'])('keeps every delta and the original %s deadline, then flushes on release', async kind => {
     const f = fixture();
     try {
-      f.queue.push({ schema_version: 2, kind: 'ready' }); f.apply.mockClear();
+      f.queue.push({ schema_version: 3, kind: 'ready', baseline_complete: true }); f.apply.mockClear();
       f.root.setAttribute(attribute, kind);
       for (let version = 1; version <= 10; version++) { f.queue.push(envelope(version)); await vi.advanceTimersByTimeAsync(7); }
       f.frame(); expect(f.apply).not.toHaveBeenCalled();

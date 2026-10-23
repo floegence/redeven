@@ -1127,6 +1127,7 @@ export type FlowerRuntimeUpdate = Readonly<{
 }>;
 
 export type FlowerLiveStreamEnvelope = Readonly<{
+  baseline_complete?: boolean;
   facts_only?: boolean;
   reading_revision?: number;
   window?: FlowerHistoryWindow;
@@ -1675,7 +1676,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   saveComputerUseEnabled?: (enabled: boolean) => Promise<FlowerSettingsSnapshot>;
   saveAutoUpdateModelCatalog?: (enabled: boolean) => Promise<FlowerSettingsSnapshot>;
   saveModelProfile: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
-  listThreads: () => Promise<readonly FlowerThreadSnapshot[]>;
+  listThreads: (options?: { signal?: AbortSignal; onPage?: (threads: readonly FlowerThreadSnapshot[]) => void }) => Promise<readonly FlowerThreadSnapshot[]>;
   loadThread: (threadID: string, signal: AbortSignal) => Promise<FlowerThreadView>;
   loadHistory?: (threadID: string, input: FlowerHistoryRequest, signal: AbortSignal) => Promise<FlowerThreadView>;
   loadHistoryItem?: (threadID: string, itemID: string, signal: AbortSignal) => Promise<FlowerRuntimeCurrentItem>;

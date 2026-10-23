@@ -113,6 +113,7 @@ export function normalizeRuntimeFlowerReadID(value: unknown): string | null {
 
 /** Cancellation eligibility only; the main-process route allowlist owns dispatch authorization. */
 export function isRuntimeFlowerCancellableRead(request: RuntimeFlowerRequest): boolean {
+  if (request.staging_scope_id !== undefined || request.staging_capability !== undefined) return false;
   return request.method === 'GET' && request.body === undefined
-    && request.staging_scope_id === undefined && request.staging_capability === undefined;
+    || request.method === 'POST' && /^\/_redeven_proxy\/api\/ai\/threads\/[^/?#]+\/(history|history-item)$/u.test(request.path);
 }

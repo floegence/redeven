@@ -5,7 +5,7 @@ import { FlowerLiveSyncError } from './flowerLiveWire';
 import type { FlowerLiveStreamEnvelope } from './contracts/flowerSurfaceContracts';
 
 function append(version: number): FlowerLiveStreamEnvelope {
-  return { schema_version: 2, kind: 'thread.batch', thread_id: 'thread', update: {
+  return { schema_version: 3, kind: 'thread.batch', thread_id: 'thread', update: {
     thread_id: 'thread', turn_id: 'turn', run_id: 'run', base_version: version - 1, view_version: version,
     facts: { activity: 'active', queue_count: 0, run_progress: { phase: 'streaming' } },
     items: [{ kind: 'append', item_id: 'answer', append: { offset_bytes: version - 1, text: 'x' } }],
@@ -137,8 +137,8 @@ describe('ordered native live frame queue', () => {
     const item = { ...changed, update: { ...changed.update!, items: [{ kind: 'append' as const, item_id: 'thinking', append: { offset_bytes: 0, text: 'y' } }] } };
     h.queue.push(item);
     h.queue.push({ ...item, update: { ...item.update, turn_id: 'turn2', run_id: 'run2' } });
-    h.queue.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'parent', subagent_update: { ...append(1).update!, thread_id: 'child1' } });
-    h.queue.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'parent', subagent_update: { ...append(1).update!, thread_id: 'child2' } });
+    h.queue.push({ schema_version: 3, kind: 'thread.batch', thread_id: 'parent', subagent_update: { ...append(1).update!, thread_id: 'child1' } });
+    h.queue.push({ schema_version: 3, kind: 'thread.batch', thread_id: 'parent', subagent_update: { ...append(1).update!, thread_id: 'child2' } });
     h.flush(); expect(h.onError).not.toHaveBeenCalled(); expect(h.apply).toHaveBeenCalledTimes(5);
     h.queue.dispose();
   });

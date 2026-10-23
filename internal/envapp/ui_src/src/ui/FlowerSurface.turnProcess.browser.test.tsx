@@ -51,7 +51,7 @@ function liveStream(initial: FlowerRuntimeCurrentView) {
   return {
     current: () => latest,
     envelope(value: FlowerLiveStreamEnvelope) { values.push(value); wake?.(); },
-    push(value: FlowerRuntimeCurrentView) { latest = value; values.push({ schema_version: 2, kind: 'thread.batch', thread_id: 'process', current: value }); wake?.(); },
+    push(value: FlowerRuntimeCurrentView) { latest = value; values.push({ schema_version: 3, kind: 'thread.batch', thread_id: 'process', current: value }); wake?.(); },
     async *connect({ signal }: { signal: AbortSignal }) {
       const abort = () => wake?.(); signal.addEventListener('abort', abort, { once: true });
       try { while (!signal.aborted) { const value = values.shift(); if (value) yield value; else await new Promise<void>((resolve) => { wake = resolve; }); } }
@@ -64,7 +64,7 @@ async function mount(initial = current(), copy?: FlowerSurfaceCopy, overrides: P
   const seed = applyFlowerRuntimeCurrentView(thread({ thread_id: 'process', title: 'Process disclosure', messages: [] }), initial);
   const peer = thread({ thread_id: 'peer', title: 'Another conversation' });
   const live = liveStream(initial);
-  live.envelope({ schema_version: 2, kind: 'ready', summaries: [seed, peer] });
+  live.envelope({ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [seed, peer] });
   const root = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [applyFlowerRuntimeCurrentView(seed, live.current()), peer]),
     loadThread: vi.fn(async (id) => id === peer.thread_id ? liveBootstrap(peer) : { thread: applyFlowerRuntimeCurrentView(seed, live.current()), current: live.current() }), connectLiveStream: live.connect, ...overrides }, { copy });
   root.style.height = '780px';
@@ -124,7 +124,7 @@ describe('completed turn process disclosure', () => {
         phase: 'complete' as const, status: 'compacted' as const, updated_at_ms: 1 },
     };
     const send = (version: number, decorations = [decoration]) => live.envelope({
-      schema_version: 2, kind: 'thread.batch', thread_id: 'process',
+      schema_version: 3, kind: 'thread.batch', thread_id: 'process',
       current: { ...terminal, view_version: version }, timeline_decorations: decorations,
     });
     send(2);
@@ -136,7 +136,7 @@ describe('completed turn process disclosure', () => {
     expect(row()!.closest('.flower-turn-row-viewport')?.hasAttribute('inert')).toBe(false);
     send(1, []); send(1, []);
     // A later accepted frame with omitted context preserves the prior snapshot.
-    live.envelope({ schema_version: 2, kind: 'thread.batch', thread_id: 'process', current: { ...terminal, view_version: 3,
+    live.envelope({ schema_version: 3, kind: 'thread.batch', thread_id: 'process', current: { ...terminal, view_version: 3,
       items: terminal.items!.map(item => item.id === 'final-a' ? { ...item, text: 'Version three accepted.' } : item),
     } });
     await waitFor(() => message(root, 'final-a')?.textContent?.includes('Version three accepted.') === true);
@@ -160,7 +160,7 @@ describe('completed turn process disclosure', () => {
     });
     const decorations = [decoration('first', 'turn', 7), decoration('second', 'turn', 8), decoration('third', 'turn', 9), decoration('manual', 'manual', 10)];
     const terminal = current(true, { turns: [turn(), turn({ turn_id: 'manual', run_id: 'manual-run', kind: 'context_compaction', intermediate_item_ids: [], final_item_ids: [] })] });
-    live.envelope({ schema_version: 2, kind: 'thread.batch', thread_id: 'process', current: terminal, timeline_decorations: decorations });
+    live.envelope({ schema_version: 3, kind: 'thread.batch', thread_id: 'process', current: terminal, timeline_decorations: decorations });
     const divider = (id: string) => root.querySelector<HTMLElement>('[data-flower-decoration-id="' + id + '"]')!;
     const collapsed = (id: string) => root.querySelector(`[data-flower-row-decoration-id="${id}"] .flower-turn-row-viewport`)?.getAttribute('aria-hidden') === 'true';
     await waitFor(() => Boolean(summary(root)) && collapsed('third'));
@@ -181,7 +181,7 @@ describe('completed turn process disclosure', () => {
     expect(root.querySelector('[data-flower-row-decoration-id="third"] .flower-turn-row-viewport')?.hasAttribute('inert')).toBe(true);
     summary(root)!.click(); summary(root)!.click(); summary(root)!.click();
     await waitFor(() => !collapsed('third'));
-    live.envelope({ schema_version: 2, kind: 'thread.batch', thread_id: 'process', current: { ...terminal, view_version: 3 }, timeline_decorations: decorations.map(d => ({ ...d, compaction: { ...d.compaction, updated_at_ms: 2 } })) });
+    live.envelope({ schema_version: 3, kind: 'thread.batch', thread_id: 'process', current: { ...terminal, view_version: 3 }, timeline_decorations: decorations.map(d => ({ ...d, compaction: { ...d.compaction, updated_at_ms: 2 } })) });
     await waitFor(() => divider('third')?.getAttribute('data-flower-compaction-status') === 'compacted');
     expect(collapsed('third')).toBe(false);
     expect(root.querySelectorAll('[data-flower-decoration-id]')).toHaveLength(4);
@@ -789,7 +789,7 @@ describe('completed turn process disclosure', () => {
     const child = subagentSummary({ parent_thread_id: 'parent', thread_id: 'process', status: 'completed' });
     const parent = thread({ thread_id: 'parent', subagents: [child] });
     const live = liveStream(liveBootstrap(parent).current);
-    live.envelope({ schema_version: 2, kind: 'ready', summaries: [parent] });
+    live.envelope({ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [parent] });
     const root = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [parent]),
       loadThread: vi.fn(async () => liveBootstrap(parent, 1)), connectLiveStream: live.connect,
       loadSubagentDetail: vi.fn(async () => ({ summary: child, current: current(true, history === 'legacy'
@@ -798,7 +798,7 @@ describe('completed turn process disclosure', () => {
     await waitFor(() => Boolean(root.querySelector('[data-thread-id="parent"] button')));
     root.querySelector<HTMLButtonElement>('[data-thread-id="parent"] button')!.click();
     await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="m1"]')));
-    live.envelope({ schema_version: 2, kind: 'thread.batch', thread_id: 'parent', subagents: [child] });
+    live.envelope({ schema_version: 3, kind: 'thread.batch', thread_id: 'parent', subagents: [child] });
     await waitFor(() => Boolean(root.querySelector('[data-flower-subagent-count="1"]')));
     root.querySelector<HTMLButtonElement>('button[aria-controls="flower-subagents-dropdown"]')!.click();
     await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-disclosure]')));

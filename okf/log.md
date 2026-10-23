@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-10-23: Deliver the Flower sidebar in cancellable 25-root pages, preserve partial selection and complete membership, and avoid duplicate startup summary scans. See [live delivery](ui/flower-live-timeline.md).
+
 - 2026-10-22: Adopt the direct HTML floating-preview action and compact content-first canvas from published Floe. See [inline media](ui/flower-inline-media.md).
 
 - 2026-10-22: Compact model-facing subagent coordination metadata, retain full reports and control metadata, and specify the local browser observation shape. See [subagent runtime](ai/subagent-runtime.md).

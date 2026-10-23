@@ -179,7 +179,7 @@ describe('Flower inline media', () => {
         return liveBootstrap(seed, seed.settings_revision ?? 1);
       }, loadMessageFile,
       connectLiveStream: async function* ({ signal }) {
-        yield { schema_version: 2, kind: 'ready', summaries: seeds };
+        yield { schema_version: 3, kind: 'ready', baseline_complete: true, summaries: seeds };
         const updated = await new Promise<typeof seeds[number] | undefined>(resolve => {
           changeWorkingDirectory = () => {
             seeds[1] = { ...seeds[1], working_dir: '/workspace/moved', updated_at_ms: 3, settings_revision: 2 };
@@ -188,7 +188,7 @@ describe('Flower inline media', () => {
           if (signal.aborted) resolve(undefined);
           else signal.addEventListener('abort', () => resolve(undefined), { once: true });
         });
-        if (updated) yield { schema_version: 2, kind: 'summary.batch', summaries: [updated] };
+        if (updated) yield { schema_version: 3, kind: 'summary.batch', summaries: [updated] };
         if (!signal.aborted) await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
       },
     };

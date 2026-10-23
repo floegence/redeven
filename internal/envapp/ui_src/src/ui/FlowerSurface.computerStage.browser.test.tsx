@@ -168,7 +168,7 @@ describe('Flower computer stage', () => {
       loadComputerFrame,
       setComputerViewer,
       connectLiveStream: async function* ({ signal }) {
-        yield { schema_version: 2, kind: 'ready', observer_id: 'observer-1', summaries: [current] };
+        yield { schema_version: 3, kind: 'ready', baseline_complete: true, observer_id: 'observer-1', summaries: [current] };
         while (!signal.aborted) {
           const envelope = await new Promise<FlowerLiveStreamEnvelope | undefined>((resolve) => {
             const abort = () => resolve(undefined);
@@ -204,19 +204,19 @@ describe('Flower computer stage', () => {
     await waitFor(() => setComputerViewer.mock.calls.length > 0);
     expect(setComputerViewer).toHaveBeenCalledWith(expect.objectContaining({ observer_id: 'observer-1', thread_id: threadID, target_id: 'browser-main' }));
     const frame = { viewer_revision: setComputerViewer.mock.calls.at(-1)![0].revision, session_id: 'observer-1', target_id: 'browser-main', resource_ref: `computer://browser-main/${'b'.repeat(64)}`, sha256: 'b'.repeat(64), mime_type: 'image/png', sequence: 2 };
-    deliver({ schema_version: 2, kind: 'computer.frame', thread_id: 'another-thread', computer_frame: frame });
+    deliver({ schema_version: 3, kind: 'computer.frame', thread_id: 'another-thread', computer_frame: frame });
     await new Promise((resolve) => requestAnimationFrame(resolve));
     expect(loadComputerFrame).toHaveBeenCalledTimes(2);
-    deliver({ schema_version: 2, kind: 'computer.frame', thread_id: threadID, computer_frame: frame });
+    deliver({ schema_version: 3, kind: 'computer.frame', thread_id: threadID, computer_frame: frame });
     await waitFor(() => loadComputerFrame.mock.calls.length === 3);
     await waitFor(() => (document.querySelector('.flower-computer-stage-frame') as HTMLImageElement | null)?.naturalWidth === 1);
     expect(loadComputerFrame).toHaveBeenLastCalledWith(expect.objectContaining({ resource_ref: frame.resource_ref }));
     expect(document.querySelector('.flower-computer-stage')?.textContent).toContain('Computer');
     // An unchanged sampled image must still be read, releasing the next sample.
-    deliver({ schema_version: 2, kind: 'computer.frame', thread_id: threadID, computer_frame: { ...frame, sequence: 3 } });
+    deliver({ schema_version: 3, kind: 'computer.frame', thread_id: threadID, computer_frame: { ...frame, sequence: 3 } });
     await waitFor(() => loadComputerFrame.mock.calls.length === 4);
     const lastPixels = document.querySelector<HTMLImageElement>('.flower-computer-stage img')!.src;
-    deliver({ schema_version: 2, kind: 'computer.frame', thread_id: threadID, computer_frame: { ...frame, sequence: 4, error_code: 'computer_view_unavailable' } });
+    deliver({ schema_version: 3, kind: 'computer.frame', thread_id: threadID, computer_frame: { ...frame, sequence: 4, error_code: 'computer_view_unavailable' } });
     await waitFor(() => document.querySelector('.flower-computer-stage .flower-computer-state')?.getAttribute('data-session-state') === 'paused');
     expect(document.querySelector<HTMLImageElement>('.flower-computer-stage img')?.src).toBe(lastPixels);
     expect(loadComputerFrame).toHaveBeenCalledTimes(4);
@@ -234,7 +234,7 @@ describe('Flower computer stage', () => {
       const { label, description, renderer, payload, chips, target_refs, ...facts } = item.activity;
       return { ...item, activity: { ...facts, status: 'success', presentation: { label, description, renderer, payload, chips, target_refs } } };
     }) };
-    deliver({ schema_version: 2, kind: 'thread.batch', thread_id: threadID, current: completed });
+    deliver({ schema_version: 3, kind: 'thread.batch', thread_id: threadID, current: completed });
     await waitFor(() => document.querySelector('.flower-computer-stage') === null);
     expect(document.querySelector('.flower-computer-stage-ball')).toBeNull();
     await waitFor(() => !('thread_id' in setComputerViewer.mock.calls.at(-1)![0]));
@@ -263,7 +263,7 @@ describe('Flower computer stage', () => {
     const viewerCommandsBeforeNextRun = setComputerViewer.mock.calls.length;
     const nextRun = { ...completed, view_version: 3, activity: 'active' as const, last_outcome: undefined,
       run_id: 'next-run', turn_id: 'next-turn', run_progress: { phase: 'preparing' as const } };
-    deliver({ schema_version: 2, kind: 'thread.batch', thread_id: threadID, current: nextRun });
+    deliver({ schema_version: 3, kind: 'thread.batch', thread_id: threadID, current: nextRun });
     await waitFor(() => runtime.querySelector('.flower-surface')?.getAttribute('data-flower-selected-thread-status') === 'running');
     await new Promise((resolve) => requestAnimationFrame(resolve));
     expect(setComputerViewer).toHaveBeenCalledTimes(viewerCommandsBeforeNextRun);
@@ -276,7 +276,7 @@ describe('Flower computer stage', () => {
 
     const nextFrame = `computer://browser-main/${'c'.repeat(64)}`;
     const observed = completed.items!.find((item) => item.activity)!;
-    deliver({ schema_version: 2, kind: 'thread.batch', thread_id: threadID, current: { ...nextRun, view_version: 4,
+    deliver({ schema_version: 3, kind: 'thread.batch', thread_id: threadID, current: { ...nextRun, view_version: 4,
       items: [...nextRun.items!, { ...observed, id: 'next-observation', ordinal: 100, run_id: 'next-run', turn_id: 'next-turn',
         activity: { ...observed.activity, item_id: 'next-observation', tool_id: 'next-observation', status: 'success', presentation: {
           label: 'Screenshot', renderer: 'structured', payload: { operation: 'screenshot', status: 'success' },
@@ -288,16 +288,16 @@ describe('Flower computer stage', () => {
     expect(setComputerViewer).toHaveBeenLastCalledWith(expect.objectContaining({ thread_id: threadID, target_id: 'browser-main', resource_ref: nextFrame }));
     // A failed sampler belongs to this run. A later, explicitly started run
     // can watch its own confirmed observation without retrying the old sampler.
-    deliver({ schema_version: 2, kind: 'computer.frame', thread_id: threadID, computer_frame: {
+    deliver({ schema_version: 3, kind: 'computer.frame', thread_id: threadID, computer_frame: {
       ...frame, viewer_revision: setComputerViewer.mock.calls.at(-1)![0].revision, sequence: 1, error_code: 'computer_view_unavailable',
     } });
     await waitFor(() => document.querySelector('.flower-computer-stage .flower-computer-state')?.getAttribute('data-session-state') === 'paused');
     const viewerCommandsAfterFailure = setComputerViewer.mock.calls.length;
     const laterRun = { ...nextRun, view_version: 5, run_id: 'later-run', turn_id: 'later-turn' };
-    deliver({ schema_version: 2, kind: 'thread.batch', thread_id: threadID, current: laterRun });
+    deliver({ schema_version: 3, kind: 'thread.batch', thread_id: threadID, current: laterRun });
     await new Promise(resolve => requestAnimationFrame(resolve));
     expect(setComputerViewer).toHaveBeenCalledTimes(viewerCommandsAfterFailure);
-    deliver({ schema_version: 2, kind: 'thread.batch', thread_id: threadID, current: { ...laterRun, view_version: 6,
+    deliver({ schema_version: 3, kind: 'thread.batch', thread_id: threadID, current: { ...laterRun, view_version: 6,
       items: [...laterRun.items!, { ...observed, id: 'later-observation', ordinal: 100, run_id: 'later-run', turn_id: 'later-turn',
         activity: { ...observed.activity, item_id: 'later-observation', tool_id: 'later-observation', status: 'success', presentation: {
           label: 'Screenshot', renderer: 'structured', payload: { operation: 'screenshot', status: 'success' },
@@ -309,7 +309,7 @@ describe('Flower computer stage', () => {
     expect(setComputerViewer).toHaveBeenLastCalledWith(expect.objectContaining({ thread_id: threadID, target_id: 'browser-main', resource_ref: nextFrame }));
     (document.querySelector('.flower-computer-stage [data-floe-floating-window-control="close"]') as HTMLButtonElement).click();
     await waitFor(() => setComputerViewer.mock.calls.length === viewerCommandsAfterFailure + 2);
-    deliver({ schema_version: 2, kind: 'thread.batch', thread_id: threadID, current: { ...laterRun, view_version: 7,
+    deliver({ schema_version: 3, kind: 'thread.batch', thread_id: threadID, current: { ...laterRun, view_version: 7,
       items: [...laterRun.items!, { ...observed, id: 'hidden-observation', ordinal: 101, run_id: 'later-run', turn_id: 'later-turn',
         activity: { ...observed.activity, item_id: 'hidden-observation', tool_id: 'hidden-observation', status: 'success', presentation: {
           label: 'Screenshot', renderer: 'structured', payload: { operation: 'screenshot', status: 'success' },
@@ -388,13 +388,13 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
   let autoFrame = true;
   let sequence = 0;
   const setComputerViewer = vi.fn(async (request: { observer_id: string; revision: number; thread_id?: string; target_id?: string; interaction_id?: string; fps?: number }) => {
-    if (request.interaction_id && autoFrame) setTimeout(() => deliver({ schema_version: 2, kind: 'computer.frame', thread_id: threadID, computer_frame: {
+    if (request.interaction_id && autoFrame) setTimeout(() => deliver({ schema_version: 3, kind: 'computer.frame', thread_id: threadID, computer_frame: {
       session_id: request.observer_id, viewer_revision: request.revision, target_id: 'browser-main', interaction_id: request.interaction_id, frame_id: String(++sequence), mime_type: 'image/png', sequence,
     } }), 20);
   });
   const surface = renderSurfaceWithAdapterProps({ ...adapter(true), computerFrameRate: { read: () => 5, write: saveRate }, inputComputerControl, submitInput, setComputerViewer, loadComputerFrame: vi.fn(async () => png()),
     connectLiveStream: async function* ({ signal }) {
-      yield { schema_version: 2, kind: 'ready', observer_id: 'takeover-observer', summaries: [paused] };
+      yield { schema_version: 3, kind: 'ready', baseline_complete: true, observer_id: 'takeover-observer', summaries: [paused] };
       while (!signal.aborted) {
         const envelope = await new Promise<FlowerLiveStreamEnvelope | undefined>((resolve) => {
           const abort = () => resolve(undefined);
@@ -439,38 +439,38 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
   expect(submitInput).not.toHaveBeenCalled();
   const firstURL = document.querySelector<HTMLImageElement>('.flower-computer-stage img')!.src;
   const viewer = setComputerViewer.mock.calls.at(-1)![0];
-  deliver({ schema_version: 2, kind: 'computer.frame', thread_id: threadID, computer_frame: { session_id: viewer.observer_id, viewer_revision: viewer.revision, target_id: 'browser-main', interaction_id: 'tool-input:result-control', frame_id: String(++sequence), sequence, mime_type: 'image/png' } });
+  deliver({ schema_version: 3, kind: 'computer.frame', thread_id: threadID, computer_frame: { session_id: viewer.observer_id, viewer_revision: viewer.revision, target_id: 'browser-main', interaction_id: 'tool-input:result-control', frame_id: String(++sequence), sequence, mime_type: 'image/png' } });
   await waitFor(() => document.querySelector<HTMLImageElement>('.flower-computer-stage img')!.src !== firstURL);
   expect(inputComputerControl).toHaveBeenCalledTimes(1);
   expect(document.querySelector('.flower-computer-stage')?.textContent).toContain('Computer');
   autoFrame = false;
-  deliver({ schema_version: 2, kind: 'computer.status', thread_id: 'another-thread', computer_status: { thread_id: threadID, interaction_id: 'tool-input:result-control', target_id: 'browser-main', state: 'unavailable', reason_code: 'target_closed', at_unix_ms: 10 } });
+  deliver({ schema_version: 3, kind: 'computer.status', thread_id: 'another-thread', computer_status: { thread_id: threadID, interaction_id: 'tool-input:result-control', target_id: 'browser-main', state: 'unavailable', reason_code: 'target_closed', at_unix_ms: 10 } });
   await new Promise(resolve => setTimeout(resolve, 20));
-  deliver({ schema_version: 2, kind: 'computer.status', thread_id: threadID, computer_status: { thread_id: threadID, interaction_id: 'old-interaction', target_id: 'browser-main', state: 'unavailable', reason_code: 'target_closed', at_unix_ms: 10 } });
+  deliver({ schema_version: 3, kind: 'computer.status', thread_id: threadID, computer_status: { thread_id: threadID, interaction_id: 'old-interaction', target_id: 'browser-main', state: 'unavailable', reason_code: 'target_closed', at_unix_ms: 10 } });
   await new Promise(resolve => setTimeout(resolve, 20));
-  deliver({ schema_version: 2, kind: 'computer.status', thread_id: threadID, computer_status: { thread_id: threadID, interaction_id: 'tool-input:result-control', target_id: 'other-target', state: 'unavailable', reason_code: 'target_closed', at_unix_ms: 10 } });
+  deliver({ schema_version: 3, kind: 'computer.status', thread_id: threadID, computer_status: { thread_id: threadID, interaction_id: 'tool-input:result-control', target_id: 'other-target', state: 'unavailable', reason_code: 'target_closed', at_unix_ms: 10 } });
   await new Promise(resolve => setTimeout(resolve, 20));
   expect(document.querySelector('.flower-computer-state')?.getAttribute('data-session-state')).toBe('user_control');
-  deliver({ schema_version: 2, kind: 'computer.status', thread_id: threadID, computer_status: { thread_id: threadID, interaction_id: 'tool-input:result-control', target_id: 'browser-main', state: 'unavailable', reason_code: 'target_closed', at_unix_ms: 20 } });
+  deliver({ schema_version: 3, kind: 'computer.status', thread_id: threadID, computer_status: { thread_id: threadID, interaction_id: 'tool-input:result-control', target_id: 'browser-main', state: 'unavailable', reason_code: 'target_closed', at_unix_ms: 20 } });
   await waitFor(() => document.querySelector('.flower-computer-state')?.getAttribute('data-session-state') === 'disconnected');
   const inputCountBeforeRecovery = inputComputerControl.mock.calls.length;
-  deliver({ schema_version: 2, kind: 'computer.status', thread_id: threadID, computer_status: { thread_id: threadID, interaction_id: 'tool-input:result-control', target_id: 'browser-main', state: 'available', at_unix_ms: 19 } });
+  deliver({ schema_version: 3, kind: 'computer.status', thread_id: threadID, computer_status: { thread_id: threadID, interaction_id: 'tool-input:result-control', target_id: 'browser-main', state: 'available', at_unix_ms: 19 } });
   await new Promise(resolve => setTimeout(resolve, 20));
   expect(document.querySelector('.flower-computer-state')?.getAttribute('data-session-state')).toBe('disconnected');
-  deliver({ schema_version: 2, kind: 'computer.status', thread_id: threadID, computer_status: { thread_id: threadID, interaction_id: 'tool-input:result-control', target_id: 'browser-main', state: 'available', at_unix_ms: 21 } });
+  deliver({ schema_version: 3, kind: 'computer.status', thread_id: threadID, computer_status: { thread_id: threadID, interaction_id: 'tool-input:result-control', target_id: 'browser-main', state: 'available', at_unix_ms: 21 } });
   await waitFor(() => setComputerViewer.mock.calls.length > 2);
   const recoveredViewer = setComputerViewer.mock.calls.at(-1)![0];
   expect(recoveredViewer.revision).toBeGreaterThan(viewer.revision);
   expect(document.querySelector('.flower-computer-stage textarea')).toBeNull();
   await new Promise(resolve => setTimeout(resolve, 20));
   expect(inputComputerControl).toHaveBeenCalledTimes(inputCountBeforeRecovery);
-  deliver({ schema_version: 2, kind: 'computer.frame', thread_id: threadID, computer_frame: { session_id: recoveredViewer.observer_id, viewer_revision: recoveredViewer.revision, target_id: 'browser-main', interaction_id: 'tool-input:result-control', frame_id: String(++sequence), sequence, mime_type: 'image/png' } });
+  deliver({ schema_version: 3, kind: 'computer.frame', thread_id: threadID, computer_frame: { session_id: recoveredViewer.observer_id, viewer_revision: recoveredViewer.revision, target_id: 'browser-main', interaction_id: 'tool-input:result-control', frame_id: String(++sequence), sequence, mime_type: 'image/png' } });
   await waitFor(() => document.querySelector('.flower-computer-state')?.getAttribute('data-session-state') === 'user_control');
   await waitFor(() => document.querySelector('.flower-computer-stage textarea') !== null);
   const handback = Array.from(surface.querySelectorAll('button')).find((button) => button.textContent === 'Continue check')!;
   await new Promise(resolve => setTimeout(resolve, 50));
   const privateURL = document.querySelector<HTMLImageElement>('.flower-computer-stage img')!.src;
-  deliver({ schema_version: 2, kind: 'thread.batch', thread_id: threadID, current: { ...canonical, view_version: 2 } });
+  deliver({ schema_version: 3, kind: 'thread.batch', thread_id: threadID, current: { ...canonical, view_version: 2 } });
   await new Promise((resolve) => setTimeout(resolve, 100));
   expect(document.querySelector<HTMLImageElement>('.flower-computer-stage img')?.src).toBe(privateURL);
   expect(inputComputerControl).toHaveBeenCalledTimes(1);
@@ -582,7 +582,7 @@ it.each([false, true])('retires semantic viewing at completion and reopens only 
   }] });
   let deliver: (envelope: FlowerLiveStreamEnvelope) => void = () => undefined;
   const view = vi.fn(async (request: { observer_id: string; revision: number; target_id?: string; resource_ref?: string }) => {
-    if (request.target_id) setTimeout(() => deliver({ schema_version: 2, kind: 'computer.frame', thread_id: threadID, computer_frame: {
+    if (request.target_id) setTimeout(() => deliver({ schema_version: 3, kind: 'computer.frame', thread_id: threadID, computer_frame: {
       session_id: request.observer_id, viewer_revision: request.revision, target_id: 'browser-main', resource_ref: FRAME_REF,
       sha256: 'a'.repeat(64), mime_type: 'image/png', sequence: 1,
     } }), 10);
@@ -593,7 +593,7 @@ it.each([false, true])('retires semantic viewing at completion and reopens only 
     loadComputerFrame,
     listThreads: async () => [current], loadThread: async () => computerBootstrap(current),
     connectLiveStream: async function* ({ signal }) {
-      yield { schema_version: 2, kind: 'ready', observer_id: 'semantic-observer', summaries: [current] };
+      yield { schema_version: 3, kind: 'ready', baseline_complete: true, observer_id: 'semantic-observer', summaries: [current] };
       while (!signal.aborted) {
         const envelope = await new Promise<FlowerLiveStreamEnvelope | undefined>(resolve => {
           const abort = () => resolve(undefined);
@@ -614,7 +614,7 @@ it.each([false, true])('retires semantic viewing at completion and reopens only 
   const initialFrames = savedCapture ? 3 : 1;
   await waitFor(() => loadComputerFrame.mock.calls.length === initialFrames);
   const finished = runtimeCurrentView({ ...current, status: 'success', run_progress: undefined }, 2);
-  deliver({ schema_version: 2, kind: 'thread.batch', thread_id: threadID, current: { ...finished, items: finished.items?.map(item => {
+  deliver({ schema_version: 3, kind: 'thread.batch', thread_id: threadID, current: { ...finished, items: finished.items?.map(item => {
     if (!item.activity) return item;
     const { label, description, renderer, payload, chips, target_refs, ...facts } = item.activity;
     return { ...item, activity: { ...facts, status: 'success', presentation: { label, description, renderer, payload, chips, target_refs } } };

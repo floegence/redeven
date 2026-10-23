@@ -46,7 +46,12 @@ type reviewedSchemaFixtureVersion struct {
 }
 
 func TestPendingInputMigrationRunsBeforeServiceMaintenanceAndRemovesSource(t *testing.T) {
+	providerStarted := make(chan struct{}, 1)
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case providerStarted <- struct{}{}:
+		default:
+		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 		if flusher, ok := w.(http.Flusher); ok {
@@ -89,16 +94,23 @@ func TestPendingInputMigrationRunsBeforeServiceMaintenanceAndRemovesSource(t *te
 		t.Fatal(err)
 	}
 	insertPendingMigrationThreadForTest(t, db, meta, thread.ThreadID)
+	if _, err := db.Exec("UPDATE ai_thread_settings SET working_dir = ? WHERE thread_id = ?", stateDir, thread.ThreadID); err != nil {
+		t.Fatal(err)
+	}
 	metaJSON, _ := json.Marshal(meta)
 	insertPendingMigrationRecordForTest(t, db, "request_pending_1", meta.EndpointID, thread.ThreadID, "first imported input", string(metaJSON), 10)
 	insertPendingMigrationRecordForTest(t, db, "request_pending_2", meta.EndpointID, thread.ThreadID, "second imported input", string(metaJSON), 20)
 	const uploadID = "upl_aaaaaaaaaaaaaaaaaaaaaaaa"
 	attachmentContent := []byte("migration attachment")
 	attachmentDigest := sha256.Sum256(attachmentContent)
+	owner, err := NewUploadOwner(meta.EndpointID, meta.UserPublicID, meta.ChannelID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(stateDir, "ai", "uploads", uploadID+".data"), attachmentContent, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`INSERT INTO ai_uploads(upload_id, endpoint_id, owner_scope_kind, owner_user_hash, storage_relpath, name, declared_media_type, detected_media_type, size_bytes, content_sha256, source, state, created_at_unix_ms, claimed_at_unix_ms, delete_after_unix_ms) VALUES(?, ?, 'user', ?, ?, 'migration.txt', 'text/plain', 'text/plain', ?, ?, 'uploaded_file', 'live', 1, 1, 0)`, uploadID, meta.EndpointID, strings.Repeat("a", 64), uploadID+".data", len(attachmentContent), fmt.Sprintf("%x", attachmentDigest)); err != nil {
+	if _, err := db.Exec(`INSERT INTO ai_uploads(upload_id, endpoint_id, owner_scope_kind, owner_user_hash, storage_relpath, name, declared_media_type, detected_media_type, size_bytes, content_sha256, unicode_code_points, logical_line_count, source, state, created_at_unix_ms, claimed_at_unix_ms, delete_after_unix_ms) VALUES(?, ?, 'user', ?, ?, 'migration.txt', 'text/plain', 'text/plain; charset=utf-8', ?, ?, ?, 1, 'uploaded_file', 'live', 1, 1, 0)`, uploadID, meta.EndpointID, owner.OwnerUserHash, uploadID+".data", len(attachmentContent), fmt.Sprintf("%x", attachmentDigest), len(attachmentContent)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(`INSERT INTO ai_upload_refs(endpoint_id, upload_id, thread_id, ref_kind, ref_id, created_at_unix_ms) VALUES(?, ?, ?, 'thread', ?, 1)`, meta.EndpointID, uploadID, thread.ThreadID, thread.ThreadID); err != nil {
@@ -135,12 +147,18 @@ func TestPendingInputMigrationRunsBeforeServiceMaintenanceAndRemovesSource(t *te
 	if err := restarted.waitForStartupPreparation(t.Context()); err != nil {
 		t.Fatalf("wait for asynchronous pending-input recovery: %v", err)
 	}
+	select {
+	case <-providerStarted:
+	case <-time.After(5 * time.Second):
+		view, err := restarted.threadRuntime.View(t.Context(), identity.ThreadID(thread.ThreadID))
+		t.Fatalf("imported input did not reach the fake provider: activity=%s failure=%+v err=%v", view.Activity, view.Failure, err)
+	}
 	view, err := restarted.threadRuntime.View(context.Background(), identity.ThreadID(thread.ThreadID))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if view.Activity != flruntime.ThreadActivityActive || len(view.Items) != 1 || view.Items[0].Text != "first imported input" || len(view.Items[0].Attachments) != 1 || !strings.Contains(view.Items[0].Attachments[0].ResourceRef, uploadID) || len(view.Items[0].References) != 1 || view.Items[0].References[0].Text != "selected migration text" || len(view.Queue) != 1 || view.Queue[0].Input.Text != "second imported input" {
-		t.Fatalf("imported canonical order/state=%#v", view)
+		t.Fatalf("imported canonical order/state=%#v failure=%+v", view, view.Failure)
 	}
 	db, err = sql.Open("sqlite", threadsPath)
 	if err != nil {

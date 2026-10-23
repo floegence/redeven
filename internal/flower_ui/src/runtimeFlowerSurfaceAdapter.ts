@@ -77,6 +77,7 @@ type ThreadView = Readonly<{
 
 type ListThreadsResponse = Readonly<{
   threads?: readonly ThreadView[];
+  next_cursor?: string;
 }>;
 
 type LoadThreadResponse = Readonly<{
@@ -114,7 +115,7 @@ export const FLOWER_LIVE_EVENT_WAIT_MS = 10_000;
 type RuntimeApprovalSubmitInput = FlowerSubmitApprovalRequest;
 
 export type FlowerRuntimeTransport = Readonly<{
-  listThreads(): Promise<ListThreadsResponse>;
+  listThreads(input?: { cursor?: string; limit?: number; signal?: AbortSignal }): Promise<ListThreadsResponse>;
   loadThread(threadID: string, signal: AbortSignal): Promise<unknown>;
   loadHistory?(threadID: string, input: FlowerHistoryRequest, signal: AbortSignal): Promise<unknown>;
   loadHistoryItem?(threadID: string, itemID: string, signal: AbortSignal): Promise<FlowerRuntimeCurrentItem>;
@@ -314,7 +315,7 @@ function mapRuntimeUpdate(raw: unknown): FlowerRuntimeUpdate {
 function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfaceAdapterOptions): FlowerLiveStreamEnvelope {
   const value = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
   const kind = trim(value.kind);
-  if (value.schema_version !== 2) throw Object.assign(new Error('Flower live stream returned an unsupported schema version. Refresh or upgrade the application.'), { code: 'flower_live_version_error' });
+  if (value.schema_version !== 3) throw Object.assign(new Error('Flower live stream returned an unsupported schema version. Refresh or upgrade the application.'), { code: 'flower_live_version_error' });
   if (kind !== 'ready' && kind !== 'summary.batch' && kind !== 'thread.batch' && kind !== 'viewer.read_state' && kind !== 'computer.frame' && kind !== 'computer.status' && kind !== 'model_directory.changed') {
     throw new Error('Flower live stream returned an unsupported envelope.');
   }
@@ -322,7 +323,11 @@ function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfac
     if (Object.keys(value).some(key => key !== 'kind' && key !== 'schema_version' && key !== 'observer_id')) {
       throw new Error('Flower model directory notification is invalid.');
     }
-    return { schema_version: 2, kind };
+    return { schema_version: 3, kind };
+  }
+  if (kind === 'ready' && typeof value.baseline_complete !== 'boolean'
+    || value.baseline_complete !== undefined && (typeof value.baseline_complete !== 'boolean' || kind !== 'ready' && kind !== 'summary.batch')) {
+    throw new Error('Flower live stream returned an invalid baseline boundary.');
   }
   const summaries = Array.isArray(value.summaries)
     ? value.summaries
@@ -383,6 +388,7 @@ function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfac
   return {
     schema_version: Math.floor(Number(value.schema_version)),
     ...(value.facts_only === true ? { facts_only: true } : {}),
+    ...(typeof value.baseline_complete === 'boolean' ? { baseline_complete: value.baseline_complete } : {}),
     ...(Number.isSafeInteger(value.reading_revision) ? { reading_revision: Number(value.reading_revision) } : {}),
     ...(value.window ? { window: mapHistoryWindow(value.window) } : {}),
     kind,
@@ -448,9 +454,26 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     ...(options.saveComputerUseEnabled ? { saveComputerUseEnabled: options.saveComputerUseEnabled } : {}),
     ...(options.saveAutoUpdateModelCatalog ? { saveAutoUpdateModelCatalog: options.saveAutoUpdateModelCatalog } : {}),
     saveModelProfile: options.saveModelProfile,
-    listThreads: async () => {
-      const result = await options.transport.listThreads();
-      return (result.threads ?? []).map((thread) => mapRuntimeThread(thread, options));
+    listThreads: async (read = {}) => {
+      const threads = new Map<string, FlowerThreadSnapshot>();
+      const signals = [read.signal, options.signal].filter((signal): signal is AbortSignal => signal !== undefined);
+      const signal = signals.length ? AbortSignal.any(signals) : undefined;
+      const cursors = new Set<string>();
+      let cursor = '';
+      do {
+        signal?.throwIfAborted();
+        const result = await options.transport.listThreads({ cursor, limit: 25, signal });
+        signal?.throwIfAborted();
+        for (const thread of result.threads ?? []) {
+          const mapped = mapRuntimeThread(thread, options);
+          threads.set(mapped.thread_id, mapped);
+        }
+        read.onPage?.([...threads.values()]);
+        cursor = trim(result.next_cursor);
+        if (cursor && cursors.has(cursor)) throw new Error('Conversation pagination did not advance.');
+        cursors.add(cursor);
+      } while (cursor);
+      return [...threads.values()];
     },
     loadThread,
     loadHistory: options.transport.loadHistory ? async (threadID, input, signal) => {

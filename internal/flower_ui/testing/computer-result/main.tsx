@@ -37,10 +37,10 @@ const adapter = createRuntimeFlowerSurfaceAdapter({
     markThreadRead: async () => ({ read_status: readStatus }),
     patchThread: unavailable, forkThread: unavailable, submitApproval: unavailable,
     async *connectLiveStream({ signal }) {
-      yield* flowerLiveWireFixture({ schema_version: 2, kind: 'ready', summaries: (await api('list')).threads });
+      yield* flowerLiveWireFixture({ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: (await api('list')).threads });
       while (!signal.aborted) {
         const detail = await api('detail');
-        yield* flowerLiveWireFixture({ schema_version: 2, kind: 'thread.batch', thread_id: id, current: detail.current });
+        yield* flowerLiveWireFixture({ schema_version: 3, kind: 'thread.batch', thread_id: id, current: detail.current });
         await new Promise(resolve => setTimeout(resolve, 100));
       }
     },

@@ -16,7 +16,7 @@ async function mount(tool = false) {
   const peer = thread({ thread_id: 'peer', title: 'Another conversation' });
   const body = vi.fn(async (_tid: string, _id: string, _signal: AbortSignal): Promise<FlowerRuntimeCurrentItem> => ({ ...fixture('latest'), text: 'Preview text expanded body!!' }));
   const full = vi.fn(async () => { throw new Error('Full history must not be requested'); });
-  const values: FlowerLiveStreamEnvelope[] = [{ schema_version: 2, kind: 'ready', observer_id: 'observer', summaries: [seed, peer] }];
+  const values: FlowerLiveStreamEnvelope[] = [{ schema_version: 3, kind: 'ready', baseline_complete: true, observer_id: 'observer', summaries: [seed, peer] }];
   let wake: (() => void) | undefined;
   const history = vi.fn(async (id: string, request: FlowerHistoryRequest) => {
     const older = request.direction === 'before';
@@ -119,7 +119,7 @@ describe('bounded Flower history', () => {
   it('updates unselected conversation status without a detail download', async () => {
     const { root, history, push, full } = await mount();
     const count = history.mock.calls.length;
-    push({ schema_version: 2, kind: 'thread.batch', thread_id: 'peer', facts_only: true,
+    push({ schema_version: 3, kind: 'thread.batch', thread_id: 'peer', facts_only: true,
       update: { thread_id: 'peer', turn_id: 'peer-turn', run_id: 'peer-run', base_version: 1, view_version: 2,
         facts: { activity: 'active', attention: { input_count: 1 }, queue_count: 0, run_progress: { phase: 'tool_execution' } } } });
     await waitFor(() => root.querySelector('[data-thread-id="peer"]')?.textContent?.includes('Another conversation') === true);

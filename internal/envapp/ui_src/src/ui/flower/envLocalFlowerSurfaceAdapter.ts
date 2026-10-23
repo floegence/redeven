@@ -580,7 +580,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     },
     get canMutate() { return options.canMutate !== false; },
     transport: {
-      listThreads: () => fetchLocalApiJSON('/_redeven_proxy/api/ai/threads?limit=200', { method: 'GET' }),
+      listThreads: input => fetchLocalApiJSON('/_redeven_proxy/api/ai/threads?' + new URLSearchParams({ limit: String(input?.limit ?? 25), ...(input?.cursor ? { cursor: input.cursor } : {}) }), { method: 'GET', signal: input?.signal }),
       loadThread: (threadID, signal) => fetchLocalApiJSON<unknown>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}`, { method: 'GET', signal }),
       loadHistory: (threadID, input, signal) => fetchLocalApiJSON('/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history', { method: 'POST', body: JSON.stringify(input), signal }),
       loadHistoryItem: (threadID, itemID, signal) => fetchLocalApiJSON('/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history-item', { method: 'POST', body: JSON.stringify({ item_id: itemID }), signal }),
