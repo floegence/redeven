@@ -16,7 +16,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function mount(initialLive = true) {
+function mount(initialLive = true, elapsed = '4s') {
   const root = document.createElement('div');
   document.body.append(root);
   const [live, setLive] = createSignal(initialLive);
@@ -25,7 +25,7 @@ function mount(initialLive = true) {
   const [content, setContent] = createSignal('First reasoning line');
   disposers.push(render(() => <FlowerThinkingDisclosure contentID="thinking-test" content={content}
     live={live} liveConfirmed={confirmed} preserveOnEnd={abnormal}
-    label={() => live() && confirmed() ? 'Thinking...' : 'Thought process'} elapsed={() => '4s'}
+    label={() => live() && confirmed() ? 'Thinking...' : 'Thought process'} elapsed={() => elapsed}
     expandLabel={() => 'Expand full thinking'} collapseLabel={() => 'Collapse thinking'}
     contentBody={() => <><span>{content()}</span><button data-inner-control>Copy reasoning</button></>} />, root));
   return {
@@ -68,6 +68,7 @@ describe('Thinking segment disclosure', () => {
     expect(thinking.view()).toBe('collapsed');
     expect(thinking.content()).toBeNull();
     expect(thinking.button().textContent).toContain('Thought process');
+    expect(thinking.button().querySelector('.flower-activity-inline-duration')?.textContent).toBe('4s');
     expect(thinking.button().getAttribute('aria-expanded')).toBe('false');
     thinking.button().click();
     expect(thinking.view()).toBe('expanded');
@@ -84,6 +85,7 @@ describe('Thinking segment disclosure', () => {
     const thinking = mount();
     if (view === 'expanded') thinking.button().click();
     thinking.finish(true);
+    expect(thinking.button().querySelector('.flower-activity-inline-duration')?.textContent).toBe('4s');
     expect(thinking.view()).toBe(view);
     expect(Boolean(thinking.content())).toBe(view === 'expanded');
     thinking.button().click();
@@ -97,6 +99,7 @@ describe('Thinking segment disclosure', () => {
   it('starts completed history collapsed', () => {
     const thinking = mount(false);
     expect(thinking.view()).toBe('collapsed');
+    expect(thinking.button().querySelector('.flower-activity-inline-duration')?.textContent).toBe('4s');
     expect(thinking.content()).toBeNull();
     thinking.button().click();
     thinking.setContent('Historical reasoning detail');
@@ -109,12 +112,18 @@ describe('Thinking segment disclosure', () => {
     expect(thinking.view()).toBe('collapsed');
     expect(thinking.root.querySelector('[data-flower-thinking-active="false"]')).not.toBeNull();
     expect(thinking.button().textContent).toContain('Thought process');
+    expect(thinking.button().querySelector('.flower-activity-inline-duration')).toBeNull();
     thinking.button().click();
     thinking.setConfirmed(true);
     expect(thinking.view()).toBe('expanded');
     thinking.setConfirmed(false);
     thinking.finish();
     expect(thinking.view()).toBe('collapsed');
+  });
+
+  it('omits unavailable historical timing', () => {
+    const thinking = mount(false, '');
+    expect(thinking.button().querySelector('.flower-activity-inline-duration')).toBeNull();
   });
 
   it('keeps segments independent while later reasoning continues', () => {

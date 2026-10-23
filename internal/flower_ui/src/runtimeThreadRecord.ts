@@ -4,6 +4,7 @@ import type { FlowerChatMessage, FlowerHistoryBodyChunk, FlowerRuntimeCurrentIte
 import { FlowerLiveSyncError } from './flowerLiveWire';
 import { retainEqualValue } from './presentationIdentity';
 import { projectFlowerRuntimeComponents, runtimeMessages, validateFlowerRuntimeTurns } from './runtimeCurrentView';
+import { retainThinkingTiming } from './thinkingTiming';
 
 type ItemRecord = { item: FlowerRuntimeCurrentItem; bytes: number; preview?: FlowerRuntimeCurrentItem; retained?: boolean };
 type MutableMessage = { -readonly [K in keyof FlowerChatMessage]: FlowerChatMessage[K] };
@@ -46,6 +47,7 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
   const messages = new Map<string, MessageRecord>();
   const makeMessage = (message: FlowerChatMessage) => {
     const prior = messages.get(message.id) ?? previous?.findMessage(message.id);
+    message = retainThinkingTiming(message, prior?.value);
     if (prior) {
       const { text_source: _source, ...presentation } = prior.value;
       if (retainEqualValue(presentation, message) === presentation) {
@@ -63,7 +65,8 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
   };
   const present = (record: ItemRecord, message: FlowerChatMessage): FlowerChatMessage => message.body_pending && record.retained ? { ...message, body_pending: { ...message.body_pending, retained: true } } : message;
   const retainedMessages = new Map(runtimeMessages(initial, { ...current, tool_call_previews: [], items: [...items.values()].filter(value => value.preview || value.item.body && value.retained).map(value => value.item) }).map(message => [message.id, present(items.get(message.id)!, message)]));
-  let projectedMessages: readonly FlowerChatMessage[] = initial.messages.map(message => makeMessage(retainedMessages.get(message.id) ?? message).value);
+  let projectedMessages: readonly FlowerChatMessage[] = initial.messages.map(message =>
+    makeMessage(retainThinkingTiming(retainedMessages.get(message.id) ?? message, message)).value);
   previous = undefined;
   const [thread, setThread] = createStore<{ -readonly [K in keyof FlowerThreadSnapshot]: FlowerThreadSnapshot[K] }>({ ...initial, messages: projectedMessages });
   projectedMessages = thread.messages;

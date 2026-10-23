@@ -20,6 +20,7 @@ import { flowerAttachmentDisplayKind, safeFlowerAttachmentURL } from './attachme
 import { inputResponseBlockFromInteraction, inputResponseVisibleText } from './inputResponse';
 import { retainEqualValue, retainThreadPresentation } from './presentationIdentity';
 import { retainThreadFileActivityTargets } from './fileActivityTargets';
+import { retainThinkingTiming } from './thinkingTiming';
 
 type ResolvedApprovalState = Exclude<FlowerActivityApprovalState, 'requested'>;
 
@@ -442,8 +443,10 @@ export function applyFlowerRuntimeCurrentView(
   context: FlowerRuntimeContext = {},
 ): FlowerThreadSnapshot {
   const projected = projectFlowerRuntimeComponents(base, current, context);
+  const previousThinking = new Map(base.messages.filter(message => message.thinking_timing).map(message => [message.id, message]));
+  const messages = runtimeMessages(base, current).map(message => retainThinkingTiming(message, previousThinking.get(message.id)));
   return retainThreadPresentation(base, retainThreadFileActivityTargets(base, {
-    ...projected, history_window: current.window, messages: runtimeMessages(base, current), turns: validateFlowerRuntimeTurns(current),
+    ...projected, history_window: current.window, messages, turns: validateFlowerRuntimeTurns(current),
   }));
 }
 

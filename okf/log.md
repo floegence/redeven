@@ -102,5 +102,7 @@ A compact digest of updates from the last 30 days. Current contracts and evidenc
 - Concept: [storage ownership](ai/flower-storage-ownership-and-migrations.md)
 
 ## 2026-10-23
+- Retain observed thinking duration after completion in the shared Flower timeline, preserving it through disclosure changes and in-session refreshes.
+- Concept: [Flower activity interaction](ui/flower-activity-interaction.md)
 - Keep the initial Flower conversation inventory inside its existing loading presentation until the first authoritative page; retain admitted content and drafts through subsequent reconnects.
 - Concept: [Flower startup presentation](architecture/flower-startup-presentation.md)

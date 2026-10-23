@@ -4,18 +4,15 @@ title: Flower activity disclosure interaction
 description: Keep native tool activation, disclosure state, viewport following, and floating controls consistent during live updates.
 tags: [ai, flower, activity, interaction, accessibility]
 timestamp: 2026-10-19T00:00:00Z
-quality_exception: One 12,163-character Activity interaction contract retains the inseparable native disclosure, safe-result, viewport, and gesture ownership invariants; placement and tool-sequence behavior remain in separate concepts, and strict quality still enforces the 20,000-character maximum.
 lifecycle: contract
 reviewed_at: "2026-10-23"
 ---
 # Summary
 
-Flower owns activity interaction in its shared UI. Canonical Floret identity and
-presentation remain the only execution facts. Each transcript has one viewport
-controller for follow intent, user input, temporary anchoring, and position
-writes. A live update must not move a pressed tool trigger or introduce a
-floating hit target before its native click completes. Canceled gestures never
-activate tools. All transient ownership ends when its view is disposed.
+Shared Flower UI uses canonical Floret execution facts and one transcript
+viewport owner. Live updates cannot move pressed triggers or introduce floating
+hit targets before native clicks finish. Canceled gestures never activate tools;
+view disposal releases transient ownership.
 
 # Contract
 
@@ -50,18 +47,23 @@ Thinking, tool sequences and read-only detail previews follow the [sequence read
 
 Hidden controls do not enter the focus or hit-test order.
 
+## Thinking duration
+The message cache retains observed start and first sealed times by thread, turn,
+run and item. Completion freezes the shared-clock duration, including collapsed
+and abnormal endings. Hydration, snapshots, navigation and reconnects preserve
+it; canonical replacement timestamps cannot reset it. This measures observed
+presentation, not provider compute. Published history lacks segment timing, so
+unobserved history and full reloads cannot reconstruct it.
+
 ## Visual motion
-Thinking uses a decorative five-petal flower in the shared activity row. Only
-confirmed live thinking animates: petals fill clockwise from their bases, retain
-color, then fill a light cream-gold center in a 2.4-second cycle. The completed
-flower briefly holds and fades together. The thinking title types in once, then
-uses the shared text shimmer while thinking remains live. Sealed history,
-cancellation and disconnected observations are
-static, even when a later tool or thinking segment runs. Theme tokens own petal
-color and outlines; the center never borrows a dark petal shade. Reduced motion
-shows a fully filled static flower. High-contrast themes use solid fills, and
-forced colors use system colors with an outlined center. CSS follows the existing
-disclosure liveness attribute without timers or another execution state.
+Only confirmed live thinking animates its decorative five-petal flower: petals
+fill clockwise from their bases and retain color, then the cream-gold center
+fills, holds and fades with them in a 2.4-second cycle. The title reveals once,
+then shimmers while live. Sealed, cancelled and disconnected rows stay static
+during later work. Theme tokens own petals and outlines; the center never uses
+a dark petal shade. Reduced motion shows a filled static flower. High contrast
+uses solid fills; forced colors use system colors and an outlined center. CSS
+uses existing disclosure liveness without timers or another execution state.
 
 The disclosure motion owner uses one current Web Animation: opening takes 180 ms and closing takes 140 ms. Reversal cancels the prior animation, and its obsolete completion cannot change presence.
 

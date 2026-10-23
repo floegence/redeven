@@ -96,7 +96,7 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
           >
             <span class="flower-activity-inline-icon"><FlowerThinkingIcon /></span>
             <span ref={revealTitle.bind} class="flower-activity-inline-title" data-floe-progress-shimmer={active() && !revealTitle.revealing() ? 'text' : undefined}>{props.label()}</span>
-            <Show when={active() && props.elapsed?.()}>
+            <Show when={(!props.live() || active()) && props.elapsed?.()}>
               <span class="flower-activity-inline-duration">{props.elapsed?.()}</span>
             </Show>
             <ChevronRight class="flower-thinking-toggle-icon" aria-hidden="true" />
