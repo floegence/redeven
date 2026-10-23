@@ -63,3 +63,6 @@ A compact digest of updates from the last 30 days. Current contracts and evidenc
 
 - Adopt published Floret v7.80.0 for bounded startup and background per-thread preparation; keep product recovery after activation, isolate failed histories, and preserve results for concurrent recovery waiters.
 - Concepts: [storage ownership](ai/flower-storage-ownership-and-migrations.md), [readiness lifecycle](architecture/ai-readiness-lifecycle.md), [startup presentation](architecture/flower-startup-presentation.md), [failure recovery](ui/flower-failure-recovery.md)
+
+- Adopt published Floret v7.80.1 so Stop and shutdown settle from canonical control records without reading conversation bodies; retain the upstream cancellation deadlines.
+- Concept: [storage ownership](ai/flower-storage-ownership-and-migrations.md)

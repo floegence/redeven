@@ -21,6 +21,8 @@ Redeven consumes the exact published Floret version in go.mod with `GOWORK=off`.
 
 Floret owns bounded startup recognition and background per-thread migration. Each validated dependency closure publishes atomically; retained sources retire only after complete verification. The oldest v2-v5 snapshots reserve historical identities through a resumable scan before new-thread admission. Segmented stores admit new threads immediately. Redeven uses public status, thread preparation and per-thread media contracts and never decodes upstream records.
 
+Cancellation, shutdown and execution-context settlement resolve canonical control records through Floret. The host keeps the original Stop request and does not read or reconstruct upstream conversation bodies to settle it.
+
 A read-state failure cannot become a core Runtime constructor failure or a synthetic read record.
 
 ## Readonly checks and owner transactions
