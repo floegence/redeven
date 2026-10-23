@@ -239,6 +239,11 @@ func TestBuiltInToolDefinitions_TerminalSchemasAreCanonical(t *testing.T) {
 		t.Fatal("terminal.exec must distinguish completion, running processes and PTY echo")
 	}
 	yieldDescription := fmt.Sprint(yieldSchema["description"])
+	for _, phrase := range []string{"foreground", "nohup", "setsid", "PTY process group", "unsupported", "managed browser"} {
+		if !strings.Contains(terminalExec.Description, phrase) {
+			t.Fatalf("terminal.exec must explain process ownership: missing %q", phrase)
+		}
+	}
 	if !strings.Contains(yieldDescription, "omitted or 0 uses 5000") || !strings.Contains(yieldDescription, "command runtime timeout") {
 		t.Fatalf("terminal.exec yield_ms description must explain its default and scope: %q", yieldDescription)
 	}
