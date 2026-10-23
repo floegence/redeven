@@ -17,9 +17,9 @@ reviewed_at: "2026-10-22"
 # Contract
 
 ## Storage owners
-Redeven consumes published Floret v7.79.0 with `GOWORK=off`.
+Redeven consumes the exact published Floret version in go.mod with `GOWORK=off`.
 
-Ordinary Floret writes stage, validate and persist affected canonical records only; startup, migrations and explicit integrity checks still validate the complete repository.
+Floret owns bounded startup recognition and background per-thread migration. Each validated dependency closure publishes atomically; retained sources retire only after complete verification. The oldest v2-v5 snapshots reserve historical identities through a resumable scan before new-thread admission. Segmented stores admit new threads immediately. Redeven uses public status, thread preparation and per-thread media contracts and never decodes upstream records.
 
 A read-state failure cannot become a core Runtime constructor failure or a synthetic read record.
 
@@ -35,6 +35,8 @@ The v4-to-v5 product transaction imports canonical pending inputs through Floret
 
 ## Resource and authorization retention
 Product upload references retain resources for every canonical thread that contains them, including ordinary forks, nested forks and restored inputs.
+
+After activation, product recovery pages settings, retains each thread's complete descriptors and promotes eligible admitted input. Failures retain the cleanup gate while independent threads recover. Tool-media collection keeps its complete global inventory, write gate and idle constraint.
 
 Bounded keyset maintenance and compaction stop and drain with their owning generation.
 

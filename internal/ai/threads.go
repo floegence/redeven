@@ -562,20 +562,24 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 	if err != nil {
 		return nil, err
 	}
-	summaries, err := typed.List(ctxOrBackground(ctx), flruntime.ThreadScope{})
-	if err != nil {
-		return nil, err
-	}
-	summaryByThread := make(map[string]flruntime.ThreadSummary, len(summaries))
-	for _, summary := range summaries {
-		summaryByThread[summary.ID.String()] = summary
-	}
 	out := &ListThreadsResponse{Threads: make([]ThreadView, 0, len(list)), NextCursor: strings.TrimSpace(next)}
 	for _, t := range list {
 		threadID := strings.TrimSpace(t.ThreadID)
-		summary, found := summaryByThread[threadID]
-		if !found {
-			return nil, fmt.Errorf("product thread settings reference missing canonical Floret root %q", threadID)
+		summary, err := threadSummaryFromRuntime(ctxOrBackground(ctx), typed, identity.ThreadID(threadID))
+		if err != nil {
+			if errors.Is(err, flruntime.ErrThreadNotFound) || errors.Is(err, flruntime.ErrThreadDeleted) {
+				continue
+			}
+			if errors.Is(err, flruntime.ErrAuthorityCorrupt) {
+				view, settingsErr := s.threadSettingsView(ctx, &t)
+				if settingsErr != nil {
+					return nil, fmt.Errorf("build unavailable thread %s settings: %w", threadID, settingsErr)
+				}
+				view.RunStatus = "read_only"
+				out.Threads = append(out.Threads, view)
+				continue
+			}
+			return nil, fmt.Errorf("read canonical Floret thread %s summary: %w", threadID, err)
 		}
 		view, err := s.threadViewFromSummary(ctx, &t, summary)
 		if err != nil {

@@ -23,6 +23,8 @@ automatically migrated by published Floret v7.74.0 through schema 29. See
 
 Automatic stream recovery displays only canonical run_progress attempts and deadlines.
 
+Historical-thread loading and failure keep New chat and conversation navigation reachable; embedded conversations omit global navigation. Leaving a pending read invalidates its late completion through the existing detail owner. Recovery preserves the shell-owned draft and does not replay work automatically.
+
 Full child reports bypass the ordinary tool preview limit while retaining the provider request budget; canonical retry therefore reuses the complete confirmed reports without dispatching tools.
 
 # Boundaries

@@ -42,6 +42,23 @@ func (runtime *authorityContinuityRuntime) List(ctx context.Context, scope flrun
 	return runtime.list(ctx, scope)
 }
 
+func (runtime *authorityContinuityRuntime) Summary(ctx context.Context, threadID identity.ThreadID) (flruntime.ThreadSummary, error) {
+	if runtime.list != nil {
+		summaries, err := runtime.list(ctx, flruntime.ThreadScope{})
+		if err == nil {
+			for _, summary := range summaries {
+				if summary.ID == threadID {
+					return summary, nil
+				}
+			}
+		}
+	}
+	if reader, ok := runtime.ThreadService.(flruntime.ThreadSummaryReader); ok {
+		return reader.Summary(ctx, threadID)
+	}
+	return flruntime.ThreadSummary{}, errors.New("test runtime summary is unavailable")
+}
+
 func (runtime *authorityContinuityRuntime) View(ctx context.Context, threadID identity.ThreadID) (flruntime.ThreadView, error) {
 	return runtime.view(ctx, threadID)
 }

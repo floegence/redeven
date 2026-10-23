@@ -656,6 +656,24 @@ func TestAIReadinessStopWaitsForRollbackAndAllowsExplicitRetry(t *testing.T) {
 	}
 }
 
+func TestBackgroundStorePreparationDoesNotRevokeAIServiceReadiness(t *testing.T) {
+	var progress func(ai.FloretStoreStartupPhase)
+	controller := newAIReadinessController(t.Context(), ai.Options{}, func(_ context.Context, opts ai.Options) (*ai.Service, error) {
+		progress = opts.StoreStartupProgress
+		return new(ai.Service), nil
+	}, nil)
+	defer controller.Close()
+	controller.Start()
+	waitForAIReadinessState(t, controller, appserver.AIReadinessReady)
+	if progress == nil {
+		t.Fatal("storage progress callback was not installed")
+	}
+	progress(ai.FloretStoreStartupPreparing)
+	if got := controller.AIReadiness(); got.State != appserver.AIReadinessReady {
+		t.Fatalf("background preparation changed service readiness to %q", got.State)
+	}
+}
+
 func TestAIReadinessStopCloseFailureRequiresApplicationRestart(t *testing.T) {
 	entered := make(chan struct{})
 	controller := newAIReadinessController(t.Context(), ai.Options{}, func(ctx context.Context, _ ai.Options) (*ai.Service, error) {

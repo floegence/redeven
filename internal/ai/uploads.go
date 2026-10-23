@@ -403,6 +403,13 @@ func (s *Service) SaveUpload(ctx context.Context, req SaveUploadRequest) (*Uploa
 	if owner.EndpointID == "" || len(owner.OwnerUserHash) != 64 {
 		return nil, NewUploadError(UploadErrorInvalidRequest, false, errors.New("authenticated upload owner is incomplete"))
 	}
+	if err := s.waitForUploadRecovery(ctx); err != nil {
+		code := UploadErrorStoreUnavailable
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			code = UploadErrorInProgress
+		}
+		return nil, NewUploadError(code, true, err)
+	}
 	name, err := normalizeUploadDisplayName(req.DisplayName)
 	if err != nil {
 		return nil, err

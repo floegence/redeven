@@ -6,38 +6,106 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/floegence/floret/v7/identity"
+	flruntime "github.com/floegence/floret/v7/runtime"
 )
 
-func TestFlowerPreparationCancellationNeverExecutes(t *testing.T) {
-	for _, phase := range []FloretStoreStartupPhase{FloretStoreStartupInspecting, FloretStoreStartupMigrating, FloretStoreStartupVerifying, FloretStoreStartupPreparing} {
-		t.Run(string(phase), func(t *testing.T) {
-			state, _ := loadFlowerUpgradeFixture(t, "10ce4c152-lifecycle")
-			opts := fixtureMaintenanceOptions(t, state)
-			calls := fixtureModelServer(t, &opts)
-			ctx, cancel := context.WithCancel(t.Context())
-			defer cancel()
-			opts.DeferExecution = false
-			observed := false
-			opts.StoreStartupProgress = func(current FloretStoreStartupPhase) {
-				if current == phase {
-					observed = true
-					cancel()
-				}
-			}
-			svc, err := NewServiceContext(ctx, opts)
-			if svc != nil {
-				_ = svc.Close()
-				t.Fatal("cancelled preparation returned a service")
-			}
-			if !observed {
-				t.Fatalf("startup never reached cancellation phase %q", phase)
-			}
-			if !errors.Is(err, context.Canceled) || calls.Load() != 0 {
-				t.Fatalf("cancel=%v calls=%d", err, calls.Load())
-			}
-		})
+type deletedSummaryThreadRuntime struct{ flruntime.ThreadService }
+
+func (deletedSummaryThreadRuntime) Summary(context.Context, identity.ThreadID) (flruntime.ThreadSummary, error) {
+	return flruntime.ThreadSummary{}, flruntime.ErrThreadDeleted
+}
+
+func TestStartupPreparationSkipsDeletedCanonicalThread(t *testing.T) {
+	service := newSendTurnTestService(t)
+	if _, err := service.CreateThread(t.Context(), testSendTurnMeta(), "deleted during recovery", "", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	service.threadRuntime = deletedSummaryThreadRuntime{ThreadService: service.threadRuntime}
+	if err := service.prepareStartupThreads(t.Context()); err != nil {
+		t.Fatalf("deleted canonical thread blocked startup preparation: %v", err)
+	}
+}
+
+func TestFlowerPreparationWaitCancellationDoesNotStopWorker(t *testing.T) {
+	state, _ := loadFlowerUpgradeFixture(t, "10ce4c152-lifecycle")
+	opts := fixtureMaintenanceOptions(t, state)
+	calls := fixtureModelServer(t, &opts)
+	opts.DeferExecution = true
+	started, release := make(chan struct{}), make(chan struct{})
+	releaseWorker := func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	}
+	opts.StoreStartupProgress = func(phase FloretStoreStartupPhase) {
+		if phase == FloretStoreStartupPreparing {
+			close(started)
+			<-release
+		}
+	}
+	svc, err := NewServiceContext(t.Context(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		releaseWorker()
+		_ = svc.Close()
+	})
+	svc.startStartupPreparation()
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("startup preparation did not start")
+	}
+	waitCtx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := svc.waitForStartupPreparation(waitCtx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled wait = %v, want context cancellation", err)
+	}
+	svc.startupPreparationMu.Lock()
+	stillRunning := svc.startupPreparationRun
+	svc.startupPreparationMu.Unlock()
+	if !stillRunning {
+		t.Fatal("cancelling the wait stopped the Host-owned worker")
+	}
+	releaseWorker()
+	waitCtx, cancel = context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	if err := svc.waitForStartupPreparation(waitCtx); err != nil {
+		t.Fatalf("preparation after cancelled wait: %v", err)
+	}
+	if calls.Load() != 0 {
+		t.Fatalf("startup preparation dispatched %d provider requests", calls.Load())
+	}
+}
+
+func TestFlowerDeferredServiceDoesNotStartProductRecovery(t *testing.T) {
+	state, _ := loadFlowerUpgradeFixture(t, "10ce4c152-lifecycle")
+	opts := fixtureMaintenanceOptions(t, state)
+	opts.DeferExecution = true
+	providerCalls := fixtureModelServer(t, &opts)
+	var preparationCalls atomic.Int32
+	opts.StoreStartupProgress = func(phase FloretStoreStartupPhase) {
+		if phase == FloretStoreStartupPreparing {
+			preparationCalls.Add(1)
+		}
+	}
+	service, err := NewServiceContext(t.Context(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if preparationCalls.Load() != 0 || providerCalls.Load() != 0 {
+		t.Fatalf("deferred service started preparation=%d provider=%d", preparationCalls.Load(), providerCalls.Load())
 	}
 }
 

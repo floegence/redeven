@@ -9,7 +9,6 @@ import (
 
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
-	flstorage "github.com/floegence/floret/v7/storage"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -17,12 +16,13 @@ import (
 // floretBootstrapResult keeps Floret lifecycle, canonical retention, and the
 // typed thread service behind their published runtime contracts.
 type floretBootstrapResult struct {
-	activate       func(context.Context) error
-	prepareRestore func(context.Context) (flruntime.RestorePreparation, error)
-	mediaInventory func(context.Context) (flruntime.MediaInventory, error)
-	close          func() error
-	threadRuntime  flruntime.ThreadService
-	effects        *floretEffectAdapter
+	activate             func(context.Context) error
+	prepareRestore       func(context.Context) (flruntime.RestorePreparation, error)
+	mediaInventory       func(context.Context) (flruntime.MediaInventory, error)
+	threadMediaInventory func(context.Context, identity.ThreadID) (flruntime.MediaInventory, error)
+	close                func() error
+	threadRuntime        flruntime.ThreadService
+	effects              *floretEffectAdapter
 }
 
 // floretEffectAdapter is a short-lived command inbox, not lifecycle state. A
@@ -223,21 +223,22 @@ func configureFloretRuntime(host *flruntime.Host) (*floretBootstrapResult, error
 		return nil, errors.New("published Floret ThreadUpdateSource contract is unavailable")
 	}
 	return &floretBootstrapResult{
-		activate:       host.Activate,
-		prepareRestore: host.PrepareRestore,
-		mediaInventory: host.MediaInventory,
-		close:          func() error { return host.Shutdown(context.Background()) },
-		threadRuntime:  threadRuntime,
-		effects:        effects,
+		activate:             host.Activate,
+		prepareRestore:       host.PrepareRestore,
+		mediaInventory:       host.MediaInventory,
+		threadMediaInventory: host.ThreadMediaInventory,
+		close:                func() error { return host.Shutdown(context.Background()) },
+		threadRuntime:        threadRuntime,
+		effects:              effects,
 	}, nil
 }
 
 func openFloretRuntime(ctx context.Context, storePath string, progress func(FloretStoreStartupPhase), logger *slog.Logger, work ...func(flruntime.StartupWork)) (*floretBootstrapResult, error) {
-	return openFloretRuntimeWith(ctx, storePath, progress, logger, flstorage.MaintainSQLite, flruntime.Open, work...)
+	return openFloretRuntimeWith(ctx, storePath, progress, logger, flruntime.Open, work...)
 }
 
-func openFloretRuntimeWith(ctx context.Context, storePath string, progress func(FloretStoreStartupPhase), logger *slog.Logger, maintain floretSQLiteMaintainer, open floretRuntimeOpener, work ...func(flruntime.StartupWork)) (*floretBootstrapResult, error) {
-	host, err := openFloretHost(ctx, storePath, progress, logger, maintain, open, work...)
+func openFloretRuntimeWith(ctx context.Context, storePath string, progress func(FloretStoreStartupPhase), logger *slog.Logger, open floretRuntimeOpener, work ...func(flruntime.StartupWork)) (*floretBootstrapResult, error) {
+	host, err := openFloretHost(ctx, storePath, progress, logger, open, work...)
 	if err != nil {
 		return nil, err
 	}

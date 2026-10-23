@@ -132,6 +132,9 @@ func TestPendingInputMigrationRunsBeforeServiceMaintenanceAndRemovesSource(t *te
 		t.Fatalf("restart pending input migration: %v", err)
 	}
 	t.Cleanup(func() { _ = restarted.Close() })
+	if err := restarted.waitForStartupPreparation(t.Context()); err != nil {
+		t.Fatalf("wait for asynchronous pending-input recovery: %v", err)
+	}
 	view, err := restarted.threadRuntime.View(context.Background(), identity.ThreadID(thread.ThreadID))
 	if err != nil {
 		t.Fatal(err)

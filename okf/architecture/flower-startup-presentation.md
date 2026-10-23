@@ -19,6 +19,8 @@ unknown or contradictory facts expose a non-retryable contract failure.
 
 Env App shares one readiness controller across Activity, Workbench, and Settings.
 
+An operational generation stays mounted during historical thread preparation. A selected thread uses its ordinary loading and retry surface, with New chat and conversation navigation available. The oldest snapshot stores may wait for their identity scan before admitting new threads. A thread-local failure does not return the whole product to startup.
+
 Unconfirmed, failed or revoked permissions cannot authorize new mutations; renewed authority reopens the same controls.
 
 The boundary shows completed/total counts only for a known total and preserves shell-owned drafts.

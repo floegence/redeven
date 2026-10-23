@@ -193,6 +193,31 @@ func TestThreadQueryToolPreservesRuntimeFailures(t *testing.T) {
 	}
 }
 
+func TestThreadQueryIndexNotReadyIsRetryableAndNeverLooksPartial(t *testing.T) {
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	base := svc.threadRuntime
+	defer func() { svc.threadRuntime = base }()
+	for _, tool := range []string{"threads.query", "threads.read", "threads.aggregate"} {
+		svc.threadRuntime = threadQueryFailureRuntime{ThreadService: base, failure: threadquery.ErrThreadQueryIndexNotReady}
+		args := map[string]any{"object": "messages"}
+		if tool == "threads.read" {
+			args = map[string]any{"ref": "opaque"}
+		}
+		_, err := svc.execThreadQueryTool(t.Context(), meta, tool, args)
+		if !errors.Is(err, threadquery.ErrThreadQueryIndexNotReady) {
+			t.Fatalf("%s lost index readiness classification: %v", tool, err)
+		}
+		classified := aitools.ClassifyError(aitools.Invocation{ToolName: tool, Args: args}, err)
+		if classified.Code != aitools.ErrorCodeThreadQueryIndexNotReady || !classified.Retryable {
+			t.Fatalf("%s index readiness error = %+v", tool, classified)
+		}
+		if !strings.Contains(classified.Message, "No partial results") || len(classified.SuggestedFixes) == 0 {
+			t.Fatalf("%s readiness guidance is incomplete: %+v", tool, classified)
+		}
+	}
+}
+
 func TestThreadQueryInvocationDescription(t *testing.T) {
 	svc := newSendTurnTestService(t)
 	meta := testSendTurnMeta()

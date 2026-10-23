@@ -1562,7 +1562,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const selectedThreadReadOnlyReason = createMemo(() => trimString(selectedThread()?.read_only_reason));
   const selectedThreadReadOnly = createMemo(() => surfaceReadOnly() || selectedThreadLiveStatus() === 'read_only' || Boolean(selectedThreadReadOnlyReason()));
   const selectedThreadReadOnlyDisplay = createMemo(() => (
-    selectedThreadReadOnlyReason() || subagentsCopy().readOnlyComposerLabel
+    selectedThreadReadOnlyReason()
+      || (selectedThreadLiveStatus() === 'read_only' ? copy().chat.threadReference.unavailable : subagentsCopy().readOnlyComposerLabel)
   ));
   const visibleInputRequest = (thread: FlowerThreadSnapshot | null | undefined): FlowerInputRequest | null => (
     thread?.status === 'waiting_user' ? thread.input_request ?? null : null
@@ -11887,6 +11888,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     />
   );
 
+  const threadRecoveryNavigation = () => <>
+    <Show when={!props.embeddedConversation}>
+      <Button size="sm" variant="ghost" icon={Menu} onClick={() => setThreadNavigationOpen(true)}>
+        {copy().chat.conversationsAria}
+      </Button>
+    </Show>
+    <Button size="sm" variant="ghost" icon={Plus} disabled={surfaceWarmupActive()} onClick={startCompose}>
+      {copy().chat.newChat}
+    </Button>
+  </>;
+
   const threadLoadingState = () => (
     <div class="flower-thread-loading" role="status" aria-live="polite">
       <div class="flower-thread-loading-panel">
@@ -11895,6 +11907,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <div class="flower-thread-loading-indicator-bar" />
         </div>
         <div class="flower-thread-loading-message">{copy().chat.threadLoading}</div>
+        <div class="flower-error-actions">{threadRecoveryNavigation()}</div>
       </div>
     </div>
   );
@@ -11976,6 +11989,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           {errorNotice(
             createdForkThreadID() === selectedThreadID() ? copy().threadList.forkLoadFailed : copy().chat.threadLoadErrorTitle,
             threadLoadError(),
+            <>
             <Button
               size="sm"
               variant="outline"
@@ -11983,7 +11997,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               onClick={retrySelectedThreadDetail}
             >
               {copy().chat.handlerRetry}
-            </Button>,
+            </Button>
+            {threadRecoveryNavigation()}
+            </>,
           )}
         </div>
       );

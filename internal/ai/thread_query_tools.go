@@ -162,11 +162,24 @@ func (e threadQueryArgumentsError) InvalidArgumentsMeta() map[string]any {
 }
 
 func threadQueryToolError(err error) error {
+	if errors.Is(err, threadquery.ErrThreadQueryIndexNotReady) {
+		return threadQueryIndexNotReadyFailure{cause: err}
+	}
 	if errors.Is(err, threadquery.ErrInvalidQuery) {
 		return threadQueryArgumentsError{cause: err}
 	}
 	return err
 }
+
+type threadQueryIndexNotReadyFailure struct{ cause error }
+
+func (failure threadQueryIndexNotReadyFailure) Error() string {
+	return "conversation search index is not ready"
+}
+
+func (failure threadQueryIndexNotReadyFailure) Unwrap() error { return failure.cause }
+
+func (threadQueryIndexNotReadyFailure) ThreadQueryIndexNotReady() bool { return true }
 
 func isThreadQueryTool(name string) bool {
 	switch name {

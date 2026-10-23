@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -30,26 +29,15 @@ func TestOpenFloretRuntimeColdStart(t *testing.T) {
 	}
 }
 
-func TestOpenFloretRuntimeMaintainsBeforeSingleOpen(t *testing.T) {
+func TestOpenFloretRuntimeOpensOnceWithoutPreOpenMaintenance(t *testing.T) {
 	storePath := filepath.Join(t.TempDir(), "floret.sqlite")
 	phases := make([]FloretStoreStartupPhase, 0, 3)
-	maintainCalls := 0
 	openCalls := 0
 	runtime, err := openFloretRuntimeWith(
 		context.Background(),
 		storePath,
 		func(phase FloretStoreStartupPhase) { phases = append(phases, phase) },
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
-		func(_ context.Context, gotPath string, policy flstorage.SQLiteMaintenancePolicy) (flstorage.SQLiteMaintenanceResult, error) {
-			maintainCalls++
-			if gotPath != storePath {
-				t.Fatalf("maintenance path = %q, want %q", gotPath, storePath)
-			}
-			if policy != floretStoreMaintenancePolicy {
-				t.Fatalf("maintenance policy = %#v, want %#v", policy, floretStoreMaintenancePolicy)
-			}
-			return flstorage.SQLiteMaintenanceResult{Action: flstorage.SQLiteMaintenanceActionNone, Reason: "database_missing"}, nil
-		},
+		slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)),
 		func(ctx context.Context, opts flruntime.Options) (*flruntime.Host, error) {
 			openCalls++
 			opts.StartupProgress.OnStartupPhase(flruntime.StartupPhaseVerifying)
@@ -60,35 +48,12 @@ func TestOpenFloretRuntimeMaintainsBeforeSingleOpen(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = runtime.close() })
-	if maintainCalls != 1 || openCalls != 1 {
-		t.Fatalf("calls = maintain:%d open:%d, want exactly one of each", maintainCalls, openCalls)
+	if openCalls != 1 {
+		t.Fatalf("runtime opens = %d, want one", openCalls)
 	}
-	wantPhases := []FloretStoreStartupPhase{FloretStoreStartupInspecting, FloretStoreStartupOptimizing, FloretStoreStartupVerifying}
+	wantPhases := []FloretStoreStartupPhase{FloretStoreStartupVerifying}
 	if fmt.Sprint(phases) != fmt.Sprint(wantPhases) {
 		t.Fatalf("startup phases = %v, want %v", phases, wantPhases)
-	}
-}
-
-func TestOpenFloretRuntimeFailsClosedBeforeRuntimeOpenWhenMaintenanceValidationFails(t *testing.T) {
-	openCalls := 0
-	_, err := openFloretRuntimeWith(
-		context.Background(),
-		filepath.Join(t.TempDir(), "floret.sqlite"),
-		nil,
-		nil,
-		func(context.Context, string, flstorage.SQLiteMaintenancePolicy) (flstorage.SQLiteMaintenanceResult, error) {
-			return flstorage.SQLiteMaintenanceResult{}, errors.New("maintenance inspection unavailable")
-		},
-		func(ctx context.Context, _ flruntime.Options) (*flruntime.Host, error) {
-			openCalls++
-			return flruntime.Open(ctx, flruntime.Options{Storage: flstorage.Memory()})
-		},
-	)
-	if err == nil {
-		t.Fatal("maintenance validation failure opened the runtime")
-	}
-	if openCalls != 0 {
-		t.Fatalf("runtime opens = %d, want 0", openCalls)
 	}
 }
 
@@ -145,9 +110,6 @@ func TestOpenFloretRuntimeReportsVerifyingBeforeClassifiedOpenFailure(t *testing
 		storePath,
 		func(phase FloretStoreStartupPhase) { phases = append(phases, phase) },
 		logger,
-		func(context.Context, string, flstorage.SQLiteMaintenancePolicy) (flstorage.SQLiteMaintenanceResult, error) {
-			return flstorage.SQLiteMaintenanceResult{Action: flstorage.SQLiteMaintenanceActionNone, Reason: "file_below_threshold"}, nil
-		},
 		func(_ context.Context, opts flruntime.Options) (*flruntime.Host, error) {
 			opts.StartupProgress.OnStartupPhase(flruntime.StartupPhaseVerifying)
 			return nil, fmt.Errorf("private backend detail: %w", flruntime.ErrAuthorityCorrupt)
@@ -157,7 +119,7 @@ func TestOpenFloretRuntimeReportsVerifyingBeforeClassifiedOpenFailure(t *testing
 	if !errors.As(err, &startupErr) || startupErr.Class != FloretStoreStartupIntegrityError {
 		t.Fatalf("startup error=%#v, want integrity classification", startupErr)
 	}
-	wantPhases := []FloretStoreStartupPhase{FloretStoreStartupInspecting, FloretStoreStartupOptimizing, FloretStoreStartupVerifying}
+	wantPhases := []FloretStoreStartupPhase{FloretStoreStartupVerifying}
 	if fmt.Sprint(phases) != fmt.Sprint(wantPhases) {
 		t.Fatalf("startup phases=%v, want %v", phases, wantPhases)
 	}
@@ -177,9 +139,6 @@ func TestOpenFloretRuntimeForwardsMigrationPhasesFromFloret(t *testing.T) {
 		filepath.Join(t.TempDir(), "floret.sqlite"),
 		func(phase FloretStoreStartupPhase) { phases = append(phases, phase) },
 		nil,
-		func(context.Context, string, flstorage.SQLiteMaintenancePolicy) (flstorage.SQLiteMaintenanceResult, error) {
-			return flstorage.SQLiteMaintenanceResult{Action: flstorage.SQLiteMaintenanceActionNone}, nil
-		},
 		func(ctx context.Context, opts flruntime.Options) (*flruntime.Host, error) {
 			opts.StartupProgress.OnStartupPhase(flruntime.StartupPhaseMigrating)
 			opts.StartupProgress.OnStartupPhase(flruntime.StartupPhaseVerifying)
@@ -190,12 +149,7 @@ func TestOpenFloretRuntimeForwardsMigrationPhasesFromFloret(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = result.close() })
-	want := []FloretStoreStartupPhase{
-		FloretStoreStartupInspecting,
-		FloretStoreStartupOptimizing,
-		FloretStoreStartupMigrating,
-		FloretStoreStartupVerifying,
-	}
+	want := []FloretStoreStartupPhase{FloretStoreStartupMigrating, FloretStoreStartupVerifying}
 	if fmt.Sprint(phases) != fmt.Sprint(want) {
 		t.Fatalf("startup phases = %v, want %v", phases, want)
 	}
@@ -206,9 +160,6 @@ func TestOpenFloretFailureUsesActualPhaseAndSanitizedLog(t *testing.T) {
 		t.Run(string(phase), func(t *testing.T) {
 			var logs bytes.Buffer
 			_, err := openFloretHost(t.Context(), filepath.Join(t.TempDir(), "floret.sqlite"), nil, slog.New(slog.NewTextHandler(&logs, nil)),
-				func(context.Context, string, flstorage.SQLiteMaintenancePolicy) (flstorage.SQLiteMaintenanceResult, error) {
-					return flstorage.SQLiteMaintenanceResult{}, nil
-				},
 				func(_ context.Context, opts flruntime.Options) (*flruntime.Host, error) {
 					if phase != "" {
 						opts.StartupProgress.OnStartupPhase(phase)

@@ -49,6 +49,7 @@ const (
 	ErrorCodeCanceled                     ErrorCode = "CANCELED"
 	ErrorCodePatchValidationFailed        ErrorCode = "PATCH_VALIDATION_FAILED"
 	ErrorCodePatchCommitFailed            ErrorCode = "PATCH_COMMIT_FAILED"
+	ErrorCodeThreadQueryIndexNotReady     ErrorCode = "THREAD_QUERY_INDEX_NOT_READY"
 	ErrorCodeUnknown                      ErrorCode = "UNKNOWN"
 )
 

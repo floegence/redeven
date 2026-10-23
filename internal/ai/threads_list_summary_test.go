@@ -14,10 +14,11 @@ import (
 
 type countingListThreadRuntime struct {
 	flruntime.ThreadService
-	lists     atomic.Int64
-	rootLists atomic.Int64
-	summaries atomic.Int64
-	views     atomic.Int64
+	lists         atomic.Int64
+	rootLists     atomic.Int64
+	summaries     atomic.Int64
+	views         atomic.Int64
+	summaryErrors map[identity.ThreadID]error
 }
 
 func TestThreadReadsDoNotRequireDesktopModelSourceAvailability(t *testing.T) {
@@ -134,8 +135,11 @@ func TestListThreadsUsesSummaryWithoutLoadingThreadViews(t *testing.T) {
 			t.Fatalf("thread %q has no summary title", thread.ThreadID)
 		}
 	}
-	if got := counter.lists.Load(); got != 1 {
-		t.Fatalf("List calls = %d, want 1", got)
+	if got := counter.lists.Load(); got != 0 {
+		t.Fatalf("List calls = %d, want no full canonical inventory scan", got)
+	}
+	if got := counter.summaries.Load(); got != int64(len(wantIDs)) {
+		t.Fatalf("Summary calls = %d, want one per visible thread (%d)", got, len(wantIDs))
 	}
 	if got := counter.views.Load(); got != 0 {
 		t.Fatalf("View calls = %d, want 0", got)
@@ -144,7 +148,54 @@ func TestListThreadsUsesSummaryWithoutLoadingThreadViews(t *testing.T) {
 
 func (runtime *countingListThreadRuntime) Summary(ctx context.Context, threadID identity.ThreadID) (flruntime.ThreadSummary, error) {
 	runtime.summaries.Add(1)
+	if err := runtime.summaryErrors[threadID]; err != nil {
+		return flruntime.ThreadSummary{}, err
+	}
 	return runtime.ThreadService.(flruntime.ThreadSummaryReader).Summary(ctx, threadID)
+}
+
+func TestListThreadsIsolatesCorruptCanonicalThread(t *testing.T) {
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	var createdIDs []string
+	for _, title := range []string{"first healthy thread", "damaged thread", "last healthy thread"} {
+		created, err := svc.CreateThread(t.Context(), meta, title, "", "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		createdIDs = append(createdIDs, created.ThreadID)
+	}
+	damagedID := identity.ThreadID(createdIDs[1])
+	counter := &countingListThreadRuntime{
+		ThreadService: svc.threadRuntime,
+		summaryErrors: map[identity.ThreadID]error{
+			damagedID: errors.Join(flruntime.ErrAuthorityCorrupt, errors.New("synthetic damaged history")),
+		},
+	}
+	svc.threadRuntime = counter
+
+	page, err := svc.ListThreads(t.Context(), meta, 25, "")
+	if err != nil {
+		t.Fatalf("one damaged canonical thread failed the full page: %v", err)
+	}
+	if len(page.Threads) != len(createdIDs) {
+		t.Fatalf("listed %d threads, want all %d product-visible threads", len(page.Threads), len(createdIDs))
+	}
+	seen := make(map[string]ThreadView, len(page.Threads))
+	for _, thread := range page.Threads {
+		seen[thread.ThreadID] = thread
+	}
+	if got := seen[damagedID.String()].RunStatus; got != "read_only" {
+		t.Fatalf("damaged thread status = %q, want read_only", got)
+	}
+	for _, id := range createdIDs {
+		if id == damagedID.String() {
+			continue
+		}
+		if got := seen[id].RunStatus; got == "read_only" || got == "" {
+			t.Fatalf("healthy thread %q status = %q", id, got)
+		}
+	}
 }
 
 func TestPointThreadReadsUsePublishedSummaryReader(t *testing.T) {
