@@ -30,21 +30,18 @@ scrolling. Preparation has no elapsed-time reveal fallback. Cold navigation
 shows separate loading feedback confined to the transcript region; failed body
 reads expose local Retry. The composer and navigation remain available.
 
-Cached destinations flush that same layout pass after render effects and before
-the task's paint. Completed historical rows use `content-visibility: auto`;
-intrinsic placeholder heights do not establish layout readiness, even when all
-text is cached. Destination-visible row content must pass the browser's
-`checkVisibility({ contentVisibilityAuto: true })` check before reveal. The
-scroll owner's one capture listener receives non-bubbling
-`contentvisibilityautostatechange` notifications and coalesces them with resize
-notifications into its existing layout pass. No timed reveal, polling, per-row
-observer or disabling of offscreen layout is allowed. A cached destination may
-retain preparation until that native layout is available. The two-slot body loader
-prepares the latest visible text first, including its existing viewport margin,
-and cancels obsolete demand on navigation or transport boundaries. Immutable
-bodies remain in ThreadCache; no additional content cache or polling loop exists.
-Native scroll events do not prove user intent. The scroll controller's explicit
-wheel, touch, scrollbar and keyboard ownership may interrupt preparation.
+Cached destinations flush the same layout pass after render effects, before
+paint. Historical `content-visibility: auto` placeholders are not real layout:
+visible row content must pass `checkVisibility({ contentVisibilityAuto: true })`
+before reveal, even with cached text. One capture listener routes non-bubbling
+`contentvisibilityautostatechange` events through the scroll owner's existing
+coalesced resize/layout pass. Preparation waits for native layout; no timers,
+polling, per-row observers or disabled offscreen optimization.
+
+The two-slot body loader prioritizes the latest visible text plus its existing
+margin and cancels obsolete navigation/transport demand. ThreadCache retains
+immutable bodies. Explicit wheel, touch, scrollbar or keyboard ownership can
+interrupt preparation; native scroll events alone cannot.
 
 Selection continues to open the latest interval. Per-thread reading-position
 restoration is a separate product policy, not part of presentation stabilization.

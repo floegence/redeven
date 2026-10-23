@@ -22249,7 +22249,7 @@
         "title": "Flower conversation switch performance qualification",
         "type": "Qualification Evidence"
       },
-      "body_length": 8916,
+      "body_length": 8404,
       "summary": "Published Floret v7.79.0 owns canonical windows, bodies, View and Summary. Redeven consumes a\npoint summary and coordinates ephemeral read demand through one loader. The\n[sidebar contract](../ui/flower-thread-sidebar.md) and\n[Desktop bridge](../desktop/desktop-runtime-bridge.md) own the behavior.\nQualification uses copied released-writer fixtures and synthetic conversations;\nit never continues real user tasks. The short-detail P95 target is at least a\n70% reduction, with warm selection synchronous P95 below 8 ms and actual\nselection feedback presented before transcript commit. These checks are local\nqualification, outside ordinary CI and hooks.",
       "sections": [
         {
@@ -30764,15 +30764,15 @@
         "title": "Flower conversation selection and detail reads",
         "type": "UI Contract"
       },
-      "body_length": 4015,
+      "body_length": 3686,
       "summary": "Flower presents the latest selection intent before transcript work and uses one\ncoordinator for navigation, command confirmation and reference preflight reads.\nThreadCache owns committed selection and accepted detail; the loader owns only\nbounded ephemeral demand.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Selection and navigation\nThe rail acknowledges a selection with a short-lived navigation intent before committing the conversation. Foreground detail requests cannot bypass this boundary through summary effects.\n\nVisible selection schedules commit after one feedback rendering opportunity\n(two animation callbacks and a task); hidden documents commit without waiting\nfor animation frames. Latest intent supersedes earlier scheduled work.\n\nThe destination transcript is exposed only after accepted detail, measurable\nlayout and destination-visible historical text have settled. The existing scroll\ncontroller positions and reveals it in one layout pass, without smooth initial\nscrolling. Preparation has no elapsed-time reveal fallback. Cold navigation\nshows separate loading feedback confined to the transcript region; failed body\nreads expose local Retry. The composer and navigation remain available.\n\nCached destinations flush that same layout pass after render effects and before\nthe task's paint. Completed historical rows use `content-visibility: auto`;\nintrinsic placeholder heights do not establish layout readiness, even when all\ntext is cached. Destination-visible row content must pass the browser's\n`checkVisibility({ contentVisibilityAuto: true })` check before reveal. The\nscroll owner's one capture listener receives non-bubbling\n`contentvisibilityautostatechange` notifications and coalesces them with resize\nnotifications into its existing layout pass. No timed reveal, polling, per-row\nobserver or disabling of offscreen layout is allowed. A cached destination may\nretain preparation until that native layout is available. The two-slot body loader\nprepares the latest visible text first, including its existing viewport margin,\nand cancels obsolete demand on navigation or transport boundaries. Immutable\nbodies remain in ThreadCache; no additional content cache or polling loop exists.\nNative scroll events do not prove user intent. The scroll controller's explicit\nwheel, touch, scrollbar and keyboard ownership may interrupt preparation.\n\nSelection continues to open the latest interval. Per-thread reading-position\nrestoration is a separate product policy, not part of presentation stabilization.\n\nOrdinary conversations remain ordered by creation time descending, then ThreadID ascending.\n\n## Detail read ownership\nPublished Floret v7.69.1 already supplies ThreadSummaryReader.Summary.\n\nThreadCache remains the sole owner of accepted detail and committed selection, bounded to twelve detail entries.\n\nNeither selection nor detail cancellation reconnects the workspace stream.",
-          "char_count": 2601
+          "body": "## Selection and navigation\nThe rail acknowledges a selection with a short-lived navigation intent before committing the conversation. Foreground detail requests cannot bypass this boundary through summary effects.\n\nVisible selection schedules commit after one feedback rendering opportunity\n(two animation callbacks and a task); hidden documents commit without waiting\nfor animation frames. Latest intent supersedes earlier scheduled work.\n\nThe destination transcript is exposed only after accepted detail, measurable\nlayout and destination-visible historical text have settled. The existing scroll\ncontroller positions and reveals it in one layout pass, without smooth initial\nscrolling. Preparation has no elapsed-time reveal fallback. Cold navigation\nshows separate loading feedback confined to the transcript region; failed body\nreads expose local Retry. The composer and navigation remain available.\n\nCached destinations flush the same layout pass after render effects, before\npaint. Historical `content-visibility: auto` placeholders are not real layout:\nvisible row content must pass `checkVisibility({ contentVisibilityAuto: true })`\nbefore reveal, even with cached text. One capture listener routes non-bubbling\n`contentvisibilityautostatechange` events through the scroll owner's existing\ncoalesced resize/layout pass. Preparation waits for native layout; no timers,\npolling, per-row observers or disabled offscreen optimization.\n\nThe two-slot body loader prioritizes the latest visible text plus its existing\nmargin and cancels obsolete navigation/transport demand. ThreadCache retains\nimmutable bodies. Explicit wheel, touch, scrollbar or keyboard ownership can\ninterrupt preparation; native scroll events alone cannot.\n\nSelection continues to open the latest interval. Per-thread reading-position\nrestoration is a separate product policy, not part of presentation stabilization.\n\nOrdinary conversations remain ordered by creation time descending, then ThreadID ascending.\n\n## Detail read ownership\nPublished Floret v7.69.1 already supplies ThreadSummaryReader.Summary.\n\nThreadCache remains the sole owner of accepted detail and committed selection, bounded to twelve detail entries.\n\nNeither selection nor detail cancellation reconnects the workspace stream.",
+          "char_count": 2272
         },
         {
           "id": "boundaries",
@@ -33596,5 +33596,5 @@
       ]
     }
   ],
-  "source_sha256": "a2751654334ceb85f46a040d33811cb159de3868f2dd4a55fc23fe82ce3f6aa8"
+  "source_sha256": "40f16de54594bd6e6fffa6219782505cfe503ed68b3ff8b5f434142adbf667e4"
 }

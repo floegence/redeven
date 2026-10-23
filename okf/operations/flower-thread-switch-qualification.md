@@ -38,26 +38,19 @@ The item-window budget excludes product metadata and pending controls. Cold back
 
 ## Completed-history layout correction, 2026-10-23
 
-The earlier destination tests and native fixture omitted terminal turn metadata,
-so they did not exercise the historical row `content-visibility: auto` path.
-Complete inline or cached text also bypassed the body-placeholder measurements
-that happened to trigger layout in the hydration fixture. The earlier results
-therefore did not establish first-frame stability for ordinary completed history.
+Earlier fixtures omitted completed-turn metadata, missing historical
+`content-visibility: auto`. Inline/cached bodies also skipped hydration measurements.
+In dev bundle `0abb96b3a416` (with the earlier fix), geometry-only tracing exposed
+(top, height) `(0, 584)`, then `(0, 3246)`, then top `2661.5`. Opacity did not
+help; disabling content visibility eliminated the flash. Instrumentation was
+removed without retaining conversation text.
 
-A geometry-only trace of the reported development renderer (bundle commit
-`0abb96b3a416`, including the prior presentation fix) reproduced visible content
-at scrollTop 0 and scrollHeight 584, then height 3246 at top 0, then top 2661.5.
-Changing hidden visibility to opacity did not repair it. Disabling historical
-content visibility eliminated it, isolating native skipped layout as the cause;
-all temporary instrumentation was removed and no conversation text was retained.
-
-Canonical completed-turn fixtures with full inline text now assert every exposed
-frame on cold and cached selection for two and twenty-four long rows. They also
-assert zero body reads and retained offscreen layout skipping. The layout-event
-test covers capture of non-bubbling notifications, manual reading ownership and
-listener disposal. Built Electron acceptance uses a completed long response and
-requires the first exposed frame to be more than 1000 px from the top and within
-one pixel of the bottom on three repeated cached selections.
+Completed-history browser fixtures cover 2/24 long rows, cold/cached selection,
+every exposed frame, zero body reads and retained offscreen skipping. Unit tests
+cover non-bubbling layout events, reading ownership and disposal. Built Electron
+42.11.9 repeated three cached selections: first exposure 56.2–57.8 ms, top 2245,
+height 2861, bottom distance 0; no page errors or owned process leaks. These are
+local diagnostic samples, not population latency guarantees.
 
 ## Destination presentation qualification, 2026-10-23
 
