@@ -6,7 +6,7 @@ tags: [ai, flower, activity, interaction, accessibility]
 timestamp: 2026-10-19T00:00:00Z
 quality_exception: One 12,163-character Activity interaction contract retains the inseparable native disclosure, safe-result, viewport, and gesture ownership invariants; placement and tool-sequence behavior remain in separate concepts, and strict quality still enforces the 20,000-character maximum.
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-23"
 ---
 # Summary
 
@@ -46,7 +46,7 @@ Presentation never supplies execution input or authorization.
 
 ## Viewport and gesture ownership
 One controller per viewport owns transcript position. Layout, focus, animation and growth never resume a reading pause.
-Tool sequence scroll chaining follows the [sequence reading contract](flower-tool-sequences.md#disclosure-and-reading): short groups and outward input at a sequence edge reach the transcript, while embedded terminals and editors retain their own input.
+Thinking, tool sequences and read-only detail previews follow the [sequence reading contract](flower-tool-sequences.md#disclosure-and-reading). Short regions and outward input at every nested edge reach the next scrollable ancestor. Transcript follow intent matches this native chain; explicitly contained regions and canceled input remain local.
 
 Hidden controls do not enter the focus or hit-test order.
 

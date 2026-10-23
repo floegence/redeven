@@ -5,7 +5,7 @@ description: Compact tools and bounded thinking without hiding dialogue or takin
 tags: [ui, flower, activity, thinking, disclosure, accessibility]
 timestamp: 2026-10-21T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-23"
 ---
 # Summary
 
@@ -63,11 +63,13 @@ scroll viewport below their reachable summary button. Its height is bounded by
 is smallest. Expanded thinking has its own scroll viewport bounded by 20rem,
 45% of the window height, and the same transcript limit. Short content keeps its
 natural height; no canonical content is truncated. Both viewports expose a thin
-scrollbar, keyboard focus, and a localized accessible name. Tool sequences use
-native scroll chaining: short groups pass scrolling through to the transcript,
-and overflowing groups consume input only while they can scroll in that
-direction. At either edge, scrolling continues in the transcript. Expanded
-thinking and embedded terminal/detail viewports retain their own scroll boundary.
+scrollbar, keyboard focus, and a localized accessible name. Thinking, tool
+sequences and read-only tool details use native scroll chaining: short regions
+pass scrolling through, and overflowing regions consume input only while they
+can scroll in that direction. At either edge, input reaches the next scrollable
+ancestor and eventually the transcript. This includes terminal output, file
+content, diffs, fetched excerpts and code previews; it does not dispatch input
+to a running terminal or editor.
 
 Canonical row components retain their rendering owners when the sequence layout
 places their existing DOM under the first node's viewport. Membership changes
@@ -78,10 +80,13 @@ so content-only streaming does not rerun historical layout or recreate resize
 observers. Membership, status, disclosure and source-order changes still replace
 the affected projection; previous projections are never mutated.
 Internal scrolling does not scroll or resume the outer transcript while the
-sequence can consume it. The transcript controller recognizes wheel, touch, and
-keyboard input handed off at a sequence edge: upward scrolling pauses outer
-tail following, and an actual return to the transcript bottom resumes it. This
-exception does not change terminal, editor, or Workbench input ownership. Active content
+inner region can consume it. The transcript controller recognizes wheel, touch,
+and keyboard input through the same native ancestor chain instead of maintaining
+a component allowlist. Upward input reaching the transcript pauses outer tail
+following, and an actual return to its bottom resumes it. CSS containment
+(`contain` or `none`) remains an explicit boundary, even for short content;
+canceled wheel events and zoom gestures never become transcript intent.
+Interactive terminal, editor and Workbench input ownership is unchanged. Active content
 follows its own tail only until the reader scrolls upward, and resumes when they
 return to the bottom. Opening a sequence positions its internal viewport at the
 latest tool and resumes tail following, including after reading older calls or
