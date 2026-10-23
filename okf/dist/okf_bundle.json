@@ -57,7 +57,7 @@
               "performance",
               "qualification"
             ],
-            "summary": "Published Floret v7.79.0 owns canonical windows, bodies, View and Summary. Redeven consumes a\npoint summary and coordinates ephemeral read demand through one loader. The\n[sidebar contract](../ui/flower-thread-sidebar.md) and\n[Desktop bridge](../desktop/desktop-runtime-bridge.md) own the behavior.\nQualification uses copied released-writer fixtures and synthetic conversations;\nit never continues real user tasks. The short-detail P95 target is at least a\n70% reduction, with warm selection synchronous P95 below 8 ms and actual\nselection feedback presented before transcript commit. These checks are local\nqualification, outside ordinary CI and hooks.",
+            "summary": "Published Floret v7.79.0 owns windows, bodies, View and Summary. Redeven owns\nbounded reads and presentation through the [sidebar](../ui/flower-thread-sidebar.md)\nand [Desktop bridge](../desktop/desktop-runtime-bridge.md). Local qualification\ntargets \u003e=70% lower short-detail P95, warm synchronous P95 \u003c8 ms, and feedback\nbefore commit. Fixtures never continue real user tasks.",
             "section_count": 2
           },
           {
@@ -22265,8 +22265,8 @@
         "title": "Flower conversation switch performance qualification",
         "type": "Qualification Evidence"
       },
-      "body_length": 8568,
-      "summary": "Published Floret v7.79.0 owns canonical windows, bodies, View and Summary. Redeven consumes a\npoint summary and coordinates ephemeral read demand through one loader. The\n[sidebar contract](../ui/flower-thread-sidebar.md) and\n[Desktop bridge](../desktop/desktop-runtime-bridge.md) own the behavior.\nQualification uses copied released-writer fixtures and synthetic conversations;\nit never continues real user tasks. The short-detail P95 target is at least a\n70% reduction, with warm selection synchronous P95 below 8 ms and actual\nselection feedback presented before transcript commit. These checks are local\nqualification, outside ordinary CI and hooks.",
+      "body_length": 8112,
+      "summary": "Published Floret v7.79.0 owns windows, bodies, View and Summary. Redeven owns\nbounded reads and presentation through the [sidebar](../ui/flower-thread-sidebar.md)\nand [Desktop bridge](../desktop/desktop-runtime-bridge.md). Local qualification\ntargets \u003e=70% lower short-detail P95, warm synchronous P95 \u003c8 ms, and feedback\nbefore commit. Fixtures never continue real user tasks.",
       "sections": [
         {
           "id": "contract",
@@ -22279,11 +22279,11 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Measurements use synthetic conversations and copied released-writer fixtures. Backend point-read timings and the loopback transport fixture are separate experiments; their durations must not be added. These explicit qualification suites stay outside ordinary CI and hooks.\n\nRoot detail now uses Floret's window subscription; the initial interval and explicit body expansion bound network demand. GET detail, PATCH detail, command receipts and root live observation use the same public projection. The service's cold actor initialization can still load complete canonical state. Child detail retains its existing full-view transport. Explicitly expanding a single very large item transfers that requested item in full.\n\nThe item-window budget excludes product metadata and pending controls. Cold backend timings below are isolated read timings, not remote end-to-end rendering measurements. Lazy collapsed tool content and bounded transport address separate costs.",
-          "char_count": 963
+          "body": "Synthetic and copied released-writer qualification stays outside CI and hooks. Backend point-read and loopback timings are separate and must not be added.\n\nRoot detail now uses Floret's window subscription; the initial interval and explicit body expansion bound network demand. GET detail, PATCH detail, command receipts and root live observation use the same public projection. The service's cold actor initialization can still load complete canonical state. Child detail retains its existing full-view transport. Explicitly expanding a single very large item transfers that requested item in full.\n\nWindow budgets exclude metadata and pending controls. Cold backend timings are isolated reads, not remote rendering latency. Lazy tools and bounded transport address separate costs.",
+          "char_count": 782
         }
       ],
-      "snippet": "Published Floret v7.79.0 owns canonical windows, bodies, View and Summary. Redeven consumes a point summary and coordinates ephemeral read demand through one loader. The Qualification uses copied released-writer fixtures and synthetic conve",
+      "snippet": "Published Floret v7.79.0 owns windows, bodies, View and Summary. Redeven owns bounded reads and presentation through the [sidebar](../ui/flower-thread-sidebar.md) and [Desktop bridge](../desktop/desktop-runtime-bridge.md). Local qualificati",
       "links": [
         {
           "label": "Desktop bridge",
@@ -22292,7 +22292,7 @@
           "title": "Desktop runtime bridge"
         },
         {
-          "label": "sidebar contract",
+          "label": "sidebar",
           "path": "ui/flower-thread-sidebar.md",
           "concept_id": "ui.flower-thread-sidebar",
           "title": "Flower conversation sidebar"
@@ -33630,5 +33630,5 @@
       ]
     }
   ],
-  "source_sha256": "dcd17459b3b9f14b6abcaf8d478d2514bfbf9ad6ae73c7a72f1e3626c17cd937"
+  "source_sha256": "7fd9a59e2a5e82e899158ceba3a037bfd7eb83069bb697a097f6079e42deaab6"
 }
