@@ -763,9 +763,6 @@ prepare_instance_bundle_snapshot() {
 start_desktop() {
 	local electron_binary cmd previous_dir desktop_status
   local ssh_runtime_release_tag
-	electron_binary="$(cd "$DESKTOP_DIR" && node -e 'process.stdout.write(require("electron"))')"
-	[ -x "$electron_binary" ] || ui_pkg_die "Electron executable is unavailable: $electron_binary"
-	cmd=("$electron_binary")
 
   ui_pkg_log "Starting Redeven Desktop from the current checkout..."
   ui_pkg_log "ROOT_DIR: $ROOT_DIR"
@@ -798,6 +795,32 @@ start_desktop() {
     ui_pkg_log "Main-process inspector: 127.0.0.1:$INSPECT_PORT"
   fi
 
+  if [ "$DRY_RUN" -eq 0 ]; then
+    export REDEVEN_DESKTOP_OPEN_DEVTOOLS="$OPEN_DEVTOOLS"
+    export REDEVEN_DESKTOP_AUTO_START_RUNTIME="${REDEVEN_DESKTOP_AUTO_START_RUNTIME:-1}"
+    export REDEVEN_STATE_ROOT="$DEVELOPMENT_STATE_ROOT"
+    export REDEVEN_DESKTOP_LOCAL_UI_BIND="$LOCAL_UI_BIND"
+    if [ -n "$ssh_runtime_release_tag" ]; then
+      export REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG="$ssh_runtime_release_tag"
+      export REDEVEN_DESKTOP_BUNDLE_VERSION="${REDEVEN_DESKTOP_BUNDLE_VERSION:-$ssh_runtime_release_tag}"
+    fi
+    export REDEVEN_DESKTOP_BUNDLE_COMMIT="${REDEVEN_DESKTOP_BUNDLE_COMMIT:-$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)}"
+    export REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT="${REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT:-$ROOT_DIR}"
+    local source_identity
+    source_identity=$(node "$SCRIPT_DIR/source_build_identity.mjs" capture "$ROOT_DIR" "$REDEVEN_DESKTOP_BUNDLE_COMMIT")
+
+    previous_dir="$PWD"
+    cd "$DESKTOP_DIR"
+    npm run build
+    prepare_instance_bundle_snapshot "$source_identity"
+    cd "$previous_dir"
+    [ "$SHUTDOWN_REQUESTED" -eq 0 ] || return "$SHUTDOWN_EXIT_STATUS"
+  fi
+
+  # Asset builds may reinstall Desktop dependencies; resolve the final package.
+  electron_binary="$(ui_pkg_electron_binary "$DESKTOP_DIR")"
+  [ -x "$electron_binary" ] || ui_pkg_die "Electron executable is unavailable: $electron_binary"
+  cmd=("$electron_binary")
   if [ "${#ELECTRON_DEBUG_ARGS[@]}" -gt 0 ]; then
     cmd+=("${ELECTRON_DEBUG_ARGS[@]}")
   fi
@@ -815,25 +838,6 @@ start_desktop() {
     return 0
   fi
 
-  export REDEVEN_DESKTOP_OPEN_DEVTOOLS="$OPEN_DEVTOOLS"
-  export REDEVEN_DESKTOP_AUTO_START_RUNTIME="${REDEVEN_DESKTOP_AUTO_START_RUNTIME:-1}"
-  export REDEVEN_STATE_ROOT="$DEVELOPMENT_STATE_ROOT"
-  export REDEVEN_DESKTOP_LOCAL_UI_BIND="$LOCAL_UI_BIND"
-  if [ -n "$ssh_runtime_release_tag" ]; then
-    export REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG="$ssh_runtime_release_tag"
-    export REDEVEN_DESKTOP_BUNDLE_VERSION="${REDEVEN_DESKTOP_BUNDLE_VERSION:-$ssh_runtime_release_tag}"
-  fi
-  export REDEVEN_DESKTOP_BUNDLE_COMMIT="${REDEVEN_DESKTOP_BUNDLE_COMMIT:-$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)}"
-  export REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT="${REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT:-$ROOT_DIR}"
-  local source_identity
-  source_identity=$(node "$SCRIPT_DIR/source_build_identity.mjs" capture "$ROOT_DIR" "$REDEVEN_DESKTOP_BUNDLE_COMMIT")
-
-  previous_dir="$PWD"
-  cd "$DESKTOP_DIR"
-  npm run build
-  prepare_instance_bundle_snapshot "$source_identity"
-  cd "$previous_dir"
-  [ "$SHUTDOWN_REQUESTED" -eq 0 ] || return "$SHUTDOWN_EXIT_STATUS"
   DEVELOPMENT_SERVICES_OWNED=1
   manage_development_gateways start
   stop_current_instance_runtime

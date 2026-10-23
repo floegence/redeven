@@ -5,8 +5,10 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." &> /dev/null && pwd)
 DESKTOP_DIR="${1:-$ROOT_DIR/desktop}"
 
+source "$SCRIPT_DIR/ui_package_common.sh"
+
 DESKTOP_DIR=$(cd -- "$DESKTOP_DIR" &> /dev/null && pwd)
-ELECTRON_BINARY=$(cd -- "$DESKTOP_DIR" && node -p "require('electron')")
+ELECTRON_BINARY=$(ui_pkg_electron_binary "$DESKTOP_DIR")
 ELECTRON_PACKAGE_JSON=$(cd -- "$DESKTOP_DIR" && node -p "require.resolve('electron/package.json')")
 ELECTRON_PACKAGE_ROOT=$(dirname -- "$ELECTRON_PACKAGE_JSON")
 DECLARED_ELECTRON_VERSION=$(cd -- "$DESKTOP_DIR" && node -p "require('./package.json').devDependencies.electron")
