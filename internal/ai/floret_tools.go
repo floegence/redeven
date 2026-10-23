@@ -398,6 +398,15 @@ func modelToolResultPayload(result ToolResult) (map[string]any, error) {
 		return nil, err
 	}
 	modelPayload := normalized.(map[string]any)
+	if result.ToolName == "terminal.read" {
+		if data, ok := modelPayload["data"].(map[string]any); ok {
+			// Activity retains the command and process timing. Model reads carry
+			// incremental output and execution facts without echoing the command.
+			for _, key := range []string{"command", "cwd", "execution_location", "started_at_ms", "duration_ms"} {
+				delete(data, key)
+			}
+		}
+	}
 	if result.ToolName == "apply_patch" && status == toolResultStatusSuccess {
 		if data, ok := modelPayload["data"].(map[string]any); ok {
 			// The canonical Activity retains the full diff and format metadata. The
@@ -541,7 +550,7 @@ func floretToolOpenWorld(def ToolDef) bool {
 		return true
 	}
 	switch strings.TrimSpace(def.Name) {
-	case "terminal.exec", "terminal.read", "terminal.write", "terminal.terminate", "web.search", "use_skill":
+	case "terminal.exec", "terminal.write", "terminal.terminate", "web.search", "use_skill":
 		return true
 	default:
 		return false
@@ -737,7 +746,7 @@ func floretToolEffects(def ToolDef) []fltools.Effect {
 	switch name {
 	case "computer.select_target", "computer.exec", "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.drag", "browser.navigate", "browser.back", "browser.reload":
 		return []fltools.Effect{fltools.EffectWrite}
-	case "terminal.exec", "terminal.read", "terminal.write", "terminal.terminate":
+	case "terminal.exec", "terminal.write", "terminal.terminate":
 		return []fltools.Effect{fltools.EffectShell}
 	case "tessiven.inspect", "tessiven.runtimes", "tessiven.runtime.inspect":
 		return []fltools.Effect{fltools.EffectRead, fltools.EffectNetwork}
@@ -800,6 +809,12 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 		}
 	}
 	var boundedWait *fltools.BoundedWait
+	if result.ToolName == "terminal.read" && status == toolResultStatusSuccess && dispatchErr == nil {
+		data, _ := structured["data"].(map[string]any)
+		if readBoolField(data, "wait_expired") && anyToString(data["status"]) == terminalProcessStatusRunning && readInt64Field(data, "wait_ms") > 0 {
+			boundedWait = &fltools.BoundedWait{Timeout: time.Duration(readInt64Field(data, "wait_ms")) * time.Millisecond, TimedOut: true}
+		}
+	}
 	inputRequired := encoded.inputRequired
 	var effectOutcome fltools.EffectOutcome
 	if result.effectUncertain && dispatchErr == nil && status != toolResultStatusAborted {

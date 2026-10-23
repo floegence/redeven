@@ -282,18 +282,20 @@ func TestBuiltInToolDefinitions_TerminalSchemasAreCanonical(t *testing.T) {
 	toolDescription := strings.ToLower(terminalRead.Description)
 	for _, phrase := range []string{
 		"new output after after_seq",
-		"waiting up to 10 seconds",
+		fmt.Sprintf("waiting up to %d seconds", terminalProcessModelReadWaitMS/1000),
 		"returning sooner when output arrives or the process ends",
-		"on timeout with no new output, returns status=running, process_id, and an unchanged cursor",
-		"if has_more, read again",
-		"status=running remains active even with empty output",
+		"wait_expired means only the read window ended",
+		"if has_more or you still need the running command's result",
+		"running remains active even with empty output and an unchanged cursor",
+		"do not restart the command or add sleeps",
+		"cancellation interrupts the read",
 	} {
 		if !strings.Contains(toolDescription, phrase) {
 			t.Fatalf("terminal.read description missing %q: %q", phrase, terminalRead.Description)
 		}
 	}
-	if terminalProcessModelReadWaitMS != 10_000 {
-		t.Fatalf("model terminal.read wait=%dms, want 10000ms", terminalProcessModelReadWaitMS)
+	if terminalProcessModelReadWaitMS != 60_000 {
+		t.Fatalf("model terminal.read wait=%dms, want 60000ms", terminalProcessModelReadWaitMS)
 	}
 
 	var terminateSchema map[string]any

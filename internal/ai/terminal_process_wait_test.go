@@ -1,10 +1,15 @@
 package ai
 
 import (
+	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
+
+	fltools "github.com/floegence/floret/v7/tools"
 )
 
 func TestTerminalExecYieldWaitDefaultsAndLimits(t *testing.T) {
@@ -54,6 +59,7 @@ func TestTerminalReadReturnsOnOutputOrProcessExit(t *testing.T) {
 		if payload["first_seq"] != int64(5) || payload["last_seq"] != int64(5) || payload["latest_seq"] != int64(5) || payload["has_more"] != false {
 			t.Fatalf("terminal.read cursor changed unexpectedly: %#v", payload)
 		}
+		assertTerminalReadHasNoBoundedWait(t, payload)
 	})
 
 	t.Run("process exit", func(t *testing.T) {
@@ -78,6 +84,7 @@ func TestTerminalReadReturnsOnOutputOrProcessExit(t *testing.T) {
 		if payload["output"] != "" || payload["last_seq"] != int64(4) || payload["latest_seq"] != int64(4) {
 			t.Fatalf("terminal.read changed cursor without output: %#v", payload)
 		}
+		assertTerminalReadHasNoBoundedWait(t, payload)
 	})
 }
 
@@ -95,6 +102,165 @@ func TestTerminalReadTimeoutKeepsRunningCursor(t *testing.T) {
 	}
 	if payload["output"] != "" || payload["first_seq"] != int64(0) || payload["last_seq"] != int64(4) || payload["latest_seq"] != int64(4) {
 		t.Fatalf("terminal.read timeout changed cursor: %#v", payload)
+	}
+}
+
+func TestTerminalReadQuietWaitReachesFloretRepeatGuard(t *testing.T) {
+	process := newTerminalReadWaitTestProcess(4)
+	const waitMS = int64(10)
+	payload := readTerminalProcessForTest(t, process, 4, waitMS)
+	result, err := floretToolResultFromFlower(nil, ToolResult{
+		ToolID: "quiet-read", ToolName: "terminal.read",
+		Status: toolResultStatusSuccess, Data: payload,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.BoundedWait == nil || !result.BoundedWait.TimedOut || result.BoundedWait.Timeout != time.Duration(waitMS)*time.Millisecond {
+		t.Fatalf("quiet terminal read lost its completed wait: %#v", result.BoundedWait)
+	}
+	if payload["timed_out"] != false {
+		t.Fatalf("read deadline became a command timeout: %#v", payload)
+	}
+}
+
+func TestTerminalReadCancellationDoesNotStopProcess(t *testing.T) {
+	for _, beforeRead := range []bool{false, true} {
+		t.Run(map[bool]string{false: "during wait", true: "before read"}[beforeRead], func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				process := newTerminalReadWaitTestProcess(4)
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				if beforeRead {
+					cancel()
+				} else {
+					go func() { time.Sleep(time.Second); cancel() }()
+				}
+				start := time.Now()
+				snapshot, err := process.ReadAfter(ctx, terminalProcessReadRequest{AfterSeq: 4, WaitMS: 60_000, MaxBytes: terminalProcessModelReadBytes})
+				if !errors.Is(err, context.Canceled) || snapshot.readWaitExpired || time.Since(start) > time.Second {
+					t.Fatalf("cancellation waited for deadline: snapshot=%+v err=%v elapsed=%v", snapshot, err, time.Since(start))
+				}
+				if state := process.Snapshot(); state.Status != terminalProcessStatusRunning || state.LastSeq != 4 {
+					t.Fatalf("canceling observation changed process: %+v", state)
+				}
+			})
+		})
+	}
+}
+
+func TestTerminalReadDeadlineAndConcurrentReaders(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		process := newTerminalReadWaitTestProcess(4)
+		canceled, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		type observation struct {
+			snapshot terminalProcessSnapshot
+			err      error
+		}
+		first, second := make(chan observation, 1), make(chan observation, 1)
+		read := func(ctx context.Context, out chan observation) {
+			snapshot, err := process.ReadAfter(ctx, terminalProcessReadRequest{AfterSeq: 4, WaitMS: 60_000, MaxBytes: terminalProcessModelReadBytes})
+			out <- observation{snapshot, err}
+		}
+		go read(canceled, first)
+		go read(t.Context(), second)
+		synctest.Wait()
+		cancel()
+		synctest.Wait()
+		if got := <-first; !errors.Is(got.err, context.Canceled) {
+			t.Fatalf("first reader: %+v", got)
+		}
+		select {
+		case got := <-second:
+			t.Fatalf("another reader's cancellation ended this read: %+v", got)
+		default:
+		}
+		process.mu.Lock()
+		process.status = terminalProcessStatusSuccess
+		process.endedAt = time.Now()
+		process.cond.Broadcast()
+		process.mu.Unlock()
+		if got := <-second; got.err != nil || got.snapshot.Status != terminalProcessStatusSuccess || got.snapshot.readWaitExpired {
+			t.Fatalf("exit observation: %+v", got)
+		}
+	})
+	synctest.Test(t, func(t *testing.T) {
+		process := newTerminalReadWaitTestProcess(4)
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+		defer cancel()
+		snapshot, err := process.ReadAfter(ctx, terminalProcessReadRequest{AfterSeq: 4, WaitMS: 60_000, MaxBytes: terminalProcessModelReadBytes})
+		if !errors.Is(err, context.DeadlineExceeded) || snapshot.readWaitExpired {
+			t.Fatalf("caller deadline became successful wait: %+v, %v", snapshot, err)
+		}
+	})
+}
+
+func TestTerminalReadImmediateObservationDoesNotQualifyAsWait(t *testing.T) {
+	process := newTerminalReadWaitTestProcess(4)
+	assertTerminalReadHasNoBoundedWait(t, readTerminalProcessForTest(t, process, 4, 0))
+	assertTerminalReadHasNoBoundedWait(t, readTerminalProcessForTest(t, process, 0, 60_000))
+}
+
+func TestTerminalReadHandlerCancellationPreservesProcess(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		process := newTerminalReadWaitTestProcess(4)
+		r := &run{host: runHostCapabilities{terminal: terminalReadWaitTestHost{process: process}}, endpointID: process.endpointID, threadID: process.threadID, sessionMeta: testSendTurnMeta()}
+		snapshot := buildPermissionSnapshot(FlowerPermissionFullAccess, builtInToolDefinitions(), nil)
+		snapshot.SnapshotID = "terminal-cancellation"
+		ctx := contextWithToolAuthorizationSnapshot(t.Context(), snapshot)
+		ctx = contextWithFloretToolExecutionAuthorization(ctx, "read", "terminal.read", "read-attempt", snapshot, ApprovalDecisionAllow, true, nil)
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		go func() { time.Sleep(time.Second); cancel() }()
+		start := time.Now()
+		handler := &builtInToolHandler{r: r, toolName: "terminal.read"}
+		result, err := handler.Execute(ctx, ToolCall{ID: "read", Name: "terminal.read", Args: map[string]any{"process_id": process.id, "after_seq": 4, "description": "Wait for existing command"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		adapted, err := floretToolResultFromFlower(r, result)
+		if err != nil || adapted.DispatchErr != nil || adapted.Structured["outcome"] != fltools.ResultOutcomeCanceled || adapted.BoundedWait != nil || time.Since(start) != time.Second {
+			t.Fatalf("handler cancellation lost: result=%+v err=%v elapsed=%s", adapted, err, time.Since(start))
+		}
+		if process.Snapshot().Status != terminalProcessStatusRunning {
+			t.Fatal("canceling read terminated its process")
+		}
+	})
+}
+
+func assertTerminalReadHasNoBoundedWait(t *testing.T, payload map[string]any) {
+	t.Helper()
+	result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "read", ToolName: "terminal.read", Status: toolResultStatusSuccess, Data: payload})
+	if err != nil || result.BoundedWait != nil || payload["wait_expired"] != false {
+		t.Fatalf("early read qualified as a full wait: %#v, %v", result, err)
+	}
+}
+
+func TestTerminalReadModelOutputIsIncrementalAndActivityKeepsCommand(t *testing.T) {
+	process := newTerminalReadWaitTestProcess(4)
+	process.command = "printf " + strings.Repeat("long-command-", 300)
+	process.cwd = "/task/workspace"
+	payload := readTerminalProcessForTest(t, process, 4, 0)
+	result, err := floretToolResultFromFlower(nil, ToolResult{ToolID: "read", ToolName: "terminal.read", Status: toolResultStatusSuccess, Data: payload})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := result.Structured["data"].(map[string]any)
+	for _, key := range []string{"command", "cwd", "execution_location", "started_at_ms", "duration_ms"} {
+		if _, exists := data[key]; exists {
+			t.Fatalf("model read repeats %s: %s", key, result.Text)
+		}
+	}
+	if len(result.Text) > 1000 || payload["command"] != process.command {
+		t.Fatalf("model projection changed source or repeats command: %s", result.Text)
+	}
+	if result.Activity == nil {
+		t.Fatal("missing terminal activity")
+	}
+	activity, ok := result.Activity.Payload.(fltools.TerminalActivityPayload)
+	if !ok || !strings.HasPrefix(activity.Command, "printf") {
+		t.Fatalf("activity lost command: %#v", result.Activity)
 	}
 }
 
@@ -143,7 +309,7 @@ func readTerminalProcessForTest(t *testing.T, process *terminalProcess, afterSeq
 		endpointID: process.endpointID,
 		threadID:   process.threadID,
 	}
-	result, err := r.toolTerminalReadWithWait(process.id, afterSeq, waitMS)
+	result, err := r.toolTerminalReadWithWait(t.Context(), process.id, afterSeq, waitMS)
 	if err != nil {
 		t.Fatalf("terminal.read: %v", err)
 	}
