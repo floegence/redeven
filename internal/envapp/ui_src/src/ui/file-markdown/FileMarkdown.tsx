@@ -1,4 +1,4 @@
-import { StableText } from '@floegence/floe-webapp-core/ui';
+import { Dialog, DialogPlacementProvider, StableText } from '@floegence/floe-webapp-core/ui';
 import { writeTextToClipboard } from '../utils/clipboard';
 import {
   For,
@@ -7,6 +7,8 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  createUniqueId,
+  on,
   onCleanup,
   onMount,
 } from 'solid-js';
@@ -48,6 +50,7 @@ export interface FileMarkdownProps {
   content: string;
   filePath?: string;
   showToc?: boolean;
+  tocPresentation?: 'sidebar' | 'drawer';
   class?: string;
   textScalePercent?: number;
   onTextScalePercentChange?: (percent: number) => void;
@@ -170,7 +173,8 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
       props.textScalePercent ?? DEFAULT_MARKDOWN_PREVIEW_TEXT_SCALE_PERCENT,
     ),
   );
-  const [tocVisible, setTocVisible] = createSignal(props.showToc !== false);
+  const isTocDrawer = () => props.tocPresentation === 'drawer';
+  const [tocVisible, setTocVisible] = createSignal(props.showToc !== false && !isTocDrawer());
   const [tocItems, setTocItems] = createSignal<TocItem[]>([]);
   const [activeTocId, setActiveTocId] = createSignal('');
   const [fatalIssue, setFatalIssue] = createSignal<MarkdownPreviewIssue | null>(null);
@@ -186,8 +190,14 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
   let themeObserver: MutationObserver | undefined;
   let renderTaskSeq = 0;
   let disposed = false;
+  const tocId = createUniqueId();
 
   const showToc = () => props.showToc !== false;
+  const tocOpen = () => showToc() && tocVisible() && tocItems().length > 0 && !fatalIssue();
+
+  createEffect(on(() => props.filePath, () => {
+    if (isTocDrawer()) setTocVisible(false);
+  }, { defer: true }));
   const textScalePercent = () => (
     props.textScalePercent === undefined
       ? uncontrolledTextScalePercent()
@@ -700,6 +710,7 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
         onClick={(e) => {
           e.preventDefault();
           scrollMarkdownBodyToHeadingId(item.id);
+          if (isTocDrawer()) setTocVisible(false);
         }}
       >
         {item.text}
@@ -712,6 +723,16 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
         </ul>
       </Show>
     </li>
+  );
+
+  const renderTocList = (): JSX.Element => (
+    <nav id={tocId} aria-label={i18n.t('uiCopy.preview.contents')}>
+      <ul class="fm-toc-list">
+        <For each={tocItems()}>
+          {(item) => renderTocItem(item, 1)}
+        </For>
+      </ul>
+    </nav>
   );
 
   function commitTextScalePercent(value: number): void {
@@ -787,9 +808,14 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
       <Show when={showToc()}>
         <button
           type="button"
-          class={`fm-toolbar-btn${tocVisible() ? ' fm-toolbar-active' : ''}`}
+          class={`fm-toolbar-btn${tocOpen() ? ' fm-toolbar-active' : ''}`}
           title={i18n.t('uiCopy.preview.toggleContents')}
-          aria-pressed={tocVisible()}
+          aria-label={i18n.t('uiCopy.preview.toggleContents')}
+          aria-pressed={tocOpen()}
+          aria-expanded={tocOpen()}
+          aria-controls={tocOpen() ? tocId : undefined}
+          aria-haspopup={isTocDrawer() ? 'dialog' : undefined}
+          disabled={tocItems().length === 0}
           onClick={() => setTocVisible(!tocVisible())}
         >
           <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
@@ -891,6 +917,8 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
 
         <div
           class="fm-markdown-layout"
+          data-floe-dialog-surface-host={isTocDrawer() ? 'true' : undefined}
+          data-floe-surface-portal-layer={isTocDrawer() ? 'true' : undefined}
           hidden={fatalIssue() !== null}
           aria-hidden={fatalIssue() !== null ? 'true' : undefined}
         >
@@ -915,19 +943,31 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
             />
           </div>
 
-          <Show when={tocVisible() && tocItems().length > 0}>
+          <Show when={!isTocDrawer() && tocOpen()}>
             <div
               class="fm-toc-panel"
               style={{ width: '280px', 'flex-shrink': 0 }}
             >
               {renderToolbar('toc')}
               <div class="fm-toc-title">{i18n.t('uiCopy.preview.contents')}</div>
-              <ul class="fm-toc-list">
-                <For each={tocItems()}>
-                  {(item) => renderTocItem(item, 1)}
-                </For>
-              </ul>
+              {renderTocList()}
             </div>
+          </Show>
+
+          <Show when={isTocDrawer()}>
+            <DialogPlacementProvider mode="auto">
+              <Dialog
+                open={tocOpen()}
+                onOpenChange={setTocVisible}
+                title={i18n.t('uiCopy.preview.contents')}
+                closeLabel={i18n.t('common.actions.close')}
+                presentation="side-drawer"
+                drawerSide="right"
+                class="fm-toc-drawer"
+              >
+                {renderTocList()}
+              </Dialog>
+            </DialogPlacementProvider>
           </Show>
         </div>
       </div>

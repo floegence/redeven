@@ -92,6 +92,40 @@ afterEach(() => {
 });
 
 describe('MarkdownPreviewPane', () => {
+  it('starts floating previews with Contents closed while preserving the main preview sidebar', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const context = createPreviewContext(vi.fn(async () => undefined));
+    const dispose = render(() => (
+      <FilePreviewContext.Provider value={context}>
+        <div data-surface="window">
+          <MarkdownPreviewPane surface="window" path="/workspace/window.md" descriptor={{ mode: 'markdown' }} text={'# Start\n\n## Details'} />
+        </div>
+        <div data-surface="main">
+          <MarkdownPreviewPane surface="main" path="/workspace/main.md" descriptor={{ mode: 'markdown' }} text={'# Start\n\n## Details'} />
+        </div>
+      </FilePreviewContext.Provider>
+    ), host);
+
+    try {
+      await flushAsync();
+      const floating = host.querySelector('[data-surface="window"]')!;
+      const main = host.querySelector('[data-surface="main"]')!;
+      expect(floating.querySelector('.fm-toc-panel, .fm-toc-drawer')).toBeNull();
+      const toggle = floating.querySelector<HTMLButtonElement>('button[title="Toggle table of contents"]')!;
+      expect(toggle.getAttribute('aria-expanded')).toBe('false');
+      expect(main.querySelector('.fm-toc-panel')).toBeTruthy();
+
+      toggle.click();
+      await flushAsync();
+      await vi.waitFor(() => expect(floating.querySelector('.fm-toc-drawer')).toBeTruthy());
+      expect(toggle.getAttribute('aria-expanded')).toBe('true');
+      expect(main.querySelector('.fm-toc-panel')).toBeTruthy();
+    } finally {
+      dispose();
+    }
+  });
+
   it('routes relative file links through FilePreviewContext instead of app navigation', async () => {
     const openPreview = vi.fn(async () => undefined);
     const host = document.createElement('div');

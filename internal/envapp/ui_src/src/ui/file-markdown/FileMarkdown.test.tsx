@@ -533,7 +533,10 @@ describe('FileMarkdown', () => {
       await vi.waitFor(() => {
         expect(previewFatal(host)?.textContent).toContain('Failed to render preview');
       });
-      expect(previewFatal(host)?.textContent).toContain('Copy error details');
+      const details = previewFatal(host)?.querySelector<HTMLButtonElement>('button[aria-expanded="false"]');
+      expect(details?.textContent).toContain('Technical details');
+      details!.click();
+      expect(previewFatal(host)?.textContent).toContain('sanitize exploded');
       expect(markdownBodyText(host)).toBe('');
       expect(previewWarning(host)).toBeNull();
       expect(host.querySelector('.fm-toc-panel')).toBeNull();
