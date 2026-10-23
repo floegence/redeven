@@ -259,7 +259,16 @@ describe('consecutive tools in the shared Flower surface', () => {
     sequence.scrollTop = 0;
     sequence.focus({ preventScroll: true });
     const before = transcript.scrollTop;
-    const scrollEnd = new Promise<void>(resolve => transcript.addEventListener('scrollend', () => resolve(), { once: true }));
+    const scrollEnd = new Promise<void>(resolve => {
+      // Initial tail positioning may still have a queued scrollend. Wait for
+      // the keyboard movement to finish before recording the reading position.
+      const onEnd = (event: Event) => {
+        if (event.target !== transcript || transcript.scrollTop >= before - 10) return;
+        transcript.removeEventListener('scrollend', onEnd);
+        resolve();
+      };
+      transcript.addEventListener('scrollend', onEnd);
+    });
     await userEvent.keyboard('{ArrowUp}');
     await expect.poll(() => transcript.scrollTop).toBeLessThan(before - 10);
     await scrollEnd;
