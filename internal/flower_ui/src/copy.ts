@@ -697,6 +697,10 @@ export type FlowerSurfaceCopy = Readonly<{
     composerErrorTitle: string;
     turnProcess: FlowerTurnProcessCopy;
     thinkingLabel: string;
+    thinkingTimingUnavailable: string;
+    thinkingTimingUnavailableDescription: string;
+    thinkingTimingDescription: string;
+    thinkingTimingObservedDescription: string;
     thinkingActiveLabel: string;
     expandThinking: string;
     collapseThinking: string;
@@ -1202,6 +1206,10 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       second: (count) => `${count} ${count === 1 ? 'second' : 'seconds'}`,
     },
     thinkingLabel: 'Thought process',
+    thinkingTimingUnavailable: "Not recorded",
+    thinkingTimingUnavailableDescription: "This historical thinking segment has no recorded timing.",
+    thinkingTimingDescription: "Time between the first and last received thinking chunks; not model compute time.",
+    thinkingTimingObservedDescription: "Approximate time observed by this page; the historical source has no recorded timing.",
     thinkingActiveLabel: 'Thinking...',
     expandThinking: 'Expand full thinking',
     collapseThinking: 'Collapse thinking',

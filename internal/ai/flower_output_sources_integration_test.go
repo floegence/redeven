@@ -237,6 +237,17 @@ func TestFlowerDeepSeekOutputSourceFixtures(t *testing.T) {
 			item.TurnID = identity.TurnID("source-turn")
 			item.RunID = identity.RunID("source-run")
 			item.CreatedAt = time.Time{}
+			if item.Kind == flruntime.ThreadItemThinking || item.Kind == flruntime.ThreadItemAssistant {
+				if item.OutputStartedAt == nil || (!item.Live && item.OutputEndedAt == nil) || (item.OutputEndedAt != nil && item.OutputEndedAt.Before(*item.OutputStartedAt)) {
+					t.Fatalf("output source timing missing or invalid: %+v", item)
+				}
+				start := time.Unix(1700000000+int64(item.Ordinal), 0).UTC()
+				item.OutputStartedAt = &start
+				if item.OutputEndedAt != nil {
+					end := start.Add(time.Second)
+					item.OutputEndedAt = &end
+				}
+			}
 			if item.CanonicalOrdinal != 0 || item.Kind == flruntime.ThreadItemUser {
 				item.CanonicalOrdinal = item.Ordinal
 			}

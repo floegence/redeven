@@ -20,7 +20,7 @@ import { flowerAttachmentDisplayKind, safeFlowerAttachmentURL } from './attachme
 import { inputResponseBlockFromInteraction, inputResponseVisibleText } from './inputResponse';
 import { retainEqualValue, retainThreadPresentation } from './presentationIdentity';
 import { retainThreadFileActivityTargets } from './fileActivityTargets';
-import { retainThinkingTiming } from './thinkingTiming';
+import { retainThinkingTiming, runtimeThinkingTiming } from './thinkingTiming';
 
 type ResolvedApprovalState = Exclude<FlowerActivityApprovalState, 'requested'>;
 
@@ -271,6 +271,7 @@ export function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeC
         id: itemID, thread_id: base.thread_id, turn_id: identity.turnID, run_id: identity.runID, role: 'assistant',
         content: '', status: messageStatus(item), created_at_ms: createdAtMs, canonical_ordinal: item.canonical_ordinal,
         blocks: [{ type: 'thinking', content: String(item.text ?? '') }],
+        thinking_timing: runtimeThinkingTiming(item),
         ...(item.live ? { live: true } : {}),
         ...(references ? { references } : {}),
       });

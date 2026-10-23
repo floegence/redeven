@@ -82,7 +82,12 @@ async function mount(presentation: 'full' | 'companion' = 'full', localized = fa
   root.style.height = '780px';
   await waitFor(() => Boolean(root.querySelector(`[data-thread-id="${seed.thread_id}"] button`)));
   root.querySelector<HTMLButtonElement>(`[data-thread-id="${seed.thread_id}"] button`)!.click();
-  await waitFor(() => Boolean(disclosure(root)) && disclosure(root).getAttribute('data-flower-thinking-active') === 'true');
+  if (!initial.items?.find(item => item.id === 'thinking')?.live) {
+    await waitFor(() => Boolean(root.querySelector('.flower-turn-summary-button')) || Boolean(disclosure(root)));
+    const summary = root.querySelector<HTMLButtonElement>('.flower-turn-summary-button');
+    if (summary?.getAttribute('aria-expanded') === 'false') summary.click();
+  }
+  await waitFor(() => Boolean(disclosure(root)) && disclosure(root).getAttribute('data-flower-thinking-active') === (initial.items?.find(item => item.id === 'thinking')?.live ? 'true' : 'false'));
   await waitFor(() => root.querySelector('.flower-chat-transcript')?.getAttribute('data-flower-tail-preparing') !== 'true');
   await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   return { root, live, initial };
@@ -380,4 +385,38 @@ it('retains correction disclosure, selection and focus through real provider che
   expect(disclosure(root, 'source-2').dataset.flowerThinkingView).toBe('collapsed');
   expect(document.activeElement).toBe(button);
   selection.removeAllRanges();
+});
+
+
+it.each(['full', 'companion'] as const)('shows cold historical, single-chunk and unrecorded timing in %s', async presentation => {
+  const start = '2026-10-23T12:00:00Z';
+  const seed = current();
+  const initial = sealed(seed, { activity: 'idle', last_outcome: 'completed', turns: [turn('completed')], items: [
+    seed.items![0],
+    { ...seed.items![1], live: false, output_started_at: start, output_ended_at: '2026-10-23T12:00:03Z' },
+    { ...seed.items![1], id: 'single', ordinal: 3, live: false, text: 'A short thought.', output_started_at: start, output_ended_at: start },
+    { ...seed.items![1], id: 'historical', ordinal: 4, live: false, text: 'An older thought.' },
+  ] });
+  const { root } = await mount(presentation, true, initial);
+  const duration = (id: string) => disclosure(root, id).querySelector<HTMLElement>('.flower-activity-inline-duration')!;
+  expect(duration('thinking').textContent).toBe('3s');
+  expect(duration('single').textContent).toBe('<1ms');
+  expect(duration('historical').textContent).toBe('未记录');
+  expect(duration('historical').title).toContain('没有记录起止时间');
+  toggle(root, 'single').click();
+  expect(duration('single').textContent).toBe('<1ms');
+  await page.screenshot({ element: root, path: '__screenshots__/thinking-source-timing-' + presentation + '.png' });
+});
+
+it('uses the source interval even when completion arrives much later', async () => {
+  const started = Date.parse('2026-10-23T12:00:00Z');
+  vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(started + 4000);
+  const seed = current();
+  const initial = { ...seed, items: seed.items!.map(item => item.kind === 'thinking' ? { ...item, output_started_at: new Date(started).toISOString() } : item) };
+  const { root, live } = await mount('full', true, initial);
+  vi.setSystemTime(started + 120000);
+  live.push(sealed(initial, { items: initial.items!.map(item => item.kind === 'thinking'
+    ? { ...item, live: false, output_ended_at: new Date(started + 250).toISOString() } : item) }));
+  await waitFor(() => disclosure(root).dataset.flowerThinkingActive === 'false');
+  expect(disclosure(root).querySelector('.flower-activity-inline-duration')?.textContent).toBe('250ms');
 });
