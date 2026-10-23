@@ -5,7 +5,7 @@ description: Execute Engine-owned prompt-cache and continuation decisions withou
 tags: [ai, providers, cache, usage]
 timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-23"
 ---
 # Summary
 
@@ -31,7 +31,14 @@ HTTP and WebSocket use one Responses event consumer and send at most one generat
 
 There is no persistent transport history or second retry owner.
 
+OpenAI request settings, continuation state, and input prefixes use SHA-256 only
+as equality fingerprints for in-memory reuse decisions. These digests do not
+store or verify user passwords and grant no authentication authority. Credential
+rotation separately invalidates the live connection before another request.
+
 # Evidence
+
+- `redeven:internal/ai/model_gateway_openai_connections.go` - Separates request fingerprints from authenticated connection admission and credential rotation.
 
 - `redeven:internal/config/ai.go` - One effective continuation policy for every adapter initialization path.
 

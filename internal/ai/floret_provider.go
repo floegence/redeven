@@ -620,7 +620,7 @@ func (p *floretProviderAdapter) floretMessagesToFlowerWithResolver(ctx context.C
 		if err := msg.Validate(); err != nil {
 			return nil, fmt.Errorf("invalid Floret model message %d: %w", i, err)
 		}
-		parts := make([]ContentPart, 0, 2+len(msg.Attachments)+len(msg.ToolCalls))
+		parts := make([]ContentPart, 0, 2)
 		if msg.Text != "" {
 			parts = append(parts, ContentPart{Type: "text", Text: msg.Text})
 		}

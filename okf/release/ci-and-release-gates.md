@@ -5,7 +5,7 @@ description: Redeven binds published dependencies, generated assets, UI behavior
 tags: [release, ci, quality, okf]
 timestamp: 2026-10-07T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-23"
 quality_exception: Exact-main validation order spanning repository checks, generated assets, published dependency contracts, Desktop updates, and compatibility evidence.
 ---
 # Summary
@@ -85,6 +85,11 @@ main tip to be the pushed tip, verifies fast-forward ancestry against the
 remote handshake, rejects merge commits in the unpublished range, and invokes
 `scripts/check_final_integration.sh` with the exact base and tip. Evidence from
 an earlier commit or pre-rebase tip does not transfer.
+
+The local gate fingerprints executable paths and test inputs. It excludes
+manual-page search paths (`MANPATH`), which macOS can populate on entry to a Git
+hook shell without changing the executed checks. Real-hook tests verify that
+manual validation, commit, and push share matching evidence.
 
 The final script requires a clean worktree and runs bounded source, dependency,
 release-manifest, compatibility, focused changed-package, and OKF contracts.
@@ -172,6 +177,17 @@ Temporary Flower qualification credentials are written and permissioned through
 one no-follow descriptor. Terminal carrier TLS fingerprints are accepted only
 after the server authenticates against that run's isolated device CA; an
 unrelated certificate cannot become a browser trust exception.
+
+Source-build identity capture opens each regular input without following links,
+checks its opened inode against the enumerated input, and hashes that descriptor.
+Installer bootstrap pins likewise validate and hash one no-follow descriptor.
+Deterministic pathname-replacement tests run in Quick CI and the exact-main gate.
+AI diagnostics use the shared bounded, single-line logging boundary.
+
+Manual qualification writes fixture responses as report content at explicit
+operator-selected paths and uses synthetic credentials with the selected test
+coordinator. SSH fixture commands POSIX-quote data arguments. These test flows
+grant no product file or network authority.
 
 The exact-main UI and renderer steps invoke the canonical headless browser and
 terminal carrier gates without a display server. Explicit headed runs are
@@ -317,6 +333,9 @@ Integration experiments may exist only on an unmerged feature branch and may
 not become a fallback, shim, or local artifact path.
 
 # Evidence
+
+- `redeven:scripts/security_scan_boundaries.test.mjs` - Replaces source and installer paths between inspection and reading to verify descriptor-bound identity and pins.
+- `redeven:internal/ai/tool_timeout_test.go` - Keeps complete classified failures and partial effects while bounding single-line warning diagnostics.
 
 - `redeven:scripts/quick_ci_policy.test.mjs` - Enforces bounded source gates and the repository guide line budget and contract links.
 

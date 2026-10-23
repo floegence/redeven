@@ -732,7 +732,7 @@ func flowerLiveDiagnosticIdentity(value interface {
 	if _, err := value.MarshalText(); err != nil {
 		return "[invalid]"
 	}
-	return value.String()
+	return logsafe.Text(value.String(), 256)
 }
 
 func wakeFlowerLiveSubscriberLocked(subscriber *flowerLiveSubscriber) {

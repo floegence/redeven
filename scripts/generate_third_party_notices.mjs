@@ -658,8 +658,7 @@ function findLicenseFiles(moduleDir) {
 function detectLicenseFromText(text) {
   const sample = text.slice(0, 20000);
   if (/Mozilla Public License,?\s*(?:version|Version)\s*2\.0|Mozilla Public License Version 2\.0/u.test(sample)) return 'MPL-2.0';
-  if (/Apache License\s+Version 2\.0/u.test(sample)) return 'Apache-2.0';
-  if (/Licensed under the Apache License, Version 2\.0/u.test(sample) && /https?:\/\/www\.apache\.org\/licenses\/LICENSE-2\.0/u.test(sample)) return 'Apache-2.0';
+  if (/Apache License,?\s+Version 2\.0/u.test(sample)) return 'Apache-2.0';
   if (/MIT License/u.test(sample) || /Permission is hereby granted, free of charge/u.test(sample)) return 'MIT';
   if (/ISC License/u.test(sample) || /Permission to use, copy, modify, and\/or distribute this software/u.test(sample)) return 'ISC';
   if (/The Unlicense/u.test(sample)) return 'Unlicense';

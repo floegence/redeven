@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash } from 'node:crypto';
-import { lstatSync, readFileSync, writeFileSync } from 'node:fs';
+import { closeSync, constants, fstatSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -35,9 +35,14 @@ export function renderFromBuild(dist, version, channel = 'github') {
   const digests = {};
   for (const platform of platforms) {
     const file = path.join(dist, `redeven-installer_${platform}`);
-    const info = lstatSync(file);
-    if (!info.isFile() || info.size <= 0 || info.size > 64 * 1024 * 1024) throw new Error(`Invalid installer build: ${file}`);
-    digests[platform] = createHash('sha256').update(readFileSync(file)).digest('hex');
+    const fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const info = fstatSync(fd);
+      if (!info.isFile() || info.size <= 0 || info.size > 64 * 1024 * 1024) throw new Error(`Invalid installer build: ${file}`);
+      digests[platform] = createHash('sha256').update(readFileSync(fd)).digest('hex');
+    } finally {
+      closeSync(fd);
+    }
   }
   return renderBootstrap(version, digests, channel);
 }

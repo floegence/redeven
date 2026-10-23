@@ -443,6 +443,20 @@ func TestServerFSFileResourceRejectsScopeAndUnsupportedTypes(t *testing.T) {
 	if outsideResp.Code != http.StatusForbidden {
 		t.Fatalf("outside status = %d, want %d", outsideResp.Code, http.StatusForbidden)
 	}
+	linkPath := filepath.Join(home, "escape.mp4")
+	if err := os.Symlink(outsidePath, linkPath); err != nil {
+		t.Fatal(err)
+	}
+	relative, err := filepath.Rel(home, outsidePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range []string{linkPath, home + string(os.PathSeparator) + relative} {
+		response := performFSFileRequest(srv, http.MethodGet, target, origin, "")
+		if response.Code != http.StatusForbidden {
+			t.Fatalf("scope escape %q status = %d, want %d", target, response.Code, http.StatusForbidden)
+		}
+	}
 
 	dirResp := performFSFileRequest(srv, http.MethodGet, dirPath, origin, "")
 	if dirResp.Code != http.StatusUnsupportedMediaType {

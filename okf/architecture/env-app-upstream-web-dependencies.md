@@ -20,6 +20,11 @@ Frontend deployment and lazy-import recovery follow [Env App page asset recovery
 # Contract
 
 ## Mechanism
+
+CodeSpace and Web Service presentation modules own their page styles. The root
+stylesheet does not import those styles a second time, so Vite loads them with
+their lazy page chunks and preserves the existing initial CSS budget.
+
 Floe owns the loading icon slot, localized intrinsic label reservation, persistent feedback region, and resolved inline-media viewport contracts used by [asynchronous layout stability](../ui/asynchronous-layout-stability.md).
 
 Env App Core v0.86.60 supplies the shared remote-pointer and remote-input controllers used by Host Applications, including bounded motion independent of rendering and explicit local text composition.
