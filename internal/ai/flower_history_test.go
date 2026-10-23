@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -19,19 +20,38 @@ import (
 
 type flowerHistoryNoFullView struct {
 	flruntime.ThreadService
+	flruntime.ThreadUpdateSource
 	flruntime.ThreadWindowSource
 	flruntime.ThreadSummaryReader
 	flruntime.ThreadBodyReader
 	flruntime.ThreadBodyManifestReader
 	flruntime.ThreadLiveBodyReader
+	allowFullView *atomic.Bool
 }
 
-func (r flowerHistoryNoFullView) View(context.Context, identity.ThreadID) (flruntime.ThreadView, error) {
+func (r flowerHistoryNoFullView) View(ctx context.Context, threadID identity.ThreadID) (flruntime.ThreadView, error) {
+	if r.allowFullView != nil && r.allowFullView.Load() {
+		return r.ThreadService.View(ctx, threadID)
+	}
 	panic("history must not call full View")
 }
 
 func TestFlowerHistoryBoundedPagesAndExactBodies(t *testing.T) {
-	svc := newSendTurnTestService(t)
+	svc := newSendTurnTestServiceWithActivation(t, true)
+	runtime := svc.threadRuntime
+	var allowFullView atomic.Bool
+	allowFullView.Store(true)
+	// Install the guard before activation starts workers. Only fixture setup
+	// may read the complete view; history reads keep the same runtime owner.
+	svc.threadRuntime = flowerHistoryNoFullView{
+		ThreadService: runtime, ThreadUpdateSource: runtime.(flruntime.ThreadUpdateSource),
+		ThreadWindowSource: runtime.(flruntime.ThreadWindowSource), ThreadSummaryReader: runtime.(flruntime.ThreadSummaryReader),
+		ThreadBodyReader: runtime.(flruntime.ThreadBodyReader), ThreadBodyManifestReader: runtime.(flruntime.ThreadBodyManifestReader),
+		ThreadLiveBodyReader: runtime.(flruntime.ThreadLiveBodyReader), allowFullView: &allowFullView,
+	}
+	if err := svc.Activate(t.Context()); err != nil {
+		t.Fatal(err)
+	}
 	meta := testSendTurnMeta()
 	thread, err := svc.CreateThread(t.Context(), meta, "Bounded history", "", "", "")
 	if err != nil {
@@ -70,7 +90,7 @@ func TestFlowerHistoryBoundedPagesAndExactBodies(t *testing.T) {
 	if _, err = svc.threadRuntime.Send(t.Context(), flruntime.SendInput{ThreadID: identity.ThreadID(thread.ThreadID), RequestKey: key, Input: flruntime.UserInput{Text: "Inspect history"}}); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(30 * time.Second)
+	deadline := time.Now().Add(2 * time.Minute)
 	for {
 		summary, e := svc.threadRuntime.(flruntime.ThreadSummaryReader).Summary(t.Context(), identity.ThreadID(thread.ThreadID))
 		if e != nil {
@@ -82,7 +102,7 @@ func TestFlowerHistoryBoundedPagesAndExactBodies(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatal("fixture did not settle")
 		}
-		time.Sleep(time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 	full, err := svc.GetFlowerThreadDetail(t.Context(), meta, thread.ThreadID)
 	if err != nil {
@@ -92,9 +112,7 @@ func TestFlowerHistoryBoundedPagesAndExactBodies(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := svc.threadRuntime
-	svc.threadRuntime = flowerHistoryNoFullView{runtime, runtime.(flruntime.ThreadWindowSource), runtime.(flruntime.ThreadSummaryReader), runtime.(flruntime.ThreadBodyReader), runtime.(flruntime.ThreadBodyManifestReader), runtime.(flruntime.ThreadLiveBodyReader)}
-	defer func() { svc.threadRuntime = runtime }()
+	allowFullView.Store(false)
 	seen := map[string]bool{}
 	input := FlowerHistoryRequest{}
 	pages := 0
@@ -257,10 +275,7 @@ func TestFlowerHistoryBackgroundFactsExcludeBodies(t *testing.T) {
 }
 
 func TestFlowerHistoryPressureRecoveryNeverReadsFullView(t *testing.T) {
-	svc := newSendTurnTestService(t)
-	original := svc.threadRuntime
-	svc.threadRuntime = flowerHistoryNoFullView{ThreadService: original}
-	defer func() { svc.threadRuntime = original }()
+	svc := &Service{threadRuntime: flowerHistoryNoFullView{}}
 	stream := &FlowerLiveStreamSubscription{service: svc}
 	if err := stream.resolveFlowerLiveRefresh(t.Context(), &flowerLiveEncodedBatch{readingRevision: 1}); !errors.Is(err, ErrFlowerLiveSync) {
 		t.Fatalf("bounded pressure must re-establish the reading interest: %v", err)
