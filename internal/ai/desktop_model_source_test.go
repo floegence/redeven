@@ -1006,6 +1006,11 @@ func TestDesktopModelSourceRejectsMalformedTerminals(t *testing.T) {
 		{Type: "result"}, {Type: "result", Result: json.RawMessage("null")}, {Type: "result", Result: json.RawMessage("{}")},
 	} {
 		source, cleanup := startTestDesktopModelSource(t, func(request DesktopModelSourceRPCFrame) DesktopModelSourceRPCFrame {
+			// Catalog observation starts when RPC connects. Keep that exchange
+			// valid so only the requested turn receives the malformed terminal.
+			if request.Method == "ai.models.list" {
+				return testDesktopModelSourceResult(t, request.ID, DesktopModelSourceModelSnapshot{})
+			}
 			frame.ID = request.ID
 			return frame
 		})
