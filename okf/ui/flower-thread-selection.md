@@ -9,48 +9,44 @@ reviewed_at: "2026-10-23"
 ---
 # Summary
 
-Flower presents the latest selection intent before transcript work and uses one
-coordinator for navigation, command confirmation and reference preflight reads.
-ThreadCache owns committed selection and accepted detail; the loader owns only
-bounded ephemeral demand.
+Flower acknowledges navigation before transcript work. One coordinator serves
+navigation, command confirmation and reference preflight. ThreadCache owns
+selection and detail; the loader owns bounded ephemeral demand.
+Readiness controls reveal; elapsed time controls feedback only.
 
 # Contract
 
 ## Selection and navigation
-The rail acknowledges a selection with a short-lived navigation intent before committing the conversation. Foreground detail requests cannot bypass this boundary through summary effects.
+The rail acknowledges intent before commit. Visible selection commits after one
+feedback rendering opportunity (two animation callbacks and a task); hidden
+documents do not wait for frames. Latest intent supersedes earlier work. Summary
+effects cannot bypass this boundary for foreground reads.
 
-Visible selection schedules commit after one feedback rendering opportunity
-(two animation callbacks and a task); hidden documents commit without waiting
-for animation frames. Latest intent supersedes earlier scheduled work.
-
-The destination transcript is exposed only after accepted detail, measurable
-layout and destination-visible historical text have settled. The existing scroll
-controller positions and reveals it in one layout pass, without smooth initial
-scrolling. Preparation has no elapsed-time reveal fallback. Cold navigation
-shows separate loading feedback confined to the transcript region; failed body
-reads expose local Retry. The composer and navigation remain available.
+Expose the destination only after accepted detail, measurable layout and visible
+historical text settle. The scroll controller positions and reveals it without
+smooth initial scrolling or an elapsed-time reveal fallback. Show loading feedback
+only after 200 ms, using one cancellable deadline across detail, body and layout
+preparation. Ready content and errors appear immediately, without minimum dwell.
+New selection, New chat and disposal cancel old feedback. Keep the transcript
+frame, composer and navigation stable; failed body reads expose local Retry.
 
 Cached destinations flush layout after render effects. Visible historical rows
 must pass `checkVisibility({ contentVisibilityAuto: true })` before reveal.
-Skipped rows above the viewport can still expand afterward. The existing
-ResizeObserver corrects scroll in its pre-paint delivery; scheduling that
-correction in rAF would expose one frame with stale offsets. Reveal and body
-requests remain in rAF, outside resize delivery, to avoid observer loops.
-Content-visibility events reuse the scheduled pass. New navigation clears old
-arrival motion. Native offscreen skipping, bounded reads and manual scroll
-ownership remain intact; no timers, polling or per-row observers are added.
+Above-viewport rows can expand later: ResizeObserver corrects scroll before paint,
+while reveal and body requests stay in rAF to avoid observer loops. Visibility
+events reuse that pass. Navigation clears old arrival motion; native offscreen
+skipping, bounded reads and manual scrolling remain. No positioning polling or
+per-row observers are added.
 
-The two-slot body loader prioritizes the latest visible text plus its existing
-margin and cancels obsolete navigation/transport demand. ThreadCache retains
-immutable bodies. Explicit wheel, touch, scrollbar or keyboard ownership can
-interrupt preparation; native scroll events alone cannot.
+Two body-read slots prioritize latest visible text plus margin and cancel obsolete
+demand; ThreadCache retains immutable bodies. Wheel, touch, scrollbar or keyboard
+input can interrupt preparation; native scroll events alone cannot.
 
 Growth, refresh and canonical completion preserve displayed prose without
 restarting selection. [Live delivery](flower-live-timeline.md) owns incremental
 body reads, source validation and local Retry.
 
-Selection continues to open the latest interval. Per-thread reading-position
-restoration is a separate product policy, not part of presentation stabilization.
+Selection opens the latest interval; reading-position restoration is separate.
 
 Ordinary conversations remain ordered by creation time descending, then ThreadID ascending.
 

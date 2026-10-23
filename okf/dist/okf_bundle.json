@@ -73,7 +73,7 @@
               "navigation",
               "recovery"
             ],
-            "summary": "Flower presents the latest selection intent before transcript work and uses one\ncoordinator for navigation, command confirmation and reference preflight reads.\nThreadCache owns committed selection and accepted detail; the loader owns only\nbounded ephemeral demand.",
+            "summary": "Flower acknowledges navigation before transcript work. One coordinator serves\nnavigation, command confirmation and reference preflight. ThreadCache owns\nselection and detail; the loader owns bounded ephemeral demand.\nReadiness controls reveal; elapsed time controls feedback only.",
             "section_count": 2
           },
           {
@@ -30791,15 +30791,15 @@
         "title": "Flower conversation selection and detail reads",
         "type": "UI Contract"
       },
-      "body_length": 4036,
-      "summary": "Flower presents the latest selection intent before transcript work and uses one\ncoordinator for navigation, command confirmation and reference preflight reads.\nThreadCache owns committed selection and accepted detail; the loader owns only\nbounded ephemeral demand.",
+      "body_length": 3714,
+      "summary": "Flower acknowledges navigation before transcript work. One coordinator serves\nnavigation, command confirmation and reference preflight. ThreadCache owns\nselection and detail; the loader owns bounded ephemeral demand.\nReadiness controls reveal; elapsed time controls feedback only.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Selection and navigation\nThe rail acknowledges a selection with a short-lived navigation intent before committing the conversation. Foreground detail requests cannot bypass this boundary through summary effects.\n\nVisible selection schedules commit after one feedback rendering opportunity\n(two animation callbacks and a task); hidden documents commit without waiting\nfor animation frames. Latest intent supersedes earlier scheduled work.\n\nThe destination transcript is exposed only after accepted detail, measurable\nlayout and destination-visible historical text have settled. The existing scroll\ncontroller positions and reveals it in one layout pass, without smooth initial\nscrolling. Preparation has no elapsed-time reveal fallback. Cold navigation\nshows separate loading feedback confined to the transcript region; failed body\nreads expose local Retry. The composer and navigation remain available.\n\nCached destinations flush layout after render effects. Visible historical rows\nmust pass `checkVisibility({ contentVisibilityAuto: true })` before reveal.\nSkipped rows above the viewport can still expand afterward. The existing\nResizeObserver corrects scroll in its pre-paint delivery; scheduling that\ncorrection in rAF would expose one frame with stale offsets. Reveal and body\nrequests remain in rAF, outside resize delivery, to avoid observer loops.\nContent-visibility events reuse the scheduled pass. New navigation clears old\narrival motion. Native offscreen skipping, bounded reads and manual scroll\nownership remain intact; no timers, polling or per-row observers are added.\n\nThe two-slot body loader prioritizes the latest visible text plus its existing\nmargin and cancels obsolete navigation/transport demand. ThreadCache retains\nimmutable bodies. Explicit wheel, touch, scrollbar or keyboard ownership can\ninterrupt preparation; native scroll events alone cannot.\n\nGrowth, refresh and canonical completion preserve displayed prose without\nrestarting selection. [Live delivery](flower-live-timeline.md) owns incremental\nbody reads, source validation and local Retry.\n\nSelection continues to open the latest interval. Per-thread reading-position\nrestoration is a separate product policy, not part of presentation stabilization.\n\nOrdinary conversations remain ordered by creation time descending, then ThreadID ascending.\n\n## Detail read ownership\nPublished Floret v7.69.1 already supplies ThreadSummaryReader.Summary.\n\nThreadCache remains the sole owner of accepted detail and committed selection, bounded to twelve detail entries.\n\nNeither selection nor detail cancellation reconnects the workspace stream.",
-          "char_count": 2622
+          "body": "## Selection and navigation\nThe rail acknowledges intent before commit. Visible selection commits after one\nfeedback rendering opportunity (two animation callbacks and a task); hidden\ndocuments do not wait for frames. Latest intent supersedes earlier work. Summary\neffects cannot bypass this boundary for foreground reads.\n\nExpose the destination only after accepted detail, measurable layout and visible\nhistorical text settle. The scroll controller positions and reveals it without\nsmooth initial scrolling or an elapsed-time reveal fallback. Show loading feedback\nonly after 200 ms, using one cancellable deadline across detail, body and layout\npreparation. Ready content and errors appear immediately, without minimum dwell.\nNew selection, New chat and disposal cancel old feedback. Keep the transcript\nframe, composer and navigation stable; failed body reads expose local Retry.\n\nCached destinations flush layout after render effects. Visible historical rows\nmust pass `checkVisibility({ contentVisibilityAuto: true })` before reveal.\nAbove-viewport rows can expand later: ResizeObserver corrects scroll before paint,\nwhile reveal and body requests stay in rAF to avoid observer loops. Visibility\nevents reuse that pass. Navigation clears old arrival motion; native offscreen\nskipping, bounded reads and manual scrolling remain. No positioning polling or\nper-row observers are added.\n\nTwo body-read slots prioritize latest visible text plus margin and cancel obsolete\ndemand; ThreadCache retains immutable bodies. Wheel, touch, scrollbar or keyboard\ninput can interrupt preparation; native scroll events alone cannot.\n\nGrowth, refresh and canonical completion preserve displayed prose without\nrestarting selection. [Live delivery](flower-live-timeline.md) owns incremental\nbody reads, source validation and local Retry.\n\nSelection opens the latest interval; reading-position restoration is separate.\n\nOrdinary conversations remain ordered by creation time descending, then ThreadID ascending.\n\n## Detail read ownership\nPublished Floret v7.69.1 already supplies ThreadSummaryReader.Summary.\n\nThreadCache remains the sole owner of accepted detail and committed selection, bounded to twelve detail entries.\n\nNeither selection nor detail cancellation reconnects the workspace stream.",
+          "char_count": 2284
         },
         {
           "id": "boundaries",
@@ -30836,7 +30836,7 @@
           "description": "Built Electron rendering opportunities on repeated cached selection, with owned-process cleanup."
         }
       ],
-      "snippet": "Flower presents the latest selection intent before transcript work and uses one coordinator for navigation, command confirmation and reference preflight reads. ThreadCache owns committed selection and accepted detail; the loader owns only",
+      "snippet": "Flower acknowledges navigation before transcript work. One coordinator serves navigation, command confirmation and reference preflight. ThreadCache owns selection and detail; the loader owns bounded ephemeral demand. Readiness controls reve",
       "links": [
         {
           "label": "Live delivery",
@@ -33629,5 +33629,5 @@
       ]
     }
   ],
-  "source_sha256": "7cb4a815a9d91ff78286bd303a7d1df04fe9902c89a45fc0d5823903fd79d4d7"
+  "source_sha256": "7e80f64cb75fc46747250b6c9d487601e4e936c1c02d65d07097f8b5f3543d4d"
 }
