@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-10-22: Add bounded stepped reveals for newly arriving Flower activity titles, preserving immediate content, stable row geometry and static historical reading. See [activity interaction](ui/flower-activity-interaction.md).
+
 - 2026-10-22: Unify cancellable terminal reads, explicit read deadlines, and published Floret repeat protection; retain concise incremental model output. See [terminal tool runtime](ai/terminal-tool-runtime.md).
 
 - 2026-10-22: Let short Flower tool groups and outward scrolling at sequence edges reach the transcript, preserve internal reading, and coordinate native scroll input with tail following. See [tool sequences](ui/flower-tool-sequences.md).

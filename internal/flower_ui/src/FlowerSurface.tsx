@@ -93,6 +93,7 @@ import { SubagentAvatarStack } from './SubagentAvatarStack';
 import { FlowerToolSequenceNode } from './FlowerToolSequenceNode';
 import { FlowerThinkingDisclosure } from './FlowerThinkingDisclosure';
 import { FlowerTurnTimeline } from './FlowerTurnTimeline';
+import { useFlowerActivityTitleReveal } from './flowerActivityTitleReveal';
 import { createFlowerTurnDisclosureStore } from './flowerTurnDisclosure';
 import type { FlowerComputerStageSessionState, FlowerComputerStageSnapshot } from './FlowerComputerStage';
 import { FlowerToolIcon } from './FlowerToolIcon';
@@ -10539,23 +10540,27 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </Show>
   );
 
-  const argumentPreviewRow = (block: Accessor<FlowerToolCallPreviewBlock>) => (
-    <div class="flower-activity-inline-row flower-activity-inline-row-generating" data-flower-tool-call-id={block().call.call_id} data-flower-argument-generation="true">
-      <div class="flower-activity-inline-line">
-        <div class="flower-activity-inline-button flower-activity-inline-button-static">
-          <span class="flower-activity-inline-icon"><FlowerToolIcon toolName={block().call.name} running={livePresentationConfirmed()} /></span>
-          <span class="flower-activity-inline-copy">
-            <span class="flower-activity-inline-title" data-floe-progress-shimmer={livePresentationConfirmed() ? 'text' : undefined}>
-              <span class="flower-activity-inline-title-verb">{block().call.name === 'goal' ? copy().chat.goalTitle : block().call.name === 'apply_patch' ? copy().chat.toolActivity.patch : copy().chat.toolActivity.edit}</span>
-              <Show when={block().call.preview?.display_name}>{(name) => <span class="flower-activity-inline-title-target" title={name()}>{name()}</span>}</Show>
+  const argumentPreviewRow = (block: Accessor<FlowerToolCallPreviewBlock>) => {
+    const revealTitle = useFlowerActivityTitleReveal(() => flowerToolCallPreviewIdentity(block().call),
+      () => block().call.preview?.display_name);
+    return (
+      <div class="flower-activity-inline-row flower-activity-inline-row-generating" data-flower-tool-call-id={block().call.call_id} data-flower-argument-generation="true">
+        <div class="flower-activity-inline-line">
+          <div class="flower-activity-inline-button flower-activity-inline-button-static">
+            <span class="flower-activity-inline-icon"><FlowerToolIcon toolName={block().call.name} running={livePresentationConfirmed()} /></span>
+            <span class="flower-activity-inline-copy">
+              <span ref={revealTitle} class="flower-activity-inline-title" data-floe-progress-shimmer={livePresentationConfirmed() ? 'text' : undefined}>
+                <span class="flower-activity-inline-title-verb">{block().call.name === 'goal' ? copy().chat.goalTitle : block().call.name === 'apply_patch' ? copy().chat.toolActivity.patch : copy().chat.toolActivity.edit}</span>
+                <Show when={block().call.preview?.display_name}>{(name) => <span class="flower-activity-inline-title-target" title={name()}>{name()}</span>}</Show>
+              </span>
+              <Show when={block().call.name !== 'goal'}><span class="flower-activity-inline-detail">{copy().chat.outputProgress.preparingChanges}</span></Show>
+              {changeStats(() => block().call.preview ?? undefined, () => true)}
             </span>
-            <Show when={block().call.name !== 'goal'}><span class="flower-activity-inline-detail">{copy().chat.outputProgress.preparingChanges}</span></Show>
-            {changeStats(() => block().call.preview ?? undefined, () => true)}
-          </span>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const activityRow = (
     messageID: Accessor<string>,
@@ -10587,6 +10592,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         ? { kind: 'command', command }
         : presentation().title;
     });
+    const revealTitle = useFlowerActivityTitleReveal(disclosureKey,
+      () => [displayTitle(), item().status, item().requires_approval, item().approval_state]);
     const terminalDisclosure = createMemo(() => presentation().detailBlocks.some((block) => block.kind === 'terminal_output'));
     const detailKeys = createMemo(() => presentation().detailBlocks.map((block) => `${disclosureKey()}:${block.kind}:${block.kind === 'structured_rows' ? block.section ?? '' : ''}`));
     const detailsByKey = createMemo(() => {
@@ -10689,7 +10696,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <FlowerToolIcon toolName={item().tool_name} source={item().metadata?.source} webOperation={webOperation()} running={livePresentationConfirmed() && displayStatus() === 'running'} />
         </span>
         <div class="flower-activity-inline-copy">
-          <span class="flower-activity-inline-title" data-floe-progress-shimmer={progressShimmer() ? 'text' : undefined}>{activityTitle(displayTitle())}</span>
+          <span ref={revealTitle} class="flower-activity-inline-title" data-floe-progress-shimmer={progressShimmer() ? 'text' : undefined}>{activityTitle(displayTitle())}</span>
           <Show when={presentation().subagentThreadIDs?.length}>
             <span class="flower-activity-report-sources">
               <For each={presentation().subagentThreadIDs}>{threadID => {
@@ -11868,7 +11875,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       renderTimeline={() => <FlowerTurnTimeline thread={subagentDetailThread()} entries={subagentDetailTimelineEntries()}
         failureNoticeVisible={runErrorNoticeVisible(subagentDetailThread())}
         runtimeID={props.adapter.runtime.runtime_id} scope="subagent" choices={turnDisclosureChoices}
-        scroll={subagentDetailScroll} reducedMotion={reducedMotionPreferred} copy={copy().chat.turnProcess}
+        scroll={subagentDetailScroll} reducedMotion={reducedMotionPreferred} liveConfirmed={livePresentationConfirmed} copy={copy().chat.turnProcess}
         renderEntry={(entry, visible) => timelineEntry(entry, subagentDetailScroll, subagentDetailThread, subagentThreadMedia, visible)} />}
       bindScroll={bindSubagentDetailViewport}
       onScroll={subagentDetailScroll.onScroll}
@@ -13647,7 +13654,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               <FlowerTurnTimeline thread={selectedThread()} entries={visibleTimelineEntries()}
                 failureNoticeVisible={runErrorNoticeVisible(selectedThread())}
                 runtimeID={props.adapter.runtime.runtime_id} scope="main" choices={turnDisclosureChoices}
-                scroll={transcriptScroll} reducedMotion={reducedMotionPreferred} copy={copy().chat.turnProcess}
+                scroll={transcriptScroll} reducedMotion={reducedMotionPreferred} liveConfirmed={livePresentationConfirmed} copy={copy().chat.turnProcess}
                 renderEntry={(entry, visible) => timelineEntry(entry, transcriptScroll, selectedThread, selectedThreadMedia, visible)} />
               {threadLevelApprovalPanel()}
             </Show>
