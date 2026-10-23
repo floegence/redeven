@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -224,5 +226,32 @@ func TestServeFlowerLiveStreamKeepsOrdinaryReconnectFenceNonTerminal(t *testing.
 	serveFlowerLiveStreamFrames(response, request, failedFlowerLiveStream{err: io.EOF}, time.Second, time.Second)
 	if response.Body.Len() != 0 {
 		t.Fatalf("ordinary reconnect fence became a terminal synchronization error: %q", response.Body.String())
+	}
+}
+
+func TestFlowerLiveSubscriptionErrorsPreserveRecoveryClassification(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		err        error
+		status     int
+		retryAfter string
+	}{
+		{"runtime_rebinding", ai.ErrFlowerLiveSync, http.StatusServiceUnavailable, ""},
+		{"wrapped_sync_failure", fmt.Errorf("baseline: %w", ai.ErrFlowerLiveSync), http.StatusServiceUnavailable, ""},
+		{"baseline_timeout", fmt.Errorf("baseline: %w", context.DeadlineExceeded), http.StatusGatewayTimeout, ""},
+		{"capacity", ai.ErrFlowerLiveTooManySubscribers, http.StatusTooManyRequests, "10"},
+		{"invalid_request", errors.New("invalid Flower live stream request"), http.StatusBadRequest, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			writeFlowerLiveSubscriptionError(response, tc.err)
+			if response.Code != tc.status || response.Header().Get("Retry-After") != tc.retryAfter {
+				t.Fatalf("status=%d retry-after=%q, want %d %q", response.Code, response.Header().Get("Retry-After"), tc.status, tc.retryAfter)
+			}
+			var body apiResp
+			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil || body.OK || body.Error == "" {
+				t.Fatalf("invalid failure response: %s (%v)", response.Body.String(), err)
+			}
+		})
 	}
 }
