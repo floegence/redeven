@@ -20,6 +20,9 @@ no adapter silently selects another tab, window or device.
 
 ## Execution
 `computer.observe` reads bounded semantic information, with an optional image.
+Inside `computer.exec`, `await ui.observe({emit:false})` returns a local object with
+`observation.nodes`; script reads receive the full observation. The `full:true`
+option controls the emitted snapshot instead of the default diff.
 
 See the [adapter result contract](floret-redeven-adapter-and-projection.md).
 

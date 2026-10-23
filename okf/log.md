@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-10-22: Compact model-facing subagent coordination metadata, retain full reports and control metadata, and specify the local browser observation shape. See [subagent runtime](ai/subagent-runtime.md).
+
 - 2026-10-22: Add bounded stepped reveals for newly arriving Flower activity titles, preserving immediate content, stable row geometry and static historical reading. See [activity interaction](ui/flower-activity-interaction.md).
 
 - 2026-10-22: Unify cancellable terminal reads, explicit read deadlines, and published Floret repeat protection; retain concise incremental model output. See [terminal tool runtime](ai/terminal-tool-runtime.md).

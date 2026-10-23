@@ -312,7 +312,7 @@ func TestSubagentDefinitionUsesOneHandoffContract(t *testing.T) {
 		if def.Name != "subagents" {
 			continue
 		}
-		for _, want := range []string{"handoffs[].content", "items[].failure", "returns metadata only"} {
+		for _, want := range []string{"handoffs[].content", "items[].failure", "status returns metadata"} {
 			assertPromptContains(t, def.Description, want)
 		}
 		for _, stale := range []string{"final_handoff_report", "progress_summary"} {

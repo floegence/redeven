@@ -545,8 +545,15 @@ func TestFlowerSubagentResultsReachProviderWithoutAutomaticOverview(t *testing.T
 				t.Fatalf("interaction status lost: %s", resultText)
 			}
 			item := data.Items[byID[completed.ID.String()]]
-			if item.TaskDescription != completed.TaskDescription || item.LastMessagePreview != completed.LastItemPreview {
-				t.Fatalf("task description and preview conflated: %+v", item)
+			wantDescription, wantPreview := completed.TaskDescription, completed.LastItemPreview
+			if action == subagentActionWait {
+				wantDescription = ""
+			}
+			if action != subagentActionList {
+				wantPreview = ""
+			}
+			if item.TaskDescription != wantDescription || item.LastMessagePreview != wantPreview {
+				t.Fatalf("unexpected task metadata/report preview: %+v", item)
 			}
 			if action != subagentActionList {
 				if len(data.Handoffs) != 1 || data.Handoffs[0].Content != final || data.Handoffs[0].ThreadID != completed.ID.String() || data.Handoffs[0].TurnID != completed.TurnID.String() || data.Handoffs[0].RunID != completed.RunID.String() {
