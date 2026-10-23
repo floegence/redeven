@@ -141,6 +141,7 @@ func (c *aiReadinessController) RetryAIReadiness() error {
 		c.mu.Unlock()
 		return appserver.ErrAIRetryInProgress
 	}
+	c.refreshAIReadinessIssuesLocked()
 	if c.snapshot.State == appserver.AIReadinessDegraded && c.current != nil && !c.current.draining && c.current.service != nil {
 		c.running = true
 		generation := c.current
@@ -726,13 +727,21 @@ func (c *aiReadinessController) AIReadiness() appserver.AIReadinessSnapshot {
 		return appserver.AIReadinessSnapshot{State: appserver.AIReadinessUnavailable}
 	}
 	c.mu.Lock()
-	snapshot := c.snapshot
+	defer c.mu.Unlock()
+	c.refreshAIReadinessIssuesLocked()
+	return c.snapshot
+}
+
+func (c *aiReadinessController) refreshAIReadinessIssuesLocked() {
 	generation := c.current
-	c.mu.Unlock()
-	if generation != nil && generation.service != nil && (snapshot.State == appserver.AIReadinessReady || snapshot.State == appserver.AIReadinessDegraded) {
-		return aiReadinessSnapshotForIssueCount(generation.service.OrphanCanonicalRootIssueCount())
+	if generation != nil && generation.service != nil && !generation.draining && (c.snapshot.State == appserver.AIReadinessReady || c.snapshot.State == appserver.AIReadinessDegraded) {
+		if count := generation.service.OrphanCanonicalRootIssueCount(); count > 0 {
+			// Background discovery must also update the retry owner's state. A
+			// failed recheck cannot clear known issues; successful reconciliation
+			// and explicit repair publish their result through the same controller.
+			c.snapshot = aiReadinessSnapshotForIssueCount(count)
+		}
 	}
-	return snapshot
 }
 
 func (c *aiReadinessController) Close() error {

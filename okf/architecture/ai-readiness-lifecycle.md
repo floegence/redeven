@@ -19,9 +19,9 @@ reviewed_at: "2026-10-22"
 ## Process-local readiness
 The Code App composition layer owns the only AI readiness controller.
 
-Startup performs unfinished replacement recovery, bounded Floret owner open, product database migration, explicit activation, then generation publication. Historical thread preparation continues in Floret's worker. Product recovery begins only after activation, pages settings in batches of 200, retains each thread's complete media inventory and resumes eligible admitted queues. One thread failure does not starve later pages; ownership review runs afterward. Incomplete recovery gates destructive maintenance and retries on the next maintenance pass.
+Startup performs unfinished replacement recovery, bounded Floret owner open, product database migration, explicit activation, then generation publication. Historical thread preparation continues in Floret's worker. Product recovery begins only after activation, pages settings in batches of 200, retains each thread's complete media inventory and resumes eligible admitted queues. One thread failure does not starve later pages; ownership review runs afterward. Incomplete recovery gates destructive maintenance and retries on the next maintenance pass. Each waiter retains the result of its own recovery attempt; a concurrent retry cannot turn a failed attempt into successful readiness.
 
-Background phase callbacks cannot return a published generation to startup or unmount Flower. Readiness refreshes the current in-memory orphan issue count. Shutdown cancels and joins generation workers before closing storage.
+Background phase callbacks cannot return a published generation to startup or unmount Flower. Background orphan discovery updates the controller's degraded state and retry path; known issues clear only after successful reconciliation or explicit repair. Shutdown cancels and joins generation workers before closing storage.
 
 Retry is explicit, asynchronous, and admits at most one startup owner.
 
