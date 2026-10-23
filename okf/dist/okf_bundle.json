@@ -8142,15 +8142,15 @@
         "title": "Computer and browser use runtime",
         "type": "AI Tool Contract"
       },
-      "body_length": 2175,
+      "body_length": 2406,
       "summary": "`ComputerUseRuntime` owns targets, adapter resources, active control and script\nprocesses. Published Floret owns Agent lifecycle, tool effects and canonical\nresults. Flower prefers authorized commands and integrations for data work,\nsemantic browser or desktop operations for interaction, and explicit images for\nvisual decisions. A missing target, permission or capability fails explicitly;\nno adapter silently selects another tab, window or device.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Execution\n`computer.observe` reads bounded semantic information, with an optional image.\n\nSee the [adapter result contract](floret-redeven-adapter-and-projection.md).\n\n## Platform adapters\nThe [browser contract](computer-use-browser.md) covers managed profiles, explicit CDP tabs and same-device Chrome extension bindings.\n\nStage viewing uses its independent bounded sampler; those samples never enter model history. See [Computer media](computer-use-media.md).\n\n## Task access\nEach computer invocation receives the permission snapshot established at its tool authorization boundary. Opaque origins never become origin grants.\n\nTarget selection chooses where work runs; it is not another confirmation of an already authorized action.\n\n## Packaging and compatibility\nBrowser execution JSONL and Native Messaging use protocol 6 for Runtime-owned pause control, explicit page selection, reveal, popup progress and confirmed progress on observation failure.\n\nNative window capture continues to respect Desktop-window exclusion and never substitutes an unrestricted display capture after failure.",
-          "char_count": 1094
+          "body": "## Execution\n`computer.observe` reads bounded semantic information, with an optional image.\nInside `computer.exec`, `await ui.observe({emit:false})` returns a local object with\n`observation.nodes`; script reads receive the full observation. The `full:true`\noption controls the emitted snapshot instead of the default diff.\n\nSee the [adapter result contract](floret-redeven-adapter-and-projection.md).\n\n## Platform adapters\nThe [browser contract](computer-use-browser.md) covers managed profiles, explicit CDP tabs and same-device Chrome extension bindings.\n\nStage viewing uses its independent bounded sampler; those samples never enter model history. See [Computer media](computer-use-media.md).\n\n## Task access\nEach computer invocation receives the permission snapshot established at its tool authorization boundary. Opaque origins never become origin grants.\n\nTarget selection chooses where work runs; it is not another confirmation of an already authorized action.\n\n## Packaging and compatibility\nBrowser execution JSONL and Native Messaging use protocol 6 for Runtime-owned pause control, explicit page selection, reveal, popup progress and confirmed progress on observation failure.\n\nNative window capture continues to respect Desktop-window exclusion and never substitutes an unrestricted display capture after failure.",
+          "char_count": 1325
         },
         {
           "id": "boundaries",
@@ -11368,15 +11368,15 @@
         "title": "Flower subagent runtime",
         "type": "AI Tool Contract"
       },
-      "body_length": 1647,
+      "body_length": 2433,
       "summary": "Floret v7 owns each SubAgent as a normal canonical child Thread. Redeven exposes product tools and Flower mappings over the typed `ThreadRuntime` without a second child identity, result store, recovery projection, or child lifecycle table. Parent-scoped summaries are bounded status only; the canonical child current view is the only complete handoff authority.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "The `subagents` tool supports spawn, send input, wait, list, status, inspect, close, and close all.\n\nIts allowlist contains thread identity, task name (140 code points), status, current turn, closed, queue count, update time, and optional failure code.\n\nParent reports, lifecycle events, bounded waiting, and the compact event panel are described in [Subagent parent events](subagent-parent-events.md).\n\n## Child ownership and historical references\nForks copy conversation facts, never child ownership.\n\nMissing targets are presented as missing rather than completed or timed out.",
-          "char_count": 580
+          "body": "The `subagents` tool supports spawn, send input, wait, list, status, inspect, close, and close all.\n\nThe model-facing result keeps child identity, task name, status, current turn, queue count, failure and interaction facts. Display timestamps, duplicated IDs and counts, and UI action flags remain outside that projection. Spawn and wait do not repeat task descriptions; list and explicit inspect retain them. A preview is omitted only when the same result carries the complete handoff.\n\nComplete handoff bodies bypass generic output caps. Explicit event reads retain their full page contract. Bounded-wait and input-request metadata derive from the original execution result, never its compact model projection. Wait returns on child events and includes available complete reports; inspect explicitly reads reports. Tool descriptions state input and output semantics without prescribing a coordination workflow.\n\nParent reports, lifecycle events, bounded waiting, and the compact event panel are described in [Subagent parent events](subagent-parent-events.md).\n\n## Child ownership and historical references\nForks copy conversation facts, never child ownership.\n\nMissing targets are presented as missing rather than completed or timed out.",
+          "char_count": 1240
         },
         {
           "id": "boundaries",
@@ -11387,6 +11387,11 @@
         }
       ],
       "evidence": [
+        {
+          "id": "redeven:internal/ai/subagents_model_payload.go:0:removes coordination display echoes without changing complete handoffs.",
+          "source": "redeven:internal/ai/subagents_model_payload.go",
+          "description": "Removes coordination display echoes without changing complete handoffs."
+        },
         {
           "id": "redeven:internal/ai/builtin_tool_handlers.go:0:declares the strict subagent tool input.",
           "source": "redeven:internal/ai/builtin_tool_handlers.go",
@@ -33506,5 +33511,5 @@
       ]
     }
   ],
-  "source_sha256": "8bc494ed2a7adbf34e3b205083bfdedd2be3fb36c2a9c02d5a36dce5ac9a8716"
+  "source_sha256": "b8e758085b9f54c1e8e3fad91e6139a4ad159b8afc0ae8801808b17aefa69894"
 }

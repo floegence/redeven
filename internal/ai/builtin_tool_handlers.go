@@ -744,7 +744,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:         "subagents",
-			Description:  "Manage this thread's direct children; inherited history does not transfer ownership. spawn requires task_name, task_description and message. Give the child your task instructions and execution authorization in message, including any relevant scope, constraints, deliverables and verification; no fixed template is required. context_mode selects mission_only (default) or full_history. status requires target or ids (at most 200) and returns metadata only. inspect/wait return full reports in handoffs[].content and failures in items[].failure.",
+			Description:  "Manage direct child threads; inherited history does not transfer ownership. spawn requires task_name, task_description and message (task instructions and execution authorization). context_mode: mission_only (default) or full_history. status/inspect require target or ids; wait requires ids. status returns metadata. wait returns on child events; wait/inspect include available complete reports in handoffs[].content and failures in items[].failure.",
 			InputSchema:  toSchema(subagentsToolInputSchema()),
 			Mutating:     false,
 			Visibility:   ToolVisibilityDelegationControl,

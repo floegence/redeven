@@ -389,7 +389,7 @@ func modelToolResultPayload(result ToolResult) (map[string]any, error) {
 	if status == toolResultStatusAborted && result.cancellationConfirmed {
 		raw["outcome"] = fltools.ResultOutcomeCanceled
 	}
-	if isComputerUseTool(result.ToolName) || completeReportTool(result.ToolName) {
+	if isComputerUseTool(result.ToolName) || result.ToolName == "subagent_events" {
 		return raw, nil
 	}
 	// Validate before the bounded projection can turn an unsupported value into text.
@@ -398,6 +398,14 @@ func modelToolResultPayload(result ToolResult) (map[string]any, error) {
 		return nil, err
 	}
 	modelPayload := normalized.(map[string]any)
+	if completeReportTool(result.ToolName) {
+		if data, ok := modelPayload["data"].(map[string]any); ok {
+			compactSubagentModelData(data)
+		}
+		// Report bodies and failure details remain complete; only coordination
+		// metadata is projected. Activity keeps the original tool result.
+		return modelPayload, nil
+	}
 	if result.ToolName == "terminal.read" {
 		if data, ok := modelPayload["data"].(map[string]any); ok {
 			// Activity retains the command and process timing. Model reads carry
@@ -822,7 +830,9 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 		inputRequired = nil
 	}
 	if result.ToolName == "subagents" && !isError {
-		data, _ := structured["data"].(map[string]any)
+		// Engine control metadata comes from the executed result, never its
+		// compact model-facing presentation.
+		data, _ := result.Data.(map[string]any)
 		if anyToString(data["action"]) == subagentActionWait {
 			if readBoolField(data, "timed_out") && readInt64Field(data, "found_count") > 0 && readInt64Field(data, "missing_count") == 0 {
 				boundedWait = &fltools.BoundedWait{Timeout: time.Duration(readInt64Field(data, "effective_timeout_ms")) * time.Millisecond, TimedOut: true}

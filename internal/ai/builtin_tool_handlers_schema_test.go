@@ -143,7 +143,7 @@ func TestSubagentsSpawnSchemaUsesParentProvidedInstructions(t *testing.T) {
 			t.Errorf("subagents schema is missing %q", required)
 		}
 	}
-	if !strings.Contains(definition.Description, "execution authorization in message") || strings.Contains(definition.Description, "agent_type") {
+	if !strings.Contains(definition.Description, "message (task instructions and execution authorization)") || strings.Contains(definition.Description, "agent_type") {
 		t.Fatalf("subagents description does not match direct delegation: %q", definition.Description)
 	}
 }

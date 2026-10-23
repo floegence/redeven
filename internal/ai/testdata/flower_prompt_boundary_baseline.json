@@ -1,7 +1,7 @@
 {
   "approval_required/main_autonomous/restricted=false": {
     "system_bytes": 8330,
-    "tools_sha256": "7d276787f54765f08d76de674c319a779466e6a7c4b3b436b2ba65f2d7a9ed54"
+    "tools_sha256": "e1199f5e967e60efe109877b5fa0876b1502e5404b78ca18ce5b17028ae3f220"
   },
   "approval_required/main_autonomous/restricted=true": {
     "system_bytes": 4502,
@@ -9,7 +9,7 @@
   },
   "approval_required/main_interactive/restricted=false": {
     "system_bytes": 8849,
-    "tools_sha256": "7d276787f54765f08d76de674c319a779466e6a7c4b3b436b2ba65f2d7a9ed54"
+    "tools_sha256": "e1199f5e967e60efe109877b5fa0876b1502e5404b78ca18ce5b17028ae3f220"
   },
   "approval_required/main_interactive/restricted=true": {
     "system_bytes": 4502,
@@ -17,7 +17,7 @@
   },
   "approval_required/subagent_autonomous/restricted=false": {
     "system_bytes": 7886,
-    "tools_sha256": "c78c59428d2dfbe596cacdfdf1bd50b415a45bb336593c650716d3f07f853700"
+    "tools_sha256": "88303ecc093bf30d16dfa1dc01302f102a48e25b843a34116ac75a3bef5c3b9a"
   },
   "approval_required/subagent_autonomous/restricted=true": {
     "system_bytes": 4574,
@@ -25,7 +25,7 @@
   },
   "full_access/main_autonomous/restricted=false": {
     "system_bytes": 8324,
-    "tools_sha256": "7d276787f54765f08d76de674c319a779466e6a7c4b3b436b2ba65f2d7a9ed54"
+    "tools_sha256": "e1199f5e967e60efe109877b5fa0876b1502e5404b78ca18ce5b17028ae3f220"
   },
   "full_access/main_autonomous/restricted=true": {
     "system_bytes": 4496,
@@ -33,7 +33,7 @@
   },
   "full_access/main_interactive/restricted=false": {
     "system_bytes": 8843,
-    "tools_sha256": "7d276787f54765f08d76de674c319a779466e6a7c4b3b436b2ba65f2d7a9ed54"
+    "tools_sha256": "e1199f5e967e60efe109877b5fa0876b1502e5404b78ca18ce5b17028ae3f220"
   },
   "full_access/main_interactive/restricted=true": {
     "system_bytes": 4496,
@@ -41,7 +41,7 @@
   },
   "full_access/subagent_autonomous/restricted=false": {
     "system_bytes": 7880,
-    "tools_sha256": "c78c59428d2dfbe596cacdfdf1bd50b415a45bb336593c650716d3f07f853700"
+    "tools_sha256": "88303ecc093bf30d16dfa1dc01302f102a48e25b843a34116ac75a3bef5c3b9a"
   },
   "full_access/subagent_autonomous/restricted=true": {
     "system_bytes": 4568,
@@ -49,7 +49,7 @@
   },
   "readonly/main_autonomous/restricted=false": {
     "system_bytes": 5446,
-    "tools_sha256": "1ee55c54fb6200af7c0f439952b7d3de445270c90774352e287c68e4f3b79819"
+    "tools_sha256": "552c5e23957350fa55d1cffaa7841e033090d050ca0a9f23c5018e91d725d7df"
   },
   "readonly/main_autonomous/restricted=true": {
     "system_bytes": 4493,
@@ -57,7 +57,7 @@
   },
   "readonly/main_interactive/restricted=false": {
     "system_bytes": 5817,
-    "tools_sha256": "1ee55c54fb6200af7c0f439952b7d3de445270c90774352e287c68e4f3b79819"
+    "tools_sha256": "552c5e23957350fa55d1cffaa7841e033090d050ca0a9f23c5018e91d725d7df"
   },
   "readonly/main_interactive/restricted=true": {
     "system_bytes": 4493,
