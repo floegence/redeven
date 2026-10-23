@@ -5,7 +5,7 @@ description: Incremental Markdown and local record updates preserve interactive 
 tags: [flower, streaming, performance, interaction]
 timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-23"
 ---
 # Summary
 
@@ -24,6 +24,24 @@ Released Floe `createIncrementalMarkdownParser` owns Marked, CJK and GFM syntax.
 Flower tracks the complete accepted source through appends. A changed snapshot establishes a complete parser baseline: unchanged list tokens can move to new source offsets and block identities. The DOM adapter reuses exact tokens at unchanged offsets and retires the other old regions before applying that baseline. Identical-source metadata changes retain existing regions. Completed answers preserve every authored block through tool-process collapse and later snapshot replacement.
 
 See [code highlighting](flower-code-highlighting.md) and [inline media](flower-inline-media.md).
+
+## Soft live text reveal
+
+Newly appended prose fades into its current theme text color over 320 ms. The DOM
+adapter paints exact added ranges through CSS custom highlights; it does not split
+text nodes, delay delivery, translate lines, or restart the effect on already read
+content. Initial history and corrected snapshots appear immediately. Headings,
+lists and emphasis can reveal their added suffix; links, code, media and controls
+keep their own colors and interaction behavior.
+
+Twenty fixed CSS paint phases avoid document-wide stylesheet mutation on each
+frame. Each active Markdown owner retains at most 32 transient range groups. Diff
+inspection is limited to 8,192 characters and 128 text nodes per region; larger
+replacements and bursts remain immediately readable. Completion never waits for
+paint: remaining valid highlights settle naturally. Reset, unmount, hidden
+documents, reduced motion and forced colors clear effects and their callbacks.
+Historical owners schedule no frames or preference listeners. Browsers without
+custom highlights retain normal immediate text presentation.
 
 ## Disclosure and layout
 Composer autosizing and approval measurements listen to releasable font loading completion/error events. Disposal removes those listeners; an unsettled FontFaceSet.ready promise must never retain a detached surface.
@@ -56,6 +74,8 @@ Floret remains the runtime/persistence owner; Floe owns generic parsing; Redeven
 - [Reactive record tests](../../internal/flower_ui/src/runtimeThreadRecord.client.test.ts)
 
 - [Incremental model and semantic differential tests](../../internal/flower_ui/src/chat/markdown/streamingMarkdownModel.test.ts)
+
+- [Soft reveal, stable ranges and motion preference checks](../../internal/envapp/ui_src/src/ui/FlowerMarkdown.softReveal.browser.test.tsx)
 
 - [Browser transcript completion and corrected-snapshot list regression](../../internal/envapp/ui_src/src/ui/FlowerSurface.streamingStability.browser.test.tsx)
 

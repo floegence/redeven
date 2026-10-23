@@ -1,6 +1,7 @@
 # Redeven OKF Update Log
 
 - 2026-10-23: Distinguish the three generated OKF bundle outputs from source-build inputs, allowing stable dirty-source builds while continuing to reject concurrent source edits and checkout advances. See [development bundles](desktop/desktop-development-bundles.md).
+- 2026-10-23: Add bounded 320 ms soft reveals for live Flower prose while retaining text nodes, selection, Markdown colors and immediate canonical completion. Verify motion preferences and cleanup in Chromium. See [streaming stability](ui/flower-streaming-stability.md).
 
 - 2026-10-23: Restore native scrolling over expanded thinking and align transcript follow intent with nested read-only detail boundaries, including short content, both edges and streaming updates. See [tool sequence reading](ui/flower-tool-sequences.md) and [activity interaction](ui/flower-activity-interaction.md).
 

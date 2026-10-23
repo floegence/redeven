@@ -1,5 +1,6 @@
 import type { Marked, Token, Tokens, TokensList } from 'marked';
 import type { MarkdownUpdate, MarkdownBlockChange } from '@floegence/floe-webapp-core/markdown';
+import { createStreamingTextReveal } from './streamingTextReveal';
 
 type Region = { start: number; length: number; element: HTMLDivElement; code?: { append(text: string): void }; inline?: HTMLSpanElement[]; lengths?: number[]; offsets?: number[]; token: Token; live: boolean; specializedCode?: boolean; incremental?: boolean };
 export type MarkdownDecoration = { dispose(): void; finish?(): void; update?(token: Token, live: boolean): boolean };
@@ -108,6 +109,8 @@ export function createIncrementalMarkdownDOM(markdown: Marked<string, string>, r
   const cleanups = new Map<number, MarkdownDecoration>();
   const inlineCleanups = new Map<HTMLElement, MarkdownDecoration>();
   const textRuns = new WeakMap<HTMLElement, { append(text: string): void }>();
+  const reveal = createStreamingTextReveal(root);
+  let animate = false;
   let links: TokensList['links'] = {};
   const render = (token: Token) => {
     const list = [token] as TokensList; list.links = links;
@@ -130,6 +133,7 @@ export function createIncrementalMarkdownDOM(markdown: Marked<string, string>, r
   const replace = (change: Extract<MarkdownBlockChange, { kind: 'replace' }>, live: boolean, redecorate = false) => {
     const { id, start, token } = change.block;
     const prior = regions.get(id);
+    const previousText = animate && !redecorate ? prior ? reveal.read([prior.element]) : '' : undefined;
     if (prior) forget(prior.start, prior.length);
     if (prior && !redecorate && cleanups.get(id)?.update?.(token, live)) {
       locate([token], start, token.raw);
@@ -163,6 +167,7 @@ export function createIncrementalMarkdownDOM(markdown: Marked<string, string>, r
     }
     regions.set(id, region);
     cleanups.set(id, decorate(element, token, live));
+    reveal.reveal([element], previousText);
   };
   return {
     refresh(predicate: (token: Token, element: HTMLElement) => boolean, streaming: boolean) {
@@ -171,6 +176,7 @@ export function createIncrementalMarkdownDOM(markdown: Marked<string, string>, r
       }
     },
     apply(update: MarkdownUpdate, streaming: boolean, reset = false) {
+      animate = reveal.begin(streaming, reset);
       links = update.links;
       const retained = new Set<number>();
       if (reset) {
@@ -222,9 +228,11 @@ export function createIncrementalMarkdownDOM(markdown: Marked<string, string>, r
             if (!target) throw new Error('Flower contract error: Markdown append requires a text region.');
             if (change.code && region.token.type === 'code') { region.token.text += change.text; region.token.raw += change.text; }
             if (change.code) region.code!.append(change.text);
-            else if (target instanceof HTMLElement && textRuns.has(target)) textRuns.get(target)!.append(change.text);
-            else if (target instanceof HTMLElement && target.lastChild instanceof Text) target.lastChild.appendData(change.text);
-            else if (target instanceof HTMLElement) target.appendChild(document.createTextNode(change.text));
+            else if (target instanceof HTMLElement) reveal.append(target, change.text.length, () => {
+              if (textRuns.has(target)) textRuns.get(target)!.append(change.text);
+              else if (target.lastChild instanceof Text) target.lastChild.appendData(change.text);
+              else target.appendChild(document.createTextNode(change.text));
+            });
             if (!change.code && region.lengths) region.lengths[change.inlineIndex!] += change.text.length;
           } else {
             const nodes = region.inline;
@@ -242,6 +250,7 @@ export function createIncrementalMarkdownDOM(markdown: Marked<string, string>, r
             region.offsets?.splice(change.from, change.deleteCount, ...offsets);
             if (region.offsets && region.lengths) for (let i = change.from + change.tokens.length; i < region.offsets.length; i++) region.offsets[i] = region.offsets[i - 1] + region.lengths[i - 1];
             const added = inline(change.tokens);
+            const previousText = reveal.read(nodes.slice(change.from, change.from + change.deleteCount));
             const anchor = nodes[change.from + change.deleteCount] ?? null;
             const parent = nodes[0]?.parentNode ?? region.element.firstElementChild;
             if (!parent) throw new Error('Flower contract error: Markdown inline parent is missing.');
@@ -250,6 +259,7 @@ export function createIncrementalMarkdownDOM(markdown: Marked<string, string>, r
               const node = added[i]; parent.insertBefore(node, anchor);
               inlineCleanups.set(node, decorate(node, change.tokens[i], streaming));
             }
+            reveal.reveal(added, previousText);
           }
         }
       }
@@ -260,6 +270,6 @@ export function createIncrementalMarkdownDOM(markdown: Marked<string, string>, r
       }
     },
 
-    dispose() { for (const id of cleanups.keys()) release(id); for (const region of regions.values()) { forget(region.start, region.length); region.element.remove(); } regions.clear(); },
+    dispose() { reveal.dispose(); for (const id of cleanups.keys()) release(id); for (const region of regions.values()) { forget(region.start, region.length); region.element.remove(); } regions.clear(); },
   };
 }
