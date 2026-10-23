@@ -108,61 +108,54 @@ html:not(.dark) .redeven-welcome-surface {
 }
 
 .redeven-desktop-update-button {
+  position: relative;
   display: inline-flex;
-  height: 1.875rem;
-  min-width: 0;
-  max-width: min(12rem, 22vw);
+  width: 1.75rem;
+  height: 1.75rem;
+  flex: none;
   cursor: pointer;
   align-items: center;
   justify-content: center;
-  gap: 0.375rem;
-  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-  border-radius: 0.375rem;
-  background: color-mix(in srgb, var(--muted) 24%, transparent);
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
   color: var(--muted-foreground);
-  padding: 0 0.625rem;
-  font-size: 0.6875rem;
-  font-weight: 500;
-  line-height: 1;
+  padding: 0;
   transition:
-    background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+    background-color 120ms ease, color 120ms ease;
 }
 
 .redeven-desktop-update-button:hover,
 .redeven-desktop-update-button:focus-visible {
-  border-color: color-mix(in srgb, var(--primary) 24%, var(--border));
-  background: color-mix(in srgb, var(--primary) 7%, var(--muted));
+  background: var(--accent);
   color: var(--foreground);
-  outline: none;
+}
+
+.redeven-desktop-update-button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 
 .redeven-desktop-update-button[data-update-state='available'],
 .redeven-desktop-update-button[data-update-state='ready'] {
-  border-color: color-mix(in srgb, var(--primary) 38%, var(--border));
-  background: color-mix(in srgb, var(--primary) 10%, transparent);
-  color: var(--foreground);
+  color: var(--primary);
 }
 
 .redeven-desktop-update-button[data-update-state='blocked'],
 .redeven-desktop-update-button[data-update-state='error'] {
-  border-color: color-mix(in srgb, var(--warning) 38%, var(--border));
   color: var(--warning);
 }
 
-.redeven-desktop-update-button > span:not(.redeven-desktop-update-button__indicator) {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .redeven-desktop-update-button__indicator {
+  position: absolute;
+  inset-block-start: 0.125rem;
+  inset-inline-end: 0.125rem;
   width: 0.375rem;
   height: 0.375rem;
-  flex: none;
+  pointer-events: none;
   border-radius: 9999px;
   background: var(--primary);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 15%, transparent);
+  box-shadow: 0 0 0 2px var(--background);
 }
 
 .redeven-flower-back-button {

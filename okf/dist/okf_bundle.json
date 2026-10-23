@@ -18848,7 +18848,7 @@
       "frontmatter": {
         "description": "Signed macOS and Linux application updates with an explicitly unsupported internal Windows channel.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-23",
         "tags": [
           "desktop",
           "linux",
@@ -18862,15 +18862,15 @@
         "title": "Desktop application updates",
         "type": "Desktop Contract"
       },
-      "body_length": 2055,
+      "body_length": 2652,
       "summary": "Redeven Desktop exposes one update coordinator to the permanent Welcome\ntitlebar-corner entry, application menu, command palette, settings, status bar,\nand compatibility recovery. Packaged macOS uses Sparkle 2.9.4 with a signed\narchitecture-specific appcast. Packaged Linux uses `electron-updater` metadata\nfor the matching DEB or RPM package. Development, unsupported, and incorrectly\nplaced macOS builds fail closed and provide a manual recovery path.\nWindows internal NSIS builds report updates as unsupported and contain no\nproduction feed.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Check and presentation\nThe coordinator owns the states `idle`, `checking`, `available`, `downloading`, `ready`, `installing`, `blocked`, and `error`. A check is serialized; repeated requests reuse the current operation and never start a second download.\n\nNo client request contains a GitHub token or a repository-specific credential.\n\n## Installation interlock\nInstallation is a one-shot action. A cleanup or identity verification failure prevents the installer call, restores the Launcher, and reports an actionable error.\n\nThe first release that contains Sparkle remains a manual install; later signed DMG releases are eligible for the feed.\n\n## Release and trust\nRelease jobs run in the protected `redeven-release` environment.\n\nThe manual exact-main Windows workflow may publish only an Actions artifact whose filename marks it as internal.",
-          "char_count": 847
+          "body": "## Check and presentation\nThe coordinator owns the states `idle`, `checking`, `available`, `downloading`, `ready`, `installing`, `blocked`, and `error`. A check is serialized; repeated requests reuse the current operation and never start a second download.\n\nThe permanent Welcome titlebar entry is a compact icon-only button with no resting border or label. Its localized state remains available through the accessible name and the shared tooltip on hover or keyboard focus. Checking animates the icon unless reduced motion is requested; available and ready updates add a small overlaid dot without changing the button width. Warning states tint the icon, and keyboard focus has a visible outline.\n\nNo client request contains a GitHub token or a repository-specific credential.\n\n## Installation interlock\nInstallation is a one-shot action. A cleanup or identity verification failure prevents the installer call, restores the Launcher, and reports an actionable error.\n\nThe first release that contains Sparkle remains a manual install; later signed DMG releases are eligible for the feed.\n\n## Release and trust\nRelease jobs run in the protected `redeven-release` environment.\n\nThe manual exact-main Windows workflow may publish only an Actions artifact whose filename marks it as internal.",
+          "char_count": 1288
         },
         {
           "id": "boundaries",
@@ -33526,5 +33526,5 @@
       ]
     }
   ],
-  "source_sha256": "484d6276d40a81a0758e124e4ba69d657758558eb97d27b088c2532595b5a141"
+  "source_sha256": "10cf6ff9bdeeb07342cfa60b2a95e7d627cea7e466252fa7befae0e59c234b4c"
 }
