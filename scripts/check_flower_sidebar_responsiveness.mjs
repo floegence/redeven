@@ -1,4 +1,5 @@
 import { createDesktopTestSession } from './desktop_test_session.mjs';
+import { qualifyFlowerSidebarResize } from './qualify_flower_sidebar_resize.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -26,7 +27,7 @@ await session.run(async () => {
   await build({ configFile: path.join(root, 'desktop/vite.welcome.config.mjs'), logLevel: 'error',
     plugins: [{ name: 'sidebar-markdown-counts', enforce: 'pre', transform(code, id) {
       if (!id.endsWith('/chat/markdown/FlowerMarkdownBlock.tsx')) return;
-      const marker = 'const renderMarkdown = createMarkdownRenderModel(marked);';
+      const marker = 'marked.use(';
       assert.ok(code.includes(marker), 'Markdown measurement boundary must exist');
       return code.replace(marker, "for (const [method, count] of [['parser', 'parses'], ['lexer', 'lexes']]) { const original = marked[method].bind(marked); marked[method] = (...args) => { window.__flowerPerfCounts[count]++; return original(...args); }; }\n" + marker);
     } }],
@@ -75,6 +76,12 @@ await session.run(async () => {
   await page.waitForFunction(() => !!window.flowerSidebar);
   const version = await app.evaluate(() => process.versions);
   assert.equal(version.electron, JSON.parse(await readFile(path.join(root, 'desktop/package.json'))).devDependencies.electron);
+  if (process.argv.includes('--resize-only')) {
+    await qualifyFlowerSidebarResize({ app, page, session, output, version });
+    assert.deepEqual(pageErrors, []);
+    await session.closeElectron(app);
+    return;
+  }
   const selections = [];
   const rapidOnly = process.argv.includes('--pin-rapid-only');
   const pinsOnly = rapidOnly || process.argv.includes('--pins-only');
@@ -138,7 +145,9 @@ await session.run(async () => {
   const pins = [];
   for (const width of rapidOnly || process.argv.includes('--selection-only') ? [] : [220, 224, 272, 360]) {
     console.log('Sidebar pin qualification width: ' + width);
-    await page.evaluate(width => document.querySelector('.flower-surface').style.setProperty('--flower-thread-rail-width', width + 'px'), width);
+    await page.evaluate(width => {
+      document.querySelector('.flower-surface').style.gridTemplateColumns = `${width}px 0 minmax(0, 1fr)`;
+    }, width);
     for (let index = 0; index < 16; index++) {
       const id = ['sidebar-2', 'sidebar-3', 'sidebar-4', 'sidebar-5'][index % 4];
       const control = page.locator('[data-thread-id="' + id + '"] .flower-thread-card-pin-button');

@@ -100,6 +100,21 @@ async function until(condition: () => boolean) {
 const sidebar = {
   qualifyDetailReads,
   smallID, bigID, hugeID,
+  beginResizeStream() {
+    let version = current.view_version;
+    let count = 0;
+    let offset = new TextEncoder().encode(current.items!.find(item => item.id === 'streaming-tail')!.text!).length;
+    const timer = window.setInterval(() => {
+      const text = ` resize-live-${++count} `;
+      fixture.emit({ schema_version: 3, kind: 'thread.batch', thread_id: bigID, update: {
+        thread_id: bigID, turn_id: current.turn_id!, run_id: current.run_id!, base_version: version, view_version: ++version,
+        facts: { activity: current.activity, queue_count: 0, run_progress: current.run_progress },
+        items: [{ kind: 'append', item_id: 'streaming-tail', append: { offset_bytes: offset, text } }],
+      } });
+      offset += new TextEncoder().encode(text).length;
+    }, 50);
+    return () => { window.clearInterval(timer); return count; };
+  },
   pinState: () => ({ pinStarted, pinSettled, listStarted, listSettled, pinCalls: [...pinCalls] }),
   setDelays(pin: number, list: number) { pinDelay = pin; listDelay = list; },
   failNextPin() { nextPinFailure = true; },
