@@ -30818,7 +30818,7 @@
         "title": "Flower conversation sidebar",
         "type": "UI Contract"
       },
-      "body_length": 4823,
+      "body_length": 4838,
       "summary": "Redeven owns conversation selection presentation and persistent pin order. Desktop\nand Env App use the same Flower sidebar. Selection, running activity, unread\nattention and pending replies or approvals retain independent meanings. Live summary changes\nmust preserve row identity, open menus, focus and running wave continuity. Pin\nfailures undo only the current operation's presentation and reconcile through the\nexisting workspace summary stream or one explicit post-command read.",
       "sections": [
         {
@@ -30848,9 +30848,9 @@
           "description": "Real layout widths, keyboard persistence and presentation transitions."
         },
         {
-          "id": "redeven:scripts/check_flower_sidebar_responsiveness.mjs --resize-only:0:isolated electron pointer dragging, bounded style invalidation, one persistence write and markdown retention across small/large histories; live delivery preserves draft, transcript identity and detached scrolling.",
-          "source": "redeven:scripts/check_flower_sidebar_responsiveness.mjs --resize-only",
-          "description": "Isolated Electron pointer dragging, bounded style invalidation, one persistence write and Markdown retention across small/large histories; live delivery preserves draft, transcript identity and detached scrolling."
+          "id": "redeven:scripts/check_flower_sidebar_responsiveness.mjs:0:run with `--resize-only` for isolated electron pointer dragging, bounded style invalidation, one persistence write and markdown retention across small/large histories; live delivery preserves draft, transcript identity and detached scrolling.",
+          "source": "redeven:scripts/check_flower_sidebar_responsiveness.mjs",
+          "description": "Run with `--resize-only` for isolated Electron pointer dragging, bounded style invalidation, one persistence write and Markdown retention across small/large histories; live delivery preserves draft, transcript identity and detached scrolling."
         },
         {
           "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.titleRename.browser.test.tsx:0:header rename, save/cancel focus, failed saves, narrow titles and host capability.",
@@ -33541,5 +33541,5 @@
       ]
     }
   ],
-  "source_sha256": "2fdaf01e5ca1d9df5f4f556119d4b1786c279e449b8dc7ee9ec53915cb00b676"
+  "source_sha256": "3c9babec11746ef99384a88fb83e87632a8ea5040c7324a6e44a6d404d31bcdf"
 }
