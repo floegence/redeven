@@ -22,6 +22,10 @@ type invalidArgumentsError interface {
 	InvalidArgumentsMeta() map[string]any
 }
 
+type threadQueryIndexNotReadyError interface {
+	ThreadQueryIndexNotReady() bool
+}
+
 func ClassifyError(inv Invocation, err error) *ToolError {
 	if err == nil {
 		return nil
@@ -38,6 +42,17 @@ func ClassifyError(inv Invocation, err error) *ToolError {
 			Code:           ErrorCodeTimeout,
 			Message:        "Timed out",
 			SuggestedFixes: []string{"Inspect the current state or existing process before continuing. A timeout does not establish that an effect did not execute; never replay an unknown effect."},
+		}
+		out.Normalize()
+		return out
+	}
+	var indexNotReady threadQueryIndexNotReadyError
+	if errors.As(err, &indexNotReady) && indexNotReady.ThreadQueryIndexNotReady() {
+		out := &ToolError{
+			Code:           ErrorCodeThreadQueryIndexNotReady,
+			Message:        "Conversation search is preparing its index. No partial results were returned; retry the same query shortly.",
+			Retryable:      true,
+			SuggestedFixes: []string{"Retry the same query later. Do not present partial or unverified search results."},
 		}
 		out.Normalize()
 		return out

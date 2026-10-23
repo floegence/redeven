@@ -3,6 +3,8 @@ package ai
 import (
 	"context"
 	"errors"
+	"fmt"
+	"time"
 
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
@@ -19,46 +21,66 @@ func (s *Service) ThreadReadState() *threadreadstate.Store {
 	return s.readState
 }
 
+// Recover each settings page independently. Keep only the first failure as the
+// cleanup gate, while allowing unrelated threads and their queues to recover.
 func (s *Service) prepareStartupThreads(ctx context.Context) error {
 	summaries, ok := s.threadRuntime.(flruntime.ThreadSummaryReader)
 	if !ok {
 		return errors.New("published Floret thread summary reader is unavailable")
 	}
-	inventory, err := s.floretMediaInventory(ctx)
-	if err != nil {
-		return err
+	if s.floretThreadMediaInventory == nil {
+		return errors.New("published Floret thread media inventory is unavailable")
 	}
-	descriptors := make(map[string][]flruntime.MessageAttachment)
-	for _, reference := range inventory.References {
-		id := reference.ThreadID.String()
-		descriptors[id] = append(descriptors[id], reference.Attachment)
-	}
+	var firstFailure error
 	var cursor threadstore.ThreadSettingsRecoveryCursor
 	for {
 		settings, next, more, err := s.threadsDB.ListThreadSettingsForRecoveryPage(ctx, cursor, 200)
 		if err != nil {
-			return err
+			return errors.Join(firstFailure, err)
 		}
 		for _, setting := range settings {
-			summary, err := summaries.Summary(ctx, identity.ThreadID(setting.ThreadID))
-			if errors.Is(err, flruntime.ErrThreadNotFound) {
+			if err := ctx.Err(); err != nil {
+				return errors.Join(firstFailure, err)
+			}
+			err := s.prepareStartupThread(ctx, summaries, setting)
+			if err == nil || errors.Is(err, flruntime.ErrThreadNotFound) || errors.Is(err, flruntime.ErrThreadDeleted) {
 				continue
 			}
-			if err != nil {
-				return err
+			if firstFailure == nil {
+				firstFailure = fmt.Errorf("prepare thread %q: %w", setting.ThreadID, err)
 			}
-			if err := s.retainCanonicalUploadDescriptors(ctx, setting.EndpointID, setting.ThreadID, descriptors[setting.ThreadID]); err != nil {
-				return err
-			}
-			if summary.Activity == flruntime.ThreadActivityIdle && summary.QueueCount > 0 && (summary.LastOutcome == nil || *summary.LastOutcome == flruntime.TurnOutcomeCompleted) {
-				s.pendingStartupThreads = append(s.pendingStartupThreads, setting.ThreadID)
+			if s.log != nil {
+				s.log.Warn("ai: thread recovery is pending", "thread_id", setting.ThreadID, "error", err)
 			}
 		}
 		if !more {
-			return ctx.Err()
+			return errors.Join(firstFailure, ctx.Err())
 		}
 		cursor = next
 	}
+}
+
+func (s *Service) prepareStartupThread(ctx context.Context, summaries flruntime.ThreadSummaryReader, setting threadstore.ThreadSettings) error {
+	threadID := identity.ThreadID(setting.ThreadID)
+	summary, err := summaries.Summary(ctx, threadID)
+	if err != nil {
+		return err
+	}
+	inventory, err := s.floretThreadMediaInventory(ctx, threadID)
+	if err != nil {
+		return err
+	}
+	attachments := make([]flruntime.MessageAttachment, 0, len(inventory.References))
+	for _, reference := range inventory.References {
+		attachments = append(attachments, reference.Attachment)
+	}
+	if err := s.retainCanonicalUploadDescriptors(ctx, setting.EndpointID, setting.ThreadID, attachments); err != nil {
+		return err
+	}
+	if summary.Activity == flruntime.ThreadActivityIdle && summary.QueueCount > 0 && (summary.LastOutcome == nil || *summary.LastOutcome == flruntime.TurnOutcomeCompleted) {
+		return s.resumeMigratedPendingInputs(ctx, []string{setting.ThreadID})
+	}
+	return nil
 }
 
 // Activate is the final preparation boundary. The controller calls it only
@@ -94,9 +116,8 @@ func (s *Service) Activate(ctx context.Context) error {
 	s.maintenanceDoneCh = make(chan struct{})
 	s.mu.Unlock()
 	s.startBackgroundMaintenance()
-	if err := s.resumeMigratedPendingInputs(s.lifecycleCtx, s.pendingStartupThreads); err != nil && !errors.Is(err, context.Canceled) && s.log != nil {
-		s.log.Error("ai: pending input recovery failed", "error", err)
-	}
+	s.startUploadRecovery()
+	s.startStartupPreparation()
 	if !s.skipStorageMaintenance {
 		if err := removeObsoleteFlowerUpgrade(s.stateDir); err != nil && s.log != nil {
 			s.log.Warn("ai: obsolete upgrade record cleanup failed", "error", err)
@@ -117,13 +138,171 @@ func flowerGenerationCloseError(err error) error {
 }
 
 // startServiceWorker joins background product writes to the same generation.
-func (s *Service) startServiceWorker(work func()) {
+func (s *Service) startServiceWorker(work func()) bool {
 	s.mu.Lock()
 	if s.serviceClosing {
 		s.mu.Unlock()
-		return
+		return false
 	}
 	s.serviceWorkers.Add(1)
 	s.mu.Unlock()
 	go func() { defer s.serviceWorkers.Done(); work() }()
+	return true
+}
+
+func (s *Service) startUploadRecovery() {
+	if s == nil {
+		return
+	}
+	s.uploadRecoveryMu.Lock()
+	if s.uploadRecoveryReady || s.uploadRecoveryRunning {
+		s.uploadRecoveryMu.Unlock()
+		return
+	}
+	s.uploadRecoveryRunning = true
+	s.uploadRecoveryErr = nil
+	done := make(chan struct{})
+	s.uploadRecoveryDone = done
+	s.uploadRecoveryMu.Unlock()
+	finish := func(err error) {
+		s.uploadRecoveryMu.Lock()
+		s.uploadRecoveryRunning = false
+		s.uploadRecoveryReady = err == nil
+		s.uploadRecoveryErr = err
+		close(done)
+		s.uploadRecoveryMu.Unlock()
+	}
+	if !s.startServiceWorker(func() {
+		lifecycleCtx := s.lifecycleCtx
+		if lifecycleCtx == nil {
+			lifecycleCtx = context.Background()
+		}
+		ctx, cancel := context.WithTimeout(lifecycleCtx, 30*time.Second)
+		defer cancel()
+		if s.storeStartupProgress != nil {
+			s.storeStartupProgress(FloretStoreStartupRecovering)
+		}
+		count, err := s.interruptUploadAttemptsFromPreviousProcess(ctx)
+		if err != nil {
+			finish(err)
+			if !errors.Is(err, context.Canceled) && s.log != nil {
+				s.log.Warn("ai: interrupted upload recovery is still pending", "error", err)
+			}
+			return
+		}
+		if count > 0 && s.log != nil {
+			s.log.Info("ai: interrupted upload recovery completed", "count", count)
+		}
+		finish(nil)
+	}) {
+		finish(errors.New("service is closing"))
+	}
+}
+
+func (s *Service) uploadRecoveryComplete() bool {
+	if s == nil {
+		return false
+	}
+	s.uploadRecoveryMu.Lock()
+	defer s.uploadRecoveryMu.Unlock()
+	return s.uploadRecoveryReady
+}
+
+func (s *Service) startStartupPreparation() {
+	if s == nil || s.lifecycleCtx == nil {
+		return
+	}
+	s.startupPreparationMu.Lock()
+	if s.startupPreparationReady || s.startupPreparationRun {
+		s.startupPreparationMu.Unlock()
+		return
+	}
+	s.startupPreparationRun = true
+	s.startupPreparationErr = nil
+	done := make(chan struct{})
+	s.startupPreparationDone = done
+	s.startupPreparationMu.Unlock()
+	finish := func(err error) {
+		s.startupPreparationMu.Lock()
+		s.startupPreparationRun = false
+		s.startupPreparationErr = err
+		s.startupPreparationReady = err == nil
+		close(done)
+		s.startupPreparationMu.Unlock()
+	}
+	if !s.startServiceWorker(func() {
+		ctx := s.lifecycleCtx
+		if s.storeStartupProgress != nil {
+			s.storeStartupProgress(FloretStoreStartupPreparing)
+		}
+		// Ownership review must not prevent an unrelated owned thread from
+		// retaining its uploads or resuming an already admitted queue.
+		preparationErr := s.prepareStartupThreads(ctx)
+		var ownershipErr error
+		if ctx.Err() == nil {
+			_, ownershipErr = s.ReconcileCanonicalRootOwnership(ctx)
+		}
+		if err := errors.Join(preparationErr, ownershipErr, ctx.Err()); err != nil {
+			if !errors.Is(err, context.Canceled) && s.log != nil {
+				s.log.Warn("ai: startup recovery is pending", "error", err)
+			}
+			finish(err)
+			return
+		}
+		finish(nil)
+	}) {
+		finish(errors.New("service is closing"))
+	}
+}
+
+func (s *Service) waitForStartupPreparation(ctx context.Context) error {
+	if s == nil || ctx == nil {
+		return errors.New("startup preparation requires a service and context")
+	}
+	s.startStartupPreparation()
+	s.startupPreparationMu.Lock()
+	if s.startupPreparationReady {
+		s.startupPreparationMu.Unlock()
+		return nil
+	}
+	done := s.startupPreparationDone
+	err := s.startupPreparationErr
+	s.startupPreparationMu.Unlock()
+	if done == nil {
+		return err
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-done:
+	}
+	s.startupPreparationMu.Lock()
+	defer s.startupPreparationMu.Unlock()
+	return s.startupPreparationErr
+}
+
+func (s *Service) waitForUploadRecovery(ctx context.Context) error {
+	if s == nil || ctx == nil {
+		return errors.New("upload recovery requires a service and context")
+	}
+	s.startUploadRecovery()
+	s.uploadRecoveryMu.Lock()
+	if s.uploadRecoveryReady {
+		s.uploadRecoveryMu.Unlock()
+		return nil
+	}
+	done := s.uploadRecoveryDone
+	err := s.uploadRecoveryErr
+	s.uploadRecoveryMu.Unlock()
+	if done == nil {
+		return err
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-done:
+	}
+	s.uploadRecoveryMu.Lock()
+	defer s.uploadRecoveryMu.Unlock()
+	return s.uploadRecoveryErr
 }

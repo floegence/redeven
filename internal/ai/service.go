@@ -126,7 +126,6 @@ type Service struct {
 	activateFloret         func(context.Context) error
 	prepareFloretRestore   func(context.Context) (flruntime.RestorePreparation, error)
 	readState              *threadreadstate.Store
-	pendingStartupThreads  []string
 	skipStorageMaintenance bool
 
 	stateDir     string
@@ -183,12 +182,14 @@ type Service struct {
 	uploadsDir string
 	threadsDB  *threadstore.Store
 
-	closeFloret            func() error
-	floretMediaInventory   func(context.Context) (flruntime.MediaInventory, error)
-	threadRuntime          flruntime.ThreadService
-	floretEffects          *floretEffectAdapter
-	orphanMu               sync.Mutex
-	orphanCanonicalRootIDs map[string]struct{}
+	closeFloret                func() error
+	floretMediaInventory       func(context.Context) (flruntime.MediaInventory, error)
+	floretThreadMediaInventory func(context.Context, identity.ThreadID) (flruntime.MediaInventory, error)
+	storeStartupProgress       func(FloretStoreStartupPhase)
+	threadRuntime              flruntime.ThreadService
+	floretEffects              *floretEffectAdapter
+	orphanMu                   sync.Mutex
+	orphanCanonicalRootIDs     map[string]struct{}
 
 	capabilityResolver *contextadapter.Resolver
 	skillManager       *skillManager
@@ -198,6 +199,16 @@ type Service struct {
 	flowerReadStateCleaner   FlowerReadStateCleaner
 	maintenanceStopCh        chan struct{}
 	maintenanceDoneCh        chan struct{}
+	startupPreparationMu     sync.Mutex
+	startupPreparationDone   chan struct{}
+	startupPreparationErr    error
+	startupPreparationRun    bool
+	startupPreparationReady  bool
+	uploadRecoveryMu         sync.Mutex
+	uploadRecoveryRunning    bool
+	uploadRecoveryReady      bool
+	uploadRecoveryDone       chan struct{}
+	uploadRecoveryErr        error
 	compactionScheduled      bool
 	uploadAttemptPruneCursor threadstore.UploadAttemptPruneCursor
 	executionAuthorityCursor threadstore.ExecutionAuthorityCursor
@@ -456,6 +467,8 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		threadsDB:                       ts,
 		closeFloret:                     floretBootstrap.close,
 		floretMediaInventory:            floretBootstrap.mediaInventory,
+		floretThreadMediaInventory:      floretBootstrap.threadMediaInventory,
+		storeStartupProgress:            opts.StoreStartupProgress,
 		threadRuntime:                   floretBootstrap.threadRuntime,
 		floretEffects:                   floretBootstrap.effects,
 		orphanCanonicalRootIDs:          make(map[string]struct{}),
@@ -517,22 +530,6 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 	svc.floretEffects.bind(svc)
 	if svc.flowerReadStateCleaner == nil {
 		svc.flowerReadStateCleaner = reads
-	}
-	reportFloretStorePhase(opts.StoreStartupProgress, FloretStoreStartupPreparing)
-	if _, err := svc.ReconcileCanonicalRootOwnership(ctx); err != nil {
-		return nil, errors.Join(flowerStorageError("product", "verifying", err), svc.Close())
-	}
-	if err := svc.prepareStartupThreads(ctx); err != nil {
-		return nil, errors.Join(flowerStorageError("floret", "verifying", err), svc.Close())
-	}
-	uploadRecoveryCtx, cancelUploadRecovery := context.WithTimeout(ctx, persistTO)
-	interruptedUploads, uploadRecoveryErr := svc.interruptUploadAttemptsFromPreviousProcess(uploadRecoveryCtx)
-	cancelUploadRecovery()
-	if uploadRecoveryErr != nil {
-		return nil, errors.Join(flowerStorageError("uploads", "verifying", uploadRecoveryErr), svc.Close())
-	}
-	if interruptedUploads > 0 {
-		logger.Info("ai: interrupted upload recovery completed", "count", interruptedUploads)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, errors.Join(err, svc.Close())

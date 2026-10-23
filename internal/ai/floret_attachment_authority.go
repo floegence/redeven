@@ -62,6 +62,25 @@ func (service *Service) retainCanonicalUploadDescriptors(ctx context.Context, en
 	return service.threadsDB.RetainCanonicalUploads(ctx, endpointID, threadID, ids)
 }
 
+func (service *Service) retainCanonicalUploadForOwner(ctx context.Context, owner UploadOwner, threadID string, membership CanonicalAttachmentMembership) error {
+	if service == nil || service.threadsDB == nil {
+		return errors.New("attachment store is unavailable")
+	}
+	record, err := service.threadsDB.GetUpload(ctx, owner.EndpointID, membership.AttachmentID)
+	if err != nil {
+		return err
+	}
+	if record == nil || record.OwnerUserHash != owner.OwnerUserHash {
+		return sql.ErrNoRows
+	}
+	return service.retainCanonicalUploadDescriptors(ctx, owner.EndpointID, threadID, []flruntime.MessageAttachment{{
+		ResourceRef: membership.ResourceRef,
+		Name:        membership.Name,
+		MIMEType:    membership.DetectedMediaType,
+		SizeBytes:   membership.SizeBytes,
+	}})
+}
+
 func (authority floretLiveAttachmentAuthority) ReadCanonicalAttachmentMembership(ctx context.Context, threadID, turnID, attachmentID string) (CanonicalAttachmentMembership, error) {
 	if authority.service == nil || strings.TrimSpace(threadID) == "" || strings.TrimSpace(threadID) != strings.TrimSpace(authority.threadID) || !validUploadID(strings.TrimSpace(attachmentID)) {
 		return CanonicalAttachmentMembership{}, sql.ErrNoRows
@@ -93,6 +112,9 @@ func (service *Service) openCanonicalLiveAttachment(ctx context.Context, owner U
 	if err != nil {
 		return openedCanonicalAttachment{}, err
 	}
+	if err := service.retainCanonicalUploadForOwner(ctxOrBackground(ctx), owner, membership.ThreadID, membership); err != nil {
+		return openedCanonicalAttachment{}, err
+	}
 	upload, err := service.OpenLiveUpload(ctx, owner, membership.ThreadID, membership.TurnID, membership.AttachmentID, authority)
 	if err != nil {
 		return openedCanonicalAttachment{}, err
@@ -106,11 +128,18 @@ func (service *Service) OpenCanonicalLiveAttachmentForTurn(ctx context.Context, 
 		return nil, NewUploadError(UploadErrorNotFound, false, errors.New("attachment not found"))
 	}
 	authority := floretLiveAttachmentAuthority{service: service, threadID: threadID}
-	if _, err := authority.find(ctx, turnID, attachmentID); err != nil {
+	membership, err := authority.find(ctx, turnID, attachmentID)
+	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, flruntime.ErrThreadNotFound) || errors.Is(err, flruntime.ErrThreadDeleted) {
 			return nil, NewUploadError(UploadErrorNotFound, false, errors.New("attachment not found"))
 		}
 		return nil, NewUploadError(UploadErrorStoreUnavailable, true, fmt.Errorf("open canonical attachment authority: %w", err))
+	}
+	if err := service.retainCanonicalUploadForOwner(ctxOrBackground(ctx), owner, threadID, membership); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, NewUploadError(UploadErrorNotFound, false, errors.New("attachment not found"))
+		}
+		return nil, NewUploadError(UploadErrorStoreUnavailable, true, fmt.Errorf("retain canonical attachment: %w", err))
 	}
 	return service.OpenLiveUpload(ctx, owner, threadID, turnID, attachmentID, authority)
 }

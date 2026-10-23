@@ -60,6 +60,7 @@ type aiReadinessController struct {
 	startupPhase          string
 	startupStartedAt      time.Time
 	startupPhaseStartedAt time.Time
+	startupFactoryOpening bool
 }
 
 var readinessTraceSequence uint64
@@ -352,9 +353,13 @@ func (c *aiReadinessController) runAttempt(attemptCtx context.Context, previous 
 		c.mu.Lock()
 		opts := c.opts
 		revision := c.optsRevision
+		c.startupFactoryOpening = true
 		c.mu.Unlock()
 
 		service, err := c.create(attemptCtx, opts)
+		c.mu.Lock()
+		c.startupFactoryOpening = false
+		c.mu.Unlock()
 		if err != nil {
 			if errors.Is(err, ai.ErrFlowerGenerationClose) {
 				c.finishCloseFailure(err)
@@ -449,7 +454,15 @@ func (c *aiReadinessController) observeStoreStartupPhase(phase ai.FloretStoreSta
 	default:
 		return
 	}
-	c.setTransientState(state)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed || !c.running || c.stopRequested || !c.startupFactoryOpening {
+		return
+	}
+	c.logStartupPhaseLocked(string(state))
+	c.snapshot = appserver.AIReadinessSnapshot{
+		State: state, TraceID: c.startupTraceID, StartupPhase: c.startupPhase, Stoppable: true,
+	}
 }
 
 func (c *aiReadinessController) setTransientState(state appserver.AIReadinessState) {
@@ -713,8 +726,13 @@ func (c *aiReadinessController) AIReadiness() appserver.AIReadinessSnapshot {
 		return appserver.AIReadinessSnapshot{State: appserver.AIReadinessUnavailable}
 	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.snapshot
+	snapshot := c.snapshot
+	generation := c.current
+	c.mu.Unlock()
+	if generation != nil && generation.service != nil && (snapshot.State == appserver.AIReadinessReady || snapshot.State == appserver.AIReadinessDegraded) {
+		return aiReadinessSnapshotForIssueCount(generation.service.OrphanCanonicalRootIssueCount())
+	}
+	return snapshot
 }
 
 func (c *aiReadinessController) Close() error {

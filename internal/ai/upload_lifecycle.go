@@ -492,11 +492,20 @@ func (s *Service) startBackgroundMaintenance() {
 		ticker := time.NewTicker(uploadCleanupSweepInterval)
 		defer ticker.Stop()
 		defer close(doneCh)
-		s.runBackgroundMaintenance("startup")
+		run := func(reason string) {
+			if err := s.waitForStartupPreparation(s.lifecycleCtx); err != nil {
+				if !errors.Is(err, context.Canceled) && s.log != nil {
+					s.log.Warn("ai upload maintenance deferred because startup preparation is incomplete", "error", err)
+				}
+				return
+			}
+			s.runBackgroundMaintenance(reason)
+		}
+		run("startup")
 		for {
 			select {
 			case <-ticker.C:
-				s.runBackgroundMaintenance("periodic")
+				run("periodic")
 			case <-stopCh:
 				return
 			}
