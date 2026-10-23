@@ -96,8 +96,8 @@ const mocks = vi.hoisted(() => {
     if (url.includes('/_redeven_proxy/api/ai/threads/') && url.includes('/live/events') && (!init || init.method === 'GET')) {
       return { events: [], next_cursor: 0, retained_from_seq: 1 };
     }
-    if (/\/_redeven_proxy\/api\/ai\/threads\/[^/?]+$/u.test(url) && (!init || init.method === 'GET')) {
-      const match = /\/_redeven_proxy\/api\/ai\/threads\/([^/?]+)$/u.exec(url);
+    if (/\/_redeven_proxy\/api\/ai\/threads\/[^/?]+(?:\/history)?$/u.test(url) && (!init || init.method === 'GET' || init.method === 'POST' && url.endsWith('/history'))) {
+      const match = /\/_redeven_proxy\/api\/ai\/threads\/([^/?]+)(?:\/history)?$/u.exec(url);
       const threadID = decodeURIComponent(match?.[1] ?? 'thread-1');
       const pendingInput = state.currentInteractions.find((value) => (
         value && typeof value === 'object' && (value as Record<string, unknown>).kind === 'input'
@@ -541,7 +541,8 @@ async function renderPage(waitForSurface = true) {
       data: await mocks.fetchLocalApiJSONMock(input instanceof Request ? input.url : String(input), init),
     }), { headers: { 'Content-Type': 'application/json' } }),
     events: async function* (_input, options) {
-      yield* [];
+      const baseline = await mocks.fetchLocalApiJSONMock('/_redeven_proxy/api/ai/threads?limit=25', { method: 'GET', signal: options?.signal });
+      yield { data: JSON.stringify({ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: baseline.threads }) };
       await new Promise<void>((resolve) => {
         if (options?.signal?.aborted) resolve();
         else options?.signal?.addEventListener('abort', () => resolve(), { once: true });
@@ -844,7 +845,7 @@ export function registerEnvAIPageSendTests() {
         const bootstrapURLs = [
           '/_redeven_proxy/api/settings',
           '/_redeven_proxy/api/ai/models?mode=baseline',
-          '/_redeven_proxy/api/ai/threads?limit=200',
+          '/_redeven_proxy/api/ai/threads?limit=25',
         ];
         for (let attempt = 0; attempt < 20; attempt += 1) {
           if (bootstrapURLs.every(url => mocks.fetchLocalApiJSONMock.mock.calls.some(([admittedURL]) => admittedURL === url))) break;
@@ -872,7 +873,7 @@ export function registerEnvAIPageSendTests() {
       const { host, dispose } = await renderPage();
       try {
         await selectHistoryThread(host);
-        expect(mocks.fetchLocalApiJSONMock).toHaveBeenCalledWith('/_redeven_proxy/api/ai/threads/thread-1', { method: 'GET', signal: expect.any(AbortSignal) });
+        expect(mocks.fetchLocalApiJSONMock).toHaveBeenCalledWith('/_redeven_proxy/api/ai/threads/thread-1/history', { method: 'POST', body: '{}', signal: expect.any(AbortSignal) });
         expect(mocks.currentItemsMock).toHaveBeenCalledWith({ threadId: 'thread-1' });
         expect(host.textContent).toContain('Transcript for thread-1');
       } finally {
@@ -1202,8 +1203,7 @@ export function registerEnvAIPageSendTests() {
       mocks.state.omitReadState = true;
       const { host, dispose } = await renderPage();
       try {
-        await flush();
-        await flush();
+        await selectHistoryThread(host);
         expect(host.textContent).toContain('Flower contract error: thread.read_status.read_state is required.');
       } finally {
         dispose();

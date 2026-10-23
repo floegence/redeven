@@ -164,3 +164,28 @@ it('keeps Companion approval recovery visible and allows keyboard Stop while liv
   await userEvent.keyboard('Draft after stopping');
   expect(editor.value).toBe('Draft after stopping');
 });
+
+it('automatically replaces a failed reading-interest baseline and preserves the draft', async () => {
+  const selected = thread({ thread_id: 'history-recovery', title: 'History recovery' });
+  const drafts = createFlowerComposerDraftCoordinator();
+  const attempts: FlowerLiveStreamConnectInput[] = [];
+  const loadHistory = vi.fn(async () => liveBootstrap(selected, 9));
+  loadHistory.mockRejectedValueOnce(Object.assign(new Error('temporary baseline failure'), { code: 'transport' }));
+  const runtime = renderSurfaceWithDraftCoordinator({
+    ...adapter(true), loadHistory,
+    async *connectLiveStream(input) {
+      attempts.push(input);
+      yield { schema_version: 3, kind: 'ready', baseline_complete: true, observer_id: 'observer-' + attempts.length, summaries: [selected] };
+      if (!input.signal.aborted) await new Promise<void>(resolve => input.signal.addEventListener('abort', () => resolve(), { once: true }));
+    },
+  }, drafts);
+  await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="history-recovery"] button')));
+  drafts.open(selected.thread_id).mutate(value => ({ ...value, text: 'Keep my recovery draft' }));
+  runtime.querySelector<HTMLButtonElement>('[data-thread-id="history-recovery"] button')!.click();
+  await waitFor(() => attempts.length === 2 && runtime.textContent?.includes('Plan deploy') === true);
+  expect(loadHistory).toHaveBeenCalledTimes(2);
+  expect(attempts[0].signal.aborted).toBe(true);
+  expect(attempts.filter(attempt => !attempt.signal.aborted)).toHaveLength(1);
+  expect(runtime.querySelector('.flower-workspace-sync')).toBeNull();
+  expect(drafts.read(selected.thread_id).value.text).toBe('Keep my recovery draft');
+});

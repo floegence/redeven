@@ -1,3 +1,5 @@
+import { FlowerReadDeadlineError } from './requestDeadline';
+
 export type LiveTransportConnect<T> = (input: Readonly<{ signal: AbortSignal }>) => AsyncIterable<T>;
 
 export type LiveTransportState = Readonly<{
@@ -25,6 +27,18 @@ export type LiveTransport<T> = Readonly<{
 
 const RECONNECT_DELAYS_MS = [250, 500, 1_000, 2_000, 4_000, 10_000] as const;
 const HANDSHAKE_TIMEOUT_MS = 15_000;
+
+// Only transport/read availability and lost observation continuity recover
+// automatically. Invalid contracts and authorization require explicit action.
+function recoverable(error: unknown): boolean {
+  if (error === undefined) return true;
+  const status = Number((error as { status?: unknown })?.status ?? 0);
+  const code = String((error as { code?: unknown })?.code ?? '').trim();
+  if (status >= 400 && status < 500) return status === 408;
+  if (code === 'flower_live_version_error' || code === 'INVALID_JSON_RESPONSE') return false;
+  return error instanceof FlowerReadDeadlineError || status >= 500 && status <= 599
+    || code === 'transport' || code === 'flower_live_sync_error' || code === 'flower_live_handshake_timeout';
+}
 
 type ConnectionAttempt = {
   epoch: number;
@@ -65,7 +79,7 @@ export function createLiveTransport<T>(): LiveTransport<T> {
   const fail = (error: unknown, connectionEpoch = epoch) => {
     const current = owner;
     if (!current || current.stopped || connectionEpoch !== epoch || state.status === 'failed') return;
-    if ((error as { code?: unknown })?.code === 'flower_live_sync_error' && current.attempt) {
+    if (recoverable(error) && current.attempt) {
       disconnect(current, current.attempt, error);
       return;
     }
@@ -75,10 +89,7 @@ export function createLiveTransport<T>(): LiveTransport<T> {
   };
   const disconnect = (current: TransportOwner<T>, attempt: ConnectionAttempt, error?: unknown) => {
     if (!currentAttempt(current, attempt)) return;
-    const status = Number((error as { status?: unknown })?.status ?? 0);
-    const code = String((error as { code?: unknown })?.code ?? '').trim();
-    if (error !== undefined && (status === 401 || status === 403 || status === 423 || status === 426 || status === 429
-      || ((!code && status === 0) || (code && code !== 'transport' && code !== 'unexpected_status' && code !== 'flower_live_sync_error')))) {
+    if (!recoverable(error)) {
       fail(error, attempt.epoch);
       return;
     }

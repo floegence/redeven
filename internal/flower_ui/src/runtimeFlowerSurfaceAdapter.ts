@@ -478,7 +478,20 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     loadThread,
     loadHistory: options.transport.loadHistory ? async (threadID, input, signal) => {
       signal.throwIfAborted();
-      const raw = await options.transport.loadHistory!(threadID, input, signal);
+      let raw: unknown;
+      try {
+        raw = await options.transport.loadHistory!(threadID, input, signal);
+      } catch (error) {
+        signal.throwIfAborted();
+        const failure = error as { code?: unknown; status?: unknown; failureKind?: unknown } | null;
+        // Native fetch rejects with TypeError; Desktop explicitly classifies a
+        // lost bridge response. Only normalize at the read transport boundary,
+        // before mapping, so programming and contract errors stay terminal.
+        if (error instanceof TypeError && !failure?.code && !failure?.status || failure?.failureKind === 'transport_unknown') {
+          throw Object.assign(new Error('Flower history transport is unavailable.', { cause: error }), { code: 'transport' });
+        }
+        throw error;
+      }
       signal.throwIfAborted();
       return mapRuntimeThreadView(raw, options);
     } : undefined,

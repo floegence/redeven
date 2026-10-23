@@ -92,7 +92,6 @@ describe('Flower workspace stream visibility', () => {
   });
 
   it.each(['hidden', 'covered', 'failed'] as const)('does not acknowledge an unpresented %s body', async mode => {
-    if (mode === 'hidden') setDocumentVisible(false);
     const initial = thread({ thread_id: 'read-not-presented', updated_at_ms: 7, status: 'success', read_status: readStatus(true, 7) });
     const markThreadRead = vi.fn(async () => readStatus(false, 7));
     const runtime = renderSurfaceWithAdapterProps({
@@ -100,17 +99,18 @@ describe('Flower workspace stream visibility', () => {
       loadThread: vi.fn(async () => { if (mode === 'failed') throw new Error('body failed'); return liveBootstrap(initial, 7); }),
     }, { transcriptVisible: mode !== 'covered' });
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="read-not-presented"] button')));
+    if (mode === 'hidden') setDocumentVisible(false);
     (runtime.querySelector('[data-thread-id="read-not-presented"] button') as HTMLButtonElement).click();
     await wait(100);
     expect(markThreadRead).not.toHaveBeenCalled();
   });
 
   it('acknowledges automatically after a hidden body becomes visible', async () => {
-    setDocumentVisible(false);
     const selected = thread({ thread_id: 'read-visibility-recovery', updated_at_ms: 7, status: 'success', read_status: readStatus(true, 7) });
     const markThreadRead = vi.fn(async () => readStatus(false, 7));
     const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [selected]), loadThread: vi.fn(async () => liveBootstrap(selected, 7)), markThreadRead });
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="read-visibility-recovery"] button')));
+    setDocumentVisible(false);
     (runtime.querySelector('[data-thread-id="read-visibility-recovery"] button') as HTMLButtonElement).click();
     await wait(80);
     expect(markThreadRead).not.toHaveBeenCalled();

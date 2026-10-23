@@ -12406,11 +12406,8 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
   padding: 0.75rem 1rem;
   font-size: 0.8125rem;
 }
-.flower-history-text-preview { padding: 1rem; }
-.flower-history-text-preview pre {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font: inherit;
-  max-height: 24rem;
-  overflow: auto;
-}
+.flower-history-message { min-width: 0; }
+.flower-history-text-loading { padding: 1rem; min-height: 9rem; }
+.flower-history-text-skeleton { display: grid; gap: 0.625rem; padding: 0.25rem 0; }
+.flower-history-text-skeleton span { height: 0.75rem; border-radius: 0.25rem; background: currentColor; opacity: 0.07; }
+.flower-history-text-skeleton span:last-child { width: 62%; }

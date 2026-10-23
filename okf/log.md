@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-10-23 — Readable bounded conversation history
+
+- Ordinary visible message bodies load automatically through a two-slot cancellable queue and render complete Markdown without moving the reading anchor; tools retain explicit disclosure.
+- Transient history baseline failures recover through the existing live connection owner; contract and authorization failures remain explicit.
+- Contract and evidence: [Flower live timeline](ui/flower-live-timeline.md).
+
 - 2026-10-23: Deliver the Flower sidebar in cancellable 25-root pages, preserve partial selection and complete membership, and avoid duplicate startup summary scans. Add isolated native Electron and bilingual navigation acceptance for progressive loading and draft retention. See [live delivery](ui/flower-live-timeline.md).
 
 - 2026-10-22: Adopt the direct HTML floating-preview action and compact content-first canvas from published Floe. See [inline media](ui/flower-inline-media.md).
