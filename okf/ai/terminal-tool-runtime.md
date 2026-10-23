@@ -9,29 +9,29 @@ reviewed_at: "2026-10-23"
 ---
 # Summary
 
-Redeven owns PTY process resources and bounded output retention. Floret v7 owns the canonical tool call, interaction, effect attempt, result, and Activity. One effect adapter authorizes execution once and publishes stable current-view updates; Redeven does not persist a parallel terminal lifecycle or recover effects from product SQL.
+Redeven owns PTYs and bounded output; Floret v7 owns canonical tool calls, interactions, effect attempts, results and Activity. One adapter authorizes execution once and publishes current views. Product SQL stores no parallel terminal lifecycle or effect recovery.
 
 # Contract
 
-Each local PTY uses Floret's execution and effect identities. `terminal.exec` waits 5 seconds by default (`yield_ms` omitted or zero), or a positive value capped at 30 seconds. When waiting ends, it returns a running process ID and the command continues.
+PTYs use Floret execution/effect identities. `terminal.exec` waits 5 seconds when `yield_ms` is omitted or zero; positive values cap at 30 seconds. Yield returns a running process ID without stopping the command.
 
-On macOS/Linux, the PTY manager observes direct-command exit without reaping it, signals the owned process group, retires numeric group signaling, confirms the group has no running members within a bounded cleanup window, and only then reaps the root and settles output. Keeping the root unreaped pins its PID through the final group signal. Normal shell exit codes remain authoritative; cleaning up children does not itself mean cancellation. Stop, initial-input failure, the 30-minute runtime limit, and Service shutdown use the same exit worker. Cleanup failures surface as terminal runtime failures and retain workload admission; completed commands stop their watchdog immediately.
+On macOS/Linux, one exit worker observes command exit without reaping, kills its process group, retires numeric signaling, verifies no live members within 2 seconds, then reaps and drains output. The unreaped root pins its PID through cleanup. Child cleanup preserves shell exit codes; only confirmed Stop termination means cancellation. Stop, input failure, the 30-minute limit and Service shutdown share this worker. Unconfirmed cleanup reports a runtime error and retains workload admission. Settlement stops the watchdog.
 
-Long-lived commands must remain in the foreground and use the yielded process ID. Shell backgrounding and `nohup` do not transfer ownership to an independent service. Descendants that deliberately create another process group/session are unsupported: this is process-group cleanup, not arbitrary daemon containment. Use an explicit managed service lifecycle for independent services and the managed browser for browser previews; never infer ownership from process names, CPU usage, or age.
+Long-lived commands stay foreground under the yielded process ID. Backgrounding and `nohup` cannot transfer ownership; escaping the PTY group/session is unsupported. Independent services need a managed lifecycle; previews use the managed browser. Names, CPU use and age never establish ownership.
 
-`terminal.read` waits up to 60 seconds for output after the caller's sequence and returns early on output or exit. One cancellable observation owns the deadline. An empty full-window result keeps the running process ID and cursor unchanged and reports `wait_expired` with `wait_ms`. These describe the read window; `timed_out` remains a command execution timeout. The model uses the same process ID and returned `last_seq` when more output or the command's final result is needed, without sleeps or command restarts.
+`terminal.read` observes output after the caller's sequence for up to 60 seconds, returning early on output/exit. An expired observation retains process ID and cursor and reports `wait_expired`/`wait_ms`; `timed_out` means command timeout. Continue with the same ID and returned `last_seq`, without sleeps or command restarts.
 
-The adapter passes a normally expired observation to the published Floret `BoundedWait` contract. Floret measures actual handler time and owns repeat protection. Immediate, failed, canceled, and early-returning reads receive no wait exemption; a wait never excuses a neighboring repeated effect. No additional retry counter, progress clock, automatic wake, or durable task ledger is introduced.
+Normal expiry uses Floret `BoundedWait`; Floret measures handler time and owns repeat protection. Immediate, failed, canceled and early reads gain no exemption, nor do neighboring repeated effects. No extra retry counter, clock, wake or durable ledger exists.
 
-Terminal reads declare a read-only effect over the existing process. Cancellation interrupts the read without terminating the observed process or advancing its output cursor; after the local observation returns, its canceled result is confirmed for Floret settlement. Command execution and input retain their shell-effect and uncertainty rules. `terminal.write` writes bounded stdin; `terminal.terminate` explicitly requests owned-process-group termination and waits for reap and output drain. Existing thread Stop policy remains authoritative over process cleanup.
+Reads are read-only effects: cancellation preserves process and cursor, then confirms the canceled result after observation returns. Execution/input retain shell-effect uncertainty rules. `terminal.write` bounds stdin; `terminal.terminate` kills the owned group and waits for reap/output drain. Thread Stop policy governs cleanup.
 
-Model read results retain incremental output, status, cursor, wait facts, and exit information. The command, working directory, and process timing remain available to the canonical Activity source without being echoed into every model read result.
+Read results contain incremental output, status, cursor, wait and exit facts. Command, cwd and timing remain in canonical Activity without repeated model echoes.
 
 Browser payloads exclude local working paths, stdin, authorization proofs, and effect internals.
 
 # Boundaries
 
-Redeven does not wait on authority barriers, admission receipts, recovery handles, or projection cursors. Terminal reads never trigger settlement retries. UI polling may refresh process bytes while a detail row is open, but it cannot synthesize canonical status or cause provider dispatch.
+No authority barriers, admission receipts, recovery handles or projection-cursor waits exist. Reads never retry settlement. Open-detail polling refreshes bytes, never canonical status or provider dispatch.
 
 # Evidence
 
