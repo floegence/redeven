@@ -596,23 +596,23 @@ func applyParsedPatch(ctx context.Context, workingDir string, parsed parsedPatch
 	plans := make([]patchFilePlan, 0, len(files))
 	seen := map[string]bool{}
 	for _, fd := range files {
+		operationPaths := map[string]bool{}
+		for _, path := range []string{fd.oldPath, fd.newPath} {
+			if path == "/dev/null" || operationPaths[path] {
+				continue
+			}
+			operationPaths[path] = true
+			if seen[path] {
+				return parsedPatch{}, &patchApplyError{cause: duplicatePatchOperation(path)}
+			}
+			seen[path] = true
+		}
 		plan, err := buildPatchFilePlan(workingDir, fd)
 		if err != nil {
 			return parsedPatch{}, &patchApplyError{cause: err}
 		}
 		if (fd.oldPath != "/dev/null" && plan.oldAbs != fd.oldPath) || (fd.newPath != "/dev/null" && plan.newAbs != fd.newPath) {
 			return parsedPatch{}, &patchApplyError{cause: fmt.Errorf("patch target changed while planning; inspect paths and submit a new patch")}
-		}
-		operationPaths := map[string]bool{}
-		for _, path := range []string{plan.oldAbs, plan.newAbs} {
-			if path == "" || operationPaths[path] {
-				continue
-			}
-			operationPaths[path] = true
-			if seen[path] {
-				return parsedPatch{}, &patchApplyError{cause: fmt.Errorf("patch touches %s in more than one file operation; combine its chunks into one operation", path)}
-			}
-			seen[path] = true
 		}
 		plans = append(plans, plan)
 	}

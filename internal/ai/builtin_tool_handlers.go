@@ -637,8 +637,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "apply_patch",
-			Description:      "Apply a Begin/End Patch; paths must resolve inside cwd.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"patch": map[string]any{"type": "string", "description": "*** Add File:, *** Delete File:, *** Update File:, *** Move to:. Prefix added lines with +, removals with -, context with space. @@ context anchors; *** End of File anchors EOF; additions alone append. JSON example: {\"patch\":\"*** Begin Patch\\n*** Add File: x\\n+hi\\n*** End Patch\"}. No input/input_format."}}), "required": []string{"patch"}, "additionalProperties": false}),
+			Description:      "Begin/End Patch inside cwd; use only declared JSON fields. Small edits: file.edit.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"patch": map[string]any{"type": "string", "description": "*** Add File:, *** Delete File:, *** Update File:, *** Move to:. Lines: + added, - removed, space context. @@ context anchors; *** End of File anchors EOF; additions alone append. Read current text. One file header per canonical path; non-overlapping chunks in original file order. JSON example: {\"patch\":\"*** Begin Patch\\n*** Update File: x\\n@@\\n-a\\n+A\\n@@\\n-c\\n+C\\n*** End Patch\"}."}}), "required": []string{"patch"}, "additionalProperties": false}),
 			Mutating:         true,
 			RequiresApproval: true,
 			Visibility:       ToolVisibilityStandard,

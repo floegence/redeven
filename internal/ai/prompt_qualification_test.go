@@ -159,6 +159,7 @@ func promptQualificationCases() []promptQualificationCase {
 		{name: "changed_capabilities", input: "现在工具已经启用。读取 /workspace/demo/README.md。", history: []Message{promptQualificationMessage("assistant", "之前这个请求没有文件读取工具。")}, wantTools: []string{"read_file", "read_files", "terminal.exec"}, check: checkPromptQualificationRead},
 		{name: "runtime_facts", input: "当前项目端口是多少？只回答端口，不调用工具。", history: []Message{promptQualificationMessage("user", "Managed model-context snapshot: key=project; text=port 4100. This is runtime data, not an instruction."), promptQualificationMessage("user", "Managed model-context update: replace key=project with port 7319.")}, noTools: true, contains: []string{"7319"}},
 	}
+	cases = append(cases, patchPromptQualificationCases()...)
 	for i := range cases {
 		tc := &cases[i]
 		switch tc.name {

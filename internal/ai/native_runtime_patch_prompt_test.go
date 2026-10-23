@@ -9,7 +9,7 @@ func TestPatchFormatRemainsInToolDefinition(t *testing.T) {
 	for _, def := range builtInToolDefinitions() {
 		if def.Name == "apply_patch" {
 			found = true
-			for _, contract := range []string{"*** Begin Patch", "*** End Patch", "*** Add File:", "*** Update File:", "*** Move to:", "Prefix added lines with +"} {
+			for _, contract := range []string{"*** Begin Patch", "*** End Patch", "*** Add File:", "*** Update File:", "*** Move to:", "space context", "One file header per canonical path", "non-overlapping chunks in original file order"} {
 				assertPromptContains(t, string(def.InputSchema), contract)
 			}
 		}
