@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createFlowerScrollTailController } from '../../../../../flower_ui/src/flowerScrollTail';
 
 const cleanups: (() => void)[] = [];
-afterEach(() => { cleanups.splice(0).forEach((cleanup) => cleanup()); });
+afterEach(() => { cleanups.splice(0).forEach((cleanup) => cleanup()); vi.unstubAllGlobals(); });
 
-function harness() {
+function harness(options: { onLayout?: () => void } = {}) {
   const frames = new Map<number, FrameRequestCallback>();
   let nextID = 0;
   const viewport = document.createElement('div');
@@ -20,6 +20,7 @@ function harness() {
   });
   viewport.scrollTop = 300;
   const controller = createFlowerScrollTailController({
+    onLayout: options.onLayout,
     reducedMotionPreferred: () => true,
     requestAnimationFrame: (callback) => { frames.set(++nextID, callback); return nextID; },
     cancelAnimationFrame: (id) => { frames.delete(id); },
@@ -45,7 +46,7 @@ function harness() {
     frame(); frame();
   };
   cleanups.push(() => { controller.dispose(); viewport.remove(); expect(frames.size).toBe(0); });
-  return { controller, viewport, title, frame, grow };
+  return { controller, viewport, title, frame, grow, pending: () => frames.size };
 }
 
 function pointer(target: Element, type: string, pointerType = 'mouse') {
@@ -60,6 +61,41 @@ function touchMove(target: Element, clientY: number) {
 }
 
 describe('Flower viewport input ownership', () => {
+  it('positions resize geometry before paint while deferring presentation mutations and keeping reading ownership', () => {
+    let resize!: () => void;
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: () => void) { resize = callback; }
+      observe = observe;
+      disconnect = disconnect;
+    });
+    const onLayout = vi.fn();
+    const { controller, viewport, frame, pending } = harness({ onLayout });
+    controller.startFollowing();
+    let reads = 0;
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, get: () => { reads++; return 900; } });
+    for (let index = 0; index < 300; index++) controller.measureAfterLayout();
+    expect(pending()).toBe(1);
+    resize();
+    expect(viewport.scrollTop).toBe(800);
+    expect(reads).toBe(1);
+    expect(onLayout).not.toHaveBeenCalled();
+    expect(pending()).toBe(1);
+    frame();
+    expect(onLayout).toHaveBeenCalledTimes(1);
+    expect(pending()).toBe(0);
+    controller.stopFollowing();
+    viewport.scrollTop = 200;
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1200 });
+    resize();
+    frame();
+    expect(viewport.scrollTop).toBe(200);
+    expect(observe).toHaveBeenCalledTimes(2);
+    controller.dispose();
+    expect(disconnect).toHaveBeenCalledTimes(1);
+  });
+
   it('coalesces historical layout notifications and releases the capture listener on disposal', () => {
     const { controller, viewport, title, frame } = harness();
     controller.startFollowing();

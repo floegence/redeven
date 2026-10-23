@@ -30,13 +30,15 @@ scrolling. Preparation has no elapsed-time reveal fallback. Cold navigation
 shows separate loading feedback confined to the transcript region; failed body
 reads expose local Retry. The composer and navigation remain available.
 
-Cached destinations flush the same layout pass after render effects, before
-paint. Historical `content-visibility: auto` placeholders are not real layout:
-visible row content must pass `checkVisibility({ contentVisibilityAuto: true })`
-before reveal, even with cached text. One capture listener routes non-bubbling
-`contentvisibilityautostatechange` events through the scroll owner's existing
-coalesced resize/layout pass. Preparation waits for native layout; no timers,
-polling, per-row observers or disabled offscreen optimization.
+Cached destinations flush layout after render effects. Visible historical rows
+must pass `checkVisibility({ contentVisibilityAuto: true })` before reveal.
+Skipped rows above the viewport can still expand afterward. The existing
+ResizeObserver corrects scroll in its pre-paint delivery; scheduling that
+correction in rAF would expose one frame with stale offsets. Reveal and body
+requests remain in rAF, outside resize delivery, to avoid observer loops.
+Content-visibility events reuse the scheduled pass. New navigation clears old
+arrival motion. Native offscreen skipping, bounded reads and manual scroll
+ownership remain intact; no timers, polling or per-row observers are added.
 
 The two-slot body loader prioritizes the latest visible text plus its existing
 margin and cancels obsolete navigation/transport demand. ThreadCache retains

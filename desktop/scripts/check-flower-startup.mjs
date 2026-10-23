@@ -10,9 +10,10 @@ import { _electron } from '../../internal/envapp/ui_src/node_modules/playwright/
 import { createDesktopTestSession } from '../../scripts/desktop_test_session.mjs';
 
 const session = await createDesktopTestSession(import.meta.url, { timeoutMs: 180000 });
+const activeTail = process.argv.includes('--active-tail');
 await session.run(async () => {
   const root = fileURLToPath(new URL('../../', import.meta.url));
-  const output = path.join(root, 'desktop/dist/flower-startup-acceptance');
+  const output = path.join(root, activeTail ? 'desktop/dist/flower-startup-active-tail-acceptance' : 'desktop/dist/flower-startup-acceptance');
   await mkdir(output, { recursive: true });
   const state = await mkdtemp(path.join(tmpdir(), 'redeven-flower-startup-'));
   await session.directory(state);
@@ -40,7 +41,7 @@ await session.run(async () => {
     const language = { preference: 'zh-CN', resolved_locale: 'zh-CN', source: 'explicit', system_candidates: [] };
     window.redevenDesktopLanguage = { getSnapshot: () => language, setPreference: () => language, subscribe: () => () => {} };
   }, snapshot);
-  await page.goto(new URL('flower-navigation.html?progressive&delayed-first-page&settled-history', url).href);
+  await page.goto(new URL('flower-navigation.html?progressive&delayed-first-page&settled-history' + (activeTail ? '&active-tail' : ''), url).href);
   await page.getByRole('button', { name: 'Flower', exact: true }).click();
   await page.locator('[data-flower-runtime-availability=preparing]').waitFor();
   await page.evaluate(() => window.navigationFixture.releaseRuntime());
@@ -69,6 +70,7 @@ await session.run(async () => {
   // Sample rendering opportunities in the built native renderer. Cached
   // navigation must never expose intrinsic placeholder geometry as content.
   assert.ok(await page.locator('[data-flower-turn-settled=true]').count() > 0);
+  if (activeTail) assert.ok(await page.locator('.flower-turn-row:not([data-flower-turn-settled])').count() > 0);
   const warmSwitches = [];
   for (let attempt = 0; attempt < 3; attempt++) {
     await page.locator('.flower-sidebar-actions .flower-new-chat-button').click();
@@ -82,7 +84,8 @@ await session.run(async () => {
         const surface = document.querySelector('[data-flower-engaged]');
         if (surface?.getAttribute('data-flower-selected-thread-id') !== 'navigation-thread') continue;
         const viewport = surface.querySelector('.flower-chat-transcript');
-        frames.push({ time: performance.now() - started, preparing: viewport.dataset.flowerTailPreparing === 'true',
+        const tail = viewport.querySelector('.flower-turn-row:last-child').getBoundingClientRect();
+        frames.push({ time: performance.now() - started, preparing: viewport.dataset.flowerTailPreparing === 'true', tailTop: tail.top, tailBottom: tail.bottom,
           top: viewport.scrollTop, height: viewport.scrollHeight,
           distance: viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop });
       }
@@ -92,8 +95,11 @@ await session.run(async () => {
     const exposed = result.filter(frame => !frame.preparing);
     assert.ok(exposed.length > 0);
     assert.ok(exposed.every(frame => frame.top > 1000 && Math.abs(frame.distance) <= 1), JSON.stringify(result));
+    assert.ok(exposed.every(frame => Math.abs(frame.tailTop - exposed.at(-1).tailTop) <= 1
+      && Math.abs(frame.tailBottom - exposed.at(-1).tailBottom) <= 1), JSON.stringify(result));
     warmSwitches.push(result);
   }
+  assert.deepEqual(errors, []);
   await page.evaluate(() => window.navigationFixture.dispose());
   assert.ok(await page.evaluate(() => window.navigationFixture.cancellations > 0));
   await session.closeElectron(application);
