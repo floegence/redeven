@@ -9,7 +9,7 @@ reviewed_at: "2026-10-24"
 ---
 # Summary
 
-Redeven owns configuration, credentials and Flower readiness. Floret's public runtime contract is unchanged. Invalid saves preserve configuration and credentials; authentication/network failures remain execution errors.
+Redeven owns configuration, credentials and Flower readiness across every settings entrypoint and provider-bundle save. Floret's public runtime contract is unchanged. Invalid saves preserve configuration and credentials; authentication/network failures remain execution errors.
 
 # Contract
 

@@ -32,16 +32,16 @@ Baseline review: October 12; Kimi update: October 24. Audio, video, embeddings a
 | Custom compatible | User-defined models | Retain explicit endpoint, token limits, and capability configuration. |
 
 ## October catalog refresh
-The original models.dev snapshot hash is recorded in upstream.json; scoped updates record per-provider hashes in provider_sources. [ChatGPT authentication](chatgpt-local-authentication.md) intersects account inventory with reviewed capabilities.
+upstream.json records baseline and per-provider refresh hashes. [ChatGPT authentication](chatgpt-local-authentication.md) intersects account inventory with reviewed capabilities.
 
 ## Kimi review on October 24
 K3.1 Pro/Highspeed launched October 23. This refresh changes only Moonshot and Kimi Code inventory and provenance.
 
-Subscription IDs are k3.1-pro, k3.1-pro-highspeed, k3, k3-256k, kimi-for-coding, and kimi-for-coding-highspeed. K3/K3.1 Pro default to 262,144 context tokens because Plus/Moderato is limited to 256K; users with Pro/Allegretto entitlement can explicitly choose 1,048,576. Highspeed requires Pro/Allegretto or above. Offline catalog refresh verifies neither credentials nor entitlement/quota.
+Six reviewed subscription IDs are listed in the catalog. K3/K3.1 Pro default to 262,144 context tokens because Plus/Moderato is limited to 256K; users with Pro/Allegretto entitlement can explicitly choose 1,048,576. Highspeed requires Pro/Allegretto or above. Offline catalog refresh verifies neither credentials nor entitlement/quota.
 
 Native Responses replays canonical reasoning summaries, messages and paired tool results; it does not retain response-ID continuation or invent reasoning IDs. The client identifies itself as Redeven. Documented quota and policy 429 errors stop automatic retries; transient overload keeps normal backoff and Retry-After. Keys, monthly/5-hour allowance and optional Extra Usage billing remain Kimi-owned. Membership is for personal interactive use; model-family changes should start a new conversation. Native Kimi search remains explicitly unintegrated.
 
-Sources: [models](https://www.kimi.com/code/docs/kimi-code/models.html), [membership](https://www.kimi.com/code/docs/kimi-code/membership.html), [errors](https://www.kimi.com/code/docs/kimi-code/error-reference.html), [usage policy](https://www.kimi.com/code/docs/kimi-code/community-guidelines.html), [platform quickstart](https://platform.kimi.com/docs/guide/kimi-k3-1-pro-quickstart), and [Responses](https://platform.kimi.com/docs/api/responses.md). Deterministic HTTP fixtures qualify routing, tools, reasoning, images, usage, cancellation and failure handling. A real subscription acceptance check still requires a user-owned key and eligible plan.
+Sources: [models](https://www.kimi.com/code/docs/kimi-code/models.html), [membership](https://www.kimi.com/code/docs/kimi-code/membership.html), [errors](https://www.kimi.com/code/docs/kimi-code/error-reference.html), [usage policy](https://www.kimi.com/code/docs/kimi-code/community-guidelines.html), [platform quickstart](https://platform.kimi.com/docs/guide/kimi-k3-1-pro-quickstart), and [Responses](https://platform.kimi.com/docs/api/responses.md). HTTP fixtures cover routing, tools, reasoning, images, usage and cancellation/errors. Live acceptance requires a user key and eligible plan.
 
 # Boundaries
 
