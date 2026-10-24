@@ -67,7 +67,7 @@ func buildFloretTools(r *run, activeTools []ToolDef, webBindings ...map[string]w
 					return floretComputerResources(r, inv)
 				}
 				if inv.Name == "apply_patch" && !r.shouldRouteTargetTool(inv.Name) {
-					return r.patchToolResources(anyToString(inv.Args["patch"]))
+					return r.patchToolResources(anyToString(inv.Args["input"]))
 				}
 				return floretToolResources(inv)
 			},
@@ -626,7 +626,7 @@ func floretToolResources(inv fltools.Invocation[map[string]any]) ([]fltools.Reso
 			return []fltools.ResourceRef{{Kind: "file", Value: root}}, nil
 		}
 	case "apply_patch":
-		if patch := strings.TrimSpace(anyToString(args["patch"])); patch != "" {
+		if patch := strings.TrimSpace(anyToString(args["input"])); patch != "" {
 			files := resourceRefsFromPatch(patch)
 			if len(files) > 0 {
 				return files, nil
@@ -1100,7 +1100,7 @@ func activityPayloadFieldValue(r *run, field string, source map[string]any) (any
 	}
 	switch field {
 	case "files_changed", "hunks", "additions", "deletions":
-		if patch := strings.TrimSpace(anyToString(source["patch"])); patch != "" {
+		if patch := strings.TrimSpace(anyToString(source["input"])); patch != "" {
 			filesChanged, hunks, additions, deletions := summarizeUnifiedDiff(patch)
 			switch field {
 			case "files_changed":

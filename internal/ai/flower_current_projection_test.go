@@ -292,7 +292,7 @@ func TestTypedFailureProjectionIsConsistentAcrossCurrentAndSummaryPaths(t *testi
 
 func TestFlowerCurrentPublishesParsedPatchNameBeforeArgumentsComplete(t *testing.T) {
 	parse := flowerArgumentPreviewFactory("apply_patch")()
-	preview, err := parse(`{"patch":"*** Begin Patch\n*** Update File: src/example.ts\n@@\n-old\n+new`, false)
+	preview, err := parse(`{"input":"*** Begin Patch\n*** Update File: src/example.ts\n@@\n-old\n+new`, false)
 	if err != nil {
 		t.Fatal(err)
 	}

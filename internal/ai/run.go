@@ -1979,13 +1979,13 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 			return nil, errors.New("write permission denied")
 		}
 		var p struct {
-			Patch string `json:"patch"`
+			Input string `json:"input"`
 		}
 		b, _ := json.Marshal(args)
 		if err := json.Unmarshal(b, &p); err != nil {
 			return nil, errors.New("invalid args")
 		}
-		return r.toolApplyPatch(ctx, p.Patch)
+		return r.toolApplyPatch(ctx, p.Input)
 
 	case "terminal.exec":
 		return nil, errors.New("terminal.exec must be executed through the hosted terminal process lifecycle")

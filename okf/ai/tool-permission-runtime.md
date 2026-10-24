@@ -31,7 +31,7 @@ Readonly roots cannot be written. Target-routed tools retain target-owned policy
 
 Use file.edit for small unique literal replacements, file.write for complete
 files, and apply_patch for multi-chunk or multi-file changes. The current provider
-surface uses one strict JSON patch argument plus declared routing fields; input
+surface uses one strict JSON input argument plus declared routing fields; patch
 and input_format are not accepted aliases. No endpoint is assumed to support
 freeform grammar based on its model name.
 

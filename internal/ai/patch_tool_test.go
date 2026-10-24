@@ -225,7 +225,7 @@ func TestPatchModelOutputKeepsDiffInActivity(t *testing.T) {
 	}
 }
 
-func TestPatchToolSchemaHasOnePatchInput(t *testing.T) {
+func TestPatchToolSchemaHasOneInput(t *testing.T) {
 	t.Parallel()
 	var definition ToolDef
 	for _, candidate := range builtInToolDefinitions() {
@@ -243,12 +243,31 @@ func TestPatchToolSchemaHasOnePatchInput(t *testing.T) {
 		t.Fatal(err)
 	}
 	patch := "*** Begin Patch\n*** Add File: f.txt\n+hello\n*** End Patch"
-	if err := schema.Validate(map[string]any{"patch": patch}); err != nil {
+	if err := schema.Validate(map[string]any{"input": patch}); err != nil {
 		t.Fatal(err)
 	}
-	for _, args := range []map[string]any{{}, {"input": patch}, {"patch": patch, "input_format": "begin_patch"}, {"patch": patch, "input": patch}} {
+	if err := schema.Validate(map[string]any{"input": patch, "target_id": "local"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range []map[string]any{{}, {"patch": patch}, {"input": patch, "input_format": "begin_patch"}, {"input": patch, "patch": patch}} {
 		if err := schema.Validate(args); err == nil {
 			t.Fatalf("accepted unsupported input: %+v", args)
+		}
+	}
+}
+
+func TestPatchInputResourcesAndActivity(t *testing.T) {
+	t.Parallel()
+	text := "*** Begin Patch\n*** Update File: old.txt\n*** Move to: new.txt\n@@\n-old\n+new\n*** End Patch"
+	args := map[string]any{"input": text}
+	refs, err := floretToolResources(fltools.Invocation[map[string]any]{Name: "apply_patch", Args: args})
+	if err != nil || len(refs) != 2 || refs[0].Value != "old.txt" || refs[1].Value != "new.txt" {
+		t.Fatalf("patch resources=%+v err=%v", refs, err)
+	}
+	for _, field := range []string{"files_changed", "hunks", "additions", "deletions"} {
+		value, ok := activityPayloadFieldValue(nil, field, args)
+		if !ok || value != 1 {
+			t.Errorf("patch %s=%v present=%v", field, value, ok)
 		}
 	}
 }

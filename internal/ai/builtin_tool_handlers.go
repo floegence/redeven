@@ -638,7 +638,7 @@ func builtInToolDefinitions() []ToolDef {
 		{
 			Name:             "apply_patch",
 			Description:      "Apply a Begin/End Patch inside cwd.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"patch": map[string]any{"type": "string", "description": "*** Begin Patch ... *** End Patch. Operations: *** Add File:, *** Delete File:, *** Update File:, *** Move to:. Lines: + added, - removed, space context. @@ context anchors; *** End of File anchors EOF; additions alone append. One file header per canonical path; non-overlapping chunks in original file order."}}), "required": []string{"patch"}, "additionalProperties": false}),
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"input": map[string]any{"type": "string", "description": "*** Begin Patch ... *** End Patch. Operations: *** Add File:, *** Delete File:, *** Update File:, *** Move to:. Lines: + added, - removed, space context. @@ context anchors; *** End of File anchors EOF; additions alone append. One file header per canonical path; non-overlapping chunks in original file order."}}), "required": []string{"input"}, "additionalProperties": false}),
 			Mutating:         true,
 			RequiresApproval: true,
 			Visibility:       ToolVisibilityStandard,

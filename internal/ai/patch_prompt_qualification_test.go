@@ -21,7 +21,7 @@ func patchPromptQualificationCases() []promptQualificationCase {
 		if len(result.ToolCalls) != 1 || result.ToolCalls[0].Name != "apply_patch" {
 			return fmt.Errorf("expected one apply_patch call")
 		}
-		text, _ := result.ToolCalls[0].Args["patch"].(string)
+		text, _ := result.ToolCalls[0].Args["input"].(string)
 		parsed, err := parsePatchText(text)
 		if err != nil || len(parsed.files) != 1 {
 			return fmt.Errorf("expected one valid file operation: %v", err)
@@ -49,7 +49,7 @@ func patchPromptQualificationCases() []promptQualificationCase {
 			diagnostic = duplicatePatchOperation(path)
 		}
 		failure := patchToolError(&patchApplyError{cause: diagnostic})
-		args, _ := json.Marshal(map[string]any{"patch": fixture.text})
+		args, _ := json.Marshal(map[string]any{"input": fixture.text})
 		result, _ := json.Marshal(map[string]any{"status": "error", "error": failure})
 		cases = append(cases, promptQualificationCase{name: fixture.name, input: input, history: promptQualificationReceipt("apply_patch", string(args), string(result)), wantTools: []string{"apply_patch"}, check: check})
 	}
@@ -65,12 +65,13 @@ func TestPatchPromptQualificationRejectsInvalidEdits(t *testing.T) {
 			args  map[string]any
 			valid bool
 		}{
-			{"correct", map[string]any{"patch": good}, true},
-			{"extra_argument", map[string]any{"patch": good, "input_format": "patch"}, false},
-			{"wrong_old_text", map[string]any{"patch": strings.Replace(good, "-roof=1", "-roof=9", 1)}, false},
-			{"wrong_result", map[string]any{"patch": strings.Replace(good, "+roof=10", "+roof=11", 1)}, false},
-			{"duplicate_header", map[string]any{"patch": strings.Replace(good, "@@\n-water", "*** Update File: /workspace/demo/scene.txt\n@@\n-water", 1)}, false},
-			{"out_of_order", map[string]any{"patch": "*** Begin Patch\n*** Update File: /workspace/demo/scene.txt\n@@\n-sun=3\n+sun=30\n@@\n-roof=1\n+roof=10\n@@\n-water=2\n+water=20\n*** End Patch"}, false},
+			{"correct", map[string]any{"input": good}, true},
+			{"old_argument", map[string]any{"patch": good}, false},
+			{"extra_argument", map[string]any{"input": good, "input_format": "patch"}, false},
+			{"wrong_old_text", map[string]any{"input": strings.Replace(good, "-roof=1", "-roof=9", 1)}, false},
+			{"wrong_result", map[string]any{"input": strings.Replace(good, "+roof=10", "+roof=11", 1)}, false},
+			{"duplicate_header", map[string]any{"input": strings.Replace(good, "@@\n-water", "*** Update File: /workspace/demo/scene.txt\n@@\n-water", 1)}, false},
+			{"out_of_order", map[string]any{"input": "*** Begin Patch\n*** Update File: /workspace/demo/scene.txt\n@@\n-sun=3\n+sun=30\n@@\n-roof=1\n+roof=10\n@@\n-water=2\n+water=20\n*** End Patch"}, false},
 		} {
 			t.Run(tc.name+"/"+trial.name, func(t *testing.T) {
 				result := ModelGatewayResult{ToolCalls: []ToolCall{{Name: "apply_patch", Args: trial.args}}}
