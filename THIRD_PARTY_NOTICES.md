@@ -2760,7 +2760,7 @@ SOFTWARE.
 | github.com/floegence/redeven-service-templates | v0.7.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redeven-service-templates@v0.7.0 | Floegence first-party versioned Managed Service template catalog. |
 | github.com/floegence/redevplugin/v3 | v3.0.36 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.0.36 | Floegence first-party dependency. |
 | github.com/flynn/noise | v1.1.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/flynn/noise@v1.1.0 | Detected from LICENSE. |
-| github.com/go-chi/chi/v5 | v5.3.0 | MIT | Runtime | https://pkg.go.dev/github.com/go-chi/chi/v5@v5.3.0 | Detected from LICENSE. |
+| github.com/go-chi/chi/v5 | v5.4.0 | MIT | Runtime | https://pkg.go.dev/github.com/go-chi/chi/v5@v5.4.0 | Detected from LICENSE. |
 | github.com/go-jose/go-jose/v4 | v4.1.4 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/go-jose/go-jose/v4@v4.1.4 | Detected from LICENSE. |
 | github.com/go-logr/logr | v1.4.3 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/go-logr/logr@v1.4.3 | Detected from LICENSE. |
 | github.com/go-logr/stdr | v1.2.2 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/go-logr/stdr@v1.2.2 | Detected from LICENSE. |
@@ -3474,7 +3474,7 @@ SOFTWARE.
 | electron-to-chromium | 1.5.439 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/electron-to-chromium/v/1.5.439 |  |
 | electron-updater | 6.8.9 | MIT | Desktop shell | https://www.npmjs.com/package/electron-updater/v/6.8.9 |  |
 | electron-winstaller | 5.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/electron-winstaller/v/5.4.0 |  |
-| electron | 42.11.9 | MIT | Desktop shell | https://www.npmjs.com/package/electron/v/42.11.9 |  |
+| electron | 42.11.16 | MIT | Desktop shell | https://www.npmjs.com/package/electron/v/42.11.16 |  |
 | elkjs | 0.12.0 | EPL-2.0 OR GPL-3.0-or-later | Desktop shell, Env App UI | https://www.npmjs.com/package/elkjs/v/0.12.0 | Redeven selects EPL-2.0 for the unmodified ELK layout engine; the verified license and exact source reference are reproduced below. |
 | emoji-regex | 8.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/emoji-regex/v/8.0.0 |  |
 | end-of-stream | 1.4.5 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/end-of-stream/v/1.4.5 |  |
@@ -3519,7 +3519,7 @@ SOFTWARE.
 | fast-deep-equal | 3.1.3 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/fast-deep-equal/v/3.1.3 |  |
 | fast-json-stable-stringify | 2.1.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/fast-json-stable-stringify/v/2.1.0 |  |
 | fast-levenshtein | 2.0.6 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/fast-levenshtein/v/2.0.6 |  |
-| fast-uri | 3.1.8 | BSD-3-Clause | Desktop shell | https://www.npmjs.com/package/fast-uri/v/3.1.8 |  |
+| fast-uri | 3.1.9 | BSD-3-Clause | Desktop shell | https://www.npmjs.com/package/fast-uri/v/3.1.9 |  |
 | fastdom | 1.0.12 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/fastdom/v/1.0.12 |  |
 | fdir | 6.5.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/fdir/v/6.5.0 |  |
 | file-entry-cache | 8.0.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/file-entry-cache/v/8.0.0 |  |
@@ -3915,7 +3915,7 @@ SOFTWARE.
 | ufo | 1.6.3 | MIT | Env App UI | https://www.npmjs.com/package/ufo/v/1.6.3 |  |
 | undici-types | 7.16.0 | MIT | Desktop shell | https://www.npmjs.com/package/undici-types/v/7.16.0 |  |
 | undici-types | 8.3.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/undici-types/v/8.3.0 |  |
-| undici | 7.30.0 | MIT | Desktop shell | https://www.npmjs.com/package/undici/v/7.30.0 |  |
+| undici | 7.30.1 | MIT | Desktop shell | https://www.npmjs.com/package/undici/v/7.30.1 |  |
 | unist-util-is | 6.0.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/unist-util-is/v/6.0.1 |  |
 | unist-util-position | 5.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/unist-util-position/v/5.0.0 |  |
 | unist-util-stringify-position | 4.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/unist-util-stringify-position/v/4.0.0 |  |
