@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-10-23: Require patched Zod validation through matching Env App npm/pnpm overrides and locks. See [upstream web dependencies](architecture/env-app-upstream-web-dependencies.md).
+
 - 2026-10-23: Align apply_patch arguments with Codex input. See [tool permissions](ai/tool-permission-runtime.md).
 
 - 2026-10-23: Preserve canonical [thinking duration](ui/flower-activity-interaction.md#thinking-duration), including submillisecond and unrecorded states.
