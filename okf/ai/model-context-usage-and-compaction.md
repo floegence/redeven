@@ -5,52 +5,28 @@ description: Canonical compaction evidence, context usage, and timeline presenta
 tags: [ai, models, context, compaction]
 timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-23"
+reviewed_at: "2026-10-24"
 ---
 # Summary
 
-Published Floret owns canonical context, compaction and usage. Redeven presents
-its typed snapshots without accumulating usage or reconstructing lifecycle facts.
-[Context compaction and Goal continuation](flower-context-compaction.md) defines
-manual intent, admission, execution, cancellation and recovery. [Qualification](../operations/flower-compaction-qualification.md) defines deterministic, historical-copy and real-provider checks.
+Published Floret owns context, compaction and usage; Redeven displays typed snapshots. [Compaction lifecycle](flower-context-compaction.md) owns intent through recovery; [qualification](../operations/flower-compaction-qualification.md) covers deterministic, historical-copy and real-provider checks.
 
 # Contract
 
-## Compaction decision evidence
-The canonical lifecycle optionally retains the frozen trigger candidate, pressure and validated replacement.
+## Evidence and projection
+Lifecycle evidence may retain frozen trigger candidates, pressure and validated replacement. Floret installs complete actor-owned context before publishing its version. Changed context bypasses text cadence; equal snapshots coalesce text in bounded queues. Redeven neither accumulates usage nor reconstructs lifecycle facts, invents budgets or infers capacity from weights.
 
-## Timeline presentation
-Compaction uses a single status row between two short separator lines. Details
-appear in a compact, surface-owned tooltip without changing timeline layout.
-Successful compression shows only the canonical message counts as
-≈ {before} → {after} tokens; provider-request decision estimates never substitute
-for missing message counts. Missing counts have an explicit localized explanation.
-Running and cancelled operations have short localized descriptions. Failures show
-the original error, wrapping long text without clipping; absent errors have a
-short localized fallback. No expanded detail panel is rendered.
+## Timeline
+One row between short separators uses a compact surface-owned tooltip without expansion or reflow. Success shows only canonical message counts as ≈ {before} → {after} tokens, never provider-request estimates. Localize missing-count, running and cancelled explanations. Wrap original errors without clipping; localize the fallback only when absent.
 
-The tooltip follows the active surface, uses global theme tokens outside the chat
-shell, and prefers space above the status, falling below near the top boundary.
-Pointer exit dismisses it after a brief delay that permits hovering and selecting
-its contents. Escape, Tab, focus loss and outside pointer actions dismiss it;
-process collapse closes it through the existing visibility owner. Keyboard and
-touch access and the independent retry action remain available.
-
-## Projection and usage
-Floret installs the complete context snapshot in its actor-owned current view before publishing its version. Context changes bypass text cadence, while equal snapshots still coalesce text growth within the existing bounded queues.
-
-Redeven does not invent a total budget or infer serving capacity from model weights.
+The tooltip follows the active surface and global theme outside chat. Prefer above, or below near the top boundary. Delay pointer-exit dismissal for hovering/selection. Escape, Tab, blur and outside clicks dismiss it; the visibility owner closes it on process collapse. Retain keyboard/touch access and independent retry.
 
 # Boundaries
 
-Floret owns one shared summary, validation, convergence, and installation path. Historical `/compact` conversation output is never retroactively classified as successful compaction.
-
-Cache counters and the latest/cumulative tooltip rates follow the [request reuse and usage contract](model-request-reuse.md#cache-usage-presentation), using canonical confirmed usage rather than another host store.
+Floret owns summary, validation, convergence and installation. Never reclassify historical `/compact` output as successful compaction. [Cache counts and latest/cumulative rates](model-request-reuse.md#cache-usage-presentation) use confirmed canonical usage, not another host store.
 
 # Evidence
 
-- `redeven:internal/ai/floret_thread_context.go` - Canonical divider anchors and usage mapping.
-
-- `redeven:internal/flower_ui/src/chat/flowerContextPresentation.ts` - Canonical usage and localized noop presentation.
-
-- `redeven:internal/flower_ui/src/runtimeCurrentView.test.ts` - Complete typed context and execution projection.
+- `redeven:internal/ai/floret_thread_context.go` - Divider anchors and usage mapping.
+- `redeven:internal/flower_ui/src/chat/flowerContextPresentation.ts` - Usage and localized noop presentation.
+- `redeven:internal/flower_ui/src/runtimeCurrentView.test.ts` - Complete context/execution projection.
