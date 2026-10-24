@@ -371,20 +371,26 @@ export function createPlaintextSecretCodec(): DesktopSecretCodec {
 }
 
 export function createSafeStorageSecretCodec(safeStorage: SafeStorageLike | null | undefined): DesktopSecretCodec {
-  if (!safeStorage || !safeStorage.isEncryptionAvailable()) {
-    return createPlaintextSecretCodec();
-  }
+  // Availability checks can unlock the macOS Keychain. Empty profiles and
+  // consumers that only construct a codec must not prompt for credentials.
+  const plaintext = createPlaintextSecretCodec();
+  const availableStorage = () => safeStorage?.isEncryptionAvailable() ? safeStorage : null;
 
   return {
-    encodeSecret: (value) => ({
-      encoding: 'safe_storage',
-      data: safeStorage.encryptString(String(value ?? '')).toString('base64'),
-    }),
+    encodeSecret: (value) => {
+      const storage = availableStorage();
+      return storage ? {
+        encoding: 'safe_storage',
+        data: storage.encryptString(String(value ?? '')).toString('base64'),
+      } : plaintext.encodeSecret(value);
+    },
     decodeSecret: (secret) => {
+      const storage = availableStorage();
+      if (!storage) return plaintext.decodeSecret(secret);
       if (!secret || secret.encoding !== 'safe_storage') {
         throw new Error('unsupported secret encoding');
       }
-      return safeStorage.decryptString(Buffer.from(String(secret.data ?? ''), 'base64'));
+      return storage.decryptString(Buffer.from(String(secret.data ?? ''), 'base64'));
     },
   };
 }

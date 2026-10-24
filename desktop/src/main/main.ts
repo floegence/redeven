@@ -39,6 +39,7 @@ import { runtimeExecutableFromArchive } from './runtimeArchive';
 import { REMOTE_DESKTOP_DEPLOYMENT_CHANNEL, REMOTE_DESKTOP_DEPLOYMENT_PROGRESS, parseDesktopDeploymentRequest } from '../shared/remoteDesktopDeployment';
 import { HOST_APPLICATION_COMPONENTS_CHANNEL, HOST_APPLICATION_COMPONENTS_PROGRESS, type HostApplicationComponentsRequest } from '../shared/hostApplicationComponents';
 import { desktopEnvironmentID } from './desktopPreferences';
+import { createDesktopSecretCodec } from './developmentSecretStorage';
 import { environmentSettingsFailure, withEnvironmentAccessOwner, buildEnvironmentAccessSnapshot, requireEnvironmentAccessHostAvailable, requireEnvironmentAccessCompatible, requireEnvironmentManagementAvailable, type EnvironmentAccessOwner } from './environmentAccessSettings';
 import { assertRuntimeFlowerCompatible } from '../shared/runtimeFlowerAccess';
 import { isRuntimeFlowerReadinessPath, runtimeFlowerPath, runtimeFlowerMethod, runtimeFlowerMethodAllowed } from './runtimeFlowerRoutes';
@@ -129,7 +130,6 @@ import type { DesktopConfirmationDialogModel } from '../shared/desktopConfirmati
 import { createDesktopI18n } from '../shared/i18n/desktopI18n';
 import type { DesktopTranslationKey } from '../shared/i18n/locales/en-US';
 import {
-  createSafeStorageSecretCodec,
   signOutSavedControlPlane,
   deleteSavedEnvironment,
   deleteSavedRuntimeTarget,
@@ -3382,8 +3382,15 @@ function preferencesPaths() {
   return defaultDesktopPreferencesPaths(app.getPath('userData'));
 }
 
+let desktopSecretCodec: ReturnType<typeof createDesktopSecretCodec> | undefined;
 function preferencesCodec() {
-  return createSafeStorageSecretCodec(safeStorage);
+  return desktopSecretCodec ??= createDesktopSecretCodec({
+    isPackaged: app.isPackaged,
+    developmentInstanceID: process.env.REDEVEN_DESKTOP_DEV_INSTANCE_ID,
+    userDataRoot: app.getPath('userData'),
+    stateRoot: preferencesPaths().stateRoot,
+    safeStorage,
+  });
 }
 
 function desktopRedevenCloudOriginPolicy(): RedevenCloudOriginPolicy {
