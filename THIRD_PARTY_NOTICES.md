@@ -3968,7 +3968,7 @@ SOFTWARE.
 | yargs | 17.7.2 | MIT | Desktop shell | https://www.npmjs.com/package/yargs/v/17.7.2 |  |
 | yocto-queue | 0.1.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/yocto-queue/v/0.1.0 |  |
 | zip-stream | 4.1.1 | MIT | Env App UI | https://www.npmjs.com/package/zip-stream/v/4.1.1 |  |
-| zod | 4.6.5 | MIT | Env App UI | https://www.npmjs.com/package/zod/v/4.6.5 |  |
+| zod | 4.6.7 | MIT | Env App UI | https://www.npmjs.com/package/zod/v/4.6.7 |  |
 | zwitch | 2.0.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/zwitch/v/2.0.4 |  |
 
 ## Bundled Agent CLI Brand Assets

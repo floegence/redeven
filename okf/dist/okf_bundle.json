@@ -12723,7 +12723,7 @@
         "title": "Env App upstream web dependencies",
         "type": "Frontend Contract"
       },
-      "body_length": 2452,
+      "body_length": 2682,
       "summary": "Env App is built as a Redeven-specific shell on top of published floe-webapp UI/runtime primitives, floe-webapp protocol connectivity, Floeterm terminal-web components, and Flowersec controlplane artifact helpers.\n\nEnv App pins Floe Webapp Boot, Core, and Protocol v0.86.60, Floeterm terminal-web v0.19.2, and Flowersec Core v5.11.1. It consumes Floeterm's semantic Presentation and session exports.\n\n\nFrontend deployment and lazy-import recovery follow [Env App page asset recovery](../ui/page-asset-recovery.md), using Floe's published document asset monitor and per-view error boundary.",
       "sections": [
         {
@@ -12737,8 +12737,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Env App and Desktop use Solid 1.9.17 or newer for patched Seroval serialization.\n\nRedeven may select shell presets and map product permissions, credentials, local-path authority, and placement into upstream contracts, but it must not recreate Floe shell tokens, Flowersec reconnect/framing/RPC behavior, or Floeterm parsing, key encoding, history, attachment arbitration, geometry, Presentation encoding, cursor, graphics, or canvas rendering.\n\nThis exact coordinate is reviewed without relaxing the guard for other LGPL dependencies.",
-          "char_count": 534
+          "body": "Env App and Desktop use Solid 1.9.17 or newer for patched Seroval serialization.\n\nEnv App's npm and pnpm overrides require Zod 4.6.7 or newer within major 4,\nincluding Floebrowser's transitive validator. Both lockfiles must retain the\npatched version rather than restoring an upstream package's vulnerable pin.\n\nRedeven may select shell presets and map product permissions, credentials, local-path authority, and placement into upstream contracts, but it must not recreate Floe shell tokens, Flowersec reconnect/framing/RPC behavior, or Floeterm parsing, key encoding, history, attachment arbitration, geometry, Presentation encoding, cursor, graphics, or canvas rendering.\n\nThis exact coordinate is reviewed without relaxing the guard for other LGPL dependencies.",
+          "char_count": 764
         }
       ],
       "evidence": [
@@ -33668,5 +33668,5 @@
       ]
     }
   ],
-  "source_sha256": "2430388d9150f4b81f31fcf60b1efbba33f36f75f48f682ad765c1286a7e489f"
+  "source_sha256": "6f82c4d9c353b587c42b2b580ee6b725d3a98f2d67c38d28baa6849ea3dade59"
 }

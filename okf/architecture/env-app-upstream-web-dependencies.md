@@ -35,6 +35,10 @@ Env App Core v0.86.60 supplies the shared remote-pointer and remote-input contro
 
 Env App and Desktop use Solid 1.9.17 or newer for patched Seroval serialization.
 
+Env App's npm and pnpm overrides require Zod 4.6.7 or newer within major 4,
+including Floebrowser's transitive validator. Both lockfiles must retain the
+patched version rather than restoring an upstream package's vulnerable pin.
+
 Redeven may select shell presets and map product permissions, credentials, local-path authority, and placement into upstream contracts, but it must not recreate Floe shell tokens, Flowersec reconnect/framing/RPC behavior, or Floeterm parsing, key encoding, history, attachment arbitration, geometry, Presentation encoding, cursor, graphics, or canvas rendering.
 
 This exact coordinate is reviewed without relaxing the guard for other LGPL dependencies.
