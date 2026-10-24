@@ -220,7 +220,7 @@ it('opens the current provider and model and returns to the failed chat on cance
   expect(surface.querySelector('.flower-composer-submit')).not.toBeNull();
 });
 
-it.each(['provider_request_rejected', 'provider_stream_interrupted', 'provider_request_failed', 'floret_tool_argument_correction_exhausted'])('retains a failed save for %s, saves once on repeated clicks, then retries manually with the saved preference', async (code) => {
+it.each(['provider_request_too_large', 'provider_request_rejected', 'provider_stream_interrupted', 'provider_request_failed', 'floret_tool_argument_correction_exhausted'])('retains a failed save for %s, saves once on repeated clicks, then retries manually with the saved preference', async (code) => {
   const { surface, configure, saveModelProfile, retryThread, snapshot } = await mount({ code });
   saveModelProfile.mockRejectedValueOnce(new Error('settings save unavailable'));
   await userEvent.click(configure());

@@ -47,6 +47,9 @@ func newPreparedModelWire(providerType, model string, format flprovider.RequestF
 	if err != nil {
 		return nil, err
 	}
+	if err := flprovider.CheckRequestBytes(raw, flowerModelRequestMaxBytes); err != nil {
+		return nil, err
+	}
 	estimate, err := flprovider.EstimateRenderedRequest(flprovider.RenderedRequest{Provider: providerType, Model: model, Format: format, Payload: raw, Attribution: renderedContextAttribution(format, raw, req, aliases)})
 	if err != nil {
 		return nil, err
@@ -118,6 +121,9 @@ func (p *preparedModelWire) withMaxOutputTokens(ctx context.Context, limit int64
 	body[p.outputField], _ = json.Marshal(limit)
 	raw, err := json.Marshal(body)
 	if err != nil {
+		return nil, err
+	}
+	if err := flprovider.CheckRequestBytes(raw, flowerModelRequestMaxBytes); err != nil {
 		return nil, err
 	}
 	return &preparedModelWire{request: p.request, measurementForRequest: p.measurementForRequest, measurementIdentity: p.measurementIdentity, measurementFormat: p.measurementFormat, measurementProvider: p.measurementProvider, measurementModel: p.measurementModel, outputField: p.outputField, payload: raw, estimate: p.estimate, fingerprint: fmt.Sprintf("sha256:%x", sha256.Sum256(raw)), execute: p.execute}, nil

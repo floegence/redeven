@@ -6,9 +6,11 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
+	"image/draw"
 	_ "image/gif"
 	_ "image/jpeg"
 	"image/png"
@@ -95,14 +97,15 @@ func decodeBoundedImageWithinLimit(body []byte, maxBytes int) (image.Image, stri
 }
 
 type imageReadResult struct {
-	FilePath    string `json:"file_path,omitempty"`
-	Locator     string `json:"locator,omitempty"`
-	DisplayName string `json:"display_name"`
-	MIMEType    string `json:"mime_type"`
-	Width       int    `json:"width"`
-	Height      int    `json:"height"`
-	SizeBytes   int64  `json:"size_bytes"`
-	FirstFrame  bool   `json:"first_frame,omitempty"`
+	SourceCrop  *imageReadCrop `json:"source_crop,omitempty"`
+	FilePath    string         `json:"file_path,omitempty"`
+	Locator     string         `json:"locator,omitempty"`
+	DisplayName string         `json:"display_name"`
+	MIMEType    string         `json:"mime_type"`
+	Width       int            `json:"width"`
+	Height      int            `json:"height"`
+	SizeBytes   int64          `json:"size_bytes"`
+	FirstFrame  bool           `json:"first_frame,omitempty"`
 }
 
 func imageSnapshot(body []byte, name string) (TargetToolAttachment, imageReadResult, []byte, error) {
@@ -160,8 +163,14 @@ func (r *run) toolImageRead(ctx context.Context, meta *session.Meta, toolID stri
 		if err != nil {
 			return nil, err
 		}
+		if crop, ok := args["crop"]; ok {
+			return r.cropCanonicalImage(ctx, snapshot, value, crop)
+		}
 		a := snapshot.Attachment
 		return toolExecutionOutput{Payload: imageReadResult{Locator: value, DisplayName: a.Name, MIMEType: a.MIMEType, Width: snapshot.Width, Height: snapshot.Height, SizeBytes: a.SizeBytes}, Attachments: []ToolAttachment{{ResourceRef: a.ResourceRef, Name: a.Name, MIMEType: a.MIMEType, SizeBytes: a.SizeBytes, SHA256: snapshot.SHA256}}}, nil
+	}
+	if _, ok := args["crop"]; ok {
+		return nil, errors.New("crop requires locator mode")
 	}
 	if value, ok := filePath.(string); !ok || strings.TrimSpace(value) == "" {
 		return nil, errors.New("file_path must be a non-empty string")
@@ -269,4 +278,60 @@ func (r *run) resolveFloretToolMedia(ctx context.Context, attachment flprovider.
 		return ContentPart{}, errors.New("canonical tool image content changed")
 	}
 	return ContentPart{Type: "image", Text: attachment.Name, MimeType: descriptor.MIMEType, FileURI: "data:" + descriptor.MIMEType + ";base64," + base64.StdEncoding.EncodeToString(body)}, nil
+}
+
+// Crop coordinates refer to original image pixels, never CSS viewport coordinates.
+type imageReadCrop struct {
+	X      int `json:"x"`
+	Y      int `json:"y"`
+	Width  int `json:"width"`
+	Height int `json:"height"`
+}
+
+func (r *run) cropCanonicalImage(ctx context.Context, snapshot canonicalImageSnapshot, locator string, value any) (any, error) {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return nil, errors.New("invalid crop rectangle")
+	}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(raw, &fields) != nil || len(fields) != 4 {
+		return nil, errors.New("crop requires x, y, width and height")
+	}
+	for _, key := range []string{"x", "y", "width", "height"} {
+		if len(fields[key]) == 0 || string(fields[key]) == "null" {
+			return nil, errors.New("crop requires x, y, width and height")
+		}
+	}
+	var crop imageReadCrop
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&crop); err != nil || crop.X < 0 || crop.Y < 0 || crop.Width <= 0 || crop.Height <= 0 || crop.X >= snapshot.Width || crop.Y >= snapshot.Height || crop.Width > snapshot.Width-crop.X || crop.Height > snapshot.Height-crop.Y {
+		return nil, errors.New("crop must be an integer rectangle within original image pixels")
+	}
+	if r.host.saveToolMedia == nil {
+		return nil, errors.New("image snapshot storage is unavailable")
+	}
+	decoded, _, _, err := decodeBoundedImageWithinLimit(snapshot.Body, maxComputerFrameBytes)
+	if err != nil {
+		return nil, err
+	}
+	cropped := image.NewNRGBA(image.Rect(0, 0, crop.Width, crop.Height))
+	draw.Draw(cropped, cropped.Bounds(), decoded, image.Pt(crop.X, crop.Y), draw.Src)
+	var encoded bytes.Buffer
+	if err := png.Encode(&encoded, cropped); err != nil {
+		return nil, err
+	}
+	attachment, result, body, err := imageSnapshot(encoded.Bytes(), "crop.png")
+	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := r.host.saveToolMedia(ctx, attachment, body); err != nil {
+		return nil, err
+	}
+	result.Locator = locator
+	result.SourceCrop = &crop
+	return toolExecutionOutput{Payload: result, Attachments: toolAttachmentsFromTarget([]TargetToolAttachment{attachment})}, nil
 }

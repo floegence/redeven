@@ -516,6 +516,7 @@
       "runErrorProviderRequestInvalid": "選択した AI プロバイダーが Flower のリクエスト形式を拒否しました。Redeven を更新して再試行してください。",
       "runErrorProviderRequestFailed": "モデルへのリクエストを完了できませんでした。再試行し、問題が続く場合は現在のモデルの接続元を確認してください。",
       "runErrorProviderRequestRejected": "選択した AI プロバイダーが Flower のリクエストを拒否しました。診断の詳細を確認し、後でもう一度試してください。",
+      "runErrorProviderRequestTooLarge": "画像またはリクエストのサイズ上限を超えています。元のスクリーンショットと完了した操作は保存されています。画像を減らす、必要な部分を切り抜く、またはモデルを変更してから再試行してください。",
       "runErrorModelGatewayContractFailed": "モデルソースから不完全なツール呼び出しが返されたため、ツールは実行されませんでした。再試行するか、別のモデルを選択してください。",
       "runErrorRepeatedToolCalls": "同じツールへの要求が繰り返され、有効な進展がなかったため、このターンを停止しました。確認済みの結果と完了済みの子スレッドのレポートは保存されています。再試行すると保存済みの進捗から続行できます。",
       "runErrorNoProgress": "Agent に進展がなかったため、このターンを停止しました。保存済みの結果は保持されています。指示を追加するか再試行してください。",

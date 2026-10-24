@@ -177,7 +177,7 @@ func (p *floretProviderAdapter) Prepare(ctx context.Context, req flprovider.Requ
 	if preparer, ok := p.base.(modelGatewayRequestPreparer); ok {
 		transport, err := preparer.prepareTurn(ctx, turnReq)
 		if err != nil {
-			return nil, err
+			return nil, providerTransportFailure(err, p.providerType)
 		}
 		return &preparedFloretModelRequest{
 			adapter: p, providerRequest: req, frozenProviderInput: frozenProviderInput, transport: transport,
@@ -187,6 +187,9 @@ func (p *floretProviderAdapter) Prepare(ctx context.Context, req flprovider.Requ
 	payload, err := json.Marshal(turnReq)
 	if err != nil {
 		return nil, fmt.Errorf("marshal prepared model request: %w", err)
+	}
+	if err := flprovider.CheckRequestBytes(payload, flowerModelRequestMaxBytes); err != nil {
+		return nil, providerTransportFailure(err, p.providerType)
 	}
 	var frozen ModelGatewayRequest
 	if err := json.Unmarshal(payload, &frozen); err != nil {
@@ -624,6 +627,7 @@ func (p *floretProviderAdapter) floretMessagesToFlowerWithResolver(ctx context.C
 		if msg.Text != "" {
 			parts = append(parts, ContentPart{Type: "text", Text: msg.Text})
 		}
+		var imageNotices []string
 		attachments := msg.Attachments
 		if msg.ToolResult != nil {
 			attachments = append(append([]flprovider.Attachment(nil), attachments...), msg.ToolResult.Attachments...)
@@ -646,6 +650,17 @@ func (p *floretProviderAdapter) floretMessagesToFlowerWithResolver(ctx context.C
 			if err := p.validateResolvedAttachment(part); err != nil {
 				return nil, err
 			}
+			part, notice, err := prepareModelScreenshot(ctx, attachment, part, msg.ToolResult != nil && msg.ToolResult.ToolName == "image.read")
+			if err != nil {
+				return nil, err
+			}
+			if notice != "" {
+				if msg.ToolResult != nil {
+					imageNotices = append(imageNotices, notice)
+				} else {
+					parts = append(parts, ContentPart{Type: "text", Text: notice})
+				}
+			}
 			parts = append(parts, part)
 		}
 		if msg.Reasoning != "" {
@@ -664,11 +679,16 @@ func (p *floretProviderAdapter) floretMessagesToFlowerWithResolver(ctx context.C
 			})
 		}
 		if msg.ToolResult != nil {
+			// Keep model-image notices inside their owning tool result.
+			text := msg.ToolResult.Text
+			if len(imageNotices) > 0 {
+				text += "\n" + strings.Join(imageNotices, "\n")
+			}
 			parts = append(parts, ContentPart{
 				Type:       "tool_result",
 				ToolCallID: msg.ToolResult.CallID,
 				ToolName:   msg.ToolResult.ToolName,
-				Text:       msg.ToolResult.Text,
+				Text:       text,
 			})
 		}
 		out = append(out, Message{Role: string(msg.Role), Content: parts, Attribution: cloneMessageAttribution(msg.Attribution)})

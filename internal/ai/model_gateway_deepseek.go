@@ -57,7 +57,7 @@ func (p *deepSeekProvider) prepareTurn(ctx context.Context, req ModelGatewayRequ
 		}
 		return data, nil
 	}
-	gateway, err := flprovider.NewDeepSeek(flprovider.DeepSeekOptions{Model: req.Model, BaseURL: p.baseURL, APIKey: p.apiKey, StateCompatibilityKey: "deepseek-responses-v1:" + p.baseURL + ":" + req.Model, HTTPClient: p.client, ResolveAttachment: resolveImage, Temperature: req.ProviderControls.Temperature, TopP: req.ProviderControls.TopP, ResponseFormat: req.ProviderControls.ResponseFormat})
+	gateway, err := flprovider.NewDeepSeek(flprovider.DeepSeekOptions{MaxRequestBytes: flowerModelRequestMaxBytes, Model: req.Model, BaseURL: p.baseURL, APIKey: p.apiKey, StateCompatibilityKey: "deepseek-responses-v1:" + p.baseURL + ":" + req.Model, HTTPClient: p.client, ResolveAttachment: resolveImage, Temperature: req.ProviderControls.Temperature, TopP: req.ProviderControls.TopP, ResponseFormat: req.ProviderControls.ResponseFormat})
 	if err != nil {
 		return nil, err
 	}

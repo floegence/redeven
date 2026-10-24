@@ -205,7 +205,11 @@ func TestAnthropicTextAttachmentDoesNotSilentlyTruncate(t *testing.T) {
 var _ ModelGateway = (*recordingPreparedGateway)(nil)
 
 func TestDeepSeekPreparedDesktopImageUsesUpstreamBudgetAndExactBody(t *testing.T) {
-	data := []byte(strings.Repeat("desktop-frame", 250000))
+	data, frameAttachment, original := screenshotPreparationFixture(t)
+	modelPart, _, err := prepareModelScreenshot(t.Context(), frameAttachment, original, false)
+	if err != nil {
+		t.Fatal(err)
+	}
 	dataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(data)
 	var sent []byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -283,8 +287,8 @@ func TestDeepSeekPreparedDesktopImageUsesUpstreamBudgetAndExactBody(t *testing.T
 	if prepared.RenderedPayloadFingerprint() != fmt.Sprintf("sha256:%x", sha256.Sum256(sent)) {
 		t.Fatal("budget fingerprint differs from the transmitted body")
 	}
-	if !strings.Contains(string(sent), base64.StdEncoding.EncodeToString(data)) || !strings.Contains(string(sent), `"type":"input_image"`) {
-		t.Fatal("prepared desktop pixels changed before transmission")
+	if !strings.Contains(string(sent), strings.TrimPrefix(modelPart.FileURI, "data:image/jpeg;base64,")) || !strings.Contains(string(sent), `"type":"input_image"`) {
+		t.Fatal("prepared desktop encoding changed before transmission")
 	}
 	if _, err := prepared.Stream(t.Context()); err == nil {
 		t.Fatal("allowed prepared request replay")

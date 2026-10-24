@@ -5433,6 +5433,7 @@
       "runErrorProviderModelUnavailable": "该模型提供商无法提供所选模型。请在本地 AI 配置文件中选择另一个模型。",
       "runErrorProviderRequestInvalid": "所选模型提供商拒绝了 Flower 的请求格式。请更新 Redeven 后重试。",
       "runErrorProviderRequestRejected": "所选模型提供商拒绝了 Flower 的请求。请查看诊断详情，稍后重试。",
+      "runErrorProviderRequestTooLarge": "请求超出了图片或请求体大小限制。原始截图和已完成的操作均已保存。请减少图片、裁剪所需细节，或调整模型后再重试。",
       "runErrorModelGatewayContractFailed": "模型源返回了不完整的工具调用，未执行任何工具。请重试或切换模型。",
       "runErrorRepeatedToolCalls": "连续请求相同工具且没有有效进展，系统已停止本轮。已确认的结果和已完成的子线程报告均已保留，可重试并从保存的进度继续。",
       "runErrorNoProgress": "Agent 没有取得进展，系统已停止本轮。已保存的结果仍在，可补充指导或重试。",
