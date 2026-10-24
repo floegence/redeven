@@ -218,6 +218,15 @@ function expandDynamicTranslationKeys(keys: ReadonlyMap<string, readonly string[
   return expanded;
 }
 
+describe('Environment window terminology', () => {
+  it.each(SUPPORTED_LOCALES)('keeps internal app terminology out of user-facing copy in %s', (locale) => {
+    const violations = Object.entries(collectLeaves(dictionaries[locale]))
+      .filter(([, value]) => stringsForLeaf(value).some((message) => /env app/i.test(message)))
+      .map(([key]) => key);
+    expect(violations).toEqual([]);
+  });
+});
+
 describe('Env App i18n metadata', () => {
   it('provides every published Workbench composition message in every locale', () => {
     const keys = Object.keys(workbenchCompositionMessages).sort();

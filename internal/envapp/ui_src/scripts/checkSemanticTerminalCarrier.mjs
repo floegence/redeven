@@ -290,7 +290,7 @@ async function openEnvPage(context, entryURL) {
   const problems = observePage(page);
   await page.goto(entryURL, { waitUntil: 'load', timeout: 30_000 });
   await page.locator('#root > *').first().waitFor({ state: 'visible', timeout: 15_000 });
-  if (await page.title() !== 'Redeven Env App') throw new Error('unexpected Env App title');
+  if (await page.title() !== 'Redeven') throw new Error('unexpected Env App title');
   return { page, problems };
 }
 

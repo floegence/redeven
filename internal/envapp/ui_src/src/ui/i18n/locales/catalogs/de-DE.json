@@ -17,7 +17,7 @@
     "waiting": "Warten auf Verbindung…"
   },
   "document": {
-    "title": "Redeven Env App"
+    "title": "Redeven"
   },
   "aiReadiness": {
     "eyebrow": "Flower-Verfügbarkeit",
@@ -3853,7 +3853,7 @@
       "label": "Zugriffsmodus",
       "unifiedProxyTitle": "Einheitlicher sicherer Proxy",
       "unifiedProxyShort": "Sicherer Proxy",
-      "unifiedProxyDescription": "Funktioniert in Desktop, Web Env App und im Systembrowser.",
+      "unifiedProxyDescription": "Funktioniert in Redeven Desktop und im Webbrowser.",
       "desktopLoopbackTitle": "Lokale Desktop-Kompatibilität",
       "desktopLoopbackShort": "Desktop lokal",
       "desktopLoopbackDescription": "Verwendet einen isolierten 127.0.0.1-Origin für Apps, die lokalen Zugriff verlangen. Nur in Redeven Desktop verfügbar.",
@@ -7040,7 +7040,7 @@
       }
     },
     "pluginRuntime": {
-      "sandboxOriginUnavailable": "Für diesen Env App-Host ist keine Plugin-Sandbox-Adresse verfügbar.",
+      "sandboxOriginUnavailable": "Die Plugin-Sandbox-Adresse ist für diese Umgebung nicht verfügbar.",
       "assetBootstrapFailed": "Die Plugin-Ressourcen konnten nicht vorbereitet werden (HTTP {status}).",
       "assetSessionMissing": "Die Plugin-Ressourcensitzung konnte nicht erstellt werden.",
       "approveAction": "Diese Plugin-Aktion genehmigen?",
@@ -7750,7 +7750,7 @@
     "deployHint": "Richten Sie den Remotedesktop über diese SSH-Verbindung ein. Eine Bestätigung am Bildschirm des Hosts ist nicht erforderlich.",
     "deployPasswordHint": "Wird nur für diesen SSH-Vorgang verwendet. Redeven speichert es nicht und gibt es nicht an den Desktopdienst weiter.",
     "deployConfirm": "Autorisieren und fortfahren",
-    "serviceUpdateRequired": "Aktualisieren Sie den Remote-Desktop in Env App, um diese Laufzeitversion zu verwenden.",
+    "serviceUpdateRequired": "Aktualisiere den Remote-Desktop im Umgebungsfenster, um diese Laufzeitversion zu verwenden.",
     "deployChecking": "SSH-Host wird geprüft…",
     "deployTransferring": "Komponenten werden übertragen und geprüft…",
     "deployAuthorizing": "SSH-Vorgang wird autorisiert…",

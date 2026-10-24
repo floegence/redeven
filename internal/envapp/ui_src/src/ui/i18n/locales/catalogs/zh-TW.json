@@ -17,7 +17,7 @@
     "waiting": "正在等待連線…"
   },
   "document": {
-    "title": "Redeven Env App"
+    "title": "Redeven"
   },
   "aiReadiness": {
     "eyebrow": "Flower 可用性",
@@ -3853,7 +3853,7 @@
       "label": "存取模式",
       "unifiedProxyTitle": "統一安全代理",
       "unifiedProxyShort": "安全代理",
-      "unifiedProxyDescription": "可在 Desktop、Web Env App 與系統瀏覽器中使用。",
+      "unifiedProxyDescription": "可在 Redeven Desktop 和瀏覽器中使用。",
       "desktopLoopbackTitle": "Desktop 本機相容",
       "desktopLoopbackShort": "Desktop 本機",
       "desktopLoopbackDescription": "使用隔離的 127.0.0.1 Origin，讓僅支援本機存取的應用正常運作；僅限 Redeven Desktop。",
@@ -7036,7 +7036,7 @@
       }
     },
     "pluginRuntime": {
-      "sandboxOriginUnavailable": "目前 Env App 主機無法提供外掛程式沙箱位址。",
+      "sandboxOriginUnavailable": "目前環境無法提供外掛程式沙箱位址。",
       "assetBootstrapFailed": "無法準備外掛程式資源（HTTP {status}）。",
       "assetSessionMissing": "無法建立外掛程式資源工作階段。",
       "approveAction": "是否核准此外掛程式操作？",
@@ -7746,7 +7746,7 @@
     "deployHint": "透過目前的 SSH 連線設定遠端桌面，無須在目標主機的螢幕上確認。",
     "deployPasswordHint": "僅用於本次 SSH 操作。Redeven 不會儲存密碼，也不會將其傳給桌面服務。",
     "deployConfirm": "授權並繼續",
-    "serviceUpdateRequired": "請在 Env App 中更新遠端桌面，以配合目前的執行階段版本使用。",
+    "serviceUpdateRequired": "請在環境視窗中更新遠端桌面，以配合目前的執行階段版本使用。",
     "deployChecking": "正在檢查 SSH 主機…",
     "deployTransferring": "正在傳輸並驗證元件…",
     "deployAuthorizing": "正在授權本次 SSH 操作…",

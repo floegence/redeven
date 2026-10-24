@@ -148,7 +148,7 @@ describe('Gateway setup and own-service actions', () => {
     button('View Environments').click(); await settle();
     expect(document.querySelector('[data-gateway-id="bastion"]')).toBeTruthy();
     expect(document.querySelector('[data-gateway-environment-id="internal-workspace"]')?.textContent).toContain('Gateway workspace');
-    button('Open Env App').click(); await settle();
+    button('Open window').click(); await settle();
     expect(perform.mock.calls[0]?.[0]).toMatchObject({ kind: 'open_gateway_environment', gateway_id: 'bastion', gateway_env_id: 'internal-workspace' });
     expect(perform.mock.calls).toHaveLength(1);
   });

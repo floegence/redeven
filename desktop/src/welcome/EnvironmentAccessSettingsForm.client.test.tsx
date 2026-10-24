@@ -59,7 +59,7 @@ async function mount(options: { focusAccess?: 'access' | 'certificate'; url?: st
       applyAccessFixedPort={(port) => setDraft((current) => applyDesktopAccessFixedPortToDraft(current, port))}
       toggleAutoPort={() => {}} saveSettings={save} runtimeRestartAvailable={Boolean(url)} runtimeRunning={Boolean(url)}
       runtimeStatusLabel={runtimeStatus()} runtimeStatusTone={runtimeStatusTone()} dark={false}
-      desktopOpenLabel="Open Env App" openInDesktop={() => {}} openInBrowser={open} copyEnvironmentValue={copy}
+      desktopOpenLabel="Open window" openInDesktop={() => {}} openInBrowser={open} copyEnvironmentValue={copy}
       resetAccess={() => setDraft(baseline)} cancelSettings={() => setOpen(false)} clearStoredLocalUIPassword={() => setDraft(current => ({...current, local_ui_password: '', local_ui_password_mode: 'clear'}))} certificate={certificate} security={options.security} />)} />
   ), host));
   await settle();

@@ -52,7 +52,7 @@ export const enUS = defineDictionary({
     "deployAuthFailed": "Administrator authorization was not accepted. Choose the correct password identity and try again.",
     "deploySSHRequired": "This action requires a Redeven Desktop SSH connection to a supported Linux host.",
     "serviceStopped": "Remote desktop is stopped",
-    "serviceUpdateRequired": "Update remote desktop in the Env App to use this Runtime version.",
+    "serviceUpdateRequired": "Update remote desktop in the environment window to use this Runtime version.",
     "displayDisconnected": "No display output is connected. Connect a monitor or display adapter and refresh.",
     "displayInactive": "The display output could not be woken. Check the host’s display power state and refresh.",
     "gpuUnsupported": "This graphics device cannot provide the desktop image required for remote control.",
@@ -434,7 +434,7 @@ export const enUS = defineDictionary({
   },
   flowerSurface: flowerSurfaceEnUS,
   document: {
-    title: 'Redeven Env App',
+    title: 'Redeven',
   },
   flower: {
     currentEnvironmentFallback: 'This environment',
@@ -1207,7 +1207,7 @@ export const enUS = defineDictionary({
       },
     },
     pluginRuntime: {
-      sandboxOriginUnavailable: 'The plugin sandbox address is unavailable for this Env App host.',
+      sandboxOriginUnavailable: 'The plugin sandbox address is unavailable for this environment.',
       assetBootstrapFailed: 'Plugin assets could not be prepared (HTTP {status}).',
       assetSessionMissing: 'The plugin asset session could not be created.',
       approveAction: 'Approve this plugin action?',
@@ -3832,7 +3832,7 @@ export const enUS = defineDictionary({
       label: 'Access mode',
       unifiedProxyTitle: 'Unified secure proxy',
       unifiedProxyShort: 'Secure proxy',
-      unifiedProxyDescription: 'Works in Desktop, the Web Env App, and your system browser.',
+      unifiedProxyDescription: 'Works in Redeven Desktop and your web browser.',
       desktopLoopbackTitle: 'Desktop local compatibility',
       desktopLoopbackShort: 'Desktop local',
       desktopLoopbackDescription: 'Uses an isolated 127.0.0.1 origin so local-only apps work correctly. Available only in Redeven Desktop.',

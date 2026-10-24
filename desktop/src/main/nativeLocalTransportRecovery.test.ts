@@ -101,7 +101,7 @@ describe('native Local Runtime transport loss', () => {
     expect(ownedOpen).toHaveBeenCalledExactlyOnceWith(preferences, environment, target, 'local-target:open', options);
   });
 
-  it('recovers a failed native session when the launcher action is Show Env App', async () => {
+  it('recovers a failed native session when the launcher action is Show window', async () => {
     const f = fixture(); f.record.transport_recovery_snapshot = { phase: 'failed' };
     const open = vi.fn(async () => ({ ok: true, outcome: 'restarted_environment_runtime' }));
     const focus = vi.fn(() => true);

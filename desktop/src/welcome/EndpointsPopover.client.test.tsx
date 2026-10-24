@@ -69,7 +69,7 @@ describe('Environment connection popover', () => {
     expect(group.querySelectorAll('details')).toHaveLength(1);
     expect(group.querySelectorAll('[data-endpoint-kind="address"]')).toHaveLength(2);
     expect(group.querySelectorAll('button')).toHaveLength(0);
-    expect(group.textContent?.match(/Choose “Open Env App”/g)).toHaveLength(1);
+    expect(group.textContent?.match(/Choose “Open window”/g)).toHaveLength(1);
   });
 
   it('groups and filters many addresses while preserving sharing and input state across refresh', async () => {
@@ -113,7 +113,7 @@ describe('Environment connection popover', () => {
     const details = document.querySelector<HTMLDetailsElement>('.redeven-endpoint-listener')!;
     expect(details).not.toBeNull();
     expect(details.open).toBe(false);
-    expect(document.body.textContent).toContain('Choose “Open Env App” in Desktop to enter this environment.');
+    expect(document.body.textContent).toContain('Choose “Open window” in Desktop to enter this environment.');
     expect(document.querySelector('[data-endpoint-id="host"]')?.textContent).toContain('gzcom:22');
     details.open = true;
     const summary = details.querySelector('summary')!;

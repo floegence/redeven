@@ -29,7 +29,7 @@ function Surface() {
       <div><h1 style={{ 'font-size': '24px', 'font-weight': 600 }}>Environments</h1><p style={{ color: 'var(--muted-foreground)' }}>Manage local, SSH, and Redeven Cloud environments.</p></div>
       <div style={{ display: 'grid', 'grid-template-columns': 'repeat(3, 1fr)', gap: '20px' }}>
         <For each={['Local Environment', 'Development', 'Production']}>
-          {name => <Card class="redeven-environment-card"><CardHeader><CardTitle>{name}</CardTitle></CardHeader><CardContent><span style={{ color: 'var(--success)' }}>● Ready</span><p style={{ 'margin-top': '20px', color: 'var(--muted-foreground)' }}>Runtime service is available</p></CardContent><CardFooter><Button>Open Env App</Button></CardFooter></Card>}
+          {name => <Card class="redeven-environment-card"><CardHeader><CardTitle>{name}</CardTitle></CardHeader><CardContent><span style={{ color: 'var(--success)' }}>● Ready</span><p style={{ 'margin-top': '20px', color: 'var(--muted-foreground)' }}>Runtime service is available</p></CardContent><CardFooter><Button>Open window</Button></CardFooter></Card>}
         </For>
       </div>
       <label style={{ 'max-width': '400px' }}>Workspace notes<textarea data-appearance-draft aria-label="Workspace notes" style={{ display: 'block', width: '100%', 'margin-top': '8px', padding: '12px', background: 'var(--card)', border: '1px solid var(--input)', 'border-radius': '8px' }}>Unsubmitted draft</textarea></label>

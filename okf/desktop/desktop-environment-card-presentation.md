@@ -5,7 +5,7 @@ description: Preserve compact Env card tabs, facts, action footers, focus and ge
 tags: [desktop, environment, interaction, accessibility]
 timestamp: 2026-10-13T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-24"
 ---
 # Summary
 
@@ -16,6 +16,11 @@ The shared Environment card renders independent access perspectives with its exi
 Interaction sessions follow [Desktop interaction continuity](desktop-interaction-continuity.md), including authority invalidation, retained drafts, explicit visibility and stale-completion fencing.
 
 Recognized Linux distributions use their original brand marks; missing or unsupported IDs retain Tux.
+
+## Window action language
+User-facing copy describes the visible action and destination. An unopened Environment offers **Open window**; an existing window offers **Show window** and focuses that session. Local, SSH, Cloud and Gateway perspectives use the same localized action wording. The selected perspective identifies the access route. These labels do not change runtime readiness, authorization, lifecycle or session ownership.
+
+Settings, progress, recovery guidance and browser titles use Environment, environment window or Redeven as appropriate. The internal name Env App remains an implementation term, never a product label or protected brand term. All shipped Desktop and environment catalogs explicitly translate this copy; catalog regression checks reject the internal name in displayed messages.
 
 ## Perspectives and owner actions
 Linked cards expose Runtime, Redeven Cloud and any paired Gateway as tabs in the existing compact segmented selector in the same header slot used by standalone type badges.
@@ -35,3 +40,7 @@ Deliberate Environment Center tab selection follows the separate [Welcome naviga
 - `redeven:desktop/src/welcome/EnvironmentCards.tsx` - Shared cards, stable perspectives, owner action and overlay control.
 
 - `redeven:desktop/src/welcome/CloudConnectionStatus.tsx` - Independent local and Cloud state, actionable recovery and scoped diagnostics.
+
+- `redeven:desktop/src/shared/i18n/desktopI18n.test.ts` and `redeven:internal/envapp/ui_src/src/ui/i18n/i18n.test.ts` - Every shipped locale excludes the internal app name from user-facing messages.
+
+- `redeven:desktop/src/welcome/EnvironmentRelation.client.test.tsx` - Window actions retain explicit access routes, focus existing sessions and preserve card state across snapshots.

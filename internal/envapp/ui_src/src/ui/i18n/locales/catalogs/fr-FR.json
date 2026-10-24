@@ -17,7 +17,7 @@
     "waiting": "En attente de connexion…"
   },
   "document": {
-    "title": "Redeven Env App"
+    "title": "Redeven"
   },
   "aiReadiness": {
     "eyebrow": "Disponibilité de Flower",
@@ -3853,7 +3853,7 @@
       "label": "Mode d’accès",
       "unifiedProxyTitle": "Proxy sécurisé unifié",
       "unifiedProxyShort": "Proxy sécurisé",
-      "unifiedProxyDescription": "Fonctionne dans Desktop, Web Env App et le navigateur système.",
+      "unifiedProxyDescription": "Fonctionne dans Redeven Desktop et dans votre navigateur web.",
       "desktopLoopbackTitle": "Compatibilité locale Desktop",
       "desktopLoopbackShort": "Desktop local",
       "desktopLoopbackDescription": "Utilise une Origin 127.0.0.1 isolée pour les applications exigeant un accès local. Disponible uniquement dans Redeven Desktop.",
@@ -7040,7 +7040,7 @@
       }
     },
     "pluginRuntime": {
-      "sandboxOriginUnavailable": "Aucune adresse de bac à sable de plug-in n’est disponible pour cet hôte Env App.",
+      "sandboxOriginUnavailable": "L’adresse du bac à sable du plugin n’est pas disponible pour cet environnement.",
       "assetBootstrapFailed": "Impossible de préparer les ressources du plug-in (HTTP {status}).",
       "assetSessionMissing": "Impossible de créer la session de ressources du plug-in.",
       "approveAction": "Approuver cette action du plug-in ?",
@@ -7750,7 +7750,7 @@
     "deployHint": "Configurez le bureau à distance via cette connexion SSH. Aucune confirmation sur l’écran de l’hôte n’est nécessaire.",
     "deployPasswordHint": "Utilisé uniquement pour cette opération SSH. Redeven ne le conserve pas et ne le transmet pas au service de bureau.",
     "deployConfirm": "Autoriser et continuer",
-    "serviceUpdateRequired": "Mettez à jour le bureau distant dans Env App pour utiliser cette version de l’environnement d’exécution.",
+    "serviceUpdateRequired": "Mettez à jour le bureau à distance dans la fenêtre de l’environnement pour utiliser cette version du moteur d’exécution.",
     "deployChecking": "Vérification de l’hôte SSH…",
     "deployTransferring": "Transfert et vérification des composants…",
     "deployAuthorizing": "Autorisation de cette opération SSH…",

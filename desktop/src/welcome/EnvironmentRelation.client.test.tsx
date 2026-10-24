@@ -424,7 +424,7 @@ describe('linked environment owner interactions', () => {
     const panel = card.querySelector('[aria-label="Gateway"][role="tabpanel"]')!;
     const select = panel.querySelector<HTMLSelectElement>('select')!;
     expect(select.value).toBe('service-0');
-    button(panel, 'Show Env App').click(); await settle();
+    button(panel, 'Show window').click(); await settle();
     expect(h.performAction).toHaveBeenCalledWith(expect.objectContaining({ kind: 'focus_environment_window', session_key: fixture.inputs.openSessions[0]!.session_key }));
     select.value = 'service-1'; select.dispatchEvent(new Event('change', { bubbles: true })); await settle();
     expect(panel.textContent).toContain('https://lab.internal:7443');
@@ -433,7 +433,7 @@ describe('linked environment owner interactions', () => {
     expect(panel.querySelector('select')).toBe(select);
     expect(select.value).toBe('service-1');
     h.publish(buildDesktopWelcomeSnapshot({ ...fixture.inputs, openSessions: [], gatewaySources: [] })); await settle();
-    expect(button(panel, 'Open Env App').disabled).toBe(true);
+    expect(button(panel, 'Open window').disabled).toBe(true);
     expect(panel.querySelector<HTMLButtonElement>('.redeven-environment-card__flower-button')?.disabled).toBe(true);
     expect(select.value).toBe('service-1');
     button(panel, 'Actions').click(); await settle();
@@ -610,10 +610,10 @@ describe('linked environment owner interactions', () => {
     expect(h.owner('cloud').textContent).toContain('env_linked');
     expect(document.querySelectorAll('.redeven-card-cloud-affiliation')).toHaveLength(0);
     await h.select('runtime');
-    button(h.owner('runtime'), 'Open Env App').click(); await settle();
+    button(h.owner('runtime'), 'Open window').click(); await settle();
     expect(h.performAction).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'open_local_environment', environment_id: h.runtime.id }));
     await h.select('cloud');
-    button(h.owner('cloud'), 'Open via Redeven Cloud').click(); await settle();
+    button(h.owner('cloud'), 'Open window').click(); await settle();
     expect(h.performAction).toHaveBeenLastCalledWith({ kind: 'open_provider_environment', environment_id: h.cloud.id, route: 'remote_desktop' });
     await h.select('cloud');
     button(h.owner('cloud'), 'Pin Cloud workspace · Redeven Cloud').click(); await settle();
@@ -631,11 +631,11 @@ describe('linked environment owner interactions', () => {
   it.each(['offline', 'auth_required', 'provider_unreachable'] as const)('keeps Runtime open independent of Cloud %s', async state => {
     const h = await mount();
     h.publish({ ...h.snapshot, environments: [h.runtime, { ...h.cloud, remote_route_state: state, control_plane_sync_state: state === 'auth_required' ? state : 'ready' }] }); await settle();
-    const open = button(h.owner('runtime'), 'Open Env App');
+    const open = button(h.owner('runtime'), 'Open window');
     expect(open.disabled).toBe(false); open.click(); await settle();
     expect(h.performAction).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'open_local_environment', environment_id: h.runtime.id }));
     await h.select('cloud');
-    button(h.owner('cloud'), 'Open via Redeven Cloud').click(); await settle();
+    button(h.owner('cloud'), 'Open window').click(); await settle();
     if (state === 'auth_required') {
       button(document, 'Request access').click(); await settle();
       expect(h.performAction).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'start_control_plane_connect', cloud_origin: h.cloud.cloud_origin }));
@@ -793,7 +793,7 @@ describe('linked environment owner interactions', () => {
       open_progress: openConnectionProgress({ location: 'provider_remote', phase: 'opening_window', environmentID: h.cloud.id, environmentLabel: h.cloud.label }),
     };
     h.publish({ ...h.snapshot, action_progress: [progress] }); await settle();
-    expect(button(h.owner('runtime'), 'Open Env App').disabled).toBe(false);
+    expect(button(h.owner('runtime'), 'Open window').disabled).toBe(false);
     expect(h.owner('cloud').querySelector('[data-floe-progress-shimmer]')).not.toBeNull();
     h.publish({ ...h.snapshot, environments: [
       { ...h.runtime, provider_runtime_link_target: { ...h.runtime.provider_runtime_link_target!, cloud_link_state: 'unbound' } },
@@ -847,7 +847,7 @@ describe('shared overview and Cloud source grids', () => {
     expect(card.querySelector('[role="tablist"]')).toBeNull();
     expect(card.textContent).not.toContain('No managed runtime linked');
     expect(card.querySelector('.redeven-card-runtime-age')).toBeNull();
-    button(card, 'Open via Redeven Cloud').click(); await settle();
+    button(card, 'Open window').click(); await settle();
     expect(h.performAction).toHaveBeenLastCalledWith({ kind: 'open_provider_environment', environment_id: cloud.id, route: 'remote_desktop' });
     button(card, 'Show Personal Cloud').click(); await settle();
     expect(document.querySelectorAll('[data-cloud-source]')).toHaveLength(2);
@@ -1006,7 +1006,7 @@ describe('background interaction continuity', () => {
         targetLabel: f.environment.label }),
     };
     const h = await mount({ ...snapshot, action_progress: [progress] });
-    button(document.querySelector('[data-environment-group]')!, 'Open Env App').click();
+    button(document.querySelector('[data-environment-group]')!, 'Open window').click();
     await settle();
     expect(h.performAction).toHaveBeenCalledOnce();
     expect(h.performAction.mock.calls[0][0]).toMatchObject({
@@ -1038,9 +1038,9 @@ describe('background interaction continuity', () => {
     })) }); await settle();
     h.publish(ready); await settle();
     const panel = document.querySelector('.redeven-environment-progress')!;
-    expect(button(panel, 'Open Env App').disabled).toBe(true);
+    expect(button(panel, 'Open window').disabled).toBe(true);
     expect(button(document, 'Verify current target').disabled).toBe(false);
-    button(card, 'Open Env App').click(); await settle();
+    button(card, 'Open window').click(); await settle();
     expect(h.performAction).not.toHaveBeenCalled();
     await vi.waitFor(() => expect(document.querySelector('.redeven-action-popover-surface')).toBeNull());
   });

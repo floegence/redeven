@@ -17,7 +17,7 @@
     "waiting": "Aguardando conexão…"
   },
   "document": {
-    "title": "Redeven Env App"
+    "title": "Redeven"
   },
   "aiReadiness": {
     "eyebrow": "Disponibilidade do Flower",
@@ -3853,7 +3853,7 @@
       "label": "Modo de acesso",
       "unifiedProxyTitle": "Proxy seguro unificado",
       "unifiedProxyShort": "Proxy seguro",
-      "unifiedProxyDescription": "Funciona no Desktop, Web Env App e navegador do sistema.",
+      "unifiedProxyDescription": "Funciona no Redeven Desktop e no seu navegador.",
       "desktopLoopbackTitle": "Compatibilidade local do Desktop",
       "desktopLoopbackShort": "Desktop local",
       "desktopLoopbackDescription": "Usa um Origin 127.0.0.1 isolado para aplicativos que exigem acesso local. Disponível somente no Redeven Desktop.",
@@ -7040,7 +7040,7 @@
       }
     },
     "pluginRuntime": {
-      "sandboxOriginUnavailable": "Nenhum endereço de isolamento de plugin está disponível para este host do Env App.",
+      "sandboxOriginUnavailable": "O endereço da sandbox do plugin não está disponível para este ambiente.",
       "assetBootstrapFailed": "Não foi possível preparar os recursos do plugin (HTTP {status}).",
       "assetSessionMissing": "Não foi possível criar a sessão de recursos do plugin.",
       "approveAction": "Aprovar esta ação do plugin?",
@@ -7750,7 +7750,7 @@
     "deployHint": "Configure a área de trabalho remota por esta conexão SSH. Não é necessário confirmar na tela do host.",
     "deployPasswordHint": "Usada apenas nesta operação SSH. O Redeven não salva a senha nem a envia ao serviço da área de trabalho.",
     "deployConfirm": "Autorizar e continuar",
-    "serviceUpdateRequired": "Atualize a área de trabalho remota no Env App para usar esta versão do ambiente de execução.",
+    "serviceUpdateRequired": "Atualize a área de trabalho remota na janela do ambiente para usar esta versão do ambiente de execução.",
     "deployChecking": "Verificando o host SSH…",
     "deployTransferring": "Transferindo e verificando componentes…",
     "deployAuthorizing": "Autorizando esta operação SSH…",

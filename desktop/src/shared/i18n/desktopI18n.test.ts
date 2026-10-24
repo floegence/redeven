@@ -438,6 +438,13 @@ describe('Desktop shared i18n dictionaries', () => {
     expect(i18n.t('environmentAction.reinstallRedevenKeepData')).toBe(preserve);
   });
 
+  it.each(REDEVEN_SUPPORTED_LOCALES)('keeps internal app terminology out of user-facing copy in %s', (locale) => {
+    const violations = flattenDictionaryMessages(DESKTOP_I18N_DICTIONARIES[locale])
+      .filter((row) => desktopLeafStrings(row.value).some((message) => /env app/i.test(message)))
+      .map((row) => row.path);
+    expect(violations).toEqual([]);
+  });
+
   it('keeps non-English dictionaries assignable to a widened message shape', () => {
     const zhCN: DesktopTranslationShape = DESKTOP_I18N_DICTIONARIES['zh-CN'];
     expect(zhCN.common.open).toBe('打开');
@@ -446,7 +453,7 @@ describe('Desktop shared i18n dictionaries', () => {
     expect(zhCN.flowerSurface.settings.addProvider).toBe('添加模型提供商');
     expect(zhCN.environmentFacts.sshHost).toBe('SSH主机');
     expect(zhCN.environmentFacts.startedAt).toBe('已启动 {time}');
-    expect(zhCN.environmentAction.open).toBe('打开 Env App');
+    expect(zhCN.environmentAction.open).toBe('打开窗口');
     expect(zhCN.environmentAction.runtimeActions).toBe('操作');
     expect(zhCN.environmentAction.refreshStatus).toBe('刷新');
     expect(zhCN.environmentAction.refreshRuntimeStatus).toBe('刷新');
