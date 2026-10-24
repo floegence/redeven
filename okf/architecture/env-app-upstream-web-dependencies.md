@@ -10,43 +10,40 @@ reviewed_at: "2026-10-23"
 ---
 # Summary
 
-Env App is built as a Redeven-specific shell on top of published floe-webapp UI/runtime primitives, floe-webapp protocol connectivity, Floeterm terminal-web components, and Flowersec controlplane artifact helpers.
+Env App adapts published floe-webapp UI/runtime and protocol, Floeterm terminal-web, and Flowersec artifact helpers into the Redeven shell.
 
-Env App pins Floe Webapp Boot, Core, and Protocol v0.86.60, Floeterm terminal-web v0.19.2, and Flowersec Core v5.11.1. It consumes Floeterm's semantic Presentation and session exports.
+Pins are Floe Webapp Boot/Core/Protocol v0.86.60, Floeterm terminal-web v0.19.2, and Flowersec Core v5.11.1. Floeterm supplies semantic Presentation and session exports.
 
-
-Frontend deployment and lazy-import recovery follow [Env App page asset recovery](../ui/page-asset-recovery.md), using Floe's published document asset monitor and per-view error boundary.
+[Page asset recovery](../ui/page-asset-recovery.md) uses Floe's document asset monitor and per-view error boundary for deployment and lazy imports.
 
 # Contract
 
 ## Mechanism
 
-CodeSpace and Web Service presentation modules own their page styles. The root
-stylesheet does not import those styles a second time, so Vite loads them with
-their lazy page chunks and preserves the existing initial CSS budget.
+CodeSpace and Web Service modules own their styles. Vite loads these with lazy
+page chunks; the root stylesheet avoids duplicate imports to retain the initial CSS budget.
 
-Floe owns the loading icon slot, localized intrinsic label reservation, persistent feedback region, and resolved inline-media viewport contracts used by [asynchronous layout stability](../ui/asynchronous-layout-stability.md).
+Floe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/asynchronous-layout-stability.md).
 
-Env App Core v0.86.60 supplies the shared remote-pointer and remote-input controllers used by Host Applications, including bounded motion independent of rendering and explicit local text composition.
+Core supplies Host Applications' remote pointer/input controllers with render-independent bounded motion and explicit local text composition.
 
-[Flower citations](../ui/flower-citations.md#inline-code-references) defines that presentation boundary and its browser acceptance.
+[Flower citations](../ui/flower-citations.md#inline-code-references) owns citation presentation and browser acceptance.
 
 # Boundaries
 
 Env App and Desktop use Solid 1.9.17 or newer for patched Seroval serialization.
 
-Env App's npm and pnpm overrides require Zod 4.6.7 or newer within major 4,
-including Floebrowser's transitive validator. Both lockfiles must retain the
-patched version rather than restoring an upstream package's vulnerable pin.
+Matching npm/pnpm overrides and locks require Zod 4.6.7 or newer within major 4,
+including Floebrowser's transitive validator.
 
-Redeven may select shell presets and map product permissions, credentials, local-path authority, and placement into upstream contracts, but it must not recreate Floe shell tokens, Flowersec reconnect/framing/RPC behavior, or Floeterm parsing, key encoding, history, attachment arbitration, geometry, Presentation encoding, cursor, graphics, or canvas rendering.
+Redeven owns adapters for shell presets, permissions, credentials, local-path authority and placement. Upstream retains Floe shell tokens, Flowersec reconnect/framing/RPC, and Floeterm parsing, key encoding, history, attachment arbitration, geometry, Presentation encoding, cursor, graphics and canvas rendering.
 
-This exact coordinate is reviewed without relaxing the guard for other LGPL dependencies.
+Reviewed coordinates do not relax guards for other LGPL dependencies.
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/package.json` - Env App pins Floe Webapp Boot, Core, and Protocol v0.86.60; Desktop pins Boot and Core.
+- `redeven:internal/envapp/ui_src/package.json` - Published pins and matching overrides.
 
-- `redeven:internal/envapp/ui_src/src/ui/App.tsx:62` - Env App configures the published shell preset catalog and per-mode defaults.
+- `redeven:internal/envapp/ui_src/src/ui/App.tsx:62` - Shell preset catalog and per-mode defaults.
 
-- `redeven:internal/envapp/ui_src/src/ui/file-markdown/FileMarkdown.browser.test.tsx` - Chromium coverage renders CSS Color 4 Mermaid themes and one accessible KaTeX presentation across theme changes.
+- `redeven:internal/envapp/ui_src/src/ui/file-markdown/FileMarkdown.browser.test.tsx` - CSS Color 4 Mermaid themes and accessible KaTeX across theme changes.
