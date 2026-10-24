@@ -588,7 +588,8 @@ describe('Flower composer attachment browser presentation', () => {
     const modelTrigger = visibleModelTrigger();
     expect(modelTrigger).toBeTruthy();
     modelTrigger!.click();
-    await waitFor(() => Boolean(document.querySelector('.flower-model-menu-attachment-status')));
+    await waitFor(() => Boolean(document.querySelector('.flower-model-menu-item')));
+    await waitFor(() => document.querySelector('.flower-model-menu-attachment-status') === null);
     const menu = document.querySelector('.flower-model-menu') as HTMLElement;
     await waitFor(() => {
       const menuBounds = menu.getBoundingClientRect();

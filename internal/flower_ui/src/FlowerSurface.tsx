@@ -37,7 +37,6 @@ import { computerAssistance } from './computerAssistance';
 import { computerFrameRate } from './computerViewer';
 import type { FlowerComputerFrameSource, FlowerComputerInputCommand, FlowerThreadPinMetadata, FlowerThreadPinPosition } from './contracts/flowerSurfaceContracts';
 import { FLOE_HOT_INTERACTION_ATTR, secureRandomUUID } from '@floegence/floe-webapp-core';
-import { WebSearchCapabilityBadge } from './WebSearchCapabilityBadge';
 import { FlowerKeyedList } from './FlowerKeyedList';
 import { FlowerApprovalRow, FlowerApprovalDecisionActions } from './FlowerApprovalRow';
 import { createFlowerLiveFrameQueue } from './flowerLiveFrameQueue';
@@ -238,7 +237,6 @@ import {
 } from './transportOutbox';
 import { createLiveTransport, type LiveTransportState } from './liveTransport';
 import { flowerThreadActivityRevision } from './flowerThreadListRefresh';
-import { flowerModelSupportsImage, formatFlowerTokenCount } from './flowerModelLabel';
 import { FlowerReasoningControl } from './ReasoningControl';
 import {
   type FlowerComposerDraftCoordinator,
@@ -1142,7 +1140,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [modelMenuExpanded, setModelMenuExpanded] = createSignal(false);
   let modelSearchRef: HTMLInputElement | undefined;
   const [modelMenuPosition, setModelMenuPosition] = createSignal({ x: 0, y: 0 });
-  const [modelMenuSize, setModelMenuSize] = createSignal({ width: 416, height: 480 });
+  const [modelMenuSize, setModelMenuSize] = createSignal({ width: 360, height: 480 });
   const [modelMenuAvailableHeight, setModelMenuAvailableHeight] = createSignal(480);
   const [modelCapabilityRevision, setModelCapabilityRevision] = createSignal(0);
   type ModelCapabilityLoadState =
@@ -3083,15 +3081,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     name?: string;
     group: string;
     aliasKey?: string;
-    quantization?: string;
-    aliases?: readonly string[];
     source: 'model_profile' | 'desktop_model_source' | 'platform' | 'thread_snapshot';
     disabled?: boolean;
     providerType?: FlowerProviderType;
-    supportsImageInput: boolean;
-    webSearch?: import('./contracts/flowerSurfaceContracts').FlowerWebSearchAvailability;
-    contextWindow?: number;
-    maxOutputTokens?: number;
     reasoningCapability?: FlowerReasoningCapability;
     defaultReasoningSelection?: FlowerReasoningSelection;
     pending?: boolean;
@@ -3104,10 +3096,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     source: model.source === 'runtime_config' ? 'model_profile' : model.source || 'thread_snapshot',
     unavailableReason: ({ missing_keys: copy().chat.modelUnavailableMissingKeys, provider_disabled: copy().chat.modelUnavailableProviderDisabled, model_missing: copy().chat.modelUnavailableModelMissing, chatgpt_renewing: copy().settings.dialog.chatGPT.renewing, chatgpt_temporarily_unavailable: copy().settings.dialog.chatGPT.temporarilyUnavailable, chatgpt_review_required: copy().settings.dialog.chatGPT.reviewRequired, chatgpt_plan_permission_required: copy().settings.dialog.chatGPT.planPermission, chatgpt_authorization_required: copy().settings.dialog.chatGPT.authorizationRequired, chatgpt_signing_out: copy().settings.dialog.chatGPT.signingOut, chatgpt_signed_out: copy().settings.dialog.chatGPT.signedOut, chatgpt_storage_unavailable: copy().settings.dialog.chatGPT.storageUnavailable } as Record<string, string>)[model.reason ?? ''],
     disabled: model.state !== 'ready', pending: model.state === 'pending', providerType: model.provider_type,
-    aliasKey: model.alias_group, quantization: model.quantization,
-    supportsImageInput: flowerModelSupportsImage(model.input_modalities),
-    webSearch: model.web_search, contextWindow: model.context_window,
-    maxOutputTokens: model.max_output_tokens, reasoningCapability: model.reasoning_capability,
+    aliasKey: model.alias_group, reasoningCapability: model.reasoning_capability,
     defaultReasoningSelection: model.default_reasoning_selection,
   })));
   const currentModelLabel = createMemo(() => catalogModelOptions().find(model => model.id === currentModelID())?.label || currentModelID() || copy().chat.noModelSelected);
@@ -3128,7 +3117,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       source: 'thread_snapshot',
       group: copy().settings.dialog.catalog.unavailableModel,
       disabled: true,
-      supportsImageInput: false,
     };
   });
   const modelSelectOptions = createMemo(() => {
@@ -12458,6 +12446,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const modelMenuItem = (option: ComposerModelOption) => {
     const selected = () => option.id === selectedComposerModelID();
+    const unavailableReason = () => option.unavailableReason ?? (option.pending ? copy().chat.modelsChecking : copy().settings.dialog.catalog.unavailableModel);
     const attachmentSupport = () => modelAttachmentSupportState(option.id);
     const attachmentSupportLabel = () => {
       switch (attachmentSupport()) {
@@ -12475,6 +12464,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         data-model-source={option.source}
         role="option"
         aria-selected={selected()}
+        aria-description={option.disabled ? unavailableReason() : undefined}
+        title={option.disabled ? `${option.label} · ${unavailableReason()}` : option.label}
         disabled={option.disabled}
         onClick={() => {
           if (option.disabled) return;
@@ -12482,27 +12473,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           closeModelMenu(true);
         }}
       >
-        {option.providerType
-          ? <FlowerProviderBrandIcon type={option.providerType} class="flower-model-menu-icon" />
-          : <Bot class="flower-model-menu-icon" />}
+        <span class="flower-model-menu-avatar" aria-hidden="true">
+          {option.providerType
+            ? <FlowerProviderBrandIcon type={option.providerType} class="flower-model-menu-icon" />
+            : <Bot class="flower-model-menu-icon" />}
+        </span>
         <span class="flower-model-menu-copy">
           <span class="flower-model-menu-name" title={option.label}>{option.name || option.label}</span>
-          <span class="flower-model-menu-meta">
-            <Show when={option.quantization}><span>{option.quantization} · </span></Show>
-            <Show when={option.disabled}><span>{option.unavailableReason ?? (option.pending ? copy().chat.modelsChecking : copy().settings.dialog.catalog.unavailableModel)}{option.contextWindow ? ' · ' : ''}</span></Show>
-            <Show when={option.contextWindow}>
-              <span>{formatFlowerTokenCount(option.contextWindow)} {copy().settings.dialog.contextSuffix}</span>
-            </Show>
-            <Show when={option.maxOutputTokens}>
-              <span> · {formatFlowerTokenCount(option.maxOutputTokens)} {copy().settings.dialog.outputSuffix}</span>
-            </Show>
-            <Show when={option.supportsImageInput}>
-              <span> · {copy().settings.dialog.imageInput}</span>
-            </Show>
-          </span>
-          <Show when={option.aliases?.length}><span class="flower-model-menu-meta flower-model-menu-aliases" title={option.aliases?.join(', ')}>{copy().settings.dialog.catalog.aliases}: {option.aliases?.join(', ')}</span></Show>
-          <WebSearchCapabilityBadge availability={option.webSearch} copy={copy().settings.dialog.catalog} />
-          <Show when={attachmentSupport()} keyed>
+          <Show when={attachmentSupport() !== 'supported' && attachmentSupport()} keyed>
             {(state) => (
               <span
                 class="flower-model-menu-attachment-status"
@@ -12510,7 +12488,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 aria-label={attachmentSupportLabel()}
               >
                 {state === 'checking' && <Clock class="flower-model-menu-attachment-status-icon" aria-hidden="true" />}
-                {state === 'supported' && <Check class="flower-model-menu-attachment-status-icon" aria-hidden="true" />}
                 {state === 'unsupported' && <XCircle class="flower-model-menu-attachment-status-icon" aria-hidden="true" />}
                 {state === 'unavailable' && <AlertCircle class="flower-model-menu-attachment-status-icon" aria-hidden="true" />}
                 <span>{attachmentSupportLabel()}</span>
@@ -12518,8 +12495,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             )}
           </Show>
         </span>
+        <Show when={option.disabled}>
+          <span class="flower-model-menu-unavailable">{option.pending ? copy().chat.modelsChecking : copy().settings.dialog.catalog.unavailableModel}</span>
+        </Show>
         <Show when={selected()}>
-          <Check class="flower-model-menu-check" aria-hidden="true" />
+          <span class="flower-model-menu-selection" aria-hidden="true"><Check class="flower-model-menu-check" /></span>
         </Show>
       </button>
     );
@@ -12596,6 +12576,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         onKeyDown={handleModelMenuKeyDown}
       >
         <div class="flower-model-menu-header">
+          <div class="flower-model-menu-heading">
+            <span>{copy().settings.selectModelPlaceholder}</span>
+            <button type="button" class="flower-model-menu-close" aria-label={copy().settings.closeModelSelection} title={copy().settings.closeModelSelection} onClick={() => closeModelMenu(true)}><X aria-hidden="true" /></button>
+          </div>
           <Input ref={modelSearchRef} class="flower-model-menu-search" leftIcon={<Search class="flower-model-menu-search-icon" aria-hidden="true" />} value={modelQuery()} onInput={(event) => setModelQuery(event.currentTarget.value)} placeholder={copy().settings.dialog.catalog.search} aria-label={copy().settings.dialog.catalog.search} size="sm" />
         </div>
         <div class="flower-model-menu-list" role="listbox" aria-label={copy().settings.dialog.catalog.search}>
