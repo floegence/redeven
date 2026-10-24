@@ -31,6 +31,7 @@ func TestPatchHostedRunWritesAndPatchesAbsolutePath(t *testing.T) {
 	beta := "@@ beta:\n-changed\n+BETA\n"
 	ordered := "*** Begin Patch\n*** Update File: " + path + "\n" + alpha + beta + "*** End Patch"
 	backwards := "*** Begin Patch\n*** Update File: " + path + "\n" + beta + alpha + "*** End Patch"
+	uniqueBackwards := "*** Begin Patch\n*** Update File: " + path + "\n@@\n-BETA\n+final-beta\n@@\n-ALPHA\n+final-alpha\n*** End Patch"
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -59,7 +60,7 @@ func TestPatchHostedRunWritesAndPatchesAbsolutePath(t *testing.T) {
 				t.Errorf("missing corrective feedback %q: %+v", feedback, results)
 			}
 		}
-		if step > 5 {
+		if step > 6 {
 			for _, raw := range request["input"].([]any) {
 				item, _ := raw.(map[string]any)
 				if item["type"] != "function_call" || item["name"] != "apply_patch" {
@@ -72,6 +73,9 @@ func TestPatchHostedRunWritesAndPatchesAbsolutePath(t *testing.T) {
 				var args map[string]any
 				if err := json.Unmarshal([]byte(item["arguments"].(string)), &args); err != nil || len(args) != 1 || args[key] == nil {
 					t.Errorf("historical arguments changed: %+v, %v", item, err)
+				}
+				if item["call_id"] == "unique-backwards" && args["input"] != uniqueBackwards {
+					t.Errorf("historical patch order changed: %+v", args)
 				}
 			}
 			outputMu.Lock()
@@ -91,6 +95,8 @@ func TestPatchHostedRunWritesAndPatchesAbsolutePath(t *testing.T) {
 			name, id, args = "apply_patch", "out-of-order", map[string]any{"input": backwards}
 		case 5:
 			name, id, args = "apply_patch", "reordered", map[string]any{"input": ordered}
+		case 6:
+			name, id, args = "apply_patch", "unique-backwards", map[string]any{"input": uniqueBackwards}
 		}
 		raw, err := json.Marshal(args)
 		if err != nil {
@@ -135,21 +141,21 @@ func TestPatchHostedRunWritesAndPatchesAbsolutePath(t *testing.T) {
 		t.Fatalf("patch turn: %v; failure=%+v", err, terminal.Failure)
 	}
 	got, err := os.ReadFile(path)
-	if err != nil || string(got) != "alpha:\nALPHA\nbeta:\nBETA\n" {
+	if err != nil || string(got) != "alpha:\nfinal-alpha\nbeta:\nfinal-beta\n" {
 		t.Fatalf("patched file=%q error=%v", got, err)
 	}
 	outputMu.Lock()
 	initialOutputs := append([]openAIFunctionOutput(nil), outputs...)
 	outputMu.Unlock()
-	if calls.Load() != 6 || len(initialOutputs) != 5 || initialOutputs[4].CallID != "reordered" {
+	if calls.Load() != 7 || len(initialOutputs) != 6 || initialOutputs[5].CallID != "unique-backwards" {
 		t.Fatalf("provider calls=%d outputs=%+v", calls.Load(), initialOutputs)
 	}
 	var patchResult map[string]any
-	if err := json.Unmarshal([]byte(initialOutputs[4].Output), &patchResult); err != nil {
+	if err := json.Unmarshal([]byte(initialOutputs[5].Output), &patchResult); err != nil {
 		t.Fatal(err)
 	}
-	if patchResult["status"] != "success" || strings.Contains(initialOutputs[4].Output, "mutations") || !strings.Contains(initialOutputs[4].Output, "note.txt") {
-		t.Fatalf("patch result=%s", initialOutputs[4].Output)
+	if patchResult["status"] != "success" || strings.Contains(initialOutputs[5].Output, "mutations") || !strings.Contains(initialOutputs[5].Output, "note.txt") {
+		t.Fatalf("patch result=%s", initialOutputs[5].Output)
 	}
 
 	if err := svc.Close(); err != nil {
@@ -174,12 +180,12 @@ func TestPatchHostedRunWritesAndPatchesAbsolutePath(t *testing.T) {
 		outputMu.Lock()
 		retained := len(outputs)
 		outputMu.Unlock()
-		if retained != 5 {
+		if retained != 6 {
 			t.Fatalf("historical tool exchanges lost: %d", retained)
 		}
 	}
 	got, err = os.ReadFile(path)
-	if err != nil || string(got) != "alpha:\nALPHA\nbeta:\nBETA\n" || calls.Load() != 8 {
+	if err != nil || string(got) != "alpha:\nfinal-alpha\nbeta:\nfinal-beta\n" || calls.Load() != 9 {
 		t.Fatalf("history continuation replayed edits: contents=%q calls=%d err=%v", got, calls.Load(), err)
 	}
 }

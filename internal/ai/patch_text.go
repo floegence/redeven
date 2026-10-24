@@ -2,11 +2,12 @@ package ai
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
-// Matching reads the original file and moves forward. Unchanged lines retain
-// their endings; inserted lines use the first existing ending (LF for new files).
+// Unchanged lines retain their endings; inserted lines use the first existing
+// ending (LF for new files). All matching reads the original file.
 type patchSourceLine struct{ text, ending string }
 
 func splitPatchSource(original string) ([]patchSourceLine, string) {
@@ -44,6 +45,49 @@ func applyUnifiedDiffHunksToBytes(original []byte, hunks []unifiedDiffHunk) ([]b
 	for i, line := range source {
 		lines[i] = line.text
 	}
+	result, err := applyOrderedPatchHunks(source, lines, ending, hunks)
+	diagnostic, ok := err.(*patchDiagnostic)
+	if !ok || diagnostic.reason != "out_of_order" {
+		return result, err
+	}
+	ordered, ok := orderUniquePatchHunks(lines, hunks)
+	if !ok {
+		return nil, err
+	}
+	return applyOrderedPatchHunks(source, lines, ending, ordered)
+}
+
+// Reorder only ordinary chunks with one exact, disjoint original-source match
+// each. Explicit anchors, ranges, EOF and pure additions keep their order rules.
+func orderUniquePatchHunks(lines []string, hunks []unifiedDiffHunk) ([]unifiedDiffHunk, bool) {
+	type locatedHunk struct {
+		hunk       unifiedDiffHunk
+		start, end int
+	}
+	located := make([]locatedHunk, 0, len(hunks))
+	for _, h := range hunks {
+		if h.anchor != "" || h.hasRange || h.endOfFile {
+			return nil, false
+		}
+		old := patchOldLines(h)
+		start, count := exactPatchSequenceMatches(lines, old)
+		if count != 1 {
+			return nil, false
+		}
+		located = append(located, locatedHunk{h, start, start + len(old)})
+	}
+	slices.SortFunc(located, func(a, b locatedHunk) int { return a.start - b.start })
+	ordered := make([]unifiedDiffHunk, len(located))
+	for i, match := range located {
+		if i > 0 && match.start < located[i-1].end {
+			return nil, false
+		}
+		ordered[i] = match.hunk
+	}
+	return ordered, true
+}
+
+func applyOrderedPatchHunks(source []patchSourceLine, lines []string, ending string, hunks []unifiedDiffHunk) ([]byte, error) {
 	var output []patchSourceLine
 	var matched []patchMatchedRange
 	cursor := 0
@@ -146,6 +190,26 @@ func patchOldLines(h unifiedDiffHunk) []string {
 		}
 	}
 	return old
+}
+
+// Two matches suffice to establish ambiguity; empty patterns have no location.
+func exactPatchSequenceMatches(lines, pattern []string) (first, count int) {
+	first = -1
+	if len(pattern) == 0 {
+		return first, 0
+	}
+	for pos := 0; pos+len(pattern) <= len(lines); pos++ {
+		if slices.Equal(lines[pos:pos+len(pattern)], pattern) {
+			if count == 0 {
+				first = pos
+			}
+			count++
+			if count == 2 {
+				break
+			}
+		}
+	}
+	return first, count
 }
 
 func findPatchSequence(lines, pattern []string, start, preferred, end int) (hunkMatchResult, bool) {

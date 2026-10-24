@@ -33,25 +33,7 @@ func diagnosePatchContext(lines, pattern []string, h unifiedDiffHunk, chunk, sta
 	}
 	// Only exact source evidence refines the diagnosis. Never guess which repeated
 	// or normalized occurrence the model intended, and never apply this search.
-	first, count := -1, 0
-	for pos := 0; pos+len(pattern) <= len(lines); pos++ {
-		equal := len(pattern) > 0
-		for i, line := range pattern {
-			if lines[pos+i] != line {
-				equal = false
-				break
-			}
-		}
-		if equal {
-			count++
-			if first < 0 {
-				first = pos
-			}
-			if count == 2 {
-				break
-			}
-		}
-	}
+	first, count := exactPatchSequenceMatches(lines, pattern)
 	if count == 0 {
 		return d
 	}

@@ -14,7 +14,7 @@ func TestPatchDiagnosticsExplainRejectedContextWithoutEffects(t *testing.T) {
 		name, before, body, reason, remedy string
 		chunk, sourceLine, searchLine      int
 	}{
-		{"out_of_order", "early\nmiddle\nlate\n", "@@\n-late\n+LATE\n@@\n-early\n+EARLY", "out_of_order", "original file order", 2, 1, 4},
+		{"out_of_order", "early\nlate\nmiddle\nlate\n", "@@\n-late\n+LATE\n@@\n-early\n+EARLY", "out_of_order", "original file order", 2, 1, 3},
 		{"overlapping_context", "a\nb\nc\nd\n", "@@\n a\n-b\n+B\n c\n@@\n c\n-d\n+D", "overlapping_context", "one chunk", 2, 3, 4},
 		{"earlier_anchor", "section:\na\nb\n", "@@\n-b\n+B\n@@ section:\n-a\n+A", "out_of_order", "original file order", 2, 1, 4},
 		{"before_anchor", "early\nsection:\nlate\n", "@@ section:\n-early\n+EARLY", "before_anchor", "anchor", 1, 1, 3},

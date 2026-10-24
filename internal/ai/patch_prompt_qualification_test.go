@@ -15,7 +15,7 @@ func patchPromptQualificationCases() []promptQualificationCase {
 	patch := func(body string) string {
 		return "*** Begin Patch\n*** Update File: " + path + "\n" + body + "\n*** End Patch"
 	}
-	backwards := patch("@@\n-sun=3\n+sun=30\n@@\n-roof=1\n+roof=10\n@@\n-water=2\n+water=20")
+	backwards := patch("@@ keep-b\n-sun=3\n+sun=30\n@@\n-roof=1\n+roof=10\n@@\n-water=2\n+water=20")
 	duplicate := patch("@@\n-roof=1\n+roof=10\n*** Update File: " + path + "\n@@\n-water=2\n+water=20\n@@\n-sun=3\n+sun=30")
 	check := func(result ModelGatewayResult) error {
 		if len(result.ToolCalls) != 1 || result.ToolCalls[0].Name != "apply_patch" {
@@ -71,7 +71,7 @@ func TestPatchPromptQualificationRejectsInvalidEdits(t *testing.T) {
 			{"wrong_old_text", map[string]any{"input": strings.Replace(good, "-roof=1", "-roof=9", 1)}, false},
 			{"wrong_result", map[string]any{"input": strings.Replace(good, "+roof=10", "+roof=11", 1)}, false},
 			{"duplicate_header", map[string]any{"input": strings.Replace(good, "@@\n-water", "*** Update File: /workspace/demo/scene.txt\n@@\n-water", 1)}, false},
-			{"out_of_order", map[string]any{"input": "*** Begin Patch\n*** Update File: /workspace/demo/scene.txt\n@@\n-sun=3\n+sun=30\n@@\n-roof=1\n+roof=10\n@@\n-water=2\n+water=20\n*** End Patch"}, false},
+			{"out_of_order", map[string]any{"input": "*** Begin Patch\n*** Update File: /workspace/demo/scene.txt\n@@\n-sun=3\n+sun=30\n@@\n-roof=1\n+roof=10\n@@\n-water=2\n+water=20\n*** End Patch"}, true},
 		} {
 			t.Run(tc.name+"/"+trial.name, func(t *testing.T) {
 				result := ModelGatewayResult{ToolCalls: []ToolCall{{Name: "apply_patch", Args: trial.args}}}
