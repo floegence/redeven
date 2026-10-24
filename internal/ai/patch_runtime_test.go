@@ -46,7 +46,7 @@ func TestPatchHostedRunWritesAndPatchesAbsolutePath(t *testing.T) {
 		assertPatchProviderContract(t, request)
 		step := calls.Add(1)
 		if step == 3 || step == 5 {
-			want, feedback := "alpha:\nsame\nbeta:\nsame\n", "input_format"
+			want, feedback := "alpha:\nsame\nbeta:\nsame\n", "input"
 			if step == 5 {
 				want, feedback = "alpha:\nsame\nbeta:\nchanged\n", "out_of_order"
 			}
@@ -60,6 +60,20 @@ func TestPatchHostedRunWritesAndPatchesAbsolutePath(t *testing.T) {
 			}
 		}
 		if step > 5 {
+			for _, raw := range request["input"].([]any) {
+				item, _ := raw.(map[string]any)
+				if item["type"] != "function_call" || item["name"] != "apply_patch" {
+					continue
+				}
+				key := "input"
+				if item["call_id"] == "invalid-schema" {
+					key = "patch"
+				}
+				var args map[string]any
+				if err := json.Unmarshal([]byte(item["arguments"].(string)), &args); err != nil || len(args) != 1 || args[key] == nil {
+					t.Errorf("historical arguments changed: %+v, %v", item, err)
+				}
+			}
 			outputMu.Lock()
 			outputs = collectOpenAIFunctionOutputs(request["input"])
 			outputMu.Unlock()
@@ -70,13 +84,13 @@ func TestPatchHostedRunWritesAndPatchesAbsolutePath(t *testing.T) {
 		args := map[string]any{"file_path": path, "content": "alpha:\nsame\nbeta:\nsame\n"}
 		switch step {
 		case 2:
-			name, id, args = "apply_patch", "invalid-schema", map[string]any{"patch": patch, "input_format": "patch"}
+			name, id, args = "apply_patch", "invalid-schema", map[string]any{"patch": patch}
 		case 3:
-			name, id, args = "apply_patch", "patch", map[string]any{"patch": patch}
+			name, id, args = "apply_patch", "patch", map[string]any{"input": patch}
 		case 4:
-			name, id, args = "apply_patch", "out-of-order", map[string]any{"patch": backwards}
+			name, id, args = "apply_patch", "out-of-order", map[string]any{"input": backwards}
 		case 5:
-			name, id, args = "apply_patch", "reordered", map[string]any{"patch": ordered}
+			name, id, args = "apply_patch", "reordered", map[string]any{"input": ordered}
 		}
 		raw, err := json.Marshal(args)
 		if err != nil {
@@ -90,7 +104,7 @@ func TestPatchHostedRunWritesAndPatchesAbsolutePath(t *testing.T) {
 		writeAskUserIntegrationCompletedResponse(w, flusher, "response-"+id)
 	}))
 	t.Cleanup(provider.Close)
-	svc, err := NewService(Options{
+	opts := Options{
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: stateDir, AgentHomeDir: stateDir, Shell: "/bin/sh",
 		Config: &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{
 			ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: provider.URL + "/v1",
@@ -99,7 +113,8 @@ func TestPatchHostedRunWritesAndPatchesAbsolutePath(t *testing.T) {
 		ResolveProviderAPIKey:        func(string) (string, bool, error) { return "test-key", true, nil },
 		ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 5 * time.Second, FirstOutputTimeout: 5 * time.Second, IdleTimeout: 5 * time.Second},
 		PersistOpTimeout:             2 * time.Second,
-	})
+	}
+	svc, err := NewService(opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,16 +139,48 @@ func TestPatchHostedRunWritesAndPatchesAbsolutePath(t *testing.T) {
 		t.Fatalf("patched file=%q error=%v", got, err)
 	}
 	outputMu.Lock()
-	defer outputMu.Unlock()
-	if calls.Load() != 6 || len(outputs) != 5 || outputs[4].CallID != "reordered" {
-		t.Fatalf("provider calls=%d outputs=%+v", calls.Load(), outputs)
+	initialOutputs := append([]openAIFunctionOutput(nil), outputs...)
+	outputMu.Unlock()
+	if calls.Load() != 6 || len(initialOutputs) != 5 || initialOutputs[4].CallID != "reordered" {
+		t.Fatalf("provider calls=%d outputs=%+v", calls.Load(), initialOutputs)
 	}
 	var patchResult map[string]any
-	if err := json.Unmarshal([]byte(outputs[4].Output), &patchResult); err != nil {
+	if err := json.Unmarshal([]byte(initialOutputs[4].Output), &patchResult); err != nil {
 		t.Fatal(err)
 	}
-	if patchResult["status"] != "success" || strings.Contains(outputs[4].Output, "mutations") || !strings.Contains(outputs[4].Output, "note.txt") {
-		t.Fatalf("patch result=%s", outputs[4].Output)
+	if patchResult["status"] != "success" || strings.Contains(initialOutputs[4].Output, "mutations") || !strings.Contains(initialOutputs[4].Output, "note.txt") {
+		t.Fatalf("patch result=%s", initialOutputs[4].Output)
+	}
+
+	if err := svc.Close(); err != nil {
+		t.Fatal(err)
+	}
+	svc, err = NewService(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fork, err := svc.ForkThreadWithOptions(t.Context(), meta, thread.ThreadID, ForkThreadRequest{ClientRequestID: "patch-fork", Title: "Patch history"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{thread.ThreadID, fork.ThreadID} {
+		view, err := runTypedTurnForTest(t, t.Context(), svc, meta, "continue-"+id, RunStartRequest{
+			ThreadID: id, Model: "openai/gpt-5-mini", Input: RunInput{Text: "Summarize the confirmed edits without changing files."},
+			Options: RunOptions{PermissionType: config.AIPermissionFullAccess},
+		})
+		if err != nil {
+			t.Fatalf("continue patch history: %v; failure=%+v", err, view.Failure)
+		}
+		outputMu.Lock()
+		retained := len(outputs)
+		outputMu.Unlock()
+		if retained != 5 {
+			t.Fatalf("historical tool exchanges lost: %d", retained)
+		}
+	}
+	got, err = os.ReadFile(path)
+	if err != nil || string(got) != "alpha:\nALPHA\nbeta:\nBETA\n" || calls.Load() != 8 {
+		t.Fatalf("history continuation replayed edits: contents=%q calls=%d err=%v", got, calls.Load(), err)
 	}
 }
 
@@ -151,12 +198,21 @@ func assertPatchProviderContract(t *testing.T, request map[string]any) {
 			return
 		}
 		properties := parameters["properties"].(map[string]any)
-		for _, extra := range []string{"input", "input_format"} {
+		for _, extra := range []string{"patch", "input_format"} {
 			if _, exists := properties[extra]; exists {
 				t.Errorf("unexpected patch argument %s", extra)
 			}
 		}
-		description := properties["patch"].(map[string]any)["description"].(string)
+		input, ok := properties["input"].(map[string]any)
+		if !ok || input["type"] != "string" {
+			t.Errorf("provider lost input argument: %+v", properties)
+			return
+		}
+		required, _ := parameters["required"].([]any)
+		if len(required) != 1 || required[0] != "input" {
+			t.Errorf("unexpected required arguments: %+v", required)
+		}
+		description, _ := input["description"].(string)
 		for _, want := range []string{"One file header per canonical path", "non-overlapping chunks in original file order"} {
 			if !strings.Contains(description, want) {
 				t.Errorf("provider lost patch guidance %q", want)

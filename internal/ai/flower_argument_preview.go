@@ -133,7 +133,7 @@ func (p *flowerArgumentPreview) append(delta string, complete bool) (*fltools.Ar
 			out.Deletions = p.editStats.Deletions
 		}
 	case "apply_patch":
-		if p.fields["patch"] != nil {
+		if p.fields["input"] != nil {
 			if p.patch.invalidUTF8 {
 				return nil, errors.New("invalid patch utf8")
 			}
@@ -250,7 +250,7 @@ func (p *flowerArgumentPreview) wants(key string) bool {
 		return p.tool == "file.edit"
 	case "content":
 		return p.tool == "file.write"
-	case "patch":
+	case "input":
 		return p.tool == "apply_patch"
 	}
 	return false

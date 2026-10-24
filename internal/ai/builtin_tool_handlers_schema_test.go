@@ -176,19 +176,19 @@ func TestBuiltInToolDefinitions_ApplyPatchContractIsCanonical(t *testing.T) {
 	if !ok {
 		t.Fatalf("schema missing properties: %#v", schema)
 	}
-	patchSchema, ok := props["patch"].(map[string]any)
+	inputSchema, ok := props["input"].(map[string]any)
 	if !ok {
-		t.Fatalf("schema missing patch property: %#v", props)
+		t.Fatalf("schema missing input property: %#v", props)
 	}
-	description := fmt.Sprint(patchSchema["description"])
+	description := fmt.Sprint(inputSchema["description"])
 	if !strings.Contains(description, "*** Begin Patch") || !strings.Contains(description, "*** End Patch") {
-		t.Fatalf("patch property description missing canonical envelope: %q", description)
+		t.Fatalf("input property description missing canonical envelope: %q", description)
 	}
 	if !strings.Contains(description, "*** Update File:") || !strings.Contains(description, "@@") {
-		t.Fatalf("patch property description missing file op guidance: %q", description)
+		t.Fatalf("input property description missing file op guidance: %q", description)
 	}
 	if !strings.Contains(description, "Lines: + added, - removed, space context") {
-		t.Fatalf("patch property description missing add-file content-line prefix rule: %q", description)
+		t.Fatalf("input property description missing add-file content-line prefix rule: %q", description)
 	}
 }
 

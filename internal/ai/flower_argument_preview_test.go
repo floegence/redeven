@@ -52,7 +52,7 @@ func TestFlowerArgumentPreviewPatchFormats(t *testing.T) {
 		"*** Begin Patch\n*** Update File: missing.txt\n--- header-like content\n+++ header-like content\n context\n*** Add File: second.txt\n+\n+text\n*** End Patch",
 		"diff --git a/missing.txt b/missing.txt\r\n--- a/missing.txt\r\n+++ b/missing.txt\r\n@@ -1,2 +1,2 @@\r\n--- header-like content\r\n+++ header-like content\r\n context\r\ndiff --git a/second.txt b/second.txt\r\n--- /dev/null\r\n+++ b/second.txt\r\n@@ -0,0 +1,2 @@\r\n+\r\n+text",
 	} {
-		raw, _ := json.Marshal(map[string]string{"patch": patch})
+		raw, _ := json.Marshal(map[string]string{"input": patch})
 		parse := flowerArgumentPreviewFactory("apply_patch")()
 		for i := range len(raw) {
 			got, err := parse(string(raw[i:i+1]), i == len(raw)-1)
@@ -133,7 +133,7 @@ func TestFlowerArgumentPreviewLongBodyFirstKeepsProgressUntilPathArrives(t *test
 func TestFlowerArgumentPreviewPatchNamesStreamFromCompleteHeaders(t *testing.T) {
 	parse := flowerArgumentPreviewFactory("apply_patch")()
 	for _, step := range []struct{ delta, name string }{
-		{`{"patch":"*** Begin Patch\n*** Update File: src/exam`, ""},
+		{`{"input":"*** Begin Patch\n*** Update File: src/exam`, ""},
 		{`ple.ts\n@@\n-old\n+new`, "example.ts"},
 		{`\n*** Add File: src/second.ts`, "example.ts"},
 		{`\n+second`, "example.ts, second.ts"},
@@ -157,7 +157,7 @@ func TestFlowerArgumentPreviewPatchNamesRespectPatchStructure(t *testing.T) {
 		{"invalid path", "*** Begin Patch\n*** Update File: ../outside.ts\n*** Add File: /absolute.ts\n+text\n*** End Patch", ""},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			raw, _ := json.Marshal(map[string]string{"patch": test.patch})
+			raw, _ := json.Marshal(map[string]string{"input": test.patch})
 			parse := flowerArgumentPreviewFactory("apply_patch")()
 			for i := range len(raw) {
 				preview, err := parse(string(raw[i:i+1]), i == len(raw)-1)
@@ -193,7 +193,7 @@ func TestFlowerArgumentPreviewPatchNamesStayBounded(t *testing.T) {
 		patch.WriteString("*** Delete File: src/" + strings.Repeat("x", i+1) + ".ts\n")
 	}
 	patch.WriteString("*** End Patch")
-	raw, _ := json.Marshal(map[string]string{"patch": patch.String()})
+	raw, _ := json.Marshal(map[string]string{"input": patch.String()})
 	preview, err := flowerArgumentPreviewFactory("apply_patch")()(string(raw), true)
 	if err != nil || len([]rune(preview.DisplayName)) > 200 || !strings.HasSuffix(preview.DisplayName, "…") {
 		t.Fatalf("unbounded display name: %#v, %v", preview, err)

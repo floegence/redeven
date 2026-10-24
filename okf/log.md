@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-10-23: Align apply_patch arguments with Codex input. See [tool permissions](ai/tool-permission-runtime.md).
+
 - 2026-10-23: Preserve canonical [thinking duration](ui/flower-activity-interaction.md#thinking-duration), including submillisecond and unrecorded states.
 
 - 2026-10-23: Clean up AI terminal process groups before reaping command roots; preserve exit results, stop completed watchdogs, and define foreground execution and daemonization boundaries. See [terminal runtime](ai/terminal-tool-runtime.md).
