@@ -1,6 +1,6 @@
 # Redeven OKF Update Log
 
-- 2026-10-24: Simplify the Flower model picker to grouped icon-and-name rows, preserve actionable availability feedback and qualify keyboard, theme and narrow-screen layouts. See [model selection](ai/model-directory-and-selection.md).
+- 2026-10-24: Redesign the [Flower model picker](ai/model-directory-and-selection.md); verify themes, keyboard access and narrow layouts.
 
 - 2026-10-24: Accept uniquely matched, disjoint patch chunks in any order; retain strict rejection elsewhere. See [tool permissions](ai/tool-permission-runtime.md).
 
