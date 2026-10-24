@@ -1,7 +1,7 @@
 ---
 type: Development Contract
 title: Desktop development sessions and bundles
-description: Run current-source local development services together and bound generated packages without removing live bundles.
+description: Own development services, credentials and bundle retention.
 tags: [desktop, development, storage, retention]
 timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
@@ -9,48 +9,53 @@ reviewed_at: "2026-10-23"
 ---
 # Summary
 
-- Authority: the launcher owns its Desktop session, local Runtime, saved local host Gateways, and immutable bundles.
-- Outcome: run current checkout code, stop together, and prune obsolete bundles after publication.
-- Invariants: preserve identities, user data, unrelated services, and recent, selected or live bundles.
-- Failure boundary: preparation failure prevents launch and triggers cleanup; incomplete inventory prevents pruning.
+- Authority: the launcher owns Desktop, local Runtime, saved local Gateways, and bundles.
+- Outcome: run current source, stop together, prune obsolete bundles.
+- Invariants: preserve user data, identities, unrelated services, and recent, selected or live bundles.
+- Failure boundary: preparation errors clean up; incomplete inventory prevents pruning.
 
 # Contract
 
-## Development service lifecycle
-`scripts/dev_desktop.sh` builds Desktop and its Runtime bundle from the current checkout, including uncommitted source.
+## Service lifecycle
+`scripts/dev_desktop.sh` builds current source, including edits. Capture HEAD
+and tracked/non-ignored inputs; reject concurrent changes before launch. Exact
+generated OKF paths and ignored assets are outputs; protect OKF source, builder
+and Go embed inputs.
 
-Desktop and Runtime builds capture HEAD, tracked and non-ignored untracked
-inputs, including local edits. Verification after builds and before startup
-rejects concurrent edits or checkout advances. The three generated OKF bundles
-are outputs excluded by exact path alongside ignored assets. OKF Markdown,
-its builder and Go embed source remain protected inputs.
+Normal exit, startup failure, Ctrl+C and SIGTERM stop owned local services.
+The launcher owns coordination; product shutdown semantics remain unchanged.
 
-Normal Electron exit, startup failure after service preparation begins, Ctrl+C, and SIGTERM stop the development Runtime and local Gateways.
+Shared Electron resolution returns only the path; installer logs use stderr.
+Propagate failures and check executability after dependency-changing builds.
 
-Development coordination belongs to the launcher, not to product shutdown.
+## Credentials
+Unpackaged development instances use AES-256-GCM with a random profile key
+(0600). Keep the key with the profile. It prevents plaintext disclosure, not
+same-user process access. Other launches use Electron system storage; codec
+construction never probes it.
 
-Launch and preflight use the shared Electron resolver: package/installer logs
-go to stderr; only the exported path returns. Download failures propagate and
-executability is checked. Launch resolves after builds, which may reinstall
-Desktop dependencies.
+Before preference recovery, migrate Desktop, Gateway and registration-journal
+secrets atomically per file. Legacy Keychain records may need one final approval;
+later launches use the profile key. Decryption failure preserves files and blocks
+startup. Never reset accounts, connections, Runtime state or Keychain entries.
 
 ## Bundle retention
-`scripts/dev_desktop.sh` publishes each complete bundle below `<development-state-root>/desktop/bundles/<manifest-sha256>` and then runs retention before launching Electron. The selected bundle is always retained, including reuse of an older build.
-
-Retention is a count bound on inactive verified packages, not a byte quota; active processes and unverified entries can require additional space.
+Complete bundles publish under `<development-state-root>/desktop/bundles/<manifest-sha256>`.
+Retain the newest three, selected bundle (including reuse), and all live references.
+This bounds inactive verified package counts, not bytes; active or unverified
+entries can increase usage.
 
 # Boundaries
 
-Only generated packages within the selected development profile participate. In-progress build directories belong to their builders.
+Retention only touches generated packages in the selected profile. Builders own
+in-progress directories.
 
 # Evidence
 
-- `redeven:scripts/dev_desktop.sh` - Complete bundle publication and startup cleanup.
-
-- `redeven:scripts/source_build_identity.mjs` - Shared source identity and mixed-build rejection.
-
-- `redeven:scripts/desktop_bundle_build_contract.test.mjs` - Checkout advance, dirty sources, and preserved staging boundaries.
-
-- `redeven:scripts/ui_package_common_node_test.sh` - Resolution, diagnostics, failure and preflight.
-
-- `redeven:scripts/dev_desktop_signal_cleanup_test.sh` - Download, reinstall and cleanup.
+- `redeven:scripts/dev_desktop.sh` - Publication, launch and cleanup.
+- `redeven:scripts/source_build_identity.mjs` - Mixed-source rejection.
+- `redeven:scripts/desktop_bundle_build_contract.test.mjs` - Source and staging boundaries.
+- `redeven:scripts/ui_package_common_node_test.sh` - Electron resolution and preflight.
+- `redeven:scripts/dev_desktop_signal_cleanup_test.sh` - Exit, download and reinstall cleanup.
+- `redeven:desktop/src/main/developmentSecretStorage.test.ts` - Restart, migration, failures, tags and permissions.
+- `redeven:desktop/src/main/desktopPreferences.test.ts` - Lazy system storage.

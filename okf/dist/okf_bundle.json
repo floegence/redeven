@@ -1946,14 +1946,14 @@
             "path": "desktop/desktop-development-bundles.md",
             "type": "Development Contract",
             "title": "Desktop development sessions and bundles",
-            "description": "Run current-source local development services together and bound generated packages without removing live bundles.",
+            "description": "Own development services, credentials and bundle retention.",
             "tags": [
               "desktop",
               "development",
               "retention",
               "storage"
             ],
-            "summary": "- Authority: the launcher owns its Desktop session, local Runtime, saved local host Gateways, and immutable bundles.\n- Outcome: run current checkout code, stop together, and prune obsolete bundles after publication.\n- Invariants: preserve identities, user data, unrelated services, and recent, selected or live bundles.\n- Failure boundary: preparation failure prevents launch and triggers cleanup; incomplete inventory prevents pruning.",
+            "summary": "- Authority: the launcher owns Desktop, local Runtime, saved local Gateways, and bundles.\n- Outcome: run current source, stop together, prune obsolete bundles.\n- Invariants: preserve user data, identities, unrelated services, and recent, selected or live bundles.\n- Failure boundary: preparation errors clean up; incomplete inventory prevents pruning.",
             "section_count": 2
           },
           {
@@ -18931,7 +18931,7 @@
       "concept_id": "desktop.desktop-development-bundles",
       "type": "Development Contract",
       "title": "Desktop development sessions and bundles",
-      "description": "Run current-source local development services together and bound generated packages without removing live bundles.",
+      "description": "Own development services, credentials and bundle retention.",
       "tags": [
         "desktop",
         "development",
@@ -18940,7 +18940,7 @@
       ],
       "timestamp": "2026-10-08T00:00:00Z",
       "frontmatter": {
-        "description": "Run current-source local development services together and bound generated packages without removing live bundles.",
+        "description": "Own development services, credentials and bundle retention.",
         "lifecycle": "contract",
         "reviewed_at": "2026-10-23",
         "tags": [
@@ -18953,52 +18953,62 @@
         "title": "Desktop development sessions and bundles",
         "type": "Development Contract"
       },
-      "body_length": 2534,
-      "summary": "- Authority: the launcher owns its Desktop session, local Runtime, saved local host Gateways, and immutable bundles.\n- Outcome: run current checkout code, stop together, and prune obsolete bundles after publication.\n- Invariants: preserve identities, user data, unrelated services, and recent, selected or live bundles.\n- Failure boundary: preparation failure prevents launch and triggers cleanup; incomplete inventory prevents pruning.",
+      "body_length": 2609,
+      "summary": "- Authority: the launcher owns Desktop, local Runtime, saved local Gateways, and bundles.\n- Outcome: run current source, stop together, prune obsolete bundles.\n- Invariants: preserve user data, identities, unrelated services, and recent, selected or live bundles.\n- Failure boundary: preparation errors clean up; incomplete inventory prevents pruning.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Development service lifecycle\n`scripts/dev_desktop.sh` builds Desktop and its Runtime bundle from the current checkout, including uncommitted source.\n\nDesktop and Runtime builds capture HEAD, tracked and non-ignored untracked\ninputs, including local edits. Verification after builds and before startup\nrejects concurrent edits or checkout advances. The three generated OKF bundles\nare outputs excluded by exact path alongside ignored assets. OKF Markdown,\nits builder and Go embed source remain protected inputs.\n\nNormal Electron exit, startup failure after service preparation begins, Ctrl+C, and SIGTERM stop the development Runtime and local Gateways.\n\nDevelopment coordination belongs to the launcher, not to product shutdown.\n\nLaunch and preflight use the shared Electron resolver: package/installer logs\ngo to stderr; only the exported path returns. Download failures propagate and\nexecutability is checked. Launch resolves after builds, which may reinstall\nDesktop dependencies.\n\n## Bundle retention\n`scripts/dev_desktop.sh` publishes each complete bundle below `\u003cdevelopment-state-root\u003e/desktop/bundles/\u003cmanifest-sha256\u003e` and then runs retention before launching Electron. The selected bundle is always retained, including reuse of an older build.\n\nRetention is a count bound on inactive verified packages, not a byte quota; active processes and unverified entries can require additional space.",
-          "char_count": 1405
+          "body": "## Service lifecycle\n`scripts/dev_desktop.sh` builds current source, including edits. Capture HEAD\nand tracked/non-ignored inputs; reject concurrent changes before launch. Exact\ngenerated OKF paths and ignored assets are outputs; protect OKF source, builder\nand Go embed inputs.\n\nNormal exit, startup failure, Ctrl+C and SIGTERM stop owned local services.\nThe launcher owns coordination; product shutdown semantics remain unchanged.\n\nShared Electron resolution returns only the path; installer logs use stderr.\nPropagate failures and check executability after dependency-changing builds.\n\n## Credentials\nUnpackaged development instances use AES-256-GCM with a random profile key\n(0600). Keep the key with the profile. It prevents plaintext disclosure, not\nsame-user process access. Other launches use Electron system storage; codec\nconstruction never probes it.\n\nBefore preference recovery, migrate Desktop, Gateway and registration-journal\nsecrets atomically per file. Legacy Keychain records may need one final approval;\nlater launches use the profile key. Decryption failure preserves files and blocks\nstartup. Never reset accounts, connections, Runtime state or Keychain entries.\n\n## Bundle retention\nComplete bundles publish under `\u003cdevelopment-state-root\u003e/desktop/bundles/\u003cmanifest-sha256\u003e`.\nRetain the newest three, selected bundle (including reuse), and all live references.\nThis bounds inactive verified package counts, not bytes; active or unverified\nentries can increase usage.",
+          "char_count": 1488
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Only generated packages within the selected development profile participate. In-progress build directories belong to their builders.",
-          "char_count": 132
+          "body": "Retention only touches generated packages in the selected profile. Builders own\nin-progress directories.",
+          "char_count": 104
         }
       ],
       "evidence": [
         {
-          "id": "redeven:scripts/dev_desktop.sh:0:complete bundle publication and startup cleanup.",
+          "id": "redeven:scripts/dev_desktop.sh:0:publication, launch and cleanup.",
           "source": "redeven:scripts/dev_desktop.sh",
-          "description": "Complete bundle publication and startup cleanup."
+          "description": "Publication, launch and cleanup."
         },
         {
-          "id": "redeven:scripts/source_build_identity.mjs:0:shared source identity and mixed-build rejection.",
+          "id": "redeven:scripts/source_build_identity.mjs:0:mixed-source rejection.",
           "source": "redeven:scripts/source_build_identity.mjs",
-          "description": "Shared source identity and mixed-build rejection."
+          "description": "Mixed-source rejection."
         },
         {
-          "id": "redeven:scripts/desktop_bundle_build_contract.test.mjs:0:checkout advance, dirty sources, and preserved staging boundaries.",
+          "id": "redeven:scripts/desktop_bundle_build_contract.test.mjs:0:source and staging boundaries.",
           "source": "redeven:scripts/desktop_bundle_build_contract.test.mjs",
-          "description": "Checkout advance, dirty sources, and preserved staging boundaries."
+          "description": "Source and staging boundaries."
         },
         {
-          "id": "redeven:scripts/ui_package_common_node_test.sh:0:resolution, diagnostics, failure and preflight.",
+          "id": "redeven:scripts/ui_package_common_node_test.sh:0:electron resolution and preflight.",
           "source": "redeven:scripts/ui_package_common_node_test.sh",
-          "description": "Resolution, diagnostics, failure and preflight."
+          "description": "Electron resolution and preflight."
         },
         {
-          "id": "redeven:scripts/dev_desktop_signal_cleanup_test.sh:0:download, reinstall and cleanup.",
+          "id": "redeven:scripts/dev_desktop_signal_cleanup_test.sh:0:exit, download and reinstall cleanup.",
           "source": "redeven:scripts/dev_desktop_signal_cleanup_test.sh",
-          "description": "Download, reinstall and cleanup."
+          "description": "Exit, download and reinstall cleanup."
+        },
+        {
+          "id": "redeven:desktop/src/main/developmentSecretStorage.test.ts:0:restart, migration, failures, tags and permissions.",
+          "source": "redeven:desktop/src/main/developmentSecretStorage.test.ts",
+          "description": "Restart, migration, failures, tags and permissions."
+        },
+        {
+          "id": "redeven:desktop/src/main/desktopPreferences.test.ts:0:lazy system storage.",
+          "source": "redeven:desktop/src/main/desktopPreferences.test.ts",
+          "description": "Lazy system storage."
         }
       ],
-      "snippet": "- Authority: the launcher owns its Desktop session, local Runtime, saved local host Gateways, and immutable bundles. - Outcome: run current checkout code, stop together, and prune obsolete bundles after publication. - Invariants: preserve i",
+      "snippet": "- Authority: the launcher owns Desktop, local Runtime, saved local Gateways, and bundles. - Outcome: run current source, stop together, prune obsolete bundles. - Invariants: preserve user data, identities, unrelated services, and recent, se",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -33658,5 +33668,5 @@
       ]
     }
   ],
-  "source_sha256": "2edefdac15738d5bf4574f709bb991ff93bd6bac87c635a856413573565f58fc"
+  "source_sha256": "2430388d9150f4b81f31fcf60b1efbba33f36f75f48f682ad765c1286a7e489f"
 }

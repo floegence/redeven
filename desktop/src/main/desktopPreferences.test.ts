@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   normalizeDesktopCloud,
@@ -21,6 +21,7 @@ import {
 } from '../testSupport/desktopTestHelpers';
 import {
   createPlaintextSecretCodec,
+  createSafeStorageSecretCodec,
   type DesktopPreferences,
   defaultDesktopPreferences,
   defaultDesktopPreferencesPaths,
@@ -50,6 +51,18 @@ import {
   upsertSavedRuntimeTarget,
   validateDesktopSettingsDraft,
 } from './desktopPreferences';
+
+describe('safe storage initialization', () => {
+  it('does not unlock the OS secret store until a secret is used', () => {
+    const isEncryptionAvailable = vi.fn(() => { throw new Error('Keychain access requested'); });
+    expect(() => createSafeStorageSecretCodec({
+      isEncryptionAvailable,
+      encryptString: vi.fn(),
+      decryptString: vi.fn(),
+    })).not.toThrow();
+    expect(isEncryptionAvailable).not.toHaveBeenCalled();
+  });
+});
 
 function draft(overrides: Partial<DesktopSettingsDraft> = {}): DesktopSettingsDraft {
   return {

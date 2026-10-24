@@ -20,6 +20,16 @@ function readSharedGatewaySource(): string {
 }
 
 describe('main routing', () => {
+  it('uses one launcher-scoped secret codec for Desktop and Gateway credentials', () => {
+    const source = readMainSource();
+    const start = source.indexOf('function preferencesCodec()');
+    const codec = source.slice(start, source.indexOf('function desktopRedevenCloudOriginPolicy()', start));
+    expect(codec).toContain('desktopSecretCodec ??= createDesktopSecretCodec(');
+    expect(codec).toContain('isPackaged: app.isPackaged');
+    expect(codec).toContain('developmentInstanceID: process.env.REDEVEN_DESKTOP_DEV_INSTANCE_ID');
+    expect(codec).toContain("userDataRoot: app.getPath('userData')");
+    expect(source).toContain('const codec = preferencesCodec();');
+  });
   it('resolves source icons without starting a Runtime or preparing models', () => {
     const source = readMainSource();
     const start = source.indexOf('async function requestRuntimeFlower(');
