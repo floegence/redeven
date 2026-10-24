@@ -17,10 +17,9 @@ reviewed_at: "2026-10-23"
 # Contract
 
 ## Service lifecycle
-`scripts/dev_desktop.sh` builds current source, including edits. Capture HEAD
-and tracked/non-ignored inputs; reject concurrent changes before launch. Exact
-generated OKF paths and ignored assets are outputs; protect OKF source, builder
-and Go embed inputs.
+`scripts/dev_desktop.sh` builds current tracked/non-ignored source and captures HEAD.
+Reject concurrent edits. Generated OKF and ignored assets are outputs; protect
+OKF sources, builders and Go embeds.
 
 Normal exit, startup failure, Ctrl+C and SIGTERM stop owned local services.
 The launcher owns coordination; product shutdown semantics remain unchanged.
@@ -34,10 +33,10 @@ Unpackaged development instances use AES-256-GCM with a random profile key
 same-user process access. Other launches use Electron system storage; codec
 construction never probes it.
 
-Before preference recovery, migrate Desktop, Gateway and registration-journal
-secrets atomically per file. Legacy Keychain records may need one final approval;
-later launches use the profile key. Decryption failure preserves files and blocks
-startup. Never reset accounts, connections, Runtime state or Keychain entries.
+Legacy Keychain records open a recovery screen without system access or preference
+recovery. Only its explicit migration action decrypts and atomically migrates each
+file. Failure preserves credentials and permits retry/quit; corrupt keys require
+repair. Never reset accounts, Runtime state or Keychain entries.
 
 ## Bundle retention
 Complete bundles publish under `<development-state-root>/desktop/bundles/<manifest-sha256>`.
@@ -55,7 +54,6 @@ in-progress directories.
 - `redeven:scripts/dev_desktop.sh` - Publication, launch and cleanup.
 - `redeven:scripts/source_build_identity.mjs` - Mixed-source rejection.
 - `redeven:scripts/desktop_bundle_build_contract.test.mjs` - Source and staging boundaries.
-- `redeven:scripts/ui_package_common_node_test.sh` - Electron resolution and preflight.
 - `redeven:scripts/dev_desktop_signal_cleanup_test.sh` - Exit, download and reinstall cleanup.
 - `redeven:desktop/src/main/developmentSecretStorage.test.ts` - Restart, migration, failures, tags and permissions.
-- `redeven:desktop/src/main/desktopPreferences.test.ts` - Lazy system storage.
+- `redeven:desktop/scripts/check-development-credentials.mjs` - Real-product restarts, Env App, damaged keys and cleanup.

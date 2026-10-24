@@ -20,9 +20,23 @@ function readSharedGatewaySource(): string {
 }
 
 describe('main routing', () => {
+  it('keeps legacy credential recovery inside a visible launcher without background probes', () => {
+    const source = readMainSource();
+    const snapshot = source.slice(source.indexOf('async function buildCurrentDesktopWelcomeSnapshot('), source.indexOf('async function loadGatewaySourcesForWelcome('));
+    expect(snapshot.indexOf('if (developmentCredentialRecovery)')).toBeLessThan(snapshot.indexOf('await loadDesktopPreferencesCached()'));
+    expect(snapshot).toContain('credential_recovery: developmentCredentialRecovery');
+    const action = source.slice(source.indexOf("case 'migrate_development_credentials':"), source.indexOf("case 'open_local_environment':", source.indexOf('async function performDesktopLauncherAction(')));
+    expect(action).toContain('preferencesCodec(true)');
+    expect(action).toContain('await loadDesktopPreferencesCached()');
+    expect(action).toContain('await completeDesktopStartup(preferences)');
+    expect(source).toContain("utilityWindowKindByWebContentsID.get(_event.sender.id) !== 'launcher'");
+    expect(source).toContain('!app.isReady() || developmentCredentialRecovery');
+    expect(source).toContain("_event.senderFrame !== _event.sender.mainFrame");
+  });
+
   it('uses one launcher-scoped secret codec for Desktop and Gateway credentials', () => {
     const source = readMainSource();
-    const start = source.indexOf('function preferencesCodec()');
+    const start = source.indexOf('function preferencesCodec(');
     const codec = source.slice(start, source.indexOf('function desktopRedevenCloudOriginPolicy()', start));
     expect(codec).toContain('desktopSecretCodec ??= createDesktopSecretCodec(');
     expect(codec).toContain('isPackaged: app.isPackaged');

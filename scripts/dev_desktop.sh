@@ -52,8 +52,9 @@ diagnostics in Gateways, or disable/remove the connection while repairing it.
 Saved local Gateways can use the default host directory or a custom location.
 The embedded Env App Plugin UI is enabled for this development launch.
 Development credentials use a private profile-local encryption key instead of
-the system secret store. Existing credentials migrate once; macOS may request
-Keychain authorization for that migration. Keep the key with this profile.
+the system secret store. Profiles with existing Keychain credentials open a
+recovery screen; only its explicit migration action requests authorization.
+Keep the encryption key with this profile.
 After building, keep the three newest development bundles plus the selected
 bundle and any older bundles still referenced by running processes.
 
@@ -696,7 +697,7 @@ log_development_configuration() {
   fi
   ui_pkg_log "Development runtime owner scope: checkout=$ROOT_DIR state-root=$DEVELOPMENT_STATE_ROOT"
   ui_pkg_log "The isolated profile does not copy providers, secrets, or databases. Configure a Provider in this development profile before using Flower."
-  ui_pkg_log "Development credentials use a profile-local key; existing system-encrypted credentials may require one-time authorization to migrate."
+  ui_pkg_log "Development credentials use a profile-local key. Existing Keychain credentials open a recovery screen; migration requires an explicit action."
 }
 
 ensure_desktop_workspace() {

@@ -31,6 +31,11 @@ const operationSnapshotHasNoLegacyInterruptionFields: [
   : false = true;
 
 describe('desktopLauncherIPC', () => {
+  it('accepts only the explicit development migration action', () => {
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'migrate_development_credentials' })).toEqual({ kind: 'migrate_development_credentials' });
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'automatically_migrate_development_credentials' })).toBeNull();
+  });
+
   it('preserves explicit restart recovery through launcher IPC', () => {
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'open_local_environment', environment_id: 'local', route: 'local_host', runtime_recovery: 'restart',

@@ -1,3 +1,4 @@
+import { DevelopmentCredentialRecovery } from './DevelopmentCredentialRecovery';
 import { environmentInteractionIdentity, gatewayInteractionIdentity } from './environmentInteractionIdentity';
 import { RuntimeGatewaySetupDialog } from './RuntimeGatewaySetupDialog';
 import { RuntimeComponentTransferProgress } from './RuntimeComponentTransferProgress';
@@ -14197,6 +14198,12 @@ function ControlPlaneDialog(props: Readonly<{
 
 
 export function DesktopWelcomeShell(props: DesktopWelcomeShellProps) {
+  const [recoverySnapshot, setRecoverySnapshot] = createSignal(props.snapshot);
+  createEffect(() => {
+    if (!recoverySnapshot().credential_recovery) return;
+    const unsubscribe = props.runtime.launcher.subscribeSnapshot(next => setRecoverySnapshot(current => selectLatestDesktopWelcomeSnapshot(current, next)));
+    onCleanup(unsubscribe);
+  });
   const shellLanguage = desktopLanguageBridge();
   const [languageSnapshot, setLanguageSnapshot] = createSignal<RedevenLanguageSnapshot>(
     shellLanguage?.getSnapshot() ?? FALLBACK_DESKTOP_LANGUAGE_SNAPSHOT,
@@ -14216,7 +14223,11 @@ export function DesktopWelcomeShell(props: DesktopWelcomeShellProps) {
   return (
     <FloeProvider config={floeConfig()}>
       <div data-redeven-desktop-locale={languageSnapshot().resolved_locale}>
-        <DesktopWelcomeShellInner {...props} />
+        <Show when={recoverySnapshot().credential_recovery} fallback={<DesktopWelcomeShellInner {...props} snapshot={recoverySnapshot()} />}>
+          {recovery => <DevelopmentCredentialRecovery recovery={recovery()} i18n={i18n()}
+            migrate={() => props.runtime.launcher.performAction({ kind: 'migrate_development_credentials' })}
+            quit={() => props.runtime.launcher.performAction({ kind: 'close_launcher_or_quit' })} />}
+        </Show>
         <CommandPalette />
       </div>
     </FloeProvider>

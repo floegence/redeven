@@ -18953,15 +18953,15 @@
         "title": "Desktop development sessions and bundles",
         "type": "Development Contract"
       },
-      "body_length": 2609,
+      "body_length": 2499,
       "summary": "- Authority: the launcher owns Desktop, local Runtime, saved local Gateways, and bundles.\n- Outcome: run current source, stop together, prune obsolete bundles.\n- Invariants: preserve user data, identities, unrelated services, and recent, selected or live bundles.\n- Failure boundary: preparation errors clean up; incomplete inventory prevents pruning.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Service lifecycle\n`scripts/dev_desktop.sh` builds current source, including edits. Capture HEAD\nand tracked/non-ignored inputs; reject concurrent changes before launch. Exact\ngenerated OKF paths and ignored assets are outputs; protect OKF source, builder\nand Go embed inputs.\n\nNormal exit, startup failure, Ctrl+C and SIGTERM stop owned local services.\nThe launcher owns coordination; product shutdown semantics remain unchanged.\n\nShared Electron resolution returns only the path; installer logs use stderr.\nPropagate failures and check executability after dependency-changing builds.\n\n## Credentials\nUnpackaged development instances use AES-256-GCM with a random profile key\n(0600). Keep the key with the profile. It prevents plaintext disclosure, not\nsame-user process access. Other launches use Electron system storage; codec\nconstruction never probes it.\n\nBefore preference recovery, migrate Desktop, Gateway and registration-journal\nsecrets atomically per file. Legacy Keychain records may need one final approval;\nlater launches use the profile key. Decryption failure preserves files and blocks\nstartup. Never reset accounts, connections, Runtime state or Keychain entries.\n\n## Bundle retention\nComplete bundles publish under `\u003cdevelopment-state-root\u003e/desktop/bundles/\u003cmanifest-sha256\u003e`.\nRetain the newest three, selected bundle (including reuse), and all live references.\nThis bounds inactive verified package counts, not bytes; active or unverified\nentries can increase usage.",
-          "char_count": 1488
+          "body": "## Service lifecycle\n`scripts/dev_desktop.sh` builds current tracked/non-ignored source and captures HEAD.\nReject concurrent edits. Generated OKF and ignored assets are outputs; protect\nOKF sources, builders and Go embeds.\n\nNormal exit, startup failure, Ctrl+C and SIGTERM stop owned local services.\nThe launcher owns coordination; product shutdown semantics remain unchanged.\n\nShared Electron resolution returns only the path; installer logs use stderr.\nPropagate failures and check executability after dependency-changing builds.\n\n## Credentials\nUnpackaged development instances use AES-256-GCM with a random profile key\n(0600). Keep the key with the profile. It prevents plaintext disclosure, not\nsame-user process access. Other launches use Electron system storage; codec\nconstruction never probes it.\n\nLegacy Keychain records open a recovery screen without system access or preference\nrecovery. Only its explicit migration action decrypts and atomically migrates each\nfile. Failure preserves credentials and permits retry/quit; corrupt keys require\nrepair. Never reset accounts, Runtime state or Keychain entries.\n\n## Bundle retention\nComplete bundles publish under `\u003cdevelopment-state-root\u003e/desktop/bundles/\u003cmanifest-sha256\u003e`.\nRetain the newest three, selected bundle (including reuse), and all live references.\nThis bounds inactive verified package counts, not bytes; active or unverified\nentries can increase usage.",
+          "char_count": 1423
         },
         {
           "id": "boundaries",
@@ -18988,11 +18988,6 @@
           "description": "Source and staging boundaries."
         },
         {
-          "id": "redeven:scripts/ui_package_common_node_test.sh:0:electron resolution and preflight.",
-          "source": "redeven:scripts/ui_package_common_node_test.sh",
-          "description": "Electron resolution and preflight."
-        },
-        {
           "id": "redeven:scripts/dev_desktop_signal_cleanup_test.sh:0:exit, download and reinstall cleanup.",
           "source": "redeven:scripts/dev_desktop_signal_cleanup_test.sh",
           "description": "Exit, download and reinstall cleanup."
@@ -19003,9 +18998,9 @@
           "description": "Restart, migration, failures, tags and permissions."
         },
         {
-          "id": "redeven:desktop/src/main/desktopPreferences.test.ts:0:lazy system storage.",
-          "source": "redeven:desktop/src/main/desktopPreferences.test.ts",
-          "description": "Lazy system storage."
+          "id": "redeven:desktop/scripts/check-development-credentials.mjs:0:real-product restarts, env app, damaged keys and cleanup.",
+          "source": "redeven:desktop/scripts/check-development-credentials.mjs",
+          "description": "Real-product restarts, Env App, damaged keys and cleanup."
         }
       ],
       "snippet": "- Authority: the launcher owns Desktop, local Runtime, saved local Gateways, and bundles. - Outcome: run current source, stop together, prune obsolete bundles. - Invariants: preserve user data, identities, unrelated services, and recent, se",
@@ -33668,5 +33663,5 @@
       ]
     }
   ],
-  "source_sha256": "f6d30a4d444426bc862d0254acecfa5505d3dfc413b14c490cde9cf6de12f04f"
+  "source_sha256": "ba6766e70f3f897024d42dd2b6089617f863a401272ea8a39c613a5c732bdf4c"
 }

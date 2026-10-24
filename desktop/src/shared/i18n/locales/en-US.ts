@@ -2,6 +2,14 @@ import { plural, type DeepWidenMessages, type DotPathByLeaf, type PluralMessage 
 import flowerSurfaceEnUS from './catalogs/en-US-flower.json';
 
 export const enUS = {
+  developmentCredentials: {
+    title: 'Unlock development credentials',
+    description: 'This development profile contains credentials encrypted by macOS Keychain. Migrate them once to the private profile key to continue. Only this action requests Keychain authorization; launching Desktop does not. Existing accounts, connections, and Runtime data are preserved.',
+    unavailable: 'The development credential file or profile key cannot be read. Restore the matching profile key and credential files, then restart Desktop. Existing data has been preserved.',
+    failed: 'Credentials could not be unlocked. Existing data is preserved. You can retry when Keychain access is available.',
+    migrate: 'Migrate saved credentials',
+    quit: 'Quit Desktop',
+  },
   interactionContinuity: {
   "unavailable": "This target or its access has changed. Your input is preserved. Verify the current target before continuing.",
   "revalidate": "Verify current target",
