@@ -215,7 +215,7 @@ try {
     if (name === 'gzcom' || name === 'gzlight') {
       assert.ok((await popup.innerText()).includes(`仅限 ${name} 内部`));
       assert.equal(await popup.locator('.redeven-endpoint-listener .redeven-card-endpoint-value').isVisible(), false);
-      assert.ok((await popup.innerText()).includes('通过 Desktop 的“打开 Env App”进入此环境。'));
+      assert.ok((await popup.innerText()).includes('通过 Desktop 的“打开窗口”进入此环境。'));
       await popup.getByRole('button', { name: /复制 SSH/ }).click();
       assert.equal(await page.locator('[data-copy-result]').innerText(), `${name}:22`);
     }

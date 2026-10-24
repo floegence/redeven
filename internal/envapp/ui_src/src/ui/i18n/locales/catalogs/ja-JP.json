@@ -17,7 +17,7 @@
     "waiting": "接続を待っています…"
   },
   "document": {
-    "title": "Redeven Env App"
+    "title": "Redeven"
   },
   "aiReadiness": {
     "eyebrow": "Flower の利用可否",
@@ -3853,7 +3853,7 @@
       "label": "アクセスモード",
       "unifiedProxyTitle": "統合セキュアプロキシ",
       "unifiedProxyShort": "セキュアプロキシ",
-      "unifiedProxyDescription": "Desktop、Web Env App、システムブラウザーで利用できます。",
+      "unifiedProxyDescription": "Redeven Desktop とウェブブラウザーで利用できます。",
       "desktopLoopbackTitle": "Desktop ローカル互換",
       "desktopLoopbackShort": "Desktop ローカル",
       "desktopLoopbackDescription": "分離された 127.0.0.1 Origin を使用し、ローカル専用アプリを正しく動作させます。Redeven Desktop 専用です。",
@@ -7036,7 +7036,7 @@
       }
     },
     "pluginRuntime": {
-      "sandboxOriginUnavailable": "この Env App ホストではプラグインのサンドボックスアドレスを利用できません。",
+      "sandboxOriginUnavailable": "この環境ではプラグインのサンドボックスアドレスを利用できません。",
       "assetBootstrapFailed": "プラグインリソースを準備できませんでした（HTTP {status}）。",
       "assetSessionMissing": "プラグインリソースのセッションを作成できませんでした。",
       "approveAction": "このプラグイン操作を承認しますか？",
@@ -7746,7 +7746,7 @@
     "deployHint": "この SSH 接続でリモートデスクトップを設定します。ホストの画面での確認は不要です。",
     "deployPasswordHint": "今回の SSH 操作にのみ使用します。Redeven は保存せず、デスクトップサービスにも渡しません。",
     "deployConfirm": "許可して続行",
-    "serviceUpdateRequired": "このランタイムのバージョンを使用するには、Env App でリモートデスクトップを更新してください。",
+    "serviceUpdateRequired": "このランタイムバージョンを使用するには、環境ウィンドウでリモートデスクトップを更新してください。",
     "deployChecking": "SSH ホストを確認中…",
     "deployTransferring": "コンポーネントを転送・検証中…",
     "deployAuthorizing": "今回の SSH 操作を認証中…",

@@ -110,7 +110,7 @@ await session.run(async () => {
         };
       });
       welcome = await eventually(() => context.pages().find((page) => page.url().includes('/welcome/')), `Welcome did not open: ${log}`);
-      const open = () => welcome.getByRole('button', { name: /^(Open|Show|打开|显示) Env App$/ }).first();
+      const open = () => welcome.getByRole('button', { name: /^((Open|Show) window|(打开|显示)窗口)$/ }).first();
       await open().click({ timeout: 60000 });
       let page = await eventually(
         () => context.pages().find((page) => page.url().includes('/_redeven_proxy/env/')),

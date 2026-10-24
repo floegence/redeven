@@ -17,7 +17,7 @@
     "waiting": "Ожидание подключения…"
   },
   "document": {
-    "title": "Redeven Env App"
+    "title": "Redeven"
   },
   "aiReadiness": {
     "eyebrow": "Доступность Flower",
@@ -3943,7 +3943,7 @@
       "label": "Режим доступа",
       "unifiedProxyTitle": "Единый защищённый прокси",
       "unifiedProxyShort": "Защищённый прокси",
-      "unifiedProxyDescription": "Работает в Desktop, Web Env App и системном браузере.",
+      "unifiedProxyDescription": "Работает в Redeven Desktop и веб-браузере.",
       "desktopLoopbackTitle": "Локальная совместимость Desktop",
       "desktopLoopbackShort": "Desktop локально",
       "desktopLoopbackDescription": "Использует изолированный Origin 127.0.0.1 для приложений, которым нужен локальный доступ. Доступно только в Redeven Desktop.",
@@ -7169,7 +7169,7 @@
       }
     },
     "pluginRuntime": {
-      "sandboxOriginUnavailable": "Для этого узла Env App недоступен адрес изолированной среды плагина.",
+      "sandboxOriginUnavailable": "Адрес изолированной среды плагина недоступен для этого окружения.",
       "assetBootstrapFailed": "Не удалось подготовить ресурсы плагина (HTTP {status}).",
       "assetSessionMissing": "Не удалось создать сеанс ресурсов плагина.",
       "approveAction": "Разрешить это действие плагина?",
@@ -7883,7 +7883,7 @@
     "deployHint": "Настройте удалённый рабочий стол через это SSH-подключение. Подтверждение на экране хоста не требуется.",
     "deployPasswordHint": "Используется только для этой операции SSH. Redeven не сохраняет его и не передаёт сервису рабочего стола.",
     "deployConfirm": "Разрешить и продолжить",
-    "serviceUpdateRequired": "Обновите удалённый рабочий стол в Env App, чтобы использовать эту версию среды выполнения.",
+    "serviceUpdateRequired": "Обновите удалённый рабочий стол в окне окружения, чтобы использовать эту версию среды выполнения.",
     "deployChecking": "Проверка SSH-хоста…",
     "deployTransferring": "Передача и проверка компонентов…",
     "deployAuthorizing": "Авторизация этой операции SSH…",

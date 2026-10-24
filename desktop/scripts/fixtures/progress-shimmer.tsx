@@ -46,7 +46,7 @@ function Fixture() {
       <EnvironmentSplitActionButton
         i18n={createDesktopI18n('zh-CN')}
         environmentID="local-environment" environmentLabel="Local Environment"
-        presentation={{ kind: 'split_button', primary_action: { intent: 'open', label: 'Open Env App', enabled: true, variant: 'default' }, menu_button_label: 'Environment actions', menu_actions: [{ id: 'refresh', label: 'Refresh status', action: { intent: 'refresh_runtime', label: 'Refresh status', enabled: true, variant: 'default' } }] }}
+        presentation={{ kind: 'split_button', primary_action: { intent: 'open', label: 'Open window', enabled: true, variant: 'default' }, menu_button_label: 'Environment actions', menu_actions: [{ id: 'refresh', label: 'Refresh status', action: { intent: 'refresh_runtime', label: 'Refresh status', enabled: true, variant: 'default' } }] }}
         menuOpen={menuOpen()} onMenuOpenChange={setMenuOpen} guidanceOpen={false} onGuidanceOpenChange={() => undefined}
         progressOpen={progressOpen()} onProgressOpenChange={setProgressOpen} guidanceSession={null}
         operationState={{ activeProgress: active() ? progress() : null, panelProgress: progress(), openProgress: null, runtimeLifecycleProgress: progress(), reinstallTargetProgress: null, isSubmitting: submitting(), actionsDisabled: submitting() || active() }}

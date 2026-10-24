@@ -19136,7 +19136,7 @@
       "frontmatter": {
         "description": "Preserve compact Env card tabs, facts, action footers, focus and geometry across snapshots.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-24",
         "tags": [
           "accessibility",
           "desktop",
@@ -19147,15 +19147,15 @@
         "title": "Environment card presentation",
         "type": "Interaction Contract"
       },
-      "body_length": 2221,
+      "body_length": 3416,
       "summary": "The shared Environment card renders independent access perspectives with its existing tabs, facts and split footer. Perspective changes select an explicit route and never grant authority or fall back after failure. Snapshot refresh preserves nodes, selection, drafts and focus; removing an owner invalidates submission while preserving its open sessions. Long translations and narrow layouts retain single-line controls and stable card geometry. A locally bundled OS mark in its original brand colors beside the Runtime name displays a trusted platform fact; unknown platforms show a default device illustration in the same fixed slot.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Interaction sessions follow [Desktop interaction continuity](desktop-interaction-continuity.md), including authority invalidation, retained drafts, explicit visibility and stale-completion fencing.\n\nRecognized Linux distributions use their original brand marks; missing or unsupported IDs retain Tux.\n\n## Perspectives and owner actions\nLinked cards expose Runtime, Redeven Cloud and any paired Gateway as tabs in the existing compact segmented selector in the same header slot used by standalone type badges.\n\nCloud authorization or synchronization failure never disables Runtime actions.\n\nDeliberate Environment Center tab selection follows the separate [Welcome navigation presentation contract](desktop-welcome-navigation.md); its transient visual translation does not change card layout or restart on snapshots.",
-          "char_count": 815
+          "body": "Interaction sessions follow [Desktop interaction continuity](desktop-interaction-continuity.md), including authority invalidation, retained drafts, explicit visibility and stale-completion fencing.\n\nRecognized Linux distributions use their original brand marks; missing or unsupported IDs retain Tux.\n\n## Window action language\nUser-facing copy describes the visible action and destination. An unopened Environment offers **Open window**; an existing window offers **Show window** and focuses that session. Local, SSH, Cloud and Gateway perspectives use the same localized action wording. The selected perspective identifies the access route. These labels do not change runtime readiness, authorization, lifecycle or session ownership.\n\nSettings, progress, recovery guidance and browser titles use Environment, environment window or Redeven as appropriate. The internal name Env App remains an implementation term, never a product label or protected brand term. All shipped Desktop and environment catalogs explicitly translate this copy; catalog regression checks reject the internal name in displayed messages.\n\n## Perspectives and owner actions\nLinked cards expose Runtime, Redeven Cloud and any paired Gateway as tabs in the existing compact segmented selector in the same header slot used by standalone type badges.\n\nCloud authorization or synchronization failure never disables Runtime actions.\n\nDeliberate Environment Center tab selection follows the separate [Welcome navigation presentation contract](desktop-welcome-navigation.md); its transient visual translation does not change card layout or restart on snapshots.",
+          "char_count": 1627
         },
         {
           "id": "boundaries",
@@ -19180,6 +19180,11 @@
           "id": "redeven:desktop/src/welcome/CloudConnectionStatus.tsx:0:independent local and cloud state, actionable recovery and scoped diagnostics.",
           "source": "redeven:desktop/src/welcome/CloudConnectionStatus.tsx",
           "description": "Independent local and Cloud state, actionable recovery and scoped diagnostics."
+        },
+        {
+          "id": "redeven:desktop/src/welcome/EnvironmentRelation.client.test.tsx:0:window actions retain explicit access routes, focus existing sessions and preserve card state across snapshots.",
+          "source": "redeven:desktop/src/welcome/EnvironmentRelation.client.test.tsx",
+          "description": "Window actions retain explicit access routes, focus existing sessions and preserve card state across snapshots."
         }
       ],
       "snippet": "The shared Environment card renders independent access perspectives with its existing tabs, facts and split footer. Perspective changes select an explicit route and never grant authority or fall back after failure. Snapshot refresh preserve",
@@ -33660,5 +33665,5 @@
       ]
     }
   ],
-  "source_sha256": "925f6f391ca10fe2312527c94503db56cbaec4cd0d1101a361f2f26cf1815751"
+  "source_sha256": "abec27b83b8020365af6d6bca5d2a5118d3531115e22c094783e6653ab7b9441"
 }

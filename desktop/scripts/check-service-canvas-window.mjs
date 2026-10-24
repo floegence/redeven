@@ -361,7 +361,7 @@ await session.run(async () => {
       'owned Runtime ready',
     );
     await welcome
-      .getByRole('button', { name: /^(Open|Show) Env App$/ })
+      .getByRole('button', { name: /^(Open|Show) window$/ })
       .first()
       .click({ timeout: 60000 });
     const page = await until(

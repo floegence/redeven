@@ -882,7 +882,7 @@ function EnvironmentOwnerSurface(
     return props.environment.kind === 'provider_environment' ? {
       ...presentation,
       primary_action: { ...presentation.primary_action, label: props.i18n.t(
-        props.environment.window_state === 'open' ? 'environmentCenter.showCloudEnvApp' : 'environmentCenter.openCloudEnvApp',
+        props.environment.window_state === 'open' ? 'environmentAction.focus' : 'environmentAction.open',
       ) },
     } : presentation;
   });

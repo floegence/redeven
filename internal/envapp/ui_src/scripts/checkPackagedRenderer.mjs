@@ -1734,7 +1734,7 @@ async function main() {
     await page.waitForTimeout(250);
 
     const title = await page.title();
-    if (title !== 'Redeven Env App') throw new Error(`unexpected built Env App title: ${title}`);
+    if (title !== 'Redeven') throw new Error(`unexpected built Env App title: ${title}`);
     const rootSnapshot = await page.locator('#root').evaluate((element) => ({
       childElementCount: element.childElementCount,
       textLength: (element.textContent ?? '').trim().length,

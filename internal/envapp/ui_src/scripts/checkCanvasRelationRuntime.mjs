@@ -237,7 +237,7 @@ await session.run(async () => {
         60000,
       );
       await welcome
-        .getByRole('button', { name: /^(Open|Show) Env App$/ })
+        .getByRole('button', { name: /^(Open|Show) window$/ })
         .first()
         .click({ timeout: 60000 });
       await until(
