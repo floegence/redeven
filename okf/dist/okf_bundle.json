@@ -10073,7 +10073,7 @@
       "frontmatter": {
         "description": "Canonical compaction evidence, context usage, and timeline presentation.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-23",
         "tags": [
           "ai",
           "compaction",
@@ -10084,15 +10084,15 @@
         "title": "Model context usage and compaction",
         "type": "AI Runtime Contract"
       },
-      "body_length": 1853,
+      "body_length": 2804,
       "summary": "Published Floret owns canonical context, compaction and usage. Redeven presents\nits typed snapshots without accumulating usage or reconstructing lifecycle facts.\n[Context compaction and Goal continuation](flower-context-compaction.md) defines\nmanual intent, admission, execution, cancellation and recovery. [Qualification](../operations/flower-compaction-qualification.md) defines deterministic, historical-copy and real-provider checks.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Compaction decision evidence\nThe canonical lifecycle optionally retains the frozen trigger candidate, pressure and validated replacement.\n\nPointer exit, Escape, Tab, focus loss and outside pointer actions dismiss the layer; process collapse closes it through the existing visibility owner.\n\n## Projection and usage\nFloret installs the complete context snapshot in its actor-owned current view before publishing its version. Context changes bypass text cadence, while equal snapshots still coalesce text growth within the existing bounded queues.\n\nRedeven does not invent a total budget or infer serving capacity from model weights.",
-          "char_count": 634
+          "body": "## Compaction decision evidence\nThe canonical lifecycle optionally retains the frozen trigger candidate, pressure and validated replacement.\n\n## Timeline presentation\nCompaction uses a single status row between two short separator lines. Details\nappear in a compact, surface-owned tooltip without changing timeline layout.\nSuccessful compression shows only the canonical message counts as\n≈ {before} → {after} tokens; provider-request decision estimates never substitute\nfor missing message counts. Missing counts have an explicit localized explanation.\nRunning and cancelled operations have short localized descriptions. Failures show\nthe original error, wrapping long text without clipping; absent errors have a\nshort localized fallback. No expanded detail panel is rendered.\n\nThe tooltip follows the active surface, uses global theme tokens outside the chat\nshell, and prefers space above the status, falling below near the top boundary.\nPointer exit dismisses it after a brief delay that permits hovering and selecting\nits contents. Escape, Tab, focus loss and outside pointer actions dismiss it;\nprocess collapse closes it through the existing visibility owner. Keyboard and\ntouch access and the independent retry action remain available.\n\n## Projection and usage\nFloret installs the complete context snapshot in its actor-owned current view before publishing its version. Context changes bypass text cadence, while equal snapshots still coalesce text growth within the existing bounded queues.\n\nRedeven does not invent a total budget or infer serving capacity from model weights.",
+          "char_count": 1585
         },
         {
           "id": "boundaries",
@@ -33660,5 +33660,5 @@
       ]
     }
   ],
-  "source_sha256": "cdb660c9f9080ba61b8b97cd66d605f59a778c041838a865ae89fc91e652f306"
+  "source_sha256": "925f6f391ca10fe2312527c94503db56cbaec4cd0d1101a361f2f26cf1815751"
 }

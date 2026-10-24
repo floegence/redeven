@@ -129,7 +129,9 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(compactContextIndicatorIndex).toBeGreaterThanOrEqual(0);
     expect(contextIndicatorIndex).toBe(-1);
     expect(childContextIndex).toBeGreaterThanOrEqual(0);
-    expect(childContextIndex).toBeLessThan(src.indexOf('renderTimeline={() => <FlowerTurnTimeline', childContextIndex));
+    const childTimelineIndex = src.indexOf('renderTimeline=', childContextIndex);
+    expect(childTimelineIndex).toBeGreaterThan(childContextIndex);
+    expect(src.indexOf('<FlowerTurnTimeline', childTimelineIndex)).toBeGreaterThan(childTimelineIndex);
     expect(submitIndex).toBeGreaterThan(compactContextIndicatorIndex);
     expect(src).toContain('!livePresentationConfirmed() || selectedThreadTerminalSyncing() ? null : flowerRunProgress(selectedThread())');
     expect(src).not.toContain('projectFlowerLiveProgress');
@@ -172,7 +174,8 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(dividerSrc).toContain("role={hasDetail() ? 'button' : undefined}");
     expect(dividerSrc).toContain('tabIndex={hasDetail() ? 0 : -1}');
     expect(dividerSrc).toContain('onFocus={openTooltip}');
-    expect(dividerSrc).toContain('onBlur={closeTooltip}');
+    expect(dividerSrc).toContain("if (event.relatedTarget || !panel()?.matches(':hover')) closeTooltip()");
+    expect(dividerSrc).toContain("event.key === 'Escape' || event.key === 'Tab'");
     expect(dividerSrc).toContain('onClick={openTooltip}');
     expect(dividerSrc).toContain("event.key === 'Enter' || event.key === ' '");
     expect(dividerSrc).toContain('data-open="true"');

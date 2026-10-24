@@ -17,7 +17,7 @@ it('shows only a concise message estimate and dismisses by keyboard, outside poi
   }} />, host);
   const trigger = host.querySelector<HTMLElement>('[role="button"]')!;
   trigger.focus();
-  expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('Message estimate: 159k → 17k tokens');
+  expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('≈ 159.1k → 17.5k tokens');
   trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   expect(document.querySelector('[role="tooltip"]')).toBeNull();
   expect(document.activeElement).toBe(trigger);
@@ -53,7 +53,7 @@ it('closes the floating detail when hidden and can reopen after disclosure', () 
   expect(document.querySelector('[role="tooltip"]')).not.toBeNull();
 });
 
-it('does not create an empty detail control when canonical estimates are unavailable', () => {
+it('explains unavailable historical estimates without inventing token totals', () => {
   const host = document.createElement('div'); document.body.append(host);
   dispose = render(() => <FlowerContextCompactionDivider copy={DEFAULT_FLOWER_SURFACE_COPY} decoration={{
     decoration_id: 'context-compaction:historical', kind: 'context_compaction', ordinal: 0,
@@ -62,10 +62,10 @@ it('does not create an empty detail control when canonical estimates are unavail
   }} />, host);
   const trigger = host.querySelector<HTMLElement>('.flower-compaction-divider-pill')!;
   expect(trigger.textContent).toBe('Context compacted');
-  expect(trigger.hasAttribute('role')).toBe(false);
-  expect(trigger.tabIndex).toBe(-1);
+  expect(trigger.getAttribute('role')).toBe('button');
+  expect(trigger.tabIndex).toBe(0);
   trigger.click();
-  expect(document.querySelector('[role="tooltip"]')).toBeNull();
+  expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('Token counts unavailable.');
 });
 
 it('keeps failure details and an independent icon retry with a focus tooltip', async () => {
@@ -131,7 +131,7 @@ it('keeps keyboard focus on the status when an accepted retry removes its action
   expect(document.activeElement).toBe(host.querySelector('.flower-compaction-divider-pill'));
 });
 
-it('closes unavailable details without reopening them when a later update restores the estimate', () => {
+it('updates an open tooltip when canonical estimates become unavailable and return', () => {
   const host = document.createElement('div'); document.body.append(host);
   const [tokens, setTokens] = createSignal<number | undefined>(20000);
   dispose = render(() => <FlowerContextCompactionDivider copy={DEFAULT_FLOWER_SURFACE_COPY} decoration={{
@@ -143,11 +143,9 @@ it('closes unavailable details without reopening them when a later update restor
   trigger.focus();
   expect(document.querySelector('[role="tooltip"]')).not.toBeNull();
   setTokens(undefined);
-  expect(document.querySelector('[role="tooltip"]')).toBeNull();
-  expect(trigger.hasAttribute('aria-describedby')).toBe(false);
-  expect(trigger.tabIndex).toBe(-1);
+  expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('Token counts unavailable.');
+  expect(trigger.hasAttribute('aria-describedby')).toBe(true);
+  expect(trigger.tabIndex).toBe(0);
   setTokens(21000);
-  expect(document.querySelector('[role="tooltip"]')).toBeNull();
-  trigger.click();
-  expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('Message estimate: 150k → 21k tokens');
+  expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('≈ 150k → 21k tokens');
 });

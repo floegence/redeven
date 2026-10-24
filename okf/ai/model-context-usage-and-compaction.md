@@ -5,7 +5,7 @@ description: Canonical compaction evidence, context usage, and timeline presenta
 tags: [ai, models, context, compaction]
 timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-23"
 ---
 # Summary
 
@@ -19,7 +19,22 @@ manual intent, admission, execution, cancellation and recovery. [Qualification](
 ## Compaction decision evidence
 The canonical lifecycle optionally retains the frozen trigger candidate, pressure and validated replacement.
 
-Pointer exit, Escape, Tab, focus loss and outside pointer actions dismiss the layer; process collapse closes it through the existing visibility owner.
+## Timeline presentation
+Compaction uses a single status row between two short separator lines. Details
+appear in a compact, surface-owned tooltip without changing timeline layout.
+Successful compression shows only the canonical message counts as
+≈ {before} → {after} tokens; provider-request decision estimates never substitute
+for missing message counts. Missing counts have an explicit localized explanation.
+Running and cancelled operations have short localized descriptions. Failures show
+the original error, wrapping long text without clipping; absent errors have a
+short localized fallback. No expanded detail panel is rendered.
+
+The tooltip follows the active surface, uses global theme tokens outside the chat
+shell, and prefers space above the status, falling below near the top boundary.
+Pointer exit dismisses it after a brief delay that permits hovering and selecting
+its contents. Escape, Tab, focus loss and outside pointer actions dismiss it;
+process collapse closes it through the existing visibility owner. Keyboard and
+touch access and the independent retry action remain available.
 
 ## Projection and usage
 Floret installs the complete context snapshot in its actor-owned current view before publishing its version. Context changes bypass text cadence, while equal snapshots still coalesce text growth within the existing bounded queues.
