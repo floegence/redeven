@@ -5,39 +5,36 @@ description: Apply provider-specific optional fields and reject incomplete model
 tags: [ai, providers, credentials, settings]
 timestamp: 2026-10-05T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-24"
 ---
 # Summary
 
-Redeven owns provider configuration, credential requirements, and Flower readiness. Ollama and custom OpenAI-compatible endpoints can send without a stored key; other local-profile providers require one. All settings entrypoints and the provider-bundle API enforce configuration completeness without inventing stored secrets. Invalid saves leave configuration and credentials unchanged; network or authentication failures remain execution errors. Floret's published thread-runtime contract is unchanged.
+Redeven owns configuration, credentials and Flower readiness. Floret's public runtime contract is unchanged. Invalid saves preserve configuration and credentials; authentication/network failures remain execution errors.
 
 # Contract
 
 ## Readiness and saving
-The shared Flower composer follows the same credential contract as provider execution: a selected Ollama inventory model or configured OpenAI-compatible model can start or continue a conversation without a stored API key. Credential snapshots report actual secret presence; readiness must not manufacture a configured secret or bypass catalog membership.
+All settings entrypoints and provider-bundle saves enforce the same completeness rules. Readiness reflects actual stored secrets and selected catalog membership. Ollama and custom compatible endpoints may run without a key. Unknown discovered models need explicit capabilities.
 
-Unknown discovered models require explicit capabilities before they become runnable.
-
-## Field requirements
-| Field | Required value or omission behavior |
+| Field | Rule |
 | --- | --- |
-| Provider API key | Optional for Ollama and custom OpenAI-compatible endpoints; all other local-profile provider types require a new or stored key. Desktop and Redeven AI model sources retain their separate session authority. |
-| Base URL | OpenAI, Anthropic, and Gemini may use their adapter default. Other provider types require an explicit HTTP(S) URL. |
-| Provider display name | Optional; the UI derives a name from the provider type or identity. |
-| Models | Explicit lists require named models; catalog providers save explicit `selected_models`, including an empty selection after deselecting all models. Unresolved legacy exclusion profiles require selection review; unavailable selected identities retain their metadata without requiring invented capacity. |
-| Context and output limits | Published catalog or adapter defaults may supply omitted limits. Explicit compatible, OpenRouter, xAI, Groq, and Ollama model entries require context capacity. Custom catalog models also require it. Reviewed models retain their established optional output limits; unknown discovered models require explicit context, output, and tools capability. |
-| Brave API key | Required only when Brave search is enabled; existing stored credentials satisfy the requirement. |
+| API key | Required for local providers except Ollama/custom compatible. Desktop and Redeven AI sources retain separate session authority. |
+| Base URL | Optional adapter default for OpenAI/Anthropic/Gemini; explicit HTTP(S) otherwise. |
+| Display name | Optional; derive from provider type/identity. |
+| Models | Explicit named list or selected_models, including empty selection. Legacy exclusion profiles require review. Preserve unavailable selections without inventing capacity. |
+| Limits | Published defaults may supply omitted limits. Explicit compatible/OpenRouter/xAI/Groq/Ollama models and custom catalog entries require context. Unknown discoveries require context, output and tools capability; reviewed models retain optional output limits. |
+| Brave key | New or stored key required when Brave search is enabled. |
+
+## Kimi Code
+The kimi_code provider uses its own subscription key and official China/global coding endpoint. Admit only six reviewed model/wire identities, capacity ceilings and reasoning levels. An explicit 1M override is user intent, not entitlement evidence. Preparation rejects unknown IDs, thinking-off and response-ID continuation before dispatch.
 
 # Boundaries
 
-The [model directory](model-directory-and-selection.md) owns catalog discovery and selected-model membership. Existing malformed or externally edited configurations still receive defensive runtime checks; provider-bundle saves must not create a newly incomplete profile.
-
-Secret patches remain separate from model profiles.
+[Model directory](model-directory-and-selection.md) owns discovery/membership. Runtime defensively checks externally edited profiles; saves must not introduce incomplete ones. Secret patches remain separate from profiles.
 
 # Evidence
 
-- `redeven:internal/config/ai.go` - Structural validation and optional authentication contract.
-
-- `redeven:internal/ai/model_gateway_optional_key_test.go` - Streamed requests preserve explicit endpoint credentials and omit authentication when absent, even with host credentials set.
-
-- `redeven:internal/ai/provider_adapter.go` - Runtime credential resolution preserves optional keys and read failures.
+- redeven:internal/config/ai.go - Validation/authentication.
+- redeven:internal/config/kimi_code_test.go - Endpoint, identity, capacity and reasoning bounds.
+- redeven:internal/ai/model_gateway_optional_key_test.go - Explicit keys and keyless requests ignore ambient credentials.
+- redeven:internal/ai/provider_adapter.go - Shared credential resolution and read failures.

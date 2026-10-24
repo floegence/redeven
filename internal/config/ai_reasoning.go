@@ -262,6 +262,7 @@ func ValidateAIProviderReasoningCapability(providerType string, c AIReasoningCap
 		"openai_compatible": {"openai_chat_reasoning_effort", "openai_responses_reasoning_effort"},
 		"anthropic":         {"anthropic_output_config_effort", "anthropic_thinking_budget_tokens"},
 		"google":            {"openai_chat_reasoning_effort", "gemini_thinking_level", "gemini_openai_thinking_budget"},
+		"kimi_code":         {"openai_responses_reasoning_effort"},
 		"moonshot":          {"kimi_reasoning_effort", "kimi_thinking_type"},
 		"chatglm":           {"glm_reasoning_effort", "glm_thinking_type"},
 		"deepseek":          {"deepseek_responses_reasoning_effort"},

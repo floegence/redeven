@@ -22,7 +22,7 @@ func TestModelDirectoryPublishesBackendDefaultsWithoutConfiguredProviders(t *tes
 		t.Fatal(err)
 	}
 	count := 0
-	for _, kind := range []string{"openai", "anthropic", "google", "moonshot", "chatglm", "deepseek", "qwen", "xai", "groq"} {
+	for _, kind := range []string{"openai", "anthropic", "google", "moonshot", "kimi_code", "chatglm", "deepseek", "qwen", "xai", "groq"} {
 		want := config.AIProviderCatalog(kind)
 		got := response.Defaults[kind]
 		if len(want) == 0 || len(got) != len(want) {
@@ -36,13 +36,13 @@ func TestModelDirectoryPublishesBackendDefaultsWithoutConfiguredProviders(t *tes
 		}
 		count += len(got)
 	}
-	if count != 140 || len(directory.Models) != 0 || len(directory.Sources) != 0 {
-		t.Fatalf("defaults must describe 140 models without configuring a source: %d, %+v", count, directory)
+	if count != 148 || len(directory.Models) != 0 || len(directory.Sources) != 0 {
+		t.Fatalf("defaults must describe 148 models without configuring a source: %d, %+v", count, directory)
 	}
 }
 
 func TestModelDirectoryRetainsReviewedMetadataForUnavailableSelections(t *testing.T) {
-	for _, providerType := range []string{"openai", "anthropic", "google", "moonshot", "chatglm", "deepseek", "qwen", "xai", "groq"} {
+	for _, providerType := range []string{"openai", "anthropic", "google", "moonshot", "kimi_code", "chatglm", "deepseek", "qwen", "xai", "groq"} {
 		t.Run(providerType, func(t *testing.T) {
 			catalog := config.AIProviderCatalog(providerType)
 			p := config.AIProvider{ID: providerType, Type: providerType, ModelSelection: &config.AIModelSelection{SelectedModels: []string{}}}

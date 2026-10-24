@@ -5,6 +5,7 @@ export type FlowerProviderType =
   | 'anthropic'
   | 'google'
   | 'moonshot'
+  | 'kimi_code'
   | 'chatglm'
   | 'deepseek'
   | 'qwen'

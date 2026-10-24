@@ -22,6 +22,7 @@ func TestProviderPreparationFreezesDispatchedWireAndEstimate(t *testing.T) {
 		{"openai", "gpt-4o", "openai-chat-completions", "o200k_base"},
 		{"anthropic", "claude-sonnet", "", "proxy_bpe"},
 		{"moonshot", "kimi-k2.6", "", "proxy_bpe"},
+		{"kimi_code", "k3.1-pro", "openai-responses", "proxy_bpe"},
 		{"google", "gemini-model", "", "proxy_bpe"},
 		{"openrouter", "openai/gpt-4o", "", "o200k_base"},
 		{"ollama", "local-model", "", "proxy_bpe"},

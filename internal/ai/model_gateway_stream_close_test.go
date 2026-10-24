@@ -17,6 +17,7 @@ func TestModelGatewayStreamingProvidersCloseRequestOnCancellation(t *testing.T) 
 		model        string
 	}{
 		{name: "openai responses", providerType: "openai", model: "gpt-5-mini"},
+		{name: "kimi code responses", providerType: "kimi_code", model: "k3.1-pro"},
 		{name: "openai chat", providerType: "openai_compatible", model: "gpt-5-mini"},
 		{name: "moonshot chat", providerType: "moonshot", model: "kimi-k2.6"},
 		{name: "anthropic messages", providerType: "anthropic", model: "claude-sonnet-4-5"},

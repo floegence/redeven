@@ -93,7 +93,7 @@ func defaultCapability(provider config.AIProvider, modelName string, wireModelNa
 		cap.PreferredToolSchemaMode = "relaxed_json"
 		cap.MaxContextTokens = 200000
 		cap.MaxOutputTokens = 8192
-	case "moonshot":
+	case "moonshot", "kimi_code":
 		cap.SupportsStrictJSONSchema = false
 		cap.SupportsAskUserQuestionBatches = false
 		cap.PreferredToolSchemaMode = "relaxed_json"

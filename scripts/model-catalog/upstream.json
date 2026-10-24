@@ -1,4 +1,14 @@
 {
+  "provider_sources": {
+    "kimi_code": {
+      "sha256": "2df6a44e5be4608d0537cbcf214bfc7f83e2ab16543fbf6df052cec593563c08",
+      "source": "https://models.dev/api.json"
+    },
+    "moonshot": {
+      "sha256": "2df6a44e5be4608d0537cbcf214bfc7f83e2ab16543fbf6df052cec593563c08",
+      "source": "https://models.dev/api.json"
+    }
+  },
   "providers": {
     "anthropic": {
       "claude-fable-5": {
@@ -3140,12 +3150,229 @@
         "tool_call": false
       }
     },
+    "kimi_code": {
+      "k3": {
+        "cost": {
+          "cache_read": 0,
+          "cache_write": 0,
+          "input": 0,
+          "output": 0
+        },
+        "id": "k3",
+        "limit": {
+          "context": 1048576,
+          "output": 131072
+        },
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "video"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Kimi K3",
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "none",
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ],
+        "release_date": "2026-07-16",
+        "tool_call": true
+      },
+      "k3-256k": {
+        "cost": {
+          "cache_read": 0,
+          "cache_write": 0,
+          "input": 0,
+          "output": 0
+        },
+        "id": "k3-256k",
+        "limit": {
+          "context": 262144,
+          "output": 131072
+        },
+        "modalities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Kimi K3-256K",
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "none",
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ],
+        "release_date": "2026-07-16",
+        "tool_call": true
+      },
+      "k3.1-pro": {
+        "cost": {
+          "cache_read": 0,
+          "cache_write": 0,
+          "input": 0,
+          "output": 0
+        },
+        "id": "k3.1-pro",
+        "limit": {
+          "context": 1048576,
+          "output": 131072
+        },
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "video"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Kimi K3.1 Pro",
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ],
+        "release_date": "2026-10-23",
+        "tool_call": true
+      },
+      "k3.1-pro-highspeed": {
+        "cost": {
+          "cache_read": 0,
+          "cache_write": 0,
+          "input": 0,
+          "output": 0
+        },
+        "id": "k3.1-pro-highspeed",
+        "limit": {
+          "context": 1048576,
+          "output": 131072
+        },
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "video"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Kimi K3.1 Pro Highspeed",
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ],
+        "release_date": "2026-10-23",
+        "tool_call": true
+      },
+      "kimi-for-coding": {
+        "cost": {
+          "cache_read": 0,
+          "cache_write": 0,
+          "input": 0,
+          "output": 0
+        },
+        "id": "kimi-for-coding",
+        "limit": {
+          "context": 1048576,
+          "output": 32768
+        },
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "video"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Kimi K2.8 Preview",
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "none",
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ],
+        "release_date": "2026-09-11",
+        "tool_call": true
+      },
+      "kimi-for-coding-highspeed": {
+        "cost": {
+          "cache_read": 0,
+          "cache_write": 0,
+          "input": 0,
+          "output": 0
+        },
+        "id": "kimi-for-coding-highspeed",
+        "limit": {
+          "context": 262144,
+          "output": 32768
+        },
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "video"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Kimi For Coding HighSpeed",
+        "reasoning": true,
+        "reasoning_options": [],
+        "release_date": "2026-06-12",
+        "tool_call": true
+      }
+    },
     "moonshot": {
       "kimi-k2.6": {
         "cost": {
-          "cache_read": 0.16,
-          "input": 0.95,
-          "output": 4
+          "cache_read": 0.1643,
+          "input": 0.9711,
+          "output": 4.0337
         },
         "id": "kimi-k2.6",
         "limit": {
@@ -3169,14 +3396,14 @@
             "type": "toggle"
           }
         ],
-        "release_date": "2026-04-21",
+        "release_date": "2026-04-20",
         "tool_call": true
       },
       "kimi-k2.7-code": {
         "cost": {
-          "cache_read": 0.19,
-          "input": 0.95,
-          "output": 4
+          "cache_read": 0.1942,
+          "input": 0.9711,
+          "output": 4.0337
         },
         "id": "kimi-k2.7-code",
         "limit": {
@@ -3201,9 +3428,9 @@
       },
       "kimi-k2.7-code-highspeed": {
         "cost": {
-          "cache_read": 0.38,
-          "input": 1.9,
-          "output": 8
+          "cache_read": 0.3884,
+          "input": 1.9421,
+          "output": 8.0673
         },
         "id": "kimi-k2.7-code-highspeed",
         "limit": {
@@ -3228,10 +3455,10 @@
       },
       "kimi-k3": {
         "cost": {
-          "cache_read": 0.3,
-          "cache_write": 3,
-          "input": 3,
-          "output": 15
+          "cache_read": 0.2988,
+          "cache_write": 2.9879,
+          "input": 2.9879,
+          "output": 14.9395
         },
         "id": "kimi-k3",
         "limit": {
@@ -3261,6 +3488,80 @@
           }
         ],
         "release_date": "2026-07-16",
+        "tool_call": true
+      },
+      "kimi-k3.1-pro": {
+        "cost": {
+          "cache_read": 0.1944,
+          "cache_write": 1.9437,
+          "input": 1.9437,
+          "output": 10.1671
+        },
+        "id": "kimi-k3.1-pro",
+        "limit": {
+          "context": 1048576,
+          "output": 1048576
+        },
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "video"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Kimi K3.1 Pro",
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ],
+        "release_date": "2026-10-23",
+        "tool_call": true
+      },
+      "kimi-k3.1-pro-highspeed": {
+        "cost": {
+          "cache_read": 0.1944,
+          "cache_write": 3.8874,
+          "input": 3.8874,
+          "output": 20.3342
+        },
+        "id": "kimi-k3.1-pro-highspeed",
+        "limit": {
+          "context": 1048576,
+          "output": 1048576
+        },
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "video"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Kimi K3.1 Pro Highspeed",
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ],
+        "release_date": "2026-10-23",
         "tool_call": true
       }
     },

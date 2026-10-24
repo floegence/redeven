@@ -1,3 +1,4 @@
+import { kimiCodeCopy, type KimiCodeCopy } from './settings/kimiCodeCopy';
 import type { FlowerContextSource } from './chat/flowerContextPresentation';
 import { extensionI18n, type ExtensionI18n } from './extensions/context';
 import { markdownMediaEnUS, type FlowerMarkdownMediaCopy } from './chat/markdown/mediaCopy';
@@ -209,6 +210,7 @@ export type FlowerSettingsCopy = Readonly<{
 }>;
 
 export type FlowerProviderDialogCopy = Readonly<{
+  kimiCode: KimiCodeCopy;
   chatGPT: Readonly<{
     changeAccount: string;
     signInAgain: string;
@@ -1711,6 +1713,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     },
     dialog: {
       catalog: modelCatalogCopy('en-US'),
+      kimiCode: kimiCodeCopy('en-US'),
       addTitle: 'Add provider',
       editTitle: 'Edit provider',
       discard: 'Discard',
@@ -1727,6 +1730,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
         google: 'Gemini',
         anthropic: 'Native connection',
         moonshot: 'Native connection',
+        kimi_code: 'Subscription API key',
         chatglm: 'Native connection',
         deepseek: 'Native connection',
         qwen: 'Native connection',

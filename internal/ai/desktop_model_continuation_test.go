@@ -327,6 +327,7 @@ func TestModelContinuationRejectsInvalidStateBeforeHTTP(t *testing.T) {
 		{"openai_chat_override", "openai", "gpt-5-mini", "openai-chat-completions", validOpenAI},
 		{"chat", "openai_compatible", "chat", "", validOpenAI},
 		{"moonshot", "moonshot", "kimi-k3", "", validOpenAI},
+		{"kimi_code", "kimi_code", "k3.1-pro", "", validOpenAI},
 		{"anthropic", "anthropic", "claude-sonnet-4-5", "", validOpenAI},
 		{"deepseek_kind", "deepseek", "deepseek-v4-pro", "", validOpenAI},
 		{"deepseek_history", "deepseek", "deepseek-v4-pro", "", &ModelGatewayState{Kind: "deepseek_responses_v1", ID: "response", Attributes: map[string]string{"history": "{"}}},

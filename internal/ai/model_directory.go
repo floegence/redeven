@@ -113,7 +113,7 @@ func (s *Service) projectModelDirectory(cfg *config.AIConfig, out *ModelsRespons
 	directory := ModelDirectory{ProviderCatalogs: map[string][]ModelCatalogModel{}, Models: []ModelDirectoryModel{}, Sources: []ModelDirectorySource{}}
 	directory.SearchPolicies = map[string]config.AIWebSearchPolicy{}
 	directory.ProviderSearchPolicies = map[string]config.AIWebSearchPolicy{}
-	for _, kind := range []string{"openai", "openai_compatible", "moonshot", "chatglm", "qwen", "anthropic", "google", "deepseek", "openrouter", "xai", "groq", "ollama"} {
+	for _, kind := range []string{"openai", "openai_compatible", "moonshot", "kimi_code", "chatglm", "qwen", "anthropic", "google", "deepseek", "openrouter", "xai", "groq", "ollama"} {
 		directory.SearchPolicies[kind] = config.ResolveAIWebSearchPolicy(config.AIProvider{Type: kind})
 	}
 	directory.ProviderDefaults = make(map[string][]ModelCatalogModel)

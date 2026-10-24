@@ -259,7 +259,7 @@ func AIProviderProtocol(providerType, searchMode string) string {
 		return "anthropic-messages"
 	case "desktop_model_source":
 		return "desktop-model-source"
-	case "openai":
+	case "openai", "kimi_code":
 		return "openai-responses"
 	case "qwen", "openai_compatible":
 		if searchMode == AIWebSearchOpenAI || searchMode == AIWebSearchQwen || searchMode == AIWebSearchBrave {

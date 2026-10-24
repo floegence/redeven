@@ -38,7 +38,9 @@
     "moonshot": [
       "https://platform.kimi.com/docs/models",
       "https://platform.kimi.com/docs/guide/kimi-k3-quickstart",
-      "https://platform.kimi.com/docs/guide/use-reasoning-effort"
+      "https://platform.kimi.com/docs/guide/use-reasoning-effort",
+      "https://platform.kimi.com/docs/guide/kimi-k3-1-pro-quickstart",
+      "https://platform.kimi.com/docs/api/models-overview"
     ],
     "chatglm": [
       "https://docs.z.ai/guides/overview/migrate-to-glm-new",
@@ -64,6 +66,10 @@
     "groq": [
       "https://console.groq.com/docs/models",
       "https://console.groq.com/docs/reasoning"
+    ],
+    "kimi_code": [
+      "https://www.kimi.com/code/docs/kimi-code/models.html",
+      "https://www.kimi.com/code/docs/third-party-tools/codex.html"
     ]
   },
   "models": {
@@ -219,6 +225,90 @@
     "anthropic/claude-haiku-5-5": {
       "reasoning": {
         "default_level": "medium"
+      }
+    },
+    "moonshot/kimi-k3.1-pro": {
+      "reasoning": {
+        "disable_supported": false,
+        "default_level": "max"
+      }
+    },
+    "moonshot/kimi-k3.1-pro-highspeed": {
+      "reasoning": {
+        "disable_supported": false,
+        "default_level": "max"
+      }
+    },
+    "kimi_code/kimi-for-coding-highspeed": {
+      "reasoning": {
+        "disable_supported": false
+      }
+    },
+    "kimi_code/k3.1-pro-highspeed": {
+      "reasoning": {
+        "disable_supported": false,
+        "supported_levels": [
+          "low",
+          "high",
+          "max"
+        ],
+        "default_level": "max"
+      }
+    },
+    "kimi_code/k3.1-pro": {
+      "reasoning": {
+        "disable_supported": false,
+        "supported_levels": [
+          "low",
+          "high",
+          "max"
+        ],
+        "default_level": "max"
+      },
+      "metadata": {
+        "limit": {
+          "context": 262144,
+          "output": 131072
+        }
+      }
+    },
+    "kimi_code/k3-256k": {
+      "reasoning": {
+        "disable_supported": false,
+        "supported_levels": [
+          "low",
+          "high",
+          "max"
+        ],
+        "default_level": "high"
+      }
+    },
+    "kimi_code/kimi-for-coding": {
+      "reasoning": {
+        "disable_supported": false,
+        "supported_levels": [
+          "low",
+          "high",
+          "max"
+        ],
+        "default_level": "max"
+      }
+    },
+    "kimi_code/k3": {
+      "reasoning": {
+        "disable_supported": false,
+        "supported_levels": [
+          "low",
+          "high",
+          "max"
+        ],
+        "default_level": "high"
+      },
+      "metadata": {
+        "limit": {
+          "context": 262144,
+          "output": 131072
+        }
       }
     }
   },
@@ -487,10 +577,47 @@
         "https://docs.x.ai/developers/models/grok-4.7"
       ],
       "source_checked_at": "2026-10-12"
+    },
+    {
+      "provider": "moonshot",
+      "models": [
+        "kimi-k3.1-pro",
+        "kimi-k3.1-pro-highspeed"
+      ],
+      "status": "not_integrated",
+      "source_urls": [
+        "https://platform.kimi.com/docs/models",
+        "https://platform.kimi.com/docs/guide/kimi-k3-quickstart",
+        "https://platform.kimi.com/docs/guide/use-reasoning-effort",
+        "https://platform.kimi.com/docs/guide/kimi-k3-1-pro-quickstart",
+        "https://platform.kimi.com/docs/api/models-overview"
+      ],
+      "source_checked_at": "2026-10-24"
+    },
+    {
+      "provider": "kimi_code",
+      "models": [
+        "kimi-for-coding-highspeed",
+        "k3.1-pro-highspeed",
+        "k3.1-pro",
+        "k3-256k",
+        "kimi-for-coding",
+        "k3"
+      ],
+      "status": "not_integrated",
+      "source_urls": [
+        "https://www.kimi.com/code/docs/kimi-code/models.html",
+        "https://www.kimi.com/code/docs/third-party-tools/codex.html"
+      ],
+      "source_checked_at": "2026-10-24"
     }
   ],
   "exclusion_notes": {
     "openai/gpt-daybreak-blue-latest": "Separate Daybreak approval and provisioning required; not part of the public default catalog.",
     "openai/gpt-daybreak-red-latest": "Separate Daybreak approval and provisioning required; not part of the public default catalog."
+  },
+  "provider_checked_at": {
+    "moonshot": "2026-10-24",
+    "kimi_code": "2026-10-24"
   }
 }
