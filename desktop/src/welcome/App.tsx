@@ -66,6 +66,7 @@ import {
   ExternalLink,
   Globe,
   Link,
+  Loader2,
   Lock,
   Highlighter,
   HelpIcon,
@@ -9763,7 +9764,7 @@ export function EnvironmentSplitActionButton(
   );
   const renderPrimaryActionIcon = () =>
     props.presentation.primary_action.intent === 'request_open_access' ? (
-      <ShieldCheck class="mr-1 h-3.5 w-3.5" />
+      <ShieldCheck class="h-3.5 w-3.5 shrink-0" />
     ) : null;
   const renderEnvironmentProgressTriggerIcon = (icon: 'play' | 'stop' | 'refresh') => {
     const ProgressIcon = icon === 'stop' ? Stop : icon === 'refresh' ? Refresh : Play;
@@ -9831,17 +9832,19 @@ export function EnvironmentSplitActionButton(
       variant={props.presentation.primary_action.variant}
       class={primaryButtonClass()}
       style={{ 'min-width': 'var(--redeven-split-action-primary-min-width)' }}
-      loading={primaryActionLoading()}
+      aria-busy={primaryActionLoading() || undefined}
       data-floe-progress-shimmer={primaryActionLoading() ? 'surface' : undefined}
       title={props.presentation.primary_action.label}
-      disabled={!props.presentation.primary_action.enabled}
+      disabled={!props.presentation.primary_action.enabled || primaryActionLoading()}
       onClick={() => {
         closeMenu();
         props.onProgressOpenChange(false);
         props.onRunAction(props.presentation.primary_action);
       }}
     >
-      {renderPrimaryActionIcon()}
+      <Show when={primaryActionLoading()} fallback={renderPrimaryActionIcon()}>
+        <Loader2 class="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
+      </Show>
       <span class="redeven-control-label">{props.presentation.primary_action.label}</span>
     </Button>
   );

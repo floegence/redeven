@@ -12,6 +12,20 @@ await server.watcher.close();
 const browser = await chromium.launch({ headless: true });
 const report = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
   pid: process.pid, url: server.resolvedUrls.local[0], output, cases: [], errors: [] };
+async function assertCenteredActions(page, label) {
+  const failures = await page.locator('.redeven-split-action-primary button:visible').evaluateAll(buttons =>
+    buttons.flatMap(button => {
+      const label = button.querySelector('.redeven-control-label');
+      if (!label) return [];
+      const box = button.getBoundingClientRect();
+      const content = [label, ...button.querySelectorAll('svg')].map(element => element.getBoundingClientRect());
+      const left = Math.min(...content.map(rect => rect.left));
+      const right = Math.max(...content.map(rect => rect.right));
+      const offset = (left + right - box.left - box.right) / 2;
+      return Math.abs(offset) > 1 ? [{ label: label.textContent, offset }] : [];
+    }));
+  assert.deepEqual(failures, [], `${label}: visible action content is centered in the primary button`);
+}
 try {
   const load = path => server.ssrLoadModule(fileURLToPath(new URL(path, import.meta.url)));
   const { runtimeConnectionFixture } = await load('../src/testSupport/runtimeConnectionFixture.ts');
@@ -79,6 +93,7 @@ try {
             return failures;
           });
           assert.deepEqual(failures, [], label);
+          await assertCenteredActions(page, label);
           if (width >= 1408) {
             assert.equal(await page.locator('.redeven-environment-grid').first().evaluate(grid =>
               getComputedStyle(grid).gridTemplateColumns.split(' ').length), 5, `${label}: five columns`);
@@ -90,6 +105,7 @@ try {
             assert.equal(await pair.getByRole('tabpanel').locator('[data-cloud-connection-status]:visible').count(),
               index === 1 ? 1 : 0, `${label}: only the Cloud perspective shows connection status`);
             assert.ok(Math.abs((await pair.boundingBox()).height - bounds.height) < 1, `${label}: stable card height`);
+            await assertCenteredActions(page, `${label}/perspective ${index}`);
           }
           await tabs.first().click({ clickCount: 2 });
           assert.equal(await page.evaluate(() => getSelection().toString()), '', `${label}: double click selects no text`);
@@ -126,6 +142,29 @@ try {
       }
     } finally { await context.close(); }
   }
+  const progressPage = await browser.newPage({ viewport: { width: 1100, height: 760 }, reducedMotion: 'reduce' });
+  progressPage.on('pageerror', error => report.errors.push(error.message));
+  await progressPage.goto(new URL('progress-shimmer.html', report.url).href);
+  await progressPage.waitForFunction(() => Boolean(window.progressFixture));
+  await progressPage.evaluate(() => { window.progressFixture.setStatus('succeeded'); window.progressFixture.setSubmitting(false); });
+  const primary = progressPage.locator('.redeven-split-action-primary button');
+  const idleBounds = await primary.boundingBox();
+  await assertCenteredActions(progressPage, 'idle action');
+  await progressPage.evaluate(() => window.progressFixture.setSubmitting(true));
+  assert.equal(await primary.isDisabled(), true, 'submission blocks repeated actions');
+  assert.equal(await primary.getAttribute('aria-busy'), 'true');
+  assert.equal(await primary.getAttribute('data-floe-progress-shimmer'), 'surface');
+  assert.equal(await primary.locator('svg').count(), 1, 'submission displays its loading indicator');
+  await assertCenteredActions(progressPage, 'submitting action');
+  assert.deepEqual(await primary.boundingBox(), idleBounds, 'submission preserves button geometry');
+  await progressPage.evaluate(() => window.progressFixture.setSubmitting(false));
+  assert.equal(await primary.isDisabled(), false);
+  assert.equal(await primary.getAttribute('aria-busy'), null);
+  assert.equal(await primary.locator('svg').count(), 0, 'idle action has no loading placeholder');
+  await assertCenteredActions(progressPage, 'restored idle action');
+  assert.deepEqual(await primary.boundingBox(), idleBounds, 'completion preserves button geometry');
+  report.cases.push('idle-submitting-idle: centered content, stable geometry and accessible busy feedback');
+  await progressPage.close();
   assert.deepEqual(report.errors, []);
   report.status = 'passed';
 } catch (error) { report.status = 'failed'; report.failure = String(error.stack || error); throw error; }

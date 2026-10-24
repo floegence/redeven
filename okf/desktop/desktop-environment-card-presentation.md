@@ -22,6 +22,9 @@ User-facing copy describes the visible action and destination. An unopened Envir
 
 Settings, progress, recovery guidance and browser titles use Environment, environment window or Redeven as appropriate. The internal name Env App remains an implementation term, never a product label or protected brand term. All shipped Desktop and environment catalogs explicitly translate this copy; catalog regression checks reject the internal name in displayed messages.
 
+## Primary action alignment
+The split footer centers visible content within the primary button, independently of the menu toggle. Text-only actions reserve no invisible icon space. Submission adds a visible loading indicator and surface shimmer, exposes the busy state, and blocks duplicate activation without changing button geometry. Completion restores the centered text-only action. Meaningful action and progress icons stay grouped with their labels.
+
 ## Perspectives and owner actions
 Linked cards expose Runtime, Redeven Cloud and any paired Gateway as tabs in the existing compact segmented selector in the same header slot used by standalone type badges.
 
@@ -35,7 +38,7 @@ Deliberate Environment Center tab selection follows the separate [Welcome naviga
 
 # Evidence
 
-- `redeven:desktop/scripts/check-environment-card-tabs.mjs` - Two- and three-option readability, five-column layout, native pointer selection suppression, keyboard switching and snapshot focus across ten locales, light/dark themes and enlarged text.
+- `redeven:desktop/scripts/check-environment-card-tabs.mjs` - Two- and three-option readability, five-column layout, centered primary actions, native pointer selection suppression, keyboard switching and snapshot focus across ten locales, light/dark themes and enlarged text; submission retains button geometry and accessible busy feedback.
 
 - `redeven:desktop/src/welcome/EnvironmentCards.tsx` - Shared cards, stable perspectives, owner action and overlay control.
 
