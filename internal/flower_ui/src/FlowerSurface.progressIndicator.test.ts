@@ -253,7 +253,10 @@ describe('Flower progress indicator', () => {
 
     expect(dividerRule).toContain('display: flex');
     expect(dividerRule).toContain('justify-content: center');
-    expect(dividerRule).toContain('flex-wrap: wrap');
+    expect(dividerRule).toContain('flex-wrap: nowrap');
+    const rule = cssRule(css, '.flower-compaction-divider::before,\n.flower-compaction-divider::after');
+    expect(rule).toContain('flex: 0 1 4rem');
+    expect(rule).toContain('height: 1px');
     expect(css).not.toContain('.flower-compaction-divider-rule');
     expect(dividerRule).toContain('user-select: text');
     expect(dividerRule).not.toContain('pointer-events: none');
@@ -264,7 +267,7 @@ describe('Flower progress indicator', () => {
     expect(pillRule).toContain('overflow: visible');
     expect(pillRule).toContain('white-space: nowrap');
     expect(pillRule).toContain('border: 0');
-    expect(pillRule).toContain('background: var(--muted)');
+    expect(pillRule).toContain('background: transparent');
     expect(copyRule).toContain('display: inline-flex');
     expect(copyRule).toContain('align-items: center');
     expect(copyRule).not.toContain('flex-direction: column');
@@ -272,16 +275,17 @@ describe('Flower progress indicator', () => {
     expect(labelRule).toContain('white-space: nowrap');
     expect(tooltipRule).not.toContain('position: absolute');
     expect(fs.readFileSync(path.join(repoRoot, 'internal/flower_ui/src/chat/FlowerContextCompactionDivider.tsx'), 'utf8')).toContain('<SurfaceFloatingLayer');
-    expect(tooltipRule).toContain('opacity: 0');
-    expect(tooltipRule).toContain('pointer-events: none');
-    expect(tooltipRule).toContain('white-space: normal');
+    expect(tooltipRule).toContain('background: var(--foreground)');
+    expect(tooltipRule).toContain('color: var(--background)');
+    expect(tooltipRule).not.toContain('--flower-chat-surface');
+    expect(tooltipRule).toContain('pointer-events: auto');
+    expect(tooltipRule).toContain('white-space: pre-wrap');
     expect(tooltipRule).toContain('overflow-wrap: anywhere');
-    expect(css).toContain(".flower-compaction-divider-tooltip[data-open='true']");
     expect(css).not.toContain('.flower-compaction-divider-detail');
     expect(css).toContain(".flower-compaction-divider-pill[role='button']");
     expect(css).toContain('cursor: pointer');
     expect(css).toContain(".flower-compaction-divider-pill[role='button']:focus-visible");
-    expect(css).toContain(".flower-compaction-divider[data-flower-compaction-status='failed'] .flower-compaction-divider-pill");
+    expect(css).toContain(".flower-compaction-divider[data-flower-compaction-status='failed'] .flower-compaction-divider-status-icon");
   });
 
   it('positions the slash command popover above the composer and gives compacting dividers a running treatment', () => {
@@ -311,7 +315,7 @@ describe('Flower progress indicator', () => {
     expect(cssRule(css, '.flower-composer-command-item:hover,\n.flower-composer-command-item:focus-visible')).not.toContain('transform:');
     expect(descriptionRule).toContain('font-size: 0.74rem');
     expect(descriptionRule).toContain('white-space: nowrap');
-    expect(dividerRunningRule).toContain('background: color-mix(in srgb, var(--primary) 10%, var(--flower-chat-surface-elevated) 90%)');
+    expect(dividerRunningRule).toContain('color: color-mix');
     expect(dividerIconRule).toContain('display: inline-block');
     expect(dividerIconRule).toContain('border-radius: 9999px');
     expect(dividerIconRule).toContain('border: 1.5px solid currentColor');

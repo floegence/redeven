@@ -139,7 +139,7 @@ describe('flower context presentation', () => {
   it('formats token counts compactly without showing zero as a valid total', () => {
     expect(formatContextTokenCount(123)).toBe('123');
     expect(formatContextTokenCount(1234)).toBe('1.2k');
-    expect(formatContextTokenCount(10_200)).toBe('10k');
+    expect(formatContextTokenCount(10_200)).toBe('10.2k');
     expect(formatContextTokenCount(1_250_000)).toBe('1.3M');
     expect(formatContextTokenCount(0)).toBe('');
   });
@@ -158,7 +158,7 @@ describe('flower context presentation', () => {
       tokens_before: 60_000,
       tokens_after_estimate: 488,
       error: 'ignored',
-    }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('Message estimate: 60k → 488 tokens');
+    }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('≈ 60k → 488 tokens');
     expect(compactionDividerDetail(compaction({
       tokens_before: undefined,
       tokens_after_estimate: undefined,
@@ -168,7 +168,7 @@ describe('flower context presentation', () => {
     expect(compactionDividerDetail(compaction({
       reason: 'threshold',
       trigger: 'pre_request',
-    }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('');
+    }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('Token counts unavailable.');
     expect(compactionDividerDetail(compaction({
       status: 'noop',
       reason: 'context_too_small',
@@ -218,6 +218,17 @@ describe('request source attribution', () => {
 it('keeps canonical decision diagnostics out of the concise message estimate', () => {
   const candidate = { payload_fingerprint: 'frozen', provider: 'test', model: 'model', estimated_input_tokens: 470382, source: 'fixture_v5', estimate_method: 'provider_rendered_payload_estimate', estimate_confidence: 'conservative', pressure: {} };
   const decision = { pressure: { projected_input_tokens: 480000, threshold_tokens: 472500, request_safe_limit_tokens: 500000, pressure_signal: 'projected_request', pressure_source: 'usage_anchored_delta' }, before: candidate, after: { ...candidate, estimated_input_tokens: 37594 } };
-  expect(compactionDividerDetail(compaction({ tokens_before: 159143, tokens_after_estimate: 17462, decision }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('Message estimate: 159k → 17k tokens');
-  expect(compactionDividerDetail(compaction({ decision }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('');
+  expect(compactionDividerDetail(compaction({ tokens_before: 159143, tokens_after_estimate: 17462, decision }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('≈ 159.1k → 17.5k tokens');
+  expect(compactionDividerDetail(compaction({ decision }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('Token counts unavailable.');
+});
+
+it('keeps every lifecycle detail short without claiming unsuccessful token savings', () => {
+  const copy = DEFAULT_FLOWER_SURFACE_COPY;
+  expect(compactionDividerDetail(compaction({ status: 'compacting', tokens_before: 128400 }), copy)).toBe('Preparing summary · 128.4k tokens');
+  expect(compactionDividerDetail(compaction({ status: 'compacting' }), copy)).toBe('Preparing summary');
+  expect(compactionDividerDetail(compaction({ status: 'cancelled', tokens_before: 128400, tokens_after_estimate: 24600 }), copy)).toBe('Compression stopped.');
+  expect(compactionDividerDetail(compaction({ status: 'failed' }), copy)).toBe('No summary was generated.');
+  expect(compactionDividerDetail(compaction({ tokens_before: 128400, tokens_after_estimate: 24600 }), copy)).toBe('≈ 128.4k → 24.6k tokens');
+  const error = 'tool history message 2 has unmatched result "call_00_Qt94NlrrbYFkmB4OBGuS4234"';
+  expect(compactionDividerDetail(compaction({ status: 'failed', error }), copy)).toBe(error);
 });

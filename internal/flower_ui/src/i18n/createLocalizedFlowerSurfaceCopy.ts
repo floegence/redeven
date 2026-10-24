@@ -733,6 +733,10 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         cancelled: t(i18n, k('chat.compactionDividerCancelled')),
         noop: t(i18n, k('chat.compactionDividerNoop')),
         fallback: t(i18n, k('chat.compactionDividerFallback')),
+        compactingDetail: t(i18n, k('chat.compactionDividerCompactingDetail')),
+        cancelledDetail: t(i18n, k('chat.compactionDividerCancelledDetail')),
+        failedDetail: t(i18n, k('chat.compactionDividerFailedDetail')),
+        unavailableDetail: t(i18n, k('chat.compactionDividerUnavailableDetail')),
         tokenChange: (before, after) => t(i18n, k('chat.compactionDividerTokenChange'), { before, after }),
       },
       projectionUnavailable: {

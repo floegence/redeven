@@ -759,6 +759,10 @@ export type FlowerSurfaceCopy = Readonly<{
       cancelled: string;
       noop: string;
       fallback: string;
+      compactingDetail: string;
+      cancelledDetail: string;
+      failedDetail: string;
+      unavailableDetail: string;
       tokenChange: (before: string, after: string) => string;
     }>;
     projectionUnavailable: Readonly<{
@@ -1283,7 +1287,11 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       cancelled: 'Context compaction cancelled',
       noop: 'Context does not need compression',
       fallback: 'Context checkpoint',
-      tokenChange: (before, after) => `Message estimate: ${before} → ${after} tokens`,
+      compactingDetail: 'Preparing summary',
+      cancelledDetail: 'Compression stopped.',
+      failedDetail: 'No summary was generated.',
+      unavailableDetail: 'Token counts unavailable.',
+      tokenChange: (before, after) => `≈ ${before} → ${after} tokens`,
     },
     projectionUnavailable: {
       title: 'Response unavailable',

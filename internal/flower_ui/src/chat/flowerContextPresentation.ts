@@ -98,9 +98,7 @@ export type FlowerComposerContextIndicatorView = Readonly<{
 export function formatContextTokenCount(tokens: number | undefined): string {
   const value = Math.max(0, Math.floor(Number(tokens ?? 0)));
   if (!Number.isFinite(value) || value <= 0) return '';
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}k`;
-  return String(value);
+  return formatContextAmount(value);
 }
 
 export function contextUsageRatio(usage: FlowerContextSample): number | null {
@@ -223,5 +221,14 @@ export function compactionDividerDetail(compaction: FlowerContextCompaction, cop
   const after = formatContextTokenCount(compaction.tokens_after_estimate);
   const labels = copy.chat.compactionDivider ?? DEFAULT_FLOWER_SURFACE_COPY.chat.compactionDivider;
   if (compaction.status === 'compacted' && before && after) return labels.tokenChange(before, after);
-  return trimString(compaction.error);
+  const error = trimString(compaction.error);
+  if (error) return error;
+  switch (compaction.status) {
+    case 'compacting':
+      return before ? labels.compactingDetail + ' · ' + copy.chat.contextIndicator.tokens(before) : labels.compactingDetail;
+    case 'cancelled': return labels.cancelledDetail;
+    case 'failed': return labels.failedDetail;
+    case 'compacted': return labels.unavailableDetail;
+    default: return '';
+  }
 }
