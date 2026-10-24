@@ -20,7 +20,7 @@ it.each([390, 1280])('keeps model search and management visible at %s px', async
   const base = settingsSnapshot();
   const snapshot = { ...base, model_profile: { schema_version: 1 as const, current_model_id: 'local/agent-0', providers: [{
     id: 'local', name: 'Local models', type: 'ollama' as const, models: Array.from({ length: 40 }, (_, i) => ({
-      model_name: `agent-${i}`, context_window: 131072, quantization: 'Q8_0',
+      model_name: `agent-${i}`, display_name: `agent-${i} with a deliberately long model name that must stay inside the picker`, context_window: 131072, quantization: 'Q8_0',
     })),
   }] } };
   const surface = renderSurfaceWithAdapter({ ...adapter(), loadSettings: async () => snapshot, listThreads: async () => [] });
@@ -37,6 +37,10 @@ it.each([390, 1280])('keeps model search and management visible at %s px', async
   expect(bounds.top).toBeGreaterThanOrEqual(0);
   expect(bounds.bottom).toBeLessThanOrEqual(window.innerHeight);
   expect(menu.scrollWidth).toBeLessThanOrEqual(menu.clientWidth);
+  expect(list.scrollWidth).toBeLessThanOrEqual(list.clientWidth);
+  const name = menu.querySelector<HTMLElement>('.flower-model-menu-name')!;
+  expect(name.scrollWidth).toBeGreaterThan(name.clientWidth);
+  expect(getComputedStyle(name).textOverflow).toBe('ellipsis');
   const composerFontSize = Number.parseFloat(getComputedStyle(surface.querySelector('textarea')!).fontSize);
   for (const action of menu.querySelectorAll('.flower-model-menu-footer button')) {
     expect(Number.parseFloat(getComputedStyle(action).fontSize)).toBeLessThan(composerFontSize);
@@ -59,8 +63,16 @@ it.each(SUPPORTED_LOCALES)('keeps the %s picker compact, readable, and keyboard 
       { model_name: 'deepseek-v4-flash', display_name: 'DeepSeek V4.1 Flash', context_window: 950000, max_output_tokens: 393216, input_modalities: ['text', 'image'], web_search: { status: 'available', reason: 'catalog_supported' } },
       { model_name: 'deepseek-v4-pro', display_name: 'DeepSeek V4 Pro', context_window: 950000, max_output_tokens: 393216, input_modalities: ['text', 'image'], web_search: { status: 'available', reason: 'catalog_supported' } },
     ] },
+    { id: 'gateway', name: 'CC-Switch', type: 'openai' as const, models: [
+      { model_name: 'gpt-6.1-sol', display_name: 'GPT-6.1 Sol' },
+      { model_name: 'gpt-6-astra', display_name: 'GPT-6 Astra' },
+    ] },
+    { id: 'anthropic', name: 'Anthropic', type: 'anthropic' as const, models: [
+      { model_name: 'claude-opus-5-5', display_name: 'Claude Opus 5.5' },
+      { model_name: 'claude-sonnet-5-5', display_name: 'Claude Sonnet 5.5' },
+    ] },
     { id: 'local', name: 'Ollama Qwen 3.8 27B', type: 'ollama' as const, models: [{ model_name: 'qwen3.8:27b', unavailable: true }] },
-  ] }, provider_secrets: [{ provider_id: 'deepseek', provider_api_key_configured: true, web_search_api_key_configured: false }] };
+  ] }, provider_secrets: ['deepseek', 'gateway', 'anthropic'].map(provider_id => ({ provider_id, provider_api_key_configured: true, web_search_api_key_configured: false })) };
   const surface = renderSurfaceWithAdapterProps({ ...adapter(), loadSettings: async () => snapshot, listThreads: async () => [] }, { copy });
   surface.style.cssText = 'width:100%;height:100vh';
   const root = document.documentElement;
@@ -92,12 +104,24 @@ it.each(SUPPORTED_LOCALES)('keeps the %s picker compact, readable, and keyboard 
       expect(bounds.right).toBeLessThanOrEqual(width);
       expect(menu.scrollWidth).toBeLessThanOrEqual(menu.clientWidth);
       expectSingleLineButtonLabels(menu.querySelector('.flower-model-menu-footer')!);
-      expect(menu.querySelectorAll('.flower-model-menu-group')).toHaveLength(2);
-      const metadata = menu.querySelector('.flower-model-menu-meta')?.textContent;
-      expect(metadata).toContain(copy.settings.dialog.contextSuffix);
-      expect(metadata).toContain(copy.settings.dialog.outputSuffix);
-      expect(metadata).toContain(copy.settings.dialog.imageInput);
+      expect(menu.querySelectorAll('.flower-model-menu-group')).toHaveLength(4);
+      expect(menu.querySelector('.flower-model-menu-meta, [data-web-search]')).toBeNull();
+      const rows = [...menu.querySelectorAll<HTMLElement>('.flower-model-menu-item:not(:disabled)')];
+      expect(rows.map(row => row.querySelector('.flower-model-menu-copy')?.textContent)).toEqual(['DeepSeek V4.1 Flash', 'DeepSeek V4 Pro', 'GPT-6.1 Sol', 'GPT-6 Astra', 'Claude Opus 5.5', 'Claude Sonnet 5.5']);
+      expect(menu.querySelectorAll('.flower-model-menu-check')).toHaveLength(1);
+      for (const row of rows) {
+        const bounds = row.getBoundingClientRect();
+        expect(bounds.height).toBeGreaterThanOrEqual(44);
+        expect(bounds.height).toBeLessThanOrEqual(46);
+        for (const child of row.querySelectorAll('.flower-model-menu-icon, .flower-model-menu-name, .flower-model-menu-check')) {
+          const rect = child.getBoundingClientRect();
+          expect(Math.abs(rect.top + rect.height / 2 - (bounds.top + bounds.height / 2))).toBeLessThanOrEqual(1);
+        }
+      }
+      const scrollList = menu.querySelector<HTMLElement>('.flower-model-menu-list')!;
+      expect(scrollList.scrollWidth).toBeLessThanOrEqual(scrollList.clientWidth);
       expect(menu.querySelector<HTMLButtonElement>('.flower-model-menu-item:disabled')?.textContent).toContain('qwen3.8:27b');
+      expect(menu.querySelector('.flower-model-menu-item:disabled')?.getAttribute('aria-description')).toBeTruthy();
       const footer = menu.querySelector('.flower-model-menu-footer')!.getBoundingClientRect();
       const list = menu.querySelector('.flower-model-menu-list')!.getBoundingClientRect();
       expect(footer.top - list.bottom).toBeLessThan(16);
@@ -115,4 +139,9 @@ it.each(SUPPORTED_LOCALES)('keeps the %s picker compact, readable, and keyboard 
   await userEvent.keyboard('{Escape}');
   expect(document.querySelector('.flower-model-menu')).toBeNull();
   expect(document.activeElement).toBe(activeTrigger);
+  activeTrigger.click();
+  await waitFor(() => Boolean(document.querySelector('.flower-model-menu-close')));
+  document.querySelector<HTMLButtonElement>('.flower-model-menu-close')!.click();
+  await waitFor(() => document.activeElement === activeTrigger);
+  expect(document.querySelector('.flower-model-menu')).toBeNull();
 });

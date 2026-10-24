@@ -107,7 +107,7 @@ describe('Flower setup browser presentation', () => {
     expect(runtime.querySelector('.flower-empty-suggestions')).toBeTruthy();
   });
 
-  it('shows server search reasons in the model menu without blocking ordinary model selection', async () => {
+  it('keeps model selection available without displaying search capabilities', async () => {
     await page.viewport(1000, 760);
     const snapshot = settingsSnapshot();
     let modelID = 'search/vision';
@@ -128,15 +128,11 @@ describe('Flower setup browser presentation', () => {
     });
     await waitFor(() => Boolean(runtime.querySelector('.flower-model-reasoning-model-trigger')));
     (runtime.querySelector('.flower-model-reasoning-model-trigger') as HTMLButtonElement).click();
-    await waitFor(() => document.querySelectorAll('[data-web-search]').length === 3);
-    expect(document.querySelector('[data-web-search="available"]')?.textContent).toBe('Web search');
-    const unavailableItems = [...document.querySelectorAll('[data-web-search="unavailable"]')] as HTMLElement[];
-    expect(document.querySelectorAll('[data-web-search="available"]')).toHaveLength(2);
-    const unavailable = unavailableItems.find((item) => item.textContent === 'Search API key required')!;
-    expect(unavailable.textContent).toBe('Search API key required');
-    const option = unavailable.closest('button') as HTMLButtonElement;
+    await waitFor(() => document.querySelectorAll('.flower-model-menu-item').length === 3);
+    expect(document.querySelector('.flower-model-menu [data-web-search]')).toBeNull();
+    const option = [...document.querySelectorAll<HTMLButtonElement>('.flower-model-menu-item')]
+      .find(item => item.querySelector('.flower-model-menu-name')?.textContent === 'custom')!;
     expect(option.disabled).toBe(false);
-    expect(unavailable.getBoundingClientRect().right).toBeLessThanOrEqual(option.getBoundingClientRect().right);
     option.click();
     await waitFor(() => runtime.querySelector('.flower-model-reasoning-model-trigger')?.textContent?.includes('custom') === true);
   });

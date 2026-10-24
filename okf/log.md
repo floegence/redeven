@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-10-24: Simplify the Flower model picker to grouped icon-and-name rows, preserve actionable availability feedback and qualify keyboard, theme and narrow-screen layouts. See [model selection](ai/model-directory-and-selection.md).
+
 - 2026-10-24: Accept uniquely matched, disjoint patch chunks in any order; retain strict rejection elsewhere. See [tool permissions](ai/tool-permission-runtime.md).
 
 - 2026-10-24: Refresh Kimi K3.1 Pro models and add personal Kimi Code subscriptions through native Responses. See [provider review](ai/provider-api-catalog-review.md), [validation](ai/provider-configuration-validation.md), and [settings](ui/flower-provider-configuration.md).

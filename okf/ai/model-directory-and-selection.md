@@ -5,7 +5,7 @@ description: Read configured model metadata immediately and make Provider invent
 tags: [ai, models, providers, settings]
 timestamp: 2026-10-13T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-24"
 ---
 # Summary
 
@@ -23,7 +23,9 @@ Cloud execution consumes its catalog protocol rather than fetching inventory dur
 ## Selection and availability
 Provider profiles own selection, sparse overrides, custom definitions, and default identity separately from metadata. Row visibility never derives selection.
 
-It changes presentation only, never stored identities or wire routing.
+The shared Flower composer picker groups single-line icon-and-name rows by provider, with a titled header, inset search, aligned icon tiles and a separate footer. Selected rows use a subtle inset outline and filled checkmark; search, alias matching, keyboard navigation, refresh and management remain available. Context/output limits, image/search capabilities, quantization and alias descriptions do not appear in picker rows. Unavailable models use a short status with the full reason in the accessible description and tooltip; attachment compatibility appears only while checking or when current draft content needs attention. Long names truncate with a full-name tooltip, and the list scrolls vertically without pushing search or footer actions out of view.
+
+Presentation never changes stored identities, capabilities or wire routing.
 
 ## Shared reads and settings
 Both `GET /api/ai/models` modes return the same projection, including unfiltered `provider_catalogs` and backend `provider_defaults`. Defaults describe capabilities, never account availability, even before providers are configured.
@@ -46,3 +48,5 @@ The Runtime owns inventory, snapshots, and authorized projections consumed by De
 - `redeven:internal/config/ai_model_snapshot.go` - Credential-scoped atomic snapshots and read-only Desktop projection.
 
 - `redeven:internal/ai/provider_inventory.go` - Native authentication and complete pagination.
+
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.modelMenu.browser.test.tsx` - Compact rows, long-name containment, themed localized layouts and keyboard focus.
