@@ -140,7 +140,7 @@ func TestApplyPatchRejectsInvalidPlanBeforeWriting(t *testing.T) {
 	t.Parallel()
 	cases := []struct{ name, body string }{
 		{"missing_anchor", "*** Update File: f.txt\n@@ absent\n-old\n+new"},
-		{"backwards", "*** Update File: f.txt\n@@\n-tail\n+TAIL\n@@\n-old\n+NEW"},
+		{"backwards_eof", "*** Update File: f.txt\n@@\n-tail\n+TAIL\n*** End of File\n@@\n-old\n+NEW"},
 		{"duplicate_file", "*** Update File: f.txt\n@@\n-old\n+new\n*** Update File: f.txt\n@@\n-tail\n+TAIL"},
 		{"move_outside", "*** Update File: f.txt\n*** Move to: ../outside.txt\n@@\n-old\n+new"},
 		{"directory_target", "*** Add File: directory\n+bad"},

@@ -5,7 +5,7 @@ description: Tool registration, scheduling, permission, readonly, and target-rou
 tags: [ai, tools, permissions, dispatch]
 timestamp: 2026-10-15T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-23"
+reviewed_at: "2026-10-24"
 ---
 # Summary
 
@@ -35,25 +35,22 @@ surface uses one strict JSON input argument plus declared routing fields; patch
 and input_format are not accepted aliases. No endpoint is assumed to support
 freeform grammar based on its model name.
 
-Begin/End Patch preserves context anchors and EOF markers. Chunks search forward
-through original content, pure additions append, numeric ranges remain supported,
-and untouched lines retain their endings. Insertions use the first existing
-ending (LF for empty files); nonempty updates retain the established final-newline
-convention. Exact matching precedes whitespace and punctuation normalization.
-Explicit Add and Move preserve the existing replacement behavior for regular
-files. Multiple operations on one canonical path must be combined into one file
-operation with ordered chunks.
-The provider-visible definition contains the patch syntax and ordering rules;
-JSON field constraints remain in the schema.
+Chunks search original content forward, preserving anchors, EOF and numeric
+ranges. Only an order failure permits reordering: every chunk must have one
+exact, non-overlapping original-source match, without anchors, ranges, EOF markers
+or pure additions. The same matcher and write plan apply sorted chunks; accepted
+forward patches and recorded arguments remain unchanged. Ambiguity or unsupported
+chunks retain the original rejection. The provider still requests source order.
 
-Rejected patch diagnostics distinguish out-of-order chunks, overlapping context,
-context before an anchor, incorrect EOF context, repeated earlier occurrences,
-missing text, and duplicate canonical file operations. They report the chunk,
-patch-body line and original-source search boundary, plus an exact source line
-when available. An exact diagnostic search never selects an application location
-or changes matching rules. Repeated occurrences require unique context rather
-than guessing the intended location. Model feedback carries the reason and a
-specific repair instruction; strict JSON argument rejection remains in Floret.
+Pure additions append. Untouched lines retain their endings; insertions use the
+first ending (LF for empty files), and nonempty updates retain a final newline.
+Exact matching precedes whitespace and punctuation normalization. Explicit Add
+and Move may replace regular files. Use one operation per canonical path.
+
+Rejection diagnostics distinguish order, overlap, anchor, EOF, repeated context,
+missing text and duplicate-path failures. They report the chunk, patch-body line,
+search boundary and exact source line when available, with a repair instruction.
+Diagnostics do not select writes; strict JSON validation remains in Floret.
 
 All plans validate before writing and recheck source and destination snapshots
 before each commit. Validation errors confirm no writes. Filesystem commit errors
@@ -77,5 +74,5 @@ Flower must not infer remote execution from thread context alone; it can only cl
 - `redeven:internal/ai/floret_native_tools.go` - The unique native factory derives `web_fetch` from Floret and binds invocation product permission.
 
 - Redeven patch implementation: internal/ai/unified_diff_apply.go, patch_text.go and patch_tool.go.
-- Deterministic qualification: internal/ai/patch_correctness_test.go, patch_diagnostics_test.go, patch_tool_test.go and patch_runtime_test.go cover placement, endings, authorization, collision semantics, zero-effect diagnostics, injected commit failures, final provider schemas and hosted invalid-argument/order correction.
+- Deterministic tests: patch_correctness_test.go, patch_order_test.go, patch_diagnostics_test.go, patch_tool_test.go and patch_runtime_test.go cover ordering, zero-effect rejection, endings, authorization, commit failures, provider schemas and unchanged history after restart/Fork.
 - Synthetic live-model cases in internal/ai/patch_prompt_qualification_test.go check multi-chunk construction, ordering recovery and duplicate-header recovery. They use the configured isolated prompt qualification lane and only evaluate proposed patches in memory; they never execute model-proposed tools. A small passing sample does not establish a production failure rate.
