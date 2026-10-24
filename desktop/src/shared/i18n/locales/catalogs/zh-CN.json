@@ -3644,7 +3644,11 @@
     "recoveryFailed": "无法完成运行时准备。请查看操作详情后重试。",
     "containerHelp": "容器或容器引擎不可用。请启动容器引擎并检查环境设置后重试。",
     "credentialsHelp": "Desktop 无法验证运行时管理连接。请检查凭据和权限后重试。",
-    "channelHelp": "运行时管理通道不可用。请检查连接后重试。"
+    "channelHelp": "运行时管理通道不可用。请检查连接后重试。",
+    "sshPassword": "SSH 密码",
+    "sshAuthenticationRequired": "请输入 SSH 密码以连接此环境。",
+    "sshAuthenticationFailed": "SSH 认证失败，请检查密码后重试。",
+    "sshPasswordHelp": "密码仅用于本次连接，不会保存。"
   },
   "gatewayMembership": {
     "not_joined": "未连接",

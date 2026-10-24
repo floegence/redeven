@@ -3649,7 +3649,11 @@
     "recoveryFailed": "Die Vorbereitung der Laufzeitumgebung konnte nicht abgeschlossen werden. Prüfen Sie die Vorgangsdetails und versuchen Sie es erneut.",
     "containerHelp": "Der Container oder seine Engine ist nicht verfügbar. Starten Sie die Container-Engine und prüfen Sie die Umgebungseinstellungen. Versuchen Sie es dann erneut.",
     "credentialsHelp": "Desktop konnte die Verwaltungsverbindung der Laufzeitumgebung nicht authentifizieren. Prüfen Sie Anmeldedaten und Berechtigungen und versuchen Sie es erneut.",
-    "channelHelp": "Der Verwaltungskanal der Laufzeitumgebung ist nicht verfügbar. Prüfen Sie die Verbindung und versuchen Sie es erneut."
+    "channelHelp": "Der Verwaltungskanal der Laufzeitumgebung ist nicht verfügbar. Prüfen Sie die Verbindung und versuchen Sie es erneut.",
+    "sshPassword": "SSH-Passwort",
+    "sshAuthenticationRequired": "Geben Sie das SSH-Passwort ein, um eine Verbindung zu dieser Umgebung herzustellen.",
+    "sshAuthenticationFailed": "SSH-Authentifizierung fehlgeschlagen. Prüfen Sie das Passwort und versuchen Sie es erneut.",
+    "sshPasswordHelp": "Das Passwort wird nur für diese Verbindung verwendet und nicht gespeichert."
   },
   "gatewayMembership": {
     "not_joined": "Nicht verbunden",

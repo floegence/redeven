@@ -3644,7 +3644,11 @@
     "recoveryFailed": "無法完成執行階段準備。請查看操作詳細資訊後重試。",
     "containerHelp": "容器或容器引擎無法使用。請啟動容器引擎並檢查環境設定後重試。",
     "credentialsHelp": "Desktop 無法驗證執行階段管理連線。請檢查認證資料與權限後重試。",
-    "channelHelp": "執行階段管理通道無法使用。請檢查連線後重試。"
+    "channelHelp": "執行階段管理通道無法使用。請檢查連線後重試。",
+    "sshPassword": "SSH 密碼",
+    "sshAuthenticationRequired": "請輸入 SSH 密碼以連線至此環境。",
+    "sshAuthenticationFailed": "SSH 驗證失敗，請檢查密碼後重試。",
+    "sshPasswordHelp": "密碼僅用於本次連線，不會儲存。"
   },
   "gatewayMembership": {
     "not_joined": "未連線",

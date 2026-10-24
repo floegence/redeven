@@ -1,4 +1,5 @@
 import type { DesktopContainerEngine } from '../shared/desktopRuntimePlacement';
+import { DesktopSSHTransportAuthenticationError } from './sshTransportManager';
 import {
   desktopRuntimeContainerReference,
   type DesktopRuntimePlacement,
@@ -28,6 +29,7 @@ export type DesktopRuntimeContainerUnavailableStatus =
   | Exclude<DesktopContainerRuntimeStatus, 'running'>
   | 'ambiguous'
   | 'command_not_found'
+  | 'auth_required'
   | 'engine_unavailable';
 
 type ContainerProcessPlacement = Extract<DesktopRuntimePlacement, Readonly<{ kind: 'container_process' }>>;
@@ -282,6 +284,9 @@ export function containerRuntimeUnavailableMessage(
   const label = placement.container_label || desktopRuntimeContainerReference(placement);
   const engine = placement.container_engine === 'podman' ? 'Podman' : 'Docker';
   const command = placement.container_engine === 'podman' ? 'podman' : 'docker';
+  if (status === 'auth_required') {
+    return 'Authenticate the SSH host connection before inspecting its containers.';
+  }
   if (status === 'command_not_found') {
     return desktopHostCommandNotFoundMessage(command);
   }
@@ -303,6 +308,7 @@ export function containerRuntimeUnavailableMessage(
 export function containerRuntimeCommandFailureStatus(
   error: unknown,
 ): Exclude<DesktopRuntimeContainerUnavailableStatus, 'stopped' | 'ambiguous'> {
+  if (error instanceof DesktopSSHTransportAuthenticationError) return 'auth_required';
   if (isDesktopHostCommandNotFoundError(error)) {
     return 'command_not_found';
   }

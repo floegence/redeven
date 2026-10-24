@@ -56,6 +56,9 @@ describe('environment access settings authority', () => {
 
   it('distinguishes stopped access configuration from unavailable and incompatible management', () => {
     const stopped = { runtime_target_available: true, runtime_control_status: desktopRuntimeControlStatusMissing('not_started', 'Stopped') };
+    expect(() => requireEnvironmentManagementAvailable({ ...stopped, runtime_target_available: false,
+      runtime_control_status: desktopRuntimeControlStatusMissing('auth_required', 'Authenticate') }))
+      .toThrowError(expect.objectContaining({ code: 'SSH_AUTHENTICATION_REQUIRED' }));
     expect(() => requireEnvironmentManagementAvailable(stopped)).not.toThrow();
     expect(() => requireEnvironmentManagementAvailable({ ...stopped, runtime_target_available: false,
       runtime_control_status: desktopRuntimeControlStatusMissing('unverified', 'Connection failed') }))

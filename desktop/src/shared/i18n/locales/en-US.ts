@@ -120,6 +120,11 @@ export const enUS = {
     "lastSeen": "Last access"
   },
   gatewayJoin: {
+    sshPassword: "SSH password",
+    sshAuthenticationRequired: "Enter the SSH password to connect to this environment.",
+    sshAuthenticationFailed: "SSH authentication failed. Check the password and try again.",
+    sshPasswordHelp: "Used only for this connection. The password is not saved.",
+
     connectEnvironment: "Connect environment",
     gatewayInvitation: "Gateway invitation",
     confirmAccess: "Confirm access",

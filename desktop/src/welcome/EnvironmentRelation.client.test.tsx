@@ -162,7 +162,7 @@ it.each([['status', false, false], ['preview', false, false], ['join', false, fa
   if (completedFailure) { h.publish(await check.fail()); await settle(); }
   complete(requestFailure ? { ok: false, gateway_error_code: 'RUNTIME_CONTROL_UNREACHABLE' } : resultFor(operation)); await settle();
   if (requestFailure) {
-    expect(dialog.textContent).toContain('The Runtime could not reach or verify this Gateway. Check its network connection and address, then retry.');
+    expect(dialog.textContent).toContain('Could not connect to this environment. Retry or check its connection settings.');
     expect(button(dialog, 'Confirm and enable').disabled).toBe(true);
   } else if (operation === 'join') expect(dialog.querySelector('[data-gateway-step]')).toBeNull();
   else expect(dialog.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe(operation === 'status' ? '1' : '2');
@@ -294,7 +294,7 @@ describe('linked environment owner interactions', () => {
     button(document.querySelector('[role="menu"]')!, 'Add Gateway access').click(); await settle();
     expect(perform).not.toHaveBeenCalled();
     button(document.querySelector('[role="dialog"]')!, 'Connect and continue').click(); await settle();
-    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', runtime_target_id: runtime.provider_runtime_link_target!.id, operation: 'status' });
+    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', connection_token: expect.any(Number), runtime_target_id: runtime.provider_runtime_link_target!.id, operation: 'status' });
     expect(h.performAction).not.toHaveBeenCalled();
     button(document.querySelector('[role="dialog"]')!, 'Cancel').click(); await settle();
     expect(document.activeElement).toBe(toggle);

@@ -3650,7 +3650,11 @@
     "recoveryFailed": "Não foi possível concluir a preparação do ambiente de execução. Verifique os detalhes da operação e tente novamente.",
     "containerHelp": "O contêiner ou seu mecanismo está indisponível. Inicie o mecanismo de contêineres e verifique as configurações do ambiente antes de tentar novamente.",
     "credentialsHelp": "O Desktop não conseguiu autenticar a conexão de gerenciamento do ambiente de execução. Verifique as credenciais e permissões e tente novamente.",
-    "channelHelp": "O canal de gerenciamento do ambiente de execução está indisponível. Verifique a conexão e tente novamente."
+    "channelHelp": "O canal de gerenciamento do ambiente de execução está indisponível. Verifique a conexão e tente novamente.",
+    "sshPassword": "Senha SSH",
+    "sshAuthenticationRequired": "Digite a senha SSH para se conectar a este ambiente.",
+    "sshAuthenticationFailed": "Falha na autenticação SSH. Verifique a senha e tente novamente.",
+    "sshPasswordHelp": "A senha é usada apenas nesta conexão e não é salva."
   },
   "gatewayMembership": {
     "not_joined": "Não conectado",

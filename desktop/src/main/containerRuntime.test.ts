@@ -22,9 +22,17 @@ import {
   type DesktopRuntimeContainerResolver,
 } from './containerRuntime';
 import { DesktopHostCommandNotFoundError } from './desktopHostCommand';
+import { DesktopSSHTransportAuthenticationError } from './sshTransportManager';
 import { DEFAULT_DESKTOP_SSH_RUNTIME_ROOT } from '../shared/desktopSSH';
 
 describe('containerRuntime', () => {
+  it('preserves SSH authentication failures without reporting a missing container or unavailable engine', async () => {
+    const resolver = { inspect: async () => { throw new DesktopSSHTransportAuthenticationError('Permission denied'); },
+      listRunning: async () => { throw new Error('Authentication must not trigger container discovery'); } };
+    await expect(resolveRuntimeContainerPlacement(resolver, { kind: 'container_process', container_engine: 'docker',
+      container_id: 'chosen', container_ref: 'chosen', container_label: 'Chosen', bridge_strategy: 'exec_stream', runtime_root: '/runtime',
+    })).resolves.toMatchObject({ status: 'auth_required' });
+  });
   it('parses Docker inspect records into stable container facts', () => {
     expect(parseContainerInspectJSON('docker', JSON.stringify([{
       Id: 'container-stable-id',
