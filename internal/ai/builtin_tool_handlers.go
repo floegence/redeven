@@ -557,8 +557,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:         "image.read",
-			Description:  "Inspect a PNG, JPEG, WebP or first GIF frame. Supply exactly one of file_path or a media:v1 locator. Locator reads return the original thread snapshot and reject target_id.",
-			InputSchema:  toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"locator": map[string]any{"type": "string", "pattern": "^media:v1:[a-f0-9]{64}$", "description": "Snapshot locator from threads.read or compaction."}, "file_path": map[string]any{"type": "string", "minLength": 1, "description": "Working-directory-relative or authorized absolute image path."}}), "additionalProperties": false}),
+			Description:  "Inspect a PNG, JPEG, WebP or first GIF frame. Supply exactly one of file_path or a media:v1 locator. Locator reads return the original thread snapshot and reject target_id. Optional crop selects original image pixels without resizing; use it for fine text.",
+			InputSchema:  toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"crop": map[string]any{"type": "object", "description": "Locator mode only. Original image pixels, not CSS viewport coordinates.", "properties": map[string]any{"x": map[string]any{"type": "integer", "minimum": 0}, "y": map[string]any{"type": "integer", "minimum": 0}, "width": map[string]any{"type": "integer", "minimum": 1}, "height": map[string]any{"type": "integer", "minimum": 1}}, "required": []string{"x", "y", "width", "height"}, "additionalProperties": false}, "locator": map[string]any{"type": "string", "pattern": "^media:v1:[a-f0-9]{64}$", "description": "Snapshot locator from threads.read or compaction."}, "file_path": map[string]any{"type": "string", "minLength": 1, "description": "Working-directory-relative or authorized absolute image path."}}), "additionalProperties": false}),
 			Visibility:   ToolVisibilitySharedReadonly,
 			Capabilities: []ToolCapabilityClass{ToolCapabilityReadonlyLocal},
 			Source:       "builtin", Namespace: "builtin.image", Priority: 100,

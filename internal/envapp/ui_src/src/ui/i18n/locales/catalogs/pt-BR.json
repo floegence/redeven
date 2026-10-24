@@ -5433,6 +5433,7 @@
       "runErrorProviderModelUnavailable": "O modelo selecionado não está disponível neste provedor de modelos. Escolha outro modelo no perfil de IA local.",
       "runErrorProviderRequestInvalid": "O provedor de IA selecionado rejeitou o formato da solicitação do Flower. Atualize o Redeven e tente novamente.",
       "runErrorProviderRequestRejected": "O provedor de IA selecionado rejeitou a solicitação do Flower. Confira os detalhes do diagnóstico e tente novamente mais tarde.",
+      "runErrorProviderRequestTooLarge": "A solicitação excede o limite de tamanho das imagens ou do conteúdo. As capturas originais e as ações concluídas estão salvas. Use menos imagens, recorte o detalhe necessário ou altere o modelo antes de tentar novamente.",
       "runErrorModelGatewayContractFailed": "A fonte do modelo retornou uma chamada de ferramenta incompleta. Nenhuma ferramenta foi executada. Tente novamente ou escolha outro modelo.",
       "runErrorRepeatedToolCalls": "Solicitações idênticas foram repetidas sem progresso efetivo. Este turno foi interrompido. Os resultados confirmados e os relatórios dos chats filhos concluídos foram preservados. Tente novamente para continuar do progresso salvo.",
       "runErrorNoProgress": "O Agent não avançava e este turno foi interrompido. Os resultados salvos foram preservados. Adicione orientações ou tente novamente.",

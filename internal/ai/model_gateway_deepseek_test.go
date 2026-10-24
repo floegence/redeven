@@ -252,6 +252,7 @@ func TestDeepSeekVisionUsesPreparedImageAndPreservesToolContinuation(t *testing.
 }
 
 func TestDeepSeekAdapterPreservesToolResultImages(t *testing.T) {
+	_, attachment, imagePart := screenshotPreparationFixture(t)
 	var imageOutput bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
@@ -279,12 +280,12 @@ func TestDeepSeekAdapterPreservesToolResultImages(t *testing.T) {
 	adapter := newFloretProviderAdapter(base, "deepseek", "deepseek-v4-flash-vision-exp", ProviderControls{}, TurnBudgets{}, providerWebSearchModeDisabled)
 	adapter.supportsImageInput = true
 	adapter.attachmentResolver = func(context.Context, flprovider.Attachment) (ContentPart, error) {
-		return ContentPart{Type: "image", FileURI: "data:image/png;base64,AQID", MimeType: "image/png"}, nil
+		return imagePart, nil
 	}
 	req := flprovider.Request{Messages: []flprovider.Message{
 		{Role: flprovider.RoleAssistant, ToolCalls: []flprovider.ToolCall{{ID: "screen", Name: "computer.screenshot", Args: "{}"}}},
 		{Role: flprovider.RoleTool, ToolResult: &flprovider.ToolResult{CallID: "screen", ToolName: "computer.screenshot", Text: "captured",
-			Attachments: []flprovider.Attachment{{ResourceRef: "computer://browser-main/" + strings.Repeat("a", 64), MIMEType: "image/png", Name: "screen.png", SizeBytes: 3}}}},
+			Attachments: []flprovider.Attachment{attachment}}},
 	}}
 	prepared, err := adapter.turnRequest(context.Background(), req)
 	if err != nil {

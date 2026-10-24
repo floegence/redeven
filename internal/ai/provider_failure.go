@@ -27,6 +27,8 @@ const providerFailurePrefix = "redeven_provider_failure_v1:"
 // message. Only structured error messages and reviewed diagnostic fields enter
 // it; raw bodies, metadata, endpoints and credentials stay private.
 type providerFailureDiagnostic struct {
+	ActualBytes int64                      `json:"actual_bytes,omitempty"`
+	LimitBytes  int64                      `json:"limit_bytes,omitempty"`
 	Attempt     *providerAttemptDiagnostic `json:"attempt,omitempty"`
 	Provider    string                     `json:"provider"`
 	Status      int                        `json:"http_status,omitempty"`
@@ -66,6 +68,10 @@ var diagnosticParamPattern = regexp.MustCompile(`^(tools|input|messages|model|in
 var diagnosticRequestIDPattern = regexp.MustCompile(`^req[_-][A-Za-z0-9_-]{1,120}$`)
 
 func (d providerFailureDiagnostic) sanitized() providerFailureDiagnostic {
+	if d.Code != "request_bytes_exceeded" || d.ActualBytes <= d.LimitBytes || d.LimitBytes <= 0 {
+		d.ActualBytes = 0
+		d.LimitBytes = 0
+	}
 	d.Attempt = d.Attempt.sanitized()
 	switch d.Provider {
 	case "openai", "chatgpt", "openai_compatible", "openrouter", "xai", "groq", "ollama", "google", "chatglm", "qwen", "moonshot", "deepseek", "anthropic":
@@ -129,20 +135,28 @@ func (d providerFailureDiagnostic) failureStatus() int {
 }
 
 func parseProviderFailure(message string) (providerFailureDiagnostic, bool) {
-	var d providerFailureDiagnostic
-	if !strings.HasPrefix(message, providerFailurePrefix) || len(message) > 8192 {
-		return d, false
+	if len(message) > 16384 {
+		return providerFailureDiagnostic{}, false
 	}
-	decoder := json.NewDecoder(strings.NewReader(strings.TrimPrefix(message, providerFailurePrefix)))
-	decoder.DisallowUnknownFields()
-	if decoder.Decode(&d) != nil {
-		return d, false
+	for _, line := range strings.Split(message, "\n") {
+		// The Engine wraps the first cause with this fixed context.
+		line = strings.TrimPrefix(line, "provider context overflow retry exhausted: ")
+		if !strings.HasPrefix(line, providerFailurePrefix) || len(line) > 8192 {
+			continue
+		}
+		var d providerFailureDiagnostic
+		decoder := json.NewDecoder(strings.NewReader(strings.TrimPrefix(line, providerFailurePrefix)))
+		decoder.DisallowUnknownFields()
+		if decoder.Decode(&d) != nil {
+			continue
+		}
+		var extra any
+		if decoder.Decode(&extra) != io.EOF {
+			continue
+		}
+		return d.sanitized(), true
 	}
-	var extra any
-	if decoder.Decode(&extra) != io.EOF {
-		return d, false
-	}
-	return d.sanitized(), true
+	return providerFailureDiagnostic{}, false
 }
 
 func diagnosticFromBody(d providerFailureDiagnostic, raw []byte) providerFailureDiagnostic {
@@ -270,6 +284,10 @@ func providerTransportFailure(err error, providerType string) error {
 	if err == nil {
 		return nil
 	}
+	var byteLimit *flprovider.RequestByteLimitError
+	if errors.As(err, &byteLimit) {
+		return newProviderFailure(providerFailureDiagnostic{Provider: providerType, Code: "request_bytes_exceeded", Shape: "unknown", ActualBytes: byteLimit.ActualBytes, LimitBytes: byteLimit.LimitBytes}, err, flprovider.RetryAdvice{Category: flprovider.RetryPermanent})
+	}
 	var failure *providerFailure
 	var rpc *DesktopModelSourceRPCError
 	var httpError *flprovider.ProviderHTTPError
@@ -394,6 +412,9 @@ func providerFailureDetail(message string) string {
 
 func providerDiagnosticRunCode(d providerFailureDiagnostic) string {
 	d = d.sanitized()
+	if d.Code == "request_bytes_exceeded" {
+		return runErrorCodeProviderRequestTooLarge
+	}
 	status := d.failureStatus()
 
 	if d.Provider == "chatgpt" {

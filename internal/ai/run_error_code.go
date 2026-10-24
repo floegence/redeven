@@ -35,6 +35,7 @@ const (
 	runErrorCodeProviderRequestInvalid      = "provider_request_invalid"
 	runErrorCodeProviderRequestFailed       = "provider_request_failed"
 	runErrorCodeProviderRequestRejected     = "provider_request_rejected"
+	runErrorCodeProviderRequestTooLarge     = "provider_request_too_large"
 	runErrorCodeModelGatewayContract        = "model_gateway_contract_failed"
 	runErrorCodeModelContextUnavailable     = "model_context_unavailable"
 	runErrorCodeContextBudgetInvalid        = "context_budget_invalid"
@@ -92,6 +93,8 @@ func userFacingRunError(code string, fallback string) string {
 		return "The selected AI provider rejected Flower's request format. Update Redeven and retry."
 	case runErrorCodeProviderRequestFailed:
 		return "The model request could not be completed. Retry, or check the current model source if it keeps happening."
+	case runErrorCodeProviderRequestTooLarge:
+		return "This request exceeds the image or request-size limit. Original screenshots and completed actions are saved. Use fewer images or a cropped detail, then retry after changing the input or model."
 	case runErrorCodeProviderRequestRejected:
 		return "The selected AI provider rejected Flower's request. Check the diagnostic details and try again later."
 	case runErrorCodeModelGatewayContract:
@@ -323,6 +326,8 @@ func projectFloretTurnFailure(failure *flruntime.ThreadTurnFailure, fallbackCode
 
 func providerHTTPStatusRunErrorCode(status int) string {
 	switch status {
+	case http.StatusRequestEntityTooLarge:
+		return runErrorCodeProviderRequestTooLarge
 	case http.StatusBadRequest, http.StatusUnprocessableEntity:
 		return runErrorCodeProviderRequestInvalid
 	case http.StatusUnauthorized, http.StatusForbidden:

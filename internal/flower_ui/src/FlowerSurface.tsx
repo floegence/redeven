@@ -2714,6 +2714,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       case 'provider_request_invalid': return copy().chat.runErrors.providerRequestInvalid;
       case 'provider_request_failed': return copy().chat.runErrors.providerRequestFailed;
       case 'provider_request_rejected': return copy().chat.runErrors.providerRequestRejected;
+      case 'provider_request_too_large': return copy().chat.runErrors.providerRequestTooLarge;
       case 'provider_model_unavailable':
         return copy().chat.runErrors.providerModelUnavailable;
       case 'model_gateway_contract_failed':
@@ -7365,6 +7366,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       case 'provider_request_invalid': return copy().chat.runErrors.providerRequestInvalid;
       case 'provider_request_failed': return copy().chat.runErrors.providerRequestFailed;
       case 'provider_request_rejected': return copy().chat.runErrors.providerRequestRejected;
+      case 'provider_request_too_large': return copy().chat.runErrors.providerRequestTooLarge;
       case 'provider_model_unavailable':
       case 'model_gateway_contract_failed':
         return copy().chat.runErrorActions.switchModel;
@@ -7809,6 +7811,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const code = trimString(error?.code);
     const correctionFailure = code === 'floret_tool_argument_correction_exhausted';
     const contextFailure = code === 'context_budget_invalid' || code === 'context_fixed_overhead' || code === 'context_compaction_limit';
+    const settingsAtFailure = savedAt();
+    const capacitySettingsChanged = () => savedAt() !== settingsAtFailure;
     const retryPending = () => retryingThreads().has(trimString(targetThread()?.thread_id));
     const retryBlocked = () => threadRecoveryBlocked(targetThread())
       || (isCompactionRecovery(targetThread()) && !props.adapter.compactThreadContext);
@@ -7910,7 +7914,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     ) : providerFailure ? (
       <>
         <Button size="sm" variant="ghost" disabled={configureBlocked()} onClick={() => void configureThreadProvider(targetThread())}>{copy().settings.dialog.catalog.searchConfigure}</Button>
-        {retryAction()}
+        <Show when={code !== 'provider_request_too_large' || capacitySettingsChanged()}>{retryAction()}</Show>
         <Show when={code === 'chatgpt_usage_unavailable'}><a href="https://chatgpt.com/settings/usage" target="_blank" rel="noopener noreferrer" class="cursor-pointer whitespace-nowrap text-sm font-medium text-primary hover:underline">{copy().settings.dialog.chatGPT.manageUsage}</a></Show>
       </>
     ) : code === 'model_context_unavailable' || retryableRuntimeFailure ? (

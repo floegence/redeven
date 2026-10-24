@@ -3947,7 +3947,7 @@
               "security",
               "tools"
             ],
-            "summary": "`image.read(file_path, target_id)` reads an image directly in every permission\nmode. Its exclusive `locator` mode rereads an admitted immutable snapshot in the\ncurrent thread without reopening the original file or copying bytes. Redeven\nowns authorization and immutable bytes; Floret owns the typed\nattachment, model history and canonical membership. File references stay file\nreferences. The tool creates native image content without a browser, temporary\nHTTP server, path-to-image inference or Base64 in ordinary result JSON.",
+            "summary": "image.read inspects authorized files/snapshots. Redeven owns bytes/authorization;\nFloret owns history/membership. File references stay references; results use native\nimages, not browsers, temporary servers or Base64 result JSON. Original snapshots\nremain available after model preparation.",
             "section_count": 2
           },
           {
@@ -4252,7 +4252,7 @@
               "computer-use",
               "media"
             ],
-            "summary": "Redeven owns screenshot bytes and authorized media resolution; Floret owns opaque\nattachment history and provider rendering. Flower displays saved screenshots inline and offers decoded pixels in a\nmedia-only Stage. Durable keyframes and ephemeral viewing samples have distinct\nlifetimes. A missing, changed or unauthorized reference fails explicitly and\ncannot fall back to an unrestricted image URL. Successful tool metadata alone\ndoes not prove the user can see a frame.\n\nDurable keyframes share one byte store and canonical retention entry point with\n[direct image reads](image-read-and-retention.md). Existing `computer://`\nreferences and their physical root remain unchanged. The media resolver owns\nmembership authorization without a preceding product detail load.",
+            "summary": "Redeven owns authorized screenshots; Floret owns history/preparation. Flower\nshows frames inline/in Stage. Durable frames and ephemeral samples have separate\nlifetimes; tool success does not prove delivery. Model encodings never replace original assets.",
             "section_count": 2
           },
           {
@@ -7680,7 +7680,7 @@
       "frontmatter": {
         "description": "Resolve authenticated keyframes and bounded live samples into decoded Flower pixels without persisting image bytes in model history.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-23",
         "tags": [
           "ai",
           "attachments",
@@ -7691,45 +7691,28 @@
         "title": "Computer use media and visual requests",
         "type": "Media Contract"
       },
-      "body_length": 1616,
-      "summary": "Redeven owns screenshot bytes and authorized media resolution; Floret owns opaque\nattachment history and provider rendering. Flower displays saved screenshots inline and offers decoded pixels in a\nmedia-only Stage. Durable keyframes and ephemeral viewing samples have distinct\nlifetimes. A missing, changed or unauthorized reference fails explicitly and\ncannot fall back to an unrestricted image URL. Successful tool metadata alone\ndoes not prove the user can see a frame.\n\nDurable keyframes share one byte store and canonical retention entry point with\n[direct image reads](image-read-and-retention.md). Existing `computer://`\nreferences and their physical root remain unchanged. The media resolver owns\nmembership authorization without a preceding product detail load.",
+      "body_length": 1756,
+      "summary": "Redeven owns authorized screenshots; Floret owns history/preparation. Flower\nshows frames inline/in Stage. Durable frames and ephemeral samples have separate\nlifetimes; tool success does not prove delivery. Model encodings never replace original assets.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Safe results return target identity, execution location, summary and safety. Semantic observations and script operations omit images unless explicitly requested.\n\nUnit or fixture results alone must not be presented as complete product qualification.",
-          "char_count": 249
+          "body": "- Missing, changed or unauthorized bytes fail explicitly. No unrestricted URL fallback.\n- [Image reads](image-read-and-retention.md) share immutable Computer storage;\n  computer:// identities and retention stay intact.\n- Safe results include target, location, summary and safety. Semantic/script\n  operations include images only when requested.\n- Floret prepares Computer PNGs \u003e=256 KiB as smaller JPEG90 (Go 4:2:0).\n  Transparency, dimensions, originals, hashes and visible history stay intact.\n- Model notices report dimensions/bytes/encoding; image pixels differ from CSS coordinates.\n- Ordinary/summary/Retry/Fork share preparation before estimation/freezing.\n  Retries reuse bytes; encoding revisions invalidate provider state. Ordinary\n  image.read originals bypass compression.\n- Flower caps JSON/base64 at 32 MiB independently of tokens: product policy,\n  not a provider limit. Remote DTOs share the cap; services own final rendering.\n- Floret compacts complete tool pairs and retains causes. UI provides numeric\n  diagnostics and input/model guidance without unchanged Retry or secret payloads.",
+          "char_count": 1103
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "The media viewer does not authorize target actions, own lifecycle state, or expose private takeover pixels to model history.\n\nEnv App and Desktop share the pure path encoder; each host retains its existing authenticated transport and byte validation.",
-          "char_count": 250
+          "body": "The viewer owns no authorization/lifecycle/private takeover pixels. Both hosts\nshare paths, not authentication. Fixtures do not establish product qualification.",
+          "char_count": 160
         }
       ],
-      "evidence": [
-        {
-          "id": "redeven:internal/ai/computer_live_frames.go:0:bounded observer-owned samples.",
-          "source": "redeven:internal/ai/computer_live_frames.go",
-          "description": "bounded observer-owned samples."
-        },
-        {
-          "id": "redeven:internal/ai/computer_media.go:0:host keyframe storage and validation.",
-          "source": "redeven:internal/ai/computer_media.go",
-          "description": "host keyframe storage and validation."
-        },
-        {
-          "id": "redeven:internal/flower_ui/host/computerFramePath.ts:0:host-owned media route encoding without transport or authorization.",
-          "source": "redeven:internal/flower_ui/host/computerFramePath.ts",
-          "description": "host-owned media route encoding without transport or authorization."
-        }
-      ],
-      "snippet": "Redeven owns screenshot bytes and authorized media resolution; Floret owns opaque attachment history and provider rendering. Flower displays saved screenshots inline and offers decoded pixels in a media-only Stage. Durable keyframes and eph",
+      "snippet": "Redeven owns authorized screenshots; Floret owns history/preparation. Flower shows frames inline/in Stage. Durable frames and ephemeral samples have separate lifetimes; tool success does not prove delivery. Model encodings never replace ori",
       "links": [
         {
-          "label": "direct image reads",
+          "label": "Image reads",
           "path": "ai/image-read-and-retention.md",
           "concept_id": "ai.image-read-and-retention",
           "title": "Direct image reading and tool media retention"
@@ -7747,6 +7730,12 @@
           "path": "ai/computer-use-runtime.md",
           "concept_id": "ai.computer-use-runtime",
           "title": "Computer and browser use runtime"
+        },
+        {
+          "label": "Direct image reading and tool media retention",
+          "path": "ai/image-read-and-retention.md",
+          "concept_id": "ai.image-read-and-retention",
+          "title": "Direct image reading and tool media retention"
         },
         {
           "label": "Redeven OKF Bundle",
@@ -9836,7 +9825,7 @@
       "frontmatter": {
         "description": "Authorized image reads produce immutable native model attachments with canonical retention and preview membership.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-23",
         "tags": [
           "ai",
           "images",
@@ -9848,25 +9837,33 @@
         "title": "Direct image reading and tool media retention",
         "type": "AI Media Contract"
       },
-      "body_length": 2125,
-      "summary": "`image.read(file_path, target_id)` reads an image directly in every permission\nmode. Its exclusive `locator` mode rereads an admitted immutable snapshot in the\ncurrent thread without reopening the original file or copying bytes. Redeven\nowns authorization and immutable bytes; Floret owns the typed\nattachment, model history and canonical membership. File references stay file\nreferences. The tool creates native image content without a browser, temporary\nHTTP server, path-to-image inference or Base64 in ordinary result JSON.",
+      "body_length": 1810,
+      "summary": "image.read inspects authorized files/snapshots. Redeven owns bytes/authorization;\nFloret owns history/membership. File references stay references; results use native\nimages, not browsers, temporary servers or Base64 result JSON. Original snapshots\nremain available after model preparation.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Authorized reads\nThe shared read-only tool checks model image capability, `CanRead`, filesystem scope and `ToolTargetPolicy`. An explicit unavailable target fails rather than using another device.\n\nNative image budgeting inspects these protocol parts and does not count Base64 transport as ordinary text.\n\n## Visual summaries and rereads\nPublished Floret v7.51.1 projects user and confirmed tool attachments into one ordered visual compaction input. Full rendered request budgets include image cost; an image that cannot fit fails explicitly.\n\nFile reads keep their 10 MiB bound; admitted Computer frames retain their existing 16 MiB bound.\n\n## Immutable bytes and retention\nOne `toolMediaStore` owns image snapshots and existing Computer keyframes under the original `computer/keyframes` root. Changes or deletion of the source file cannot alter subsequent sends, retry, restart, fork or compaction.\n\nNo product or Floret storage schema changes.\n\n## Authorized previews\nThe resolver is the only membership and endpoint authorization entry point. It reads product thread ownership and one public canonical view, without the full product detail mapper.\n\nAssistant Markdown images retain their existing presentation.",
-          "char_count": 1217
+          "body": "- File mode accepts file_path and optional target_id; locator mode requires a\n  canonical media:v1 locator, excludes file_path/target_id, and reuses original\n  bytes without reopening the source. Default behavior remains unchanged.\n- Every permission mode checks image capability, CanRead, filesystem scope and\n  ToolTargetPolicy. Unavailable explicit targets fail without device fallback.\n- File reads retain their 10 MiB bound; Computer snapshots retain 16 MiB.\n- Locator-only crop accepts integer x/y/width/height within original image pixels,\n  never clips, and saves a new lossless PNG with source_crop metadata. It uses\n  fresh canonical authorization. Image pixels differ from CSS action coordinates.\n- Ordinary image.read results preserve original encoding. Visual summaries may\n  optimize Computer frames through [model preparation](computer-use-media.md).\n  Original locators remain available; no automatic resizing or derivative cache.\n- Floret preserves image order in summaries. Tokens and JSON bytes have separate\n  limits; indivisible overflow fails.\n- toolMediaStore retains immutable images in computer/keyframes across source\n  changes, Retry, restart, Fork and compaction.\n- Previews check ownership/canonical membership directly. Markdown images stay unchanged.",
+          "char_count": 1281
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Redeven never queries Floret tables or persists a second media membership ledger. Model attachment history and compaction remain upstream-owned.",
-          "char_count": 144
+          "body": "No storage migration, Floret-table queries or second media-membership ledger.",
+          "char_count": 77
         }
       ],
-      "snippet": "`image.read(file_path, target_id)` reads an image directly in every permission mode. Its exclusive `locator` mode rereads an admitted immutable snapshot in the current thread without reopening the original file or copying bytes. Redeven",
+      "snippet": "image.read inspects authorized files/snapshots. Redeven owns bytes/authorization; Floret owns history/membership. File references stay references; results use native images, not browsers, temporary servers or Base64 result JSON. Original sn",
+      "links": [
+        {
+          "label": "model preparation",
+          "path": "ai/computer-use-media.md",
+          "concept_id": "ai.computer-use-media",
+          "title": "Computer use media and visual requests"
+        }
+      ],
       "backlinks": [
         {
           "label": "Computer use media and visual requests",
@@ -33663,5 +33660,5 @@
       ]
     }
   ],
-  "source_sha256": "ba6766e70f3f897024d42dd2b6089617f863a401272ea8a39c613a5c732bdf4c"
+  "source_sha256": "cdb660c9f9080ba61b8b97cd66d605f59a778c041838a865ae89fc91e652f306"
 }

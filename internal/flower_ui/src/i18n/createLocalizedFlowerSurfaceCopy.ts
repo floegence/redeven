@@ -476,6 +476,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         providerRequestInvalid: t(i18n, k('chat.runErrorProviderRequestInvalid')),
         providerRequestFailed: t(i18n, k('chat.runErrorProviderRequestFailed')),
         providerRequestRejected: t(i18n, k('chat.runErrorProviderRequestRejected')),
+        providerRequestTooLarge: t(i18n, k('chat.runErrorProviderRequestTooLarge')),
         modelGatewayContractFailed: t(i18n, k('chat.runErrorModelGatewayContractFailed')),
         repeatedToolCalls: t(i18n, k('chat.runErrorRepeatedToolCalls')),
         noProgress: t(i18n, k('chat.runErrorNoProgress')),

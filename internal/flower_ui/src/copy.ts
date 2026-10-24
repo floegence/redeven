@@ -642,6 +642,7 @@ export type FlowerSurfaceCopy = Readonly<{
       providerRequestInvalid: string;
       providerRequestFailed: string;
       providerRequestRejected: string;
+      providerRequestTooLarge: string;
       modelGatewayContractFailed: string;
       contextBudgetInvalid: string;
       contextFixedOverhead: string;
@@ -1139,6 +1140,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       providerRequestInvalid: "The selected AI provider rejected Flower's request format. Update Redeven and retry.",
       providerRequestFailed: "The model request could not be completed. Retry, or check the current model source if it keeps happening.",
       providerRequestRejected: "The selected AI provider rejected Flower's request. Check the diagnostic details and try again later.",
+      providerRequestTooLarge: 'This request exceeds the image or request-size limit. Original screenshots and completed actions are saved. Use fewer images or a cropped detail, then retry after changing the input or model.',
       modelGatewayContractFailed: 'The model source returned an incomplete tool call. No tool was run. Try again or choose another model.',
       repeatedToolCalls: "Repeated identical tool requests made no effective progress, so this turn was stopped. Confirmed results and completed child reports are preserved. Retry to continue from saved progress.",
       noProgress: "The agent made no progress, so this turn was stopped. Saved results are preserved. Add guidance or retry.",

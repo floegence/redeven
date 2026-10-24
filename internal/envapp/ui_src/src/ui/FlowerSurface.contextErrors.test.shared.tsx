@@ -65,6 +65,7 @@ describe('Flower provider failure recovery', () => {
   it.each([
     ['provider_request_invalid', 'request format', 'Retry reply'],
     ['provider_request_rejected', 'diagnostic details', 'Retry reply'],
+    ['provider_request_too_large', 'cropped detail', 'Configure'],
     ['provider_server_error', 'server error', 'Retry reply'],
     ['provider_rate_limited', 'try again later', 'Retry reply'],
     ['provider_upstream_rate_limited', 'shared capacity', 'Retry reply'],
@@ -87,6 +88,7 @@ describe('Flower provider failure recovery', () => {
       const card = surface.querySelector<HTMLElement>('.flower-error-card')!;
       expect(card.querySelector('.flower-error-message')?.textContent?.toLowerCase()).toContain(guidance);
       expect(card.textContent).not.toContain('raw provider text');
+      if (code === 'provider_request_too_large') expect(card.textContent).not.toContain('Retry reply');
       expect(card.querySelector('.flower-error-actions')?.textContent).toContain(action);
       expect(card.querySelector('a[href="https://chatgpt.com/settings/usage"]') !== null).toBe(code === 'chatgpt_usage_unavailable');
       expect(retryThread).not.toHaveBeenCalled();

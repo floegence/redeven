@@ -283,6 +283,7 @@ export const flowerSurfaceEnUS = {
     runErrorProviderRequestInvalid: "The selected AI provider rejected Flower's request format. Update Redeven and retry.",
     runErrorProviderRequestFailed: "The model request could not be completed. Retry, or check the current model source if it keeps happening.",
     runErrorProviderRequestRejected: "The selected AI provider rejected Flower's request. Check the diagnostic details and try again later.",
+    runErrorProviderRequestTooLarge: 'This request exceeds the image or request-size limit. Original screenshots and completed actions are saved. Use fewer images or a cropped detail, then retry after changing the input or model.',
     runErrorModelGatewayContractFailed: 'The model source returned an incomplete tool call. No tool was run. Try again or choose another model.',
     runContextErrorTitle: 'Model context limit',
     runErrorDetails: 'Technical details',

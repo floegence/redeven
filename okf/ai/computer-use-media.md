@@ -5,38 +5,39 @@ description: Resolve authenticated keyframes and bounded live samples into decod
 tags: [ai, computer-use, media, attachments]
 timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-23"
 ---
 # Summary
 
-Redeven owns screenshot bytes and authorized media resolution; Floret owns opaque
-attachment history and provider rendering. Flower displays saved screenshots inline and offers decoded pixels in a
-media-only Stage. Durable keyframes and ephemeral viewing samples have distinct
-lifetimes. A missing, changed or unauthorized reference fails explicitly and
-cannot fall back to an unrestricted image URL. Successful tool metadata alone
-does not prove the user can see a frame.
-
-Durable keyframes share one byte store and canonical retention entry point with
-[direct image reads](image-read-and-retention.md). Existing `computer://`
-references and their physical root remain unchanged. The media resolver owns
-membership authorization without a preceding product detail load.
+Redeven owns authorized screenshots; Floret owns history/preparation. Flower
+shows frames inline/in Stage. Durable frames and ephemeral samples have separate
+lifetimes; tool success does not prove delivery. Model encodings never replace original assets.
 
 # Contract
 
-Safe results return target identity, execution location, summary and safety. Semantic observations and script operations omit images unless explicitly requested.
-
-Unit or fixture results alone must not be presented as complete product qualification.
+- Missing, changed or unauthorized bytes fail explicitly. No unrestricted URL fallback.
+- [Image reads](image-read-and-retention.md) share immutable Computer storage;
+  computer:// identities and retention stay intact.
+- Safe results include target, location, summary and safety. Semantic/script
+  operations include images only when requested.
+- Floret prepares Computer PNGs >=256 KiB as smaller JPEG90 (Go 4:2:0).
+  Transparency, dimensions, originals, hashes and visible history stay intact.
+- Model notices report dimensions/bytes/encoding; image pixels differ from CSS coordinates.
+- Ordinary/summary/Retry/Fork share preparation before estimation/freezing.
+  Retries reuse bytes; encoding revisions invalidate provider state. Ordinary
+  image.read originals bypass compression.
+- Flower caps JSON/base64 at 32 MiB independently of tokens: product policy,
+  not a provider limit. Remote DTOs share the cap; services own final rendering.
+- Floret compacts complete tool pairs and retains causes. UI provides numeric
+  diagnostics and input/model guidance without unchanged Retry or secret payloads.
 
 # Boundaries
 
-The media viewer does not authorize target actions, own lifecycle state, or expose private takeover pixels to model history.
-
-Env App and Desktop share the pure path encoder; each host retains its existing authenticated transport and byte validation.
+The viewer owns no authorization/lifecycle/private takeover pixels. Both hosts
+share paths, not authentication. Fixtures do not establish product qualification.
 
 # Evidence
 
-- `redeven:internal/ai/computer_live_frames.go` - bounded observer-owned samples.
-
-- `redeven:internal/ai/computer_media.go` - host keyframe storage and validation.
-
-- `redeven:internal/flower_ui/host/computerFramePath.ts` - host-owned media route encoding without transport or authorization.
+- [Preparation](../../internal/ai/model_image_preparation.go)
+- [Media storage](../../internal/ai/computer_media.go)
+- [Viewer paths](../../internal/flower_ui/host/computerFramePath.ts)

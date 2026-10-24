@@ -121,3 +121,5 @@ A compact digest of updates from the last 30 days. Current contracts and evidenc
 
 - Make workspace ready independent of sidebar reads; consume body-free facts, bound root/child reading interests, and keep history failures local without retry loops.
 - Concepts: [live state](ui/flower-live-timeline.md), [startup presentation](architecture/flower-startup-presentation.md), [failure recovery](ui/flower-failure-recovery.md), [adapter ownership](ai/floret-redeven-adapter-and-projection.md)
+
+- 2026-10-23: Document model screenshot encoding, independent request byte budgets, safe capacity recovery and authorized fine-detail crops.
