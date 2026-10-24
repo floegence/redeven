@@ -3821,5 +3821,13 @@
     "corrupt": "Der gespeicherte Vorgang kann nicht gelesen werden. Prüfen Sie den aktuellen Weg, bevor Sie diesen lokalen Eintrag löschen.",
     "storageFailed": "Der Vorgang konnte nicht lokal gespeichert werden. Kein Wechsel wurde gestartet.",
     "reviewCurrent": "Lokalen Eintrag löschen"
+  },
+  "developmentCredentials": {
+    "title": "Entwicklungszugangsdaten entsperren",
+    "description": "Dieses Entwicklungsprofil enthält mit dem macOS-Schlüsselbund verschlüsselte Zugangsdaten. Migrieren Sie diese einmal zum privaten Profilschlüssel, um fortzufahren. Nur diese Aktion fordert eine Schlüsselbundfreigabe an; der Start von Desktop nicht. Bestehende Konten, Verbindungen und Laufzeitumgebung-Daten bleiben erhalten.",
+    "unavailable": "Die Zugangsdaten oder der Profilschlüssel können nicht gelesen werden. Stellen Sie die zusammengehörigen Schlüssel- und Zugangsdaten wieder her und starten Sie Desktop neu. Vorhandene Daten bleiben erhalten.",
+    "failed": "Die Zugangsdaten konnten nicht entsperrt werden. Vorhandene Daten bleiben erhalten. Versuchen Sie es erneut, wenn der Schlüsselbund verfügbar ist.",
+    "migrate": "Gespeicherte Zugangsdaten migrieren",
+    "quit": "Desktop beenden"
   }
 }

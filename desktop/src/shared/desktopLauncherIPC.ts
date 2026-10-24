@@ -264,6 +264,7 @@ export type DesktopLauncherActionKind =
   | 'delete_environment_registration'
   | 'cancel_launcher_operation'
   | 'dismiss_launcher_operation'
+  | 'migrate_development_credentials'
   | 'close_launcher_or_quit';
 
 export type DesktopWelcomeIssue = Readonly<{
@@ -467,6 +468,7 @@ export type DesktopEnvironmentEntry = Readonly<{
 }>;
 
 export type DesktopWelcomeSnapshot = Readonly<{
+  credential_recovery?: Readonly<{ can_migrate: boolean; failed: boolean }>;
   snapshot_revision?: number;
   snapshot_generation?: number;
   /** Explicit host navigation; ordinary snapshot refreshes do not change pages. */
@@ -914,6 +916,7 @@ export type DesktopLauncherActionRequest = Readonly<
       kind: 'dismiss_launcher_operation';
       operation_key: string;
     }
+  | { kind: 'migrate_development_credentials' }
   | {
       kind: 'close_launcher_or_quit';
     }
@@ -1263,6 +1266,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       const route_id = compact(input.route_id);
       return environment_id && route_id ? { kind, environment_id, route_id } : null;
     }
+    case 'migrate_development_credentials':
     case 'close_launcher_or_quit':
       return { kind };
     case 'open_flower':

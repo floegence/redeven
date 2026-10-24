@@ -64,6 +64,25 @@ async function mount(load: (request: { environment_id: string }) => Promise<Desk
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('environment card settings entry', () => {
+  it('transitions from credential recovery to the live launcher after explicit migration', async () => {
+    const normal = buildDesktopWelcomeSnapshot({ preferences: testDesktopPreferences({}) });
+    const h = await mount(async () => success, undefined, {
+      ...normal, credential_recovery: { can_migrate: true, failed: false },
+    });
+    expect(document.querySelector('[data-redeven-credential-recovery]')).not.toBeNull();
+    expect(h.performAction).not.toHaveBeenCalled();
+    button('Migrate saved credentials').click();
+    await settle();
+    expect(h.performAction).toHaveBeenCalledWith({ kind: 'migrate_development_credentials' });
+    h.publish(normal);
+    await settle();
+    expect(document.querySelector('[data-redeven-credential-recovery]')).toBeNull();
+    expect(document.body.textContent).toContain('Local Environment');
+    h.publish({ ...normal, environments: normal.environments.map(entry => ({ ...entry, label: 'Restored local environment' })) });
+    await settle();
+    expect(document.body.textContent).toContain('Restored local environment');
+  });
+
   it('retains a dirty settings opening across permission loss until explicit revalidation', async () => {
     const h = await mount(async () => success);
     button('Settings for Fixture SSH').click(); await settle();

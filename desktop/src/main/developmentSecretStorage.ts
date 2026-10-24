@@ -6,6 +6,26 @@ import { createSafeStorageSecretCodec, type DesktopSecretCodec, type SafeStorage
 
 const ENCODING = 'development_aes_256_gcm';
 
+export class DevelopmentSecretStorageError extends Error {
+  constructor(readonly canMigrate: boolean, options?: ErrorOptions) {
+    super(canMigrate ? 'Development credentials require migration' : 'Development credentials could not be read', options);
+  }
+}
+
+function readSecretFile(file: string): unknown {
+  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+}
+
+function hasLegacySecrets(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  if (Array.isArray(value)) return value.some(hasLegacySecrets);
+  const record = value as Record<string, unknown>;
+  return record.encoding === 'safe_storage' || Object.values(record).some(hasLegacySecrets);
+}
+
 function developmentKey(userDataRoot: string): Buffer {
   fs.mkdirSync(userDataRoot, { recursive: true, mode: 0o700 });
   const file = path.join(userDataRoot, 'development-secret-key-v1');
@@ -20,11 +40,8 @@ function developmentKey(userDataRoot: string): Buffer {
 }
 
 function migrateSecrets(file: string, codec: DesktopSecretCodec, legacy: DesktopSecretCodec): void {
-  let source: string;
-  try { source = fs.readFileSync(file, 'utf8'); } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
-    throw error;
-  }
+  const source = readSecretFile(file);
+  if (source === undefined) return;
   let changed = false;
   const migrate = (value: unknown): unknown => {
     if (Array.isArray(value)) return value.map(migrate);
@@ -35,7 +52,11 @@ function migrateSecrets(file: string, codec: DesktopSecretCodec, legacy: Desktop
       return record;
     }
     if (record.encoding === 'safe_storage' && typeof record.data === 'string') {
-      const secret = codec.encodeSecret(legacy.decodeSecret({ encoding: 'safe_storage', data: record.data }));
+      let value: string;
+      try { value = legacy.decodeSecret({ encoding: 'safe_storage', data: record.data }); } catch (error) {
+        throw new DevelopmentSecretStorageError(true, { cause: error });
+      }
+      const secret = codec.encodeSecret(value);
       changed = true;
       return secret;
     }
@@ -46,8 +67,8 @@ function migrateSecrets(file: string, codec: DesktopSecretCodec, legacy: Desktop
     return Object.fromEntries(Object.entries(record).map(([key, entry]) => [key, migrate(entry)]));
   };
   // Decrypt every record before replacing the file. A denied Keychain request
-  // must fail startup without letting preference recovery discard credentials.
-  const migrated = migrate(JSON.parse(source));
+  // must preserve the file without letting preference recovery discard credentials.
+  const migrated = migrate(source);
   if (!changed) return;
   const temporary = `${file}.${process.pid}.${randomBytes(8).toString('hex')}.tmp`;
   try {
@@ -64,9 +85,20 @@ export function createDesktopSecretCodec(options: {
   userDataRoot: string;
   stateRoot: string;
   safeStorage: SafeStorageLike;
+  migrateLegacy?: boolean;
 }): DesktopSecretCodec {
   const legacy = createSafeStorageSecretCodec(options.safeStorage);
   if (options.isPackaged || !options.developmentInstanceID?.trim()) return legacy;
+  const files = [
+    path.join(options.userDataRoot, 'desktop-secrets.json'),
+    path.join(options.stateRoot, 'local-environment/gateway/gateway-secrets.json'),
+    path.join(options.stateRoot, 'maintenance/environment-registration-migration.json'),
+  ];
+  // Scan before any decryption or mutation. Only an explicit launcher action may
+  // request system authorization; an old profile must still open a window.
+  if (!options.migrateLegacy && files.some(file => hasLegacySecrets(readSecretFile(file)))) {
+    throw new DevelopmentSecretStorageError(true);
+  }
   const key = developmentKey(options.userDataRoot);
   const codec: DesktopSecretCodec = {
     encodeSecret: value => {
@@ -84,8 +116,6 @@ export function createDesktopSecretCodec(options: {
       return Buffer.concat([decipher.update(encrypted.subarray(28)), decipher.final()]).toString('utf8');
     },
   };
-  migrateSecrets(path.join(options.userDataRoot, 'desktop-secrets.json'), codec, legacy);
-  migrateSecrets(path.join(options.stateRoot, 'local-environment/gateway/gateway-secrets.json'), codec, legacy);
-  migrateSecrets(path.join(options.stateRoot, 'maintenance/environment-registration-migration.json'), codec, legacy);
+  for (const file of files) migrateSecrets(file, codec, legacy);
   return codec;
 }

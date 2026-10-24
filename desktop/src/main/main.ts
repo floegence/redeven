@@ -39,7 +39,7 @@ import { runtimeExecutableFromArchive } from './runtimeArchive';
 import { REMOTE_DESKTOP_DEPLOYMENT_CHANNEL, REMOTE_DESKTOP_DEPLOYMENT_PROGRESS, parseDesktopDeploymentRequest } from '../shared/remoteDesktopDeployment';
 import { HOST_APPLICATION_COMPONENTS_CHANNEL, HOST_APPLICATION_COMPONENTS_PROGRESS, type HostApplicationComponentsRequest } from '../shared/hostApplicationComponents';
 import { desktopEnvironmentID } from './desktopPreferences';
-import { createDesktopSecretCodec } from './developmentSecretStorage';
+import { createDesktopSecretCodec, DevelopmentSecretStorageError } from './developmentSecretStorage';
 import { environmentSettingsFailure, withEnvironmentAccessOwner, buildEnvironmentAccessSnapshot, requireEnvironmentAccessHostAvailable, requireEnvironmentAccessCompatible, requireEnvironmentManagementAvailable, type EnvironmentAccessOwner } from './environmentAccessSettings';
 import { assertRuntimeFlowerCompatible } from '../shared/runtimeFlowerAccess';
 import { isRuntimeFlowerReadinessPath, runtimeFlowerPath, runtimeFlowerMethod, runtimeFlowerMethodAllowed } from './runtimeFlowerRoutes';
@@ -3383,14 +3383,24 @@ function preferencesPaths() {
 }
 
 let desktopSecretCodec: ReturnType<typeof createDesktopSecretCodec> | undefined;
-function preferencesCodec() {
-  return desktopSecretCodec ??= createDesktopSecretCodec({
-    isPackaged: app.isPackaged,
-    developmentInstanceID: process.env.REDEVEN_DESKTOP_DEV_INSTANCE_ID,
-    userDataRoot: app.getPath('userData'),
-    stateRoot: preferencesPaths().stateRoot,
-    safeStorage,
-  });
+let developmentCredentialRecovery: DesktopWelcomeSnapshot['credential_recovery'];
+function preferencesCodec(migrateLegacy = false) {
+  try {
+    return desktopSecretCodec ??= createDesktopSecretCodec({
+      isPackaged: app.isPackaged,
+      developmentInstanceID: process.env.REDEVEN_DESKTOP_DEV_INSTANCE_ID,
+      migrateLegacy,
+      userDataRoot: app.getPath('userData'),
+      stateRoot: preferencesPaths().stateRoot,
+      safeStorage,
+    });
+  } catch (error) {
+    if (error instanceof DevelopmentSecretStorageError) throw error;
+    if (!app.isPackaged && process.env.REDEVEN_DESKTOP_DEV_INSTANCE_ID?.trim()) {
+      throw new DevelopmentSecretStorageError(false, { cause: error });
+    }
+    throw error;
+  }
 }
 
 function desktopRedevenCloudOriginPolicy(): RedevenCloudOriginPolicy {
@@ -5285,6 +5295,16 @@ async function buildCurrentDesktopWelcomeSnapshot(
   kind: DesktopUtilityWindowKind,
   overrides: Partial<Pick<BuildDesktopWelcomeSnapshotArgs, 'entryReason' | 'issue'>> = {},
 ) {
+  if (developmentCredentialRecovery) {
+    return {
+      platform_capabilities: desktopPlatformCapabilities, wsl_discovery: null,
+      default_flower_runtime_target_id: null, surface: 'connect_environment' as const,
+      entry_reason: 'app_launch' as const, close_action: 'quit' as const,
+      open_windows: [], environments: [], gateway_sources: [], redeven_cloud_origins: [],
+      control_planes: [], action_progress: [], operations: [], suggested_remote_url: '',
+      issue: null, settings_environment_id: '', credential_recovery: developmentCredentialRecovery,
+    };
+  }
   const preferences = await loadDesktopPreferencesCached();
   const openSessions = openSessionSummaries();
   const reinstallDescriptors = directReinstallTargetDescriptors(preferences);
@@ -5980,6 +6000,7 @@ async function syncGatewayIfNeeded(record: GatewayRecord, options: Readonly<{ fo
 }
 
 async function syncVisibleGatewaysIfNeeded(options: Readonly<{ force?: boolean }> = {}): Promise<void> {
+  if (developmentCredentialRecovery) return;
   const launcher = liveUtilityWindow('launcher');
   if (!launcher || launcher.isDestroyed()) {
     updateGatewaySyncPoller();
@@ -9975,6 +9996,37 @@ async function openDesktopWelcomeWindow(options: OpenDesktopWelcomeOptions = {})
   await openUtilityWindow('launcher', options);
 }
 
+async function completeDesktopStartup(startupPreferences: DesktopPreferences): Promise<void> {
+  if (redevenCloudCleanupIssue) {
+    setLauncherViewState({
+      surface: 'connect_environment',
+      entryReason: 'app_launch',
+      issue: redevenCloudCleanupIssue,
+    });
+  }
+  if (desktopPlatformCapabilities.wsl_environment) {
+    await refreshDesktopWSLDiscovery();
+  }
+  await reinstallTargetCoordinator().discardUnstartedJournals();
+  const localRuntimeAutoStart = autoStartLocalRuntimeOnDesktopLaunch(startupPreferences);
+  if (pendingDesktopDeepLinks.length > 0) {
+    while (pendingDesktopDeepLinks.length > 0) {
+      const nextDeepLink = pendingDesktopDeepLinks.shift();
+      if (!nextDeepLink) {
+        continue;
+      }
+      await handleDesktopDeepLink(nextDeepLink);
+    }
+    if (openSessionSummaries().length <= 0 && !liveUtilityWindow('launcher')) {
+      await openDesktopWelcomeWindow({ entryReason: 'app_launch' });
+    }
+    await localRuntimeAutoStart;
+    return;
+  }
+  await openDesktopWelcomeWindow({ entryReason: 'app_launch' });
+  await localRuntimeAutoStart;
+}
+
 async function autoStartLocalRuntimeOnDesktopLaunch(loadedPreferences?: DesktopPreferences): Promise<void> {
   if (!desktopPlatformCapabilities.native_local_environment || !desktopAutoStartRuntimeEnabled()) {
     return;
@@ -13455,7 +13507,7 @@ function controlPlaneNeedsAutoSync(
 }
 
 function updateControlPlaneSyncPoller(): void {
-  const shouldPoll = Boolean(liveUtilityWindow('launcher'));
+  const shouldPoll = !developmentCredentialRecovery && Boolean(liveUtilityWindow('launcher'));
   if (!shouldPoll) {
     if (controlPlaneSyncPollTimer) {
       clearInterval(controlPlaneSyncPollTimer);
@@ -13472,7 +13524,7 @@ function updateControlPlaneSyncPoller(): void {
 }
 
 function updateGatewaySyncPoller(): void {
-  const shouldPoll = Boolean(liveUtilityWindow('launcher'));
+  const shouldPoll = !developmentCredentialRecovery && Boolean(liveUtilityWindow('launcher'));
   if (!shouldPoll) {
     if (gatewaySyncPollTimer) {
       clearInterval(gatewaySyncPollTimer);
@@ -13489,6 +13541,7 @@ function updateGatewaySyncPoller(): void {
 }
 
 async function syncVisibleControlPlanesIfNeeded(options: Readonly<{ force?: boolean }> = {}): Promise<void> {
+  if (developmentCredentialRecovery) return;
   const launcher = liveUtilityWindow('launcher');
   if (!launcher || launcher.isDestroyed()) {
     updateControlPlaneSyncPoller();
@@ -13624,6 +13677,7 @@ const welcomeRuntimePoller = new DesktopWelcomeRuntimePoller(
 );
 
 async function pollWelcomeRuntimeState(): Promise<void> {
+  if (developmentCredentialRecovery) return;
   const launcher = liveUtilityWindow('launcher');
   if (!launcher || launcher.isDestroyed()) {
     updateWelcomeRuntimePoller();
@@ -13633,7 +13687,7 @@ async function pollWelcomeRuntimeState(): Promise<void> {
 }
 
 function updateWelcomeRuntimePoller(): void {
-  const shouldPoll = Boolean(liveUtilityWindow('launcher'));
+  const shouldPoll = !developmentCredentialRecovery && Boolean(liveUtilityWindow('launcher'));
   if (!shouldPoll) {
     if (welcomeRuntimePollTimer) {
       clearInterval(welcomeRuntimePollTimer);
@@ -18706,7 +18760,34 @@ async function listRuntimeContainersFromLauncher(
 }
 
 async function performDesktopLauncherAction(request: DesktopLauncherActionRequest): Promise<DesktopLauncherActionResult> {
+  if (developmentCredentialRecovery && request.kind !== 'migrate_development_credentials' && request.kind !== 'close_launcher_or_quit') {
+    return launcherActionFailure('action_invalid', 'global', 'Development credentials require migration.');
+  }
   switch (request.kind) {
+    case 'migrate_development_credentials': {
+      if (!developmentCredentialRecovery?.can_migrate) {
+        return launcherActionFailure('action_invalid', 'global', 'Development credential migration is unavailable.');
+      }
+      let preferences: DesktopPreferences;
+      try {
+        preferencesCodec(true);
+        preferences = await loadDesktopPreferencesCached();
+      } catch (error) {
+        developmentCredentialRecovery = {
+          can_migrate: !(error instanceof DevelopmentSecretStorageError) || error.canMigrate,
+          failed: true,
+        };
+        broadcastDesktopWelcomeSnapshots();
+        return launcherActionFailure('action_invalid', 'global', 'Development credential migration failed. Existing credentials were preserved.');
+      }
+      developmentCredentialRecovery = undefined;
+      updateControlPlaneSyncPoller();
+      updateGatewaySyncPoller();
+      updateWelcomeRuntimePoller();
+      broadcastDesktopWelcomeSnapshots();
+      await completeDesktopStartup(preferences);
+      return launcherActionSuccess('saved_environment');
+    }
     case 'open_local_environment':
       return openLocalEnvironmentFromLauncher(request);
     case 'open_remote_environment':
@@ -19395,7 +19476,7 @@ function queueDesktopDeepLink(rawURL: string): void {
     return;
   }
   pendingDesktopDeepLinks.push(clean);
-  if (!app.isReady()) {
+  if (!app.isReady() || developmentCredentialRecovery) {
     return;
   }
   const nextURL = pendingDesktopDeepLinks.shift();
@@ -19876,6 +19957,10 @@ if (!app.requestSingleInstanceLock()) {
         'global',
         'Desktop could not understand that action.',
       );
+    }
+    if (normalized.kind === 'migrate_development_credentials'
+      && (utilityWindowKindByWebContentsID.get(_event.sender.id) !== 'launcher' || _event.senderFrame !== _event.sender.mainFrame)) {
+      return launcherActionFailure('action_invalid', 'global', 'Credential migration requires the launcher.');
     }
     try {
       const result = await performDesktopLauncherAction(normalized);
@@ -20361,35 +20446,14 @@ if (!app.requestSingleInstanceLock()) {
       }
       await fs.rm(path.join(preferencesPaths().stateRoot, 'maintenance', 'gateway-environment-migration.json'), { force: true });
       const startupPreferences = await loadDesktopPreferencesCached();
-      if (redevenCloudCleanupIssue) {
-        setLauncherViewState({
-          surface: 'connect_environment',
-          entryReason: 'app_launch',
-          issue: redevenCloudCleanupIssue,
-        });
-      }
-      if (desktopPlatformCapabilities.wsl_environment) {
-        await refreshDesktopWSLDiscovery();
-      }
-      await reinstallTargetCoordinator().discardUnstartedJournals();
-      const localRuntimeAutoStart = autoStartLocalRuntimeOnDesktopLaunch(startupPreferences);
-      if (pendingDesktopDeepLinks.length > 0) {
-        while (pendingDesktopDeepLinks.length > 0) {
-          const nextDeepLink = pendingDesktopDeepLinks.shift();
-          if (!nextDeepLink) {
-            continue;
-          }
-          await handleDesktopDeepLink(nextDeepLink);
-        }
-        if (openSessionSummaries().length <= 0 && !liveUtilityWindow('launcher')) {
-          await openDesktopWelcomeWindow({ entryReason: 'app_launch' });
-        }
-        await localRuntimeAutoStart;
+      await completeDesktopStartup(startupPreferences);
+    } catch (error) {
+      if (error instanceof DevelopmentSecretStorageError) {
+        developmentCredentialRecovery = { can_migrate: error.canMigrate, failed: !error.canMigrate };
+        console.error('[redeven:desktop-startup] Development credentials are unavailable; existing data is preserved.', error);
+        await openDesktopWelcomeWindow({ entryReason: 'app_launch' });
         return;
       }
-      await openDesktopWelcomeWindow({ entryReason: 'app_launch' });
-      await localRuntimeAutoStart;
-    } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       dialog.showErrorBox('Redeven Desktop failed to start', message || 'Unknown startup error.');
       requestImmediateQuit();

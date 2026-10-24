@@ -3822,5 +3822,13 @@
     "corrupt": "L’opération enregistrée est illisible. Vérifiez le chemin actuel avant d’effacer cet enregistrement local.",
     "storageFailed": "L’opération n’a pas pu être enregistrée localement. Aucun changement n’a commencé.",
     "reviewCurrent": "Effacer l’enregistrement local"
+  },
+  "developmentCredentials": {
+    "title": "Déverrouiller les identifiants de développement",
+    "description": "Ce profil de développement contient des identifiants chiffrés par le trousseau macOS. Migrez-les une fois vers la clé privée du profil pour continuer. Seule cette action demande une autorisation du trousseau ; le lancement de Desktop ne la demande pas. Les comptes, connexions et données environnement d’exécution existants sont conservés.",
+    "unavailable": "Impossible de lire le fichier des identifiants ou la clé du profil. Restaurez la clé et les fichiers correspondants, puis redémarrez Desktop. Les données existantes sont conservées.",
+    "failed": "Impossible de déverrouiller les identifiants. Les données existantes sont conservées. Réessayez lorsque le trousseau est accessible.",
+    "migrate": "Migrer les identifiants enregistrés",
+    "quit": "Quitter Desktop"
   }
 }

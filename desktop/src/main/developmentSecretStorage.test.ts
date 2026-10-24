@@ -48,12 +48,49 @@ describe('development secret storage', () => {
     expect(() => codec.encodeSecret('test')).toThrow('Keychain access requested');
   });
 
+  it('requires an explicit migration action before accessing legacy Keychain credentials', () => {
+    const options = fixture();
+    const file = path.join(options.userDataRoot, 'desktop-secrets.json');
+    writeJSON(file, { credential: { encoding: 'safe_storage', data: 'legacy' } });
+    const original = fs.readFileSync(file, 'utf8');
+    expect(() => createDesktopSecretCodec(options)).toThrow('Development credentials require migration');
+    expect(options.safeStorage.isEncryptionAvailable).not.toHaveBeenCalled();
+    expect(fs.readFileSync(file, 'utf8')).toBe(original);
+  });
+
+  it.each(['desktop', 'gateway', 'journal'])('scans %s credentials before decrypting or creating a key', location => {
+    const options = fixture();
+    const file = location === 'desktop' ? path.join(options.userDataRoot, 'desktop-secrets.json')
+      : path.join(options.stateRoot, location === 'gateway' ? 'local-environment/gateway/gateway-secrets.json' : 'maintenance/environment-registration-migration.json');
+    writeJSON(file, { nested: [{ encoding: 'safe_storage', data: 'legacy' }] });
+    const original = fs.readFileSync(file, 'utf8');
+    expect(() => createDesktopSecretCodec(options)).toThrow('Development credentials require migration');
+    expect(options.safeStorage.isEncryptionAvailable).not.toHaveBeenCalled();
+    expect(fs.existsSync(path.join(options.userDataRoot, 'development-secret-key-v1'))).toBe(false);
+    expect(fs.readFileSync(file, 'utf8')).toBe(original);
+  });
+
+  it('retains a denied migration and resumes it explicitly without prompting on later launches', () => {
+    const options = fixture();
+    const file = path.join(options.userDataRoot, 'desktop-secrets.json');
+    writeJSON(file, { credential: { encoding: 'safe_storage', data: Buffer.from('retained').toString('base64') } });
+    const original = fs.readFileSync(file, 'utf8');
+    expect(() => createDesktopSecretCodec({ ...options, migrateLegacy: true })).toThrow('Development credentials require migration');
+    expect(fs.readFileSync(file, 'utf8')).toBe(original);
+    options.safeStorage.isEncryptionAvailable.mockReturnValue(true);
+    createDesktopSecretCodec({ ...options, migrateLegacy: true });
+    options.safeStorage.isEncryptionAvailable.mockImplementation(() => { throw new Error('Unexpected Keychain access'); });
+    const stored = JSON.parse(fs.readFileSync(file, 'utf8')).credential;
+    for (let launch = 0; launch < 3; launch++) expect(createDesktopSecretCodec(options).decodeSecret(stored)).toBe('retained');
+    expect(options.safeStorage.decryptString).toHaveBeenCalledTimes(1);
+  });
+
   it('migrates Desktop and Gateway secrets once and preserves unrelated fields', () => {
     const options = fixture();
     options.safeStorage.isEncryptionAvailable.mockImplementation(() => true);
     const files = [path.join(options.userDataRoot, 'desktop-secrets.json'), path.join(options.stateRoot, 'local-environment/gateway/gateway-secrets.json')];
     for (const file of files) writeJSON(file, { version: 5, secrets: { retained: 7, credential: { encoding: 'safe_storage', data: Buffer.from('legacy-test').toString('base64') } } });
-    const codec = createDesktopSecretCodec(options);
+    const codec = createDesktopSecretCodec({ ...options, migrateLegacy: true });
     for (const file of files) {
       const data = JSON.parse(fs.readFileSync(file, 'utf8'));
       expect(data.version).toBe(5);
@@ -72,7 +109,7 @@ describe('development secret storage', () => {
     const file = path.join(options.userDataRoot, 'desktop-secrets.json');
     writeJSON(file, { credential: { encoding: 'safe_storage', data: 'legacy' } });
     const original = fs.readFileSync(file, 'utf8');
-    expect(() => createDesktopSecretCodec(options)).toThrow('Keychain access requested');
+    expect(() => createDesktopSecretCodec({ ...options, migrateLegacy: true })).toThrow('Development credentials require migration');
     expect(fs.readFileSync(file, 'utf8')).toBe(original);
     expect(fs.readdirSync(options.userDataRoot).filter(name => name.endsWith('.tmp'))).toEqual([]);
   });
@@ -84,7 +121,7 @@ describe('development secret storage', () => {
     const file = path.join(options.userDataRoot, 'desktop-secrets.json');
     writeJSON(file, { secrets: [ { encoding: 'safe_storage', data: 'first' }, { encoding: 'safe_storage', data: 'second' } ] });
     const original = fs.readFileSync(file, 'utf8');
-    expect(() => createDesktopSecretCodec(options)).toThrow('Decryption denied');
+    expect(() => createDesktopSecretCodec({ ...options, migrateLegacy: true })).toThrow('Development credentials require migration');
     expect(fs.readFileSync(file, 'utf8')).toBe(original);
   });
 

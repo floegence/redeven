@@ -3822,5 +3822,13 @@
     "corrupt": "Não foi possível ler a operação salva. Revise a rota atual antes de apagar este registro local.",
     "storageFailed": "Não foi possível salvar a operação localmente. Nenhuma alteração de rota foi iniciada.",
     "reviewCurrent": "Apagar registro local"
+  },
+  "developmentCredentials": {
+    "title": "Desbloquear credenciais de desenvolvimento",
+    "description": "Este perfil de desenvolvimento contém credenciais criptografadas pelas Chaves do macOS. Migre-as uma vez para a chave privada do perfil para continuar. Somente esta ação solicita autorização das Chaves; iniciar o Desktop não solicita. Contas, conexões e dados do ambiente de execução existentes são preservados.",
+    "unavailable": "Não foi possível ler o arquivo de credenciais ou a chave do perfil. Restaure a chave e os arquivos correspondentes e reinicie o Desktop. Os dados existentes foram preservados.",
+    "failed": "Não foi possível desbloquear as credenciais. Os dados existentes foram preservados. Tente novamente quando o acesso às Chaves estiver disponível.",
+    "migrate": "Migrar credenciais salvas",
+    "quit": "Sair do Desktop"
   }
 }
