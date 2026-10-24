@@ -146,6 +146,21 @@ func (p *openAIProvider) prepareTurn(ctx context.Context, req ModelGatewayReques
 			return nil, errors.New("provider state forbidden by request reuse policy")
 		}
 	}
+	if p.providerType == "kimi_code" {
+		model, ok := config.AIModelCatalogEntry("kimi_code", req.Model)
+		if !ok {
+			return nil, fmt.Errorf("unknown Kimi Code model %q", req.Model)
+		}
+		if req.Protocol != "" && req.Protocol != "openai-responses" {
+			return nil, errors.New("Kimi Code requires native Responses")
+		}
+		if req.PreviousState != nil {
+			return nil, errors.New("Kimi Code requires complete canonical history")
+		}
+		// Subscription model identity and thinking behavior must not be silently
+		// changed by custom metadata or the service's unknown-model fallback.
+		req.ProviderControls.ReasoningCapability = model.ReasoningCapability
+	}
 	useChat := p.forceChat
 	switch req.Protocol {
 	case "":
@@ -181,10 +196,10 @@ func (p *openAIProvider) prepareTurn(ctx context.Context, req ModelGatewayReques
 	if req.Budgets.MaxOutputToken > 0 {
 		params.MaxOutputTokens = openai.Int(int64(req.Budgets.MaxOutputToken))
 	}
-	if req.ProviderControls.Temperature != nil {
+	if req.ProviderControls.Temperature != nil && p.providerType != "kimi_code" {
 		params.Temperature = openai.Float(*req.ProviderControls.Temperature)
 	}
-	if req.ProviderControls.TopP != nil {
+	if req.ProviderControls.TopP != nil && p.providerType != "kimi_code" {
 		params.TopP = openai.Float(*req.ProviderControls.TopP)
 	}
 	if state := req.PreviousState; state != nil && !p.chatGPT && p.responsesContinuation && (req.ReusePolicy == nil || req.ReusePolicy.PreferContinuation) {
@@ -214,7 +229,7 @@ func (p *openAIProvider) prepareTurn(ctx context.Context, req ModelGatewayReques
 	if err != nil {
 		return nil, err
 	}
-	inputItems, instructions, err := buildOpenAIInput(req.Messages, aliases)
+	inputItems, instructions, err := buildOpenAIResponsesInput(req.Messages, aliases, p.providerType == "kimi_code")
 	if err != nil {
 		return nil, err
 	}
@@ -593,7 +608,7 @@ func (p *openAIProvider) streamResponsesTurn(ctx context.Context, aliases provid
 	}
 	result.Usage = usage
 	result.ResponseID = completed.ID
-	if rid := strings.TrimSpace(completed.ID); rid != "" {
+	if rid := strings.TrimSpace(completed.ID); rid != "" && p.providerType != "kimi_code" {
 		result.RawProviderDiag["response_id"] = rid
 		result.ProviderState = &ModelGatewayState{
 			Kind: providerContinuationKindOpenAIResponses,
@@ -1037,10 +1052,10 @@ func (p *moonshotProvider) prepareTurn(ctx context.Context, req ModelGatewayRequ
 			params.MaxTokens = openai.Int(int64(req.Budgets.MaxOutputToken))
 		}
 	}
-	if req.ProviderControls.Temperature != nil {
+	if req.ProviderControls.Temperature != nil && !strings.HasPrefix(req.Model, "kimi-k3") {
 		params.Temperature = openai.Float(*req.ProviderControls.Temperature)
 	}
-	if req.ProviderControls.TopP != nil {
+	if req.ProviderControls.TopP != nil && !strings.HasPrefix(req.Model, "kimi-k3") {
 		params.TopP = openai.Float(*req.ProviderControls.TopP)
 	}
 	switch strings.ToLower(strings.TrimSpace(req.ProviderControls.ResponseFormat)) {
@@ -1302,10 +1317,10 @@ func (p *moonshotProvider) Turn(ctx context.Context, req ModelGatewayRequest) (M
 			params.MaxTokens = openai.Int(int64(req.Budgets.MaxOutputToken))
 		}
 	}
-	if req.ProviderControls.Temperature != nil {
+	if req.ProviderControls.Temperature != nil && !strings.HasPrefix(req.Model, "kimi-k3") {
 		params.Temperature = openai.Float(*req.ProviderControls.Temperature)
 	}
-	if req.ProviderControls.TopP != nil {
+	if req.ProviderControls.TopP != nil && !strings.HasPrefix(req.Model, "kimi-k3") {
 		params.TopP = openai.Float(*req.ProviderControls.TopP)
 	}
 	switch strings.ToLower(strings.TrimSpace(req.ProviderControls.ResponseFormat)) {
@@ -1895,6 +1910,10 @@ func buildOpenAITools(defs []ToolDef, strict bool, aliases providerToolAliases) 
 }
 
 func buildOpenAIInput(messages []Message, aliases providerToolAliases) (oresponses.ResponseInputParam, string, error) {
+	return buildOpenAIResponsesInput(messages, aliases, false)
+}
+
+func buildOpenAIResponsesInput(messages []Message, aliases providerToolAliases, replayReasoning bool) (oresponses.ResponseInputParam, string, error) {
 	items := make(oresponses.ResponseInputParam, 0, len(messages)+2)
 	instructions := ""
 	for _, msg := range messages {
@@ -1939,6 +1958,21 @@ func buildOpenAIInput(messages []Message, aliases providerToolAliases) (orespons
 				})
 			}
 		case "assistant":
+			if replayReasoning {
+				var reasoning strings.Builder
+				for _, part := range msg.Content {
+					if part.Type == "reasoning" {
+						reasoning.WriteString(part.Text)
+					}
+				}
+				if reasoning.Len() > 0 {
+					item := oresponses.ResponseInputItemParamOfReasoning("", []oresponses.ResponseReasoningItemSummaryParam{{Text: reasoning.String()}})
+					// Kimi accepts reasoning without an ID; canonical prose has no
+					// provider item identity to invent or persist.
+					item.OfReasoning.SetExtraFields(map[string]any{"id": param.Omit})
+					items = append(items, item)
+				}
+			}
 			handledAssistantPart := false
 			appendFunctionCall := func(part ContentPart) {
 				callID := strings.TrimSpace(part.ToolCallID)
@@ -2642,7 +2676,7 @@ func (r *run) supportsModelGatewayProvider(provider *config.AIProvider) bool {
 		return false
 	}
 	switch strings.ToLower(strings.TrimSpace(provider.Type)) {
-	case "openai", "anthropic", "google", "moonshot", "chatglm", "deepseek", "qwen", "openrouter", "xai", "groq", "ollama", "openai_compatible", "redeven_platform", DesktopModelSourceProviderType:
+	case "openai", "anthropic", "google", "moonshot", "kimi_code", "chatglm", "deepseek", "qwen", "openrouter", "xai", "groq", "ollama", "openai_compatible", "redeven_platform", DesktopModelSourceProviderType:
 		return true
 	default:
 		return false
@@ -2660,8 +2694,11 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 		parallelTools = parallelToolCallsOverride[0]
 	}
 	switch providerType {
-	case "openai":
+	case "openai", "kimi_code":
 		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey)), ooption.WithMaxRetries(0)}
+		if providerType == "kimi_code" {
+			opts = append(opts, ooption.WithHeader("User-Agent", "Redeven"))
+		}
 		if strings.TrimSpace(baseURL) != "" {
 			opts = append(opts, ooption.WithBaseURL(strings.TrimSpace(baseURL)))
 		}
@@ -2796,8 +2833,8 @@ func shouldUseStrictOpenAIToolSchema(providerType string, baseURL string) bool {
 		// Compatible endpoints vary widely in strict function schema support; disable strict mode by default.
 		return false
 	}
-	if providerType == "moonshot" {
-		// Moonshot uses a chat-completions-compatible endpoint; strict schema is not guaranteed.
+	if providerType == "moonshot" || providerType == "kimi_code" {
+		// Kimi endpoints do not guarantee strict JSON schema enforcement.
 		return false
 	}
 	if providerType != "openai" {

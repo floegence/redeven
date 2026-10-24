@@ -5,45 +5,30 @@ description: Configure provider access before choosing models, with stable navig
 tags: [ai, flower, settings, authentication]
 timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-24"
 ---
 # Summary
 
-One shared Flower provider dialog owns provider configuration in Desktop,
-embedded Flower and global Env settings; hosts own admission and persistence.
-Users choose a provider, supply required connection access, and then configure
-models. Unready ChatGPT authorization exposes connection actions only. Provider
-navigation, authentication selection, and model rows retain stable geometry and
-focus. Failed authorization or discovery keeps recovery actions visible and must
-not apply responses from a changed provider or trusted connection.
+One shared Flower dialog configures Desktop, embedded Flower and Env settings. Hosts own admission/persistence. Choose a provider, establish access, then configure models. Navigation, authentication and model rows retain geometry/focus. Failed authorization/discovery preserves recovery actions; stale connection responses never apply.
 
 # Contract
 
-## Search preferences
-Provider and model search switches use backend policies from the model directory. Both must be on; model preferences remain editable while provider search is off.
+## Connection setup
+Creation shows a compact provider picker beside its configuration pane. Endpoint fields stay flat; ChatGPT has one bounded connection panel and exposes connection actions until ready. OpenAI supports API keys or verified local ChatGPT accounts; account registration and model selection remain independent. Host permissions are unchanged.
 
-Failure and manual retry behavior follows [Flower failure recovery](flower-failure-recovery.md).
+## Search
+Both provider and model switches must be on. Model preferences stay editable when provider search is off; policies come from the backend directory. See [failure recovery](flower-failure-recovery.md) for retry behavior.
 
-## Layout and connection readiness
-Provider creation in the shared Flower dialog places a compact provider picker beside one configuration pane.
-
-ChatGPT uses one bounded connection panel; endpoint fields remain flat.
-
-Host permission checks and persistence remain unchanged.
-
-## OpenAI authentication
-OpenAI connections offer API keys and verified local ChatGPT accounts. Provider configuration and model selection remain explicit and independent of account registration.
+## Kimi Code
+Separate from Moonshot: supply a personal subscription key, choose China/global service and select reviewed models. Custom model/wire-ID edits are unavailable to prevent silent provider fallback. Localized guidance covers shared quota, Extra Usage charges, plan/context limits and new conversations for family changes. Official key/usage and model-doc links stay visible.
 
 # Boundaries
 
-Saved API and Brave credentials appear as a fixed-length dot placeholder in both editors. The input value contains only the new credential draft; the saved secret and its length never enter the browser.
-
-The nullable credential patch still means remove, while omitted or blank replacement drafts preserve saved secrets; catalog synchronization never selects newly discovered models automatically.
+Saved API/Brave keys use fixed-length dot placeholders; only replacement drafts enter inputs. Null removes a key; omitted/blank patches preserve it. Catalog synchronization never selects additions automatically.
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/settings/FlowerProviderDialog.tsx` - Shared provider selection, credential readiness, authentication actions, and catalog ownership.
-
-- `redeven:internal/envapp/ui_src/src/ui/pages/settings/FlowerProviderDialog.test.tsx` - Default and custom API endpoints across create/edit flows and authentication switches.
-
-- `redeven:internal/envapp/ui_src/src/ui/pages/settings/sections/FlowerSection.tsx` - Global Env admission, shared dialog integration and atomic provider/credential saves.
+- redeven:internal/flower_ui/src/settings/FlowerProviderDialog.tsx - Shared settings/credential readiness.
+- redeven:internal/envapp/ui_src/src/ui/pages/settings/FlowerProviderDialog.test.tsx - Create/edit endpoint and authentication behavior.
+- redeven:internal/envapp/ui_src/src/ui/pages/settings/sections/FlowerSection.tsx - Atomic profile/credential saves.
+- redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.kimiCode.browser.test.tsx - Responsive region/model selection and key preservation.

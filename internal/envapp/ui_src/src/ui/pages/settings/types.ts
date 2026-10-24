@@ -16,7 +16,7 @@ export type PermissionPolicy = Readonly<{
   by_app?: Record<string, PermissionSet>;
 }>;
 
-export type AIProviderType = 'openai' | 'anthropic' | 'google' | 'moonshot' | 'chatglm' | 'deepseek' | 'qwen' | 'openrouter' | 'xai' | 'groq' | 'ollama' | 'openai_compatible';
+export type AIProviderType = 'openai' | 'anthropic' | 'google' | 'moonshot' | 'kimi_code' | 'chatglm' | 'deepseek' | 'qwen' | 'openrouter' | 'xai' | 'groq' | 'ollama' | 'openai_compatible';
 
 export type AIProviderModel = FlowerProviderModel;
 

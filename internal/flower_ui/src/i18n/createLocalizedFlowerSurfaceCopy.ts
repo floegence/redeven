@@ -1,3 +1,4 @@
+import { kimiCodeCopy } from '../settings/kimiCodeCopy';
 import { localizedComputerCopy } from '../computerUseCopy';
 import { extensionI18n } from '../extensions/context';
 import { createLocalizedReasoningControlCopy } from './reasoningControlMessages';
@@ -1156,6 +1157,7 @@ function createLocalizedFlowerProviderDialogCopy(i18n: FlowerSurfaceTranslator):
       signOutImpact: (connections, tasks) => t(i18n, k('dialogChatGPTSignOutImpact'), { connections, tasks }),
     },
     catalog: modelCatalogCopy(i18n.locale),
+    kimiCode: kimiCodeCopy(i18n.locale),
     addTitle: t(i18n, k('dialogAddTitle')),
     editTitle: t(i18n, k('dialogEditTitle')),
     discard: t(i18n, k('dialogDiscard')),
@@ -1172,6 +1174,7 @@ function createLocalizedFlowerProviderDialogCopy(i18n: FlowerSurfaceTranslator):
       google: t(i18n, k('dialogNativeConnection')),
       anthropic: t(i18n, k('dialogNativeConnection')),
       moonshot: t(i18n, k('dialogNativeConnection')),
+      kimi_code: kimiCodeCopy(i18n.locale).subscription,
       chatglm: t(i18n, k('dialogNativeConnection')),
       deepseek: t(i18n, k('dialogNativeConnection')),
       qwen: t(i18n, k('dialogNativeConnection')),

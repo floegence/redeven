@@ -74,7 +74,7 @@ func (d providerFailureDiagnostic) sanitized() providerFailureDiagnostic {
 	}
 	d.Attempt = d.Attempt.sanitized()
 	switch d.Provider {
-	case "openai", "chatgpt", "openai_compatible", "openrouter", "xai", "groq", "ollama", "google", "chatglm", "qwen", "moonshot", "deepseek", "anthropic":
+	case "openai", "chatgpt", "openai_compatible", "openrouter", "xai", "groq", "ollama", "google", "chatglm", "qwen", "moonshot", "kimi_code", "deepseek", "anthropic":
 	default:
 		d.Provider = "unknown"
 	}
@@ -482,6 +482,22 @@ func responseRetryAdvice(d providerFailureDiagnostic, response *http.Response) f
 		}
 	}
 	advice := flprovider.HTTPRetryAdvice(d.failureStatus(), d.Code, headers, received)
+	// Kimi uses 429 for exhausted subscription quotas and policy restrictions,
+	// as well as transient load. Only documented account-limit messages stop retries.
+	if d.Provider == "kimi_code" && d.failureStatus() == http.StatusTooManyRequests {
+		message := strings.ToLower(d.Message)
+		for _, prefix := range []string{
+			"you've reached your 5-hour usage limit", "you've reached your weekly (7-day) usage limit",
+			"you've reached your monthly usage limit", "you've reached your concurrent request limit",
+			"your credit balance is insufficient", "your organization's extra usage balance has run out",
+			"you've reached the extra usage limit",
+		} {
+			if strings.HasPrefix(message, prefix) {
+				advice.Category = flprovider.RetryPermanent
+				break
+			}
+		}
+	}
 	if d.Provider == "chatgpt" {
 		code := strings.ToLower(strings.TrimSpace(d.Code))
 		switch {

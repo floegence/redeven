@@ -29,6 +29,7 @@ func TestProductionProvidersPreservePairedToolImagesAndNativeBudget(t *testing.T
 	uri := "data:image/png;base64," + base64.StdEncoding.EncodeToString(data)
 	for _, tc := range []struct{ provider, model string }{
 		{"openai", "gpt-5-mini"},
+		{"kimi_code", "k3.1-pro"},
 		{"openai_compatible", "gpt-4o"},
 		{"anthropic", "claude-sonnet"},
 		{"deepseek", "deepseek-v4-flash-vision-exp"},
@@ -116,7 +117,7 @@ func TestProductionProvidersPreservePairedToolImagesAndNativeBudget(t *testing.T
 				t.Fatal(err)
 			}
 			switch tc.provider {
-			case "openai", "deepseek":
+			case "openai", "kimi_code", "deepseek":
 				outputs := 0
 				for _, item := range body.Input {
 					if item["type"] != "function_call_output" {

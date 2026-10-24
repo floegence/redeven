@@ -808,6 +808,16 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                       </Show>
                     </div>
                   </Show>
+                  <Show when={store.draft!.type === 'kimi_code'}>
+                    <div class="space-y-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground" role="note">
+                      <p>{copy().kimiCode.notice}</p>
+                      <p>{copy().kimiCode.context}</p>
+                      <div class="flex flex-wrap gap-3">
+                        <a class="inline-flex items-center gap-1 text-primary hover:underline" href="https://www.kimi.com/code/console" target="_blank" rel="noopener noreferrer">{copy().kimiCode.console}<ExternalLink class="h-3 w-3" aria-hidden="true" /></a>
+                        <a class="inline-flex items-center gap-1 text-primary hover:underline" href="https://www.kimi.com/code/docs/kimi-code/models.html" target="_blank" rel="noopener noreferrer">{copy().kimiCode.guide}<ExternalLink class="h-3 w-3" aria-hidden="true" /></a>
+                      </div>
+                    </div>
+                  </Show>
                   <div class="flower-provider-connection-fields">
                     <Show when={!chatGPTSelected()}>
                       <div>
@@ -833,7 +843,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                       </div>
                       <div>
                         <FlowerFieldLabel hint={flowerProviderTypeRequiresBaseURL(store.draft!.type) ? copy().required : undefined}>{copy().baseURL}</FlowerFieldLabel>
-                        <Input
+                        <Show when={store.draft!.type === 'kimi_code'} fallback={<Input
                           value={store.draft!.base_url ?? ''}
                           onInput={(event) => updateProvider({ base_url: event.currentTarget.value })}
                           onBlur={finishConnectionInput}
@@ -841,7 +851,15 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                           aria-label={copy().baseURL}
                           size="sm"
                           class="w-full"
-                        />
+                        />}>
+                          <select value={store.draft!.base_url?.replace(/\/+$/, '') || defaultBaseURLForFlowerProviderType('kimi_code')}
+                            class="h-8 w-full cursor-pointer rounded border border-input bg-background px-2.5 text-[length:var(--floe-type-control)] shadow-sm disabled:cursor-not-allowed"
+                            aria-label={copy().baseURL} disabled={props.disabled || props.saving}
+                            onChange={event => updateProvider({ base_url: event.currentTarget.value })}>
+                            <option value="https://api.kimi.com/coding/v1">{copy().kimiCode.china}</option>
+                            <option value="https://api.kimi.ai/coding/v1">{copy().kimiCode.global}</option>
+                          </select>
+                        </Show>
                       </div>
                       <Show when={store.draft!.type === 'openai'}>
                         <div class="space-y-1.5">
@@ -992,11 +1010,11 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                   <div class="grid grid-cols-1 gap-3 md:grid-cols-4">
                                     <div class="md:col-span-2">
                                       <FlowerFieldLabel>{copy().modelName}</FlowerFieldLabel>
-                                      <Input value={model().model_name} onInput={(event) => { if (modelIndex() >= 0) updateModel(modelIndex(), { model_name: event.currentTarget.value }); }} placeholder="model-name" size="sm" class="w-full font-mono" />
+                                      <Input disabled={store.draft?.type === 'kimi_code'} value={model().model_name} onInput={(event) => { if (modelIndex() >= 0) updateModel(modelIndex(), { model_name: event.currentTarget.value }); }} placeholder="model-name" size="sm" class="w-full font-mono" />
                                     </div>
                                     <div class="md:col-span-2">
                                       <FlowerFieldLabel>{copy().providerModelID}</FlowerFieldLabel>
-                                      <Input disabled={chatGPTSelected() || store.draft?.type === 'ollama'} value={model().wire_model_name ?? ''} onInput={(event) => { if (modelIndex() >= 0) updateModel(modelIndex(), { wire_model_name: event.currentTarget.value || undefined }); }} placeholder={modelName()} size="sm" class="w-full font-mono" />
+                                      <Input disabled={chatGPTSelected() || store.draft?.type === 'ollama' || store.draft?.type === 'kimi_code'} value={model().wire_model_name ?? ''} onInput={(event) => { if (modelIndex() >= 0) updateModel(modelIndex(), { wire_model_name: event.currentTarget.value || undefined }); }} placeholder={modelName()} size="sm" class="w-full font-mono" />
                                     </div>
                                     <div>
                                       <FlowerFieldLabel hint={flowerModelNeedsConfiguration(model()) ? copy().required : undefined}>{copy().contextWindow}</FlowerFieldLabel>

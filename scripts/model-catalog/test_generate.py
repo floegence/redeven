@@ -44,6 +44,32 @@ class SearchDeclarationTests(unittest.TestCase):
         self.assertFalse(any(key.startswith('deepseek/') for key in generated['web_search']))
         self.assertEqual(generated['web_search']['qwen/qwen3.6-plus-2026-04-02']['status'], 'supported')
 
+    def test_scoped_refresh_preserves_other_reviews_and_tracks_provenance(self):
+        incoming = copy.deepcopy(self.data)
+        incoming['sha256'] = 'refreshed-source'
+        incoming['providers']['openai'] = {}
+        incoming['providers']['moonshot']['future-kimi'] = {'id': 'future-kimi'}
+        actual = generator.refresh_providers(self.data, incoming, ['moonshot', 'kimi_code'])
+        self.assertEqual(actual['providers']['openai'], self.data['providers']['openai'])
+        self.assertEqual(actual['sha256'], self.data['sha256'])
+        self.assertIn('future-kimi', actual['providers']['moonshot'])
+        self.assertNotIn('future-kimi', self.data['providers']['moonshot'])
+        self.assertEqual(actual['provider_sources']['moonshot']['sha256'], 'refreshed-source')
+        actual['providers']['moonshot']['future-kimi']['id'] = 'changed'
+        self.assertEqual(incoming['providers']['moonshot']['future-kimi']['id'], 'future-kimi')
+
+    def test_kimi_review_dates_and_subscription_limits(self):
+        actual = generator.generate(self.data, self.rules)
+        self.assertEqual(actual['provider_sources'], self.data['provider_sources'])
+        for provider in ['moonshot', 'kimi_code']:
+            for model in actual['providers'][provider]:
+                self.assertEqual(model['reasoning_capability']['source_checked_at'], '2026-10-24')
+        subscription = {model['model_name']: model for model in actual['providers']['kimi_code']}
+        self.assertEqual(len(subscription), 6)
+        self.assertEqual(subscription['k3.1-pro']['context_window'], 262144)
+        self.assertFalse(subscription['k3.1-pro']['reasoning_capability']['disable_supported'])
+        self.assertEqual(subscription['k3.1-pro']['reasoning_capability']['supported_levels'], ['low', 'high', 'max'])
+
     def test_deepseek_review_is_owned_upstream(self):
         self.assertFalse(any(g['provider'] == 'deepseek' for g in self.rules['web_search']))
 

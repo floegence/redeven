@@ -1710,6 +1710,8 @@ func defaultProviderDisplayName(p config.AIProvider) string {
 		return "Qwen"
 	case "moonshot":
 		return "Moonshot"
+	case "kimi_code":
+		return "Kimi Code"
 	case "openai_compatible":
 		baseURL := strings.TrimSpace(p.BaseURL)
 		if baseURL != "" {

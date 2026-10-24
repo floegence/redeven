@@ -95,6 +95,7 @@ type AIProvider struct {
 	// - "anthropic"
 	// - "google"
 	// - "moonshot"
+	// - "kimi_code"
 	// - "chatglm"
 	// - "deepseek"
 	// - "qwen"
@@ -138,7 +139,7 @@ type AIProvider struct {
 	// - openai official endpoints: strict
 	// - openai custom endpoints: non-strict
 	// - openai_compatible: non-strict
-	// - moonshot/chatglm/deepseek/qwen: non-strict
+	// - moonshot/kimi_code/chatglm/deepseek/qwen: non-strict
 	StrictToolSchema *bool `json:"strict_tool_schema,omitempty"`
 
 	// WebSearch holds provider-wide search intent. Model preferences form a second gate.
@@ -291,7 +292,7 @@ func validateAIInputModalities(modalities []string) error {
 
 func requiresExplicitAIProviderBaseURL(providerType string) bool {
 	switch strings.ToLower(strings.TrimSpace(providerType)) {
-	case "moonshot", "chatglm", "deepseek", "qwen", "openrouter", "xai", "groq", "ollama", "openai_compatible":
+	case "moonshot", "kimi_code", "chatglm", "deepseek", "qwen", "openrouter", "xai", "groq", "ollama", "openai_compatible":
 		return true
 	default:
 		return false
@@ -399,11 +400,16 @@ func (p *AIModelProfile) Validate() error {
 
 		t := strings.ToLower(strings.TrimSpace(provider.Type))
 		switch t {
-		case "openai", "anthropic", "google", "moonshot", "chatglm", "deepseek", "qwen", "openrouter", "xai", "groq", "ollama", "openai_compatible", "redeven_platform":
+		case "openai", "anthropic", "google", "moonshot", "kimi_code", "chatglm", "deepseek", "qwen", "openrouter", "xai", "groq", "ollama", "openai_compatible", "redeven_platform":
 		default:
 			return fmt.Errorf("providers[%d]: invalid type %q", i, t)
 		}
 
+		if t == "kimi_code" {
+			if err := validateKimiCodeProvider(provider); err != nil {
+				return fmt.Errorf("providers[%d]: %w", i, err)
+			}
+		}
 		baseURL := strings.TrimSpace(provider.BaseURL)
 		if requiresExplicitAIProviderBaseURL(t) && baseURL == "" {
 			return fmt.Errorf("providers[%d]: base_url is required for %s", i, t)

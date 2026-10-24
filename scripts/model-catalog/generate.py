@@ -13,7 +13,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 DATA = ROOT / 'scripts/model-catalog'
 OUTPUT = ROOT / 'internal/config/model_catalog.generated.json'
 SOURCES = {'openai': 'openai', 'anthropic': 'anthropic', 'google': 'google',
-           'moonshot': 'moonshotai-cn', 'chatglm': 'zai', 'deepseek': 'deepseek',
+           'moonshot': 'moonshotai-cn', 'kimi_code': 'kimi-code-plan-cn', 'chatglm': 'zai', 'deepseek': 'deepseek',
            'qwen': 'alibaba', 'xai': 'xai', 'groq': 'groq'}
 FIELDS = ('id', 'name', 'status', 'release_date', 'tool_call', 'modalities',
           'limit', 'cost', 'reasoning', 'reasoning_options')
@@ -38,7 +38,7 @@ def reasoning(pid, model, rules):
     effort = next((o.get('values', []) for o in options if o['type'] == 'effort'), [])
     budget = next((o for o in options if o['type'] == 'budget_tokens'), None)
     levels = ['off' if v == 'none' else v for v in effort if v != 'default']
-    cap = {'kind': 'always_on', 'source_checked_at': rules['checked_at'],
+    cap = {'kind': 'always_on', 'source_checked_at': rules.get('provider_checked_at', {}).get(pid, rules['checked_at']),
            'source_urls': rules['sources'][pid]}
     if effort:
         cap.update(kind='effort', supported_levels=levels)
@@ -57,6 +57,8 @@ def reasoning(pid, model, rules):
         cap['wire_shape'] = 'anthropic_output_config_effort' if effort else 'anthropic_thinking_budget_tokens'
         if budget is not None:
             cap.update(budget_shape='anthropic_thinking_budget_tokens', disable_supported=True)
+    elif pid == 'kimi_code':
+        cap['wire_shape'] = 'openai_responses_reasoning_effort'
     elif pid == 'moonshot':
         cap['wire_shape'] = 'kimi_reasoning_effort' if effort else 'kimi_thinking_type'
         cap['history_replay_requirements'] = ['reasoning_content']
@@ -107,6 +109,8 @@ def search_declarations(rules):
 
 def generate(data, rules):
     result = {'source': data['source'], 'sha256': data['sha256'], 'checked_at': rules['checked_at'], 'providers': {}, 'web_search': search_declarations(rules)}
+    if data.get('provider_sources'):
+        result['provider_sources'] = data['provider_sources']
     for pid, models in data['providers'].items():
         output = []
         for mid, original in models.items():
@@ -182,13 +186,26 @@ def encoded(value):
     return json.dumps(value, indent=2, ensure_ascii=False, sort_keys=True) + '\n'
 
 
+def refresh_providers(previous, incoming, providers):
+    """Keep unrelated snapshots and record the raw source of each reviewed refresh."""
+    import copy
+    result = copy.deepcopy(previous)
+    for pid in providers:
+        result['providers'][pid] = copy.deepcopy(incoming['providers'][pid])
+        result.setdefault('provider_sources', {})[pid] = {'source': incoming['source'], 'sha256': incoming['sha256']}
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--update', action='store_true')
     group.add_argument('--source', type=pathlib.Path, help='Explicit previously downloaded models.dev API response')
     parser.add_argument('--check', action='store_true')
+    parser.add_argument('--providers', nargs='+', choices=list(SOURCES), help='Refresh only these providers from --source or --update')
     args = parser.parse_args()
+    if args.providers and not (args.source or args.update):
+        parser.error('--providers requires --source or --update')
     rules = json.loads((DATA / 'overrides.json').read_text())
     if args.update:
         request = urllib.request.Request('https://models.dev/api.json', headers={'User-Agent': 'Redeven model catalog updater'})
@@ -198,6 +215,9 @@ def main():
         data = snapshot(args.source.read_bytes())
     else:
         data = json.loads((DATA / 'upstream.json').read_text())
+    if args.providers:
+        previous = json.loads((DATA / 'upstream.json').read_text())
+        data = refresh_providers(previous, data, args.providers)
     output = encoded(generate(data, rules))
     if args.check:
         if OUTPUT.read_text() != output:

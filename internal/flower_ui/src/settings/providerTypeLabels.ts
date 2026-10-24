@@ -7,6 +7,7 @@ const EN_US_PROVIDER_TYPE_LABELS: FlowerProviderTypeLabels = {
   anthropic: 'Anthropic',
   google: 'Gemini',
   moonshot: 'Moonshot',
+  kimi_code: 'Kimi Code',
   chatglm: 'Z.ai',
   deepseek: 'DeepSeek',
   qwen: 'Qwen',

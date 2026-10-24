@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-10-24: Refresh Kimi K3.1 Pro models and add personal Kimi Code subscriptions through native Responses. See [provider review](ai/provider-api-catalog-review.md), [validation](ai/provider-configuration-validation.md), and [settings](ui/flower-provider-configuration.md).
+
 - 2026-10-23: Require patched Zod validation through matching Env App npm/pnpm overrides and locks. See [upstream web dependencies](architecture/env-app-upstream-web-dependencies.md).
 
 - 2026-10-23: Align apply_patch arguments with Codex input. See [tool permissions](ai/tool-permission-runtime.md).

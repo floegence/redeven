@@ -30,7 +30,7 @@ func (s *Service) initResolvedProviderAdapter(resolved resolvedRunModel) (resolv
 	}
 
 	switch providerType {
-	case "openai", "anthropic", "google", "moonshot", "chatglm", "deepseek", "qwen", "openrouter", "xai", "groq", "ollama", "openai_compatible":
+	case "openai", "anthropic", "google", "moonshot", "kimi_code", "chatglm", "deepseek", "qwen", "openrouter", "xai", "groq", "ollama", "openai_compatible":
 	case DesktopModelSourceProviderType:
 		s.mu.Lock()
 		modelSource := s.desktopModelSource
@@ -74,7 +74,7 @@ func (s *Service) initStructuredOutputProvider(resolved resolvedRunModel) (Model
 	}
 	responseFormat := "json_object"
 	switch adapter.ProviderType {
-	case "google", "openai_compatible", "moonshot", "chatglm", "deepseek", "qwen", "openrouter", "xai", "groq", "ollama":
+	case "google", "openai_compatible", "moonshot", "kimi_code", "chatglm", "deepseek", "qwen", "openrouter", "xai", "groq", "ollama":
 		responseFormat = ""
 	}
 	return adapter.Adapter, responseFormat, nil
