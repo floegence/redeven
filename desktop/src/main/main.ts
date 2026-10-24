@@ -25,7 +25,7 @@ import { sessionRestartDocumentURL, SESSION_RESTART_REOPEN_URL, SESSION_RESTART_
 import { SESSION_RESTART_INIT, SESSION_RESTART_REGISTER, SESSION_RESTART_PREPARE, SESSION_RESTART_CANCEL, SESSION_RESTART_SUBMIT, SESSION_RESTART_READ, SESSION_RESTART_RESTORED } from '../shared/sessionRestartIPC';
 import { localAccessCookieFromHeaders } from './localAccessCookie';
 import { DESKTOP_MODEL_SOURCE_RETRY_CHANNEL } from '../shared/desktopSessionContextIPC';
-import { EnvironmentSettingsConnections } from './environmentSettingsConnections';
+import { EnvironmentManagementConnections } from './environmentManagementConnections';
 import { DESKTOP_SECURITY_CHANNEL, parseDesktopSecurityRequest } from '../shared/runtimeSecurity';
 import { manageRuntimeSecurity } from './runtimeControlClient';
 import { DesktopResourceCache } from './desktopResourceCache';
@@ -402,6 +402,7 @@ import {
 } from './managedLinuxRuntime';
 import {
   DefaultDesktopSSHTransportManager,
+  DesktopSSHTransportAuthenticationError,
   DesktopSSHRemoteCommandError,
   DesktopSSHTransportInterruptedError,
   DesktopSSHTransportUnavailableError,
@@ -1667,8 +1668,8 @@ async function acquireRuntimePlacementBridgeForReadyRecord(
 ): Promise<RuntimePlacementBridgeLease> {
   return runtimePlacementBridgeRegistry.acquire(readyRecord.runtime_key as DesktopRuntimeTargetID, owner, async creationSignal => {
     const preferences = await loadDesktopPreferencesCached();
-    const sshPassword = savedRuntimePlacementSSHPassword(preferences, readyRecord.host_access, readyRecord.placement,
-      readyRecord.runtime_key as DesktopRuntimeTargetID, readyRecord.environment_id, passwordOverride);
+    const sshPassword = passwordOverride ?? savedRuntimePlacementSSHPassword(preferences, readyRecord.host_access, readyRecord.placement,
+      readyRecord.runtime_key as DesktopRuntimeTargetID, readyRecord.environment_id);
     const session = await startRuntimePlacementBridgeSession({
       host_access: readyRecord.host_access, placement: readyRecord.placement, ssh_password: sshPassword,
       ssh_credential_scope: readyRecord.environment_id, ssh_transport_manager: desktopSSHTransportManager,
@@ -2233,6 +2234,8 @@ function runtimeControlReasonCodeForContainerResolution(
   status: Exclude<DesktopRuntimeContainerResolution['status'], 'running'>,
 ): Extract<DesktopRuntimeControlStatus, Readonly<{ state: 'missing' }>>['reason_code'] {
   switch (status) {
+    case 'auth_required':
+      return 'auth_required';
     case 'command_not_found':
     case 'engine_unavailable':
     case 'no_permission':
@@ -2421,7 +2424,7 @@ async function inspectRuntimePlacementTargetState(
     return bridgeState;
   }
   if (target.placement.kind === 'host_process' && target.hostAccess.kind === 'ssh_host') {
-    const sshPassword = compact(target.sshPassword);
+    const sshPassword = target.sshPassword ?? '';
     if (target.hostAccess.ssh.auth_mode === 'password' && sshPassword === '') {
       return {
         running: false,
@@ -2549,7 +2552,7 @@ async function inspectRuntimePlacementTargetState(
       running: false,
       local_ui_url: '',
       runtime_control_status: desktopRuntimeControlStatusMissing(
-        status.status === 'failed' ? 'unverified' : 'not_started',
+        status.status === 'failed' ? status.failure?.code === 'ssh_authentication_failed' ? 'auth_required' : 'unverified' : 'not_started',
         status.message,
       ),
       placement: target.placement,
@@ -2657,7 +2660,7 @@ async function inspectRuntimePlacementTargetState(
       runtime_target_available: false,
     };
   }
-  const sshPassword = compact(target.sshPassword);
+  const sshPassword = target.sshPassword ?? '';
   if (target.hostAccess.kind === 'ssh_host' && target.hostAccess.ssh.auth_mode === 'password' && sshPassword === '') {
     return {
       running: false,
@@ -5235,16 +5238,17 @@ async function environmentAccessSnapshot(owner: EnvironmentAccessOwner, { access
   return buildEnvironmentAccessSnapshot(owner, environment, access, startup);
 }
 
-const environmentSettingsConnections = new EnvironmentSettingsConnections(acquireEnvironmentManagementConnection);
-const settingsWindows = new Set<number>();
-function watchEnvironmentSettingsWindow(sender: WebContents): void {
-  if (settingsWindows.has(sender.id)) return;
-  settingsWindows.add(sender.id);
-  sender.on('did-navigate', () => environmentSettingsConnections.destroy(sender.id));
-  sender.once('destroyed', () => { environmentSettingsConnections.destroy(sender.id); settingsWindows.delete(sender.id); });
+const environmentSettingsConnections = new EnvironmentManagementConnections(acquireEnvironmentManagementConnection);
+const gatewayManagementConnections = new EnvironmentManagementConnections(acquireEnvironmentManagementConnection, 'gateway');
+const managementWindows = new Set<number>();
+function watchEnvironmentManagementWindow(sender: WebContents): void {
+  if (managementWindows.has(sender.id)) return;
+  managementWindows.add(sender.id);
+  sender.on('did-navigate', () => { environmentSettingsConnections.destroy(sender.id); gatewayManagementConnections.destroy(sender.id); });
+  sender.once('destroyed', () => { environmentSettingsConnections.destroy(sender.id); gatewayManagementConnections.destroy(sender.id); managementWindows.delete(sender.id); });
 }
 
-async function acquireEnvironmentManagementConnection(environmentID: string, owner: string, signal?: AbortSignal): Promise<RuntimePlacementBridgeLease | null> {
+async function acquireEnvironmentManagementConnection(environmentID: string, owner: string, signal?: AbortSignal, sshPassword?: string): Promise<RuntimePlacementBridgeLease | null> {
   const preferences = await loadDesktopPreferencesCached();
   const target = preferences.saved_runtime_targets.find(candidate => candidate.id === environmentID);
   if (!target) {
@@ -5259,10 +5263,10 @@ async function acquireEnvironmentManagementConnection(environmentID: string, own
     throw new RuntimeControlError('SETTINGS_RUNTIME_PREPARING', 'Runtime is preparing. Retry when it is ready.');
   }
   const inspection = await inspectRuntimePlacementTargetState({ targetID: target.id, environmentID, label: target.label,
-    hostAccess: target.host_access, placement: target.placement, sshPassword: target.ssh_password, signal });
+    hostAccess: target.host_access, placement: target.placement, sshPassword: sshPassword ?? target.ssh_password, signal });
   requireEnvironmentManagementAvailable(inspection);
   const ready = runtimePlacementReadyByTargetID.get(target.id);
-  return ready ? acquireRuntimePlacementBridgeForReadyRecord(ready, owner, signal) : null;
+  return ready ? acquireRuntimePlacementBridgeForReadyRecord(ready, owner, signal, sshPassword) : null;
 }
 
 async function runManagedRuntimeAuthority(environmentID: string, command: readonly string[], input?: unknown): Promise<unknown> {
@@ -9962,6 +9966,7 @@ async function openUtilityWindow(
     onClosed: (closedWindow) => {
       void releaseRuntimeFlowerBridge();
       environmentSettingsConnections.destroy(closedWindow.webContentsID);
+      gatewayManagementConnections.destroy(closedWindow.webContentsID);
       utilityWindows.delete(kind);
       utilityWindowKindByWebContentsID.delete(closedWindow.webContentsID);
       updateControlPlaneSyncPoller();
@@ -18936,6 +18941,8 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       return manageRuntimeCloudFromLauncher(request);
     case 'manage_runtime_gateway':
       return manageRuntimeGatewayFromLauncher(request);
+    case 'close_runtime_gateway':
+      return launcherActionFailure('action_invalid', 'environment', 'Gateway dialog closure requires its owning window.');
     case 'configure_gateway_cloud':
     case 'inspect_gateway_cloud':
       return runGatewayCloudActionFromLauncher(request);
@@ -19773,7 +19780,7 @@ if (!app.requestSingleInstanceLock()) {
     let environmentID = '';
     try {
       if (!utilityWindowKindByWebContentsID.has(event.sender.id) || event.senderFrame !== event.sender.mainFrame) throw new Error('Security settings require the Desktop settings window.');
-      watchEnvironmentSettingsWindow(event.sender);
+      watchEnvironmentManagementWindow(event.sender);
       const parsed = parseDesktopSecurityRequest(input);
       const { environment_id, dialog_token: _dialogToken, ...request } = parsed;
       environmentID = environment_id;
@@ -19814,7 +19821,7 @@ if (!app.requestSingleInstanceLock()) {
       }
       const parsed = parseDesktopSettingsRequest(request);
       const { environment_id } = parsed;
-      watchEnvironmentSettingsWindow(event.sender);
+      watchEnvironmentManagementWindow(event.sender);
       return await environmentSettingsConnections.use(event.sender.id, parsed, async record =>
         withEnvironmentAccessOwner(await loadDesktopPreferencesCached(), environment_id,
           desktopPlatformCapabilities.native_host_runtime, async owner => {
@@ -19830,7 +19837,7 @@ if (!app.requestSingleInstanceLock()) {
       }
       const parsed = parseDesktopSettingsRequest(request);
       const { environment_id } = parsed;
-      watchEnvironmentSettingsWindow(event.sender);
+      watchEnvironmentManagementWindow(event.sender);
       if (!request.draft || typeof request.draft !== 'object') throw new Error('Access settings are missing.');
       return await environmentSettingsConnections.use(event.sender.id, parsed, async record =>
         withEnvironmentAccessOwner(await loadDesktopPreferencesCached(), environment_id,
@@ -19963,7 +19970,9 @@ if (!app.requestSingleInstanceLock()) {
       return launcherActionFailure('action_invalid', 'global', 'Credential migration requires the launcher.');
     }
     try {
-      const result = await performDesktopLauncherAction(normalized);
+      const result = normalized.kind === 'close_runtime_gateway' || normalized.kind === 'manage_runtime_gateway' && normalized.connection_token !== undefined
+        ? await performRuntimeGatewayDialogAction(_event, normalized)
+        : await performDesktopLauncherAction(normalized);
       scheduleWelcomeRuntimeHealthRefreshAfterLauncherAction(normalized, result);
       scheduleGatewaySyncAfterLauncherAction(normalized, result);
       return result;
@@ -20541,6 +20550,29 @@ async function runGatewayCloudActionFromLauncher(request: Extract<DesktopLaunche
     const message = error instanceof Error ? error.message : 'Gateway Cloud operation failed.';
     launcherOperations.finishCurrentAttempt(key, owner, signal?.aborted ? 'canceled' : 'failed', { phase: 'cloud_failed', detail: message });
     return launcherActionFailure('action_invalid', 'gateway', message, { gatewayID: request.gateway_id, operationKey: key });
+  }
+}
+
+async function performRuntimeGatewayDialogAction(
+  event: Electron.IpcMainInvokeEvent,
+  request: Extract<DesktopLauncherActionRequest, { kind: 'manage_runtime_gateway' | 'close_runtime_gateway' }>,
+): Promise<DesktopLauncherActionResult> {
+  if (!utilityWindowKindByWebContentsID.has(event.sender.id) || event.senderFrame !== event.sender.mainFrame) {
+    return launcherActionFailure('action_invalid', 'environment', 'Gateway management requires its Desktop window.');
+  }
+  watchEnvironmentManagementWindow(event.sender);
+  if (request.kind === 'close_runtime_gateway') {
+    gatewayManagementConnections.close(event.sender.id, request.connection_token);
+    return launcherActionSuccess('gateway_membership_updated');
+  }
+  try {
+    return await gatewayManagementConnections.use(event.sender.id, {
+      environment_id: desktopCloudRuntimeLinkTargetRuntimeKey(request.runtime_target_id), dialog_token: request.connection_token!,
+    }, () => manageRuntimeGatewayFromLauncher(request), request.operation === 'status' ? request.ssh_password : undefined);
+  } catch (error) {
+    const code = error instanceof RuntimeControlError ? error.code
+      : error instanceof DesktopSSHTransportAuthenticationError ? 'SSH_AUTHENTICATION_REQUIRED' : 'RUNTIME_CONTROL_UNREACHABLE';
+    return { ...launcherActionFailure('cloud_link_failed', 'environment', 'The Runtime management connection needs attention.'), gateway_error_code: code };
   }
 }
 

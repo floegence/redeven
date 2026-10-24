@@ -7,6 +7,8 @@ import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeL
 import type { GatewayJoinPreview, GatewayMembershipOperation, GatewayEnrollmentPurpose } from '../shared/gatewayJoin';
 import type { DesktopI18n } from '../shared/i18n';
 
+let nextConnectionToken = Date.now();
+
 /** Verification belongs to the selected Runtime; only a verified preview can be confirmed. */
 export function RuntimeGatewayJoinPanel(props: Readonly<{
   targetID: DesktopCloudRuntimeLinkTargetID; targetLabel?: string; i18n: DesktopI18n; disabled?: boolean;
@@ -25,6 +27,18 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const busy = () => pending() !== null;
   const [error, setError] = createSignal('');
   const [statusError, setStatusError] = createSignal('');
+  const [authenticationRequired, setAuthenticationRequired] = createSignal(false);
+  const [password, setPassword] = createSignal('');
+  const [connectionLost, setConnectionLost] = createSignal(false);
+  let passwordInput: HTMLInputElement | undefined;
+  let connection: { runtime_target_id: DesktopCloudRuntimeLinkTargetID; connection_token: number } | undefined;
+  const connectionScope = () => connection ??= { runtime_target_id: props.targetID, connection_token: ++nextConnectionToken };
+  const releaseConnection = () => {
+    const previous = connection;
+    connection = undefined;
+    setPassword(''); setAuthenticationRequired(false); setConnectionLost(false);
+    if (previous) void window.redevenDesktopLauncher?.performAction({ kind: 'close_runtime_gateway', ...previous }).catch(() => undefined);
+  };
   const purpose = () => props.purpose ?? 'join';
   const canConnect = () => props.canConnect !== false;
   const blocked = () => props.submissionBlocked === true;
@@ -100,13 +114,14 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   }));
   // IMPORTANT: Identity changes revoke verification, never the user's draft or current step.
   createEffect(on([targetID, managementCoordinates, authorityKey], () => {
+    releaseConnection();
     generation++; statusGeneration++; clearTimeout(timer); setPending(null);
     if (open()) { setPreviewInvalidated(true); setError(text('gatewayJoin.changed')); }
   }, { defer: true }));
   createEffect(on(verificationResetRequest, () => { generation++; setPending(null); setPreviewInvalidated(true); }, { defer: true }));
-  const close = () => { invalidate(); statusGeneration++; clearTimeout(timer); setCode(''); setStep(0); setOpen(false); props.onClose?.();
+  const close = () => { invalidate(); statusGeneration++; clearTimeout(timer); releaseConnection(); setCode(''); setStep(0); setOpen(false); props.onClose?.();
     queueMicrotask(() => trigger?.isConnected ? trigger.focus() : props.focusOwner?.()); };
-  onCleanup(() => { generation++; statusGeneration++; clearTimeout(timer); clearInterval(expiryTimer); });
+  onCleanup(() => { generation++; statusGeneration++; clearTimeout(timer); clearInterval(expiryTimer); releaseConnection(); });
   const openDialog = () => { setOpen(true); if (!blocked() && !props.wizard) void refresh(); queueMicrotask(() => { if (props.wizard) connectionHeading?.focus({ preventScroll: true }); else if (!blocked()) focusAddress(); }); };
   let observedRuntimeStart = props.runtimeStartedAtUnixMS;
   createEffect(on(runtimeStart, value => {
@@ -128,44 +143,76 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
       default: return text('gatewayJoin.unreachable');
     }
   };
+  const connectionFailure = (failure?: string) => {
+    const needsPassword = failure === 'SSH_AUTHENTICATION_REQUIRED';
+    const rejectedPassword = needsPassword && authenticationRequired() && password() !== '';
+    const transportFailure = needsPassword || ['RUNTIME_CONTROL_UNREACHABLE', 'RUNTIME_CONTROL_TIMEOUT', 'GATEWAY_CONNECTION_CLOSED', 'runtime_not_started'].includes(failure ?? '');
+    if (!transportFailure) return false;
+    clearTimeout(timer);
+    if (failure === 'GATEWAY_CONNECTION_CLOSED') releaseConnection();
+    setConnectionLost(true); setAuthenticationRequired(needsPassword); setPassword('');
+    setStatusError(text(rejectedPassword ? 'gatewayJoin.sshAuthenticationFailed' : needsPassword ? 'gatewayJoin.sshAuthenticationRequired' : 'gatewayJoin.connectFailed'));
+    if (preview()) setPreviewInvalidated(true);
+    if (needsPassword) queueMicrotask(() => passwordInput?.focus());
+    return true;
+  };
+  const passwordHelpID = createUniqueId();
+  const passwordField = () => <Show when={authenticationRequired()}>
+    <label class="redeven-gateway-join-field"><span>{text('gatewayJoin.sshPassword')}</span>
+      <Input ref={passwordInput} type="password" autocomplete="current-password" value={password()} disabled={busy()}
+        aria-describedby={passwordHelpID} onInput={event => setPassword(event.currentTarget.value)}
+        onKeyDown={event => { if (event.key === 'Enter' && password() && !busy()) { event.preventDefault(); void connect(); } }} />
+    </label>
+    <p id={passwordHelpID} class="text-sm text-muted-foreground">{text('gatewayJoin.sshPasswordHelp')}</p>
+  </Show>;
   async function connect() {
-    if (!canConnect() || blocked() || busy()) return;
+    if (!canConnect() || blocked() || busy() || authenticationRequired() && !password()) return;
     const current = ++statusGeneration;
     setPending('connecting'); setStatusError('');
     try {
-      const result = await window.redevenDesktopLauncher?.performAction({ kind: 'manage_runtime_gateway', runtime_target_id: props.targetID, operation: 'status' });
+      const result = await window.redevenDesktopLauncher?.performAction({ kind: 'manage_runtime_gateway', ...connectionScope(), operation: 'status',
+        ...(authenticationRequired() ? { ssh_password: password() } : {}) });
       if (current !== statusGeneration) return;
-      if (!result?.ok || !result.gateway_membership) { setStatusError(text('gatewayJoin.connectFailed')); return; }
+      if (!result?.ok || !result.gateway_membership) {
+        if (!connectionFailure(result && !result.ok ? result.gateway_error_code ?? result.code : undefined)) setStatusError(text('gatewayJoin.connectFailed'));
+        return;
+      }
+      setPassword(''); setAuthenticationRequired(false); setConnectionLost(false);
+      if (!props.wizard && open()) { clearTimeout(timer); timer = setTimeout(() => void refresh(), 3000); }
       if (preview() && preview()!.expires_at_unix_ms <= Date.now()) { setPreview(undefined); setError(text('gatewayJoin.expired')); }
       setStep(preview() ? 2 : 1);
       queueMicrotask(() => preview() ? focusConfirmation() : focusAddress());
-    } catch { if (current === statusGeneration) setStatusError(text('gatewayJoin.connectFailed')); }
-    finally { if (current === statusGeneration) setPending(null); }
+    } catch { if (current === statusGeneration) connectionFailure('RUNTIME_CONTROL_UNREACHABLE'); }
+    finally { if (current === statusGeneration) { setPending(null); setPassword(''); } }
   }
   createEffect(() => {
     const request = props.connectionRequest ?? 0;
     if (canConnect() && !blocked() && !busy() && request > lastConnectionRequest) { lastConnectionRequest = request; void connect(); }
   });
   async function refresh() {
-    if (blocked()) return;
+    if (blocked() || connectionLost()) return;
     const current = ++statusGeneration;
     clearTimeout(timer);
     try {
-      const result = await window.redevenDesktopLauncher?.performAction({kind:'manage_runtime_gateway',runtime_target_id:props.targetID,operation:'status'});
+      const result = await window.redevenDesktopLauncher?.performAction({kind:'manage_runtime_gateway',...connectionScope(),operation:'status'});
       if (current !== statusGeneration) return;
       if (result?.ok && result.gateway_membership) { setStatusError(''); }
-      else setStatusError(text('gatewayJoin.failed'));
+      else if (!connectionFailure(result && !result.ok ? result.gateway_error_code ?? result.code : undefined)) setStatusError(text('gatewayJoin.failed'));
     } catch { if (current === statusGeneration) setStatusError(text('gatewayJoin.failed')); }
-    finally { if (current === statusGeneration && open()) timer = setTimeout(() => void refresh(),3000); }
+    finally { if (current === statusGeneration && open() && !connectionLost()) timer = setTimeout(() => void refresh(),3000); }
   }
   async function verify() {
-    if (blocked() || busy()) return;
+    if (blocked() || busy() || connectionLost()) return;
     invalidate(); const current = generation; const start = runtimeStart(); setPending('verifying');
     try {
-      const result = await window.redevenDesktopLauncher?.performAction({kind:'manage_runtime_gateway',runtime_target_id:props.targetID,operation:'preview',address:effectiveAddress(),code:code(),purpose:purpose()});
+      const result = await window.redevenDesktopLauncher?.performAction({kind:'manage_runtime_gateway',...connectionScope(),operation:'preview',address:effectiveAddress(),code:code(),purpose:purpose()});
       if (current !== generation) return;
       if (start && runtimeStart() && start !== runtimeStart()) { setError(text('gatewayJoin.changed')); return; }
-      if (!result?.ok || !result.gateway_preview) { setError(errorText(result && !result.ok ? result.gateway_error_code : undefined)); return; }
+      if (!result?.ok || !result.gateway_preview) {
+        const failure = result && !result.ok ? result.gateway_error_code ?? result.code : undefined;
+        if (!connectionFailure(failure)) setError(errorText(failure));
+        return;
+      }
       setPreview(result.gateway_preview); setPreviewInvalidated(false); setNow(Date.now()); if (props.wizard) setStep(2);
       queueMicrotask(focusConfirmation);
     } catch { if (current === generation) setError(text('gatewayJoin.unreachable')); }
@@ -173,15 +220,15 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   }
   async function act(operation: GatewayMembershipOperation) {
     const consent = preview();
-    if (blocked() || busy() || !consent || previewInvalidated() || consent.expires_at_unix_ms <= Date.now() || consent.purpose !== purpose() || operation !== purpose()) return;
+    if (blocked() || connectionLost() || busy() || !consent || previewInvalidated() || consent.expires_at_unix_ms <= Date.now() || consent.purpose !== purpose() || operation !== purpose()) return;
     const current = generation; setPending('joining'); setError('');
     try {
-      const result = await window.redevenDesktopLauncher?.performAction({kind:'manage_runtime_gateway',runtime_target_id:props.targetID,operation,
+      const result = await window.redevenDesktopLauncher?.performAction({kind:'manage_runtime_gateway',...connectionScope(),operation,
         ...(['join','replace','update-endpoints'].includes(operation) ? {preview_id:preview()?.preview_id} : {})});
       if (current !== generation) return;
       if (!result?.ok || !result.gateway_membership) {
-        const code = result && !result.ok ? result.gateway_error_code : undefined;
-        setError(errorText(code));
+        const code = result && !result.ok ? result.gateway_error_code ?? result.code : undefined;
+        if (!connectionFailure(code)) setError(errorText(code));
         if (code === 'GATEWAY_PREVIEW_CHANGED' || code === 'GATEWAY_PREVIEW_EXPIRED') {
           setPreviewInvalidated(true);
         }
@@ -214,9 +261,10 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
             <Show when={canConnect()}><p class="text-sm text-muted-foreground">{text('gatewayJoin.connectHelp')}</p></Show>
             {props.preparation}
             <Show when={statusError()}><p role="alert" class="text-sm text-error">{statusError()}</p></Show>
+            {passwordField()}
             <div class="redeven-gateway-step-actions">
               <Show when={canConnect()} fallback={props.preparationActions}>
-                <Button class="cursor-pointer whitespace-nowrap" disabled={busy() || blocked()}
+                <Button class="cursor-pointer whitespace-nowrap" disabled={busy() || blocked() || authenticationRequired() && !password()}
                   onClick={() => void connect()}><StableText reserve={[text('gatewayJoin.connectAndContinue'), text('gatewayJoin.connecting'), text('common.retry')]}>{text(pending() === 'connecting' ? 'gatewayJoin.connecting' : statusError() ? 'common.retry' : 'gatewayJoin.connectAndContinue')}</StableText><ArrowRight class="h-4 w-4 shrink-0" aria-hidden="true" /></Button>
               </Show>
               {props.settingsAction}
@@ -263,11 +311,15 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
         <Button class="cursor-pointer whitespace-nowrap" variant="outline" disabled={busy()} onClick={() => { setStep(0); setStatusError(''); }}>{text('gatewayJoin.restoreConnection')}</Button>
       </div></Show>
       <Show when={error() || (currentStep() !== 0 && statusError())}><p role="alert" class="text-sm text-error">{error() || statusError()}</p></Show>
+      <Show when={currentStep() > 0 && connectionLost() && !blocked()}><section class="redeven-gateway-join-section">
+        {passwordField()}
+        <Button class="cursor-pointer whitespace-nowrap" disabled={busy() || blocked() || authenticationRequired() && !password()} onClick={() => void connect()}>{text('gatewayJoin.restoreConnection')}</Button>
+      </section></Show>
       <Show when={!props.wizard || currentStep() > 0}><div class="redeven-gateway-step-actions">
-        <Show when={preview() && (!props.wizard || currentStep() === 2)} fallback={<Button class="cursor-pointer whitespace-nowrap" disabled={busy() || blocked() || !effectiveAddress() || !code().trim()} onClick={() => void verify()}><StableText reserve={[text('gatewayJoin.verify'),text('gatewayJoin.verifying')]}>{text(pending() === 'verifying' ? 'gatewayJoin.verifying' : 'gatewayJoin.verify')}</StableText></Button>}>
-          <Button ref={confirmButton} class="cursor-pointer whitespace-nowrap" disabled={busy() || blocked() || previewInvalidated() || preview()!.expires_at_unix_ms <= now()} onClick={() => void act(purpose())}>{text('gatewayJoin.confirmEnable')}</Button>
+        <Show when={preview() && (!props.wizard || currentStep() === 2)} fallback={<Button class="cursor-pointer whitespace-nowrap" disabled={busy() || blocked() || connectionLost() || !effectiveAddress() || !code().trim()} onClick={() => void verify()}><StableText reserve={[text('gatewayJoin.verify'),text('gatewayJoin.verifying')]}>{text(pending() === 'verifying' ? 'gatewayJoin.verifying' : 'gatewayJoin.verify')}</StableText></Button>}>
+          <Button ref={confirmButton} class="cursor-pointer whitespace-nowrap" disabled={busy() || blocked() || connectionLost() || previewInvalidated() || preview()!.expires_at_unix_ms <= now()} onClick={() => void act(purpose())}>{text('gatewayJoin.confirmEnable')}</Button>
         </Show>
-        <Show when={preview() && (previewInvalidated() || preview()!.expires_at_unix_ms <= now())}><Button variant="outline" disabled={busy() || blocked()} onClick={() => void verify()}>{text('gatewayJoin.verify')}</Button></Show>
+        <Show when={preview() && (previewInvalidated() || preview()!.expires_at_unix_ms <= now())}><Button variant="outline" disabled={busy() || blocked() || connectionLost()} onClick={() => void verify()}>{text('gatewayJoin.verify')}</Button></Show>
       </div></Show>
     </div>
     <div class="redeven-gateway-join-actions">

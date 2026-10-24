@@ -207,6 +207,7 @@ export type DesktopLauncherActionFailureCode =
 export type DesktopLauncherActionKind =
   | 'manage_runtime_cloud'
   | 'manage_runtime_gateway'
+  | 'close_runtime_gateway'
   | 'configure_gateway_cloud'
   | 'inspect_gateway_cloud'
   | 'open_local_environment'
@@ -692,8 +693,9 @@ export type DesktopLauncherOperationNextAction = Readonly<
 
 export type DesktopLauncherActionRequest = Readonly<
   | ({kind: 'manage_runtime_cloud'; runtime_target_id: DesktopCloudRuntimeLinkTargetID} & RuntimeCloudOperation)
-  | { kind: 'manage_runtime_gateway'; runtime_target_id: DesktopCloudRuntimeLinkTargetID; operation: 'preview'; address: string; code: string; purpose: GatewayEnrollmentPurpose }
-  | { kind: 'manage_runtime_gateway'; runtime_target_id: DesktopCloudRuntimeLinkTargetID; operation: GatewayMembershipOperation; preview_id?: string; gateway_id?: string; route_impact_acknowledged?: boolean }
+  | { kind: 'close_runtime_gateway'; runtime_target_id: DesktopCloudRuntimeLinkTargetID; connection_token: number }
+  | { kind: 'manage_runtime_gateway'; runtime_target_id: DesktopCloudRuntimeLinkTargetID; connection_token?: number; operation: 'preview'; address: string; code: string; purpose: GatewayEnrollmentPurpose }
+  | { kind: 'manage_runtime_gateway'; runtime_target_id: DesktopCloudRuntimeLinkTargetID; connection_token?: number; ssh_password?: string; operation: GatewayMembershipOperation; preview_id?: string; gateway_id?: string; route_impact_acknowledged?: boolean }
   | { kind: 'configure_gateway_cloud'; gateway_id: string; configuration: GatewayCloudConfiguration }
   | { kind: 'inspect_gateway_cloud'; gateway_id: string }
   | {
@@ -1612,25 +1614,37 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       const request = normalizeRuntimeCloudOperation(operation);
       return request ? {kind, runtime_target_id: runtimeTargetID as DesktopCloudRuntimeLinkTargetID, ...request} : null;
     }
+    case 'close_runtime_gateway': {
+      const input = candidate as Record<string, unknown>;
+      if (Object.keys(input).some(key => !['kind', 'runtime_target_id', 'connection_token'].includes(key))
+        || typeof input.runtime_target_id !== 'string' || !/^(local|ssh|wsl):.+$/u.test(input.runtime_target_id)
+        || !Number.isSafeInteger(input.connection_token) || Number(input.connection_token) <= 0) return null;
+      return { kind, runtime_target_id: input.runtime_target_id as DesktopCloudRuntimeLinkTargetID, connection_token: Number(input.connection_token) };
+    }
     case 'manage_runtime_gateway': {
       const input = candidate as Record<string, unknown>;
       const runtimeTargetID = compact(input.runtime_target_id), operation = compact(input.operation);
+      if (input.connection_token !== undefined && (!Number.isSafeInteger(input.connection_token) || Number(input.connection_token) <= 0)) return null;
+      if (input.ssh_password !== undefined && (operation !== 'status' || input.connection_token === undefined || !runtimeTargetID.startsWith('ssh:')
+        || typeof input.ssh_password !== 'string' || input.ssh_password.length > 4096)) return null;
+      const connection = input.connection_token === undefined ? {} : { connection_token: Number(input.connection_token) };
       if (!/^(local|ssh|wsl):.+$/u.test(runtimeTargetID)) return null;
       if (operation === 'preview') {
-        if (Object.keys(input).some(key => !['kind','runtime_target_id','operation','purpose','address','code'].includes(key))
+        if (Object.keys(input).some(key => !['kind','runtime_target_id','operation','purpose','address','code','connection_token'].includes(key))
           || !['join','replace','update-endpoints'].includes(String(input.purpose)) || typeof input.address !== 'string' || input.address.length > 512 || typeof input.code !== 'string' || !input.code.trim() || input.code.length > 128) return null;
         try { const url = new URL(input.address); if (url.protocol !== 'https:' || url.username || url.password || url.pathname !== '/' || url.search || url.hash) return null; } catch { return null; }
-        return { kind, runtime_target_id: runtimeTargetID as DesktopCloudRuntimeLinkTargetID, operation, address: input.address, code: input.code, purpose: input.purpose as GatewayEnrollmentPurpose };
+        return { kind, runtime_target_id: runtimeTargetID as DesktopCloudRuntimeLinkTargetID, operation, ...connection, address: input.address, code: input.code, purpose: input.purpose as GatewayEnrollmentPurpose };
       }
       const confirming = operation === 'join' || operation === 'replace' || operation === 'update-endpoints';
-      if (Object.keys(input).some(key => !['kind','runtime_target_id','operation','preview_id','gateway_id','route_impact_acknowledged'].includes(key))
+      if (Object.keys(input).some(key => !['kind','runtime_target_id','operation','preview_id','gateway_id','route_impact_acknowledged','connection_token','ssh_password'].includes(key))
         || !['join','replace','update-endpoints','status','retry','leave','publish'].includes(operation)
         || (confirming ? typeof input.preview_id !== 'string' || !/^[a-zA-Z0-9_-]{43}$/u.test(input.preview_id) : input.preview_id !== undefined)) return null;
       const gatewayID = compact(input.gateway_id);
       if (input.gateway_id !== undefined && (!['retry','leave','publish'].includes(operation) || !gatewayID || gatewayID.length > 256)) return null;
       if (operation === 'publish' && !gatewayID) return null;
       if (input.route_impact_acknowledged !== undefined && (operation !== 'leave' || typeof input.route_impact_acknowledged !== 'boolean')) return null;
-      return { kind, runtime_target_id: runtimeTargetID as DesktopCloudRuntimeLinkTargetID, operation: operation as GatewayMembershipOperation, ...(gatewayID ? {gateway_id: gatewayID} : {}), ...(input.route_impact_acknowledged === true ? {route_impact_acknowledged: true} : {}), ...(confirming ? { preview_id: input.preview_id as string } : {}) };
+      return { kind, runtime_target_id: runtimeTargetID as DesktopCloudRuntimeLinkTargetID, operation: operation as GatewayMembershipOperation, ...connection,
+        ...(typeof input.ssh_password === 'string' ? { ssh_password: input.ssh_password } : {}), ...(gatewayID ? {gateway_id: gatewayID} : {}), ...(input.route_impact_acknowledged === true ? {route_impact_acknowledged: true} : {}), ...(confirming ? { preview_id: input.preview_id as string } : {}) };
     }
     case 'configure_gateway_cloud': {
       const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id);

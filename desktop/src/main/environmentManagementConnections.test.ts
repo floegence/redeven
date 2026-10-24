@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { EnvironmentSettingsConnections } from './environmentSettingsConnections';
+import { EnvironmentManagementConnections } from './environmentManagementConnections';
+import { RuntimeControlError } from './runtimeControlClient';
 import { RuntimePlacementBridgeRegistry, type RuntimePlacementBridgeRecord } from './runtimePlacementBridgeRegistry';
 import type { DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import type { RuntimePlacementBridgeTermination } from './runtimePlacementBridgeSession';
@@ -13,11 +14,50 @@ function fixture() {
   const registry = new RuntimePlacementBridgeRegistry(vi.fn());
   const create = vi.fn(async () => record);
   const connect = vi.fn((_id: string, owner: string, signal: AbortSignal) => registry.acquire(targetID, owner, create, signal));
-  return { registry, create, connect, disconnect, scopes: new EnvironmentSettingsConnections(connect) };
+  return { registry, create, connect, disconnect, scopes: new EnvironmentManagementConnections(connect) };
 }
 const request = { environment_id: 'target', dialog_token: 1 };
 
-describe('EnvironmentSettingsConnections', () => {
+describe('EnvironmentManagementConnections', () => {
+  it('retains Gateway authentication across steps and retries a rejected password without saving it', async () => {
+    const f = fixture();
+    const connect = vi.fn(async (id: string, owner: string, signal: AbortSignal, password?: string) => {
+      if (password !== ' temporary password ') throw new RuntimeControlError('SSH_AUTHENTICATION_REQUIRED', 'Authenticate');
+      return f.connect(id, owner, signal);
+    });
+    const gateway = new EnvironmentManagementConnections(connect, 'gateway');
+    await expect(gateway.use(1, request, async () => 'status')).rejects.toMatchObject({ code: 'SSH_AUTHENTICATION_REQUIRED' });
+    await expect(gateway.use(1, request, async () => 'status', 'wrong')).rejects.toMatchObject({ code: 'SSH_AUTHENTICATION_REQUIRED' });
+    await expect(gateway.use(1, request, async () => 'status', ' temporary password ')).resolves.toBe('status');
+    const app = await f.registry.acquire('target' as DesktopRuntimeTargetID, 'app', f.create);
+    await app.release();
+    expect(f.disconnect).not.toHaveBeenCalled();
+    await expect(gateway.use(1, request, async () => 'preview')).resolves.toBe('preview');
+    await expect(gateway.use(1, request, async () => 'join')).resolves.toBe('join');
+    expect(connect).toHaveBeenCalledTimes(3);
+    gateway.close(1, 1);
+    await vi.waitFor(() => expect(f.disconnect).toHaveBeenCalledTimes(1));
+    await expect(gateway.use(1, request, async () => 'late')).rejects.toMatchObject({ code: 'GATEWAY_CONNECTION_CLOSED' });
+  });
+  it('releases a connection that finishes after the Gateway dialog is canceled', async () => {
+    const f = fixture();
+    let finish!: () => void;
+    const gate = new Promise<void>(resolve => { finish = resolve; });
+    const connect = vi.fn(async (id: string, owner: string, signal: AbortSignal) => {
+      const lease = await f.connect(id, owner, signal);
+      await gate;
+      return lease;
+    });
+    const gateway = new EnvironmentManagementConnections(connect, 'gateway');
+    const operation = vi.fn(async () => 'status');
+    const result = gateway.use(1, request, operation);
+    const rejected = expect(result).rejects.toMatchObject({ code: 'GATEWAY_CONNECTION_CLOSED' });
+    await vi.waitFor(() => expect(f.create).toHaveBeenCalledOnce());
+    gateway.close(1, 1); finish();
+    await rejected;
+    expect(operation).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(f.disconnect).toHaveBeenCalledOnce());
+  });
   it('rejects the first request when its close message arrived first', async () => {
     const { scopes, create } = fixture();
     scopes.close(1, 1);

@@ -3650,7 +3650,11 @@
     "recoveryFailed": "No se pudo completar la preparación del entorno de ejecución. Comprueba los detalles de la operación y vuelve a intentarlo.",
     "containerHelp": "El contenedor o su motor no está disponible. Inicia el motor de contenedores y comprueba la configuración del entorno; después, vuelve a intentarlo.",
     "credentialsHelp": "Desktop no pudo autenticar la conexión de administración del entorno de ejecución. Comprueba las credenciales y los permisos y vuelve a intentarlo.",
-    "channelHelp": "El canal de administración del entorno de ejecución no está disponible. Comprueba la conexión y vuelve a intentarlo."
+    "channelHelp": "El canal de administración del entorno de ejecución no está disponible. Comprueba la conexión y vuelve a intentarlo.",
+    "sshPassword": "Contraseña SSH",
+    "sshAuthenticationRequired": "Introduce la contraseña SSH para conectarte a este entorno.",
+    "sshAuthenticationFailed": "La autenticación SSH ha fallado. Comprueba la contraseña e inténtalo de nuevo.",
+    "sshPasswordHelp": "La contraseña solo se utiliza para esta conexión y no se guarda."
   },
   "gatewayMembership": {
     "not_joined": "Sin conexión",

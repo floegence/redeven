@@ -3650,7 +3650,11 @@
     "recoveryFailed": "La préparation de l’environnement d’exécution n’a pas pu aboutir. Consultez les détails de l’opération, puis réessayez.",
     "containerHelp": "Le conteneur ou son moteur est indisponible. Démarrez le moteur de conteneurs et vérifiez les paramètres de l’environnement, puis réessayez.",
     "credentialsHelp": "Desktop n’a pas pu authentifier la connexion de gestion de l’environnement d’exécution. Vérifiez les identifiants et les autorisations, puis réessayez.",
-    "channelHelp": "Le canal de gestion de l’environnement d’exécution est indisponible. Vérifiez la connexion, puis réessayez."
+    "channelHelp": "Le canal de gestion de l’environnement d’exécution est indisponible. Vérifiez la connexion, puis réessayez.",
+    "sshPassword": "Mot de passe SSH",
+    "sshAuthenticationRequired": "Saisissez le mot de passe SSH pour vous connecter à cet environnement.",
+    "sshAuthenticationFailed": "Échec de l’authentification SSH. Vérifiez le mot de passe et réessayez.",
+    "sshPasswordHelp": "Le mot de passe est utilisé uniquement pour cette connexion et n’est pas enregistré."
   },
   "gatewayMembership": {
     "not_joined": "Non connecté",

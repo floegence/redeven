@@ -30,8 +30,89 @@ const environment: DesktopEnvironmentEntry = { ...original, id: 'created', label
 const readyEnvironment: DesktopEnvironmentEntry = { ...environment, runtime_service: service,
   runtime_health: { ...original.runtime_health, status: 'online' }, provider_runtime_link_target: target };
 const refresh = async () => true;
+it('authenticates inside the wizard and keeps one connection through verification and consent', async () => {
+  const perform = vi.fn(async (request) => {
+    if (request.operation === 'status' && !request.ssh_password) return { ok: false, gateway_error_code: 'SSH_AUTHENTICATION_REQUIRED' };
+    if (request.operation === 'preview') return { ok: true, gateway_preview: { preview_id: 'a'.repeat(43), purpose: 'join', gateway_id: 'office', gateway_name: 'Office', target_runtime_id: 'runtime', expires_at_unix_ms: Date.now() + 600000 } };
+    return { ok: true, gateway_membership: { joined: false, phase: 'not_joined' } };
+  });
+  vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
+  const root = document.createElement('div'); document.body.append(root);
+  dispose = render(() => <RuntimeGatewaySetupDialog environment={readyEnvironment} i18n={i18n} refresh={refresh} recover={vi.fn()} edit={() => {}} close={() => {}} />, root);
+  await settle(); button('gatewayJoin.connectAndContinue').click(); await settle();
+  const password = document.querySelector<HTMLInputElement>('input[type="password"]');
+  expect(password).not.toBeNull();
+  expect(document.activeElement).toBe(password);
+  password!.value = ' temporary password '; password!.dispatchEvent(new Event('input', { bubbles: true }));
+  password!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  await settle();
+  expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('1');
+  expect(document.querySelector<HTMLInputElement>('input[type="password"]')?.value ?? '').toBe('');
+  const inputs = [...document.querySelectorAll<HTMLInputElement>('input:not([type="password"])')];
+  for (const [index, value] of ['https://office.example:7443', 'draft-code'].entries()) {
+    inputs[index].value = value; inputs[index].dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  button('gatewayJoin.verify').click(); await settle();
+  button('gatewayJoin.confirmEnable').click(); await settle();
+  const requests = perform.mock.calls.map(([request]) => request);
+  expect(requests.filter(request => request.kind === 'manage_runtime_gateway').map(request => request.operation)).toEqual(['status', 'status', 'preview', 'join']);
+  expect(new Set(requests.map(request => request.connection_token)).size).toBe(1);
+  expect(requests[1].ssh_password).toBe(' temporary password ');
+  expect(requests.filter(request => request.ssh_password)).toHaveLength(1);
+  expect(requests.at(-1)?.kind).toBe('close_runtime_gateway');
+});
 beforeEach(() => { vi.stubGlobal('CSS', { escape: (value: string) => value }); HTMLElement.prototype.scrollIntoView = vi.fn(); });
 afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+it('recovers authentication without losing invitation drafts and starts a fresh connection after cancellation', async () => {
+  const access = readyEnvironment.managed_runtime_host_access;
+  if (access?.kind !== 'ssh_host') throw new Error('SSH fixture required');
+  const selected: DesktopEnvironmentEntry = { ...readyEnvironment,
+    managed_runtime_host_access: { ...access, ssh: { ...access.ssh, auth_mode: 'password' } },
+    provider_runtime_link_target: { ...readyEnvironment.provider_runtime_link_target!,
+      runtime_control_status: { state: 'missing', reason_code: 'auth_required', message: 'Authenticate' } },
+  };
+  const [current, setCurrent] = createSignal<DesktopEnvironmentEntry | undefined>(selected);
+  let connected = false;
+  const perform = vi.fn(async request => {
+    if (request.kind === 'close_runtime_gateway') { connected = false; return { ok: true }; }
+    if (request.operation === 'status' && (connected || request.ssh_password === 'correct')) {
+      connected = true; return { ok: true, gateway_membership: { joined: false, phase: 'not_joined' } };
+    }
+    return { ok: false, gateway_error_code: 'SSH_AUTHENTICATION_REQUIRED' };
+  });
+  vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
+  const root = document.createElement('div'); document.body.append(root);
+  dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} i18n={i18n} refresh={refresh} recover={vi.fn()} edit={() => {}} close={() => setCurrent(undefined)} />, root);
+  const enterPassword = async (value: string) => {
+    const input = document.querySelector<HTMLInputElement>('input[type="password"]')!;
+    expect(document.activeElement).toBe(input);
+    input.value = value; input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await settle();
+  };
+  await settle(); button('gatewayJoin.connectAndContinue').click(); await settle();
+  await enterPassword('wrong');
+  expect(document.body.textContent).toContain(i18n.t('gatewayJoin.sshAuthenticationFailed'));
+  expect(document.querySelector<HTMLInputElement>('input[type="password"]')?.value).toBe('');
+  await enterPassword('correct');
+  const inputs = [...document.querySelectorAll<HTMLInputElement>('input:not([type="password"])')];
+  for (const [index, value] of ['https://office.example:7443', 'retained-code'].entries()) {
+    inputs[index].value = value; inputs[index].dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  connected = false;
+  button('gatewayJoin.verify').click(); await settle();
+  expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('1');
+  expect(button('gatewayJoin.verify').hasAttribute('disabled')).toBe(true);
+  await enterPassword('correct');
+  expect(inputs.map(input => input.value)).toEqual(['https://office.example:7443', 'retained-code']);
+  const firstToken = perform.mock.calls[0][0].connection_token;
+  button('common.cancel').click(); await settle();
+  expect(perform.mock.calls.at(-1)?.[0]).toEqual({ kind: 'close_runtime_gateway', runtime_target_id: target.id, connection_token: firstToken });
+  setCurrent(selected); await settle(); button('gatewayJoin.connectAndContinue').click(); await settle();
+  expect(perform.mock.calls.at(-1)?.[0].connection_token).toBeGreaterThan(firstToken);
+  expect(document.querySelector<HTMLInputElement>('input[type="password"]')?.value).toBe('');
+  expect(perform.mock.calls.some(([request]) => request.operation === 'join')).toBe(false);
+});
 
 it.each(['ssh', 'wsl', 'local_container', 'ssh_container'] as const)('connects the running %s management bridge before exposing Gateway fields', async kind => {
   const selected = runtimeGatewayAccessFixture(kind, 'connection_required').environment;
@@ -55,7 +136,7 @@ it.each(['ssh', 'wsl', 'local_container', 'ssh_container'] as const)('connects t
   expect(button('gatewayJoin.connecting').hasAttribute('disabled')).toBe(true);
   expect(button('gatewayJoin.connecting')).toBe(connection);
   expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('0');
-  expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', runtime_target_id: selected.provider_runtime_link_target!.id, operation: 'status' });
+  expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', connection_token: expect.any(Number), runtime_target_id: selected.provider_runtime_link_target!.id, operation: 'status' });
   complete({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }); await settle();
   expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('1');
   expect(document.querySelector('input')?.closest('[hidden]')).toBeNull();
@@ -66,7 +147,7 @@ it.each(['ssh', 'wsl', 'local_container', 'ssh_container'] as const)('connects t
 
 it('keeps connection failure in the first step with Retry and settings, then continues after success', async () => {
   const selected = runtimeGatewayAccessFixture('ssh', 'connection_required').environment;
-  const perform = vi.fn().mockResolvedValueOnce({ ok: false, gateway_error_code: 'RUNTIME_CONTROL_UNREACHABLE' })
+  const perform = vi.fn().mockResolvedValue({ ok: true }).mockResolvedValueOnce({ ok: false, gateway_error_code: 'RUNTIME_CONTROL_UNREACHABLE' })
     .mockResolvedValueOnce({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } });
   const edit = vi.fn(); vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const root = document.createElement('div'); document.body.append(root);
@@ -126,7 +207,7 @@ it('explains unsupported Runtime versions and requires an explicit update', asyn
 });
 
 it('starts the selected Runtime, verifies an administrator code, then requires local consent', async () => {
-  const perform = vi.fn().mockResolvedValueOnce({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } })
+  const perform = vi.fn().mockResolvedValue({ ok: true }).mockResolvedValueOnce({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } })
     .mockResolvedValueOnce({ ok: true, gateway_preview: { preview_id: 'a'.repeat(43), purpose: 'join', gateway_id: 'gateway', gateway_name: invitationFixture.gateway_name, target_runtime_id: 'runtime', expires_at_unix_ms: invitationFixture.expires_at_unix_ms } })
  .mockResolvedValueOnce({ ok: true, gateway_membership: { joined: true, phase: 'joining' } });
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
@@ -139,7 +220,7 @@ it('starts the selected Runtime, verifies an administrator code, then requires l
   expect(button('gatewayJoin.startAndContinue').closest('.redeven-gateway-connect-stage')).not.toBeNull();
   button('gatewayJoin.startAndContinue').click(); await settle();
   expect(start).toHaveBeenCalledExactlyOnceWith(environment, 'start');
-  expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', runtime_target_id: target.id, operation: 'status' });
+  expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', connection_token: expect.any(Number), runtime_target_id: target.id, operation: 'status' });
   expect([...document.querySelectorAll('button')].some(element => controlText(element) === i18n.t('gatewayMembers.createInvitation'))).toBe(false);
   expect(document.querySelector('select')).toBeNull();
   const inputs = [...document.querySelectorAll<HTMLInputElement>('input')];
@@ -148,7 +229,7 @@ it('starts the selected Runtime, verifies an administrator code, then requires l
   expect(document.body.textContent).toContain(i18n.t('gatewayJoin.verified'));
   expect(document.body.textContent).not.toContain(invitationFixture.gateway_id);
   button('gatewayJoin.confirmEnable').click(); await settle();
-  expect(perform.mock.calls[2]?.[0]).toEqual({kind:'manage_runtime_gateway',runtime_target_id:target.id,operation:'join',preview_id:'a'.repeat(43)});
+  expect(perform.mock.calls[2]?.[0]).toEqual({kind:'manage_runtime_gateway',connection_token:expect.any(Number),runtime_target_id:target.id,operation:'join',preview_id:'a'.repeat(43)});
 
 });
 
@@ -202,7 +283,7 @@ it.each(['local', 'ssh', 'wsl', 'local_container', 'ssh_container'] as const)('s
   expect(refresh).toHaveBeenCalledOnce(); expect(recover).not.toHaveBeenCalled(); expect(perform).not.toHaveBeenCalled();
   button('gatewayJoin.startAndContinue').click(); await settle();
   expect(recover).toHaveBeenCalledExactlyOnceWith(selected, 'start');
-  expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', runtime_target_id: selected.provider_runtime_link_target!.id, operation: 'status' });
+  expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', connection_token: expect.any(Number), runtime_target_id: selected.provider_runtime_link_target!.id, operation: 'status' });
 });
 
 it('keeps drafts and verified consent across a failed management retry', async () => {

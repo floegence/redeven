@@ -13,6 +13,16 @@ function runtime(kind: 'local_environment' | 'ssh_environment' | 'wsl_environmen
 }
 
 describe('managed Runtime Gateway access', () => {
+  it.each(['ssh', 'ssh_container'] as const)('offers inline authentication for a saved password-mode %s target', kind => {
+    const entry = runtimeGatewayAccessFixture(kind, 'management_unavailable').environment;
+    const access = entry.managed_runtime_host_access!;
+    if (access.kind !== 'ssh_host') throw new Error('SSH fixture required');
+    const candidate = { ...entry, runtime_service: undefined,
+      managed_runtime_host_access: { ...access, ssh: { ...access.ssh, auth_mode: 'password' as const } },
+      runtime_health: { ...entry.runtime_health, status: 'offline' as const, freshness: 'unknown' as const },
+    };
+    expect(runtimeGatewayAccessPresentation(candidate)).toMatchObject({ phase: 'connection_required' });
+  });
   it.each(['local', 'ssh', 'wsl', 'local_container', 'ssh_container'] as const)('retains the completed %s diagnosis through real background probes without restoring live control', async kind => {
     for (const state of ['ready', 'connection_required', 'stopped', 'control_missing', 'update_required', 'management_unavailable'] as const) {
       const f = await runtimeGatewayBackgroundProbeFixture(kind, state);

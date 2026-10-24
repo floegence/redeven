@@ -64,6 +64,9 @@ export function requireEnvironmentManagementAvailable(inspection: Readonly<{
     throw new RuntimeControlError('SECURITY_RESTART_REQUIRED', inspection.maintenance.message);
   }
   // A stopped, reachable Runtime still supports the offline access configuration CLI.
+  if (inspection.runtime_control_status.state === 'missing' && inspection.runtime_control_status.reason_code === 'auth_required') {
+    throw new RuntimeControlError('SSH_AUTHENTICATION_REQUIRED', 'Authenticate the SSH management connection to continue.');
+  }
   if (inspection.runtime_target_available === false && !(inspection.runtime_control_status.state === 'missing'
     && inspection.runtime_control_status.reason_code === 'not_started')) {
     throw new RuntimeControlError('RUNTIME_CONTROL_UNREACHABLE', 'The Environment management connection is unavailable.');

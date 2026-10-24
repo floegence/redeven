@@ -29,6 +29,9 @@ export function runtimeGatewayAccessPresentation(
     || update.package_state?.state === 'outdated' || update.package_state?.state === 'incompatible') return state('update_required', 'update');
   // A successful host probe can intentionally leave the Desktop bridge unopened.
   // The main-process status action acquires that bridge for the exact target.
+  if (control?.state === 'missing' && control.reason_code === 'auth_required'
+    && environment.managed_runtime_host_access.kind === 'ssh_host'
+    && environment.managed_runtime_host_access.ssh.auth_mode === 'password') return state('connection_required');
   if (control?.state === 'missing' && control.reason_code === 'forward_unavailable'
     && target?.runtime_running && health.status === 'online' && environment.runtime_operations.open.availability === 'available') {
     return service && !runtimeServiceSupportsRuntimeGateway(service) ? state('unsupported', 'update') : state('connection_required');
