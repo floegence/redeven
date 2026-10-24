@@ -9,7 +9,7 @@ reviewed_at: "2026-10-24"
 ---
 # Summary
 
-Runtime, Web, Desktop and iOS share the authenticated backend catalog. Official docs own API contracts; pinned models.dev data supplies inventory. Selectable models require a released adapter, reviewed limits/search and qualified replay/tools/images/reasoning. Refreshes preserve selections and stored conversation models.
+Runtime, Web, Desktop and iOS share one authenticated catalog. Official contracts and pinned models.dev inventory require released adapters and qualified limits, replay, tools, images and reasoning. Refreshes preserve configured model selections and stored conversation identities.
 
 # Contract
 
@@ -35,17 +35,17 @@ Baseline review: October 12; Kimi update: October 24. Audio, video, embeddings a
 upstream.json records baseline and per-provider refresh hashes. [ChatGPT authentication](chatgpt-local-authentication.md) intersects account inventory with reviewed capabilities.
 
 ## Kimi review on October 24
-K3.1 Pro/Highspeed launched October 23. This refresh changes only Moonshot and Kimi Code inventory and provenance.
+K3.1 Pro/Highspeed launched October 23. Floret v7.83.0 qualifies Moonshot catalog, output controls and reasoning/tool replay from the same snapshot. The downstream adoption test exercises its public gateway with Redeven capabilities.
 
-Six reviewed subscription IDs are listed in the catalog. K3/K3.1 Pro default to 262,144 context tokens because Plus/Moderato is limited to 256K; users with Pro/Allegretto entitlement can explicitly choose 1,048,576. Highspeed requires Pro/Allegretto or above. Offline catalog refresh verifies neither credentials nor entitlement/quota.
+The six subscription IDs are catalogued. K3/K3.1 default to 262,144 context for Plus/Moderato; Pro/Allegretto users can choose 1,048,576 and Highspeed. Offline refresh cannot verify credentials, entitlements or quota.
 
-Native Responses replays canonical reasoning summaries, messages and paired tool results; it does not retain response-ID continuation or invent reasoning IDs. The client identifies itself as Redeven. Documented quota and policy 429 errors stop automatic retries; transient overload keeps normal backoff and Retry-After. Keys, monthly/5-hour allowance and optional Extra Usage billing remain Kimi-owned. Membership is for personal interactive use; model-family changes should start a new conversation. Native Kimi search remains explicitly unintegrated.
+Native Responses replays canonical reasoning, messages and tool pairs without response-ID continuation or invented reasoning IDs. Client identity is Redeven. Quota/policy 429 stops retries; transient overload honors Retry-After. Kimi owns keys, allowances and Extra Usage billing. Membership is personal and interactive; start a new conversation for model-family changes. Native Kimi search remains unintegrated.
 
 Sources: [models](https://www.kimi.com/code/docs/kimi-code/models.html), [membership](https://www.kimi.com/code/docs/kimi-code/membership.html), [errors](https://www.kimi.com/code/docs/kimi-code/error-reference.html), [usage policy](https://www.kimi.com/code/docs/kimi-code/community-guidelines.html), [platform quickstart](https://platform.kimi.com/docs/guide/kimi-k3-1-pro-quickstart), and [Responses](https://platform.kimi.com/docs/api/responses.md). HTTP fixtures cover routing, tools, reasoning, images, usage and cancellation/errors. Live acceptance requires a user key and eligible plan.
 
 # Boundaries
 
-Preserve configured bases; never save templates or silently move keys between regions. iOS links official endpoint docs. Redeven consumes published Floret v7.79.0 with GOWORK=off; no sibling source or transport copy bypasses that boundary. Supplier search does not imply integrated search.
+Provider additions qualify in Floret before Redeven adopts its published module with GOWORK=off. No sibling wiring or upstream copies. Hosts own credentials, subscriptions and selection. Preserve configured regional bases. Supplier search alone does not enable search.
 
 Runtime owns routing and projection. Native Anthropic/Google discovery preserves authentication/pagination; supported compatible providers use their inventories. Unknown identities need explicit adapter-supported capabilities. [Model directory](model-directory-and-selection.md) owns discovery deadlines and scope isolation.
 
