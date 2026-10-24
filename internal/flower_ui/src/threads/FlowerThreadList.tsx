@@ -3,8 +3,9 @@ import { flowerThreadIsStopping } from '../flowerSurfaceModel';
 import type { Component, JSX } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { ArrowUp, ArrowDown, Copy, GitBranch, MessageSquare, MoreHorizontal, Pencil, Pin, Refresh, Search, ShieldCheck, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
+import { ArrowUp, ArrowDown, Copy, GitBranch, MessageSquare, MoreHorizontal, Pencil, Refresh, Search, ShieldCheck, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
 
+import { FlowerPinIcon } from '../icons/FlowerPinIcon';
 import { FlowerThreadRows } from './FlowerThreadRows';
 import type { FlowerThreadPinPosition } from '../contracts/flowerSurfaceContracts';
 import { FlowerContextMenu } from '../FlowerContextMenu';
@@ -174,7 +175,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
                 props.onPin?.(props.item);
               }}
             >
-              <Pin class={cn('h-3.5 w-3.5', props.item.pinned && 'text-primary')} />
+              <FlowerPinIcon pinned={props.item.pinned} class={cn('h-3.5 w-3.5', props.item.pinned && 'text-primary')} />
             </button>
           </Show>
           <button
@@ -270,7 +271,7 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
       <Show when={props.showStopAction && canStopThreadItem(props.item)}>
         <ItemButton kind="stop" label={props.copy.stop} icon={<XCircle class="h-3.5 w-3.5" />} />
       </Show>
-      <ItemButton kind="pin" label={props.item.pinned ? props.copy.unpin : props.copy.pin} icon={<Pin class={cn('h-3.5 w-3.5', props.item.pinned && 'text-primary')} />} disabled={!props.canPin || props.pinBusy || !canPinThreadItem(props.item)} />
+      <ItemButton kind="pin" label={props.item.pinned ? props.copy.unpin : props.copy.pin} icon={<FlowerPinIcon pinned={props.item.pinned} class={cn('h-3.5 w-3.5', props.item.pinned && 'text-primary')} />} disabled={!props.canPin || props.pinBusy || !canPinThreadItem(props.item)} />
       <Show when={props.item.pinned}>
         <ItemButton kind="move_up" label={props.copy.movePinnedUp} icon={<ArrowUp class="h-3.5 w-3.5" />} disabled={!props.canMoveUp || props.pinBusy} />
         <ItemButton kind="move_down" label={props.copy.movePinnedDown} icon={<ArrowDown class="h-3.5 w-3.5" />} disabled={!props.canMoveDown || props.pinBusy} />
