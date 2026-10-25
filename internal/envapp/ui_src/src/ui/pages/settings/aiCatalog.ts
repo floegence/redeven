@@ -9,6 +9,7 @@ import { AI_PROVIDER_ICON_DEFINITIONS, type AIProviderIconDefinition } from './p
 import {
   FLOWER_PROVIDER_PRESETS,
   FLOWER_PROVIDER_TYPES,
+  FLOWER_PROVIDER_CHOICES,
   flowerProviderSupportsCustomModels,
   flowerProviderTypeRequiresBaseURL,
   flowerProviderDisplayName,
@@ -28,7 +29,7 @@ export type AIProviderBrand = Readonly<{
   icon: AIProviderIconDefinition;
 }>;
 
-const AI_PROVIDER_TYPE_ORDER = FLOWER_PROVIDER_TYPES.map((item) => item.value as AIProviderType);
+const AI_PROVIDER_TYPE_ORDER = FLOWER_PROVIDER_CHOICES.map((item) => item.value as AIProviderType);
 
 function toAIProviderPreset(providerType: AIProviderType): AIProviderPreset {
   const preset = FLOWER_PROVIDER_PRESETS[providerType];
@@ -58,7 +59,7 @@ export const AI_PROVIDER_TYPE_OPTIONS: ReadonlyArray<{ value: AIProviderType; la
 });
 
 export const AI_PROVIDER_PRESET_CATALOG: Record<AIProviderType, AIProviderPreset> = Object.fromEntries(
-  AI_PROVIDER_TYPE_ORDER.map((providerType) => [providerType, toAIProviderPreset(providerType)]),
+  FLOWER_PROVIDER_TYPES.map(({ value }) => [value, toAIProviderPreset(value)]),
 ) as Record<AIProviderType, AIProviderPreset>;
 
 export function modelID(providerID: string, modelName: string): string {

@@ -8,7 +8,7 @@ import { applyFlowerModelDiscovery, cloneFlowerModel, filterFlowerModels, flower
 import { flowerModelSupportsImage, formatFlowerTokenCount } from '../flowerModelLabel';
 import type { FlowerChatGPTAuth, FlowerChatGPTAccount, FlowerModelCatalogDiscovery } from '../contracts/flowerSurfaceContracts';
 import { For, Show, batch, createEffect, createMemo, createSignal, on, onCleanup, untrack, type JSX } from 'solid-js';
-import { createStore, reconcile } from 'solid-js/store';
+import { createStore, reconcile, unwrap } from 'solid-js/store';
 import { cn } from '@floegence/floe-webapp-core';
 import { Check, ChevronDown, ExternalLink, Info, Pencil, Save } from '@floegence/floe-webapp-core/icons';
 import { Button, Checkbox, ConfirmDialog, Dialog, Dropdown, Input, Select, StableText, Tooltip } from '@floegence/floe-webapp-core/ui';
@@ -19,7 +19,9 @@ import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
 import { createFlowerActivityDisclosureMotion } from '../activityDisclosure';
 import type { FlowerProviderDraft, FlowerProviderModel, FlowerProviderType, FlowerWebSearchPolicy } from '../contracts/flowerSurfaceContracts';
 import {
-  FLOWER_PROVIDER_TYPES,
+  FLOWER_PROVIDER_CHOICES,
+  flowerProviderBrandType,
+  isKimiProviderType,
   defaultBaseURLForFlowerProviderType,
   flowerProviderSupportsCustomModels,
   flowerProviderTypeRequiresBaseURL,
@@ -88,7 +90,9 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       </Tooltip>
     </span>
   );
-  const canChangeType = () => props.mode === 'create' || props.allowTypeChange === true;
+  const canChangeType = () => props.mode === 'create' || props.allowTypeChange === true && !isKimiProviderType(props.provider?.type);
+  let kimiDrafts: Partial<Record<'moonshot' | 'kimi_code', FlowerProviderDraft>> = {};
+  const keyConfigured = () => props.keyConfigured && (!(isKimiProviderType(store.draft?.type) || isKimiProviderType(props.provider?.type)) || store.draft?.type === props.provider?.type);
   const [query, setQuery] = createSignal('');
   const [loading, setLoading] = createSignal(false);
   const [discoveryError, setDiscoveryError] = createSignal('');
@@ -111,7 +115,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
     try {
       const result = await props.onDiscoverModels({ provider_id: draft.id, type: draft.type, base_url: draft.base_url, api_key: draft.auth_method === 'chatgpt' ? undefined : draft.provider_api_key ?? undefined, auth_method: draft.auth_method, account_id: draft.account_id });
       const current = store.draft;
-      if (currentRequest() && current) setStore('draft', reconcile(applyFlowerModelDiscovery(current, result.models)));
+      if (currentRequest() && current) setStore('draft', reconcile(applyFlowerModelDiscovery(current, result.models.map(cloneModel))));
     } catch (error) { if (currentRequest()) setDiscoveryError(error instanceof Error ? error.message : String(error)); }
     finally { if (sequence === discoverySequence) setLoading(false); }
   };
@@ -119,7 +123,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const discoverNewConnection = () => {
     const draft = store.draft;
     if (!setupDiscovery() || !draft || !providerID() || loading() || lastDiscoveryIdentity === discoveryIdentity(draft)) return;
-    if (draft.type === 'openrouter' && !draft.provider_api_key?.trim() && !props.keyConfigured) return;
+    if (draft.type === 'openrouter' && !draft.provider_api_key?.trim() && !keyConfigured()) return;
     try {
       const endpoint = new URL(draft.base_url?.trim() || defaultBaseURLForFlowerProviderType(draft.type));
       if (!['http:', 'https:'].includes(endpoint.protocol) || !endpoint.hostname || endpoint.username || endpoint.password || endpoint.search || endpoint.hash) return;
@@ -153,7 +157,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const [selectedProviderType, setSelectedProviderType] = createSignal<FlowerProviderType | null>(null);
   const [store, setStore] = createStore<{ draft: FlowerProviderDraft | null }>({ draft: null });
   const keyHint = () => {
-    if (props.keyConfigured) return store.draft?.provider_api_key?.trim() ? copy().replaceStoredKeyHint : copy().storedKeyKept;
+    if (keyConfigured()) return store.draft?.provider_api_key?.trim() ? copy().replaceStoredKeyHint : copy().storedKeyKept;
     return store.draft && flowerProviderAPIKeyOptional(store.draft.type) ? copy().catalog.optionalKey : copy().requiredBeforeUse;
   };
   const braveKeyHint = () => {
@@ -448,11 +452,11 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   });
   const providerID = () => String(store.draft?.id ?? '').trim();
   const missingCredential = () => store.draft
-    ? missingFlowerProviderCredential(store.draft, props.keyConfigured, props.webSearchKeyConfigured)
+    ? missingFlowerProviderCredential(store.draft, keyConfigured(), props.webSearchKeyConfigured)
     : null;
   const connectionReady = () => Boolean(store.draft
     && (chatGPTSelected() && Boolean(store.draft.account_id) && (store.draft.models.length > 0 || (store.draft.catalog_models?.length ?? 0) > 0)
-      || !missingFlowerProviderCredential({ ...store.draft, enabled: true }, props.keyConfigured, props.webSearchKeyConfigured))
+      || !missingFlowerProviderCredential({ ...store.draft, enabled: true }, keyConfigured(), props.webSearchKeyConfigured))
     && (!flowerProviderTypeRequiresBaseURL(store.draft.type) || store.draft.base_url?.trim() || defaultBaseURLForFlowerProviderType(store.draft.type)));
   const incompleteModel = () => store.draft?.models.find(flowerModelNeedsConfiguration);
   let providerForm: HTMLFieldSetElement | undefined;
@@ -470,13 +474,14 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const providerTypeLabel = (type: FlowerProviderType): string => copy().providerTypeLabels[type] ?? type;
 
   createEffect(on(() => [props.open, props.provider?.id] as const, () => {
+    kimiDrafts = {};
     if (props.open) {
       cancelAuthorization();
       invalidateDiscovery(); lastDiscoveryIdentity = undefined;
       const initial = untrack(() => props.provider ? { ...props.provider, model_defaults: props.providerDefaults?.[props.provider.type] ?? props.provider.model_defaults, chatgpt_account: props.chatGPTAccount ?? props.provider.chatgpt_account } : null);
       if (initial?.chatgpt_account) initial.chatgpt_account = { ...initial.chatgpt_account };
       if (initial && props.mode === 'create' && initial.type === 'openai' && !initial.auth_method) initial.auth_method = untrack(chatGPTEnabled) ? 'chatgpt' : 'api_key';
-      setStore('draft', reconcile(initial));
+      setStore('draft', reconcile(initial ? structuredClone(unwrap(initial)) : null));
       setAuthError('');
       setCustomModelName(''); setQuery(''); setDiscoveryError('');
       setEditingModelName(props.initialModelName ?? '');
@@ -497,7 +502,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       if (draft && draft.id === props.provider?.id && draft.type === props.provider.type && draft.base_url === props.provider.base_url
         && draft.auth_method === props.provider.auth_method && draft.account_id === props.provider.account_id
         && draft.provider_api_key === undefined) {
-        setStore('draft', reconcile(applyFlowerModelDiscovery(draft, catalog)));
+        setStore('draft', reconcile(applyFlowerModelDiscovery(draft, catalog.map(cloneModel))));
       }
     });
   });
@@ -505,7 +510,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   createEffect(on(() => [props.open, props.providerDefaults, store.draft?.id, store.draft?.type] as const, () => {
     untrack(() => {
       const defaults = props.providerDefaults?.[store.draft?.type ?? 'openai'];
-      if (props.open && store.draft && defaults) setStore('draft', draft => draft ? { ...draft, model_defaults: defaults } : draft);
+      if (props.open && store.draft && defaults) setStore('draft', draft => draft ? { ...draft, model_defaults: defaults.map(cloneModel) } : draft);
     });
   }));
   createEffect(() => {
@@ -523,9 +528,9 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const updateProvider = (patch: Partial<FlowerProviderDraft>) => {
     setStore('draft', (draft) => {
       if (!draft) return draft;
-      const next = { ...draft, ...patch };
-      // Draft reconciliation must never mutate the canonical account-list snapshot.
-      if (patch.chatgpt_account) next.chatgpt_account = { ...patch.chatgpt_account };
+      // Reconciliation may mutate nested objects; draft inputs must never share
+      // ownership with host snapshots, provider defaults or saved access drafts.
+      const next = { ...draft, ...structuredClone(unwrap(patch)) };
       if ('base_url' in patch) {
         next.catalog_models = undefined;
       }
@@ -551,19 +556,41 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       web_search: props.searchPolicies?.[type] ? { enabled: props.searchPolicies[type]!.default_enabled, source: props.searchPolicies[type]!.source } : undefined,
       web_fetch: undefined,
       web_search_api_key: undefined,
-      provider_api_key: undefined,
+      provider_api_key: props.mode === 'edit' && isKimiProviderType(type) && type !== props.provider?.type ? null : undefined,
       models: nextModels,
       model_selection: undefined,
       catalog_models: undefined,
+      catalog_error: undefined,
+      search_policy: props.searchPolicies?.[type],
       model_defaults: props.providerDefaults?.[type],
     });
   };
 
   const selectProviderType = (type: FlowerProviderType) => {
-    if (props.disabled || !canChangeType()) return;
+    if (props.disabled || props.saving || !canChangeType()) return;
+    // Re-selecting the brand must not reset the chosen subscription or its draft.
+    if (isKimiProviderType(type) && isKimiProviderType(store.draft?.type)) {
+      setSelectedProviderType(store.draft.type);
+      return;
+    }
+    kimiDrafts = {};
     setSelectedProviderType(type);
     if (store.draft?.type !== type) changeProviderType(type);
     discoverNewConnection();
+  };
+
+  const selectKimiAccess = (type: 'moonshot' | 'kimi_code') => {
+    const current = store.draft;
+    if (!canChangeType() || props.disabled || props.saving || !current || !isKimiProviderType(current.type) || current.type === type) return;
+    kimiDrafts[current.type] = structuredClone(unwrap(current));
+    batch(() => {
+      cancelAuthorization(); invalidateDiscovery(); setAuthError('');
+      setQuery(''); setCustomModelName(''); setEditingModelName(''); setEditingProviderName(false);
+      const saved = kimiDrafts[type];
+      if (saved) setStore('draft', reconcile(structuredClone(saved)));
+      else changeProviderType(type);
+      setSelectedProviderType(type);
+    });
   };
 
   const setModels = (models: readonly FlowerProviderModel[]) => {
@@ -662,20 +689,21 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
           <nav class="flower-provider-picker" aria-label={copy().providerTypeTitle} data-flower-skip-discovery>
             <h3 class="flower-provider-picker-title">{copy().providerTypeTitle}</h3>
             <div class="flower-provider-picker-options">
-              <For each={canChangeType() ? FLOWER_PROVIDER_TYPES : FLOWER_PROVIDER_TYPES.filter((item) => item.value === store.draft?.type)}>
+              <For each={canChangeType() ? FLOWER_PROVIDER_CHOICES : FLOWER_PROVIDER_CHOICES.filter((item) => item.value === flowerProviderBrandType(store.draft?.type))}>
                 {(item) => (
                   <button
                     type="button"
                     class="flower-provider-choice"
-                    classList={{ 'flower-provider-choice--active': selectedProviderType() === item.value }}
+                    aria-label={providerTypeLabel(item.value)}
+                    classList={{ 'flower-provider-choice--active': flowerProviderBrandType(selectedProviderType()) === item.value }}
                     onClick={() => selectProviderType(item.value)}
-                    aria-current={selectedProviderType() === item.value ? 'true' : undefined}
+                    aria-current={flowerProviderBrandType(selectedProviderType()) === item.value ? 'true' : undefined}
                     aria-controls={`flower-provider-type-${item.value}`}
-                    title={copy().providerTypeHints[item.value] ?? item.hint}
+                    title={isKimiProviderType(item.value) ? copy().kimiCode.access : copy().providerTypeHints[item.value] ?? item.hint}
                   >
                     <span class="flower-provider-choice-icon"><FlowerProviderBrandIcon type={item.value} class="h-5 w-5" /></span>
                     <span class="flower-provider-choice-label">{providerTypeLabel(item.value)}</span>
-                    <span class="flower-provider-choice-check" aria-hidden="true"><Show when={selectedProviderType() === item.value}><Check class="h-3.5 w-3.5" /></Show></span>
+                    <span class="flower-provider-choice-check" aria-hidden="true"><Show when={flowerProviderBrandType(selectedProviderType()) === item.value}><Check class="h-3.5 w-3.5" /></Show></span>
                   </button>
                 )}
               </For>
@@ -683,7 +711,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
           </nav>
           <div class="flower-provider-detail">
             <Show when={selectedProviderType()} fallback={<div class="flower-provider-introduction"><p>{copy().providerTypeDescription}</p></div>}>
-              <div id={`flower-provider-type-${store.draft!.type}`} class="flower-provider-editor">
+              <div id={`flower-provider-type-${flowerProviderBrandType(store.draft!.type)}`} class="flower-provider-editor">
                 <div class="flower-provider-identity">
                   <span class="flower-provider-identity-mark" title={providerTypeLabel(store.draft!.type)}>
                     <FlowerProviderBrandIcon type={store.draft!.type} class="h-6 w-6" />
@@ -712,6 +740,19 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                 </div>
                 <section class="flower-provider-connection">
                   <div class="flower-provider-section-heading"><h3>{copy().connectionTitle}</h3></div>
+                  <Show when={isKimiProviderType(store.draft!.type)}>
+                    <div class="flower-provider-authentication flower-provider-kimi-access">
+                      <FieldInfo label={copy().kimiCode.access} text={[
+                        copy().kimiCode.separate,
+                        ...(store.draft!.type === 'kimi_code' ? [copy().kimiCode.notice] : []),
+                        ...(!canChangeType() ? [copy().kimiCode.saved] : []),
+                      ]}><span class="text-xs font-medium text-muted-foreground">{copy().kimiCode.access}</span></FieldInfo>
+                      <div role="group" aria-label={copy().kimiCode.access} class="flower-provider-auth-method">
+                        <button type="button" disabled={!canChangeType()} aria-pressed={store.draft!.type === 'moonshot'} onClick={() => selectKimiAccess('moonshot')}>{copy().kimiCode.platform}</button>
+                        <button type="button" disabled={!canChangeType()} aria-pressed={store.draft!.type === 'kimi_code'} onClick={() => selectKimiAccess('kimi_code')}>{copy().kimiCode.code}</button>
+                      </div>
+                    </div>
+                  </Show>
                   <Show when={store.draft!.type === 'openai'}>
                     <div class="flower-provider-authentication">
                       <div role="group" aria-label={copy().chatGPT.authentication} class="flower-provider-auth-method">
@@ -808,21 +849,13 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                       </Show>
                     </div>
                   </Show>
-                  <Show when={store.draft!.type === 'kimi_code'}>
-                    <div class="space-y-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground" role="note">
-                      <p>{copy().kimiCode.notice}</p>
-                      <p>{copy().kimiCode.context}</p>
-                      <div class="flex flex-wrap gap-3">
-                        <a class="inline-flex items-center gap-1 text-primary hover:underline" href="https://www.kimi.com/code/console" target="_blank" rel="noopener noreferrer">{copy().kimiCode.console}<ExternalLink class="h-3 w-3" aria-hidden="true" /></a>
-                        <a class="inline-flex items-center gap-1 text-primary hover:underline" href="https://www.kimi.com/code/docs/kimi-code/models.html" target="_blank" rel="noopener noreferrer">{copy().kimiCode.guide}<ExternalLink class="h-3 w-3" aria-hidden="true" /></a>
-                      </div>
-                    </div>
-                  </Show>
                   <div class="flower-provider-connection-fields">
                     <Show when={!chatGPTSelected()}>
                       <div>
                         <FlowerFieldLabel hint={keyHint()}>
-                          {copy().apiKey}
+                          <span class="inline-flex items-center gap-1">{copy().apiKey}<Show when={store.draft!.type === 'kimi_code'}>
+                            <a class="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring" href="https://www.kimi.com/code/console" target="_blank" rel="noopener noreferrer" aria-label={copy().kimiCode.console} title={copy().kimiCode.console}><ExternalLink class="h-3 w-3" aria-hidden="true" /></a>
+                          </Show></span>
                         </FlowerFieldLabel>
                         <Input
                           type="password"
@@ -831,11 +864,11 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                             provider_api_key: event.currentTarget.value,
                           })}
                           onBlur={finishConnectionInput}
-                          placeholder={props.keyConfigured ? FLOWER_STORED_SECRET_PLACEHOLDER : copy().pasteAPIKey}
+                          placeholder={keyConfigured() ? FLOWER_STORED_SECRET_PLACEHOLDER : copy().pasteAPIKey}
                           aria-label={copy().apiKey}
                           aria-description={keyHint()}
                           autocomplete="new-password"
-                          data-stored-secret={props.keyConfigured ? 'true' : undefined}
+                          data-stored-secret={keyConfigured() ? 'true' : undefined}
                           size="sm"
                           class="flower-provider-secret-input w-full"
                           disabled={!providerID()}
@@ -929,7 +962,10 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                 <Show when={connectionReady()}><section class="flower-provider-models">
                   <div class="flower-provider-section-heading">
                     <h3>{copy().recommendedModelsTitle}</h3>
-                    <FieldInfo label={copy().recommendedModelsTitle} text={copy().catalog.selectionHint} alignEnd />
+                    <div class="flex items-center gap-1">
+                      <Show when={store.draft!.type === 'kimi_code'}><a class="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring" href="https://www.kimi.com/code/docs/kimi-code/models.html" target="_blank" rel="noopener noreferrer" aria-label={copy().kimiCode.guide} title={copy().kimiCode.guide}><ExternalLink class="h-3 w-3" aria-hidden="true" /></a></Show>
+                      <FieldInfo label={copy().recommendedModelsTitle} text={[copy().catalog.selectionHint, ...(store.draft!.type === 'kimi_code' ? [copy().kimiCode.context] : [])]} alignEnd />
+                    </div>
                   </div>
                   <Show when={store.draft?.model_selection && !store.draft.model_selection.selected_models}><p role="status" class="flower-body-copy text-muted-foreground">{copy().catalog.selectionReview}</p></Show>
                   <ModelCatalogControls hasContent={catalog().length > 0} copy={copy().catalog} query={query()} count={store.draft!.models.length} onQuery={setQuery} onSelectAll={addAllPresets} onClear={() => setEnabled(store.draft?.models ?? [], false)} loading={loading()} error={discoveryError()} onRefresh={props.onDiscoverModels ? discover : undefined} />
@@ -942,6 +978,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                         {(name) => <Show when={catalogByName().get(name)}>{(preset) => {
                           const modelName = () => cleanModelName(name);
                           const enabled = () => modelSelected(store.draft!, modelName());
+                          const selectionDisabled = createMemo(() => Boolean(preset().unavailable && !enabled()));
                           const activeModel = () => store.draft!.models.find((m) => cleanModelName(m.model_name) === modelName());
                           const model = () => activeModel() ?? preset();
                           const modelNote = () => {
@@ -956,7 +993,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                 <Checkbox
                                   class="mt-1"
                                   checked={enabled()}
-                                  disabled={preset().unavailable && !enabled()}
+                                  disabled={selectionDisabled()}
                                   aria-label={preset().display_name || modelName()}
                                   onChange={(on) => { if (on) addPreset(preset()); else removePreset(modelName()); }}
                                   size="sm"

@@ -68,14 +68,14 @@ vi.mock('@floegence/floe-webapp-core/ui', async (original) => ({
 
 afterEach(() => { document.body.innerHTML = ''; });
 
-function mountDialog(mode: 'create' | 'edit' = 'create', discover?: FlowerModelCatalogDiscovery, keyConfigured = true) {
+function mountDialog(mode: 'create' | 'edit' = 'create', discover?: FlowerModelCatalogDiscovery, keyConfigured = true, allowTypeChange = false) {
   const host = document.createElement('div'); document.body.append(host);
   const [open, setOpen] = createSignal(true);
   const [provider, setProvider] = createSignal<FlowerProviderDraft>({ id: 'initial', type: 'openai', models: [] });
   const [catalog, setCatalog] = createSignal<FlowerProviderDraft['catalog_models']>();
   const [defaults, setDefaults] = createSignal(providerDefaultsFixture);
   let confirmed: FlowerProviderDraft | undefined;
-  const dispose = render(() => <FlowerProviderDialog providerDefaults={defaults()} catalogModels={catalog()} onDiscoverModels={discover} open={open()} mode={mode} provider={provider()} keyConfigured={keyConfigured} webSearchKeyConfigured={false} onOpenChange={setOpen} onConfirm={(draft) => { confirmed = JSON.parse(JSON.stringify(draft)); }}/>, host);
+  const dispose = render(() => <FlowerProviderDialog providerDefaults={defaults()} catalogModels={catalog()} onDiscoverModels={discover} open={open()} mode={mode} allowTypeChange={allowTypeChange} provider={provider()} keyConfigured={keyConfigured} webSearchKeyConfigured={false} onOpenChange={setOpen} onConfirm={(draft) => { confirmed = JSON.parse(JSON.stringify(draft)); }}/>, host);
   const button = (text: string) => {
     const el = [...host.querySelectorAll('button')].find(element => element.textContent?.includes(text) || element.getAttribute('aria-label') === text);
     if (!el) throw new Error(`Missing button: ${text}`);
@@ -541,4 +541,100 @@ it('merges background metadata without replacing an unsaved endpoint or selectio
   expect(input.value).toBe('https://draft.example/v1');dialog.button('Save provider').click();
   expect(dialog.confirmed().base_url).toBe('https://draft.example/v1');expect(dialog.confirmed().models.map(model=>model.model_name)).toEqual(['agent']);
  }finally{dialog.dispose();}
+});
+
+describe('Kimi connection identity', () => {
+  it('offers one Kimi brand and preserves each unsaved access-method draft independently', () => {
+    const defaultsBefore = structuredClone(providerDefaultsFixture);
+    const dialog = mountDialog('create', undefined, false);
+    const input = (selector: string, value: string) => {
+      const field = dialog.host.querySelector<HTMLInputElement>(selector)!;
+      field.value = value; field.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    try {
+      const choices = [...dialog.host.querySelectorAll('.flower-provider-choice')];
+      expect(choices.filter(button => /Kimi|Moonshot/.test(button.textContent ?? ''))).toHaveLength(1);
+      dialog.type('moonshot');
+      expect(dialog.host.querySelector('[aria-controls="flower-provider-type-kimi_code"]')).toBeNull();
+      input('input[type=password]', 'platform-fixture');
+      input('input[aria-label="Base URL"]', 'https://platform.example/v1');
+      dialog.host.querySelector<HTMLInputElement>('.flower-provider-models input[type=checkbox]')!.click();
+      expect(dialog.selected()).toBe(1);
+      dialog.button('Kimi Code').click();
+      expect(dialog.host.querySelector<HTMLInputElement>('input[type=password]')!.value).toBe('');
+      expect(dialog.button('Save provider').disabled).toBe(true);
+      input('input[type=password]', 'subscription-fixture');
+      dialog.host.querySelector<HTMLInputElement>('.flower-provider-models input[type=checkbox]')!.click();
+      dialog.button('API').click();
+      expect(dialog.selected()).toBe(1);
+      expect(dialog.host.querySelector<HTMLInputElement>('input[type=password]')!.value).toBe('platform-fixture');
+      expect(dialog.host.querySelector<HTMLInputElement>('input[aria-label="Base URL"]')!.value).toBe('https://platform.example/v1');
+      dialog.button('Kimi Code').click();
+      dialog.type('moonshot');
+      expect(dialog.host.querySelector<HTMLInputElement>('input[type=password]')!.value).toBe('subscription-fixture');
+      expect(dialog.selected()).toBe(1);
+      dialog.button('Save provider').click();
+      expect(dialog.confirmed()).toMatchObject({ id: 'initial', type: 'kimi_code', base_url: 'https://api.kimi.com/coding/v1', provider_api_key: 'subscription-fixture' });
+      expect(dialog.confirmed().models.every(model => !model.model_name.startsWith('kimi-'))).toBe(true);
+      expect(providerDefaultsFixture).toEqual(defaultsBefore);
+      dialog.setOpen(false); dialog.setOpen(true); dialog.type('moonshot'); dialog.button('Kimi Code').click();
+      expect(dialog.host.querySelector<HTMLInputElement>('input[type=password]')!.value).toBe('');
+    } finally { dialog.dispose(); }
+  });
+
+  it.each(['moonshot', 'kimi_code'] as const)('edits existing %s without changing its saved identity or key', type => {
+    const dialog = mountDialog('edit', undefined, true, true);
+    try {
+      const model = backendModelsForProviderType(type)[0];
+      const original: FlowerProviderDraft = { id: 'saved-kimi', type, name: 'My Kimi', base_url: type === 'moonshot' ? 'https://api.moonshot.cn/v1' : 'https://api.kimi.ai/coding/v1', models: [model], model_selection: { selected_models: [model.model_name] } };
+      dialog.setProvider(original);
+      expect(dialog.host.querySelectorAll('.flower-provider-choice')).toHaveLength(1);
+      expect(dialog.host.querySelector('.flower-provider-choice')!.textContent).toContain('Kimi');
+      expect(dialog.host.querySelector('.flower-provider-choice')!.getAttribute('aria-current')).toBe('true');
+      expect(dialog.button(type === 'moonshot' ? 'Kimi Code' : 'API').disabled).toBe(true);
+      dialog.button('Save provider').click();
+      expect(serializeFlowerProvider(dialog.confirmed())).toMatchObject({ id: original.id, type, name: original.name, base_url: original.base_url, model_selection: original.model_selection });
+      expect(dialog.confirmed().provider_api_key).toBeUndefined();
+      expect(original).toEqual({ id: 'saved-kimi', type, name: 'My Kimi', base_url: type === 'moonshot' ? 'https://api.moonshot.cn/v1' : 'https://api.kimi.ai/coding/v1', models: [model], model_selection: { selected_models: [model.model_name] } });
+    } finally { dialog.dispose(); }
+  });
+
+  it('requires a separate credential when changing another saved connection to Kimi', () => {
+    const dialog = mountDialog('edit', undefined, true, true);
+    try {
+      dialog.type('moonshot');
+      expect(dialog.button('Save provider').disabled).toBe(true);
+      const input = dialog.host.querySelector<HTMLInputElement>('input[type=password]')!;
+      input.value = 'new-platform-key'; input.dispatchEvent(new Event('input', { bubbles: true }));
+      dialog.button('Save provider').click();
+      expect(dialog.confirmed()).toMatchObject({ type: 'moonshot', provider_api_key: 'new-platform-key' });
+      dialog.button('Kimi Code').click();
+      expect(dialog.button('Save provider').disabled).toBe(true);
+      input.value = 'new-code-key'; input.dispatchEvent(new Event('input', { bubbles: true }));
+      dialog.button('Save provider').click();
+      expect(dialog.confirmed()).toMatchObject({ type: 'kimi_code', provider_api_key: 'new-code-key' });
+    } finally { dialog.dispose(); }
+  });
+
+  it.each(['success', 'failure'] as const)('ignores late model discovery %s across Kimi access changes', async outcome => {
+    let resolve!: (result: { models: FlowerProviderDraft['models'] }) => void;
+    let reject!: (error: Error) => void;
+    const discover = vi.fn<FlowerModelCatalogDiscovery>(() => new Promise((done, fail) => { resolve = done; reject = fail; }));
+    const dialog = mountDialog('create', discover, false);
+    try {
+      dialog.type('moonshot');
+      const input = dialog.host.querySelector<HTMLInputElement>('input[type=password]')!;
+      input.value = 'platform-key'; input.dispatchEvent(new Event('input', { bubbles: true }));
+      dialog.button('Sync model list').click();
+      expect(discover).toHaveBeenCalledOnce();
+      dialog.button('Kimi Code').click();
+      if (outcome === 'success') resolve({ models: [{ model_name: 'late-platform-model', context_window: 8192 }] });
+      else reject(new Error('Late platform error'));
+      await Promise.resolve(); await Promise.resolve();
+      expect(dialog.host.textContent).not.toContain('late-platform-model');
+      expect(dialog.host.textContent).not.toContain('Late platform error');
+      dialog.button('API').click();
+      expect(dialog.host.textContent).not.toContain('late-platform-model');
+    } finally { dialog.dispose(); }
+  });
 });
