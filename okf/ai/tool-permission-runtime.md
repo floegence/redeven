@@ -5,7 +5,7 @@ description: Tool registration, scheduling, permission, readonly, and target-rou
 tags: [ai, tools, permissions, dispatch]
 timestamp: 2026-10-15T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-24"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
@@ -22,42 +22,38 @@ The resolver validates MIME, size, and digest through the target-owned media sto
 
 ## File editing
 
-The active Flower patch executor belongs to Redeven. Local file edits use the
-filesystem registry; patch source and move destinations additionally remain
-inside the run working directory after canonical resolution. Relative and
-absolute spellings are accepted. Existing symlinks and new-file ancestors resolve
-before approval, and execution checks the approved canonical targets again.
-Readonly roots cannot be written. Target-routed tools retain target-owned policy.
+Redeven owns Flower patch execution. Local edits use the filesystem registry;
+patch and move paths must resolve inside cwd. Relative and absolute paths are
+accepted. Symlinks and new-file ancestors resolve before approval; execution
+rechecks approved canonical targets. Readonly roots reject writes. Target-routed
+tools retain target-owned policy.
 
-Use file.edit for small unique literal replacements, file.write for complete
-files, and apply_patch for multi-chunk or multi-file changes. The current provider
-surface uses one strict JSON input argument plus declared routing fields; patch
-and input_format are not accepted aliases. No endpoint is assumed to support
-freeform grammar based on its model name.
+Use file.edit for unique literal replacements, file.write for complete files,
+and apply_patch for multi-chunk/file changes. Its strict JSON input argument and
+declared routing fields have no patch or input_format aliases. Model names never
+imply endpoint support for freeform grammar.
 
-Chunks search original content forward, preserving anchors, EOF and numeric
-ranges. Only an order failure permits reordering: every chunk must have one
-exact, non-overlapping original-source match, without anchors, ranges, EOF markers
-or pure additions. The same matcher and write plan apply sorted chunks; accepted
-forward patches and recorded arguments remain unchanged. Ambiguity or unsupported
-chunks retain the original rejection. The provider still requests source order.
+Chunks search original content forward, honoring anchors, EOF and numeric ranges.
+Only order failures allow reordering: every chunk needs one exact, non-overlapping
+match, without anchors, ranges, EOF markers or pure additions. Sorted chunks use
+the same matcher and write plan. Forward patches, recorded arguments and rejection
+classifications remain unchanged. Ambiguity names the blocking chunk and requests
+unique context. The provider still requests source order.
 
 Pure additions append. Untouched lines retain their endings; insertions use the
 first ending (LF for empty files), and nonempty updates retain a final newline.
 Exact matching precedes whitespace and punctuation normalization. Explicit Add
 and Move may replace regular files. Use one operation per canonical path.
 
-Rejection diagnostics distinguish order, overlap, anchor, EOF, repeated context,
-missing text and duplicate-path failures. They report the chunk, patch-body line,
-search boundary and exact source line when available, with a repair instruction.
-Diagnostics do not select writes; strict JSON validation remains in Floret.
+Diagnostics distinguish order, overlap, anchor, EOF, repeated/missing context and
+duplicate paths, with chunk, patch-body line, search boundary, exact source line
+when available, and a remedy. They never select writes. Floret validates JSON.
 
-All plans validate before writing and recheck source and destination snapshots
-before each commit. Validation errors confirm no writes. Filesystem commit errors
-report completed file operations and uncertain effects; they never authorize
-blind replay. Single-file replacement is atomic, but a multi-file patch is not a
-filesystem transaction. Model success retains confirmed paths and counts; actual
-before/after diffs and format metadata remain in canonical Activity presentation.
+Plans validate before writing and recheck source/destination snapshots per commit.
+Validation errors confirm no writes; commit errors report completed operations
+and uncertain effects, never permission to replay. Replacement is atomic per
+file, not per patch. Success retains confirmed paths/counts; canonical Activity
+retains before/after diffs and format metadata.
 
 # Boundaries
 
@@ -73,6 +69,5 @@ Flower must not infer remote execution from thread context alone; it can only cl
 
 - `redeven:internal/ai/floret_native_tools.go` - The unique native factory derives `web_fetch` from Floret and binds invocation product permission.
 
-- Redeven patch implementation: internal/ai/unified_diff_apply.go, patch_text.go and patch_tool.go.
-- Deterministic tests: patch_correctness_test.go, patch_order_test.go, patch_diagnostics_test.go, patch_tool_test.go and patch_runtime_test.go cover ordering, zero-effect rejection, endings, authorization, commit failures, provider schemas and unchanged history after restart/Fork.
-- Synthetic live-model cases in internal/ai/patch_prompt_qualification_test.go check multi-chunk construction, ordering recovery and duplicate-header recovery. They use the configured isolated prompt qualification lane and only evaluate proposed patches in memory; they never execute model-proposed tools. A small passing sample does not establish a production failure rate.
+- Patch sources/tests in internal/ai/: unified_diff_apply.go, patch_text.go, patch_tool.go; patch_{correctness,order,diagnostics,tool,runtime}_test.go cover ordering, no-effect rejection, endings, authorization, commit errors, schemas and restart/Fork history.
+- internal/ai/patch_prompt_qualification_test.go uses the isolated live-model lane for multi-chunk, order and duplicate-header recovery. Patches run only in memory; proposed tools never execute. Small samples do not establish production failure rates.

@@ -1,6 +1,7 @@
 # Redeven OKF Update Log
 
 - 2026-10-25: Compact the [Flower model picker](ai/model-directory-and-selection.md) with one-line search, smaller desktop rows and preserved touch targets.
+- 2026-10-25: Identify ambiguous chunks in [patch errors](ai/tool-permission-runtime.md).
 
 - 2026-10-25: Unify Kimi setup with isolated access drafts and stable saved connections. See [provider configuration](ui/flower-provider-configuration.md).
 
