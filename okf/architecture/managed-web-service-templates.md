@@ -5,40 +5,22 @@ description: Consume one signed-off versioned service catalog whose release is a
 tags: [architecture, templates, managed-services, localization, supply-chain]
 timestamp: 2026-09-10T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-- Authority: `github.com/floegence/redeven-service-templates` owns built-in template identity, specification, releases, localization, icons, and service-specific third-party notices.
-- Outcome: Redeven embeds one immutable, reproducible, digest-verified bundle that works offline and maps its declared release to the default and recommended installation choice.
-- Invariants: recommendation never limits source versions or changes an installed exact release; all ten published locales are explicit, assets are passive SVG bytes, platform artifacts are exact, and catalog failure prevents Runtime startup.
-- Failure boundary: missing, malformed, mismatched, unsupported, or future bundle content is rejected without falling back to local definitions.
+The released `redeven-service-templates` module owns built-in identity, specifications, releases, localization, icons and service-specific notices. Redeven embeds a reproducible digest-verified offline bundle. Recommendations set defaults, never constrain source choices or replace installed releases. Malformed, missing, mismatched or future content blocks startup without local-definition fallback.
 
 # Contract
 
-## Published bundle
-The template repository publishes a versioned Go module.
-
-`recommended_version` must equal the default npm package version or every platform's default image tag.
-
-Service-specific license and provenance statements remain in that repository; Redeven's root notice declares only the module dependency and generic Host runtime it downloads.
-
-## Redeven mapping
-Catalog loading completes before Registry and Manager startup. Validation covers the outer bundle, manifest, module version, canonical digest, unique IDs and families, schema versions, strict TemplateSpec decoding, supported deployment kinds, HTTPS sources, OCI platform digests, locale completeness, notice references, and SVG digest and safety constraints.
-
-[Managed opening](managed-web-service-opening.md) owns launch preparation, private persistence and recovery.
-
-## Host hooks and output
-`start_script` prepares application configuration and executes the foreground application. `after_start_script` is an optional, safely repeatable preparation hook using the existing startup deadline; it must not start a second service.
-
-[Git sources](managed-service-git-sources.md) own original-directory persistence, temporary acquisition credentials, and manual source review.
-
-## Change contract
-A catalog change is released upstream first, then Redeven upgrades to that published module version without `replace`, `go.work`, local paths, or copied assets. The [automated catalog update contract](../release/service-template-updates.md) owns scheduled discovery, source integration, checksums, and failure recovery. Runtime persistence migration remains a separate Redeven-owned concern and cannot be hidden in catalog decoding.
+- `recommended_version` equals the default npm version or every platform's default image tag. Upstream owns service licenses/provenance; Redeven notices cover the dependency and generic Host runtime only.
+- Before Registry/Manager startup, validate bundle/manifest/version/digest, unique IDs/families, schema and strict TemplateSpec, deployment/source/platform constraints, all ten locales, notices and passive SVG digest/safety.
+- `start_script` prepares configuration and executes the foreground app. Optional repeatable `after_start_script` uses the startup deadline and cannot start another service. [Opening](managed-web-service-opening.md) owns launch recovery; [Git sources](managed-service-git-sources.md) owns original directories/temporary credentials/review.
+- Release upstream changes first, then consume the published module without local wiring or copied assets. [Catalog automation](../release/service-template-updates.md) owns discovery/checksums; product database migration remains separate.
 
 # Boundaries
 
-Redeven does not copy upstream compatibility adapters or service-specific template fingerprints, retired paths, container names, data-volume markers, process rules, service-specific localizations, or application assets. The catalog does not execute services, own Registry records, choose user releases silently, or bypass Redeven permission and resource policies.
+Do not copy upstream adapters, fingerprints, legacy paths, process/volume rules, localization or assets. Catalogs neither execute services nor own Registry records, silently choose user releases or bypass product permission/resource checks.
 
 # Evidence
 

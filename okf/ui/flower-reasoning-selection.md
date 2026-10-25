@@ -5,34 +5,26 @@ description: Preserve explicit reasoning choices across cold loads, shared draft
 tags: [ai, flower, reasoning, composer]
 timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Confirmed Thread settings own the reasoning level displayed for an existing Flower conversation. Drafts own only explicit new-thread choices; computed defaults never become draft intent. Default reasoning is a configuration choice, not an enabled state or an effort level. Cold loading and restart preserve explicit Off and On. Controls reflect verified model capabilities; unknown controls remain model-controlled. Failed saves retain the confirmed setting, and active Turns retain their immutable runtime configuration.
+Existing threads display confirmed reasoning settings independently of runtime view versions; new drafts retain only explicit choices. Default is a configuration choice, never On or an inferred effort. Verified capabilities determine controls; unknown controls remain model-controlled. Failed saves preserve confirmed settings and active turns keep immutable execution configuration.
 
 # Contract
 
-Existing Threads display the newest confirmed settings snapshot in `ThreadCache`, comparing settings revisions independently of runtime view versions. Loading, reconnecting, and rendering must never write a reasoning preference.
+Loading, reconnecting and rendering never write reasoning preferences. Explicit new-thread Off survives shared remounts/attachment preparation; a confirmed non-reasoning model clears unsupported draft intent.
 
-New-thread Off survives shared-surface remounts and attachment preparation, while changing to a confirmed model without reasoning clears the unsupported draft choice.
+[Preferences](flower-conversation-preferences.md) own explicit full-model-identity choices and budgets. Sending/automatic normalization cannot save them; preference failure reports separately without rolling back confirmed thread settings or changing retry snapshots. One localized ordered option list serves all controls; explicit Default remains distinct.
 
-[Conversation preferences](flower-conversation-preferences.md) store only explicit reasoning choices, keyed by the complete model identity and including budget tokens. Loading, sending, reconnecting, and automatic model normalization never write preferences. A preference-save failure retains the confirmed Thread result and reports a separate save error; active Turns and retry snapshots remain immutable.
-
-All shared control variants use one ordered option list and localized labels. An explicit `default` is never labeled On or replaced with a specific effort.
-
-The UI does not infer an effective provider default.
-
-The shared Desktop and Env App control distinguishes these model contracts:
-
-| Declared capability | Presentation |
+| Capability | Control |
 | --- | --- |
-| Boolean toggle | Default, Off when supported, and explicit On |
-| Named efforts | Default, Off when supported, and only declared supported levels |
-| Token budget | Bounded token input; clearing it removes the override |
-| Fixed thinking | Non-interactive Always on status |
-| Thinking with unknown controls | Non-interactive Model controlled status with an explanation |
-| No reasoning | No reasoning control |
+| Boolean | Default, supported Off, On |
+| Named efforts | Default, supported Off, declared levels only |
+| Token budget | Bounded input; clearing removes override |
+| Fixed thinking | Noninteractive Always on |
+| Unknown thinking controls | Noninteractive Model controlled with explanation |
+| No reasoning | No control |
 
 # Boundaries
 

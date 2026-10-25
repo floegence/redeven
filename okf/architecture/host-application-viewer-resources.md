@@ -5,47 +5,20 @@ description: Prepare current immutable viewer snapshots while retaining applicat
 tags: [applications, runtime, security, cache]
 timestamp: 2026-09-27T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Released `floe-native-apps` owns `PreparedViewer`, matching entry documents/static
-assets, content digests and capability results. Redeven pins one immutable snapshot
-per authorized Xpra sharing session. Runtime or viewer updates can reconnect to
-compatible surviving applications without changing their PID or unsaved content.
-Preparation failure is retryable and never selects historical client resources.
-Graphical backends and loaded modules keep their process lifetimes; they are not
-hot-swapped. The [application contract](host-applications.md) owns authorization and
-normal/forced termination, and the [input contract](host-application-input.md) owns
-safe input delivery.
+Published Floe Native Apps owns immutable `PreparedViewer` documents/assets, digests and capabilities. Redeven pins one snapshot per authorized Xpra share. Compatible surviving apps reconnect after viewer/Runtime updates without PID/content changes. Preparation failure offers retry, never historical resources. Backends and loaded modules retain process lifetimes without hot swaps.
 
 # Contract
 
-## Native frames and Xpra snapshots
-New combined Linux sessions use the Runtime canvas viewer and the released native frame/input/cursor protocol.
-
-Its pre-client script inherits the owning viewer's Flowersec constructor, and missing transport fails closed.
-
-The snapshot becomes ineligible for resource lookup; other active shares and the application remain independent.
-
-## Capability and recovery boundary
-One SDK result determines which operations are available:
-
-| Result | Redeven behavior |
-| --- | --- |
-| Current viewer, compatible backend/input | Connect to the surviving app and preserve content |
-| Missing, corrupt or unsupported current viewer resources | Report preparation failure and offer retry |
-| Display protocol older than 2 | Use logical density; explain the high-resolution limitation |
-| Unsupported input or ordered pointer protocol | Disable affected input; retain pictures and local controls |
-| Authenticated incompatible process-module registration | Explain saving and normal application exit before reopening |
-| Missing input context, temporary focus loss or ordinary disconnect | Preserve existing recovery semantics without inferring a version problem |
+- New combined Linux sessions use native canvas/frame/input/cursor protocols. Xpra pre-client scripts inherit their viewer's Flowersec constructor and fail closed without it. Retiring a share removes snapshot lookup authority without affecting other shares/apps.
+- Current compatible viewers reconnect. Missing/corrupt/unsupported assets fail preparation. Display protocol below 2 stays at logical density with an explanation. Unsupported input/pointer disables those controls while preserving pictures/local UI. Authenticated incompatible loaded modules require save/quit/reopen; transient focus/context loss follows normal recovery.
 
 # Boundaries
 
-## Resource authorization and caching
-The SDK digest covers actual prepared resource names and bytes, including input adapters and transformed worker URLs. Remote port-forward origins must also identify an admitted active host-application share; codespace, unrelated, expired or unknown origins are rejected.
-
-Document and asset content therefore cannot diverge through the application's old HTTP resource tree.
+Digests cover actual resource names/bytes, adapters and transformed worker URLs. Remote origins must identify an active authorized share; reject CodeSpace, unrelated, expired or unknown origins. Documents/assets never fall back to old application HTTP trees. [Applications](host-applications.md) owns authorization/termination and [input](host-application-input.md) owns delivery.
 
 # Evidence
 

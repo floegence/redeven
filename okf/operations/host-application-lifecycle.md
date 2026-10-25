@@ -5,7 +5,7 @@ description: Scenario-based evidence for native application sharing and explicit
 tags: [applications, macos, linux, validation]
 timestamp: 2026-09-21T07:00:00Z
 lifecycle: active_evidence
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
@@ -23,47 +23,46 @@ for aligned operations and unavoidable OS differences.
 
 # Contract
 
-## Startup and window transitions
-| Scenario | Expected outcome | Evidence |
-| --- | --- | --- |
-| Existing single-instance Mac app | Reuse its exact process; releasing a client lease preserves it | Real native fixture |
-| First window delayed beyond 40 seconds | Keep waiting; display eventual pixels without relaunch | Real 48-second fixture, Go watchdog test |
-| Multiple shareable windows | Visible counted picker, literal titles, current selection and direct switching; keep picker/focus during updates | Viewer and responsive browser tests |
-| Close cancelled by app | Retain process and session; do not close viewer optimistically | Real close-cancellation fixture |
-| Unreadable window list or replaced capture surface | Retain lifetime evidence; uncertainty never expires into closure | Swift inventory and presence tests |
-| Linux application opens only a dialog | Reveal decoded dialog; retain its native dimensions | Xpra adapter test |
-| Final window actually closes | Close established physical viewer | Native fixture and viewer tests |
+| Scenario | Required result and evidence |
+| --- | --- |
+| Existing single-instance Mac app | Reuse exact process; lease release preserves it (native fixture) |
+| First window after 40 seconds | Keep waiting, then reveal without relaunch (48-second fixture and Go watchdog) |
+| Multiple windows | Counted picker with literal titles, retained selection/focus and direct switching (viewer/browser tests) |
+| Close cancelled | Retain process/session and viewer (native cancellation fixture) |
+| Unreadable/replaced surface | Uncertainty never expires into closure (Swift inventory/presence tests) |
+| Linux dialog-only app | Reveal decoded dialog at native dimensions (Xpra adapter) |
+| Final window actually closes | Close established physical viewer (native/viewer tests) |
+| Last lease released | End sharing, retain newly launched app and all windows (multi-window fixture) |
+| One stale quit selection | Reject whole selection before termination (native quit fixture) |
+| App cancels quit | Keep process, pixels and sharing; permit another explicit request (cancellation/reconnect fixture) |
+| Unknown quit result | Keep confirmation error; never infer exit or auto-retry (Env App test) |
+| Read-only caller | May list running apps, never quit/detach (API/UI tests) |
+| Network loss/reload | Keep app; suspend capture/input, reclaim buffers, reconnect same session/current credential (WebSocket/native/viewer tests) |
+| Second viewer | Revoke previous input, release held keys, suspend old capture before successor resumes (WebSocket/native tests) |
+| Permission loss/console lock | Invalidate capture/input and expose distinct recovery (Swift/viewer tests) |
+| Helper exit | Sharing failure is not app exit; reclaim route, credential, buffers and helper before terminal state (Go/viewer tests) |
+| Late callback/unknown terminal reason | Ignore stale results; retain terminal page without automatic physical closure (macOS/Xpra viewer tests) |
+| Unproven foreground/window ownership | Nonblocking input failure, no replay into another app (native/viewer tests) |
+| Missing video decoder | Negotiate same-process image transport (picture/viewer acceptance) |
 
-| Scenario | Expected outcome | Evidence |
-| --- | --- | --- |
-| Last client lease released for a newly launched app | End only sharing; keep all native windows and process alive | Real multiple-window quit fixture |
-| One selected instance is stale | Reject the entire selection before any termination request | Real quit fixture |
-| App cancels quit | Preserve process, pixels and active sharing; allow another explicit request | Real cancellation and reconnect fixture |
-| Request outcome unknown | Keep an error in the confirmation; never infer exit or retry automatically | Env App interaction test |
-| Read-only caller | Running list is readable; quit and detach are forbidden | API permission and Env App tests |
-
-| Scenario | Expected outcome | Evidence |
-| --- | --- | --- |
-| Network loss or viewer reload | Preserve app; suspend native capture/input, reclaim frame buffers, then reconnect the same session with current credential | Go WebSocket, native startup fixture and viewer tests |
-| Second viewer attaches | Revoke previous input connection, release held input, suspend the old capture and let the new viewer resume it | Go WebSocket replacement and native startup fixture |
-| Permission revoked or console locked | Invalidate capture/input and show a distinct recovery action | Swift access classification and viewer event tests |
-| Helper unexpectedly exits | Sharing failure, not proof of application exit; reclaim route, credential, frame buffers and helper process before terminal state | Go helper and viewer tests |
-| Late callback or unknown terminal reason | Ignore stale results; retain the terminal page without automatic physical closure | macOS/Xpra viewer tests |
-| Input cannot prove foreground/window ownership | Nonblocking failure; no replay into another app | Native input fixture and viewer operation tests |
-| Video decoder unavailable | Negotiate image transport for the same process | Existing picture/viewer acceptance |
-
-The viewer toolbar acceptance also covers content-area resizing below the fixed bar, bounded popovers at 320/390/1000 pixels, native-menu keyboard navigation, separate window close and confirmed application quit, late menu dismissal, and unconfirmed quit without replay. The native quit fixture runs both catalog and session-bound controls with visible and windowless apps, verifies cancellation, and rejects stale generations before any termination request.
+Toolbar checks cover content resize below its fixed bar, bounded popovers at
+320/390/1000 px, native-menu keyboard access, distinct window close/confirmed quit,
+late menu dismissal and no replay of unconfirmed quit. Native quit tests cover
+catalog/session controls, visible/windowless apps, cancellation and stale generations.
 
 # Boundaries
 
-Screen recording and accessibility permissions remain explicit macOS grants. A save-dialog cancellation must never be bypassed or escalated to forced exit.
-
-See the [distribution record](host-application-validation.md) for actual tested targets.
+Screen-recording and accessibility are explicit macOS grants. Save-dialog cancellation
+never permits forced exit. [Distribution evidence](host-application-validation.md)
+names tested targets; [platform behavior](../architecture/host-application-behavior.md)
+owns OS differences.
 
 # Evidence
 
-- `scripts/check_host_application_lifecycle.mjs`: Chromium, Firefox and WebKit popup closure with production viewer assets and a controlled host stream; records first-frame acknowledgment, state response, close call stack and actual page close. This does not certify native window capture.
-
-- `scripts/check_macos_host_application_waiting.py` and `scripts/fixtures/nativeHostApplication.swift`: disposable lifecycle scenarios.
-
-- `scripts/check_macos_host_application_termination.py`: host-driven exit before/after a window, last-window closure with a live process, and explicit detachment.
+- `scripts/check_host_application_lifecycle.mjs`: production assets with controlled
+  host streams in Chromium/Firefox/WebKit; records first-frame acknowledgment, state,
+  close stack and page closure, without claiming native capture certification.
+- `scripts/check_macos_host_application_waiting.py` and
+  `scripts/fixtures/nativeHostApplication.swift`: disposable lifecycle scenarios.
+- `scripts/check_macos_host_application_termination.py`: exit before/after windows,
+  last-window closure with a live process and explicit detach.

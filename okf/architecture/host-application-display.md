@@ -5,38 +5,21 @@ description: Keep Xpra layout, native window state, pixel density and cursor coo
 tags: [applications, ui, desktop, display]
 timestamp: 2026-09-29T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Released `floe-native-apps` is the single owner of Linux display configuration,
-window constraints and cursor coordinates. Redeven declares layout and quality
-policy; Desktop owns actual maximize/minimize state. Remote geometry receipts must
-not trigger resize feedback. Unchanged configurations preserve canvases and send
-no layout commands. Old display backends remain usable at logical density and
-explicitly restrict high resolution; no application is automatically restarted.
+Published Floe Native Apps owns Linux display configuration, constraints and cursor coordinates. Redeven declares layout/quality; Desktop owns actual maximize/minimize. Remote receipts cannot create resize loops, and unchanged configuration preserves canvases without commands. Old display backends retain logical density with explicit high-resolution limits; apps never auto-restart.
 
 # Contract
 
-## Native Linux window families
-The published compositor owns Wayland/Xwayland surface geometry, native resize operations and window-family capture. Bounded image regions include the current application family and its popups. The [native stream contract](host-application-native-stream.md) owns picture modes, region composition, measured statistics and retained PNG-session compatibility.
-
-## Xpra window geometry and closure
-The adapter integrates the selected HTML5 v20/v21 client. Native viewer chrome owns primary-window movement and the authoritative maximize/minimize state.
-
-The adapter does not infer closure from a missing paint, a close request or a transport failure.
-
-## Xpra density and decoding
-Clarity first requests native display density through the published SDK. Encoding quality and HTTPS cannot restore absent source detail.
-
-The [certificate contract](../security/local-ui-certificates.md) owns identity and trust; the viewer never creates certificates, installs trust, changes the saved protocol, restarts a Runtime, or silently downgrades TLS.
+- The native compositor owns Wayland/Xwayland geometry, resize and bounded family/popup capture. [Native stream](host-application-native-stream.md) owns picture regions/statistics and retained PNG compatibility.
+- Xpra uses its selected HTML5 v20/v21 client; native chrome owns primary movement/maximize/minimize. Missing paint, close request or transport loss never proves closure.
+- Clarity first requests SDK source density; encoding quality/HTTPS cannot recover absent detail. [Certificates](../security/local-ui-certificates.md) owns trust: viewer never creates/trusts certificates, changes saved protocol, restarts Runtime or downgrades TLS.
 
 # Boundaries
 
-The [viewer resource contract](host-application-viewer-resources.md) owns current snapshots, cache authorization and independent viewer/backend upgrades. Unsupported input preserves viewing; confirmed incompatible modules require save/quit/reopen.
-
-## Remote cursor geometry
-The [native stream contract](host-application-native-stream.md) owns the shared Linux cursor's complete bounds, hotspot, density and decode lifetime. Native and Xpra adapters use the released normalizer; macOS retains its local system cursor.
+[Viewer resources](host-application-viewer-resources.md) owns snapshot/upgrade admission. Unsupported input preserves viewing; incompatible loaded modules require save/quit/reopen. Native/Xpra use published cursor normalization; native stream owns bounds/hotspot/density/decode and macOS retains system cursor.
 
 # Evidence
 

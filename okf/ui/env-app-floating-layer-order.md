@@ -5,57 +5,33 @@ description: One product-owned stacking contract orders movable windows, Flower,
 tags: [ui, floating-windows, flower, plugins, dialogs, focus]
 timestamp: 2026-10-19T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-23"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Env App owns one global stacking contract for cross-surface UI. Movable product and plugin windows share a most-recently-used band from 1000 through 1099; the expanded Flower companion is 2000, its context previews use 2100 through 2199, the plugin launcher Panel is 3000, blocking product modals are 4000, and the command palette is 5000. No surface may escape its assigned band through an ad hoc `z-index`. A window interaction changes only the movable-window order, while higher product layers remain stable and operable.
-
-Published Floe Webapp constrains dialogs and floating windows to the visible
-viewport or owning projected surface. Toolbar and keyboard changes preserve
-reachable window controls and local content scrolling; temporary bounds do not
-replace the live preferred geometry.
+Env App assigns global layers to movable windows, Flower, plugin surfaces, blocking modals and command UI. Interaction reorders only its window band. Published Floe owns visible-viewport constraints and drag geometry; Redeven persists settled geometry and preserves reachable controls, local scrolling and destination interaction.
 
 # Contract
 
 ## Drag-region synchronization
-Desktop's embedded host projects iframe-relative native drag regions. A settled snapshot must not schedule another animation frame by rebuilding itself.
-
-Native pointer and floating geometry ownership remain upstream.
+Desktop projects iframe-relative native drag regions. A settled snapshot must not schedule another frame by rebuilding itself; native pointer/geometry ownership remains upstream.
 
 ## Global bands
-The command palette is always the top Env App surface at 5000.
-
-Window-local menus, tooltips, and recovery panels must not cross a global band.
+Ordinary windows use 1000–1099; expanded Flower 2000; its context previews 2100–2199; plugin Panel 3000 and plugin context menu 3100; product modals 4000; command palette 5000. Local menus, tooltips and recovery UI stay within their surface's global band.
 
 ## Dialog placement
-Mobile plugin and tools navigation is local to the released Shell content region, not a global launcher modal.
-
-Clicking the backdrop closes only the Dialog; the first click never reaches the Activity content beneath it.
-
-Interactive titlebar controls retain their existing no-drag exclusions.
+Mobile plugin/tools navigation belongs to Shell content, not a global Launcher. Backdrop clicks close only the Dialog without reaching Activity beneath it; titlebar controls remain no-drag.
 
 ## Visible viewport boundaries
-Published Floe Webapp owns the visible viewport, safe areas, Safari fixed-origin conversion, and projected surface intersection for Dialog and FloatingWindow. Product CSS must not bypass this boundary with fixed panel positions, viewport-unit heights plus removed maximums, or forced transforms.
+Published Floe owns visible viewport/safe areas, Safari fixed-origin conversion and projected-surface intersection. Do not bypass it with fixed positions, uncapped viewport heights or transforms. Temporary constraints preserve preferred size.
 
-Temporary viewport constraints do not replace upstream's live preferred window size.
-
-Published Floe Webapp owns elastic titlebar dragging: movement beyond the safe
-viewport has increasing resistance and retains a reachable header; release or
-interruption returns the entire window inside the current safe boundary. Dragging
-a maximized header restores its preferred size at the pointer's grab position
-and continues the same gesture. Titlebar controls and double-click behavior remain
-independent, and the window body stays mounted. Redeven passes its desktop safe
-area through the existing insets contract and persists geometry after the upstream
-return animation completes, never an intermediate animated frame.
+Upstream elastic dragging resists boundary overflow, retains a reachable header and returns the window inside safe bounds on release/interruption. Dragging a maximized header restores preferred size at the grab point and continues the gesture; controls, double-click and mounted body remain independent. Redeven supplies safe-area insets and persists only settled geometry.
 
 ## Movable window order
-One Shell-lifetime provider registers every open movable window under a stable identifier.
-
-It never uses an unbounded incrementing counter, stays inside 1000–1099 for ordinary windows or 2100–2199 for Flower context previews, and keeps a multiply registered identifier until all owners unregister. The minimized Debug Console entry is a launcher control at the base of the window band rather than an open movable window.
+A Shell-lifetime provider registers stable IDs, retains multiply registered IDs until all owners unregister, and assigns bounded MRU order within each window band. Minimized Debug Console is a base-band launcher, not an open window.
 
 ## Flower dismissal
-The Flower companion remains above ordinary movable windows while expanded; its owned context preview remains above it and below plugin Panels and product modals. It must not return focus to the retained composer because composer focus is an expansion intent. Activity plugin window interaction is also outside Flower: host pointer or focus input and trusted plugin bridge activation, focus, or action events collapse the companion without consuming the destination interaction, including when the event originates inside a cross-origin iframe and cannot bubble through the product document.
+Expanded Flower sits above ordinary windows; owned previews sit above Flower and below plugin Panels. Dismissal never restores composer focus, which would expand it again. Host pointer/focus and trusted plugin bridge activation/focus/action events collapse Flower without consuming destination interaction, including cross-origin iframe interaction.
 
 # Boundaries
 

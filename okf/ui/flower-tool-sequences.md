@@ -5,7 +5,7 @@ description: Compact tools and bounded thinking without hiding dialogue or takin
 tags: [ui, flower, activity, thinking, disclosure, accessibility]
 timestamp: 2026-10-21T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-23"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
@@ -22,85 +22,24 @@ no upstream contract, canonical summary or backend migration.
 # Contract
 
 ## Boundaries and identity
+A sequence contains at least two nodes in one thread/turn/run, including a tool; one call plus following thinking qualifies. Calls, failures and argument previews qualify. Leading thinking is standalone; thinking after the first tool joins, including after the last call. Counts report calls, thinking and failures without synthesizing summaries. A newer single-call segment can make an untouched older sequence collapsible.
 
-A sequence needs at least two nodes from the same thread, turn and run, including
-a tool call. One tool plus following thinking qualifies. Successful, active and
-failed calls and argument previews qualify. Running attention does not break a
-sequence; waiting and approval do. Leading thinking stays standalone; thinking
-from the first tool onward joins. Counts report calls, thinking segments and
-failures without generating summaries. A newer single-call segment can make an
-older untouched sequence eligible for collapse.
+Prose, user messages, interactions, parent events, compaction, Goal updates, SubAgent operations, approvals, uncertain effects and non-tool errors break groups. Goal calls and Web Search remain tools; running attention does not break a sequence, waiting/approval does. Empty assistant placeholders are transparent. An answered input splits work in a settled turn: sequences on both sides default closed, including the newest, while explicit choices and active calls retain disclosure policy. Whole-turn disclosure remains independent.
 
-Prose, user messages, interactions, parent events, compaction, Goal state updates,
-SubAgent operations, approvals, uncertain effects and non-tool errors break
-sequences. Goal calls and Web Search remain tool nodes. Failed calls retain their
-errors; summaries show the failure count and existing warning treatment. Whole-turn
-disclosure stays separate, and grouping preserves source order and final output.
-An answered input receipt is a turn-sequence boundary. When one splits a settled
-turn's work, settled sequence groups on both sides default to collapsed; explicit
-user choices and active calls continue to use the existing disclosure store.
-
-Empty assistant text placeholders between tool messages are transparent; non-empty
-text remains a boundary. Canonical tool identity owns row lifetime, the first call
-anchors the sequence through updates, and thinking changes presentation in place.
-Existing actions and details remain intact. Adjacent tool icons connect; theme
-tokens own active, completed and failure states.
+Canonical call identity retains row lifetime; the first call anchors a group and thinking moves in place. Preserve source order, final output, actions and errors. Adjacent icons connect with theme-owned active/completed/failure states.
 
 ## Disclosure and reading
+Session-local choices are keyed by runtime, thread and tool. Automatic collapse settles once; explicit choices survive updates, reconnects and navigation until refresh. Focus, selection, gestures, open details/thinking and reading away from the tail protect expansion.
 
-Choices live for the interface session by runtime, thread and tool. Automatic
-collapse settles once; explicit choices persist through updates, reconnects and
-navigation, then reset on refresh. Focus, selection, gestures, open details or
-thinking, and reading away from the tail protect expansion.
+Closed groups initially mount only row shells and summary. Details mount on first expansion and remain mounted but inert after folding; new members of manually closed groups wait. Whole-turn closure releases its body after motion. Existing row owners lend DOM to the first node's viewport and restore it on disposal, preserving focus, selection and nested detail state. Unchanged groups/members retain identity during content growth; membership, status, disclosure and order changes replace only affected immutable projections.
 
-An initially collapsed sequence mounts its stable row shells and summary only.
-Tool and thinking content mounts on first expansion; inspected content then stays
-mounted and inert when folded so nested detail state survives. Newly arriving
-members of a manually closed sequence also wait for expansion. Whole-turn
-closure releases its body after motion. Expanded sequences share one internal
-scroll viewport below their reachable summary button. Its height is bounded by
-24rem, half the window height, and 65% of the actual transcript height, whichever
-is smallest. Expanded thinking has its own scroll viewport bounded by 20rem,
-45% of the window height, and the same transcript limit. Short content keeps its
-natural height; no canonical content is truncated. Both viewports expose a thin
-scrollbar, keyboard focus, and a localized accessible name. Thinking, tool
-sequences and read-only tool details use native scroll chaining: short regions
-pass scrolling through, and overflowing regions consume input only while they
-can scroll in that direction. At either edge, input reaches the next scrollable
-ancestor and eventually the transcript. This includes terminal output, file
-content, diffs, fetched excerpts and code previews; it does not dispatch input
-to a running terminal or editor.
+Sequence height is bounded by the minimum of 24rem, half the window and 65% of transcript height; thinking uses 20rem, 45% and the same transcript limit. Short content retains natural height, with no canonical truncation. Both expose thin scrollbars, keyboard focus, localized names and reachable summary controls.
 
-Canonical row components retain their rendering owners when the sequence layout
-places their existing DOM under the first node's viewport. Membership changes
-preserve details, focus and selection; disposal restores borrowed rows to their
-original slots. The transcript controller continues to own outer scroll intent.
-Fresh live arrivals coordinate with both viewport owners after placement: make
-room with a bounded upward scroll, then reveal the new row. Resize notifications
-retarget the existing movement without snapping or restarting it; manual reading
-and reduced-motion preferences retain their existing ownership. See
-[activity motion](flower-activity-interaction.md#visual-motion).
-Unchanged sequence groups and members retain their identities within one thread,
-so content-only streaming does not rerun historical layout or recreate resize
-observers. Membership, status, disclosure and source-order changes still replace
-the affected projection; previous projections are never mutated.
-Internal scrolling does not scroll or resume the outer transcript while the
-inner region can consume it. The transcript controller recognizes wheel, touch,
-and keyboard input through the same native ancestor chain instead of maintaining
-a component allowlist. Upward input reaching the transcript pauses outer tail
-following, and an actual return to its bottom resumes it. CSS containment
-(`contain` or `none`) remains an explicit boundary, even for short content;
-canceled wheel events and zoom gestures never become transcript intent.
-Interactive terminal, editor and Workbench input ownership is unchanged. Active content
-follows its own tail only until the reader scrolls upward, and resumes when they
-return to the bottom. Opening a sequence positions its internal viewport at the
-latest tool and resumes tail following, including after reading older calls or
-receiving new calls while collapsed. Manual collapse restores focus to the group
-button, while automatic collapse above the reader preserves position.
+Thinking, sequences and read-only terminal/file/diff/excerpt/code details use native ancestor scroll chaining. Inner regions consume only input they can scroll; short regions and outward edge input reach the next ancestor. The transcript controller uses the same wheel/touch/keyboard chain: upward input reaching it pauses following; an actual return to bottom resumes it. Explicit CSS containment, cancelled events and zoom remain local. Interactive terminals/editors retain their input owners.
 
-Controls expose viewport IDs, localized counts and labels. Hidden nodes create no
-gaps. Focus, reduced motion, forced colors, narrow layouts and pointer targets
-follow shared Flower rules; both product catalogs translate all copy.
+Inner active content follows until the reader scrolls upward. Opening a sequence returns to its latest tool and resumes following, including calls received while closed. Manual collapse focuses the group button; automatic collapse above a reader preserves position. [Activity motion](flower-activity-interaction.md#visual-motion) coordinates placement and bounded arrival scrolling with both viewport owners.
+
+Controls expose viewport IDs and localized counts; hidden nodes leave no gaps. Shared narrow-layout, pointer, focus, reduced-motion and forced-color rules apply in both product catalogs.
 
 # Boundaries
 

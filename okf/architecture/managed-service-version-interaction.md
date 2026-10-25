@@ -5,37 +5,21 @@ description: Select and verify a version in one drawer, confirm only changed not
 tags: [architecture, web-services, releases, updates, ui]
 timestamp: 2026-09-17T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-- Authority: Redeven owns version selection and presentation; the Manager owns the exact update plan and operation admission.
-- Outcome: an ordinary update takes a version selection and one explicit submit action in the same drawer.
-- Invariants: preparation never executes an operation; only new or revised required template notices need confirmation; the selected version and browsing context survive preparation and admission failure; one local viewport owns scrolling.
-- Failure boundary: source or admission failures stay actionable in the drawer; accepted operations continue through the existing service operation controller when the drawer closes.
+Redeven owns version selection; Manager owns exact update-plan admission. Users select and submit in one drawer. Preparation executes nothing, only changed required notices need confirmation, and selection/browsing survives preparation or admission failure. Accepted operations retain their existing controller after drawer closure; source failures stay actionable in place.
 
 # Contract
 
-## Selection and automatic preparation
-The service row's installed version opens the version drawer. The UI never selects the first source result automatically.
-
-The footer links directly to any outstanding confirmation.
-
-## Layout and accessibility
-The header identifies the service and current version. They never precede the version list or push earlier rows down.
-
-Restored candidates stay visible during refresh.
-
-## Stop, submit, and recover
-Downgrades and unknown-order switches use the Manager's existing stopped-state requirement.
-
-[Operation progress](managed-service-operation-progress.md) owns observation, completion, failure retention, and controller cleanup; the drawer adds no polling or parallel progress owner.
-
-Browser acceptance must inspect screenshots of wide and narrow layouts in light and dark themes, plus required notices, stopped-state guidance, preparation, rejection, and long translated version labels. Screenshots supplement assertions and must be opened and visually reviewed before delivery.
+- Installed version opens the drawer; never auto-select the first result. Keep service/current-version header, restored candidates during refresh and one scrolling viewport. Notices stay below the list without shifting prior rows; footer links to outstanding confirmation.
+- Downgrades/unknown ordering follow Manager stopped-state requirements. [Operation progress](managed-service-operation-progress.md) owns completion/failure/cleanup without drawer polling or another lifecycle.
+- Browser qualification visually reviews light/dark wide/narrow screenshots with notices, stop guidance, preparation/rejection and long translations; screenshots supplement assertions.
 
 # Boundaries
 
-Redeven owns candidate selection, drawer presentation, and explicit submit intent. Preparation never executes an update or creates another operation lifecycle.
+Only explicit submit requests execution. Selection, preparation and closing a drawer cannot create or cancel a backend lifecycle implicitly.
 
 # Evidence
 

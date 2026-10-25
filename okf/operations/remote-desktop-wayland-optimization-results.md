@@ -5,7 +5,7 @@ description: Assess separate cursor ownership, ordered nonblocking input and dam
 tags: [desktop, linux, wayland, validation, latency]
 timestamp: 2026-10-04T18:10:00Z
 lifecycle: active_evidence
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
@@ -45,7 +45,4 @@ The private PipeWire fixture sends synthetic BGRA pixels, header sequences, Vide
 ## Product And Distribution
 The immutable v0.22.12 tag resolves through the Go proxy and checksum database to upstream commit `ba8ecda3294a732c25a4829734896139f6df7ad8`. Redeven consumes its published Go/Swift artifacts; local integration does not publish or restart the product Runtime.
 
-## Verification
-## Isolated Linux Native Paths Redeven consumes its published Go/Swift artifacts; local integration does not publish or restart the product Runtime.
-
-Private task evidence lives in `task-evidence/desktop-cursor-ownership-20261005/`:
+Private task evidence: `task-evidence/desktop-cursor-ownership-20261005/`.

@@ -5,41 +5,25 @@ description: Apply one initial-loading and refresh policy across Activity pages 
 tags: [ui, startup, lifecycle, workbench]
 timestamp: 2026-09-23T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Redeven owns a single page-presentation registry over published Floe lifecycle,
-loading, and layout APIs. Every built-in Activity page declares its initial
-presentation and document-reload eligibility in that registry. Activity and
-Workbench consume the same declaration. Module loading must stay inside the
-selected page or widget; it cannot replace another mounted page, the whole
-canvas, or an existing successful result. Data services retain their existing
-authority. Access denial and authentication changes take precedence over retained
-content; ordinary loading does not grant permission or clear content.
+One product presentation registry declares initial loading and reload eligibility for every built-in Activity page and Workbench widget. Modules load inside their own surface, preserving existing successful content. Data services own readiness; access/authentication changes override retention, and loading never grants permission.
 
 # Contract
 
 ## One display rule
-A page without a successful result shows its initial presentation until data or an actionable error is ready.
-
-Pages derive readiness from their authoritative data. Transient mutations, terminal attachment, runtime maintenance, and plugin execution retain their own progress and confirmation contracts; they are not directory or inventory loads.
+Without a successful result, retain initial presentation until authoritative data or an actionable error arrives. Mutation, attachment, maintenance and plugin execution progress remain separate from inventory loading.
 
 ## Page ownership
-| Surface | Initial presentation and data authority |
-| --- | --- |
-| Host Applications, Web Services, Containers, Codespaces | Shared page frames and list skeletons; the resource cache owns restoration, successful snapshots, refresh, and request fencing. |
-| Files | Actual workspace chrome with blank content regions until the first successful directory result; the directory owner commits valid snapshots and rejects stale responses. |
-| Terminal | Shared initial status until the session catalog resolves; the terminal runtime owns subsequent creation and attachment. |
-| Monitoring | Shared initial status until the first live sample or error; subsequent polling preserves charts and current content. Metrics are not persisted as inventory snapshots. |
-| Settings | Shared module status; existing settings resources retain values during refresh and each section owns its form. |
-| Flower | Shared module status; its readiness and workspace-stream owners govern operational content and actionable maintenance. |
-| Plugin Center and dynamic plugin pages | Shared module status; the inventory and published plugin surface lifecycle retain ownership of discovery, permission, and readiness. |
+- Host Applications, Web Services, Containers and Codespaces: shared frames/list skeletons; [resource cache](env-resource-cache.md) owns snapshots, refresh and fencing.
+- Files: real workspace chrome with blank regions until its first valid directory; the directory owner rejects stale responses.
+- Terminal/Monitoring: shared status until catalog/first live sample or error; later attachment/polling preserves content. Metrics are not inventory snapshots.
+- Settings, Flower, Tessiven, Plugin Center and dynamic plugin pages: shared module status; existing resources/runtime/lifecycle owners govern operational readiness and errors.
 
 ## Activity and Workbench
-`EnvPageLoading` is the only built-in module-presentation registry. Its type must cover every `BuiltinActivityPage`, so adding a built-in page requires an explicit initial presentation and reload policy.
-
-[Resource snapshots](env-resource-cache.md) and [filesystem navigation](filesystem-picker-navigation.md) own their respective successful data and security boundaries.
+`ENV_PAGE_PRESENTATIONS` in `EnvPageLoading` exhaustively covers `BuiltinActivityPage`. New built-ins must declare loading and reload policy. [Filesystem navigation](filesystem-picker-navigation.md) retains its security boundary.
 
 # Boundaries
 

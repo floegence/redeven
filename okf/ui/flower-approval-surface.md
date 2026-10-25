@@ -5,26 +5,22 @@ description: Review bounded approval queues, inspect exact commands, and submit 
 tags: [ui, flower, approval, accessibility]
 timestamp: 2026-09-25T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Flower projects approvals from Floret typed current views through one compact list shared by Activity, the full page, Workbench, and Desktop. The actual chat container bounds the list while its header and decision footer remain visible. Approval identity, permissions, and completion remain canonical runtime concerns; local state owns disclosure and submission feedback only. Failures preserve the pending content and allow retry without blocking Stop or navigation.
+Shared Flower renders canonical Floret approvals as a compact keyed list bounded by chat space with reachable header/footer. Runtime owns identity, permission and settlement; UI owns disclosure/submission feedback. Pending unavailable approvals stay visible with disabled decisions and reasons. Failures preserve content and keep Stop/navigation usable.
 
 # Contract
 
 ## Reading and layout
-Approval uses one keyed flat list for both single and multiple actions. Each row pairs its safe operation label with independent Floe Reject and Allow once capsules; risk, actual file/network targets, and unavailable reasons remain visible.
-
-After an input response advances to approval, the existing focus handoff prefers the first enabled decision and falls back to Stop when no decision is available.
+Single/multiple approvals share one flat list. Rows pair safe operation labels with independent Reject/Allow once capsules and actual risk/targets/reasons. After input advances to approval, focus the first enabled decision or Stop.
 
 ## Canonical decisions and drafts
-Every pending, requested primary approval remains visible even when its action reports `can_approve=false`, the adapter cannot mutate, the selected thread is read-only, or detail is pending; those states disable every decision action and present the canonical unavailable or read-only reason instead of falling back to chat.
-
-No local handoff, consumed-interaction set, approval generation, or command busy reducer controls canonical visibility.
+Primary requested approvals remain visible when `can_approve=false`, adapters cannot mutate, thread is read-only or detail is pending. Disable every decision with canonical/read-only reason. Local handoff, consumed sets, generations or busy reducers cannot own visibility.
 
 ## Safe presentation
-One pure presenter owns operation classification, title, description, command, targets, and risk. Operation fallbacks are independent localized strings and never extracted from translated sentences. Internal tool names and target-encoding prefixes are never user-facing.
+One pure presenter owns trusted operation/title/description/command/target/risk fields. Localized fallbacks are independent strings, never parsed from translated sentences; internal names/encoding prefixes remain hidden.
 
 # Boundaries
 

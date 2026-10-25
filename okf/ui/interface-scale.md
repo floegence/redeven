@@ -5,29 +5,21 @@ description: Apply one measured desktop reading and control scale across Flower,
 tags: [ui, flower, desktop, accessibility, typography]
 timestamp: 2026-09-26T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Published Floe owns typography, control dimensions, responsive targets, settings geometry, and virtual file row measurements. Redeven maps product roles to that released scale across Flower, Files, Git, runtime settings, monitoring, services, plugins, Codespaces, and Desktop Welcome. At a browser-controlled 16px root and 100% zoom, desktop body text is 12px/20px and conversation titles are 13px/20px; ordinary host navigation remains 12px/18px, and ordinary single-line rows occupy 28px including inter-row spacing. Touch and enlarged-text layouts grow naturally. No density preference, root-font reduction, transform scaling, or second theme state controls this behavior. A geometry failure is repaired at its owning component without changing permission, focus, draft, or scroll authority.
+Published Floe owns typography, dimensions, responsive targets and virtual rows; Redeven maps product roles to it. At 16px root/100% zoom, desktop body is 12px/20px, conversation titles 13px/20px, navigation 12px/18px and ordinary rows 28px including spacing. Touch/enlarged text grows naturally. No density setting, root shrink or transform changes scale.
 
 # Contract
 
 ## Type roles and boundaries
-Env App and Desktop bundle Inter Variable and use the same platform fallback stack for unsupported scripts. Product guidance, error messages, settings labels, and dialog copy must use their published body or control roles rather than fixed 13–14px sizes or generic utility sizes.
-
-Root font size, browser zoom, and system magnification remain user-controlled.
+Env App/Desktop bundle Inter Variable with shared script fallbacks. Guidance, errors, labels/dialogs use published roles, not fixed 13–14px or generic utilities. Root size, zoom and magnification remain user-controlled. [Message appearance](flower-message-appearance.md) owns the separate transcript reading scale.
 
 ## Controls and layout density
-Inline desktop actions use 28px targets; primary actions and ordinary fields use 32px.
+Inline desktop actions use 28px targets; ordinary primary actions/fields use 32px. [Settings fields](runtime-settings.md#settings-controls-and-identity) use their explicit 34px treatment. Groups are 8px apart with the last action at trailing padding; focus changes only the existing border color.
 
-Groups stay 8px apart and the last action meets the trailing padding, so spare width never becomes an interior or trailing gap.
-
-Input focus changes only the existing border color through Floe's published input-focus contract.
-
-Density is measured on real components with published dependencies after font loading, recording source identity, loaded Floe version, font family, root size, DPR, and zoom. The fixed mixed-script Markdown sample at 434px and 758px must occupy no more than 90% of its frozen pre-change height.
-
-Screenshots use matching content and dimensions; reference screenshots from another product do not establish its unmeasured CSS values.
+Measure real published components after fonts load, recording source/package identity, font, root, DPR and zoom. Mixed-script Markdown at 434px/758px must fit within 90% of the frozen reference height. Compare matching content/dimensions; another product's screenshots do not establish CSS measurements.
 
 # Boundaries
 

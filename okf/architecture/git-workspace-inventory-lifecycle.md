@@ -5,37 +5,22 @@ description: Bound Git workspace capture, immutable revisions, resource admissio
 tags: [architecture, git, runtime, filesystem, transport]
 timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Redeven exposes Git workspace state as bounded, immutable, process-local inventory snapshots. Fresh queries stream Git porcelain output into an admitted snapshot; paged and path-scoped reads bind an exact revision. Git and Files mutations coordinate against the same repository and topology authority, invalidate all affected snapshots before and after effects, and never use display state to authorize a mutation. Oversized, stale, malformed, or resource-exhausted work fails closed with a small typed Git error while the Flowersec session remains usable.
+Git workspace queries produce bounded immutable process-local snapshots; paged/path reads bind exact revisions. Git and Files mutations share repository/topology coordination and invalidate affected snapshots before and after effects. Display state never authorizes mutation. Oversized, stale, malformed or exhausted requests return small typed errors while the Flowersec session remains usable.
 
 # Contract
 
-## Inventory
-Workspace capture reads NUL-delimited porcelain v2 incrementally. Token, record, canonical-path, retained-heap, subprocess, capture, and published-cache limits are admitted before retained capacity grows beyond its reservation.
-
-Stable filesystem identity prevents a deleted and recreated path from inheriting an older coordinator or revision.
-
-## Query and wire
-`git.getCapabilities` advertises revisioned workspace pages, path-scoped status, directory scope, and stash-section diff support. `git.listWorkspacePathStatuses` accepts only a bounded set of already-known paths and returns file rows or aggregate directory counts without descendant arrays.
-
-It does not claim a general bound for non-Git outbound responses or notifications; transport-wide lifecycle remains owned by the published Flowersec v5.10.3 release.
-
-## Mutation coordination
-The Agent owns one Git runtime shared by direct sessions. A cancellable topology gate, active-worktree registry, canonical repository lock order, per-repository fair read/write coordination, epochs, process admissions, snapshot storage, and destructive-scan admission form one lifecycle.
-
-Descendants that deliberately escape the process group remain an explicit operating-system boundary; their existence does not permit an unbounded handler or retained pipe.
-
-## Linked worktree removal
-Linked-worktree lists and previews expose summary state rather than full file arrays. The root Git control entry is excluded only after its type, exact contents when applicable, canonical target, and filesystem identity match the already resolved Git directory.
-
-Hostile external writers and metadata outside the portable fingerprint, including ACLs, extended attributes, resource forks, and alternate data streams, are explicit non-transactional boundaries.
+- Incrementally read NUL-delimited porcelain v2 and reserve token/record/path/heap/process/capture/cache capacity before growth. Filesystem identity prevents recreated paths inheriting old coordination or revisions.
+- `git.getCapabilities` advertises revisioned pages, path/directory status and stash-section diff. `git.listWorkspacePathStatuses` accepts bounded known paths and returns rows or directory counts without descendant arrays.
+- One Agent Git runtime coordinates cancellable topology, active worktrees, canonical lock order, fair per-repository reads/writes, epochs, process admission, snapshots and destructive scans. Escaped process-group descendants never justify unbounded handlers/pipes.
+- Linked-worktree previews expose summaries. Exclude the root Git control entry only after verifying type, applicable exact content, canonical target and filesystem identity against the resolved Git directory.
 
 # Boundaries
 
-Git remains authoritative for repository and workspace state; snapshots are process-local read models and never authorize mutations. Floret, ReDevPlugin, Flowersec transport internals, non-Git outbound RPC allocation, and operating-system processes that deliberately escape the supervised process group remain outside this runtime's ownership.
+Git remains authoritative; snapshots are read models. Hostile external writers and nonportable metadata (ACLs, xattrs, resource forks, alternate streams) remain non-transactional limits. Published Flowersec owns transport-wide lifecycle; this contract cannot bound non-Git RPCs/notifications or control escaped OS processes, Floret or ReDevPlugin internals.
 
 # Evidence
 

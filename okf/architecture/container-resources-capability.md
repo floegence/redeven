@@ -5,48 +5,22 @@ description: Aggregate the active Docker and Podman runtimes behind one Redeven-
 tags: [architecture, containers, docker, podman]
 timestamp: 2026-09-19T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Redeven owns container management as a native product capability. The
-`containerengine` package is the only Docker and Podman execution layer shared
-by native Containers and Web Services; `containerresource` is the only native
-mutation, persistence, and reconciliation owner. Resources created by Web
-Services remain visible but read-only in Containers. Unknown runtime targets, stale
-preflights, ambiguous outcomes, and failed authoritative observation fail
-closed without replaying mutations.
+Native container management uses one `containerengine` Docker/Podman execution layer shared with Web Services. `containerresource` alone owns native mutations, persistence and reconciliation. Managed Web Service resources are visible but read-only here. Unknown targets, stale preflights, uncertain outcomes and failed authoritative reads fail closed without mutation replay.
 
 # Contract
 
-## Runtime execution
-[Container runtime execution](container-runtime-execution.md) owns active Docker/Podman discovery, endpoint binding, typed CLI reads and shared resource normalization. Native mutations and product permissions use that single execution owner.
-
-## Native service boundary
-Volume reference completeness and the independent disk usage read are owned by [Volume usage observation](container-volume-usage.md).
-
-`containerresource` strictly decodes every mutation request and rejects unknown fields.
-
-Unknown results remain explicit.
-
-## Product ownership and permissions
-The Local API is under `/_redeven_proxy/api/container-resources` and `/_redeven_proxy/api/container-resource-operations`. Server-side enforcement is authoritative; disabled UI controls are only a presentation aid.
-
-Renderer cannot construct argv, skip validation, or use native mutation on managed resources.
-
-## Data and host safety
-DTOs expose only typed, redacted fields. They never return environment values, arbitrary label values, credentials, socket paths, certificates, remote URLs, or Compose file paths.
-
-Ordinary terminal sessions retain their Write and Execute permission contract.
-
-## Product surface
-The native Activity and Workbench interaction, loading, resource-navigation, Compose input, and responsive presentation contracts are owned by [Native container console](container-resources-console.md). That surface may project only the targets and capabilities established here; it cannot create a second routing, mutation, or ownership path.
-
-Resource readiness observes engine reachability directly; host-service state additionally identifies management capabilities and never substitutes for a successful resource probe.
+- [Runtime execution](container-runtime-execution.md) owns discovery, endpoint binding, typed CLI reads and normalization; [volume usage](container-volume-usage.md) owns reference completeness and independent usage reads.
+- Strictly decode mutations and reject unknown fields. Keep uncertain outcomes explicit. Server gates `/_redeven_proxy/api/container-resources` and `container-resource-operations`; disabled controls are only presentation.
+- Renderer cannot construct argv, skip admission or mutate managed resources. DTOs expose typed redacted facts, excluding environment/label values, credentials, sockets/certificates, remote URLs and Compose paths. Terminal sessions retain Write/Execute checks.
+- [Console](container-resources-console.md) projects established targets/capabilities. Direct engine reachability proves resource readiness; host-service management state cannot replace that probe.
 
 # Boundaries
 
-- `containerengine` owns typed Docker and Podman execution and redaction. - `containerresource` owns native mutation admission, locking, persistence,   cancellation, events, and reconciliation. - Web Services owns the lifecycle of resources it created. - ReDevPlugin remains the platform for other plugins and has no Containers   capability, adapter, package, generated client, or native UI role. - The host administrator owns engine installation and operating-system access.
+`containerengine` owns execution/redaction; `containerresource` owns admission, locks, cancellation, events and reconciliation; Web Services owns its resources. ReDevPlugin has no Containers adapter/package/client/UI role. Host administrators own engine installation and OS access.
 
 # Evidence
 

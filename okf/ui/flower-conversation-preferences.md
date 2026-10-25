@@ -5,51 +5,27 @@ description: Remember explicit model, directory, and model-owned reasoning choic
 tags: [ai, flower, preferences, composer, persistence]
 timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Flower remembers explicit choices for future root conversations in one
-Redeven-owned product store, scoped by authenticated namespace, endpoint, and
-user. The existing controls and layout are unchanged. Loading or switching a
-Thread never writes a preference. Existing Threads and immutable Turns keep
-their own confirmed settings; new conversations use explicit launch/draft
-choices before personal memory and configured defaults.
+Explicit model, directory and model-owned reasoning choices are remembered per authenticated namespace, endpoint and user. Loading/switching threads never writes defaults. New roots prefer explicit launch/draft choices, then personal memory, then configuration; existing threads and immutable turns retain confirmed settings.
 
 # Contract
 
 ## Ownership and persistence
-`ai_conversation_preferences` belongs to `ai_threadstore_product_v1`, schema version 11. The v10-to-v11 transactional migration validates both historical and target shapes, preserves product data, and never infers a user's preference from old Threads.
-
-Stable scope absence cannot read another user's defaults.
+`ai_conversation_preferences` belongs to product schema v11. Transactional v10→v11 validates source/target shapes, preserves data and never infers preferences from old threads. Missing stable scope cannot read another user's defaults.
 
 ## Selection events
-Only the selected field is patched. Existing-Thread edits must succeed before personal memory is changed; a later memory failure does not roll back the confirmed Thread result.
-
-Explicit Default remains distinct from absent memory; existing Default/budget and Off/budget semantics are unchanged.
+Patch only the chosen field. Existing-thread edits must succeed before saving memory; memory failure cannot roll back confirmed thread state. Explicit Default differs from absent memory; Default/budget and Off/budget semantics remain.
 
 ## Drafts and admission
-Shared drafts separate explicit `model_id_override`/`working_dir_override` from effective `model_id`/`working_dir` admission projections. Old Thread selection cannot seed the new draft.
-
-A root launch without an explicit or remembered reasoning choice freezes
-explicit Default, so a retry cannot pick up memory written after preparation.
-The client does not inspect model capability for this; the server owns
-[Default canonicalization](../ai/model-reasoning-runtime.md).
-
-Existing busy/queued/unresolved-interaction edit restrictions are unchanged.
+Draft overrides remain distinct from effective model/directory admission values; old selection cannot seed a new draft. Without explicit/remembered reasoning, root launch freezes explicit Default so retries cannot acquire later memory. Server [canonicalization](../ai/model-reasoning-runtime.md) owns model capability. Existing busy/queued/unresolved-input edit restrictions apply.
 
 ## Concurrency and failure
-Each authenticated adapter orders captured field patches and loads the latest revision before writing. The product store atomically merges fields and uses compare-and-set revision; concurrent stale writes return HTTP 409 and are not automatically retried.
+Adapters serialize captured patches and load latest revision; the store atomically merges with compare-and-set. Stale writes return 409 without auto-retry. Captured target/model identity fences late responses against navigation or retargeting.
 
-Thread/draft targets and model identities are captured before asynchronous work; a late response cannot retarget another draft or navigate the surface.
-
-Saving a conversation preference updates the active Flower surface from the
-authoritative response. The originating surface consumes its own settings
-revision notification without reloading the shared model settings resource;
-other mounted surfaces still refresh from the persisted preference. Provider and
-model catalog refreshes remain reserved for model configuration changes, so
-switching a model or reasoning level does not replace the active composer with a
-loading state or move its layout.
+The originating surface consumes its authoritative response/settings revision without reloading shared model resources; other surfaces refresh persisted preferences. Catalog refresh is reserved for configuration changes, preventing model/reasoning selection from replacing the composer with loading UI.
 
 # Boundaries
 

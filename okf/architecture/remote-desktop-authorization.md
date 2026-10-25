@@ -5,47 +5,22 @@ description: Restore approved desktop sharing without conflating saved OS author
 tags: [desktop, runtime, authorization, wayland]
 timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Redeven owns the host's sharing preference and authenticated reset operation;
-published `floe-native-apps` v0.22.24 owns OS authorization and private recovery
-credentials. With the Runtime running in a logged-in graphical desktop, sharing
-defaults to preserving first approval. Later connections attempt recovery before
-requesting consent again. A saved credential is a recovery opportunity, not proof
-that the OS will accept it. No credential reaches the viewer, URL or audit.
-Uncertain single-use credentials are retained but never replayed indefinitely.
-This contract governs the optional current-user Portal chain. Linux Desktop SSH
-uses the [system-service deployment contract](remote-desktop-ssh-deployment.md);
-Portal approval is never its installation or lock-screen prerequisite.
+Redeven owns sharing preference/reset; published Floe Native Apps owns OS authorization and private recovery credentials. Logged-in Runtime defaults to reusing first approval, attempting recovery before new consent. Saved credentials are opportunities, never proof of OS admission, and never reach viewers, URLs or audits. This optional user Portal chain is separate from [SSH system-service deployment](remote-desktop-ssh-deployment.md).
 
 # Contract
 
-## Policy and migration
-`remote_desktop.unattended` remains the compatible preference field.
-
-Session creation and viewer connection always use the saved host preference; renderer input cannot override it.
-
-Audit contains the action and outcome, never credential contents.
-
-## State and platform ownership
-Desktop readiness (`ready`, `locked`, `session_unavailable`) is independent of authorization.
-
-- `unsupported`: automatic Portal restoration is unavailable; temporary sharing remains possible. - `needs_consent`: no usable saved recovery credential exists. - `saved`: a credential can be attempted on the next connection. - `restoring`: a request using saved approval is pending. - `revoked`: the system has positively established revocation. - `unknown`: a previous attempt is uncertain; a fresh request is allowed.
-
-This feature does not start the Runtime, install services, elevate privileges, bypass lock screens or provide login access.
-
-## Single-use Portal transaction
-The upstream private directory and grant/lock files validate current-user ownership, restrictive modes, regular files, schema and bounded content.
-
-This is an unavoidable distinction between pre-submission failure and an uncertain request outcome.
-
-SSH physical-desktop status and creation explicitly select the installed service. They never fall back to a Portal request when service preparation or authentication fails. This does not change local current-user Portal sharing or macOS system permission flows.
+- Compatible preference `remote_desktop.unattended` controls both creation and connection; renderer cannot override it. Audit only action/outcome.
+- Readiness (`ready`, `locked`, `session_unavailable`) is independent of authorization: `unsupported` allows temporary sharing; `needs_consent` has no usable credential; `saved` permits an attempt; `restoring` is pending; `revoked` requires positive OS evidence; `unknown` allows a fresh request after uncertainty.
+- Upstream validates credential-directory/file owner, restrictive modes, regular-file type, schema and bounded content. Retain uncertain single-use credentials without indefinite replay.
+- SSH status/creation select installed service and never fall back to Portal after preparation/authentication failure. Local Portal/macOS permission flows remain separate.
 
 # Boundaries
 
-Session closure, removed displays and invalid media revoke live input, clipboard, audio and painted authority under the [desktop session contract](remote-desktop.md). Old connections and generations cannot transfer authority to it.
+Approval reuse does not start Runtime, install/elevate, bypass lock screens or grant login. [Session ownership](remote-desktop.md) revokes input, clipboard, audio and painted authority on closure/invalid media; old generations cannot transfer it.
 
 # Evidence
 

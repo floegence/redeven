@@ -5,29 +5,24 @@ description: Canonical navigation and security boundary for Desktop-integrated R
 tags: [desktop, runtime, bridge, lifecycle]
 timestamp: 2026-08-27T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Redeven Desktop opens Runtime instances through machine-readable startup, scoped transport, session, and process contracts. Runtime remains independently runnable without Gateway. Redeven-managed lifecycle actions use the registered Local, WSL, SSH, or container direct channel and are owned by Desktop's process-local coordinator; Gateway and Provider remain access-only. This overview is the canonical navigation point for readiness, recovery, WSL/SSH operations, and model/session integration. Focused concepts own the independent details while this concept retains the boundary between Desktop lifecycle coordination, Runtime services, optional access forwarding, and plugin capabilities.
+Desktop opens independently runnable Runtime through machine-readable startup, scoped transport and session contracts. Its process-local coordinator owns direct Local, WSL, SSH and container lifecycle. Gateway/Provider remain access routes. Runtime service, health, process and session observations cannot become competing owners; plugins use their released brokers rather than Desktop control credentials.
 
 # Contract
 
-## Mechanism
-Focused contracts:
-
-Settings, model directory, preferences, and thread-detail GETs can carry it; commands, request bodies, and staging authorization cannot.
-
-A worker cannot borrow another partition's bridge or attach its token to a public origin.
+- [Process lifecycle](desktop-runtime-process-lifecycle.md) owns coordination and exact-target actions; [readiness](desktop-runtime-readiness.md) owns compatible admission.
+- [SSH](desktop-ssh-runtime-operations.md), [WSL](desktop-wsl-runtime-operations.md) and [reinstall](desktop-reinstall-operations.md) define direct execution. [Transport recovery](desktop-transport-recovery.md) owns bridge generations and disposal.
+- [Session/model source](desktop-session-model-source.md) owns target routes, model-process lifetime and session invalidation. Private bridge tokens never move between partitions or attach to public origins.
 
 # Boundaries
 
-Runtime-control is a local Desktop coordination capability, not a general network API or plugin grant plane. Bridge, health, process, Gateway, Provider, and session observations must not become competing lifecycle authorities. ReDevPlugin and access components retain their separate execution boundaries.
+Runtime control is Desktop coordination, not a general network API or plugin grant. [ReDevPlugin](../architecture/redevplugin-boundary.md) retains its separate execution and capability boundary.
 
 # Evidence
 
-- `redeven:desktop/src/main/desktopCertificate.test.ts` - Exercises explicit setup, preserved identity after trust failure, verification, and HTTPS restart admission.
-
-- `redeven:desktop/src/welcome/LocalCertificateSettings.client.test.tsx` - Covers legacy trust status, actionable retries, duplicate actions, and stale environment responses.
-
-- `redeven:cmd/redeven/main.go:299` - Local Desktop startup is rejected for remote-only mode.
+- `redeven:desktop/src/main/runtimeLifecycleCoordinator.ts` - Single target owner.
+- `redeven:desktop/src/main/desktopSessionContext.ts` - Explicit route and private document transport.
+- `redeven:desktop/src/main/codespaceNativeSession.ts` - Isolated request authentication.

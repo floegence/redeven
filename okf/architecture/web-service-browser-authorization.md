@@ -5,32 +5,22 @@ description: Hand Desktop-private Web Services to a system browser without expos
 tags: [architecture, desktop, local-ui, port-forward, security]
 timestamp: 2026-08-30T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Runtime Local UI is the sole authority for opening a `unified_proxy` Desktop-private Web Service in a system browser. Desktop obtains a short-lived, single-use entry for the exact forward and application path; Runtime redeems it into a Host-only browser session on the existing `pf-<forward_id>.localhost:<bridge_port>` origin. The bridge header never enters the system browser, the browser credential never enters the user service, and failures open no URL. A `desktop_loopback` service is Desktop-only and never enters this handoff. There is no public Local UI fallback, `/pf/<id>` conversion, persistent session record, or alternate Runtime proxy path.
+Runtime alone admits system-browser access to Desktop-private `unified_proxy` services. Desktop requests a short-lived single-use entry for an exact forward/path; Runtime redeems it into a Host-only session on `pf-<forward_id>.localhost:<bridge_port>`. Bridge credentials stay out of browsers and browser credentials out of services. Failure opens no URL; `desktop_loopback` is excluded.
 
 # Contract
 
-## Mint and redemption
-Only a request already admitted by the private Desktop bridge header may call the internal mint endpoint. Pending entries are memory-only, capped at 128, cleaned on access, and oldest-first evicted after expired entries are removed.
-
-The cookie is intentionally not `Secure` because the private bridge is loopback HTTP; it carries random session authority rather than the Desktop bridge token.
-
-## Session and proxy boundary
-One current browser session exists per exact bridge authority and forward. Sessions expire after 12 hours or Runtime shutdown, remain memory-only, are capped at 256, and are cleaned or oldest-first evicted under the same bounded store.
-
-Root-relative resources, application-owned `/pf/*` paths, same-protocol same-port redirects, HTTP query parameters, fragments, and WebSockets continue through the existing root-mounted forward without a second routing rule.
-
-## Desktop action
-Desktop derives the relative application location only from the exact private `pf-<forward_id>.localhost:<bridge_port>` route.
-
-Local-compatibility mode disables the action and cannot silently switch access modes.
+- Only private-bridge-header admission can mint entries. Memory-only entries cap at 128; remove expired then evict oldest. Loopback HTTP cookies intentionally omit Secure and contain independent random session authority.
+- One session per bridge authority/forward expires after 12 hours or shutdown. Memory-only sessions cap at 256 with the same cleanup policy.
+- Existing root-mounted forwarding preserves root-relative resources, app-owned `/pf/*`, same-protocol/port redirects, queries, fragments and WebSockets. No new routing rule is added.
+- Desktop derives relative paths only from that exact private origin. Local compatibility disables browser handoff and cannot switch mode.
 
 # Boundaries
 
-The system-browser cookie authorizes one unified Web Service proxy origin; it is not a Local UI login, Flowersec artifact, Provider session, Gateway ticket, reusable Desktop credential, local-compatibility credential, or public-access mechanism. The Desktop IPC action and Runtime startup report remain unchanged.
+The cookie admits one proxy origin, never Local UI, Provider/Gateway, Flowersec artifacts or other Desktop credentials. No public fallback, `/pf/<id>` conversion, durable session or alternate proxy is allowed; IPC/startup-report contracts remain unchanged.
 
 # Evidence
 

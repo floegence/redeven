@@ -5,44 +5,23 @@ description: Keep Code App available while a process-local controller serializes
 tags: [architecture, ai, readiness, lifecycle, floret]
 timestamp: 2026-09-08T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-- Authority: Floret owns durable Agent and Store facts; Redeven owns process-local AI availability and presentation.
-- Outcome: non-AI product surfaces remain usable while AI startup inspects, migrates, verifies, recovers, or blocks.
-- Invariants: one controller owns construction, retry, generation publication, request leases, drain, and close; each AI request stays on one generation.
-- Failure boundary: unavailable or blocked startup returns a sanitized typed envelope, publishes no partial service, repairs no Store data, and never becomes durable Agent state.
+Floret owns durable Agent/Store facts; Redeven's single process-local readiness controller owns AI construction, retry, publication, request leases, drain and close. Non-AI surfaces remain usable through startup/migration/recovery. Requests use one generation. Unavailable startup returns sanitized typed state without publishing a partial service, repairing Store data or creating durable Agent state.
 
 # Contract
 
-## Process-local readiness
-The Code App composition layer owns the only AI readiness controller.
-
-Startup performs unfinished replacement recovery, bounded Floret owner open, product database migration, explicit activation, then generation publication. Historical thread preparation continues in Floret's worker. Product recovery begins only after activation, pages settings in batches of 200, retains each thread's complete media inventory and resumes eligible admitted queues. One thread failure does not starve later pages; ownership review runs afterward. Incomplete recovery gates destructive maintenance and retries on the next maintenance pass. Each waiter retains the result of its own recovery attempt; a concurrent retry cannot turn a failed attempt into successful readiness.
-
-Background phase callbacks cannot return a published generation to startup or unmount Flower. Background orphan discovery updates the controller's degraded state and retry path; known issues clear only after successful reconciliation or explicit repair. Shutdown cancels and joins generation workers before closing storage.
-
-Retry is explicit, asynchronous, and admits at most one startup owner.
-
-## Generation leases
-Every ready service is published as one monotonically identified generation. The controller waits for every idempotent release, closes the old service once, and only then constructs and publishes a replacement.
-
-Long-lived model-source calls receive the generation context so replacement can cancel their work before waiting for release.
-
-## Route availability
-AI lifecycle routes return HTTP 503 with machine code `AI_SERVICE_UNAVAILABLE` and the current sanitized snapshot when no generation can be leased. Readiness, retry, stop, and administrator-only snapshot and restore routes never acquire a service.
-
-Incomplete provider leases fail closed, release any supplied resource, and cannot be presented as `ready`.
-
-## Maintenance presentation
-See [Flower startup and recovery presentation](flower-startup-presentation.md) for Env App and Desktop admission, phase progress, stop/retry, focus and draft continuity.
+- Startup recovers unfinished replacements, opens the Floret owner with bounded waiting, migrates product data, activates and publishes. Floret's worker prepares historical threads.
+- After activation, recovery pages settings by 200, retains complete media inventories and resumes eligible admitted queues. Per-thread failure cannot starve later pages; ownership review follows. Incomplete recovery gates destructive maintenance and retries next maintenance pass. Waiters retain their own attempt's result.
+- Background phases cannot regress a published generation or unmount Flower. Orphan discovery updates degraded/retry state; successful reconciliation or explicit repair clears issues. Shutdown cancels/joins generation workers before storage close.
+- Explicit asynchronous retry admits one startup owner. Replacement cancels long-lived generation work, waits for idempotent lease releases, closes once, then publishes the next monotonic generation.
+- Unleasable AI routes return HTTP 503 `AI_SERVICE_UNAVAILABLE` with sanitized state. Readiness/retry/stop and admin snapshot/restore bypass service acquisition. Incomplete provider leases release supplied resources and cannot report ready.
 
 # Boundaries
 
-The readiness controller must not import Floret, SQLite, or threadstore packages; perform owner storage inspection; hold `runtime.Host` or `storage.Backend`; or retain canonical Agent DTOs.
-
-Readiness history is not recovery authority.
+The controller imports no Floret/SQLite/threadstore packages, holds no Host/Backend or canonical Agent DTOs, and inspects no owner storage. Readiness history grants no recovery authority. [Startup presentation](flower-startup-presentation.md) owns UI admission, focus and drafts.
 
 # Evidence
 

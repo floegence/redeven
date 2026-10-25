@@ -5,7 +5,7 @@ description: Inspect every retained v48 paired result, source-loss failure and r
 tags: [desktop, performance, experiments]
 timestamp: 2026-10-15T13:00:00Z
 lifecycle: active_evidence
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
@@ -52,12 +52,6 @@ These outcomes apply only to the recorded hardware, workload and valid intervals
 
 All rows use the same post-reboot host, physical 1920 x 1280/60 Hz scene v8, small ordinary windows and approximately 1020 x 680 logical content viewports. Later two good rounds do not erase round one.
 
-## Retained Presentation Results
-All rows use the same post-reboot host, physical 1920 x 1280/60 Hz scene v8, small ordinary windows and approximately 1020 x 680 logical content viewports. Later two good rounds do not erase round one.
-
-The first Redeven motion attempt has 45 tapped local inputs and 58 outside events after the operator moved its window; preserve and exclude the whole attempt. These fixture failures do not invalidate complete unrelated motion trials.
-
-## Fixture Validity And Source Failure
 The first Redeven motion attempt has 45 tapped local inputs and 58 outside events after the operator moved its window; preserve and exclude the whole attempt. These fixture failures do not invalidate complete unrelated motion trials.
 
 All paths below are relative to B/`published-v48-paired`. The durable copy is `/Volumes/JianDisk/.codex-cc/artifacts/redeven-lan-performance-20261014/published-c05-20261015`.

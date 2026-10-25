@@ -5,24 +5,19 @@ description: Canonical assistant source ownership, safe links, and provider mark
 tags: [ai, flower, markdown, citations]
 timestamp: 2026-10-16T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-- Authority: published Floret v7.32.0 assistant messages own durable sources; Flower reads current views and historical pages through the existing thread projection.
-- Outcome: provider citation markers in prose become readable links with source titles. Copying a message removes those markers.
-- Invariants: ranges use end-exclusive Unicode code-point indices in the exact assistant text. URLs must be HTTP(S), without credentials, whitespace or control characters. Marker identifiers never establish a URL.
-- Failure boundary: unmatched sources appear at the end of the completed message. Historical provider markers without stored sources show localized unavailable text; Flower never reconstructs missing provider facts. Explicit Markdown bibliographies remain authored content.
+Floret owns durable assistant sources with end-exclusive Unicode code-point ranges in exact message text. Flower renders provider markers as titled links and strips them on Copy. Only credential-free, whitespace/control-free HTTP(S) URLs are links; marker IDs cannot establish URLs. Missing historical facts remain explicit, while authored bibliographies stay ordinary content.
 
 # Contract
 
-Provider annotations preserve title, URL and optional positions through the model gateway and Floret provider adapter. Floret validates sources, binds them to canonical assistant fragments and supplies the same facts in current and detail projections.
-
-Invalid URLs never become links, and metadata changes invalidate Markdown HTML without remounting stable code controls.
+Provider/gateway annotations preserve title, URL and optional positions. Floret validates and binds them to canonical assistant fragments for current/historical projections. Invalid URLs never link; metadata invalidates Markdown HTML without remounting stable code controls. Unmatched sources follow completed messages; markers without stored sources show localized unavailable text.
 
 # Boundaries
 
-The published Floe Webapp v0.86.32 `createMarkdownParser` owns GFM syntax with CJK-aware emphasis boundaries for completed and streamed text. Display parsing never writes back to canonical messages or provider cache input. New messages preserve complete sources; old records lacking sources remain readable without rewriting historical data.
+Published Floe Markdown parsing owns GFM syntax with CJK-aware emphasis boundaries for completed and streamed text. Display parsing never writes back to canonical messages or provider cache input. New messages preserve complete sources; old records lacking sources remain readable without rewriting historical data.
 
 ## Inline-code references
 Inline Markdown code derives from the published Floe `--inline-code-foreground` and `--inline-code-background` pair.

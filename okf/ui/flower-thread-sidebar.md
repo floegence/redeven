@@ -5,69 +5,36 @@ description: Select conversations clearly and reorder endpoint-owned pins withou
 tags: [flower, sidebar, navigation, pins, interaction]
 timestamp: 2026-10-19T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-23"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Redeven owns conversation selection presentation and persistent pin order. Desktop
-and Env App use the same Flower sidebar. Selection, running activity, unread
-attention and pending replies or approvals retain independent meanings. Live summary changes
-must preserve row identity, open menus, focus and running wave continuity. Pin
-failures undo only the current operation's presentation and reconcile through the
-existing workspace summary stream or one explicit post-command read.
+Desktop and Env App share one Flower sidebar with ThreadID-owned rows and endpoint-owned pin order. Selection, running work, unread attention and pending actions remain distinct. Live summaries preserve row/menu/focus identity. Resizing and pin feedback are ephemeral presentation over the canonical ThreadCache.
 
 # Contract
 
 ## Resizing
+One 220–380 CSS-pixel preference owns desktop sidebar width. Inline resizing updates only its grid track, at most once per frame; drawer width applies only in overlay mode. Mobile, companion and embedded layouts keep their sizing.
 
-One width signal owns the 220–380 CSS pixel sidebar preference. Inline desktop
-resizing updates the grid track directly, at most once per animation frame,
-without propagating a changing inherited variable through the transcript. The
-desktop drawer receives its saved width only in overlay presentation; mobile,
-companion and embedded layouts retain their own sizing.
-
-One transient gesture captures the primary pointer, retains the latest sample,
-and flushes the final coordinate on release. Cancellation, lost capture, blur,
-layout changes and unmount settle the latest sample and release all listeners,
-frames and the temporary cursor/selection shield. Width changes persist once
-at gesture completion; keyboard changes persist immediately. Unavailable
-preference storage cannot interrupt interaction.
-
-Live updates, conversation identity, focus and scrolling remain owned by their
-existing controllers. Resizing must not reparse unchanged Markdown or invalidate
-styles across the entire mounted transcript.
+One primary-pointer gesture retains the latest sample and settles on release, cancellation, lost capture, blur, layout change or unmount. Release listeners, frames and cursor/selection shielding; persist once per gesture or immediately for keyboard changes. Storage failure cannot interrupt interaction. Width changes cannot reparse Markdown or invalidate the full transcript.
 
 ## Rename from the conversation header
-The header's pencil renames an existing ThreadID when supported, including during execution and detail loading.
-
-The pencil replaces the title with an inline input, prefilled from the current canonical title with its text selected.
-
-Both entry points share one rename owner and canonical save path; header and sidebar titles update through the existing thread cache.
+The header pencil edits the existing ThreadID, including during execution/loading, with canonical title prefilled and selected. Header/sidebar share one save owner and thread cache.
 
 ## Selection and detail reads
-[Conversation selection and detail reads](flower-thread-selection.md) owns deferred selection, bounded shared reads, cancellation and recovery. ThreadCache remains the sole committed selection and accepted-detail owner; sidebar intent only reserves feedback presentation before that commit.
+[Selection](flower-thread-selection.md) owns deferred commitment, bounded reads, cancellation and recovery. ThreadCache owns committed selection/detail; sidebar intent reserves feedback only.
 
 ## Reference action
-The same ThreadID-owned menu serves right-click, More and Shift+F10. [Conversation references](flower-thread-references.md) owns deduplication, preview, removal, admission and failure recovery.
+Right-click, More and Shift+F10 share the ThreadID-owned menu. [References](flower-thread-references.md) own deduplication, preview, admission and recovery.
 
 ## Pending replies and approvals
-An unresolved input request shows the localized "Reply needed" label beside the title; a pending approval shows its approval label in the same position.
-
-Status and progress text keep their bounded width so longer translations cannot consume the whole row.
-
-Background threads update through the same workspace stream without requiring selection.
+Localized reply/approval labels appear beside the title with bounded status/progress width. Background updates use the workspace stream without selection.
 
 ## Pin ordering
-The stable .flower-thread-rows owner provides inline-size containment for real and skeleton rows; movable cards cannot be size containers.
-
-Keyboard selection follows the same visible order, including search results and the sidebar's short-lived pin presentation overlay.
+The stable `.flower-thread-rows` owner contains inline size for real/skeleton rows; movable cards cannot be size containers. Keyboard order matches visible search/pin-overlay order. Failed pin operations undo only their own presentation and reconcile via the existing summary stream or one explicit command read.
 
 ## Stable presentation and convergence
-One sidebar row owner keys conversations by ThreadID and group labels by separate keys.
-
-`ThreadCache` owns canonical summaries.
-
-Each summary batch publishes once through existing title/revision rules to avoid repeated transcript invalidation.
+Key rows by ThreadID and group labels separately. ThreadCache owns summaries; each batch publishes once under existing title/revision rules, preserving menus, focus and running-wave continuity.
 
 # Boundaries
 

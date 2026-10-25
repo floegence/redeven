@@ -5,25 +5,21 @@ description: Immediate delivery feedback, ordered transport recovery, canonical 
 tags: [ui, flower, composer, commands]
 timestamp: 2026-10-14T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Flower assigns one request ID to an input intent and reuses it for retries. New-thread HTTP puts it in `create.client_request_id`; existing-thread HTTP uses top-level `client_request_id`, with ThreadID owned by the URL. The core rejects missing, duplicate, invalid, or conflicting identities, while the legacy RPC adapter may fill only a missing ID. Accepted receipts echo the exact request and Thread IDs. Composer, rail, Stop, interactions, and switching remain usable during provider work. A short-lived outbox retains non-secret input and provisional new-thread settings until canonical confirmation; secret answers never enter it.
+Each input intent has one request ID reused for retries; accepted receipts echo exact request/Thread IDs. New-thread HTTP nests it under create, existing-thread HTTP uses top-level client_request_id with URL-owned ThreadID. The short-lived outbox retains non-secret unconfirmed input/settings; composer, Stop, navigation and interactions remain usable during work.
 
 # Contract
 
-[Goal commands](../ai/flower-goals.md) mutate controls through the same outbox. Empty-thread creation retains text, references and attachment authority; the first Send binds draft staging to the authorized canonical thread.
-
-An unknown effect outcome is terminal: Flower shows the safe failure explanation, offers no replay control, and keeps the composer available for a new reply.
+Core commands reject missing, duplicate, invalid or conflicting IDs; only the legacy RPC adapter may fill a missing one. [Goals](../ai/flower-goals.md) share the outbox. Empty-thread creation retains text/reference/attachment authority; first Send binds staged resources to the authorized canonical thread. Unknown effect outcomes are terminal with safe explanation and no replay action.
 
 ## Restored data and preserved inputs
-An explicit new submission captures the storage generation lookup immediately, even while a predecessor pauses dispatch. The outbox keeps rejected text copyable and explicitly restorable and never silently resubmits it.
-
-Re-running preserved input requires an explicit new submission; old approvals and uncertain tool effects cannot resume.
+New submissions capture storage generation immediately, even behind paused dispatch. Rejected input stays copyable/restorable; running it requires explicit new submission, never resumed old approvals/effects.
 
 ## Context preview presentation
-Env App renders launcher references and composer/chat snapshots through one `FlowerContextPreviewWindow`, using the existing `PreviewWindow` and `FilePreviewContent`. Launcher owns attachment IO, request sequencing and object-URL disposal; Flower owns draft or canonical snapshot validity. Related-surface markers keep preview input owned by Flower, and Escape dismisses the preview before its companion.
+One Env App `FlowerContextPreviewWindow` uses existing preview/text components for launcher and draft/canonical snapshots. Launcher owns attachment IO, sequencing and URL cleanup; Flower owns validity. Related-surface markers preserve input ownership; Escape dismisses preview before companion.
 
 # Boundaries
 

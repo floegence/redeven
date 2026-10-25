@@ -5,32 +5,21 @@ description: Give one HTTP Web Service an isolated numeric-loopback browser Orig
 tags: [architecture, desktop, port-forward, proxy, security]
 timestamp: 2026-09-22T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-`desktop_loopback` is the Desktop-only compatibility mode for a Web Service that requires a local-browser Origin. Desktop assigns the exact Environment session and forward one random `http://127.0.0.1:<port>` Origin, while every request still traverses the authorized Runtime forward. The mode never connects directly to the target, changes a network interface, allocates another loopback address, modifies the application, or falls back to `unified_proxy`. Closing the owning window or Environment removes the gateway and its authority.
+Desktop-only `desktop_loopback` gives one Environment session/forward a random `http://127.0.0.1:<port>` origin while every request follows its protected Runtime route. It never connects directly, changes interfaces, modifies applications or falls back to unified proxy. Closing the owning window/Environment removes the gateway and authority.
 
 # Contract
 
-## Mode and presentation
-`port_forwards.access_mode` is the sole decision owner.
-
-A system browser cannot receive the Electron-partition credential, and Desktop must not substitute a private `pf-*` URL, mint a unified-proxy session, or silently change the persisted mode.
-
-## Protected gateway route
-The gateway binds exclusively to `127.0.0.1:0`. Native and placement private bridges use their canonical numeric-loopback listener with the exact `/pf/<forward_id>/` route; remote routes retain their authorized `pf-*` authority.
-
-Streaming and oversized responses remain streaming rather than being buffered for optional text rewriting.
-
-## Authorization and cleanup
-Each gateway generates an independent random session credential.
-
-[Managed opening](managed-web-service-opening.md) owns explicit reprepare; authentication failure cannot switch to unified proxy or a direct target.
+- Persisted `port_forwards.access_mode` alone selects mode. System browsers cannot receive Electron credentials, private `pf-*` substitutions or newly minted unified sessions.
+- Bind only `127.0.0.1:0`. Native/placement bridges use canonical numeric-loopback plus exact `/pf/<forward_id>/`; remote routes retain their authorized `pf-*` authority. Keep streaming/oversized replies streaming, not buffered for optional rewriting.
+- Each gateway has an independent random credential. [Managed opening](managed-web-service-opening.md) owns explicit reprepare; failed authentication cannot change mode or dial directly.
 
 # Boundaries
 
-The loopback Origin improves application compatibility; it is not direct network access, Remote Browser Isolation, a public listener, a Local UI login, or a substitute for application authentication. The random credential prevents ambient browser requests from using a live gateway but does not turn loopback networking into a cross-user security boundary.
+Compatibility origin is not direct access, RBI, public listening, Local UI login or application authentication. Random credentials block ambient browser use but do not make loopback a cross-user security boundary.
 
 # Evidence
 

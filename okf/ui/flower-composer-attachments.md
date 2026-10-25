@@ -5,35 +5,24 @@ description: Connection-local attachment staging, long-text conversion, and cano
 tags: [ui, flower, attachments, composer, accessibility]
 timestamp: 2026-10-16T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-- Authority: Flower owns connection-local editing, its host adapter owns authenticated staging transport, Redeven owns staged bytes and unadmitted commands, and Floret owns admitted attachment history.
-- Outcome: file selection, drag-and-drop, paste, progress, retry, removal, preview, reference copy, attachment-only send, and long-text restore behave consistently in Activity, Workbench, Desktop, and mobile layouts.
-- Invariants: text is converted only above 50,000 Unicode code points, IME composition is never interrupted, and source text is not cleared until staging succeeds.
-- Failure boundary: invalid Unicode, capability drift, quota, upload, restore, or pre-acceptance failure preserves the connection-local editor and never synthesizes user text.
+Flower owns connection-local attachment editing; host adapters authenticate staging, Redeven owns staged bytes/unadmitted commands and Floret owns admitted history. Select, paste, drop, retry, remove, preview and attachment-only send share one controller. Text above 50,000 Unicode code points converts only after successful staging, preserving IME and source text on failure.
 
 # Contract
 
-An attachment selected while the model capability snapshot is loading stays queued with its local bytes.
-
-Attachment-only turns are valid and never receive invented prompt copy.
-
-No automatic Send occurs during restoration.
+Selection during capability loading retains queued local bytes. Invalid Unicode, drift, quota, upload/restore or pre-admission failure preserves the editor. Attachment-only sends never synthesize prompts; restoration never sends automatically.
 
 ## Connection-local editing
-Activity and Workbench use one Env App shell-owned in-memory coordinator; Desktop uses one App-owned coordinator per connection. A Flower surface never creates a module singleton.
-
-Admission uncertainty preserves that product request identity in the live connection so retry and reconciliation cannot silently create another request.
+Env App uses one Shell-owned coordinator across Activity/Workbench; Desktop uses one per connection, never a module singleton. Admission uncertainty retains request identity for reconciliation/retry.
 
 ## Queued content
-Active execution keeps file selection, paste, drag-and-drop and reference controls available. Users can remove or add resources and send normally; staged copies remain usable after the queue item is removed, while canonical attachment bytes stay immutable.
+Execution leaves select/paste/drop/reference controls usable. Users may add/remove/send resources; staged copies survive queue removal and canonical bytes remain immutable.
 
 ## Canonical Presentation
-Message attachment previews cross the host's authenticated `loadMessageAttachment` boundary. Env App prepares its local access credentials; Desktop sends a scoped GET through Runtime IPC and receives bounded bytes with the canonical MIME type.
-
-A real Chromium 320-CSS-pixel layout check covers common desktop 400-percent zoom width without horizontal overflow.
+Previews use authenticated `loadMessageAttachment`: Env App prepares local credentials; Desktop uses scoped Runtime IPC GET with bounded canonical-MIME bytes. Chromium coverage includes 320 CSS pixels without horizontal overflow.
 
 # Boundaries
 

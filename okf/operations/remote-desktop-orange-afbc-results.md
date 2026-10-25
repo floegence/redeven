@@ -5,7 +5,7 @@ description: Verify the bounded legacy Rockchip scanout import repair and distin
 tags: [desktop, drm, rockchip, qualification]
 timestamp: 2026-10-11T14:10:00Z
 lifecycle: active_evidence
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
@@ -47,10 +47,4 @@ The [earlier responsiveness record](remote-desktop-responsive-input-results.md) 
 
 Orange runs a physical Wayland session on HDMI-A-2. Unit tests exclude other drivers, modifiers, private swizzle, HDR, AR24 and multiplane inputs.
 
-## Diagnosis
-Orange runs a physical Wayland session on HDMI-A-2. Unit tests exclude other drivers, modifiers, private swizzle, HDR, AR24 and multiplane inputs.
-
-The upstream change is commit `2bcd721e2eeb68947c3943627ab0135068f2b808`, tagged `v0.22.34`. No credentials are retained in the fixture, service protocol, arguments, environment or maintained record.
-
-## Native Physical-Host Qualification
 The upstream change is commit `2bcd721e2eeb68947c3943627ab0135068f2b808`, tagged `v0.22.34`. No credentials are retained in the fixture, service protocol, arguments, environment or maintained record.

@@ -5,18 +5,16 @@ description: Selection presentation, recovery ownership, lazy widgets, and share
 tags: [ui, workbench, lifecycle, keep-alive]
 timestamp: 2026-09-21T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Workbench keeps widget identity and state stable while Dock navigation, visual selection, input routing, committed activation, lazy feature loading, and connection recovery follow explicit presentation ownership. Floe Webapp owns generic Dock focus cycling; Redeven selects that mode and persists no competing visibility state. A selected Terminal's declared local scroll viewport owns pointer wheel input without requiring terminal DOM focus, while unselected widgets remain under Canvas ownership. Recovery is mounted above the canvas and makes retained content inert instead of creating per-widget reconnect state. Pointer-anchored overlays use the shared surface layer, and lazy module delivery cannot replace permission, keep-alive, or lifecycle contracts.
+Workbench preserves widget identity across selection, activation, loading and recovery. Floe owns generic Dock focus; Redeven adds no visibility store. Selected Terminal local viewports own wheel input without DOM focus; unselected widgets remain Canvas-owned. Shell recovery makes retained content inert above the canvas, with overlays in the shared surface layer.
 
 # Contract
 
 ## Mechanism
-[Page loading continuity](page-loading-continuity.md) owns initial presentation. Each lazy widget has its own Suspense boundary and uses the same page declaration as Activity; module delivery cannot suspend the surrounding canvas.
-
-Its product target snapshot and terminal anchor opt-out are owned by that contract; the shared widget lifecycle remains unchanged.
+[Page loading](page-loading-continuity.md) supplies per-widget Suspense/initial presentation without suspending the canvas. [Input ownership](workbench-input-ownership.md) controls local gestures; [Activity companion](flower-activity-companion.md) owns retained Flower placement. Lazy delivery creates no second lifecycle or eager feature initialization.
 
 # Boundaries
 

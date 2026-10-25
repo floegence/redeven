@@ -5,7 +5,7 @@ description: Verify the released optional frame window against RustDesk and reta
 tags: [desktop, performance, qualification]
 timestamp: 2026-10-15T10:45:00Z
 lifecycle: active_evidence
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
@@ -23,7 +23,7 @@ Read the [decision ledger](remote-desktop-lan-experiment-ledger.md), C01 histori
 
 Use bounded 300-second motion samplers and two 50-click input batches to avoid the documented C04 timeout.
 
-The Go proxy/checksum database resolves the immutable tag to the native commit above with module sum `h1:wlvpKFaGY5zYhA20QzUTXCfVEQvYpT5rj1bTivcn8VY=`. Its first attempt exposed a fixture-only capability refresh that omitted the selected window while the assertion retained six; preserve the failure and carry the same offer in unrelated capability refreshes. These checks establish compatibility behavior, not LAN performance acceptance.
+The Go proxy/checksum database verifies the immutable v0.22.48 tag with module sum `h1:wlvpKFaGY5zYhA20QzUTXCfVEQvYpT5rj1bTivcn8VY=`. Its first attempt exposed a fixture-only capability refresh that omitted the selected window while the assertion retained six; preserve the failure and carry the same offer in unrelated capability refreshes. These checks establish compatibility behavior, not LAN performance acceptance.
 
 # Boundaries
 
@@ -39,15 +39,6 @@ Release and compatibility checks establish only their named published contracts.
 
 The immutable v0.22.48 tag's release qualification run is `38721381321`. Rebuild fixtures and record new process identities; do not join pre-reboot and post-reboot intervals or reuse stale credentials/geometry.
 
-## Preparation Record
-The immutable v0.22.48 tag's release qualification run is `38721381321`. Rebuild fixtures and record new process identities; do not join pre-reboot and post-reboot intervals or reuse stale credentials/geometry.
-
 The Runtime is built from consumer commit `20bc99cb46938f3349555e9a91b5e66b1497bb0d` with published v0.22.48 and no overlay. No performance acceptance follows from C04's peak.
 
-## Post-Reboot Fixture
-The Runtime is built from consumer commit `20bc99cb46938f3349555e9a91b5e66b1497bb0d` with published v0.22.48 and no overlay. No performance acceptance follows from C04's peak.
-
-[Complete C05 outcomes](remote-desktop-lan-c05-results.md) owns all three pairs, invalid fixtures, source loss, resources, detail and next experiment conditions. Keep the SHA-verified published v48 native service, not a diagnostic replacement.
-
-## Outcome And Cleanup
 [Complete C05 outcomes](remote-desktop-lan-c05-results.md) owns all three pairs, invalid fixtures, source loss, resources, detail and next experiment conditions. Keep the SHA-verified published v48 native service, not a diagnostic replacement.

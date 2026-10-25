@@ -5,7 +5,7 @@ description: Apply paired presentation, detail, compatibility and resource crite
 tags: [desktop, performance, qualification]
 timestamp: 2026-10-15T13:00:00Z
 lifecycle: active_evidence
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
@@ -39,7 +39,4 @@ Results apply only to the recorded hardware, path and fixture. Unsupported physi
 
 - [LAN experiment decision ledger](remote-desktop-lan-experiment-ledger.md): concise conclusions for older hypotheses and current retry conditions.
 
-[C05 preparation and compatibility](remote-desktop-lan-published-c05.md) records published v0.22.48, consumer identity, source-only tests, platform contracts, release qualification and the reboot boundary. No complete parity claim follows from the six-frame diagnostic's 52-53 FPS.
-
-## Current Qualification
 [C05 preparation and compatibility](remote-desktop-lan-published-c05.md) records published v0.22.48, consumer identity, source-only tests, platform contracts, release qualification and the reboot boundary. No complete parity claim follows from the six-frame diagnostic's 52-53 FPS.

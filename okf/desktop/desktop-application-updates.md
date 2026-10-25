@@ -5,41 +5,22 @@ description: Signed macOS and Linux application updates with an explicitly unsup
 tags: [desktop, updates, sparkle, linux, windows, security, release]
 timestamp: 2026-08-25T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-23"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Redeven Desktop exposes one update coordinator to the permanent Welcome
-titlebar-corner entry, application menu, command palette, settings, status bar,
-and compatibility recovery. Packaged macOS uses Sparkle 2.9.4 with a signed
-architecture-specific appcast. Packaged Linux uses `electron-updater` metadata
-for the matching DEB or RPM package. Development, unsupported, and incorrectly
-placed macOS builds fail closed and provide a manual recovery path.
-Windows internal NSIS builds report updates as unsupported and contain no
-production feed.
+One Desktop update coordinator serves Welcome, menus, command palette, settings, status and compatibility recovery. Packaged macOS uses signed architecture-specific Sparkle appcasts; Linux uses matching DEB/RPM metadata through `electron-updater`. Development, unsupported and misplaced macOS builds fail closed with manual recovery. Internal Windows NSIS builds expose no production feed and report updates unsupported.
 
 # Contract
 
-## Check and presentation
-The coordinator owns the states `idle`, `checking`, `available`, `downloading`, `ready`, `installing`, `blocked`, and `error`. A check is serialized; repeated requests reuse the current operation and never start a second download.
-
-The permanent Welcome titlebar entry is a compact icon-only button with no resting border or label. Its localized state remains available through the accessible name and the shared tooltip on hover or keyboard focus. Checking animates the icon unless reduced motion is requested; available and ready updates add a small overlaid dot without changing the button width. Warning states tint the icon, and keyboard focus has a visible outline.
-
-No client request contains a GitHub token or a repository-specific credential.
-
-## Installation interlock
-Installation is a one-shot action. A cleanup or identity verification failure prevents the installer call, restores the Launcher, and reports an actionable error.
-
-The first release that contains Sparkle remains a manual install; later signed DMG releases are eligible for the feed.
-
-## Release and trust
-Release jobs run in the protected `redeven-release` environment.
-
-The manual exact-main Windows workflow may publish only an Actions artifact whose filename marks it as internal.
+- Serialize `idle`, `checking`, `available`, `downloading`, `ready`, `installing`, `blocked` and `error` transitions. Repeated checks reuse the operation; never start a second download.
+- Welcome has a permanent compact icon button, localized accessible name/tooltip, visible keyboard focus, reduced-motion-aware checking animation, fixed-width availability dot and warning tint.
+- Installation is one-shot. Failed cleanup or identity checks prevent installer invocation, restore Launcher and report recovery. The first Sparkle-enabled release needs manual installation; later signed DMGs can use its feed.
+- Protected `redeven-release` jobs own credentials/publication. Clients contain no GitHub credentials. Manual exact-main Windows builds publish only explicitly internal Actions artifacts.
 
 # Boundaries
 
-Sparkle owns macOS update discovery, verification, download UI, and relaunch. The release workflow owns credentials and publication; Runtime, Provider, and Gateway services do not own Desktop application updates.
+Sparkle owns macOS discovery, verification, download UI and relaunch. Runtime, Provider and Gateway never own Desktop updates. Exact bundled versions belong to dependency manifests.
 
 # Evidence
 

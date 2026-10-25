@@ -5,43 +5,23 @@ description: Preserve bounded pixel ownership, cursor presentation and ordered i
 tags: [desktop, media, input, wayland, latency]
 timestamp: 2026-10-17T01:46:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-The published native component owns desktop capture, encoding and playback;
-Redeven consumes that implementation. The [session contract](remote-desktop.md)
-owns authorization and generation changes. Media work stays bounded, cursor
-presentation follows painted pixels, and input admission cannot certify host
-application delivery. Capture/input failure retires authority explicitly; delayed
-work cannot overwrite or authorize a successor generation.
+Published native components own capture, encoding and playback; Redeven consumes them. [Session authority](remote-desktop.md) owns authorization/generations. Media work is bounded and cursors follow painted pixels. Input admission does not prove host delivery. Capture/input failure retires authority; delayed work cannot overwrite or authorize a successor.
 
 # Contract
 
-## Video Scheduling
-The physical-seat service uses one latest-sample mailbox for capture and a separate 60 Hz cursor stream. The media worker is attached through an authenticated inherited descriptor and bounded backpressure retires the attachment instead of blocking input release.
-
-Encoder reset starts a fresh keyframe chain; it cannot discard a transported reference.
-
-## Encoder Capability
-Intel AV1 uses the published component's pinned, publisher-verified amd64 musl media driver and GMM library inside the private media closure. The root DRM exporter never loads this userspace driver.
-
-These copies are intentional; this is not zero-copy capture.
-
-## Wayland Capture And Input
-Wayland metadata capture obtains cursor-free pixels and shapes from one authorized PipeWire stream. Cursor-only buffers cannot restore a baseline lost before them. The [Wayland optimization record](../operations/remote-desktop-wayland-optimization-results.md) separates native/browser checks from real desktop and physical latency evidence.
-
-## Physical-Seat Input
-The privileged service owns login-session identity, input generation, painted frame authority and uinput. Its DRM exporter passes capture descriptors to an unprivileged media worker; that worker can encode and report cursor state but cannot inject input or grant frame authority.
-
-Disconnect, session/VT transition, service stop and attachment replacement also release held input before the next owner is admitted.
-
-## Physical Scanout Formats
-The unprivileged DRM converter retains the producer's DMA-BUF descriptor. For the qualified legacy Rockchip SDR layout only, it imports single-plane XR24 with modifier `0x0800000000000051` as canonical AB24 and labels the validated linear result XB24. The [orange AFBC record](../operations/remote-desktop-orange-afbc-results.md) owns producer-source, pixel and physical-host evidence for this narrow mapping.
+- Physical-seat capture uses one latest-sample mailbox and separate 60Hz cursor stream. An authenticated inherited descriptor attaches media; bounded backpressure retires attachment instead of blocking input release. Encoder reset begins a new keyframe chain without discarding transported references.
+- Intel AV1 uses publisher-verified pinned amd64 musl media-driver/GMM in the private closure, never the root DRM exporter. Copies are intentional, not zero-copy claims.
+- Wayland cursor-free pixels/shapes come from one authorized PipeWire stream. Cursor-only buffers cannot restore a lost baseline. [Wayland evidence](../operations/remote-desktop-wayland-optimization-results.md) distinguishes native/browser from physical latency results.
+- The privileged service owns login identity, input generation, painted-frame authority and uinput. Unprivileged media workers encode/cursor-report only. Disconnect, VT/session transition, stop or replacement release held input before new ownership.
+- DRM conversion retains producer DMA-BUF. Only qualified legacy Rockchip SDR XR24 modifier `0x0800000000000051` maps through AB24 to validated linear XB24; [AFBC evidence](../operations/remote-desktop-orange-afbc-results.md) owns that narrow exception.
 
 # Boundaries
 
-Synthetic encoder probes and browser preferences are capabilities, not hardware latency certification. Shared capture, input and player behavior belongs upstream; the host must not add a duplicate implementation.
+Synthetic encoder probes/preferences establish capability, not hardware latency. Shared capture/input/player behavior stays upstream without duplicate host implementation.
 
 # Evidence
 
