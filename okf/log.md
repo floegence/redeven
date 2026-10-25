@@ -4,6 +4,8 @@ Recent changes only. The linked concepts own current contracts and evidence; Git
 
 ## 2026-10-25
 
+- Keep [Flower startup](architecture/flower-startup-presentation.md) actionable in collapsed companions through runtime preparation and first conversation loading, with explicit expansion and recovery.
+
 - Document scroll-driven canonical windows, concurrent disclosure ownership, automatic Floret display preparation, and retained completeness limits; see [selection](ui/flower-thread-selection.md) and [runtime](ai/floret-thread-runtime.md).
 
 - Tighten the [model picker](ai/model-directory-and-selection.md) to 272px width, 320px height cap, 24px desktop rows and 10px labels; retain one-line search and touch targets.

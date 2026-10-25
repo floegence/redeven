@@ -13011,15 +13011,15 @@
         "title": "Flower startup and recovery presentation",
         "type": "Interaction Contract"
       },
-      "body_length": 2600,
+      "body_length": 3331,
       "summary": "Env App/Desktop project one owner's readiness and typed Stop/Retry while retaining navigation and drafts. Close failure requires restart; unknown or contradictory facts are non-retryable contract failures. No surface adds an availability controller. First content admits the workspace; later refresh/reconnect retains mounted conversation state.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "- Activity, Workbench and Settings share readiness. After Runtime readiness, retain Flower loading until the first authoritative list page or selected detail is applied. Confirmed empty lists admit; empty partial-ready envelopes do not. Remaining pages load progressively. Embedded conversations wait only for their own detail.\n- Before admission, hide welcome suggestions, composer and stale reconnect banners. Initial retries retain loading; terminal failure stops the indicator and offers localized Retry/access/version/capacity/timeout guidance. No raw diagnostics/error card or extra UI timer/controller.\n- After admission, refresh/reconnect preserves selection, transcript, drafts and navigation with existing notices. [Message continuity](../ui/flower-live-timeline.md) also retains prose during growth/completion; body locators cannot restart loading.\n- Historical preparation leaves the operational generation mounted. Thread-local loading/failure retains New chat/navigation; only oldest snapshot stores may wait for their identity scan before new-thread admission.\n- Unconfirmed/failed/revoked permissions block mutations until renewed. Show completed/total counts only for known totals.",
-          "char_count": 1198
+          "body": "- Activity, Workbench and Settings share readiness. After Runtime readiness, retain Flower loading until the first authoritative list page or selected detail is applied. Confirmed empty lists admit; empty partial-ready envelopes do not. Remaining pages load progressively. Embedded conversations wait only for their own detail.\n- Before admission, hide welcome suggestions, composer and stale reconnect banners. Initial retries retain loading; terminal failure stops the indicator and offers localized Retry/access/version/capacity/timeout guidance. No raw diagnostics/error card or extra UI timer/controller.\n- A collapsed Activity companion presents runtime preparation/failure and initial conversation loading/failure as one bounded status button, including the 24-pixel Terminal footer. Pointer or keyboard activation opens details without retrying or stopping work. Expanded details retain close, progress and explicit recovery actions. Readiness never auto-expands the companion; compact presentation derives from the existing shell phase and readiness owner.\n- After admission, refresh/reconnect preserves selection, transcript, drafts and navigation with existing notices. [Message continuity](../ui/flower-live-timeline.md) also retains prose during growth/completion; body locators cannot restart loading.\n- Historical preparation leaves the operational generation mounted. Thread-local loading/failure retains New chat/navigation; only oldest snapshot stores may wait for their identity scan before new-thread admission.\n- Unconfirmed/failed/revoked permissions block mutations until renewed. Show completed/total counts only for known totals.",
+          "char_count": 1654
         },
         {
           "id": "boundaries",
@@ -33561,5 +33561,5 @@
       ]
     }
   ],
-  "source_sha256": "3132ad0e354bef9fede349fc28ba1fbcd870b3a9e55eab79d24c34f35ba774a2"
+  "source_sha256": "15cfb4dc241fa4be6199ef1ef62dc545132e257d88972643af8ca4c4a935207b"
 }

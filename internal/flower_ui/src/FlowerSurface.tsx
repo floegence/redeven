@@ -12,6 +12,7 @@ import type { FlowerConversationPreferencePatch, FlowerConversationPreferences }
 import { ParentEventRow, createParentEventReading } from './parentEvents';
 import { createStore } from 'solid-js/store';
 import { FlowerAnswerActions } from './FlowerAnswerActions';
+import { FlowerCompanionReadiness } from './FlowerCompanionReadiness';
 import { FlowerGoalIcon } from './FlowerGoalIcon';
 import { flowerAnswerHTML, downloadFlowerAnswer } from './chat/markdown/flowerAnswerExport';
 import { flowerToolCallPreviewIdentity } from './toolCallPreview';
@@ -1168,6 +1169,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let startedFocusComposerRequest = 0;
   let composerRef: HTMLTextAreaElement | HTMLInputElement | undefined;
   let companionActionRef: HTMLButtonElement | undefined;
+  let companionReadinessRef: HTMLButtonElement | undefined;
   let companionSummaryRef: HTMLButtonElement | undefined;
   let surfaceRef: HTMLElement | undefined;
   let mobileThreadsTrigger: HTMLButtonElement | undefined;
@@ -2718,7 +2720,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (!request.restoreCompanion && request.owner === surfaceRef) return;
       const entry = companionEntry();
       const target = request.restoreCompanion
-        ? entry.kind === 'editor' ? composerRef : entry.kind === 'status' ? companionSummaryRef : companionActionRef
+        ? initialConversationPending() ? companionReadinessRef : entry.kind === 'editor' ? composerRef : entry.kind === 'status' ? companionSummaryRef : companionActionRef
         : bottomActionEditTarget();
       if (!target?.isConnected || target.closest('[inert]') || target.matches(':disabled')) return;
       restoringCompanionFocus = request.restoreCompanion;
@@ -12982,6 +12984,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const failed = () => initial && initialConversationFailed();
     const title = () => failed() ? copy().threadList.title : warmupTitle();
     return (
+      <Show when={initial && companionCollapsed()} fallback={<>
+        <Show when={initial && props.headerTrailingActions}>
+          <div class="flower-readiness-header-actions">{props.headerTrailingActions}</div>
+        </Show>
       <div class={cn('flower-warmup', initial && 'h-full col-span-full')} role="status" aria-live="polite" aria-label={title()} aria-busy={!failed()}>
         <div class="flower-warmup-panel">
           <FlowerSoftAuraIcon class="redeven-flower-soft-aura-lg h-14 w-14" />
@@ -13000,6 +13006,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           </Show>
         </div>
       </div>
+      </>}>
+        <FlowerCompanionReadiness ref={element => { companionReadinessRef = element; }}
+          label={failed() ? initialConversationFailureMessage() : copy().chat.threadLoading}
+          busy={!failed()} regionID={props.companionRegionID} onOpen={() => {
+            const owner = document.activeElement;
+            props.onCompanionOpenRequest?.();
+            queueMicrotask(() => {
+              if (!companionCollapsed() && surfaceEngaged() && surfaceRef?.isConnected && !surfaceRef.closest('[inert]')
+                && (document.activeElement === owner || document.activeElement === document.body)) surfaceRef.focus({ preventScroll: true });
+            });
+          }} />
+      </Show>
     );
   };
 

@@ -2,7 +2,7 @@ import { render } from 'solid-js/web';
 import { Show, createEffect, createSignal } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFlowerComposerDraftCoordinator } from '../../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
-import { EnvAIPage } from './EnvAIPage';
+import { EnvAIPage, type EnvAIPageProps } from './EnvAIPage';
 import { bindSessionHTTP } from '../services/sessionHTTP';
 
 const mocks = vi.hoisted(() => {
@@ -529,7 +529,7 @@ async function selectHistoryThread(host: HTMLElement, threadID = 'thread-1') {
   });
 }
 
-async function renderPage(waitForSurface = true) {
+async function renderPage(waitForSurface = true, props: Partial<EnvAIPageProps> = {}) {
   const host = document.createElement('div');
   const draftCoordinator = createFlowerComposerDraftCoordinator();
   document.body.appendChild(host);
@@ -551,6 +551,7 @@ async function renderPage(waitForSurface = true) {
   });
   const disposeSurface = render(() => (
     <EnvAIPage
+      {...props}
       draftCoordinator={draftCoordinator}
     />
   ), host);
@@ -618,6 +619,28 @@ export function registerEnvAIPageSendTests() {
 
     afterEach(() => {
       document.body.innerHTML = '';
+    });
+
+    it('forwards companion placement and actions while runtime preparation blocks the conversation', async () => {
+      mocks.state.setReadinessSnapshot({ state: 'blocked', reason_code: 'temporarily_blocked', retryable: true, safe_to_retry: true });
+      const [open, setOpen] = createSignal(false);
+      const { host, dispose } = await renderPage(false, {
+        presentation: 'companion', companionRegionID: 'env-page-companion',
+        get companionOpen() { return open(); }, get engaged() { return open(); },
+        onCompanionOpenRequest: () => setOpen(true),
+        get headerTrailingActions() { return <button onClick={() => setOpen(false)}>Collapse Flower</button>; },
+      });
+      try {
+        const compact = host.querySelector<HTMLButtonElement>('.flower-companion-readiness')!;
+        expect(compact.getAttribute('aria-controls')).toBe('env-page-companion');
+        expect(host.querySelector('.ai-readiness-surface')).toBeNull();
+        compact.click();
+        await vi.waitFor(() => expect(host.querySelector('.ai-readiness-surface')).not.toBeNull());
+        host.querySelector<HTMLButtonElement>('.flower-readiness-header-actions button')!.click();
+        expect(host.querySelector('.flower-companion-readiness')).not.toBeNull();
+        expect(host.querySelector('.ai-readiness-surface')).toBeNull();
+        expect(mocks.sendUserTurnMock).not.toHaveBeenCalled();
+      } finally { dispose(); }
     });
 
     it.each([
