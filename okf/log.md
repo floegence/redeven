@@ -4,6 +4,7 @@ Recent changes only. The linked concepts own current contracts and evidence; Git
 
 ## 2026-10-25
 
+- Align [Flower qualification](operations/flower-live-queue-performance.md) with the published SSE parser and product framing. Retain failed CPU/lifecycle samples alongside exact-content and [bounded metadata-write evidence](operations/flower-thread-switch-qualification.md).
 - Keep [Flower startup](architecture/flower-startup-presentation.md) actionable in collapsed companions through runtime preparation and first conversation loading, with explicit expansion and recovery.
 - Adopt published Floret v7.87.0, remove global startup display preparation, bound initial windows and exact body reads, and add priority/byte-budgeted caches. See [storage](ai/flower-storage-ownership-and-migrations.md), [live timeline](ui/flower-live-timeline.md), [terminal hydration](ui/flower-terminal-activity.md) and [qualification](operations/flower-thread-switch-qualification.md).
 

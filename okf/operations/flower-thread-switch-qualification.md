@@ -122,8 +122,23 @@ Initial history response was 91,044 bytes versus the earlier 192,218-byte baseli
 not a population P95 or an unprepared old-format upgrade bound. Service construction
 is measured separately from click-to-interactive and process launch.
 
+After aligning the qualification transport with the published SSE parser, three
+additional fresh-process runs on the same isolated prepared copy measured 571.7,
+609.2 and 250.0 ms click-to-interactive. All passed the unchanged 1,000 ms gate,
+draft/scroll/disclosure checks and ninety stable frames without page or transport
+errors. Fixture service startup polling measured 102.6/102.3/102.8 ms separately;
+that polling interval is not a precise constructor duration.
+
 The deterministic blocked-migration test proves service availability before global
 historical work completes. Large hidden activity details prepare only on explicit
 access; cold first disclosure may still parse one complete selected activity.
 Inactive cache budgets do not cap active Markdown documents, selected text or a
 mounted live terminal. Exact content and explicit ownership remain mandatory.
+
+Published Floret storage regressions measured seven admitted activity-summary
+records for both twenty and 180 large structured rows. Explicit disclosure then
+prepared 210 and 1,810 field records respectively; reopen and summary reads left
+those records unchanged. The independent full-locator byte budget measured
+91,073 / 1,160,931 bytes for twenty rows and 798,196 / 10,448,051 bytes for 180 rows
+(7.84% / 7.64%). These are metadata record bytes, not physical WAL or disk write
+amplification. Repeated equal single/batched SQLite puts changed zero rows.

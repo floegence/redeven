@@ -21805,7 +21805,7 @@
       "frontmatter": {
         "description": "Isolated deterministic, historical-copy, and real-provider compaction acceptance.",
         "lifecycle": "active_evidence",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-25",
         "tags": [
           "ai",
           "compaction",
@@ -21817,7 +21817,7 @@
         "title": "Flower context compaction qualification",
         "type": "Runtime Qualification"
       },
-      "body_length": 1688,
+      "body_length": 2221,
       "summary": "Compaction qualification uses isolated state and explicit test lanes. Production\nthreads are never continued by historical-copy inspection. The [execution contract](../ai/flower-context-compaction.md) owns intent and recovery; [usage presentation](../ai/model-context-usage-and-compaction.md) maps canonical observations.",
       "sections": [
         {
@@ -21977,15 +21977,15 @@
         "title": "Flower live queue CPU qualification",
         "type": "Qualification Evidence"
       },
-      "body_length": 5451,
+      "body_length": 8236,
       "summary": "Ordered queues avoid premature full-history snapshots. Global facts and bounded\nroot/child reading have separate owners. Local read failure preserves content\nwithout reconnecting or replacing drafts; see the\n[live-state contract](../ui/flower-live-timeline.md).",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Real isolated Services/fake providers emit Markdown, Unicode, reasoning and tools at\n40 Hz; Apple M5 Pro (18 cores, 64 GiB), macOS arm64, Go 1.27.3, Node 26.7.0, published\nFloret and GOWORK=off. CPU is process time (100% = one core); combined includes fixture\nElectron processes. NDJSON excludes encryption/framing; allocations are cumulative.\nInput/click/output/frame timing is followed by exact canonical/rendered prose,\nreasoning and code inspection. Cadence/marker coverage must reach 95%; retain failures\nbefore assertions and never relax gates.\n\nBuild `node scripts/qualify_flower_cpu.mjs --build --dist=\u003cui\u003e` and compile\n`TestFlowerCPUQualification` against the frozen backend. Start fresh state with\n`REDEVEN_CPU_QUALIFICATION=1`, `REDEVEN_CPU_STATE`, `REDEVEN_CPU_DIST` and\n`REDEVEN_CPU_HISTORY_TURNS` (520 for queue comparison, 100 for recovery).\nChild fixtures add `REDEVEN_CPU_CHILD_DETAIL=1`. After seeding:\n\n```sh\nnode scripts/qualify_flower_cpu.mjs --fixture=\u003cstate\u003e/fixture.json --seconds=60 --warmup=10 --threads=1 --hz=40 --candidate-gates --output=\u003csample\u003e.json\n```\n\nUse `--subagent --full-cache` for child, `--idle --seconds=30` for idle and 120 seconds\nfor the older comparison. Keep local raw evidence/hashes; quit only owned fixtures\nand verify subscribers/queues/process cleanup.",
-          "char_count": 1303
+          "body": "Real isolated Services/fake providers emit Markdown, Unicode, reasoning and tools at\n40 Hz; Apple M5 Pro (18 cores, 64 GiB), macOS arm64, Go 1.27.3, Node 26.7.0, published\nFloret and GOWORK=off. CPU is process time (100% = one core); combined includes fixture\nElectron processes. Current fixtures use the published SSE parser and product\nframing/headers; payload counters exclude framing/encryption. Earlier NDJSON samples\nretain their original transport scope. Allocations are cumulative.\nInput/click/output/frame timing is followed by exact canonical/rendered prose,\nreasoning and code inspection. Cadence/marker coverage must reach 95%; retain failures\nbefore assertions and never relax gates.\n\nBuild `node scripts/qualify_flower_cpu.mjs --build --dist=\u003cui\u003e` and compile\n`TestFlowerCPUQualification` against the frozen backend. Start fresh state with\n`REDEVEN_CPU_QUALIFICATION=1`, `REDEVEN_CPU_STATE`, `REDEVEN_CPU_DIST` and\n`REDEVEN_CPU_HISTORY_TURNS` (520 for queue comparison, 100 for recovery).\nChild fixtures add `REDEVEN_CPU_CHILD_DETAIL=1`. After seeding:\n\n```sh\nnode scripts/qualify_flower_cpu.mjs --fixture=\u003cstate\u003e/fixture.json --seconds=60 --warmup=10 --threads=1 --hz=40 --candidate-gates --output=\u003csample\u003e.json\n```\n\nUse `--subagent --full-cache` for child, `--idle --seconds=30` for idle and 120 seconds\nfor the older comparison. Keep local raw evidence/hashes; quit only owned fixtures\nand verify subscribers/queues/process cleanup.",
+          "char_count": 1449
         },
         {
           "id": "boundaries",
@@ -22370,7 +22370,7 @@
         "title": "Flower conversation switch performance qualification",
         "type": "Qualification Evidence"
       },
-      "body_length": 7152,
+      "body_length": 8177,
       "summary": "Published Floret v7.87.0 owns windows, bounded item-text reads, View and Summary. Redeven owns\nbounded reads and presentation through the [sidebar](../ui/flower-thread-sidebar.md)\nand [Desktop bridge](../desktop/desktop-runtime-bridge.md). Local qualification\ntargets \u003e=70% lower short-detail P95, warm synchronous P95 \u003c8 ms, and feedback\nbefore commit. Fixtures never continue real user tasks.",
       "sections": [
         {
@@ -33561,5 +33561,5 @@
       ]
     }
   ],
-  "source_sha256": "a60dbe59c10465fa4d3b0fb534c5b6aceea7a0935eb5e46924b9914f42a41261"
+  "source_sha256": "aafa136741324673f1e6570b1e71e9f5af9c1e2cefa5abd22d7cf81f10a10efe"
 }
