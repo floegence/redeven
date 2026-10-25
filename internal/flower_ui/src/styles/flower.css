@@ -8175,7 +8175,7 @@ button.flower-composer-context-source:focus-visible,
   color: var(--primary);
 }
 
-.flower-thread-card-pin-button[data-pinned="true"] svg path {
+.flower-thread-card-pin-button[data-pinned="true"] [data-flower-pin-head] {
   fill: currentColor;
   stroke: none;
 }
