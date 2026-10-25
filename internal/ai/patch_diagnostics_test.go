@@ -64,6 +64,64 @@ func TestPatchDiagnosticsExplainRejectedContextWithoutEffects(t *testing.T) {
 	}
 }
 
+func TestPatchDiagnosticsExplainAmbiguousReorderingWithoutEffects(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, before, body, ambiguity, remedy string
+		chunk, sourceLine, searchLine         int
+	}{
+		{
+			"first_chunk", "early\nlate\nlate\n",
+			"@@\n-late\n+LATE\n@@\n-early\n+EARLY",
+			"automatic reordering is unsafe: chunk 1 has multiple exact matches",
+			"add unique context to chunk 1", 2, 1, 3,
+		},
+		{
+			"repeated_chunks_with_different_edits",
+			"header\nvisible\nidle\nvisible\nidle\nstart\nvisible\nidle\n",
+			"@@\n-header\n+HEADER\n@@\n-visible\n+hidden\n idle\n@@\n-visible\n+hidden\n idle\n@@\n-visible\n+ready\n idle\n@@\n-start\n+START",
+			"automatic reordering is unsafe: chunk 2 has multiple exact matches",
+			"add unique context to chunk 2", 5, 6, 9,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "f.txt")
+			if err := os.WriteFile(path, []byte(tc.before), 0600); err != nil {
+				t.Fatal(err)
+			}
+			patch := "*** Begin Patch\n*** Add File: first.txt\n+first\n*** Update File: f.txt\n" + tc.body + "\n*** End Patch"
+			_, err := applyUnifiedDiff(dir, patch)
+			var failure *patchApplyError
+			if !errors.As(err, &failure) {
+				t.Fatalf("expected validation failure, got %v", err)
+			}
+			result := patchToolError(failure)
+			if result.Code != "PATCH_VALIDATION_FAILED" || result.Retryable {
+				t.Fatalf("unexpected error classification: %+v", result)
+			}
+			for key, want := range map[string]any{
+				"effect": "none", "reason": "out_of_order", "chunk": tc.chunk,
+				"source_line": tc.sourceLine, "search_from_line": tc.searchLine,
+			} {
+				if result.Meta[key] != want {
+					t.Errorf("%s=%v, want %v", key, result.Meta[key], want)
+				}
+			}
+			if !strings.Contains(result.Message, tc.ambiguity) || !strings.Contains(strings.Join(result.SuggestedFixes, " "), tc.remedy) {
+				t.Errorf("missing ambiguity and repair instruction: %+v", result)
+			}
+			got, err := os.ReadFile(path)
+			if err != nil || string(got) != tc.before {
+				t.Fatalf("rejected patch changed file: %q, %v", got, err)
+			}
+			if _, err := os.Stat(filepath.Join(dir, "first.txt")); !os.IsNotExist(err) {
+				t.Fatalf("rejected patch created file: %v", err)
+			}
+		})
+	}
+}
+
 func TestPatchDuplicateFileDiagnosticUsesCanonicalPath(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

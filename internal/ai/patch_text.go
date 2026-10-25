@@ -50,8 +50,12 @@ func applyUnifiedDiffHunksToBytes(original []byte, hunks []unifiedDiffHunk) ([]b
 	if !ok || diagnostic.reason != "out_of_order" {
 		return result, err
 	}
-	ordered, ok := orderUniquePatchHunks(lines, hunks)
-	if !ok {
+	ordered, ambiguousChunk := orderUniquePatchHunks(lines, hunks)
+	if ordered == nil {
+		if ambiguousChunk > 0 {
+			diagnostic.message += fmt.Sprintf("; automatic reordering is unsafe: chunk %d has multiple exact matches", ambiguousChunk)
+			diagnostic.fix = fmt.Sprintf("add unique context to chunk %d and keep non-overlapping chunks in original file order", ambiguousChunk)
+		}
 		return nil, err
 	}
 	return applyOrderedPatchHunks(source, lines, ending, ordered)
@@ -59,20 +63,24 @@ func applyUnifiedDiffHunksToBytes(original []byte, hunks []unifiedDiffHunk) ([]b
 
 // Reorder only ordinary chunks with one exact, disjoint original-source match
 // each. Explicit anchors, ranges, EOF and pure additions keep their order rules.
-func orderUniquePatchHunks(lines []string, hunks []unifiedDiffHunk) ([]unifiedDiffHunk, bool) {
+// A nil result rejects reordering; a positive index identifies an ambiguous chunk.
+func orderUniquePatchHunks(lines []string, hunks []unifiedDiffHunk) ([]unifiedDiffHunk, int) {
 	type locatedHunk struct {
 		hunk       unifiedDiffHunk
 		start, end int
 	}
 	located := make([]locatedHunk, 0, len(hunks))
-	for _, h := range hunks {
+	for index, h := range hunks {
 		if h.anchor != "" || h.hasRange || h.endOfFile {
-			return nil, false
+			return nil, 0
 		}
 		old := patchOldLines(h)
 		start, count := exactPatchSequenceMatches(lines, old)
+		if count > 1 {
+			return nil, index + 1
+		}
 		if count != 1 {
-			return nil, false
+			return nil, 0
 		}
 		located = append(located, locatedHunk{h, start, start + len(old)})
 	}
@@ -80,11 +88,11 @@ func orderUniquePatchHunks(lines []string, hunks []unifiedDiffHunk) ([]unifiedDi
 	ordered := make([]unifiedDiffHunk, len(located))
 	for i, match := range located {
 		if i > 0 && match.start < located[i-1].end {
-			return nil, false
+			return nil, 0
 		}
 		ordered[i] = match.hunk
 	}
-	return ordered, true
+	return ordered, 0
 }
 
 func applyOrderedPatchHunks(source []patchSourceLine, lines []string, ending string, hunks []unifiedDiffHunk) ([]byte, error) {
