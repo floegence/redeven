@@ -173,7 +173,9 @@ func TestFlowerHistoryBoundedPagesAndExactBodies(t *testing.T) {
 		close(events)
 		return events, nil
 	})
-	agent, err := flruntime.NewAgent(flconfig.AgentConfig{Profile: flconfig.AgentProfile{ID: "history", Name: "History"}, SystemPrompt: "Inspect then answer.", Context: flconfig.ContextPolicy{ContextWindowTokens: 10000000}}, gateway, flruntime.WithAgentTools(tool), flruntime.WithAgentEffectAuthorization(floretAllowTestEffect), flruntime.WithAgentLoopLimits(flruntime.LoopLimits{DuplicateToolLimit: 1000, NoProgressLimit: 1000, WallTime: time.Minute}))
+	// This fixture persists 180 large tool results under race instrumentation.
+	// Its setup deadline is separate from the measured page/body budgets.
+	agent, err := flruntime.NewAgent(flconfig.AgentConfig{Profile: flconfig.AgentProfile{ID: "history", Name: "History"}, SystemPrompt: "Inspect then answer.", Context: flconfig.ContextPolicy{ContextWindowTokens: 10000000}}, gateway, flruntime.WithAgentTools(tool), flruntime.WithAgentEffectAuthorization(floretAllowTestEffect), flruntime.WithAgentLoopLimits(flruntime.LoopLimits{DuplicateToolLimit: 1000, NoProgressLimit: 1000, WallTime: 5 * time.Minute}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +184,7 @@ func TestFlowerHistoryBoundedPagesAndExactBodies(t *testing.T) {
 	if _, err = svc.threadRuntime.Send(t.Context(), flruntime.SendInput{ThreadID: identity.ThreadID(thread.ThreadID), RequestKey: key, Input: flruntime.UserInput{Text: "Inspect history"}}); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(2 * time.Minute)
+	deadline := time.Now().Add(5 * time.Minute)
 	for {
 		summary, e := svc.threadRuntime.(flruntime.ThreadSummaryReader).Summary(t.Context(), identity.ThreadID(thread.ThreadID))
 		if e != nil {
@@ -192,7 +194,7 @@ func TestFlowerHistoryBoundedPagesAndExactBodies(t *testing.T) {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("fixture did not settle")
+			t.Fatalf("fixture did not settle: %+v", summary)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

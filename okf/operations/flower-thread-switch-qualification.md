@@ -112,9 +112,10 @@ existing disclosure/scroll failures reproduced on baseline remain separately rec
 ## Responsive runtime qualification, 2026-10-25
 
 A consistent isolated historical copy, with execution deferred, passed three fresh
-backend/Electron process runs after field-summary, pending-terminal and lifecycle fixes.
-Trusted click to stable readable content plus usable composer: 626.2, 261.4 and
-239.1 ms, all below the explicit 1,000 ms gate. Each run retained ninety stable
+backend/Electron process runs after rebasing the field-summary, pending-terminal
+and lifecycle fixes onto the latest gateway/startup changes. Trusted click to stable
+readable content plus usable composer: 973.9, 260.0 and 240.7 ms, all below the
+explicit 1,000 ms gate. Each run retained ninety stable
 frames, exact typed drafts, scrolling and disclosure without page/transport errors.
 Initial history response was 91,044 bytes versus the earlier 192,218-byte baseline
 (52.6% smaller). These are three local samples with prepared historical state,
