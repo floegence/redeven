@@ -5,10 +5,11 @@ import { FlowerLiveSyncError } from './flowerLiveWire';
 import { retainEqualValue } from './presentationIdentity';
 import { projectFlowerRuntimeComponents, runtimeMessages, validateFlowerRuntimeTurns } from './runtimeCurrentView';
 import { retainThinkingTiming } from './thinkingTiming';
+import { createMessageTextSource } from './messageTextSource';
 
 type ItemRecord = { item: FlowerRuntimeCurrentItem; bytes: number; preview?: FlowerRuntimeCurrentItem; retained?: boolean };
 type MutableMessage = { -readonly [K in keyof FlowerChatMessage]: FlowerChatMessage[K] };
-type MessageRecord = { value: FlowerChatMessage; set: SetStoreFunction<MutableMessage>; chunks: string[]; setRevision: (value: number) => number };
+type MessageRecord = { value: FlowerChatMessage; set: SetStoreFunction<MutableMessage>; appendText: (text: string) => void };
 const utf8 = new TextEncoder();
 
 function advanceMessage(prior: MessageRecord, message: FlowerChatMessage): boolean {
@@ -19,11 +20,10 @@ function advanceMessage(prior: MessageRecord, message: FlowerChatMessage): boole
     || before.blocks?.length || message.blocks?.length || !message.content.startsWith(before.content)) return false;
   const suffix = message.content.slice(before.content.length);
   batch(() => {
-    if (suffix) prior.chunks.push(suffix);
+    if (suffix) prior.appendText(suffix);
     for (const key of new Set([...Object.keys(before), ...Object.keys(message)])) {
       if (key !== 'text_source') prior.set({ [key]: message[key as keyof FlowerChatMessage] });
     }
-    if (suffix) prior.setRevision(prior.chunks.length);
   });
   return true;
 }
@@ -73,11 +73,11 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
         return prior;
       }
     }
-    const chunks: string[] = [];
     const [revision, setRevision] = createSignal(0);
-    const textSource = { get length() { return chunks.length; }, get revision() { return revision(); }, read(from: number) { return chunks.slice(from); } };
+    const text = createMessageTextSource(revision, setRevision);
+    const textSource = text.source;
     const [value, set] = createStore<MutableMessage>({ ...message, ...(message.role === 'assistant' && !message.blocks?.length ? { text_source: textSource } : {}) });
-    const record = { value, set, chunks, setRevision };
+    const record = { value, set, appendText: text.append };
     messages.set(message.id, record);
     return record;
   };
@@ -130,21 +130,21 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
     },
     bodyOffset(id: string) { return items.get(id)?.bytes; },
     appendBody(chunk: FlowerHistoryBodyChunk) {
-      const before = items.get(chunk.source_id);
+      const before = items.get(chunk.item_id);
       const body = before?.item.body;
       if (!before || !body || chunk.thread_id !== threadID || chunk.run_id !== body.run_id
-        || chunk.source_id !== body.source_id || chunk.offset_bytes !== before.bytes) return false;
+        || chunk.source_id !== body.source_id || chunk.entry_id !== body.entry_id || chunk.field !== body.field || chunk.offset_bytes !== before.bytes) return false;
       const size = utf8.encode(chunk.text).length;
-      if (!size || size > 16 * 1024 || !version(chunk.through_bytes)
-        || before.bytes + size > chunk.through_bytes || chunk.through_bytes > body.bytes) invalid('invalid body chunk extent');
+      if ((!size && chunk.offset_bytes !== chunk.through_bytes) || size > 16 * 1024 || !version(chunk.bytes) || !version(chunk.through_bytes)
+        || before.bytes + size > chunk.through_bytes || chunk.through_bytes > body.bytes || chunk.through_bytes > chunk.bytes) invalid('invalid body chunk extent');
       const bytes = before.bytes + size;
-      const item = { ...before.item, text: (before.item.text ?? '') + chunk.text, body: bytes < body.bytes ? body : undefined };
+      const item = { ...before.item, text: (before.item.text ?? '') + chunk.text, body: bytes < (body.run_id ? body.bytes : Math.min(body.bytes, chunk.bytes)) ? body : undefined };
       const after = { item, bytes, preview: before.preview ?? before.item, retained: true };
       batch(() => {
         items.set(item.id, after);
         const message = messages.get(item.id)!;
         if (item.kind === 'thinking') message.set('blocks', [{ type: 'thinking', content: item.text }]);
-        else { message.set('content', item.text); message.chunks.push(chunk.text); message.setRevision(message.chunks.length); }
+        else { message.set('content', item.text); message.appendText(chunk.text); }
         message.set('body_pending', item.body ? { kind: 'text', bytes: body.bytes, retained: true } : undefined);
       });
       return true;
@@ -287,8 +287,7 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
             if (read(id)!.item.kind === 'thinking') previous.set('blocks', message.blocks);
             else {
               previous.set('content', read(id)!.item.text ?? '');
-              for (const change of update.items ?? []) if (change.item_id === id && change.kind === 'append') previous.chunks.push(change.append!.text);
-              previous.setRevision(previous.chunks.length);
+              for (const change of update.items ?? []) if (change.item_id === id && change.kind === 'append') previous.appendText(change.append!.text);
             }
           }
           else if (previous) updateMessage(message);

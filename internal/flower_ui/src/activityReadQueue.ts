@@ -1,20 +1,25 @@
 const MAX_READS = 128;
 const MAX_CONSUMERS = 128;
 const CONCURRENCY = 2;
+export type ActivityReadPriority = 'interactive' | 'visible' | 'background';
+const priorities: Record<ActivityReadPriority, number> = { interactive: 2, visible: 1, background: 0 };
 type Consumer = { resolve: (value: unknown) => void; reject: (error: unknown) => void; cancel: () => void; signal: AbortSignal };
-type Read = { key: string; controller: AbortController; consumers: Set<Consumer>; start: (signal: AbortSignal) => Promise<unknown>; active: boolean };
+type Read = { key: string; controller: AbortController; consumers: Set<Consumer>; start: (signal: AbortSignal) => Promise<unknown>; active: boolean; priority: number; queuedAt: number };
 
 // An abandoned transport keeps its slot until it settles. Closing panels
 // releases their consumers immediately without multiplying outstanding IO.
 export function createActivityReadQueue() {
   const reads = new Map<string, Read>();
   let active = 0;
+  let dispatches = 0;
   const detach = (read: Read) => { if (reads.get(read.key) === read) reads.delete(read.key); };
   const pump = () => {
-    for (const read of reads.values()) {
-      if (active >= CONCURRENCY) break;
-      if (read.active) continue;
-      read.active = true; active++;
+    while (active < CONCURRENCY) {
+      // Aging keeps continuous foreground traffic from starving older work.
+      const read = [...reads.values()].filter(read => !read.active).sort((a, b) =>
+        (b.priority + Math.floor((dispatches - b.queuedAt) / 8)) - (a.priority + Math.floor((dispatches - a.queuedAt) / 8)))[0];
+      if (!read) break;
+      read.active = true; active++; dispatches++;
       let result: Promise<unknown>;
       try { result = read.start(read.controller.signal); }
       catch (error) { result = Promise.reject(error); }
@@ -29,15 +34,16 @@ export function createActivityReadQueue() {
     }
   };
   return {
-    run<T>(key: string, signal: AbortSignal, start: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    run<T>(key: string, signal: AbortSignal, start: (signal: AbortSignal) => Promise<T>, priority: ActivityReadPriority = 'visible'): Promise<T> {
       signal.throwIfAborted();
       let read = reads.get(key);
       if (!read) {
         if (reads.size >= MAX_READS) return Promise.reject(new RangeError('Activity read capacity exceeded.'));
-        read = { key, controller: new AbortController(), consumers: new Set(), start, active: false };
+        read = { key, controller: new AbortController(), consumers: new Set(), start, active: false, priority: priorities[priority], queuedAt: dispatches };
         reads.set(key, read);
       }
       if (read.consumers.size >= MAX_CONSUMERS) return Promise.reject(new RangeError('Activity read consumer capacity exceeded.'));
+      read.priority = Math.max(read.priority, priorities[priority]);
       const owned = read;
       const promise = new Promise<T>((resolve, reject) => {
         const consumer: Consumer = { resolve: value => resolve(value as T), reject, signal, cancel: () => {

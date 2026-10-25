@@ -66,7 +66,7 @@ export function createActivityFieldReader(transport: Transport, budgets = { fiel
         || textFields.some(field => !field || field.length > 128 || /[/~]/u.test(field) || selectedFields.includes(field)))) invalid('invalid deferred fields');
       const key = JSON.stringify([threadID, itemID, path, maximumBytes, maximumNodes, selectedFields, textFields]);
       const result = await queue.run('value:' + key, owned, readSignal => recoverHistoryRead(() => transport.loadActivityValue!(threadID,
-        { item_id: itemID, path, maximum_bytes: maximumBytes, maximum_nodes: maximumNodes, ...(selectedFields ? { fields: selectedFields } : {}), ...(textFields ? { text_fields: textFields } : {}) }, readSignal), readSignal));
+        { item_id: itemID, path, maximum_bytes: maximumBytes, maximum_nodes: maximumNodes, ...(selectedFields ? { fields: selectedFields } : {}), ...(textFields ? { text_fields: textFields } : {}) }, readSignal), readSignal), 'interactive');
       owned.throwIfAborted();
       if (epoch !== generation) throw new DOMException('Read scope changed.', 'AbortError');
       if (result.thread_id !== threadID || result.item_id !== itemID || result.path !== path || !result.turn_id || !result.run_id
@@ -108,7 +108,7 @@ export function createActivityFieldReader(transport: Transport, budgets = { fiel
       if (cached) return cached;
       const epoch = generation;
       const owned = AbortSignal.any([signal, lifetime.signal, scope.signal]);
-      const page = await queue.run('shape:' + key, owned, readSignal => recoverHistoryRead(() => transport.loadActivityStructure!(threadID, { item_id: itemID, path, offset, limit, ...(version ? { version } : {}) }, readSignal), readSignal));
+      const page = await queue.run('shape:' + key, owned, readSignal => recoverHistoryRead(() => transport.loadActivityStructure!(threadID, { item_id: itemID, path, offset, limit, ...(version ? { version } : {}) }, readSignal), readSignal), 'interactive');
       owned.throwIfAborted();
       if (epoch !== generation) throw new DOMException('Read scope changed.', 'AbortError');
       validateField(page.field);
@@ -157,7 +157,7 @@ export function createActivityFieldReader(transport: Transport, budgets = { fiel
         item_id: itemID, path, entry_id: field.entry_id, source_sha256: field.source_sha256, sha256: field.sha256,
         source_id: field.source_id, run_id: field.run_id, offset_bytes: base + offset, limit_bytes: Math.max(4, Math.min(ACTIVITY_FIELD_CHUNK_BYTES, extent - offset)),
         ...(alignStart ? { align_start: true } : {}),
-      }, readSignal), readSignal));
+      }, readSignal), readSignal), 'interactive');
       owned.throwIfAborted();
       if (epoch !== generation) throw new DOMException('Read scope changed.', 'AbortError');
       const size = encoder.encode(chunk.text).length;

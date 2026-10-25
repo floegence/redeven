@@ -192,6 +192,9 @@ if (process.argv.includes('--build')) {
           await api('stop');
           const completed = await Promise.all(configured.threads.map(id => api('evidence', '&id=' + encodeURIComponent(id))));
           assert.ok(completed.every(run => run.exact_text && run.exact_reasoning), 'every stability cycle must preserve provider content');
+          const lastWord = [...completed[0].text.matchAll(/word\d{6}/g)].at(-1)?.[0];
+          assert.ok(lastWord, 'the visible run must produce identifiable final text');
+          await page.waitForFunction(word => [...document.querySelectorAll('[data-flower-message-role="assistant"] .flower-chat-md-block')].some(block => block.textContent.includes(word)), lastWord, { timeout: 5000 });
           await page.evaluate(() => window.flowerQualification.setVisible(false));
           await page.locator('.flower-composer textarea').waitFor({ state: 'detached' });
           await page.waitForTimeout(100);
@@ -204,7 +207,7 @@ if (process.argv.includes('--build')) {
           await cdp.send('HeapProfiler.collectGarbage');
           await page.waitForTimeout(1000);
           const released = await api('stats');
-          assert.equal(released.subscribers, 0, 'disposing the surface must release its runtime subscription');
+          assert.equal(released.subscribers, 0, 'disposing the surface must release its runtime subscription: ' + JSON.stringify(released.subscription_states));
           assert.equal(released.queued_bytes, 0, 'disposing the surface must release queued buffers');
           const next = await api('configure', '&threads=' + threads + '&hz=' + hz + '&mode=' + workload + '&initial_bytes=' + initialBytes);
           configured.threads = next.threads;

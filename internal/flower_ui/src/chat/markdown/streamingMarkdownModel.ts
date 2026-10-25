@@ -14,7 +14,7 @@ export function createMarkdownRenderModel(markdown: Marked<string, string>, appl
       // Reading revision tracks only this message. The append source itself
       // avoids flattening or comparing the complete growing JavaScript rope.
       void textSource?.revision;
-      if (!initialized || owner !== textSource || key !== renderingKey || !textSource) {
+      if (!initialized || owner !== textSource || key !== renderingKey || !textSource || cursor < (textSource.start ?? 0)) {
         const value = content();
         if (!initialized || owner !== textSource || key !== renderingKey || value !== previous) {
           if (initialized && owner === textSource && key === renderingKey && value.startsWith(previous)) {

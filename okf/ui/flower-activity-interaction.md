@@ -19,6 +19,8 @@ Desktop and Env App share this contract.
 ## Stable disclosure and safe content
 Activity identity is thread, run, turn and canonical item ID. [Tool sequences](flower-tool-sequences.md) own grouping and bounded thinking; individual details remain available.
 
+Field summaries preserve collapsed labels and result shape without transferring hidden payloads. Disclosure reads selected values; long text uses 16 KiB ranges and a 128 KiB reading window, with explicit selection pins. Closing, hiding or navigating cancels obsolete demand. Markdown reads exact UTF-8 chunks and yields between batches: whitespace cannot be sampled or silently removed because it affects parsing and copied code. A selected Markdown document remains a complete working set rather than a fixed-memory preview.
+
 ## Thread query and read details
 `Thread Query:` and `Thread Read:` are fixed technical labels; their suffix retains model-authored intent in the user's language. [Thread queries](../ai/flower-thread-queries.md) own lookup, privacy, bounds and failure behavior.
 

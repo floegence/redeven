@@ -110,7 +110,29 @@ func TestServerAIGoalReviewDetailPreservesEvidenceWhileWaitingForUser(t *testing
 		if item.Activity == nil || item.Activity.ToolName != "goal" {
 			continue
 		}
-		goal := item.Activity.Presentation.Payload.(fltools.StructuredActivityPayload).Goal
+		if item.Activity.Presentation != nil || item.ActivitySummary == nil {
+			t.Fatal("thread detail must defer Goal presentation behind its summary")
+		}
+		body, err := json.Marshal(map[string]any{"item_id": item.ID, "path": "/payload/goal", "maximum_bytes": 65536, "maximum_nodes": 64})
+		if err != nil {
+			t.Fatal(err)
+		}
+		detail := performServerRequest(server, http.MethodPost, "/_redeven_proxy/api/ai/threads/"+current.ThreadID.String()+"/activity-value", origin, string(body))
+		if detail.Code != http.StatusOK {
+			t.Fatalf("Goal disclosure status=%d body=%s", detail.Code, detail.Body.String())
+		}
+		var value struct{ Data flruntime.ThreadActivityValue }
+		if err := json.Unmarshal(detail.Body.Bytes(), &value); err != nil {
+			t.Fatal(err)
+		}
+		if value.Data.ItemID != item.ID || value.Data.ThreadID != view.ThreadID {
+			t.Fatal("Goal disclosure changed canonical identity")
+		}
+		var payload fltools.StructuredActivityPayload
+		if err := json.Unmarshal(append(append([]byte("{\"goal\":"), value.Data.Value...), '}'), &payload); err != nil {
+			t.Fatal(err)
+		}
+		goal := payload.Goal
 		if goal == nil || goal.Text != objective || goal.Outcome != "blocked" || goal.Evidence != evidence {
 			t.Fatalf("HTTP Goal activity lost canonical review: %+v", goal)
 		}

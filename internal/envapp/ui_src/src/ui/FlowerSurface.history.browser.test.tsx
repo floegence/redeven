@@ -57,6 +57,38 @@ async function mount(tool = false, pending = false, options: { count?: number; t
 }
 
 describe('bounded Flower history', () => {
+  it('releases every observed node after live body hydration and disposal', async () => {
+    const NativeObserver = globalThis.IntersectionObserver;
+    const observed = new Map<IntersectionObserver, Set<Element>>();
+    class TrackedObserver extends NativeObserver {
+      observe(node: Element) { let nodes = observed.get(this); if (!nodes) observed.set(this, nodes = new Set()); nodes.add(node); super.observe(node); }
+      unobserve(node: Element) { observed.get(this)?.delete(node); super.unobserve(node); }
+      disconnect() { observed.delete(this); super.disconnect(); }
+    }
+    vi.stubGlobal('IntersectionObserver', TrackedObserver);
+    try {
+      for (let cycle = 0; cycle < 3; cycle++) {
+        const { root, body, push, history } = await mount(false, false, { live: true });
+        await waitFor(() => body.mock.calls.length > 0);
+        const terminal: FlowerRuntimeCurrentView = { thread_id: 'history', turn_id: 'turn', run_id: 'run', view_version: 8, activity: 'idle', last_outcome: 'completed', items: [{ ...fixture('latest'), text: 'Finished output' }], turns: [], interactions: [], queue: [], window: { first_item_id: 'latest', last_item_id: 'latest', has_before: true, has_after: false } };
+        const snapshot = applyFlowerRuntimeCurrentView(thread({ thread_id: 'history', title: 'Bounded history', messages: [] }), terminal);
+        const readingRevision = history.mock.calls.at(-1)![1].reading_revision;
+        history.mockResolvedValue({ thread: snapshot, current: terminal });
+        push({ schema_version: 3, kind: 'summary.batch', summaries: [snapshot] });
+        push({ schema_version: 3, kind: 'thread.batch', thread_id: 'history', reading_revision: readingRevision, update: {
+          thread_id: 'history', base_version: 7, view_version: 8, turn_id: 'turn', run_id: 'run',
+          facts: { activity: 'idle', attention: { input_count: 0, approval_count: 0 }, queue_count: 0, last_outcome: 'completed' },
+          items: [{ kind: 'replace', item_id: 'latest', item: { ...fixture('latest'), text: 'Finished output' } }],
+        } });
+        await waitFor(() => root.textContent?.includes('Finished output') === true);
+        disposeRenderedSurface(root);
+        await new Promise(resolve => setTimeout(resolve, 50));
+        expect(root.querySelector('.flower-composer')).toBeNull();
+        expect([...observed.values()].flatMap(nodes => [...nodes]).map(node => node.outerHTML.slice(0, 150))).toEqual([]);
+      }
+    } finally { vi.unstubAllGlobals(); }
+  });
+
   it('rebinds bounded history once after reconnect while retaining the transcript and draft', async () => {
     const seed = thread({ thread_id: 'rebind-history', title: 'Reconnect history', messages: [] });
     const disconnect = deferred<void>();
@@ -203,7 +235,7 @@ describe('bounded Flower history', () => {
 
   it('keeps visible live prose through slow reads, burst growth, and canonical completion', async () => {
     let finish!: (text: string) => void;
-    const incremental = vi.fn<NonNullable<FlowerSurfaceAdapter['loadHistoryBody']>>(async (_tid, input) => ({ thread_id: 'history', ...input, text: await new Promise<string>(resolve => { finish = resolve; }) }));
+    const incremental = vi.fn<NonNullable<FlowerSurfaceAdapter['loadHistoryBody']>>(async (_tid, input) => ({ thread_id: 'history', bytes: input.through_bytes, ...input, text: await new Promise<string>(resolve => { finish = resolve; }) }));
     const { root, body, push, history } = await mount(false, false, { live: true, loadHistoryBody: incremental });
     await waitFor(() => incremental.mock.calls.length === 1);
     const bubble = root.querySelector('.flower-history-message .flower-message-bubble')!;
@@ -224,22 +256,44 @@ describe('bounded Flower history', () => {
     finish('y'.repeat(100));
     await waitFor(() => bubble.textContent?.includes('y'.repeat(100)) === true);
     const text = 'Preview text' + 'x'.repeat(16) + 'y'.repeat(100);
-    let complete!: (item: FlowerRuntimeCurrentItem) => void;
-    body.mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
     const canonical = { ...fixture('latest', true), body: { field: 'content', source_id: 'latest', bytes: 128, preview_bytes: 12 } };
     const terminal: FlowerRuntimeCurrentView = { thread_id: 'history', turn_id: 'turn', run_id: 'run', view_version: version + 1, activity: 'idle', last_outcome: 'completed', items: [canonical], turns: [], interactions: [], queue: [], window: { first_item_id: 'latest', last_item_id: 'latest', has_before: true, has_after: false } };
     const snapshot = applyFlowerRuntimeCurrentView(thread({ thread_id: 'history', title: 'Bounded history', messages: [] }), terminal);
     history.mockResolvedValue({ thread: snapshot, current: terminal });
     push({ schema_version: 3, kind: 'summary.batch', summaries: [snapshot] });
     push({ schema_version: 3, kind: 'thread.batch', thread_id: 'history', reading_revision: readingRevision, update: { thread_id: 'history', turn_id: 'turn', run_id: 'run', base_version: version++, view_version: version, facts: { activity: 'idle', attention: {}, queue_count: 0, last_outcome: 'completed' }, items: [{ kind: 'replace', item_id: 'latest', item: canonical }] } });
-    await waitFor(() => body.mock.calls.length === 1);
+    await waitFor(() => incremental.mock.calls.length === 3);
+    expect(incremental.mock.calls[2][1]).toMatchObject({ item_id: 'latest', offset_bytes: 128, through_bytes: 128 });
+    expect(body).not.toHaveBeenCalled();
     expect(bubble.textContent).toContain(text);
     expect(root.querySelector('.flower-history-text-loading')).toBeNull();
-    complete({ ...canonical, body: undefined, text });
+    finish('');
     await waitFor(() => !root.querySelector('.flower-history-body-control'));
     expect(root.querySelector('.flower-history-message .flower-message-bubble')).toBe(bubble);
-    expect(incremental).toHaveBeenCalledTimes(2);
+    expect(incremental).toHaveBeenCalledTimes(3);
   });
+  it('cancels obsolete live body reads when the canonical source is sealed', async () => {
+    const incremental = vi.fn<NonNullable<FlowerSurfaceAdapter['loadHistoryBody']>>(async (_tid, input, signal) => {
+      if (input.run_id) return new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
+      return { thread_id: 'history', bytes: input.through_bytes, ...input, text: ' sealed content.' };
+    });
+    const { root, push, history } = await mount(false, false, { live: true, loadHistoryBody: incremental });
+    await waitFor(() => incremental.mock.calls.length === 1);
+    const signal = incremental.mock.calls[0][2];
+    const canonical = { ...fixture('latest', true), body: { field: 'content', source_id: 'latest', entry_id: 'sealed-entry', bytes: 28, preview_bytes: 12 } };
+    const terminal: FlowerRuntimeCurrentView = { thread_id: 'history', turn_id: 'turn', run_id: 'run', view_version: 8, activity: 'idle', last_outcome: 'completed', items: [canonical], turns: [], interactions: [], queue: [], window: { first_item_id: 'latest', last_item_id: 'latest', has_before: true, has_after: false } };
+    const snapshot = applyFlowerRuntimeCurrentView(thread({ thread_id: 'history', title: 'Bounded history', messages: [] }), terminal);
+    const readingRevision = history.mock.calls.at(-1)![1].reading_revision;
+    history.mockResolvedValue({ thread: snapshot, current: terminal });
+    push({ schema_version: 3, kind: 'summary.batch', summaries: [snapshot] });
+    push({ schema_version: 3, kind: 'thread.batch', thread_id: 'history', reading_revision: readingRevision, update: { thread_id: 'history', turn_id: 'turn', run_id: 'run', base_version: 7, view_version: 8, facts: { activity: 'idle', attention: {}, queue_count: 0, last_outcome: 'completed' }, items: [{ kind: 'replace', item_id: 'latest', item: canonical }] } });
+    await waitFor(() => root.textContent?.includes('Preview text sealed content.') === true);
+    expect(signal.aborted).toBe(true);
+    expect(incremental).toHaveBeenCalledTimes(2);
+    expect(incremental.mock.calls[1][1]).toMatchObject({ entry_id: 'sealed-entry', offset_bytes: 12 });
+    expect(root.querySelector('.flower-history-body-control')).toBeNull();
+  });
+
   it('keeps user loading placeholders and hydrated text aligned to the transcript right edge', async () => {
     const text = 'Preview text ' + 'Review the complete historical request and preserve its references. '.repeat(8);
     const { root, body, complete } = await mount(false, true, { kind: 'user', text });

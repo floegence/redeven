@@ -111,7 +111,9 @@ func TestFlowerSubagentForkAndIndependentRootCannotControlSourceChildren(t *test
 			if err != nil || listed["total"] != 0 {
 				t.Fatalf("foreign list=%#v err=%v", listed, err)
 			}
-			waited, err := adapter.wait(t.Context(), map[string]any{"ids": []any{f.child.String()}, "timeout_ms": 1})
+			// Scope rejection must return before waiting. A one-millisecond IO
+			// deadline tests scheduler speed instead of this authority boundary.
+			waited, err := adapter.wait(t.Context(), map[string]any{"ids": []any{f.child.String()}, "timeout_ms": 10000})
 			if err != nil || waited["reason"] != "missing" || waited["found_count"] != 0 {
 				t.Fatalf("foreign wait=%#v err=%v", waited, err)
 			}

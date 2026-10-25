@@ -11,6 +11,42 @@ import {
 } from './flowerTerminalOutput';
 
 describe('terminal visible output', () => {
+  it('bounds inactive bytes without evicting a mounted live tail', () => {
+    const store = createTerminalVisibleOutputStore(200, 1024);
+    const active = { run_id: 'run', item_id: 'active' };
+    const release = store.retain(active);
+    store.replaceSnapshot(active, { output: 'a'.repeat(400), first_seq: 1, last_seq: 1 });
+    const old = { run_id: 'run', item_id: 'old' };
+    store.replaceSnapshot(old, { output: 'b'.repeat(400), first_seq: 1, last_seq: 1 });
+    store.replaceSnapshot({ run_id: 'run', item_id: 'new' }, { output: 'c'.repeat(400), first_seq: 1, last_seq: 1 });
+    expect(store.get(active)).toHaveLength(400);
+    expect(store.get(old)).toBe('');
+    release(); release();
+    expect(store.get(active)).toBe('');
+  });
+  it('coalesces frame metadata without losing a partial handoff', async () => {
+    const store = createTerminalVisibleOutputStore();
+    const owner = { run_id: 'run', item_id: 'segments' };
+    for (let seq = 1; seq <= 200; seq++) store.appendDelta(owner, { output: 'x', first_seq: seq, last_seq: seq });
+    expect(store.get(owner)).toHaveLength(200);
+    const publish = await store.acknowledgeDeferred(owner, 10, async after => ({ output: 'x'.repeat(200-after), first_seq: after+1, last_seq: 200 }), new AbortController().signal);
+    expect(publish()).toBe('x'.repeat(190));
+  });
+  it('coalesces frames after a deferred watermark without inventing a gap', async () => {
+    const store = createTerminalVisibleOutputStore();
+    const owner = { run_id: 'run', item_id: 'deferred-segments' };
+    const signal = new AbortController().signal;
+    (await store.acknowledgeDeferred(owner, 500, async () => { throw new Error('unexpected reread'); }, signal))();
+    for (let seq = 501; seq <= 700; seq++) store.appendDelta(owner, { output: 'x', first_seq: seq, last_seq: seq });
+    expect(store.get(owner)).toHaveLength(200);
+    const offsets: number[] = [];
+    const publish = await store.acknowledgeDeferred(owner, 520, async after => {
+      offsets.push(after);
+      return { output: 'x'.repeat(700 - after), first_seq: after + 1, last_seq: 700 };
+    }, signal);
+    expect(publish()).toBe('x'.repeat(180));
+    expect(offsets).toEqual([520]);
+  });
   it('renders canonical completed output that predates sequence metadata', () => {
     expect(replaceTerminalOutputSnapshot(undefined, {
       output: '1785682356',

@@ -16,6 +16,18 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
+// Opening a conversation needs one viewport, not the retained-history capacity.
+// Explicit pagination and protected selections retain their requested bounds.
+const flowerInitialHistoryItems = 24
+
+func flowerHistoryWindowInput(threadID identity.ThreadID, input FlowerHistoryRequest) flruntime.ThreadWindowInput {
+	limit := input.Limit
+	if limit == 0 && input.ItemIDs == nil {
+		limit = flowerInitialHistoryItems
+	}
+	return flruntime.ThreadWindowInput{ThreadID: threadID, AnchorID: input.AnchorID, AnchorOffset: input.AnchorOffset, Direction: input.Direction, Limit: limit, ItemIDs: input.ItemIDs, IncludeSummary: true, ActivityFields: true, PreviewBytes: 1024}
+}
+
 // FlowerHistoryWindow is disposable reading state, never a journal cursor.
 type FlowerHistoryWindow struct {
 	LeafID      string                   `json:"leaf_id,omitempty"`
@@ -37,43 +49,32 @@ type FlowerHistoryRequest struct {
 	Limit           int                             `json:"limit,omitempty"`
 }
 
-// FlowerHistoryBodyRequest resumes one live source at an accepted UTF-8 offset.
+// FlowerHistoryBodyRequest resumes one presentation source at an accepted UTF-8 offset.
 // The server resolves the source again; client locators never grant access.
 type FlowerHistoryBodyRequest struct {
-	ItemID       string         `json:"item_id"`
-	RunID        identity.RunID `json:"run_id"`
-	SourceID     string         `json:"source_id"`
-	ThroughBytes int            `json:"through_bytes"`
-	OffsetBytes  int            `json:"offset_bytes"`
+	ItemID       string                    `json:"item_id"`
+	RunID        identity.RunID            `json:"run_id,omitempty"`
+	SourceID     string                    `json:"source_id,omitempty"`
+	EntryID      string                    `json:"entry_id,omitempty"`
+	Field        flruntime.ThreadBodyField `json:"field"`
+	ThroughBytes int                       `json:"through_bytes"`
+	OffsetBytes  int                       `json:"offset_bytes"`
 }
 
-func (s *Service) GetFlowerHistoryBody(ctx context.Context, meta *session.Meta, threadID string, input FlowerHistoryBodyRequest) (flruntime.ThreadLiveBodyChunk, error) {
-	var empty flruntime.ThreadLiveBodyChunk
+func (s *Service) GetFlowerHistoryBody(ctx context.Context, meta *session.Meta, threadID string, input FlowerHistoryBodyRequest) (flruntime.ThreadItemTextChunk, error) {
+	var empty flruntime.ThreadItemTextChunk
 	scope, err := s.flowerHistoryScope(ctx, meta, threadID)
 	if err != nil {
 		return empty, err
 	}
-	if input.ItemID == "" || input.RunID == "" || input.SourceID == "" || input.OffsetBytes < 0 || input.ThroughBytes <= input.OffsetBytes {
+	if input.ItemID == "" || input.OffsetBytes < 0 || input.ThroughBytes < input.OffsetBytes {
 		return empty, threadquery.ErrInvalidQuery
 	}
-	locator, ok := s.threadRuntime.(flruntime.ThreadItemBodyReader)
+	reader, ok := s.threadRuntime.(flruntime.ThreadItemTextReader)
 	if !ok {
-		return empty, errors.New("published Floret item body contract is unavailable")
+		return empty, errors.New("published Floret item text contract is unavailable")
 	}
-	reader, ok := s.threadRuntime.(flruntime.ThreadLiveBodyReader)
-	if !ok {
-		return empty, errors.New("published Floret live body contract is unavailable")
-	}
-	body, err := locator.ItemBody(ctx, scope, flruntime.ThreadItemBodyInput{ThreadID: identity.ThreadID(threadID), ItemID: input.ItemID})
-	if err != nil {
-		return empty, err
-	}
-	if body.RunID != input.RunID || body.SourceID != input.SourceID || input.ThroughBytes > body.Bytes {
-		return empty, threadquery.ErrRecordUnavailable
-	}
-	// One request reads at most 16 KiB, with no window subscription, full View,
-	// prefix re-download, or host-owned durable body cache.
-	return reader.ReadLiveBody(ctx, scope, flruntime.ThreadLiveBodyInput{ThreadID: identity.ThreadID(threadID), RunID: body.RunID, SourceID: body.SourceID, ThroughBytes: input.ThroughBytes, OffsetBytes: input.OffsetBytes, LimitBytes: 16 << 10})
+	return reader.ReadItemText(ctx, scope, flruntime.ThreadItemTextInput{ThreadID: identity.ThreadID(threadID), ItemID: input.ItemID, RunID: input.RunID, SourceID: input.SourceID, EntryID: input.EntryID, Field: input.Field, ThroughBytes: input.ThroughBytes, OffsetBytes: input.OffsetBytes, LimitBytes: 16 << 10})
 }
 
 func (s *Service) flowerHistoryScope(ctx context.Context, meta *session.Meta, threadID string) (threadquery.Scope, error) {
@@ -127,7 +128,7 @@ func flowerHistoryCurrent(update flruntime.ThreadUpdate) (flruntime.ThreadView, 
 		Activity: update.Facts.Activity, Attention: update.Facts.Attention, TurnKind: update.Facts.TurnKind,
 		LastOutcome: update.Facts.LastOutcome, Failure: update.Facts.Failure, Cancellation: update.Facts.Cancellation, RunProgress: update.Facts.RunProgress, Items: w.Items}
 	if update.Context != nil {
-		current.Context = update.Context.Value
+		current.Context = flowerWindowContext(update.Context.Value, w.Items, current.RunID)
 	}
 	if update.Goal != nil {
 		current.Goal = update.Goal.Value
@@ -164,7 +165,7 @@ func (s *Service) GetFlowerThreadHistory(ctx context.Context, meta *session.Meta
 	}
 	// Metadata and the read watermark come from the same explicit baseline.
 	// No separate preparation window or independently sampled Summary is needed.
-	current, window, err := s.readFlowerHistoryForObserver(ctx, meta, scope, input, flruntime.ThreadWindowInput{ThreadID: identity.ThreadID(threadID), AnchorID: input.AnchorID, AnchorOffset: input.AnchorOffset, Direction: input.Direction, Limit: input.Limit, ItemIDs: input.ItemIDs, IncludeSummary: true})
+	current, window, err := s.readFlowerHistoryForObserver(ctx, meta, scope, input, flowerHistoryWindowInput(identity.ThreadID(threadID), input))
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +176,7 @@ func (s *Service) GetFlowerThreadHistory(ctx context.Context, meta *session.Meta
 	if err != nil {
 		return nil, err
 	}
-	evidence, err := s.flowerHistoryComputerEvidence(ctx, current.ThreadID, current.Interactions)
+	evidence, err := s.flowerHistoryComputerEvidence(ctx, scope, current.ThreadID, current.Interactions)
 	if err != nil {
 		return nil, err
 	}
@@ -346,14 +347,135 @@ func (s *Service) GetFlowerHistoryItem(ctx context.Context, meta *session.Meta, 
 // Safety provenance may refer to a tool outside the displayed interval. Read
 // canonical evidence on the server only when a pending input cites it; never
 // serialize those historical items as part of a bounded page.
-func (s *Service) flowerHistoryComputerEvidence(ctx context.Context, id identity.ThreadID, interactions []flruntime.ThreadInteraction) (*flruntime.ThreadView, error) {
+// Evidence needs ordered safety facts from the pending turns, never transcript
+// bodies. Scan bounded canonical pages, stop at each turn's user boundary, and
+// reject a moving path rather than combine independently sampled histories.
+func (s *Service) flowerHistoryComputerEvidence(ctx context.Context, scope threadquery.Scope, id identity.ThreadID, interactions []flruntime.ThreadInteraction) (*flruntime.ThreadView, error) {
+	return readFlowerComputerEvidence(ctx, id, interactions,
+		func(ctx context.Context, input flruntime.ThreadWindowInput) (flruntime.ThreadView, *FlowerHistoryWindow, error) {
+			return readFlowerHistory(ctx, s.threadRuntime, scope, input)
+		}, func(ctx context.Context, item flruntime.ThreadItem) (flruntime.ThreadItem, error) {
+			return s.flowerComputerEvidenceItem(ctx, scope, id, item)
+		})
+}
+
+func readFlowerComputerEvidence(ctx context.Context, id identity.ThreadID, interactions []flruntime.ThreadInteraction,
+	read func(context.Context, flruntime.ThreadWindowInput) (flruntime.ThreadView, *FlowerHistoryWindow, error),
+	resolve func(context.Context, flruntime.ThreadItem) (flruntime.ThreadItem, error)) (*flruntime.ThreadView, error) {
+	pending := make(map[identity.TurnID]bool)
 	for _, interaction := range interactions {
 		if interaction.Kind == flruntime.ThreadInteractionInput && !interaction.Resolved && interaction.Input != nil && (len(interaction.Input.EvidenceRefs) > 0 || strings.HasPrefix(interaction.ID, "tool-input:")) {
-			view, err := s.threadRuntime.View(ctx, id)
-			return &view, err
+			pending[interaction.TurnID] = true
 		}
 	}
-	return nil, nil
+	if len(pending) == 0 {
+		return nil, nil
+	}
+	view := &flruntime.ThreadView{ThreadID: id}
+	input := flruntime.ThreadWindowInput{ThreadID: id, Limit: 64, ActivityFields: true, PreviewBytes: 128, Direction: flruntime.ThreadWindowBefore}
+	var leaf string
+	var version uint64
+	for {
+		page, window, err := read(ctx, input)
+		if err != nil {
+			return nil, err
+		}
+		if window == nil || input.AnchorID != "" && (window.LeafID != leaf || page.ViewVersion != version) {
+			return nil, threadquery.ErrRecordUnavailable
+		}
+		leaf, version = window.LeafID, page.ViewVersion
+		view.ViewVersion = version
+		for index := len(page.Items) - 1; index >= 0; index-- {
+			item := page.Items[index]
+			if !pending[item.TurnID] {
+				continue
+			}
+			if item.Kind == flruntime.ThreadItemUser {
+				delete(pending, item.TurnID)
+				continue
+			}
+			if item.Activity == nil || !isComputerUseTool(item.Activity.ToolName) {
+				continue
+			}
+			item, err = resolve(ctx, item)
+			if err != nil {
+				return nil, err
+			}
+			view.Items = append(view.Items, item)
+		}
+		if len(pending) == 0 || !window.HasBefore {
+			break
+		}
+		if window.FirstItemID == "" || window.FirstItemID == input.AnchorID {
+			return nil, threadquery.ErrRecordUnavailable
+		}
+		input.AnchorID = window.FirstItemID
+	}
+	// Field reads may span source transactions. Confirm the monotonic version
+	// and leaf before accepting safety facts sampled across those reads.
+	confirmed, confirmedWindow, err := read(ctx, flruntime.ThreadWindowInput{ThreadID: id, Limit: 1, ActivityFields: true, PreviewBytes: 128})
+	if err != nil {
+		return nil, err
+	}
+	if confirmedWindow == nil || confirmedWindow.LeafID != leaf || confirmed.ViewVersion != version {
+		return nil, threadquery.ErrRecordUnavailable
+	}
+	for left, right := 0, len(view.Items)-1; left < right; left, right = left+1, right-1 {
+		view.Items[left], view.Items[right] = view.Items[right], view.Items[left]
+	}
+	return view, nil
+}
+
+func (s *Service) flowerComputerEvidenceItem(ctx context.Context, scope threadquery.Scope, id identity.ThreadID, item flruntime.ThreadItem) (flruntime.ThreadItem, error) {
+	if item.ActivitySummary == nil {
+		return item, nil
+	}
+	presentation := &fltools.ActivityPresentation{}
+	for _, field := range []struct {
+		path   string
+		target any
+	}{{"/chips", &presentation.Chips}, {"/target_refs", &presentation.TargetRefs}} {
+		raw := item.ActivitySummary.Values[field.path]
+		if len(raw) == 0 {
+			for _, source := range item.ActivitySummary.Fields {
+				if source.Path != field.path || source.Kind != "array" || source.Count == 0 {
+					continue
+				}
+				// Unusually large safety collections are still explicit field
+				// reads. Never treat omitted summary metadata as canonical absence.
+				reader, ok := s.threadRuntime.(flruntime.ThreadActivityValueReader)
+				if !ok {
+					return item, errors.New("published Floret activity value contract is unavailable")
+				}
+				values := make([]json.RawMessage, 0, source.Count)
+				for index := 0; index < source.Count; index++ {
+					value, err := reader.ReadActivityValue(ctx, scope, flruntime.ThreadActivityValueInput{ThreadID: id, ItemID: item.ID, Path: fmt.Sprintf("%s/%d", field.path, index), MaximumBytes: 64 << 10, MaximumNodes: 16})
+					if err != nil {
+						return item, err
+					}
+					if value.ThreadID != id || value.ItemID != item.ID || value.TurnID != item.TurnID || value.RunID != item.RunID {
+						return item, threadquery.ErrRecordUnavailable
+					}
+					values = append(values, value.Value)
+				}
+				var err error
+				raw, err = json.Marshal(values)
+				if err != nil {
+					return item, err
+				}
+			}
+		}
+		if len(raw) > 0 {
+			if err := json.Unmarshal(raw, field.target); err != nil {
+				return item, err
+			}
+		}
+	}
+	activity := *item.Activity
+	activity.Presentation = presentation
+	item.Activity = &activity
+	item.Text, item.Body, item.ActivityBodies, item.ActivitySummary = "", nil, nil, nil
+	return item, nil
 }
 
 // MarshalFlowerHistoryCurrent keeps command receipts on the same bounded

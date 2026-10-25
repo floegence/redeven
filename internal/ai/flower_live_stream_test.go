@@ -25,6 +25,31 @@ import (
 	"github.com/floegence/redeven/internal/threadreadstate"
 )
 
+func TestFlowerLiveSubscriptionCancellationReleasesWithoutNext(t *testing.T) {
+	svc := newSendTurnTestService(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	meta := testSendTurnMeta()
+	sub, err := svc.SubscribeFlowerLiveStream(ctx, meta, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sub.Close()
+	cancel()
+	deadline := time.Now().Add(time.Second)
+	for svc.flowerLiveSubscriberCount(meta.EndpointID) != 0 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if svc.flowerLiveSubscriberCount(meta.EndpointID) != 0 {
+		t.Fatal("cancelled subscriber retained its stream without a pending Next call")
+	}
+	svc.mu.Lock()
+	defer svc.mu.Unlock()
+	if svc.flowerLiveQueuedBytes != 0 {
+		t.Fatal("cancelled subscriber retained queued bytes")
+	}
+}
+
 func TestFlowerLiveEncodingFailureRetainsCauseAndLogsSafeCurrentContext(t *testing.T) {
 	for _, child := range []bool{false, true} {
 		t.Run(fmt.Sprintf("subagent_%t", child), func(t *testing.T) {
@@ -319,10 +344,7 @@ func TestFlowerWorkspaceStreamBaselinesAndBroadcastsCanonicalComputerStatus(t *t
 
 	bounded := current
 	bounded.Items = nil
-	evidence, err := svc.flowerHistoryComputerEvidence(ctx, current.ThreadID, current.Interactions)
-	if err != nil {
-		t.Fatal(err)
-	}
+	evidence := &current
 	public, err := MarshalFlowerCurrentView(bounded, evidence)
 	if err != nil {
 		t.Fatal(err)

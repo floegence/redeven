@@ -4,7 +4,7 @@ import { page } from 'vitest/browser';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import type { FlowerLiveStreamEnvelope, FlowerRuntimeCurrentView, FlowerSurfaceAdapter } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
-import { adapter, renderSurfaceWithAdapterProps, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+import { adapter, disposeRenderedSurface, renderSurfaceWithAdapterProps, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 let warningSpy: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   warningSpy = vi.spyOn(console, 'warn');
@@ -16,6 +16,35 @@ afterEach(() => {
 });
 
 describe('field-backed activity in the product surface', () => {
+  it('observes activity visibility only after DOM adoption and releases it on disposal', async () => {
+    const NativeObserver = globalThis.IntersectionObserver;
+    const early: string[] = [];
+    const observed = new Set<Element>();
+    class TrackedObserver extends NativeObserver {
+      private nodes = new Set<Element>();
+      observe(node: Element) { if (!node.isConnected) early.push(node.className); this.nodes.add(node); observed.add(node); super.observe(node); }
+      unobserve(node: Element) { this.nodes.delete(node); observed.delete(node); super.unobserve(node); }
+      disconnect() { for (const node of this.nodes) observed.delete(node); this.nodes.clear(); super.disconnect(); }
+    }
+    vi.stubGlobal('IntersectionObserver', TrackedObserver);
+    try {
+      const seed = thread({ thread_id: 'observer-thread', messages: [] });
+      const current: FlowerRuntimeCurrentView = { thread_id: seed.thread_id, activity: 'idle', view_version: 1, items: [{
+        id: 'tool:turn:inspect', kind: 'tool', turn_id: 'turn', run_id: 'run', ordinal: 1,
+        activity: { item_id: 'inspect', tool_id: 'inspect', tool_name: 'inspect', kind: 'tool', status: 'success' },
+        activity_summary: { version: 'v1', label: 'Inspect', renderer: 'structured', fields: [] },
+      }] };
+      const root = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [seed],
+        loadHistory: async () => ({ current, thread: applyFlowerRuntimeCurrentView(seed, current) }),
+      }, { focusThreadRequest: { request_id: 'open-observer', thread_id: seed.thread_id } });
+      await waitFor(() => Boolean(root.querySelector('[data-flower-activity-item-id="inspect"]')));
+      disposeRenderedSurface(root);
+      expect(root.querySelector('.flower-composer')).toBeNull();
+      expect([...observed]).toEqual([]);
+      expect(early).toEqual([]);
+    } finally { vi.unstubAllGlobals(); }
+  });
+
   it('shows the correct collapsed Goal disposition and reads text only when expanded', async () => {
     await page.viewport(1280, 900);
     const seed = thread({ thread_id: 'goal-fields', title: 'Goal review', messages: [] });
@@ -192,6 +221,47 @@ describe('field-backed activity in the product surface', () => {
     activityRow.style.marginTop = '';
     await waitFor(() => root.querySelector('.flower-activity-terminal-output')?.textContent?.includes('tick-' + version) === true);
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(root.querySelector('.flower-thread-sync-error')).toBeNull();
+  });
+
+  it('waits for a small terminal body before applying its sequence or polling', async () => {
+    await page.viewport(1280, 900);
+    const seed = thread({ thread_id: 'pending-terminal', title: 'Pending terminal body', messages: [] });
+    const current: FlowerRuntimeCurrentView = { thread_id: seed.thread_id, activity: 'idle', view_version: 1, items: [{
+      id: 'tool:turn:small', turn_id: 'turn', run_id: 'run', ordinal: 1, kind: 'tool',
+      activity: { item_id: 'small', tool_id: 'small', tool_name: 'terminal.exec', kind: 'tool', status: 'success', severity: 'normal' },
+      activity_summary: { version: 'v1', label: 'Read small output', renderer: 'terminal', fields: [
+        { path: '/payload/output', kind: 'string', bytes: 6 },
+        { path: '/payload/command', kind: 'string', bytes: 7 },
+        { path: '/payload/process_id', kind: 'string', bytes: 7 },
+        { path: '/payload/operation', kind: 'string', bytes: 4 },
+        { path: '/payload/first_seq', kind: 'scalar', value: 1 },
+        { path: '/payload/last_seq', kind: 'scalar', value: 1 },
+        { path: '/payload/latest_seq', kind: 'scalar', value: 2 },
+      ] },
+    }] };
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => { release = resolve; });
+    const loadActivityValue = vi.fn<NonNullable<FlowerSurfaceAdapter['loadActivityValue']>>(async (_thread, request) => {
+      await pending;
+      return { thread_id: seed.thread_id, item_id: request.item_id, turn_id: 'turn', run_id: 'run', path: request.path,
+        value: { output: 'first\n', command: 'inspect', process_id: 'process', operation: 'exec', first_seq: 1, last_seq: 1, latest_seq: 2 } };
+    });
+    const readTerminalProcess = vi.fn<NonNullable<FlowerSurfaceAdapter['readTerminalProcess']>>(async () => ({
+      process_id: 'process', status: 'success', output: 'second\n', first_seq: 2, last_seq: 2, latest_seq: 2, has_more: false,
+    }));
+    const root = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [seed], loadActivityValue, readTerminalProcess,
+      loadHistory: async () => ({ current, thread: applyFlowerRuntimeCurrentView(seed, current) }),
+    }, { focusThreadRequest: { request_id: 'open-pending-terminal', thread_id: seed.thread_id } });
+    root.style.height = '780px';
+    await waitFor(() => Boolean(root.querySelector('[data-flower-activity-item-id="small"] [data-flower-disclosure-trigger]')));
+    root.querySelector<HTMLButtonElement>('[data-flower-activity-item-id="small"] [data-flower-disclosure-trigger]')!.click();
+    await waitFor(() => loadActivityValue.mock.calls.length === 1);
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect(readTerminalProcess).not.toHaveBeenCalled();
+    release();
+    await waitFor(() => root.querySelector('.flower-activity-terminal-output')?.textContent === 'first\nsecond\n');
+    expect(readTerminalProcess.mock.calls.map(([request]) => request.after_seq)).toEqual([1]);
     expect(root.querySelector('.flower-thread-sync-error')).toBeNull();
   });
 

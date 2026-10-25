@@ -562,7 +562,7 @@ func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderC
 		}
 		continuationRunID = update.RunID
 	}
-	assertAskUserContinuationLiveThinking(t, live, baseline.Current, continuationRunID, "Check receipt")
+	assertAskUserContinuationLiveThinking(t, svc, meta, live, baseline.Current, continuationRunID, "Check receipt")
 	select {
 	case result := <-submitted:
 		if result.err != nil || result.response.Kind != "accepted" ||
@@ -624,7 +624,7 @@ func deepSeekRequestHasStableSystemPrompt(request map[string]any, forbidden ...s
 	return false
 }
 
-func assertAskUserContinuationLiveThinking(t *testing.T, live *FlowerLiveStreamSubscription, current flruntime.ThreadView, continuationRunID identity.RunID, wantThinking string) {
+func assertAskUserContinuationLiveThinking(t *testing.T, svc *Service, meta *session.Meta, live *FlowerLiveStreamSubscription, current flruntime.ThreadView, continuationRunID identity.RunID, wantThinking string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
@@ -651,7 +651,17 @@ func assertAskUserContinuationLiveThinking(t *testing.T, live *FlowerLiveStreamS
 			continue
 		}
 		for _, item := range current.Items {
-			if item.Kind != flruntime.ThreadItemThinking || item.RunID != continuationRunID || !item.Live || item.Text != wantThinking {
+			if item.Kind != flruntime.ThreadItemThinking || item.RunID != continuationRunID || !item.Live {
+				continue
+			}
+			if body := item.Body; body != nil {
+				chunk, err := svc.GetFlowerHistoryBody(ctx, meta, current.ThreadID.String(), FlowerHistoryBodyRequest{ItemID: item.ID, RunID: body.RunID, SourceID: body.SourceID, EntryID: body.EntryID, Field: body.Field, ThroughBytes: body.Bytes})
+				if err != nil {
+					t.Fatalf("read live thinking body: %v", err)
+				}
+				item.Text = chunk.Text
+			}
+			if item.Text != wantThinking {
 				continue
 			}
 			if current.RunID != continuationRunID || current.Activity != flruntime.ThreadActivityActive || current.RunProgress == nil ||

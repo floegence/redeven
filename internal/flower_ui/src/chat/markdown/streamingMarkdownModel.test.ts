@@ -5,6 +5,7 @@ import { createMarkdownRenderModel } from './streamingMarkdownModel';
 import { createIncrementalMarkdownDOM } from './incrementalMarkdownDOM';
 import { createFlowerMarkdownRenderer } from './markedConfig';
 import { createIncrementalCitations } from './incrementalCitations';
+import { createMessageTextSource } from '../../messageTextSource';
 
 function fixture(initial = '', citationSources: readonly import('../../contracts/flowerSurfaceContracts').FlowerCitationSource[] = []) {
   const markdown = createMarkdownParser({ breaks: false });
@@ -32,6 +33,24 @@ function canonicalHTML(element: HTMLElement) {
   return [...copy.children].map(node => node.innerHTML).join('');
 }
 describe('incremental Markdown DOM', () => {
+  it('catches up a paused consumer after append log eviction without losing text or stable nodes', () => {
+    const markdown = createMarkdownParser({ breaks: false });
+    const log = createMessageTextSource(() => 0, () => {});
+    let text = 'Initial';
+    let assembled = '';
+    const apply = vi.fn();
+    const model = createMarkdownRenderModel(markdown, apply, { reset() { assembled = ''; }, append(value) { assembled += value; } });
+    model.update(() => text, true, log.source);
+    for (let index = 0; index < 1000; index++) { text += 'x'; log.append('x'); }
+    expect(log.source.start).toBeGreaterThan(0);
+    model.update(() => text, true, log.source);
+    expect(assembled).toBe(text);
+    expect(model.diagnostics().fullParses).toBe(1);
+    log.append('!'); text += '!';
+    model.update(() => { throw new Error('unnecessary complete read'); }, true, log.source);
+    expect(assembled).toBe(text);
+  });
+
   it.each([1, 3, 11])('retains the complete billing list across %i-character deltas and snapshot correction', size => {
     const source = 'Added `api/internal/billing/limits_test.go`:\n\n'
       + '- **Under the limit** — 80 units are recorded normally.\n'

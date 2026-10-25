@@ -37,6 +37,20 @@ function controlledConnections<T>() {
 afterEach(() => vi.useRealTimers());
 
 describe('LiveTransport', () => {
+  it('stops without publishing reactive boundaries into a disposing surface', async () => {
+    const fixture = controlledConnections<number>();
+    const onBoundary = vi.fn(), onState = vi.fn();
+    const transport = createLiveTransport<number>();
+    const stop = transport.start({ ...fixture, onCurrent: vi.fn(), onBoundary, onState, onTerminalError: vi.fn() });
+    onState.mockClear();
+    stop();
+    expect(fixture.connections[0].signal.aborted).toBe(true);
+    expect(transport.state().status).toBe('stopped');
+    expect(onBoundary).not.toHaveBeenCalled();
+    expect(onState).not.toHaveBeenCalled();
+    fixture.connections[0].end();
+  });
+
   it('invalidates outstanding reads immediately on disconnect before reconnecting', async () => {
     vi.useFakeTimers();
     const transport = createLiveTransport<{ kind: string }>();

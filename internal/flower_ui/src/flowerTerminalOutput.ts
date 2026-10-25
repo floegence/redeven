@@ -30,6 +30,7 @@ export type TerminalVisibleOutputState = Readonly<{
 }>;
 
 export interface TerminalVisibleOutputStore {
+  retain(identity: TerminalVisibleOutputIdentity): () => void;
   get(identity: TerminalVisibleOutputIdentity): string;
   replaceSnapshot(identity: TerminalVisibleOutputIdentity, snapshot: TerminalOutputFrame): string;
   appendDelta(identity: TerminalVisibleOutputIdentity, delta: TerminalOutputFrame): string;
@@ -287,21 +288,47 @@ export function terminalListeningPlaceholderVisible(output: unknown, status: Ter
   return isLiveStatus(status) && !normalizeOutput(output).trim();
 }
 
-export function createTerminalVisibleOutputStore(maxEntries = 200): TerminalVisibleOutputStore {
+export function createTerminalVisibleOutputStore(maxEntries = 200, maxBytes = 8 << 20): TerminalVisibleOutputStore {
   type Entry = { state: TerminalVisibleOutputState; frames: readonly TerminalVisibleOutputState[]; deferredThrough?: number };
   const entries = new Map<string, Entry>();
-
-  const touch = (key: string, entry: Entry) => {
-    entries.delete(key);
-    entries.set(key, entry);
-    while (entries.size > maxEntries) {
-      const oldest = entries.keys().next().value;
-      if (oldest === undefined) break;
-      entries.delete(oldest);
+  const owners = new Map<string, number>();
+  const bytes = (entry: Entry) => entry.state.output.length * 2 + entry.frames.reduce((sum, frame) => sum + frame.output.length * 2 + 64, 0);
+  let retainedBytes = 0;
+  const prune = (selected?: string) => {
+    for (const [key, entry] of entries) {
+      if (entries.size <= maxEntries && retainedBytes <= maxBytes) break;
+      if (key === selected || owners.has(key)) continue;
+      entries.delete(key); retainedBytes -= bytes(entry);
     }
+  };
+  const touch = (key: string, entry: Entry) => {
+    const prior = entries.get(key);
+    if (prior) retainedBytes -= bytes(prior);
+    // Frame boundaries are only a reread optimization. Coalesce old contiguous
+    // frames; an acknowledgement inside one frame still rereads exact sequence
+    // boundaries from the process owner before publishing the handoff.
+    if (entry.frames.length > 128) {
+      const prefix = entry.frames.slice(0, 64);
+      const combined = prefix.reduce<TerminalVisibleOutputState>((state, frame) => appendTerminalOutputDelta(state, frame), { output: '', first_seq: 0, last_seq: Math.max(0, prefix[0].first_seq - 1), truncated: false });
+      entry = { ...entry, frames: [combined, ...entry.frames.slice(64)] };
+    }
+    entries.delete(key); entries.set(key, entry); retainedBytes += bytes(entry);
+    prune(key);
   };
 
   return {
+    retain(identity) {
+      const key = terminalVisibleOutputIdentityKey(identity);
+      owners.set(key, (owners.get(key) ?? 0) + 1);
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        const count = (owners.get(key) ?? 1) - 1;
+        if (count > 0) owners.set(key, count); else owners.delete(key);
+        prune();
+      };
+    },
     get(identity) {
       return entries.get(terminalVisibleOutputIdentityKey(identity))?.state.output ?? '';
     },
@@ -358,7 +385,7 @@ export function createTerminalVisibleOutputStore(maxEntries = 200): TerminalVisi
       };
     },
     clear() {
-      entries.clear();
+      entries.clear(); retainedBytes = 0;
     },
   };
 }

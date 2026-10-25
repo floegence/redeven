@@ -914,7 +914,7 @@ func (service *Service) getFlowerSubagentDetail(ctx context.Context, meta *sessi
 		if scopeErr != nil {
 			return nil, scopeErr
 		}
-		view, window, err = service.readFlowerHistoryForObserver(ctx, meta, scope, input, flruntime.ThreadWindowInput{ThreadID: summary.ID, AnchorID: input.AnchorID, AnchorOffset: input.AnchorOffset, Direction: input.Direction, Limit: input.Limit, ItemIDs: input.ItemIDs, IncludeSummary: true})
+		view, window, err = service.readFlowerHistoryForObserver(ctx, meta, scope, input, flowerHistoryWindowInput(summary.ID, input))
 		if err == nil {
 			if window == nil || window.Summary == nil || window.Summary.ID != summary.ID || window.Summary.ParentThreadID.String() != parentThreadID {
 				return nil, errors.New("canonical child history baseline has no matching summary")
@@ -936,9 +936,16 @@ func (service *Service) getFlowerSubagentDetail(ctx context.Context, meta *sessi
 	if err != nil {
 		return nil, err
 	}
-	evidence, err := service.flowerHistoryComputerEvidence(ctx, view.ThreadID, view.Interactions)
-	if err != nil {
-		return nil, err
+	evidence := &view
+	if window != nil {
+		scope, scopeErr := service.flowerHistoryScope(ctx, meta, childThreadID)
+		if scopeErr != nil {
+			return nil, scopeErr
+		}
+		evidence, err = service.flowerHistoryComputerEvidence(ctx, scope, view.ThreadID, view.Interactions)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &FlowerSubagentDetailResponse{Window: window, ComputerEvidence: evidence,
 		ModelContext: projection.ModelContext, ContextUsage: projection.Usage,

@@ -25,9 +25,9 @@ const (
 	flowersecGoVersion   = "v5.11.1"
 	flowersecCorePackage = "@floegence/flowersec-core"
 	flowersecCoreVersion = "5.11.1"
-	floeWebappVersion    = "0.86.55"
+	floeWebappVersion    = "0.86.60"
 	floeEnvCoreVersion   = floeWebappVersion
-	floretVersion        = "v7.79.0"
+	floretVersion        = "v7.87.0"
 )
 
 var flowersecNPMPackages = []string{
@@ -776,7 +776,7 @@ func TestFloretCapabilitiesAreMintedOnlyDuringBootstrap(t *testing.T) {
 		"flruntime.Open", "*flruntime.Host", "host.ThreadService(effects)",
 		"threadRuntime  flruntime.ThreadService", "effects        *floretEffectAdapter",
 	} {
-		if !strings.Contains(bootstrap, marker) {
+		if !strings.Contains(strings.Join(strings.Fields(bootstrap), " "), strings.Join(strings.Fields(marker), " ")) {
 			t.Fatalf("floret_bootstrap.go is missing typed runtime boundary %q", marker)
 		}
 	}

@@ -66,7 +66,7 @@ export function createLiveTransport<T>(): LiveTransport<T> {
   const currentAttempt = (current: TransportOwner<T>, attempt: ConnectionAttempt): boolean => (
     owner === current && !current.stopped && current.attempt === attempt && attempt.epoch === epoch
   );
-  const invalidate = (current: TransportOwner<T>) => {
+  const invalidate = (current: TransportOwner<T>, notify = true) => {
     epoch++;
     if (current.retryTimer !== undefined) window.clearTimeout(current.retryTimer);
     current.retryTimer = undefined;
@@ -74,7 +74,7 @@ export function createLiveTransport<T>(): LiveTransport<T> {
     current.attempt = undefined;
     if (attempt?.handshakeTimer !== undefined) window.clearTimeout(attempt.handshakeTimer);
     attempt?.controller.abort();
-    current.input.onBoundary?.();
+    if (notify) current.input.onBoundary?.();
   };
   const fail = (error: unknown, connectionEpoch = epoch) => {
     const current = owner;
@@ -145,9 +145,12 @@ export function createLiveTransport<T>(): LiveTransport<T> {
     if (current.stopped) return;
     current.stopped = true;
     if (owner !== current) return;
-    invalidate(current);
-    setState(current, state.status === 'failed' ? 'failed' : 'stopped', state.error);
+    // Disposal runs while Solid is tearing down children. Publishing cache or
+    // connection signals here can recreate rows and subscriptions whose owners
+    // have already been cleaned. Reconnection still publishes its boundary.
     owner = undefined;
+    invalidate(current, false);
+    state = { ...state, status: state.status === 'failed' ? 'failed' : 'stopped', connectionEpoch: epoch };
   };
   return {
     connectionEpoch: () => epoch,

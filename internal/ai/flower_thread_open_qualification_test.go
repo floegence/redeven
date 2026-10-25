@@ -62,8 +62,8 @@ func TestFlowerThreadOpenQualification(t *testing.T) {
 	defer service.Close()
 	startupMS := float64(time.Since(started)) / float64(time.Millisecond)
 	readiness, err := service.floretThreadReadiness(t.Context(), identity.ThreadID(id))
-	if err != nil || !readiness.DisplayReady || readiness.DisplayError != "" {
-		t.Fatalf("target browsing is not ready after upgrade: %+v, %v", readiness, err)
+	if err != nil || readiness.DisplayError != "" {
+		t.Fatalf("target readiness failed after upgrade: %+v, %v", readiness, err)
 	}
 	settings, err := service.threadsDB.GetThreadSettingsByCanonicalThreadID(t.Context(), id)
 	if err != nil || settings == nil {

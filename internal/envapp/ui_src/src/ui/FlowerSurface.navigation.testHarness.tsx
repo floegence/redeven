@@ -1083,7 +1083,16 @@ const mountFlowerSurface = (
       onThreadSelectionEvent={props.onThreadSelectionEvent}
     />
   );
-  disposers.push(render(() => props.layout ? <TestProviders mobileQuery={props.mobileQuery}>{surface()}</TestProviders> : surface(), runtime));
+  const dispose = render(() => props.layout ? <TestProviders mobileQuery={props.mobileQuery}>{surface()}</TestProviders> : surface(), runtime);
+  let disposed = false;
+  const disposeOnce = () => {
+    if (disposed) return;
+    disposed = true;
+    runtimeDisposers.delete(runtime);
+    dispose();
+  };
+  runtimeDisposers.set(runtime, disposeOnce);
+  disposers.push(disposeOnce);
   return runtime;
 };
 

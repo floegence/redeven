@@ -31,7 +31,11 @@ export async function readActivityRowSnapshot(reader: ReturnType<typeof createAc
       // invalid code or allocate an unbounded joined string.
       if (row.format === 'code') throw new Error('Activity display row exceeds its source contract.');
       deferredContent = field;
-      if (row.format === 'markdown') continue;
+      if (row.format === 'markdown') {
+        row[name] = await readActivityMarkdown(reader, threadID, itemID, field, signal);
+        deferredContent = undefined;
+        continue;
+      }
       // The presenter compares trimmed text for labels, empty screenshots and
       // repeated errors. Read that bounded semantic interval, while the field
       // renderer retains the exact whitespace and complete source geometry.
@@ -59,4 +63,19 @@ export async function readActivityRow(reader: ReturnType<typeof createActivityFi
   const snapshot = await readActivityRowSnapshot(reader, threadID, itemID, path, signal);
   if (snapshot.content) throw new Error('Activity row requires range rendering.');
   return snapshot.value;
+}
+
+// Markdown whitespace can change parsing and copied code, even outside the
+// trimmed display extent. Read the exact selected document through bounded
+// requests; never infer blank-line semantics from a sampled prefix.
+async function readActivityMarkdown(reader: ReturnType<typeof createActivityFieldReader>, threadID: string, itemID: string,
+  field: FlowerActivityField, signal: AbortSignal): Promise<string> {
+  const chunks: string[] = [];
+  for (let offset = 0; offset < (field.bytes ?? 0);) {
+    const chunk = await reader.chunk(threadID, itemID, field, offset, signal);
+    signal.throwIfAborted();
+    chunks.push(chunk.text); offset = chunk.next;
+    if (chunks.length % 4 === 0) await new Promise<void>(resolve => setTimeout(resolve, 0));
+  }
+  return chunks.join('');
 }
