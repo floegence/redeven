@@ -38,6 +38,9 @@ describe('AI provider preset catalog', () => {
       expect(brand.icon.paths?.join('') || brand.icon.svgContent || '').not.toEqual('');
       expect(brand.icon.viewBox).not.toEqual('');
     }
+    expect(AI_PROVIDER_PRESET_CATALOG.kimi_code.default_base_url).toBe('https://api.kimi.com/coding/v1');
+    expect(providerTypeLabel('kimi_code')).toBe('Kimi');
+    expect(providerTypeLabel('moonshot')).toBe('Kimi');
     expect(providerBrandForType('deepseek').icon.title).toBe('DeepSeek');
     expect(providerSupportsCustomModelNames('openai')).toBe(true);
     expect(providerSupportsCustomModelNames('deepseek')).toBe(true);

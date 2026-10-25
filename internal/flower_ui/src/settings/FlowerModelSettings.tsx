@@ -8,7 +8,7 @@ import { flowerModelSupportsImage, formatFlowerTokenCount } from '../flowerModel
 import { flowerWebSearchLabel } from '../webSearchCapability';
 import { FlowerReasoningControl } from '../ReasoningControl';
 import { reasoningCapabilitySupportsControl } from '../reasoning';
-import { flowerProviderDisplayName } from './providerCatalog';
+import { flowerProviderDisplayName, isKimiProviderType } from './providerCatalog';
 import { FlowerProviderBrandIcon } from './FlowerProviderBrandIcon';
 import { FlowerSubSectionHeader } from './FlowerSettingsPrimitives';
 import { FlowerModelSelectionDialog } from './FlowerModelSelectionDialog';
@@ -109,6 +109,7 @@ export const FlowerModelSettings: Component<FlowerModelSettingsProps> = (props) 
                   <div class="flower-settings-provider-title">
                     <span class="truncate flower-body-copy font-semibold text-foreground" title={displayName(provider())}>{displayName(provider())}</span>
                     <Show when={displayName(provider()) !== copy().providerTypeLabels[provider().type]}><span class="text-xs text-muted-foreground">{copy().providerTypeLabels[provider().type]}</span></Show>
+                    <Show when={isKimiProviderType(provider().type)}><span class="text-xs text-muted-foreground" data-flower-kimi-access>{provider().type === 'moonshot' ? copy().dialog.kimiCode.platform : copy().dialog.kimiCode.code}</span></Show>
                     <Show when={props.currentModelID.startsWith(`${provider().id}/`)}><span class="flower-settings-provider-default">{copy().defaultProvider}</span></Show>
                   </div>
                   <button ref={trigger} type="button" class="flower-settings-provider-disclosure" aria-expanded={expanded()} aria-controls={detailsID}

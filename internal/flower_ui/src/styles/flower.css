@@ -113,6 +113,7 @@
 .flower-provider-choice-label {
   min-width: 0;
   flex: 1;
+  white-space: normal;
   overflow-wrap: anywhere;
 }
 
@@ -252,6 +253,15 @@
   white-space: nowrap;
   cursor: pointer;
   transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.flower-provider-kimi-access { min-width: 0; }
+.flower-provider-kimi-access .flower-provider-auth-method { max-width: 100%; }
+.flower-provider-kimi-access .flower-provider-auth-method > button {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .flower-provider-auth-method > button:hover:not(:disabled):not([aria-pressed='true']) {

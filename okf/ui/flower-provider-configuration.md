@@ -5,26 +5,28 @@ description: Configure provider access before choosing models, with stable navig
 tags: [ai, flower, settings, authentication]
 timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-24"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-One shared Flower dialog configures Desktop, embedded Flower and Env settings. Hosts own admission/persistence. Choose a provider, establish access, then configure models. Navigation, authentication and model rows retain geometry/focus. Failed authorization/discovery preserves recovery actions; stale connection responses never apply.
+Desktop, Flower and Env share one dialog. Hosts own persistence. Choose a brand, connect, then select models. Preserve navigation, focus and recovery actions after connection failures; reject stale responses. Kimi shares one brand while access methods retain separate credentials and models.
 
 # Contract
 
 ## Connection setup
-Creation shows a compact provider picker beside its configuration pane. Endpoint fields stay flat; ChatGPT has one bounded connection panel and exposes connection actions until ready. OpenAI supports API keys or verified local ChatGPT accounts; account registration and model selection remain independent. Host permissions are unchanged.
+OpenAI offers API keys or verified local ChatGPT accounts. Registration and model selection stay independent; endpoints stay flat and permissions unchanged.
 
-## Search
-Both provider and model switches must be on. Model preferences stay editable when provider search is off; policies come from the backend directory. See [failure recovery](flower-failure-recovery.md) for retry behavior.
+## Kimi
+One Kimi choice offers API or Kimi Code. Drafts isolate keys, endpoints and models; close clears them. Switching rejects stale discovery. Saved methods stay fixed; add another connection to change service. Cards label methods; IDs, aliases, selections and history stay unchanged.
 
-## Kimi Code
-Separate from Moonshot: supply a personal subscription key, choose China/global service and select reviewed models. Custom model/wire-ID edits are unavailable to prevent silent provider fallback. Localized guidance covers shared quota, Extra Usage charges, plan/context limits and new conversations for family changes. Official key/usage and model-doc links stay visible.
+Use short names and access labels. Explain keys, quotas and saved methods in the access tooltip; model limits in the model tooltip. Icon links open official guidance. Code keeps regional endpoints and reviewed IDs; billing never falls back.
+
+## Search and secrets
+Provider and model search switches must both be on; preferences remain editable when provider search is off. Backend policies own availability. See [failure recovery](flower-failure-recovery.md). Stored keys use fixed dot placeholders. Null removes a key; omitted/blank patches preserve it. Catalog refresh never selects new models.
 
 # Boundaries
 
-Saved API/Brave keys use fixed-length dot placeholders; only replacement drafts enter inputs. Null removes a key; omitted/blank patches preserve it. Catalog synchronization never selects additions automatically.
+Brand grouping is presentation only; both connection types remain in catalog/serialization. Floret mechanics and storage are unchanged.
 
 # Evidence
 
