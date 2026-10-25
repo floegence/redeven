@@ -5,7 +5,7 @@ description: Isolated deterministic, historical-copy, and real-provider compacti
 tags: [ai, flower, context, compaction, qualification]
 timestamp: 2026-10-20T00:00:00Z
 lifecycle: active_evidence
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
@@ -31,6 +31,14 @@ Its output retains synthetic canonical snapshots, screenshots, and sanitized req
 These checks qualify published Floret through public APIs and actual Flower surfaces. They never substitute for deterministic historical migration and adoption release gates.
 
 # Evidence
+
+The 2026-10-25 published-v7.87.0 run passed the live compaction, collapse/reopen and
+reload assertions in 5.323 seconds. The fixture now opens an explicit canonical
+reading window and uses the published SSE parser. Its first run failed because
+the old detail-only fixture never established the reading interest needed for
+live context updates; aligning the fixture restored coverage without changing
+production code or weakening the assertions. Optional private historical-copy
+and real-provider lanes were not rerun by this check.
 
 - `redeven:internal/ai/flower_compaction_ui_test.go` - Isolated scripted Runtime and optional historical-copy qualification.
 

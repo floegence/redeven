@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -139,6 +140,31 @@ func TestFlowerCompactionRuntimeUI(t *testing.T) {
 			}
 		case "detail":
 			value, err = detail(r.Context(), thread)
+		case "history":
+			var input FlowerHistoryRequest
+			err = json.NewDecoder(r.Body).Decode(&input)
+			if err == nil {
+				value, err = service.GetFlowerThreadHistory(r.Context(), meta, thread, input)
+			}
+		case "history_body":
+			var input FlowerHistoryBodyRequest
+			err = json.NewDecoder(r.Body).Decode(&input)
+			if err == nil {
+				value, err = service.GetFlowerHistoryBody(r.Context(), meta, thread, input)
+			}
+		case "history_item":
+			var input map[string]string
+			err = json.NewDecoder(r.Body).Decode(&input)
+			if err == nil {
+				value, err = service.GetFlowerHistoryItem(r.Context(), meta, thread, input["item_id"])
+			}
+		case "history_release":
+			var input FlowerHistoryRelease
+			err = json.NewDecoder(r.Body).Decode(&input)
+			if err == nil {
+				err = service.ReleaseFlowerHistory(r.Context(), meta, thread, input)
+				value = true
+			}
 		case "start":
 			value, err = canonical.Send(r.Context(), flruntime.SendInput{ThreadID: id, RequestKey: "live", Input: flruntime.UserInput{Text: "Inspect all evidence and finish."}})
 		case "summary":
@@ -166,13 +192,16 @@ func TestFlowerCompactionRuntimeUI(t *testing.T) {
 			return
 		}
 		defer subscription.Close()
-		w.Header().Set("Content-Type", "application/x-ndjson")
+		w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Accel-Buffering", "no")
 		for {
 			frame, err := subscription.Next(r.Context())
 			if err != nil {
 				return
 			}
-			if _, err = w.Write(append(frame.Data, '\n')); err != nil {
+			if _, err = io.WriteString(w, "data: "+string(frame.Data)+"\n\n"); err != nil {
 				return
 			}
 			w.(http.Flusher).Flush()

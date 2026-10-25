@@ -1,4 +1,5 @@
 import { FloeProvider } from '@floegence/floe-webapp-core';
+import { fetchServerSentEvents } from '@floegence/floe-webapp-boot';
 import { createSignal, Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import { FlowerSurface } from '../../src/FlowerSurface';
@@ -33,30 +34,11 @@ const adapter = createRuntimeFlowerSurfaceAdapter({
   transport: {
     listThreads: () => api('list'),
     ...(!new URLSearchParams(location.search).has('history') ? { connectLiveStream: async function* ({ signal }: { signal: AbortSignal }) {
-      const response = await fetch('/live', { signal });
-      if (!response.ok || !response.body) throw new Error('Live stream unavailable');
-      const reader = response.body.getReader();
-      const cancel = () => { void reader.cancel().catch(() => undefined); };
-      signal.addEventListener('abort', cancel, { once: true });
-      if (signal.aborted) cancel();
-      const decoder = new TextDecoder();
-      let pending = '';
-      try {
-        while (!signal.aborted) {
-          const chunk = await reader.read();
-          if (chunk.done) break;
-          pending += decoder.decode(chunk.value, { stream: true });
-          let end: number;
-          while ((end = pending.indexOf('\n')) >= 0) {
-            yield { data: pending.slice(0, end) };
-            pending = pending.slice(end + 1);
-          }
-        }
-      } finally { signal.removeEventListener('abort', cancel); await reader.cancel().catch(() => undefined); }
+      yield* fetchServerSentEvents('/live', { signal });
     }
     } : {}),
     loadThread: (threadID, signal) => api('detail', threadID, undefined, signal),
-    ...(new URLSearchParams(location.search).has('cpu') ? {
+    ...(new URLSearchParams(location.search).has('cpu') || new URLSearchParams(location.search).has('window') ? {
       loadHistory: (threadID: string, input: unknown, signal: AbortSignal) => api('history', threadID, input, signal),
       loadHistoryItem: (threadID: string, itemID: string, signal: AbortSignal) => api('history_item', threadID, { item_id: itemID }, signal),
       loadHistoryBody: (threadID: string, input: unknown, signal: AbortSignal) => api('history_body', threadID, input, signal),

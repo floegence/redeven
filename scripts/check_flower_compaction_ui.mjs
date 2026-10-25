@@ -20,7 +20,10 @@ await build({
   ...loaded.config, root: ui, base: '/', configFile: false, logLevel: 'error',
   plugins: [...loaded.config.plugins, {
     name: 'compaction-qualification',
-    resolveId: id => id === entry ? entry : undefined,
+    resolveId(id) {
+      if (id === entry) return entry;
+      if (id === '@floegence/floe-webapp-boot') return this.resolve(id, path.join(ui, 'src/main.tsx'), { skipSelf: true });
+    },
     load: id => id === entry ? source : undefined,
   }],
   build: {
@@ -45,7 +48,7 @@ try {
   const errors = [];
   page.on('console', message => { if (message.type() === 'error') console.error(message.text()); });
   page.on('pageerror', error => errors.push(String(error)));
-  await page.goto(url + '/?thread=' + setup.source);
+  await page.goto(url + '/?window=1&thread=' + setup.source);
   await page.locator('.flower-composer textarea').waitFor();
   await api('start');
   const running = page.locator('[data-flower-compaction-status="compacting"]');

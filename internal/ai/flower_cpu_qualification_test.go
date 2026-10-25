@@ -588,14 +588,19 @@ func TestFlowerCPUQualification(t *testing.T) {
 			return
 		}
 		defer sub.Close()
-		w.Header().Set("Content-Type", "application/x-ndjson")
+		w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+		// Keep qualification framing and headers aligned with the product SSE
+		// contract; the browser uses the same published parser.
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Accel-Buffering", "no")
 		for {
 			frame, e := sub.Next(r.Context())
 			if e != nil {
 				return
 			}
 			wireBytes.Add(int64(len(frame.Data)))
-			if _, e = w.Write(append(frame.Data, '\n')); e != nil {
+			if _, e = io.WriteString(w, "data: "+string(frame.Data)+"\n\n"); e != nil {
 				return
 			}
 			w.(http.Flusher).Flush()

@@ -28,6 +28,7 @@ if (process.argv.includes('--build')) {
   await build({
     ...loaded.config, root: ui, base: '/', configFile: false, logLevel: 'error',
     plugins: [{ name: 'flower-cpu-reference', enforce: 'pre', resolveId(specifier, importer) {
+      if (specifier === '@floegence/floe-webapp-boot') return this.resolve(specifier, path.join(ui, 'src/main.tsx'), { skipSelf: true });
       if (!reference || !specifier.startsWith('.') || !importer?.startsWith(path.join(root, 'internal/flower_ui/src/'))) return;
       const target = path.resolve(path.dirname(importer.split('?')[0]), specifier);
       return ['', '.ts', '.tsx', '.css', '/index.ts'].map(suffix => target + suffix).find(file => referenceFiles.has(file));

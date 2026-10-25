@@ -19,7 +19,9 @@ without reconnecting or replacing drafts; see the
 Real isolated Services/fake providers emit Markdown, Unicode, reasoning and tools at
 40 Hz; Apple M5 Pro (18 cores, 64 GiB), macOS arm64, Go 1.27.3, Node 26.7.0, published
 Floret and GOWORK=off. CPU is process time (100% = one core); combined includes fixture
-Electron processes. NDJSON excludes encryption/framing; allocations are cumulative.
+Electron processes. Current fixtures use the published SSE parser and product
+framing/headers; payload counters exclude framing/encryption. Earlier NDJSON samples
+retain their original transport scope. Allocations are cumulative.
 Input/click/output/frame timing is followed by exact canonical/rendered prose,
 reasoning and code inspection. Cadence/marker coverage must reach 95%; retain failures
 before assertions and never relax gates.
@@ -103,3 +105,42 @@ type/lint and race coverage.
 - [Reading/release](../../internal/ai/flower_history_test.go), [baseline cancellation](../../internal/ai/flower_live_baseline_test.go).
 - [Service fixture](../../internal/ai/flower_cpu_qualification_test.go), [Electron qualifier](../../scripts/qualify_flower_cpu.mjs).
 - [Interaction](../ui/flower-streaming-stability.md), [recovery](../ui/flower-failure-recovery.md).
+
+## Responsive lifecycle qualification, 2026-10-25
+
+Published Floret v7.87.0 and the current Flower UI were measured with 100 seed turns,
+40 Hz mixed Markdown/reasoning/tool output, ten-second warmup and sixty-second
+measurement. The fixture now uses the published `fetchServerSentEvents` parser and
+product SSE framing/headers instead of its own NDJSON decoder. No task-owned build
+or test overlapped either timed measurement.
+
+| Sample | Backend | Renderer | Combined | Input / click / output / Stop P95 | Frame P95 |
+| --- | ---: | ---: | ---: | --- | ---: |
+| Initial, failed CPU gate | 4.78% | 20.27% | 37.88% | 12.4 / 15.3 / 46 / 12.5 ms | 18.2 ms |
+| Controlled repeat, passed | 4.61% | 19.89% | 37.22% | 12.2 / 16 / 47 / 16.6 ms | 18.4 ms |
+
+The unchanged renderer limit is 20%; both measurements remain evidence. The repeat
+passes all candidate gates but has little renderer CPU margin. Both runs retained
+100% foreground markers, exact canonical prose/reasoning, complete rendered Markdown
+and code blocks, with no long tasks or page exceptions. Each recorded two fixture
+HTTP 500 responses when a live body identity was superseded by its sealed identity;
+exact content converged. These are not zero-transport-error measurements. Browser
+regressions independently verify old-source cancellation and sealed-source reading.
+
+An earlier NDJSON thirty-minute attempt failed disposal in its thirtieth cycle:
+one uncancelled HTTP subscription remained after the one-second release deadline.
+Its first 29 cycles are not a passing stability result. Raw Chromium fetch/abort
+also reproduced retained requests; changing headers or SSE framing alone did not
+establish a fix. The actual Flower component with the published SSE parser passed
+120 isolated mount/dispose cycles, each releasing subscribers within one second.
+That result establishes repeated disposal only, not thirty-minute stability.
+
+The subsequent SSE run completed 1,800 seconds and all thirty cycles with the
+unchanged gates. Late/early medians grew 6.71% for renderer heap, 2.44% for runtime
+heap, 4.14% for app CPU and 1.60% for runtime CPU. DOM nodes grew 0.32%, listeners
+stayed at 131 and maximum early/late runtime goroutines stayed at nineteen. Every
+cycle preserved canonical text/reasoning and the visible final message, retained
+the draft across close/reopen, and returned subscriptions and queued bytes to zero
+after disposal. Each mounted surface owned one subscription. No page exceptions
+or convergence errors occurred. This is fixed-workload lifecycle evidence, not an
+arbitrary-content memory bound; active Markdown and terminal documents remain uncapped.
