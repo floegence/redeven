@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -131,12 +132,18 @@ func TestFlowerHistoryBoundedPagesAndExactBodies(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	output := strings.Repeat("Unicode 中文🌸 tool output.\n", 300)
+	// Several legal code rows exceed the single-item hydration budget while
+	// retaining their exact source bytes through canonical normalization.
+	output := strings.Repeat("Unicode 中文🌸 tool output.\n", 1800)
 	answer := strings.Repeat("Final answer 中文🌸.\n", 4000)
 	thought := strings.Repeat("Reasoning segment 中文🌸.\n", 1000)
 	tool := tools.Define[struct{}](tools.Definition{Name: "inspect_history", ReadOnly: true, InputSchema: tools.StrictObject(map[string]any{}, nil), Permission: tools.PermissionSpec{Mode: tools.PermissionAllow}}, nil, nil,
 		func(context.Context, tools.Invocation[struct{}]) (tools.Result, error) {
-			return tools.Result{Text: "Inspection completed.", Activity: &tools.ActivityPresentation{Label: "Inspect history", Renderer: tools.ActivityRendererTerminal, Payload: tools.TerminalActivityPayload{Operation: "exec", Command: "inspect", Output: output, Status: "success"}}}, nil
+			return tools.Result{Text: "Inspection completed.", Activity: &tools.ActivityPresentation{Label: "Inspect history", Renderer: tools.ActivityRendererStructured, Payload: tools.StructuredActivityPayload{Rows: []tools.StructuredActivityRow{
+				{Content: output, Format: tools.StructuredActivityRowFormatCode},
+				{Content: output, Format: tools.StructuredActivityRowFormatCode},
+				{Content: output, Format: tools.StructuredActivityRowFormatCode},
+			}}}}, nil
 		})
 	count := 0
 	gateway := testFloretGatewayFunc(func(context.Context, flprovider.Request) (<-chan flprovider.Event, error) {
@@ -187,6 +194,14 @@ func TestFlowerHistoryBoundedPagesAndExactBodies(t *testing.T) {
 	fullBytes, err := json.Marshal(full)
 	if err != nil {
 		t.Fatal(err)
+	}
+	canonicalItems := make(map[string]json.RawMessage)
+	for _, item := range full.Current.Items {
+		value, err := json.Marshal(item)
+		if err != nil {
+			t.Fatal(err)
+		}
+		canonicalItems[item.ID] = value
 	}
 	allowFullView.Store(false)
 	seen := map[string]bool{}
@@ -244,6 +259,16 @@ func TestFlowerHistoryBoundedPagesAndExactBodies(t *testing.T) {
 		item, e := svc.GetFlowerHistoryItem(t.Context(), meta, thread.ThreadID, id)
 		if e != nil {
 			t.Fatal(e)
+		}
+		var actual, canonical any
+		if err := json.Unmarshal(item, &actual); err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(canonicalItems[id], &canonical); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(actual, canonical) {
+			t.Fatalf("expanded item %s differs from the complete canonical view", id)
 		}
 		var expanded flowerPublicItem
 		if e = json.Unmarshal(item, &expanded); e != nil {
@@ -328,8 +353,8 @@ func TestFlowerHistoryObserverOwnershipAndSupersession(t *testing.T) {
 	if _, err = svc.GetFlowerThreadHistory(t.Context(), meta, thread.ThreadID, request); err != nil {
 		t.Fatal(err)
 	}
-	if sub.subscriber.history.subscription == first || sub.subscriber.history.revision != 2 {
-		t.Fatal("new interest not installed")
+	if sub.subscriber.history.subscription != first || sub.subscriber.history.revision != 2 {
+		t.Fatal("replacement did not reuse the ordered observation owner")
 	}
 	canceled, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -340,6 +365,76 @@ func TestFlowerHistoryObserverOwnershipAndSupersession(t *testing.T) {
 	sub.Close()
 	if _, err = svc.GetFlowerThreadHistory(t.Context(), meta, thread.ThreadID, request); err == nil {
 		t.Fatal("closed observer accepted")
+	}
+}
+
+func TestFlowerHistoryCommittedBaselineSurvivesCanceledWaiter(t *testing.T) {
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(t.Context(), meta, "Canceled response", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream, err := svc.SubscribeFlowerLiveStream(t.Context(), meta, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Close()
+	nextFlowerLiveStreamFrame(t, stream)
+	if _, err = svc.GetFlowerThreadHistory(t.Context(), meta, thread.ThreadID, FlowerHistoryRequest{ObserverID: stream.subscriber.observerID, ReadingRevision: 1}); err != nil {
+		t.Fatal(err)
+	}
+	nextBaseline := func(want uint64) {
+		t.Helper()
+		for {
+			frame := nextFlowerLiveStreamFrame(t, stream)
+			var envelope FlowerLiveStreamEnvelope
+			if err := json.Unmarshal(frame.Data, &envelope); err != nil {
+				t.Fatal(err)
+			}
+			if envelope.Kind != FlowerLiveStreamThreadBatch || envelope.ReadingRevision == 0 {
+				continue
+			}
+			if envelope.ReadingRevision != want || envelope.Current == nil || envelope.HistoryInvalidated != nil {
+				t.Fatalf("committed baseline %d lost: %s", want, frame.Data)
+			}
+			return
+		}
+	}
+	nextBaseline(1)
+	scope, err := svc.flowerHistoryScope(t.Context(), meta, thread.ThreadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc.mu.Lock()
+	interest := &stream.subscriber.history
+	subscription := interest.subscription
+	// The HTTP caller has left, but Floret has committed its selection. A
+	// newer waiter may already exist before Next consumes that older baseline.
+	interest.requested = 3
+	pending := &flowerHistoryPending{revision: 3, result: make(chan flowerHistoryReadResult, 1)}
+	interest.pending = pending
+	svc.mu.Unlock()
+	for _, requestID := range []string{"2", "3"} {
+		if err := subscription.SetWindow(t.Context(), scope, flruntime.ThreadWindowInput{ThreadID: identity.ThreadID(thread.ThreadID), RequestID: requestID}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, revision := range []uint64{2, 3} {
+		nextBaseline(revision)
+	}
+	select {
+	case result := <-pending.result:
+		if result.err != nil || result.window == nil {
+			t.Fatalf("replacement result: %+v", result)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("new waiter was not completed")
+	}
+	svc.mu.Lock()
+	defer svc.mu.Unlock()
+	if interest.subscription != subscription || interest.revision != 3 {
+		t.Fatal("baseline replaced observation owner")
 	}
 }
 
@@ -538,5 +633,44 @@ func TestFlowerHistoryChildInterestIsBoundedAndIndependent(t *testing.T) {
 	}
 	if stream.subscriber.history.subscription != root || stream.subscriber.subagentHistory.subscription != nil || stream.subscriber.closed {
 		t.Fatal("closing child affected root")
+	}
+}
+
+func TestFlowerHistoryRequestedRevisionCannotMoveBackwards(t *testing.T) {
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(t.Context(), meta, "monotonic", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream, err := svc.SubscribeFlowerLiveStream(t.Context(), meta, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Close()
+	request := FlowerHistoryRequest{ObserverID: stream.subscriber.observerID, ReadingRevision: 1}
+	if _, err := svc.GetFlowerThreadHistory(t.Context(), meta, thread.ThreadID, request); err != nil {
+		t.Fatal(err)
+	}
+	svc.mu.Lock()
+	sub := stream.subscriber.history.subscription
+	stream.subscriber.history.requested = 3 // A newer waiter cancelled before its baseline arrived.
+	svc.mu.Unlock()
+	request.ReadingRevision = 2
+	if _, err := svc.GetFlowerThreadHistory(t.Context(), meta, thread.ThreadID, request); err == nil {
+		t.Fatal("older request replaced newer intent")
+	}
+	if err := svc.ReleaseFlowerHistory(t.Context(), meta, thread.ThreadID, FlowerHistoryRelease{ObserverID: request.ObserverID, ReadingRevision: 2}); err != nil {
+		t.Fatal(err)
+	}
+	svc.mu.Lock()
+	retained := stream.subscriber.history.subscription == sub && stream.subscriber.history.requested == 3
+	svc.mu.Unlock()
+	if !retained {
+		t.Fatal("older release discarded newer intent")
+	}
+	request.ReadingRevision = 4
+	if _, err := svc.GetFlowerThreadHistory(t.Context(), meta, thread.ThreadID, request); err != nil {
+		t.Fatal(err)
 	}
 }

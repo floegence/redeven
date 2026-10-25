@@ -61,6 +61,7 @@ export function projectFlowerToolSequences(
   threadID?: string,
   turns: readonly FlowerRuntimeTurn[] = [],
   previous?: FlowerToolSequenceProjection,
+  breakBefore: ReadonlySet<string> = new Set(),
 ): FlowerToolSequenceProjection {
   const tokens: (SequenceNode | null)[] = [];
   const turnsByID = uniqueTurnsByID(turns);
@@ -79,6 +80,7 @@ export function projectFlowerToolSequences(
   };
 
   for (const entry of entries) {
+    if (breakBefore.has(entry.key)) tokens.push(null);
     if (entry.type === 'parent_event') {
       tokens.push(parentEventNode(entry));
       continue;
@@ -114,7 +116,7 @@ export function projectFlowerToolSequences(
           const failed = item.status === 'error';
           const attentionReasons = item.attention_reasons ?? [];
           const subagentWait = item.tool_name === 'subagents' && item.renderer === 'subagent_operation'
-            && item.payload?.action === 'wait' && (item.status === 'running' || item.status === 'waiting');
+            && (item.field_summary?.action ?? item.payload?.action) === 'wait' && (item.status === 'running' || item.status === 'waiting');
           const runningAttention = item.status === 'running' && attentionReasons.length > 0
             && attentionReasons.every(reason => reason === 'running');
           const waitingAttention = subagentWait && item.status === 'waiting'
@@ -127,8 +129,9 @@ export function projectFlowerToolSequences(
             && statusAllowed
             && attentionAllowed
             && !item.requires_approval && !item.approval_state
-            && (!item.payload?.error || failed)
+            && (!(item.field_summary?.has_error || item.payload?.error) || failed)
             && (!['warning', 'error', 'blocking'].includes(item.severity) || failed || waitingAttention)
+            && !item.field_summary?.uncertain_effect
             && !item.chips?.some(chip => chip.kind === 'effect_outcome' && chip.value === 'uncertain');
           tokens.push(foldable ? {
             key: flowerActivityIdentity({ threadID: block.block.thread_id, runID: block.block.run_id, turnID: block.block.turn_id,

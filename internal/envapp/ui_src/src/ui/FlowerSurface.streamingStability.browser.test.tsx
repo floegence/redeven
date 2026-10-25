@@ -374,6 +374,7 @@ describe('Flower complete interaction subtree stability', () => {
       constructor(callback: ResizeObserverCallback) { super(callback); observerStarts += 1; }
     });
     onTestFinished(() => { vi.unstubAllGlobals(); animation.mockRestore(); observer.disconnect(); window.getSelection()?.removeAllRanges(); });
+    await waitFor(() => fixture.calls.terminal === 1);
     const requests = { ...fixture.calls };
     await unrelatedUpdates(fixture);
     await waitFor(() => runtime.textContent?.includes('Unrelated stream update 299') === true);

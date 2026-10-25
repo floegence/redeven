@@ -44,6 +44,27 @@ const parentEvent = (id: string, kind: FlowerParentEvent['kind'] = 'completed'):
 });
 
 describe('consecutive tool presentation', () => {
+  it('does not join tool sequences across an unloaded reading interval', () => {
+    const entries = [tool('a'), tool('b'), tool('c'), tool('d')];
+    const value = projectFlowerToolSequences(entries, 'thread', [], undefined, new Set(['c']));
+    expect([...value.groups.values()].map(group => group.toolCount)).toEqual([2, 2]);
+    expect([...value.groups.values()].map(group => group.entryKeys)).toEqual([['a', 'b'], ['c', 'd']]);
+  });
+  it('keeps field-backed safety facts identical to complete presentation boundaries', () => {
+    for (const [complete, summary] of [
+      [{ payload: { error: { message: 'unconfirmed' } } }, { has_error: true }],
+      [{ chips: [{ kind: 'effect_outcome', label: 'Result unconfirmed', value: 'uncertain' }] }, { uncertain_effect: true }],
+    ] as const) {
+      const full = projectFlowerToolSequences([tool('a'), tool('boundary', complete), tool('b')]);
+      const partial = projectFlowerToolSequences([tool('a'), tool('boundary', { field_summary: { fields: [], ...summary } }), tool('b')]);
+      expect(partial).toEqual(full);
+      expect(partial.groups.size).toBe(0);
+    }
+    const wait = { tool_name: 'subagents', renderer: 'subagent_operation' as const, status: 'waiting' as const, severity: 'blocking' as const,
+      needs_attention: true, attention_reasons: ['waiting' as const] };
+    expect(projectFlowerToolSequences([tool('a'), tool('wait', { ...wait, field_summary: { action: 'wait', fields: [] } }), tool('b')]))
+      .toEqual(projectFlowerToolSequences([tool('a'), tool('wait', { ...wait, payload: { action: 'wait' } }), tool('b')]));
+  });
   it('retains unchanged projections and replaces only changed groups', () => {
     const entries = [tool('a'), tool('b'), text('prose'), tool('c'), tool('d')];
     const first = projectFlowerToolSequences(entries, 'thread');

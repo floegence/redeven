@@ -9,6 +9,7 @@ export type FlowerScrollTailController = Readonly<{
   followingLatest: Accessor<boolean>;
   viewport: () => HTMLDivElement | undefined;
   preserveLayoutAnchor: (title: HTMLElement) => void;
+  restoreReadingAnchor: (title: HTMLElement, screenTop: number) => void;
   showLatest: Accessor<boolean>;
   latestPointerBlocked: Accessor<boolean>;
   onPointerDown: (event: PointerEvent) => void;
@@ -20,7 +21,7 @@ export type FlowerScrollTailController = Readonly<{
   userInterruptionRevision: () => number;
   startFollowing: () => void;
   stopFollowing: () => void;
-  onScroll: () => void;
+  onScroll: () => 'before' | 'after' | undefined;
   onWheel: (event: WheelEvent) => void;
   measureAfterLayout: () => void;
   flushLayout: () => void;
@@ -200,7 +201,8 @@ export function createFlowerScrollTailController(
         if (!userScroll?.moved && !draggingScrollbar) endUserScroll();
       });
     });
-    if (direction > 0 && node.scrollHeight - node.clientHeight - node.scrollTop <= 1) startFollowing();
+    if (direction > 0 && node.scrollHeight - node.clientHeight - node.scrollTop <= 1
+      && (options.canFollowLatest?.() ?? true)) startFollowing();
   };
   const stabilizeAnchor = () => {
     if (!anchor || !node) return;
@@ -281,6 +283,7 @@ export function createFlowerScrollTailController(
   };
   const onScroll = () => {
     if (!node) return;
+    let direction: 'before' | 'after' | undefined;
     const input = userScroll;
     if (input) {
       const delta = node.scrollTop - input.top;
@@ -295,10 +298,12 @@ export function createFlowerScrollTailController(
       input.viewportHeight = node.clientHeight;
       input.moved ||= moved;
       if (moved) {
+        direction = delta < 0 ? 'before' : 'after';
         const current = gesture();
         if (current) current.scrolled = true;
         if (delta < 0) stopFollowing();
-        if (delta > 0 && input.direction >= 0 && (isNearBottom() || reachedPreviousBottom)) {
+        if (delta > 0 && input.direction >= 0 && (isNearBottom() || reachedPreviousBottom)
+          && (options.canFollowLatest?.() ?? true)) {
           setFollowingLatest(true);
           scheduleLayout();
         }
@@ -306,6 +311,7 @@ export function createFlowerScrollTailController(
     }
     // Scroll events report geometry; only a verified user scroll may resume.
     setNearBottom(isNearBottom());
+    return direction;
   };
   const onWheel = (event: WheelEvent) => {
     if (event.defaultPrevented || event.ctrlKey || event.deltaY === 0 || !ownsScrollInput(event.target, event.deltaY)) return;
@@ -389,6 +395,11 @@ export function createFlowerScrollTailController(
       if (!node?.contains(title) || followingLatest()) return;
       anchor = { title, top: title.getBoundingClientRect().top, activated: true };
       scheduleLayout();
+    },
+    restoreReadingAnchor: (title, screenTop) => {
+      if (!node?.contains(title) || followingLatest()) return;
+      anchor = { title, top: screenTop, activated: true, finished: true };
+      flushLayout();
     },
     showLatest: () => gesture()?.latestVisible ?? (!followingLatest() && !nearBottom()),
     latestPointerBlocked: () => Boolean(gesture() && !gesture()!.latest),

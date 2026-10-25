@@ -4,6 +4,8 @@ Recent changes only. The linked concepts own current contracts and evidence; Git
 
 ## 2026-10-25
 
+- Document scroll-driven canonical windows, concurrent disclosure ownership, automatic Floret display preparation, and retained completeness limits; see [selection](ui/flower-thread-selection.md) and [runtime](ai/floret-thread-runtime.md).
+
 - Tighten the [model picker](ai/model-directory-and-selection.md) to 272px width, 320px height cap, 24px desktop rows and 10px labels; retain one-line search and touch targets.
 - Identify ambiguous chunks in [patch errors](ai/tool-permission-runtime.md).
 - Unify Kimi setup with isolated access drafts and stable saved connections; see [provider configuration](ui/flower-provider-configuration.md).

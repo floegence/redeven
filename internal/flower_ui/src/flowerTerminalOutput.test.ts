@@ -76,6 +76,42 @@ describe('terminal visible output', () => {
     expect(terminalListeningPlaceholderVisible(store.get(identity), 'running')).toBe(false);
   });
 
+  it('retires exactly the deferred source prefix and retains later live output', async () => {
+    const store = createTerminalVisibleOutputStore();
+    const identity = { run_id: 'run', item_id: 'tool' };
+    const signal = new AbortController().signal;
+    store.replaceSnapshot(identity, { output: '', first_seq: 0, last_seq: 3 });
+    store.appendDelta(identity, { output: 'four', first_seq: 4, last_seq: 4 });
+    store.appendDelta(identity, { output: 'five', first_seq: 5, last_seq: 5 });
+    expect((await store.acknowledgeDeferred(identity, 4, async () => { throw new Error('No read needed.'); }, signal))()).toBe('five');
+    expect((await store.acknowledgeDeferred(identity, 5, async () => { throw new Error('No read needed.'); }, signal))()).toBe('');
+    expect(store.appendDelta(identity, { output: 'six', first_seq: 6, last_seq: 6 })).toBe('six');
+  });
+  it('leaves the live tail intact when field validation is abandoned', async () => {
+    const store = createTerminalVisibleOutputStore();
+    const identity = { run_id: 'run', item_id: 'tool' };
+    store.replaceSnapshot(identity, { output: '', first_seq: 0, last_seq: 3 });
+    store.appendDelta(identity, { output: 'four', first_seq: 4, last_seq: 4 });
+    const scope = new AbortController();
+    const publish = await store.acknowledgeDeferred(identity, 4, async () => { throw new Error('No read needed.'); }, scope.signal);
+    expect(store.get(identity)).toBe('four');
+    scope.abort();
+    expect(publish).toThrow();
+    expect(store.get(identity)).toBe('four');
+  });
+  it('rereads a partial sequence frame without guessing byte boundaries', async () => {
+    const store = createTerminalVisibleOutputStore();
+    const identity = { run_id: 'run', item_id: 'tool' };
+    const signal = new AbortController().signal;
+    store.replaceSnapshot(identity, { output: '', first_seq: 0, last_seq: 3 });
+    store.appendDelta(identity, { output: 'four中five', first_seq: 4, last_seq: 5 });
+    expect((await store.acknowledgeDeferred(identity, 4, async after => {
+      expect(after).toBe(4);
+      expect(store.get(identity)).toBe('four中five');
+      return { output: '中five', first_seq: 5, last_seq: 5 };
+    }, signal))()).toBe('中five');
+  });
+
   it('does not change the primary identity key when the process id arrives later', () => {
     const base = {
       surface_scope: 'test',

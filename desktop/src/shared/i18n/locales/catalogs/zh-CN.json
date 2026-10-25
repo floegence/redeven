@@ -3477,7 +3477,7 @@
       "verifying": "正在校验会话数据...",
       "recovering": "正在等待会话存储恢复可用...",
       "restoring": "正在从选定的备份恢复会话...",
-      "indexing": "正在建立搜索索引…",
+      "indexing": "正在进行会话历史的一次性升级准备，完成后将自动打开 Flower。",
       "preparing": "正在准备会话…",
       "stopping": "正在安全停止…"
     },

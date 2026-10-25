@@ -11,6 +11,23 @@ type MutableMessage = { -readonly [K in keyof FlowerChatMessage]: FlowerChatMess
 type MessageRecord = { value: FlowerChatMessage; set: SetStoreFunction<MutableMessage>; chunks: string[]; setRevision: (value: number) => number };
 const utf8 = new TextEncoder();
 
+function advanceMessage(prior: MessageRecord, message: FlowerChatMessage): boolean {
+  const before = prior.value;
+  if (before.id !== message.id || before.thread_id !== message.thread_id || before.turn_id !== message.turn_id
+    || before.run_id !== message.run_id || before.role !== message.role
+    || before.logical_request_id !== message.logical_request_id || before.attempt_epoch !== message.attempt_epoch
+    || before.blocks?.length || message.blocks?.length || !message.content.startsWith(before.content)) return false;
+  const suffix = message.content.slice(before.content.length);
+  batch(() => {
+    if (suffix) prior.chunks.push(suffix);
+    for (const key of new Set([...Object.keys(before), ...Object.keys(message)])) {
+      if (key !== 'text_source') prior.set({ [key]: message[key as keyof FlowerChatMessage] });
+    }
+    if (suffix) prior.setRevision(prior.chunks.length);
+  });
+  return true;
+}
+
 function invalid(message: string): never { throw new Error(`Flower contract error: ${message}.`); }
 function version(value: number) { return Number.isSafeInteger(value) && value >= 0; }
 
@@ -33,8 +50,9 @@ function retainBody(before: ItemRecord | undefined, incoming: FlowerRuntimeCurre
 
 // ThreadCache owns these records. There is no second raw current snapshot or
 // lifecycle: components supply the shared projection, and items are indexed once.
-export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, initial: FlowerThreadSnapshot, previous?: { findMessage(id: string): MessageRecord | undefined; retainedItem(item: FlowerRuntimeCurrentItem): ItemRecord | undefined }) {
+export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, initial: FlowerThreadSnapshot, previous?: { readonly threadID: string; findMessage(id: string): MessageRecord | undefined; retainedItem(item: FlowerRuntimeCurrentItem): ItemRecord | undefined }) {
   const threadID = current.thread_id;
+  if (previous?.threadID !== threadID) previous = undefined;
   let acceptedVersion = current.view_version;
   const items = new Map<string, ItemRecord>();
   for (const item of current.items ?? []) {
@@ -50,7 +68,7 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
     message = retainThinkingTiming(message, prior?.value);
     if (prior) {
       const { text_source: _source, ...presentation } = prior.value;
-      if (retainEqualValue(presentation, message) === presentation) {
+      if (retainEqualValue(presentation, message) === presentation || advanceMessage(prior, message)) {
         messages.set(message.id, prior);
         return prior;
       }
@@ -72,24 +90,18 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
   projectedMessages = thread.messages;
   const updateMessage = (message: FlowerChatMessage) => {
     const prior = messages.get(message.id);
-    if (prior && !message.blocks?.length && !prior.value.blocks?.length && message.content.startsWith(prior.value.content)) {
-      const suffix = message.content.slice(prior.value.content.length);
-      if (suffix) prior.chunks.push(suffix);
-      for (const key of new Set([...Object.keys(prior.value), ...Object.keys(message)])) {
-        if (key !== 'text_source') prior.set({ [key]: message[key as keyof FlowerChatMessage] });
-      }
-      if (suffix) prior.setRevision(prior.chunks.length);
-      return;
-    }
     const value = makeMessage(message).value;
+    if (value === prior?.value) return;
     projectedMessages = projectedMessages.map(previous => previous.id === value.id ? value : previous);
     setThread('messages', projectedMessages);
     projectedMessages = thread.messages;
   };
 
   return {
+    threadID,
     get version() { return acceptedVersion; },
     item(id: string) { return items.get(id)?.item; },
+    itemIDs(): readonly string[] { return [...order]; },
     retainedItem(item: FlowerRuntimeCurrentItem) {
       return retainBody(items.get(item.id), item);
     },

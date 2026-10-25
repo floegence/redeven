@@ -33,6 +33,8 @@ export interface TerminalVisibleOutputStore {
   get(identity: TerminalVisibleOutputIdentity): string;
   replaceSnapshot(identity: TerminalVisibleOutputIdentity, snapshot: TerminalOutputFrame): string;
   appendDelta(identity: TerminalVisibleOutputIdentity, delta: TerminalOutputFrame): string;
+  acknowledgeDeferred(identity: TerminalVisibleOutputIdentity, lastSeq: number,
+    read: (afterSeq: number) => Promise<TerminalOutputFrame>, signal: AbortSignal): Promise<() => string>;
   clear(): void;
 }
 
@@ -286,11 +288,12 @@ export function terminalListeningPlaceholderVisible(output: unknown, status: Ter
 }
 
 export function createTerminalVisibleOutputStore(maxEntries = 200): TerminalVisibleOutputStore {
-  const entries = new Map<string, TerminalVisibleOutputState>();
+  type Entry = { state: TerminalVisibleOutputState; frames: readonly TerminalVisibleOutputState[]; deferredThrough?: number };
+  const entries = new Map<string, Entry>();
 
-  const touch = (key: string, state: TerminalVisibleOutputState) => {
+  const touch = (key: string, entry: Entry) => {
     entries.delete(key);
-    entries.set(key, state);
+    entries.set(key, entry);
     while (entries.size > maxEntries) {
       const oldest = entries.keys().next().value;
       if (oldest === undefined) break;
@@ -300,19 +303,59 @@ export function createTerminalVisibleOutputStore(maxEntries = 200): TerminalVisi
 
   return {
     get(identity) {
-      return entries.get(terminalVisibleOutputIdentityKey(identity))?.output ?? '';
+      return entries.get(terminalVisibleOutputIdentityKey(identity))?.state.output ?? '';
     },
     replaceSnapshot(identity, snapshot) {
       const key = terminalVisibleOutputIdentityKey(identity);
-      const state = replaceTerminalOutputSnapshot(entries.get(key), snapshot);
-      touch(key, state);
+      const prior = entries.get(key);
+      const state = replaceTerminalOutputSnapshot(prior?.state, snapshot);
+      touch(key, state === prior?.state ? prior : { state, frames: state.output ? [state] : [] });
       return state.output;
     },
     appendDelta(identity, delta) {
       const key = terminalVisibleOutputIdentityKey(identity);
-      const state = appendTerminalOutputDelta(entries.get(key), delta);
-      touch(key, state);
+      const prior = entries.get(key);
+      const state = appendTerminalOutputDelta(prior?.state, delta);
+      const frame = normalizeFrame(delta);
+      touch(key, state === prior?.state ? prior : { state,
+        frames: frame.output ? frame.truncated && prior && frame.first_seq > prior.state.last_seq + 1
+          ? [frame] : [...(prior?.frames ?? []), frame] : prior?.frames ?? [], deferredThrough: prior?.deferredThrough });
       return state.output;
+    },
+    async acknowledgeDeferred(identity, watermark, read, signal) {
+      signal.throwIfAborted();
+      const through = normalizeSequence(watermark, 'last_seq');
+      const key = terminalVisibleOutputIdentityKey(identity);
+      const prior = entries.get(key);
+      if (prior?.deferredThrough !== undefined && through < prior.deferredThrough) return () => prior.state.output;
+      let frames = (prior?.frames ?? []).filter(frame => frame.last_seq > through);
+      if (frames.some(frame => frame.first_seq <= through)) {
+        // A canonical watermark can fall inside a multi-sequence response.
+        // Text cannot be split by sequence arithmetically. Re-read only that
+        // retained suffix from its process owner before replacing the display.
+        const target = prior!.state.last_seq;
+        frames = [];
+        let after = through;
+        while (after < target) {
+          const frame = normalizeFrame(await read(after));
+          signal.throwIfAborted();
+          if (!frame.output || frame.last_seq <= after || frame.first_seq !== after + 1 && !frame.truncated) {
+            throw new Error('Deferred terminal output handoff did not advance.');
+          }
+          frames.push(frame); after = frame.last_seq;
+        }
+      }
+      signal.throwIfAborted();
+      let state = normalizeFrame({ output: '', first_seq: 0, last_seq: through });
+      for (const frame of frames) state = appendTerminalOutputDelta(state, frame);
+      // Publication belongs to the field owner after its range validation.
+      // Aborting that read leaves both the old text and live tail intact.
+      return () => {
+        signal.throwIfAborted();
+        if (entries.get(key) !== prior) throw new DOMException('Terminal source changed during handoff.', 'AbortError');
+        touch(key, { state, frames, deferredThrough: through });
+        return state.output;
+      };
     },
     clear() {
       entries.clear();

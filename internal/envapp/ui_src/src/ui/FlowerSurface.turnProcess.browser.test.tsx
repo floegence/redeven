@@ -172,7 +172,7 @@ describe('completed turn process disclosure', () => {
     trigger.focus();
     const tooltip = () => document.getElementById(trigger.getAttribute('aria-describedby') ?? '');
     await waitFor(() => tooltip()?.getAttribute('role') === 'tooltip');
-    expect(tooltip()?.textContent).toBe('Message estimate: 150k → 20k tokens');
+    expect(tooltip()?.textContent).toBe('≈ 150k → 20k tokens');
     summary(root)!.click();
     await waitFor(() => collapsed('third'));
     expect(tooltip()).toBeNull();
@@ -229,35 +229,32 @@ describe('completed turn process disclosure', () => {
     expect(hidden(root, 'progress')).toBe(true);
     expect(hidden(root, 'final-a')).toBe(false);
   });
-  it('keeps failed report reads and continuation retries reachable outside collapsed work', async () => {
-    const complete = parentProcessPage();
-    const partial = { ...complete, events: [parentProcessEvents[0]], next_after_event_id: parentProcessEvents[0].id };
+  it('defers folded report reads and recovers a disclosed failure on re-expansion', async () => {
+    const report = parentProcessEvents[0];
     const read = vi.fn().mockRejectedValueOnce(new Error('offline'))
-      .mockResolvedValueOnce(partial).mockRejectedValueOnce(new Error('page offline'))
-      .mockResolvedValueOnce({ ...complete, events: parentProcessEvents.slice(1) });
-    const initial = { ...partial, events: [{ ...parentProcessEvents[0], message: undefined }] };
+      .mockResolvedValueOnce(parentProcessPage([report]));
+    const initial = parentProcessPage(parentProcessEvents.map(event => ({ ...event, message: undefined })));
     const { root } = await mount(current(true, { parent_events: initial }), undefined, { readParentEvents: read });
-    const recovery = () => root.querySelector<HTMLElement>('.flower-parent-event-reading');
-    await waitFor(() => Boolean(recovery()?.querySelector('button:not(:disabled)')));
-    expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
-    expect(recovery()?.closest('[inert], [aria-hidden="true"]')).toBeNull();
-    recovery()!.querySelector<HTMLButtonElement>('button')!.click();
-    await waitFor(() => !recovery());
-    const more = root.querySelector<HTMLButtonElement>('.flower-transcript-stack > button.flower-parent-event-action')!;
-    expect(more.disabled).toBe(false);
-    expect(more.closest('[inert], [aria-hidden="true"]')).toBeNull();
-    more.click();
-    await waitFor(() => Boolean(recovery()?.querySelector('button:not(:disabled)')));
-    recovery()!.querySelector<HTMLButtonElement>('button')!.click();
-    await waitFor(() => root.querySelectorAll('[data-flower-row-event-id]').length === 11);
-    expect(read.mock.calls[2]).toEqual(read.mock.calls[3]);
-    expect(summary(root)?.textContent).toContain('11 subtask updates');
-    expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
-    expect(parentProcessEvents.every((event) => eventHidden(root, event.id))).toBe(true);
-    expect(recovery()).toBeNull();
-    expect(more.isConnected).toBe(false);
+    await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'false');
+    expect(read).not.toHaveBeenCalled();
+    expect(root.querySelector('.flower-transcript-stack > button.flower-parent-event-action')).toBeNull();
     summary(root)!.click();
-    expect(eventHidden(root, 'event-10')).toBe(false);
+    await waitFor(() => Boolean(eventRow(root, report.id)));
+    const disclosure = () => eventRow(root, report.id).querySelector<HTMLButtonElement>('.flower-parent-event-disclosure')!;
+    disclosure().click();
+    await waitFor(() => read.mock.calls.length === 1 && eventRow(root, report.id).querySelector('[data-parent-event-body]')?.getAttribute('aria-busy') === 'false');
+    expect(eventRow(root, report.id).textContent).not.toContain(report.message!);
+    disclosure().click(); disclosure().click();
+    await waitFor(() => eventRow(root, report.id).textContent?.includes(report.message!) === true);
+    expect(read.mock.calls[0].slice(0, 2)).toEqual(['process', { action: 'read', event_id: report.id }]);
+    expect(read.mock.calls[1].slice(0, 2)).toEqual(read.mock.calls[0].slice(0, 2));
+    summary(root)!.click();
+    await waitFor(() => parentProcessEvents.every(event => eventHidden(root, event.id)));
+    expect(summary(root)?.textContent).toContain('11 subtask updates');
+    summary(root)!.click();
+    await waitFor(() => eventRow(root, report.id)?.textContent?.includes(report.message!) === true);
+    expect(disclosure().getAttribute('aria-expanded')).toBe('true');
+    expect(read).toHaveBeenCalledTimes(2);
   });
   it('folds all eleven child dynamics with failed work and preserves reports, order and late updates', async () => {
     const failed = current(true, { last_outcome: 'failed', turns: [turn({ outcome: 'failed', intermediate_item_ids: ['progress'], final_item_ids: [], final_boundary_complete: false })], parent_events: parentProcessPage(parentProcessEvents.slice(0, 9)) });

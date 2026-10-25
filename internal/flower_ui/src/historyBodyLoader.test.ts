@@ -43,34 +43,70 @@ describe('history body request ownership', () => {
     expect(read).toHaveBeenCalledTimes(2);
     expect(loader.state('0')).toBeUndefined();
   });
-  it('keeps failures local and retries only when explicitly requested', async () => {
-    const loader = createHistoryBodyLoader(() => 'timeout');
-    const controller = new AbortController(); const identity = {};
-    const read = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue(undefined);
-    loader.request('item', identity, controller.signal, read);
-    await settle(); expect(loader.state('item')).toBe('failed');
-    loader.request('item', identity, controller.signal, read);
-    await settle(); expect(read).toHaveBeenCalledOnce();
-    loader.request('item', identity, controller.signal, read, true);
-    await settle(); expect(read).toHaveBeenCalledTimes(2);
-    expect(loader.state('item')).toBeUndefined();
-    controller.abort();
-  });
-  it('releases stalled transports at the read deadline and rejects superseded ownership', async () => {
+  it('automatically recovers transient failures and bounds retry exhaustion', async () => {
     vi.useFakeTimers();
     const loader = createHistoryBodyLoader(() => 'timeout');
     const controller = new AbortController();
-    const read = vi.fn((_signal: AbortSignal) => new Promise<void>(() => undefined));
+    const read = vi.fn().mockRejectedValue(Object.assign(new Error('network unavailable'), { code: 'transport' }));
+    loader.request('item', 'source', controller.signal, read);
+    await settle(); expect(loader.state('item')).toBe('loading');
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(read).toHaveBeenCalledTimes(4);
+    expect(loader.state('item')).toBe('failed');
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(read).toHaveBeenCalledTimes(4);
+    read.mockResolvedValue(undefined);
+    loader.resume(); await settle();
+    expect(read).toHaveBeenCalledTimes(5);
+    expect(loader.state('item')).toBeUndefined();
+    controller.abort();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it('does not retry authorization or protocol failures after reconnect', async () => {
+    vi.useFakeTimers();
+    const loader = createHistoryBodyLoader(() => 'timeout');
+    const controller = new AbortController();
+    const denied = vi.fn().mockRejectedValue({ status: 403 });
+    const malformed = vi.fn().mockRejectedValue(new TypeError('invalid decoder state'));
+    loader.request('denied', 'source', controller.signal, denied);
+    loader.request('malformed', 'source', controller.signal, malformed);
+    await settle(); loader.resume();
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(denied).toHaveBeenCalledOnce(); expect(malformed).toHaveBeenCalledOnce();
+    controller.abort();
+  });
+  it('cancels pending retries without reviving a replacement disclosure', async () => {
+    vi.useFakeTimers();
+    const loader = createHistoryBodyLoader(() => 'timeout');
+    const first = new AbortController(); const second = new AbortController();
+    const oldRead = vi.fn().mockRejectedValue(Object.assign(new Error('network unavailable'), { code: 'transport' }));
+    const newRead = vi.fn().mockResolvedValue(undefined);
+    loader.request('item', 'old', first.signal, oldRead); await settle();
+    first.abort(); loader.request('item', 'new', second.signal, newRead);
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(oldRead).toHaveBeenCalledOnce(); expect(newRead).toHaveBeenCalledOnce();
+    expect(loader.state('item')).toBeUndefined();
+    second.abort(); expect(vi.getTimerCount()).toBe(0);
+  });
+  it('bounds stalled physical transports after the read deadline and releases UI ownership', async () => {
+    vi.useFakeTimers();
+    const loader = createHistoryBodyLoader(() => 'timeout');
+    const controller = new AbortController();
+    const completions: Array<() => void> = [];
+    const read = vi.fn((_signal: AbortSignal) => new Promise<void>(resolve => completions.push(resolve)));
     loader.request('a', {}, controller.signal, read);
     loader.request('b', {}, controller.signal, read);
     loader.request('c', {}, controller.signal, read);
     await vi.advanceTimersByTimeAsync(15_000);
-    expect(read).toHaveBeenCalledTimes(3);
+    expect(read).toHaveBeenCalledTimes(2);
     expect(read.mock.calls[0][0].aborted).toBe(true);
-    expect(loader.state('a')).toBe('failed');
+    expect(loader.state('a')).toBe('loading');
+    completions.shift()!(); await settle();
+    expect(read).toHaveBeenCalledTimes(3);
     controller.abort(); await settle();
     expect(loader.state('c')).toBeUndefined();
     expect(vi.getTimerCount()).toBe(0);
+    completions.splice(0).forEach(finish => finish()); await settle();
   });
   it('never clears replacement state when an obsolete transport finishes late', async () => {
     const loader = createHistoryBodyLoader(() => 'timeout');

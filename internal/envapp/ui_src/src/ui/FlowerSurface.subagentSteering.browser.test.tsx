@@ -29,7 +29,10 @@ async function mount(operate: (parent: string, child: string, input: FlowerSubag
   (runtime.querySelector('button[aria-controls="flower-subagents-dropdown"]') as HTMLButtonElement).click();
   await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-row]')));
   (document.querySelector('[data-flower-subagent-row]') as HTMLButtonElement).click();
-  await waitFor(() => Boolean(document.querySelector('[data-flower-subagent-input-id="first"]')));
+  await waitFor(() => {
+    const row = document.querySelector<HTMLElement>('[data-flower-subagent-input-id="first"]');
+    return Boolean(row?.checkVisibility({ visibilityProperty: true }) && !row.closest('[inert]'));
+  });
   return { runtime, detail, call, loadDetail };
 }
 const row = (id = 'first') => document.querySelector<HTMLElement>(`[data-flower-subagent-input-id="${id}"]`)!;
@@ -74,8 +77,9 @@ describe('Subagent immediate guidance controls', () => {
     buttons()[0].click();
     await waitFor(() => loadDetail.mock.calls.length === 2);
     expect(window.querySelector('[data-flower-message-id="guide"]')).toBe(message);
-    expect(window.textContent).toContain('Earlier messages');
-    expect(window.textContent).toContain('Newer messages');
+    expect(window.querySelector('.flower-history-navigation')).toBeNull();
+    expect(window.textContent).not.toContain('Earlier messages');
+    expect(window.textContent).not.toContain('Newer messages');
     expect(window.querySelector('.flower-subagent-detail-loading')).toBeNull();
     reload.resolve({ ...bounded, current: { ...bounded.current, view_version: 41, queue: bounded.current.queue!.slice(1) } });
     await waitFor(() => !document.querySelector('[data-flower-subagent-input-id="first"]'));

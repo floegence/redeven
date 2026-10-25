@@ -795,11 +795,14 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       get subtitle() { return options.runtimeSubtitle ?? LOCAL_ENVIRONMENT_SUBTITLE; },
     },
     transport: {
-      readParentEvents: (threadID, query) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/subagent-events', query),
+      readParentEvents: (threadID, query, signal) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/subagent-events', query, undefined, options.runtimeEnvironmentID, signal),
       listThreads: input => runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/ai/threads?' + new URLSearchParams({ limit: String(input?.limit ?? 25), ...(input?.cursor ? { cursor: input.cursor } : {}) }), undefined, undefined, options.runtimeEnvironmentID, input?.signal),
 		loadThread: (threadID, signal) => runtimeJSON(bridge, 'GET', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}`, undefined, undefined, options.runtimeEnvironmentID, signal),
       releaseHistory: async (threadID, input) => { await runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history-release', input, undefined, options.runtimeEnvironmentID); },
       loadHistory: (threadID, input, signal) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history', input, undefined, options.runtimeEnvironmentID, signal),
+      loadActivityValue: (threadID, input, signal) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/activity-value', input, undefined, options.runtimeEnvironmentID, signal),
+      loadActivityStructure: (threadID, input, signal) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/activity-structure', input, undefined, options.runtimeEnvironmentID, signal),
+      loadActivityField: (threadID, input, signal) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/activity-field', input, undefined, options.runtimeEnvironmentID, signal),
       loadHistoryItem: (threadID, itemID, signal) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history-item', { item_id: itemID }, undefined, options.runtimeEnvironmentID, signal),
       loadHistoryBody: (threadID, input, signal) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history-body', input, undefined, options.runtimeEnvironmentID, signal),
       connectLiveStream: async function* (input: FlowerLiveStreamConnectInput) {
@@ -843,13 +846,14 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(input.thread_id)}/tool-preview`,
         { turn_id: input.turn_id, run_id: input.run_id, tool_call_id: input.tool_call_id },
       ),
-      readTerminalProcess: (runID, processID, input) => {
+      readTerminalProcess: (runID, processID, input, signal) => {
         const params = new URLSearchParams();
         params.set('after_seq', String(input.after_seq));
         return runtimeJSON<FlowerTerminalProcessSnapshot>(
           bridge,
           'GET',
           `/_redeven_proxy/api/ai/runs/${encodeURIComponent(runID)}/terminal/${encodeURIComponent(processID)}/read?${params.toString()}`,
+          undefined, undefined, undefined, signal,
         );
       },
       markThreadRead: (threadID, body) => runtimeJSON<MarkThreadReadResponse>(

@@ -549,7 +549,7 @@ it('keeps an embedded canvas visible during readiness and confines recovery to t
 it('keeps startup details open through stop and explicit preparation retry', async () => {
   const { host, setSnapshot } = mountHarness(blockedReason('', { state: 'indexing', stoppable: true, work_completed: 3, work_total: 10 }));
   await sizeReadinessSurface(720, 720);
-  await expect.element(page.getByRole('heading', { name: 'Building search index', exact: true })).toBeVisible();
+  await expect.element(page.getByRole('heading', { name: 'Preparing conversation history', exact: true })).toBeVisible();
   await expect.element(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '3');
   await page.getByRole('button', { name: 'Startup details', exact: true }).click();
   const details = host.querySelector('.ai-readiness-diagnostics');

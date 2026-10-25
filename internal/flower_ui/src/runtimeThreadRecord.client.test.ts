@@ -46,18 +46,25 @@ it('notifies only affected text subscribers and preserves structural presentatio
 }));
 
 
-it('retains unchanged records across an authoritative snapshot and continues the same text source', () => createRoot(dispose => {
+it('retains growing records across an authoritative snapshot and continues the same text source', () => createRoot(dispose => {
   try {
     const current: FlowerRuntimeCurrentView = { thread_id: 'thread', view_version: 1, activity: 'active', turn_id: 'turn', run_id: 'run', run_progress: { phase: 'streaming' },
       interactions: [], queue: [], turns: [], items: [{ id: 'one', kind: 'assistant', ordinal: 1, turn_id: 'turn', run_id: 'run', text: 'Text', live: true }] };
     const base = { thread_id: 'thread', title: '', title_status: 'unset', title_generation: 0, created_at_ms: 1, updated_at_ms: 1, model_id: 'model', working_dir: '/', settings_revision: 0, status: 'running', source_label: '', target_labels: [], messages: [], read_status: { is_unread: false, snapshot: { activity_revision: 1 }, read_state: { last_seen_activity_revision: 1 } } } satisfies FlowerThreadSnapshot;
     const record = createRuntimeThreadRecord(current, applyFlowerRuntimeCurrentView(base, current));
     const prior = record.initializeThread().messages[0];
-    const refreshed = createRuntimeThreadRecord({ ...current, view_version: 2 }, applyFlowerRuntimeCurrentView(base, current), record);
+    let textRuns = 0; let sourceRuns = 0; let identityRuns = 0;
+    createComputed(() => { void prior.content; textRuns++; });
+    createComputed(() => { void prior.text_source?.revision; sourceRuns++; });
+    createComputed(() => { void record.initializeThread().messages; identityRuns++; });
+    const next = { ...current, view_version: 2, items: [{ ...current.items![0], text: 'Text next' }] };
+    const refreshed = createRuntimeThreadRecord(next, applyFlowerRuntimeCurrentView(base, next), record);
     expect(refreshed.initializeThread().messages[0]).toBe(prior);
+    expect(prior.content).toBe('Text next');
+    expect({ textRuns, sourceRuns, identityRuns }).toEqual({ textRuns: 2, sourceRuns: 2, identityRuns: 1 });
     refreshed.apply(refreshed.initializeThread(), { thread_id: 'thread', turn_id: 'turn', run_id: 'run', base_version: 2, view_version: 3,
-      facts: { activity: 'active', queue_count: 0, run_progress: { phase: 'streaming' } }, items: [{ kind: 'append', item_id: 'one', append: { offset_bytes: 4, text: '!' } }] });
-    expect(prior.content).toBe('Text!');
-    expect(prior.text_source?.read(0)).toEqual(['!']);
+      facts: { activity: 'active', queue_count: 0, run_progress: { phase: 'streaming' } }, items: [{ kind: 'append', item_id: 'one', append: { offset_bytes: 9, text: '!' } }] });
+    expect(prior.content).toBe('Text next!');
+    expect(prior.text_source?.read(0)).toEqual([' next', '!']);
   } finally { dispose(); }
 }));

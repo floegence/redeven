@@ -13,6 +13,10 @@ class VitestResizeObserver implements ResizeObserver {
   }
 }
 
+if (typeof Element !== 'undefined' && typeof Element.prototype.getAnimations !== 'function') {
+  Element.prototype.getAnimations = () => [];
+}
+
 class VitestAnimation {
   private resolveFinished!: () => void;
   private rejectFinished!: () => void;
@@ -53,6 +57,28 @@ class VitestAnimation {
 
 if (typeof globalThis.ResizeObserver === 'undefined') {
   globalThis.ResizeObserver = VitestResizeObserver;
+}
+
+// jsdom has no layout or viewport observation. These component tests represent
+// a visible transcript; real browser suites qualify clipping and scroll geometry.
+if (typeof navigator !== 'undefined' && navigator.userAgent.includes('jsdom')) {
+  Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get() {
+    return this.classList.contains('flower-chat-transcript') ? 600 : 0;
+  } });
+  if (typeof globalThis.IntersectionObserver === 'undefined') {
+    globalThis.IntersectionObserver = class {
+      readonly root = null; readonly rootMargin = ''; readonly thresholds = [0];
+      private elements = new Set<Element>();
+      constructor(private callback: IntersectionObserverCallback) {}
+      observe(target: Element) {
+        this.elements.add(target);
+        queueMicrotask(() => { if (this.elements.has(target)) this.callback([{ target, isIntersecting: true, intersectionRatio: 1 } as IntersectionObserverEntry], this); });
+      }
+      unobserve(target: Element) { this.elements.delete(target); }
+      disconnect() { this.elements.clear(); }
+      takeRecords(): IntersectionObserverEntry[] { return []; }
+    };
+  }
 }
 
 if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {

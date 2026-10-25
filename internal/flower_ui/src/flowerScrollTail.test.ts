@@ -75,6 +75,29 @@ function createController() {
 }
 
 describe('Flower scroll tail controller', () => {
+  it('does not follow the end of a history window that has later content', () => {
+    const raf = createRafHarness();
+    let hasAfter = true;
+    const controller = createFlowerScrollTailController({ reducedMotionPreferred: () => true,
+      canFollowLatest: () => !hasAfter, requestAnimationFrame: raf.requestAnimationFrame, cancelAnimationFrame: raf.cancelAnimationFrame });
+    const metrics = createViewport();
+    controller.bind(metrics.viewport);
+    controller.stopFollowing();
+    const wheel = { target: metrics.viewport, deltaY: 100, defaultPrevented: false, ctrlKey: false } as unknown as WheelEvent;
+    controller.onWheel(wheel);
+    controller.onScroll();
+    expect(controller.followingLatest()).toBe(false);
+    metrics.setScrollHeight(800);
+    controller.measureAfterLayout();
+    raf.flushAll();
+    expect(metrics.scrollTop()).toBe(400);
+    hasAfter = false;
+    metrics.setScrollTop(700);
+    controller.onWheel(wheel);
+    expect(controller.followingLatest()).toBe(true);
+    controller.dispose();
+  });
+
   it.each([false, true])('clears prior arrival motion before starting a new destination: started=%s', (started) => {
     const raf = createRafHarness();
     const controller = createFlowerScrollTailController({ reducedMotionPreferred: () => false,

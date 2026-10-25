@@ -31,12 +31,13 @@ function currentFor(items: readonly FlowerActivityItem[], version: number) {
 const write = () => activityItem({ item_id: 'write', tool_id: 'write', tool_name: 'terminal.write', renderer: 'terminal', label: '向 SSH 登录会话提交密码', status: 'success', payload: { operation: 'write', command: 'ssh udesk26', process_id: 'process-1', input_bytes: 12 } });
 const read = () => activityItem({ item_id: 'read', tool_id: 'read', tool_name: 'terminal.read', renderer: 'terminal', label: '检查 GPU/LM Studio 诊断输出', status: 'success', payload: { operation: 'read', command: 'ssh udesk26 nvidia-smi', process_id: 'process-1', output: '', last_seq: 2, latest_seq: 2 } });
 
-function stream() {
+function stream(summaries: ReturnType<typeof thread>[]) {
   const queue: FlowerLiveStreamEnvelope[] = [];
   let wake: (() => void) | undefined;
   return {
     push(value: FlowerLiveStreamEnvelope) { queue.push(value); wake?.(); },
     async *connect({ signal }: { signal: AbortSignal }): AsyncIterable<FlowerLiveStreamEnvelope> {
+      yield { schema_version: 3, kind: 'ready', baseline_complete: true, observer_id: 'terminal-activity-observer', summaries };
       while (!signal.aborted) {
         const value = queue.shift();
         if (value) { yield value; continue; }
@@ -46,11 +47,12 @@ function stream() {
   };
 }
 
-async function mount(items: readonly FlowerActivityItem[]) {
+async function mount(items: readonly FlowerActivityItem[], configure?: (base: ReturnType<typeof adapter>) => void) {
   const current = fixture(items);
   const peer = thread({ thread_id: 'peer', title: 'Another task' });
-  const live = stream();
+  const live = stream([current, peer]);
   const base = adapter(true);
+  configure?.(base);
   const runtime = renderSurfaceWithAdapter({ ...base, listThreads: vi.fn(async () => [current, peer]), loadThread: vi.fn(async (id) => liveBootstrap(id === peer.thread_id ? peer : current, 1)), connectLiveStream: live.connect });
   runtime.style.height = '780px';
   await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="terminal-activity"] button')));
@@ -64,6 +66,37 @@ const rowFor = (runtime: HTMLElement, id: string) => runtime.querySelector(`[dat
 const toggleFor = (runtime: HTMLElement, id: string) => rowFor(runtime, id).querySelector<HTMLButtonElement>('.flower-activity-inline-button')!;
 
 describe('SSH terminal activity', () => {
+  it('drains remaining output when the canonical tool is already complete', async () => {
+    const result = activityItem({ ...read(), status: 'success', payload: { operation: 'exec', command: 'inspect',
+      process_id: 'process-1', output: 'first\n', first_seq: 1, last_seq: 1, latest_seq: 3, has_more: true } });
+    const { runtime, base } = await mount([write(), result], base => {
+      vi.mocked(base.readTerminalProcess!).mockImplementation(async request => ({ process_id: 'process-1', status: 'success',
+        output: request.after_seq === 1 ? 'second\n' : 'third\n', first_seq: request.after_seq + 1,
+        last_seq: request.after_seq + 1, latest_seq: 3, has_more: request.after_seq === 1 }));
+    });
+    toggleFor(runtime, 'read').click();
+    await waitFor(() => rowFor(runtime, 'read').querySelector('.flower-activity-terminal-output')?.textContent === 'first\nsecond\nthird\n');
+    expect(vi.mocked(base.readTerminalProcess!).mock.calls.map(call => call[0].after_seq)).toEqual([1, 2]);
+    await new Promise(resolve => setTimeout(resolve, 350));
+    expect(base.readTerminalProcess).toHaveBeenCalledTimes(2);
+  });
+
+  it('reads remaining bounded output after the process exits while its tool is still settling', async () => {
+    const result = activityItem({ ...read(), status: 'running', payload: { operation: 'exec', command: 'inspect',
+      process_id: 'process-1', output: 'first\n', first_seq: 1, last_seq: 1 } });
+    const { runtime, base } = await mount([write(), result], base => {
+      vi.mocked(base.readTerminalProcess!).mockImplementation(async request => ({ process_id: 'process-1', status: 'success',
+        output: request.after_seq === 1 ? 'second\n' : 'third\n', first_seq: request.after_seq + 1,
+        last_seq: request.after_seq + 1, latest_seq: 3, has_more: request.after_seq === 1 }));
+    });
+    toggleFor(runtime, 'read').click();
+    await waitFor(() => rowFor(runtime, 'read').querySelector('.flower-activity-terminal-output')?.textContent === 'first\nsecond\nthird\n');
+    expect(vi.mocked(base.readTerminalProcess!).mock.calls.map(call => call[0].after_seq)).toEqual([1, 2]);
+    await new Promise(resolve => setTimeout(resolve, 350));
+    expect(base.readTerminalProcess).toHaveBeenCalledTimes(2);
+    expect(rowFor(runtime, 'read').querySelector('.flower-activity-terminal-notice-error')).toBeNull();
+  });
+
   it.each(['classic-light', 'classic-dark'])('highlights crisp borderless commands with open output in %s', async theme => {
     document.documentElement.classList.toggle('dark', theme === 'classic-dark');
     document.documentElement.dataset.floeShellTheme = theme;

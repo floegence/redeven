@@ -7,10 +7,15 @@ import type { FlowerActivityItem, FlowerLiveStreamEnvelope } from '../../../../f
 import { activityItem, activityTimeline, adapter, liveBootstrap, renderSurfaceWithAdapter, runtimeCurrentView, subagentDetail, subagentSummary, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
 function fixture(items: readonly FlowerActivityItem[]) {
-  return thread({ thread_id: 'terminal-activity', title: 'SSH GPU diagnostics', status: 'running', active_run_id: 'run-terminal', messages: [{
-    id: 'terminal-message', turn_id: 'turn-terminal', run_id: 'run-terminal', role: 'assistant', content: '', status: 'streaming', created_at_ms: 10,
-    blocks: [activityTimeline({ thread_id: 'terminal-activity', run_id: 'run-terminal', turn_id: 'turn-terminal', status: 'running', items: [...items] })],
-  }] });
+  // Exercise the outer transcript. Consecutive tools have their own bounded
+  // sequence scroller, covered by the tool-sequence interaction suite.
+  return thread({ thread_id: 'terminal-activity', title: 'SSH GPU diagnostics', status: 'running', active_run_id: 'run-terminal', messages: items.flatMap((item, index) => [{
+    id: `terminal-message-${item.item_id}`, turn_id: 'turn-terminal', run_id: 'run-terminal', role: 'assistant' as const, content: '', status: 'streaming' as const, created_at_ms: 10 + index * 2,
+    blocks: [activityTimeline({ thread_id: 'terminal-activity', run_id: 'run-terminal', turn_id: 'turn-terminal', status: 'running', items: [item] })],
+  }, {
+    id: `checkpoint-${item.item_id}`, turn_id: 'turn-terminal', run_id: 'run-terminal', role: 'assistant' as const, content: `Inspection checkpoint ${index + 1}.`, status: 'streaming' as const, created_at_ms: 11 + index * 2,
+    blocks: [],
+  }]) });
 }
 function currentFor(items: readonly FlowerActivityItem[], version: number) {
   const current = runtimeCurrentView(fixture(items), version);
@@ -24,8 +29,8 @@ function currentFor(items: readonly FlowerActivityItem[], version: number) {
 const write = () => activityItem({ item_id: 'write', tool_id: 'write', tool_name: 'terminal.write', renderer: 'terminal', label: '向 SSH 登录会话提交密码', status: 'success', payload: { operation: 'write', command: 'ssh udesk26', process_id: 'process-1', input_bytes: 12 } });
 const read = () => activityItem({ item_id: 'read', tool_id: 'read', tool_name: 'terminal.read', renderer: 'terminal', label: '检查 GPU/LM Studio 诊断输出', status: 'success', payload: { operation: 'read', command: 'ssh udesk26 nvidia-smi', process_id: 'process-1', output: '', last_seq: 2, latest_seq: 2 } });
 
-function stream() {
-  const queue: FlowerLiveStreamEnvelope[] = [];
+function stream(summary: ReturnType<typeof thread>) {
+  const queue: FlowerLiveStreamEnvelope[] = [{ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [summary] }];
   let wake: (() => void) | undefined;
   return {
     push(value: FlowerLiveStreamEnvelope) { queue.push(value); wake?.(); },
@@ -42,7 +47,7 @@ function stream() {
 async function mount(items: readonly FlowerActivityItem[]) {
   const current = fixture(items);
   const peer = thread({ thread_id: 'peer', title: 'Another task' });
-  const live = stream();
+  const live = stream(current);
   const base = adapter(true);
   const runtime = renderSurfaceWithAdapter({ ...base, listThreads: vi.fn(async () => [current, peer]), loadThread: vi.fn(async (id) => liveBootstrap(id === peer.thread_id ? peer : current, 1)), connectLiveStream: live.connect });
   runtime.style.height = '780px';
@@ -319,7 +324,7 @@ describe('Activity disclosure interaction', () => {
       ...read(), item_id: `child-read-${index}`, tool_id: `child-read-${index}`, status: 'running', label: `Inspect child diagnostic ${index}`,
     }));
     const childCurrent = (rows: typeof items, version: number) => ({ ...currentFor(rows, version), thread_id: child.thread_id });
-    const live = stream();
+    const live = stream(parent);
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true), listThreads: vi.fn(async () => [parent]),
       loadThread: vi.fn(async () => liveBootstrap(parent, 1)), connectLiveStream: live.connect,

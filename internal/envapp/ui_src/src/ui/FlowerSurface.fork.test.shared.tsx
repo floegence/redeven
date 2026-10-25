@@ -115,8 +115,11 @@ describe('Flower fork results', () => {
     await forkFrom(runtime, 'source');
     await waitFor(() => !!runtime.querySelector('.flower-thread-load-error button'));
     (runtime.querySelector('.flower-thread-load-error button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-parent-event-disclosure')));
+    expect(readParentEvents).not.toHaveBeenCalled();
+    runtime.querySelector<HTMLButtonElement>('.flower-parent-event-disclosure')!.click();
     await waitFor(() => runtime.textContent!.includes('Inherited findings'));
-    expect(readParentEvents).toHaveBeenCalledWith('destination', expect.objectContaining({ first_event_id: 'inherited', last_event_id: 'inherited' }));
+    expect(readParentEvents).toHaveBeenCalledWith('destination', { action: 'read', event_id: 'inherited' }, expect.any(AbortSignal));
     expect(runtime.querySelector('[data-parent-event="inherited"] .flower-parent-event-open')).toBeNull();
     expect(runtime.querySelector('[data-parent-event="inherited"] button.flower-parent-event-source')).toBeNull();
     expect(runtime.querySelector<HTMLTextAreaElement>('.flower-composer textarea')?.disabled).toBe(false);

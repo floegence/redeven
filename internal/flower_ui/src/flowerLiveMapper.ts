@@ -796,7 +796,9 @@ function mapStructuredActivityRows(raw: unknown, field: string): readonly Readon
     if (!title && !meta && !content) {
       throw new Error(`Flower contract error: activity_item.presentation.payload.${field}[${index}] must contain display content.`);
     }
-    if ((format === 'code' ? new TextEncoder().encode(content).length > 65536 : Array.from(content).length > 8000)) {
+    // Canonical text/Markdown limits count the trimmed value, but the stored
+    // content remains exact: leading indentation can change Markdown meaning.
+    if ((format === 'code' ? new TextEncoder().encode(content).length > 65536 : Array.from(content.trim()).length > 8000)) {
       throw new Error(`Flower contract error: ${field}[${index}].content exceeds the structured activity limit.`);
     }
     return {
@@ -922,6 +924,62 @@ function mapActivityPresentation(raw: unknown): Partial<Pick<FlowerActivityItem,
     ...(targetRefs ? { target_refs: targetRefs } : {}),
     ...(payload ? { payload } : {}),
   };
+}
+
+// A summary is a separate partial contract. Never pass it through the complete
+// payload mapper: absence of an unread field is not canonical absence.
+export function mapFlowerActivitySummary(raw: unknown): import('./contracts/flowerSurfaceContracts').FlowerActivitySummary {
+  const fail = (): never => { throw new Error('Flower contract error: invalid activity summary.'); };
+  const record = plainRecordValue(raw);
+  if (!record || !Array.isArray(record.fields) || record.fields.length > 64) return fail();
+  const allowed = new Set(['values', 'version', 'label', 'description', 'renderer', 'action', 'has_error', 'uncertain_effect', 'fields']);
+  if (Object.keys(record).some(key => !allowed.has(key))) return fail();
+  for (const key of ['version', 'label', 'description', 'action']) if (record[key] !== undefined && typeof record[key] !== 'string') return fail();
+  for (const key of ['has_error', 'uncertain_effect']) if (record[key] !== undefined && typeof record[key] !== 'boolean') return fail();
+  const paths = new Set<string>();
+  const fields = record.fields.map(rawField => {
+    const field = plainRecordValue(rawField);
+    if (!field || typeof field.path !== 'string' || !/^\/(?:[^/]+|payload\/[^/]+)$/u.test(field.path) || field.path === '/payload'
+      || paths.has(field.path) || !['object', 'array', 'string', 'scalar'].includes(String(field.kind))) return fail();
+    paths.add(field.path);
+    if (field.inline_text !== undefined || field.source_id !== undefined || field.sha256 !== undefined) return fail();
+    for (const key of ['bytes', 'count', 'source_offset_bytes']) if (field[key] !== undefined && (typeof field[key] !== 'number' || !Number.isSafeInteger(field[key]) || field[key] < 0)) return fail();
+    if (field.kind === 'scalar' && field.value !== null && typeof field.value !== 'boolean'
+      && !(typeof field.value === 'number' && Number.isFinite(field.value))) return fail();
+    return { ...field } as import('./contracts/flowerSurfaceContracts').FlowerActivityField;
+  });
+  const values = record.values === undefined ? undefined : plainRecordValue(record.values);
+  if (record.values !== undefined && !values) return fail();
+  const summaryText = new Set(['status', 'operation', 'display_name', 'action', 'change_type', 'url', 'final_url',
+    'query', 'pattern', 'process_id', 'execution_location', 'content_type', 'format']);
+  const normalizedValues: Record<string, unknown> = {};
+  for (const [path, value] of Object.entries(values ?? {})) {
+    if (!paths.has(path)) return fail();
+    if (path === '/payload/goal') {
+      const goal = plainRecordValue(value);
+      if (!goal || fields.find(field => field.path === path)?.kind !== 'object'
+        || Object.keys(goal).some(key => !['operation', 'applied', 'version', 'outcome'].includes(key))
+        || !['set', 'delete', 'review'].includes(String(goal.operation)) || typeof goal.applied !== 'boolean'
+        || typeof goal.version !== 'number' || !Number.isSafeInteger(goal.version) || goal.version < 0
+        || goal.outcome !== undefined && (goal.operation !== 'review' || !['completed', 'continue', 'blocked'].includes(String(goal.outcome)))) return fail();
+      normalizedValues[path] = { ...goal };
+    } else if (path === '/chips' || path === '/target_refs') {
+      if (!Array.isArray(value) || value.length > 200 || new TextEncoder().encode(JSON.stringify(value)).length > (16 << 10)) return fail();
+      const mapped = path === '/chips' ? value.map(mapActivityChip) : value.map(mapActivityTargetRef);
+      if (mapped.some(value => !value)) return fail();
+      normalizedValues[path] = mapped;
+    } else if (!path.startsWith('/payload/') || !summaryText.has(path.slice('/payload/'.length)) || typeof value !== 'string'
+      || new TextEncoder().encode(value).length > 2048) return fail();
+    else normalizedValues[path] = value;
+  }
+  return { ...(values ? { values: normalizedValues } : {}),
+    ...(record.version !== undefined ? { version: record.version as string } : {}),
+    ...(record.label !== undefined ? { label: record.label as string } : {}),
+    ...(record.description !== undefined ? { description: record.description as string } : {}),
+    ...(record.renderer !== undefined ? { renderer: activityRenderer(record.renderer) } : {}),
+    ...(record.action !== undefined ? { action: record.action as string } : {}),
+    ...(record.has_error !== undefined ? { has_error: record.has_error as boolean } : {}),
+    ...(record.uncertain_effect !== undefined ? { uncertain_effect: record.uncertain_effect as boolean } : {}), fields };
 }
 
 export function mapFlowerActivityItem(raw: unknown): FlowerActivityItem | null {

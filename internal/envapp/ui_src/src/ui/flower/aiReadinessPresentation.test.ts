@@ -45,6 +45,12 @@ const reasonActionCases: readonly ReasonActionCase[] = [
 ];
 
 describe('createAIReadinessPresentation', () => {
+  it('identifies automatic one-time conversation preparation during upgrade', () => {
+    const projection = createAIReadinessPresentation({ state: 'indexing', reason_code: '', retryable: false, safe_to_retry: false }, i18n);
+    expect(projection.description).toContain('one-time preparation');
+    expect(projection.description).toContain('automatically');
+    expect(projection.description).not.toContain('search index');
+  });
   it('offers only a status refresh after an unconfirmed readiness command', () => {
     const projection = createAIReadinessPresentation(blocked('temporarily_blocked', { retry_reason: 'readiness_request_timeout' }), i18n);
     expect(projection.mode).toBe('blocked');

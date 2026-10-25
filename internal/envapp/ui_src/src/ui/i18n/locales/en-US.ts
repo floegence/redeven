@@ -444,13 +444,13 @@ export const enUS = defineDictionary({
   aiReadiness: {
     startup: {
       verifying: "Validating data",
-      indexing: "Building search index",
+      indexing: "Preparing conversation history",
       preparing: "Preparing conversations",
       stopping: "Stopping preparation",
       stopped: "Preparation stopped",
       stop: "Stop preparation",
       prepareAgain: "Prepare again",
-      indexingDescription: "The first search index is being built. Flower opens when preparation finishes.",
+      indexingDescription: "This upgrade requires one-time preparation of saved conversations. Flower opens automatically when preparation finishes.",
       stoppingDescription: "Waiting for the current transaction to roll back and storage to close.",
       stoppedDescription: "Your data is preserved. Choose Prepare again when you are ready.",
       closeFailed: "Flower could not close its storage safely. Copy the diagnostics and restart the application before preparing again.",

@@ -3445,7 +3445,8 @@
   margin: 0 auto;
 }
 
-.flower-chat-transcript[data-flower-tail-preparing="true"] .flower-transcript-stack {
+.flower-chat-transcript[data-flower-tail-preparing="true"] .flower-transcript-stack,
+.flower-subagent-detail-transcript[data-flower-tail-preparing="true"] .flower-subagent-detail-timeline {
   visibility: hidden;
   pointer-events: none;
 }
@@ -10462,6 +10463,20 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-subagent-detail-elapsed > span {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.flower-subagent-detail-transcript-region {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.flower-subagent-detail-loading[data-overlay="true"] {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
 .flower-subagent-detail-loading {

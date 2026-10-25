@@ -143,6 +143,7 @@ it('stops once, keeps Back usable and offers explicit preparation after cleanup'
   disposers.push(render(() => <DesktopFlowerRuntimeBoundary snapshot={snapshot()} i18n={i18n} onRecover={vi.fn()} onStartupAction={action} onBack={back}><div data-ready-flower /></DesktopFlowerRuntimeBoundary>, document.body));
   const button = () => [...document.querySelectorAll('button')].find(item => item.textContent?.includes(i18n.t('flowerRuntime.stopPreparation')))!;
   expect(document.body.textContent).toContain('3 of 8 completed');
+  expect(document.querySelector('[data-flower-startup-phase]')?.textContent).toContain('one-time preparation');
   button().click(); button().click();
   await settle();
   expect(action).toHaveBeenCalledExactlyOnceWith('stop');

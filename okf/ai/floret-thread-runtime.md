@@ -6,7 +6,7 @@ tags: [ai, floret, threads, runtime]
 timestamp: 2026-10-18T00:00:00Z
 quality_exception: Typed Floret ThreadService lifecycle and restart contract covering canonical journal ownership, idempotent effects, and migration safety.
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
@@ -19,13 +19,21 @@ Optional ThreadGoalController and WithAgentGoals provide [canonical Goals](flowe
 
 Redeven-specific authorization, DTO mapping, live projection, and adapter ownership are specified in [Floret Redeven adapter and projection](floret-redeven-adapter-and-projection.md).
 
+## Automatic display preparation
+
+Floret owns one-time historical source preparation during upgrade. Redeven
+requests and observes public display readiness; it never scans or migrates
+Floret-owned records. Prepared restarts reuse canonical readiness anchors.
+New threads and independently ready conversations remain available while other
+threads prepare; a failed preparation is reported without rewriting history.
+
 # Boundaries
 
 Redeven never imports Floret internals, reads Floret storage, copies canonical lifecycle into product SQL, or uses sibling source wiring in formal validation. Product migrations may import retired queued inputs once into the typed runtime and then delete their staging rows.
 
 # Evidence
 
-- `redeven:go.mod` - Pins the released Floret v7.79.0 typed runtime without local replacement.
+- `redeven:go.mod` - Pins the released Floret typed runtime without local replacement.
 
 - `redeven:internal/session/floret_v7_dependency_contract_test.go` - Enforces exact published-v7 adoption and rejects retired imports.
 
