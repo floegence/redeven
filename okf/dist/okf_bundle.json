@@ -3845,14 +3845,14 @@
             "path": "ai/model-directory-and-selection.md",
             "type": "AI Configuration Contract",
             "title": "Model directory and selection",
-            "description": "Runtime-owned metadata and explicit model selection.",
+            "description": "Runtime metadata and explicit selection.",
             "tags": [
               "ai",
               "models",
               "providers",
               "settings"
             ],
-            "summary": "Runtime owns atomic metadata snapshots. Reads/send preflight use shipped or saved metadata; pending/failed refresh never blocks configured chat. Background refresh is disclosed, opt-in and excludes OpenRouter. Adding OpenRouter/Ollama discovers models; manual refresh remains available.",
+            "summary": "Runtime owns atomic metadata. Reads/send preflight use shipped/saved snapshots; refresh never blocks configured chat. Background refresh is disclosed, opt-in and excludes OpenRouter. OpenRouter/Ollama discover on addition; manual refresh remains available.",
             "section_count": 2
           },
           {
@@ -10183,7 +10183,7 @@
       "concept_id": "ai.model-directory-and-selection",
       "type": "AI Configuration Contract",
       "title": "Model directory and selection",
-      "description": "Runtime-owned metadata and explicit model selection.",
+      "description": "Runtime metadata and explicit selection.",
       "tags": [
         "ai",
         "models",
@@ -10192,7 +10192,7 @@
       ],
       "timestamp": "2026-10-13T00:00:00Z",
       "frontmatter": {
-        "description": "Runtime-owned metadata and explicit model selection.",
+        "description": "Runtime metadata and explicit selection.",
         "lifecycle": "contract",
         "reviewed_at": "2026-10-25",
         "tags": [
@@ -10205,25 +10205,25 @@
         "title": "Model directory and selection",
         "type": "AI Configuration Contract"
       },
-      "body_length": 2495,
-      "summary": "Runtime owns atomic metadata snapshots. Reads/send preflight use shipped or saved metadata; pending/failed refresh never blocks configured chat. Background refresh is disclosed, opt-in and excludes OpenRouter. Adding OpenRouter/Ollama discovers models; manual refresh remains available.",
+      "body_length": 1946,
+      "summary": "Runtime owns atomic metadata. Reads/send preflight use shipped/saved snapshots; refresh never blocks configured chat. Background refresh is disclosed, opt-in and excludes OpenRouter. OpenRouter/Ollama discover on addition; manual refresh remains available.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Runtime initializes from `runtime/model-catalog`. Inventory reads resolve shipped static defaults, avoiding stale capabilities; unreviewed models need explicit configuration. Cloud uses its catalog protocol without dispatch-time discovery.\n\nProfiles separate selection, overrides, custom definitions and default identity from metadata. Visibility never selects models or changes identity, capabilities or wire routing.\n\nFlower groups icon/name rows by provider in a compact picker, with title, search and close control on one line, small icon tiles, selected outline/checkmark and fixed footer. Desktop sizing uses a 19rem width, 25rem height cap, 32px minimum rows and 11px primary labels; viewport bounds can reduce the panel further. Coarse-pointer controls retain 44px targets and 16px search text. Search, aliases, keyboard control, refresh and management remain. Hide context/output limits, image/search capabilities, quantization and alias descriptions. Unavailable rows show a short status; tooltip/accessibility descriptions retain the reason. Attachment feedback appears only while checking or needing attention. Long names and headings truncate with tooltips; scrolling is vertical.\n\nBoth `GET /api/ai/models` modes share unfiltered `provider_catalogs` and backend `provider_defaults`. Defaults express capabilities, never account availability, even before configuration. With no usable model, settings and draft editing remain available.\n\n`LoadForStartup` freezes supported legacy selections before services start. Startup never waits for discovery or migrates current profiles.",
-          "char_count": 1590
+          "body": "Runtime uses `runtime/model-catalog` and resolves shipped defaults on read. Unreviewed models require configuration. Cloud uses its catalog protocol without dispatch-time discovery.\n\nProfiles separate selection, overrides, custom definitions and default identity from metadata; visibility changes none of selection, identity, capabilities or routing.\n\nFlower groups icon/name rows by provider: inline title/search/close, icon tiles, selection outline/check and fixed footer. Desktop: viewport-bounded 19rem width, 25rem height cap, 32px rows, 11px labels. Touch: 44px targets, 16px search. Preserve search, aliases, keyboard control, refresh and management. Hide limits, image/search capabilities, quantization and alias descriptions. Unavailable rows show brief status with tooltip/accessibility reasons. Attachment feedback requires checks or attention. Long names/headings truncate with tooltips; scroll vertically.\n\nBoth `GET /api/ai/models` modes share unfiltered `provider_catalogs` and backend `provider_defaults`: capabilities, never account availability, even before setup. Settings/drafts remain editable without usable models.\n\n`LoadForStartup` freezes supported legacy selections before service start; no discovery wait or current-profile migration.",
+          "char_count": 1261
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Desktop/Env adapters consume Runtime's authorized inventory projection. No Floret dependency, execution/storage change, schema migration or conversation store is added.",
-          "char_count": 168
+          "body": "Desktop/Env consume Runtime's authorized inventory. No Floret dependency, execution/storage change, schema migration or conversation store is added.",
+          "char_count": 148
         }
       ],
-      "snippet": "Runtime owns atomic metadata snapshots. Reads/send preflight use shipped or saved metadata; pending/failed refresh never blocks configured chat. Background refresh is disclosed, opt-in and excludes OpenRouter. Adding OpenRouter/Ollama disco",
+      "snippet": "Runtime owns atomic metadata. Reads/send preflight use shipped/saved snapshots; refresh never blocks configured chat. Background refresh is disclosed, opt-in and excludes OpenRouter. OpenRouter/Ollama discover on addition; manual refresh re",
       "backlinks": [
         {
           "label": "Model web search",
@@ -33604,5 +33604,5 @@
       ]
     }
   ],
-  "source_sha256": "4fd0da576d713c982b08b9a39c2303d3cc36a2793449c7ba53ea97b023e0d77a"
+  "source_sha256": "ebd6709f5beff11550e41881320fd7bdf474813308dbab41823ef73687b5df5f"
 }
