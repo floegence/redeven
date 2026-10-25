@@ -10205,15 +10205,15 @@
         "title": "Model directory and selection",
         "type": "AI Configuration Contract"
       },
-      "body_length": 1946,
+      "body_length": 1980,
       "summary": "Runtime owns atomic metadata. Reads/send preflight use shipped/saved snapshots; refresh never blocks configured chat. Background refresh is disclosed, opt-in and excludes OpenRouter. OpenRouter/Ollama discover on addition; manual refresh remains available.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Runtime uses `runtime/model-catalog` and resolves shipped defaults on read. Unreviewed models require configuration. Cloud uses its catalog protocol without dispatch-time discovery.\n\nProfiles separate selection, overrides, custom definitions and default identity from metadata; visibility changes none of selection, identity, capabilities or routing.\n\nFlower groups icon/name rows by provider: inline title/search/close, icon tiles, selection outline/check and fixed footer. Desktop: viewport-bounded 19rem width, 25rem height cap, 32px rows, 11px labels. Touch: 44px targets, 16px search. Preserve search, aliases, keyboard control, refresh and management. Hide limits, image/search capabilities, quantization and alias descriptions. Unavailable rows show brief status with tooltip/accessibility reasons. Attachment feedback requires checks or attention. Long names/headings truncate with tooltips; scroll vertically.\n\nBoth `GET /api/ai/models` modes share unfiltered `provider_catalogs` and backend `provider_defaults`: capabilities, never account availability, even before setup. Settings/drafts remain editable without usable models.\n\n`LoadForStartup` freezes supported legacy selections before service start; no discovery wait or current-profile migration.",
-          "char_count": 1261
+          "body": "Runtime uses `runtime/model-catalog` and resolves shipped defaults on read. Unreviewed models require configuration. Cloud uses its catalog protocol without dispatch-time discovery.\n\nProfiles separate selection, overrides, custom definitions and default identity from metadata; visibility changes none of selection, identity, capabilities or routing.\n\nFlower groups icon/name rows by provider: inline title/search/close, icon tiles, selection outline/check and fixed footer. Desktop: viewport-bounded 17rem width, 20rem height cap, 24px minimum rows, 10px labels and 9px provider headings. Touch: 44px targets, 16px search. Preserve search, aliases, keyboard control, refresh and management. Hide limits, image/search capabilities, quantization and alias descriptions. Unavailable rows show brief status with tooltip/accessibility reasons. Attachment feedback requires checks or attention. Long names/headings truncate with tooltips; scroll vertically.\n\nBoth `GET /api/ai/models` modes share unfiltered `provider_catalogs` and backend `provider_defaults`: capabilities, never account availability, even before setup. Settings/drafts remain editable without usable models.\n\n`LoadForStartup` freezes supported legacy selections before service start; no discovery wait or current-profile migration.",
+          "char_count": 1295
         },
         {
           "id": "boundaries",
@@ -33561,5 +33561,5 @@
       ]
     }
   ],
-  "source_sha256": "5d55b59ce82cb89843f808334e56989f7f848654a45beb0d7f934534c4fb0404"
+  "source_sha256": "70353cd5ebbeb9cd1bb400385f6341c04e7076e5febd115d6615fd8c74e00a61"
 }

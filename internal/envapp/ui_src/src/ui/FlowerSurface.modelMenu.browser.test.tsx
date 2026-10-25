@@ -100,8 +100,8 @@ it.each(SUPPORTED_LOCALES)('keeps the %s picker compact, readable, and keyboard 
       await waitFor(() => Boolean(document.querySelector('.flower-model-menu')));
       const menu = document.querySelector<HTMLElement>('.flower-model-menu')!;
       const bounds = menu.getBoundingClientRect();
-      expect(bounds.width).toBeLessThanOrEqual(304);
-      expect(bounds.height).toBeLessThanOrEqual(400);
+      expect(bounds.width).toBeLessThanOrEqual(272);
+      expect(bounds.height).toBeLessThanOrEqual(320);
       expect(bounds.left).toBeGreaterThanOrEqual(0);
       expect(bounds.right).toBeLessThanOrEqual(width);
       expect(menu.scrollWidth).toBeLessThanOrEqual(menu.clientWidth);
@@ -114,8 +114,8 @@ it.each(SUPPORTED_LOCALES)('keeps the %s picker compact, readable, and keyboard 
       expect(headingBounds.right).toBeLessThanOrEqual(searchBounds.left);
       expect(searchBounds.right).toBeLessThanOrEqual(close.getBoundingClientRect().left);
       expect(searchBounds.width).toBeGreaterThanOrEqual(96);
-      expect(Number.parseFloat(getComputedStyle(heading).fontSize)).toBeLessThanOrEqual(12);
-      expect(Number.parseFloat(getComputedStyle(search).fontSize)).toBeLessThanOrEqual(12);
+      expect(Number.parseFloat(getComputedStyle(heading).fontSize)).toBeLessThanOrEqual(10);
+      expect(Number.parseFloat(getComputedStyle(search).fontSize)).toBeLessThanOrEqual(10);
       expectSingleLineButtonLabels(menu.querySelector('.flower-model-menu-footer')!);
       expect(menu.querySelectorAll('.flower-model-menu-group')).toHaveLength(4);
       expect(menu.querySelector('.flower-model-menu-meta, [data-web-search]')).toBeNull();
@@ -124,9 +124,9 @@ it.each(SUPPORTED_LOCALES)('keeps the %s picker compact, readable, and keyboard 
       expect(menu.querySelectorAll('.flower-model-menu-check')).toHaveLength(1);
       for (const row of rows) {
         const bounds = row.getBoundingClientRect();
-        expect(bounds.height).toBeGreaterThanOrEqual(32);
-        expect(bounds.height).toBeLessThanOrEqual(34);
-        expect(Number.parseFloat(getComputedStyle(row.querySelector('.flower-model-menu-name')!).fontSize)).toBeLessThanOrEqual(11);
+        expect(bounds.height).toBeGreaterThanOrEqual(24);
+        expect(bounds.height).toBeLessThanOrEqual(26);
+        expect(Number.parseFloat(getComputedStyle(row.querySelector('.flower-model-menu-name')!).fontSize)).toBeLessThanOrEqual(10);
         for (const child of row.querySelectorAll('.flower-model-menu-icon, .flower-model-menu-name, .flower-model-menu-check')) {
           const rect = child.getBoundingClientRect();
           expect(Math.abs(rect.top + rect.height / 2 - (bounds.top + bounds.height / 2))).toBeLessThanOrEqual(1);

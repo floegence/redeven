@@ -4,7 +4,7 @@ Recent changes only. The linked concepts own current contracts and evidence; Git
 
 ## 2026-10-25
 
-- Compact the [model picker](ai/model-directory-and-selection.md): inline title/search, smaller desktop rows and preserved touch targets.
+- Tighten the [model picker](ai/model-directory-and-selection.md) to 272px width, 320px height cap, 24px desktop rows and 10px labels; retain one-line search and touch targets.
 - Identify ambiguous chunks in [patch errors](ai/tool-permission-runtime.md).
 - Unify Kimi setup with isolated access drafts and stable saved connections; see [provider configuration](ui/flower-provider-configuration.md).
 - Add mandatory independent subagent review whenever the documentation cap is reached, targeting at most 90%. Revalidate and condense UI, architecture, Desktop, operations and release knowledge; consolidate this log's repeated change inventories.
