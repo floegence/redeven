@@ -8702,7 +8702,7 @@
         "description": "Typed Floret v7 thread runtime ownership and Redeven product boundaries.",
         "lifecycle": "contract",
         "quality_exception": "Typed Floret ThreadService lifecycle and restart contract covering canonical journal ownership, idempotent effects, and migration safety.",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-25",
         "tags": [
           "ai",
           "floret",
@@ -8713,15 +8713,15 @@
         "title": "Floret thread runtime integration",
         "type": "AI Runtime Contract"
       },
-      "body_length": 1547,
+      "body_length": 1955,
       "summary": "Floret v7 `ThreadService` is the sole owner of active and canonical thread lifecycle. Redeven owns endpoint authorization, attachment resource resolution, provider and tool effects, and browser-safe mapping. Every existing-thread mutation proves that the ThreadID belongs to the authenticated endpoint before entering Floret. Send, Respond, Cancel, Retry, and the optional independent CompactContext return the current typed view without waiting for provider continuation. Canonical journal facts prevent duplicate user, assistant, tool, and interaction records; transient drafts and execution tokens remain in memory.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Typed runtime\nOptional ThreadGoalController and WithAgentGoals provide [canonical Goals](flower-goals.md).\n\nRedeven-specific authorization, DTO mapping, live projection, and adapter ownership are specified in [Floret Redeven adapter and projection](floret-redeven-adapter-and-projection.md).",
-          "char_count": 294
+          "body": "## Typed runtime\nOptional ThreadGoalController and WithAgentGoals provide [canonical Goals](flower-goals.md).\n\nRedeven-specific authorization, DTO mapping, live projection, and adapter ownership are specified in [Floret Redeven adapter and projection](floret-redeven-adapter-and-projection.md).\n\n## Automatic display preparation\n\nFloret owns one-time historical source preparation during upgrade. Redeven\nrequests and observes public display readiness; it never scans or migrates\nFloret-owned records. Prepared restarts reuse canonical readiness anchors.\nNew threads and independently ready conversations remain available while other\nthreads prepare; a failed preparation is reported without rewriting history.",
+          "char_count": 710
         },
         {
           "id": "boundaries",
@@ -8733,9 +8733,9 @@
       ],
       "evidence": [
         {
-          "id": "redeven:go.mod:0:pins the released floret v7.79.0 typed runtime without local replacement.",
+          "id": "redeven:go.mod:0:pins the released floret typed runtime without local replacement.",
           "source": "redeven:go.mod",
-          "description": "Pins the released Floret v7.79.0 typed runtime without local replacement."
+          "description": "Pins the released Floret typed runtime without local replacement."
         },
         {
           "id": "redeven:internal/session/floret_v7_dependency_contract_test.go:0:enforces exact published-v7 adoption and rejects retired imports.",
@@ -30665,15 +30665,15 @@
         "title": "Flower conversation selection and detail reads",
         "type": "UI Contract"
       },
-      "body_length": 3178,
+      "body_length": 4565,
       "summary": "Flower acknowledges navigation before transcript work. One coordinator serves\nnavigation, command confirmation and reference preflight. ThreadCache owns\nselection and detail; the loader owns bounded ephemeral demand.\nReadiness controls reveal; elapsed time controls feedback only.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Selection and navigation\nRail feedback precedes visible commit by two animation callbacks and a task; hidden documents do not wait for frames. Latest intent supersedes earlier work; summary effects cannot bypass foreground coordination.\n\nReveal only after accepted detail, measurable layout and visible historical text settle. The scroll owner positions without smooth initial scrolling or time-based fallback. One cancellable 200 ms deadline spans detail/body/layout loading feedback; ready content/errors appear immediately. Selection, New chat and disposal cancel old feedback; frame, composer/navigation remain stable and body failures offer Retry.\n\nCached destinations flush render effects; visible rows pass `checkVisibility({ contentVisibilityAuto: true })`. ResizeObserver adjusts above-viewport growth before paint, while reveal/body work stays in rAF; visibility events reuse this pass. Navigation clears arrival motion. No positioning polls or per-row observers. Explicit wheel/touch/scrollbar/keyboard input can interrupt preparation; scroll events alone cannot.\n\nTwo read slots prioritize visible text/margin and cancel obsolete demand. ThreadCache retains immutable bodies. Growth/refresh/completion never restart selection or remove accepted prose; [live delivery](flower-live-timeline.md) owns validation/retry. Selection opens Latest; reading restoration is separate. Ordinary threads sort by descending creation time, then ascending ThreadID.\n\n## Detail read ownership\nReleased Floret's `ThreadSummaryReader.Summary` owns summaries; ThreadCache owns selection/detail with twelve entries. The bounded coordinator shares navigation, confirmation and reference-preflight demand. Cancellation never reconnects the workspace stream.",
-          "char_count": 1748
+          "body": "## Selection and navigation\nRail feedback precedes visible commit by two animation callbacks and a task; hidden documents do not wait for frames. Latest intent supersedes earlier work; summary effects cannot bypass foreground coordination.\n\nReveal only after accepted detail, measurable layout and visible historical text settle. The scroll owner positions without smooth initial scrolling or time-based fallback. One cancellable 200 ms deadline spans detail/body/layout loading feedback; ready content/errors appear immediately. Selection, New chat and disposal cancel old feedback; frame, composer/navigation remain stable and failed body reads remain local and retry with renewed viewport demand or reconnect.\n\nCached destinations flush render effects; visible rows pass `checkVisibility({ contentVisibilityAuto: true })`. ResizeObserver adjusts above-viewport growth before paint, while reveal/body work stays in rAF; visibility events reuse this pass. Navigation clears arrival motion. No positioning polls or per-row observers. Explicit wheel/touch/scrollbar/keyboard input can interrupt preparation; scroll events alone cannot.\n\nTwo read slots prioritize visible text/margin and cancel obsolete demand. ThreadCache retains immutable bodies. Growth/refresh/completion never restart selection or remove accepted prose; [live delivery](flower-live-timeline.md) owns validation/retry. Selection opens Latest; reading restoration is separate. Ordinary threads sort by descending creation time, then ascending ThreadID.\n\n## Continuous history and concurrent activity\n\nUsers browse earlier and newer history by scrolling. Viewport demand reads\ncanonical windows automatically; no load-earlier or load-newer action is part\nof normal navigation. Retained windows preserve visible, selected and focused\nrows while gaps are filled in either direction. Stable item identities preserve\nexpanded details and scroll anchors during live appends and replacements.\nThe accepted history baseline belongs to the live observer and reading revision;\nsuperseded navigation cannot replace a newer selection.\n\nCollapsed tools and parent reports retain presentation previews. Full activity\nbodies and report text are requested when disclosed, under fresh authorization.\nCollapse, navigation and disposal cancel unused demand; reconnect restores active\nconsumers. Retry is local to an actual read failure. Released empty activity\nsources use Floret's canonical default presentation in source order.\n\nField-only activity presentation remains disabled for ordinary product history\nuntil complete renderer parity is qualified. Complete body expansion is retained;\ncomputer evidence and target hydration can still require full canonical reads.\nThis release does not promise a fixed opening latency or globally bounded memory\nfor all expanded terminal output.\n\n## Detail read ownership\nFloret supplies canonical summaries, source-bound windows and exact body reads; ThreadCache owns selection/detail with twelve entries. The bounded coordinator shares navigation, confirmation and reference-preflight demand. Cancellation never reconnects the workspace stream.",
+          "char_count": 3135
         },
         {
           "id": "boundaries",
@@ -33561,5 +33561,5 @@
       ]
     }
   ],
-  "source_sha256": "1f44b2576c861361b20adefbfafe7cdec3db63eb2a476b324bea77231ba663ed"
+  "source_sha256": "3132ad0e354bef9fede349fc28ba1fbcd870b3a9e55eab79d24c34f35ba774a2"
 }

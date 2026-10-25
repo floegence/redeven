@@ -119,14 +119,17 @@ export type FlowerRuntimeTransport = Readonly<{
   loadThread(threadID: string, signal: AbortSignal): Promise<unknown>;
   releaseHistory?(threadID: string, input: { observer_id: string; reading_revision: number; subagent?: boolean }): Promise<void>;
   loadHistory?(threadID: string, input: FlowerHistoryRequest, signal: AbortSignal): Promise<unknown>;
+  loadActivityValue?(threadID: string, input: import('./contracts/flowerSurfaceContracts').FlowerActivityValueRequest, signal: AbortSignal): Promise<import('./contracts/flowerSurfaceContracts').FlowerActivityValue>;
+  loadActivityStructure?(threadID: string, input: import('./contracts/flowerSurfaceContracts').FlowerActivityStructureRequest, signal: AbortSignal): Promise<import('./contracts/flowerSurfaceContracts').FlowerActivityStructurePage>;
+  loadActivityField?(threadID: string, input: import('./contracts/flowerSurfaceContracts').FlowerActivityFieldRequest, signal: AbortSignal): Promise<import('./contracts/flowerSurfaceContracts').FlowerActivityFieldChunk>;
   loadHistoryItem?(threadID: string, itemID: string, signal: AbortSignal): Promise<FlowerRuntimeCurrentItem>;
   loadHistoryBody?(threadID: string, input: import('./contracts/flowerSurfaceContracts').FlowerHistoryBodyRequest, signal: AbortSignal): Promise<import('./contracts/flowerSurfaceContracts').FlowerHistoryBodyChunk>;
   connectLiveStream?: (input: FlowerLiveStreamConnectInput) => AsyncIterable<FlowerLiveTransportFrame>;
-  readParentEvents?(threadID: string, query: FlowerParentEventQuery): Promise<FlowerParentEventPage>;
+  readParentEvents?(threadID: string, query: FlowerParentEventQuery, signal?: AbortSignal): Promise<FlowerParentEventPage>;
   loadSubagentDetail(parentThreadID: string, childThreadID: string, input?: FlowerHistoryRequest, signal?: AbortSignal): Promise<LoadSubagentDetailResponse>;
   operateSubagentInput?(parentThreadID: string, childThreadID: string, input: FlowerSubagentInputOperation): Promise<LoadSubagentDetailResponse>;
   loadToolPreview?(input: FlowerToolPreviewRequest): Promise<FlowerToolPreview>;
-  readTerminalProcess?(runID: string, processID: string, input: { after_seq: number }): Promise<FlowerTerminalProcessSnapshot>;
+  readTerminalProcess?(runID: string, processID: string, input: { after_seq: number }, signal?: AbortSignal): Promise<FlowerTerminalProcessSnapshot>;
   markThreadRead(threadID: string, input: MarkThreadReadInput): Promise<MarkThreadReadResponse>;
   patchThread(threadID: string, input: ThreadPatchInput): Promise<RuntimeThreadPatchResponse>;
   movePinnedThread?(threadID: string, input: FlowerThreadPinPosition): Promise<{ pins: readonly RuntimeThreadPinMetadata[] }>;
@@ -486,25 +489,19 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     releaseHistory: options.transport.releaseHistory,
     loadHistory: options.transport.loadHistory ? async (threadID, input, signal) => {
       signal.throwIfAborted();
-      let raw: unknown;
-      try {
-        raw = await options.transport.loadHistory!(threadID, input, signal);
-      } catch (error) {
-        signal.throwIfAborted();
-        const failure = error as { code?: unknown; status?: unknown; failureKind?: unknown } | null;
-        // Native fetch rejects with TypeError; Desktop explicitly classifies a
-        // lost bridge response. Only normalize at the read transport boundary,
-        // before mapping, so programming and contract errors stay terminal.
-        if (error instanceof TypeError && !failure?.code && !failure?.status || failure?.failureKind === 'transport_unknown') {
-          throw Object.assign(new Error('Flower history transport is unavailable.', { cause: error }), { code: 'transport' });
-        }
-        throw error;
-      }
-      signal.throwIfAborted();
+      const raw = await historyTransportRead(() => options.transport.loadHistory!(threadID, input, signal), signal);
       return mapRuntimeThreadView(raw, options);
     } : undefined,
-    loadHistoryItem: options.transport.loadHistoryItem,
-    loadHistoryBody: options.transport.loadHistoryBody,
+    loadActivityValue: options.transport.loadActivityValue ? async (threadID, input, signal) =>
+      historyTransportRead(() => options.transport.loadActivityValue!(threadID, input, signal), signal) : undefined,
+    loadActivityStructure: options.transport.loadActivityStructure ? async (threadID, input, signal) =>
+      historyTransportRead(() => options.transport.loadActivityStructure!(threadID, input, signal), signal) : undefined,
+    loadActivityField: options.transport.loadActivityField ? async (threadID, input, signal) =>
+      historyTransportRead(() => options.transport.loadActivityField!(threadID, input, signal), signal) : undefined,
+    loadHistoryItem: options.transport.loadHistoryItem ? async (threadID, itemID, signal) =>
+      historyTransportRead(() => options.transport.loadHistoryItem!(threadID, itemID, signal), signal) : undefined,
+    loadHistoryBody: options.transport.loadHistoryBody ? async (threadID, input, signal) =>
+      historyTransportRead(() => options.transport.loadHistoryBody!(threadID, input, signal), signal) : undefined,
     ...(options.transport.connectLiveStream ? {
       connectLiveStream: async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
         for await (const envelope of assembleFlowerLiveEnvelopes(options.transport.connectLiveStream!(input))) {
@@ -512,7 +509,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
         }
       },
     } : {}),
-    readParentEvents: options.transport.readParentEvents ? (threadID, query) => options.transport.readParentEvents!(threadID, query) : undefined,
+    readParentEvents: options.transport.readParentEvents ? (threadID, query, signal) => options.transport.readParentEvents!(threadID, query, signal) : undefined,
     loadSubagentDetail: async (parentThreadID, childThreadID, input, signal) => {
       const parentID = trim(parentThreadID);
       const childID = trim(childThreadID);
@@ -732,7 +729,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       loadToolPreview: (input) => options.transport.loadToolPreview!(input),
     } : {}),
     ...(options.transport.readTerminalProcess ? {
-      readTerminalProcess: async (input) => {
+      readTerminalProcess: async (input, signal) => {
         const runID = trim(input.run_id);
         const processID = trim(input.process_id);
         if (!runID) throw new Error('Missing run id.');
@@ -743,7 +740,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
 		}
         return options.transport.readTerminalProcess!(runID, processID, {
 		  after_seq: afterSeq,
-        });
+        }, signal);
       },
     } : {}),
     ...(options.directoryFavorites ? { directoryFavorites: options.directoryFavorites } : {}),
@@ -784,4 +781,22 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     Object.defineProperty(adapter, key, { enumerable: true, get: () => mutations.has(key) && options.canMutate === false ? undefined : guarded });
   }
   return adapter;
+}
+
+// Normalize only rejected transport calls. Decoding and presentation execute
+// outside this boundary, so their TypeErrors never enter automatic retries.
+async function historyTransportRead<T>(read: () => Promise<T>, signal: AbortSignal): Promise<T> {
+  signal.throwIfAborted();
+  try {
+    const result = await read();
+    signal.throwIfAborted();
+    return result;
+  } catch (error) {
+    signal.throwIfAborted();
+    const failure = error as { code?: unknown; status?: unknown; failureKind?: unknown } | null;
+    if (error instanceof TypeError && !failure?.code && !failure?.status || failure?.failureKind === 'transport_unknown') {
+      throw Object.assign(new Error('Flower history transport is unavailable.', { cause: error }), { code: 'transport' });
+    }
+    throw error;
+  }
 }

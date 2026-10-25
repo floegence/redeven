@@ -86,6 +86,8 @@ describe('Flower management operation execution timing', () => {
       await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${parentID}"] button`)));
       (runtime.querySelector(`[data-thread-id="${parentID}"] button`) as HTMLButtonElement).click();
       await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="active-wait"]')));
+      for (const button of runtime.querySelectorAll<HTMLButtonElement>('.flower-tool-sequence-toggle[aria-expanded="false"]')) button.click();
+      await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="spawn-first"]')));
       return runtime;
     };
     const runtime = await mount();

@@ -29,20 +29,21 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('parent event synchronization boundaries', () => {
-  it('offers canonical resynchronization when report reading is unavailable', async () => {
+  it('keeps a missing report reader local to the expanded report', async () => {
     const report = { id: 'report-unavailable', parent_thread_id: 'thread-report-unavailable', source_thread_id: 'child', source_turn_id: 'turn', source_run_id: 'run', source_entry_id: 'entry', kind: 'report' as const, received_at: '2026-10-18T00:00:00Z', admitted: false };
     const selected = thread({ thread_id: report.parent_thread_id, parent_events: { thread_id: report.parent_thread_id, events: [report], first_event_id: report.id, last_event_id: report.id } });
     const loadThread = vi.fn(async () => liveBootstrap(selected, 1));
     const launchTurn = vi.fn(); const stopThread = vi.fn();
     const surface = renderSurfaceWithAdapterProps({ ...adapter(), listThreads: vi.fn(async () => [selected]), loadThread, readParentEvents: undefined, launchTurn, stopThread },
       { focusThreadRequest: { request_id: 'unavailable-report', thread_id: selected.thread_id } });
-    await waitFor(() => Boolean(surface.querySelector('.flower-parent-event-reading button')));
-    const retry = surface.querySelector<HTMLButtonElement>('.flower-parent-event-reading button')!;
-    expect(retry.textContent).toBe('Retry'); expect(retry.disabled).toBe(false);
+    await waitFor(() => Boolean(surface.querySelector('.flower-parent-event-disclosure')));
+    expect(surface.querySelector('.flower-parent-event-body')).toBeNull();
+    const readsBeforeExpansion = loadThread.mock.calls.length;
+    surface.querySelector<HTMLButtonElement>('.flower-parent-event-disclosure')!.click();
+    await waitFor(() => surface.querySelector('.flower-parent-event-body')?.textContent?.includes('Unable to load reports') ?? false);
     expect(surface.querySelector<HTMLTextAreaElement>('.flower-composer textarea')?.disabled).toBe(false);
-    const before = loadThread.mock.calls.length; retry.click();
-    await waitFor(() => loadThread.mock.calls.length > before);
     expect(surface.querySelector('.flower-workspace-sync')).toBeNull();
+    expect(loadThread).toHaveBeenCalledTimes(readsBeforeExpansion);
     expect(stopThread).not.toHaveBeenCalled(); expect(launchTurn).not.toHaveBeenCalled();
   });
   it('rejects malformed canonical events before publication and resyncs without sending', async () => {
@@ -88,16 +89,19 @@ describe('parent event synchronization boundaries', () => {
       loadThread: vi.fn(async id => liveBootstrap(id === selected.thread_id ? selected : second, 1)), readParentEvents, stopThread, launchTurn });
     await waitFor(() => Boolean(surface.querySelector('[data-thread-id="thread-report-local"] button')));
     selectThread(surface, selected.thread_id);
-    await waitFor(() => Boolean(surface.querySelector('.flower-parent-event-reading')));
-    expect(surface.querySelector('.flower-parent-event-reading')?.textContent).toContain('Unable to load reports');
+    await waitFor(() => Boolean(surface.querySelector('.flower-parent-event-disclosure')));
+    expect(readParentEvents).not.toHaveBeenCalled();
+    surface.querySelector<HTMLButtonElement>('.flower-parent-event-disclosure')!.click();
+    await waitFor(() => surface.querySelector('.flower-parent-event-body')?.textContent?.includes('Unable to load reports') ?? false);
     expect(surface.querySelector('.flower-workspace-sync')).toBeNull();
     expect(surface.textContent).not.toContain(stopUnconfirmed);
     const editor = surface.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
     expect(editor.disabled).toBe(false);
     editor.value = 'Keep my report draft'; editor.dispatchEvent(new InputEvent('input', { bubbles: true }));
-    (surface.querySelector('.flower-parent-event-reading button') as HTMLButtonElement).click();
+    surface.querySelector<HTMLButtonElement>('.flower-parent-event-disclosure')!.click();
+    surface.querySelector<HTMLButtonElement>('.flower-parent-event-disclosure')!.click();
     await waitFor(() => surface.textContent?.includes('Saved report recovered') ?? false);
-    expect(readParentEvents.mock.calls[1]).toEqual(readParentEvents.mock.calls[0]);
+    expect(readParentEvents.mock.calls[1]?.slice(0, 2)).toEqual(readParentEvents.mock.calls[0]?.slice(0, 2));
     expect(editor.value).toBe('Keep my report draft');
     selectThread(surface, second.thread_id); await waitFor(() => surface.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === second.thread_id);
     selectThread(surface, selected.thread_id); await waitFor(() => surface.querySelector<HTMLTextAreaElement>('.flower-composer textarea')?.value === 'Keep my report draft');

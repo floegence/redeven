@@ -3477,7 +3477,7 @@
       "verifying": "正在驗證對話資料...",
       "recovering": "正在等待對話儲存恢復可用...",
       "restoring": "正在從選取的備份還原對話...",
-      "indexing": "正在建立搜尋索引…",
+      "indexing": "正在進行對話歷史的一次性升級準備，完成後將自動開啟 Flower。",
       "preparing": "正在準備對話…",
       "stopping": "正在安全停止…"
     },

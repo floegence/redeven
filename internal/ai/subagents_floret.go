@@ -898,15 +898,8 @@ func (service *Service) getFlowerSubagentDetail(ctx context.Context, meta *sessi
 	if err := service.requireEndpointThreadAuthority(ctx, meta.EndpointID, parentThreadID); err != nil {
 		return nil, err
 	}
-	if input.ParentThreadID != "" {
-		scope, err := service.flowerHistoryScope(ctx, meta, childThreadID)
-		if err != nil {
-			return nil, err
-		}
-		if _, _, err := readFlowerHistory(ctx, service.threadRuntime, scope, flruntime.ThreadWindowInput{ThreadID: identity.ThreadID(childThreadID), Limit: 1}); err != nil {
-			return nil, err
-		}
-	}
+	// Establish the canonical parent relationship before installing an observer.
+	// Summary owns its preparation; a throwaway history window is unnecessary.
 	summary, err := threadSummaryFromRuntime(ctx, service.threadRuntime, identity.ThreadID(childThreadID))
 	if err != nil {
 		return nil, err
@@ -921,7 +914,13 @@ func (service *Service) getFlowerSubagentDetail(ctx context.Context, meta *sessi
 		if scopeErr != nil {
 			return nil, scopeErr
 		}
-		view, window, err = service.readFlowerHistoryForObserver(ctx, meta, scope, input, flruntime.ThreadWindowInput{ThreadID: summary.ID, AnchorID: input.AnchorID, Direction: input.Direction, Limit: input.Limit})
+		view, window, err = service.readFlowerHistoryForObserver(ctx, meta, scope, input, flruntime.ThreadWindowInput{ThreadID: summary.ID, AnchorID: input.AnchorID, AnchorOffset: input.AnchorOffset, Direction: input.Direction, Limit: input.Limit, ItemIDs: input.ItemIDs, IncludeSummary: true})
+		if err == nil {
+			if window == nil || window.Summary == nil || window.Summary.ID != summary.ID || window.Summary.ParentThreadID.String() != parentThreadID {
+				return nil, errors.New("canonical child history baseline has no matching summary")
+			}
+			summary = *window.Summary
+		}
 	} else {
 		view, err = service.threadRuntime.View(ctxOrBackground(ctx), summary.ID)
 	}

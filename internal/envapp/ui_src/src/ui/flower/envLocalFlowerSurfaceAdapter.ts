@@ -584,6 +584,9 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       loadThread: (threadID, signal) => fetchLocalApiJSON<unknown>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}`, { method: 'GET', signal }),
       releaseHistory: async (threadID, input) => { await fetchLocalApiJSON('/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history-release', { method: 'POST', body: JSON.stringify(input) }); },
       loadHistory: (threadID, input, signal) => fetchLocalApiJSON('/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history', { method: 'POST', body: JSON.stringify(input), signal }),
+      loadActivityValue: (threadID, input, signal) => fetchLocalApiJSON('/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/activity-value', { method: 'POST', body: JSON.stringify(input), signal }),
+      loadActivityStructure: (threadID, input, signal) => fetchLocalApiJSON('/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/activity-structure', { method: 'POST', body: JSON.stringify(input), signal }),
+      loadActivityField: (threadID, input, signal) => fetchLocalApiJSON('/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/activity-field', { method: 'POST', body: JSON.stringify(input), signal }),
       loadHistoryItem: (threadID, itemID, signal) => fetchLocalApiJSON('/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history-item', { method: 'POST', body: JSON.stringify({ item_id: itemID }), signal }),
       loadHistoryBody: (threadID, input, signal) => fetchLocalApiJSON('/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history-body', { method: 'POST', body: JSON.stringify(input), signal }),
       connectLiveStream: async function* (input: FlowerLiveStreamConnectInput) {
@@ -595,9 +598,9 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
           yield frame;
         }
       },
-      readParentEvents: (threadID, query) => fetchLocalApiJSON(
+      readParentEvents: (threadID, query, signal) => fetchLocalApiJSON(
         '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/subagent-events',
-        { method: 'POST', body: JSON.stringify(query) },
+        { method: 'POST', body: JSON.stringify(query), signal },
       ),
       loadSubagentDetail: (parentThreadID, childThreadID, input, signal) => fetchLocalApiJSON(
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(parentThreadID)}/subagents/${encodeURIComponent(childThreadID)}/detail`,
@@ -607,12 +610,12 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(input.thread_id)}/tool-preview`,
         { method: 'POST', body: JSON.stringify({ turn_id: input.turn_id, run_id: input.run_id, tool_call_id: input.tool_call_id }) },
       ),
-      readTerminalProcess: (runID, processID, input) => {
+      readTerminalProcess: (runID, processID, input, signal) => {
         const params = new URLSearchParams();
         params.set('after_seq', String(input.after_seq));
         return fetchLocalApiJSON<FlowerTerminalProcessSnapshot>(
           `/_redeven_proxy/api/ai/runs/${encodeURIComponent(runID)}/terminal/${encodeURIComponent(processID)}/read?${params.toString()}`,
-          { method: 'GET' },
+          { method: 'GET', signal },
         );
       },
       operateSubagentInput: (parentThreadID, childThreadID, input) => fetchLocalApiJSON(

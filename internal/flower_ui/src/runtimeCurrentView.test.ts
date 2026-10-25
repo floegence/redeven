@@ -5,7 +5,7 @@ import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
 import { createThreadCache } from './threadCache';
 import { canonicalProcessFixture } from './flowerCanonicalProcess.testFixture';
 import { projectFlowerTurnProcess } from './flowerTurnPresentation';
-import { mapFlowerMessage } from './flowerLiveMapper';
+import { mapFlowerActivitySummary, mapFlowerMessage } from './flowerLiveMapper';
 
 const summary = (): FlowerThreadSnapshot => ({
   thread_id: 'thread-a', title: 'Product title', title_status: 'ready', title_generation: 1, model_id: 'deepseek/chat', working_dir: '/',
@@ -1084,4 +1084,54 @@ it('projects goal continuation as active business work after compaction preparat
   });
   expect(next.status).toBe('running');
   expect(next.current_execution?.turn_kind).toBe('goal_continuation');
+});
+
+
+describe('field-backed activity summaries', () => {
+  it('normalizes summary targets and chips through the complete display contract', () => {
+    const values = { '/target_refs': [{ kind: 'file', label: ' source.ts ', path: '/workspace/source.ts' }],
+      '/chips': [{ kind: 'effect_outcome', label: ' Outcome ', value: ' uncertain ', private_metadata: 'discard' }] };
+    const actual = mapFlowerActivitySummary({ fields: [{ path: '/target_refs', kind: 'array', count: 1 }, { path: '/chips', kind: 'array', count: 1 }], values });
+    expect(actual.values).toEqual({ '/target_refs': [{ kind: 'file', label: 'source.ts', path: '/workspace/source.ts' }],
+      '/chips': [{ kind: 'effect_outcome', label: 'Outcome', value: 'uncertain' }] });
+    expect(values['/chips'][0].value).toBe(' uncertain ');
+  });
+  const activity = { item_id: 'entry', tool_id: 'call', tool_name: 'computer.exec', kind: 'tool', status: 'success', severity: 'normal' };
+  const fields = [
+    { path: '/payload/rows', kind: 'array' as const, count: 80, entry_id: 'result', source_sha256: 'source' },
+    { path: '/payload/rows_provided', kind: 'scalar' as const, value: true },
+    { path: '/payload/error', kind: 'object' as const, count: 1 },
+  ];
+  const source = { label: 'Inspect current page', renderer: 'structured' as const, has_error: true, uncertain_effect: true, fields };
+  const current = (activity_summary: unknown): FlowerRuntimeCurrentView => ({ thread_id: 'thread-a', view_version: 1, activity: 'idle', items: [
+    { id: 'tool:turn:call', turn_id: 'turn', run_id: 'run', ordinal: 1, kind: 'tool', activity, activity_summary } as NonNullable<FlowerRuntimeCurrentView['items']>[number],
+  ] });
+  it('retains activity-local refresh identity when only hidden content changes', () => {
+    const before = applyFlowerRuntimeCurrentView(summary(), current({ ...source, version: 'resident:run:1' }));
+    const after = applyFlowerRuntimeCurrentView(before, { ...current({ ...source, version: 'resident:run:2' }), view_version: 2 });
+    const block = after.messages[0].blocks![0];
+    if (block.type !== 'activity-timeline') throw new Error('Expected activity.');
+    expect(block.items[0].field_summary?.version).toBe('resident:run:2');
+    expect(after.messages[0]).not.toBe(before.messages[0]);
+  });
+  it('retains exact shape and safety without claiming omitted fields are complete', () => {
+    const result = applyFlowerRuntimeCurrentView(summary(), current(source));
+    const block = result.messages[0].blocks![0];
+    if (block.type !== 'activity-timeline') throw new Error('Expected activity.');
+    expect(block.items[0]).toMatchObject({ label: source.label, renderer: 'structured', field_summary: source });
+    expect(block.items[0].payload).toEqual({ rows_provided: true });
+    expect(block.items[0].body_pending).toBeUndefined();
+    expect(block.items[0].field_summary?.fields[0].count).toBe(80);
+  });
+  it.each([
+    { ...source, fields: [...fields, fields[0]] },
+    { ...source, fields: [{ path: '/payload/rows', kind: 'array', count: -1 }] },
+    { ...source, fields: [{ path: '/payload/rows/0/content', kind: 'string', bytes: 2 }] },
+    { ...source, fields: [{ path: '/payload/output', kind: 'string', bytes: 4, inline_text: 'body' }] },
+    { ...source, has_error: 'false' },
+    { ...source, values: { '/payload/output': 'hidden body' } },
+    { ...source, values: { '/payload/status': 'missing source' } },
+  ])('rejects malformed or hidden-body summary contracts', source => {
+    expect(() => applyFlowerRuntimeCurrentView(summary(), current(source))).toThrow('summary');
+  });
 });

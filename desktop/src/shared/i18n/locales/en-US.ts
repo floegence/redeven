@@ -466,7 +466,7 @@ export const enUS = {
     startupActionFailed: "The preparation action could not be confirmed. Check the runtime connection and try again.",
     workProgress: "{completed} of {total} completed",
     startupPhase: {
-      indexing: "Building the search index...",
+      indexing: "Completing one-time preparation of conversation history. Flower opens automatically when ready.",
       preparing: "Preparing conversations...",
       stopping: "Stopping safely...",
 

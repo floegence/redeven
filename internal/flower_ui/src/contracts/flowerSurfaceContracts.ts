@@ -583,6 +583,7 @@ export type FlowerActivityTargetRef = Readonly<{
 }>;
 
 export type FlowerActivityItem = Readonly<{
+  field_summary?: FlowerActivitySummary;
   body_pending?: boolean;
   item_id: string;
   tool_id?: string;
@@ -932,13 +933,45 @@ export type FlowerGoalInput = Readonly<{
 }>;
 export type FlowerGoalResult = Readonly<{ client_request_id: string; thread_id: string; current: FlowerRuntimeCurrentView; goal: FlowerGoal; conflict: boolean; replayed?: boolean }>;
 
-export type FlowerHistoryWindow = Readonly<{ first_item_id?: string; last_item_id?: string; has_before: boolean; has_after: boolean }>;
+export type FlowerHistoryWindow = Readonly<{ leaf_id?: string; first_item_id?: string; last_item_id?: string; has_before: boolean; has_after: boolean }>;
 export type FlowerHistoryBodyRequest = Readonly<{ item_id: string; run_id: string; source_id: string; through_bytes: number; offset_bytes: number }>;
 export type FlowerHistoryBodyChunk = Readonly<{ thread_id: string; run_id: string; source_id: string; through_bytes: number; offset_bytes: number; text: string }>;
-export type FlowerHistoryRequest = Readonly<{ anchor_id?: string; direction?: 'before' | 'after' | 'around'; limit?: number; observer_id?: string; reading_revision?: number }>;
+export type FlowerHistoryRequest = Readonly<{ anchor_offset?: number; item_ids?: readonly string[]; anchor_id?: string; direction?: 'before' | 'after' | 'around'; limit?: number; observer_id?: string; reading_revision?: number }>;
+// Field sources freeze decoded UTF-8 independently of subsequent live growth.
+export type FlowerActivityField = Readonly<{
+  path: string; kind: 'object' | 'array' | 'string' | 'scalar';
+  bytes?: number; source_offset_bytes?: number; count?: number; value?: unknown;
+  entry_id?: string; source_path?: string; source_sha256?: string; sha256?: string;
+  source_id?: string; run_id?: string; inline_text?: string;
+  text_extent?: Readonly<{ start_bytes: number; end_bytes: number }>;
+}>;
+export type FlowerActivitySummary = Readonly<{
+  version?: string;
+  values?: Readonly<Record<string, unknown>>;
+  label?: string; description?: string; renderer?: FlowerActivityRenderer;
+  action?: string; has_error?: boolean; uncertain_effect?: boolean;
+  fields: readonly FlowerActivityField[];
+}>;
+export type FlowerActivityValueRequest = Readonly<{ item_id: string; path: string; maximum_bytes: number; maximum_nodes: number; fields?: readonly string[]; text_fields?: readonly string[] }>;
+export type FlowerActivityValue = Readonly<{ thread_id: string; item_id: string; turn_id: string; run_id: string; path: string; value: unknown; text_fields?: readonly FlowerActivityField[] }>;
+export type FlowerActivityStructureRequest = Readonly<{ item_id: string; path: string; version?: string; offset?: number; limit?: number }>;
+export type FlowerActivityStructurePage = Readonly<{
+  thread_id: string; item_id: string; turn_id: string; run_id: string; version: string;
+  field: FlowerActivityField; children: readonly FlowerActivityField[]; next: number; has_more: boolean;
+}>;
+export type FlowerActivityFieldRequest = Readonly<{
+	align_start?: boolean;
+  item_id: string; path: string; entry_id?: string; source_sha256?: string; sha256?: string;
+  source_id?: string; run_id?: string; offset_bytes: number; limit_bytes?: number;
+}>;
+export type FlowerActivityFieldChunk = Readonly<{
+  thread_id: string; path: string; entry_id?: string; source_sha256?: string; sha256?: string;
+  source_id?: string; run_id?: string; bytes: number; offset_bytes: number; text: string;
+}>;
 export type FlowerItemBody = Readonly<{ run_id?: string; entry_id?: string; source_id?: string; field: string; bytes: number; preview_bytes: number }>;
 export type FlowerRuntimeCurrentItem = Readonly<{
   body?: FlowerItemBody;
+  activity_summary?: FlowerActivitySummary;
   activity_bodies?: readonly Readonly<{ entry_id: string; bytes: number; sha256: string }>[];
   id: string;
   turn_id?: string;
@@ -1055,8 +1088,8 @@ export type FlowerParentEvent = Readonly<{
   source_entry_id: string; kind: 'report' | 'completed' | 'failed' | 'cancelled' | 'interrupted' | 'timed_out' | 'input_required' | 'approval_required';
   reason_code?: string; interaction_id?: string; message?: string; received_at: string; admitted: boolean; resolved?: boolean;
 }>;
-export type FlowerParentEventPage = Readonly<{ thread_id: string; events: readonly FlowerParentEvent[]; first_event_id?: string; last_event_id?: string; next_after_event_id?: string }>;
-export type FlowerParentEventQuery = Readonly<{ action: 'list' | 'read'; event_id?: string; first_event_id?: string; last_event_id?: string; after_event_id?: string; limit?: number }>;
+export type FlowerParentEventPage = Readonly<{ leaf_id?: string; thread_id: string; events: readonly FlowerParentEvent[]; first_event_id?: string; last_event_id?: string; next_after_event_id?: string; previous_before_event_id?: string }>;
+export type FlowerParentEventQuery = Readonly<{ leaf_id?: string; after_ordinal?: number; before_ordinal?: number; action: 'list' | 'read'; event_id?: string; first_event_id?: string; last_event_id?: string; after_event_id?: string; before_event_id?: string; latest?: boolean; limit?: number }>;
 
 export type FlowerRuntimeCurrentView = Readonly<{
   window?: FlowerHistoryWindow;
@@ -1689,10 +1722,13 @@ export type FlowerSurfaceAdapter = Readonly<{
   loadThread: (threadID: string, signal: AbortSignal) => Promise<FlowerThreadView>;
   releaseHistory?: (threadID: string, input: { observer_id: string; reading_revision: number; subagent?: boolean }) => Promise<void>;
   loadHistory?: (threadID: string, input: FlowerHistoryRequest, signal: AbortSignal) => Promise<FlowerThreadView>;
+  loadActivityValue?: (threadID: string, input: FlowerActivityValueRequest, signal: AbortSignal) => Promise<FlowerActivityValue>;
+  loadActivityStructure?: (threadID: string, input: FlowerActivityStructureRequest, signal: AbortSignal) => Promise<FlowerActivityStructurePage>;
+  loadActivityField?: (threadID: string, input: FlowerActivityFieldRequest, signal: AbortSignal) => Promise<FlowerActivityFieldChunk>;
   loadHistoryItem?: (threadID: string, itemID: string, signal: AbortSignal) => Promise<FlowerRuntimeCurrentItem>;
   loadHistoryBody?: (threadID: string, input: FlowerHistoryBodyRequest, signal: AbortSignal) => Promise<FlowerHistoryBodyChunk>;
   connectLiveStream?: (input: FlowerLiveStreamConnectInput) => AsyncIterable<FlowerLiveStreamEnvelope>;
-  readParentEvents?: (threadID: string, query: FlowerParentEventQuery) => Promise<FlowerParentEventPage>;
+  readParentEvents?: (threadID: string, query: FlowerParentEventQuery, signal?: AbortSignal) => Promise<FlowerParentEventPage>;
   loadSubagentDetail: (parentThreadID: string, childThreadID: string, input?: FlowerHistoryRequest, signal?: AbortSignal) => Promise<FlowerSubagentDetail>;
   operateSubagentInput?: (parentThreadID: string, childThreadID: string, input: FlowerSubagentInputOperation) => Promise<FlowerSubagentDetail>;
   markThreadRead: (threadID: string, snapshot: FlowerThreadActivitySnapshot) => Promise<FlowerThreadReadStatus>;
@@ -1745,7 +1781,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerSubmitInputReceipt>;
   submitApproval: (input: FlowerSubmitApprovalRequest) => Promise<FlowerApprovalCommandResult>;
   loadToolPreview?: (input: FlowerToolPreviewRequest) => Promise<FlowerToolPreview>;
-  readTerminalProcess?: (input: FlowerTerminalProcessReadRequest) => Promise<FlowerTerminalProcessSnapshot>;
+  readTerminalProcess?: (input: FlowerTerminalProcessReadRequest, signal?: AbortSignal) => Promise<FlowerTerminalProcessSnapshot>;
   getWorkingDirectoryPathContext?: () => Promise<FlowerWorkingDirectoryPathContext>;
   directoryFavorites?: (failureMessage: () => string) => DirectoryFavorites | undefined;
   listWorkingDirectoryEntries?: (input: FlowerWorkingDirectoryListInput) => Promise<readonly FlowerWorkingDirectoryEntry[]>;

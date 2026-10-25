@@ -168,6 +168,30 @@ describe('bounded history body residency', () => {
 
 
 describe('history page anchors', () => {
+  it.each(['thread_id', 'turn_id', 'run_id', 'role'] as const)('does not reuse a message across a changed %s', field => {
+    const { current, initial, record } = fixture();
+    const before = record.initializeThread().messages[0];
+    const next = { ...current, view_version: 2, items: [{ ...current.items![0], text: '中文🌸 next' }] };
+    if (field === 'thread_id') next.thread_id = 'another-thread';
+    else if (field === 'role') next.items[0].kind = 'user';
+    else next.items[0][field] = 'another';
+    const refreshed = createRuntimeThreadRecord(next, applyFlowerRuntimeCurrentView({ ...initial, thread_id: next.thread_id }, next), record);
+    expect(refreshed.initializeThread().messages[0]).not.toBe(before);
+    expect(before.content).toBe('中文🌸');
+  });
+
+  it('keeps an overlapping live message mounted when a window baseline advances its text', () => {
+    const { current, initial, record } = fixture();
+    const before = record.initializeThread().messages[0];
+    const next = { ...current, view_version: 2, items: [{ ...current.items![0], text: '中文🌸 next' }] };
+    const refreshed = createRuntimeThreadRecord(next, applyFlowerRuntimeCurrentView(initial, next), record);
+    expect(refreshed.initializeThread().messages[0]).toBe(before);
+    expect(before.content).toBe('中文🌸 next');
+    refreshed.apply(refreshed.initializeThread(), append(2, '!', 15));
+    expect(before.content).toBe('中文🌸 next!');
+    expect(before.text_source?.read(0)).toEqual([' next', '!']);
+  });
+
   it('advances page edges with accepted membership changes', () => {
     const { current, initial } = fixture();
     const page = { ...current, window: { first_item_id: 'one', last_item_id: 'one', has_before: true, has_after: false } };

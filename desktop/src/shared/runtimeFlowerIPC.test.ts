@@ -8,7 +8,7 @@ import {
 } from './runtimeFlowerIPC';
 
 describe('runtime Flower read cancellation', () => {
-  it.each(['history', 'history-item', 'history-body'])('cancels the canonical %s read without authorizing mutation routes', suffix => {
+  it.each(['history', 'history-item', 'history-body', 'activity-value', 'activity-field', 'activity-structure', 'subagent-events'])('cancels the canonical %s read without authorizing mutation routes', suffix => {
     expect(isRuntimeFlowerCancellableRead({ method: 'POST', path: `/_redeven_proxy/api/ai/threads/thread-1/${suffix}`, body: {} })).toBe(true);
     expect(isRuntimeFlowerCancellableRead({ method: 'POST', path: `/_redeven_proxy/api/ai/threads/thread-1/${suffix}/extra`, body: {} })).toBe(false);
     expect(isRuntimeFlowerCancellableRead({ method: 'POST', path: `/_redeven_proxy/api/ai/threads/thread-1/${suffix}`, staging_scope_id: 'scope', body: {} })).toBe(false);

@@ -18,13 +18,17 @@ import (
 
 // FlowerHistoryWindow is disposable reading state, never a journal cursor.
 type FlowerHistoryWindow struct {
-	FirstItemID string `json:"first_item_id,omitempty"`
-	LastItemID  string `json:"last_item_id,omitempty"`
-	HasBefore   bool   `json:"has_before"`
-	HasAfter    bool   `json:"has_after"`
+	LeafID      string                   `json:"leaf_id,omitempty"`
+	Summary     *flruntime.ThreadSummary `json:"-"`
+	FirstItemID string                   `json:"first_item_id,omitempty"`
+	LastItemID  string                   `json:"last_item_id,omitempty"`
+	HasBefore   bool                     `json:"has_before"`
+	HasAfter    bool                     `json:"has_after"`
 }
 
 type FlowerHistoryRequest struct {
+	AnchorOffset    int                             `json:"anchor_offset,omitempty"`
+	ItemIDs         []string                        `json:"item_ids,omitempty"`
 	ParentThreadID  string                          `json:"-"`
 	ObserverID      string                          `json:"observer_id,omitempty"`
 	ReadingRevision uint64                          `json:"reading_revision,omitempty"`
@@ -146,7 +150,7 @@ func flowerHistoryCurrent(update flruntime.ThreadUpdate) (flruntime.ThreadView, 
 	if update.RestoredInputs != nil {
 		current.RestoredInputs = update.RestoredInputs.Value
 	}
-	return current, &FlowerHistoryWindow{w.FirstItemID, w.LastItemID, w.HasBefore, w.HasAfter}
+	return current, &FlowerHistoryWindow{LeafID: w.LeafID, Summary: w.Summary, FirstItemID: w.FirstItemID, LastItemID: w.LastItemID, HasBefore: w.HasBefore, HasAfter: w.HasAfter}
 }
 
 func (s *Service) GetFlowerThreadHistory(ctx context.Context, meta *session.Meta, threadID string, input FlowerHistoryRequest) (*FlowerThreadDetail, error) {
@@ -158,23 +162,14 @@ func (s *Service) GetFlowerThreadHistory(ctx context.Context, meta *session.Meta
 	if err != nil {
 		return nil, err
 	}
-	runtime, err := s.typedFloretRuntime()
+	// Metadata and the read watermark come from the same explicit baseline.
+	// No separate preparation window or independently sampled Summary is needed.
+	current, window, err := s.readFlowerHistoryForObserver(ctx, meta, scope, input, flruntime.ThreadWindowInput{ThreadID: identity.ThreadID(threadID), AnchorID: input.AnchorID, AnchorOffset: input.AnchorOffset, Direction: input.Direction, Limit: input.Limit, ItemIDs: input.ItemIDs, IncludeSummary: true})
 	if err != nil {
 		return nil, err
 	}
-	// Prepare the canonical actor before Summary. Read the accepted window after
-	// Summary so the read watermark cannot claim unseen content. This bounded
-	// preparation never materializes a complete View.
-	if _, _, err := readFlowerHistory(ctx, runtime, scope, flruntime.ThreadWindowInput{ThreadID: identity.ThreadID(threadID), Limit: 1}); err != nil {
-		return nil, err
-	}
-	summary, err := threadSummaryFromRuntime(ctx, runtime, identity.ThreadID(threadID))
-	if err != nil {
-		return nil, err
-	}
-	current, window, err := s.readFlowerHistoryForObserver(ctx, meta, scope, input, flruntime.ThreadWindowInput{ThreadID: identity.ThreadID(threadID), AnchorID: input.AnchorID, Direction: input.Direction, Limit: input.Limit})
-	if err != nil {
-		return nil, err
+	if window == nil || window.Summary == nil || window.Summary.ID != current.ThreadID {
+		return nil, errors.New("canonical history baseline has no matching summary")
 	}
 	current.Items, err = s.hydrateActivityTargets(ctx, meta, threadID, current.Items)
 	if err != nil {
@@ -184,7 +179,7 @@ func (s *Service) GetFlowerThreadHistory(ctx context.Context, meta *session.Meta
 	if err != nil {
 		return nil, err
 	}
-	thread, err := s.threadViewFromRecord(ctx, settings, current, &summary)
+	thread, err := s.threadViewFromRecord(ctx, settings, current, window.Summary)
 	if err != nil {
 		return nil, err
 	}
@@ -311,48 +306,31 @@ func (s *Service) GetFlowerHistoryItem(ctx context.Context, meta *session.Meta, 
 			}
 		}
 	}
-	// Released empty activity fields carry canonical presentation defaults.
-	// Delegate this rare explicit expansion to Floret instead of duplicating
-	// its historical presentation synthesis in the host.
-	for _, body := range item.ActivityBodies {
-		if body.Bytes != 0 {
-			continue
-		}
-		complete, err := s.threadRuntime.View(ctx, current.ThreadID)
-		if err != nil {
-			return nil, err
-		}
-		found := false
-		for _, candidate := range complete.Items {
-			if candidate.ID == itemID {
-				item = candidate
-				found = true
-				break
-			}
-		}
-		if !found {
-			return nil, flruntime.ErrThreadNotFound
-		}
-		break
-	}
 	if len(item.ActivityBodies) > 0 {
 		if item.Activity == nil {
 			return nil, errors.New("activity body has no activity")
 		}
 		var presentation *fltools.ActivityPresentation
 		for _, body := range item.ActivityBodies {
-			value, err := readPart(body.EntryID, flruntime.ThreadBodyActivityJSON, body.Bytes, body.SHA256)
-			if err != nil {
-				return nil, err
+			// Empty sources carry the canonical owner's default. Merge every
+			// source in order without loading unrelated conversation history.
+			next := body.DefaultPresentation
+			if body.Bytes != 0 {
+				value, err := readPart(body.EntryID, flruntime.ThreadBodyActivityJSON, body.Bytes, body.SHA256)
+				if err != nil {
+					return nil, err
+				}
+				if err := json.Unmarshal([]byte(value), &next); err != nil {
+					return nil, err
+				}
 			}
-			var next fltools.ActivityPresentation
-			if err := json.Unmarshal([]byte(value), &next); err != nil {
-				return nil, err
+			if next == nil {
+				return nil, errors.New("activity source has no canonical presentation")
 			}
 			if err := next.Validate(); err != nil {
 				return nil, err
 			}
-			presentation = fltools.MergeActivityPresentations(presentation, &next)
+			presentation = fltools.MergeActivityPresentations(presentation, next)
 		}
 		activity := *item.Activity
 		activity.Presentation = presentation

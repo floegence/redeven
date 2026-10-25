@@ -19,14 +19,36 @@ Readiness controls reveal; elapsed time controls feedback only.
 ## Selection and navigation
 Rail feedback precedes visible commit by two animation callbacks and a task; hidden documents do not wait for frames. Latest intent supersedes earlier work; summary effects cannot bypass foreground coordination.
 
-Reveal only after accepted detail, measurable layout and visible historical text settle. The scroll owner positions without smooth initial scrolling or time-based fallback. One cancellable 200 ms deadline spans detail/body/layout loading feedback; ready content/errors appear immediately. Selection, New chat and disposal cancel old feedback; frame, composer/navigation remain stable and body failures offer Retry.
+Reveal only after accepted detail, measurable layout and visible historical text settle. The scroll owner positions without smooth initial scrolling or time-based fallback. One cancellable 200 ms deadline spans detail/body/layout loading feedback; ready content/errors appear immediately. Selection, New chat and disposal cancel old feedback; frame, composer/navigation remain stable and failed body reads remain local and retry with renewed viewport demand or reconnect.
 
 Cached destinations flush render effects; visible rows pass `checkVisibility({ contentVisibilityAuto: true })`. ResizeObserver adjusts above-viewport growth before paint, while reveal/body work stays in rAF; visibility events reuse this pass. Navigation clears arrival motion. No positioning polls or per-row observers. Explicit wheel/touch/scrollbar/keyboard input can interrupt preparation; scroll events alone cannot.
 
 Two read slots prioritize visible text/margin and cancel obsolete demand. ThreadCache retains immutable bodies. Growth/refresh/completion never restart selection or remove accepted prose; [live delivery](flower-live-timeline.md) owns validation/retry. Selection opens Latest; reading restoration is separate. Ordinary threads sort by descending creation time, then ascending ThreadID.
 
+## Continuous history and concurrent activity
+
+Users browse earlier and newer history by scrolling. Viewport demand reads
+canonical windows automatically; no load-earlier or load-newer action is part
+of normal navigation. Retained windows preserve visible, selected and focused
+rows while gaps are filled in either direction. Stable item identities preserve
+expanded details and scroll anchors during live appends and replacements.
+The accepted history baseline belongs to the live observer and reading revision;
+superseded navigation cannot replace a newer selection.
+
+Collapsed tools and parent reports retain presentation previews. Full activity
+bodies and report text are requested when disclosed, under fresh authorization.
+Collapse, navigation and disposal cancel unused demand; reconnect restores active
+consumers. Retry is local to an actual read failure. Released empty activity
+sources use Floret's canonical default presentation in source order.
+
+Field-only activity presentation remains disabled for ordinary product history
+until complete renderer parity is qualified. Complete body expansion is retained;
+computer evidence and target hydration can still require full canonical reads.
+This release does not promise a fixed opening latency or globally bounded memory
+for all expanded terminal output.
+
 ## Detail read ownership
-Released Floret's `ThreadSummaryReader.Summary` owns summaries; ThreadCache owns selection/detail with twelve entries. The bounded coordinator shares navigation, confirmation and reference-preflight demand. Cancellation never reconnects the workspace stream.
+Floret supplies canonical summaries, source-bound windows and exact body reads; ThreadCache owns selection/detail with twelve entries. The bounded coordinator shares navigation, confirmation and reference-preflight demand. Cancellation never reconnects the workspace stream.
 
 # Boundaries
 

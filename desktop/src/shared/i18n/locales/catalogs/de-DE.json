@@ -3482,7 +3482,7 @@
       "verifying": "Unterhaltungsdaten werden überprüft...",
       "recovering": "Warten auf die Verfügbarkeit des Unterhaltungsspeichers...",
       "restoring": "Unterhaltungen werden aus der ausgewählten Sicherung wiederhergestellt...",
-      "indexing": "Suchindex wird erstellt…",
+      "indexing": "Einmalige Vorbereitung des Gesprächsverlaufs für das Upgrade. Flower öffnet sich danach automatisch.",
       "preparing": "Unterhaltungen werden vorbereitet…",
       "stopping": "Wird sicher angehalten…"
     },

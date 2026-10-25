@@ -249,6 +249,17 @@ describe('mapFlowerThread title contract', () => {
 });
 
 describe('mapFlowerActivityItem structured rows contract', () => {
+  it('preserves legal whitespace around structured text and Markdown', () => {
+    for (const format of ['text', 'markdown']) {
+      const content = ' '.repeat(70000) + '**Retained content**' + '\n'.repeat(70000);
+      const mapped = mapFlowerActivityItem({ item_id: 'whitespace', kind: 'tool', status: 'success',
+        presentation: { renderer: 'structured', payload: { rows: [{ content, format }] } } });
+      expect((mapped?.payload?.rows as { content: string }[])[0].content).toBe(content);
+      expect(() => mapFlowerActivityItem({ item_id: 'oversized', kind: 'tool', status: 'success',
+        presentation: { renderer: 'structured', payload: { rows: [{ content: 'a'.repeat(8001), format }] } } }))
+        .toThrow('exceeds the structured activity limit');
+    }
+  });
   it('preserves literal long script inputs and explicit empty output across the wire', () => {
     const content = '  await ui.observe();\n' + '// comment\n'.repeat(1200);
     const payload = { inputs: [{ content, format: 'code', language: 'javascript', truncated: false }], rows_provided: true };

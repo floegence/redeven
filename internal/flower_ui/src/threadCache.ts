@@ -194,16 +194,17 @@ export type ThreadCache = {
   replaceSummaries(summaries: readonly FlowerThreadSummary[]): ThreadCache;
   resetRootSummaries(summaries: readonly FlowerThreadSummary[]): ThreadCache;
   beginRuntimeRead(id: string): () => void;
+  runtimeItemIDs(threadID: string): readonly string[];
   runtimeItem(threadID: string, itemID: string): FlowerRuntimeCurrentItem | undefined;
   bodyOffset(threadID: string, itemID: string): number | undefined;
   appendBody(threadID: string, chunk: import('./contracts/flowerSurfaceContracts').FlowerHistoryBodyChunk): boolean;
   hydrateItem(threadID: string, expected: FlowerRuntimeCurrentItem, loaded: FlowerRuntimeCurrentItem): boolean;
   receiveView(
     view: ThreadView,
-    options?: Readonly<{ preserveSummary?: boolean; current?: FlowerRuntimeCurrentView }>,
+    options?: Readonly<{ preserveSummary?: boolean; current?: FlowerRuntimeCurrentView; installedBaseline?: boolean }>,
   ): ThreadViewReceiveResult;
-  receiveCurrent(view: ThreadDetailView, options?: Readonly<{ preserveSummary?: boolean; current?: FlowerRuntimeCurrentView }>): ThreadViewReceiveResult;
-  receiveUpdate(update: FlowerRuntimeUpdate): Readonly<{ cache: ThreadCache; observation?: FlowerRuntimeCurrentView; accepted: boolean }>;
+  receiveCurrent(view: ThreadDetailView, options?: Readonly<{ preserveSummary?: boolean; current?: FlowerRuntimeCurrentView; installedBaseline?: boolean }>): ThreadViewReceiveResult;
+  receiveUpdate(update: FlowerRuntimeUpdate, options?: Readonly<{ installedInterest?: boolean }>): Readonly<{ cache: ThreadCache; observation?: FlowerRuntimeCurrentView; accepted: boolean }>;
   updateDetailAdjuncts(id: string, update: (thread: ThreadDetail) => ThreadDetail): ThreadCache;
   updateSummaryAdjuncts(id: string, update: (thread: ThreadDetail) => ThreadDetail): ThreadCache;
   evict(id: string): ThreadCache;
@@ -266,7 +267,7 @@ function createCache(
   reads: BaselineReads = new Map(),
   retainedIDs: ReadonlySet<string> = new Set(),
 ): ThreadCache {
-  const receive = (view: ThreadDetailView, title: ThreadTitleSnapshot | undefined, options?: Readonly<{ preserveSummary?: boolean; current?: FlowerRuntimeCurrentView }>): ThreadViewReceiveResult => {
+  const receive = (view: ThreadDetailView, title: ThreadTitleSnapshot | undefined, options?: Readonly<{ preserveSummary?: boolean; current?: FlowerRuntimeCurrentView; installedBaseline?: boolean }>): ThreadViewReceiveResult => {
     const id = view.thread.thread_id.trim();
     if (!id) return {
       cache,
@@ -280,7 +281,7 @@ function createCache(
     const navigationChanged = !!stored && enriched !== stored.thread;
     const current = stored && navigationChanged ? { ...stored, thread: enriched! } : stored;
     const classified = classifyThreadView(current, view);
-    if (classified === 'stale' && options?.current?.window && reads.has(id)) throw new FlowerLiveSyncError('History read was overtaken by a newer baseline.');
+    if (classified === 'stale' && options?.current?.window && reads.has(id) && !options.installedBaseline) throw new FlowerLiveSyncError('History read was overtaken by a newer baseline.');
     const runtimeState = classified === 'unchanged' && options?.current?.window && reads.has(id) ? 'accepted' : classified;
     const activityState = classifyThreadActivity(current, view);
     const settingsState = classifyThreadSettings(current, view);
@@ -374,6 +375,7 @@ function createCache(
   const cache: ThreadCache = {
     selectedId,
     summaries,
+    runtimeItemIDs(threadID) { return views.get(threadID)?.runtime?.itemIDs() ?? []; },
     runtimeItem(threadID, itemID) { return views.get(threadID)?.runtime?.item(itemID); },
     bodyOffset(threadID, itemID) { return views.get(threadID)?.runtime?.bodyOffset(itemID); },
     appendBody(threadID, chunk) { return views.get(threadID)?.runtime?.appendBody(chunk) ?? false; },
@@ -442,10 +444,10 @@ function createCache(
     receiveCurrent(view, options) {
       return receive({ ...view, contentRevision: view.contentRevision ?? views.get(view.thread.thread_id)?.view.contentRevision ?? 0, thread: detailOnly(view.thread) }, undefined, options);
     },
-    receiveUpdate(update) {
+    receiveUpdate(update, options) {
       const entry = views.get(update.thread_id);
       const pending = reads.get(update.thread_id);
-      if (pending && entry?.view.thread.history_window) {
+      if (pending && entry?.view.thread.history_window && !options?.installedInterest) {
         if (pending.updates.length >= 64) throw new FlowerLiveSyncError('Flower baseline update queue overflow.');
         pending.updates.push(update);
         return { cache, accepted: false };

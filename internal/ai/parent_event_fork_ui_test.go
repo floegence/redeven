@@ -126,6 +126,41 @@ func TestFlowerForkParentEventScopeThroughService(t *testing.T) {
 	}
 }
 
+func TestFlowerParentEventsScrollBackwardThroughPublishedService(t *testing.T) {
+	f := newParentEventForkFixture(t)
+	meta := testSendTurnMeta()
+	all, err := f.service.GetFlowerParentEvents(t.Context(), meta, f.source, ParentEventReadRequest{Action: "list"})
+	if err != nil || len(all.Events) != 2 {
+		t.Fatalf("canonical events: %+v %v", all, err)
+	}
+	latest, err := f.service.GetFlowerParentEvents(t.Context(), meta, f.source, ParentEventReadRequest{Action: "list", Latest: true, Limit: 1})
+	if err != nil || len(latest.Events) != 1 || latest.Events[0].ID != all.Events[1].ID || latest.PreviousBeforeEventID != all.Events[1].ID {
+		t.Fatalf("latest event page: %+v %v", latest, err)
+	}
+	earlier, err := f.service.GetFlowerParentEvents(t.Context(), meta, f.source, ParentEventReadRequest{Action: "list", BeforeEventID: latest.PreviousBeforeEventID, Limit: 1})
+	if err != nil || len(earlier.Events) != 1 || earlier.Events[0].ID != all.Events[0].ID || earlier.Events[0].Message != "" || earlier.PreviousBeforeEventID != "" {
+		t.Fatalf("earlier metadata: %+v %v", earlier, err)
+	}
+	full, err := f.service.GetFlowerParentEvents(t.Context(), meta, f.source, ParentEventReadRequest{Action: "read", FirstEventID: all.FirstEventID, LastEventID: all.LastEventID, BeforeEventID: latest.PreviousBeforeEventID, Limit: 1})
+	if err != nil || len(full.Events) != 1 || full.Events[0].Message != f.report {
+		t.Fatalf("disclosed report: %+v %v", full, err)
+	}
+	for _, query := range []ParentEventReadRequest{
+		{Action: "list", Latest: true, AfterEventID: all.FirstEventID},
+		{Action: "list", Latest: true, EventID: all.FirstEventID},
+		{Action: "list", Latest: true, Limit: 101},
+	} {
+		if _, err := f.service.GetFlowerParentEvents(t.Context(), meta, f.source, query); err == nil {
+			t.Fatalf("invalid backward request accepted: %+v", query)
+		}
+	}
+	denied := *meta
+	denied.EndpointID = "unrelated-endpoint"
+	if _, err := f.service.GetFlowerParentEvents(t.Context(), &denied, f.source, ParentEventReadRequest{Action: "list", Latest: true}); err == nil {
+		t.Fatal("backward page bypassed endpoint authority")
+	}
+}
+
 // Opt-in browser qualification shares the real fixture with the default Go
 // contract test. Its only owner is the Flower UI qualification entry point.
 func TestFlowerForkParentEventsUI(t *testing.T) {
@@ -232,5 +267,30 @@ func TestFlowerForkParentEventsUI(t *testing.T) {
 	command.Stderr = os.Stderr
 	if err := command.Run(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestFlowerHistoryParentReceiptsRetainTheirAcceptedPath(t *testing.T) {
+	f := newParentEventForkFixture(t)
+	detail, err := f.service.GetFlowerThreadHistory(t.Context(), testSendTurnMeta(), f.source, FlowerHistoryRequest{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detail.Window == nil || detail.Window.LeafID == "" || detail.Current.ParentEvents == nil || detail.Current.ParentEvents.LeafID == "" {
+		t.Fatalf("history components lost source paths: window=%+v events=%+v", detail.Window, detail.Current.ParentEvents)
+	}
+	all := detail.Current.ParentEvents
+	bounded, err := f.service.GetFlowerParentEvents(t.Context(), testSendTurnMeta(), f.source, ParentEventReadRequest{Action: "list", LeafID: all.LeafID, AfterOrdinal: all.Events[0].CanonicalOrdinal - 1, BeforeOrdinal: all.Events[0].CanonicalOrdinal + 1, Limit: 1})
+	if err != nil || len(bounded.Events) != 1 || bounded.Events[0].ID != all.Events[0].ID || bounded.Events[0].Message != "" || bounded.LeafID != all.LeafID {
+		t.Fatalf("bounded receipts: %+v %v", bounded, err)
+	}
+	for _, query := range []ParentEventReadRequest{
+		{Action: "read", LeafID: all.LeafID, EventID: all.Events[0].ID},
+		{Action: "list", AfterOrdinal: 1, AfterEventID: all.Events[0].ID},
+		{Action: "list", BeforeOrdinal: 2, Latest: true},
+	} {
+		if _, err := f.service.GetFlowerParentEvents(t.Context(), testSendTurnMeta(), f.source, query); err == nil {
+			t.Fatalf("accepted conflicting query: %+v", query)
+		}
 	}
 }

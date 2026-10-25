@@ -96,18 +96,39 @@ func (s *Service) GetFlowerParentEvents(ctx context.Context, meta *session.Meta,
 	if !ok {
 		return flruntime.ParentEventPage{}, errors.New("parent event runtime unavailable")
 	}
-	args := map[string]any{"action": query.Action, "event_id": query.EventID, "first_event_id": query.FirstEventID, "last_event_id": query.LastEventID, "after_event_id": query.AfterEventID}
-	if query.Limit != 0 {
-		args["limit"] = query.Limit
+	limit := query.Limit
+	if limit == 0 {
+		limit = 50
 	}
-	return readParentEventPage(ctx, service, identity.ThreadID(threadID), args)
+	if limit < 1 || limit > 100 {
+		return flruntime.ParentEventPage{}, errors.New("limit must be between 1 and 100")
+	}
+	switch query.Action {
+	case "list":
+		if query.EventID != "" || query.FirstEventID != "" || query.LastEventID != "" {
+			return flruntime.ParentEventPage{}, errors.New("list does not accept fixed event ranges")
+		}
+		return service.ListParentEvents(ctx, flruntime.ListParentEventsInput{ThreadID: identity.ThreadID(threadID), LeafID: query.LeafID, AfterOrdinal: query.AfterOrdinal, BeforeOrdinal: query.BeforeOrdinal, AfterEventID: query.AfterEventID, BeforeEventID: query.BeforeEventID, Latest: query.Latest, Limit: limit})
+	case "read":
+		if query.LeafID != "" || query.AfterOrdinal != 0 || query.BeforeOrdinal != 0 {
+			return flruntime.ParentEventPage{}, errors.New("report detail does not accept source position selectors")
+		}
+		return service.ReadParentEvents(ctx, flruntime.ReadParentEventsInput{ThreadID: identity.ThreadID(threadID), EventID: query.EventID, FirstEventID: query.FirstEventID, LastEventID: query.LastEventID, AfterEventID: query.AfterEventID, BeforeEventID: query.BeforeEventID, Latest: query.Latest, Limit: limit})
+	default:
+		return flruntime.ParentEventPage{}, errors.New("unsupported event page action")
+	}
 }
 
 type ParentEventReadRequest struct {
-	Action       string `json:"action"`
-	EventID      string `json:"event_id,omitempty"`
-	FirstEventID string `json:"first_event_id,omitempty"`
-	LastEventID  string `json:"last_event_id,omitempty"`
-	AfterEventID string `json:"after_event_id,omitempty"`
-	Limit        int    `json:"limit,omitempty"`
+	LeafID        string `json:"leaf_id,omitempty"`
+	AfterOrdinal  uint64 `json:"after_ordinal,omitempty"`
+	BeforeOrdinal uint64 `json:"before_ordinal,omitempty"`
+	BeforeEventID string `json:"before_event_id,omitempty"`
+	Latest        bool   `json:"latest,omitempty"`
+	Action        string `json:"action"`
+	EventID       string `json:"event_id,omitempty"`
+	FirstEventID  string `json:"first_event_id,omitempty"`
+	LastEventID   string `json:"last_event_id,omitempty"`
+	AfterEventID  string `json:"after_event_id,omitempty"`
+	Limit         int    `json:"limit,omitempty"`
 }

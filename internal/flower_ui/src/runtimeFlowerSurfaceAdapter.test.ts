@@ -838,15 +838,16 @@ describe('runtime Flower surface adapter read state', () => {
     }));
     const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ readTerminalProcess }));
 
+    const signal = new AbortController().signal;
     const result = await adapter.readTerminalProcess?.({
       run_id: ' run_live ',
       process_id: ' tp_live ',
 	  after_seq: 2,
-    });
+    }, signal);
 
     expect(readTerminalProcess).toHaveBeenCalledWith('run_live', 'tp_live', {
       after_seq: 2,
-    });
+    }, signal);
     expect(result?.output).toBe('tick 1\n');
   });
 

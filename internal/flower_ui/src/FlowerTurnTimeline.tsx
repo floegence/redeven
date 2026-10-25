@@ -23,6 +23,8 @@ export function FlowerTurnTimeline(props: Readonly<{
   reducedMotion: Accessor<boolean>;
   liveConfirmed?: Accessor<boolean>;
   copy: FlowerTurnProcessCopy;
+  readingBreaks?: ReadonlySet<string>;
+  renderBefore?: (entry: Accessor<FlowerTimelineEntry>) => JSX.Element;
   renderEntry: (entry: Accessor<FlowerTimelineEntry>, visible: Accessor<boolean>) => JSX.Element;
 }>) {
   const keys = createMemo(() => props.entries.map((entry) => JSON.stringify([props.thread?.thread_id, entry.key])));
@@ -141,7 +143,7 @@ export function FlowerTurnTimeline(props: Readonly<{
   let previousSequences: { threadID?: string; value: FlowerToolSequenceProjection } | undefined;
   const sequences = createMemo(() => {
     const previous = previousSequences?.threadID === props.thread?.thread_id ? previousSequences?.value : undefined;
-    const next = projectFlowerToolSequences(props.entries, props.thread?.thread_id, props.thread?.turns ?? [], previous);
+    const next = projectFlowerToolSequences(props.entries, props.thread?.thread_id, props.thread?.turns ?? [], previous, props.readingBreaks);
     if (previous) untrack(() => {
       for (const group of next.groups.values()) {
         const addedKeys = new Set(group.nodeKeys.filter(key => !previous.members.has(key)));
@@ -355,6 +357,6 @@ export function FlowerTurnTimeline(props: Readonly<{
   return <FlowerActivityTitleRevealContext.Provider value={titleReveal}><FlowerToolSequenceContext.Provider value={sequenceContext}><div class="flower-turn-timeline" ref={timeline}><For each={keys()}>{(token) => {
     const key = (JSON.parse(token) as [string, string])[1];
     const entry = createMemo(() => entries().get(key)!);
-    return row(key, entry);
+    return <>{props.renderBefore?.(entry)}{row(key, entry)}</>;
   }}</For></div></FlowerToolSequenceContext.Provider></FlowerActivityTitleRevealContext.Provider>;
 }

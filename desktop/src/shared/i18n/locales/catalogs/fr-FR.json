@@ -3483,7 +3483,7 @@
       "verifying": "Validation des données des conversations...",
       "recovering": "En attente de la disponibilité du stockage des conversations...",
       "restoring": "Restauration des conversations depuis la sauvegarde sélectionnée...",
-      "indexing": "Création de l’index de recherche…",
+      "indexing": "Préparation unique de l’historique pour la mise à niveau. Flower s’ouvrira automatiquement à la fin.",
       "preparing": "Préparation des conversations…",
       "stopping": "Arrêt sécurisé en cours…"
     },

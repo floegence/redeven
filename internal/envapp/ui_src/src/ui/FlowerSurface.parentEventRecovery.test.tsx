@@ -6,132 +6,120 @@ import { createParentEventReading } from '../../../../flower_ui/src/parentEvents
 import type { FlowerParentEvent, FlowerParentEventPage } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 const event = (id: string, message?: string): FlowerParentEvent => ({ id, parent_thread_id: 'parent', source_thread_id: 'child', source_turn_id: 'turn', source_run_id: 'run', source_entry_id: 'entry', kind: 'report', received_at: '2026-10-18T00:00:00Z', admitted: false, ...(message ? { message } : {}) });
 const page = (events: FlowerParentEvent[], more = false): FlowerParentEventPage => ({ thread_id: 'parent', events, first_event_id: 'first', last_event_id: 'last', ...(more ? { next_after_event_id: events.at(-1)!.id } : {}) });
-const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
+const body = (id: string, message: string): FlowerParentEventPage => ({ thread_id: 'parent', events: [event(id, message)], first_event_id: id, last_event_id: id });
+const flush = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(); };
 afterEach(() => vi.useRealTimers());
 function mount(read: Parameters<typeof createParentEventReading>[0]['read'], initial: FlowerParentEventPage) {
   const [value, setValue] = createSignal(initial);
   const [epoch, setEpoch] = createSignal(1);
+  const [selected, setSelected] = createSignal('parent');
+  const [reader, setReader] = createSignal(read);
   let reading!: ReturnType<typeof createParentEventReading>;
   const host = document.createElement('div'); document.body.append(host);
-  const dispose = render(() => { reading = createParentEventReading({ threadID: 'parent', get page() { return value(); }, read, get connectionEpoch() { return epoch(); }, timeoutMessage: 'timeout' }); return null; }, host);
+  const dispose = render(() => { reading = createParentEventReading({ get threadID() { return selected(); }, get page() { return value(); }, get read() { return reader(); }, get connectionEpoch() { return epoch(); }, timeoutMessage: 'timeout' }); return null; }, host);
   onTestFinished(() => { dispose(); host.remove(); });
-  return { reading, setValue, setEpoch, dispose };
+  return { reading, setValue, setEpoch, setSelected, setReader, dispose };
 }
-it('keeps empty event pages idle without making a request', async () => {
+it('keeps empty and collapsed event pages idle without requesting bodies', async () => {
   const read = vi.fn();
-  const { reading } = mount(read, JSON.parse('{"thread_id":"parent","events":[]}'));
+  const { reading, setValue } = mount(read, { thread_id: 'parent', events: [] });
   await flush();
-  expect(reading.events()).toEqual([]); expect(reading.failed()).toBe(false); expect(reading.busy()).toBe(false);
+  setValue(page([event('first')])); await flush();
+  expect(reading.events()).toHaveLength(1); expect(reading.failed()).toBe(false); expect(reading.busy()).toBe(false);
   expect(read).not.toHaveBeenCalled();
 });
-it('retains the failed page when reading becomes unavailable and resumes when restored', async () => {
+it('retains visible demand when the reader becomes unavailable and resumes when restored', async () => {
   vi.useFakeTimers();
-  const pending = vi.fn(() => new Promise<FlowerParentEventPage>(() => {}));
-  const restored = vi.fn(async () => page([event('first', 'Restored'), event('last', 'Last')]));
-  const [reader, setReader] = createSignal<NonNullable<Parameters<typeof createParentEventReading>[0]['read']> | undefined>(pending);
-  let reading!: ReturnType<typeof createParentEventReading>;
-  const host = document.createElement('div'); document.body.append(host);
-  const dispose = render(() => { reading = createParentEventReading({ threadID: 'parent', page: page([event('first')]), get read() { return reader(); } }); return null; }, host);
-  onTestFinished(() => { dispose(); host.remove(); });
+  let finish!: (value: FlowerParentEventPage) => void;
+  const pending = vi.fn(() => new Promise<FlowerParentEventPage>(resolve => { finish = resolve; }));
+  const restored = vi.fn(async () => body('first', 'Restored'));
+  const { reading, setReader } = mount(pending, page([event('first')]));
+  const release = reading.retainBody('first');
   await flush(); setReader(undefined); await flush();
-  expect(reading.failed()).toBe(true); expect(reading.busy()).toBe(false); expect(vi.getTimerCount()).toBe(0);
+  expect(reading.bodyState('first')).toBe('failed'); expect(vi.getTimerCount()).toBe(0);
   setReader(() => restored); await flush();
-  expect(reading.events()[0].message).toBe('Restored'); expect(reading.failed()).toBe(false);
+  finish(body('first', 'Obsolete')); await flush();
+  expect(reading.events()[0].message).toBe('Restored'); expect(reading.bodyState('first')).toBe('ready'); release();
 });
-it('keeps a missing reader recoverable without starting a timer or request', async () => {
+it('reports missing readers only for expanded bodies without starting timers', async () => {
   vi.useFakeTimers();
   const { reading } = mount(undefined, page([event('first')]));
-  await flush();
-  expect(reading.failed()).toBe(true); expect(reading.recovering()).toBe(true); expect(reading.busy()).toBe(false);
-  await reading.retry();
-  expect(reading.failed()).toBe(true); expect(vi.getTimerCount()).toBe(0);
+  await flush(); expect(reading.bodyState('first')).toBeUndefined();
+  const release = reading.retainBody('first'); await flush();
+  expect(reading.bodyState('first')).toBe('failed'); expect(vi.getTimerCount()).toBe(0); release();
 });
-it('retries the exact failed continuation without dropping loaded reports', async () => {
-  const read = vi.fn().mockResolvedValueOnce(page([event('first', 'Saved report')], true)).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(page([event('last', 'Final report')]));
-  const { reading } = mount(read, page([event('first')], true));
+it('retries the exact failed continuation on further scrolling without dropping reports', async () => {
+  const read = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(page([event('last', 'Final report')]));
+  const { reading } = mount(read, page([event('first', 'Saved report')], true));
   await flush(); await reading.more();
-  expect(reading.failed()).toBe(true); expect(reading.busy()).toBe(false); expect(reading.events()[0].message).toBe('Saved report'); expect(reading.cursor()).toBe('first');
-  await reading.retry();
-  expect(read.mock.calls[2]).toEqual(read.mock.calls[1]);
+  expect(reading.failed()).toBe(true); expect(reading.events()[0].message).toBe('Saved report');
+  reading.schedule('after'); await flush();
+  expect(read.mock.calls[1]?.slice(0, 2)).toEqual(read.mock.calls[0]?.slice(0, 2));
   expect(reading.events().map(value => value.message)).toEqual(['Saved report', 'Final report']);
   expect(reading.failed()).toBe(false); expect(reading.cursor()).toBe('');
 });
-it('releases a stalled read and ignores its late result after retry', async () => {
+it('releases a stalled body when collapsed and ignores late completion after re-expansion', async () => {
   vi.useFakeTimers();
   let finish!: (value: FlowerParentEventPage) => void;
-  const read = vi.fn().mockImplementationOnce(() => new Promise<FlowerParentEventPage>(resolve => { finish = resolve; })).mockResolvedValue(page([event('first', 'Current'), event('last', 'Last')]));
+  const read = vi.fn().mockImplementationOnce(() => new Promise<FlowerParentEventPage>(resolve => { finish = resolve; })).mockResolvedValue(body('first', 'Current'));
   const { reading } = mount(read, page([event('first')]));
-  await flush(); expect(reading.busy()).toBe(true);
-  await vi.advanceTimersByTimeAsync(15_000);
-  expect(reading.failed()).toBe(true); expect(reading.busy()).toBe(false); expect(reading.timedOut()).toBe(true);
-  await reading.retry();
-  finish(page([event('first', 'Stale'), event('last', 'Stale')])); await flush();
-  expect(reading.events()[0].message).toBe('Current'); expect(reading.failed()).toBe(false); expect(vi.getTimerCount()).toBe(0);
+  const release = reading.retainBody('first'); await flush();
+  expect(reading.bodyState('first')).toBe('reading'); release(); await flush();
+  expect(vi.getTimerCount()).toBe(0);
+  const second = reading.retainBody('first'); await flush();
+  finish(body('first', 'Stale')); await flush();
+  expect(reading.events()[0].message).toBe('Current'); expect(reading.bodyState('first')).toBe('ready'); second();
 });
-it('invalidates a read on reconnect, preserves reports and releases all timers on disposal', async () => {
+it('bounds deadline retries and releases timers after exhausted body reads', async () => {
   vi.useFakeTimers();
+  const read = vi.fn(() => new Promise<FlowerParentEventPage>(() => {}));
+  const { reading } = mount(read, page([event('first')]));
+  const release = reading.retainBody('first'); await flush();
+  await vi.advanceTimersByTimeAsync(63_000); await flush();
+  expect(read).toHaveBeenCalledTimes(4); expect(reading.bodyState('first')).toBe('failed');
+  expect(vi.getTimerCount()).toBe(0); release();
+});
+it('reconnects demanded bodies and preserves completed reports across metadata updates', async () => {
   let finish!: (value: FlowerParentEventPage) => void;
-  const read = vi.fn().mockImplementationOnce(() => new Promise<FlowerParentEventPage>(resolve => { finish = resolve; })).mockResolvedValue(page([event('first', 'Reconnected'), event('last', 'Last')]));
-  const { reading, setEpoch, setValue, dispose } = mount(read, page([event('first')]));
-  await flush(); setEpoch(2); await flush();
-  finish(page([event('first', 'Stale'), event('last', 'Stale')])); await flush();
+  const read = vi.fn().mockImplementationOnce(() => new Promise<FlowerParentEventPage>(resolve => { finish = resolve; })).mockResolvedValue(body('first', 'Reconnected'));
+  const { reading, setEpoch, setValue } = mount(read, page([event('first')]));
+  const release = reading.retainBody('first'); await flush(); setEpoch(2); await flush();
+  finish(body('first', 'Stale')); await flush();
   expect(reading.events()[0].message).toBe('Reconnected');
   setValue(page([{ ...event('first'), admitted: true }])); await flush();
-  expect(reading.events()[0].message).toBe('Reconnected'); expect(read).toHaveBeenCalledTimes(2);
-  dispose(); expect(vi.getTimerCount()).toBe(0);
+  expect(reading.events()[0]).toMatchObject({ message: 'Reconnected', admitted: true }); expect(read).toHaveBeenCalledTimes(2); release();
 });
-it('rejects an invalid explicit page locally and recovers on retry', async () => {
-  const read = vi.fn().mockResolvedValueOnce({ events: null }).mockResolvedValueOnce(page([event('first', 'Recovered'), event('last', 'Last')]));
-  const { reading } = mount(read, page([event('first')]));
-  await flush(); expect(reading.failed()).toBe(true); expect(reading.busy()).toBe(false);
-  await reading.retry(); expect(reading.failed()).toBe(false); expect(reading.events()[0].message).toBe('Recovered');
+it('rejects malformed pages locally and recovers the same continuation', async () => {
+  const read = vi.fn().mockResolvedValueOnce({ events: null }).mockResolvedValueOnce(page([event('last', 'Recovered')]));
+  const { reading } = mount(read, page([event('first', 'Saved')], true));
+  await flush(); await reading.more(); expect(reading.failed()).toBe(true);
+  await reading.retry(); expect(reading.failed()).toBe(false); expect(reading.events().at(-1)?.message).toBe('Recovered');
 });
-
-it('invalidates a stalled read when its fixed range changes and on unmount', async () => {
-  vi.useFakeTimers();
-  let finish!: (value: FlowerParentEventPage) => void;
-  const read = vi.fn().mockImplementationOnce(() => new Promise<FlowerParentEventPage>(resolve => { finish = resolve; }))
-    .mockImplementationOnce(() => new Promise<FlowerParentEventPage>(() => {}));
-  const { reading, setValue, dispose } = mount(read, page([event('first')]));
-  await flush();
-  setValue({ thread_id: 'parent', events: [event('new')], first_event_id: 'new', last_event_id: 'new' }); await flush();
-  finish(page([event('first', 'Obsolete'), event('last', 'Obsolete')])); await flush();
-  expect(reading.events().map(value => value.id)).toEqual(['new']);
-  expect(vi.getTimerCount()).toBe(1);
-  dispose(); await flush(); expect(vi.getTimerCount()).toBe(0);
-});
-it('discards a previous thread read and releases its timer when navigating away', async () => {
+it('discards old thread body reads and releases timers when navigating away', async () => {
   vi.useFakeTimers();
   let finish!: (value: FlowerParentEventPage) => void;
   const read = vi.fn(() => new Promise<FlowerParentEventPage>(resolve => { finish = resolve; }));
-  const [selected, setSelected] = createSignal('parent');
-  let reading!: ReturnType<typeof createParentEventReading>;
-  const host = document.createElement('div'); document.body.append(host);
-  const dispose = render(() => { reading = createParentEventReading({ get threadID() { return selected(); },
-    get page() { return selected() === 'parent' ? page([event('first')]) : { thread_id: selected(), events: [] }; }, read }); return null; }, host);
-  onTestFinished(() => { dispose(); host.remove(); });
-  await flush(); setSelected('other'); await flush();
-  finish(page([event('first', 'Obsolete'), event('last', 'Obsolete')])); await flush();
-  expect(reading.events()).toEqual([]); expect(reading.busy()).toBe(false); expect(reading.failed()).toBe(false);
-  expect(vi.getTimerCount()).toBe(0); expect(read).toHaveBeenCalledTimes(1);
+  const { reading, setSelected, setValue } = mount(read, page([event('first')]));
+  reading.retainBody('first'); await flush();
+  setSelected('other'); setValue({ thread_id: 'other', events: [] }); await flush();
+  finish(body('first', 'Obsolete')); await flush();
+  expect(reading.events()).toEqual([]); expect(reading.bodyState('first')).toBeUndefined(); expect(vi.getTimerCount()).toBe(0);
 });
-
-it('rejects a continuation that repeats an earlier loaded page without advancing the cursor', async () => {
-  const read = vi.fn().mockResolvedValueOnce(page([event('first', 'One'), event('middle', 'Two')], true))
-    .mockResolvedValueOnce(page([event('first', 'Repeated'), event('last', 'Last')]));
-  const { reading } = mount(read, page([event('first')], true));
+it('rejects a continuation that overlaps already retained identities', async () => {
+  const read = vi.fn().mockResolvedValueOnce(page([event('first', 'Repeated'), event('last', 'Last')]));
+  const { reading } = mount(read, page([event('first', 'One'), event('middle', 'Two')], true));
   await flush(); await reading.more();
   expect(reading.failed()).toBe(true); expect(reading.cursor()).toBe('middle');
   expect(reading.events().map(value => value.message)).toEqual(['One', 'Two']);
 });
-
-it('reads inherited reports under the page scope and rejects a response for another scope', async () => {
+it('reads inherited reports under current authorization and rejects foreign scope', async () => {
   const inherited = { ...event('first'), parent_thread_id: 'ancestor' };
-  const read = vi.fn().mockResolvedValueOnce({ ...page([inherited, event('last', 'Last')]), thread_id: 'ancestor' })
-    .mockResolvedValueOnce(page([{ ...inherited, message: 'Inherited report' }, event('last', 'Last')]));
+  const read = vi.fn().mockResolvedValueOnce({ ...body('first', 'Foreign'), thread_id: 'ancestor' })
+    .mockResolvedValueOnce({ ...body('first', 'Inherited report'), events: [{ ...inherited, message: 'Inherited report' }] });
   const { reading } = mount(read, page([inherited]));
-  await flush(); expect(reading.failed()).toBe(true);
-  expect(read).toHaveBeenCalledWith('parent', expect.objectContaining({ first_event_id: 'first', last_event_id: 'last' }));
-  await reading.retry(); expect(reading.failed()).toBe(false);
-  expect(reading.events()[0]).toMatchObject({ parent_thread_id: 'ancestor', message: 'Inherited report' });
+  const release = reading.retainBody('first'); await flush();
+  expect(reading.bodyState('first')).toBe('failed');
+  expect(read.mock.calls[0]?.slice(0, 2)).toEqual(['parent', { action: 'read', event_id: 'first' }]);
+  release(); const second = reading.retainBody('first'); await flush();
+  expect(reading.events()[0]).toMatchObject({ parent_thread_id: 'ancestor', message: 'Inherited report' }); second();
 });

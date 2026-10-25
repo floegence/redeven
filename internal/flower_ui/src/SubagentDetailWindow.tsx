@@ -23,6 +23,8 @@ export type SubagentDetailWindowProps = Readonly<{
   elapsedLabel: string;
   description: string;
   loading: boolean;
+  preparing?: boolean;
+  preparationNotice?: JSX.Element;
   error: string;
   detailAvailable: boolean;
   entries: readonly FlowerTimelineEntry[];
@@ -89,8 +91,10 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
         {props.syncNotice}
         {props.runProgress}
 
-        <Show when={props.loading && !props.detailAvailable}>
-          <div class="flower-subagent-detail-loading" role="status" aria-label={props.threadLoadingLabel}>
+        <div class="flower-subagent-detail-transcript-region">
+        <Show when={props.preparationNotice}>{props.preparationNotice}</Show>
+        <Show when={props.loading && !props.detailAvailable || props.preparing && !props.preparationNotice}>
+          <div class="flower-subagent-detail-loading" data-overlay={props.detailAvailable ? 'true' : undefined} role="status" aria-label={props.threadLoadingLabel}>
             <For each={[0, 1, 2, 3]}>
               {() => (
                 <div class="flower-subagent-detail-loading-row">
@@ -119,6 +123,8 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
           <div
             ref={props.bindScroll}
             class="flower-subagent-detail-transcript"
+            data-flower-tail-preparing={props.preparing ? 'true' : undefined}
+            aria-busy={props.preparing ? 'true' : undefined}
             role="list"
             aria-label={props.copy.detailTimelineLabel}
             onScroll={props.onScroll}
@@ -128,7 +134,7 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
             onKeyDown={props.onKeyDown}
             tabIndex={0}
           >
-            <div class="flower-subagent-detail-timeline">
+            <div class="flower-subagent-detail-timeline" inert={props.preparing}>
               <Show
                 when={props.entries.length > 0}
                 fallback={<div class="flower-subagent-detail-empty">{props.copy.emptyDescription}</div>}
@@ -155,6 +161,7 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
           </div>
         </Show>
 
+        </div>
       </div>
     </FloatingWindow>
   );

@@ -3,8 +3,10 @@ package ai
 import (
 	"context"
 	"errors"
+	"strconv"
 	"sync"
 
+	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/floret/v7/threadquery"
 	"github.com/floegence/redeven/internal/session"
@@ -16,8 +18,22 @@ type flowerHistoryInterest struct {
 	mu           sync.Mutex
 	gate         chan struct{}
 	revision     uint64
+	requested    uint64
 	subscription *flruntime.ThreadUpdateSubscription
 	cancel       context.CancelFunc
+	threadID     string
+	pending      *flowerHistoryPending
+}
+
+type flowerHistoryPending struct {
+	revision uint64
+	result   chan flowerHistoryReadResult
+}
+
+type flowerHistoryReadResult struct {
+	current flruntime.ThreadView
+	window  *FlowerHistoryWindow
+	err     error
 }
 
 func (interest *flowerHistoryInterest) lock(ctx context.Context) (func(), error) {
@@ -61,62 +77,84 @@ func (s *Service) readFlowerHistoryForObserver(ctx context.Context, meta *sessio
 	}
 	defer unlock()
 	s.mu.Lock()
-	superseded := request.ReadingRevision <= interest.revision || subscriber.closed
+	superseded := request.ReadingRevision <= max(interest.revision, interest.requested) || subscriber.closed
 	s.mu.Unlock()
 	if superseded {
 		return flruntime.ThreadView{}, nil, errors.New("history read was superseded")
 	}
-	source, ok := s.threadRuntime.(flruntime.ThreadWindowSource)
-	if !ok {
-		return flruntime.ThreadView{}, nil, errors.New("published Floret window contract is unavailable")
-	}
-	observerCtx, cancel := context.WithCancel(subscriber.observerContext)
-	sub, err := source.SubscribeWindowUpdates(observerCtx, scope)
-	if err != nil {
-		cancel()
-		return flruntime.ThreadView{}, nil, err
-	}
-	installed := false
-	defer func() {
-		if !installed {
+	s.mu.Lock()
+	sub := interest.subscription
+	sameThread := sub != nil && interest.threadID == input.ThreadID.String()
+	s.mu.Unlock()
+	if !sameThread {
+		source, ok := s.threadRuntime.(flruntime.ThreadWindowSource)
+		if !ok {
+			return flruntime.ThreadView{}, nil, errors.New("published Floret window contract is unavailable")
+		}
+		observerCtx, cancel := context.WithCancel(subscriber.observerContext)
+		sub, err = source.SubscribeWindowUpdates(observerCtx, scope)
+		if err != nil {
+			cancel()
+			return flruntime.ThreadView{}, nil, err
+		}
+		s.mu.Lock()
+		if subscriber.closed || s.serviceClosing || request.ReadingRevision <= max(interest.revision, interest.requested) {
+			s.mu.Unlock()
 			cancel()
 			sub.Close()
+			return flruntime.ThreadView{}, nil, context.Canceled
 		}
+		clearFlowerHistoryInterestLocked(s, subscriber, interest, request.ParentThreadID != "")
+		interest.subscription, interest.cancel, interest.threadID = sub, cancel, input.ThreadID.String()
+		s.serviceWorkers.Add(1)
+		s.mu.Unlock()
+		s.observeFlowerHistoryInterest(observerCtx, meta, subscriber, interest, sub, input.ThreadID.String(), request.ParentThreadID)
+	}
+	pending := &flowerHistoryPending{revision: request.ReadingRevision, result: make(chan flowerHistoryReadResult, 1)}
+	s.mu.Lock()
+	if subscriber.closed || interest.subscription != sub || request.ReadingRevision <= max(interest.revision, interest.requested) {
+		s.mu.Unlock()
+		return flruntime.ThreadView{}, nil, context.Canceled
+	}
+	previousRequested := interest.requested
+	interest.pending = pending
+	interest.requested = request.ReadingRevision
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		if interest.pending == pending {
+			interest.pending = nil
+		}
+		s.mu.Unlock()
 	}()
+	// One Next consumer observes the old interest until this exact baseline.
+	// Floret atomically queues it before any new-interest delta. No second
+	// subscription or independently sampled version participates in the handoff.
+	input.RequestID = strconv.FormatUint(request.ReadingRevision, 10)
 	if err := sub.SetWindow(ctx, scope, input); err != nil {
+		// SetWindow installs a baseline atomically or leaves the prior interest
+		// intact. Only a rejected call may release its unused revision. Once it
+		// succeeds, even a canceled HTTP waiter cannot rewind requested intent.
+		s.mu.Lock()
+		if interest.subscription == sub && interest.pending == pending && interest.requested == request.ReadingRevision && interest.revision < request.ReadingRevision {
+			interest.requested = previousRequested
+		}
+		s.mu.Unlock()
 		return flruntime.ThreadView{}, nil, err
 	}
-	var current flruntime.ThreadView
-	var window *FlowerHistoryWindow
-	for {
-		update, err := sub.Next(ctx)
-		if err != nil {
-			return current, nil, err
-		}
-		if update.Window != nil && update.Window.Value != nil {
-			current, window = flowerHistoryCurrent(update)
-			break
-		}
+	select {
+	case result := <-pending.result:
+		return result.current, result.window, result.err
+	case <-ctx.Done():
+		return flruntime.ThreadView{}, nil, ctx.Err()
+	case <-subscriber.observerContext.Done():
+		return flruntime.ThreadView{}, nil, ErrFlowerLiveSync
 	}
-	if err := ctx.Err(); err != nil {
-		return current, nil, err
-	}
-	s.mu.Lock()
-	if request.ReadingRevision <= interest.revision {
-		s.mu.Unlock()
-		return current, nil, context.Canceled
-	}
-	if subscriber.closed || s.serviceClosing {
-		s.mu.Unlock()
-		return current, nil, ErrFlowerLiveSync
-	}
+}
+
+func (s *Service) observeFlowerHistoryInterest(observerCtx context.Context, meta *session.Meta, subscriber *flowerLiveSubscriber,
+	interest *flowerHistoryInterest, sub *flruntime.ThreadUpdateSubscription, threadID, parentID string) {
 	metaCopy := *meta
-	clearFlowerHistoryInterestLocked(s, subscriber, interest, request.ParentThreadID != "")
-	interest.revision = request.ReadingRevision
-	interest.subscription, interest.cancel = sub, cancel
-	s.serviceWorkers.Add(1)
-	installed = true
-	s.mu.Unlock()
 	go func() {
 		defer s.serviceWorkers.Done()
 		defer sub.Close()
@@ -126,14 +164,33 @@ func (s *Service) readFlowerHistoryForObserver(ctx context.Context, meta *sessio
 				if observerCtx.Err() == nil {
 					s.mu.Lock()
 					if interest.subscription == sub {
-						invalidateFlowerHistoryInterestLocked(s, subscriber, interest, input.ThreadID.String(), request.ParentThreadID)
+						invalidateFlowerHistoryInterestLocked(s, subscriber, interest, threadID, parentID)
 					}
 					s.mu.Unlock()
 				}
 				return
 			}
+			s.mu.Lock()
+			if subscriber.closed || interest.subscription != sub {
+				s.mu.Unlock()
+				return
+			}
+			revision := interest.revision
+			pending := interest.pending
+			correlated := update.Window != nil && update.Window.Value != nil && update.Window.Value.RequestID != ""
+			if correlated {
+				accepted, parseErr := strconv.ParseUint(update.Window.Value.RequestID, 10, 64)
+				if parseErr != nil || accepted <= interest.revision || accepted > interest.requested {
+					invalidateFlowerHistoryInterestLocked(s, subscriber, interest, threadID, parentID)
+					s.mu.Unlock()
+					return
+				}
+				interest.revision = accepted
+				revision = accepted
+			}
+			s.mu.Unlock()
 			// Authorization is refreshed for every delivered read observation.
-			if _, err := s.flowerHistoryScope(observerCtx, &metaCopy, input.ThreadID.String()); err != nil {
+			if _, err := s.flowerHistoryScope(observerCtx, &metaCopy, threadID); err != nil {
 				s.mu.Lock()
 				if interest.subscription == sub {
 					subscriber.closeErr = ErrFlowerLiveSync
@@ -142,7 +199,24 @@ func (s *Service) readFlowerHistoryForObserver(ctx context.Context, meta *sessio
 				s.mu.Unlock()
 				return
 			}
-			envelope := FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: input.ThreadID.String(), Update: &update, ReadingRevision: request.ReadingRevision}
+			if correlated && pending != nil && pending.revision == revision {
+				current, window := flowerHistoryCurrent(update)
+				s.mu.Lock()
+				if !subscriber.closed && interest.subscription == sub && interest.pending == pending {
+					select {
+					case pending.result <- flowerHistoryReadResult{current: current, window: window}:
+					default:
+					}
+				}
+				s.mu.Unlock()
+			}
+			// Publish the same canonical baseline on the ordered channel. A lost
+			// HTTP response or cancelled waiter must not strand the new interest.
+			// The browser accepts it only for its current reading intent.
+			if revision == 0 {
+				continue
+			}
+			envelope := FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: threadID, Update: &update, ReadingRevision: revision}
 			if update.Window != nil && update.Window.Value != nil {
 				baseline, bounds := flowerHistoryCurrent(update)
 				envelope.Update, envelope.Current, envelope.Window = nil, &baseline, bounds
@@ -151,7 +225,7 @@ func (s *Service) readFlowerHistoryForObserver(ctx context.Context, meta *sessio
 			if update.Interactions != nil {
 				interactions = update.Interactions.Value
 			}
-			evidence, err := s.flowerHistoryComputerEvidence(observerCtx, input.ThreadID, interactions)
+			evidence, err := s.flowerHistoryComputerEvidence(observerCtx, identity.ThreadID(threadID), interactions)
 			if err != nil {
 				s.fenceFlowerLiveEndpoint(metaCopy.EndpointID)
 				return
@@ -161,8 +235,8 @@ func (s *Service) readFlowerHistoryForObserver(ctx context.Context, meta *sessio
 					s.broadcastFlowerComputerStatus(metaCopy.EndpointID, status)
 				}
 			}
-			if request.ParentThreadID != "" {
-				envelope.ThreadID = request.ParentThreadID
+			if parentID != "" {
+				envelope.ThreadID = parentID
 				envelope.SubagentUpdate, envelope.SubagentCurrent = envelope.Update, envelope.Current
 				envelope.Update, envelope.Current = nil, nil
 			}
@@ -175,7 +249,6 @@ func (s *Service) readFlowerHistoryForObserver(ctx context.Context, meta *sessio
 			s.mu.Unlock()
 		}
 	}()
-	return current, window, nil
 }
 
 // Release is revision-fenced and never waits for a slow window read. A pending
@@ -197,7 +270,7 @@ func (s *Service) ReleaseFlowerHistory(ctx context.Context, meta *session.Meta, 
 		if request.Subagent {
 			interest = &subscriber.subagentHistory
 		}
-		if request.ReadingRevision <= interest.revision {
+		if request.ReadingRevision <= interest.revision || request.ReadingRevision < interest.requested {
 			return nil
 		}
 		clearFlowerHistoryInterestLocked(s, subscriber, interest, request.Subagent)
@@ -214,6 +287,14 @@ type FlowerHistoryRelease struct {
 }
 
 func clearFlowerHistoryInterestLocked(s *Service, subscriber *flowerLiveSubscriber, interest *flowerHistoryInterest, child bool) {
+	if interest.pending != nil {
+		select {
+		case interest.pending.result <- flowerHistoryReadResult{err: context.Canceled}:
+		default:
+		}
+		interest.pending = nil
+	}
+	interest.threadID = ""
 	if interest.cancel != nil {
 		interest.cancel()
 	}

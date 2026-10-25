@@ -106,6 +106,7 @@ export type FlowerActivityTerminalDetail = Readonly<{
   exit_code?: number;
   first_seq: number;
   last_seq: number;
+  latest_seq: number;
   has_more: boolean;
   truncated: boolean;
   timed_out: boolean;
@@ -1156,6 +1157,7 @@ function presentationForTerminal(item: FlowerActivityItem, copy?: FlowerActivity
     exit_code: optionalNumericValue(payload.exit_code),
     first_seq: optionalNumericValue(payload.first_seq) ?? 0,
     last_seq: optionalNumericValue(payload.last_seq) ?? 0,
+    latest_seq: optionalNumericValue(payload.latest_seq) ?? optionalNumericValue(payload.last_seq) ?? 0,
     has_more: boolValue(payload.has_more),
     truncated: boolValue(payload.truncated),
     timed_out: boolValue(payload.timed_out),
@@ -1541,10 +1543,10 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
   const detailBlocks: FlowerActivityDetailBlock[] = [];
   if (uncertain) detailBlocks.push({ kind: 'structured_rows', section: 'results', rows: [], notice: words.effectUncertain });
   if (inputs.length > 0) detailBlocks.push({ kind: 'structured_rows', section: 'inputs', rows: inputs });
-  else if (item.tool_name === 'computer.exec' && !active) detailBlocks.push({ kind: 'structured_rows', section: 'inputs', rows: [], notice: words.inputUnavailable });
+  else if (item.tool_name === 'computer.exec' && !active && !item.field_summary?.fields.some(field => field.path === '/payload/inputs' && (field.count ?? 0) > 0)) detailBlocks.push({ kind: 'structured_rows', section: 'inputs', rows: [], notice: words.inputUnavailable });
   if (rows.length > 0) detailBlocks.push({ kind: 'structured_rows', section: 'results', rows, ...(!errorBlock && (item.status === 'error' || item.status === 'canceled') ? { notice: words.partialOutput } : {}) });
-  else if (item.tool_name === 'computer.exec' && active) detailBlocks.push({ kind: 'structured_rows', section: 'results', rows: [], notice: words.waitingResult });
-  else if (!active && (!computer || item.payload?.rows_provided !== true) && (!errorBlock || item.chips?.some(chip => chip.kind === 'partial_execution'))) detailBlocks.push({ kind: 'structured_rows', section: 'results', rows: [], notice: item.chips?.some(chip => chip.kind === 'partial_execution') ? words.partialOutput : item.target_refs?.some(ref => ref.kind === 'computer_frame' || ref.kind === 'tool_image') ? undefined : item.payload?.rows_provided === true ? words.noOutput : words.detailsUnavailable });
+  else if (item.tool_name === 'computer.exec' && active && !item.field_summary?.fields.some(field => field.path === '/payload/rows' && (field.count ?? 0) > 0)) detailBlocks.push({ kind: 'structured_rows', section: 'results', rows: [], notice: words.waitingResult });
+  else if (!active && !item.field_summary?.fields.some(field => field.path === '/payload/rows' && (field.count ?? 0) > 0) && (!computer || item.payload?.rows_provided !== true) && (!errorBlock || item.chips?.some(chip => chip.kind === 'partial_execution'))) detailBlocks.push({ kind: 'structured_rows', section: 'results', rows: [], notice: item.chips?.some(chip => chip.kind === 'partial_execution') ? words.partialOutput : item.target_refs?.some(ref => ref.kind === 'computer_frame' || ref.kind === 'tool_image') ? undefined : item.payload?.rows_provided === true ? words.noOutput : words.detailsUnavailable });
   if (detailLines.length > 0) detailBlocks.push({ kind: 'structured', lines: detailLines });
   const image = item.target_refs?.find(ref => ref.kind === 'tool_image' && (/^media:v1:[a-f0-9]{64}$/u.test(ref.resource_ref ?? '') || /^image:\/\/[a-f0-9]{64}\/(png|jpeg|webp)$/u.test(ref.resource_ref ?? '')));
   if (image?.resource_ref) detailBlocks.push({ kind: 'image', resource_ref: image.resource_ref, name: image.label || trimString(item.label) });

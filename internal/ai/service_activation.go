@@ -305,3 +305,52 @@ func (s *Service) waitForUploadRecovery(ctx context.Context) error {
 	}
 	return attempt.err
 }
+
+// Upgrade browsing preparation belongs to Floret. Product settings identify the
+// admitted threads; the host owns source checks, migration, batching and repair.
+// This runs before service publication, without activating execution or queues.
+// Prepared stores only read readiness anchors; no history body is revisited.
+// A failed thread keeps Floret's readiness/error and fails its own reads. It
+// must not prevent unrelated prepared threads or new threads from being used.
+func (s *Service) prepareDisplayThreads(ctx context.Context) error {
+	if s.floretThreadReadiness == nil || s.prepareFloretDisplayThread == nil {
+		return errors.New("published Floret display preparation is unavailable")
+	}
+	var cursor threadstore.ThreadSettingsRecoveryCursor
+	for {
+		settings, next, more, err := s.threadsDB.ListThreadSettingsForRecoveryPage(ctx, cursor, 200)
+		if err != nil {
+			return err
+		}
+		for _, setting := range settings {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			id := identity.ThreadID(setting.ThreadID)
+			ready, err := s.floretThreadReadiness(ctx, id)
+			if err == nil && ready.DisplayReady {
+				continue
+			}
+			if err == nil {
+				reportFloretStorePhase(s.storeStartupProgress, FloretStoreStartupIndexing)
+				err = s.prepareFloretDisplayThread(ctx, id)
+			}
+			if errors.Is(err, flruntime.ErrThreadNotFound) || errors.Is(err, flruntime.ErrThreadDeleted) {
+				continue
+			}
+			if err == nil {
+				ready, err = s.floretThreadReadiness(ctx, id)
+				if err == nil && (!ready.DisplayReady || ready.DisplayError != "") {
+					err = errors.New("canonical browsing preparation did not publish readiness")
+				}
+			}
+			if err != nil && s.log != nil {
+				s.log.Warn("ai: thread browsing preparation failed", "thread_id", id, "error", err)
+			}
+		}
+		if !more {
+			return ctx.Err()
+		}
+		cursor = next
+	}
+}

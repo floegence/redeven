@@ -44,9 +44,9 @@ describe('Flower canonical title synchronization', () => {
     expect(title(runtime)).toBe('Hi');
     expect(runtime.querySelector('[data-thread-id="title-race"]')?.textContent).toContain('Hi');
     expect(runtime.textContent).toContain('Hello from Flower.');
-    // Live body updates retain the title while the unified detail owner admits
-    // one follow-up read for the newer canonical revision.
-    expect(loadThread).toHaveBeenCalledTimes(2);
+    // The accepted live baseline already owns the newer body and title; a late
+    // initial response must neither overwrite it nor trigger a redundant read.
+    expect(loadThread).toHaveBeenCalledTimes(1);
   });
 
   it('updates two windows without reloading their message history', async () => {

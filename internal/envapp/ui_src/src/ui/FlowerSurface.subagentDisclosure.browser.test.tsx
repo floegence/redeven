@@ -54,6 +54,42 @@ function row(runtime: HTMLElement, id: string) {
 afterEach(() => document.documentElement.classList.remove('dark', 'light'));
 
 describe('Subagent inline capsules', () => {
+  it('preserves child navigation when operation targets arrive as visible fields', async () => {
+    const loadActivityValue = vi.fn(async (_thread: string, request: { item_id: string; path: string }) => ({
+      thread_id: parentID, item_id: request.item_id, turn_id: 'parent-turn', run_id: 'parent-run', path: request.path,
+      value: request.path === '/payload' ? { action: 'inspect', requested_count: 1 } : targets[0],
+    }));
+    const { runtime, loadDetail } = mount([operation('field-child', 'inspect', 1, { payload: undefined,
+      field_summary: { version: 'field-v1', renderer: 'subagent_operation', fields: [
+        { path: '/payload/action', kind: 'string', bytes: 7 },
+        { path: '/payload/requested_count', kind: 'scalar', value: 1 },
+        { path: '/payload/targets', kind: 'array', count: 1 },
+      ] },
+    })], 1, { loadActivityValue });
+    await waitFor(() => Boolean(row(runtime, 'field-child')?.querySelector('[data-flower-subagent-capsule]')));
+    const capsule = row(runtime, 'field-child').querySelector<HTMLButtonElement>('[data-flower-subagent-capsule]')!;
+    capsule.click();
+    await waitFor(() => loadDetail.mock.calls.length === 1);
+    expect(loadDetail.mock.calls[0].slice(0, 2)).toEqual([parentID, targets[0]!.thread_id]);
+    expect(loadActivityValue.mock.calls.every(call => ['/payload', '/payload/targets/0'].includes(call[1].path))).toBe(true);
+  });
+  it('keeps foreign field-backed targets informational without child navigation', async () => {
+    const loadActivityValue = vi.fn(async (_thread: string, request: { item_id: string; path: string }) => ({
+      thread_id: parentID, item_id: request.item_id, turn_id: 'parent-turn', run_id: 'parent-run', path: request.path,
+      value: request.path === '/payload' ? { action: 'inspect', requested_count: 1 } : targets[0],
+    }));
+    const { runtime, loadDetail } = mount([operation('foreign-field-child', 'inspect', 1, { payload: undefined,
+      field_summary: { version: 'field-v1', renderer: 'subagent_operation', fields: [
+        { path: '/payload/action', kind: 'string', bytes: 7 },
+        { path: '/payload/requested_count', kind: 'scalar', value: 1 },
+        { path: '/payload/targets', kind: 'array', count: 1 },
+      ] },
+    })], 0, { loadActivityValue });
+    await waitFor(() => Boolean(row(runtime, 'foreign-field-child')?.textContent?.includes(targets[0]!.task_name)));
+    expect(row(runtime, 'foreign-field-child').querySelector('[data-flower-subagent-capsule]')).toBeNull();
+    expect(loadDetail).not.toHaveBeenCalled();
+  });
+
   it('renders live child text at streaming cadence while the parent is idle', async () => {
     const summary = subagentSummary({ ...targets[0]!, parent_thread_id: parentID, title: targets[0]!.task_name });
     const base = detailFor(summary);

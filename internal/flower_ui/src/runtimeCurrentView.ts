@@ -1,3 +1,4 @@
+import { mapFlowerActivitySummary } from './flowerLiveMapper';
 import { validateParentEventPage } from './parentEventPage';
 import { flowerCurrentToolCallPreviews } from './toolCallPreview';
 import { mapFlowerProviderRequestProgress, mapFlowerProviderTransportProgress } from './providerRequestProgress';
@@ -188,7 +189,20 @@ function mergeResolvedApproval(activity: FlowerActivityItem, interaction: Flower
 }
 
 function activityBlock(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentView, item: FlowerRuntimeCurrentItem, identity: RuntimeExecutionIdentity): FlowerActivityTimelineBlock {
-  let activity = { ...activityItem(item.activity ?? {}), ...(item.activity_bodies?.length ? { body_pending: true } : {}) };
+  let activity: FlowerActivityItem = { ...activityItem(item.activity ?? {}), ...(item.activity_bodies?.length ? { body_pending: true } : {}) };
+  if (item.activity_summary) {
+    const field_summary = mapFlowerActivitySummary(item.activity_summary);
+    if (item.activity?.presentation || item.activity_bodies?.length) throw new Error('Flower contract error: summary and complete activity overlap.');
+    const payload: Record<string, unknown> = {};
+    for (const field of field_summary.fields) if (field.path.startsWith('/payload/') && field.kind === 'scalar') {
+      payload[field.path.slice('/payload/'.length)] = field.value;
+    }
+    for (const [path, value] of Object.entries(field_summary.values ?? {})) if (path.startsWith('/payload/')) payload[path.slice('/payload/'.length)] = value;
+    activity = { ...activity, label: field_summary.label, description: field_summary.description,
+      renderer: field_summary.renderer, ...(Object.keys(payload).length ? { payload } : {}),
+      ...(field_summary.values?.['/chips'] ? { chips: field_summary.values['/chips'] as FlowerActivityItem['chips'] } : {}),
+      ...(field_summary.values?.['/target_refs'] ? { target_refs: field_summary.values['/target_refs'] as FlowerActivityItem['target_refs'] } : {}), field_summary };
+  }
   const toolCallID = trim(item.activity?.tool_id);
   const resolvedApproval = toolCallID ? (view.interactions ?? []).find((interaction) => (
     interaction.kind === 'approval'

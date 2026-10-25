@@ -1823,8 +1823,8 @@ describe('terminal interaction facts', () => {
       first_seq: 1, last_seq: 2, latest_seq: 3, has_more: true,
     } }));
     const detail = value.detailBlocks.find((block) => block.kind === 'terminal_output');
-    expect(detail).toMatchObject({ terminal: { output: 'GPU ready', exit_code: 2, timed_out: true, terminated: true, first_seq: 1, last_seq: 2, has_more: true } });
-    for (const field of ['purpose', 'input_bytes', 'total_bytes', 'execution_location', 'duration_ms', 'latest_seq']) {
+    expect(detail).toMatchObject({ terminal: { output: 'GPU ready', exit_code: 2, timed_out: true, terminated: true, first_seq: 1, last_seq: 2, latest_seq: 3, has_more: true } });
+    for (const field of ['purpose', 'input_bytes', 'total_bytes', 'execution_location', 'duration_ms']) {
       expect(detail && 'terminal' in detail ? detail.terminal : {}).not.toHaveProperty(field);
     }
   });

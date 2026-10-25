@@ -753,6 +753,42 @@ describe('ThreadCache native baseline reads', () => {
 });
 
 describe('bounded history windows', () => {
+  it('keeps the installed interest live while its replacement baseline is pending', () => {
+    const current: FlowerRuntimeCurrentView = { thread_id: 'a', turn_id: 'turn', run_id: 'run', view_version: 7, activity: 'active',
+      run_progress: { phase: 'streaming' }, items: [{ id: 'answer', kind: 'assistant', text: 'text', ordinal: 1, turn_id: 'turn', run_id: 'run', live: true }],
+      window: { first_item_id: 'answer', last_item_id: 'answer', has_before: true, has_after: false } };
+    const base = { ...thread('a', 7, 'text'), history_window: current.window,
+      messages: [{ ...thread('a', 7, '').messages[0], id: 'answer', content: 'text' }] };
+    let cache = createThreadCache().receiveView({ thread: base, version: 7 }, { current }).cache;
+    const release = cache.beginRuntimeRead('a');
+    const result = cache.receiveUpdate({ thread_id: 'a', turn_id: 'turn', run_id: 'run', base_version: 7, view_version: 8,
+      facts: { activity: 'active', queue_count: 0, run_progress: { phase: 'streaming' } },
+      items: [{ kind: 'append', item_id: 'answer', append: { offset_bytes: 4, text: '!' } }] }, { installedInterest: true });
+    expect(result.accepted).toBe(true);
+    expect(cache.views.get('a')!.thread.messages[0].content).toBe('text!');
+    const next = { ...current, view_version: 8, items: [{ ...current.items![0], text: 'text!' }] };
+    cache = cache.receiveView({ thread: { ...base, messages: [{ ...base.messages[0], content: 'text!' }] }, version: 8 }, { current: next }).cache;
+    release();
+    expect(cache.views.get('a')!.thread.messages[0].content).toBe('text!');
+  });
+
+  it('requires an installed receipt to accept a late window response after live growth', () => {
+    const current: FlowerRuntimeCurrentView = { thread_id: 'a', turn_id: 'turn', run_id: 'run', view_version: 7, activity: 'active',
+      run_progress: { phase: 'streaming' }, items: [{ id: 'answer', kind: 'assistant', text: 'text', ordinal: 1, turn_id: 'turn', run_id: 'run', live: true }],
+      window: { first_item_id: 'answer', last_item_id: 'answer', has_before: true, has_after: false } };
+    const base = { ...thread('a', 7, 'text'), history_window: current.window,
+      messages: [{ ...thread('a', 7, '').messages[0], id: 'answer', content: 'text' }] };
+    let cache = createThreadCache().receiveView({ thread: base, version: 7 }, { current }).cache;
+    const release = cache.beginRuntimeRead('a');
+    cache.receiveUpdate({ thread_id: 'a', turn_id: 'turn', run_id: 'run', base_version: 7, view_version: 8,
+      facts: { activity: 'active', queue_count: 0, run_progress: { phase: 'streaming' } },
+      items: [{ kind: 'append', item_id: 'answer', append: { offset_bytes: 4, text: '!' } }] }, { installedInterest: true });
+    expect(() => cache.receiveView({ thread: base, version: 7 }, { current })).toThrow('overtaken');
+    cache = cache.receiveView({ thread: base, version: 7 }, { current, installedBaseline: true }).cache;
+    expect(cache.views.get('a')!.version).toBe(8);
+    expect(cache.views.get('a')!.thread.messages[0].content).toBe('text!');
+    release();
+  });
   it('accepts same-version page movement and applies deltas delivered before its baseline', () => {
     const make = (id: string, version = 7): FlowerRuntimeCurrentView => ({ thread_id: 'a', turn_id: 'turn', run_id: 'run', view_version: version,
       activity: 'active', run_progress: { phase: 'streaming' }, items: [{ id, kind: 'assistant', text: id, ordinal: 1, turn_id: 'turn', run_id: 'run', live: true }],

@@ -105,28 +105,30 @@ type Options struct {
 }
 
 type Service struct {
-	openAIConnections      *openAIResponsesPool
-	chatGPT                *chatgpt.Client
-	accountMu              sync.Mutex
-	accountTasks           map[string]accountTaskWatch
-	accountUnsubscribe     func()
-	platformHTTPTransport  func() (http.RoundTripper, error)
-	tessiven               *tessiven.Service
-	tessivenResources      *tessiven.ResourceBackend
-	buildVersion           string
-	serviceClosing         bool // guarded by mu; fences background worker admission
-	storageGeneration      string
-	log                    *slog.Logger
-	activationMu           sync.Mutex
-	activated              bool
-	serviceClosed          bool
-	closeOnce              sync.Once
-	closeResult            error
-	serviceWorkers         sync.WaitGroup
-	activateFloret         func(context.Context) error
-	prepareFloretRestore   func(context.Context) (flruntime.RestorePreparation, error)
-	readState              *threadreadstate.Store
-	skipStorageMaintenance bool
+	openAIConnections          *openAIResponsesPool
+	chatGPT                    *chatgpt.Client
+	accountMu                  sync.Mutex
+	accountTasks               map[string]accountTaskWatch
+	accountUnsubscribe         func()
+	platformHTTPTransport      func() (http.RoundTripper, error)
+	tessiven                   *tessiven.Service
+	tessivenResources          *tessiven.ResourceBackend
+	buildVersion               string
+	serviceClosing             bool // guarded by mu; fences background worker admission
+	storageGeneration          string
+	log                        *slog.Logger
+	activationMu               sync.Mutex
+	activated                  bool
+	serviceClosed              bool
+	closeOnce                  sync.Once
+	closeResult                error
+	serviceWorkers             sync.WaitGroup
+	activateFloret             func(context.Context) error
+	floretThreadReadiness      func(context.Context, identity.ThreadID) (flruntime.ThreadReadiness, error)
+	prepareFloretDisplayThread func(context.Context, identity.ThreadID) error
+	prepareFloretRestore       func(context.Context) (flruntime.RestorePreparation, error)
+	readState                  *threadreadstate.Store
+	skipStorageMaintenance     bool
 
 	stateDir     string
 	agentHomeDir string
@@ -432,6 +434,8 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		buildVersion:          strings.TrimSpace(opts.BuildVersion),
 		tessiven:              opts.Tessiven, tessivenResources: opts.TessivenResources,
 		activateFloret:                  floretBootstrap.activate,
+		floretThreadReadiness:           floretBootstrap.threadReadiness,
+		prepareFloretDisplayThread:      floretBootstrap.prepareDisplayThread,
 		prepareFloretRestore:            floretBootstrap.prepareRestore,
 		readState:                       reads,
 		storageGeneration:               storageGeneration,
@@ -532,6 +536,9 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		svc.flowerReadStateCleaner = reads
 	}
 	if err := ctx.Err(); err != nil {
+		return nil, errors.Join(err, svc.Close())
+	}
+	if err := svc.prepareDisplayThreads(ctx); err != nil {
 		return nil, errors.Join(err, svc.Close())
 	}
 	if !opts.DeferExecution {

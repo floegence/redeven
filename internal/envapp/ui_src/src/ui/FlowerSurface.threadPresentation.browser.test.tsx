@@ -266,11 +266,14 @@ describe('Flower destination presentation', () => {
     await waitFor(() => loadHistoryItem.mock.calls.length === 2);
     const previous = [...bodies.values()];
     select(root, 'target');
+    await waitFor(() => loadHistoryItem.mock.calls.slice(0, 2).every(call => call[2].aborted));
+    // A transport which ignores abort keeps its physical slots until settled.
+    expect(loadHistoryItem).toHaveBeenCalledTimes(2);
+    previous.forEach((body, index) => body.resolve(fullBody(loadHistoryItem.mock.calls[index][1])));
     await waitFor(() => loadHistoryItem.mock.calls.length === 4);
     expect(loadHistoryItem.mock.calls.slice(0, 2).every(call => call[2].aborted)).toBe(true);
     for (const [id, body] of bodies) body.resolve(fullBody(id));
     await waitFor(() => !preparing(root));
-    previous.forEach((body, index) => body.resolve(fullBody(loadHistoryItem.mock.calls[index][1])));
     await afterPaint();
     expect(bottomDistance(root)).toBeLessThanOrEqual(1);
     expect(loadHistoryItem).toHaveBeenCalledTimes(4);
@@ -313,9 +316,10 @@ describe('Flower destination presentation', () => {
     expect(bottomDistance(root)).toBeLessThanOrEqual(1);
   });
 
-  it('reveals local body failures with Retry and lets another selection supersede preparation', async () => {
+  it('reveals local body failures without load buttons and lets another selection supersede preparation', async () => {
     const failed = await fixture({ failBody: true });
-    await waitFor(() => !preparing(failed.root) && Boolean(failed.root.querySelector('.flower-history-body-control button')), 5000);
+    await waitFor(() => !preparing(failed.root) && Boolean(failed.root.querySelector('.flower-history-body-control[aria-busy="false"]')), 5000);
+    expect(failed.root.querySelector('.flower-history-body-control button')).toBeNull();
     expect(bottomDistance(failed.root)).toBeLessThanOrEqual(1);
     select(failed.root, 'peer');
     await waitFor(() => !preparing(failed.root) && Boolean(failed.root.querySelector('[data-flower-message-id="peer-message"]')));

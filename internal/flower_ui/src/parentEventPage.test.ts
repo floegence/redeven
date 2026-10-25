@@ -47,3 +47,41 @@ it('accepts inherited event recipients only under the explicit queried page scop
   expect(() => validateParentEventPage({ ...inherited, thread_id: undefined }, 'fork', query)).toThrow('Flower contract error:');
   expect(validateParentEventPage({ thread_id: 'fork', events: [] }, 'fork').events).toEqual([]);
 });
+
+it('accepts chronological backward pages and rejects direction conflicts', () => {
+  const tail = { thread_id: 'parent', events: [event('middle'), event('a')], first_event_id: 'z', last_event_id: 'a', previous_before_event_id: 'middle' };
+  expect(validateParentEventPage(tail, 'parent', { action: 'list', latest: true })).toBe(tail);
+  const head = { thread_id: 'parent', events: [event('z')], first_event_id: 'z', last_event_id: 'a', next_after_event_id: 'z' };
+  expect(validateParentEventPage(head, 'parent', { ...query, before_event_id: 'middle' })).toBe(head);
+  expect(() => validateParentEventPage(tail, 'parent', { action: 'list', latest: true, after_event_id: 'z' })).toThrow();
+  expect(() => validateParentEventPage({ ...tail, previous_before_event_id: 'a' }, 'parent', { action: 'list', latest: true })).toThrow();
+});
+it('rejects repeated and reversed canonical receipt positions', () => {
+  for (const positions of [[2, 2], [3, 2]]) {
+    const page = { thread_id: 'parent', events: [event('z'), event('a')].map((entry, index) => ({ ...entry, canonical_ordinal: positions[index] })), first_event_id: 'z', last_event_id: 'a' };
+    expect(() => validateParentEventPage(page, 'parent')).toThrow();
+  }
+});
+
+it('validates source-bound ordinal receipt queries without treating an interval end as global EOF', () => {
+  const page = { thread_id: 'parent', leaf_id: 'accepted', events: [{ ...event('middle'), canonical_ordinal: 20 }], first_event_id: 'first', last_event_id: 'last', previous_before_event_id: 'middle', next_after_event_id: 'middle' };
+  const query = { action: 'list' as const, leaf_id: 'accepted', after_ordinal: 19, before_ordinal: 21, limit: 50 };
+  expect(validateParentEventPage(page, 'parent', query)).toBe(page);
+  for (const invalid of [
+    { ...page, leaf_id: 'other' }, { ...page, leaf_id: undefined },
+    { ...page, events: [{ ...event('middle'), canonical_ordinal: 19 }] },
+    { ...page, events: [{ ...event('middle'), canonical_ordinal: 21 }] },
+    { ...page, events: [event('middle')] },
+  ]) expect(() => validateParentEventPage(invalid, 'parent', query)).toThrow('Flower contract error:');
+});
+
+it('rejects conflicting and malformed receipt source selectors', () => {
+  const page = { thread_id: 'parent', leaf_id: 'accepted', events: [{ ...event('middle'), canonical_ordinal: 20 }], first_event_id: 'first', last_event_id: 'last' };
+  for (const query of [
+    { action: 'list' as const, after_ordinal: 2, after_event_id: 'first' },
+    { action: 'list' as const, before_ordinal: 22, latest: true },
+    { action: 'list' as const, after_ordinal: 21, before_ordinal: 20 },
+    { action: 'list' as const, after_ordinal: -1 }, { action: 'list' as const, before_ordinal: 1.5 },
+    { action: 'read' as const, event_id: 'middle', leaf_id: 'accepted' },
+  ]) expect(() => validateParentEventPage(page, 'parent', query)).toThrow('Flower contract error:');
+});
