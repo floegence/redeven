@@ -1140,8 +1140,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [modelMenuExpanded, setModelMenuExpanded] = createSignal(false);
   let modelSearchRef: HTMLInputElement | undefined;
   const [modelMenuPosition, setModelMenuPosition] = createSignal({ x: 0, y: 0 });
-  const [modelMenuSize, setModelMenuSize] = createSignal({ width: 304, height: 400 });
-  const [modelMenuAvailableHeight, setModelMenuAvailableHeight] = createSignal(400);
+  const [modelMenuSize, setModelMenuSize] = createSignal({ width: 272, height: 320 });
+  const [modelMenuAvailableHeight, setModelMenuAvailableHeight] = createSignal(320);
   const [modelCapabilityRevision, setModelCapabilityRevision] = createSignal(0);
   type ModelCapabilityLoadState =
     | Readonly<{ kind: 'loading' }>
