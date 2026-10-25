@@ -518,6 +518,10 @@ func TestFlowerCPUQualification(t *testing.T) {
 			runtime.ReadMemStats(&memory)
 			service.mu.Lock()
 			subscribers, queued := len(service.flowerLiveSubscribers), service.flowerLiveQueuedBytes
+			subscriptionStates := make([]map[string]any, 0, subscribers)
+			for _, subscriber := range service.flowerLiveSubscribers {
+				subscriptionStates = append(subscriptionStates, map[string]any{"id": subscriber.id, "cancelled": subscriber.observerContext.Err() != nil, "initializing": subscriber.initializing, "reading": subscriber.baselineReading})
+			}
 			service.mu.Unlock()
 			evidenceMu.Lock()
 			threadUpdates := make(map[string]int, len(latestRuns))
@@ -525,7 +529,7 @@ func TestFlowerCPUQualification(t *testing.T) {
 				threadUpdates[id] = evidence[run].index
 			}
 			evidenceMu.Unlock()
-			encode(w, map[string]any{"produced": produced.Load(), "thread_updates": threadUpdates, "wire_bytes": wireBytes.Load(), "goroutines": runtime.NumGoroutine(), "heap_bytes": memory.HeapAlloc, "alloc_bytes": memory.TotalAlloc, "subscribers": subscribers, "queued_bytes": queued})
+			encode(w, map[string]any{"produced": produced.Load(), "thread_updates": threadUpdates, "wire_bytes": wireBytes.Load(), "goroutines": runtime.NumGoroutine(), "heap_bytes": memory.HeapAlloc, "alloc_bytes": memory.TotalAlloc, "subscribers": subscribers, "subscription_states": subscriptionStates, "queued_bytes": queued})
 		case "grow_history":
 			configureMu.Lock()
 			defer configureMu.Unlock()

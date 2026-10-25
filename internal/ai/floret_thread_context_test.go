@@ -468,3 +468,41 @@ func TestFlowerCompactionDecisionPreservesCanonicalEvidence(t *testing.T) {
 		t.Fatalf("historical evidence fabricated: %+v %v", historical, err)
 	}
 }
+
+func TestFlowerWindowContextKeepsVisibleAnchorsAndCurrentIndicator(t *testing.T) {
+	source := &flruntime.ThreadContextSnapshot{UsageTotals: &flruntime.ThreadTokenUsageTotals{InputTokens: 100}, Compactions: []flruntime.ThreadContextCompaction{
+		{OperationID: "old", RunID: "old-run", AfterItemID: "old-item"},
+		{OperationID: "visible", RunID: "old-run", AfterItemID: "visible-item"},
+		{OperationID: "previous", RunID: "active-run", AfterItemID: "offscreen"},
+		{OperationID: "latest", RunID: "active-run", AfterItemID: "latest-item"},
+	}}
+	selected := flowerWindowContext(source, []flruntime.ThreadItem{{ID: "visible-item"}}, "active-run")
+	if len(selected.Compactions) != 2 || selected.Compactions[0].OperationID != "visible" || selected.Compactions[1].OperationID != "latest" || selected.UsageTotals != source.UsageTotals {
+		t.Fatalf("incorrect selected context: %+v", selected)
+	}
+	older := flowerWindowContext(source, []flruntime.ThreadItem{{ID: "old-item"}}, "")
+	if len(older.Compactions) != 1 || older.Compactions[0].OperationID != "old" || len(source.Compactions) != 4 {
+		t.Fatal("history context was lost or canonical state mutated")
+	}
+}
+
+func TestFlowerPublicItemRetainsDeferredActivitySummary(t *testing.T) {
+	item := flruntime.ThreadItem{ID: "tool", Kind: flruntime.ThreadItemTool, ActivitySummary: &flruntime.ThreadActivitySummary{
+		Version: "source-version", Label: "Read source", Renderer: "structured",
+		Fields: []flruntime.ThreadActivityField{{Path: "/payload/rows", Kind: "array", Count: 180}},
+		Values: map[string]json.RawMessage{"/payload/rows_provided": json.RawMessage("true")},
+	}}
+	raw, err := json.Marshal(projectFlowerItem(item, "thread", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var actual struct {
+		Summary *flruntime.ThreadActivitySummary `json:"activity_summary"`
+	}
+	if err := json.Unmarshal(raw, &actual); err != nil {
+		t.Fatal(err)
+	}
+	if actual.Summary == nil || actual.Summary.Version != "source-version" || len(actual.Summary.Fields) != 1 || actual.Summary.Fields[0].Count != 180 {
+		t.Fatalf("deferred details disappeared from public response: %s", raw)
+	}
+}

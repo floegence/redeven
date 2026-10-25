@@ -63,9 +63,6 @@ export function ActivityFieldRows(props: {
       ? await readActivityValue(props.reader, props.threadID, props.itemID, path, signal, { maximumBytes: 192 << 10, maximumNodes: 256 })
       : snapshot!.value;
     if (props.renderValue) return { index, raw, revision };
-    if (snapshot?.content && snapshot.value.format === 'markdown') {
-      throw new Error('Deferred Markdown requires a complete semantic rendering source.');
-    }
     const field = props.section === 'inputs' ? 'inputs' : 'rows';
     // Reuse the public row validator and product normalization, including
     // language, safe resource targets, formatting and localized field labels.

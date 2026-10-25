@@ -6,16 +6,73 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
+	"github.com/floegence/floret/v7/threadquery"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 type deletedSummaryThreadRuntime struct{ flruntime.ThreadService }
+
+func TestFlowerServicePublishesWhileHistoricalDisplayPreparationWaits(t *testing.T) {
+	state, _ := loadFlowerUpgradeFixture(t, "10ce4c152-lifecycle")
+	opts := fixtureMaintenanceOptions(t, state)
+	opts.DeferExecution = true
+	calls := fixtureModelServer(t, &opts)
+	started, release := make(chan struct{}), make(chan struct{})
+	var startedOnce, releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	defer unblock()
+	opts.StoreStartupProgress = func(phase FloretStoreStartupPhase) {
+		if phase == FloretStoreStartupMigrating {
+			startedOnce.Do(func() { close(started) })
+			<-release
+		}
+	}
+	type result struct {
+		service *Service
+		err     error
+	}
+	completed := make(chan result, 1)
+	go func() { service, err := NewServiceContext(t.Context(), opts); completed <- result{service, err} }()
+	var value result
+	select {
+	case value = <-completed:
+	case <-time.After(2 * time.Second):
+		unblock()
+		value = <-completed
+		if value.service != nil {
+			_ = value.service.Close()
+		}
+		t.Fatal("service publication waited for unrelated historical display preparation")
+	}
+	// The worker may reach its first phase before or after publication.
+	// Publication must be independent of either scheduling order.
+	select {
+	case <-started:
+	case <-time.After(10 * time.Second):
+		unblock()
+		if value.service != nil {
+			_ = value.service.Close()
+		}
+		t.Fatal("historical display preparation did not start")
+	}
+	unblock()
+	if value.err != nil {
+		t.Fatal(value.err)
+	}
+	if err := value.service.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if calls.Load() != 0 {
+		t.Fatal("browsing preparation dispatched a provider")
+	}
+}
 
 func (deletedSummaryThreadRuntime) Summary(context.Context, identity.ThreadID) (flruntime.ThreadSummary, error) {
 	return flruntime.ThreadSummary{}, flruntime.ErrThreadDeleted
@@ -196,7 +253,7 @@ func TestFlowerMaintenanceRejectsSymlinksAndOversizedJSON(t *testing.T) {
 	}
 }
 
-func TestFlowerUpgradePreparesDisplayBeforeServicePublication(t *testing.T) {
+func TestFlowerUpgradePreparesSelectedDisplayOnRead(t *testing.T) {
 	state, _ := loadFlowerUpgradeFixture(t, "10ce4c152-lifecycle")
 	opts := fixtureMaintenanceOptions(t, state)
 	opts.DeferExecution = true
@@ -214,70 +271,13 @@ func TestFlowerUpgradePreparesDisplayBeforeServicePublication(t *testing.T) {
 		t.Fatalf("historical settings: %d %v", len(settings), err)
 	}
 	for _, setting := range settings {
-		ready, err := svc.floretThreadReadiness(t.Context(), identity.ThreadID(setting.ThreadID))
-		if err != nil || !ready.Ready || !ready.DisplayReady || ready.DisplayError != "" {
-			t.Fatalf("service published unprepared thread: %+v %v", ready, err)
+		id := identity.ThreadID(setting.ThreadID)
+		if current, _, err := readFlowerHistory(t.Context(), svc.threadRuntime, threadquery.Scope{Authority: "upgrade-fixture", ThreadIDs: []identity.ThreadID{id}}, flruntime.ThreadWindowInput{ThreadID: id, Limit: 24}); err != nil || current.ThreadID != id {
+			t.Fatalf("selected history read: %s %v", current.ThreadID, err)
 		}
+
 	}
 	if calls.Load() != 0 {
 		t.Fatal("display preparation dispatched a provider")
-	}
-}
-
-func TestFlowerDisplayPreparationIsolatesHistoricalFailure(t *testing.T) {
-	service := newSendTurnTestService(t)
-	for _, name := range []string{"damaged", "healthy", "already prepared"} {
-		if _, err := service.CreateThread(t.Context(), testSendTurnMeta(), name, "", "", ""); err != nil {
-			t.Fatal(err)
-		}
-	}
-	settings, _, _, err := service.threadsDB.ListThreadSettingsForRecoveryPage(t.Context(), threadstore.ThreadSettingsRecoveryCursor{}, 200)
-	if err != nil || len(settings) != 3 {
-		t.Fatalf("settings: %d %v", len(settings), err)
-	}
-	damaged := identity.ThreadID(settings[0].ThreadID)
-	healthy := identity.ThreadID(settings[1].ThreadID)
-	prepared := identity.ThreadID(settings[2].ThreadID)
-	ready := map[identity.ThreadID]bool{prepared: true}
-	var calls []identity.ThreadID
-	service.floretThreadReadiness = func(_ context.Context, id identity.ThreadID) (flruntime.ThreadReadiness, error) {
-		return flruntime.ThreadReadiness{Ready: true, DisplayReady: ready[id]}, nil
-	}
-	service.prepareFloretDisplayThread = func(_ context.Context, id identity.ThreadID) error {
-		calls = append(calls, id)
-		if id == damaged {
-			return errors.New("invalid historical browsing source")
-		}
-		ready[id] = true
-		return nil
-	}
-	if err := service.prepareDisplayThreads(t.Context()); err != nil {
-		t.Fatalf("one historical failure blocked service publication: %v", err)
-	}
-	if !ready[healthy] || ready[damaged] || len(calls) != 2 {
-		t.Fatalf("preparation isolation: ready=%v calls=%v", ready, calls)
-	}
-	calls = nil
-	if err := service.prepareDisplayThreads(t.Context()); err != nil || len(calls) != 1 || calls[0] != damaged {
-		t.Fatalf("prepared threads were revisited: calls=%v err=%v", calls, err)
-	}
-}
-
-func TestFlowerDisplayPreparationCancellationStopsPublication(t *testing.T) {
-	service := newSendTurnTestService(t)
-	if _, err := service.CreateThread(t.Context(), testSendTurnMeta(), "cancelled preparation", "", "", ""); err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-	service.floretThreadReadiness = func(context.Context, identity.ThreadID) (flruntime.ThreadReadiness, error) {
-		return flruntime.ThreadReadiness{Ready: true}, nil
-	}
-	service.prepareFloretDisplayThread = func(ctx context.Context, _ identity.ThreadID) error {
-		cancel()
-		return ctx.Err()
-	}
-	if err := service.prepareDisplayThreads(ctx); !errors.Is(err, context.Canceled) {
-		t.Fatalf("cancelled display preparation = %v", err)
 	}
 }

@@ -39,6 +39,11 @@ func applyFlowerTestUpdate(t *testing.T, view *flruntime.ThreadView, update flru
 				t.Fatal("invalid item removal")
 			}
 			view.Items = append(view.Items[:index], view.Items[index+1:]...)
+		case flruntime.ThreadItemBodyUpdated:
+			if index < 0 || change.Body == nil {
+				t.Fatal("invalid body locator update")
+			}
+			view.Items[index].Body = change.Body
 		case flruntime.ThreadItemAppended:
 			if index < 0 || change.Append == nil || len(view.Items[index].Text) != change.Append.OffsetBytes {
 				t.Fatal("invalid text append")

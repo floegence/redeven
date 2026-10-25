@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/floegence/floret/v7/identity"
 	"github.com/floegence/floret/v7/observation"
 	flruntime "github.com/floegence/floret/v7/runtime"
 )
@@ -88,4 +89,31 @@ func flowerThreadTokenUsageFromFloret(totals *flruntime.ThreadTokenUsageTotals) 
 		InputTokens: totals.InputTokens, OutputTokens: totals.OutputTokens,
 		CacheReadTokens: totals.CacheReadTokens, CacheWriteTokens: totals.CacheWriteTokens,
 	}, nil
+}
+
+// A reading window needs decorations anchored to its own items and the latest
+// operation for the active run's context indicator. Historical operations stay
+// canonical and return when their anchors enter a later reading window.
+func flowerWindowContext(source *flruntime.ThreadContextSnapshot, items []flruntime.ThreadItem, runID identity.RunID) *flruntime.ThreadContextSnapshot {
+	if source == nil {
+		return nil
+	}
+	selected := make(map[string]bool, len(items))
+	for _, item := range items {
+		selected[item.ID] = true
+	}
+	latest := -1
+	for index, item := range source.Compactions {
+		if runID != "" && item.RunID == runID {
+			latest = index
+		}
+	}
+	result := *source
+	result.Compactions = nil
+	for index, item := range source.Compactions {
+		if selected[item.AfterItemID] || index == latest {
+			result.Compactions = append(result.Compactions, item)
+		}
+	}
+	return &result
 }

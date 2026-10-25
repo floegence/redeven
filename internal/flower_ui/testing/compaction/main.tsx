@@ -14,7 +14,7 @@ async function api(op: string, threadID = id, body?: unknown, signal?: AbortSign
     method: body ? 'POST' : 'GET', signal,
     ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
   });
-  if (!response.ok) throw new Error(await response.text());
+  if (!response.ok) throw Object.assign(new Error(await response.text()), { status: response.status });
   const value = await response.json();
   // The product HTTP boundary adds viewer-owned read metadata after Service.
   if (value.thread) value.thread = { ...value.thread, read_status: readStatus };
@@ -36,6 +36,9 @@ const adapter = createRuntimeFlowerSurfaceAdapter({
       const response = await fetch('/live', { signal });
       if (!response.ok || !response.body) throw new Error('Live stream unavailable');
       const reader = response.body.getReader();
+      const cancel = () => { void reader.cancel().catch(() => undefined); };
+      signal.addEventListener('abort', cancel, { once: true });
+      if (signal.aborted) cancel();
       const decoder = new TextDecoder();
       let pending = '';
       try {
@@ -49,7 +52,7 @@ const adapter = createRuntimeFlowerSurfaceAdapter({
             pending = pending.slice(end + 1);
           }
         }
-      } finally { await reader.cancel(); }
+      } finally { signal.removeEventListener('abort', cancel); await reader.cancel().catch(() => undefined); }
     }
     } : {}),
     loadThread: (threadID, signal) => api('detail', threadID, undefined, signal),

@@ -228,7 +228,7 @@ describe('continuous visible bodies', () => {
     const record = createRuntimeThreadRecord(page, applyFlowerRuntimeCurrentView(initial, page));
     const messages = record.initializeThread().messages;
     record.apply(record.initializeThread(), { ...append(), items: [{ kind: 'body', item_id: 'one', body: { ...preview.body, bytes: 11 } }] });
-    const chunk = { thread_id: 'thread', run_id: 'run', source_id: 'one', offset_bytes: 6, through_bytes: 10, text: '🌸' };
+    const chunk = { thread_id: 'thread', item_id: 'one', field: 'content', bytes: 11, run_id: 'run', source_id: 'one', offset_bytes: 6, through_bytes: 10, text: '🌸' };
     expect(record.appendBody({ ...chunk, run_id: 'obsolete' })).toBe(false);
     expect(record.appendBody(chunk)).toBe(true);
     expect(record.appendBody(chunk)).toBe(false);
@@ -249,6 +249,29 @@ describe('continuous visible bodies', () => {
     expect(messages[0].body_pending).toBeUndefined();
   });
 
+  it('settles an already retained canonical prefix at its exact presentation end', () => {
+    const { current, initial } = fixture();
+    const preview = { ...current.items![0], live: false, canonical_ordinal: 4, text: '中文', body: { field: 'content', source_id: 'one', bytes: 100, preview_bytes: 6 } };
+    const page = { ...current, items: [preview] };
+    const record = createRuntimeThreadRecord(page, applyFlowerRuntimeCurrentView(initial, page));
+    expect(record.appendBody({ thread_id: 'thread', item_id: 'one', field: 'content', source_id: 'one', bytes: 6, offset_bytes: 6, through_bytes: 6, text: '' })).toBe(true);
+    expect(record.item('one')?.body).toBeUndefined();
+    expect(record.item('one')?.text).toBe('中文');
+  });
+  it('resumes canonical user and assistant text with exact locator identities', () => {
+    for (const kind of ['user', 'assistant'] as const) {
+      const { current, initial } = fixture();
+      const body = { field: 'content', ...(kind === 'user' ? { entry_id: 'one' } : { source_id: 'one' }), bytes: 10, preview_bytes: 6 };
+      const preview = { ...current.items![0], kind, live: false, canonical_ordinal: 4, text: '中文', body };
+      const page = { ...current, items: [preview] };
+      const record = createRuntimeThreadRecord(page, applyFlowerRuntimeCurrentView(initial, page));
+      const chunk = { thread_id: 'thread', item_id: 'one', ...body, bytes: 10, offset_bytes: 6, through_bytes: 10, text: '🌸' };
+      expect(record.appendBody({ ...chunk, entry_id: 'wrong' })).toBe(false);
+      expect(record.appendBody(chunk)).toBe(true);
+      expect(record.item('one')?.text).toBe('中文🌸');
+      expect(record.item('one')?.body).toBeUndefined();
+    }
+  });
   it('keeps accepted live text and message identity while its body grows', () => {
     const { current, initial } = fixture();
     const preview = { ...current.items![0], text: '中文', body: { field: 'content' as const, source_id: 'one', run_id: 'run', bytes: 10, preview_bytes: 6 } };

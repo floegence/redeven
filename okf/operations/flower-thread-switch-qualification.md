@@ -9,7 +9,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Published Floret v7.79.0 owns windows, bodies, View and Summary. Redeven owns
+Published Floret v7.87.0 owns windows, bounded item-text reads, View and Summary. Redeven owns
 bounded reads and presentation through the [sidebar](../ui/flower-thread-sidebar.md)
 and [Desktop bridge](../desktop/desktop-runtime-bridge.md). Local qualification
 targets >=70% lower short-detail P95, warm synchronous P95 <8 ms, and feedback
@@ -26,7 +26,7 @@ Root detail uses Floret window subscriptions; GET/PATCH, command receipts and ro
 observation share public projection. Child reads own an independent bounded interest.
 Initial windows and explicit body requests bound transport, excluding metadata and
 pending controls. Cold actor initialization may still read complete state; explicitly
-expanded large items transfer in full. Backend read and loopback/render timings are
+expanded activities use selected values and bounded field ranges. Backend read and loopback/render timings are
 separate measurements, never additive.
 
 ```sh
@@ -108,3 +108,21 @@ existing disclosure/scroll failures reproduced on baseline remain separately rec
 - [Streaming regressions](../../internal/envapp/ui_src/src/ui/FlowerSurface.streamingStability.browser.test.tsx)
 - [Sidebar ownership](../ui/flower-thread-sidebar.md)
 - [Desktop bridge](../desktop/desktop-runtime-bridge.md)
+
+## Responsive runtime qualification, 2026-10-25
+
+A consistent isolated historical copy, with execution deferred, passed three fresh
+backend/Electron process runs after field-summary, pending-terminal and lifecycle fixes.
+Trusted click to stable readable content plus usable composer: 626.2, 261.4 and
+239.1 ms, all below the explicit 1,000 ms gate. Each run retained ninety stable
+frames, exact typed drafts, scrolling and disclosure without page/transport errors.
+Initial history response was 91,044 bytes versus the earlier 192,218-byte baseline
+(52.6% smaller). These are three local samples with prepared historical state,
+not a population P95 or an unprepared old-format upgrade bound. Service construction
+is measured separately from click-to-interactive and process launch.
+
+The deterministic blocked-migration test proves service availability before global
+historical work completes. Large hidden activity details prepare only on explicit
+access; cold first disclosure may still parse one complete selected activity.
+Inactive cache budgets do not cap active Markdown documents, selected text or a
+mounted live terminal. Exact content and explicit ownership remain mandatory.

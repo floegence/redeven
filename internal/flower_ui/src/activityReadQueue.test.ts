@@ -47,3 +47,27 @@ describe('activity read scheduling', () => {
     expect(queue.pending).toBe(0);
   });
 });
+
+it('prioritizes explicit details and promotes shared queued reads', async () => {
+  const queue = createActivityReadQueue();
+  const starts: string[] = [];
+  const finishes: (() => void)[] = [];
+  const signal = new AbortController().signal;
+  const start = (key: string) => () => {
+    starts.push(key);
+    return new Promise<void>(resolve => finishes.push(resolve));
+  };
+  const running = [queue.run('one', signal, start('one')), queue.run('two', signal, start('two'))];
+  const background = queue.run('background', signal, start('background'), 'background');
+  const promoted = queue.run('promoted', signal, start('promoted'), 'background');
+  const visible = queue.run('visible', signal, start('visible'), 'visible');
+  const explicit = queue.run('promoted', signal, start('duplicate'), 'interactive');
+  finishes.shift()!(); await tick();
+  expect(starts).toEqual(['one', 'two', 'promoted']);
+  finishes.shift()!(); await tick();
+  expect(starts).toEqual(['one', 'two', 'promoted', 'visible']);
+  finishes.shift()!(); await tick();
+  expect(starts.at(-1)).toBe('background');
+  finishes.splice(0).forEach(finish => finish());
+  await Promise.all([...running, background, promoted, visible, explicit]);
+});

@@ -88,27 +88,28 @@ type flowerPublicInteraction struct {
 	ComputerAssistance *ComputerInputAssistance         `json:"computer_assistance,omitempty"`
 }
 type flowerPublicItem struct {
-	OutputStartedAt  *time.Time                     `json:"output_started_at,omitempty"`
-	OutputEndedAt    *time.Time                     `json:"output_ended_at,omitempty"`
-	Body             *flruntime.ThreadItemBody      `json:"body,omitempty"`
-	ActivityBodies   []flruntime.ThreadActivityBody `json:"activity_bodies,omitempty"`
-	Goal             *flruntime.ThreadGoalChange    `json:"goal,omitempty"`
-	Steering         *flruntime.ThreadSteering      `json:"steering,omitempty"`
-	Sources          []provider.Source              `json:"sources,omitempty"`
-	ID               string                         `json:"id"`
-	TurnID           identity.TurnID                `json:"turn_id,omitempty"`
-	RunID            identity.RunID                 `json:"run_id,omitempty"`
-	CanonicalOrdinal uint64                         `json:"canonical_ordinal,omitempty"`
-	Ordinal          uint64                         `json:"ordinal"`
-	Kind             flruntime.ThreadItemKind       `json:"kind"`
-	Text             string                         `json:"text,omitempty"`
-	Live             bool                           `json:"live,omitempty"`
-	CreatedAt        time.Time                      `json:"created_at,omitempty"`
-	Attachments      []flowerPublicAttachment       `json:"attachments,omitempty"`
-	References       []flruntime.MessageReference   `json:"references,omitempty"`
-	Context          []flruntime.MessageContextItem `json:"context,omitempty"`
-	Activity         *flowerPublicActivity          `json:"activity,omitempty"`
-	Interaction      *flowerPublicInteraction       `json:"interaction,omitempty"`
+	ActivitySummary  *flruntime.ThreadActivitySummary `json:"activity_summary,omitempty"`
+	OutputStartedAt  *time.Time                       `json:"output_started_at,omitempty"`
+	OutputEndedAt    *time.Time                       `json:"output_ended_at,omitempty"`
+	Body             *flruntime.ThreadItemBody        `json:"body,omitempty"`
+	ActivityBodies   []flruntime.ThreadActivityBody   `json:"activity_bodies,omitempty"`
+	Goal             *flruntime.ThreadGoalChange      `json:"goal,omitempty"`
+	Steering         *flruntime.ThreadSteering        `json:"steering,omitempty"`
+	Sources          []provider.Source                `json:"sources,omitempty"`
+	ID               string                           `json:"id"`
+	TurnID           identity.TurnID                  `json:"turn_id,omitempty"`
+	RunID            identity.RunID                   `json:"run_id,omitempty"`
+	CanonicalOrdinal uint64                           `json:"canonical_ordinal,omitempty"`
+	Ordinal          uint64                           `json:"ordinal"`
+	Kind             flruntime.ThreadItemKind         `json:"kind"`
+	Text             string                           `json:"text,omitempty"`
+	Live             bool                             `json:"live,omitempty"`
+	CreatedAt        time.Time                        `json:"created_at,omitempty"`
+	Attachments      []flowerPublicAttachment         `json:"attachments,omitempty"`
+	References       []flruntime.MessageReference     `json:"references,omitempty"`
+	Context          []flruntime.MessageContextItem   `json:"context,omitempty"`
+	Activity         *flowerPublicActivity            `json:"activity,omitempty"`
+	Interaction      *flowerPublicInteraction         `json:"interaction,omitempty"`
 }
 type flowerPublicInput struct {
 	ModelContextSnapshot *flruntime.ModelContextSnapshot `json:"model_context_snapshot,omitempty"`
@@ -177,7 +178,7 @@ func projectFlowerInteraction(value flruntime.ThreadInteraction, evidence *flrun
 	return out
 }
 func projectFlowerItem(value flruntime.ThreadItem, threadID string, evidence *flruntime.ThreadView) flowerPublicItem {
-	out := flowerPublicItem{OutputStartedAt: value.OutputStartedAt, OutputEndedAt: value.OutputEndedAt, Body: value.Body, ActivityBodies: value.ActivityBodies, Goal: value.Goal, Steering: value.Steering, Sources: value.Sources, ID: value.ID, TurnID: value.TurnID, RunID: value.RunID, CanonicalOrdinal: value.CanonicalOrdinal, Ordinal: value.Ordinal, Kind: value.Kind, Text: value.Text, Live: value.Live, CreatedAt: value.CreatedAt, Attachments: projectFlowerAttachments(value.Attachments, threadID, value.TurnID.String(), ""), References: publicRuntimeReferences(value.References), Context: value.Context}
+	out := flowerPublicItem{ActivitySummary: publicFlowerActivitySummary(value.ActivitySummary), OutputStartedAt: value.OutputStartedAt, OutputEndedAt: value.OutputEndedAt, Body: value.Body, ActivityBodies: value.ActivityBodies, Goal: value.Goal, Steering: value.Steering, Sources: value.Sources, ID: value.ID, TurnID: value.TurnID, RunID: value.RunID, CanonicalOrdinal: value.CanonicalOrdinal, Ordinal: value.Ordinal, Kind: value.Kind, Text: value.Text, Live: value.Live, CreatedAt: value.CreatedAt, Attachments: projectFlowerAttachments(value.Attachments, threadID, value.TurnID.String(), ""), References: publicRuntimeReferences(value.References), Context: value.Context}
 	if value.Activity != nil {
 		activity := projectFlowerActivity(*value.Activity)
 		out.Activity = &activity
@@ -188,6 +189,33 @@ func projectFlowerItem(value flruntime.ThreadItem, threadID string, evidence *fl
 	}
 	return out
 }
+
+// Field mode carries the canonical shape and small display values. Apply the
+// same product sanitizers as complete presentations to chips and target refs.
+func publicFlowerActivitySummary(source *flruntime.ThreadActivitySummary) *flruntime.ThreadActivitySummary {
+	if source == nil {
+		return nil
+	}
+	result := *source
+	result.Values = make(map[string]json.RawMessage, len(source.Values))
+	for path, raw := range source.Values {
+		if path == "/chips" || path == "/target_refs" {
+			var values []any
+			if json.Unmarshal(raw, &values) != nil {
+				continue
+			}
+			if path == "/chips" {
+				values = sanitizeActivityChipsValue(values)
+			} else {
+				values = sanitizeActivityTargetRefsValue(values)
+			}
+			raw, _ = json.Marshal(values)
+		}
+		result.Values[path] = raw
+	}
+	return &result
+}
+
 func projectFlowerInput(value flruntime.UserInput, threadID, queueID string) flowerPublicInput {
 	return flowerPublicInput{value.ModelContextSnapshot, value.Text, projectFlowerAttachments(value.Attachments, threadID, "", queueID), publicRuntimeReferences(value.References), value.Context}
 }

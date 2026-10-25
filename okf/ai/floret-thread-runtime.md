@@ -21,9 +21,7 @@ Redeven-specific authorization, DTO mapping, live projection, and adapter owners
 
 ## Automatic display preparation
 
-Floret owns one-time historical source preparation during upgrade. Redeven
-requests and observes public display readiness; it never scans or migrates
-Floret-owned records. Prepared restarts reuse canonical readiness anchors.
+Floret owns one-time historical source preparation during upgrade. Redeven publishes service readiness without a global display-preparation sweep and observes public per-thread readiness; it never scans or migrates Floret-owned records. Prepared restarts reuse canonical readiness anchors. Hidden Activity field indexes are prepared only on explicit detail reads.
 New threads and independently ready conversations remain available while other
 threads prepare; a failed preparation is reported without rewriting history.
 

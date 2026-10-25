@@ -145,6 +145,7 @@ main() {
       internal/flower_ui/src/runtimeCurrentView.test.ts \
       internal/flower_ui/src/runtimeCurrentView.stability.test.ts \
       internal/flower_ui/src/runtimeThreadRecord.test.ts \
+      internal/flower_ui/src/messageTextSource.test.ts \
       internal/flower_ui/src/runtimeThreadRecord.client.test.ts \
       internal/flower_ui/src/flowerDecisionCurrent.test.ts \
       internal/flower_ui/src/flowerLiveFrameQueue.test.ts \

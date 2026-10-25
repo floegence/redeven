@@ -5,7 +5,7 @@ description: Keep canonical Floret storage opaque and preserve every supported p
 tags: [ai, storage, sqlite, migrations, floret]
 timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
@@ -20,6 +20,8 @@ reviewed_at: "2026-10-22"
 Redeven consumes the exact published Floret version in go.mod with `GOWORK=off`.
 
 Floret owns bounded startup recognition and background per-thread migration. Each validated dependency closure publishes atomically; retained sources retire only after complete verification. The oldest v2-v5 snapshots reserve historical identities through a resumable scan before new-thread admission. Segmented stores admit new threads immediately. Redeven uses public status, thread preparation and per-thread media contracts and never decodes upstream records.
+
+Published Floret v7.87.0 removes hidden Activity field preparation from ordinary startup, retains summary metadata on large activity admission, batches explicit locator writes and skips same-value SQLite upserts. Its recent manifest cache is bounded, memory-only and owned upstream. No new host indexes, full-text indexes or duplicate conversation storage are introduced. First disclosure may still prepare the selected complete activity once; this is not a claim of field-granular cold preparation.
 
 Cancellation, shutdown and execution-context settlement resolve canonical control records through Floret. The host keeps the original Stop request and does not read or reconstruct upstream conversation bodies to settle it.
 

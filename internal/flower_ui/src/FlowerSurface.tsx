@@ -4159,8 +4159,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (!expected || !expected.body && !expected.activity_bodies?.length) return;
       const body = expected.body;
       const offset = threadCache().bodyOffset(threadID, itemID);
-      const incremental = Boolean(body?.run_id && body.source_id && offset !== undefined && props.adapter.loadHistoryBody);
-      const chunk = incremental ? await props.adapter.loadHistoryBody!(threadID, { item_id: itemID, run_id: body!.run_id!, source_id: body!.source_id!, through_bytes: body!.bytes, offset_bytes: offset! }, readSignal) : undefined;
+      const incremental = Boolean(body && offset !== undefined && props.adapter.loadHistoryBody);
+      const chunk = incremental ? await props.adapter.loadHistoryBody!(threadID, { item_id: itemID, run_id: body!.run_id, source_id: body!.source_id, entry_id: body!.entry_id, field: body!.field, through_bytes: body!.bytes, offset_bytes: offset! }, readSignal) : undefined;
       const item = chunk ? undefined : await props.adapter.loadHistoryItem!(threadID, itemID, readSignal);
       readSignal.throwIfAborted();
       if (epoch !== liveTransport.connectionEpoch()) throw new DOMException('Read was superseded.', 'AbortError');
@@ -10553,6 +10553,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     failureDetailPresent: Accessor<boolean>;
     outputField?: Accessor<import('./contracts/flowerSurfaceContracts').FlowerActivityField | undefined>;
     deferredOutput?: Accessor<boolean>;
+    pendingOutput?: Accessor<boolean>;
     outputFieldLastSeq?: Accessor<number>;
     detailActive?: Accessor<boolean>;
   }>;
@@ -10600,6 +10601,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     };
     const payloadOutput = () => String(terminal().output).replace(/\r\n?/g, '\n');
     const deferredOutput = createMemo(() => detailProps.deferredOutput?.() ?? false);
+    const pendingOutput = createMemo(() => detailProps.pendingOutput?.() ?? false);
     const [fieldAtEnd, setFieldAtEnd] = createSignal(false);
     const [fieldHandoff, setFieldHandoff] = createSignal<AbortSignal>();
     // Deferred bytes have a sequence watermark, not an empty canonical frame.
@@ -10610,11 +10612,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       last_seq: terminal().last_seq,
       truncated: terminal().truncated,
     });
-    const initialOutput = terminalVisibleOutputStore.replaceSnapshot(terminalIdentity(), snapshotFrame());
+    const releaseTerminalOutput = terminalVisibleOutputStore.retain(terminalIdentity());
+    onCleanup(releaseTerminalOutput);
+    const initialOutput = pendingOutput() ? terminalVisibleOutputStore.get(terminalIdentity())
+      : terminalVisibleOutputStore.replaceSnapshot(terminalIdentity(), snapshotFrame());
     const [liveOutput, setLiveOutput] = createSignal(initialOutput);
     outputViewport.setOutput(initialOutput);
     const canReadLiveOutput = createMemo(() => (
-      (detailProps.detailActive?.() ?? true) && !fieldHandoff() && (!deferredOutput() || fieldAtEnd()) &&
+      (detailProps.detailActive?.() ?? true) && !pendingOutput() && !fieldHandoff() && (!deferredOutput() || fieldAtEnd()) &&
       terminal().operation !== 'write' && terminal().operation !== 'read' &&
       !!props.adapter.readTerminalProcess &&
       detailProps.context().runID !== '' &&
@@ -10758,8 +10763,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       });
     }));
 
-    createEffect(on([terminal, liveExecutionIdentity, processID], () => {
-      if (deferredOutput()) return;
+    createEffect(on([terminal, liveExecutionIdentity, processID, pendingOutput, deferredOutput], () => {
+      if (pendingOutput() || deferredOutput()) return;
       const canonicalOutput = terminalVisibleOutputStore.replaceSnapshot(terminalIdentity(), snapshotFrame());
       if (canonicalOutput !== liveOutput()) {
         setLiveOutput(canonicalOutput);
@@ -10841,7 +10846,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             prepareSource={prepareOutputSource}
             active={detailProps.detailActive?.() ?? true} connection={liveSyncState().connectionEpoch} />
         }</Show>
-        <Show when={!deferredOutput()}><Show when={terminal().operation !== 'write' && visibleOutput().trim()} fallback={
+        <Show when={!pendingOutput() && !deferredOutput()}><Show when={terminal().operation !== 'write' && visibleOutput().trim()} fallback={
           <Show when={emptyOutputNotice()}>
             {(notice) => <p class="flower-activity-terminal-notice">{notice()}</p>}
           </Show>
@@ -11345,13 +11350,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ) => {
     const disclosureKey = createMemo(() => activityItemKey(messageID(), timeline(), item()));
     const [visible, setVisible] = createSignal(false);
-    const observeVisibility = (node: HTMLDivElement) => {
+    let activityNode!: HTMLDivElement;
+    // Template refs run before adoption into the live document. Chromium can
+    // retain observers registered against that inert template document even
+    // after disconnect; observe only once the row has mounted.
+    onMount(() => {
       const observer = new IntersectionObserver(entries => {
         setVisible(entries.some(entry => entry.isIntersecting));
       });
-      observer.observe(node);
+      observer.observe(activityNode);
       onCleanup(() => observer.disconnect());
-    };
+    });
     const fieldPresentation = createActivityFieldPresentation({ reader: activityFields, item, itemID: messageID,
       threadID: () => timeline().thread_id ?? '',
       active: () => visible() && ((openActivityRuns()[disclosureKey()] ?? isSavedComputerScreenshot(item()))
@@ -11538,7 +11547,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
     return (
       <div
-        ref={observeVisibility}
+        ref={activityNode}
         class={cn('flower-activity-inline-row', item().tool_name === 'goal' && 'flower-activity-inline-row-goal', `flower-activity-inline-row-${displayStatus()}`, item().tool_name === 'subagent_events' && 'flower-activity-inline-row-reports', item().renderer === 'web_search' && 'flower-activity-inline-row-web-search', subagentOperation() && 'flower-activity-inline-row-subagents', inlineSubagent() && 'flower-activity-inline-row-single-subagent')}
         data-flower-activity-item-id={item().item_id}
         title={subagentReadHint()}
@@ -11672,6 +11681,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                                 failureDetailPresent={() => presentation().detailBlocks.some(block => block.kind === 'error')}
                                 outputField={() => fieldPresentation.field('/payload/output')}
                                 outputFieldLastSeq={() => Number(fieldPresentation.sourcePayload()?.last_seq ?? 0)}
+                                pendingOutput={() => fieldPresentation.sourcePayload() === undefined
+                                  && Boolean(item().field_summary?.fields.some(field => field.path === '/payload/output' && field.kind === 'string'))}
                                 deferredOutput={() => Boolean(item().field_summary?.fields.some(field => field.path === '/payload/output'
                                   && field.kind === 'string' && (field.bytes ?? 0) > (64 << 10)))}
                                 detailActive={() => visible() && open()}

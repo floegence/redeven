@@ -17,7 +17,6 @@ import (
 // typed thread service behind their published runtime contracts.
 type floretBootstrapResult struct {
 	threadReadiness      func(context.Context, identity.ThreadID) (flruntime.ThreadReadiness, error)
-	prepareDisplayThread func(context.Context, identity.ThreadID) error
 	activate             func(context.Context) error
 	prepareRestore       func(context.Context) (flruntime.RestorePreparation, error)
 	mediaInventory       func(context.Context) (flruntime.MediaInventory, error)
@@ -226,7 +225,6 @@ func configureFloretRuntime(host *flruntime.Host) (*floretBootstrapResult, error
 	}
 	return &floretBootstrapResult{
 		threadReadiness:      host.Readiness,
-		prepareDisplayThread: host.PrepareDisplayThread,
 		activate:             host.Activate,
 		prepareRestore:       host.PrepareRestore,
 		mediaInventory:       host.MediaInventory,

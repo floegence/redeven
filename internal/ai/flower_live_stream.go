@@ -277,6 +277,7 @@ type flowerLiveSubscriber struct {
 	observerID         string
 	observerContext    context.Context
 	observerCancel     context.CancelFunc
+	observerStop       func() bool
 	baselineThreadIDs  []string
 	baselineArrayBytes int
 	viewerMu           sync.Mutex
@@ -384,6 +385,9 @@ func (s *Service) SubscribeFlowerLiveStream(ctx context.Context, meta *session.M
 		media: make(chan *flowerLiveEncodedBatch, 1), wake: make(chan struct{}, 1),
 		initializing: true,
 	}
+	// Cancellation owns subscription lifetime even while the transport is not
+	// awaiting Next (for example while a disconnected client is writing).
+	subscriber.observerStop = context.AfterFunc(observerContext, func() { closeFlowerLiveSubscription(s, subscriber) })
 	s.flowerLiveSubscribers[subscriber.id] = subscriber
 	s.flowerLiveSubscribersByEndpoint[endpointID]++
 	s.flowerLiveMetrics.subscriberOpened()
@@ -1056,11 +1060,7 @@ func (s *FlowerLiveStreamSubscription) resolveFlowerLiveRefresh(ctx context.Cont
 	} else {
 		envelope.Current = &current
 	}
-	evidence, err := s.service.flowerHistoryComputerEvidence(ctx, current.ThreadID, current.Interactions)
-	if err != nil {
-		return err
-	}
-	envelope.updateEvidence = evidence
+	envelope.updateEvidence = &current
 	batch := newFlowerLiveEncodedBatch(envelope)
 	s.service.mu.Lock()
 	defer s.service.mu.Unlock()
@@ -1114,6 +1114,10 @@ func closeFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSub
 	queuedBytes := subscriber.queuedBytes + subscriber.mediaBytes
 	globalBytes := service.flowerLiveQueuedBytes
 	subscriber.closed = true
+	if subscriber.observerStop != nil {
+		subscriber.observerStop()
+		subscriber.observerStop = nil
+	}
 	if subscriber.observerCancel != nil {
 		subscriber.observerCancel()
 	}

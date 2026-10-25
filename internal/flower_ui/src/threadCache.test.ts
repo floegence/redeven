@@ -839,3 +839,28 @@ describe('progressive root baseline', () => {
     expect(cache.selectedId).toBeNull();
   });
 });
+
+it('evicts by retained bytes before entry count and protects displayed details', () => {
+  const text = 'x'.repeat(5 << 20);
+  let cache = createThreadCache().select('selected').retainDetails(['child']);
+  cache = receive(cache, view('selected', 1, text));
+  cache = receive(cache, view('child', 1, text));
+  for (let i = 0; i < 6; i++) cache = receive(cache, view('background-' + i, 1, text));
+  expect(cache.views.has('selected')).toBe(true);
+  expect(cache.views.has('child')).toBe(true);
+  expect(cache.views.size).toBeLessThan(8);
+  expect(cache.summaries.size).toBe(8);
+});
+
+it('reaccounts a grown retained child before releasing its protection', () => {
+  let cache = createThreadCache().select('selected').retainDetails(['child']);
+  cache = receive(cache, view('selected', 1, 'selected'));
+  cache = receive(cache, view('child', 1, 'small'));
+  const child = cache.views.get('child')!;
+  // Runtime message stores grow in place without touching cache visit order.
+  Object.assign(child.thread.messages[0], { content: 'x'.repeat(20 << 20) });
+  cache = cache.retainDetails([]);
+  expect(cache.views.has('child')).toBe(false);
+  expect(cache.views.has('selected')).toBe(true);
+  expect(cache.summaries.has('child')).toBe(true);
+});

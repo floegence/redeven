@@ -158,6 +158,7 @@ func (s *Service) observeFlowerHistoryInterest(observerCtx context.Context, meta
 	go func() {
 		defer s.serviceWorkers.Done()
 		defer sub.Close()
+		selectedItems := make(map[string]flruntime.ThreadItem)
 		for {
 			update, err := sub.Next(observerCtx)
 			if err != nil {
@@ -190,7 +191,8 @@ func (s *Service) observeFlowerHistoryInterest(observerCtx context.Context, meta
 			}
 			s.mu.Unlock()
 			// Authorization is refreshed for every delivered read observation.
-			if _, err := s.flowerHistoryScope(observerCtx, &metaCopy, threadID); err != nil {
+			scope, err := s.flowerHistoryScope(observerCtx, &metaCopy, threadID)
+			if err != nil {
 				s.mu.Lock()
 				if interest.subscription == sub {
 					subscriber.closeErr = ErrFlowerLiveSync
@@ -210,6 +212,27 @@ func (s *Service) observeFlowerHistoryInterest(observerCtx context.Context, meta
 				}
 				s.mu.Unlock()
 			}
+			if update.Window != nil && update.Window.Value != nil {
+				clear(selectedItems)
+				for _, item := range update.Window.Value.Items {
+					selectedItems[item.ID] = flruntime.ThreadItem{ID: item.ID}
+				}
+			} else {
+				for _, change := range update.Items {
+					if change.Kind == flruntime.ThreadItemRemoved {
+						delete(selectedItems, change.ItemID)
+					} else if change.Item != nil {
+						selectedItems[change.ItemID] = flruntime.ThreadItem{ID: change.ItemID}
+					}
+				}
+			}
+			if update.Context != nil {
+				items := make([]flruntime.ThreadItem, 0, len(selectedItems))
+				for _, item := range selectedItems {
+					items = append(items, item)
+				}
+				update.Context = &flruntime.ThreadComponent[*flruntime.ThreadContextSnapshot]{Value: flowerWindowContext(update.Context.Value, items, update.RunID)}
+			}
 			// Publish the same canonical baseline on the ordered channel. A lost
 			// HTTP response or cancelled waiter must not strand the new interest.
 			// The browser accepts it only for its current reading intent.
@@ -225,7 +248,7 @@ func (s *Service) observeFlowerHistoryInterest(observerCtx context.Context, meta
 			if update.Interactions != nil {
 				interactions = update.Interactions.Value
 			}
-			evidence, err := s.flowerHistoryComputerEvidence(observerCtx, identity.ThreadID(threadID), interactions)
+			evidence, err := s.flowerHistoryComputerEvidence(observerCtx, scope, identity.ThreadID(threadID), interactions)
 			if err != nil {
 				s.fenceFlowerLiveEndpoint(metaCopy.EndpointID)
 				return

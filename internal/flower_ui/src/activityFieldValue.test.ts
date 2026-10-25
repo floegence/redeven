@@ -48,7 +48,7 @@ describe('visible atomic activity values', () => {
     expect(api.loadActivityField.mock.calls.length).toBe(16);
     expect(api.loadActivityField.mock.calls.every(([, request]) => request.limit_bytes! <= 16384)).toBe(true);
   });
-  it('preserves legal oversized Markdown as a frozen source and reads only normalized titles', async () => {
+  it('preserves complete oversized Markdown whitespace through bounded requests', async () => {
     const content = '\n'.repeat(70000) + '    preserved indentation\n';
     const title = ' '.repeat(40000) + 'Title';
     const values = { title, content };
@@ -65,9 +65,9 @@ describe('visible atomic activity values', () => {
       }),
     };
     const row = await readActivityRowSnapshot(createActivityFieldReader(api), 'thread', 'tool', '/payload/rows/0', new AbortController().signal);
-    expect(row.value).toEqual({ format: 'markdown', title: 'Title' });
-    expect(row.content).toMatchObject({ source_id: 'content', bytes: new TextEncoder().encode(content).length });
-    expect(api.loadActivityField.mock.calls).toHaveLength(1);
+    expect(row.value).toEqual({ format: 'markdown', title: 'Title', content });
+    expect(row.content).toBeUndefined();
+    expect(api.loadActivityField.mock.calls).toHaveLength(6);
     expect(api.loadActivityField.mock.calls[0][1]).toMatchObject({ source_id: 'title', offset_bytes: 40000 });
     expect(api.loadActivityField.mock.calls.every(([, input]) => input.limit_bytes! <= 16384)).toBe(true);
   });

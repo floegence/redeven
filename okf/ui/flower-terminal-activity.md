@@ -5,7 +5,7 @@ description: Terminal output, truthful result messages, safe input confirmation,
 tags: [ai, flower, terminal, presentation]
 timestamp: 2026-10-15T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
@@ -17,6 +17,10 @@ Flower renders canonical Floret v7 Activity facts. Host-authored labels and desc
 Floret owns the nested `ActivityItem.presentation` contract and merges results with their stable call presentation. Labels and descriptions are authoritative; the typed operation supplies localized fallback text.
 
 The five-line independently scrolling output viewport retains its existing owner.
+
+An omitted output field is pending content, never an empty canonical frame with a nonzero first sequence. Wait for small-field hydration before polling or installing its sequence; large fields use source-bound ranges, then acknowledge their watermark before adding process deltas. Existing output and selection survive handoff.
+
+Inactive output caches have 200-entry / 8 MiB estimated-byte limits. Mounted outputs remain retained until release; frame metadata coalesces after 128 records without changing sequence checks. These cache limits do not truncate an active process output or its canonical history.
 
 ## Interaction boundary
 [Activity disclosure interaction](flower-activity-interaction.md) owns stable triggers, manual choices, animation, transcript following, and floating controls across all renderers. Approval state is never a row badge, chip, metadata line, title suffix, tooltip, detail, or ordinary activity ARIA label. Completing a decision removes that dock without inserting an approval outcome into history.

@@ -35,7 +35,7 @@ type flowerHistoryChunkRuntime struct {
 	flruntime.ThreadFactsSource
 	flruntime.ThreadSummaryReader
 	body  flruntime.ThreadItemBody
-	reads []flruntime.ThreadLiveBodyInput
+	reads []flruntime.ThreadItemTextInput
 }
 
 func (r *flowerHistoryChunkRuntime) ItemBody(ctx context.Context, scope threadquery.Scope, input flruntime.ThreadItemBodyInput) (flruntime.ThreadItemBody, error) {
@@ -47,10 +47,19 @@ func (r *flowerHistoryChunkRuntime) ItemBody(ctx context.Context, scope threadqu
 	}
 	return r.body, nil
 }
-func (r *flowerHistoryChunkRuntime) ReadLiveBody(_ context.Context, _ threadquery.Scope, input flruntime.ThreadLiveBodyInput) (flruntime.ThreadLiveBodyChunk, error) {
+func (r *flowerHistoryChunkRuntime) ReadItemText(ctx context.Context, scope threadquery.Scope, input flruntime.ThreadItemTextInput) (flruntime.ThreadItemTextChunk, error) {
+	var empty flruntime.ThreadItemTextChunk
+	body, err := r.ItemBody(ctx, scope, flruntime.ThreadItemBodyInput{ThreadID: input.ThreadID, ItemID: input.ItemID})
+	if err != nil {
+		return empty, err
+	}
+	if input.RunID != body.RunID || input.SourceID != body.SourceID || input.EntryID != body.EntryID || input.Field != body.Field || input.ThroughBytes > body.Bytes {
+		return empty, threadquery.ErrRecordUnavailable
+	}
 	r.reads = append(r.reads, input)
-	return flruntime.ThreadLiveBodyChunk{ThreadID: input.ThreadID, RunID: input.RunID, SourceID: input.SourceID, ThroughBytes: input.ThroughBytes, OffsetBytes: input.OffsetBytes, Text: "🌸"}, nil
+	return flruntime.ThreadItemTextChunk{ThreadID: input.ThreadID, ItemID: input.ItemID, RunID: input.RunID, SourceID: input.SourceID, EntryID: input.EntryID, Field: input.Field, Bytes: body.Bytes, ThroughBytes: input.ThroughBytes, OffsetBytes: input.OffsetBytes, Text: "🌸"}, nil
 }
+
 func (r *flowerHistoryChunkRuntime) View(context.Context, identity.ThreadID) (flruntime.ThreadView, error) {
 	panic("chunk read must not load history")
 }
@@ -67,7 +76,7 @@ func TestFlowerHistoryBodyBoundedAuthorizedResume(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := FlowerHistoryBodyRequest{ItemID: "output", RunID: "run", SourceID: "output", OffsetBytes: 65536, ThroughBytes: 90000}
+	input := FlowerHistoryBodyRequest{Field: flruntime.ThreadBodyContent, ItemID: "output", RunID: "run", SourceID: "output", OffsetBytes: 65536, ThroughBytes: 90000}
 	chunk, err := svc.GetFlowerHistoryBody(t.Context(), meta, thread.ThreadID, input)
 	if err != nil || chunk.OffsetBytes != input.OffsetBytes || chunk.ThroughBytes != input.ThroughBytes || chunk.Text != "🌸" {
 		t.Fatalf("chunk=%+v err=%v", chunk, err)
@@ -239,7 +248,7 @@ func TestFlowerHistoryBoundedPagesAndExactBodies(t *testing.T) {
 					thinkingID = item.ID
 				}
 			}
-			if item.Kind == flruntime.ThreadItemTool && len(item.ActivityBodies) > 0 {
+			if item.Kind == flruntime.ThreadItemTool && item.ActivitySummary != nil {
 				toolID = item.ID
 			}
 			if item.Kind == flruntime.ThreadItemAssistant && item.Body != nil {
