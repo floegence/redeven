@@ -189,6 +189,11 @@ export function EnvAIPage(props: EnvAIPageProps) {
       controller={readinessController}
       embedded={Boolean(props.embeddedConversation)}
       presentation={props.presentation}
+      companionOpen={props.companionOpen}
+      companionRegionID={props.companionRegionID}
+      onCompanionOpenRequest={props.onCompanionOpenRequest}
+      headerTrailingActions={props.headerTrailingActions}
+      focusComposerRequest={props.focusComposerRequest}
       onOpenUpdate={() => env.openSettings('agent', { origin: { kind: 'flower', returnSurfaceId: props.settingsReturnSurfaceId ?? 'ai' } })}
       onOpenPermissions={() => env.openSettings('runtime', { origin: { kind: 'flower', returnSurfaceId: props.settingsReturnSurfaceId ?? 'ai' } })}
       onReviewIssues={() => env.openSettings('ai', { origin: { kind: 'flower', returnSurfaceId: props.settingsReturnSurfaceId ?? 'ai' } })}

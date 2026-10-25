@@ -16,12 +16,18 @@ import { useI18n } from '../i18n';
 import type { AIReadinessController } from './aiReadiness';
 import { createAIReadinessPresentation, type AIReadinessAction } from './aiReadinessPresentation';
 import { FlowerReadinessIllustration } from './FlowerReadinessIllustration';
+import { FlowerCompanionReadiness } from '../../../../../flower_ui/src/FlowerCompanionReadiness';
 
 const INTERACTIVE_CLASS = 'cursor-pointer disabled:cursor-not-allowed disabled:opacity-55';
 
 export type AIReadinessBoundaryProps = Readonly<{
   controller: AIReadinessController;
   presentation?: 'full' | 'companion';
+  companionOpen?: boolean;
+  companionRegionID?: string;
+  onCompanionOpenRequest?: () => void;
+  headerTrailingActions?: JSX.Element;
+  focusComposerRequest?: number;
   embedded?: boolean;
   onOpenUpdate: () => void;
   onOpenPermissions: () => void;
@@ -64,11 +70,14 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
     return state === 'ready' || state === 'degraded';
   });
   const busy = createMemo(() => projection().mode === 'busy');
+  const companionCollapsed = () => props.presentation === 'companion' && props.companionOpen === false;
   const diagnosticContentID = `ai-readiness-diagnostic-${createUniqueId()}`;
   let boundaryRoot: HTMLDivElement | undefined;
   let surfaceRoot: HTMLDivElement | undefined;
   let maintenanceHeading: HTMLHeadingElement | undefined;
   let diagnosticsButton: HTMLButtonElement | undefined;
+  let companionEntry: HTMLButtonElement | undefined;
+  let consumedFocusRequest = 0;
   let wasOperational = false;
   let maintenanceFocused = false;
   let restoreSurfaceFocus = false;
@@ -77,6 +86,16 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
     const active = document.activeElement;
     return active === null || active === document.body || Boolean(active && boundaryRoot?.contains(active));
   };
+
+  createEffect(() => {
+    const request = props.focusComposerRequest ?? 0;
+    if (!request || request === consumedFocusRequest || operational() || !companionCollapsed()) return;
+    consumedFocusRequest = request;
+    queueMicrotask(() => {
+      if (!operational() && companionCollapsed() && boundaryRoot?.isConnected && !boundaryRoot.closest('[inert]')
+        && focusStillBelongsToBoundary()) companionEntry?.focus({ preventScroll: true });
+    });
+  });
 
   createEffect(() => {
     setBusyVisible(false);
@@ -100,9 +119,10 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
 
   createEffect(() => {
     const isOperational = operational();
-    if (props.focusEnabled && !isOperational && (props.controller.snapshot().state === 'blocked' || props.controller.snapshot().state === 'stopped' || busyVisible()) && !maintenanceFocused && focusStillBelongsToBoundary()) {
+    if (companionCollapsed()) maintenanceFocused = false;
+    if (!companionCollapsed() && props.focusEnabled && !isOperational && (props.controller.snapshot().state === 'blocked' || props.controller.snapshot().state === 'stopped' || busyVisible()) && !maintenanceFocused && focusStillBelongsToBoundary()) {
       queueMicrotask(() => {
-        if (!props.focusEnabled || operational() || !focusStillBelongsToBoundary()) return;
+        if (companionCollapsed() || !props.focusEnabled || operational() || !focusStillBelongsToBoundary()) return;
         maintenanceFocused = true;
         maintenanceHeading?.focus({ preventScroll: true });
       });
@@ -273,7 +293,10 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
         </div>
       </Show>
 
-      <Show when={maintenanceVisible()}>
+      <Show when={!operational() && companionCollapsed()} fallback={<Show when={maintenanceVisible()}>
+        <Show when={props.headerTrailingActions}>
+          <div class="flower-readiness-header-actions">{props.headerTrailingActions}</div>
+        </Show>
         <section
           class="ai-readiness-surface h-full min-h-0 overflow-auto"
           data-presentation={props.presentation ?? 'full'}
@@ -409,6 +432,9 @@ export function AIReadinessBoundary(props: AIReadinessBoundaryProps) {
             </Show>
           </div>
         </section>
+      </Show>}>
+        <FlowerCompanionReadiness ref={element => { companionEntry = element; }} label={projection().title} busy={busy()}
+          regionID={props.companionRegionID} onOpen={() => props.onCompanionOpenRequest?.()} />
       </Show>
     </div>
   );
