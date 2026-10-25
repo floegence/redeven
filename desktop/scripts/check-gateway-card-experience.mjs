@@ -6,7 +6,7 @@ import { createSSHSettingsPreviewServer } from './ssh-settings-preview.mjs';
 
 const output = fileURLToPath(new URL('../dist/gateway-card-experience/', import.meta.url));
 await mkdir(output, { recursive: true });
-const server = await createSSHSettingsPreviewServer(0);
+const server = await createSSHSettingsPreviewServer(0, ['environment-settings.html']);
 await server.watcher.close();
 const browser = await chromium.launch({ headless: true });
 const report = { cases: [], errors: [] };
@@ -76,12 +76,22 @@ try {
     await page.waitForFunction(() => document.querySelector('.redeven-gateway-card__primary-button[aria-busy="true"]'));
     assert.equal(await primary.locator('svg').count(), 1, 'Background update must show one loading icon');
     assert.equal(await primary.getAttribute('data-floe-progress-shimmer'), 'surface');
+    await primary.click();
+    const recovered = page.locator('.redeven-gateway-action-popover-surface');
+    await recovered.locator('[aria-current="step"]').getByText(i18n.t('progress.installingGatewayPackage'), { exact: true }).waitFor();
+    assert.equal(await recovered.locator('.redeven-gateway-action-panel').count(), 0, 'Existing updates reopen progress instead of another confirmation');
+    assert.equal(await page.evaluate(() => window.settingsFixture.requests.filter(r => r.kind === 'update_gateway').length), 0);
+    await recovered.getByRole('button', { name: i18n.t('common.close'), exact: true }).click();
+    await recovered.waitFor({ state: 'detached' });
     await page.screenshot({ path: `${output}/updating-${width}.png` });
-    await page.evaluate(snapshot => window.settingsFixture.publish(snapshot), snapshot);
+    await page.evaluate(({ snapshot, progress }) => window.settingsFixture.publish({ ...snapshot, action_progress: [{ ...progress, status: 'succeeded' }] }), { snapshot, progress: backgroundUpdate });
     await page.waitForFunction(() => !document.querySelector('.redeven-gateway-card__primary-button[aria-busy="true"]'));
+    // The completed foreground retires on its normal terminal retention timer.
+    await page.waitForTimeout(4200);
+    await page.evaluate(snapshot => window.settingsFixture.publish(snapshot), snapshot);
 
     // The desktop-width case exercises the actual update confirmation and progress.
-    const isUpdate = width === 1824;
+    const isUpdate = width !== 1280;
     const action = isUpdate ? 'update_gateway' : 'start_gateway';
     const actionKey = isUpdate ? 'environmentCenter.gatewayActionUpdate' : 'environmentCenter.gatewayActionStart';
     const workflowSnapshot = isUpdate ? updateSnapshot : snapshot;
@@ -89,7 +99,18 @@ try {
     // A delayed service event must still open progress; dismissing it must not cancel or resubmit.
     await page.evaluate(() => { window.settingsFixture.beforeAction = () => new Promise(resolve => { window.finishGatewayRequest = resolve; }); });
     await card.getByRole('button', { name: i18n.t(actionKey), exact: true }).click();
-    if (isUpdate) await page.locator('.redeven-gateway-action-popover-surface').getByRole('button', { name: i18n.t(actionKey), exact: true }).click();
+    if (isUpdate) {
+      const confirmation = page.locator('.redeven-gateway-action-popover-surface');
+      await confirmation.evaluate(async el => { await Promise.all(el.getAnimations().map(a => a.finished)); });
+      assert.equal(await confirmation.locator('.redeven-gateway-action-panel__diagnostics-toggle').count(), 0);
+      const close = confirmation.getByRole('button', { name: i18n.t('common.close'), exact: true });
+      const hero = await confirmation.locator('.redeven-gateway-action-panel__hero').boundingBox();
+      const closeBounds = await close.boundingBox();
+      assert.ok(closeBounds.x + closeBounds.width <= hero.x + hero.width + 1 && closeBounds.y >= hero.y - 1 && closeBounds.y < hero.y + 5, `Close stays at the top right of the title row: ${JSON.stringify({ hero, closeBounds })}`);
+      await page.screenshot({ path: `${output}/confirmation-${width}.png` });
+      await confirmation.getByRole('button', { name: i18n.t(actionKey), exact: true }).click();
+      assert.equal(await confirmation.locator('.redeven-gateway-action-panel__footer').count(), 0, 'An admitted update cannot be submitted again');
+    }
     await page.waitForFunction(() => typeof window.finishGatewayRequest === 'function');
     const trigger = card.locator('.redeven-gateway-card__primary-button');
     assert.equal(await trigger.locator('svg').count(), 1, 'Admission must have a single icon, including the loading spinner');
@@ -97,10 +118,16 @@ try {
     const progress = { action, subject_kind: 'gateway', subject_id: 'local-preview', gateway_id: 'local-preview',
       operation_key: `local-preview:${action}`, started_at_unix_ms: startedAt, updated_at_unix_ms: startedAt,
       status: 'running', active_progress_surface: 'gateway', environment_label: 'Gateway-local', phase: 'preparing_gateway_package', title: isUpdate ? 'Update Gateway' : 'Start Gateway', title_key: actionKey, cancelable: true,
+      detail: 'Technical fixture: ' + 'package=/fixture/cache/gateway; transport=ssh; '.repeat(80),
       step_progress: gatewayServiceStepProgress(gatewayServiceStepProgress(undefined, 'checking_gateway_service', 'running', startedAt), 'preparing_gateway_package', 'running', startedAt) };
     await page.evaluate(({ snapshot, progress }) => window.settingsFixture.publish({ ...snapshot, action_progress: [progress] }), { snapshot: workflowSnapshot, progress });
     const popover = page.locator('.redeven-gateway-action-popover-surface');
     await popover.waitFor();
+    const technicalDetails = popover.locator('details');
+    assert.equal(await technicalDetails.getAttribute('open'), null);
+    assert.equal(await technicalDetails.locator('pre').isVisible(), false, 'Technical output is collapsed by default');
+    await popover.locator('[aria-current="step"]').getByText(i18n.t('progress.preparingGatewayPackage'), { exact: true }).waitFor();
+    assert.equal(await popover.locator('.redeven-environment-progress__step').count(), 2);
     const popoverBounds = await popover.boundingBox();
     assert.ok(popoverBounds.y >= 0 && popoverBounds.y + popoverBounds.height <= 1050, 'Progress fits the viewport from its main-row anchor');
     assert.equal(await trigger.locator('svg').count(), 1, 'Progress must retain one icon');
@@ -130,6 +157,11 @@ try {
     progress.phase = 'installing_gateway';
     progress.step_progress = gatewayServiceStepProgress(progress.step_progress, 'installing_gateway', 'running', startedAt + 65_000);
     await page.evaluate(({ snapshot, progress }) => window.settingsFixture.publish({ ...snapshot, action_progress: [progress] }), { snapshot: workflowSnapshot, progress });
+    await popover.locator('[aria-current="step"]').getByText(i18n.t('progress.installingGatewayPackage'), { exact: true }).waitFor();
+    await popover.getByRole('button', { name: i18n.t('common.close'), exact: true }).click();
+    await popover.waitFor({ state: 'detached' });
+    await trigger.click(); await popover.waitFor();
+    assert.equal(await page.evaluate(action => window.settingsFixture.requests.filter(r => r.kind === action).length, action), 1);
     assert.equal(await elapsed.innerText(), i18n.t('progress.operationElapsed', { seconds: 65 }), 'Changing stage retains operation time');
     await page.evaluate(({ snapshot, progress }) => {
       window.settingsFixture.publish({ ...snapshot, action_progress: [{ ...progress, status: 'failed', updated_at_unix_ms: progress.started_at_unix_ms + 68_000,
@@ -153,6 +185,7 @@ try {
     await menu.waitFor();
     assert.notEqual(await menu.evaluate(el => getComputedStyle(el).animationName), 'none');
     const menuItems = menu.locator('[role="menuitem"]:not([disabled])');
+    await page.waitForFunction(() => document.querySelector('.redeven-gateway-menu')?.contains(document.activeElement));
     await page.keyboard.press('End');
     assert.equal(await menuItems.last().evaluate(el => document.activeElement === el), true);
     await page.keyboard.press('ArrowDown');

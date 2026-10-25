@@ -8,6 +8,7 @@ import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import type { DesktopLauncherActionRequest, DesktopLauncherActionResult, DesktopWelcomeSnapshot } from '../shared/desktopLauncherIPC';
 import { normalizeDesktopLauncherActionRequest } from '../shared/desktopLauncherIPC';
 import { compactEnvironmentPreviewFixture } from '../testSupport/compactEnvironmentPreviewFixture';
+import { gatewayServiceStepProgress } from '../main/gatewayServiceProgress';
 
 const disposers: (() => void)[] = [];
 const settle = () => new Promise(resolve => setTimeout(resolve, 50));
@@ -61,6 +62,87 @@ async function mount(gateway?: DesktopGatewaySource, initialSnapshot?: DesktopWe
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(HTMLElement.prototype, 'animate'); });
 
 describe('Gateway setup and own-service actions', () => {
+  it('opens an already running update directly in progress after the launcher reconnects', async () => {
+    const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
+    const gateway = { ...source, connection_kind: 'ssh_host' as const, management_capability: 'managed_ssh_host' as const,
+      service_state: { status: 'service_needs_update' as const, can_start: false, can_stop: true, can_restart: true, can_update: true, can_pair_after_start: false } };
+    const snapshot = buildDesktopWelcomeSnapshot({ preferences: testDesktopPreferences(), gatewaySources: [gateway] });
+    const startedAt = Date.now() - 60_000;
+    const perform = await mount(gateway, { ...snapshot, action_progress: [{
+      action: 'update_gateway', subject_kind: 'gateway', subject_id: gateway.gateway_id, gateway_id: gateway.gateway_id,
+      operation_key: gateway.gateway_id + ':update_gateway', started_at_unix_ms: startedAt, updated_at_unix_ms: startedAt,
+      status: 'running', active_progress_surface: 'gateway', phase: 'installing_gateway', title: 'Update Gateway', detail: '',
+      step_progress: gatewayServiceStepProgress(undefined, 'installing_gateway', 'running', startedAt),
+    }] });
+    button('Gateways').click(); await settle();
+    const trigger = document.querySelector<HTMLButtonElement>('.redeven-gateway-card__primary-button')!;
+    expect(trigger.textContent).toContain('Updating');
+    trigger.click(); await settle();
+    expect(document.querySelector('.redeven-gateway-action-panel')).toBeNull();
+    expect(document.querySelector('[aria-current="step"]')?.textContent).toBe('Installing Gateway package');
+    expect(perform).not.toHaveBeenCalled();
+  });
+
+  it('keeps update confirmation focused on the action with an accessible corner close control', async () => {
+    const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
+    const perform = await mount({ ...source, connection_kind: 'ssh_host', management_capability: 'managed_ssh_host',
+      service_state: { status: 'service_needs_update', can_start: false, can_stop: true, can_restart: true, can_update: true, can_pair_after_start: false } });
+    button('Gateways').click(); await settle(); button('Update Gateway').click(); await settle();
+    const popup = document.querySelector('.redeven-gateway-action-popover-surface')!;
+    expect(popup.querySelector('.redeven-gateway-action-panel__diagnostics-toggle')).toBeNull();
+    const close = popup.querySelector<HTMLButtonElement>('button[aria-label="Close"]');
+    expect(close?.querySelector('svg')).toBeTruthy();
+    expect(perform).not.toHaveBeenCalled();
+    close!.click();
+    await vi.waitFor(() => expect(document.querySelector('.redeven-gateway-action-popover-surface')).toBeNull());
+  });
+
+  it.each(['succeeded', 'failed'] as const)('keeps update steps and trigger focus through closing, reopening and %s', async status => {
+    const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
+    const perform = await mount({ ...source, connection_kind: 'ssh_host', management_capability: 'managed_ssh_host',
+      service_state: { status: 'service_needs_update', can_start: false, can_stop: true, can_restart: true, can_update: true, can_pair_after_start: false } });
+    perform.mockImplementation(() => new Promise(() => {}));
+    button('Gateways').click(); await settle();
+    const trigger = button('Update Gateway'); trigger.focus(); trigger.click(); await settle();
+    document.querySelector<HTMLButtonElement>('.redeven-gateway-action-panel__primary-action')!.click(); await settle();
+    const startedAt = Date.now();
+    const detail = 'Desktop is opening the Gateway protocol stream through the managed Gateway service. /tmp/private-build/state';
+    const progress = { action: 'update_gateway' as const, subject_kind: 'gateway' as const, subject_id: source.gateway_id,
+      gateway_id: source.gateway_id, operation_key: source.gateway_id + ':update_gateway', started_at_unix_ms: startedAt,
+      updated_at_unix_ms: startedAt, status: 'running' as const, active_progress_surface: 'gateway' as const,
+      phase: 'installing_gateway', title: 'Update Gateway', detail,
+      step_progress: gatewayServiceStepProgress(gatewayServiceStepProgress(undefined, 'preparing_gateway_package'), 'installing_gateway') };
+    perform.publish({ ...perform.snapshot, action_progress: [progress] }); await settle();
+    expect(document.querySelector('.redeven-gateway-card__primary-button')).toBe(trigger);
+    const popup = document.querySelector('.redeven-gateway-action-popover-surface')!;
+    expect(popup.querySelectorAll('.redeven-environment-progress__step')).toHaveLength(2);
+    expect(popup.querySelector('[aria-current="step"]')?.textContent).toBe('Installing Gateway package');
+    expect(popup.querySelector('.redeven-action-popover__detail')?.textContent ?? '').not.toContain(detail);
+    const diagnostics = popup.querySelector('details');
+    expect(diagnostics?.open).toBe(false);
+    expect(diagnostics?.textContent).toContain(detail);
+    popup.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click();
+    await vi.waitFor(() => expect(document.querySelector('.redeven-gateway-action-popover-surface')).toBeNull());
+    expect(document.activeElement).toBe(trigger);
+    trigger.click(); await settle();
+    const reopened = document.querySelector('.redeven-gateway-action-popover-surface')!;
+    expect(document.querySelector('[aria-current="step"]')?.textContent).toBe('Installing Gateway package');
+    expect(perform).toHaveBeenCalledOnce();
+    perform.publish({ ...perform.snapshot, action_progress: [{ ...progress, status,
+      updated_at_unix_ms: startedAt + 10_000,
+      step_progress: { ...progress.step_progress, steps: progress.step_progress.steps.map(step => ({ ...step, status: step.status === 'running' ? status : step.status })) },
+      ...(status === 'failed' ? { failure: { code: 'operation_failed' as const, severity: 'error' as const, title: 'Update Gateway',
+        summary: 'Gateway is unavailable.', summary_key: 'gatewayAccess.unavailable' as const, diagnostics: [{ channel: 'stderr', label: 'Command output', text: detail }] } } : {}),
+    }] }); await settle();
+    expect(document.querySelector('.redeven-gateway-action-popover-surface')).toBe(reopened);
+    expect(document.querySelector('.redeven-gateway-card__primary-button')).toBe(trigger);
+    expect(reopened.querySelectorAll('.redeven-environment-progress__step')).toHaveLength(2);
+    expect(reopened.querySelector('[aria-current="step"]')).toBeNull();
+    expect(reopened.querySelector('.redeven-environment-progress__elapsed')?.textContent).toContain('10');
+    expect(reopened.querySelector('details')?.open).toBe(false);
+    if (status === 'failed') expect(reopened.querySelector('.redeven-action-popover__notice-detail')?.textContent).toBe('Gateway unavailable');
+  });
+
   it('retains Gateway drafts through identity replacement and requires explicit verification after return', async () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
     const perform = await mount(source); await openGatewayAccess();
