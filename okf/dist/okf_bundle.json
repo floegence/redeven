@@ -10194,7 +10194,7 @@
       "frontmatter": {
         "description": "Runtime-owned metadata and explicit model selection.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-24",
+        "reviewed_at": "2026-10-25",
         "tags": [
           "ai",
           "models",
@@ -10205,15 +10205,15 @@
         "title": "Model directory and selection",
         "type": "AI Configuration Contract"
       },
-      "body_length": 2234,
+      "body_length": 2495,
       "summary": "Runtime owns atomic metadata snapshots. Reads/send preflight use shipped or saved metadata; pending/failed refresh never blocks configured chat. Background refresh is disclosed, opt-in and excludes OpenRouter. Adding OpenRouter/Ollama discovers models; manual refresh remains available.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Runtime initializes from `runtime/model-catalog`. Inventory reads resolve shipped static defaults, avoiding stale capabilities; unreviewed models need explicit configuration. Cloud uses its catalog protocol without dispatch-time discovery.\n\nProfiles separate selection, overrides, custom definitions and default identity from metadata. Visibility never selects models or changes identity, capabilities or wire routing.\n\nFlower groups icon/name rows by provider, with a titled header, inset search, icon tiles, selected outline/checkmark and fixed footer. Search, aliases, keyboard control, refresh and management remain. Hide context/output limits, image/search capabilities, quantization and alias descriptions. Unavailable rows show a short status; tooltip/accessibility descriptions retain the reason. Attachment feedback appears only while checking or needing attention. Long names truncate with tooltips; scrolling is vertical.\n\nBoth `GET /api/ai/models` modes share unfiltered `provider_catalogs` and backend `provider_defaults`. Defaults express capabilities, never account availability, even before configuration. With no usable model, settings and draft editing remain available.\n\n`LoadForStartup` freezes supported legacy selections before services start. Startup never waits for discovery or migrates current profiles.",
-          "char_count": 1329
+          "body": "Runtime initializes from `runtime/model-catalog`. Inventory reads resolve shipped static defaults, avoiding stale capabilities; unreviewed models need explicit configuration. Cloud uses its catalog protocol without dispatch-time discovery.\n\nProfiles separate selection, overrides, custom definitions and default identity from metadata. Visibility never selects models or changes identity, capabilities or wire routing.\n\nFlower groups icon/name rows by provider in a compact picker, with title, search and close control on one line, small icon tiles, selected outline/checkmark and fixed footer. Desktop sizing uses a 19rem width, 25rem height cap, 32px minimum rows and 11px primary labels; viewport bounds can reduce the panel further. Coarse-pointer controls retain 44px targets and 16px search text. Search, aliases, keyboard control, refresh and management remain. Hide context/output limits, image/search capabilities, quantization and alias descriptions. Unavailable rows show a short status; tooltip/accessibility descriptions retain the reason. Attachment feedback appears only while checking or needing attention. Long names and headings truncate with tooltips; scrolling is vertical.\n\nBoth `GET /api/ai/models` modes share unfiltered `provider_catalogs` and backend `provider_defaults`. Defaults express capabilities, never account availability, even before configuration. With no usable model, settings and draft editing remain available.\n\n`LoadForStartup` freezes supported legacy selections before services start. Startup never waits for discovery or migrates current profiles.",
+          "char_count": 1590
         },
         {
           "id": "boundaries",
@@ -33604,5 +33604,5 @@
       ]
     }
   ],
-  "source_sha256": "2d435835fdcc43613db9ab19500f7cdda7b71e04d421300f292a31f71ff39e2d"
+  "source_sha256": "55c9199ea4acec8dde65fe56c5757c5729a78c506a019baeb26fde710c8d1e04"
 }

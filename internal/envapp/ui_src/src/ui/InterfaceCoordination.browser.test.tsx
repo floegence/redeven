@@ -94,9 +94,14 @@ it.each([
   await page.screenshot({ element: composer, path: `__screenshots__/composer-minimal-${permissionType}-${touch ? 'touch' : 'desktop'}.png` });
   const name = trigger.getAttribute('aria-label');
   await userEvent.click(trigger);
-  const menu = runtime.querySelector<HTMLElement>('.flower-model-menu')!;
+  await waitFor(() => Boolean(document.querySelector('.flower-model-menu')));
+  const menu = document.querySelector<HTMLElement>('.flower-model-menu')!;
   expect.soft(menu.getBoundingClientRect().width).toBeLessThanOrEqual(320);
   expect.soft(getComputedStyle(menu.querySelector('.flower-model-menu-name')!).fontSize).toBe(touch ? '12px' : '11px');
+  for (const control of menu.querySelectorAll('.flower-model-menu-item, .flower-model-menu-close, .flower-model-menu-footer button, input')) {
+    expect.soft(control.getBoundingClientRect().height).toBeGreaterThanOrEqual(touch ? 44 : 24);
+  }
+  expect.soft(getComputedStyle(menu.querySelector('input')!).fontSize).toBe(touch ? '16px' : '11px');
   await page.screenshot({ element: runtime, path: `__screenshots__/coordination-composer${touch ? '-touch' : ''}.png` });
   await userEvent.keyboard('{Escape}');
   expect(document.activeElement).toBe(trigger);

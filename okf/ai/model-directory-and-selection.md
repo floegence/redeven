@@ -5,7 +5,7 @@ description: Runtime-owned metadata and explicit model selection.
 tags: [ai, models, providers, settings]
 timestamp: 2026-10-13T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-24"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
@@ -17,7 +17,7 @@ Runtime initializes from `runtime/model-catalog`. Inventory reads resolve shippe
 
 Profiles separate selection, overrides, custom definitions and default identity from metadata. Visibility never selects models or changes identity, capabilities or wire routing.
 
-Flower groups icon/name rows by provider, with a titled header, inset search, icon tiles, selected outline/checkmark and fixed footer. Search, aliases, keyboard control, refresh and management remain. Hide context/output limits, image/search capabilities, quantization and alias descriptions. Unavailable rows show a short status; tooltip/accessibility descriptions retain the reason. Attachment feedback appears only while checking or needing attention. Long names truncate with tooltips; scrolling is vertical.
+Flower groups icon/name rows by provider in a compact picker, with title, search and close control on one line, small icon tiles, selected outline/checkmark and fixed footer. Desktop sizing uses a 19rem width, 25rem height cap, 32px minimum rows and 11px primary labels; viewport bounds can reduce the panel further. Coarse-pointer controls retain 44px targets and 16px search text. Search, aliases, keyboard control, refresh and management remain. Hide context/output limits, image/search capabilities, quantization and alias descriptions. Unavailable rows show a short status; tooltip/accessibility descriptions retain the reason. Attachment feedback appears only while checking or needing attention. Long names and headings truncate with tooltips; scrolling is vertical.
 
 Both `GET /api/ai/models` modes share unfiltered `provider_catalogs` and backend `provider_defaults`. Defaults express capabilities, never account availability, even before configuration. With no usable model, settings and draft editing remain available.
 
