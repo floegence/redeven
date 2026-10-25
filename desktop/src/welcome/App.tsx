@@ -1091,6 +1091,8 @@ function localizedGatewayPanelFactValue(i18n: DesktopI18n, value: string): strin
     Revoked: 'environmentCenter.gatewayPanelTrustRevoked',
     'Not paired': 'environmentCenter.gatewayPanelTrustNotPaired',
     'URL transport': 'connectionDialog.gatewayTransportUrl',
+    'Local host': 'gatewayAccess.localService',
+    'Local container': 'connectionDialog.localContainer',
     'SSH host': 'connectionDialog.gatewayTransportSshHost',
     'SSH container': 'connectionDialog.gatewayTransportSshContainer',
     'Gateway is stopped': 'environmentCenter.gatewayGuidanceStoppedTitle',
@@ -8823,6 +8825,7 @@ function localizedProgressPanelPrimaryAction(
 export function EnvironmentProgressPanel(props: Readonly<{
   i18n: DesktopI18n;
   progress: DesktopLauncherActionProgress;
+  close?: () => void;
   primaryAction?: EnvironmentActionModel;
   settingsRestart?: EnvironmentSettingsRestartSource;
   primaryActionBusy?: boolean;
@@ -8953,7 +8956,7 @@ export function EnvironmentProgressPanel(props: Readonly<{
       : null
   ));
   const progressLeadDetail = createMemo(() => {
-    if (failureDisplay() || (props.progress.status === 'needs_confirmation' && props.progress.reinstall_preview)) {
+    if (observedGatewayServiceSteps() || failureDisplay() || (props.progress.status === 'needs_confirmation' && props.progress.reinstall_preview)) {
       return '';
     }
     return localizedProgressDetail(props.i18n, props.progress);
@@ -9104,6 +9107,11 @@ export function EnvironmentProgressPanel(props: Readonly<{
             <div class="redeven-action-popover__title">{localizedProgressTitle(props.i18n, props.progress)}</div>
             <div class="redeven-environment-progress__target">{environmentProgressLabel(props.i18n, props.progress)}</div>
           </div>
+          <Show when={props.close}>
+            <button type="button" class="redeven-gateway-action-panel__close" aria-label={props.i18n.t('common.close')} onClick={() => props.close?.()}>
+              <X aria-hidden="true" />
+            </button>
+          </Show>
         </div>
         <Show when={props.settingsRestart}>
           <p class="redeven-action-popover__detail" data-settings-restart-result>
@@ -9253,6 +9261,14 @@ export function EnvironmentProgressPanel(props: Readonly<{
             </div>
             {renderFailureNotice()}
           </>
+        </Show>
+        <Show when={observedGatewayServiceSteps() && !failureDisplay() && trimString(props.progress.detail)}>
+          <details class="redeven-action-popover__failure-details">
+            <summary><span>{props.i18n.t('environmentCenter.gatewayPanelDiagnostics')}</span><ChevronRight aria-hidden="true" /></summary>
+            <div class="redeven-action-popover__failure-details-viewport">
+              <pre class="redeven-action-popover__failure-technical-text">{props.progress.detail}</pre>
+            </div>
+          </details>
         </Show>
       </div>
       <Show when={hasPanelActions()}>
@@ -11265,7 +11281,7 @@ function GatewaySourceCard(props: Readonly<{
   ));
   const progressPresentation = createMemo(() => localizedPrimaryProgressPresentation(
     props.i18n,
-    environmentProgressPrimaryPresentation(visibleGatewayProgress()),
+    environmentProgressPrimaryPresentation(gatewayLifecycleBusyProgress()),
   ));
   const hasProgressPanel = createMemo(() => visibleGatewayProgress() !== null);
   const foregroundWantsPopover = createMemo(() => (
@@ -11283,7 +11299,11 @@ function GatewaySourceCard(props: Readonly<{
   const [directoryHelpOpen, setDirectoryHelpOpen] = createSignal(false);
   const directoryHelpID = createUniqueId();
   const directoryHelpPresence = createFloatingPresence({ open: directoryHelpOpen, exitDurationMs: 160 });
-  const PrimaryActionIcon = (iconProps: { class?: string }) => <GatewaySourceActionIcon intent={displayedPrimaryAction().intent} class={iconProps.class} />;
+  const PrimaryActionIcon = (iconProps: { class?: string }) => (
+    <Show when={progressPresentation()} fallback={<GatewaySourceActionIcon intent={displayedPrimaryAction().intent} class={iconProps.class} />}>
+      {presentation => renderProgressPresentationIcon(presentation())}
+    </Show>
+  );
   const catalogReady = createMemo(() => props.gateway.sync_state === 'ready' || (props.gateway.last_synced_at_ms ?? 0) > 0);
   const catalogFailed = createMemo(() => ['gateway_unreachable', 'pairing_failed', 'catalog_failed'].includes(props.gateway.sync_state ?? ''));
   const transportLabel = createMemo(() => props.i18n.t({
@@ -11838,6 +11858,13 @@ function GatewaySourceCard(props: Readonly<{
       props.onActionPopoverOpenChange(true);
       return;
     }
+    const activeProgress = activeGatewayLifecycleProgress();
+    const activeAction = gatewaySourceActionForLifecycleProgress(activeProgress);
+    if (activeProgress && activeAction) {
+      rememberForegroundProgress(activeAction, activeProgress);
+      props.onActionPopoverOpenChange(true);
+      return;
+    }
     const action = displayedPrimaryAction();
     if (actionStartsWorkflowImmediately(action)) {
       if (runGatewayActionAsForeground(action)) {
@@ -11919,6 +11946,7 @@ function GatewaySourceCard(props: Readonly<{
                   <EnvironmentProgressPanel
                     i18n={props.i18n}
                     progress={progress()}
+                    close={closeActionPopover}
                     cancelOperation={props.cancelOperation}
                     dismissOperation={(currentProgress) => {
                       closeActionPopoverAfterExit(() => {
@@ -11979,52 +12007,26 @@ function GatewaySourceCard(props: Readonly<{
             }
             class="redeven-gateway-action-popover-surface"
           >
-            <Show
-              when={progressPresentation()}
-              fallback={(
-                <Button
-                  size="sm"
-                  variant={displayedPrimaryAction().intent === 'refresh_gateway' ? 'ghost' : 'default'}
-                  class={cn(
-                    'redeven-gateway-card__primary-button min-w-0 justify-center',
-                    primaryBlocked() && 'redeven-split-action-trigger--blocked',
-                  )}
-                  icon={PrimaryActionIcon}
-                  aria-busy={primaryBusy()}
-                  data-floe-progress-shimmer={primaryBusy() ? 'surface' : undefined}
-                  disabled={!props.available || !displayedPrimaryAction().enabled && !primaryBlocked()}
-                  aria-disabled={primaryBlocked() ? true : undefined}
-                  aria-haspopup={primaryHasGuide() ? 'dialog' : undefined}
-                  aria-expanded={primaryHasGuide() ? props.actionPopoverOpen : undefined}
-                  onClick={runPrimaryAction}
-                >
-                  <span>{primaryActionLabel()}</span>
-                </Button>
+            <Button
+              size="sm"
+              variant={!progressPresentation() && displayedPrimaryAction().intent === 'refresh_gateway' ? 'ghost' : 'default'}
+              class={cn(
+                'redeven-gateway-card__primary-button min-w-0 justify-center',
+                !progressPresentation() && primaryBlocked() && 'redeven-split-action-trigger--blocked',
+                progressPresentation() && progressTriggerClassName(progressPresentation()!),
               )}
+              icon={PrimaryActionIcon}
+              aria-busy={progressPresentation()?.kind === 'progress_trigger' || primaryBusy()}
+              aria-label={progressPresentation()?.ariaLabel}
+              data-floe-progress-shimmer={progressPresentation()?.kind === 'progress_trigger' || primaryBusy() ? 'surface' : undefined}
+              disabled={!props.available || !progressPresentation() && !displayedPrimaryAction().enabled && !primaryBlocked()}
+              aria-disabled={!progressPresentation() && primaryBlocked() ? true : undefined}
+              aria-haspopup={progressPresentation() || primaryHasGuide() ? 'dialog' : undefined}
+              aria-expanded={progressPresentation() || primaryHasGuide() ? props.actionPopoverOpen : undefined}
+              onClick={runPrimaryAction}
             >
-              {(presentation) => (
-                <Button
-                  size="sm"
-                  variant="default"
-                  class={cn(
-                    'redeven-gateway-card__primary-button min-w-0 justify-center',
-                    progressTriggerClassName(presentation()),
-                  )}
-                  aria-haspopup="dialog"
-                  aria-expanded={props.actionPopoverOpen}
-                  aria-label={presentation().ariaLabel}
-                  data-floe-progress-shimmer={presentation().kind === 'progress_trigger' ? 'surface' : undefined}
-                  onClick={() => {
-                    props.onActionPopoverOpenChange(true);
-                  }}
-                >
-                  <span class="redeven-split-action-trigger__content">
-                    {renderProgressPresentationIcon(presentation())}
-                    <span>{presentation().label}</span>
-                  </span>
-                </Button>
-              )}
-            </Show>
+              <span>{progressPresentation()?.label ?? primaryActionLabel()}</span>
+            </Button>
           </DesktopActionPopover>
           <div class="redeven-gateway-card__menu">
             <span ref={moreActionsAnchorRef} class="relative">
@@ -12171,27 +12173,27 @@ function GatewayActionPanel(props: Readonly<{
   const panelContext = createMemo(() => {
     const parts = [
       localizedGatewayPanelFactValue(props.i18n, desktopGatewayConnectionKindLabel(props.gateway.connection_kind)),
-      trimString(props.gateway.endpoint_label),
+      props.gateway.connection_kind === 'local_host' ? '' : trimString(props.gateway.endpoint_label),
     ].filter((part) => trimString(part) !== '');
     return parts.join(' · ');
   });
   const [diagnosticsOpen, setDiagnosticsOpen] = createSignal(false);
+  const awaitingProgress = () => props.admission === 'pending' || props.admission === 'accepted';
+  const showDiagnostics = () => props.model.kind !== 'service_confirmation' && !props.admission && props.model.diagnostic_facts.length > 0;
   return (
-    <div class="redeven-action-popover redeven-gateway-action-panel" tabIndex={-1} aria-label={panelAriaLabel()}>
+    <div class="redeven-action-popover redeven-gateway-action-panel" data-redeven-action-popover-initial-focus="" tabIndex={-1} aria-label={panelAriaLabel()}>
       <div class="redeven-gateway-action-panel__body">
-        <Show when={props.admission === 'pending'}><p role="status">{props.i18n.t('interactionContinuity.pending')}</p></Show>
-        <Show when={props.admission === 'accepted'}><p role="status">{props.i18n.t('interactionContinuity.accepted')}</p></Show>
-        <Show when={props.admission === 'failed'}><p role="alert">{props.admissionError || props.i18n.t('interactionContinuity.rejected')}</p><Button onClick={props.retry}>{props.i18n.t('common.retry')}</Button></Show>
-        <Button variant="ghost" onClick={props.close}>{props.i18n.t('common.close')}</Button>
         <div class="redeven-gateway-action-panel__hero">
-          <span class="redeven-action-popover__status-icon" data-tone={tone()}>
-            <Show when={props.model.tone === 'error'} fallback={props.model.tone === 'warning' ? <AlertTriangle /> : <ShieldCheck />}>
-              <X />
+          <span class="redeven-action-popover__status-icon" data-tone={awaitingProgress() ? 'primary' : tone()}>
+            <Show when={awaitingProgress()} fallback={props.model.tone === 'error' ? <X /> : props.model.tone === 'warning' ? <AlertTriangle /> : <ShieldCheck />}>
+              <Loader2 class="animate-spin" aria-hidden="true" />
             </Show>
           </span>
           <div class="redeven-action-popover__status-text">
             <div class="redeven-action-popover__title">{panelTitle()}</div>
-            <div class="redeven-action-popover__detail">{panelDetail()}</div>
+            <Show when={awaitingProgress()} fallback={<div class="redeven-action-popover__detail">{panelDetail()}</div>}>
+              <div class="redeven-action-popover__detail" role="status">{props.i18n.t(props.admission === 'pending' ? 'interactionContinuity.pending' : 'interactionContinuity.accepted')}</div>
+            </Show>
             <Show when={panelContext()}>
               {(context) => <div class="redeven-gateway-action-panel__context">{context()}</div>}
             </Show>
@@ -12208,28 +12210,37 @@ function GatewayActionPanel(props: Readonly<{
               </div>
             </Show>
           </div>
+          <button type="button" class="redeven-gateway-action-panel__close" aria-label={props.i18n.t('common.close')} onClick={props.close}>
+            <X aria-hidden="true" />
+          </button>
         </div>
+        <Show when={props.admission === 'failed'}>
+          <div class="redeven-action-popover__notice" data-tone="error" role="alert">{props.admissionError || props.i18n.t('interactionContinuity.rejected')}</div>
+          <Button onClick={props.retry}>{props.i18n.t('common.retry')}</Button>
+        </Show>
 
-        <button
-          type="button"
-          class="redeven-gateway-action-panel__diagnostics-toggle"
-          aria-expanded={diagnosticsOpen()}
-          onClick={() => setDiagnosticsOpen((open) => !open)}
-        >
-          <span class="redeven-gateway-action-panel__diagnostics-label">{props.i18n.t('environmentCenter.gatewayPanelDiagnostics')}</span>
-          <ChevronDown class={cn('h-3.5 w-3.5 transition-transform duration-150', diagnosticsOpen() && 'rotate-180')} />
-        </button>
-        <Show when={diagnosticsOpen()}>
-          <div class="redeven-gateway-action-panel__facts redeven-gateway-action-panel__facts--diagnostics">
-            <For each={props.model.diagnostic_facts}>
-            {(fact) => (
-              <div class="redeven-gateway-action-panel__fact">
-                <span class="redeven-gateway-action-panel__fact-label">{localizedGatewayPanelFactLabel(props.i18n, fact.label)}</span>
-                <span class="redeven-gateway-action-panel__fact-value" data-tone={fact.tone ?? 'neutral'}>{localizedGatewayPanelFactValue(props.i18n, fact.value)}</span>
-              </div>
-            )}
-            </For>
-          </div>
+        <Show when={showDiagnostics()}>
+          <button
+            type="button"
+            class="redeven-gateway-action-panel__diagnostics-toggle"
+            aria-expanded={diagnosticsOpen()}
+            onClick={() => setDiagnosticsOpen((open) => !open)}
+          >
+            <span class="redeven-gateway-action-panel__diagnostics-label">{props.i18n.t('environmentCenter.gatewayPanelDiagnostics')}</span>
+            <ChevronDown class={cn('h-3.5 w-3.5 transition-transform duration-150', diagnosticsOpen() && 'rotate-180')} />
+          </button>
+          <Show when={diagnosticsOpen()}>
+            <div class="redeven-gateway-action-panel__facts redeven-gateway-action-panel__facts--diagnostics">
+              <For each={props.model.diagnostic_facts}>
+              {(fact) => (
+                <div class="redeven-gateway-action-panel__fact">
+                  <span class="redeven-gateway-action-panel__fact-label">{localizedGatewayPanelFactLabel(props.i18n, fact.label)}</span>
+                  <span class="redeven-gateway-action-panel__fact-value" data-tone={fact.tone ?? 'neutral'}>{localizedGatewayPanelFactValue(props.i18n, fact.value)}</span>
+                </div>
+              )}
+              </For>
+            </div>
+          </Show>
         </Show>
         <Show when={props.model.affected_sessions.length > 0}>
           <div class="redeven-action-popover__notice" data-tone="warning">
@@ -12248,7 +12259,7 @@ function GatewayActionPanel(props: Readonly<{
         </Show>
       </div>
 
-      <Show when={props.model.primary_action}>
+      <Show when={!props.admission && props.model.primary_action}>
         {(action) => (
           <div class="redeven-gateway-action-panel__footer" data-mode="primary">
             <div class="relative min-w-0">

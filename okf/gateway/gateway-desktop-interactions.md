@@ -5,7 +5,7 @@ description: Gateway enrollment, connection ownership and consent.
 tags: [gateway, desktop, interaction, validation]
 timestamp: 2026-10-14T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-24"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
@@ -31,6 +31,10 @@ Member dialogs list members, issue invitations and manage policy. Refresh failur
 
 Use explicit translations and viewport-bounded panels.
 
+Gateway service confirmation presents the action, target and affected sessions without a diagnostic inventory. Its close icon shares the title row. Admission replaces confirmation controls with a pending state until authoritative operation progress arrives; it cannot resubmit the same action.
+
+Service progress prioritizes observed step labels, current-step state and elapsed time. It never invents future steps or a completion percentage. Raw service detail is optional, collapsed diagnostics after the timeline; failures retain their concise recovery summary and separate technical details. Confirmation and progress share a stable card trigger and explicit close control: closing hides the panel, restores trigger focus and leaves the operation running. Reopening retains its steps and timing without dispatching another request. After launcher reconnection, a running service operation takes precedence over a new confirmation: the card adopts that operation's owner and opens its existing progress.
+
 # Boundaries
 
 UI state and observations cannot expand authority or imply completion.
@@ -40,3 +44,5 @@ UI state and observations cannot expand authority or imply completion.
 - `redeven:desktop/scripts/check-gateway-auth-ui.mjs` — Ten-locale connection and consent flows.
 - `redeven:desktop/scripts/check-gateway-network-ui.mjs` — Address tabs and network settings.
 - `redeven:desktop/src/main/environmentManagementConnections.test.ts` — Lease ownership, cancellation and admitted writes.
+- `redeven:desktop/src/welcome/GatewaySetup.client.test.tsx` — Confirmation, admission, observed service steps and stable trigger continuity.
+- `redeven:desktop/scripts/check-gateway-card-experience.mjs` — Update progress, collapsed diagnostics, title-row close controls and viewport bounds at desktop and narrow widths.
