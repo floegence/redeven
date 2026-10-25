@@ -5,45 +5,21 @@ description: Compatible installed components, independent user-directed updates,
 tags: [runtime, desktop, applications, linux, security]
 timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-The released `floe-native-apps` library owns Linux graphical component acquisition,
-verification, staging, self-check and activation. Redeven owns authenticated product
-routes, private state placement, localized preparation and the user's pending app
-opening. Applications execute on the host. Preparation never requires a container,
-VM, package-manager command, custom software source, or administrator password.
-Runtime updates never depend on component updates. Compatible installed components
-remain usable during an optional update and after failure or cancellation. A new
-installation activates only after verification and real graphical qualification.
-Closing a pending viewer prevents automatic application opening.
+Published Floe Native Apps owns Linux component acquisition, verification, staging, self-check and activation. Redeven owns authorized routes, private placement, localized progress and pending app opening. Preparation needs no container, VM, package manager or admin password. Runtime upgrades remain independent; compatible installed components survive optional-update failure/cancellation. Activate only after verification and graphical qualification.
 
 # Contract
 
-## Component ownership and admission
-Redeven consumes `github.com/floegence/floe-native-apps` as a published Go module
-at the exact version pinned in `go.mod`. The same file's Go directive owns the
-Runtime toolchain version; this contract does not maintain a separate version
-pin.
-
-Partial managed and system installations are never merged into a synthetic toolset.
-
-The [host application contract](host-applications.md) owns restoration of the application's environment, private display isolation and host-owned dependencies.
-
-## Preparation execution and recovery
-Reading status, explicitly inspecting a transfer plan and observing events requires read permission. The upstream serializes writers with its private-root lease and enforces owner-scoped cancellation and idempotent request/chunk admission.
-
-The [Desktop component cache contract](../desktop/host-application-component-cache.md) owns cross-device reuse, seven-day idle retention, the 2 GB archive budget, process leases and separate cache/download/transfer presentation.
-
-## Window and permission interaction
-Selecting an unavailable application presents preparation for that actual app. An in-flight session-only refresh must not reuse the old unavailable state or prevent the pending window from opening once.
-
-Its bundled helper, native local opening and explicit remote screen-recording/accessibility authorization follow the [macOS contract](macos-host-applications.md); a graphical login is still required.
+- `go.mod` owns exact dependency/toolchain versions. Never combine partial managed/system installations. [Applications](host-applications.md) owns environment restoration, private displays and dependencies.
+- Status, explicit transfer-plan inspection and observation require Read. Upstream serializes writers with a private-root lease and owns scoped cancellation/idempotent chunks. [Desktop cache](../desktop/host-application-component-cache.md) owns cross-device reuse, seven-day/2GB policy and separate progress.
+- Preparation names the selected app. Session refresh cannot reuse stale unavailable state or suppress its one pending opening. [macOS](macos-host-applications.md) owns helper/local launch/explicit capture-input permission and requires graphical login.
 
 # Boundaries
 
-Preparation does not install the user's applications or require administrator credentials. Closing a pending viewer withdraws automatic opening, and unqualified staged bytes never become active.
+Preparation never installs user applications. Closing a pending viewer withdraws automatic opening; unqualified staged bytes never activate.
 
 # Evidence
 

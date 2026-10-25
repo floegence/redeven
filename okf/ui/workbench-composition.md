@@ -5,28 +5,22 @@ description: Edit notes, text, and optional region names through published Floe 
 tags: [ui, workbench, composition, editing, persistence]
 timestamp: 2026-10-01T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Published Floe Webapp owns Workbench composition rendering, direct text editing, material previews, and anchored tools. Redeven owns localized copy, product defaults, and shared layout persistence. Clicking editable text preserves native caret placement, selection, and input-method composition. Region names may remain completely empty. Saving or reopening a layout must preserve content, colors, geometry, and materials; a failed database upgrade leaves the previous supported layout intact.
+Published Floe owns composition rendering, direct editing, materials and anchored tools; Redeven owns localization, defaults and layout persistence. Native caret, selection and IME remain intact, with optional empty region names. Save/reopen preserves content, color, geometry and material; failed upgrades retain the prior supported layout.
 
 # Contract
 
 ## Surfaces and tools
-Canvas and widget surfaces use the published matte palette across every shell preset and Workbench appearance. Redeven must not override the shared canvas, window, header, or selection colors with a competing product palette.
-
-Responsive layout and action dimensions remain stable when adjacent nodes appear or disappear; the host adds no alternate preview or drag implementation.
+Published matte palettes own canvas/widget/header/selection colors across themes. Product adapters add no competing palette, preview or drag engine; adjacent-node changes retain responsive action geometry.
 
 ## Editing
-A pristine Runtime receives an English welcome canvas once, independent of interface language: two editable notes beside Files, Terminal, and Monitoring, organized by three unnamed regions. Existing layouts, including intentionally empty layouts with an advanced revision, are never reseeded.
-
-Placeholder substitution remains owned by the shared controls; switching product language refreshes their copy.
+Pristine runtimes receive one English welcome canvas: two editable notes beside Files, Terminal and Monitoring in three unnamed regions. Existing layouts, including intentionally empty advanced revisions, never reseed. Published controls own placeholders; locale changes update copy.
 
 ## Persistence
-`workbench_layout_runtime` schema version 6 appends the sticky-note `title` column through the contiguous 5-to-6 migration. Current request handlers always use the current schema.
-
-Material changes participate in shared-layout equality so they trigger persistence.
+`workbench_layout_runtime` schema v6 appends sticky-note title through contiguous 5→6 migration. Handlers use current schema; material equality changes trigger persistence.
 
 # Boundaries
 

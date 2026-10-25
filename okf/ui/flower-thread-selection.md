@@ -5,7 +5,7 @@ description: Present navigation feedback before committing content and coordinat
 tags: [flower, navigation, cancellation, recovery, detail]
 timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-23"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
@@ -17,45 +17,16 @@ Readiness controls reveal; elapsed time controls feedback only.
 # Contract
 
 ## Selection and navigation
-The rail acknowledges intent before commit. Visible selection commits after one
-feedback rendering opportunity (two animation callbacks and a task); hidden
-documents do not wait for frames. Latest intent supersedes earlier work. Summary
-effects cannot bypass this boundary for foreground reads.
+Rail feedback precedes visible commit by two animation callbacks and a task; hidden documents do not wait for frames. Latest intent supersedes earlier work; summary effects cannot bypass foreground coordination.
 
-Expose the destination only after accepted detail, measurable layout and visible
-historical text settle. The scroll controller positions and reveals it without
-smooth initial scrolling or an elapsed-time reveal fallback. Show loading feedback
-only after 200 ms, using one cancellable deadline across detail, body and layout
-preparation. Ready content and errors appear immediately, without minimum dwell.
-New selection, New chat and disposal cancel old feedback. Keep the transcript
-frame, composer and navigation stable; failed body reads expose local Retry.
+Reveal only after accepted detail, measurable layout and visible historical text settle. The scroll owner positions without smooth initial scrolling or time-based fallback. One cancellable 200 ms deadline spans detail/body/layout loading feedback; ready content/errors appear immediately. Selection, New chat and disposal cancel old feedback; frame, composer/navigation remain stable and body failures offer Retry.
 
-Cached destinations flush layout after render effects. Visible historical rows
-must pass `checkVisibility({ contentVisibilityAuto: true })` before reveal.
-Above-viewport rows can expand later: ResizeObserver corrects scroll before paint,
-while reveal and body requests stay in rAF to avoid observer loops. Visibility
-events reuse that pass. Navigation clears old arrival motion; native offscreen
-skipping, bounded reads and manual scrolling remain. No positioning polling or
-per-row observers are added.
+Cached destinations flush render effects; visible rows pass `checkVisibility({ contentVisibilityAuto: true })`. ResizeObserver adjusts above-viewport growth before paint, while reveal/body work stays in rAF; visibility events reuse this pass. Navigation clears arrival motion. No positioning polls or per-row observers. Explicit wheel/touch/scrollbar/keyboard input can interrupt preparation; scroll events alone cannot.
 
-Two body-read slots prioritize latest visible text plus margin and cancel obsolete
-demand; ThreadCache retains immutable bodies. Wheel, touch, scrollbar or keyboard
-input can interrupt preparation; native scroll events alone cannot.
-
-Growth, refresh and canonical completion preserve displayed prose without
-restarting selection. [Live delivery](flower-live-timeline.md) owns incremental
-body reads, source validation and local Retry.
-
-Selection opens the latest interval; reading-position restoration is separate.
-
-Ordinary conversations remain ordered by creation time descending, then ThreadID ascending.
+Two read slots prioritize visible text/margin and cancel obsolete demand. ThreadCache retains immutable bodies. Growth/refresh/completion never restart selection or remove accepted prose; [live delivery](flower-live-timeline.md) owns validation/retry. Selection opens Latest; reading restoration is separate. Ordinary threads sort by descending creation time, then ascending ThreadID.
 
 ## Detail read ownership
-Published Floret v7.69.1 already supplies ThreadSummaryReader.Summary.
-
-ThreadCache remains the sole owner of accepted detail and committed selection, bounded to twelve detail entries.
-
-Neither selection nor detail cancellation reconnects the workspace stream.
+Released Floret's `ThreadSummaryReader.Summary` owns summaries; ThreadCache owns selection/detail with twelve entries. The bounded coordinator shares navigation, confirmation and reference-preflight demand. Cancellation never reconnects the workspace stream.
 
 # Boundaries
 

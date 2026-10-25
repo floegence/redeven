@@ -6,43 +6,31 @@ tags: [ui, flower, activity, companion, read-state, floret]
 timestamp: 2026-10-13T03:06:33Z
 quality_exception: Cross-surface placement contract spanning Activity, Workbench residency, contextual launch handoff, and viewer read acknowledgement; composer presentation has its own owner.
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-After access first becomes ready, Env App owns one stable `EnvAIPage` and `FlowerSurface`. On desktop, the published `BottomBarCompanion` provides a centered collapsed field and a bounded detail surface that grows upward without changing body geometry. The dedicated Activity Bar page and an available, unfiltered Workbench Flower widget are placements of that same product tree. Workbench selection controls canvas input and focus only; clearing selection never revokes Flower placement or engagement. Placement changes hosts, presentation, visibility, and engagement; it never creates a second Flower surface or changes Floret authority. Floret owns thread lifecycle state, while Redeven owns product placement, read acknowledgement, and ephemeral UI state.
+Env App retains one Flower product tree across its Activity page, desktop companion and available Workbench widget. Published Floe owns the companion shell; Redeven owns placement, focus and read acknowledgement; Floret owns conversation lifecycle. Changing placement or canvas selection never creates another Flower surface or workspace stream.
 
 # Contract
 
 ## Companion ownership
-`@floegence/floe-webapp-core/layout` owns the reusable companion shell, fixed geometry, visual-viewport and safe-area clamping, motion phases, capture-phase outside dismissal, Escape routing, and explicit mount handling.
-
-The companion Portal mounts to the explicit Activity overlay host and never falls back to `document.body`.
-
-A running task never prevents the user from collapsing the companion or clicking another surface.
+Published `BottomBarCompanion` owns geometry, viewport/safe-area clamps, motion, outside dismissal, Escape and mount handling. Its Portal uses the explicit Activity overlay host, never `document.body`. The collapsed field is centered; bounded detail grows upward without changing body geometry. Running work cannot prevent collapse or destination interaction.
 
 ## Activity Terminal footer
-Desktop Activity Terminal registers a 24-pixel anchor in its existing 28-pixel footer, centered in the terminal content column with a maximum width of 360 pixels and room to shrink.
-
-Workbench Terminal widgets and mobile terminals never register an entry; their existing footer heights and navigation remain unchanged. This placement does not introduce a second Flower instance, change terminal transport, or route Flower keystrokes through terminal input.
+Desktop Activity Terminal supplies a 24-pixel anchor in its 28-pixel footer, centered in the terminal column with a shrinkable 360-pixel maximum width. Workbench/mobile terminals supply none. Placement does not create another Flower instance, alter transport or route Flower input through the terminal.
 
 ## Stable Flower placement
-The product root consumes the same authoritative visibility decision for native `hidden`, `aria-hidden`, and `inert`.
-
-[Flower setup and settings](flower-setup-and-settings.md#retained-panels) owns retained form, editor and inactive-panel semantics.
+After first access readiness, one retained `EnvAIPage`/`FlowerSurface` moves among explicit hosts. Visibility drives `hidden`, `aria-hidden` and `inert` together. Available unfiltered Workbench placement survives deselection; canvas selection governs input/focus only. [Settings](flower-setup-and-settings.md#retained-panels) own retained panels/forms.
 
 ## Contextual Ask Flower
-New companion conversations can include the desktop Activity origin page through the read-only page reader selected by Shell's current Activity ID.
-
-Send and context-action behavior remain defined by [Flower turn launcher](flower-turn-launcher.md).
+New companion conversations may capture the desktop Activity origin using its read-only page reader. [Turn launcher](flower-turn-launcher.md) owns sending/context actions.
 
 ## Presence and summary
-[Flower companion presence](flower-companion-presence.md) owns collapsed status priority, live output tails, completion acknowledgement, composer precedence, and the single workspace observation stream. Presence never changes the placement and focus ownership defined here.
+[Presence](flower-companion-presence.md) owns collapsed priority, live tails, completion feedback, composer precedence and workspace observation.
 
 ## Dismissal, focus, and reads
-Capture-phase outside pointer dismissal includes the companion shell, its anchor, and explicitly classified Flower-owned Portal surfaces. Activity plugin windows project host pointer and focus input plus trusted iframe bridge activation, focus, and action events into the same outside-dismiss behavior, because cross-origin iframe events cannot bubble into the product document.
-
-Shared SSE summaries remain activity-only, while initial/reconnect baselines and later viewer read-state envelopes are scoped to the same `UserPublicID`.
+Outside capture includes shell, anchor and classified Flower-owned Portals. Trusted cross-origin plugin bridge events join host pointer/focus dismissal without consuming the destination. Shared SSE summaries are activity-only; initial/reconnect read baselines and later read envelopes are scoped to the same `UserPublicID`.
 
 # Boundaries
 

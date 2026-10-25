@@ -5,44 +5,28 @@ description: Select authorized directories through one navigation core in Flower
 tags: [ui, filesystem, flower, spaces, workbench]
 timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Published Floe Webapp owns directory navigation, validation state, and asynchronous
-request lifetime. Redeven supplies the target runtime connection, authoritative
-path context, localized copy, and product form state. All picker paths are
-absolute; `/` always means the target environment's filesystem root. Home and
-Root are navigation shortcuts and cannot grant access. Failed navigation retains
-the requested path and form, disables selection, and offers an explicit retry.
-The runtime revalidates every create or execution request against current policy.
+Published Floe owns picker navigation, validity and request lifetime; Redeven supplies connection, authoritative path context, localization and form state. Paths are absolute and / means the target filesystem root. Home/Root shortcuts grant no access. Failed navigation preserves intent/form, disables confirmation and offers Retry; execution revalidates current policy.
 
 # Contract
 
 ## Absolute paths and runtime authority
-DirectoryPicker, DirectoryInput, and file pickers consume the same released navigation core. A failed or malformed context cannot be replaced by synthesized Home or Root permissions.
-
-Session, filesystem, OS, and process authorization remain governed by [permission policy and filesystem scope](../security/permission-policy-and-filesystem-scope.md).
+DirectoryPicker, DirectoryInput and file pickers share the released core. Invalid context cannot synthesize Home/Root permissions. [Filesystem policy](../security/permission-policy-and-filesystem-scope.md) owns session, filesystem, OS and process access.
 
 ## Navigation state and failures
-Every mounted picker owns its current directory, loaded entries, path input, hidden-item switch, and validity.
-
-Earlier successes or failures cannot overwrite newer input, navigation, error, or selection state.
-
-A cached or previously validated selection is never an authorization token: creation and later operations can fail if policy, filesystem contents, or OS permissions change.
+Each picker owns directory, entries, path input, hidden switch and validity. Stale successes/failures cannot replace newer intent. Validation is not authorization; changed policy/files/OS permissions may reject later operations.
 
 ## Live language changes
-Host-supplied Home and Root labels resolve through the active locale accessor. The change retains the current path, input element, pending selection, composer draft, and runtime authorization; it never reloads context solely to translate a label. Both Desktop Flower and Env App use this shared product adapter.
+Home/Root resolve from active locale without replacing inputs/drafts/selection or reloading authorization. Desktop and Env App share the adapter.
 
 ## Product presentations
-Files uses the same released `parsePickerPath` and `formatPickerPath` functions for its path editor. An entered `/...` path never acquires a Home prefix, regardless of the currently selected root.
-
-Its actual scroll viewports carry Workbench local-scroll markers; existing modal, keyboard, and focus ownership remains with the host and published presentation components.
+Files uses released `parsePickerPath`/`formatPickerPath`; absolute input never gets a Home prefix. Actual viewports carry Workbench local-scroll markers; host/published components retain modal, keyboard and focus ownership.
 
 ## Shared directory favorites
-All Env App and Desktop directory and file pickers receive the published controlled favorites contract. Shortcut views cannot confirm an earlier selected directory.
-
-See [directory favorites](directory-favorites.md) for authentication, persistence, refresh and failure contracts.
+All pickers use controlled [favorites](directory-favorites.md), which own scoped persistence, refresh and failures. Shortcut views cannot confirm an earlier directory selection.
 
 # Boundaries
 

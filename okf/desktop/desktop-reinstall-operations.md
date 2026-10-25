@@ -5,34 +5,21 @@ description: Runtime-only direct-channel reinstall with minimal Desktop recovery
 tags: [desktop, reinstall, runtime, ssh, containers]
 timestamp: 2026-08-26T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Wipe-data reinstall is Desktop's final recovery path for a broken managed Redeven Runtime. After the user confirms the exact Local, SSH, or container target and Runtime root, Desktop prepares a verified Runtime-only package, attempts to stop old Redeven processes, replaces the exact root, starts and verifies the fresh Runtime, and cleans retained old data. Gateway, old Runtime health, old databases, unknown process state, previous journals, and quarantine content cannot reject the operation before a direct filesystem action is attempted. Preserve-data reinstall is a convenience path and rolls back its managed-file replacement when fresh verification fails.
+Wipe reinstall is Desktop's recovery for a broken managed Runtime. After exact-target/root confirmation, Desktop verifies a Runtime package, attempts process stop, isolates/replaces the root, starts and verifies Runtime, then cleans old data. Old health, databases, journals or unknown process state cannot block the direct filesystem attempt. Preserve-data reinstall instead replaces managed files and rolls back when verification fails.
 
 # Contract
 
-Interaction sessions follow [Desktop interaction continuity](desktop-interaction-continuity.md), including authority invalidation, retained drafts, explicit visibility and stale-completion fencing.
-
-## Confirmation and prerequisites
-Environment card menus name both data modes as **Reinstall**, never **Uninstall**.
-
-Timeout and cancellation preserve the journal and command diagnostics for retry.
-
-## Runtime-only sequence
-The authoritative progress order is:
-
-They may be removed as part of exact-root wipe cleanup but are never prepared, installed, started, or verified.
-
-## Recovery journal
-Desktop writes one minimal journal outside the target root. The journal intentionally stores no package identity; the current Desktop package cache and validation contract are authoritative on every incomplete recovery.
-
-A later-stage failure is never rewritten as an earlier filesystem failure.
+- Both modes are named Reinstall. [Interaction continuity](desktop-interaction-continuity.md) owns confirmation sessions; timeout/cancellation preserve journal and diagnostics.
+- The sequence is confirmation, direct channel, target resolution, verified package, stop attempt, old-root isolation, install, start, Runtime verification, catalog/Local UI verification and old-data cleanup. See the exact phase constants below. Only Runtime is prepared, installed, started and verified.
+- One minimal journal lives outside the target root. It stores no package identity: current package-cache validation is authoritative on incomplete recovery. Preserve the actual failing phase rather than rewriting later failures as filesystem failures.
 
 # Boundaries
 
-Reinstall never scans a home directory, follows an unconfirmed symlink target, performs container-wide prune, or removes data outside the exact Runtime root and its operation quarantine. Remote commands perform one bounded filesystem or process action; Desktop owns ordering, journal commits, progress, and retry.
+Never scan a home directory, follow an unconfirmed symlink, prune containers globally or delete outside the confirmed root/quarantine. Remote commands perform bounded actions; Desktop owns sequence, journal commits, progress and retry.
 
 # Evidence
 

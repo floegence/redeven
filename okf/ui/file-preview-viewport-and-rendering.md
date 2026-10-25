@@ -5,7 +5,7 @@ description: Preview fit, renderer ownership, and Markdown reading colors.
 tags: [ui, files, preview, viewport, rendering]
 timestamp: 2026-10-01T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-23"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
@@ -14,29 +14,21 @@ Redeven owns preview modes, identity, and renderer lifetimes; published Floe own
 # Contract
 
 ## Window boundary
-The [floating layer contract](env-app-floating-layer-order.md) owns placement and viewport constraints. Title, close, and toolbar stay reachable while documents scroll locally.
+[Floating layers](env-app-floating-layer-order.md) own placement/clamps; title, close and toolbar remain reachable while documents scroll locally.
 
 ## Reading area and zoom
-Sizing excludes padding/scrollbars in local CSS pixels. Ancestor transforms, including Workbench projection, cannot change intrinsic size.
-
-Flower attachments retain native PDF controls and contained images; containers shrink with the window.
+Fit uses local CSS pixels excluding padding/scrollbars, unaffected by ancestor/Workbench transforms. Initial fit may enlarge; resize recomputes automatic fit while preserving manual zoom. Attachments retain native PDF controls/contained images and shrinkable containers.
 
 ## Rendering ownership
-PDF uses the lazy published `@floegence/floe-webapp-core/pdf` entrypoint. Its scoped CSS must not affect unrelated surfaces.
-
-Image load and error callbacks must match the currently displayed resource.
+Lazy published `@floegence/floe-webapp-core/pdf` owns PDF layers with scoped CSS. Each PDF/PPTX page has one renderer; stale work cannot replace current resources. Image callbacks match displayed identity. Cancellation is neutral; failures are local/retryable.
 
 ## HTML pages
-The [HTML contract](file-preview-html.md) owns page-first opening, source editing, bounds, and isolation.
+[HTML preview](file-preview-html.md) owns page-first opening, explicit source editing, bounds/isolation and refusal to execute incomplete HTML.
 
 ## Markdown enhancements
-Mermaid skips theme sampling/sandbox allocation without diagrams, retains theme caching, and rejects stale work.
+Mermaid skips theme/sandbox work without diagrams, caches themes and fences stale results. Floating Contents starts closed in the published right-drawer Dialog, preserving width/nodes/scroll. Dismissal affects only Contents; heading activation scrolls Markdown then closes. File changes reset it; headingless files disable it. Main previews retain their sidebar.
 
-Floating Contents starts closed. A published Floe Dialog right drawer preserves document width, nodes, and scroll without reserving a sidebar. It fits narrow windows with published focus/dismissal/motion. Escape, close, or backdrop dismisses only Contents; heading selection scrolls only Markdown and closes it. File changes reset it; headingless documents disable it. Main previews keep their sidebar.
-
-Both reading modes use published Floe colors: headings use interaction/info accents, lower headings and quotes use tip, emphasis uses note, links use info, and inline code uses its dedicated foreground. Dark headings retain hue with a lightness floor for raised windows. Tables and metadata use subtle tints; GFM alerts distinguish info, success, note, warning, and error.
-
-Text and inset titles meet 4.5:1 contrast against actual backgrounds in every preset and both materials, including floating windows. Links retain underlines/focus; selection stays readable. Forced colors use system text, links, and boundaries. Theme changes preserve nodes, geometry, selection, focus, and scroll; theme state and syntax-highlighting ownership stay shared.
+Floe roles color headings/links as interaction/info, lower headings/quotes as tip, emphasis as note and code with its dedicated foreground. Raised dark headings retain hue with a lightness floor; tables/metadata use subtle tints and GFM alerts keep semantic roles. Text/inset titles require 4.5:1 contrast across presets/materials, including floating windows. Links retain underline/focus; selection is readable and forced colors use system roles. Theme changes preserve geometry, DOM, selection, focus and scroll.
 
 # Boundaries
 

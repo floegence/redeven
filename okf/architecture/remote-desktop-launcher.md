@@ -5,43 +5,22 @@ description: Identify the target host, explain connection readiness and open its
 tags: [desktop, applications, interaction, accessibility]
 timestamp: 2026-10-09T17:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-23"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-The Env App launcher owns the remote desktop connection flow in Host Applications
-and Workbench. It names the actual target, presents current readiness and offers
-one primary action. Additional authorization advances inside that same surface.
-Permission and platform limits remain enforced by the
-[desktop session contract](remote-desktop.md). Failure stays visible with an
-appropriate recovery step; dismissal before session creation finishes releases
-that session. A successfully opened viewer retains its independent lifetime.
+Env App owns one remote desktop flow in Host Applications/Workbench: identify the host, show readiness and one primary action, then continue authorization in place. [Session policy](remote-desktop.md) enforces platform/permission limits. Failure retains recovery; dismissal before creation finishes releases that session. An opened viewer has an independent lifetime.
 
 # Contract
 
-## Target and readiness
-Remote Desktop uses one monitor-and-pointer silhouette in its launcher and Workbench Dock. Their identities must remain distinct at Dock and widget-header sizes, in every shipped theme and high-contrast mode.
-
-Failure retains its diagnostic and retry action, while cancellation stops only the selected setup operation; neither requires reloading the application.
-
-## Continuous connection setup
-When a target needs SSH service preparation, authorization and desktop opening remain one continuous flow in the existing Remote desktop dialog. The current step, operation-bound authorization challenge, progress, failure diagnostic and next action stay visible together.
-
-Administrator scope and credential lifetime follow the [SSH deployment contract](remote-desktop-ssh-deployment.md).
-
-## Connection options
-The initial dialog presents host identity, readiness and one connect action. Opening the launcher never changes system permission.
-
-Administrator-method and display selectors retain native keyboard selection and their visible labels. Their decorative chevrons stay 12 CSS pixels inside the field edge, with separate text padding, including narrow windows and forced-color presentation. The arrow does not intercept pointer input.
-
-Turning off reuse means each future connection requests host confirmation; it does not revoke the system grant.
+- Use the shared monitor/pointer mark, distinguishable at Dock/header sizes across themes/high contrast. Keep diagnostic/retry after failure; cancellation stops only selected setup without reloading.
+- SSH preparation, operation-bound challenge, progress and desktop opening stay in the same dialog. [SSH deployment](remote-desktop-ssh-deployment.md) owns admin scope/credential lifetime; opening the launcher changes no OS permission.
+- Initial content is target/readiness/connect. Admin/display selectors retain native keyboard behavior/labels; decorative chevrons sit 12px inside the field with separate text padding and no pointer interception.
+- Disabling approval reuse requests confirmation on future connections without revoking OS grants. Status refresh cannot erase connection failure.
 
 # Boundaries
 
-## Failure and window ownership
-Status refreshes never erase a connection failure.
-
-Desktop retains origin-only target validation and environment-scoped route admission; product adapters must not weaken either boundary to accept malformed session data.
+Desktop retains origin-only target validation and environment-scoped route admission. Product adapters cannot accept malformed session data to bypass either.
 
 # Evidence
 

@@ -6,51 +6,34 @@ tags: [ui, plugins, activity, workbench, plugin-center]
 timestamp: 2026-10-12T00:00:00Z
 quality_exception: Cross-surface discovery, navigation, permissions, and SDK surface presentation contract; installation, package review, and saved layout continuity are separate concepts.
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Redeven owns plugin navigation, discovery, management presentation, and placement;
-released ReDevPlugin owns package admission, surface authority, confirmations,
-bridge sessions, and revocation. Open uses the current mode with independent SDK
-slots in Activity and Workbench. Saved canvas placement survives runtime cleanup;
-[plugin layout continuity](plugin-layout-continuity.md) owns recovery and removal.
-Unknown outcomes require authoritative reconciliation, never wider teardown or
-blind retry. Management retains search and selection while exposing actionable
-failures and current permissions.
+Redeven owns plugin discovery, navigation and placement; released ReDevPlugin owns admission, surface authority, bridge sessions, confirmation and revocation. Activity and Workbench use independent SDK slots. Management preserves search/selection, exposes actionable failures and reconciles unknown outcomes against authoritative state.
 
 # Contract
 
 ## Discovery and exact inventory
-The Activity Bar `Plugins` entry opens a Shell-root Launcher without changing the current normal surface. Search normalizes Unicode with NFKC and locale-aware case folding, matches display name, canonical keywords, and the locale's explicit alias key, and intersects with the selected category.
-
-On tablet and desktop, the detail drawer overlays the directory without resizing or reflowing the card grid; closing it restores focus to the originating row.
+Activity Bar Plugins opens a Shell-root Launcher without changing the normal surface. Search intersects category with NFKC/locale-case-folded display names, canonical keywords and explicit locale aliases. Tablet/desktop details overlay the grid without reflow and restore originating-row focus.
 
 ## Session recovery
-After a direct-session handshake, the Shell requests the idempotent Host `recoverEnabled` snapshot on the explicit authenticated plugin-session-ready transition; it does not insert a stability timer. Cards, details, launchers, and placement commands consume the Host `action_state`; they do not derive `can_open` from trust, policy, grants, or recovery flags.
+An authenticated session-ready transition invokes idempotent Host `recoverEnabled` without a stability timer. All placements consume Host `action_state`; trust, grants, policy or recovery flags cannot derive `can_open`.
 
 ## Installation and package review
-[Official installation progress](plugin-installation-progress.md) owns durable Execution observation and approved setup. Both workflows preserve the placement contract and never turn a failed operation into component deletion.
+[Installation progress](plugin-installation-progress.md) owns durable Execution observation and approved setup; [package review](plugin-package-review.md) owns external packages. Failures preserve placement rather than delete components.
 
 ## Permissions and policy
-Plugin Center joins installed records, active grants, Host permission requirements, and security policy.
-
-Method effects never rename the capability being granted. Failure reloads inventory, grants, and policy and requires a new confirmation.
+Plugin Center joins inventory, grants, Host requirements and policy. Method effects cannot rename granted capabilities. Failure reloads authority and requires a new confirmation.
 
 ## Activity windows and pinned pages
-Each Activity window owns one fresh `PluginSurfaceSlot` and opens it only through `openSurfaceInSlot`.
-
-An opening or bridge failure replaces the iframe area with a recovery panel; timeouts explain that the plugin took too long and offer Retry.
-
-Restart restores shortcuts but always begins on a built-in page, so startup does not automatically open third-party content.
+Each window creates one fresh `PluginSurfaceSlot` through `openSurfaceInSlot`. Opening/bridge failures replace the iframe with local recovery; timeouts explain delay and offer Retry. Restart restores shortcuts but starts on a built-in page, never automatically opens third-party content.
 
 ## Workbench widgets and placement
-[Plugin layout continuity](plugin-layout-continuity.md) owns saved binding, atomic placement, exact-instance removal, retry, conflict, and recovery behavior. Status overlays may isolate unavailable content but must not forward events, guess plugin focus, or establish another bridge. Unpinning removes only the shortcut.
+[Layout continuity](plugin-layout-continuity.md) owns saved bindings, atomic placement, exact removal and recovery. Status overlays cannot forward input, guess focus or create a second bridge. Unpin removes only the shortcut.
 
 ## Confirmation and teardown
-Surface capability confirmations use one abort-aware FIFO product dialog. Cancel owns initial focus, each request is decided independently, and hidden, retired, or revoked surfaces cannot approve queued work.
-
-Retired Surfaces cannot start a download, and exported bytes are neither uploaded nor retained by the Shell.
+One abort-aware FIFO dialog decides requests independently with initial Cancel focus. Hidden, retired or revoked surfaces cannot approve queued work. Retired surfaces cannot download; Shell neither uploads nor retains exported bytes.
 
 # Boundaries
 

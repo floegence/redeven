@@ -1,138 +1,63 @@
 # Redeven OKF Update Log
 
-- 2026-10-25: Compact the [model picker](ai/model-directory-and-selection.md): inline search, smaller rows, preserved touch targets.
-- 2026-10-25: Identify ambiguous chunks in [patch errors](ai/tool-permission-runtime.md).
+Recent changes only. The linked concepts own current contracts and evidence; Git preserves the complete change history.
 
-- 2026-10-25: Unify Kimi setup with isolated access drafts and stable saved connections. See [provider configuration](ui/flower-provider-configuration.md).
+## 2026-10-25
 
-- 2026-10-24: Adopt published Floret v7.83.0 Moonshot K3.1 qualification; enforce upstream-first provider refreshes with a public-gateway regression.
+- Compact the [model picker](ai/model-directory-and-selection.md): inline title/search, smaller desktop rows and preserved touch targets.
+- Identify ambiguous chunks in [patch errors](ai/tool-permission-runtime.md).
+- Unify Kimi setup with isolated access drafts and stable saved connections; see [provider configuration](ui/flower-provider-configuration.md).
+- Add mandatory independent subagent review whenever the documentation cap is reached, targeting at most 90%. Revalidate and condense UI, architecture, Desktop, operations and release knowledge; consolidate this log's repeated change inventories.
 
-- 2026-10-24: Redesign the [Flower model picker](ai/model-directory-and-selection.md); verify themes, keyboard access and narrow layouts.
+## 2026-10-24
 
-- 2026-10-24: Accept uniquely matched, disjoint patch chunks in any order; retain strict rejection elsewhere. See [tool permissions](ai/tool-permission-runtime.md).
-
-- 2026-10-24: Refresh Kimi K3.1 Pro models and add personal Kimi Code subscriptions through native Responses. See [provider review](ai/provider-api-catalog-review.md), [validation](ai/provider-configuration-validation.md), and [settings](ui/flower-provider-configuration.md).
-
-- 2026-10-23: Require patched Zod validation through matching Env App npm/pnpm overrides and locks. See [upstream web dependencies](architecture/env-app-upstream-web-dependencies.md).
-
-- 2026-10-23: Align apply_patch arguments with Codex input. See [tool permissions](ai/tool-permission-runtime.md).
-
-- 2026-10-23: Preserve canonical [thinking duration](ui/flower-activity-interaction.md#thinking-duration), including submillisecond and unrecorded states.
-
-- 2026-10-23: Clean up AI terminal process groups before reaping command roots; preserve exit results, stop completed watchdogs, and define foreground execution and daemonization boundaries. See [terminal runtime](ai/terminal-tool-runtime.md).
-
-- 2026-10-23: Delay Flower loading feedback by 200 ms; retain immediate prepared-content reveal and cancel superseded feedback. See [selection](ui/flower-thread-selection.md).
-
-- 2026-10-23: Qualify bounded root/child recovery with exact content, filled-cache rendering and strict CPU/latency gates; remove per-frame computed-style reads from prose reveal. See [performance evidence](operations/flower-live-queue-performance.md) and [streaming stability](ui/flower-streaming-stability.md).
-
-- 2026-10-23: Position Flower resize geometry before paint, clear stale arrival motion, retain offscreen skipping and qualify mixed-history tail coordinates in Chromium and Electron. See [selection](ui/flower-thread-selection.md) and [qualification](operations/flower-thread-switch-qualification.md).
-
-- 2026-10-23: Bind source identities and installer pins to inspected file descriptors, sanitize AI diagnostics, synchronize patched dependency locks, retain lazy page styles and qualify Electron outline visibility. Document reviewed qualification data flows in [CI and release gates](release/ci-and-release-gates.md), [model request reuse](ai/model-request-reuse.md), [web dependencies](architecture/env-app-upstream-web-dependencies.md) and [Web Service windows](desktop/web-service-browser-window.md).
-
-- 2026-10-23: Preserve every new tool and thinking title reveal through live snapshots, fast completion, automatic folding and preview promotion; start text shimmer only after typing finishes. See [activity interaction](ui/flower-activity-interaction.md).
-
-- 2026-10-23: Retain visible Flower prose through body growth, authoritative refresh and canonical completion; resume live bodies in authorized 16 KiB chunks, coalesce extent notifications and preserve bounded two-slot read ownership. See [selection](ui/flower-thread-selection.md) and [live delivery](ui/flower-live-timeline.md).
-
-- 2026-10-23: Distinguish the three generated OKF bundle outputs from source-build inputs, allowing stable dirty-source builds while continuing to reject concurrent source edits and checkout advances. See [development bundles](desktop/desktop-development-bundles.md).
-- 2026-10-23: Add bounded 320 ms soft reveals for live Flower prose while retaining text nodes, selection, Markdown colors and immediate canonical completion. Verify motion preferences and cleanup in Chromium. See [streaming stability](ui/flower-streaming-stability.md).
-
-- 2026-10-23: Restore native scrolling over expanded thinking and align transcript follow intent with nested read-only detail boundaries, including short content, both edges and streaming updates. See [tool sequence reading](ui/flower-tool-sequences.md) and [activity interaction](ui/flower-activity-interaction.md).
-
-- 2026-10-23: Keep Flower sidebar resizing local to grid geometry, coalesce pointer samples, and persist only settled widths; qualify cancellation, keyboard and responsive layouts plus bounded Electron style recalculation. See [conversation sidebar](ui/flower-thread-sidebar.md).
-
-- 2026-10-23: Keep apply_patch guidance to syntax and source-order constraints; remove generic reminders and the JSON tutorial while retaining strict schema validation and corrective diagnostics. See [tool permissions and dispatch](ai/tool-permission-runtime.md).
-- 2026-10-23: Replace the thinking brain glyph with theme-aware clockwise petal fills and a light cream-gold center; preserve confirmed-live lifecycle, disclosure interaction, reduced motion and high contrast. See [activity interaction](ui/flower-activity-interaction.md).
-
-- 2026-10-23: Teach ordered non-overlapping patch chunks and one canonical file operation, distinguish source-order/context failures with actionable no-effect diagnostics, and qualify schema recovery plus synthetic model patch generation. See [tool permissions and dispatch](ai/tool-permission-runtime.md).
-
-- 2026-10-23: Position Flower destinations before exposure, prepare visible tail text through the existing bounded loader, remove elapsed-time reveal, and verify cached first frames in Chromium and Electron. See [selection](ui/flower-thread-selection.md), [read state](ui/flower-read-state.md), and [qualification](operations/flower-thread-switch-qualification.md).
-
-- 2026-10-23: Keep temporary Flower subscription recovery retryable over HTTP and preserve localized connection feedback in the composer status lane. Verify automatic recovery, keyboard resync and draft retention; see [Flower live timeline](ui/flower-live-timeline.md).
-
-## 2026-10-23 — Readable bounded conversation history
-
-- Ordinary visible message bodies load automatically through a two-slot cancellable queue and render complete Markdown without moving the reading anchor; tools retain explicit disclosure.
-- Transient history baseline failures recover through the existing live connection owner; contract and authorization failures remain explicit.
-- Contract and evidence: [Flower live timeline](ui/flower-live-timeline.md).
-
-- 2026-10-23: Deliver the Flower sidebar in cancellable 25-root pages, preserve partial selection and complete membership, and avoid duplicate startup summary scans. Add isolated native Electron and bilingual navigation acceptance for progressive loading and draft retention. See [live delivery](ui/flower-live-timeline.md).
-
-- 2026-10-22: Adopt the direct HTML floating-preview action and compact content-first canvas from published Floe. See [inline media](ui/flower-inline-media.md).
-
-- 2026-10-22: Compact model-facing subagent coordination metadata, retain full reports and control metadata, and specify the local browser observation shape. See [subagent runtime](ai/subagent-runtime.md).
-
-- 2026-10-22: Add bounded stepped reveals for newly arriving Flower activity titles, preserving immediate content, stable row geometry and static historical reading. See [activity interaction](ui/flower-activity-interaction.md).
-
-- 2026-10-22: Unify cancellable terminal reads, explicit read deadlines, and published Floret repeat protection; retain concise incremental model output. See [terminal tool runtime](ai/terminal-tool-runtime.md).
-- 2026-10-22: Bound Flower root history transport with authorized reading windows, explicit body expansion, facts-only background updates and bounded command receipts; record complete paging and bandwidth qualification in [live delivery](ui/flower-live-timeline.md), [adapter boundary](ai/floret-redeven-adapter-and-projection.md) and [switch qualification](operations/flower-thread-switch-qualification.md).
-
-- 2026-10-22: Defer unopened Flower tool-sequence content while retaining inspected DOM; distinguish this rendering improvement from complete detail transport. See [tool sequences](ui/flower-tool-sequences.md) and [switch qualification](operations/flower-thread-switch-qualification.md).
-- 2026-10-22: Let short Flower tool groups and outward scrolling at sequence edges reach the transcript, preserve internal reading, and coordinate native scroll input with tail following. See [tool sequences](ui/flower-tool-sequences.md).
-- 2026-10-22: Open collapsed Flower tool sequences at their latest call, resume internal tail following, and preserve manual reading during subsequent updates. See [tool sequences](ui/flower-tool-sequences.md).
-- 2026-10-22: Adopt published Floret v7.79.0 execution-owned request facts; short-circuit sidebar previews and retain tool-sequence observers across unrelated updates. See [request-history performance](operations/flower-request-history-performance.md).
-
-- 2026-10-22: Preserve ordered Flower deltas within existing queue budgets; reserve full-current convergence for actual pressure or sequence loss. Document same-route retirement and regression coverage.
-- 2026-10-22: Simplify Flower thread tools to title discovery, single-thread chronological browsing and explicit complete reads. Remove aggregate execution and advanced filters; preserve authorization and saved-result previews. See [thread tools](ai/flower-thread-queries.md).
-
-A compact digest of updates from the last 30 days. Current contracts and evidence live in the linked concepts; older detail remains in Git history.
-
-## 2026-09-28
-- Pending message controls; Adopt published DeepSeek Flash support; Refresh official provider models and endpoint compatibility; Improve personal browser responsiveness with FloeBrowser v0.1.27; Adopt the published FloeBrowser profile workspace release; Consume audited upstream security releases; Integrate private Linux desktop and package sessions
-- Concepts: [the provider review](ai/provider-api-catalog-review.md)
-
-## 2026-10-05
-- Ordered send feedback and direct image reads; Runtime-bound Ask Flower references; Authenticated message attachment previews; Unified Go toolchain and cleanup; Complete compaction input; Flower startup efficiency; Non-blocking Flower model directory; Flower computer recovery; Stable Flower media loading
-- Concepts: [direct image reads](ai/image-read-and-retention.md), [context action admission](ai/flower-context-action-records.md), [attachment previews](ui/flower-composer-attachments.md), [offline notice checks](release/ci-and-release-gates.md), [upstream context owner](ai/model-context-usage-and-compaction.md), [opaque storage boundary](ai/flower-storage-ownership-and-migrations.md), [readiness lifecycle](architecture/ai-readiness-lifecycle.md), [model capabilities](ai/model-directory-and-selection.md), [computer takeover](ai/computer-use-takeover.md), [private browser control](ai/computer-use-private-browser-control.md), [inline media](ui/flower-inline-media.md)
-
-## 2026-10-12
-- Subagent status and result boundaries; Preserve public Goal review facts; Recent-first thread queries; Readable Goal review activity; Explicit thread query sorting; Minimal computer preview placeholders; Scoped child interactions after forks; Goal history without source labels; Borderless Goal surfaces; Compact Goal presentation; Preserve compact Flower reading; Theme-adaptive Flower reading; Goal submission and compact composer controls; Flower historical defaults and Goal disclosure; Provider stream recovery and diagnosis; Unified Flower process disclosure; Compact parent report tool rows; Returned effect uncertainty and inspection recovery; Computer result fidelity and recoverable encoding failure; Parent event empty pages and bounded reading recovery; In-place child report disclosure; Parent event timeline; Lightweight presentation preview; Persistent-index startup and safe preparation; Tool-argument stall recovery; Visual image memory and original snapshot rereads; Verify generated viewer assets before commit; Bounded child waits and precise failure recovery; Passive parent events; Request output budgets; Subagent header avatar stack; On-demand subagent context; Verified SSH physical-desktop recovery; Fresh explicit skill reads; Query Flower Git details on demand; Flower provider progress queue continuity; Stable Subagent navigation; Inline reference optical emphasis; Stronger inline reference colors; Compact Subagent creation and header; Subagent inline capsules; Attachment capability loading; Final-only answer actions; Flower settings dialog; Quieter answer actions; Theme-aware inline references; Context source breakdown; Final answer actions; Animate Flower during startup readiness; Restore Flower motion and dark artwork; Compact web-search details; Compact image tool previews; Auto-loaded context category bars; Inline conversation title editing; Compact screenshot tool previews; Compact Flower sources and website icons; Used context composition; Distinct subagent identities and compact dropdown; Clear edit preparation status; Flower outline visibility; Context distribution card; Conversation title shortcut; Bounded FlowNode stream recovery; Screenshot results and independent computer questions; Compact context statistics; Confirmed file targets and recovery; Terminal failure and manual recovery; Contextual tool failure details; Search intent and provider recovery; Canonical runtime context snapshots; Pencil writing feedback; Crisp expanded command surfaces; Animated edit argument generation; Quieter Flower reading surfaces; Configurable Responses continuation; Received output and edit progress; Faster Flower storage loading; Unified provider recovery; SubAgent failure reasons reach the parent; OpenAI request reuse; Clear provider failures and quieter error presentation; Continuous Flower presentation during live recovery; Queued messages return to the ordinary composer; Consistent Flower prompt and rule sources; Reactive message copy feedback; Consistent command activity icons; Refined provider connection identity; Native provider state reader recovery; Provider aliases and editable endpoints; Actionable compatible-model configuration; Inert HTML preview loading; Canonical management operation timing; Local conversation reference admission; Canonical assistant citations; Bounded model availability checks; Compact Flower model picker; Local ChatGPT authentication and catalog refresh; Flower live synchronization recovery; Independent thinking segment disclosure; HTML preview file actions; Flower CJK Markdown emphasis; Message submission feedback and immediate queue capture; HTML preview windows and link navigation; Generated HTML preview canvas; Minimal HTML generation feedback; Readable Computer Use activity; Concise single-file edit details; Plain-language context labels; Test-driven Flower prompt reduction; Request-scoped context distribution; Native tokens and visible input characters; Canonical Flower process order
-- Concepts: [SubAgent list, wait, and inspect](ai/subagent-runtime.md), [historical Subagent operation rows](ui/flower-subagent-detail.md), [Goal submission](ai/flower-goals.md), [authorized indexed query tools](ai/flower-thread-queries.md), [computer viewer](ui/flower-computer-viewer.md), [Markdown tables](ui/flower-message-appearance.md), [turn-process projection](ui/flower-turn-process-disclosure.md), [Desktop RPC v3](desktop/desktop-session-model-source.md), [manual recovery](ui/flower-failure-recovery.md), [history reader and replay contracts](ai/model-provider-surface-and-history.md), [parent transcript](ui/flower-parent-events.md), [Stop confirmation](ai/floret-thread-runtime.md), [model encoding from Activity](ai/floret-redeven-adapter-and-projection.md), [canonical recovery controls](ai/computer-use-qualification.md), [file preview](ui/file-preview-viewport-and-rendering.md), [readiness lifecycle](architecture/ai-readiness-lifecycle.md)
-
-## 2026-10-19
-- Keep failed calls in Flower tool sequences; Isolated Flower provider saves and visible errors; Remove completed Goal controls; English Flower introduction; Retained Flower child detail; Minimal Flower identity; Direct Flower subagent delegation; Quiet Flower conversation navigation; Focused Flower execution boundaries; Concise ChatGPT account feedback; Complete shared UI localization; Focused compaction knowledge contracts; Compact favorite directory locations; Shared directory favorites; Quiet provider transport recovery; Unified ChatGPT transport recovery; Stable ChatGPT sign-out and explicit account removal; Stable Flower settings lifetime; Bounded tool correction and explicit recovery; Focused Flower selection and detail-read contract; Consolidated Flower system instructions; Native measured compaction pressure; Preserve Flower tail following during live growth; Bounded Flower conversation detail reads; Stable Flower media ownership; Concise Flower tool definitions; Yield tool output layout during floating interactions; Confirm current Goals before draft recovery; Single-source Flower execution guidance; Monotonic Flower read state; Append newly pinned conversations; Ordered tool schema rendering; Floating-window responsiveness during streaming; Present Flower selection before transcript work; Focused provider help; Historical Flower conversation compatibility; Continuous Flower pin interactions; Concise compaction feedback; Consistent Desktop build sources; Consistent DeepSeek web defaults; Responsive Flower conversation selection; Canonical compaction timeline and disclosure; Compact DeepSeek provider settings; DeepSeek search and page reading; Scoped context compaction estimates; Candidate file names during edit preparation; Readable thread tool Activity; Canonical output sources; Explicit compaction-driven Goal continuation
-- Connect running calls through tool rows, preserve post-tool thinking, and retain waiting and approval boundaries.
-- Concepts: [Flower consecutive tool sequences](ui/flower-tool-sequences.md), [provider configuration](ui/flower-provider-configuration.md), [Goal guidance](ai/flower-goals.md), [prompt contracts](ai/flower-prompt-and-rule-sources.md), [Subagent detail](ui/flower-subagent-detail.md), [subagent runtime](ai/subagent-runtime.md), [tool permissions](ai/tool-permission-runtime.md), [typed adapter](ai/floret-redeven-adapter-and-projection.md), [selection and detail reads](ui/flower-thread-selection.md), [ChatGPT authentication](ui/flower-provider-chatgpt-authentication.md), [filesystem navigation](ui/filesystem-picker-navigation.md), [native Tessiven renderer](ui/tessiven-canvas.md), [execution and Goal continuation](ai/flower-context-compaction.md), [context usage](ai/model-context-usage-and-compaction.md), [isolated qualification](operations/flower-compaction-qualification.md), [directory favorites](ui/directory-favorites.md)
-
-## 2026-10-21
-- Preserve historical answer anchors through the shared Flower fork adapter
-- Tune terminal exec initial wait and model output read wait
-- Concepts: [Flower thread fork coordination](ai/flower-thread-fork-coordination.md), [terminal tool runtime](ai/terminal-tool-runtime.md)
-
-## 2026-10-22
-- Bound expanded Flower thinking and consecutive tool sequences with responsive internal scroll regions; keep headers reachable and preserve manual reading during live updates.
-- Concept: [Flower consecutive tool sequences](ui/flower-tool-sequences.md)
-- Record paired real-Service CPU qualification for ordered live updates before actual queue saturation.
-- Concepts: [live queue performance evidence](operations/flower-live-queue-performance.md)
-- Correct Flower patch anchors, EOF placement, newline preservation, canonical in-directory absolute paths, approval targets, and partial-write diagnostics.
-- Concepts: [file editing and permissions](ai/tool-permission-runtime.md)
-- Preserve streamed Markdown lists when completion snapshots shift source offsets; qualify approved-tool transcripts and completed work disclosure.
-- Concepts: [streaming stability](ui/flower-streaming-stability.md)
-- Accept Default reasoning on models without reasoning controls as the omitted selection
-- Concepts: [model reasoning](ai/model-reasoning-runtime.md), [personal conversation preferences](ui/flower-conversation-preferences.md)
-- Keep Flower model and reasoning preference changes in the active composer without refreshing the shared model settings surface
-- Concepts: [personal conversation preferences](ui/flower-conversation-preferences.md)
-- Coalesce Flower live observations within existing memory budgets; converge dirty threads from authoritative current views and merge contiguous client appends.
-- Concepts: [incremental live state](ui/flower-live-timeline.md), [streaming stability](ui/flower-streaming-stability.md)
-- Preview complete HTML documents in ordinary Flower `html` fences while preserving HTML snippets as code
-- Concepts: [Flower inline media](ui/flower-inline-media.md)
-- Keep answered inputs visible as checkpoints between independently folded Flower work sequences
-- Concepts: [turn-process projection](ui/flower-turn-process-disclosure.md), [Flower consecutive tool sequences](ui/flower-tool-sequences.md)
-- Require writeable answers for Flower ask_user fixed choices
-- Concepts: [Flower inline media](ui/flower-inline-media.md), [Floret Redeven adapter and projection](ai/floret-redeven-adapter-and-projection.md), [Floret storage ownership](ai/flower-storage-ownership-and-migrations.md), [provider API review](ai/provider-api-catalog-review.md)
-
-- Adopt published Floret v7.80.0 for bounded startup and background per-thread preparation; keep product recovery after activation, isolate failed histories, and preserve results for concurrent recovery waiters.
-- Concepts: [storage ownership](ai/flower-storage-ownership-and-migrations.md), [readiness lifecycle](architecture/ai-readiness-lifecycle.md), [startup presentation](architecture/flower-startup-presentation.md), [failure recovery](ui/flower-failure-recovery.md)
-
-- Adopt published Floret v7.80.1 so Stop and shutdown settle from canonical control records without reading conversation bodies; retain the upstream cancellation deadlines.
-- Concept: [storage ownership](ai/flower-storage-ownership-and-migrations.md)
+- Adopt published Floret v7.83.0 Moonshot K3.1 qualification, upstream-first provider refreshes and a public-gateway regression. Add Kimi K3.1 Pro and native Responses subscriptions; see [provider review](ai/provider-api-catalog-review.md) and [configuration validation](ai/provider-configuration-validation.md).
+- Qualify the model picker across themes, narrow layouts and keyboard interaction.
+- Accept uniquely matched, disjoint patch chunks in any order while retaining strict rejection of ambiguous edits; see [tool permissions](ai/tool-permission-runtime.md).
 
 ## 2026-10-23
-- Retain observed thinking duration after completion in the shared Flower timeline, preserving it through disclosure changes and in-session refreshes.
-- Concept: [Flower activity interaction](ui/flower-activity-interaction.md)
-- Keep the initial Flower conversation inventory inside its existing loading presentation until the first authoritative page; retain admitted content and drafts through subsequent reconnects.
-- Concept: [Flower startup presentation](architecture/flower-startup-presentation.md)
 
-- Make workspace ready independent of sidebar reads; consume body-free facts, bound root/child reading interests, and keep history failures local without retry loops.
-- Concepts: [live state](ui/flower-live-timeline.md), [startup presentation](architecture/flower-startup-presentation.md), [failure recovery](ui/flower-failure-recovery.md), [adapter ownership](ai/floret-redeven-adapter-and-projection.md)
+- Bound conversation loading and rendering: authoritative paged inventory, workspace readiness independent of sidebar reads, cancellable two-slot body loading, stable reading anchors, local history failures and complete Markdown. Contracts: [live timeline](ui/flower-live-timeline.md), [selection](ui/flower-thread-selection.md), [read state](ui/flower-read-state.md), [sidebar](ui/flower-thread-sidebar.md), [startup](architecture/flower-startup-presentation.md) and [adapter ownership](ai/floret-redeven-adapter-and-projection.md).
+- Retain streamed prose and activity titles through snapshot reconciliation, completion and disclosure; preserve measured thinking duration. Evidence: [activity interaction](ui/flower-activity-interaction.md), [streaming stability](ui/flower-streaming-stability.md), [switch qualification](operations/flower-thread-switch-qualification.md) and [live queue performance](operations/flower-live-queue-performance.md).
+- Keep temporary subscription loss retryable through the existing owner, preserving drafts and localized manual resync. See [failure recovery](ui/flower-failure-recovery.md).
+- Preserve terminal exit facts, stop completed watchdogs and clean process groups; distinguish foreground execution from daemonization. See [terminal runtime](ai/terminal-tool-runtime.md).
+- Bind build sources and installer pins to inspected descriptors; retain signed extraction and qualification boundaries. See [CI/release gates](release/ci-and-release-gates.md), [Desktop build identity](desktop/desktop-development-bundles.md), [request reuse](ai/model-request-reuse.md) and [Web Service windows](desktop/web-service-browser-window.md).
+- Keep published web dependencies and patched Zod locks aligned; see [web dependency ownership](architecture/env-app-upstream-web-dependencies.md).
+- Clarify model screenshot encoding, independent byte budgets and authorized fine-detail crops; see [image reading](ai/image-read-and-retention.md).
 
-- 2026-10-23: Document model screenshot encoding, independent request byte budgets, safe capacity recovery and authorized fine-detail crops.
+## 2026-10-22
+
+- Bound expanded thinking/tool sequences, keep headers reachable, retain manual reading and return outward scrolling to the transcript. Defer unopened content and preserve inspected DOM; see [tool sequences](ui/flower-tool-sequences.md).
+- Retain complete chronological thread reads with explicit disclosure and authorization; remove aggregate/advanced query paths. See [thread queries](ai/flower-thread-queries.md) and [request-history performance](operations/flower-request-history-performance.md).
+- Simplify model-facing child coordination while retaining full reports and control metadata; see [SubAgent runtime](ai/subagent-runtime.md).
+- Preserve answered inputs between work sequences and require writable fixed-choice answers; see [turn disclosure](ui/flower-turn-process-disclosure.md).
+- Preview complete HTML documents while preserving snippets as code; see [inline media](ui/flower-inline-media.md).
+- Treat Default reasoning as omitted where unsupported; keep model/reasoning edits in the active composer. See [reasoning runtime](ai/model-reasoning-runtime.md) and [conversation preferences](ui/flower-conversation-preferences.md).
+- Adopt Floret v7.80.0 bounded startup/background preparation and v7.80.1 canonical Stop/shutdown settlement. Preserve historical threads, upstream deadlines, activation recovery and independent failure isolation; see [storage ownership](ai/flower-storage-ownership-and-migrations.md) and [AI readiness](architecture/ai-readiness-lifecycle.md).
+
+## 2026-10-21
+
+- Preserve historical answer anchors in the shared [fork adapter](ai/flower-thread-fork-coordination.md); tune initial execution and output-read waits in the terminal runtime.
+
+## 2026-10-19
+
+- Consolidate execution guidance, tool schemas and recovery boundaries; see [prompt ownership](ai/flower-prompt-and-rule-sources.md), [Goal guidance](ai/flower-goals.md) and [execution lifecycle](ai/floret-thread-runtime.md).
+- Preserve native compaction measurements, canonical disclosure and explicit Goal continuation; see [compaction](ai/flower-context-compaction.md), [context budgets](ai/model-context-usage-and-compaction.md) and [qualification](operations/flower-compaction-qualification.md).
+- Stabilize provider settings and ChatGPT sign-out/account removal; see [ChatGPT authentication](ui/flower-provider-chatgpt-authentication.md).
+- Keep focused navigation, shared directory favorites and native canvas ownership; see [filesystem navigation](ui/filesystem-picker-navigation.md), [directory favorites](ui/directory-favorites.md) and [Tessiven canvas](ui/tessiven-canvas.md).
+
+## 2026-10-12
+
+- Preserve child status/report boundaries, canonical parent events and durable recovery; see [Subagent details](ui/flower-subagent-detail.md), [parent events](ui/flower-parent-events.md), [Desktop model source](desktop/desktop-session-model-source.md) and [provider/history contracts](ai/model-provider-surface-and-history.md).
+- Refine compact conversation controls and output presentation without dropping canonical content; see [message appearance](ui/flower-message-appearance.md), [computer viewer](ui/flower-computer-viewer.md) and [file previews](ui/file-preview-viewport-and-rendering.md).
+- Retain verified target identity and explicit recovery across computer operations; see [computer qualification](ai/computer-use-qualification.md).
+
+## 2026-10-05
+
+- Admit runtime-bound context references and authenticated attachments; see [context actions](ai/flower-context-action-records.md) and [composer attachments](ui/flower-composer-attachments.md).
+- Preserve independent computer requests, private browser ownership and takeover boundaries; see [computer takeover](ai/computer-use-takeover.md) and [private browser control](ai/computer-use-private-browser-control.md).
+- Consolidate startup, complete compaction and nonblocking model-directory contracts in their owning concepts.
+
+## 2026-09-28
+
+- Adopt published DeepSeek Flash/catalog updates, FloeBrowser profile workspaces and audited security releases; integrate private Linux desktop/package sessions. Current provider contracts remain in the provider review, and exact historical versions remain in Git.

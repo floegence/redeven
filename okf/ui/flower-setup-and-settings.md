@@ -5,51 +5,31 @@ description: First-time model setup, actionable starter tasks, and shared provid
 tags: [ai, flower, settings, onboarding]
 timestamp: 2026-10-16T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-The shared Flower surface owns setup and settings for Desktop and Env App.
-An empty profile without a usable model or selected conversation offers explicit
-setup actions. Configured new conversations offer starter tasks as editable
-drafts; selecting one never launches a turn. Settings use flat sections and
-preserve drafts, model-source identity and permission ownership. Connection
-failures and configured profiles needing repair retain their recovery controls.
-Settings open in a shared modal dialog over the mounted chat. Background chat
-and navigation stay visible but inert until the dialog finishes closing; covered
-chat does not acknowledge reads. Settings save progress and errors survive hiding.
+Shared Flower setup/settings serve Desktop and Env App. Empty unconfigured profiles offer explicit setup; configured new conversations offer editable starter drafts without launching turns. A retained modal form preserves saves/errors and makes covered chat inert without acknowledging reads. Existing recovery, model identity and permission owners remain authoritative.
 
 # Contract
 
 ## First-time setup
-The welcome replaces disabled suggestions only when no thread is selected, no provider is configured, no model is usable, and the Desktop source is absent, `not_configured`, or `empty`. In a Desktop `local_host` session, the sole destination is the current Flower surface's settings dialog; it must not open or focus another Welcome window or identify the local environment as remote.
-
-The shared icon artwork stays bare, without restoring the removed glow or a continuous animation.
+Welcome setup requires no selected thread, configured provider or usable model, and absent/`not_configured`/`empty` Desktop source. Desktop `local_host` opens the current surface's settings, never another Welcome window or a remote destination. Artwork has no glow or continuous animation.
 
 ## Starter tasks
-The configured new-conversation page offers four everyday tasks: understand the current folder's contents and how to use them, understand the connected computer, discover installed applications, and prepare a folder organization plan.
-
-Matching names or older dates alone never justify deletion.
-
-The compact companion continues to omit the task grid as specified by the [companion presentation contract](flower-activity-companion.md).
+Four editable drafts cover current-folder understanding, connected computer, installed applications and folder organization. Names/dates alone never justify deletion. The [companion](flower-activity-companion.md) omits the grid.
 
 ## Settings composition
-Settings edit the environment profile even with a Desktop model source.
-
-Switch saves are immediate, block duplicate edits, and restore the previous state on failure.
-
-The shared settings panel stays mounted when returning to chat.
+Settings edit the environment profile even with a Desktop model source. Flat sections preserve identity/drafts. Immediate switches block duplicate edits and roll back on failure.
 
 ## Provider configuration
-Provider layout, authentication choices, and connection-before-model sequencing belong to [Flower provider configuration](flower-provider-configuration.md).
+[Provider configuration](flower-provider-configuration.md) owns authentication, layout and connection-before-model sequencing.
 
 ## Retained panels
-FlowerSurface owns chat and extensions plus one lazily loaded settings form. A bounded, scrollable body adapts to the visible viewport.
-
-Settings dialog interactions belong to the companion; closing the dialog leaves the companion expanded, while the host collapse action closes both without discarding forms.
+FlowerSurface retains chat/extensions and a lazily loaded settings form in a bounded scrollable modal. Covered chat/navigation remain inert through close and do not acknowledge reads. Settings interactions belong to the companion: dialog close keeps it expanded; host collapse closes both while retaining form/progress/errors.
 
 ## Saving and ownership
-The adapter exposes independent `saveDefaultPermission`, `saveModelProfile`, and `persistDefaultModel` operations. Default permission uses a serialized 700 ms controller that coalesces rapid changes, protects newer choices from older responses, and restores the last confirmed value on failure. Computer-use save failures restore the confirmed switch and expose the error.
+Independent adapter operations save permission, model profile and default model. Permission uses a serialized 700 ms coalescing controller, fences older responses and restores the last confirmed value on failure. Computer-use failures restore the confirmed switch and expose errors.
 
 # Boundaries
 

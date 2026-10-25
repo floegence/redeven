@@ -5,7 +5,7 @@ description: Run real selected-model tasks through production Flower commands an
 tags: [flower, ollama, tasks, qualification]
 timestamp: 2026-10-05T00:00:00Z
 lifecycle: active_evidence
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
@@ -18,37 +18,42 @@ their own services and tools. Source configuration and credentials stay unchange
 
 # Contract
 
-## Acceptance scenarios
-- Read structured data, compute a sum, write and verify a file, then modify it in   a later user turn. - Stop generation, including after visible output; accept Stop promptly, settle   cancelled, reject failure retry of a cancelled turn, and accept a new task. - Stop a running terminal command; preserve its confirmed initial effect, kill   its process, prevent its delayed write, and execute a later task. - Edit a queued task with optimistic text matching, reject a stale edit, reorder   tasks, delete one, and verify actual execution order and canonical user text. - Send queued input immediately, cancel the active provider request, and run the   selected task.
+Run `scripts/check_flower_tasks_ollama.sh` explicitly; `--interleavings` selects
+combined operation cases. Every request uses the selected installed model, with
+real chosen tools and exact Ollama Chat history. Observe actual effects and canonical
+state; retain failure without simulation or automatic reruns.
 
-It checks the exact Chat history shape needed by Ollama without fabricating provider output.
+| Scenario | Required observable result |
+| --- | --- |
+| Data/file task | Read structured data, compute sum, write/verify, modify in a later turn |
+| Stop generation | Prompt acceptance, cancelled terminal state, no failure retry of cancellation, later task accepted |
+| Stop terminal | Preserve confirmed initial effect, kill owned process, prevent delayed write, accept later task |
+| Queue edits | Optimistic text match, stale edit rejection, reorder/delete and exact execution/user-text order |
+| Send now | Cancel active provider request and execute selected queued task |
+| Concurrent duplicate input | One retained task; conflicting content for same key rejected across stop/restart/promotion |
+| Stop/restart at generation, approval or Ask User | Original stop identity, stale response rejection and exactly-once retained queue promotion |
+| Queue edits during approval | Stop/restart before promotion; late approval cannot execute cancelled tool |
+| Duplicate approvals | Same answer replays before/after restart, conflicting answer rejects, one actual effect |
+| Cancel Ask User | Replacement input runs after restart; stale answer cannot revive task |
+| Two interrupted continuations | Concurrent Retry/queued input retain original write exactly once |
+| Duplicate send-now | Consumed items reject edits; restart replay does not reexecute |
+| Permission/model change | Queued permission changes, active model-change rejection and immutable existing approval snapshot |
+| Repeated permission transitions | Readonly/approval, stop/restart, stale/fresh approval, post-effect failure, downgrade/retry and restored full-access effects |
 
-## Interleaved operations
-The additional interleaving cases combine commands at observed live boundaries:
-
-- Submit identical requests concurrently, reject conflicting content for the   same key, issue concurrent stops, restart, and promote the single retained task. - Stop and immediately restart during real generation, approval, and Ask User;   preserve the original user-stop identity, reject stale responses, and promote   each retained queue item exactly once across the three boundaries. - Edit, reorder, and delete queued tasks during approval; stop and restart before   promotion, and reject a late approval without executing the cancelled tool. - Submit duplicate approvals concurrently and replay the accepted answer before   and after restart; reject a conflicting answer and verify one actual effect. - Stop an Ask User interaction, restart and run replacement input, then reject a   stale answer without reviving the cancelled task. - Cut two real continuations across restarts, race retry commands, and enqueue   new input while retrying; preserve the original write exactly once. - Race duplicate send-now commands, reject edits to consumed queue items, and   replay promotion across restart without executing either item again. - Change permissions while input is queued, reject active model changes, and   preserve an existing approval snapshot when permissions are later upgraded. - Repeat readonly, approval, shutdown/restart, stale approval rejection, fresh   approved input, post-effect stream failure, readonly downgrade, restart/retry,   and restored full-access writes.
-
-Passing both layers does not claim an automated Desktop click-through against the live model.
-
-## Execution and evidence
-Run `scripts/check_flower_tasks_ollama.sh` explicitly, or use `scripts/check_flower_tasks_ollama.sh --interleavings` for only the combined operation cases.
-
-Deterministic tests pass for the role-free schema, exact delegation text, all three inherited permission modes, historical readonly preservation, and canonical steering and spawn replay.
-
-Temp stores and fixture files are removed after each case; reports retain the observable results.
+Tests own isolated state, services and tools. Remove temporary stores/files after
+each case while retaining reports; source configuration and credentials stay unchanged.
 
 # Boundaries
 
-The [thread runtime](../ai/floret-thread-runtime.md) owns commands, cancellation, queueing, and retry.
-
-Every observed provider request must use that model.
-
-These controlled transport faults qualify recovery paths, not the endpoint's natural network reliability.
+[Thread runtime](../ai/floret-thread-runtime.md) owns command/cancellation/queue/Retry
+semantics. Controlled transport faults qualify recovery, not natural endpoint
+reliability. Passing service tests does not certify Desktop click-through with the
+live model. Deterministic delegation/permission tests remain separate evidence.
 
 # Evidence
 
-- `redeven:scripts/check_flower_tasks_ollama.sh` - Explicit published-dependency real-model runner.
-
-- `redeven:internal/ai/run_e2e_ollama_tasks_test.go` - Model-driven tasks, effects, fault boundaries, product commands, and acceptance evidence.
-
-- `redeven:internal/ai/run_e2e_ollama_interleavings_test.go` - Concurrent commands, stale responses, restart, isolation, and compaction interleavings.
+- `redeven:scripts/check_flower_tasks_ollama.sh`: explicit published-dependency runner.
+- `redeven:internal/ai/run_e2e_ollama_tasks_test.go`: model-driven effects, faults and product commands.
+- `redeven:internal/ai/run_e2e_ollama_interleavings_test.go`: races, stale responses, restart and compaction.
+- Deterministic cases cover role-free schema, exact delegation text, all three inherited
+  permission modes, historical readonly and canonical steering/spawn replay.

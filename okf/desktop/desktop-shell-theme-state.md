@@ -5,37 +5,22 @@ description: Select global appearance, synchronize Desktop windows, and recover 
 tags: [desktop, themes, ui, electron]
 timestamp: 2026-09-22T03:20:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Redeven Desktop owns the global `system | light | dark` source and the remembered light and dark Floe presets. One validated snapshot drives Welcome, Env App, native chrome, and main-generated documents. New or reset selections use Porcelain Light and Porcelain Dark. Explicit valid choices survive upgrades. A user request paints pending feedback before asynchronous persistence; failure retains the acknowledged selection and permits retry. Theme changes preserve mounted content, drafts, and focus.
+Desktop owns global `system | light | dark` mode and remembered Floe light/dark presets. One validated snapshot drives Welcome, Env App, native chrome and generated documents. New/reset selections use Porcelain Light/Dark; valid choices survive upgrades. User changes paint pending feedback before asynchronous persistence, retain acknowledged state on failure and permit retry without losing mounted content, drafts or focus.
 
 # Contract
 
-## Catalog and authority
-The shared Desktop contract derives admitted ids, defaults, and semantic metadata from the published Floe Webapp dependency's browser-neutral `/themes` entry. Redeven must not copy the palette or weaken the upstream high-contrast and forced-color behavior.
-
-OS appearance updates change the active preset only while following the system.
-
-## Renderer synchronization and switching
-The preload reads the initial snapshot before composition. User-triggered writes use asynchronous IPC; they must not call synchronous IPC or block input while main is busy.
-
-The [shared material contract](../ui/surface-material.md) remains independent of palette and theme IPC.
-
-## Product hierarchy
-Env App settings derive content, sidebar, panel, inset, divider, control, and selection roles from active Floe tokens. Classic presets do not own a second settings palette.
-
-## Native chrome and auxiliary documents
-Every native titlebar background comes from the published preview, and its symbol color from the semantic foreground, including Classic presets. Symbol contrast must remain at least 3:1.
-
-Renderer IPC rejects semantic palettes; full renderers use Floe token CSS and Monaco definitions.
+- Admit ids/defaults/metadata from published Floe `/themes`; never copy palettes or weaken forced-color/high-contrast behavior. OS changes apply only in system mode.
+- Preload supplies the initial snapshot; user writes use asynchronous IPC without blocking input. [Surface material](../ui/surface-material.md) remains independent.
+- Settings derive content, panels, insets, dividers, controls and selections from active tokens, including Classic presets.
+- Native chrome uses published preview background and semantic foreground with at least 3:1 symbol contrast. Renderers reject palette-bearing IPC and use Floe CSS/Monaco definitions.
 
 # Boundaries
 
-All Floe dependencies resolve from public npm releases, without sibling checkouts, aliases, overlays, or runtime patches in formal validation. Renderers cannot persist a competing canonical selection, accept arbitrary colors, receive the main-only palette, or bypass snapshot validation.
-
-Other declarations in that file and product styling remain subject to semantic-token checks, including Welcome shadows.
+Resolve public npm dependencies without sibling wiring/patches. Renderer storage cannot become canonical, accept arbitrary colors, receive main-only palettes or bypass validation. Product styling, including Welcome shadows, remains subject to theme-source checks.
 
 # Evidence
 

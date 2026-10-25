@@ -6,43 +6,21 @@ tags: [architecture, dependencies, plugins, release]
 timestamp: 2026-10-08T00:00:00Z
 quality_exception: Cross-repository platform boundary spanning published artifacts, session teardown, package admission, surface lifecycle, runtime admission, and business adapters.
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-ReDevPlugin is an independently released plugin platform. Redeven consumes its
-coordinated `v3.0.36` Go, npm, Rust source-crate, and machine-contract artifacts;
-it does not fork platform mechanics. Redeven owns authenticated session mapping,
-product source policy and review UX, UI placement, product runtime builds, and
-concrete business adapters. Missing or unverifiable upstream identity, lifecycle,
-interaction, package, or runtime contracts fail closed; there is no Redeven
-compatibility path or sibling-source fallback.
+Redeven consumes the coordinated published ReDevPlugin Go, npm, Rust and machine-contract artifacts without forking platform mechanics. It owns session mapping, source policy/review, placement, product runtime builds and business adapters. Missing/unverifiable identity, lifecycle, interaction, package or runtime contracts fail closed without local compatibility or sibling-source fallback.
 
 # Contract
 
-## Platform ownership
-ReDevPlugin owns package and manifest validation, canonical hashes, signature and trust assessment, process-local external-package inspection, registry and lifecycle state, permissions and confirmations, tokens and asset sessions, sandbox and bridge lifecycle, settings and intents, Executions and Events, storage/network/ secret brokers, runtime supervision, Rust IPC, WASM execution, quotas, revocation, the control database, generated clients, stable errors, schemas, contract hashes, and release metadata.
-
-Local bootstrap readiness retains its short credential admission request before the session is ready.
-
-## Published dependency set
-The current integration consumes the coordinated ReDevPlugin `v3.0.36` set:
-
-A front-end package cannot be independently downgraded while the Host and runtime remain on a newer platform release.
-
-## Package and runtime lifecycle
-Detailed source inspection, installation, runtime readiness, and cache ownership are maintained in [Plugin package and runtime lifecycle](redevplugin-package-lifecycle.md).
-
-## Redeven adapter delta
-Host-module construction, external-package adapters, and product surface mapping are maintained in [ReDevPlugin Redeven adapters](redevplugin-redeven-adapters.md).
+- Upstream owns validation/hashes/trust, inspection and registry state, permission/confirmation, tokens/assets, sandbox/bridge, settings/intents, Executions/Events, storage/network/secret brokers, supervision/IPC/WASM, quotas/revocation, control storage, generated clients/errors/schemas and release metadata.
+- Go/npm/runtime/machine artifacts form one coordinated release; frontend cannot downgrade independently. Current pins live in manifests and are checked by the dependency-contract test.
+- Local bootstrap keeps its bounded credential admission before session readiness. [Package lifecycle](redevplugin-package-lifecycle.md) owns inspection/install/cache/readiness; [Redeven adapters](redevplugin-redeven-adapters.md) owns host modules and presentation.
 
 # Boundaries
 
-Plugin UI loads only through the released sandbox bootstrap and bridge.
-
-It must not write opaque state, mint tokens, manufacture trust, or grant storage/network/runtime authority.
-
-Wrong, legacy, drifted, tampered, and future roots remain fail-closed without mutation.
+Plugin UI uses only released sandbox bootstrap/bridge. Product adapters cannot write opaque state, mint tokens, fabricate trust or grant broker authority. Wrong, legacy, drifted, tampered or future roots fail unchanged.
 
 # Evidence
 

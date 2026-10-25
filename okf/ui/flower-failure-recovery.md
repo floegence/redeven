@@ -5,29 +5,19 @@ description: One turn-level failure owner and bounded manual recovery without re
 tags: [ai, flower, recovery, interaction]
 timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-23"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Floret owns canonical execution outcomes and retry checkpoints. Flower keeps
-accepted messages readable and provides one turn-level failure and recovery
-surface. Navigation, settings exit, drafts and queue editing remain available.
-Transport uncertainty never proves backend success or authorizes replay.
-Readiness timeouts use the shared bounded request helpers and expose a status
-refresh without replaying Prepare or Stop. Deterministic migration failures
-remain diagnostic/admin recovery states; supported compaction history is
-automatically migrated by published Floret v7.74.0 through schema 29. See
-[historical compatibility](../ai/flower-upgrade-compatibility.md).
+Floret owns outcomes, retry checkpoints and automatic historical migrations. Flower keeps accepted content readable with one failure/recovery surface; drafts, queue editing, Stop and navigation remain available. Transport uncertainty never proves success or permits replay. Readiness timeouts offer status refresh; deterministic migration failures remain explicit administrative diagnostics.
 
 # Contract
 
-Automatic stream recovery displays only canonical run_progress attempts and deadlines.
+Stream recovery displays only canonical progress attempts/deadlines. [Live delivery](flower-live-timeline.md#recovery-and-interaction) owns local read failure, revision fencing, one bounded window refresh and connection recovery; reader failure cannot restart the workspace stream.
 
-A history HTTP error is local to the root or child reader. It keeps accepted content and drafts, fences the failed reading revision and exposes Retry without reconnecting the workspace. A lost window subscription permits one automatic bounded refresh per selection or explicit action; repeated invalidation stops at local Retry. Only workspace transport or authority failure enters connection recovery. No polling or repeated full-history reads are introduced.
+Before accepted detail, show one centered transcript error/Retry, not duplicate workspace/composer notices. Unconfirmed Stop remains separate. Loaded conversations retain live-sync recovery; embedded views omit global navigation. Leaving a read fences its completion and preserves Shell drafts without replay.
 
-Historical-thread loading shows only progress in the transcript. Before accepted detail exists, read failure has one centered notice and Retry action; workspace and composer sync notices do not repeat it. Unconfirmed Stop remains independently visible. Loaded conversations retain live-sync recovery notices. New chat and conversation navigation stay in their existing sidebar or header controls; embedded conversations omit global navigation. Leaving a pending read invalidates its late completion through the existing detail owner. Recovery preserves the shell-owned draft and does not replay work automatically.
-
-Full child reports bypass the ordinary tool preview limit while retaining the provider request budget; canonical retry therefore reuses the complete confirmed reports without dispatching tools.
+Full child reports bypass ordinary preview limits but retain provider budget; canonical Retry reuses confirmed complete reports without tool dispatch. [Historical compatibility](../ai/flower-upgrade-compatibility.md) owns supported migration evidence rather than a UI-pinned schema version.
 
 # Boundaries
 

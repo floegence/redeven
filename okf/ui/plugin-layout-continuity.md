@@ -5,39 +5,25 @@ description: Preserve saved plugin components across runtime lifecycle changes, 
 tags: [ui, plugins, workbench, persistence, recovery]
 timestamp: 2026-09-08T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Redeven owns saved Workbench placement; released ReDevPlugin owns live surface
-authority. A saved component keeps its widget id, exact plugin instance and
-surface, coordinates, size, and z-order through upgrade, disable, permissions,
-reconnect, and failure. Only explicit component removal or confirmed uninstall
-of its exact instance deletes it. Runtime recovery never focuses, recenters, or
-rearranges the canvas. Unknown mutation outcomes require authoritative inventory
-reconciliation before fresh authority can open; they never delete layout.
+Redeven persists exact plugin widget/instance/surface identity and geometry; ReDevPlugin owns live authority. Upgrade, disable, permission/reconnect failures retain placement. Only explicit removal or confirmed exact-instance uninstall deletes it. Recovery reconciles unknown outcomes without focusing/rearranging the canvas or silently recreating authority.
 
 # Contract
 
 ## Independent display modes
-Open always uses the mode active when the action is requested.
-
-Neither path creates a plugin-center canvas widget.
+Open uses the mode captured at request time with independent SDK slots; neither mode creates a Plugin Center widget.
 
 ## Placement and deletion
-`workbench/actions/open_plugin` creates or reuses an exact instance-and-surface binding in one transaction in the existing Workbench database. A delayed request cannot reduce its saved management revision or substitute another surface.
-
-A failure in product cleanup stays retryable as reconciliation and never replays uninstall.
+`workbench/actions/open_plugin` atomically creates/reuses exact instance/surface binding. Late requests cannot lower management revision or substitute surfaces. Failed product cleanup retries reconciliation, never uninstall.
 
 ## Runtime replacement
-Product containers retain their identity while SDK leases are retired. Committed and unknown platform outcomes first invalidate the local slot registry without calling close after SDK revocation.
-
-Disconnect follows the Shell's unified reconnect screen; the same layout resumes after authenticated session and inventory recovery.
+Containers retain identity as SDK leases retire. Committed/unknown platform outcomes invalidate slot registry first, without close after revocation. Shell reconnect owns disconnection; authenticated inventory recovery restores the same layout.
 
 ## Layout failures and concurrent windows
-An initial layout read failure keeps the canvas unready and autosave disabled, with explicit Retry.
-
-Saved cards offer an explicit page reload to acquire fresh authority; they do not remain in an indefinite preparing state or reuse the retired session.
+Failed initial reads keep canvas unready/autosave off with Retry. Saved cards offer explicit reload for fresh authority rather than indefinite preparation or retired-session reuse.
 
 # Boundaries
 

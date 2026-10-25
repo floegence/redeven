@@ -5,28 +5,22 @@ description: Heavy selection changes present visual intent first, commit content
 tags: [ui, interaction, performance, keep-alive]
 timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Redeven prioritizes visible input acknowledgement over the secondary work caused by a selection change. A heavy navigation event is one presentation transaction with three ordered stages: the lightweight selected control is updated synchronously, target content visibility is committed after that intent can paint, and activation-dependent focus, controller resize, scroll restoration, viewport movement, or measurement runs only after the target content can paint. This ordering applies to Activity navigation, Activity/Workbench mode, terminal sessions, Workbench widgets, Flower threads, Files/Git modes, and heavy Settings, Plugin Center, or Debug Console panels.
+Heavy navigation acknowledges selection synchronously, commits target visibility after that intent can paint, then performs focus, resize, scroll or measurement after content paint. Published Floe separates visual from committed values; Redeven applies this ordering across Activity, Workbench, terminal, Flower, Files/Git and heavy panels without duplicating business state.
 
 # Contract
 
 ## Mechanism
-The published floe-webapp controller exposes separate visual and committed values. Initialization, persisted restoration, permission correction, automatic open, and connection recovery use the synchronous canonical path such as `commitNow()` because they are not waiting to acknowledge a user input.
-
-Operations that genuinely block the surface, such as resolving and opening a Web Service route, retain their dedicated blocking presentation.
+Initialization, persisted restoration, permission correction, automatic open and recovery use synchronous canonical commitment such as `commitNow()`. Genuinely blocking operations keep their dedicated presentation.
 
 ## Activity and retained content
-Activity uses the Shell UI-first mode and after-paint `ActivityAppsMain` activation.
-
-Files use the published hidden-measurement preservation contract for grid/list virtualization and the product toolbar, so `display:none` cannot erase the last usable width, viewport range, or scroll position.
-
-Flower keeps an old transcript visible while a cold target loads and atomically replaces it only when the latest target is ready.
+Activity uses Shell UI-first mode and after-paint activation. Files preserves hidden virtual-grid measurements, usable width/range/scroll. Flower keeps the previous transcript during cold selection and replaces it only when the latest destination is ready.
 
 ## Measurement
-Debug Console subscribes to the product presentation event stream and groups samples by `surface + source`. A user interaction must not produce a 50 ms or longer renderer task or frame gap. Debug instrumentation reports a slow presentation when intent reaches 32 ms or content reaches 100 ms; performance gates and browser tests provide the stricter distribution and long-task assertions.
+Debug Console groups presentation events by surface/source. User interactions must avoid renderer tasks/frame gaps of 50 ms or more. Instrumentation flags intent at 32 ms and content at 100 ms; focused performance/browser gates enforce distributions and long-task limits.
 
 # Boundaries
 

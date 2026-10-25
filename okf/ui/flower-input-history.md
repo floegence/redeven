@@ -5,31 +5,22 @@ description: Recall canonical user text into an empty Flower draft with terminal
 tags: [ui, flower, composer, keyboard, drafts]
 timestamp: 2026-09-26T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-- Authority: Floret supplies canonical messages through the existing thread cache; the published Floe input-history controller owns transient keyboard navigation, and Redeven owns candidate selection and the shared draft.
-- Outcome: ArrowUp in an empty ordinary Flower editor recalls the latest user text for editing or explicit resubmission.
-- Invariants: recall never submits, mutates canonical messages, restores attachments, or overwrites a nonempty draft. Input-method composition, selections, menus and structured answers retain keyboard ownership.
-- Recovery boundary: leaving the editor or changing its scope, availability, candidates or externally authored draft ends browsing without discarding the current text.
+Floret/cache supplies canonical user text; published Floe owns transient history navigation and Redeven owns shared drafts/candidates. Unmodified ArrowUp in an exactly empty ordinary editor recalls text for editing, never submits. IME, selection, menus and structured answers retain keys. Scope or external-draft changes stop browsing without discarding text.
 
 # Contract
 
 ## Candidates and ownership
-Only canonical ordinary user messages in the selected thread are eligible.
-
-Draft ownership remains defined by [Flower composer references](flower-composer-references.md).
+Only selected-thread canonical ordinary user messages qualify, never metadata, secrets or structured answers. [Composer references](flower-composer-references.md) owns draft scope.
 
 ## Keyboard interaction
-An exactly empty ordinary chat textarea accepts unmodified ArrowUp to recall the newest eligible input.
-
-A nonempty draft, including whitespace, never starts history browsing.
-
-Changing threads resets navigation while each thread's ordinary draft remains in its existing scope.
+Unmodified ArrowUp in an exactly empty textarea recalls newest eligible text. Whitespace counts as a nonempty draft. Thread changes reset history browsing while retaining each draft.
 
 ## Presentation
-The ordinary editor uses the concise localized "Ask Flower..." placeholder regardless of available history, without keyboard instructions. The same shared behavior applies to Desktop, Env App, Activity, Workbench and companion placements.
+All placements use localized Ask Flower... without history instructions in the placeholder. Recall restores no attachments or canonical mutations.
 
 # Boundaries
 

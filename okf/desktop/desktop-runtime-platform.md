@@ -5,30 +5,21 @@ description: Identify the actual Runtime OS from trusted observations and displa
 tags: [desktop, runtime, platform, accessibility]
 timestamp: 2026-10-13T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Redeven Runtime owns its OS and Linux distribution facts; Desktop consumes only recognized trusted platform observations. Environment titles display pinned local theSVG marks for macOS, Linux or Windows in their original brand colors with localized accessible names. Last known facts survive disconnect, failed probes and Desktop restart until a new online Runtime observation updates them. Unknown platforms display a default device illustration and do not block an otherwise supported Runtime. Snapshots preserve the card, access perspective, focus and geometry; provider or client identity never substitutes for the Runtime OS.
+Runtime owns OS/distribution facts; Desktop consumes recognized trusted observations and displays bundled original-color marks with localized names. Last-known facts survive disconnect, failed probes and restart until replaced online. Unknown platforms show a device mark without blocking supported Runtime. Display retains card geometry, selection and focus; client/provider identity never substitutes for Runtime OS.
 
 # Contract
 
-## Optional Runtime platform fact
-Redeven Runtime owns `runtime_platform` and optional `runtime_linux_distribution` in the private startup/attach report, local health response, management-socket status and placement bridge hello. `ID_LIKE`, `NAME`, Desktop identity, editable WSL registration names and container image names cannot supply distribution identity.
-
-An unknown derivative never borrows its `ID_LIKE` parent’s mark; absent or unsupported IDs use colored Tux.
-
-## Remembered display facts
-Desktop main owns one durable `runtime_platform_facts` map in its existing UI state store, keyed by environment kind and stable identity. Renderer storage cannot set this map. Remembered facts affect presentation only: health, connection state, compatibility, access and lifecycle authority keep their current owners.
-
-## Display and bundled assets
-The title reserves a 1rem non-shrinking slot immediately before the selectable, single-line truncated Runtime name. A .875rem image preserves the original brand colors and scales with text; masks, tinting and grayscale filters must not replace those colors.
-
-Brand and distribution names remain literal; surrounding accessible copy is localized.
+- `runtime_platform` and optional `runtime_linux_distribution` come from Runtime startup/attach, health, management status and bridge hello. Only exact distribution ID selects its mark; `ID_LIKE`, names, Desktop identity, WSL labels and image names cannot. Unknown Linux uses Tux.
+- Main persists `runtime_platform_facts` in existing UI state, keyed by environment kind/stable identity. Renderer storage cannot write it or turn remembered facts into health/access authority.
+- Reserve a nonshrinking 1rem title slot with a .875rem original-color mark and single-line truncated name. No mask, tint or grayscale; localize surrounding accessibility copy, not brand names.
 
 # Boundaries
 
-[Runtime readiness](desktop-runtime-readiness.md) owns connection and compatibility admission. This concept owns only OS and distribution facts and their marks; platform information grants no lifecycle, access or plugin capability.
+[Readiness](desktop-runtime-readiness.md) owns admission. Platform display grants no access, lifecycle or plugin capability.
 
 # Evidence
 

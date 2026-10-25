@@ -5,33 +5,24 @@ description: Display assistant media through released Floe previews and authoriz
 tags: [flower, media, preview, security]
 timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Flower displays assistant images, screenshots, video, audio, and self-contained
-HTML directly in the conversation. Released Floe chat components own media
-presentation and HTML isolation. Redeven owns resource routing and permission
-checks; Floret's canonical message remains the only durable display source.
-Unavailable, forbidden, oversized, or mismatched resources show a retryable
-preview error without interrupting the conversation.
+Assistant images, screenshots, video, audio and self-contained HTML render in shared Flower through released Floe media/HTML isolation. Redeven authorizes resource routing; canonical Floret messages remain the display source. Unavailable, forbidden, oversized or mismatched resources show local retryable errors without interrupting the conversation.
 
 # Contract
 
 ## Authoring and interaction
-- `![Title](source)` displays image, video, or audio. Preview references always produce inert placeholders. Health snapshots, labels, and ordinary thread updates do not reload a ready preview; a real context change cancels stale work.
-- An `html preview` code fence previews an HTML fragment or document. A plain `html` fence previews when its content starts with a complete HTML document (`<!doctype html>` and `<html>`); standalone HTML snippets remain visible as source.
-- HTML previews expose a circular arrow at the top right to open the authorized file preview or an independent floating copy directly. The action is disabled until the document is ready. Source and more actions share one compact top row with preview and expansion; narrow side and bottom insets leave the remaining canvas for content without covering the document.
+`![Title](source)` displays image/video/audio; preview references are inert placeholders. Ordinary updates/health/labels do not reload ready media; real context changes cancel stale work. An `html preview` fence renders fragments/documents; plain `html` renders only a complete document beginning with doctype and html, leaving snippets as source.
+
+Ready HTML exposes direct authorized file/floating expansion plus source/more in a compact top row. Until ready, expansion is disabled; controls/insets cannot cover content.
 
 ## Request lifecycle and thread ownership
-One media entry at each rendered thread boundary serves both assistant Markdown and Activity images. A child without a trusted working directory cannot resolve relative sources or HTML links against the parent's directory.
-
-Window close and Escape return focus only from the closing window to its connected trigger, preserving navigation and composer focus.
+One entry per rendered thread serves Markdown/Activity images. Children without trusted working directory cannot resolve against their parent's directory. Close/Escape restores only closing-window focus to a connected trigger, preserving navigation/composer focus.
 
 ## Resource and document boundaries
-The existing `/api/fs/file` route accepts `preview=1` for bounded chat previews.
-
-Presentation creates no second message store, lifecycle, or Floret API.
+`/api/fs/file?preview=1` supplies bounded chat previews; presentation adds no durable message/lifecycle or Floret API.
 
 # Boundaries
 

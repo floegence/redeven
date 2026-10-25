@@ -5,40 +5,21 @@ description: Switch Welcome pages immediately, retain page state, and present ex
 tags: [desktop, welcome, flower, navigation]
 timestamp: 2026-09-23T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-The Desktop Welcome renderer owns navigation inside its existing window. Opening
-Flower or returning to Environments changes the visible page on the click without
-waiting for Launcher IPC, an environment snapshot, or runtime preparation. Visited
-pages retain their state. Runtime readiness and compatibility still determine
-whether Flower can use its runtime; a blocked or loading runtime never prevents
-returning to Environments. Explicit Environment Center tab selection presents the
-destination cards with a staggered fade and rise when motion is allowed. Header
-controls remain steady, and refresh or retained-page return never replay entrance
-motion.
+Welcome owns immediate local page selection. Flower/Environments navigation never waits for Launcher IPC, snapshots or Runtime preparation; visited pages retain state. Runtime readiness still gates Flower requests without blocking return navigation. Explicit Environment Center tab changes may animate destination cards, while refresh and retained-page return preserve stable headers and never replay entrance motion.
 
 # Contract
 
-## Navigation ownership
-Local header, logo, sidebar, and contextual Flower handoff actions select the renderer page directly.
-
-Environment health, operation progress, issue clearing, and ordinary snapshot refreshes retain that revision and cannot override local navigation. Main captures the navigation state after its asynchronous snapshot reads so an older captured destination cannot be published as a later request.
-
-## Environment Center tab presentation
-Activating a different Environments, Redeven Cloud, or Gateways tab immediately selects and renders its content.
-
-Hiding the Environment page or disposing Welcome cancels unfinished tab motion, so returning from Flower never replays it. This presentation does not change tab state ownership or the [Environment library](desktop-environment-library.md) card stability contract.
-
-## Retained pages
-Environments and Flower mount on their first visit and remain mounted until Welcome is disposed.
-
-Filesystem context invalidation uses only the selected environment ID, Runtime start identity, and open session key; health timestamps and probe progress are not filesystem identities.
+- Header, logo, sidebar and contextual actions select locally. Health/progress/snapshot updates cannot override navigation. Main captures navigation after asynchronous reads so stale destinations cannot publish newer revisions.
+- Selecting Environments, Redeven Cloud or Gateways renders immediately. Hiding/disposing cancels motion; return does not replay it. [Environment library](desktop-environment-library.md) retains card/state ownership.
+- Environments and Flower mount on first visit and remain mounted until disposal. Filesystem invalidation uses environment ID, Runtime start identity and session key, never health/probe timestamps.
 
 # Boundaries
 
-Navigation grants no runtime authority. This contract concerns the main Flower page; contextual window placement remains in [Ask Flower window boundaries](../ui/ask-flower-window.md).
+Navigation grants no Runtime authority. [Ask Flower windows](../ui/ask-flower-window.md) owns contextual placement.
 
 # Evidence
 

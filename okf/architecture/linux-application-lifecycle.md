@@ -5,44 +5,22 @@ description: Preserve owned Linux graphical applications across viewer and Runti
 tags: [runtime, applications, linux, lifecycle, security]
 timestamp: 2026-09-22T05:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Redeven owns Linux application instances, caller authorization and ephemeral
-sharing; the published Floe Native Apps module owns GIO launch and process-tree
-observation. A live application outlives its viewers and window count. Closing a
-viewer, releasing a share lease or exiting Runtime never requests application termination.
-After Runtime restart, the same host user and private state can recover a surviving
-backend only after matching its kernel process generation and private endpoint
-identity. No persisted PID alone authorizes signaling. Destroying the virtual
-display, a host reboot or external cgroup cleanup cannot preserve an application dependent on that display.
+Redeven owns Linux instances, authorization and ephemeral shares; Floe Native Apps owns GIO/process observation. Applications outlive viewers and window count. Closing a share or Runtime never requests termination. Recovery requires original user/private state plus matching kernel process generation and endpoint; persisted PID alone never permits signaling. Reboot, display destruction or external cgroup cleanup can end dependent apps.
 
 # Contract
 
-## Instance and sharing ownership
-One instance has an opaque ID, authorized owner, application metadata, kernel boot/PID/start identity, component identity, backend and versioned private record. The endpoint binds the same instance and private socket; a reusable window ID or persisted PID alone never grants authority.
-
-Redeven never changes that policy.
-
-## Launch and readiness
-The published supervisor owns GIO launch, descendant/sandbox identity, launcher exit status and application lifetime. Preparation, actual launcher failure, application exit, window presence and first pixels are separate observations.
-
-Xpra retains its published readiness, final-window and audio-disable contracts.
-
-## Browser profile ownership
-Redeven supplies one stable private browser-profile directory per authorized owner and catalog application under its canonical state root.
-
-An observed process-tree exit before its first window is an explicit no-window launch failure even when the exit status is zero; a still-live process can continue waiting.
-
-## Normal close and explicit force quit
-The Linux ordinary operation is named Close all windows because these Linux backends have no universal application-level graceful quit API.
-
-This path never follows ordinary close, disconnect, save cancellation or an uncertain response automatically. An accepted request is not proof of process exit; running snapshots remove the row only when the kernel confirms termination.
+- Instance records bind opaque ID, authorized owner, metadata, boot/PID/start, component identity and private backend endpoint. Reusable window IDs never grant authority.
+- Upstream supervises GIO/descendant/sandbox lifetime. Preparation, launcher failure, app exit, windows and first pixels are separate facts. Xpra retains published readiness/final-window/audio-disable behavior.
+- Browser profiles are stable private directories per owner/catalog app. Observed process-tree exit before first window fails launch even with zero status; live processes may keep waiting.
+- Linux ordinary control is Close all windows, respecting save/cancel. Explicit force quit never follows close, disconnect, cancellation or uncertain response automatically. Acceptance is not exit proof; remove running rows only after kernel confirmation.
 
 # Boundaries
 
-Recovery requires the original private state and host OS user. A host reboot, external process cleanup or destroyed compositor/X server cannot be repaired by reconnecting. Ordinary closure always preserves native save/cancel decisions.
+Reconnect cannot restore destroyed display/OS processes or change ownership policy. Surviving-instance recovery never substitutes a replacement launch.
 
 # Evidence
 

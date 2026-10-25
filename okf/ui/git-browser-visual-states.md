@@ -5,33 +5,25 @@ description: Keep Git selection, repository facts, semantic status, hover, and f
 tags: [ui, git, files, accessibility, themes]
 timestamp: 2026-10-18T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Env App's Git browser owns file selection and inline diff inspection. File lists and the selected patch remain in one constrained surface, and late responses cannot replace the current selection. Navigation and inspection selection derive from Floe's theme interaction accent (`ring`), independently of text-selection paint. Git status colors express repository meaning. The checked-out branch is a repository fact and the selected branch is the user's inspection target; both remain visible when they coincide. Commit graph topology adapts to sidebar width without displacing the summary. A layout that obscures selection, prevents local scrolling, or retains an obsolete diff fails the interaction contract.
+Git file selection and inline diff inspection share a contained surface with independently owned request state. Floe interaction accent marks selection; semantic Git colors mark repository facts. Checked-out and inspected branches remain distinguishable when they coincide. Layout preserves local scrolling, keyboard actions and a current diff across widths and themes.
 
 # Contract
 
 ## State ownership
-Selected navigation, branch rows, history rows, status summaries, and changed-file rows share the Git selection accent, background, border, and indicator tokens. Hover uses a lower-emphasis neutral surface and never overrides an active selection.
-
-Git change and health tones such as success, warning, danger, info, and remote-branch violet remain on semantic icons, badges, paths, and values; they must not determine a selection indicator or focus ring.
+Navigation, branches, history, summaries and changed files share interaction tokens derived from `ring`, independent of text-selection paint. Neutral hover cannot override selection. Success/warning/danger/info/remote-violet remain on semantic facts, never selection or focus indicators.
 
 ## Commit graph layout
-The history sidebar has one measured geometry owner for static rails, row connectors, nodes, and row columns.
-
-Complex topology cannot change commit selection, detail loading, context actions, or keyboard behavior.
+One measured owner positions rails, connectors, nodes and columns within available width without displacing summaries or changing selection/actions.
 
 ## Inline file inspection
-Workspace changes, graph commit details, branch worktree status, branch commit details, and branch comparisons use one retained file/diff navigation surface.
-
-Filtering, removing a file, changing sections, or switching commits cannot leave a detached old file object as the displayed diff.
-
-The viewport remains contained at narrow widths and under Workbench projection.
+Workspace, commit, branch status/history and comparison entry points reuse retained file/diff navigation. Filtering/removal/section or commit changes retire stale selected objects. Narrow/Workbench viewports remain contained with independent local scrolling.
 
 ## Theme and accessibility
-Every built-in light and dark shell preset inherits the complete Git interaction token set. Forced-colors mode exposes selected borders, indicators, focus outlines, and current-chip boundaries through system colors.
+Every preset inherits complete interaction roles. Forced colors expose selected borders/indicators, focus and Current-chip boundaries through system colors.
 
 # Boundaries
 

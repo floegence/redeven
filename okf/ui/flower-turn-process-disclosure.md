@@ -5,37 +5,24 @@ description: Collapse historical and successful work while protecting current ab
 tags: [ui, flower, turns, disclosure, accessibility]
 timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Published Floret owns turn identity, outcome, final output and durations. Flower
-uses validated detail only. Successful ordinary turns default to collapsed; the
-latest failed, cancelled or interrupted turn stays expanded, while older
-abnormal turns collapse after newer work starts. Dialogue, answered inputs and
-final segments stay ordered and visible; unknown output is never hidden. Pending
-interactions stay expanded, and reading protection preserves the reader's
-position. If an answered input falls between process rows in a settled turn,
-Flower shows a static overview and keeps the receipt as a visible checkpoint.
-Settled tool sequences on either side default to independent collapsed groups;
-active tools remain available. Ordinary turns keep whole-turn disclosure.
+Floret owns turn identity, outcome, timing and explicit final boundaries. Flower collapses successful ordinary turns and older abnormal work while protecting the latest abnormal turn, pending controls and active reading. Dialogue/finals stay visible. Interleaved answered inputs retain visible checkpoints between independently folded sequences.
 
 # Contract
 
 ## Canonical facts and eligibility
-ThreadView and HistoryPage expose `turns`: exact TurnID and RunID, optional control kind, start and terminal time, outcome, elapsed/wait/work milliseconds, explicit ordered `intermediate_item_ids`, `final_item_ids` and `final_boundary_complete`. Summary updates cannot author them or trigger collapse.
+Validated ThreadView/HistoryPage turn facts include exact TurnID/RunID, optional control kind, start/end, outcome, elapsed/wait/work durations, ordered intermediate/final item IDs and complete-final boundary. Summaries cannot author them or trigger collapse; unknown output remains visible.
 
-The summary shows at most two nonzero time units, with subsecond copy; expansion reveals the original process without extra timing rows. A static overview for an interleaved answer also reports tool calls, failed calls, and answered input count; it never acts as a disclosure control.
+Summaries show at most two nonzero time units with subsecond copy. Interleaved answers use a static overview counting calls, failures and answered inputs, never a whole-turn toggle. [Sequences](flower-tool-sequences.md) independently fold settled work on each side.
 
 ## Reading and interface state
-Running, preparing, retrying, finalizing and waiting turns remain expanded without a turn disclosure control. The latest ordinary turn retains process output, open thinking previews and details by default on failure, interruption or cancellation; users may then manually hide confirmed intermediate prose and explicitly typed process rows.
-
-Main, embedded and child-detail timelines share the same renderer while using separate scroll controllers.
+Running/preparing/retrying/finalizing/waiting turns stay expanded without a toggle. Latest failed/cancelled/interrupted ordinary work retains process, thinking and details; users may hide only confirmed intermediate/typed process rows. Newer work permits older abnormal collapse; explicit choices/reading protection survive updates. Main, embedded and child views share rendering with separate scroll owners.
 
 ## Layout and accessibility
-Messages and events share canonical Path ordering; timestamps never insert receipts.
-
-Clarification receipts keep their existing secret-answer redaction.
+Canonical Path order, never timestamps, positions messages/receipts. Dialogue, final segments and secret-answer redaction remain intact.
 
 # Boundaries
 

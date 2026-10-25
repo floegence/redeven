@@ -3,7 +3,7 @@
   "okf_version": "0.2",
   "concept_count": 315,
   "section_count": 630,
-  "evidence_count": 712,
-  "bundle_sha256": "976d6e9bb4c867f96301182fb39b6cf7d726f3cafe7a1504427a6eb0d4718716",
-  "source_sha256": "ebd6709f5beff11550e41881320fd7bdf474813308dbab41823ef73687b5df5f"
+  "evidence_count": 658,
+  "bundle_sha256": "dcfd07ffe48166971c465af6c5f5fa90582af6cdc66c0e7130e29aa74816bd28",
+  "source_sha256": "5d55b59ce82cb89843f808334e56989f7f848654a45beb0d7f934534c4fb0404"
 }

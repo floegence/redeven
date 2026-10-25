@@ -5,41 +5,21 @@ description: Real application discovery, direct local launch, owned remote windo
 tags: [runtime, desktop, applications, macos, security]
 timestamp: 2026-09-23T08:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Redeven's macOS adapter owns native host application discovery and human-operated
-window sessions. Application identity comes from installed bundles. A trusted
-Desktop local-environment route launches the real app directly; remote access
-captures the selected application's actual window, including an already running
-single-instance app. Apps run as the Runtime user,
-without containers, virtual machines, X11 or an independent desktop. The existing
-[host application authorization](host-applications.md) applies to every operation
-and stream. Missing permissions or graphical login block streaming explicitly.
-Network loss preserves the app; reconnection attaches to the same process. Explicit
-quit is independent of sharing and binds to the selected OS process generations.
+Redeven discovers installed macOS bundles and opens real apps as the Runtime user. Trusted Desktop Local routes launch directly; remote routes capture the selected app's actual windows, including existing single-instance processes. [Application authorization](host-applications.md) gates every operation/stream. Missing graphical login or permissions blocks capture; disconnect preserves the app and reconnect binds the same process.
 
 # Contract
 
-## Catalog and local launch
-AppKit discovers applications in standard system/user application directories, running application bundle paths, and explicit custom absolute `.app` paths. Canonical bundle paths define identity; localized bundle metadata and system icons define presentation.
-
-The [application management contract](macos-application-management.md) owns live OS inventory, explicit quit confirmation, process-generation validation and the distinction between quitting an app and stopping its sharing session.
-
-## Remote window ownership and transport
-The [native capture owner](macos-application-capture-owner.md) uses one Swift process and host-application protocol 2, separate from Computer Use. The helper verifies the returned canonical bundle path and binds its process, so single-instance applications reuse their existing windows.
-
-Local focus during same-window recapture grants no remote input authority; composition begun before decoded pixels cannot acquire permission by waiting for a frame.
-
-## Human control and lifecycle
-Remote input shares the host's real graphical session and foreground. Explicit input activates and raises the bound window; foreground identity, focused AX window and pointer hit ownership must be verified before injection.
-
-Protected content, inaccessible custom controls, separate-process dialogs, and apps with unusual window ownership require application-specific validation. macOS 13 API compatibility is a build contract, not a claim of testing every OS version, Intel host or third-party application.
+- AppKit discovers standard directories, running bundle paths and explicit absolute `.app` paths. Canonical path defines identity; localized metadata/system icons define presentation. [Management](macos-application-management.md) owns inventory and generation-bound quit.
+- [Capture owner](macos-application-capture-owner.md) uses one Swift process with host-application protocol 2, separate from Computer Use. Verify returned bundle path/process and reuse existing single-instance windows.
+- Remote input shares the real foreground session. Activate/raise the bound window, then verify foreground, focused AX window and pointer hit ownership before injection. Local focus during recapture grants no remote authority; pre-frame composition cannot become authorized by waiting.
 
 # Boundaries
 
-Every operation and stream keeps Host Applications authorization. Network loss preserves the application; reconnect binds the same process, and quitting remains independent of viewer closure.
+No container, VM, X11 or independent desktop is involved. Protected content, custom controls, separate-process dialogs and unusual window ownership need app-specific qualification. macOS 13 compatibility is a build contract, not proof for every OS/Intel/app combination. Quit remains separate from viewer closure.
 
 # Evidence
 

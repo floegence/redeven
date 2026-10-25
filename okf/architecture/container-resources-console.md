@@ -6,49 +6,24 @@ tags: [architecture, containers, ui, workbench]
 timestamp: 2026-09-08T00:00:00Z
 quality_exception: Cross-surface native container contract spanning aggregated resources, target-scoped navigation, operations, and Compose workflows.
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Containers is one native Activity and multi-instance Workbench surface over the
-targets authorized by [Native container resources](container-resources-capability.md).
-The console controller owns selection and navigation; the [resource snapshot contract](../ui/env-resource-cache.md) owns shared persisted presentation and refresh lifetime.
-The UI never exposes endpoint selection, never commits a response from an old
-target, and never creates a lifecycle path outside `containerresource`.
+Containers provides native Activity and Workbench views over [authorized targets](container-resources-capability.md). The console owns selection/navigation; [resource snapshots](../ui/env-resource-cache.md) owns shared presentation/refresh. Old-target responses cannot commit, UI exposes no endpoint selector, and every lifecycle mutation remains within `containerresource`.
 
 # Contract
 
-## Stable console state
-Each `redeven.containers` instance persists only its resource view and selected resource key. A resource always retains its source target; same-name Docker and Podman resources remain separate.
-
-New resources use the sole compatible runtime directly or ask for Docker versus Podman inside the operation Dialog; actions on existing resources always reuse their source target.
-
-## Resource presentation and navigation
-One compact header owns refresh and Operations. It never exposes engine or endpoint selection, and Workbench hides a duplicate product title.
-
-Operation progress and sanitized errors use the canonical [Native container operation observation](containers-operation-observation.md) surface.
-
-## Compose input
-A saved Compose Project contains one to eight ordered absolute YAML paths, one optional absolute env-file path, and up to sixteen profile names. The form owns these as arrays, never as newline- or comma-encoded backend strings.
-
-The former directory-only data source and lazy picker compatibility wrapper do not remain as alternate paths.
-
-## Container run input
-Container creation has one `ContainerRunDraft` and one serializer.
-
-Environment values and host paths are never persisted as UI state. The draft survives preflight and confirmation, is cleared only after a successful operation or explicit close, and reaches the existing preflight/hash/operation path rather than a second creation protocol.
-
-## Responsive and accessible behavior
-Desktop uses a compact sortable table, narrow Workbench hides secondary columns, and mobile uses cards with a full-screen detail page. Missing, stopped, unreachable, or permission-denied engines render a dedicated detection state rather than stale inventory.
-
-## Visual feedback
-Inventories, details, service configuration, creation forms, and operation observation share a restrained type hierarchy and semantic theme surfaces. Product hover and press feedback is brief; detail identity and disclosure entrances use small, bounded movements.
-
-Dialog and menu positioning, focus, and lifecycle continue to belong to the released shared primitives.
+- Persist only resource view/key per `redeven.containers` instance. Preserve target identity even for same-name resources. Existing actions reuse their source; creation uses the sole compatible engine or asks Docker/Podman within its dialog.
+- One compact header owns refresh/Operations; Workbench suppresses duplicate title. [Operation observation](containers-operation-observation.md) owns progress/errors.
+- Compose input is 1–8 ordered absolute YAML paths, optional absolute env-file and at most 16 profiles, represented as arrays. No retired directory-only or lazy-picker alternate path.
+- One `ContainerRunDraft`/serializer feeds existing preflight/hash/operation admission. Never persist environment values/host paths in UI state. Retain draft through preflight/confirmation; clear only on success or explicit close.
+- Use sortable desktop tables, fewer columns in narrow Workbench and mobile cards/full-screen details. Missing/stopped/unreachable/denied engines show detection state rather than stale inventory.
+- Keep restrained typography, semantic surfaces and brief bounded feedback; published primitives own menu/dialog position, focus and presence.
 
 # Boundaries
 
-- Floe Webapp owns reusable FileOpenPicker, Tabs, Dialog, Dropdown, Select, and   semantic icon primitives. - Redeven owns filesystem RPC adaptation, product state, target routing, copy,   placement, and cross-resource navigation. - `containerresource` remains the only mutation and reconciliation owner.
+Floe owns reusable pickers/controls/icons. Redeven owns filesystem adaptation, product state/copy/placement/navigation; `containerresource` alone owns mutation/reconciliation.
 
 # Evidence
 

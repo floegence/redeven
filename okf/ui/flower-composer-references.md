@@ -5,47 +5,34 @@ description: Show Ask Flower context inside the input and admit exact ordered co
 tags: [ui, flower, composer, references, floret]
 timestamp: 2026-10-13T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-- Authority: Redeven owns reference discovery and unadmitted draft editing; Floret is the sole canonical source after admission.
-- Outcome: The input shows linked context, `@` files, frozen conversation references and optional origin-page facts.
-- Invariants: discovery uses the host's authorized filesystem adapter, all visible placements in one connection share one in-memory scope, and one strict context action preserves the frozen order and directory kind.
-- Failure boundary: stale search generations, malformed wire data, or admission mismatches fail without discarding the connection-local editor, creating a different queued command, or writing canonical Floret state.
+Redeven owns authorized reference discovery and unadmitted connection-local drafts; Floret owns ordered references after admission. Composer chips show files/directories, frozen conversation references and page context. Stale discovery or admission failures preserve the editor; labels never supply canonical identity or authorization.
 
 # Contract
 
 ## Ask Flower context
-The shared launcher and embedded Tessiven composer show linked context inside their existing composite input boundary.
-
-Chips sit side by side, wrap and scroll inside a bounded input region under the host's existing local-scroll contract.
-
-Editable `@` references keep their existing controls.
+Launcher and Tessiven composers show linked chips inside their composite input. Chips wrap/scroll within a bounded region under local-scroll rules; editable `@` references retain controls.
 
 ## Composer interaction
-The full composer recognizes an editable `@` token only at a whitespace boundary with a collapsed caret.
-
-Composer focus preserves the same one-pixel geometry and shadow, changing only to a restrained border color; candidate and directory-action focus-visible states remain explicit.
+An editable `@` token requires whitespace boundary and collapsed caret. Focus changes a restrained border color, preserving one-pixel geometry/shadow and explicit candidate/action focus indicators.
 
 ## New conversation origin page
-[Activity origin page references](flower-page-context.md) owns opening/New capture, authorized page readers, layout scope and removal. Host snapshot presentation is injected without transferring draft or canonical-reference authority; Env App reuses the right-click Ask Flower preview window and text viewer for both editable and submitted snapshots.
+[Page context](flower-page-context.md) owns opening/New capture, authorized readers, scope and removal. Env App reuses Ask Flower's preview/text viewer for draft and submitted snapshots without transferring draft authority.
 
 ## Conversation references
-[Conversation reference interaction](flower-thread-references.md) owns frozen basic snapshots, menu entry points, preview, removal and submission recovery. The same draft owner and type dispatch support thread, page and file references.
+[Thread references](flower-thread-references.md) own frozen snapshots, menus, preview, removal and recovery under the shared draft owner.
 
 ## Bounded discovery
-Discovery searches the current thread's immutable working directory or the new-thread working-directory draft.
-
-A token without a slash uses that bounded global matching behavior. Root read errors are visible and retryable; inaccessible descendants are skipped within the same bounded scan.
+Search uses immutable thread working directory or the new-thread directory draft. Slashless tokens use bounded global matching. Root read failures are retryable; inaccessible descendants are skipped within the same bounded scan.
 
 ## Draft and admission
-The connection-local composer stores ordered file/directory, page-context and thread chips with a product-local identity and host-derived label. This editable draft is never written to Redeven, Floret, local storage, IndexedDB, or another connection.
-
-After admission, the one-pass mapping defined by [AI tool runtime](../ai/ai-tool-runtime.md) gives Floret the canonical ordered `MessageReference` values and turn context snapshots.
+Ordered file/directory/page/thread chips have local identities/host labels and stay in connection memory, never persistence or another connection. [Tool runtime](../ai/ai-tool-runtime.md) defines one-pass canonical `MessageReference`/context admission.
 
 ## Queue previews and editing
-Canonical queue references remain visible as compact icons and use exact ThreadID, QueueID and ReferenceID for file/directory preview. New submission repeats normal authorization and admission; display labels never reconstruct opaque resource authority.
+Compact queue references preview by exact ThreadID/QueueID/ReferenceID. Resubmission repeats authorization/admission; labels cannot reconstruct resource authority.
 
 # Boundaries
 

@@ -5,33 +5,31 @@ description: Project canonical Flower work into the compact companion without di
 tags: [ui, flower, companion, presence, floret]
 timestamp: 2026-10-12T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Redeven projects canonical Floret summaries and matching current-run detail into one compact Flower status. Active work, pending actions, and user-owned drafts retain explicit precedence; historical completion never masquerades as new feedback. Presence shares the existing workspace stream and does not auto-expand, claim transcript reads, or recreate thread lifecycle state. A disconnect follows the existing transport refresh contract. [Flower Activity companion](flower-activity-companion.md) owns placement, native composer identity, dismissal, and read acknowledgement.
+Collapsed Flower projects canonical summaries and current-run detail through the existing workspace stream. Work, pending decisions and drafts have explicit precedence; historical completion is never new feedback. Presence neither expands Flower nor acknowledges reads. [Activity companion](flower-activity-companion.md) owns placement, focus and dismissal.
 
 # Contract
 
 ## Status and live output
-Floating companion presence is a pure canonical summary projection with active work first: running, queued, attention, unread failure, unread canceled, unread completed, unavailable, idle.
-
-Reduced motion disables flow, transition tracking, and arrival motion while retaining semantic color and text.
+Canonical priority is running, queued, attention, unread failure, unread cancellation, unread completion, unavailable, idle. Reduced motion disables flow/tracking/arrival effects while retaining semantic text/color. Live tails use matching current-run facts without exposing raw thinking.
 
 ## Completion acknowledgement
-A successful transition for a run that the collapsed companion previously observed as running may temporarily replace the idle composer with one localized completion acknowledgement. This is ephemeral product feedback, not canonical completed presence: initial history, queued-only work, failures, cancellations, attention, mismatched or expired runs, and completion while any running or queued work remains never trigger it. Historical completion remains forbidden from the collapsed companion.
+Only a matching successful run previously observed running while collapsed may temporarily replace an idle editor with localized completion feedback. Exclude history, queued-only work, failures, cancellation, attention, expired/mismatched runs and completion while other running/queued work remains. Feedback is ephemeral, not canonical presence.
 
 ## Observation and transport
-The companion consumes the same single workspace SSE as the full Flower surface. Shared summaries never manufacture personal read state.
-
-Expansion keeps the same connection and requests the selected thread current view rather than creating a second stream.
+Use the shared workspace SSE; summaries cannot invent personal read state. Expansion requests current selected detail without a second stream; disconnect uses existing recovery.
 
 ## Composer precedence
-One derived entry description owns collapsed rendering and target identity.
+One derived entry owns rendering/target, in this order:
+1. Current-thread pending decision, regardless of question type or draft.
+2. Ordinary editor for draft, attachment, reference, focus or IME; inspection if editing unavailable.
+3. Eligible running, queued, unread-failure or ephemeral-completion target button.
+4. Ordinary editor or read-only/unavailable inspection.
 
-- The current thread's pending decision entry, regardless of question kind, selected option, custom-answer mode, or draft content. - The ordinary chat editor when a draft, attachment, reference, focus, or IME session is present; an enabled inspection entry preserves access if editing is unavailable. - An eligible running, queued, unread-failure, or ephemeral-completion status button with its exact target thread. - The ordinary editor, or an inspection entry for a read-only or unavailable editor.
-
-[Flower Activity companion](flower-activity-companion.md) owns public question copy, activation, and one-shot focus handoffs.
+[Activity companion](flower-activity-companion.md) owns question activation and one-shot focus handoffs.
 
 # Boundaries
 

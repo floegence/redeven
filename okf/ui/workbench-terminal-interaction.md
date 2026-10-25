@@ -6,41 +6,31 @@ tags: [ui, terminal, workbench, activity, semantic]
 timestamp: 2026-09-21T00:00:00Z
 quality_exception: Cross-runtime terminal interaction contract spanning actor authority, semantic rendering, multi-view control, browser input, history, accessibility, and performance.
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Floeterm terminal-go v0.19.2 owns each PTY, native Ghostty VT, canonical geometry, controller epoch, semantic history, and atomic Presentation. Redeven Activity and Workbench use published terminal-web v0.19.2 to render that Presentation and complete atomic history viewports on one canvas per view and to collect view-local input. A browser view never parses PTY bytes, owns terminal history, or creates a second renderer. Authoritative live, input, resize, and renderer contract violations fail closed; auxiliary history and search failures remain local to that view and retry from a stable boundary without taking the live terminal offline.
+Floeterm terminal-go owns PTY, native VT, geometry, controller epoch, semantic history and atomic Presentation. Released terminal-web renders one canvas per view and collects local input. Authority/renderer violations fail closed; auxiliary history or search errors stay local and retryable without disconnecting live output.
 
 # Contract
 
 ## One terminal owner and one view renderer
-Every session has one terminal-go `SessionActor`. Its sequence and geometry generation only advance; frame width and height must equal canonical columns and rows.
-
-The renderer fills the complete target background before cells, graphics, selection, and cursor, so resize, tab activation, and theme changes cannot expose transparent or stale edges.
+One `SessionActor` owns each session; sequence and geometry generation only advance. Every view receives the same authoritative Presentation with canonical dimensions. Paint complete backgrounds before cells, graphics, selection and cursor to avoid stale edges during resize, activation or theme changes.
 
 ## Multi-view geometry and controller ownership
-All attached views receive the same authoritative Presentation.
-
-No browser output parser or quiet timer participates in this fallback.
+Published Floeterm owns attachment arbitration and geometry. Browser views never parse output bytes, own history or create hidden renderers.
 
 ## Product footer placement
-The [Flower Activity companion](flower-activity-companion.md#activity-terminal-footer) owns Terminal's Activity-only Flower entry placement. Terminal supplies a measured footer anchor and keeps shared-layout information at the right; Workbench never supplies that anchor. Footer layout changes do not attach a view, request controller ownership, or intercept terminal input.
+[Activity companion](flower-activity-companion.md#activity-terminal-footer) owns the Activity-only measured footer entry. Workbench supplies none. Layout cannot attach a view, request control or intercept terminal input.
 
 ## Input, links, selection, and mobile interaction
-`TerminalInputBridge` sends browser-confirmed Unicode text once, sends structured key intents to terminal-go's native encoder, and gives native clipboard paste its own bounded interaction.
-
-Script URLs, malformed URLs, stale capabilities, and remote paths fail closed.
+`TerminalInputBridge` sends confirmed Unicode once, structured key intents to the native encoder and clipboard paste through its bounded interaction. Script/malformed URLs, stale capabilities and remote paths fail closed.
 
 ## Clear, history, refresh, and lifecycle
-User-visible clear is terminal-go's actor-owned semantic reset, not `clearRect`, Ctrl-L, session recreation, or detach. A stale generation has zero effect.
-
-Session close/delete removes catalog authority, attachments, and capabilities and cannot be resurrected by a stale list or notification.
+Clear is the actor's semantic reset, never canvas erasure, Ctrl-L, recreation or detach; stale generations have no effect. Close/delete removes catalog, attachments and capabilities; stale notifications cannot resurrect sessions.
 
 ## Product lifecycle and performance
-The catalog remains renderer-free and dormant sessions remain metadata-only. Ask Flower may capture a selection or bounded visible semantic text; it receives a working directory only through the same current local-path capability.
-
-Real input and both post-switch view checks still run for every sample.
+Dormant sessions remain metadata-only and the catalog renderer-free. Ask Flower captures selection or bounded visible semantic text; working directory requires current local-path capability.
 
 # Boundaries
 
