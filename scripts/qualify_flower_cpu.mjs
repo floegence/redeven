@@ -192,9 +192,12 @@ if (process.argv.includes('--build')) {
           await api('stop');
           const completed = await Promise.all(configured.threads.map(id => api('evidence', '&id=' + encodeURIComponent(id))));
           assert.ok(completed.every(run => run.exact_text && run.exact_reasoning), 'every stability cycle must preserve provider content');
-          const lastWord = [...completed[0].text.matchAll(/word\d{6}/g)].at(-1)?.[0];
-          assert.ok(lastWord, 'the visible run must produce identifiable final text');
-          await page.waitForFunction(word => [...document.querySelectorAll('[data-flower-message-role="assistant"] .flower-chat-md-block')].some(block => block.textContent.includes(word)), lastWord, { timeout: 5000 });
+          const finalMessage = completed[0].items.filter(item => item.kind === 'assistant').at(-1);
+          assert.ok(finalMessage?.text.trim(), 'the visible run must produce identifiable final text');
+          const finalText = [...finalMessage.text.matchAll(/word\d{6}/g)].at(-1)?.[0] ?? finalMessage.text.trim();
+          // Earlier prose can legitimately move into a collapsed work sequence
+          // after a tool completes. Verify the canonical final message itself.
+          await page.waitForFunction(({ id, text }) => [...document.querySelectorAll('[data-flower-message-id]')].some(row => row.getAttribute('data-flower-message-id') === id && row.textContent.includes(text)), { id: finalMessage.id, text: finalText }, { timeout: 5000 });
           await page.evaluate(() => window.flowerQualification.setVisible(false));
           await page.locator('.flower-composer textarea').waitFor({ state: 'detached' });
           await page.waitForTimeout(100);
