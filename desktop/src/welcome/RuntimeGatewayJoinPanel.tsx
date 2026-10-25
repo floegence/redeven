@@ -17,6 +17,8 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   connectionRequest?: number; verificationResetRequest?: number; wizard?: boolean; canConnect?: boolean; submissionBlocked?: boolean; runtimeStartedAtUnixMS?: number;
   managementCoordinates?: string; settingsAction?: JSX.Element; preparation?: JSX.Element; preparationActions?: JSX.Element;
   authorityKey?: string;
+  sshAuthenticationRequired?: boolean; suspended?: boolean;
+  onPreparationRequired?: (failure: 'runtime_not_started' | 'SECURITY_RESTART_REQUIRED' | 'SETTINGS_RUNTIME_INCOMPATIBLE') => void;
 }>) {
   const [open, setOpen] = createSignal(false);
   const [address, setAddress] = createSignal(props.address ?? '');
@@ -27,7 +29,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const busy = () => pending() !== null;
   const [error, setError] = createSignal('');
   const [statusError, setStatusError] = createSignal('');
-  const [authenticationRequired, setAuthenticationRequired] = createSignal(false);
+  const [authenticationRequired, setAuthenticationRequired] = createSignal(props.sshAuthenticationRequired === true);
   const [password, setPassword] = createSignal('');
   const [connectionLost, setConnectionLost] = createSignal(false);
   let passwordInput: HTMLInputElement | undefined;
@@ -41,7 +43,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   };
   const purpose = () => props.purpose ?? 'join';
   const canConnect = () => props.canConnect !== false;
-  const blocked = () => props.submissionBlocked === true;
+  const blocked = () => props.suspended === true || props.submissionBlocked === true;
   const runtimeStart = createMemo(() => props.runtimeStartedAtUnixMS);
   const managementCoordinates = createMemo(() => props.managementCoordinates);
   const authorityKey = createMemo(() => props.authorityKey);
@@ -122,7 +124,21 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const close = () => { invalidate(); statusGeneration++; clearTimeout(timer); releaseConnection(); setCode(''); setStep(0); setOpen(false); props.onClose?.();
     queueMicrotask(() => trigger?.isConnected ? trigger.focus() : props.focusOwner?.()); };
   onCleanup(() => { generation++; statusGeneration++; clearTimeout(timer); clearInterval(expiryTimer); releaseConnection(); });
-  const openDialog = () => { setOpen(true); if (!blocked() && !props.wizard) void refresh(); queueMicrotask(() => { if (props.wizard) connectionHeading?.focus({ preventScroll: true }); else if (!blocked()) focusAddress(); }); };
+  const focusConnection = () => authenticationRequired() ? passwordInput?.focus() : connectionHeading?.focus({ preventScroll: true });
+  const openDialog = () => { setOpen(true); if (!blocked() && !props.wizard) void refresh(); queueMicrotask(() => { if (props.wizard) focusConnection(); else if (!blocked()) focusAddress(); }); };
+  createEffect(on(() => props.sshAuthenticationRequired === true, required => {
+    if (required) { setAuthenticationRequired(true); queueMicrotask(() => { if (!props.suspended) passwordInput?.focus(); }); }
+  }, { defer: true }));
+  createEffect(on(() => props.suspended === true, suspended => {
+    if (suspended) {
+      generation++; statusGeneration++; clearTimeout(timer); setPending(null); releaseConnection();
+      setConnectionLost(true); setPreviewInvalidated(true);
+    } else {
+      setConnectionLost(true);
+      setAuthenticationRequired(props.sshAuthenticationRequired === true);
+      queueMicrotask(() => { if (currentStep() === 0 || connectionLost()) focusConnection(); });
+    }
+  }, { defer: true }));
   let observedRuntimeStart = props.runtimeStartedAtUnixMS;
   createEffect(on(runtimeStart, value => {
     if (!value) return;
@@ -144,6 +160,12 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
     }
   };
   const connectionFailure = (failure?: string) => {
+    if (props.onPreparationRequired && (failure === 'runtime_not_started' || failure === 'SECURITY_RESTART_REQUIRED' || failure === 'SETTINGS_RUNTIME_INCOMPATIBLE')) {
+      clearTimeout(timer); setConnectionLost(true); setAuthenticationRequired(false); setPassword(''); setStatusError('');
+      if (preview()) setPreviewInvalidated(true);
+      props.onPreparationRequired(failure);
+      return true;
+    }
     const needsPassword = failure === 'SSH_AUTHENTICATION_REQUIRED';
     const rejectedPassword = needsPassword && authenticationRequired() && password() !== '';
     const transportFailure = needsPassword || ['RUNTIME_CONTROL_UNREACHABLE', 'RUNTIME_CONTROL_TIMEOUT', 'GATEWAY_CONNECTION_CLOSED', 'runtime_not_started'].includes(failure ?? '');

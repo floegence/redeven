@@ -32,15 +32,15 @@ export function runtimeGatewayAccessPresentation(
   if (control?.state === 'missing' && control.reason_code === 'auth_required'
     && environment.managed_runtime_host_access.kind === 'ssh_host'
     && environment.managed_runtime_host_access.ssh.auth_mode === 'password') return state('connection_required');
+  if (health.freshness === 'checking' && !revalidating || !service && (health.freshness === 'unknown' || !health.checked_at_unix_ms)) {
+    return state('check_required', 'refresh');
+  }
   if (control?.state === 'missing' && control.reason_code === 'forward_unavailable'
     && target?.runtime_running && health.status === 'online' && environment.runtime_operations.open.availability === 'available') {
     return service && !runtimeServiceSupportsRuntimeGateway(service) ? state('unsupported', 'update') : state('connection_required');
   }
   if (control?.state === 'missing' && ['auth_required', 'unverified', 'container_engine_unavailable', 'forward_unavailable', 'reinstall_required'].includes(control.reason_code)) {
     return state('management_unavailable', 'refresh');
-  }
-  if (health.freshness === 'checking' && !revalidating || !service && (health.freshness === 'unknown' || !health.checked_at_unix_ms)) {
-    return state('check_required', 'refresh');
   }
   if (health.status === 'offline' && health.offline_reason_code && !['not_started', 'container_not_running'].includes(health.offline_reason_code)) {
     return state('management_unavailable', 'refresh');

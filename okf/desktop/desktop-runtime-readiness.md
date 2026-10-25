@@ -18,6 +18,8 @@ Native Local Environment is available on macOS/Linux; Windows uses registered WS
 
 WSL, SSH and container observations use the saved channel. Unknown/failed health offers Refresh with its real diagnostic. Pending refresh retains prior diagnosis/startup age but withdraws live Presence; completion replaces it. Main retains credential-free `observed_runtime_control_status` until probe failure or management-configuration change. Gateway failure affects only that route.
 
+A completed probe preserves missing-control diagnostics even when it publishes no Presence. Unknown or unauthenticated status must not become an observed stopped Runtime. Missing diagnostics may guide recovery but never grant live management capability; only current Presence can do so.
+
 Direct lifecycle actions remain available in every diagnosis. Failed nested recovery names the actual operation and retains structured diagnostics; raw stderr appears only in technical details.
 
 ## Access and Flower

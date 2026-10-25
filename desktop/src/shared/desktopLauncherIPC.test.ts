@@ -31,6 +31,13 @@ const operationSnapshotHasNoLegacyInterruptionFields: [
   : false = true;
 
 describe('desktopLauncherIPC', () => {
+  it('preserves an explicit startup password verbatim without adding it to observation requests', () => {
+    const target = { environment_id: 'chosen', ssh_password: ' temporary password ' };
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'start_environment_runtime', ...target }))
+      .toMatchObject({ ssh_password: target.ssh_password });
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'refresh_environment_runtime', ...target }))
+      .not.toHaveProperty('ssh_password');
+  });
   it('accepts only the explicit development migration action', () => {
     expect(normalizeDesktopLauncherActionRequest({ kind: 'migrate_development_credentials' })).toEqual({ kind: 'migrate_development_credentials' });
     expect(normalizeDesktopLauncherActionRequest({ kind: 'automatically_migrate_development_credentials' })).toBeNull();

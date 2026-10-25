@@ -5999,7 +5999,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (opening && settingsController.current(opening)) {
       if (saved) {
         const environment = snapshot().environments.find(entry => entry.id === saved);
-        if (environment) settingsController.savedConnection(environment, createEnvironmentConnectionDraft(environment));
+        if (environment) {
+          if (gatewaySetupEnvironmentID() === state.environment_id) setGatewaySetupEnvironmentID(saved);
+          settingsController.savedConnection(environment, createEnvironmentConnectionDraft(environment));
+        }
         else { settingsController.update({ saving: null }); setConnectionDialogError(i18n().t('interactionContinuity.unavailable')); }
       } else settingsController.update({ saving: null });
     } else if (!opening && saved && connectionDialogState() === state) {
@@ -6278,7 +6281,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   };
 
-  const gatewaySetupEnvironment = createMemo(() => snapshot().environments.find(entry => entry.id === gatewaySetupEnvironmentID()));
+  const gatewaySetupEnvironment = createMemo<DesktopEnvironmentEntry | undefined>(previous => gatewaySetupEnvironmentID()
+    ? snapshot().environments.find(entry => entry.id === gatewaySetupEnvironmentID()) ?? previous : undefined);
   const gatewaySetupOperation = createMemo(() => {
     const environment = gatewaySetupEnvironment();
     return environment ? environmentOperationState(environment, activeActionProgress(), busyState()) : undefined;
@@ -6286,6 +6290,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   return (
     <>
       <RuntimeGatewaySetupDialog gateways={snapshot().gateway_sources} environment={gatewaySetupEnvironment()}
+        suspended={!!settingsSession()}
+        available={snapshot().environments.some(entry => entry.id === gatewaySetupEnvironmentID())}
         operationBusy={gatewaySetupOperation()?.actionsDisabled}
         progress={gatewaySetupOperation()?.activeProgress}
         progressDetail={gatewaySetupOperation()?.panelProgress ? localizedProgressDetail(i18n(), gatewaySetupOperation()!.panelProgress!) : undefined}
@@ -6293,13 +6299,21 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           const id = gatewaySetupEnvironmentID(); setGatewaySetupEnvironmentID('');
           requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-owner-id="${CSS.escape(id)}"]`)?.focus());
         }}
-        refresh={environment => refreshEnvironmentRuntime(environment, 'dialog')}
-        recover={(environment, operation) => triggerLocalEnvironmentAction(environment, {
-          intent: operation === 'start' ? 'start_runtime' : operation === 'restart' ? 'restart_runtime' : 'update_runtime',
-          label: i18n().t(operation === 'start' ? 'gatewayJoin.startAndContinue' : operation === 'restart' ? 'environmentAction.restartRuntime' : 'environmentAction.updateRuntime'),
-          enabled: true, variant: 'default',
-        }, 'dialog')}
-        edit={environment => { setGatewaySetupEnvironmentID(''); startEditingEnvironment(environment); }} />
+        refresh={environment => refreshEnvironmentRuntime(environment, 'dialog', { announceSuccess: false })}
+        recover={async (environment, operation, sshPassword) => {
+          if (operation === 'start' && sshPassword !== undefined) {
+            const request = runtimeActionRequest(environment, 'start_environment_runtime');
+            if (!request) return false;
+            const result = await performLauncherActionSilently({ ...request, ssh_password: sshPassword });
+            return result.ok && result.outcome === 'started_environment_runtime';
+          }
+          return triggerLocalEnvironmentAction(environment, {
+            intent: operation === 'start' ? 'start_runtime' : operation === 'restart' ? 'restart_runtime' : 'update_runtime',
+            label: i18n().t(operation === 'start' ? 'gatewayJoin.startAndContinue' : operation === 'restart' ? 'environmentAction.restartRuntime' : 'environmentAction.updateRuntime'),
+            enabled: true, variant: 'default',
+          }, 'dialog');
+        }}
+        edit={environment => startEditingEnvironment(environment)} />
       <DesktopCommandRegistrar
         snapshot={snapshot}
         i18n={i18n()}

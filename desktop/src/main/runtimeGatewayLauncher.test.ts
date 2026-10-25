@@ -9,6 +9,12 @@ import { RuntimeControlError } from './runtimeControlClient';
 import { requireEnvironmentManagementAvailable } from './environmentAccessSettings';
 import { EnvironmentManagementConnections } from './environmentManagementConnections';
 import { DesktopSSHTransportAuthenticationError } from './sshTransportManager';
+import { DesktopWelcomeRuntimeHealthStore } from './desktopWelcomeRuntimeHealth';
+import { buildDesktopWelcomeSnapshot } from './desktopWelcomeState';
+import { runtimeGatewayAccessFixture } from '../testSupport/runtimeGatewayAccessFixture';
+import { runtimeGatewayAccessPresentation } from '../shared/runtimeGatewayAccessPresentation';
+import type { DesktopRuntimeHealth } from '../shared/desktopRuntimeHealth';
+import { desktopRuntimeControlStatusMissing } from '../shared/desktopRuntimePresence';
 
 function productionBoundary(name: string, context: object) {
   const source = ts.createSourceFile('main.ts', fs.readFileSync(path.join(__dirname, 'main.ts'), 'utf8'), ts.ScriptTarget.ESNext, true);
@@ -34,6 +40,99 @@ function fixture() {
 }
 
 describe('Runtime Gateway launcher ownership', () => {
+  it.each(['unknown', 'failed', 'online'] as const)('does not grant management authority or invent stopped state from %s health alone', state => {
+    const fixture = runtimeGatewayAccessFixture('ssh');
+    const target = fixture.inputs.preferences.saved_runtime_targets[0];
+    const health: DesktopRuntimeHealth = { status: state === 'online' ? 'online' : 'offline', source: 'ssh_runtime_probe',
+      checked_at_unix_ms: state === 'unknown' ? 0 : Date.now(), freshness: state === 'online' ? 'fresh' : state,
+      observed_runtime_control_status: state === 'failed' ? { state: 'missing', reason_code: 'auth_required', message: 'Previous diagnosis' } : { state: 'available' },
+    };
+    const entry = buildDesktopWelcomeSnapshot({ ...fixture.inputs, managedRuntimePresenceByTargetID: {},
+      savedRuntimeTargetHealth: { [target.id]: health },
+    }).environments.find(entry => entry.id === target.id)!;
+    expect(entry.provider_runtime_link_target?.runtime_control_status).toMatchObject({ state: 'missing' });
+    expect(entry.provider_runtime_link_target?.runtime_control_status).not.toMatchObject({ reason_code: 'not_started' });
+    expect(entry.provider_runtime_link_target?.can_connect_cloud).toBe(false);
+    if (state === 'failed') expect(entry.provider_runtime_link_target?.runtime_control_status).toMatchObject({ reason_code: 'unverified' });
+  });
+  it.each(['ssh', 'ssh_container'] as const)('uses the explicit %s startup password through readiness verification without saving it', async kind => {
+    const target = runtimeGatewayAccessFixture(kind).inputs.preferences.saved_runtime_targets[0];
+    const preferences = { saved_runtime_targets: [target] };
+    const before = JSON.stringify(preferences);
+    const savedPassword = vi.fn(() => 'saved-password');
+    const prepareContainer = vi.fn(async () => ({ running: true, placement: target.placement }));
+    const ensureSSH = vi.fn(async () => ({ startup: {} }));
+    const ensureContainer = vi.fn(async () => ({ startup: {}, placement: target.placement }));
+    const verify = vi.fn(async () => undefined);
+    const context = {
+      desktopRuntimeTargetID: () => target.id, runtimeLifecycleTargetKey: () => target.id,
+      launcherOperations: { get: () => ({ action: 'start_environment_runtime', started_at_unix_ms: 1 }), finishCurrentAttempt: vi.fn() },
+      _initializeRuntimeLifecycleOperation: vi.fn(), updateRuntimeLifecycleOperation: vi.fn(),
+      runtimePackageProgressReporter: () => vi.fn(), runtimeLifecyclePhaseFromPlacement: vi.fn(), sshRuntimeLifecyclePhase: vi.fn(),
+      loadDesktopPreferencesCached: async () => preferences, savedRuntimePlacementSSHPassword: savedPassword,
+      sshDetailsFromRuntimePlacement: () => ({ bootstrap_strategy: 'desktop_upload' }), sshDesktopSessionKey: () => target.id,
+      prepareRuntimeContainerForLifecycle: prepareContainer, ensureManagedSSHRuntimeReady: ensureSSH, ensureRuntimePlacementReady: ensureContainer,
+      verifyManagedRuntimeLifecycleAccess: verify, desktopSSHTransportManager: {}, resolveSSHRuntimeReleaseTag: () => 'fixture',
+      desktopRuntimePlacementStateRoot: () => '/runtime/state', compact: (value?: string) => value?.trim() ?? '',
+      process: { env: {} }, desktopRuntimePackageCacheRoot: () => '/cache', PUBLIC_REDEVEN_RELEASE_BASE_URL: 'https://example.test/releases',
+      providerRuntimeLinkTargetIDForRuntimeTarget: () => `ssh:${target.id}`,
+      runtimePlacementReadyByTargetID: new Map(), sshRuntimeReadyByKey: new Map(), runtimeRestartWindows: new Map(),
+      refreshWelcomeRuntimeHealthForEnvironment: vi.fn(async () => undefined), completeRuntimeLifecycleWorkflowProgress: vi.fn(),
+      scheduleCurrentLauncherOperationRemoval: vi.fn(), retireSupersededEnvironmentOperations: vi.fn(),
+      clearReinstallTargetRequiredForEnvironment: vi.fn(async () => undefined), resetLauncherIssueState: vi.fn(), broadcastDesktopWelcomeSnapshots: vi.fn(),
+      launcherActionSuccess: (outcome: string) => ({ ok: true, outcome }), desktopFailureFromError: (error: unknown) => { throw error; },
+    };
+    const run = productionBoundary('executeDirectManagedEnvironmentLifecycle', context);
+    expect(await run({ request: { kind: 'start_environment_runtime', ssh_password: ' temporary password ' },
+      environment_id: target.id, label: target.label, host_access: target.host_access, placement: target.placement,
+      operation: 'start', operation_key: 'startup', operation_owner: 'runtime_lifecycle', lifecycle_signal: new AbortController().signal,
+    })).toEqual({ ok: true, outcome: 'started_environment_runtime' });
+    if (kind === 'ssh') expect(ensureSSH).toHaveBeenCalledWith(expect.objectContaining({ sshPassword: ' temporary password ', sshCredentialScope: target.id }));
+    else {
+      expect(prepareContainer).toHaveBeenCalledWith(target.host_access, target.placement, target.id, expect.objectContaining({ sshPassword: ' temporary password ' }));
+      expect(ensureContainer).toHaveBeenCalledWith(expect.objectContaining({ ssh_password: ' temporary password ', ssh_credential_scope: target.id }));
+    }
+    expect(verify).toHaveBeenCalledWith(expect.objectContaining({ sshPassword: ' temporary password ', environmentID: target.id }));
+    expect(savedPassword).not.toHaveBeenCalled();
+    expect(JSON.stringify(preferences)).toBe(before);
+    expect(JSON.stringify(context.launcherOperations.finishCurrentAttempt.mock.calls)).not.toContain('temporary password');
+  });
+  it.each(['ssh', 'ssh_container'] as const)('preserves unsaved-password %s authentication through the production probe and snapshot', async kind => {
+    const fixture = runtimeGatewayAccessFixture(kind);
+    const original = fixture.inputs.preferences.saved_runtime_targets[0];
+    if (original.host_access.kind !== 'ssh_host') throw new Error('SSH fixture required');
+    const target = { ...original, ssh_password: '', ssh_password_configured: false,
+      host_access: { ...original.host_access, ssh: { ...original.host_access.ssh, auth_mode: 'password' as const } } };
+    const inspect = productionBoundary('inspectRuntimePlacementTargetState', {
+      runtimePlacementInspectionFromBridge: async () => null, runtimePlacementMaintenanceByTargetID: new Map(),
+      desktopRuntimeControlStatusMissing,
+    });
+    const health = productionBoundary('runtimeTargetHealthFromState', {
+      runtimeTargetProbeSource: () => 'ssh_runtime_probe',
+      runtimeTargetOfflineReasonCode: (state: { runtime_control_status: { reason_code: string } }) => state.runtime_control_status.reason_code,
+      offlineRuntimeHealth: (source: string, offline_reason_code: string, offline_reason: string) => ({
+        status: 'offline', checked_at_unix_ms: Date.now(), source, offline_reason_code, offline_reason,
+      }),
+    });
+    const probe = productionBoundary('probeSavedRuntimeTargetHealth', {
+      inspectSavedRuntimeTargetState: () => inspect({ targetID: target.id, environmentID: target.id,
+        hostAccess: target.host_access, placement: target.placement }),
+      runtimeTargetHealthFromState: health, runtimeTargetPresenceFromState: vi.fn(),
+    });
+    const store = new DesktopWelcomeRuntimeHealthStore(() => undefined);
+    await store.refresh([{ key: target.id, environment_id: target.id, slot: 'runtime_target', auto_refresh_enabled: false,
+      checking_health: { status: 'offline', checked_at_unix_ms: 0, source: 'ssh_runtime_probe' },
+      probe: () => probe(target) as Promise<{ health: DesktopRuntimeHealth }>,
+    }]);
+    const snapshot = buildDesktopWelcomeSnapshot({ ...fixture.inputs, ...store.snapshot(),
+      preferences: { ...fixture.inputs.preferences, saved_runtime_targets: [target] } });
+    const entry = snapshot.environments.find(entry => entry.id === target.id)!;
+    expect(store.snapshot().managedRuntimePresenceByTargetID).toEqual({});
+    expect(entry.runtime_health.offline_reason_code).toBe('auth_required');
+    expect(entry.provider_runtime_link_target?.runtime_control_status).toMatchObject({ state: 'missing', reason_code: 'auth_required' });
+    expect(entry.provider_runtime_link_target?.can_connect_cloud).toBe(false);
+    expect(runtimeGatewayAccessPresentation(entry)).toMatchObject({ phase: 'connection_required' });
+  });
   it('binds transient authentication and cancellation to the originating Desktop window', async () => {
     let active = true;
     const release = vi.fn(async () => { active = false; });
@@ -101,6 +200,23 @@ describe('Runtime Gateway launcher ownership', () => {
     expect(inspect.mock.calls[0]?.[0]).toMatchObject({ sshPassword: ' temporary password ' });
     expect(acquire).toHaveBeenCalledExactlyOnceWith(ready, 'gateway', undefined, ' temporary password ');
     expect(target.ssh_password).toBe('old-password');
+  });
+  it.each(['not_started', 'container_not_running'] as const)('reports authenticated %s before attempting enrollment again without its password', async reason => {
+    const target = { id: 'chosen', label: 'Chosen', host_access: { kind: 'ssh_host' }, placement: { kind: 'host_process' } };
+    const acquire = vi.fn();
+    const connect = productionBoundary('acquireEnvironmentManagementConnection', {
+      loadDesktopPreferencesCached: async () => ({ saved_runtime_targets: [target] }),
+      runtimePlacementBridgeRegistry: { get: () => null }, runtimeLifecycleTargetKey: () => 'chosen',
+      runtimeLifecycleCoordinator: { active: () => null }, RuntimeControlError,
+      inspectRuntimePlacementTargetState: async () => ({ runtime_target_available: reason === 'not_started', running: false,
+        runtime_control_status: { state: 'missing', reason_code: reason, message: 'Runtime is stopped.' } }),
+      requireEnvironmentManagementAvailable, runtimePlacementReadyByTargetID: new Map(), acquireRuntimePlacementBridgeForReadyRecord: acquire,
+    }) as (id: string, owner: string, signal?: AbortSignal, password?: string) => Promise<unknown>;
+    await expect(connect(target.id, 'gateway:42:10', undefined, 'temporary password'))
+      .rejects.toMatchObject({ code: 'runtime_not_started' });
+    expect(acquire).not.toHaveBeenCalled();
+    if (reason === 'not_started') await expect(connect(target.id, 'settings:42:10')).resolves.toBeNull();
+    else await expect(connect(target.id, 'settings:42:10')).rejects.toMatchObject({ code: 'RUNTIME_CONTROL_UNREACHABLE' });
   });
   it.each([
     ['local:container', 'local_host'], ['ssh:runtime', 'ssh_host'], ['ssh:container', 'ssh_host'], ['wsl:runtime', 'wsl_host'],

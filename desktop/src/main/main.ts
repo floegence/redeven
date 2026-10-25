@@ -4810,7 +4810,7 @@ async function probeSavedRuntimeTargetHealth(
   const state = await inspectSavedRuntimeTargetState(target);
   if (!state.running) {
     return {
-      health: runtimeTargetHealthFromState(target, state),
+      health: { ...runtimeTargetHealthFromState(target, state), observed_runtime_control_status: state.runtime_control_status },
     };
   }
   return {
@@ -5264,8 +5264,12 @@ async function acquireEnvironmentManagementConnection(environmentID: string, own
   }
   const inspection = await inspectRuntimePlacementTargetState({ targetID: target.id, environmentID, label: target.label,
     hostAccess: target.host_access, placement: target.placement, sshPassword: sshPassword ?? target.ssh_password, signal });
-  requireEnvironmentManagementAvailable(inspection);
   const ready = runtimePlacementReadyByTargetID.get(target.id);
+  if (!ready && owner.startsWith('gateway:') && inspection.runtime_control_status.state === 'missing'
+    && ['not_started', 'container_not_running'].includes(inspection.runtime_control_status.reason_code)) {
+    throw new RuntimeControlError('runtime_not_started', inspection.runtime_control_status.message);
+  }
+  requireEnvironmentManagementAvailable(inspection);
   return ready ? acquireRuntimePlacementBridgeForReadyRecord(ready, owner, signal, sshPassword) : null;
 }
 
@@ -16580,6 +16584,9 @@ async function executeDirectManagedEnvironmentLifecycle(
       update: updateProgress,
     });
     const preferences = await loadDesktopPreferencesCached();
+    const lifecycleSSHPassword = input.request.kind === 'start_environment_runtime' && typeof input.request.ssh_password === 'string'
+      ? input.request.ssh_password
+      : savedRuntimePlacementSSHPassword(preferences, input.host_access, input.placement, targetID, input.environment_id);
     if (input.operation === 'restart') {
       const access = input.host_access.kind === 'local_host' && input.placement.kind === 'host_process'
         ? localEnvironmentAccess(preferences.local_environment)
@@ -16674,13 +16681,7 @@ async function executeDirectManagedEnvironmentLifecycle(
         input.environment_id,
         {
           startIfNeeded: input.operation !== 'stop',
-          sshPassword: savedRuntimePlacementSSHPassword(
-            preferences,
-            input.host_access,
-            input.placement,
-            targetID,
-            input.environment_id,
-          ),
+          sshPassword: lifecycleSSHPassword,
           signal: lifecycleSignal,
           onProgress: (phase, detail) => updateProgress(phase, 'Checking container', detail),
         },
@@ -16710,13 +16711,7 @@ async function executeDirectManagedEnvironmentLifecycle(
         const executor = runtimeHostExecutor(
           input.host_access,
           input.environment_id,
-          savedRuntimePlacementSSHPassword(
-            preferences,
-            input.host_access,
-            input.placement,
-            targetID,
-            input.environment_id,
-          ) || undefined,
+          lifecycleSSHPassword || undefined,
         );
         try {
           const processArgs = {
@@ -16753,13 +16748,7 @@ async function executeDirectManagedEnvironmentLifecycle(
         const ready = await ensureRuntimePlacementReady({
           host_access: input.host_access,
           placement: preparedContainer.placement,
-          ssh_password: savedRuntimePlacementSSHPassword(
-            preferences,
-            input.host_access,
-            input.placement,
-            targetID,
-            input.environment_id,
-          ),
+          ssh_password: lifecycleSSHPassword,
           ssh_credential_scope: input.environment_id,
           ssh_transport_manager: desktopSSHTransportManager,
           runtime_release_tag: resolveSSHRuntimeReleaseTag(),
@@ -16864,13 +16853,7 @@ async function executeDirectManagedEnvironmentLifecycle(
       }
       const sshDetails = sshDetailsFromRuntimePlacement(input.host_access, input.placement);
       const runtimeKey = sshDesktopSessionKey(sshDetails);
-      const sshPassword = savedRuntimePlacementSSHPassword(
-        preferences,
-        input.host_access,
-        input.placement,
-        targetID,
-        input.environment_id,
-      );
+      const sshPassword = lifecycleSSHPassword;
       if (input.operation === 'stop') {
         await closeOwnedSessions();
         const inventoryArgs = {
@@ -16943,14 +16926,7 @@ async function executeDirectManagedEnvironmentLifecycle(
         label: input.label,
         hostAccess: input.host_access,
         placement: input.placement,
-        sshPassword:
-          savedRuntimePlacementSSHPassword(
-            preferences,
-            input.host_access,
-            input.placement,
-            targetID,
-            input.environment_id,
-          ) || undefined,
+        sshPassword: lifecycleSSHPassword || undefined,
         signal: lifecycleSignal,
       });
     }

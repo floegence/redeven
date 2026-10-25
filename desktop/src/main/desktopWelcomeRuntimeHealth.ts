@@ -263,7 +263,7 @@ export class DesktopWelcomeRuntimeHealthStore {
           generation,
           target,
           health: result.health ? withFreshness({ ...result.health,
-            observed_runtime_control_status: result.presence?.runtime_control_status,
+            observed_runtime_control_status: result.presence?.runtime_control_status ?? result.health.observed_runtime_control_status,
           }, 'fresh') : undefined,
           presence: result.presence,
         });
