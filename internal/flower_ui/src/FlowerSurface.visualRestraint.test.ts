@@ -27,6 +27,14 @@ function lastCssRule(selector: string): string {
 }
 
 describe('Flower restrained selection and focus treatments', () => {
+  it('keeps the pin needle stroked when only the head is filled', () => {
+    expect(css).not.toContain('.flower-thread-card-pin-button[data-pinned="true"] svg path {');
+    const pinHeadRule = cssRule('.flower-thread-card-pin-button[data-pinned="true"] [data-flower-pin-head] {');
+
+    expect(pinHeadRule).toContain('fill: currentColor');
+    expect(pinHeadRule).toContain('stroke: none');
+  });
+
   it('uses only background and text contrast for the active thread', () => {
     const cardRule = cssRule('.flower-thread-card,');
     const activeRule = cssRule('.flower-thread-card-active,\n.flower-thread-card-active:hover {');

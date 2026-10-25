@@ -21,6 +21,9 @@ describe('FlowerPinIcon', () => {
     expect(icons[1].getAttribute('data-pinned')).toBe('true');
     expect(icons[1].querySelector('path')?.getAttribute('fill')).toBe('currentColor');
     expect(icons[0].querySelector('path')?.getAttribute('d')).toBe(icons[1].querySelector('path')?.getAttribute('d'));
+    expect(icons[1].querySelectorAll('[data-flower-pin-head]')).toHaveLength(1);
+    expect(icons[1].querySelector('path:last-child')?.hasAttribute('data-flower-pin-head')).toBe(false);
+    expect(icons[1].querySelector('path:last-child')?.getAttribute('stroke')).not.toBe('none');
     expect(icons[0].getAttribute('aria-hidden')).toBe('true');
     dispose();
   });
