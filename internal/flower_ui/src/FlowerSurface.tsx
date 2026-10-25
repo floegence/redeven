@@ -1140,8 +1140,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [modelMenuExpanded, setModelMenuExpanded] = createSignal(false);
   let modelSearchRef: HTMLInputElement | undefined;
   const [modelMenuPosition, setModelMenuPosition] = createSignal({ x: 0, y: 0 });
-  const [modelMenuSize, setModelMenuSize] = createSignal({ width: 360, height: 480 });
-  const [modelMenuAvailableHeight, setModelMenuAvailableHeight] = createSignal(480);
+  const [modelMenuSize, setModelMenuSize] = createSignal({ width: 304, height: 400 });
+  const [modelMenuAvailableHeight, setModelMenuAvailableHeight] = createSignal(400);
   const [modelCapabilityRevision, setModelCapabilityRevision] = createSignal(0);
   type ModelCapabilityLoadState =
     | Readonly<{ kind: 'loading' }>
@@ -12576,11 +12576,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         onKeyDown={handleModelMenuKeyDown}
       >
         <div class="flower-model-menu-header">
-          <div class="flower-model-menu-heading">
-            <span>{copy().settings.selectModelPlaceholder}</span>
-            <button type="button" class="flower-model-menu-close" aria-label={copy().settings.closeModelSelection} title={copy().settings.closeModelSelection} onClick={() => closeModelMenu(true)}><X aria-hidden="true" /></button>
+          <span class="flower-model-menu-heading" title={copy().settings.selectModelPlaceholder}>{copy().settings.selectModelPlaceholder}</span>
+          <div class="flower-model-menu-search-field">
+            <Input ref={modelSearchRef} class="flower-model-menu-search" leftIcon={<Search class="flower-model-menu-search-icon" aria-hidden="true" />} value={modelQuery()} onInput={(event) => setModelQuery(event.currentTarget.value)} placeholder={copy().settings.dialog.catalog.search} aria-label={copy().settings.dialog.catalog.search} size="sm" />
           </div>
-          <Input ref={modelSearchRef} class="flower-model-menu-search" leftIcon={<Search class="flower-model-menu-search-icon" aria-hidden="true" />} value={modelQuery()} onInput={(event) => setModelQuery(event.currentTarget.value)} placeholder={copy().settings.dialog.catalog.search} aria-label={copy().settings.dialog.catalog.search} size="sm" />
+          <button type="button" class="flower-model-menu-close" aria-label={copy().settings.closeModelSelection} title={copy().settings.closeModelSelection} onClick={() => closeModelMenu(true)}><X aria-hidden="true" /></button>
         </div>
         <div class="flower-model-menu-list" role="listbox" aria-label={copy().settings.dialog.catalog.search}>
           <Show when={menuModelOptions().models.length} fallback={<p class="flower-model-menu-empty">{copy().settings.dialog.catalog.empty}</p>}>
