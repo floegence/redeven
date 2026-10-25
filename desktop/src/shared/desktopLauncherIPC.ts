@@ -1374,6 +1374,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       return {
         kind,
         ...target,
+        ...(kind === 'start_environment_runtime' && 'ssh_password' in candidate && typeof candidate.ssh_password === 'string' ? { ssh_password: candidate.ssh_password } : {}),
       } as DesktopLauncherActionRequest;
     }
     case 'restart_environment_runtime':

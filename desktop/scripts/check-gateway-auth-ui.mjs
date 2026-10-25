@@ -29,7 +29,16 @@ function mockActions(environment) {
 try {
   const { createDesktopI18n, listDesktopI18nLocales } = await server.ssrLoadModule(fileURLToPath(new URL('../src/shared/i18n/desktopI18n.ts', import.meta.url)));
   const { runtimeGatewayAccessFixture } = await server.ssrLoadModule(fileURLToPath(new URL('../src/testSupport/runtimeGatewayAccessFixture.ts', import.meta.url)));
-  const environment = runtimeGatewayAccessFixture('ssh', 'management_unavailable').environment;
+  const { buildDesktopWelcomeSnapshot } = await server.ssrLoadModule(fileURLToPath(new URL('../src/main/desktopWelcomeState.ts', import.meta.url)));
+  const fixture = runtimeGatewayAccessFixture('ssh');
+  const saved = fixture.inputs.preferences.saved_runtime_targets[0];
+  const target = { ...saved, ssh_password: '', ssh_password_configured: false,
+    host_access: { ...saved.host_access, ssh: { ...saved.host_access.ssh, auth_mode: 'password' } } };
+  const environment = buildDesktopWelcomeSnapshot({ ...fixture.inputs, managedRuntimePresenceByTargetID: {},
+    preferences: { ...fixture.inputs.preferences, saved_runtime_targets: [target] },
+    savedRuntimeTargetHealth: { [target.id]: { status: 'offline', source: 'ssh_runtime_probe', checked_at_unix_ms: Date.now(),
+      freshness: 'fresh', offline_reason_code: 'auth_required', offline_reason: 'Waiting for SSH authentication.' } },
+  }).environments.find(entry => entry.id === target.id);
   environment.label = 'udesk26';
   environment.managed_runtime_host_access.ssh.auth_mode = 'password';
   for (const [locale, width] of [...listDesktopI18nLocales().map(locale => [locale, 390]), ['zh-CN', 1280]]) {
@@ -40,10 +49,12 @@ try {
     await page.goto(new URL('gateway-auth.html?locale=' + locale, server.resolvedUrls.local[0]).href);
     const dialog = page.getByRole('dialog');
     const button = key => dialog.getByRole('button', { name: i18n.t(key), exact: true });
-    await button('gatewayJoin.connectAndContinue').click();
     const password = dialog.getByLabel(i18n.t('gatewayJoin.sshPassword'), { exact: true });
     await password.waitFor();
+    assert.equal(await button('gatewayJoin.connectAndContinue').isDisabled(), true);
+    assert.equal(await page.evaluate(() => window.gatewayRequests.length), 0);
     assert.equal(await password.evaluate(el => el === document.activeElement), true);
+    if (['zh-CN', 'de-DE', 'en-US'].includes(locale)) await page.screenshot({ path: output + '/' + locale + '-' + width + '-password-entry.png' });
     await password.fill('wrong'); await password.press('Enter');
     await dialog.getByText(i18n.t('gatewayJoin.sshAuthenticationFailed'), { exact: true }).waitFor();
     assert.equal(await password.inputValue(), '');
@@ -70,8 +81,9 @@ try {
     assert.equal(requests.filter(request => request.operation === 'join').length, 1);
     assert.ok(requests.filter(request => request.ssh_password).every(request => request.operation === 'status'));
     await page.getByRole('button', { name: i18n.t('gatewayJoin.title'), exact: true }).click();
-    await button('gatewayJoin.connectAndContinue').click(); await password.waitFor();
+    await password.waitFor();
     assert.equal(await password.inputValue(), '');
+    await password.fill(' fixture password '); await password.press('Enter'); await address.waitFor();
     const reopened = await page.evaluate(() => window.gatewayRequests.at(-1));
     assert.ok(reopened.connection_token > requests[0].connection_token);
     await button('common.cancel').click(); await dialog.waitFor({ state: 'hidden' });

@@ -60,6 +60,7 @@ import {
 } from '../shared/desktopRuntimeHealth';
 import {
   defaultRuntimeControlStatusForRunningState,
+  desktopRuntimeControlStatusMissing,
   type DesktopRuntimePresence,
   type DesktopRuntimeControlStatus,
 } from '../shared/desktopRuntimePresence';
@@ -738,6 +739,22 @@ function runtimeControlBlockedReasonCode(
   }
 }
 
+/** Missing diagnoses survive probes; only current Presence can grant control availability. */
+function runtimeControlStatusForObservation(presence: DesktopRuntimePresence | undefined, health: DesktopRuntimeHealth): DesktopRuntimeControlStatus {
+  if (presence) return presence.runtime_control_status;
+  const observed = health.observed_runtime_control_status;
+  if (health.status === 'offline' && observed?.state === 'missing' && health.freshness !== 'failed') return observed;
+  if (health.status === 'offline') {
+    const reason = health.offline_reason_code;
+    return desktopRuntimeControlStatusMissing(
+      reason === 'auth_required' || reason === 'not_started' || reason === 'container_not_running'
+        || reason === 'container_engine_unavailable' || reason === 'reinstall_required' ? reason : 'unverified',
+      health.offline_reason || 'Runtime status has not been verified.',
+    );
+  }
+  return defaultRuntimeControlStatusForRunningState(true);
+}
+
 function buildCloudRuntimeLinkTarget(input: Readonly<{
   id: DesktopCloudRuntimeLinkTarget['id'];
   kind: DesktopCloudRuntimeLinkTarget['kind'];
@@ -1267,7 +1284,7 @@ function buildLocalEnvironmentEntry(
     openable: runtimeServiceIsOpenable(runtimeService),
     openConnectionRequired: presence?.open_connection_required === true,
     runtimeService,
-    runtimeControlStatus: presence?.runtime_control_status ?? defaultRuntimeControlStatusForRunningState(runtimeHealth.status === 'online'),
+    runtimeControlStatus: runtimeControlStatusForObservation(presence, runtimeHealth),
     maintenance: runtimeMaintenance,
   });
   const providerRuntimeLinkTarget = buildCloudRuntimeLinkTarget({
@@ -1278,7 +1295,7 @@ function buildLocalEnvironmentEntry(
     runtimeKey: environment.id,
     runtimeURL: resolvedLocalRuntimeURL,
     runtimeRunning: runtimeHealth.status === 'online',
-    runtimeControlStatus: presence?.runtime_control_status,
+    runtimeControlStatus: runtimeControlStatusForObservation(presence, runtimeHealth),
     runtimeService,
     redevenCloudOriginPolicy,
   });
@@ -1802,7 +1819,7 @@ function buildSavedRuntimeTargetEntry(
     runtimeKey: target.id,
     runtimeURL: presence?.local_ui_url ?? openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? runtimeHealth.local_ui_url ?? '',
     runtimeRunning: runtimeHealth.status === 'online',
-    runtimeControlStatus: presence?.runtime_control_status,
+    runtimeControlStatus: runtimeControlStatusForObservation(presence, runtimeHealth),
     runtimeService,
     redevenCloudOriginPolicy,
   });
@@ -1819,7 +1836,7 @@ function buildSavedRuntimeTargetEntry(
     openable: runtimeServiceIsOpenable(runtimeService),
     openConnectionRequired: presence?.open_connection_required === true,
     runtimeService,
-    runtimeControlStatus: presence?.runtime_control_status ?? defaultRuntimeControlStatusForRunningState(runtimeHealth.status === 'online'),
+    runtimeControlStatus: runtimeControlStatusForObservation(presence, runtimeHealth),
     maintenance: runtimeMaintenance,
   });
   const effectiveTarget = {

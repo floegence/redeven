@@ -19,7 +19,9 @@ Creation offers Not now or After setup, add Gateway access before inspection/sta
 
 Each dialog opening owns a sender/target-bound bridge lease across all steps. Env App closure cannot release it. Cancellation, renderer navigation/destruction or target authority changes release the lease and reject late requests; admitted writes retain transport until settlement.
 
-Password-mode SSH authentication is inline, focused and Enter-submittable. Rejection stays distinct from Gateway/container-engine failure. Only scoped status accepts a temporary password; it overrides saved credentials for that connection without updating preferences. Verification/consent never carry it. Clear the renderer password after connection, failure or closure. Reopening creates a fresh scope.
+Password-mode SSH authentication is inline, focused and Enter-submittable. A known authentication requirement shows the password field immediately, without a failing connection attempt or a credential-free refresh loop. Rejection stays distinct from Gateway/container-engine failure. Among enrollment commands, only scoped status accepts a temporary password; it overrides saved credentials for that connection without updating preferences. Verification/consent never carry it. Clear the renderer password after connection, failure or closure. Reopening creates a fresh scope.
+
+When authenticated inspection proves the Runtime or its container is stopped, show an explicit startup action instead of retrying without credentials. Startup uses the existing lifecycle owner. An unsaved SSH password is entered for that action, passed unchanged through startup and access verification, and never persisted or retained in retry state. The field clears on submission; subsequent enrollment proves a fresh connection and requests authentication again when needed. Opening or connecting never implicitly starts a Runtime.
 
 Connection loss blocks submission and polling; explicit recovery retains drafts and uses the original lifecycle owner. Lost connection or changed authority requires fresh verification. Observations never cancel pending requests.
 
@@ -28,6 +30,8 @@ Saved-address and manual-entry tabs preserve independent drafts. Suggestions use
 ## Management and presentation
 
 Member dialogs list members, issue invitations and manage policy. Refresh failure retains lists/invitations; cancellation cannot reopen dialogs or discard drafts. Settings/client-code import grant no Runtime permission or Namespace approval. [Network settings](gateway-network-settings.md) separates share endpoints, listeners and collapsed Host restrictions and owns validation/restart.
+
+Internal enrollment checks use inline feedback, without status-refreshed toasts. Unknown status never implies rejected credentials; expandable technical details retain the actual diagnosis. Opening Environment settings suspends enrollment, releases its connection and invalidates verification while preserving invitation drafts and the current step. Returning requires a fresh connection before submission.
 
 Use explicit translations and viewport-bounded panels.
 
