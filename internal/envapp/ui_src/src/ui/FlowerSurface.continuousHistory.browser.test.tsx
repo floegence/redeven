@@ -1,6 +1,8 @@
 import '../index.css';
 import './flower-feature.css';
 import { page } from 'vitest/browser';
+import { createRoot } from 'solid-js';
+import { createFlowerScrollTailController } from '../../../../flower_ui/src/flowerScrollTail';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import type { FlowerHistoryRequest, FlowerLiveStreamEnvelope, FlowerRuntimeCurrentItem, FlowerRuntimeCurrentView } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
@@ -156,6 +158,136 @@ async function mountChild(count = 330, _varied = false) {
 }
 
 describe('continuous history navigation', () => {
+  it.each(['flower-chat-transcript', 'flower-subagent-detail-transcript'])('corrects late-mounted %s growth before paint without a viewport resize', async className => {
+    await page.viewport(1280, 900);
+    const viewport = document.createElement('div');
+    viewport.className = className;
+    viewport.style.cssText = 'position:fixed;inset:0 auto auto 0;width:600px;height:500px;display:block;';
+    document.body.append(viewport);
+    const root = createRoot(dispose => ({ dispose, scroll: createFlowerScrollTailController({
+      reducedMotionPreferred: () => true, requestAnimationFrame: callback => requestAnimationFrame(callback), cancelAnimationFrame: id => cancelAnimationFrame(id),
+    }) }));
+    root.scroll.bind(viewport);
+    const stack = document.createElement('div');
+    const preceding = document.createElement('div');
+    const anchor = document.createElement('div');
+    anchor.dataset.flowerMessageId = 'late-mounted-anchor';
+    anchor.style.height = '80px';
+    stack.append(preceding, anchor); viewport.append(stack);
+    try {
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      root.scroll.stopFollowing(); root.scroll.preserveLayoutAnchor(anchor);
+      const top = anchor.getBoundingClientRect().top;
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      preceding.style.height = '700px';
+      // No manual flush or notification: the bound content observer must own
+      // this before-paint correction even though binding preceded insertion.
+      await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+      expect(Math.abs(anchor.getBoundingClientRect().top - top)).toBeLessThanOrEqual(1);
+      expect(viewport.scrollTop).toBeGreaterThan(600);
+    } finally { root.scroll.dispose(); root.dispose(); viewport.remove(); }
+  });
+  it.each([1, 12])('keeps a short collapsed tail stationary while loading %i older turns', async count => {
+    await page.viewport(1280, 900);
+    const seed = thread({ thread_id: 'short-collapsed-tail', messages: [] });
+    const peer = thread({ thread_id: 'short-peer', messages: [{ id: 'peer-answer', turn_id: 'peer-turn', role: 'assistant', content: 'Peer answer.', status: 'complete', created_at_ms: 1 }] });
+    const held = deferred<void>();
+    const items: FlowerRuntimeCurrentItem[] = [
+      ...Array.from({ length: count }, (_, index): FlowerRuntimeCurrentItem => ({
+        id: `older-${index}`, kind: 'assistant', turn_id: `older-turn-${index}`, run_id: `older-run-${index}`,
+        text: `Earlier answer ${index}.\n\nA paragraph that is only loaded when the reader requests previous history.`, ordinal: index + 1,
+      })),
+      { id: 'short-user', kind: 'user', text: 'Please fix the documentation.', turn_id: 'tail', run_id: 'tail-run', ordinal: count + 1 },
+      { id: 'short-tool', kind: 'tool', turn_id: 'tail', run_id: 'tail-run', ordinal: count + 2,
+        activity: { item_id: 'short-tool', tool_id: 'short-tool', kind: 'tool', tool_name: 'terminal.exec', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
+          presentation: { label: 'Check documentation', renderer: 'terminal', payload: { command: 'check-docs', output: 'Done' } } } },
+    ] satisfies FlowerRuntimeCurrentItem[];
+    for (const item of items) Object.assign(item, { canonical_ordinal: item.ordinal });
+    let first = true;
+    const history = vi.fn(async (_id: string, request: FlowerHistoryRequest) => {
+      if (_id === peer.thread_id) return liveBootstrap(peer);
+      if (request.anchor_id) await held.promise;
+      const selected = first ? items.slice(-2) : selectPage(items, request); first = false;
+      const current: FlowerRuntimeCurrentView = { thread_id: seed.thread_id, activity: 'idle', view_version: 1, items: selected,
+        window: { ...pageBounds(items, selected), leaf_id: 'short-tail-leaf' },
+        turns: [...new Set(selected.map(item => item.turn_id!))].map(id => ({
+          turn_id: id, run_id: items.find(item => item.turn_id === id)!.run_id!, started_at: '2026-10-01T00:00:00Z', ended_at: '2026-10-01T00:01:00Z',
+          outcome: id === 'tail' ? 'failed' : 'completed', elapsed_ms: 60000, waiting_ms: 0, work_duration_ms: 60000, final_boundary_complete: id !== 'tail',
+          final_item_ids: selected.filter(item => item.turn_id === id && item.kind === 'assistant').map(item => item.id),
+        })) };
+      return { current, thread: applyFlowerRuntimeCurrentView(seed, current) };
+    });
+    const root = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [seed, peer], loadHistory: history,
+      async *connectLiveStream({ signal }) {
+        yield { schema_version: 3, kind: 'ready', baseline_complete: true, observer_id: 'short-reader', summaries: [seed, peer] };
+        await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+      },
+    }, { focusThreadRequest: { request_id: 'short-tail', thread_id: seed.thread_id } });
+    root.style.height = '780px';
+    const viewport = () => root.querySelector<HTMLDivElement>('.flower-chat-transcript')!;
+    await waitFor(() => Boolean(root.querySelector('.flower-turn-summary-button')) && viewport()?.dataset.flowerTailPreparing !== 'true');
+    await new Promise(resolve => setTimeout(resolve, 200));
+    const user = root.querySelector<HTMLElement>('[data-flower-message-id="short-user"]')!;
+    const summary = root.querySelector<HTMLButtonElement>('.flower-turn-summary-button')!;
+    expect(summary.getAttribute('aria-expanded')).toBe('false');
+    expect(viewport().scrollHeight).toBe(viewport().clientHeight);
+    const top = user.getBoundingClientRect().top;
+    const samples: number[] = [];
+    let sampling = true;
+    const sample = () => { if (sampling) { samples.push(user.getBoundingClientRect().top); requestAnimationFrame(sample); } };
+    requestAnimationFrame(sample);
+    try {
+      viewport().dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true }));
+      await waitFor(() => Boolean(root.querySelector('.flower-history-loading-notice')));
+      await new Promise(resolve => setTimeout(resolve, 100));
+      held.resolve();
+      await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="older-0"]')));
+      await new Promise(resolve => setTimeout(resolve, 300));
+      expect(Math.max(...samples.map(value => Math.abs(value - top)))).toBeLessThanOrEqual(1);
+      sampling = false;
+      expect(root.querySelector('.flower-turn-summary-button')).toBe(summary);
+      expect(summary.getAttribute('aria-expanded')).toBe('false');
+      const reserved = parseFloat(viewport().style.getPropertyValue('--flower-reading-tail-space'));
+      expect(reserved).toBeGreaterThan(200);
+      // Resizing the composer/viewport must preserve the same screen anchor.
+      root.style.height = '860px';
+      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(Math.abs(user.getBoundingClientRect().top - top)).toBeLessThanOrEqual(1);
+      root.style.height = '780px';
+      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(Math.abs(user.getBoundingClientRect().top - top)).toBeLessThanOrEqual(1);
+      // Reclaim trailing room only as it leaves the reading viewport. Its
+      // removal never moves existing content, including during return visits.
+      for (const next of [0, 80, 0, 120, 0]) {
+        const before = viewport().scrollTop;
+        const previousTop = user.getBoundingClientRect().top;
+        viewport().dispatchEvent(new WheelEvent('wheel', { deltaY: next - before, bubbles: true }));
+        viewport().scrollTop = next;
+        const accepted = viewport().scrollTop;
+        viewport().dispatchEvent(new Event('scroll'));
+        await new Promise(resolve => setTimeout(resolve, 80));
+        expect(Math.abs(user.getBoundingClientRect().top - (previousTop + before - accepted))).toBeLessThanOrEqual(1);
+        expect(summary.getAttribute('aria-expanded')).toBe('false');
+      }
+      if (count === 12) expect(viewport().style.getPropertyValue('--flower-reading-tail-space')).toBe('');
+      const disclosureTop = summary.getBoundingClientRect().top;
+      summary.click();
+      await waitFor(() => summary.getAttribute('aria-expanded') === 'true');
+      await new Promise(resolve => setTimeout(resolve, 250));
+      expect(Math.abs(summary.getBoundingClientRect().top - disclosureTop)).toBeLessThanOrEqual(1);
+      summary.click();
+      await waitFor(() => summary.getAttribute('aria-expanded') === 'false');
+      await new Promise(resolve => setTimeout(resolve, 250));
+      expect(Math.abs(summary.getBoundingClientRect().top - disclosureTop)).toBeLessThanOrEqual(1);
+      const calls = history.mock.calls.length;
+      await new Promise(resolve => setTimeout(resolve, 200));
+      expect(history.mock.calls.length).toBe(calls);
+      root.querySelector<HTMLButtonElement>('[data-thread-id="short-peer"] .flower-thread-card-select-button')!.click();
+      await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="peer-answer"]')) && viewport().dataset.flowerTailPreparing !== 'true');
+      expect(viewport().style.getPropertyValue('--flower-reading-tail-space')).toBe('');
+      expect(viewport().scrollHeight - viewport().clientHeight - viewport().scrollTop).toBeLessThanOrEqual(1);
+    } finally { sampling = false; held.resolve(); }
+  });
   it('holds an ordered live baseline until its historical tool group is complete', async () => {
     await page.viewport(1280, 900);
     const seed = thread({ thread_id: 'atomic-history', messages: [] });

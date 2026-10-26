@@ -337,10 +337,14 @@ describe('Flower destination presentation', () => {
     expect(bottomDistance(root)).toBeLessThanOrEqual(1);
   });
 
-  it('reveals local body failures without load buttons and lets another selection supersede preparation', async () => {
+  it('reveals local body failures with explicit retry and lets another selection supersede preparation', async () => {
     const failed = await fixture({ failBody: true });
     await waitFor(() => !preparing(failed.root) && Boolean(failed.root.querySelector('.flower-history-body-control[aria-busy="false"]')), 5000);
-    expect(failed.root.querySelector('.flower-history-body-control button')).toBeNull();
+    const retry = failed.root.querySelector<HTMLButtonElement>('.flower-history-body-control button')!;
+    expect(retry.textContent).toContain('Retry');
+    const reads = failed.loadHistoryItem.mock.calls.length;
+    retry.click();
+    await waitFor(() => failed.loadHistoryItem.mock.calls.length > reads);
     expect(bottomDistance(failed.root)).toBeLessThanOrEqual(1);
     select(failed.root, 'peer');
     await waitFor(() => !preparing(failed.root) && Boolean(failed.root.querySelector('[data-flower-message-id="peer-message"]')));

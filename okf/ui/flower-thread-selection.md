@@ -5,7 +5,7 @@ description: Present navigation feedback before committing content and coordinat
 tags: [flower, navigation, cancellation, recovery, detail]
 timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-10-26"
 ---
 # Summary
 
@@ -32,6 +32,13 @@ canonical windows automatically; no load-earlier or load-newer action is part
 of normal navigation. Retained windows preserve visible, selected and focused
 rows while gaps are filled in either direction. Stable item identities preserve
 expanded details and scroll anchors during live appends and replacements.
+When a collapsed tail is shorter than the viewport, prepending history retains
+the visible trailing room required by its reading anchor. The scroll owner
+reclaims that room only as it leaves view or content fills it; loading must not
+push existing messages down to fill the viewport. Viewport resizing preserves
+the anchor, and destination preparation clears the temporary geometry. The
+transcript content observer attaches after DOM mounting and corrects growth
+before paint. This adds no history reads, persisted state or disclosure changes.
 The accepted history baseline belongs to the live observer and reading revision;
 superseded navigation cannot replace a newer selection.
 
@@ -63,4 +70,5 @@ The [sidebar contract](flower-thread-sidebar.md) owns conversation rows, title e
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.test.tsx` - Latest selection, retained drafts and interaction ownership.
 
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.threadPresentation.browser.test.tsx` - First exposed destination, delayed reads, cached switches, cancellation, explicit input and failure recovery.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.continuousHistory.browser.test.tsx` - Short collapsed tails, delayed history, retained whitespace, resize, repeated scrolling and mounted-content observation.
 - `redeven:desktop/scripts/check-flower-startup.mjs` - Built Electron rendering opportunities on repeated cached selection, with owned-process cleanup.
