@@ -506,3 +506,18 @@ func TestFlowerPublicItemRetainsDeferredActivitySummary(t *testing.T) {
 		t.Fatalf("deferred details disappeared from public response: %s", raw)
 	}
 }
+
+func TestFlowerPublicItemRetainsMutationTitleWithoutDetailOrTarget(t *testing.T) {
+	summary := &flruntime.ThreadActivitySummary{Renderer: "patch", Label: "apply_patch",
+		Fields: []flruntime.ThreadActivityField{{Path: "/payload/mutations", Kind: "array", Count: 1}},
+		Values: map[string]json.RawMessage{"/payload/mutations/0/display_name": json.RawMessage(`"panda-bicycle.html"`), "/payload/mutations/0/change_type": json.RawMessage(`"delete"`)},
+	}
+	result := projectFlowerItem(flruntime.ThreadItem{ID: "patch", Kind: flruntime.ThreadItemTool, ActivitySummary: summary}, "thread", nil)
+	if result.ActivitySummary == nil || string(result.ActivitySummary.Values["/payload/mutations/0/display_name"]) != `"panda-bicycle.html"` || len(result.ActivitySummary.Values) != 2 || len(result.ActivitySummary.Fields) != 1 {
+		t.Fatalf("mutation title changed: %+v", result.ActivitySummary)
+	}
+	result.ActivitySummary.Values["/payload/mutations/0/display_name"] = json.RawMessage(`"changed"`)
+	if string(summary.Values["/payload/mutations/0/display_name"]) != `"panda-bicycle.html"` {
+		t.Fatal("projection mutated canonical summary")
+	}
+}

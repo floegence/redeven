@@ -985,12 +985,19 @@ function diffFileFromMutation(
 function diffFilesFromPayload(item: FlowerActivityItem): readonly FlowerActivityDiffFile[] {
   const payload = item.payload ?? {};
   const defaultDisplayName = payloadValue(payload, 'display_name') || trimString(item.label);
-  const mutationSource = asArray(payload.mutations).length > 0 ? asArray(payload.mutations) : [payload];
+  const mutationSource = asArray(payload.mutations).length > 0 ? asArray(payload.mutations) : item.renderer === 'patch' ? [] : [payload];
   return mutationSource.map((entry) => diffFileFromMutation(item, asRecord(entry), defaultDisplayName))
     .filter((file): file is FlowerActivityDiffFile => file !== null && trimString(file.display_name) !== '');
 }
 
 function titleForPatchItem(item: FlowerActivityItem, files: readonly FlowerActivityDiffFile[]): FlowerActivityTitle {
+  const count = patchFileCount(item);
+  if (count > 1) return { kind: 'file', verb: 'Edit', display_name: `${count} files` };
+  const summaryName = payloadValue(item.field_summary?.values, '/payload/mutations/0/display_name');
+  if (count === 1 && summaryName) {
+    const operation = payloadValue(item.field_summary?.values, '/payload/mutations/0/change_type');
+    return { kind: 'file', verb: fileVerbForOperation(operation), display_name: summaryName };
+  }
   if (files.length === 1) {
     const file = files[0];
     return { kind: 'file', verb: fileVerbForOperation(file.change_type), display_name: file.display_name };
@@ -1004,6 +1011,11 @@ function titleForPatchItem(item: FlowerActivityItem, files: readonly FlowerActiv
   }
   const fallbackName = trimString(item.label);
   return { kind: 'file', verb: 'Edit', display_name: (fallbackName && fallbackName !== 'apply_patch' ? fallbackName : 'files') };
+}
+
+function patchFileCount(item: FlowerActivityItem): number {
+  const field = item.field_summary?.fields.find(field => field.path === '/payload/mutations' && field.kind === 'array');
+  return field?.count ?? (Array.isArray(item.payload?.mutations) ? item.payload.mutations.length : numericValue(item.payload?.files_changed));
 }
 
 function presentationForFile(item: FlowerActivityItem): FlowerActivityPresentation {
@@ -1064,7 +1076,10 @@ function presentationForPatch(item: FlowerActivityItem): FlowerActivityPresentat
   if (statusLines.length > 0) {
     detailBlocks.push({ kind: 'structured', lines: statusLines });
   }
-  const changeStats = diffStats(files);
+  const hasPatchTotals = ['files_changed', 'additions', 'deletions'].some(key => typeof payload[key] === 'number')
+    || payloadValue(item.field_summary?.values, '/payload/mutations/0/change_type') === 'noop';
+  const changeStats = hasPatchTotals
+    ? { additions: numericValue(payload.additions), deletions: numericValue(payload.deletions) } : diffStats(files);
   if (errorBlock) detailBlocks.push(errorBlock);
   return {
     label: titleText(title),
@@ -1652,7 +1667,7 @@ export function presentFlowerActivityItem(item: FlowerActivityItem, copy?: Flowe
   const words = copy?.tools ?? toolActivityEnUS;
   if (result.title.kind === 'file') {
     const verb = words[result.title.verb === 'Read' ? 'read' : result.title.verb === 'Delete' ? 'delete' : 'edit'];
-    const count = result.detailBlocks.find(block => block.kind === 'file_diff')?.files.length;
+    const count = renderer === 'patch' ? patchFileCount(item) : result.detailBlocks.find(block => block.kind === 'file_diff')?.files.length;
     const name = count && count > 1 ? words.fileCount.replace('{count}', String(count)) : result.title.display_name === 'files' ? words.files : result.title.display_name;
     return { ...result, title: { ...result.title, display_name: name }, label: [verb, name].filter(Boolean).join(' ') };
   }

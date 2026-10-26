@@ -162,6 +162,7 @@ main() {
       internal/flower_host_ui/src/flowerAttachmentStaging.test.ts \
       internal/flower_ui/src/contextActionWire.test.ts \
       internal/flower_ui/src/flowerActivityPresentation.test.ts \
+      internal/flower_ui/src/activityMutationSummary.test.ts \
       internal/flower_ui/src/flowerSubagentDetailThread.test.ts \
       internal/flower_ui/src/flowerSubagentProjection.test.ts \
       internal/flower_ui/src/flowerThreadListRefresh.test.ts \

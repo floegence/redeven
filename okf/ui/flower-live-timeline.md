@@ -29,6 +29,12 @@ Foreground history waits for the current live observer. Ready installs its basel
 
 Root/child slots have independent monotonic revisions. Baseline and deltas share a subscription; replacing a page replaces its interest and fences older revisions. First reads select 24 items with 1 KiB text previews and Activity field summaries. Explicit earlier/newer reads select at most 150 items within 512 KiB; receipts refresh the accepted interval, never replace historical reading with Latest.
 
+Collapsed patch rows use single-mutation display name/change type values from
+the existing Activity summary, or the localized mutation count for multiple
+files. They issue no detail requests. Summary values do not manufacture diff
+rows or navigation targets. Expansion retains the title and patch-level totals;
+each disclosed file keeps its own diff statistics.
+
 Root/child window POSTs accept at most 64 KiB of request JSON for 150 canonical identities; single-item/body locators retain 8 KiB. Exact membership also budgets 448 KiB of canonical preview metadata, reserving room below the server cap without counting hydrated bodies. The installed network interest remains bounded independently of the active reading document. Sealed items explicitly visited on the same canonical path retain their reactive message owners and hydrated bodies; cache eviction removes whole inactive documents rather than individual inspected rows. A changed leaf retains only the prefix confirmed by matching canonical identity and ordinal. Visible/focused/selected live islands remain mounted. Gap refills stop at their missing interval and prefetch only ahead of the reading edge. One coalesced scroll demand owns a page handoff; HTTP completion and layout cannot recursively traverse collapsed history. Input at a stationary edge still requests the next page. Failed navigation retains content/drafts and offers localized Retry.
 
 Before publication, resolve both boundaries and internal gaps of every affected historical turn through bounded preview pages, then align all receipts in the displayed interval. The foreground reader owns canonical publication; ordered live baselines wait in the same handoff queue until preparation completes. Publish grouping facts and timeline entries together; never expose a page-sized partial count as a complete historical group. A loading overlay leaves the installed document readable. This may require multiple bounded requests for an unusually large turn; it does not fetch unopened bodies.
