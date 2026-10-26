@@ -3643,7 +3643,13 @@
     "invitationType": "Einladung",
     "oneTime": "Einmalig",
     "expiry": "Gültig",
-    "expiresIn": "{minutes} Min.",
+    "expiresIn": {
+      "kind": "plural",
+      "forms": {
+        "one": "Läuft in {count} Minute ab",
+        "other": "Läuft in {count} Minuten ab"
+      }
+    },
     "selection": "Auswahl",
     "automatic": "Automatisch",
     "technicalDetails": "Technische Details",
@@ -3752,7 +3758,13 @@
     "confirmRemove": "Entfernen bestätigen",
     "remove": "Mitglied entfernen",
     "refreshFailed": "Der Vorgang war erfolgreich, aber die Mitgliederliste konnte nicht aktualisiert werden. Ihr Ergebnis bleibt erhalten. Aktualisieren Sie die Ansicht für den neuesten Stand.",
-    "hookInvalid": "Ungültige Konfiguration – Vorgänge werden abgelehnt"
+    "hookInvalid": "Ungültige Konfiguration – Vorgänge werden abgelehnt",
+    "memberChanged": "Dieses Mitglied wurde geändert. Aktualisieren Sie die Mitgliederliste, prüfen Sie die aktuellen Zugriffsrechte und versuchen Sie es erneut.",
+    "memberDenied": "Die Gateway-Richtlinie hat diese Aktion abgelehnt. Prüfen Sie vor einem erneuten Versuch die Zugriffsregeln des Mitglieds.",
+    "memberCapacity": "Dieses Gateway hat die maximale Mitgliederzahl erreicht. Prüfen Sie vor einem erneuten Versuch die Mitgliederliste.",
+    "hookMemberAdmission": "Mitgliederaufnahme",
+    "hookSessionAccess": "Sitzungszugriff",
+    "hookCloudPublication": "Cloud-Veröffentlichung"
   },
   "gatewayClients": {
     "connectionSettings": "Verbindungseinstellungen",
@@ -3805,7 +3817,9 @@
     "save": "Netzwerkeinstellungen speichern",
     "saving": "Wird gespeichert…",
     "saved": "Netzwerkeinstellungen gespeichert.",
-    "restartRequired": "Gateway neu starten, um die gespeicherten Bind-Adressen anzuwenden."
+    "restartRequired": "Gateway neu starten, um die gespeicherten Bind-Adressen anzuwenden.",
+    "listenAddressPlaceholder": "0.0.0.0:7443, [::]:7443",
+    "allowedHostsPlaceholder": "gateway.example, 192.168.1.10"
   },
   "gatewayConnections": {
     "unpairTitle": "Gateway-Kopplung aufheben",

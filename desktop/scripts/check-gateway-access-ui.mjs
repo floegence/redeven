@@ -46,11 +46,11 @@ try {
           if (request.kind === 'invite_gateway_runtime') return ++inviteAttempts === 1
             ? { ok: false, scope: 'gateway', code: 'gateway_catalog_failed', message: 'Unavailable' }
             : { ok: true, outcome: 'gateway_invitation_created', gateway_invitation_code: invitation };
-          if (request.kind === 'update_gateway_members') return { ok: true, outcome: 'gateway_members_updated', gateway_member_results: request.items.map((item, index) => ({ member_id: item.member_id, ...(index ? { error_code: 'MEMBER_CONFLICT' } : {}) })) };
+          if (request.kind === 'update_gateway_members') return { ok: true, outcome: 'gateway_members_updated', gateway_member_results: request.items.map((item, index) => ({ member_id: item.member_id, ...(index ? { error_code: 'MEMBER_VERSION_CONFLICT' } : {}) })) };
           return { ok: true, outcome: 'gateway_members_updated' };
         };
         await document.fonts.ready;
-      }, { dark, largeText, invitation: invitationFixture });
+      }, { dark, largeText, invitation: { ...invitationFixture, expires_at_unix_ms: Date.now() + 60_000 } });
       const card = page.locator(`[data-gateway-id="${gateway.gateway_id}"]`);
       const moreActions = card.getByRole('button', { name: i18n.t('environmentCenter.moreActionsForLabel', { label: gateway.display_name }), exact: true });
       await moreActions.click();
@@ -65,10 +65,17 @@ try {
       assert.equal(await membersPanel.getByText('Inherited', { exact: true }).isVisible(), true);
       await dialog.getByRole('button', { name: i18n.t('gatewayMembers.createInvitation'), exact: true }).click();
       await dialog.getByText(i18n.t('gatewayMembers.invitationReady'), { exact: true }).waitFor();
+      assert.equal(await dialog.getByRole('timer').innerText(), i18n.tn('gatewayJoin.expiresIn', 1));
       assert.equal(await dialog.getByRole('button', { name: i18n.t('gatewayJoin.copyAddress'), exact: true }).count(), 1);
       assert.equal(await dialog.getByRole('button', { name: i18n.t('gatewayJoin.copyCode'), exact: true }).count(), 1);
       // A policy preview only includes inherited members; saving requires a second explicit action.
       await dialog.locator('summary').filter({ hasText: i18n.t('gatewayMembers.policy') }).click();
+      const technical = dialog.locator('.redeven-gateway-policy details');
+      await technical.locator('summary').click();
+      for (const key of ['hookMemberAdmission', 'hookSessionAccess', 'hookCloudPublication']) {
+        assert.equal(await technical.getByText(i18n.t(`gatewayMembers.${key}`), { exact: false }).isVisible(), true);
+      }
+      await technical.locator('summary').click();
       await dialog.getByRole('checkbox', { name: i18n.t('gatewayMembers.defaultAllow'), exact: true }).focus();
       await page.keyboard.press('Space');
       const preview = dialog.locator('p').filter({ hasText: i18n.t('gatewayMembers.affected') });
@@ -84,7 +91,15 @@ try {
         await page.getByRole('menuitem', { name: i18n.t('gatewayMembers.allow'), exact: true }).click();
       }
       await dialog.getByRole('button', { name: i18n.t('gatewayMembers.confirmSave'), exact: true }).click();
-      await dialog.getByText('MEMBER_CONFLICT', { exact: true }).waitFor();
+      await dialog.getByText(i18n.t('gatewayMembers.memberChanged'), { exact: true }).waitFor();
+      const diagnostic = membersPanel.locator('.redeven-gateway-member-row details');
+      assert.equal(await diagnostic.getAttribute('open'), null);
+      assert.equal(await dialog.getByText('MEMBER_VERSION_CONFLICT', { exact: true }).isVisible(), false);
+      await diagnostic.locator('summary').click();
+      await dialog.getByText('MEMBER_VERSION_CONFLICT', { exact: true }).waitFor();
+      await diagnostic.locator('summary').click();
+      assert.equal(await dialog.evaluate(el => el.scrollWidth > el.clientWidth + 1), false, `${locale}/${width}: localized failure fits`);
+      await page.screenshot({ path: `${output}/${locale}-${width}-member-error.png` });
       await dialog.getByRole('button', { name: i18n.t('gatewayMembers.confirmSave'), exact: true }).click();
       const batches = (await page.evaluate(() => window.settingsFixture.requests)).filter(r => r.kind === 'update_gateway_members');
       assert.deepEqual(batches.map(r => r.items.map(item => item.member_id)), [['member_0', 'member_1'], ['member_1']]);

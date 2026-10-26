@@ -3644,7 +3644,14 @@
     "invitationType": "Invitación",
     "oneTime": "Un solo uso",
     "expiry": "Caduca",
-    "expiresIn": "{minutes} min",
+    "expiresIn": {
+      "kind": "plural",
+      "forms": {
+        "one": "Caduca en {count} minuto",
+        "many": "Caduca en {count} minutos",
+        "other": "Caduca en {count} minutos"
+      }
+    },
     "selection": "Selección",
     "automatic": "Automática",
     "technicalDetails": "Detalles técnicos",
@@ -3753,7 +3760,13 @@
     "confirmRemove": "Confirmar eliminación",
     "remove": "Eliminar miembro",
     "refreshFailed": "La operación se completó, pero no se pudo actualizar la lista de miembros. El resultado se conserva. Actualice para ver el estado más reciente.",
-    "hookInvalid": "Configuración no válida: se rechazan las operaciones"
+    "hookInvalid": "Configuración no válida: se rechazan las operaciones",
+    "memberChanged": "Este miembro ha cambiado. Actualiza la lista de miembros, revisa sus permisos de acceso actuales y vuelve a intentarlo.",
+    "memberDenied": "La política de la puerta de enlace ha denegado esta acción. Revisa las reglas de acceso del miembro antes de volver a intentarlo.",
+    "memberCapacity": "Esta puerta de enlace ha alcanzado su límite de miembros. Revisa la lista de miembros antes de volver a intentarlo.",
+    "hookMemberAdmission": "Admisión de miembros",
+    "hookSessionAccess": "Acceso a sesiones",
+    "hookCloudPublication": "Publicación en Cloud"
   },
   "gatewayClients": {
     "connectionSettings": "Configuración de conexión",
@@ -3806,7 +3819,9 @@
     "save": "Guardar ajustes de red",
     "saving": "Guardando…",
     "saved": "Ajustes de red guardados.",
-    "restartRequired": "Reinicia Gateway para aplicar las direcciones de escucha guardadas."
+    "restartRequired": "Reinicia Gateway para aplicar las direcciones de escucha guardadas.",
+    "listenAddressPlaceholder": "0.0.0.0:7443, [::]:7443",
+    "allowedHostsPlaceholder": "gateway.example, 192.168.1.10"
   },
   "gatewayConnections": {
     "unpairTitle": "Desvincular Gateway",

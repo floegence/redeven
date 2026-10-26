@@ -94,7 +94,12 @@ try {
     }
     await button('gatewayJoin.verify').click(); await button('gatewayJoin.confirmEnable').waitFor();
     assert.equal(await page.evaluate(() => window.gatewayRequests.some(request => request.operation === 'join')), false);
-    await button('gatewayJoin.confirmEnable').click(); await dialog.waitFor({ state: 'hidden' });
+    await button('gatewayJoin.confirmEnable').click();
+    const enrollmentResult = dialog.locator('[data-gateway-enrollment-result]');
+    await enrollmentResult.getByRole('status').filter({ hasText: i18n.t('gatewayExperience.joined') }).waitFor();
+    assert.equal(await enrollmentResult.getByText(i18n.t('gatewayExperience.joinedHelp'), { exact: true }).isVisible(), true);
+    assert.equal(await dialog.evaluate(element => element.scrollWidth > element.clientWidth + 1), false, locale + ': localized result fits');
+    await button('gatewayExperience.done').click(); await dialog.waitFor({ state: 'hidden' });
     const requests = await page.evaluate(() => window.gatewayRequests);
     assert.equal(new Set(requests.map(request => request.connection_token)).size, 1);
     assert.equal(requests.at(-1).kind, 'close_runtime_gateway');

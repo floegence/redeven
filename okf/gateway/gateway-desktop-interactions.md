@@ -49,7 +49,7 @@ The Environments group puts members and Add environment first; invitation delive
 
 Internal enrollment checks use inline feedback, without status-refreshed toasts. Unknown status never implies rejected credentials; expandable technical details retain the actual diagnosis. Opening Environment settings suspends enrollment, releases its connection and invalidates verification while preserving invitation drafts and the current step. Returning requires a fresh connection before submission.
 
-Use explicit translations and viewport-bounded panels. Saved Gateway and endpoint pickers use the published shared Dropdown with its field-surface marker, keyboard navigation and focus restoration. Focus changes the existing border color without adding an outer frame; native selects and parallel menu behavior do not belong to this enrollment flow. Settings and enrollment address inputs share an explicit HTTPS hostname-and-port example from every locale catalog.
+Use explicit translations and viewport-bounded panels. Saved Gateway and endpoint pickers use the published shared Dropdown with its field-surface marker, keyboard navigation and focus restoration. Focus changes the existing border color without adding an outer frame; native selects and parallel menu behavior do not belong to this enrollment flow. Settings and enrollment address inputs share an explicit HTTPS hostname-and-port example from every locale catalog. Listener and Host examples also belong to every explicit locale catalog. Invitation countdowns use locale plural rules. Member-operation failures show localized recovery text; raw error codes remain in collapsed technical details, including unknown future codes. Policy checks pair localized action names with their technical hook identifiers.
 
 Settings maintenance and card actions share the same foreground action owner, admission and progress renderer. Maintenance replaces the management body in the same modal; Back closes its presentation without reopening a card popover or dispatching again. Network restart review uses this same operation surface. Gateway service confirmation presents the action, target and affected sessions without a diagnostic inventory. Its close icon shares the title row. Admission replaces confirmation controls with a pending state until authoritative operation progress arrives; it cannot resubmit the same action.
 
@@ -60,6 +60,10 @@ Service progress prioritizes observed step labels, current-step state and elapse
 UI state and observations cannot expand authority or imply completion.
 
 # Evidence
+
+- `redeven:desktop/src/shared/i18n/desktopI18n.test.ts` — Explicit ten-locale catalogs, placeholders, dynamic Gateway states, and invitation plural forms.
+- `redeven:desktop/src/welcome/GatewayMembersDialog.client.test.tsx` — Ten-locale member errors, collapsed diagnostics, policy labels, and invitation timers.
+- `redeven:desktop/scripts/check-gateway-access-ui.mjs` — Browser checks for localized errors, expiry, policy labels, and bounded multilingual layouts.
 
 - `redeven:desktop/scripts/check-gateway-auth-ui.mjs` — Ten-locale connection reuse, authentication failure and consent flows.
 - `redeven:desktop/src/main/runtimeGatewayLauncher.test.ts` — Exact Env App bridge reuse, independent ownership and explicit SSH authentication.
