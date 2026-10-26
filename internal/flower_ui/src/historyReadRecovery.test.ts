@@ -1,9 +1,40 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { recoverHistoryRead } from './historyReadRecovery';
+import { FlowerReadDeadlineError, withFlowerReadDeadline } from './requestDeadline';
 
 afterEach(() => vi.useRealTimers());
 
 describe('history read recovery', () => {
+  it('adds no retry timer or repeated request to a successful read', async () => {
+    vi.useFakeTimers();
+    const read = vi.fn().mockResolvedValue('page');
+    expect(await recoverHistoryRead(read, new AbortController().signal)).toBe('page');
+    expect(read).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('shares a single deadline across attempts and aborts the pending transport', async () => {
+    vi.useFakeTimers();
+    let pendingSignal: AbortSignal | undefined;
+    const read = vi.fn(async (signal: AbortSignal) => {
+      pendingSignal = signal;
+      if (read.mock.calls.length === 1) {
+        await new Promise(resolve => setTimeout(resolve, 14000));
+        throw { code: 'history_source_changed' };
+      }
+      return new Promise<string>((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
+    });
+    const result = withFlowerReadDeadline(signal => recoverHistoryRead(() => read(signal), signal), 'Read timed out').catch(error => error);
+    await vi.advanceTimersByTimeAsync(14999);
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(pendingSignal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await result).toBeInstanceOf(FlowerReadDeadlineError);
+    expect(pendingSignal?.aborted).toBe(true);
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+  });
   it('recovers finite transient failures without a manual loading action', async () => {
     vi.useFakeTimers();
     const read = vi.fn().mockRejectedValueOnce({ status: 503 }).mockRejectedValueOnce({ code: 'transport' }).mockResolvedValue('page');

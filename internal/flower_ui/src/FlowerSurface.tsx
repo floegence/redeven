@@ -4415,7 +4415,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       try {
       const foreground = tid === selectedThreadID() && target.source !== 'goal_popup';
       const input = foreground && historyReadingThreadID === tid ? historyReadingInput : {};
-      const live = await readDetail(readSignal => readHistory(tid, input, readSignal, foreground), signal);
+      // Keep retry ownership inside this coalesced demand and its one deadline.
+      // A changed leaf restarts the whole baseline plus preparation; no staged
+      // page or transient failure can replace the accepted document.
+      const live = await readDetail(readSignal => recoverHistoryRead(
+        () => readHistory(tid, input, readSignal, foreground), readSignal,
+      ), signal);
       signal.throwIfAborted();
       if (surfaceDisposed || retiredThreadIDs.has(tid) || target.epoch !== liveTransport.connectionEpoch()) {
         throw new DOMException('Read was superseded.', 'AbortError');
@@ -13009,7 +13014,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       {(message) => (
         <div class="flower-thread-sync-error">
           {errorNotice(
-            copy().chat.threadLoadErrorTitle,
+            threadCache().views.get(selectedThreadID())?.version ? copy().chat.syncStatusFailed : copy().chat.threadLoadErrorTitle,
             message(),
             <Button
               size="sm"
