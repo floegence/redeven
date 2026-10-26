@@ -48,6 +48,9 @@ export function createFlowerScrollTailController(
   const [nearBottom, setNearBottom] = createSignal(true);
   let node: HTMLDivElement | undefined;
   let knownScrollTop = 0;
+  let knownScrollHeight = 0;
+  let knownViewportHeight = 0;
+  let readingTailSpace = 0;
   let layoutFrame = 0;
   let pendingScroll: Readonly<{ smooth?: boolean; force?: boolean }> | undefined;
   let smoothScroll: { startedAt: number; startTop: number } | undefined;
@@ -173,12 +176,31 @@ export function createFlowerScrollTailController(
     // Our own position writes cannot count as user scrolling.
     if (userScroll) userScroll.top = target.scrollTop;
   };
+  const setReadingTailSpace = (height: number) => {
+    if (height === readingTailSpace) return;
+    readingTailSpace = height;
+    if (height) node?.style.setProperty('--flower-reading-tail-space', `${height}px`);
+    else node?.style.removeProperty('--flower-reading-tail-space');
+  };
+  const preserveReadingRange = (top: number) => {
+    const content = node?.firstElementChild;
+    if (!node || !content) return;
+    // scrollHeight includes unused viewport space. Once older rows are
+    // prepended, that space disappears and the browser clamps an otherwise
+    // correct anchor offset. Keep only the trailing room needed at this
+    // reading position; release it when it leaves view or new text fills it.
+    const extent = content.getBoundingClientRect().bottom - node.getBoundingClientRect().top
+      - node.clientTop + node.scrollTop + (parseFloat(getComputedStyle(node).paddingBottom) || 0);
+    const needed = Math.max(0, Math.ceil(top + node.clientHeight - extent));
+    setReadingTailSpace(anchor ? needed : Math.min(readingTailSpace, needed));
+  };
   // Resize, tail-follow, smooth scrolling and disclosure anchoring share one
   // read/write pass. Notifications never cancel and restart the frame deadline.
   const layout = (timestamp: number, notify = true) => {
     if (notify) layoutFrame = 0;
     const target = node;
     if (!target) return;
+    if (options.preparing?.()) setReadingTailSpace(0);
     if (gesture() && !gesture()!.target.isConnected) finishGesture();
     const nativeDelta = target.scrollTop - knownScrollTop;
     // Native wheel scrolling can update scrollTop before dispatching scroll.
@@ -191,7 +213,7 @@ export function createFlowerScrollTailController(
     }
     restoreConnectedAnchor();
     const scrollTop = target.scrollTop;
-    const scrollHeight = target.scrollHeight;
+    let scrollHeight = target.scrollHeight;
     const viewportHeight = target.clientHeight;
     const anchorDelta = anchor ? anchor.title.getBoundingClientRect().top - anchor.top : 0;
     const request = pendingScroll;
@@ -201,6 +223,10 @@ export function createFlowerScrollTailController(
       smoothScroll = { startedAt: timestamp, startTop: scrollTop };
     }
     let nextTop = scrollTop + anchorDelta;
+    if (readingTailSpace || anchor && nextTop > Math.max(0, scrollHeight - viewportHeight)) {
+      preserveReadingRange(nextTop);
+      scrollHeight = target.scrollHeight;
+    }
     if (followingLatest() && (options.canFollowLatest?.() ?? true)) {
       const bottom = Math.max(0, scrollHeight - viewportHeight);
       if (smoothScroll && !options.reducedMotionPreferred()) {
@@ -210,6 +236,8 @@ export function createFlowerScrollTailController(
       } else { smoothScroll = undefined; nextTop = bottom; }
     }
     if (nextTop !== scrollTop) setScrollTop(target, nextTop);
+    knownScrollHeight = scrollHeight;
+    knownViewportHeight = viewportHeight;
     setNearBottom(scrollHeight - nextTop - viewportHeight <= FLOWER_TRANSCRIPT_NEAR_BOTTOM_THRESHOLD_PX);
     if (notify) options.onLayout?.();
     // Reading anchors survive asynchronous Markdown, images and page decoration.
@@ -402,13 +430,15 @@ export function createFlowerScrollTailController(
       }
     }
     if (direction && !followingLatest()) captureReadingAnchor();
-    else if (!input && externalDelta && anchor?.reading) {
+    else if (!input && externalDelta && anchor?.reading
+      && node.scrollHeight === knownScrollHeight && node.clientHeight === knownViewportHeight) {
       // Native focus/scrollIntoView and scrollbar movement can occur without a
       // wheel event. They establish a new reading position, unlike our writes.
       anchor.top -= externalDelta;
       for (const fallback of anchor.fallbacks ?? []) fallback.top -= externalDelta;
       captureReadingAnchor();
     }
+    if (readingTailSpace || node.scrollHeight !== knownScrollHeight || node.clientHeight !== knownViewportHeight) scheduleLayout();
     // Scroll events report geometry; only a verified user scroll may resume.
     setNearBottom(isNearBottom());
     return direction;
@@ -433,8 +463,11 @@ export function createFlowerScrollTailController(
     finishGesture();
     clearAnchor();
     endUserScroll();
+    setReadingTailSpace(0);
     node = nextNode;
     knownScrollTop = node?.scrollTop ?? 0;
+    knownScrollHeight = node?.scrollHeight ?? 0;
+    knownViewportHeight = node?.clientHeight ?? 0;
     setNearBottom(isNearBottom());
     if (!node?.ownerDocument) return;
     // Solid binds cloned template nodes before adoption into the live document.
@@ -474,9 +507,16 @@ export function createFlowerScrollTailController(
       if (options.onLayout) scheduleLayout();
     }) : undefined;
     resizeObserver?.observe(node);
-    if (node.firstElementChild) resizeObserver?.observe(node.firstElementChild);
     const boundNode = node;
+    let disconnected = false;
+    // Solid invokes the viewport ref before inserting its transcript child.
+    // Observe that child after synchronous mounting, so history publication
+    // and hydration are corrected before paint even without viewport resize.
+    queueMicrotask(() => {
+      if (!disconnected && boundNode.firstElementChild) resizeObserver?.observe(boundNode.firstElementChild);
+    });
     disconnect = () => {
+      disconnected = true;
       document.removeEventListener('pointerup', onRelease, true);
       document.removeEventListener('pointercancel', onRelease, true);
       document.removeEventListener('keyup', onKeyUp, true);
@@ -538,6 +578,7 @@ export function createFlowerScrollTailController(
       setGesture(undefined);
       clearAnchor();
       endUserScroll();
+      setReadingTailSpace(0);
       releaseFrame = clearFrame(releaseFrame);
       layoutFrame = clearFrame(layoutFrame);
       cancelScheduledScroll();

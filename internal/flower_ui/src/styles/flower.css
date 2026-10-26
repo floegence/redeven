@@ -3445,6 +3445,17 @@
   margin: 0 auto;
 }
 
+/* The scroll owner retains visible trailing room during short-tail history
+   insertion. This is geometry only, outside message and disclosure identity. */
+.flower-chat-transcript::after,
+.flower-subagent-detail-transcript::after {
+  content: '';
+  display: block;
+  height: var(--flower-reading-tail-space, 0px);
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
 .flower-chat-transcript[data-flower-tail-preparing="true"] .flower-transcript-stack,
 .flower-subagent-detail-transcript[data-flower-tail-preparing="true"] .flower-subagent-detail-timeline {
   visibility: hidden;
@@ -11677,6 +11688,7 @@ button.flower-attachment-preview-trigger:disabled {
 /* The viewport controller exclusively owns transcript position compensation. */
 .flower-chat-transcript,
 .flower-subagent-detail-transcript {
+  --flower-reading-tail-space: 0px;
   overflow-anchor: none;
 }
 
