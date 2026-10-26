@@ -322,9 +322,9 @@ func TestFlowerPromptSizeBudget(t *testing.T) {
 	assertFlowerSystemPrompt(t, prompt)
 	// A byte budget is deterministic and tokenizer-independent; provider usage is
 	// measured separately in the paid lane, including unchanged tool definitions.
-	// Reserve space for the shared identity, visual output and file-delivery rules.
-	if len(prompt) > 1200 {
-		t.Fatalf("system prompt is %d bytes; budget=1200", len(prompt))
+	// Reserve space for the shared identity, visual output, task-file placement and delivery rules.
+	if len(prompt) > 2000 {
+		t.Fatalf("system prompt is %d bytes; budget=2000", len(prompt))
 	}
 	for _, tutorial := range []string{
 		"Put headings, lists, blockquotes", "reason_code must be one of:", "*** Add File:", "Script example after observing",

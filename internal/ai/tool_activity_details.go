@@ -135,6 +135,11 @@ func structuredToolResults(toolName string, data any, existing []fltools.Structu
 		return computerActivityResultRows(toolName, payload)
 	}
 	switch toolName {
+	case "file.present":
+		add(anyToString(payload["title"]), fmt.Sprintf("%v bytes · %s", payload["size"], anyToString(payload["mime"])), anyToString(payload["file_path"]), fltools.StructuredActivityRowFormatText, "", false)
+		if len(rows) > 0 {
+			rows[0].Target = fileActivityTarget(anyToString(payload["file_path"]), "file")
+		}
 	case "tessiven.read":
 		add(anyToString(payload["title"]), fmt.Sprintf("v%v · %v–%v", payload["version"], payload["start_line"], payload["end_line"]), anyToString(payload["document_yaml"]), fltools.StructuredActivityRowFormatCode, "yaml", false)
 		for _, value := range toAnySlice(payload["diagnostics"]) {

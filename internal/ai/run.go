@@ -37,6 +37,7 @@ type runOptions struct {
 	ChatGPT               *chatgpt.Client
 	PlatformHTTPTransport func() (http.RoundTripper, error)
 	Log                   *slog.Logger
+	TaskFiles             *taskFileManager
 	StateDir              string
 	AgentHomeDir          string
 	WorkingDir            string
@@ -95,6 +96,7 @@ type run struct {
 	platformHTTPTransport func() (http.RoundTripper, error)
 	log                   *slog.Logger
 
+	taskFiles          *taskFileManager
 	stateDir           string
 	agentHomeDir       string
 	workingDir         string
@@ -308,6 +310,7 @@ func newRun(opts runOptions) *run {
 	r := &run{
 		platformHTTPTransport:        opts.PlatformHTTPTransport,
 		log:                          opts.Log,
+		taskFiles:                    opts.TaskFiles,
 		stateDir:                     strings.TrimSpace(opts.StateDir),
 		agentHomeDir:                 agentHomeDir,
 		workingDir:                   workingDir,
@@ -435,8 +438,10 @@ func (r *run) beginExecutionAdmission(ctx context.Context) (context.Context, fun
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
 	}
+	releaseFiles := r.taskFiles.acquire(r.threadID)
 	r.muExecution.Lock()
 	if r.executionClosed {
+		releaseFiles()
 		r.muExecution.Unlock()
 		return nil, nil, ErrRunExecutionClosed
 	}
@@ -462,6 +467,7 @@ func (r *run) beginExecutionAdmission(ctx context.Context) (context.Context, fun
 	var releaseOnce sync.Once
 	release := func() {
 		releaseOnce.Do(func() {
+			defer releaseFiles()
 			stopCallerCancellation()
 			r.muExecution.Lock()
 			delete(r.executionAdmissions, admissionID)
@@ -1963,6 +1969,12 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		}
 		return r.toolFileEdit(ctx, p)
 
+	case "file.present":
+		if err := requireRead(meta); err != nil {
+			return nil, err
+		}
+		return r.presentFile(ctx, anyToString(args["file_path"]), anyToString(args["title"]))
+
 	case "file.write":
 		if meta == nil || !meta.CanWrite {
 			return nil, errors.New("write permission denied")
@@ -3339,6 +3351,16 @@ func (r *run) runPathScope() (runPathScope, error) {
 			return runPathScope{}, errInvalidWorkingDir
 		}
 	}
+	if r.stateDir != "" && r.threadID != "" {
+		space, err := r.prepareTaskFiles()
+		if err != nil {
+			return runPathScope{}, err
+		}
+		registry, err = registry.WithPrivateRoot(filepath.Dir(space.Root), space.Root)
+		if err != nil {
+			return runPathScope{}, err
+		}
+	}
 	resolved, err := registry.Resolve(workingDir, filesystemscope.ResolveOptions{RequireExisting: true, RequireDir: true})
 	if err != nil {
 		return runPathScope{}, errInvalidWorkingDir
@@ -3522,6 +3544,10 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 	if canonicalRunID == "" || canonicalThreadID == "" || canonicalTurnID == "" {
 		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeTerminalRuntimeFailure, Message: "Terminal execution identity is unavailable", Retryable: false}
 	}
+	taskEnv, err := r.taskEnvironment(prependRedevenBinToEnv(processenv.Current()))
+	if err != nil {
+		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeTerminalRuntimeFailure, Message: err.Error()}
+	}
 	startRequest := terminalProcessStartRequest{
 		ProcessID:  processID,
 		EndpointID: strings.TrimSpace(r.endpointID),
@@ -3534,7 +3560,7 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 		Stdin:      parsed.Stdin,
 		CwdAbs:     cwdAbs,
 		Shell:      shell,
-		Env:        prependRedevenBinToEnv(processenv.Current()),
+		Env:        taskEnv,
 	}
 	r.muExecution.Lock()
 	if r.executionClosed {

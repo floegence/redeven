@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/floegence/redeven/internal/filesystemscope"
 )
 
 const (
@@ -472,6 +474,13 @@ func (r *run) toolFileEdit(ctx context.Context, args FileEditArgs) (FileMutation
 	if err != nil {
 		return FileMutationResult{}, mapToolFilePathError(err)
 	}
+	scope, err := r.runPathScope()
+	if err != nil {
+		return FileMutationResult{}, err
+	}
+	if _, err = scope.Registry.ResolveTarget(path, filesystemscope.ResolveOptions{ForWrite: true}); err != nil {
+		return FileMutationResult{}, err
+	}
 	info, err := os.Stat(path)
 	if err != nil {
 		return FileMutationResult{}, mapToolFilePathError(err)
@@ -513,6 +522,13 @@ func (r *run) toolFileWrite(ctx context.Context, args FileWriteArgs) (FileMutati
 	path, err := r.resolveStructuredToolPath(args.FilePath, false)
 	if err != nil {
 		return FileMutationResult{}, mapToolFilePathError(err)
+	}
+	scope, err := r.runPathScope()
+	if err != nil {
+		return FileMutationResult{}, err
+	}
+	if _, err = scope.Registry.ResolveTarget(path, filesystemscope.ResolveOptions{ForWrite: true}); err != nil {
+		return FileMutationResult{}, err
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return FileMutationResult{}, err

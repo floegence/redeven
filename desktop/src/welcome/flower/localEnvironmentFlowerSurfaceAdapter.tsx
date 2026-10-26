@@ -1,3 +1,4 @@
+import { downloadFlowerTaskFile, flowerTaskFilePath, type FlowerTaskFileChunk } from '../../../../internal/envapp/ui_src/src/ui/downloads/flowerTaskFileDownload';
 import { createDirectoryFavoritesClient } from '../../../../internal/flower_ui/src/filePicker/directoryFavorites';
 import { withFlowerReadDeadline } from '../../../../internal/flower_ui/src/requestDeadline';
 import { createFlowerConversationPreferenceClient, prepareFlowerNewConversationInput } from '../../../../internal/flower_ui/src/conversationPreferences';
@@ -842,6 +843,9 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
         bridge, 'POST',
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(parentThreadID)}/subagents/${encodeURIComponent(childThreadID)}/input`, input,
       ),
+      loadTaskFiles: (threadID, cursor) => runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/task-files' + (cursor ? '?cursor=' + encodeURIComponent(cursor) : ''), undefined, undefined, options.runtimeEnvironmentID),
+      downloadTaskFile: (threadID, path, working, signal) => downloadFlowerTaskFile(path, offset => runtimeJSON<FlowerTaskFileChunk>(bridge, 'GET', flowerTaskFilePath(threadID,path,working,offset), undefined, undefined, options.runtimeEnvironmentID, signal),signal),
+      cleanTaskFiles: async (threadID) => { await runtimeJSON(bridge, 'DELETE', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/task-files', undefined, undefined, options.runtimeEnvironmentID); },
       loadToolPreview: (input) => runtimeJSON<FlowerToolPreview>(bridge, 'POST',
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(input.thread_id)}/tool-preview`,
         { turn_id: input.turn_id, run_id: input.run_id, tool_call_id: input.tool_call_id },
@@ -970,7 +974,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     },
     loadMessageFile: async ({ path, signal }) => {
       signal.throwIfAborted();
-      const media = await runtimeJSON<RuntimeFlowerMedia>(bridge, 'GET', messageFilePath(path));
+      const media = await runtimeJSON<RuntimeFlowerMedia>(bridge, 'GET', messageFilePath(path), undefined, undefined, options.runtimeEnvironmentID, signal);
       signal.throwIfAborted();
       if (!(media.bytes instanceof Uint8Array)) throw new Error('File preview is unavailable.');
       return new Blob([new Uint8Array(media.bytes)], { type: media.mime_type });
@@ -1028,7 +1032,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       await runtimeJSON<RuntimeFSListResponse>(bridge, 'POST', '/_redeven_proxy/api/fs/list', {
         path: trim(input.path),
         show_hidden: input.showHidden === true,
-      }),
+      }, undefined, options.runtimeEnvironmentID),
     ),
     resolveHandler: async () => decision(),
     loadAttachmentCapability: async (modelID): Promise<FlowerAttachmentCapability> => {

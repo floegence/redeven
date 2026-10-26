@@ -11,7 +11,7 @@ import (
 )
 
 func TestFlowerPromptMatchesSelectedToolSurface(t *testing.T) {
-	// Keep the captured definitions immutable: simplifying the persona must
+	// Keep the captured definitions immutable: task-file delivery adds one explicitly reviewed tool; the remaining definitions must
 	// not change the permission, interaction, or allowlist contracts.
 	var baseline map[string]struct {
 		SystemBytes int    `json:"system_bytes"`
@@ -71,6 +71,10 @@ func promptBoundaryToolDefinitions(surface runToolSurface) ([]byte, error) {
 	definitions := make([]map[string]any, 0, len(surface.FloretToolItems))
 	for _, tool := range surface.FloretToolItems {
 		definition := tool.Definition
+		// Preserve the pre-delivery tool contract independently of the new tool.
+		if definition.Name == "file.present" {
+			continue
+		}
 		definitions = append(definitions, map[string]any{"name": definition.Name, "description": definition.Description, "input_schema": definition.InputSchema, "output_schema": definition.OutputSchema})
 	}
 	return json.Marshal(definitions)

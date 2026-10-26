@@ -5,7 +5,7 @@ description: Typed file mutation statistics, diff disclosure, and action ownersh
 tags: [ai, flower, files, activity, presentation]
 timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-26"
 ---
 # Summary
 
@@ -19,6 +19,10 @@ An activity without typed mutation detail exposes safe purpose and status throug
 the shared disclosure, without inventing a diff panel.
 
 # Contract
+
+[Task files](../ai/flower-task-files.md) add explicit verified delivery results and a
+shared Files panel. The structured result links to the confirmed user destination;
+intermediates remain in a separate expandable working-file section.
 
 Published Floret v7.30.0 owns the product-neutral file Activity payload. A read carries bounded content and line metadata.
 

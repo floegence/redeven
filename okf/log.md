@@ -4,6 +4,8 @@ Recent changes only. The linked concepts own current contracts and evidence; Git
 
 ## 2026-10-26
 
+- Keep [Flower intermediate files](ai/flower-task-files.md) in thread-owned scratch while final deliverables stay at user destinations; use canonical delivery results, authorized chunked downloads and active-work-safe cleanup.
+
 - Recover transient [Flower history synchronization](ui/flower-live-timeline.md) within one bounded detail demand; reuse canonically confirmed historical prefixes without weakening complete-turn preparation, preserve accepted interaction state, and distinguish exhausted refresh from first-load failure.
 - Bind [historical thinking hydration](ui/flower-tool-sequences.md) to its displayed movable node, cancel obsolete disclosure demand and avoid observers for unopened sealed thinking. Qualify unopened tool reads, body mounts and browser/Desktop responsiveness with the built-renderer performance harness.
 - Show [submitted messages](ui/flower-live-timeline.md) immediately from immutable

@@ -308,12 +308,12 @@ describe('Local Environment Flower surface adapter', () => {
   it('loads local media through the bounded preview route and honors cancellation', async () => {
     const bytes = new Uint8Array([0, 128, 255]);
     const bridge = bridgeFor(() => ({ bytes, mime_type: 'video/mp4' }));
-    const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+    const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge, { runtimeEnvironmentID: 'environment_files' });
     const controller = new AbortController();
     const blob = await adapter.loadMessageFile!({ path: '/project/a b.mp4', signal: controller.signal });
     expect(blob.type).toBe('video/mp4');
     expect(new Uint8Array(await blob.arrayBuffer())).toEqual(bytes);
-    expect(bridge.requestRuntimeFlower).toHaveBeenCalledWith({ method: 'GET', path: '/_redeven_proxy/api/fs/file?path=%2Fproject%2Fa+b.mp4&preview=1' });
+    expect(bridge.requestRuntimeFlower).toHaveBeenCalledWith({ method: 'GET', path: '/_redeven_proxy/api/fs/file?path=%2Fproject%2Fa+b.mp4&preview=1', environment_id: 'environment_files', read_id: expect.any(String) });
     controller.abort();
     await expect(adapter.loadMessageFile!({ path: '/project/a b.mp4', signal: controller.signal })).rejects.toThrow();
   });

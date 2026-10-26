@@ -1,3 +1,4 @@
+import { taskFilesEnUS } from '../taskFilesCopy';
 import { markdownMediaEnUS } from '../chat/markdown/mediaCopy';
 import { toolActivityEnUS } from '../toolActivityCopy';
 import { computerUseEnUS } from '../computerUseCopy';
@@ -5,6 +6,7 @@ import { reasoningControlEnUS } from './reasoningControlMessages';
 import { filesystemPickerEnUS } from './filesystemPickerMessages';
 
 export const flowerSurfaceEnUS = {
+  taskFiles: taskFilesEnUS,
   computer: computerUseEnUS,
   reasoningControl: reasoningControlEnUS,
   filesystemPicker: filesystemPickerEnUS,

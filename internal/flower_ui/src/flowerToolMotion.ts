@@ -67,6 +67,7 @@ export const flowerToolMotion: Readonly<Record<string, FlowerToolMotionRecipe>> 
   goal: { icon: 'flower-goal', cycle: 2400, tracks: [{ parts: 'all', keyframes: [{ offset: 0, opacity: 0.55 }, { offset: 0.5, opacity: 1 }, { offset: 1, opacity: 0.55 }] }] },
   "report_to_parent": { icon: 'message-square-text', cycle: 2300, tracks: [] },
   "subagent_events": { icon: 'list-tree', cycle: 2300, tracks: [] },
+  "file.present": { icon: "file-text", cycle: 2400, tracks: [] },
   "file.edit": writingPencilMotion,
   "file.write": writingPencilMotion,
   "apply_patch": writingPencilMotion,

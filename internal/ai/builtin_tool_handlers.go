@@ -58,6 +58,8 @@ func (h *builtInToolHandler) Execute(ctx context.Context, call ToolCall) (result
 	if h == nil || h.r == nil {
 		return ToolResult{}, fmt.Errorf("tool handler unavailable")
 	}
+	releaseFiles := h.r.taskFiles.acquire(h.r.threadID)
+	defer releaseFiles()
 	toolName := strings.TrimSpace(call.Name)
 	if toolName == "" {
 		toolName = strings.TrimSpace(h.toolName)
@@ -622,6 +624,12 @@ func builtInToolDefinitions() []ToolDef {
 			Source:           "builtin",
 			Namespace:        "builtin.file",
 			Priority:         100,
+		},
+		{
+			Name:        "file.present",
+			Description: "Verify and present an existing final deliverable at its user destination. Returns its absolute path, size, MIME and SHA-256. Never moves files, uploads bytes, or accepts application-private task files as final results. Call after writing the final destination.",
+			InputSchema: toSchema(map[string]any{"type": "object", "properties": map[string]any{"file_path": map[string]any{"type": "string"}, "title": map[string]any{"type": "string", "maxLength": 240}}, "required": []string{"file_path"}, "additionalProperties": false}),
+			Visibility:  ToolVisibilitySharedReadonly, Capabilities: []ToolCapabilityClass{ToolCapabilityReadonlyLocal}, Source: "builtin", Namespace: "builtin.file", Priority: 100,
 		},
 		{
 			Name:             "file.write",

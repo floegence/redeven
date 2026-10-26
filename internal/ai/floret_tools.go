@@ -536,7 +536,7 @@ func floretToolResourceKinds(toolName string) []string {
 	switch strings.TrimSpace(toolName) {
 	case "terminal.exec":
 		return []string{"command"}
-	case "image.read", "read_file", "read_files", "rgrep", "find", "file.edit", "file.write", "apply_patch":
+	case "image.read", "read_file", "read_files", "rgrep", "find", "file.edit", "file.write", "file.present", "apply_patch":
 		return []string{"file"}
 	case "attachment.read":
 		return []string{"attachment"}
@@ -587,7 +587,7 @@ func floretToolResources(inv fltools.Invocation[map[string]any]) ([]fltools.Reso
 		if processID := strings.TrimSpace(anyToString(args["process_id"])); processID != "" {
 			return []fltools.ResourceRef{{Kind: "terminal_process", Value: processID}}, nil
 		}
-	case "image.read", "read_file", "file.edit", "file.write":
+	case "image.read", "read_file", "file.edit", "file.write", "file.present":
 		if path := strings.TrimSpace(anyToString(args["file_path"])); path != "" {
 			return []fltools.ResourceRef{{Kind: "file", Value: path}}, nil
 		}

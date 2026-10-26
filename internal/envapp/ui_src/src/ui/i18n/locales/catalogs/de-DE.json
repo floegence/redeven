@@ -6483,6 +6483,30 @@
       "chromeRemoteHint": "Verwenden Sie ein separates Browserprofil mit eigenen gespeicherten Anmeldungen.",
       "chromeRemotePrepare": "Separaten Browser einrichten",
       "chromeRemoteFailed": "Der separate Browser konnte nicht vorbereitet werden. Versuchen Sie es erneut."
+    },
+    "taskFiles": {
+      "title": "Dateien",
+      "results": "Ergebnisse",
+      "working": "Arbeitsdateien",
+      "empty": "Noch keine Dateien bereitgestellt.",
+      "preview": "Vorschau",
+      "folder": "Ordner öffnen",
+      "download": "Herunterladen",
+      "refresh": "Aktualisieren",
+      "more": "Mehr laden",
+      "clean": "Arbeitsdateien bereinigen",
+      "confirm": "Arbeitsdateien löschen? Ergebnisse bleiben an ihrem Speicherort.",
+      "cancel": "Abbrechen",
+      "close": "Schließen",
+      "loading": "Dateien werden geladen…",
+      "failed": "Dateien konnten nicht geladen werden. Erneut versuchen.",
+      "available": "Verfügbar",
+      "changed": "Seit Bereitstellung geändert",
+      "missing": "Datei fehlt",
+      "unavailable": "Nicht verfügbar",
+      "busy": "Während aktiver Gespräche oder Prozesse ist keine Bereinigung möglich.",
+      "warning": "Der Anwendungsstatus liegt in diesem Arbeitsbereich. Verschieben Sie ihn aus dem Projekt, um Zwischendateien zu trennen.",
+      "truncated": "Nur die ersten 200 Arbeitsdateien werden angezeigt."
     }
   },
   "uiCopy": {

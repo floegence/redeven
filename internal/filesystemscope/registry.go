@@ -67,6 +67,8 @@ type ResolveOptions struct {
 }
 
 type Registry struct {
+	privateParent string
+	privateOwn    string
 	mu            sync.RWMutex
 	revision      uint64
 	homeAbs       string
@@ -233,6 +235,9 @@ func (r *Registry) Resolve(path string, opts ResolveOptions) (ResolvedPath, erro
 	}
 	if err != nil {
 		return ResolvedPath{}, err
+	}
+	if r.privateParent != "" && (pathWithin(logicalAbs, r.privateParent) || pathWithin(realAbs, r.privateParent)) && (!pathWithin(logicalAbs, r.privateOwn) || !pathWithin(realAbs, r.privateOwn)) {
+		return ResolvedPath{}, ErrPathOutsideScope
 	}
 	resolved, err := r.resolveRealLocked(input, logicalAbs, realAbs)
 	if err != nil {
@@ -454,4 +459,40 @@ func resolvePathViaExistingAncestor(path string) (string, error) {
 		tail = append(tail, filepath.Base(current))
 		current = parent
 	}
+}
+
+// WithPrivateRoot snapshots current policy and grants only this task's directory.
+func (r *Registry) WithPrivateRoot(parent, own string) (*Registry, error) {
+	if r == nil {
+		return nil, errors.New("nil filesystem scope")
+	}
+	parentReal, err := pathutil.CanonicalizeExistingDirAbs(parent)
+	if err != nil {
+		return nil, err
+	}
+	ownReal, err := pathutil.CanonicalizeExistingDirAbs(own)
+	if err != nil {
+		return nil, err
+	}
+	if ownReal == parentReal || !pathWithin(ownReal, parentReal) {
+		return nil, ErrPathOutsideScope
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := &Registry{privateParent: parentReal, privateOwn: ownReal, revision: r.revision, homeAbs: r.homeAbs, defaultRootID: r.defaultRootID, byID: map[string]Root{}}
+	for _, root := range r.roots {
+		if !pathWithin(root.PathReal, parentReal) {
+			out.roots = append(out.roots, root)
+			out.byID[root.ID] = root
+		}
+	}
+	for _, root := range []Root{
+		{ID: "flower-private", Label: "Private task files", PathAbs: parentReal, PathReal: parentReal, Kind: RootKindCustom, Hidden: true, System: true},
+		{ID: "flower-task", Label: "Current task files", PathAbs: ownReal, PathReal: ownReal, Kind: RootKindCustom, Permissions: PermissionSet{Read: true, Write: true}, Hidden: true, System: true},
+	} {
+		out.roots = append(out.roots, root)
+		out.byID[root.ID] = root
+	}
+	sort.SliceStable(out.roots, func(i, j int) bool { return len(out.roots[i].PathReal) > len(out.roots[j].PathReal) })
+	return out, nil
 }

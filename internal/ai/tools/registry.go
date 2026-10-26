@@ -275,6 +275,10 @@ var builtinDefinitions = map[string]Definition{
 			chipFields("truncated"),
 		),
 	},
+	"file.present": {
+		Name:         "file.present",
+		Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "file_delivery", "result", "error"), operation("present"), labelFields("title"), resultPayloadFields("title", "name", "mime", "size", "sha256", "endpoint_id")),
+	},
 	"file.write": {
 		Name:             "file.write",
 		Mutating:         true,

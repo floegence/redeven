@@ -1356,6 +1356,15 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 			}
 		}
 	}
+	// File cleanup must not race active or background tools. An explicit force
+	// delete cancels the run first; background processes retain their existing owner.
+	if !force {
+		for _, id := range transportThreadIDs {
+			if s.taskFilesBusy(endpointID, id.String()) {
+				return ErrThreadBusy
+			}
+		}
+	}
 	if !canonicalDeleted && force {
 		if _, cancelErr := runtime.Cancel(ctxOrBackground(ctx), flruntime.CancelInput{
 			ThreadID: identity.ThreadID(threadID), RequestKey: flruntime.RequestKey("delete-cancel:" + threadID),
@@ -1380,6 +1389,11 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 		desktop.releaseThreadTransport(releaseCtx, deletedID.String())
 	}
 	releaseCancel()
+	for _, deletedID := range transportThreadIDs {
+		if err := s.deleteTaskFiles(ctxOrBackground(ctx), endpointID, deletedID.String()); err != nil {
+			return err
+		}
+	}
 	if err := db.DeleteThreadProductData(ctxOrBackground(ctx), endpointID, threadID); err != nil {
 		return err
 	}

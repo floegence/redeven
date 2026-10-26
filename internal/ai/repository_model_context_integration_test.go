@@ -172,6 +172,9 @@ func TestModelContextGitChangesStayInToolHistory(t *testing.T) {
 			t.Fatalf("request %d: Git changes appended automatic facts: %+v", i, updates)
 		}
 		for _, section := range updates[0].Sections {
+			if section.Key == "execution_environment" && (!strings.Contains(section.Text, "Task scratch directory:") || !strings.Contains(section.Text, "FLOWER_SCRATCH_DIR")) {
+				t.Fatal("admission omitted task paths")
+			}
 			if section.Key == "repository" {
 				t.Fatalf("request %d contains repository facts: %+v", i, section)
 			}

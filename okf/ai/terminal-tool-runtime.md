@@ -5,13 +5,17 @@ description: Redeven PTY resources with Floret v7 canonical effect and Activity 
 tags: [ai, terminal, tools, runtime]
 timestamp: 2026-08-15T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-23"
+reviewed_at: "2026-10-26"
 ---
 # Summary
 
 Redeven owns PTYs and bounded output; Floret v7 owns canonical tool calls, interactions, effect attempts, results and Activity. One adapter authorizes execution once and publishes current views. Product SQL stores no parallel terminal lifecycle or effect recovery.
 
 # Contract
+
+[Task-file placement](flower-task-files.md) supplies thread scratch/staging through
+child-only environment variables while preserving project cwd and OS temporary
+path conventions. Cleanup waits for owned terminal processes to be reaped.
 
 PTYs use Floret execution/effect identities. `terminal.exec` waits 5 seconds when `yield_ms` is omitted or zero; positive values cap at 30 seconds. Yield returns a running process ID without stopping the command.
 

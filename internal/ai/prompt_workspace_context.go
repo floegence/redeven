@@ -215,6 +215,13 @@ func (r *run) collectModelContextSnapshot(ctx context.Context, permission Flower
 	if endpoint := strings.TrimSpace(r.endpointID); endpoint != "" {
 		runtimeLines = append(runtimeLines, "Runtime endpoint ID: "+endpoint)
 	}
+	if r.stateDir != "" && r.threadID != "" {
+		space, err := r.prepareTaskFiles()
+		if err != nil {
+			return nil, fmt.Errorf("%w: task files: %v", flruntime.ErrModelContextUnavailable, err)
+		}
+		runtimeLines = append(runtimeLines, "- Task scratch directory: "+space.Scratch+" (FLOWER_SCRATCH_DIR; helper scripts and intermediate data, retained across turns)", "- Optional unfinished-file staging directory: "+space.Staging, "- Final deliverables: user destination or established project output location; otherwise the selected working directory above. Task directories are never final destinations.")
+	}
 	runtimeLines = append(runtimeLines, renderPromptEnvironmentFactsLines(workspace.Environment)...)
 	manager := r.ensureSkillManager()
 	if manager == nil {
