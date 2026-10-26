@@ -1,6 +1,6 @@
 import '../index.css';
 import './flower-feature.css';
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { createRoot } from 'solid-js';
 import { createFlowerScrollTailController } from '../../../../flower_ui/src/flowerScrollTail';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
@@ -158,6 +158,70 @@ async function mountChild(count = 330, _varied = false) {
 }
 
 describe('continuous history navigation', () => {
+  it('returns from paged history to the canonical latest window with one action', async () => {
+    const { root, history, viewport, scroll, append } = await mountContinuous();
+    expect(root.querySelector('[data-flower-scroll-to-latest]')).toBeNull();
+    scroll(400, -100);
+    await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="entry-150"]')));
+    const latest = root.querySelector<HTMLButtonElement>('[data-flower-scroll-to-latest]');
+    expect(latest).not.toBeNull();
+    const count = history.mock.calls.length;
+    expect(getComputedStyle(latest!.parentElement!).position).toBe('absolute');
+    latest!.focus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => history.mock.calls.length > count && Boolean(root.querySelector('[data-flower-message-id="entry-329"]')));
+    await waitFor(() => viewport.dataset.flowerTailPreparing !== 'true' && viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= 1);
+    const request = history.mock.calls.at(-1)![1];
+    expect(request.anchor_id).toBeUndefined();
+    expect(request.item_ids).toBeUndefined();
+    expect(history.mock.calls.length).toBe(count + 1);
+    expect(root.querySelector('[data-flower-scroll-to-latest]')).toBeNull();
+    append(329, ' latest-button-live-growth', request.reading_revision!);
+    await waitFor(() => root.querySelector('[data-flower-message-id="entry-329"]')?.textContent?.includes('latest-button-live-growth') === true);
+    await new Promise(resolve => setTimeout(resolve, 250));
+    expect(viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop).toBeLessThanOrEqual(1);
+  });
+  it('returns child history to its canonical latest window with one action', async () => {
+    const { viewport, loadChild, scroll } = await mountChild();
+    scroll(350, -100);
+    await waitFor(() => Boolean(viewport.querySelector('[data-flower-message-id="child-entry-150"]')));
+    const latest = document.querySelector<HTMLButtonElement>('.flower-subagent-detail-window [data-flower-scroll-to-latest]');
+    expect(latest).not.toBeNull();
+    const count = loadChild.mock.calls.length;
+    latest!.click();
+    await waitFor(() => loadChild.mock.calls.length > count && Boolean(viewport.querySelector('[data-flower-message-id="child-entry-329"]')));
+    await waitFor(() => viewport.dataset.flowerTailPreparing !== 'true' && viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= 1);
+    const request = loadChild.mock.calls.at(-1)![2]!;
+    expect(request.anchor_id).toBeUndefined();
+    expect(request.item_ids).toBeUndefined();
+    expect(loadChild.mock.calls.length).toBe(count + 1);
+    expect(document.querySelector('.flower-subagent-detail-window [data-flower-scroll-to-latest]')).toBeNull();
+  });
+
+  it.each(['main', 'child'])('supersedes an in-flight %s history read when returning to latest', async kind => {
+    const mounted = kind === 'main' ? await mountContinuous() : await mountChild();
+    const { viewport, scroll, pauseNext } = mounted;
+    const calls = () => 'history' in mounted ? mounted.history.mock.calls.length : mounted.loadChild.mock.calls.length;
+    const id = kind === 'main' ? 'entry-329' : 'child-entry-329';
+    const pending = pauseNext();
+    try {
+      scroll(350, -100);
+      await waitFor(() => calls() === 2);
+      const latest = document.querySelector<HTMLButtonElement>(kind === 'main'
+        ? '.flower-chat-bottom-dock [data-flower-scroll-to-latest]'
+        : '.flower-subagent-detail-window [data-flower-scroll-to-latest]');
+      expect(latest).not.toBeNull();
+      latest!.click();
+      await waitFor(() => calls() === 3 && viewport.dataset.flowerTailPreparing !== 'true');
+      await waitFor(() => viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= 1);
+      pending.resolve();
+      await new Promise(resolve => setTimeout(resolve, 300));
+      expect(viewport.querySelector('[data-flower-message-id="' + id + '"]')).not.toBeNull();
+      expect(viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop).toBeLessThanOrEqual(1);
+      expect(calls()).toBe(3);
+    } finally { pending.resolve(); }
+  });
+
   it.each(['flower-chat-transcript', 'flower-subagent-detail-transcript'])('corrects late-mounted %s growth before paint without a viewport resize', async className => {
     await page.viewport(1280, 900);
     const viewport = document.createElement('div');
@@ -165,7 +229,7 @@ describe('continuous history navigation', () => {
     viewport.style.cssText = 'position:fixed;inset:0 auto auto 0;width:600px;height:500px;display:block;';
     document.body.append(viewport);
     const root = createRoot(dispose => ({ dispose, scroll: createFlowerScrollTailController({
-      reducedMotionPreferred: () => true, requestAnimationFrame: callback => requestAnimationFrame(callback), cancelAnimationFrame: id => cancelAnimationFrame(id),
+      reducedMotionPreferred: () => false, requestAnimationFrame: callback => requestAnimationFrame(callback), cancelAnimationFrame: id => cancelAnimationFrame(id),
     }) }));
     root.scroll.bind(viewport);
     const stack = document.createElement('div');
@@ -185,6 +249,17 @@ describe('continuous history navigation', () => {
       await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
       expect(Math.abs(anchor.getBoundingClientRect().top - top)).toBeLessThanOrEqual(1);
       expect(viewport.scrollTop).toBeGreaterThan(600);
+      const from = viewport.scrollTop;
+      const room = viewport.style.getPropertyValue('--flower-reading-tail-space');
+      expect(parseFloat(room)).toBeGreaterThan(200);
+      root.scroll.scrollToBottom({ smooth: true });
+      expect(viewport.scrollTop).toBe(from);
+      expect(viewport.style.getPropertyValue('--flower-reading-tail-space')).toBe(room);
+      await new Promise(resolve => setTimeout(resolve, 80));
+      expect(viewport.scrollTop).toBeLessThan(from);
+      expect(viewport.style.getPropertyValue('--flower-reading-tail-space')).toBe(room);
+      await waitFor(() => viewport.style.getPropertyValue('--flower-reading-tail-space') === '');
+      expect(viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop).toBeLessThanOrEqual(1);
     } finally { root.scroll.dispose(); root.dispose(); viewport.remove(); }
   });
   it.each([1, 12])('keeps a short collapsed tail stationary while loading %i older turns', async count => {
@@ -629,7 +704,7 @@ describe('continuous history navigation', () => {
     await waitFor(() => loadChild.mock.calls.length >= 3 && Boolean(viewport.querySelector('[data-flower-message-id="child-entry-150"]')));
     expect(retained?.isConnected).toBe(true);
     expect(document.querySelector('.flower-history-navigation button')).toBeNull();
-    expect(document.querySelector('[data-flower-scroll-to-latest]')).toBeNull();
+    expect(document.querySelector('[data-flower-scroll-to-latest]')).not.toBeNull();
   });
   it('accepts the ordered live baseline and growth even when its HTTP response is lost', async () => {
     const { root, history, scroll, append, loseNextResponse } = await mountContinuous();
@@ -698,7 +773,7 @@ describe('continuous history navigation', () => {
     expect(anchor.isConnected).toBe(true);
     expect(Math.abs(anchor.getBoundingClientRect().top - top)).toBeLessThanOrEqual(1);
     expect(root.querySelector('.flower-history-navigation button')).toBeNull();
-    expect(root.querySelector('[data-flower-scroll-to-latest]')).toBeNull();
+    expect(root.querySelector('[data-flower-scroll-to-latest]')).not.toBeNull();
     scroll(viewport.scrollHeight - viewport.clientHeight - 100, 100);
     await waitFor(() => history.mock.calls.length >= 3);
     expect(history.mock.calls.at(-1)![1].item_ids?.length).toBeLessThanOrEqual(150);

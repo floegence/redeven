@@ -164,6 +164,8 @@ describe('Flower scroll tail controller', () => {
     controller.onWheel(wheel);
     controller.onScroll();
     expect(controller.followingLatest()).toBe(false);
+    expect(controller.nearBottom()).toBe(true);
+    expect(controller.showLatest()).toBe(true);
     metrics.setScrollHeight(800);
     controller.measureAfterLayout();
     raf.flushAll();

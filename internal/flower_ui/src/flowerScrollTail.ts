@@ -161,6 +161,7 @@ export function createFlowerScrollTailController(
     if (!node) return true;
     return node.scrollHeight - node.scrollTop - node.clientHeight <= FLOWER_TRANSCRIPT_NEAR_BOTTOM_THRESHOLD_PX;
   };
+  const latestVisible = () => !followingLatest() && (!nearBottom() || !(options.canFollowLatest?.() ?? true));
   const cancelScheduledScroll = () => { pendingScroll = undefined; };
   const cancelSmoothScroll = () => { smoothScroll = undefined; };
   const stopFollowing = () => {
@@ -223,17 +224,24 @@ export function createFlowerScrollTailController(
       smoothScroll = { startedAt: timestamp, startTop: scrollTop };
     }
     let nextTop = scrollTop + anchorDelta;
-    if (readingTailSpace || anchor && nextTop > Math.max(0, scrollHeight - viewportHeight)) {
+    if (!smoothScroll && (readingTailSpace || anchor && nextTop > Math.max(0, scrollHeight - viewportHeight))) {
       preserveReadingRange(nextTop);
       scrollHeight = target.scrollHeight;
     }
     if (followingLatest() && (options.canFollowLatest?.() ?? true)) {
-      const bottom = Math.max(0, scrollHeight - viewportHeight);
+      const returningWithSpace = Boolean(smoothScroll && readingTailSpace);
+      const bottom = Math.max(0, scrollHeight - (returningWithSpace ? readingTailSpace : 0) - viewportHeight);
       if (smoothScroll && !options.reducedMotionPreferred()) {
         const progress = Math.min(1, Math.max(0, (timestamp - smoothScroll.startedAt) / FLOWER_TRANSCRIPT_SCROLL_TO_LATEST_MS));
         nextTop = smoothScroll.startTop + (bottom - smoothScroll.startTop) * (1 - (1 - progress) ** 3);
         if (progress >= 1) smoothScroll = undefined;
       } else { smoothScroll = undefined; nextTop = bottom; }
+      // Explicit return may animate through retained reading room. Release it
+      // only at the destination, so removing it cannot clamp an animation.
+      if (returningWithSpace && !smoothScroll) {
+        setReadingTailSpace(0);
+        scrollHeight = target.scrollHeight;
+      }
     }
     if (nextTop !== scrollTop) setScrollTop(target, nextTop);
     knownScrollHeight = scrollHeight;
@@ -263,6 +271,7 @@ export function createFlowerScrollTailController(
     } else {
       cancelSmoothScroll();
       pendingScroll = undefined;
+      setReadingTailSpace(0);
       setScrollTop(node, Math.max(0, node.scrollHeight - node.clientHeight));
       setNearBottom(true);
     }
@@ -367,7 +376,7 @@ export function createFlowerScrollTailController(
     if (gesture()) finishGesture();
     clearAnchor();
     const latest = Boolean(target.closest('[data-flower-scroll-to-latest]'));
-    setGesture({ target, ...identity, latest, wasFollowing: followingLatest(), activated: false, scrolled: false, latestVisible: !followingLatest() && !nearBottom() });
+    setGesture({ target, ...identity, latest, wasFollowing: followingLatest(), activated: false, scrolled: false, latestVisible: latestVisible() });
     const title = target.closest<HTMLElement>('[data-flower-disclosure-trigger]');
     if (title && !latest) beginAnchor(title, false);
     trackInteraction();
@@ -548,7 +557,7 @@ export function createFlowerScrollTailController(
       anchor = { title, top: screenTop, activated: true, finished: true };
       flushLayout();
     },
-    showLatest: () => gesture()?.latestVisible ?? (!followingLatest() && !nearBottom()),
+    showLatest: () => gesture()?.latestVisible ?? latestVisible(),
     latestPointerBlocked: () => Boolean(gesture() && !gesture()!.latest),
     onPointerDown,
     onTouchMove,

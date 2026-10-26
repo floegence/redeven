@@ -1534,7 +1534,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   // existing scroll owner positions hidden content before it becomes interactive.
   const prepareTranscriptDestination = (threadID: string, scroll: FlowerScrollTailController, reads: Map<string, AbortController>): boolean => {
     const viewport = scroll.viewport();
-    if (!viewport?.isConnected || viewport.clientHeight <= 0) return false;
+    if (!viewport?.isConnected || viewport.clientHeight <= 0
+      || threadCache().views.get(threadID)?.thread.history_window?.has_after) return false;
     scroll.scrollToBottom({ smooth: false });
     // Prepare only text in the positioned destination, newest first. Earlier
     // placeholders must not occupy read slots ahead of the visible tail.
@@ -6946,6 +6947,29 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     parentEventReading.schedule(direction);
   };
   const scrollTranscriptToBottom = (options: Readonly<{ smooth?: boolean }> = {}) => transcriptScroll.scrollToBottom(options);
+  const returnToLatest = (child = false) => {
+    const scroll = child ? subagentDetailScroll : transcriptScroll;
+    const thread = child ? subagentDetailThread() : selectedThread();
+    const input = child ? subagentReadingInput : historyReadingInput;
+    const pending = child ? subagentDetailLoading() : historyBusy();
+    if (props.adapter.loadHistory && (thread?.history_window?.has_after || input.anchor_id || input.item_ids || pending)) {
+      // Reuse destination preparation and its cancellation/revision fences.
+      // A bounded tail interest returns directly to latest, without walking
+      // every intervening history page or mistaking a window edge for latest.
+      if (child) {
+        subagentReadingPending = false;
+        subagentHistoryDirection = undefined;
+        subagentHistoryEdgeKey = '';
+        subagentDetailScroll.startFollowing();
+        void refreshActiveSubagentDetail(true, {});
+      } else if (thread) {
+        void loadAndSelectThread(thread.thread_id);
+      }
+      return;
+    }
+    scroll.scrollToBottom({ smooth: true });
+  };
+
   const measureTranscriptNearBottomAfterLayout = () => transcriptScroll.measureAfterLayout();
   onCleanup(() => {
     cancelDeferredThreadSelection();
@@ -8459,8 +8483,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
 
   const showScrollToLatestButton = createMemo(() => (
-    !props.adapter.loadHistory
-    && (selectedThreadHasContent() || selectedThreadHasLiveProgress())
+    (selectedThreadHasContent() || selectedThreadHasLiveProgress())
     && !selectedThreadTailPreparing()
     && transcriptScroll.showLatest()
   ));
@@ -12805,8 +12828,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const subagentDetailTimelineEntries = () => subagentTimelineDocument().entries;
   const subagentDetailWindowTitle = createMemo(() => activeSubagentTitle());
   const showSubagentDetailScrollToLatestButton = createMemo(() => (
-    !props.adapter.loadHistory
-    && Boolean(subagentDetailThread())
+    Boolean(subagentDetailThread())
+    && !subagentTailPreparing()
     && subagentDetailScroll.showLatest()
   ));
   const retrySubagentDetailLoad = () => {
@@ -12903,7 +12926,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       onKeyDown={subagentDetailScroll.onKeyDown}
       latestPointerBlocked={subagentDetailScroll.latestPointerBlocked()}
       showScrollToLatest={showSubagentDetailScrollToLatestButton()}
-      onScrollToLatest={() => subagentDetailScroll.scrollToBottom({ smooth: true })}
+      onScrollToLatest={() => returnToLatest(true)}
       onRetryLoad={retrySubagentDetailLoad}
       viewportLeftInset={subagentViewportLeftInset()}
       zIndex={FLOWER_SURFACE_LAYER.subagentWindow}
@@ -13929,10 +13952,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 onKeyDown={transcriptScroll.onKeyDown}
                 aria-label={copy().chat.scrollToLatest}
                 title={copy().chat.scrollToLatest}
-                onClick={() => {
-                  transcriptScroll.startFollowing();
-                  scrollTranscriptToBottom({ smooth: true });
-                }}
+                onClick={() => returnToLatest()}
               >
                 <ChevronDown class="h-4 w-4" />
               </button>

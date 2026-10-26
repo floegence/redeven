@@ -39,6 +39,13 @@ push existing messages down to fill the viewport. Viewport resizing preserves
 the anchor, and destination preparation clears the temporary geometry. The
 transcript content observer attaches after DOM mounting and corrects growth
 before paint. This adds no history reads, persisted state or disclosure changes.
+The floating Latest action stays available above the composer while reading
+away from latest, including at the bottom of a historical window. It is hidden
+during destination preparation and keeps pointer-gesture protection. If the
+latest window is already installed, the action scrolls smoothly and retires
+retained trailing room at arrival. Otherwise it cancels obsolete reading demand,
+installs one bounded tail interest and reveals the prepared latest destination;
+it never walks intervening pages. Main and child views share these semantics.
 The accepted history baseline belongs to the live observer and reading revision;
 superseded navigation cannot replace a newer selection.
 
