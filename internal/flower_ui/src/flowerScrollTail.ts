@@ -24,7 +24,7 @@ export type FlowerScrollTailController = Readonly<{
   onScroll: () => 'before' | 'after' | undefined;
   onWheel: (event: WheelEvent) => void;
   measureAfterLayout: () => void;
-  flushLayout: () => void;
+  flushLayout: (notify?: boolean) => void;
   prepareArrival: () => number;
   scheduleTailScroll: (options?: Readonly<{ smooth?: boolean; force?: boolean }>) => void;
   scrollToBottom: (options?: Readonly<{ smooth?: boolean }>) => void;
@@ -46,12 +46,13 @@ export function createFlowerScrollTailController(
 ): FlowerScrollTailController {
   const [nearBottom, setNearBottom] = createSignal(true);
   let node: HTMLDivElement | undefined;
+  let knownScrollTop = 0;
   let layoutFrame = 0;
   let pendingScroll: Readonly<{ smooth?: boolean; force?: boolean }> | undefined;
   let smoothScroll: { startedAt: number; startTop: number } | undefined;
   const [followingLatest, setFollowingLatest] = createSignal(true);
   let userInterruptionRevision = 0;
-  let anchor: { title: HTMLElement; top: number; activated: boolean; finished?: boolean } | undefined;
+  let anchor: { title: HTMLElement; top: number; activated: boolean; finished?: boolean; reading?: boolean; fallbacks?: { title: HTMLElement; top: number }[] } | undefined;
   type Gesture = {
     target: Element;
     pointerID?: number;
@@ -78,7 +79,72 @@ export function createFlowerScrollTailController(
     userScroll = undefined;
     scrollIntentFrame = clearFrame(scrollIntentFrame);
   };
+  const outerReadingTarget = (target: HTMLElement) => {
+    let result = target;
+    for (let parent = target.parentElement; parent && parent !== node; parent = parent.parentElement) {
+      if (/(auto|scroll)/.test(window.getComputedStyle(parent).overflowY)) result = parent;
+    }
+    return result;
+  };
 
+  const visibleReadingTarget = () => {
+    if (!node?.ownerDocument) return;
+    const bounds = node.getBoundingClientRect();
+    for (const y of [bounds.top + 12, bounds.top + 40, bounds.top + bounds.height / 2]) {
+      for (const x of [bounds.left + bounds.width / 2, bounds.left + 96, bounds.left + bounds.width / 3]) {
+        const hit = node.ownerDocument.elementFromPoint(x, y);
+        const target = hit?.closest<HTMLElement>(
+          '.flower-activity-inline-button, .flower-tool-sequence-toggle, .flower-turn-summary-button, [data-flower-message-id] p, [data-flower-message-id] pre, [data-flower-message-id] li, [data-parent-event], [data-flower-message-id]');
+        if (target && node.contains(target) && target.getBoundingClientRect().height > 0) {
+          // The clipped end of an unresolved skeleton is not reading content.
+          // Anchor the next visible row so replacing that skeleton can grow
+          // above the reader without pushing the following messages away.
+          const message = target.closest<HTMLElement>('[data-flower-message-id]');
+          if (message?.querySelector('.flower-history-text-loading') && message.getBoundingClientRect().top < bounds.top) {
+            const following = [...node.querySelectorAll<HTMLElement>('[data-flower-message-id], [data-parent-event]')].find(row => {
+              const rect = row.getBoundingClientRect();
+              return rect.height > 0 && rect.top >= bounds.top && rect.top < bounds.bottom;
+            });
+            if (following) return outerReadingTarget(following);
+          }
+          return outerReadingTarget(target);
+        }
+      }
+    }
+  };
+  const readingAnchor = (title: HTMLElement) => {
+    const fallbacks: { title: HTMLElement; top: number }[] = [];
+    // A group header can move to its canonical first item when history is
+    // completed. Keep independent visible rows as well as ancestor shells.
+    const bounds = node?.getBoundingClientRect();
+    if (bounds && node?.ownerDocument) {
+      for (const y of [bounds.top + 40, bounds.top + bounds.height / 2, bounds.bottom - 40]) {
+        const hit = node.ownerDocument.elementFromPoint(bounds.left + bounds.width / 2, y);
+        const row = hit?.closest<HTMLElement>('[data-flower-row-message-id], [data-parent-event]');
+        if (row && node.contains(row) && !row.contains(title) && row.getBoundingClientRect().height > 0
+          && !fallbacks.some(value => value.title === row)) fallbacks.push({ title: row, top: row.getBoundingClientRect().top });
+      }
+    }
+    for (let parent = title.parentElement; parent && parent !== node; parent = parent.parentElement) {
+      if (parent.matches('[data-flower-row-message-id], [data-flower-message-id], [data-parent-event], .flower-history-message')) {
+        fallbacks.push({ title: parent, top: parent.getBoundingClientRect().top });
+      }
+    }
+    return { title, top: title.getBoundingClientRect().top, activated: true, reading: true, fallbacks };
+  };
+  const restoreConnectedAnchor = () => {
+    if (!anchor || !node) return false;
+    if (anchor.title.isConnected && node.contains(anchor.title) && anchor.title.getBoundingClientRect().height !== 0) return true;
+    const fallback = anchor.fallbacks?.find(value => value.title.isConnected && node!.contains(value.title) && value.title.getBoundingClientRect().height > 0);
+    if (fallback) { anchor = { ...anchor, ...fallback }; return true; }
+    clearAnchor();
+    return false;
+  };
+  const captureReadingAnchor = () => {
+    if (!node?.ownerDocument || followingLatest() || anchor && !anchor.reading) return;
+    const title = visibleReadingTarget();
+    if (title) anchor = readingAnchor(title);
+  };
   const startFollowing = () => {
     clearAnchor();
     endUserScroll();
@@ -102,17 +168,27 @@ export function createFlowerScrollTailController(
   };
   const setScrollTop = (target: HTMLDivElement, scrollTop: number) => {
     target.scrollTop = scrollTop;
+    knownScrollTop = target.scrollTop;
     // Our own position writes cannot count as user scrolling.
     if (userScroll) userScroll.top = target.scrollTop;
   };
   // Resize, tail-follow, smooth scrolling and disclosure anchoring share one
   // read/write pass. Notifications never cancel and restart the frame deadline.
   const layout = (timestamp: number, notify = true) => {
-    layoutFrame = 0;
+    if (notify) layoutFrame = 0;
     const target = node;
     if (!target) return;
     if (gesture() && !gesture()!.target.isConnected) finishGesture();
-    if (anchor && (!anchor.title.isConnected || !target.contains(anchor.title))) clearAnchor();
+    const nativeDelta = target.scrollTop - knownScrollTop;
+    // Native wheel scrolling can update scrollTop before dispatching scroll.
+    // Layout correction must follow that input, never undo it for one frame.
+    if (userScroll && nativeDelta && anchor?.reading
+      && (userScroll.direction === 0 || Math.sign(nativeDelta) === Math.sign(userScroll.direction))) {
+      anchor.top -= nativeDelta;
+      for (const fallback of anchor.fallbacks ?? []) fallback.top -= nativeDelta;
+      knownScrollTop = target.scrollTop;
+    }
+    restoreConnectedAnchor();
     const scrollTop = target.scrollTop;
     const scrollHeight = target.scrollHeight;
     const viewportHeight = target.clientHeight;
@@ -134,15 +210,19 @@ export function createFlowerScrollTailController(
     if (nextTop !== scrollTop) setScrollTop(target, nextTop);
     setNearBottom(scrollHeight - nextTop - viewportHeight <= FLOWER_TRANSCRIPT_NEAR_BOTTOM_THRESHOLD_PX);
     if (notify) options.onLayout?.();
-    if (anchor?.finished) clearAnchor();
-    if (gesture() || anchor || smoothScroll) scheduleLayout();
+    // Reading anchors survive asynchronous Markdown, images and page decoration.
+    // Only an active disclosure animation needs frame polling.
+    if (anchor?.finished) { anchor.finished = false; anchor.reading = true; }
+    if (gesture() || anchor && !anchor.reading || smoothScroll) scheduleLayout();
   };
   const scheduleLayout = () => {
     if (!layoutFrame) layoutFrame = options.requestAnimationFrame(layout);
   };
-  const flushLayout = () => {
-    layoutFrame = clearFrame(layoutFrame);
-    layout(performance.now());
+  const flushLayout = (notify = true) => {
+    // Before-paint correction must not cancel the scheduled readiness and
+    // history-demand notification owned by the normal layout pass.
+    if (notify) layoutFrame = clearFrame(layoutFrame);
+    layout(performance.now(), notify);
   };
   const scrollToBottom = (scrollOptions: Readonly<{ smooth?: boolean }> = {}) => {
     if (!node || !(options.canFollowLatest?.() ?? true)) return;
@@ -191,6 +271,9 @@ export function createFlowerScrollTailController(
     if (followingLatest() && node.scrollHeight <= node.clientHeight) { notifyIntent(); return; }
     clearAnchor();
     stopFollowing();
+    // At the oldest loaded edge, wheel input may not produce a scroll event.
+    // Keep that visible position protected while its pending page arrives.
+    captureReadingAnchor();
     options.onUserInteraction?.();
     userScroll = { top: node.scrollTop, height: node.scrollHeight, viewportHeight: node.clientHeight, direction, moved: false };
     scrollIntentFrame = clearFrame(scrollIntentFrame);
@@ -239,6 +322,7 @@ export function createFlowerScrollTailController(
   const trackInteraction = scheduleLayout;
   const beginAnchor = (title: HTMLElement, activated: boolean) => {
     if (!node || !node.contains(title)) return;
+    title = outerReadingTarget(title);
     if (anchor?.title === title) {
       anchor.activated ||= activated;
     } else {
@@ -286,6 +370,8 @@ export function createFlowerScrollTailController(
   };
   const onScroll = () => {
     if (!node) return;
+    const externalDelta = node.scrollTop - knownScrollTop;
+    knownScrollTop = node.scrollTop;
     let direction: 'before' | 'after' | undefined;
     const input = userScroll;
     if (input) {
@@ -313,6 +399,14 @@ export function createFlowerScrollTailController(
         }
       }
     }
+    if (direction && !followingLatest()) captureReadingAnchor();
+    else if (!input && externalDelta && anchor?.reading) {
+      // Native focus/scrollIntoView and scrollbar movement can occur without a
+      // wheel event. They establish a new reading position, unlike our writes.
+      anchor.top -= externalDelta;
+      for (const fallback of anchor.fallbacks ?? []) fallback.top -= externalDelta;
+      captureReadingAnchor();
+    }
     // Scroll events report geometry; only a verified user scroll may resume.
     setNearBottom(isNearBottom());
     return direction;
@@ -327,6 +421,7 @@ export function createFlowerScrollTailController(
     beginAnchor(title, true);
   };
   const finishDisclosure = (title: HTMLElement) => {
+    title = outerReadingTarget(title);
     if (anchor?.title !== title || !anchor.activated) return;
     anchor.finished = true;
     scheduleLayout();
@@ -337,6 +432,7 @@ export function createFlowerScrollTailController(
     clearAnchor();
     endUserScroll();
     node = nextNode;
+    knownScrollTop = node?.scrollTop ?? 0;
     setNearBottom(isNearBottom());
     if (!node?.ownerDocument) return;
     // Solid binds cloned template nodes before adoption into the live document.
@@ -355,12 +451,13 @@ export function createFlowerScrollTailController(
       scheduleGestureRelease();
     };
     const onBlur = () => { finishGesture(); clearAnchor(); endUserScroll(); };
+    const onScrollEnd = endUserScroll;
     document.addEventListener('pointerup', onRelease, true);
     document.addEventListener('pointercancel', onRelease, true);
     document.addEventListener('keyup', onKeyUp, true);
     document.addEventListener('click', onClick, true);
     window.addEventListener('blur', onBlur);
-    node.addEventListener('scrollend', endUserScroll);
+    node.addEventListener('scrollend', onScrollEnd);
     // Historical rows may acquire real layout without a message mutation.
     // Capture their non-bubbling notification and reuse the same layout pass.
     node.addEventListener('contentvisibilityautostatechange', measureAfterLayout, true);
@@ -383,7 +480,7 @@ export function createFlowerScrollTailController(
       document.removeEventListener('keyup', onKeyUp, true);
       document.removeEventListener('click', onClick, true);
       window.removeEventListener('blur', onBlur);
-      boundNode.removeEventListener('scrollend', endUserScroll);
+      boundNode.removeEventListener('scrollend', onScrollEnd);
       boundNode.removeEventListener('contentvisibilityautostatechange', measureAfterLayout, true);
       resizeObserver?.disconnect();
       disconnect = undefined;
@@ -397,7 +494,11 @@ export function createFlowerScrollTailController(
     viewport: () => node,
     preserveLayoutAnchor: (title) => {
       if (!node?.contains(title) || followingLatest()) return;
-      anchor = { title, top: title.getBoundingClientRect().top, activated: true };
+      // Preserve the earliest uncorrected screen position across concurrent
+      // body, event and page completions; a later caller must not bless a jump.
+      if (restoreConnectedAnchor()) return;
+      const visible = visibleReadingTarget() ?? title;
+      anchor = readingAnchor(visible);
       scheduleLayout();
     },
     restoreReadingAnchor: (title, screenTop) => {
@@ -412,7 +513,7 @@ export function createFlowerScrollTailController(
     onKeyDown,
     activateDisclosure,
     finishDisclosure,
-    releaseDisclosure: (title) => { if (anchor?.title === title) clearAnchor(); },
+    releaseDisclosure: (title) => { if (anchor?.title === outerReadingTarget(title)) clearAnchor(); },
     userInterruptionRevision: () => userInterruptionRevision,
     startFollowing,
     stopFollowing,

@@ -94,7 +94,7 @@ const hidden = (root: HTMLElement, id: string) => messageRow(root, id)?.querySel
 afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('completed turn process disclosure', () => {
-  it('mounts collapsed process content on demand and releases it after closing', async () => {
+  it('mounts process content on demand and preserves inspected nodes while folded', async () => {
     const { root } = await mount(current(true));
     await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'false');
     await new Promise(resolve => setTimeout(resolve, 250));
@@ -103,8 +103,10 @@ describe('completed turn process disclosure', () => {
     expect(message(root, 'final-a')).not.toBeNull();
     summary(root)!.click();
     await waitFor(() => Boolean(message(root, 'progress')));
+    const inspected = message(root, 'progress');
     summary(root)!.click();
-    await waitFor(() => !message(root, 'progress'));
+    await waitFor(() => hidden(root, 'progress'));
+    expect(message(root, 'progress')).toBe(inspected);
     summary(root)!.click();
     await waitFor(() => Boolean(message(root, 'progress')));
     expect(message(root, 'final-a')).not.toBeNull();
@@ -130,8 +132,7 @@ describe('completed turn process disclosure', () => {
     send(2);
     const row = () => root.querySelector<HTMLElement>('[data-flower-decoration-id="only-compaction"]');
     await waitFor(() => Boolean(summary(root)) && Boolean(root.querySelector('[data-flower-row-decoration-id="only-compaction"]')));
-    expect(summary(root)!.getAttribute('aria-expanded')).toBe('false');
-    summary(root)!.click();
+    expect(summary(root)!.getAttribute('aria-expanded')).toBe('true');
     await waitFor(() => row()?.closest('.flower-turn-row-viewport')?.getAttribute('aria-hidden') !== 'true');
     expect(row()!.closest('.flower-turn-row-viewport')?.hasAttribute('inert')).toBe(false);
     send(1, []); send(1, []);
@@ -163,7 +164,10 @@ describe('completed turn process disclosure', () => {
     live.envelope({ schema_version: 3, kind: 'thread.batch', thread_id: 'process', current: terminal, timeline_decorations: decorations });
     const divider = (id: string) => root.querySelector<HTMLElement>('[data-flower-decoration-id="' + id + '"]')!;
     const collapsed = (id: string) => root.querySelector(`[data-flower-row-decoration-id="${id}"] .flower-turn-row-viewport`)?.getAttribute('aria-hidden') === 'true';
-    await waitFor(() => Boolean(summary(root)) && collapsed('third'));
+    await waitFor(() => Boolean(summary(root)));
+    expect(collapsed('third')).toBe(false);
+    summary(root)!.click();
+    await waitFor(() => collapsed('third'));
     expect(['first', 'second', 'third'].every(collapsed)).toBe(true);
     expect(collapsed('manual')).toBe(false);
     summary(root)!.click();
@@ -221,10 +225,12 @@ describe('completed turn process disclosure', () => {
     else await inspectTranscript(root);
     live.push(current(true, { view_version: 3 }));
     await waitFor(() => prose.closest('.flower-turn-row')?.getAttribute('data-flower-turn-process') === 'true');
-    expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
     expect(hidden(root, 'progress')).toBe(false);
     expect(message(root, 'progress')).toBe(prose);
     document.getSelection()?.removeAllRanges();
+    summary(root)!.click();
+    expect(hidden(root, 'progress')).toBe(false);
     summary(root)!.click();
     expect(hidden(root, 'progress')).toBe(true);
     expect(hidden(root, 'final-a')).toBe(false);
@@ -275,7 +281,7 @@ describe('completed turn process disclosure', () => {
     expect(summary(root)?.textContent).toContain('11 subtask updates');
     expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
     expect(parentProcessEvents.every((event) => eventHidden(root, event.id))).toBe(true);
-    await waitFor(() => !eventRow(root, 'event-0'));
+    await waitFor(() => eventHidden(root, 'event-0'));
     expect(message(root, 'final-a')).toBe(final);
     expect(hidden(root, 'final-a')).toBe(false);
     expect(hidden(root, 'user')).toBe(false);
@@ -326,7 +332,7 @@ describe('completed turn process disclosure', () => {
     } else await inspectTranscript(root, row);
     live.push(current(true, { view_version: 3, parent_events: parentProcessPage([{ ...pending, resolved: true }]) }));
     await waitFor(() => summary(root)?.textContent?.includes('1 subtask update') === true);
-    expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
     expect(eventHidden(root, pending.id)).toBe(false);
     expect(row.closest('[inert]')).toBeNull();
     if (protection === 'focus') expect(document.activeElement).toBe(row);
@@ -334,6 +340,8 @@ describe('completed turn process disclosure', () => {
     root.querySelector('[role="menu"]')?.remove();
     document.dispatchEvent(new PointerEvent('pointerup'));
     document.dispatchEvent(new KeyboardEvent('keyup'));
+    summary(root)!.click();
+    expect(eventHidden(root, pending.id)).toBe(false);
     summary(root)!.click();
     expect(eventHidden(root, pending.id)).toBe(true);
     live.push(current(true, { view_version: 4, parent_events: parentProcessPage([{ ...pending, resolved: true }]) }));
@@ -351,8 +359,7 @@ describe('completed turn process disclosure', () => {
     expect(message(root, 'final-a')).toBe(final);
     expect(final.querySelector('time')?.dateTime).toBe('2026-10-11T12:02:38.000Z');
     expect(message(root, 'final-b').querySelector('.flower-answer-actions')).not.toBeNull();
-    summary(root)!.click();
-    await waitFor(() => !hidden(root, 'progress'));
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
     expect(message(root, 'progress').querySelector('.flower-answer-actions')).toBeNull();
     expect(message(root, 'progress').querySelector('time')).toBeNull();
   });
@@ -399,20 +406,23 @@ describe('completed turn process disclosure', () => {
     await waitFor(() => [...root.querySelectorAll('.flower-turn-row-viewport[aria-hidden="true"]')].every((row) => getComputedStyle(row).display === 'none'));
     expect(message(root, 'final-a').getBoundingClientRect().top - summary(root)!.getBoundingClientRect().bottom).toBeLessThanOrEqual(32);
   });
-  it('collapses successful work despite a tool failure, retaining final DOM and both final segments', async () => {
+  it('retains successful live work until manually folded, preserving final DOM and both final segments', async () => {
     const { root, live } = await mount();
     expect(summary(root)).toBeNull();
     const final = message(root, 'final-a');
     live.push(current(true));
-    await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'false');
+    await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'true');
     expect(summary(root)?.textContent).toContain('2 minutes 18 seconds');
-    expect(hidden(root, 'progress')).toBe(true);
-    expect(hidden(root, 'tool')).toBe(true);
+    expect(hidden(root, 'progress')).toBe(false);
+    expect(hidden(root, 'tool')).toBe(false);
     expect(hidden(root, 'user')).toBe(false);
     expect(hidden(root, 'final-a')).toBe(false);
     expect(hidden(root, 'final-b')).toBe(false);
     expect(message(root, 'final-a')).toBe(final);
     const button = summary(root)!;
+    button.click();
+    await waitFor(() => hidden(root, 'progress'));
+    await new Promise(resolve => setTimeout(resolve, 240));
     const top = button.getBoundingClientRect().top;
     await userEvent.click(button);
     await waitFor(() => !hidden(root, 'progress'));
@@ -465,22 +475,23 @@ describe('completed turn process disclosure', () => {
     expect(outcomeNotice()?.textContent).toBeTruthy();
     expect(root.querySelectorAll('.flower-run-error')).toHaveLength(outcome === 'cancelled' ? 0 : 1);
   });
-  it.each(['failed', 'cancelled', 'interrupted'] as const)('collapses default %s work when a newer ordinary turn starts', async outcome => {
+  it.each(['failed', 'cancelled', 'interrupted'] as const)('preserves expanded %s work when a newer ordinary turn starts', async outcome => {
     const stopped = current(true, { last_outcome: outcome, turns: [turn({ outcome, final_item_ids: [], final_boundary_complete: false })] });
     const { root, live } = await mount(stopped);
     expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
     const partial = message(root, 'final-a');
     live.push(continued(stopped));
-    await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'false');
-    expect(hidden(root, 'thinking')).toBe(true);
-    expect(hidden(root, 'tool')).toBe(true);
-    expect(hidden(root, 'progress')).toBe(true);
+    await waitFor(() => Boolean(message(root, 'next-user')));
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
+    expect(hidden(root, 'thinking')).toBe(false);
+    expect(hidden(root, 'tool')).toBe(false);
+    expect(hidden(root, 'progress')).toBe(false);
     expect(hidden(root, 'final-a')).toBe(false);
     expect(hidden(root, 'next-user')).toBe(false);
     expect(message(root, 'final-a')).toBe(partial);
     expect(root.querySelector('.flower-turn-ended')).not.toBeNull();
     summary(root)!.click();
-    expect(hidden(root, 'tool')).toBe(false);
+    expect(hidden(root, 'tool')).toBe(true);
   });
   it.each(['selection', 'focus', 'tool', 'pointer', 'keyboard', 'menu', 'reading', 'manual-open', 'manual-collapse'] as const)('preserves %s inspection or choice when abnormal work becomes historical', async protection => {
     const stopped = current(true, { last_outcome: 'failed', turns: [turn({ outcome: 'failed', final_item_ids: [], final_boundary_complete: false })] });
@@ -556,7 +567,7 @@ describe('completed turn process disclosure', () => {
     expect(details).not.toBeNull();
     summary(root)!.click();
     live.push({ ...done, items, goal: nextGoal, view_version: 4 });
-    await waitFor(() => !message(root, 'tool'));
+    await waitFor(() => hidden(root, 'tool'));
     expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
     summary(root)!.click();
     await waitFor(() => Boolean(message(root, 'tool')));
@@ -608,18 +619,14 @@ describe('completed turn process disclosure', () => {
     await new Promise((resolve) => setTimeout(resolve, 180));
     expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
   });
-  it('settles outer work independently from a manually expanded thinking segment', async () => {
+  it('preserves an inspected thinking segment through completion and outer folding', async () => {
     const { root, live } = await mount();
     root.querySelector<HTMLButtonElement>('.flower-thinking-toggle')!.click();
     expect(root.querySelector('[data-flower-thinking-view="expanded"]')).not.toBeNull();
     (document.activeElement as HTMLElement | null)?.blur();
     live.push(current(true));
-    await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'false');
-    expect(root.querySelector('.flower-thinking-disclosure')?.getAttribute('data-flower-thinking-view')).toBe('collapsed');
-    summary(root)!.click();
-    await waitFor(() => !hidden(root, 'thinking'));
-    expect(root.querySelector('.flower-thinking-disclosure')?.getAttribute('data-flower-thinking-view')).toBe('collapsed');
-    root.querySelector<HTMLButtonElement>('.flower-thinking-toggle')!.click();
+    await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'true');
+    expect(root.querySelector('.flower-thinking-disclosure')?.getAttribute('data-flower-thinking-view')).toBe('expanded');
     expect(root.querySelector('[data-flower-thinking-view="expanded"]')).not.toBeNull();
     summary(root)!.click();
     expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
@@ -640,7 +647,7 @@ describe('completed turn process disclosure', () => {
     await new Promise((resolve) => setTimeout(resolve, 80));
     expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
   });
-  it('anchors the conclusion when completed process above the reading viewport collapses', async () => {
+  it('keeps the conclusion anchored when process above the reader completes', async () => {
     const initial = current();
     const content = initial.items!.map((item) => item.id === 'progress'
       ? { ...item, text: Array.from({ length: 90 }, (_, i) => `Process line ${i}.`).join('\n\n') }
@@ -654,7 +661,7 @@ describe('completed turn process disclosure', () => {
     expect(message(root, 'progress').getBoundingClientRect().bottom).toBeLessThan(viewport.getBoundingClientRect().top);
     const top = final.getBoundingClientRect().top;
     live.push({ ...current(true), items: [...content.map((item) => ({ ...item, live: false })), current(true).items!.at(-1)!] });
-    await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'false');
+    await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'true');
     await new Promise((resolve) => setTimeout(resolve, 240));
     expect(Math.abs(final.getBoundingClientRect().top - top)).toBeLessThanOrEqual(1);
     expect(message(root, 'final-a')).toBe(final);

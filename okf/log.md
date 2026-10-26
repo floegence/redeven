@@ -4,6 +4,8 @@ Recent changes only. The linked concepts own current contracts and evidence; Git
 
 ## 2026-10-25
 
+- Keep [history reading](ui/flower-live-timeline.md) stable through bounded pagination: retain inspected documents, publish complete grouping facts atomically, and preserve [tool](ui/flower-tool-sequences.md), thinking and [turn disclosure](ui/flower-turn-process-disclosure.md) choices without automatic folds.
+
 - Bound [history navigation](ui/flower-live-timeline.md) by request/preview bytes and user scroll demand; preserve Retry and qualify deep scrolling through the [product HTTP boundary](operations/flower-thread-switch-qualification.md).
 - Align [Flower qualification](operations/flower-live-queue-performance.md) with the published SSE parser and product framing. Retain failed CPU/lifecycle samples alongside exact-content and [bounded metadata-write evidence](operations/flower-thread-switch-qualification.md).
 - Keep [Flower startup](architecture/flower-startup-presentation.md) actionable in collapsed companions through runtime preparation and first conversation loading, with explicit expansion and recovery.

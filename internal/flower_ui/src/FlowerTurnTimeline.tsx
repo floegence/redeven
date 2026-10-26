@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, onCleanup, onMount, untrack, type Accessor, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack, type Accessor, type JSX } from 'solid-js';
 import { ChevronRight } from '@floegence/floe-webapp-core/icons';
 import type { FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
 import type { FlowerTurnProcessCopy } from './copy';
@@ -12,7 +12,7 @@ import { createFlowerToolSequenceLayout } from './flowerToolSequenceLayout';
 import { flowerDurationParts, projectFlowerTurnProcess, type FlowerTurnProcessProjection } from './flowerTurnPresentation';
 import { createFlowerActivityTitleReveal, FlowerActivityTitleRevealContext } from './flowerActivityTitleReveal';
 
-export function FlowerTurnTimeline(props: Readonly<{
+type TimelineProps = Readonly<{
   thread: FlowerThreadSnapshot | null | undefined;
   entries: readonly FlowerTimelineEntry[];
   failureNoticeVisible: boolean;
@@ -26,8 +26,78 @@ export function FlowerTurnTimeline(props: Readonly<{
   readingBreaks?: ReadonlySet<string>;
   renderBefore?: (entry: Accessor<FlowerTimelineEntry>) => JSX.Element;
   renderEntry: (entry: Accessor<FlowerTimelineEntry>, visible: Accessor<boolean>) => JSX.Element;
-}>) {
-  const keys = createMemo(() => props.entries.map((entry) => JSON.stringify([props.thread?.thread_id, entry.key])));
+}>;
+
+// Each section owns only measured geometry and offscreen layout. Disclosure, grouping and
+// title policy remain owned by the single timeline, including across sections.
+function HistorySection(props: Readonly<{ entries: readonly FlowerTimelineEntry[]; scroll: FlowerScrollTailController; sectionKey: string; children: JSX.Element }>) {
+  const [layoutVisible, setLayoutVisible] = createSignal(true);
+  const [height, setHeight] = createSignal<number>();
+  let shell!: HTMLDivElement;
+  let content!: HTMLDivElement;
+  let near = true;
+  let measuredWidth = 0;
+  const protectedContent = () => {
+    const selection = document.getSelection();
+    return shell.contains(document.activeElement) || Boolean(selection && !selection.isCollapsed
+      && Array.from({ length: selection.rangeCount }, (_, i) => selection.getRangeAt(i)).some(range => range.intersectsNode(shell)));
+  };
+  const live = () => props.entries.some(entry => entry.type === 'message' && entry.message.live)
+    || props.entries.some(entry => entry.type !== 'message' && entry.type !== 'parent_event' && entry.type !== 'context_compaction');
+  const settle = () => setLayoutVisible(near || live() || protectedContent() || height() === undefined);
+  createEffect(() => { void props.entries; setLayoutVisible(true); });
+  onMount(() => {
+    const intersection = new IntersectionObserver(records => { near = records[0].isIntersecting; settle(); },
+      { root: props.scroll.viewport(), rootMargin: '1800px 0px' });
+    intersection.observe(shell);
+    const resize = new ResizeObserver(() => {
+      if (!layoutVisible()) return;
+      const rect = shell.getBoundingClientRect();
+      if (rect.width > 0) { measuredWidth = rect.width; setHeight(rect.height); }
+      settle();
+      // ResizeObserver runs after layout and before paint. Deferring this
+      // correction to another animation frame exposes one frame of jumping.
+      props.scroll.flushLayout(false);
+    });
+    resize.observe(content);
+    const width = new ResizeObserver(() => {
+      if (Math.abs(shell.clientWidth - measuredWidth) > 1) setLayoutVisible(true);
+    });
+    width.observe(shell);
+    document.addEventListener('selectionchange', settle);
+    document.addEventListener('focusout', settle);
+    onCleanup(() => { intersection.disconnect(); resize.disconnect(); width.disconnect();
+      document.removeEventListener('selectionchange', settle); document.removeEventListener('focusout', settle); });
+  });
+  return <div ref={shell} data-flower-history-section={props.sectionKey} data-flower-history-mounted={layoutVisible() ? 'true' : 'false'}
+    style={{ 'content-visibility': layoutVisible() ? 'visible' : 'hidden', 'contain-intrinsic-block-size': height() === undefined ? undefined : height() + 'px', 'overflow-anchor': 'none' }}>
+    <div ref={content} style={{ display: 'flow-root' }}>{props.children}</div>
+  </div>;
+}
+
+export function FlowerTurnTimeline(props: TimelineProps) {
+  const sections = createMemo<{ key: string; entries: FlowerTimelineEntry[] }[]>((previous = []) => {
+    const prior = new Map(previous.map(section => [section.key, section]));
+    const id = (entry: FlowerTimelineEntry) => entry.type === 'message' ? entry.message.turn_id : entry.type === 'parent_event'
+      ? entry.event.parent_turn_id : entry.type === 'context_compaction' ? entry.decoration.compaction.turn_id : undefined;
+    const last = new Map<string, number>();
+    props.entries.forEach((entry, index) => { const turn = id(entry); if (turn) last.set(turn, index); });
+    const result: { key: string; entries: FlowerTimelineEntry[] }[] = [];
+    for (let first = 0; first < props.entries.length;) {
+      let end = first;
+      for (let i = first; i <= end; i++) end = Math.max(end, last.get(id(props.entries[i]) ?? '') ?? i);
+      const entry = props.entries[first];
+      const key = JSON.stringify([props.thread?.thread_id, id(entry) ?? entry.key]);
+      const entries = props.entries.slice(first, end + 1);
+      const retained = prior.get(key);
+      result.push(retained && retained.entries.length === entries.length && entries.every((value, index) => value === retained.entries[index])
+        ? retained : { key, entries });
+      first = end + 1;
+    }
+    return result;
+  });
+  const sectionKeys = createMemo(() => sections().map(section => section.key));
+  const bySection = createMemo(() => new Map(sections().map(section => [section.key, section.entries])));
   const entries = createMemo(() => new Map(props.entries.map((entry) => [entry.key, entry])));
   const failureTurnID = createMemo(() => props.failureNoticeVisible
     ? props.thread?.turns?.at(-1)?.turn_id : undefined);
@@ -43,6 +113,7 @@ export function FlowerTurnTimeline(props: Readonly<{
     onCleanup(() => observer.disconnect());
   });
   const motions = new Set<string>();
+  const [retainedRows, setRetainedRows] = createSignal<ReadonlySet<string>>(new Set());
   let layoutAnchor: HTMLElement | undefined;
   let gestureTarget: Element | undefined;
   let gestureFrame: number | undefined;
@@ -132,7 +203,9 @@ export function FlowerTurnTimeline(props: Readonly<{
         const newlyFoldable = group.processKeys.filter((key) => previous.value.rows.has(key)
           && !previous.value.rows.get(key)!.processKeys.includes(key));
         if (newlyFoldable.length && inspectionProtected(group.turnID, newlyFoldable)) {
-          props.choices.retainExpanded(identity(group.turnID));
+          // A newly classified row may already contain the user's selection.
+          // Keep that row visible without reopening the rest of a folded turn.
+          setRetainedRows(previous => new Set([...previous, ...newlyFoldable]));
         }
       }
     });
@@ -154,7 +227,7 @@ export function FlowerTurnTimeline(props: Readonly<{
         });
         const turnID = processes().rows.get(group.entryKeys[0])?.turnID ?? '';
         if (inspectionProtected(turnID, group.entryKeys, true, inspectedNodes)) {
-          props.choices.observe(sequenceIdentity(group.key), 'manual', () => false);
+          props.choices.observe(sequenceIdentity(group.key), 'manual');
           props.choices.retainExpanded(sequenceIdentity(group.key));
         }
       }
@@ -169,7 +242,7 @@ export function FlowerTurnTimeline(props: Readonly<{
     const threadID = props.thread?.thread_id;
     const execution = props.thread?.current_execution;
     if (threadID && execution && props.thread?.status === 'running') {
-      props.choices.observe(identity(execution.turn_id), 'none', () => false);
+      props.choices.observe(identity(execution.turn_id), 'none');
     }
     let cancelled = false;
     onCleanup(() => { cancelled = true; });
@@ -181,20 +254,7 @@ export function FlowerTurnTimeline(props: Readonly<{
       for (const group of groups.groups.values()) {
         // Automatic folding must not hide a title that has just arrived.
         if (group.disclosure === 'automatic' && group.processKeys.some(key => revealing.has(key))) continue;
-        // Check protection after content commits, when defaults first settle or change.
-        props.choices.observe(identity(group.turnID), group.disclosure,
-          () => inspectionProtected(group.turnID, group.processKeys),
-          (expanded) => {
-            preserveReadingAnchor(expanded ? [] : group.processKeys);
-            if (expanded && layoutAnchor) {
-              const anchor = layoutAnchor;
-              queueMicrotask(() => {
-                if (layoutAnchor !== anchor) return;
-                props.scroll.finishDisclosure(anchor);
-                layoutAnchor = undefined;
-              });
-            }
-          });
+        props.choices.observe(identity(group.turnID), group.disclosure);
       }
     }));
   });
@@ -209,10 +269,7 @@ export function FlowerTurnTimeline(props: Readonly<{
       const revealing = titleReveal.revealingEntries();
       for (const group of projection.groups.values()) {
         if (group.disclosure === 'automatic' && group.entryKeys.some(key => revealing.has(key))) continue;
-        const turnID = processes().rows.get(group.entryKeys[0])?.turnID ?? '';
-        props.choices.observe(sequenceIdentity(group.key), group.disclosure,
-          () => inspectionProtected(turnID, group.entryKeys, true),
-          () => preserveReadingAnchor(group.entryKeys));
+        props.choices.observe(sequenceIdentity(group.key), group.disclosure);
       }
     }));
   });
@@ -256,7 +313,7 @@ export function FlowerTurnTimeline(props: Readonly<{
   const row = (key: string, entry: Accessor<FlowerTimelineEntry>) => {
     const group = createMemo(() => processes().rows.get(key));
     const process = createMemo(() => group()?.processKeys.includes(key) ?? false);
-    const expanded = createMemo(() => !process() || group()?.staticOverview === true
+    const expanded = createMemo(() => !process() || retainedRows().has(key) || group()?.staticOverview === true
       || props.choices.expanded(identity(group()!.turnID), group()!.disclosure));
     const ended = createMemo(() => {
       const current = group();
@@ -307,10 +364,13 @@ export function FlowerTurnTimeline(props: Readonly<{
       layoutAnchor = button;
       props.scroll.activateDisclosure(button);
       props.choices.toggle(identity(current.turnID), current.disclosure);
+      setRetainedRows(previous => new Set([...previous].filter(key => !current.processKeys.includes(key))));
     };
     onCleanup(() => { nodes.delete(key); motions.delete(key); });
-    // Mount only while the disclosure is visible or animating. Stable rows
-    // keep their subtree until closing has finished.
+    // Retain inspected content while folded: reopening must preserve nested
+    // disclosure choices, selections and the internal reading offset.
+    const [contentMounted, setContentMounted] = createSignal(untrack(expanded));
+    createEffect(() => { if (expanded()) setContentMounted(true); });
     const Content = () => {
       const content = untrack(() => props.renderEntry(entry, expanded));
       return <Show when={entry().type === 'parent_event' && sequences().members.has(key)} fallback={content}>
@@ -347,16 +407,21 @@ export function FlowerTurnTimeline(props: Readonly<{
             onPointerDown={(event) => startGesture(event.target as Element)}
             onKeyDown={(event) => startGesture(event.target as Element)}
             onContextMenu={() => { menuOwner = group()?.turnID; }}>
-            <Show when={motion.mounted()}><Content /></Show>
+            <Show when={contentMounted()}><Content /></Show>
           </div>
         </div>
         <Show when={ended()}>{(label) => <div class="flower-turn-ended" role="status">{label()}</div>}</Show>
       </div>
     );
   };
-  return <FlowerActivityTitleRevealContext.Provider value={titleReveal}><FlowerToolSequenceContext.Provider value={sequenceContext}><div class="flower-turn-timeline" ref={timeline}><For each={keys()}>{(token) => {
-    const key = (JSON.parse(token) as [string, string])[1];
-    const entry = createMemo(() => entries().get(key)!);
-    return <>{props.renderBefore?.(entry)}{row(key, entry)}</>;
-  }}</For></div></FlowerToolSequenceContext.Provider></FlowerActivityTitleRevealContext.Provider>;
+  return <FlowerActivityTitleRevealContext.Provider value={titleReveal}><FlowerToolSequenceContext.Provider value={sequenceContext}><div class="flower-turn-timeline" ref={timeline}>
+    <For each={sectionKeys()}>{sectionKey => {
+      const section = createMemo(() => bySection().get(sectionKey) ?? []);
+      const keys = createMemo(() => section().map(entry => entry.key));
+      return <HistorySection sectionKey={sectionKey} entries={section()} scroll={props.scroll}><For each={keys()}>{key => {
+        const entry = createMemo(() => entries().get(key)!);
+        return <>{props.renderBefore?.(entry)}{row(key, entry)}</>;
+      }}</For></HistorySection>;
+    }}</For>
+  </div></FlowerToolSequenceContext.Provider></FlowerActivityTitleRevealContext.Provider>;
 }

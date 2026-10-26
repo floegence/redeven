@@ -72,6 +72,22 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
 }
 
 describe('buildFlowerTimelineEntries', () => {
+  it('retains unrelated message and receipt identities when another history page adds decorations', () => {
+    const messages: FlowerThreadSnapshot['messages'] = [
+      { id: 'old', role: 'assistant', content: 'Earlier answer', status: 'complete', created_at_ms: 1, canonical_ordinal: 2 },
+      { id: 'new', role: 'assistant', content: 'Later answer', status: 'complete', created_at_ms: 2, canonical_ordinal: 5 },
+    ];
+    const event: FlowerParentEvent = { id: 'receipt', canonical_ordinal: 3, kind: 'report', parent_thread_id: 'thread-1',
+      source_thread_id: 'child', source_turn_id: 'child-turn', source_run_id: 'child-run', source_entry_id: 'child-entry', received_at: new Date(1).toISOString(), admitted: false };
+    const before = buildFlowerTimelineEntries(thread({ messages }), [event]);
+    const after = buildFlowerTimelineEntries(thread({ messages, timeline_decorations: [{
+      decoration_id: 'compact', kind: 'context_compaction', ordinal: 0,
+      anchor: { target_kind: 'message', message_id: 'new', edge: 'after' },
+      compaction: { operation_id: 'compact', turn_id: 'turn', canonical_ordinal: 6, phase: 'complete', status: 'compacted', updated_at_ms: 3 },
+    }] }), [event]);
+    for (const key of ['message:old', 'parent-event:receipt']) expect(after.find(entry => entry.key === key)).toBe(before.find(entry => entry.key === key));
+    expect(after.at(-1)?.key).toBe('timeline-decoration:compact');
+  });
   it('orders multiple compactions by first canonical lifecycle among parent events and preserves position on completion', () => {
     const message = { id: 'anchor', role: 'assistant' as const, content: 'Before compression', status: 'complete' as const, canonical_ordinal: 2, created_at_ms: 100 };
     const compact = (id: string, ordinal: number, phase: 'start' | 'complete' = 'start') => ({

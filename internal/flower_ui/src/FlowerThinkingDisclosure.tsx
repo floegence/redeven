@@ -1,8 +1,11 @@
 import type { Accessor, Component } from 'solid-js';
-import { Show, createEffect, createSignal, on, onCleanup } from 'solid-js';
+import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import { ChevronRight } from '@floegence/floe-webapp-core/icons';
 import { FlowerThinkingIcon } from './icons/FlowerThinkingIcon';
 import { useFlowerActivityTitleReveal } from './flowerActivityTitleReveal';
+import { FLOWER_TRANSCRIPT_SCROLL_TO_LATEST_MS } from './flowerScrollTail';
+import type { FlowerScrollTailController } from './flowerScrollTail';
+import { createFlowerActivityDisclosureMotion } from './activityDisclosure';
 
 export type FlowerThinkingDisclosureView = 'expanded' | 'collapsed';
 
@@ -11,7 +14,6 @@ export type FlowerThinkingDisclosureProps = Readonly<{
   content: Accessor<string>;
   live: Accessor<boolean>;
   liveConfirmed: Accessor<boolean>;
-  preserveOnEnd: Accessor<boolean>;
   label: Accessor<string>;
   elapsed?: Accessor<string>;
   elapsedTitle?: Accessor<string>;
@@ -20,6 +22,7 @@ export type FlowerThinkingDisclosureProps = Readonly<{
   contentBody: Component;
   manualExpanded?: Accessor<boolean | undefined>;
   onManualExpanded?: (expanded: boolean) => void;
+  scroll?: FlowerScrollTailController;
 }>;
 
 function safeContentID(value: string): string {
@@ -28,50 +31,75 @@ function safeContentID(value: string): string {
 
 export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> = (props) => {
   const [view, setView] = createSignal<FlowerThinkingDisclosureView>(props.manualExpanded?.() ? 'expanded' : 'collapsed');
+  const [inspected, setInspected] = createSignal(props.manualExpanded?.() === true);
   let viewport: HTMLDivElement | undefined;
   let toggleButton: HTMLButtonElement | undefined;
   let following = true;
+  let savedReadingTop = 0;
+  let writtenTop = 0;
+  let followFrame = 0;
+  let restoreFrame = 0;
+  let followStart: { top: number; at: number } | undefined;
+  const cancelFollow = () => { cancelAnimationFrame(followFrame); followFrame = 0; followStart = undefined; };
+  const writeTop = (top: number) => { if (viewport) { viewport.scrollTop = top; writtenTop = viewport.scrollTop; } };
+  const follow = () => {
+    if (!viewport || followStart) return;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { writeTop(viewport.scrollHeight); return; }
+    followStart = { top: viewport.scrollTop, at: performance.now() };
+    const advance = (now: number) => {
+      if (!viewport || !followStart) return;
+      const progress = Math.min(1, Math.max(0, (now - followStart.at) / FLOWER_TRANSCRIPT_SCROLL_TO_LATEST_MS));
+      const bottom = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+      writeTop(followStart.top + (bottom - followStart.top) * (1 - (1 - progress) ** 3));
+      if (progress < 1) followFrame = requestAnimationFrame(advance);
+      else cancelFollow();
+    };
+    followFrame = requestAnimationFrame(advance);
+  };
+  onCleanup(() => { cancelFollow(); cancelAnimationFrame(restoreFrame); });
   const contentID = `flower-thinking-content-${safeContentID(props.contentID)}`;
   const active = () => props.live() && props.liveConfirmed();
   const revealTitle = useFlowerActivityTitleReveal(() => props.contentID);
   const collapse = () => {
+    savedReadingTop = viewport?.scrollTop ?? savedReadingTop;
+    cancelFollow();
     if (viewport?.contains(document.activeElement)) toggleButton?.focus({ preventScroll: true });
     setView('collapsed');
   };
+  const motion = createFlowerActivityDisclosureMotion(() => view() === 'expanded', {
+    initialOpen: props.manualExpanded?.() === true,
+    onLayoutFrame: () => props.scroll?.measureAfterLayout(),
+    onMotionEnd: () => { if (toggleButton) props.scroll?.finishDisclosure(toggleButton); },
+  });
+  onCleanup(() => { if (toggleButton) props.scroll?.releaseDisclosure(toggleButton); });
 
-  createEffect(on(props.live, (isLive, wasLive) => {
-    if (isLive && !wasLive) setView(props.manualExpanded?.() ? 'expanded' : 'collapsed');
-    else if (!isLive && wasLive && !props.preserveOnEnd()) {
-      props.onManualExpanded?.(false);
-      collapse();
-    }
-  }));
+  // Completion, reconnect and source hydration cannot change a user's choice.
+  // Each new segment starts collapsed; only its own disclosure changes it.
 
   createEffect(() => {
     props.content();
     const currentView = view();
     const isActive = active();
-    if (!viewport || currentView === 'collapsed') {
+    if (!isActive) cancelFollow();
+    if (!viewport || currentView === 'collapsed' || motion.state() !== 'open') {
       return;
     }
     const frame = requestAnimationFrame(() => {
       if (!viewport) return;
-      if (isActive && following) viewport.scrollTop = viewport.scrollHeight;
+      if (isActive && following) follow();
     });
     onCleanup(() => cancelAnimationFrame(frame));
   });
 
   const toggle = () => {
-    following = true;
-    if (props.live()) {
-      setView((current) => current === 'expanded'
-        ? 'collapsed'
-        : 'expanded');
-      return;
-    }
+    if (toggleButton) props.scroll?.activateDisclosure(toggleButton);
     const expanded = view() !== 'expanded';
     props.onManualExpanded?.(expanded);
-    if (expanded) setView('expanded');
+    if (expanded) {
+      setInspected(true); setView('expanded');
+      cancelAnimationFrame(restoreFrame);
+      restoreFrame = requestAnimationFrame(() => { restoreFrame = 0; if (view() === 'expanded') writeTop(savedReadingTop); });
+    }
     else collapse();
   };
 
@@ -89,6 +117,7 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
             ref={toggleButton}
             type="button"
             class="flower-thinking-toggle flower-activity-inline-button"
+            data-flower-disclosure-trigger
             data-flower-manual-open={view() === 'expanded' ? 'true' : undefined}
             aria-controls={contentID}
             aria-expanded={view() !== 'collapsed'}
@@ -106,22 +135,34 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
             </span>
           </button>
         </div>
-        <Show when={view() !== 'collapsed'}>
+        <Show when={inspected()}>
+          <div ref={motion.bindViewport} class="flower-thinking-viewport" data-state={motion.state()}
+            style={{ height: motion.height(), display: motion.state() === 'closed' ? 'none' : undefined, overflow: 'hidden' }}
+            aria-hidden={view() === 'collapsed' ? 'true' : undefined} inert={view() === 'collapsed'}>
+          <div ref={motion.bindContent} style={{ display: 'flow-root' }}>
           <div
             id={contentID}
             class="flower-thinking-content"
-            data-flower-thinking-view={view()}
+            data-flower-thinking-view="expanded"
+            aria-hidden={view() === 'collapsed' ? 'true' : undefined}
+            inert={view() === 'collapsed'}
             ref={viewport}
             tabIndex={0}
             role="region"
             aria-label={props.label()}
             onScroll={event => {
               const node = event.currentTarget;
+              if (view() === 'collapsed' || node.scrollTop === writtenTop) return;
+              cancelFollow();
+              savedReadingTop = node.scrollTop;
+              writtenTop = node.scrollTop;
               following = node.scrollHeight - node.clientHeight - node.scrollTop <= 24;
               node.toggleAttribute('data-flower-reading-paused', !following);
             }}
           >
             <div class="flower-thinking-content-body"><props.contentBody /></div>
+          </div>
+          </div>
           </div>
         </Show>
       </div>

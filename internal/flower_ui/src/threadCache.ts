@@ -1,3 +1,5 @@
+import type { PreparedHistoryPage } from './historyTurnPreparation';
+import { $RAW } from 'solid-js/store';
 import type {
   FlowerThreadSnapshot,
   FlowerThreadSummary,
@@ -196,6 +198,7 @@ export type ThreadCache = {
   resetRootSummaries(summaries: readonly FlowerThreadSummary[]): ThreadCache;
   beginRuntimeRead(id: string): () => void;
   runtimeItemIDs(threadID: string): readonly string[];
+  readingItemIDs(threadID: string): readonly string[];
   runtimeItem(threadID: string, itemID: string): FlowerRuntimeCurrentItem | undefined;
   runtimePreviewItem(threadID: string, itemID: string): FlowerRuntimeCurrentItem | undefined;
   bodyOffset(threadID: string, itemID: string): number | undefined;
@@ -203,9 +206,9 @@ export type ThreadCache = {
   hydrateItem(threadID: string, expected: FlowerRuntimeCurrentItem, loaded: FlowerRuntimeCurrentItem): boolean;
   receiveView(
     view: ThreadView,
-    options?: Readonly<{ preserveSummary?: boolean; current?: FlowerRuntimeCurrentView; installedBaseline?: boolean }>,
+    options?: Readonly<{ preserveSummary?: boolean; current?: FlowerRuntimeCurrentView; prepared?: readonly PreparedHistoryPage[]; installedBaseline?: boolean }>,
   ): ThreadViewReceiveResult;
-  receiveCurrent(view: ThreadDetailView, options?: Readonly<{ preserveSummary?: boolean; current?: FlowerRuntimeCurrentView; installedBaseline?: boolean }>): ThreadViewReceiveResult;
+  receiveCurrent(view: ThreadDetailView, options?: Readonly<{ preserveSummary?: boolean; current?: FlowerRuntimeCurrentView; prepared?: readonly PreparedHistoryPage[]; installedBaseline?: boolean }>): ThreadViewReceiveResult;
   receiveUpdate(update: FlowerRuntimeUpdate, options?: Readonly<{ installedInterest?: boolean }>): Readonly<{ cache: ThreadCache; observation?: FlowerRuntimeCurrentView; accepted: boolean }>;
   updateDetailAdjuncts(id: string, update: (thread: ThreadDetail) => ThreadDetail): ThreadCache;
   updateSummaryAdjuncts(id: string, update: (thread: ThreadDetail) => ThreadDetail): ThreadCache;
@@ -224,7 +227,11 @@ function retainedBytes(...roots: unknown[]): number {
   const pending = [...roots];
   let bytes = 0;
   while (pending.length) {
-    const value = pending.pop();
+    // Size accounting must not create subscriptions or walk reactive proxy
+    // descriptors for every previously visited row on each history handoff.
+    const candidate = pending.pop();
+    const value = candidate && typeof candidate === 'object'
+      ? (candidate as { [$RAW]?: unknown })[$RAW] ?? candidate : candidate;
     if (typeof value === 'string') bytes += value.length * 2;
     else if (value && typeof value === 'object' && !seen.has(value)) {
       seen.add(value); bytes += 32;
@@ -301,7 +308,7 @@ function createCache(
   reads: BaselineReads = new Map(),
   retainedIDs: ReadonlySet<string> = new Set(),
 ): ThreadCache {
-  const receive = (view: ThreadDetailView, title: ThreadTitleSnapshot | undefined, options?: Readonly<{ preserveSummary?: boolean; current?: FlowerRuntimeCurrentView; installedBaseline?: boolean }>): ThreadViewReceiveResult => {
+  const receive = (view: ThreadDetailView, title: ThreadTitleSnapshot | undefined, options?: Readonly<{ preserveSummary?: boolean; current?: FlowerRuntimeCurrentView; prepared?: readonly PreparedHistoryPage[]; installedBaseline?: boolean }>): ThreadViewReceiveResult => {
     const id = view.thread.thread_id.trim();
     if (!id) return {
       cache,
@@ -359,13 +366,13 @@ function createCache(
       ), read_only_reason: settingsState === 'accepted' ? view.thread.read_only_reason : runtimeView.thread.read_only_reason }),
     };
     const runtime = runtimeState === 'accepted' && options?.current
-      ? createRuntimeThreadRecord(options.current, { ...mergedView.thread, ...acceptedTitle }, views.get(id)?.runtime) : views.get(id)?.runtime;
+      ? createRuntimeThreadRecord(options.current, { ...mergedView.thread, ...acceptedTitle }, views.get(id)?.runtime, options.prepared) : views.get(id)?.runtime;
     const initializedView = runtimeState === 'accepted' && options?.current && runtime
       ? { ...mergedView, get version() { return runtime.version; }, thread: runtime.initializeThread() } : runtime ? { ...mergedView, get version() { return runtime.version; }, thread: runtime.syncAdjuncts(mergedView.thread as FlowerThreadSnapshot) } : mergedView;
     const next = new Map(views);
     // Live traffic is not a user visit. Background updates cannot displace
     // the displayed thread or outrank previously visited conversations.
-    next.set(id, { view: initializedView, runtime, retainedBytes: retainedBytes(initializedView.thread, options?.current), usedAt: views.get(id)?.usedAt ?? (id === selectedId || retainedIDs.has(id) ? clock + 1 : 0) });
+    next.set(id, { view: initializedView, runtime, retainedBytes: retainedBytes(initializedView.thread, runtime?.readingState().records ?? options?.current), usedAt: views.get(id)?.usedAt ?? (id === selectedId || retainedIDs.has(id) ? clock + 1 : 0) });
     pruneDetails(next, selectedId, retainedIDs, reads);
     const summary = new Map(summaries);
     const metadata = options?.preserveSummary && currentSummary
@@ -403,6 +410,7 @@ function createCache(
   const cache: ThreadCache = {
     selectedId,
     summaries,
+    readingItemIDs(threadID) { return views.get(threadID)?.runtime?.readingItemIDs() ?? []; },
     runtimeItemIDs(threadID) { return views.get(threadID)?.runtime?.itemIDs() ?? []; },
     runtimeItem(threadID, itemID) { return views.get(threadID)?.runtime?.item(itemID); },
     runtimePreviewItem(threadID, itemID) { return views.get(threadID)?.runtime?.previewItem(itemID); },
@@ -430,7 +438,7 @@ function createCache(
       const next = touch(nextID ?? '');
       const previous = selectedId ? next.get(selectedId) : undefined;
       if (previous) next.set(selectedId!, { ...previous, retainedBytes: retainedBytes(previous.view.thread,
-        previous.runtime?.itemIDs().map(id => previous.runtime?.item(id))) });
+        previous.runtime?.readingState().records) });
       pruneDetails(next, nextID, retainedIDs, reads);
       return createCache(nextID, summaries, next, clock + 1, reads, retainedIDs);
     },
@@ -442,7 +450,7 @@ function createCache(
       for (const id of retainedIDs) {
         const entry = nextViews.get(id);
         if (entry && !nextIDs.has(id)) nextViews.set(id, { ...entry, retainedBytes: retainedBytes(entry.view.thread,
-          entry.runtime?.itemIDs().map(itemID => entry.runtime?.item(itemID))) });
+          entry.runtime?.readingState().records) });
       }
       for (const id of nextIDs) {
         const entry = nextViews.get(id);

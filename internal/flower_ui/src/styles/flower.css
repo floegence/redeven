@@ -11981,7 +11981,7 @@ button.flower-attachment-preview-trigger:disabled {
 }
 
 .flower-turn-timeline, .flower-turn-row { min-width: 0; }
-.flower-turn-row[data-flower-turn-settled='true'] { content-visibility: auto; contain-intrinsic-block-size: auto 80px; }
+/* Measured section shells own offscreen geometry; rows never use estimates. */
 .flower-turn-row-viewport { overflow: clip; min-width: 0; }
 .flower-turn-row-viewport[data-state='open'] { overflow: visible; }
 .flower-turn-row-content { display: flow-root; min-width: 0; padding-bottom: 1rem; }
@@ -12600,6 +12600,21 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
   .flower-tool-sequence-node[data-flower-sequence-end='false'] > .flower-tool-sequence-viewport > .flower-tool-sequence-body > .flower-tool-sequence-content::after { background: GrayText; opacity: 1; }
 }
 
+.flower-history-loading-notice {
+  position: absolute;
+  inset-block-start: 0.5rem;
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  background: var(--background);
+  color: var(--muted-foreground);
+  box-shadow: 0 1px 5px #0002;
+  font-size: var(--floe-type-caption);
+  pointer-events: none;
+  z-index: 2;
+}
+
 .flower-history-navigation,
 .flower-history-body-control {
   display: flex;
@@ -12611,10 +12626,16 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
   font-size: 0.8125rem;
 }
 .flower-history-message { min-width: 0; }
+.flower-history-message-content { display: flow-root; }
 .flower-message-block-stack-user > .flower-history-message {
-  display: flex;
   width: 100%;
-  justify-content: flex-end;
+}
+.flower-message-block-stack-user > .flower-history-message > .flower-history-message-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  width: 100%;
+  min-width: 0;
 }
 .flower-history-text-loading { padding: 1rem; min-height: 9rem; }
 .flower-history-text-skeleton { display: grid; gap: 0.625rem; padding: 0.25rem 0; }

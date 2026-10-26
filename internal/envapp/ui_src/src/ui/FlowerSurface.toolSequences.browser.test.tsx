@@ -152,6 +152,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     root.querySelector<HTMLButtonElement>('.flower-thinking-toggle')!.click();
     const content = root.querySelector<HTMLElement>('.flower-thinking-content')!;
     const transcript = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
+    await expect.poll(() => content.closest('.flower-thinking-viewport')!.getAttribute('data-state')).toBe('open');
     expect(content.scrollHeight).toBe(content.clientHeight);
     const wheel = commands as unknown as { wheelScrollRegion: (request: { regionSelector: string; targetSelector: string; deltaY: number }) => Promise<{ before: number; after: number }> };
     let before = transcript.scrollTop;
@@ -172,7 +173,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     root.querySelector<HTMLButtonElement>('.flower-thinking-toggle')!.click();
     const content = root.querySelector<HTMLElement>('.flower-thinking-content')!;
     const transcript = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
-    await expect.poll(() => transcript.scrollHeight - transcript.clientHeight - transcript.scrollTop).toBeLessThanOrEqual(1);
+    await expect.poll(() => content.closest('.flower-thinking-viewport')!.getAttribute('data-state')).toBe('open');
     expect(content.scrollHeight).toBeGreaterThan(content.clientHeight * 2);
     const wheel = commands as unknown as { wheelScrollRegion: (request: { regionSelector: string; targetSelector: string; deltaY: number }) => Promise<{ before: number; after: number }> };
     const input = async (direction: number) => {
@@ -181,7 +182,10 @@ describe('consecutive tools in the shared Flower surface', () => {
     };
     content.scrollTop = 200;
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-    const outerTop = transcript.scrollTop;
+    let outerTop = transcript.scrollTop;
+    // Playwright hover first scrolls an offscreen reading region into view.
+    // Assert ownership from the actual wheel dispatch, after that setup move.
+    if (source === 'wheel') transcript.addEventListener('wheel', () => { outerTop = transcript.scrollTop; }, { once: true });
     const innerEnd = new Promise<void>(resolve => content.addEventListener('scrollend', () => resolve(), { once: true }));
     await input(-1);
     await expect.poll(() => content.scrollTop).toBeLessThan(190);
@@ -313,7 +317,7 @@ describe('consecutive tools in the shared Flower surface', () => {
   it.each([
     ['success', 'reduce'], ['success', 'no-preference'],
     ['running', 'reduce'], ['running', 'no-preference'],
-  ] as const)('opens a collapsed %s sequence at its latest tool with %s motion', async (status, reducedMotion) => {
+  ] as const)('preserves a collapsed %s sequence reading offset with %s motion', async (status, reducedMotion) => {
     await media.emulateMediaPreferences({ reducedMotion });
     const initial = Array.from({ length: 40 }, (_, index) => tool(`latest-${index}`, index === 39 ? status : 'success'));
     const later = status === 'success' ? [item('later-prose', 'assistant'), tool('later-first'), tool('later-last')] : [];
@@ -338,15 +342,12 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(row(root, 'latest-40')).toBeNull();
     header.click();
     await waitFor(() => group(root, 'latest-0').dataset.state === 'open');
-    await expect.poll(() => viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop).toBeLessThanOrEqual(1);
-    expect(viewport.hasAttribute('data-flower-reading-paused')).toBe(false);
-    const latestRow = row(root, 'latest-40').getBoundingClientRect();
-    expect(latestRow.top).toBeGreaterThanOrEqual(viewport.getBoundingClientRect().top - 1);
-    expect(latestRow.bottom).toBeLessThanOrEqual(viewport.getBoundingClientRect().bottom + 1);
+    await expect.poll(() => viewport.scrollTop).toBe(40);
+    expect(viewport.hasAttribute('data-flower-reading-paused')).toBe(true);
     if (status === 'running') {
       push([...updated.slice(0, -1), tool('latest-40'), tool('latest-41', 'running')]);
       await waitFor(() => Boolean(row(root, 'latest-41')));
-      await expect.poll(() => viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop).toBeLessThanOrEqual(1);
+      await expect.poll(() => viewport.scrollTop).toBe(40);
     }
   });
 
@@ -449,6 +450,7 @@ describe('consecutive tools in the shared Flower surface', () => {
       expect(document.activeElement).toBe(focused);
       const thinking = root.querySelector<HTMLElement>('[data-flower-thinking-id="selected-thought:block:0"]')!;
       thinking.querySelector<HTMLButtonElement>('.flower-thinking-toggle')!.click();
+      await expect.poll(() => thinking.querySelector('.flower-thinking-viewport')!.getAttribute('data-state')).toBe('open');
       const text = thinking.querySelector('.flower-thinking-content-body')!.firstChild!;
       const selection = document.getSelection()!;
       const range = document.createRange();
@@ -777,7 +779,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(toggle(root, 'a').getAttribute('aria-expanded')).toBe('true');
   });
 
-  it('keeps the last visible prose anchored when an offscreen older sequence folds', async () => {
+  it('keeps visible prose and the older sequence stable when more tools arrive', async () => {
     const initial = [tool('a'), tool('b'), item('progress', 'assistant', 'Current progress. '.repeat(90))];
     const { root, push } = await mount(initial);
     const viewport = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
@@ -790,8 +792,8 @@ describe('consecutive tools in the shared Flower surface', () => {
     await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
     const top = prose.getBoundingClientRect().top;
     push([...initial, tool('c')]);
-    await waitFor(() => collapsed(root, 'a'));
-    await waitFor(() => group(root, 'a').getAttribute('data-state') === 'closed');
+    await waitFor(() => Boolean(row(root, 'c')));
+    expect(collapsed(root, 'a')).toBe(false);
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     expect(Math.abs(prose.getBoundingClientRect().top - top)).toBeLessThan(2);
   });
