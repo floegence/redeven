@@ -22410,7 +22410,7 @@
         "title": "Flower conversation switch performance qualification",
         "type": "Qualification Evidence"
       },
-      "body_length": 11801,
+      "body_length": 12289,
       "summary": "Published Floret v7.87.1 owns windows, bounded item-text reads, View and Summary. Redeven owns\nbounded reads and presentation through the [sidebar](../ui/flower-thread-sidebar.md)\nand [Desktop bridge](../desktop/desktop-runtime-bridge.md). Local qualification\ntargets \u003e=70% lower short-detail P95, warm synchronous P95 \u003c8 ms, and feedback\nbefore commit. Fixtures never continue real user tasks.",
       "sections": [
         {
@@ -33612,5 +33612,5 @@
       ]
     }
   ],
-  "source_sha256": "a7199698dc95555603ac373307f6f8ca0140015f27f01ccd0eba7ab488f2c729"
+  "source_sha256": "0b314d7553721a3e10618e591a5942a435579e1b86bbdbfebf31d67b600e0000"
 }

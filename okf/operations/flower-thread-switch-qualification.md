@@ -179,6 +179,12 @@ One visibility-cancelled body read is recorded separately; there are no page or
 non-cancellation transport errors. A read-only opaque-record digest before and
 after qualification matches across 2,828,261 records (3,471,867,039 bytes), including
 metadata. Qualification does not alter canonical conversation records.
+After integrating published Floret v7.87.1 and the patch-title changes, the same
+qualifier passes in 675.8 ms with fifty upward and fifty downward wheel gestures,
+reaching ordinal one and returning to the latest content. Ninety stable opening
+frames, twelve unchanged idle-request checks and exact full-command disclosure pass.
+No page or transport errors occur. Opening includes one 58 ms long task; this
+evidence establishes stable presentation, not a claim of zero opening CPU stalls.
 
 An earlier candidate fails the one-second opening gate at 1,580.1 ms because turn
 boundary completion reads 150 items to discover nine missing members. The final

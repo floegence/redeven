@@ -923,6 +923,7 @@ describe('Flower final thread cache and workspace transport', () => {
       stopThread,
       connectLiveStream,
     });
+    runtime.style.height = '100dvh';
 
     await waitFor(() => runtime.querySelector(`[data-thread-id="${threadID}"] button`) !== null);
     (runtime.querySelector(`[data-thread-id="${threadID}"] button`) as HTMLButtonElement).click();
