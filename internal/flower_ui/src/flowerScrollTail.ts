@@ -33,6 +33,7 @@ export type FlowerScrollTailController = Readonly<{
 
 export type FlowerScrollTailControllerOptions = Readonly<{
   canFollowLatest?: () => boolean;
+  preparing?: () => boolean;
   reducedMotionPreferred: () => boolean;
   requestAnimationFrame: (callback: FrameRequestCallback) => number;
   cancelAnimationFrame: (handle: number) => void;
@@ -195,7 +196,8 @@ export function createFlowerScrollTailController(
     const anchorDelta = anchor ? anchor.title.getBoundingClientRect().top - anchor.top : 0;
     const request = pendingScroll;
     pendingScroll = undefined;
-    if (request?.smooth && !options.reducedMotionPreferred()) {
+    if (options.preparing?.()) cancelSmoothScroll();
+    else if (request?.smooth && !options.reducedMotionPreferred()) {
       smoothScroll = { startedAt: timestamp, startTop: scrollTop };
     }
     let nextTop = scrollTop + anchorDelta;
@@ -522,7 +524,7 @@ export function createFlowerScrollTailController(
     measureAfterLayout,
     flushLayout,
     prepareArrival: () => {
-      if (!node || !followingLatest() || !(options.canFollowLatest?.() ?? true) || options.reducedMotionPreferred()
+      if (!node || !followingLatest() || options.preparing?.() || !(options.canFollowLatest?.() ?? true) || options.reducedMotionPreferred()
         || node.scrollHeight - node.clientHeight - node.scrollTop <= 1) return 0;
       // A burst shares the current motion deadline. Ordinary layout notices
       // retarget its destination without turning it back into a one-frame jump.

@@ -228,6 +228,7 @@ import { FlowerIcon } from './icons/FlowerIcon';
 import { FlowerSoftAuraIcon } from './icons/FlowerSoftAuraIcon';
 import { FlowerShellCommandHighlight } from './shellCommandHighlight';
 import { FlowerThreadList, type FlowerThreadMenuAction } from './threads/FlowerThreadList';
+import { FlowerThreadWave } from './FlowerThreadWave';
 import { comparePinnedFlowerThreads } from './threads/threadListModel';
 import { FlowerThreadSwitcher, type FlowerThreadSwitcherCopy } from './threads/FlowerThreadSwitcher';
 import {
@@ -1454,6 +1455,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const detailDisclosureKey = (threadID: string, kind: string, id: string) =>
     JSON.stringify([props.adapter.runtime.runtime_id, threadID, kind, id]);
   const transcriptScroll = createFlowerScrollTailController({
+    preparing: () => selectedThreadTailPreparing(),
     canFollowLatest: () => !selectedThread()?.history_window?.has_after
       && (selectedThreadHasContent() || selectedThreadHasLiveProgress() || visibleTransportOutbox().length > 0),
     onUserInteraction: () => { if (selectedThreadTailPreparing()) cancelSelectedThreadTailReveal(); },
@@ -1467,6 +1469,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     cancelAnimationFrame: cancelTranscriptAnimationFrame,
   });
   const subagentDetailScroll = createFlowerScrollTailController({
+    preparing: () => subagentTailPreparing(),
     canFollowLatest: () => !subagentDetailThread()?.history_window?.has_after,
     onUserInteraction: () => cancelSubagentTailReveal(),
     onScrollIntent: direction => requestSubagentHistoryReading(direction),
@@ -1532,6 +1535,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const prepareTranscriptDestination = (threadID: string, scroll: FlowerScrollTailController, reads: Map<string, AbortController>): boolean => {
     const viewport = scroll.viewport();
     if (!viewport?.isConnected || viewport.clientHeight <= 0) return false;
+    scroll.scrollToBottom({ smooth: false });
     // Prepare only text in the positioned destination, newest first. Earlier
     // placeholders must not occupy read slots ahead of the visible tail.
     const bounds = viewport.getBoundingClientRect();
@@ -14723,7 +14727,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           </div>
         </Show>
         <Show when={!selectedThreadTailPreparing() && (historyBusy() || !parentEventReading.initialReady())}>
-          <div class="flower-history-loading-notice" role="status" aria-live="polite">{copy().chat.history.loading}</div>
+          <div class="flower-history-loading-notice" role="status" aria-live="polite">
+            <FlowerThreadWave />
+            <span>{copy().chat.history.loading}</span>
+          </div>
         </Show>
         </div>
         <Show when={props.embeddedConversation}>{progressLane(true)}</Show>

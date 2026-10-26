@@ -13,7 +13,10 @@ export function observeHistoryBodyMotion(shell: HTMLElement, content: HTMLElemen
     if (!measured) return;
     const start = measured; measured = 0;
     queueMicrotask(() => {
-      if (disposed || !shell.checkVisibility()) return;
+      if (disposed) return;
+      // Navigation hydrates a hidden, measurable destination. Its first visible
+      // frame must already have final geometry, with no leftover height motion.
+      if (!shell.checkVisibility({ visibilityProperty: true })) { scroll.flushLayout(false); return; }
       const next = content.getBoundingClientRect().height;
       if (reducedMotion() || Math.abs(next - start) < 1) { scroll.flushLayout(false); return; }
       const deadline = performance.now() + Math.min(320, Math.max(180, Math.abs(next - start) / 1.2));

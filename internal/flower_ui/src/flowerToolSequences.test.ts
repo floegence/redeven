@@ -44,6 +44,18 @@ const parentEvent = (id: string, kind: FlowerParentEvent['kind'] = 'completed'):
 });
 
 describe('consecutive tool presentation', () => {
+  it('waits through tool gaps and streaming prose, then folds after output completes', () => {
+    const calls = [tool('a'), tool('b')];
+    const policy = (entries: FlowerTimelineEntry[], turns: FlowerRuntimeTurn[] = []) =>
+      [...projectFlowerToolSequences(entries, 'thread', turns).groups.values()][0].disclosure;
+    expect(policy(calls)).toBe('manual');
+    expect(policy([...calls, emptyLiveText('next')])).toBe('manual');
+    expect(policy([...calls, { ...text('next'), message: { ...text('next').message, live: true, status: 'streaming' } }])).toBe('manual');
+    expect(policy([...calls, text('next')])).toBe('automatic');
+    for (const outcome of ['completed', 'failed', 'cancelled', 'interrupted'] as const) {
+      expect(policy(calls, [runtimeTurn({ outcome, ended_at: '2026-10-21T10:01:00Z' })])).toBe('automatic');
+    }
+  });
   it('does not join tool sequences across an unloaded reading interval', () => {
     const entries = [tool('a'), tool('b'), tool('c'), tool('d')];
     const value = projectFlowerToolSequences(entries, 'thread', [], undefined, new Set(['c']));
@@ -68,7 +80,7 @@ describe('consecutive tool presentation', () => {
   it('retains unchanged projections and replaces only changed groups', () => {
     const entries = [tool('a'), tool('b'), text('prose'), tool('c'), tool('d')];
     const first = projectFlowerToolSequences(entries, 'thread');
-    const contentOnly = [...entries, text('streamed prose')];
+    const contentOnly = [...entries, { ...text('streamed prose'), message: { ...text('streamed prose').message, live: true, status: 'streaming' as const } }];
     const unchanged = projectFlowerToolSequences(contentOnly, 'thread', [], first);
     expect(unchanged).toBe(first);
     const changed = projectFlowerToolSequences([tool('a'), tool('b'), text('prose'), tool('c'), tool('d', { status: 'running' })], 'thread', [], first);

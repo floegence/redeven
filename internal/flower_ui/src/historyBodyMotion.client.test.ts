@@ -5,7 +5,7 @@ import type { FlowerScrollTailController } from './flowerScrollTail';
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-function fixture(reduced = false) {
+function fixture(reduced = false, visible = true) {
   let now = 0;
   let shellHeight = 80;
   let bodyHeight = 2000;
@@ -20,7 +20,7 @@ function fixture(reduced = false) {
   const shell = document.createElement('div');
   const content = document.createElement('div');
   shell.getBoundingClientRect = () => ({ height: shellHeight }) as DOMRect;
-  shell.checkVisibility = () => true;
+  shell.checkVisibility = vi.fn(options => !options?.visibilityProperty || visible);
   content.getBoundingClientRect = () => ({ height: bodyHeight }) as DOMRect;
   const animations: { finish: () => void; cancel: ReturnType<typeof vi.fn> }[] = [];
   const animate = vi.fn((_frames: Keyframe[], _options: KeyframeAnimationOptions) => {
@@ -70,6 +70,14 @@ it('honors reduced motion and cancels a disposed pending hydration', async () =>
   const pending = fixture();
   pending.setLoading(false); pending.dispose(); await Promise.resolve();
   expect(pending.animate).not.toHaveBeenCalled();
+});
+
+it('settles hidden navigation hydration before revealing the destination', async () => {
+  const f = fixture(false, false);
+  f.setLoading(false); await Promise.resolve();
+  expect(f.animate).not.toHaveBeenCalled();
+  expect(f.flushLayout).toHaveBeenCalledWith(false);
+  f.dispose();
 });
 
 it('disconnects body observation and cancels active motion on disposal', async () => {

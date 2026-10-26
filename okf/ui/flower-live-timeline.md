@@ -43,11 +43,13 @@ Pending controls do not depend on page membership. Server-only authorized 64-ite
 
 Measured offscreen sections retain DOM and intrinsic height while skipping layout. Returning to inspected content preserves disclosure state and nested offsets; unchanged sections and unrelated message projections retain identity. One scroll controller owns writes and corrects the visible reading anchor before paint, including stationary edge input and replacement of a summary or placeholder. Readiness notifications remain scheduled independently of before-paint correction.
 
-First text hydration transitions from its skeleton to measured content within 180–320 milliseconds (or immediately with reduced motion). Further chunks retarget the same deadline; settled content does not replay that transition. Cache accounting traverses each raw object once without recursively unwrapping reactive subtrees or subscribing to their fields.
+First visible text hydration transitions from its skeleton to measured content within 180–320 milliseconds (or immediately with reduced motion). Hidden destination hydration settles immediately; root and child navigation suppress arrival scrolling until the destination is positioned and revealed at its final geometry. Further chunks retarget the same deadline; settled content does not replay that transition. Cache accounting traverses each raw object once without recursively unwrapping reactive subtrees or subscribing to their fields.
 
 Context compaction decorations travel only with their visible anchors plus the latest operation for the active run indicator. Historical anchors restore their decorations when paged into view. Canonical context remains complete.
 
 ThreadCache evicts inactive detail at twelve threads or 32 MiB estimated detail bytes; lightweight navigation summaries survive eviction. Selected, retained and in-flight owners are protected until release. Append logs retain at most 256 chunks / 256 KiB, with absolute cursors and exact-source catch-up for a paused Markdown consumer. These are cache budgets, not a cap on an explicitly active document or selected text.
+
+Upward history loading uses the sidebar running indicator's four animated wave bars with localized status text, accessible live status and reduced-motion support. The notice overlays the transcript without changing its scroll geometry.
 
 ## Recovery and interaction
 Revision-fenced `history_invalidated` permits one automatic bounded read per selection/manual action; repeated loss offers Retry. Failed reads preserve content/anchors. `history-release` cancels installed/pending interest without waiting for slow reads; child close releases only its slot. One-shot windows cannot reuse old subscription membership.

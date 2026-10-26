@@ -68,6 +68,23 @@ async function fixture(options: { delayedDetail?: boolean; delayedBodies?: boole
 }
 
 describe('Flower destination presentation', () => {
+  it('reveals hydrated navigation with final geometry and no remaining height animation', async () => {
+    const { root, bodies, loadHistoryItem } = await fixture({ delayedBodies: true, startFromPeer: true });
+    await waitFor(() => loadHistoryItem.mock.calls.length === 2);
+    const samples: { bottom: number; tailBottom: number; animated: number }[] = [];
+    for (const [id, body] of bodies) body.resolve(fullBody(id));
+    for (let frame = 0; frame < 30; frame++) {
+      await afterPaint();
+      if (preparing(root)) continue;
+      const tail = root.querySelector<HTMLElement>('[data-flower-message-id="body-23"]')!;
+      const animated = tail.getAnimations({ subtree: true }).filter(animation =>
+        animation.playState === 'running' && (animation.effect as KeyframeEffect).getKeyframes().some(keyframe => 'height' in keyframe)).length;
+      samples.push({ bottom: bottomDistance(root), tailBottom: tail.getBoundingClientRect().bottom, animated });
+    }
+    expect(samples.length).toBeGreaterThan(0);
+    expect(samples.every(sample => sample.bottom <= 1 && sample.animated === 0), JSON.stringify(samples)).toBe(true);
+    expect(samples.every(sample => Math.abs(sample.tailBottom - samples.at(-1)!.tailBottom) <= 1), JSON.stringify(samples)).toBe(true);
+  });
   it('keeps a quick switch free of loading feedback while preserving first-paint positioning', async () => {
     const { root, resolveDetail } = await fixture({ delayedDetail: true, fullText: true, startFromPeer: true });
     const composer = root.querySelector('.flower-composer');
@@ -147,11 +164,15 @@ describe('Flower destination presentation', () => {
     select(root, 'target');
     await inspectPresentation();
     expect(loadHistoryItem).not.toHaveBeenCalled();
-    // Offscreen history keeps native layout skipping; preparation must not
-    // permanently render every row or add per-row observers.
-    const rows = [...root.querySelectorAll<HTMLElement>('[data-flower-turn-settled="true"]')];
-    expect(rows.every(row => getComputedStyle(row).contentVisibility === 'auto')).toBe(true);
-    if (count === 24) expect(rows[0].querySelector('.flower-turn-row-content')!.checkVisibility({ contentVisibilityAuto: true })).toBe(false);
+    // Measured sections own layout skipping; preparation must not leave all
+    // history laid out or restore independently estimated per-row geometry.
+    const sections = [...root.querySelectorAll<HTMLElement>('[data-flower-history-section]')];
+    expect(sections.length).toBeGreaterThan(0);
+    expect(getComputedStyle(sections.at(-1)!).contentVisibility).toBe('visible');
+    if (count === 24) {
+      await expect.poll(() => getComputedStyle(sections[0]).contentVisibility).toBe('hidden');
+      expect(sections[0].style.containIntrinsicBlockSize).not.toBe('');
+    }
   });
 
   it('keeps delayed detail behind a stable loading surface until actual content can be positioned', async () => {

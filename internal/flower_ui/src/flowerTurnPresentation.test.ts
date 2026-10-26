@@ -43,7 +43,7 @@ const withRun = (value: MessageEntry, runID: string): MessageEntry => ({
 describe('canonical turn process presentation', () => {
   it('treats goal continuation as business work with the existing disclosure owner', () => {
     expect(projectFlowerTurnProcess(entries, [turn({ kind: 'goal_continuation' })]).groups.get('turn')?.disclosure).toBe('automatic');
-    expect(projectFlowerTurnProcess([thinking], [turn({ kind: 'goal_continuation', outcome: 'failed' })]).groups.get('turn')?.disclosure).toBe('manual');
+    expect(projectFlowerTurnProcess([thinking], [turn({ kind: 'goal_continuation', outcome: 'failed' })]).groups.get('turn')?.disclosure).toBe('automatic');
   });
 
   it('preserves historical groups when only the active turn structure changes', () => {
@@ -58,7 +58,7 @@ describe('canonical turn process presentation', () => {
     const old = turn({ outcome, final_item_ids: [], final_boundary_complete: false });
     const next = turn({ turn_id: 'next', run_id: 'next-run', outcome: undefined, ended_at: undefined });
     expect(projectFlowerTurnProcess([thinking, ...entries], [old, next]).groups.get('turn')?.disclosure).toBe('automatic');
-    expect(projectFlowerTurnProcess([thinking, ...entries], [old, turn({ turn_id: 'compact', kind: 'context_compaction' })]).groups.get('turn')?.disclosure).toBe('manual');
+    expect(projectFlowerTurnProcess([thinking, ...entries], [old, turn({ turn_id: 'compact', kind: 'context_compaction' })]).groups.get('turn')?.disclosure).toBe('automatic');
   });
   it.each(['set', 'completed', 'delete'] as const)('folds canonical in-turn Goal %s facts and leaves unowned or mismatched edits visible', operation => {
     const goal = { goal: { version: 1, text: 'Verify changes', status: 'active' as const, actor: 'model' as const }, actor: 'model' as const, operation, at: '2026-10-18T12:00:00Z' };
@@ -75,7 +75,7 @@ describe('canonical turn process presentation', () => {
   it('folds all eleven canonical child dynamics with failed work, including late receipts', () => {
     const projected = projectFlowerTurnProcess([thinking, ...entries, ...events], [turn({ outcome: 'failed', intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })]);
     const group = projected.groups.get('turn')!;
-    expect(group.disclosure).toBe('manual');
+    expect(group.disclosure).toBe('automatic');
     expect(group.parentEventCount).toBe(11);
     expect(group.processKeys).toEqual(['thinking', ...events.map((event) => event.key)]);
     expect(events.every((event) => projected.rows.get(event.key) === group)).toBe(true);
@@ -121,9 +121,9 @@ describe('canonical turn process presentation', () => {
     expect(result?.disclosure).toBe('automatic');
     expect(result?.processKeys).toEqual(['thinking']);
   });
-  it.each(['failed', 'cancelled', 'interrupted'] as const)('offers expanded manual disclosure for %s work', (outcome) => {
+  it.each(['failed', 'cancelled', 'interrupted'] as const)('automatically folds %s work', (outcome) => {
     const result = projectFlowerTurnProcess([thinking, ...entries], [turn({ outcome, intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })]).groups.get('turn');
-    expect(result?.disclosure).toBe('manual');
+    expect(result?.disclosure).toBe('automatic');
     expect(result?.processKeys).toEqual(['thinking']);
   });
   it('keeps mixed thinking and answer rows visible when their final boundary is unknown', () => {
@@ -182,7 +182,7 @@ describe('canonical turn process presentation', () => {
     for (const outcome of ['completed', 'failed', 'cancelled', 'interrupted'] as const) {
       const group = projectFlowerTurnProcess(entries, [turn({ outcome, final_item_ids: [], final_boundary_complete: false })]).groups.get('turn');
       expect(group?.processKeys).toEqual(['progress']);
-      expect(group?.disclosure).toBe(outcome === 'completed' ? 'automatic' : 'manual');
+      expect(group?.disclosure).toBe('automatic');
     }
     expect(projectFlowerTurnProcess(entries, [turn({ intermediate_item_ids: undefined })]).groups.get('turn')?.processKeys).toEqual([]);
     expect(projectFlowerTurnProcess(entries.slice(0, -1), [turn()]).groups.get('turn')?.processKeys).toEqual(['progress']);
