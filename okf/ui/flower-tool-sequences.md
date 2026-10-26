@@ -9,9 +9,8 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Flower groups consecutive tool calls in the shared Desktop and Env App timeline.
-Thinking after the first tool becomes an inline node in that sequence, including
-thinking after the final tool. Active sequences default open. Settled sequences fold when following assistant output completes or the canonical turn ends; temporary gaps between calls and unfinished prose do not trigger a fold. Explicit choices and active inspection survive those boundaries.
+Flower groups consecutive tools in Desktop and Env App.
+Thinking after the first tool becomes an inline node in that sequence, including the final thought. Active sequences default open. Settled sequences fold when following assistant output completes or the canonical turn ends; temporary gaps between calls and unfinished prose do not trigger a fold. Explicit choices and active inspection survive those boundaries.
 When an answered input falls between work segments in a settled turn, each
 settled tool sequence remains independently collapsed, including the newest
 sequence. Active tools retain their existing disclosure behavior.
