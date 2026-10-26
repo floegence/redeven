@@ -132,7 +132,7 @@ export async function runDevelopmentGateways({ mode, stateRoot, sourceRoot, buil
         releaseTag: process.env.REDEVEN_DESKTOP_BUNDLE_VERSION,
         targetCommit: process.env.REDEVEN_DESKTOP_BUNDLE_COMMIT,
         releaseBaseURL: '', sourceRuntimeRoot: sourceRoot,
-        assetCacheRoot: cacheRoot, tempRoot, forceUpdate: true, signal,
+        assetCacheRoot: cacheRoot, tempRoot, signal,
         onProgress: progress => {
           if (progress.phase === lastPhase) return;
           lastPhase = progress.phase;
