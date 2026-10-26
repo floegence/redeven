@@ -3752,7 +3752,14 @@
   "gatewayDiscovery": {
     "savedGateway": "Gespeichertes Gateway",
     "chooseSavedGateway": "Gespeichertes Gateway auswählen",
-    "enterAddress": "Adresse eingeben"
+    "enterAddress": "Adresse eingeben",
+    "setupNeeded": "Verbindungsadresse erforderlich",
+    "setupHelp": "Dieses Gateway ist gespeichert, hat aber keine nutzbare Adresse für diese Laufzeitumgebung. Fügen Sie hier eine Adresse hinzu, um fortzufahren.",
+    "cannotManage": "Bitten Sie den Gateway-Administrator um eine erreichbare Adresse und einen Einladungscode. Wählen Sie dann „Adresse eingeben“.",
+    "addressRequirement": "Verwenden Sie eine für diese Laufzeitumgebung erreichbare HTTPS-Adresse mit einem erlaubten Host. Entfernte Laufzeitumgebungen können localhost nicht verwenden.",
+    "saveAddress": "Verbindungsadresse speichern",
+    "invitationHelp": "Erstellen Sie einen Einladungscode für dieses Gateway oder fügen Sie einen vorhandenen Code ein.",
+    "invitationIntro": "Wählen Sie ein gespeichertes Gateway oder geben Sie eine erhaltene Adresse und einen Einladungscode ein."
   },
   "gatewayNetwork": {
     "listenTitle": "Lokaler Listener",

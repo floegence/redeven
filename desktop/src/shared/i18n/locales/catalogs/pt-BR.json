@@ -3753,7 +3753,14 @@
   "gatewayDiscovery": {
     "savedGateway": "Gateway salvo",
     "chooseSavedGateway": "Escolha um Gateway salvo",
-    "enterAddress": "Inserir um endereço"
+    "enterAddress": "Inserir um endereço",
+    "setupNeeded": "É necessário configurar o endereço",
+    "setupHelp": "Este Gateway está salvo, mas não tem um endereço utilizável por este ambiente de execução. Adicione um endereço aqui para continuar.",
+    "cannotManage": "Peça ao administrador do Gateway um endereço acessível e um código de convite e selecione a opção de inserir um endereço.",
+    "addressRequirement": "Use um endereço HTTPS acessível por este ambiente de execução e compatível com os Hosts permitidos. ambientes de execução remotos não podem usar localhost.",
+    "saveAddress": "Salvar endereço de conexão",
+    "invitationHelp": "Gere um código de convite para este Gateway ou cole um código existente.",
+    "invitationIntro": "Selecione um Gateway salvo ou insira o endereço e o código de convite que você recebeu."
   },
   "gatewayNetwork": {
     "listenTitle": "Escuta local",

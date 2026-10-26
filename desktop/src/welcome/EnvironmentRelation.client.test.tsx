@@ -445,10 +445,10 @@ describe('linked environment owner interactions', () => {
       const picker = dialog.querySelector<HTMLSelectElement>('[data-gateway-picker]')!;
       [...dialog.querySelectorAll<HTMLElement>('[role="tab"]')].find(tab => tab.textContent?.trim() === 'Saved Gateway')!.click();
       await settle();
-      expect([...picker.options].map(option => option.value)).toContain(expected);
-      picker.value = expected; picker.dispatchEvent(new Event('change', { bubbles: true }));
+      expect([...picker.options].map(option => option.value)).toContain('local-gateway');
+      picker.value = 'local-gateway'; picker.dispatchEvent(new Event('change', { bubbles: true }));
       await settle();
-      expect(picker.value).toBe(expected);
+      expect(picker.value).toBe('local-gateway');
     } else {
       [...dialog.querySelectorAll<HTMLElement>('[role="tab"]')].find(tab => tab.textContent?.trim() === 'Enter an address')!.click();
       await settle();
@@ -462,7 +462,7 @@ describe('linked environment owner interactions', () => {
     expect(document.querySelector('[role="dialog"]')).toBe(dialog);
     expect(dialog.querySelector('input')).toBe(inputs[0]);
     expect(inputs.map(input => input.value)).toEqual([method === 'typed' ? expected : '', 'draft-code']);
-    expect(dialog.querySelector<HTMLSelectElement>('[data-gateway-picker]')?.value).toBe(method !== 'typed' ? expected : '');
+    expect(dialog.querySelector<HTMLSelectElement>('[data-gateway-picker]')?.value).toBe(method !== 'typed' ? 'local-gateway' : '');
     expect(document.activeElement).toBe(inputs[1]);
     expect(perform).toHaveBeenCalledOnce();expect(harness.performAction).not.toHaveBeenCalled();
   });

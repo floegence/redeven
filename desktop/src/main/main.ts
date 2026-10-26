@@ -6134,8 +6134,9 @@ async function manageGatewayMemberFromLauncher(
     }
     let results: DesktopLauncherActionSuccess['gateway_member_results'];
     let network: DesktopLauncherActionSuccess['gateway_network_settings'];
+    let endpoints: DesktopLauncherActionSuccess['gateway_endpoints'];
     if (request.kind === 'update_gateway_network_settings') network = await client.updateNetworkSettings(record, request.settings);
-    else if (request.kind === 'update_gateway_endpoints') await client.updateEndpoints(record, request.endpoints);
+    else if (request.kind === 'update_gateway_endpoints') endpoints = await client.updateEndpoints(record, request.endpoints);
     else if (request.kind === 'remove_gateway_member') {
       await client.removeMember(record, request.member_id, request.member_version);
       for (const session of liveGatewayEnvironmentSessions(record.gateway_id, request.member_id)) {
@@ -6145,7 +6146,7 @@ async function manageGatewayMemberFromLauncher(
     else if (request.kind === 'update_gateway_policy') await client.updatePolicy(record, request.policy);
     else if (request.kind === 'update_gateway_members') results = await client.updateMembers(record, request.items);
     await syncGatewayRecord(record, { force: true, mode: 'refresh_catalog', startPolicy: 'require_ready' }).catch(() => undefined);
-    return { ...launcherActionSuccess('gateway_members_updated'), gateway_member_results: results, gateway_network_settings: network };
+    return { ...launcherActionSuccess('gateway_members_updated'), gateway_member_results: results, gateway_network_settings: network, gateway_endpoints: endpoints };
   } catch (error) { return gatewayActionFailure(record, error); }
 }
 

@@ -1,10 +1,12 @@
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
-import { savedGatewaySuggestions } from './savedGatewaySuggestions';
+import { gatewayRuntimeAddress, savedGatewaySuggestions } from './savedGatewaySuggestions';
 import { Monitor, ArrowRight } from '@floegence/floe-webapp-core/icons';
 import { Button, Dialog, Input, KeyedFor, StableText, Stepper, Tabs, TabPanel } from '@floegence/floe-webapp-core/ui';
 import { createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
 import type { GatewayJoinPreview, GatewayMembershipOperation, GatewayEnrollmentPurpose } from '../shared/gatewayJoin';
+import type { GatewayEndpoint } from '../shared/gatewayMembership';
+import { gatewayInteractionIdentity } from './environmentInteractionIdentity';
 import type { DesktopI18n } from '../shared/i18n';
 
 let nextConnectionToken = Date.now();
@@ -27,7 +29,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const [code, setCode] = createSignal(props.code ?? '');
   const [preview, setPreview] = createSignal<GatewayJoinPreview>();
   const [previewInvalidated, setPreviewInvalidated] = createSignal(false);
-  const [pending, setPending] = createSignal<'preparing' | 'connecting' | 'verifying' | 'joining' | null>(null);
+  const [pending, setPending] = createSignal<'preparing' | 'connecting' | 'verifying' | 'joining' | 'saving-address' | 'creating-invitation' | null>(null);
   const busy = () => pending() !== null;
   const [error, setError] = createSignal('');
   const [statusError, setStatusError] = createSignal('');
@@ -67,17 +69,38 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const initialAddress = createMemo(() => props.address ?? '');
   const initialCode = createMemo(() => props.code ?? '');
   const initialPurpose = createMemo(purpose);
-  const suggestions = createMemo(() => savedGatewaySuggestions(props.gateways ?? [], props.targetID));
+  const [endpointDelivery, setEndpointDelivery] = createSignal<{ gatewayID: string; baseline: string; endpoints: readonly GatewayEndpoint[] }>();
+  createEffect(() => {
+    const delivery = endpointDelivery();
+    if (!delivery) return;
+    const gateway = props.gateways?.find(value => value.gateway_id === delivery.gatewayID);
+    if (!gateway || JSON.stringify(gateway.member_endpoints ?? []) !== delivery.baseline) setEndpointDelivery(undefined);
+  });
+  const sources = createMemo(() => (props.gateways ?? []).map(gateway => {
+    const delivery = endpointDelivery();
+    return delivery?.gatewayID === gateway.gateway_id && delivery.baseline === JSON.stringify(gateway.member_endpoints ?? [])
+      ? { ...gateway, member_endpoints: delivery.endpoints } : gateway;
+  }));
+  const suggestions = createMemo(() => savedGatewaySuggestions(sources(), props.targetID));
   let addressInteracted = false;
   type AddressMode = 'saved' | 'new';
-  const initialSavedAddress = () => suggestions().find(suggestion => suggestion.address === initialAddress().trim())?.address ?? '';
-  const [addressMode, setAddressMode] = createSignal<AddressMode>(suggestions().length && (!initialAddress().trim() || initialSavedAddress()) ? 'saved' : 'new');
-  const [savedAddress, setSavedAddress] = createSignal(initialSavedAddress());
+  const initialSavedGateway = () => suggestions().find(suggestion => suggestion.addresses.includes(initialAddress().trim()));
+  const [addressMode, setAddressMode] = createSignal<AddressMode>(suggestions().length && (!initialAddress().trim() || initialSavedGateway()) ? 'saved' : 'new');
+  const [savedGatewayID, setSavedGatewayID] = createSignal(initialSavedGateway()?.gatewayID ?? '');
+  const [savedAddress, setSavedAddress] = createSignal(initialSavedGateway() ? initialAddress().trim() : '');
+  const [endpointDrafts, setEndpointDrafts] = createSignal<Record<string, string>>({});
+  let endpointInput: HTMLInputElement | undefined;
   const addressTabsID = createUniqueId();
-  const savedTabID = `${addressTabsID}-saved-tab`, newTabID = `${addressTabsID}-new-tab`;
-  const savedPanelID = `${addressTabsID}-saved-panel`, newPanelID = `${addressTabsID}-new-panel`;
-  const selectedSavedAddress = createMemo(() => suggestions().find(suggestion => suggestion.address === savedAddress())?.address ?? '');
+  const savedTabID = addressTabsID + '-saved-tab', newTabID = addressTabsID + '-new-tab';
+  const savedPanelID = addressTabsID + '-saved-panel', newPanelID = addressTabsID + '-new-panel';
+  const selectedSuggestion = createMemo(() => suggestions().find(suggestion => suggestion.gatewayID === savedGatewayID()));
+  const selectedGateway = createMemo(() => selectedSuggestion() && sources().find(gateway => gateway.gateway_id === savedGatewayID()));
+  const selectedAddresses = () => selectedSuggestion()?.addresses ?? [];
+  const selectedSavedAddress = createMemo(() => selectedAddresses().includes(savedAddress()) ? savedAddress() : '');
   const effectiveAddress = createMemo(() => addressMode() === 'saved' ? selectedSavedAddress() : address().trim());
+  const canManageGateway = () => !!selectedGateway()?.permissions?.manage_members && selectedGateway()?.connection_kind !== 'url';
+  const endpointDraft = () => endpointDrafts()[savedGatewayID()] ?? '';
+  const draftAddress = () => selectedGateway() ? gatewayRuntimeAddress(endpointDraft(), selectedGateway()!, props.targetID) : null;
   const focusAddress = () => (addressMode() === 'saved' ? savedGatewayInput : addressInput)?.focus();
   const changeAddressMode = (mode: AddressMode) => {
     addressInteracted = true;
@@ -85,28 +108,35 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
     setAddressMode(mode);
     invalidate();
   };
-  const updateSavedAddress = (value: string) => {
+  const updateSavedGateway = (value: string) => {
     addressInteracted = true;
-    const previousAddress = effectiveAddress();
-    setSavedAddress(value);
-    if (previousAddress !== value) invalidate();
+    if (savedGatewayID() === value) return;
+    invalidate();
+    if (savedGatewayID()) setCode('');
+    setSavedGatewayID(value);
+    setSavedAddress(selectedAddresses()[0] ?? '');
+    queueMicrotask(() => selectedAddresses().length ? codeInput?.focus() : endpointInput?.focus());
   };
   const manualAddressField = () => <label class="redeven-gateway-join-field"><span>{text('gatewayJoin.address')}</span><Input ref={addressInput} value={address()} placeholder="https://gateway.example:7443" autocomplete="off" spellcheck={false} disabled={busy()}
     onInput={event => { addressInteracted = true; invalidate(); setAddress(event.currentTarget.value); }} /></label>;
   const invalidate = () => { generation++; setPreview(undefined); setPending(null); setError(''); };
   const chooseInitialAddress = (value: string) => {
     addressInteracted = false;
-    const matching = suggestions().find(suggestion => suggestion.address === value.trim());
+    const matching = suggestions().find(suggestion => suggestion.addresses.includes(value.trim()));
     setAddress(value);
-    setSavedAddress(matching?.address ?? '');
+    setSavedGatewayID(matching?.gatewayID ?? '');
+    setSavedAddress(matching ? value.trim() : '');
     setAddressMode(matching ? 'saved' : value.trim() || !suggestions().length ? 'new' : 'saved');
   };
   createEffect(on(suggestions, available => {
-    const selected = savedAddress();
-    if (selected && !available.some(suggestion => suggestion.address === selected)) {
-      setSavedAddress('');
+    const selected = savedGatewayID();
+    const entry = available.find(suggestion => suggestion.gatewayID === selected);
+    if (selected && (!entry || savedAddress() && !entry.addresses.includes(savedAddress()))) {
+      if (!entry) setSavedGatewayID('');
+      setSavedAddress(entry?.addresses[0] ?? '');
       if (addressMode() === 'saved') invalidate();
     }
+    if (entry?.addresses.length && !savedAddress()) setSavedAddress(entry.addresses[0]!);
     if (!available.length && addressMode() === 'saved') {
       setAddressMode('new');
       invalidate();
@@ -116,6 +146,44 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
       if (restoreFocus) queueMicrotask(focusAddress);
     }
   }, { defer: true }));
+  const gatewayAuthority = createMemo(() => {
+    const gateway = selectedGateway();
+    return gateway ? JSON.stringify([gatewayInteractionIdentity(gateway), gateway.permissions]) : '';
+  });
+  createEffect(on(gatewayAuthority, () => { invalidate(); }, { defer: true }));
+  async function saveGatewayAddress() {
+    const gateway = selectedGateway(), origin = draftAddress();
+    if (!gateway || !origin || !canManageGateway() || blocked() || busy()) return;
+    invalidate(); const current = generation;
+    const baseline = JSON.stringify(gateway.member_endpoints ?? []);
+    const endpoints = [...(gateway.member_endpoints ?? [])];
+    if (!endpoints.some(endpoint => endpoint.address === origin)) endpoints.push({
+      endpoint_id: 'endpoint_' + crypto.randomUUID().replaceAll('-', ''), address: origin, scope: 'lan', priority: endpoints.length,
+    });
+    setPending('saving-address');
+    try {
+      const result = await window.redevenDesktopLauncher?.performAction({ kind: 'update_gateway_endpoints', gateway_id: gateway.gateway_id, endpoints });
+      if (current !== generation) return;
+      if (!result?.ok || !result.gateway_endpoints?.some(endpoint => endpoint.address === origin)) { setError(text('gatewayMembers.failed')); return; }
+      setEndpointDelivery({ gatewayID: gateway.gateway_id, baseline, endpoints: result.gateway_endpoints });
+      setSavedAddress(origin); setCode('');
+      queueMicrotask(() => codeInput?.focus());
+    } catch { if (current === generation) setError(text('gatewayMembers.failed')); }
+    finally { if (current === generation) setPending(null); }
+  }
+  async function createGatewayInvitation() {
+    const gateway = selectedGateway();
+    if (!gateway || !selectedSavedAddress() || !canManageGateway() || blocked() || busy()) return;
+    invalidate(); const current = generation; setPending('creating-invitation');
+    try {
+      const result = await window.redevenDesktopLauncher?.performAction({ kind: 'invite_gateway_runtime', gateway_id: gateway.gateway_id });
+      if (current !== generation) return;
+      if (!result?.ok || !result.gateway_invitation_code?.share_addresses.includes(selectedSavedAddress())) { setError(text('gatewayMembers.failed')); return; }
+      setCode(result.gateway_invitation_code.code);
+      queueMicrotask(() => codeInput?.focus());
+    } catch { if (current === generation) setError(text('gatewayMembers.failed')); }
+    finally { if (current === generation) setPending(null); }
+  }
   createEffect(on(currentStep, () => {
     if (props.wizard && scrollViewport) scrollViewport.scrollTop = 0;
   }, { defer: true }));
@@ -321,7 +389,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
           </section>
         </Show>
         <section class="redeven-gateway-join-section" hidden={props.wizard && currentStep() !== 1}>
-          <Show when={props.wizard}><h3>{text('gatewayJoin.gatewayInvitation')}</h3><p class="text-sm text-muted-foreground">{text('gatewayJoin.codeHelp')}</p></Show>
+          <Show when={props.wizard}><h3>{text('gatewayJoin.gatewayInvitation')}</h3><p class="text-sm text-muted-foreground">{text('gatewayDiscovery.invitationIntro')}</p></Show>
           <div class="redeven-gateway-join-address">
             <Show when={suggestions().length}>
               <Tabs items={[
@@ -332,11 +400,40 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
                 slotClassNames={{ tab: 'redeven-gateway-source-tab', indicator: 'redeven-gateway-source-indicator' }}
                 ariaLabel={text('gatewayJoin.address')} class="redeven-gateway-source-tabs" />
               <TabPanel id={savedPanelID} labelledBy={savedTabID} active={addressMode() === 'saved'} keepMounted class="redeven-gateway-source-panel">
-                <label class="redeven-gateway-join-field"><span>{text('gatewayDiscovery.savedGateway')}</span><select ref={savedGatewayInput} data-gateway-picker class="redeven-gateway-saved-picker" value={selectedSavedAddress()} disabled={busy()}
-                  onChange={event => { const value = event.currentTarget.value; updateSavedAddress(value); if (value) queueMicrotask(() => codeInput?.focus()); }}>
+                <label class="redeven-gateway-join-field"><span>{text('gatewayDiscovery.savedGateway')}</span><select ref={savedGatewayInput} data-gateway-picker class="redeven-gateway-saved-picker" value={savedGatewayID()} disabled={busy()}
+                  onChange={event => updateSavedGateway(event.currentTarget.value)}>
                   <option value="">{text('gatewayDiscovery.chooseSavedGateway')}</option>
-                  <KeyedFor each={suggestions()} by={suggestion => suggestion.address}>{suggestion => <option value={suggestion().address}>{suggestion().name} · {new URL(suggestion().address).host}</option>}</KeyedFor>
+                  <KeyedFor each={suggestions()} by={suggestion => suggestion.gatewayID}>{suggestion => <option value={suggestion().gatewayID}>{suggestion().name} · {suggestion().addresses.length ? new URL(suggestion().addresses[0]!).host : text('gatewayDiscovery.setupNeeded')}</option>}</KeyedFor>
                 </select></label>
+                <Show when={selectedGateway()}>
+                  <Show when={selectedAddresses().length} fallback={
+                    <div class="redeven-gateway-address-setup" data-gateway-address-setup aria-busy={pending() === 'saving-address'}>
+                      <strong class="text-sm">{text('gatewayDiscovery.setupNeeded')}</strong>
+                      <p class="text-sm text-muted-foreground">{text(canManageGateway() ? 'gatewayDiscovery.setupHelp' : 'gatewayDiscovery.cannotManage')}</p>
+                      <Show when={canManageGateway()}>
+                        <label class="redeven-gateway-join-field"><span>{text('gatewayJoin.address')}</span>
+                          <Input ref={endpointInput} data-gateway-endpoint-draft value={endpointDraft()} placeholder="https://gateway.example:7443"
+                            autocomplete="off" spellcheck={false} disabled={busy()} aria-describedby={addressTabsID + '-setup-help'}
+                            onInput={event => { invalidate(); setEndpointDrafts(current => ({ ...current, [savedGatewayID()]: event.currentTarget.value })); }} />
+                        </label>
+                        <p id={addressTabsID + '-setup-help'} class="text-xs text-muted-foreground">{text('gatewayDiscovery.addressRequirement')}</p>
+                        <Show when={selectedGateway()?.allowed_hosts?.length}><p class="break-all text-xs text-muted-foreground">{text('gatewayNetwork.allowedHosts')}: {selectedGateway()?.allowed_hosts?.join(', ')}</p></Show>
+                        <Button class="self-start cursor-pointer" variant="outline" disabled={busy() || blocked() || !draftAddress() || (selectedGateway()?.member_endpoints?.length ?? 0) >= 16}
+                          onClick={() => void saveGatewayAddress()}><StableText reserve={[text('gatewayDiscovery.saveAddress'), text('gatewayNetwork.saving')]}>{text(pending() === 'saving-address' ? 'gatewayNetwork.saving' : 'gatewayDiscovery.saveAddress')}</StableText></Button>
+                      </Show>
+                    </div>
+                  }>
+                    <Show when={selectedAddresses().length > 1} fallback={<p class="redeven-gateway-selected-address" data-gateway-selected-address>{selectedSavedAddress()}</p>}>
+                      <label class="redeven-gateway-join-field"><span>{text('gatewayJoin.address')}</span>
+                        <select class="redeven-gateway-saved-picker" data-gateway-address-picker value={selectedSavedAddress()} disabled={busy()}
+                          onChange={event => { invalidate(); setSavedAddress(event.currentTarget.value); }}>
+                          <option value="" disabled>{text('gatewayJoin.address')}</option>
+                          <KeyedFor each={selectedAddresses()} by={value => value}>{value => <option value={value()}>{value()}</option>}</KeyedFor>
+                        </select>
+                      </label>
+                    </Show>
+                  </Show>
+                </Show>
               </TabPanel>
             </Show>
             <TabPanel id={newPanelID} role={suggestions().length ? 'tabpanel' : undefined}
@@ -345,6 +442,11 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
               {manualAddressField()}
             </TabPanel>
           </div>
+          <Show when={addressMode() === 'saved' && canManageGateway() && selectedSavedAddress()}>
+            <div class="redeven-gateway-invitation-create" aria-busy={pending() === 'creating-invitation'}><p class="text-sm text-muted-foreground">{text('gatewayDiscovery.invitationHelp')}</p>
+              <Button class="shrink-0 cursor-pointer" variant="outline" disabled={busy() || blocked()} onClick={() => void createGatewayInvitation()}>{text('gatewayMembers.createInvitation')}</Button>
+            </div>
+          </Show>
           <label class="redeven-gateway-join-field"><span>{text('gatewayJoin.code')}</span><Input ref={codeInput} value={code()} autocomplete="off" spellcheck={false} disabled={busy()}
             onInput={event => { invalidate(); setCode(event.currentTarget.value); }} onKeyDown={event => { if (event.key === 'Enter' && !blocked() && !busy() && effectiveAddress() && code().trim()) { event.preventDefault(); void verify(); } }} /></label>
         </section>
@@ -379,6 +481,6 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
     </div>
   </div>;
   return <Show when={props.embedded} fallback={<><Show when={!props.hideTrigger}><Button ref={trigger} class="mt-2 cursor-pointer" size="sm" variant="outline" disabled={props.disabled} onClick={openDialog}>{text('gatewayJoin.title')}</Button></Show>
-    <Dialog open={open()} onOpenChange={value => { if (!value) close(); }} title={text(purpose() === 'update-endpoints' ? 'gatewayJoin.updateEndpoints' : 'gatewayJoin.title')} bodyDescription={text('gatewayJoin.codeHelp')} closeLabel={text('common.close')} class="redeven-gateway-dialog redeven-gateway-join-dialog" contentClass="redeven-gateway-join-content">{body()}</Dialog>
+    <Dialog open={open()} onOpenChange={value => { if (!value) close(); }} title={text(purpose() === 'update-endpoints' ? 'gatewayJoin.updateEndpoints' : 'gatewayJoin.title')} bodyDescription={text('gatewayDiscovery.invitationIntro')} closeLabel={text('common.close')} class="redeven-gateway-dialog redeven-gateway-join-dialog" contentClass="redeven-gateway-join-content">{body()}</Dialog>
   </>}>{body()}</Show>;
 }

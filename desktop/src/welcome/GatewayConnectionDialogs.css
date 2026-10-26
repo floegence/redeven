@@ -1067,3 +1067,30 @@
 @media (max-width: 480px) {
   .redeven-gateway-setting-badge { align-self: flex-start; }
 }
+
+.redeven-gateway-address-setup {
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+  margin-top: .75rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: .625rem;
+  background: color-mix(in srgb, var(--muted) 20%, var(--background));
+}
+
+.redeven-gateway-selected-address {
+  margin-top: .5rem;
+  overflow-wrap: anywhere;
+  color: var(--muted-foreground);
+  font-size: var(--floe-type-body);
+}
+
+.redeven-gateway-invitation-create {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .75rem;
+}
+
+.redeven-gateway-invitation-create p { flex: 1 1 12rem; }

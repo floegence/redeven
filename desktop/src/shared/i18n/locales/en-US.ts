@@ -75,6 +75,14 @@ export const enUS = {
     "tab": "Gateway"
 },
   gatewayDiscovery: {
+    invitationIntro: "Choose a saved Gateway or enter an address and invitation code shared with you.",
+    setupNeeded: "Address setup needed",
+    setupHelp: "This Gateway is saved, but has no usable address for this Runtime. Add an address here to continue.",
+    cannotManage: "Ask the Gateway administrator for a reachable address and invitation code, then choose Enter an address.",
+    addressRequirement: "Use an HTTPS address this Runtime can reach. It must match the allowed Hosts; remote Runtimes cannot use localhost.",
+    saveAddress: "Save connection address",
+    invitationHelp: "Generate an invitation for this Gateway, or paste a code you already have.",
+
     savedGateway: "Saved Gateway",
     chooseSavedGateway: "Choose a saved Gateway",
     enterAddress: "Enter an address",

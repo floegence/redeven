@@ -5,7 +5,7 @@ description: Gateway enrollment, connection ownership and consent.
 tags: [gateway, desktop, interaction, validation]
 timestamp: 2026-10-14T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-10-26"
 ---
 # Summary
 
@@ -27,7 +27,9 @@ When authenticated inspection proves the Runtime or its container is stopped, sh
 
 Connection loss blocks submission and polling; explicit recovery retains drafts and uses the original lifecycle owner. Lost connection or changed authority requires fresh verification. Observations never cancel pending requests.
 
-Saved-address and manual-entry tabs preserve independent drafts and input nodes. The picker uses enabled registrations saved on this Desktop across URL, local/SSH host and container kinds; observed connectivity and listener state do not hide known addresses or clear selection. Prefer confirmed member_endpoints; before catalog sync, a saved URL may supply a canonical HTTPS origin (an optional root slash is removed). Never infer share addresses from SSH or listener coordinates. Reject revoked/changed trust, invalid origins, Host-rejected addresses and loopback for remote targets. Late inventory defaults untouched empty entry to saved selection without replacing a typed draft or its focus. Removing an eligible selected address invalidates verification. Selection grants no authority: the target Runtime still verifies reachability, identity and invitation before explicit consent. Success clears the consumed code; reopening clears consent and code.
+Saved-Gateway and manual-entry tabs preserve independent drafts and input nodes. Selection belongs to the enabled saved registration ID across URL, local/SSH host and container kinds, never to an address or observed connectivity. Retain records with no usable endpoints and show inline address setup. Prefer confirmed member_endpoints; a URL registration without catalog endpoints may use its canonical HTTPS origin. Never infer addresses from SSH or listener coordinates. Reject revoked/changed trust, invalid origins, Host-rejected addresses and loopback for remote targets without hiding otherwise eligible registrations. Late inventory cannot replace typed input or focus; removal of a selected usable address revokes verification.
+
+For host-managed Gateways with manage_members permission, the enrollment owner saves a reachable address through update_gateway_endpoints, preserving existing endpoints, listeners and Host restrictions. The IPC response returns the authoritative endpoint list; retain that delivery only until the catalog changes, never resurrect removed endpoints. The user explicitly generates an invitation through invite_gateway_runtime or pastes an existing code. Saving, selection and invitation issuance never enroll a Runtime. URL/access-only connections explain how to obtain an address and code from the administrator. Changed authority, closure and suspension reject late responses; observations preserve pending actions. Runtime verification and explicit consent remain mandatory. Success consumes the code; reopening clears consent and code.
 
 ## Management and presentation
 
@@ -53,3 +55,5 @@ UI state and observations cannot expand authority or imply completion.
 - `redeven:desktop/src/main/environmentManagementConnections.test.ts` — Lease ownership, cancellation and admitted writes.
 - `redeven:desktop/src/welcome/GatewaySetup.client.test.tsx` — Confirmation, admission, observed service steps and stable trigger continuity.
 - `redeven:desktop/scripts/check-gateway-card-experience.mjs` — Update progress, collapsed diagnostics, title-row close controls and viewport bounds at desktop and narrow widths.
+
+- `redeven:desktop/scripts/check-gateway-enrollment-electron.mjs` — Isolated product Desktop, real Gateway and Runtime: empty-address selection, persisted endpoint, signed invitation, verification, explicit consent, connected membership and owned cleanup.

@@ -1,5 +1,14 @@
 import type { GatewayEndpoint, GatewayNetworkSettings } from './gatewayMembership';
 
+/** Canonical HTTPS origin shared by network forms and enrollment. */
+export function gatewayConnectionOrigin(value: string): string | null {
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== 'https:' || url.username || url.password || url.pathname !== '/' || url.search || url.hash) return null;
+    return url.origin;
+  } catch { return null; }
+}
+
 function ipHost(value: string): string | null {
   if (value.includes(':')) {
     try { const url = new URL(`https://[${value}]`); return url.hostname.slice(1, -1); } catch { return null; }
@@ -38,7 +47,7 @@ export function normalizeGatewayNetworkSettings(value: unknown): GatewayNetworkS
     const item = raw as Record<string, unknown>;
     if (typeof item.endpoint_id !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/u.test(item.endpoint_id) || typeof item.address !== 'string'
       || !['lan','overlay','public'].includes(String(item.scope)) || !Number.isSafeInteger(item.priority) || Number(item.priority) < 0 || Number(item.priority) > 1000) return null;
-    try { const url = new URL(item.address); if (url.protocol !== 'https:' || url.origin !== item.address || url.username || url.password || url.pathname !== '/' || url.search || url.hash) return null; } catch { return null; }
+    if (gatewayConnectionOrigin(item.address) !== item.address) return null;
     endpoints.push({endpoint_id:item.endpoint_id,address:item.address,scope:item.scope as GatewayEndpoint['scope'],priority:Number(item.priority)});
   }
   if (new Set(endpoints.map(item => item.endpoint_id)).size !== endpoints.length || new Set(endpoints.map(item => item.address)).size !== endpoints.length) return null;
