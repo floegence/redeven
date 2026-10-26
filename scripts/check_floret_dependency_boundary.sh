@@ -22,8 +22,8 @@ require_source() {
 }
 
 echo "[INFO] checking published Floret v7 dependency"
-rg -q '^\s*github\.com/floegence/floret/v7 v7\.87\.1$' go.mod \
-  || fail "go.mod must consume github.com/floegence/floret/v7 v7.87.1"
+rg -q '^\s*github\.com/floegence/floret/v7 v7\.87\.3$' go.mod \
+  || fail "go.mod must consume github.com/floegence/floret/v7 v7.87.3"
 redeven_go_version=$(GOWORK=off go list -m -f '{{.GoVersion}}')
 floret_go_version=$(GOWORK=off go list -m -f '{{.GoVersion}}' github.com/floegence/floret/v7)
 [[ "$redeven_go_version" == "$floret_go_version" ]] \
@@ -66,7 +66,8 @@ echo "[INFO] checking typed ThreadService production path"
 require_source internal/ai/floret_bootstrap.go 'host.ThreadService(effects)'
 rg -q 'threadRuntime[[:space:]]+flruntime[.]ThreadService' internal/ai/floret_bootstrap.go \
   || fail "Floret bootstrap must retain the typed ThreadService boundary"
-require_source internal/ai/send_user_turn.go 's.threadRuntime.Send'
+require_source internal/ai/send_user_turn.go 'flruntime.ThreadCommandService'
+require_source internal/ai/send_user_turn.go 'commands.SendAck'
 require_source internal/ai/compact_thread_context.go 'flruntime.ThreadContextCompactor'
 require_source internal/ai/compact_thread_context.go 'compactor.CompactContext'
 require_source internal/ai/thread_goal.go 'flruntime.ThreadGoalController'
