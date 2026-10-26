@@ -242,8 +242,8 @@ function transportKey(
   ]);
 }
 
-function authArgs(target: DesktopSSHHostAccessDetails): string[] {
-  return target.auth_mode === 'key_agent'
+function authArgs(entry: TransportEntry): string[] {
+  return entry.target.auth_mode === 'key_agent' || entry.password === ''
     ? ['-o', 'BatchMode=yes']
     : ['-o', 'BatchMode=no', '-o', 'NumberOfPasswordPrompts=3'];
 }
@@ -261,7 +261,7 @@ function sharedArgs(entry: TransportEntry, pty = false): string[] {
     '-o', 'ForwardAgent=no',
     '-o', 'ServerAliveInterval=15',
     '-o', 'ServerAliveCountMax=3',
-    ...authArgs(entry.target),
+    ...authArgs(entry),
     ...(entry.direct ? [] : ['-S', entry.controlSocketPath]),
   ];
 }
