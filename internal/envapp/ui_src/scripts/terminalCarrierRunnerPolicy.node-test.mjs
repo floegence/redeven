@@ -10,6 +10,7 @@ import {
 const carrierSource = await readFile(new URL('./checkSemanticTerminalCarrier.mjs', import.meta.url), 'utf8');
 const ciSource = await readFile(new URL('../../../../.github/workflows/ci-check.yml', import.meta.url), 'utf8');
 const prePushSource = await readFile(new URL('../../../../scripts/check_renderer_e2e.sh', import.meta.url), 'utf8');
+const dependencySource = await readFile(new URL('../../../../scripts/ui_package_common.sh', import.meta.url), 'utf8');
 const uiGateSource = await readFile(new URL('../../../../scripts/check_ui_tests.sh', import.meta.url), 'utf8');
 const performanceSource = await readFile(new URL('./checkTerminalInteractionPerformance.mjs', import.meta.url), 'utf8');
 const packagedRendererSource = await readFile(new URL('./checkPackagedRenderer.mjs', import.meta.url), 'utf8');
@@ -37,8 +38,8 @@ test('keeps the supported terminal carriers explicit in the exact-main pre-push 
   assert.match(prePushSource, /corepack pnpm run test:terminal-carrier -- --headless --fixture-bytes "\$fixture_bytes"/u);
   assert.doesNotMatch(prePushSource, /DISPLAY|xvfb-run/u);
   assert.doesNotMatch(uiGateSource, /DISPLAY|xvfb-run/u);
-  assert.match(prePushSource, /ui_pkg_need_install "\$UI_DIR"/u);
-  assert.match(prePushSource, /pnpm install --frozen-lockfile/u);
+  assert.match(prePushSource, /ui_pkg_ensure_dependencies "\$UI_DIR"/u);
+  assert.match(dependencySource, /ui_pkg_run_pnpm install --frozen-lockfile/u);
   assert.match(prePushSource, /pnpm exec playwright install chromium/u);
   assert.match(prePushSource, /^run_terminal_carrier 65536$/mu);
   assert.match(prePushSource, /^run_terminal_carrier 458752$/mu);
