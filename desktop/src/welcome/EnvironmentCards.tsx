@@ -1,6 +1,5 @@
 import { environmentInteractionIdentity } from './environmentInteractionIdentity';
 import {RuntimeCloudConnections} from './RuntimeCloudConnections';
-import { RuntimeGatewaySetupDialog } from './RuntimeGatewaySetupDialog';
 import { runtimeGatewayAccessPresentation } from '../shared/runtimeGatewayAccessPresentation';
 import { RuntimeGatewayConnectionsDialog } from './RuntimeGatewayConnectionsDialog';
 import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
@@ -180,6 +179,7 @@ export function EnvironmentCardsPanel(
     actionProgress: readonly DesktopLauncherActionProgress[];
     lifecycleProgressFocusRequest: LifecycleProgressFocusRequest | null;
     consumeLifecycleProgressFocusRequest: (requestID: number) => void;
+    openRuntimeGatewaySetup: (environment: DesktopEnvironmentEntry, restoreFocus: () => void) => void;
     runLocalEnvironmentAction: (
       environment: DesktopEnvironmentEntry,
       action: EnvironmentActionModel,
@@ -567,6 +567,7 @@ export function EnvironmentCardsPanel(
       )}
       selectEndpointForQRCode={(endpointID) => selectEndpointForQRCode(environmentID, endpointID)}
       guidanceSession={guidanceSessionForEnvironment(environmentID)}
+      openRuntimeGatewaySetup={props.openRuntimeGatewaySetup}
       runLocalEnvironmentAction={props.runLocalEnvironmentAction}
       refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
       openEnvironmentFlowerSurface={props.openEnvironmentFlowerSurface}
@@ -825,6 +826,7 @@ function EnvironmentOwnerSurface(
     ) => void;
     settleLifecycleDisclosure: (attempt: EnvironmentLifecycleAttempt, accepted: boolean) => void;
     bindLifecycleDisclosure: (attempt: EnvironmentLifecycleAttempt, operation: EnvironmentLifecycleAttempt) => void;
+    openRuntimeGatewaySetup: (environment: DesktopEnvironmentEntry, restoreFocus: () => void) => void;
     runLocalEnvironmentAction: (
       environment: DesktopEnvironmentEntry,
       action: EnvironmentActionModel,
@@ -918,7 +920,6 @@ function EnvironmentOwnerSurface(
     }
   };
 
-  const [gatewaySetupOpen, setGatewaySetupOpen] = createSignal(false);
   const [joinOpen, setJoinOpen] = createSignal(false);
   const [cloudOpen, setCloudOpen] = createSignal(false);
   const [gatewayJoinOpenRequest, setGatewayJoinOpenRequest] = createSignal(0);
@@ -932,7 +933,7 @@ function EnvironmentOwnerSurface(
   };
   const [gatewayMode,setGatewayMode]=createSignal<'leave'|'publish'>();
   const [gatewayActionID, setGatewayActionID] = createSignal<string>();
-  createEffect(() => props.onInteractionActive(gatewaySetupOpen() || joinOpen() || cloudOpen() || !!gatewayMode()));
+  createEffect(() => props.onInteractionActive(joinOpen() || cloudOpen() || !!gatewayMode()));
   const openGatewayConfirmation = (mode: 'leave' | 'publish') => {
     setGatewayActionID(props.gatewayPerspective ? props.gatewayMember?.gateway_id : undefined);
     setGatewayMode(mode);
@@ -946,7 +947,8 @@ function EnvironmentOwnerSurface(
         id: 'gateway-setup',
         label: props.i18n.t('gatewayJoin.menuAction'),
         disabled: gatewayOperationState().actionsDisabled,
-        onRun: (): void => { setGatewaySetupOpen(true); },
+        onRun: (): void => { props.openRuntimeGatewaySetup(runtime(), () =>
+          (ownerElement?.querySelector<HTMLButtonElement>('[aria-haspopup="menu"]') ?? ownerElement)?.focus()); },
       }, ...(runtime().runtime_service?.gateway_memberships?.length ? [
        {id:'gateway-update-endpoints',label:props.i18n.t('gatewayJoin.updateEndpoints')+'…',disabled:operationState().actionsDisabled,onRun:()=>openGatewayEnrollment('update-endpoints')},
        {id:'gateway-leave',label:props.i18n.t('gatewayConnections.unpairTitle')+'…',tone:'danger' as const,disabled:operationState().actionsDisabled,onRun:()=>openGatewayConfirmation('leave')},
@@ -956,7 +958,6 @@ function EnvironmentOwnerSurface(
     return [];
   });
 
-  const gatewaySetupEnvironment = createMemo(() => gatewaySetupOpen() ? runtime() : undefined);
   return (
     <section
       ref={ownerElement}
@@ -966,17 +967,6 @@ function EnvironmentOwnerSurface(
       data-owner-role={props.relationshipRole ?? 'standalone'}
       aria-label={ownerLabel()}
     >
-      <RuntimeGatewaySetupDialog gateways={props.gateways} environment={gatewaySetupEnvironment()} i18n={props.i18n}
-        available={props.ownerAvailable} operationBusy={gatewayOperationState().actionsDisabled}
-        progress={gatewayOperationState().activeProgress}
-        close={() => { setGatewaySetupOpen(false); queueMicrotask(() => (ownerElement?.querySelector<HTMLButtonElement>('[aria-haspopup="menu"]') ?? ownerElement)?.focus()); }}
-        edit={environment => { setGatewaySetupOpen(false); props.editEnvironment(environment); }}
-        refresh={environment => props.refreshEnvironmentRuntime(environment, 'dialog')}
-        recover={(environment, recovery) => props.runLocalEnvironmentAction(environment, {
-          intent: recovery === 'start' ? 'start_runtime' : recovery === 'restart' ? 'restart_runtime' : 'update_runtime',
-          label: props.i18n.t(recovery === 'start' ? 'gatewayJoin.startAndContinue' : recovery === 'restart' ? 'environmentAction.restartRuntime' : 'environmentAction.updateRuntime'),
-          enabled: true, variant: 'default',
-        }, 'dialog')} />
       <Show when={!props.ownerAvailable}><p role="alert" class="px-4 text-sm text-warning">{props.i18n.t('interactionContinuity.unavailable')}</p></Show>
       <CardHeader class="redeven-environment-owner-heading">
         <div class="flex items-start justify-between gap-2">

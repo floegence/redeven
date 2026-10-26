@@ -2690,6 +2690,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [gatewayQuery, setGatewayQuery] = createSignal('');
   const [joinGatewayAfterCreate, setJoinGatewayAfterCreate] = createSignal(false);
   const [gatewaySetupEnvironmentID, setGatewaySetupEnvironmentID] = createSignal('');
+  let runtimeGatewaySetupReturnFocus: (() => void) | undefined;
   const [activeCenterTab, setActiveCenterTab] = createSignal<EnvironmentCenterTab>('environments');
   const [lifecycleProgressFocusRequest, setLifecycleProgressFocusRequest] = createSignal<LifecycleProgressFocusRequest | null>(null);
   const actionToastTimers = new Map<number, number>();
@@ -6297,21 +6298,18 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         progressDetail={gatewaySetupOperation()?.panelProgress ? localizedProgressDetail(i18n(), gatewaySetupOperation()!.panelProgress!) : undefined}
         i18n={i18n()} close={() => {
           const id = gatewaySetupEnvironmentID(); setGatewaySetupEnvironmentID('');
-          requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-owner-id="${CSS.escape(id)}"]`)?.focus());
+          const restore = runtimeGatewaySetupReturnFocus; runtimeGatewaySetupReturnFocus = undefined;
+          requestAnimationFrame(() => restore ? restore() : document.querySelector<HTMLElement>(`[data-owner-id="${CSS.escape(id)}"]`)?.focus());
         }}
         refresh={environment => refreshEnvironmentRuntime(environment, 'dialog', { announceSuccess: false })}
         recover={async (environment, operation, sshPassword) => {
-          if (operation === 'start' && sshPassword !== undefined) {
-            const request = runtimeActionRequest(environment, 'start_environment_runtime');
-            if (!request) return false;
-            const result = await performLauncherActionSilently({ ...request, ssh_password: sshPassword });
-            return result.ok && result.outcome === 'started_environment_runtime';
-          }
-          return triggerLocalEnvironmentAction(environment, {
-            intent: operation === 'start' ? 'start_runtime' : operation === 'restart' ? 'restart_runtime' : 'update_runtime',
-            label: i18n().t(operation === 'start' ? 'gatewayJoin.startAndContinue' : operation === 'restart' ? 'environmentAction.restartRuntime' : 'environmentAction.updateRuntime'),
-            enabled: true, variant: 'default',
-          }, 'dialog');
+          const request = runtimeActionRequest(environment, operation === 'start' ? 'start_environment_runtime'
+            : operation === 'restart' ? 'restart_environment_runtime' : 'update_environment_runtime', { forceRuntimeUpdate: operation === 'update' });
+          if (!request) return { ok: false };
+          const result = await performLauncherActionSilently({ ...request, ...(sshPassword !== undefined ? { ssh_password: sshPassword } : {}) });
+          if (!result.ok) return { ok: false, authenticationRequired: result.failure?.code === 'ssh_authentication_failed' };
+          return { ok: result.outcome === (operation === 'start' ? 'started_environment_runtime'
+            : operation === 'restart' ? 'restarted_environment_runtime' : 'updated_environment_runtime') };
         }}
         edit={environment => startEditingEnvironment(environment)} />
       <DesktopCommandRegistrar
@@ -6509,6 +6507,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               setDefaultWSLEnvironment={setDefaultWSLEnvironment}
               openRemoteEnvironment={openRemoteEnvironment}
               openSSHEnvironment={openSSHEnvironment}
+              openRuntimeGatewaySetup={(environment, restoreFocus) => { runtimeGatewaySetupReturnFocus = restoreFocus; setGatewaySetupEnvironmentID(environment.id); }}
               runLocalEnvironmentAction={triggerLocalEnvironmentAction}
               refreshEnvironmentRuntime={refreshEnvironmentRuntime}
               openEnvironmentFlowerSurface={openEnvironmentFlowerSurface}
@@ -7495,6 +7494,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
     errorTarget?: 'connect' | 'dialog',
     environment?: DesktopEnvironmentEntry,
   ) => Promise<boolean>;
+  openRuntimeGatewaySetup: (environment: DesktopEnvironmentEntry, restoreFocus: () => void) => void;
   runLocalEnvironmentAction: (
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
@@ -7715,6 +7715,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
       actionProgress={props.actionProgress}
       lifecycleProgressFocusRequest={props.lifecycleProgressFocusRequest}
       consumeLifecycleProgressFocusRequest={props.consumeLifecycleProgressFocusRequest}
+      openRuntimeGatewaySetup={props.openRuntimeGatewaySetup}
       runLocalEnvironmentAction={props.runLocalEnvironmentAction}
       refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
       openEnvironmentFlowerSurface={props.openEnvironmentFlowerSurface}

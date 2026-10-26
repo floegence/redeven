@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { RuntimeGatewaySetupDialog } from './RuntimeGatewaySetupDialog';
+import type { RuntimeGatewayPreparationResult } from './RuntimeGatewayJoinPanel';
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
 import type { DesktopCloudRuntimeLinkTarget } from '../shared/providerRuntimeLinkTarget';
 import { createDesktopI18n } from '../shared/i18n';
@@ -64,6 +65,22 @@ it('authenticates inside the wizard and keeps one connection through verificatio
 });
 beforeEach(() => { vi.stubGlobal('CSS', { escape: (value: string) => value }); HTMLElement.prototype.scrollIntoView = vi.fn(); });
 afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+it('reuses available authentication for explicit startup without a second password gate', async () => {
+  const access = environment.managed_runtime_host_access;
+  if (access?.kind !== 'ssh_host') throw new Error('SSH fixture required');
+  const selected = { ...environment, ssh_password_configured: false,
+    managed_runtime_host_access: { ...access, ssh: { ...access.ssh, auth_mode: 'password' as const } } };
+  const recover = vi.fn(async () => ({ ok: true }));
+  const root = document.createElement('div'); document.body.append(root);
+  dispose = render(() => <RuntimeGatewaySetupDialog environment={selected} i18n={i18n} refresh={refresh}
+    recover={recover} edit={() => {}} close={() => {}} />, root);
+  await settle();
+  expect(document.querySelector('input[type="password"]')).toBeNull();
+  expect(button('gatewayJoin.startAndContinue').hasAttribute('disabled')).toBe(false);
+  button('gatewayJoin.startAndContinue').click(); await settle();
+  expect(recover).toHaveBeenCalledExactlyOnceWith(selected, 'start');
+});
 
 it('recovers authentication without losing invitation drafts and starts a fresh connection after cancellation', async () => {
   const access = readyEnvironment.managed_runtime_host_access;
@@ -202,7 +219,7 @@ it.each([true, false])('offers explicit startup and reconnects only with authent
   const recover = vi.fn(async () => {
     expect(document.querySelector<HTMLInputElement>('input[type="password"]')?.value ?? '').toBe('');
     if (connected) setCurrent({ ...selected, provider_runtime_link_target: target });
-    return true;
+    return { ok: true };
   });
   const root = document.createElement('div'); document.body.append(root);
   dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} i18n={i18n} refresh={refresh} recover={recover} edit={() => {}} close={() => {}} />, root);
@@ -210,12 +227,10 @@ it.each([true, false])('offers explicit startup and reconnects only with authent
   button('gatewayJoin.connectAndContinue').click(); await settle();
   expect(document.body.textContent).toContain(i18n.t('gatewayJoin.startHelp'));
   expect(recover).not.toHaveBeenCalled();
-  expect(button('gatewayJoin.startAndContinue').hasAttribute('disabled')).toBe(true);
-  const password = document.querySelector<HTMLInputElement>('input[type="password"]')!;
-  expect(password.value).toBe('');
-  password.value = ' temporary '; password.dispatchEvent(new Event('input', { bubbles: true }));
+  expect(document.querySelector('input[type="password"]')).toBeNull();
+  expect(button('gatewayJoin.startAndContinue').hasAttribute('disabled')).toBe(false);
   button('gatewayJoin.startAndContinue').click(); await settle();
-  expect(recover).toHaveBeenCalledExactlyOnceWith(selected, 'start', ' temporary ');
+  expect(recover).toHaveBeenCalledExactlyOnceWith(selected, 'start');
   if (connected) {
     expect(document.querySelector('input[type="password"]')).toBeNull();
     expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('1');
@@ -224,6 +239,41 @@ it.each([true, false])('offers explicit startup and reconnects only with authent
     expect(button('common.retry').hasAttribute('disabled')).toBe(true);
     expect(perform).toHaveBeenCalledTimes(2);
   }
+});
+
+it.each(['start', 'restart', 'update'] as const)('uses one authentication field for actual %s failures and clears it after recovery', async operation => {
+  const source = operation === 'start' ? environment : operation === 'restart'
+    ? { ...readyEnvironment, provider_runtime_link_target: { ...target, runtime_control_status: { state: 'missing' as const, reason_code: 'not_reported' as const, message: 'Restart' } } }
+    : { ...readyEnvironment, runtime_operations: { ...readyEnvironment.runtime_operations,
+      update: { ...readyEnvironment.runtime_operations.update, reason_code: 'runtime_update_required' } } };
+  const selected = { ...source, runtime_started_at_unix_ms: 100 };
+  const [current, setCurrent] = createSignal<DesktopEnvironmentEntry>(selected);
+  const recover = vi.fn(async (_environment: DesktopEnvironmentEntry, _operation: string, password?: string) => {
+    if (password !== ' temporary ') return { ok: false, authenticationRequired: true };
+    setCurrent({ ...readyEnvironment, runtime_started_at_unix_ms: 200 }); return { ok: true };
+  });
+  const perform = vi.fn(async (_request: object) => ({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }));
+  vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
+  const root = document.createElement('div'); document.body.append(root);
+  dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} i18n={i18n} refresh={refresh} recover={recover} edit={() => {}} close={() => {}} />, root);
+  await settle();
+  expect(document.querySelector('input[type="password"]')).toBeNull();
+  button(operation === 'start' ? 'gatewayJoin.startAndContinue' : operation === 'restart' ? 'environmentAction.restartRuntime' : 'environmentAction.updateRuntime').click(); await settle();
+  expect(recover).toHaveBeenCalledExactlyOnceWith(selected, operation);
+  expect(document.querySelectorAll('input[type="password"]')).toHaveLength(1);
+  const password = document.querySelector<HTMLInputElement>('input[type="password"]')!;
+  expect(document.activeElement).toBe(password);
+  password.value = 'wrong'; password.dispatchEvent(new Event('input', { bubbles: true }));
+  password.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await settle();
+  expect(document.body.textContent).toContain(i18n.t('gatewayJoin.sshAuthenticationFailed'));
+  expect(password.value).toBe('');
+  password.value = ' temporary '; password.dispatchEvent(new Event('input', { bubbles: true }));
+  password.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await settle();
+  expect(recover).toHaveBeenLastCalledWith(selected, operation, ' temporary ');
+  expect(document.querySelector('input[type="password"]')).toBeNull();
+  expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('1');
+  expect(perform).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ operation: 'status' }));
+  expect(perform.mock.calls[0][0]).not.toHaveProperty('ssh_password');
 });
 
 it.each(['status', 'preview'] as const)('rejects late %s results after settings suspends the enrollment owner', async operation => {
@@ -338,7 +388,7 @@ it('explains unsupported Runtime versions and requires an explicit update', asyn
   const selected = { ...source, runtime_service: { ...source.runtime_service!, capabilities: {
     ...source.runtime_service!.capabilities!, runtime_gateway: { supported: false },
   } } };
-  const recover = vi.fn(async () => false), refresh = vi.fn(async () => true);
+  const recover = vi.fn(async () => ({ ok: false })), refresh = vi.fn(async () => true);
   const perform = vi.fn(); vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const root = document.createElement('div'); document.body.append(root);
   dispose = render(() => <RuntimeGatewaySetupDialog environment={selected} i18n={i18n} refresh={refresh} recover={recover} edit={() => {}} close={() => {}} />, root);
@@ -355,7 +405,7 @@ it('starts the selected Runtime, verifies an administrator code, then requires l
  .mockResolvedValueOnce({ ok: true, gateway_membership: { joined: true, phase: 'joining' } });
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const [current, setCurrent] = createSignal<DesktopEnvironmentEntry | undefined>(environment);
-  const start = vi.fn(async () => { setCurrent(readyEnvironment); return true; });
+  const start = vi.fn(async () => { setCurrent(readyEnvironment); return { ok: true }; });
   const root = document.createElement('div'); document.body.append(root);
   dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} i18n={i18n} refresh={refresh} recover={start} edit={() => {}} close={() => setCurrent(undefined)} />, root);
   await settle();
@@ -377,7 +427,7 @@ it('starts the selected Runtime, verifies an administrator code, then requires l
 });
 
 it('keeps the saved registration after startup failure and supports cancellation without enrollment', async () => {
-  const perform = vi.fn(), start = vi.fn(async () => false);
+  const perform = vi.fn(), start = vi.fn(async () => ({ ok: false }));
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const [current, setCurrent] = createSignal<DesktopEnvironmentEntry | undefined>(environment);
   const root = document.createElement('div'); document.body.append(root);
@@ -394,7 +444,7 @@ it('preserves enrollment input and focus when the selected environment snapshot 
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const [current, setCurrent] = createSignal<DesktopEnvironmentEntry | undefined>(readyEnvironment);
   const root = document.createElement('div'); document.body.append(root);
-  dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} i18n={i18n} refresh={refresh} recover={async () => true} edit={() => {}} close={() => setCurrent(undefined)} />, root);
+  dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} i18n={i18n} refresh={refresh} recover={async () => ({ ok: true })} edit={() => {}} close={() => setCurrent(undefined)} />, root);
   await settle();
   button('gatewayJoin.connectAndContinue').click(); await settle();
   const inputs = [...document.querySelectorAll<HTMLInputElement>('input')];
@@ -416,7 +466,7 @@ it.each(['local', 'ssh', 'wsl', 'local_container', 'ssh_container'] as const)('s
   const [current, setCurrent] = createSignal<DesktopEnvironmentEntry | undefined>(selected);
   const refresh = vi.fn(async () => true), recover = vi.fn(async () => {
     setCurrent(runtimeGatewayAccessFixture(kind).environment);
-    return true;
+    return { ok: true };
   });
   const perform = vi.fn(async () => ({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }));
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
@@ -465,7 +515,7 @@ it.each(['restart', 'update'] as const)('retains the enrollment session across f
     ? { ok: true, gateway_preview: preview } : { ok: true, gateway_membership: { joined: false, phase: 'not_joined' } });
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const [current, setCurrent] = createSignal<DesktopEnvironmentEntry | undefined>(readyEnvironment);
-  const recover = vi.fn().mockResolvedValueOnce(false).mockImplementationOnce(async () => { setCurrent(structuredClone(readyEnvironment)); return true; });
+  const recover = vi.fn().mockResolvedValueOnce({ ok: false }).mockImplementationOnce(async () => { setCurrent(structuredClone(readyEnvironment)); return { ok: true }; });
   const root = document.createElement('div'); document.body.append(root);
   dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} i18n={i18n} refresh={refresh} recover={recover} edit={() => {}} close={() => setCurrent(undefined)} />, root);
   await settle();
@@ -582,15 +632,15 @@ it('returns expired consent to invitation verification after explicit reconnecti
 
 it('fences recovery completion when the same registration changes management coordinates', async () => {
   const [current, setCurrent] = createSignal(environment);
-  let finish!: (value: boolean) => void;
-  const recover = vi.fn(() => new Promise<boolean>(resolve => { finish = resolve; }));
+  let finish!: (value: RuntimeGatewayPreparationResult) => void;
+  const recover = vi.fn(() => new Promise<RuntimeGatewayPreparationResult>(resolve => { finish = resolve; }));
   const refresh = vi.fn(async () => true), perform = vi.fn();
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const root = document.createElement('div'); document.body.append(root);
   dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} i18n={i18n} refresh={refresh} recover={recover} edit={() => {}} close={() => {}} />, root);
   await settle(); button('gatewayJoin.startAndContinue').click(); await settle();
   setCurrent({ ...readyEnvironment, managed_runtime_placement: { kind: 'host_process', runtime_root: '/changed', bootstrap_strategy: 'auto', release_base_url: '' } }); await settle();
-  refresh.mockClear(); finish(true); await settle();
+  refresh.mockClear(); finish({ ok: true }); await settle();
   expect(refresh).not.toHaveBeenCalled(); expect(perform).not.toHaveBeenCalled();
   expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('0');
 });

@@ -1366,19 +1366,9 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       } as DesktopLauncherActionRequest;
     }
     case 'start_environment_runtime':
-    case 'refresh_environment_runtime': {
-      const target = normalizeDesktopLauncherRuntimeTarget(candidate as Record<string, unknown>);
-      if (!target) {
-        return null;
-      }
-      return {
-        kind,
-        ...target,
-        ...(kind === 'start_environment_runtime' && 'ssh_password' in candidate && typeof candidate.ssh_password === 'string' ? { ssh_password: candidate.ssh_password } : {}),
-      } as DesktopLauncherActionRequest;
-    }
     case 'restart_environment_runtime':
     case 'update_environment_runtime':
+    case 'refresh_environment_runtime':
     case 'stop_environment_runtime': {
       const target = normalizeDesktopLauncherRuntimeTarget(candidate as Record<string, unknown>);
       if (!target) {
@@ -1387,6 +1377,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       return {
         kind,
         ...target,
+        ...(kind !== 'refresh_environment_runtime' && kind !== 'stop_environment_runtime' && 'ssh_password' in candidate && typeof candidate.ssh_password === 'string' ? { ssh_password: candidate.ssh_password } : {}),
       } as DesktopLauncherActionRequest;
     }
     case 'manage_desktop_update': {

@@ -5147,7 +5147,7 @@ function scheduleGatewaySyncAfterLauncherAction(
 
 const certificateOperations = new Map<string, Promise<DesktopCertificateReport>>();
 
-async function manageEnvironmentCertificate(request: DesktopCertificateRequest, parent?: BrowserWindow, bind?: string): Promise<DesktopCertificateReport> {
+async function manageEnvironmentCertificate(request: DesktopCertificateRequest, parent?: BrowserWindow, bind?: string, sshPassword?: string): Promise<DesktopCertificateReport> {
   const preferences = await loadDesktopPreferencesCached();
   const managed = preferences.saved_runtime_targets.some((target) => target.id === request.environment_id);
   if (!managed && (request.environment_id !== preferences.local_environment.id || !desktopPlatformCapabilities.native_host_runtime)) {
@@ -5177,7 +5177,7 @@ async function manageEnvironmentCertificate(request: DesktopCertificateRequest, 
       if (!input || parent.isDestroyed()) return { status: 'canceled', code: 'local_ui_certificate_selection_canceled' };
     }
     const run = async (verifyBind?: string) => managed
-      ? parseCertificateCommandReport(await runManagedRuntimeAuthority(request.environment_id, certificateCommandArguments(command, verifyBind), input), command)
+      ? parseCertificateCommandReport(await runManagedRuntimeAuthority(request.environment_id, certificateCommandArguments(command, verifyBind), input, sshPassword), command)
       : runDesktopCertificateCommand(bundledRuntimeExecutablePath(), localEnvironmentStateRoot(), command, input, verifyBind);
     if (command === 'export') {
       if (!parent || parent.isDestroyed()) throw new Error('Certificate export requires an open settings window.');
@@ -5276,11 +5276,11 @@ async function acquireEnvironmentManagementConnection(environmentID: string, own
   return ready ? acquireRuntimePlacementBridgeForReadyRecord(ready, owner, signal, sshPassword) : null;
 }
 
-async function runManagedRuntimeAuthority(environmentID: string, command: readonly string[], input?: unknown): Promise<unknown> {
+async function runManagedRuntimeAuthority(environmentID: string, command: readonly string[], input?: unknown, sshPassword?: string): Promise<unknown> {
   const preferences = await loadDesktopPreferencesCached();
   const target = preferences.saved_runtime_targets.find((candidate) => candidate.id === environmentID);
   if (!target) throw new Error('Access settings require the selected Environment management connection.');
-  const executor = runtimeHostExecutor(target.host_access, target.id, target.ssh_password || undefined);
+  const executor = runtimeHostExecutor(target.host_access, target.id, sshPassword ?? (target.ssh_password || undefined));
   const argv = buildManagedRuntimeAuthorityCommand(target.placement.runtime_root, target.placement.runtime_state_root ?? '', command);
   try {
     const result = await executor.run(target.placement.kind === 'container_process'
@@ -16587,15 +16587,15 @@ async function executeDirectManagedEnvironmentLifecycle(
       update: updateProgress,
     });
     const preferences = await loadDesktopPreferencesCached();
-    const lifecycleSSHPassword = input.request.kind === 'start_environment_runtime' && typeof input.request.ssh_password === 'string'
+    const lifecycleSSHPassword = typeof input.request.ssh_password === 'string'
       ? input.request.ssh_password
-      : savedRuntimePlacementSSHPassword(preferences, input.host_access, input.placement, targetID, input.environment_id);
+      : savedRuntimePlacementSSHPassword(preferences, input.host_access, input.placement, targetID, input.environment_id) || undefined;
     if (input.operation === 'restart') {
       const access = input.host_access.kind === 'local_host' && input.placement.kind === 'host_process'
         ? localEnvironmentAccess(preferences.local_environment)
-        : parseRuntimeAccessSettings(await runManagedRuntimeAuthority(input.environment_id, ['access', 'get']));
+        : parseRuntimeAccessSettings(await runManagedRuntimeAuthority(input.environment_id, ['access', 'get'], undefined, lifecycleSSHPassword));
       await requireHTTPSCertificateBeforeRestart(access?.local_ui_protocol,
-        (operation) => manageEnvironmentCertificate({ environment_id: input.environment_id, operation }, undefined, access?.local_ui_bind));
+        (operation) => manageEnvironmentCertificate({ environment_id: input.environment_id, operation }, undefined, access?.local_ui_bind, lifecycleSSHPassword));
     }
     const closeOwnedSessions = async (): Promise<void> => {
       if (input.operation === 'start' || sessionsReleased) return;
