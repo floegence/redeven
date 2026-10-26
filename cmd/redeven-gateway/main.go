@@ -30,7 +30,6 @@ import (
 	"github.com/floegence/redeven/internal/lockfile"
 	"github.com/floegence/redeven/internal/processenv"
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
-	"github.com/floegence/redeven/internal/runtimeservice"
 	processlib "github.com/shirou/gopsutil/v4/process"
 )
 
@@ -227,7 +226,7 @@ func (c *cli) desktopBridgeCmd(args []string) int {
 			RuntimeControl: desktopbridge.RuntimeControl{Available: false},
 			GatewayProtocol: desktopbridge.GatewayProtocol{
 				Available:          true,
-				CompatibilityEpoch: runtimeservice.CurrentCompatibilityContract().CompatibilityEpoch,
+				CompatibilityEpoch: gp.CompatibilityEpoch,
 			},
 			GatewayService: &desktopbridge.GatewayService{
 				StateRoot:          stateRootValue,

@@ -128,10 +128,10 @@ describe('buildGatewayActionPresentation', () => {
     const needsUpdate = buildGatewayActionPresentation({
       gateway: gateway({
         diagnosis: diagnosis('needs_update', {
-          error_code: 'UNAUTHORIZED',
-          error_message: 'Pair this Gateway before listing or opening environments.',
+          error_code: 'gateway_update_required',
+          error_message: 'Installed Gateway stamp does not match its binary.',
           managed_probe: {
-            package_status: 'ready',
+            package_status: 'build_identity_mismatch',
             version: 'v0.0.0-dev',
             target_version: 'v0.0.0-dev',
             commit: '46c3d67cc469',
@@ -150,15 +150,15 @@ describe('buildGatewayActionPresentation', () => {
     expect(needsUpdate.primary_action).toBeUndefined();
     expect(needsUpdate.continuation_action).toBeUndefined();
     expect(needsUpdate.diagnostic_facts).toEqual(expect.arrayContaining([
-      expect.objectContaining({ label: 'Error code', value: 'UNAUTHORIZED' }),
-      expect.objectContaining({ label: 'Error message', value: 'Pair this Gateway before listing or opening environments.', tone: 'error' }),
+      expect.objectContaining({ label: 'Error code', value: 'gateway_update_required' }),
+      expect.objectContaining({ label: 'Error message', value: 'Installed Gateway stamp does not match its binary.', tone: 'error' }),
       expect.objectContaining({ label: 'Gateway target commit', value: 'a7fd66530509' }),
     ]));
 
     expectNoLegacyGatewayActions([stopped, bridgeUnavailable, needsUpdate]);
   });
 
-  it('routes managed protocol incompatibility to reinstall while URL Gateways stay access-only', () => {
+  it('keeps host maintenance distinct from access-only protocol failures', () => {
     const managed = buildGatewayActionPresentation({
       gateway: gateway({
         service_state: {
@@ -171,8 +171,8 @@ describe('buildGatewayActionPresentation', () => {
         },
         diagnosis: diagnosis('needs_reinstall', {
           manageable: true,
-          error_code: 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED',
-          error_message: 'Gateway protocol version is not supported.',
+          error_code: 'GATEWAY_INVALID_RESPONSE',
+          error_message: 'Gateway returned an invalid response.',
         }),
       }),
       clicked_action: action('refresh_gateway'),

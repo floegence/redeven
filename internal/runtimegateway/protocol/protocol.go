@@ -7,6 +7,10 @@ import (
 
 const Version = "redeven-gateway-v6"
 
+// CompatibilityEpoch preserves the reviewed v6 host-authority contract.
+// It is independent of Runtime Service releases and changes only with Gateway authority.
+const CompatibilityEpoch = 69
+
 type IdentityRequest struct {
 	ProtocolVersion string `json:"protocol_version"`
 	Nonce           string `json:"nonce"`

@@ -33,6 +33,8 @@ For host-managed Gateways with manage_members permission, the enrollment owner s
 
 ## Management and presentation
 
+Readiness follows the observed service and verified Gateway protocol, not equality with the Desktop build. Refresh, pairing and invitation issuance reuse compatible installed Gateways. Package repair must never produce a start-required error. Pairing rejection cannot be reclassified as an update requirement from release or commit differences; [Gateway service](gateway-service.md) owns compatibility and package integrity.
+
 Member dialogs list members, issue invitations and manage policy. Refresh failure retains lists/invitations; cancellation cannot reopen dialogs or discard drafts. Settings/client-code import grant no Runtime permission or Namespace approval. [Network settings](gateway-network-settings.md) separates share endpoints, listeners and collapsed Host restrictions and owns validation/restart.
 
 Internal enrollment checks use inline feedback, without status-refreshed toasts. Unknown status never implies rejected credentials; expandable technical details retain the actual diagnosis. Opening Environment settings suspends enrollment, releases its connection and invalidates verification while preserving invitation drafts and the current step. Returning requires a fresh connection before submission.

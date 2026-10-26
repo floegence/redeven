@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
+// Unrelated Runtime releases must not change Gateway authority admission.
+vi.mock('../shared/runtimeService', async importOriginal => ({
+  ...await importOriginal<typeof import('../shared/runtimeService')>(),
+  RUNTIME_SERVICE_COMPATIBILITY_EPOCH: 999,
+}));
+
+import { describe, expect, it, vi } from 'vitest';
+import { GATEWAY_COMPATIBILITY_EPOCH } from '../shared/gatewayMembership';
 
 import {
   parseRuntimePlacementBridgeHello,
@@ -41,7 +47,7 @@ describe('runtimePlacementBridgeProtocol', () => {
   it('requires the current Gateway host-authority epoch before admitting a host bridge', () => {
     const gatewayHello = {
       ...validHello,
-      gateway_protocol: { available: true, compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH },
+      gateway_protocol: { available: true, compatibility_epoch: GATEWAY_COMPATIBILITY_EPOCH },
       gateway_service: {
         state_root: '/gateway',
         executable_path: '/bin/redeven-gateway',
@@ -50,7 +56,7 @@ describe('runtimePlacementBridgeProtocol', () => {
       },
     };
     expect(parseRuntimePlacementBridgeHello(Buffer.from(JSON.stringify(gatewayHello))).gateway_service?.service_pid).toBe(123);
-    for (const compatibility_epoch of [RUNTIME_SERVICE_COMPATIBILITY_EPOCH - 1, RUNTIME_SERVICE_COMPATIBILITY_EPOCH + 1, undefined]) {
+    for (const compatibility_epoch of [GATEWAY_COMPATIBILITY_EPOCH - 1, GATEWAY_COMPATIBILITY_EPOCH + 1, undefined]) {
       expect(() => parseRuntimePlacementBridgeHello(Buffer.from(JSON.stringify({
         ...gatewayHello, gateway_protocol: { ...gatewayHello.gateway_protocol, compatibility_epoch },
       })))).toThrowError(expect.objectContaining({ code: 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED' }));

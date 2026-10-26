@@ -55,6 +55,13 @@ export class GatewayServiceStartRequiredError extends Error {
   }
 }
 
+export class GatewayServiceUpdateRequiredError extends Error {
+  constructor(readonly service_state: DesktopGatewayServiceState) {
+    super(service_state.message ?? 'Repair the installed Gateway package before continuing.');
+    this.name = 'GatewayServiceUpdateRequiredError';
+  }
+}
+
 export class GatewayNotManageableError extends Error {
   constructor(message = 'URL Gateways cannot be managed from Desktop.') {
     super(message);
@@ -308,6 +315,9 @@ export class GatewayLifecycleManager {
     const serviceState = await this.inspectService(record, options.signal);
     if (serviceState.status === 'needs_reinstall') {
       throw new GatewayReinstallRequiredError(serviceState, serviceState.message);
+    }
+    if (serviceState.status === 'service_needs_update') {
+      throw new GatewayServiceUpdateRequiredError(serviceState);
     }
     if (serviceState.status === 'ready') {
       return this.openBridgeSession(record, this.gatewayExecutablePath(record), {

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import electron from 'electron';
@@ -27,13 +28,22 @@ await session.run(async () => {
   const gatewayState = path.join(gatewayRoot, 'gateways', gatewayID, 'state');
   const gatewayBinary = path.join(gatewayState, 'managed/bin/redeven-gateway');
   await mkdir(path.dirname(gatewayBinary), { recursive: true });
-  execFileSync(path.join(repository, 'scripts/build_runtime_binary.sh'), [
+  const historicalBinary = process.env.REDEVEN_TEST_GATEWAY_BINARY;
+  if (historicalBinary) await copyFile(historicalBinary, gatewayBinary);
+  else execFileSync(path.join(repository, 'scripts/build_runtime_binary.sh'), [
     '--goos', process.platform, '--goarch', process.arch === 'x64' ? 'amd64' : process.arch,
     '--output', gatewayBinary, '--command', './cmd/redeven-gateway', '--version', manifest.version,
     '--commit', manifest.commit, '--build-time', new Date().toISOString(),
   ], { cwd: repository, stdio: 'inherit', timeout: 120000, env: { ...process.env, GOWORK: 'off' } });
-  await writeFile(path.join(gatewayState, 'managed/managed-gateway.stamp'),
-    'schema_version=3\ninstalled_by=redeven-desktop\nslot_release_tag=' + manifest.version + '\nsource_commit=' + manifest.commit + '\n');
+  const versionOutput = execFileSync(gatewayBinary, ['version'], { encoding: 'utf8' }).trim();
+  const version = /^redeven-gateway (\S+) \(([^)]+)\)/u.exec(versionOutput);
+  assert.ok(version, 'Gateway must report its own real build identity');
+  const gatewayVersion = version[1], gatewayCommit = version[2];
+  if (historicalBinary) assert.notEqual(gatewayCommit, manifest.commit, 'Cross-version qualification needs distinct real builds');
+  const binaryHash = createHash('sha256').update(await readFile(gatewayBinary)).digest('hex');
+  const stampPath = path.join(gatewayState, 'managed/managed-gateway.stamp');
+  const stamp = 'schema_version=3\ninstalled_by=redeven-desktop\nslot_release_tag=' + gatewayVersion + '\nsource_commit=' + gatewayCommit + '\n';
+  await writeFile(stampPath, stamp);
   await session.command('Stop isolated Gateway', gatewayBinary, ['service-stop', '--state-root', gatewayState]);
   const started = JSON.parse(execFileSync(gatewayBinary, ['service-start', '--state-root', gatewayState, '--member-listen', '127.0.0.1:0'], { encoding: 'utf8' }));
   console.log('Real Gateway started', { pid: started.pid });
@@ -116,9 +126,22 @@ await session.run(async () => {
   assert.equal(joined.environments.length, 1);
   assert.deepEqual(errors, []);
   await page.screenshot({ path: path.join(output, 'connected.png') });
+  await page.getByRole('button', { name: 'Gateways', exact: true }).click();
+  const gatewayCard = page.locator('[data-gateway-id="enrollment-qualification"]');
+  await gatewayCard.waitFor();
+  assert.ok(!(await gatewayCard.innerText()).includes('Gateway update required'));
+  await gatewayCard.screenshot({ path: path.join(output, 'compatible-gateway.png') });
+  const finalService = JSON.parse(execFileSync(gatewayBinary, ['service-status', '--state-root', gatewayState], { encoding: 'utf8' }));
+  assert.equal(finalService.pid, started.pid, 'Pairing, refresh and enrollment must not restart a compatible Gateway');
+  assert.equal(createHash('sha256').update(await readFile(gatewayBinary)).digest('hex'), binaryHash);
+  assert.equal(await readFile(stampPath, 'utf8'), stamp);
+  assert.equal(joined.service_state.status, 'ready');
+  assert.equal(joined.status, 'online');
   await session.closeElectron(application);
-  await session.writeEvidence(path.join(output, 'report.json'), { scenarioStatus: 'passed', runtimeCommit: manifest.commit,
-    cases: ['Actual Desktop main and renderer display a paired Gateway with no advertised addresses',
+  await session.writeEvidence(path.join(output, 'report.json'), { scenarioStatus: 'passed', runtimeCommit: manifest.commit, gatewayCommit, gatewayVersion,
+    gatewayPIDUnchanged: finalService.pid === started.pid, gatewayBinaryUnchanged: true,
+    cases: ['Existing Gateway stays online across pairing, refresh and Runtime enrollment without update or restart',
+      'Actual Desktop main and renderer display a paired Gateway with no advertised addresses',
       'Wizard endpoint save persists to the real Gateway without replacing listener settings',
       'Gateway issues a real invitation; Runtime verifies it before membership exists',
       'Explicit confirmation creates one connected Runtime member'], errors });

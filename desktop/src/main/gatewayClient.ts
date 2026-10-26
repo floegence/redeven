@@ -90,7 +90,7 @@ function endpointList(value: unknown, requireOne = true): readonly GatewayEndpoi
   return result;
 }
 function version(value: unknown): typeof GATEWAY_PROTOCOL_VERSION {
-  if (value !== GATEWAY_PROTOCOL_VERSION) throw new GatewayClientError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'Update Gateway and Desktop to matching versions.');
+  if (value !== GATEWAY_PROTOCOL_VERSION) throw new GatewayClientError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'This Gateway uses an unsupported Gateway protocol. Update the incompatible peer.');
   return value;
 }
 function permissions(value: unknown): GatewayPermissions {
@@ -155,7 +155,7 @@ function envelope(raw: string, status: number): unknown {
   return data.data;
 }
 
-/** One signed v5 client for URL and trusted host transports. The optional bridge
+/** One signed v6 client for URL and trusted host transports. The optional bridge
  * changes only byte delivery; it never grants Runtime lifecycle permissions.
  */
 export class GatewayClient {

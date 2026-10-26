@@ -68,15 +68,29 @@ try {
   assert.equal(before.service_status, 'running');
   assert.equal(before.commit, commit);
   report.initial = { pid: before.service_pid, listen: before.service_listen, commit: before.commit };
-  for (const action of ['updateGateway', 'restartGateway']) {
+  const independent = new GatewayLifecycleManager({ ...options, source_runtime_root: path.join(state, 'missing-source'),
+    runtime_release_tag: 'v99.0.0', target_commit: 'unrelated-desktop-build' });
+  const independentPhases = [];
+  try {
+    await independent.restartGateway(record, { onProgress: event => independentPhases.push(event.phase) });
+    assert.ok(!independentPhases.includes('preparing_gateway_package'));
+    assert.ok(!independentPhases.includes('installing_gateway'));
+    assert.equal((await probe()).commit, commit);
+    assert.equal((await independent.catalog(record)).gateway.gateway_id, catalog.gateway.gateway_id);
+    report.cases.push({ differentDesktopReleaseRestartPassed: true, phases: independentPhases });
+  } finally { await independent.clear(record); }
+  await lifecycle.clear(record);
+  const restoredSession = await lifecycle.ensureGatewayReady(record, { startPolicy: 'require_ready' });
+  const afterRestart = await probe();
+  for (const action of ['updateGateway']) {
     const failing = new GatewayLifecycleManager({ ...options, source_runtime_root: path.join(state, 'missing-source'), target_commit: 'unavailable-source' });
     const phases = [];
     await assert.rejects(failing[action](record, { onProgress: event => phases.push(event.phase) }));
     assert.ok(phases.includes('preparing_gateway_package'));
     assert.ok(!phases.includes('stopping_gateway'));
-    assert.equal((await probe()).service_pid, before.service_pid);
+    assert.equal((await probe()).service_pid, afterRestart.service_pid);
     assert.equal((await lifecycle.catalog(record)).gateway.gateway_id, catalog.gateway.gateway_id);
-    assert.equal((await lifecycle.client(record)), session.client, 'Existing Desktop bridge survives package failure');
+    assert.equal((await lifecycle.client(record)), restoredSession.client, 'Existing Desktop bridge survives package failure');
     report.cases.push({ action, packageFailurePreservesServiceAndBridge: true, phases });
   }
   const phases = [];

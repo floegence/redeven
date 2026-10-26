@@ -184,6 +184,7 @@ export type DesktopLauncherActionFailureCode =
   | 'cloud_link_failed'
   | 'runtime_start_failed'
   | 'gateway_start_required'
+  | 'gateway_update_required'
   | 'gateway_not_manageable'
   | 'gateway_service_unreachable'
   | 'gateway_container_unavailable'

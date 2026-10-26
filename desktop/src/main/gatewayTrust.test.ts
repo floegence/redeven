@@ -1,4 +1,10 @@
-import { describe, expect, it } from 'vitest';
+// Unrelated Runtime releases must not change Gateway authority admission.
+vi.mock('../shared/runtimeService', async importOriginal => ({
+  ...await importOriginal<typeof import('../shared/runtimeService')>(),
+  RUNTIME_SERVICE_COMPATIBILITY_EPOCH: 999,
+}));
+
+import { describe, expect, it, vi } from 'vitest';
 import {
   assertGatewayAddressProof, assertGatewayPairingChallenge, assertGatewayPairingCompleteResponse, buildPairingCompleteRequest,
   completeGatewayPairing, createGatewayAuthHeaders, createGatewayPairingMaterial, gatewayPublicKeyFingerprint,
@@ -8,7 +14,7 @@ import {
 import { gatewayRecordFixture } from '../testSupport/gatewayMembershipFixture';
 import { GATEWAY_PROTOCOL_VERSION, type GatewayPermissions } from '../shared/gatewayMembership';
 import { gatewayProtocolID } from './gatewayStore';
-import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
+import { GATEWAY_COMPATIBILITY_EPOCH } from '../shared/gatewayMembership';
 
 function fixture() {
   const record = gatewayRecordFixture;
@@ -18,7 +24,7 @@ function fixture() {
   const challenge = {
     protocol_version: GATEWAY_PROTOCOL_VERSION, gateway_id: 'machine_stable', gateway_nonce: 'nonce',
     gateway_public_key: machine.client_public_key, gateway_public_key_fingerprint: gatewayPublicKeyFingerprint(machine.client_public_key),
-    expires_at_unix_ms: 2000, compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH, signature: '',
+    expires_at_unix_ms: 2000, compatibility_epoch: GATEWAY_COMPATIBILITY_EPOCH, signature: '',
   };
   challenge.signature = signGatewayPayload(machine.client_private_key, pairingChallengePayload({
     protocol_version: challenge.protocol_version, client_nonce: material.client_nonce, gateway_nonce: challenge.gateway_nonce,
@@ -29,7 +35,7 @@ function fixture() {
   return { record, material, machine, challenge, values, secret_store, pair };
 }
 
-describe('Gateway v4 trust', () => {
+describe('Gateway v6 trust', () => {
   it('pins machine identity independently from the local registration and signs requests with that identity', async () => {
     const f = fixture(), profile = await f.pair(), record = { ...f.record, trust_profile: profile };
     expect(profile.gateway_id).toBe('machine_stable'); expect(profile.gateway_id).not.toBe(f.record.gateway_id);
@@ -45,7 +51,7 @@ describe('Gateway v4 trust', () => {
       { gateway_public_key_fingerprint: 'wrong' }, { expires_at_unix_ms: 1000 }, { signature: 'wrong' }, { protocol_version: 'redeven-gateway-v3' }]) {
       expect(() => assertGatewayPairingChallenge({ record, material: f.material, challenge: { ...f.challenge, ...patch }, now_unix_ms: 1000 })).toThrow();
     }
-    expect(() => assertGatewayPairingChallenge({ record, material: f.material, challenge: { ...f.challenge, compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH - 1 }, now_unix_ms: 1000 })).toThrow();
+    expect(() => assertGatewayPairingChallenge({ record, material: f.material, challenge: { ...f.challenge, compatibility_epoch: GATEWAY_COMPATIBILITY_EPOCH - 1 }, now_unix_ms: 1000 })).toThrow();
     expect(() => assertGatewayPairingChallenge({ record, material: { ...f.material, binding_audience: 'https://other.example/' }, challenge: f.challenge, now_unix_ms: 1000 })).toThrow();
   });
   it('requires explicit trust consent before storing any private key', async () => {
@@ -89,7 +95,7 @@ describe('Gateway v4 trust', () => {
    const connection = { kind: 'url' as const, base_url: 'https://new-gateway.example/' };
    let proof: Record<string, unknown> = {};
    const updated = await verifyGatewayConnectionChange(record, connection, async candidate => {
-     proof = { binding_audience: connection.base_url, compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH, expires_at_unix_ms: 2000, gateway_id: profile.gateway_id,
+     proof = { binding_audience: connection.base_url, compatibility_epoch: GATEWAY_COMPATIBILITY_EPOCH, expires_at_unix_ms: 2000, gateway_id: profile.gateway_id,
        nonce, protocol_version: GATEWAY_PROTOCOL_VERSION, signature: '' };
      proof.signature = signGatewayPayload(f.machine.client_private_key, JSON.stringify(proof));
      assertGatewayAddressProof(candidate, nonce, proof, 1000);

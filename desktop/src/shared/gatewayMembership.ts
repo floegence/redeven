@@ -1,5 +1,7 @@
 /** Gateway v6 is the membership and multi-endpoint access contract. */
 export const GATEWAY_PROTOCOL_VERSION = 'redeven-gateway-v6' as const;
+/** Frozen at the reviewed v6 host-authority contract; unrelated Runtime changes do not bump it. */
+export const GATEWAY_COMPATIBILITY_EPOCH = 69;
 export const GATEWAY_ACCESS_STREAM = 'redeven.gateway.access.https.v6';
 
 export type GatewayEndpointScope = 'lan' | 'overlay' | 'public';

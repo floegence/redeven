@@ -71,6 +71,37 @@ func memberRequest(t *testing.T, invitation gp.EnrollmentDescriptor, runtimeID s
 	return request, key
 }
 
+func TestMembershipAcceptsDifferentRuntimeReleaseVersions(t *testing.T) {
+	store, _ := membershipStore(t)
+	want := map[string]string{
+		"runtime_old": "v1.0.0",
+		"runtime_new": "v2.0.0",
+		"runtime_dev": "v0.0.0-dev",
+	}
+	for id, version := range want {
+		invitation, err := store.Invite("desktop_admin")
+		if err != nil {
+			t.Fatal(err)
+		}
+		request, key := memberRequest(t, invitation, id)
+		request.Metadata.Version = version
+		if err := SignJoin(&request, key); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.Join(t.Context(), request); err != nil {
+			t.Fatalf("compatible Runtime %s could not join: %v", version, err)
+		}
+	}
+	members, _, _ := store.Snapshot()
+	got := make(map[string]string)
+	for _, member := range members {
+		got[member.Member.RuntimePublicID] = member.Member.Metadata.Version
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("mixed Runtime releases = %v, want %v", got, want)
+	}
+}
+
 func TestInvitationHasOneDurableConcurrentDelivery(t *testing.T) {
 	store, identity := membershipStore(t)
 	invitation, err := store.Invite("desktop_admin")

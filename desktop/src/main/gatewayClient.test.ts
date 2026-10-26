@@ -17,6 +17,14 @@ describe('Gateway access client contracts', () => {
     expect(secretStore.readSecret).not.toHaveBeenCalled();
   });
 
+  it('keeps members from different Runtime releases in the same Gateway catalog', () => {
+    const seed = catalogFixture.members[0];
+    const members = ['v1.0.0', 'v2.0.0', 'v0.0.0-dev'].map((version, index) => ({
+      ...seed, member_id: 'member_' + index, runtime_public_id: 'runtime_' + index, metadata: { ...seed.metadata, version },
+    }));
+    expect(normalizeGatewayCatalogResponse({ ...catalogFixture, members }).members).toEqual(members);
+  });
+
   it('rejects old protocols, duplicate members and malformed policies', () => {
     expect(() => normalizeGatewayCatalogResponse({ ...catalogFixture, protocol_version: 'redeven-gateway-v3' })).toThrow();
     expect(() => normalizeGatewayCatalogResponse({ ...catalogFixture, members: [...catalogFixture.members, ...catalogFixture.members] })).toThrow();
