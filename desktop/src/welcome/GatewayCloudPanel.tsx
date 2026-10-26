@@ -1,9 +1,9 @@
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
-import { createSignal, createEffect, createMemo, on, onCleanup, Show } from 'solid-js';
+import { createSignal, createEffect, createMemo, on, onCleanup, onMount, Show } from 'solid-js';
 import { normalizeGatewayCloudConfiguration, type GatewayCloudSummary } from '../shared/gatewayCloud';
 import type { DesktopI18n } from '../shared/i18n/desktopI18n';
 
-export function GatewayCloudPanel(props: Readonly<{ gatewayID: string; gatewayName: string; i18n: DesktopI18n; disabled?: boolean; showTrigger?: boolean; available?: boolean; onOpenChange?: (open: boolean) => void }>) {
+export function GatewayCloudPanel(props: Readonly<{ embedded?: boolean; gatewayID: string; gatewayName: string; i18n: DesktopI18n; disabled?: boolean; showTrigger?: boolean; available?: boolean; onOpenChange?: (open: boolean) => void }>) {
   const [open, setOpen] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
   const [status, setStatus] = createSignal<GatewayCloudSummary>();
@@ -68,11 +68,8 @@ export function GatewayCloudPanel(props: Readonly<{ gatewayID: string; gatewayNa
     const url = status()?.management_url;
     if (url) await openManagementURL(url);
   }
-  return <>
-    <Show when={props.showTrigger !== false}><Button ref={trigger} size="sm" variant="outline" class="cursor-pointer" disabled={props.disabled} onClick={begin}>{props.i18n.t('gatewayCloud.title')}</Button></Show>
-    <Dialog open={open()} onOpenChange={value => { if (!value) close(); }} title={props.i18n.t('gatewayCloud.title')}
-      bodyDescription={props.i18n.t('gatewayCloud.description')} closeLabel={props.i18n.t('common.close')}
-      class="redeven-gateway-dialog redeven-gateway-cloud-dialog" contentClass="redeven-gateway-dialog__content">
+  onMount(() => { if (props.embedded) begin(); });
+  const body = () => <div class="redeven-gateway-cloud-embedded">
       <div class="redeven-gateway-cloud-layout"><Show when={unavailable()}><p role="alert">{props.i18n.t('interactionContinuity.unavailable')}</p><Button variant="outline" disabled={props.available === false || busy()} onClick={revalidate}>{props.i18n.t('interactionContinuity.revalidate')}</Button></Show>
         <div class="redeven-gateway-cloud-state">
           <p class="redeven-gateway-cloud-state__name">{sessionName()}</p>
@@ -82,13 +79,18 @@ export function GatewayCloudPanel(props: Readonly<{ gatewayID: string; gatewayNa
         <Show when={error()}><p role="alert" class="redeven-gateway-content-enter rounded-md bg-destructive/10 px-3 py-2 text-sm text-error">{error()}</p></Show>
         <Show when={busy()}><p role="status" aria-live="polite" class="text-sm text-muted-foreground">{props.i18n.t('gatewayCloud.working')}</p></Show>
         <div class="redeven-gateway-dialog-actions">
-          <Button class="cursor-pointer" variant="ghost" onClick={close}>{props.i18n.t(busy() ? 'common.cancel' : 'common.close')}</Button>
+          <Show when={!props.embedded}><Button class="cursor-pointer" variant="ghost" onClick={close}>{props.i18n.t(busy() ? 'common.cancel' : 'common.close')}</Button></Show>
           <Button class="cursor-pointer" variant="outline" disabled={busy() || unavailable()} onClick={() => void load()}>{props.i18n.t('common.refresh')}</Button>
           <Show when={!needsConfiguration()} fallback={<Button class="cursor-pointer" disabled={busy() || unavailable()} onClick={() => void load(true)}>{props.i18n.t('gatewayCloud.configure')}</Button>}>
             <Button class="cursor-pointer" disabled={busy() || unavailable()} onClick={() => void manage()}>{props.i18n.t('gatewayCloud.manage')}</Button>
           </Show>
         </div>
       </div>
-    </Dialog>
-  </>;
+  </div>;
+  return <Show when={props.embedded} fallback={<>
+    <Show when={props.showTrigger !== false}><Button ref={trigger} size="sm" variant="outline" class="cursor-pointer" disabled={props.disabled} onClick={begin}>{props.i18n.t('gatewayCloud.title')}</Button></Show>
+    <Dialog open={open()} onOpenChange={value => { if (!value) close(); }} title={props.i18n.t('gatewayCloud.title')}
+      bodyDescription={props.i18n.t('gatewayCloud.description')} closeLabel={props.i18n.t('common.close')}
+      class="redeven-gateway-dialog redeven-gateway-cloud-dialog" contentClass="redeven-gateway-dialog__content">
+{body()}</Dialog></>}>{body()}</Show>;
 }

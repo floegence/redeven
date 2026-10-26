@@ -61,7 +61,9 @@ it('authenticates inside the wizard and keeps one connection through verificatio
   expect(new Set(requests.map(request => request.connection_token)).size).toBe(1);
   expect(requests[1].ssh_password).toBe(' temporary password ');
   expect(requests.filter(request => request.ssh_password)).toHaveLength(1);
-  expect(requests.at(-1)?.kind).toBe('close_runtime_gateway');
+  expect(document.querySelector('[data-gateway-enrollment-result]')).not.toBeNull();
+  button('gatewayExperience.done').click(); await settle();
+  expect(perform.mock.calls.at(-1)?.[0].kind).toBe('close_runtime_gateway');
 });
 beforeEach(() => { vi.stubGlobal('CSS', { escape: (value: string) => value }); HTMLElement.prototype.scrollIntoView = vi.fn(); });
 afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
@@ -643,4 +645,17 @@ it('fences recovery completion when the same registration changes management coo
   refresh.mockClear(); finish({ ok: true }); await settle();
   expect(refresh).not.toHaveBeenCalled(); expect(perform).not.toHaveBeenCalled();
   expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('0');
+});
+
+it('lists stopped managed environments from the Gateway entry without opening an Env App', async () => {
+ const fixture=runtimeGatewayAccessFixture('ssh','stopped');
+ const choose=vi.fn(), perform=vi.fn();vi.stubGlobal('redevenDesktopLauncher',{performAction:perform});
+ const root=document.createElement('div');document.body.append(root);
+ dispose=render(()=><RuntimeGatewaySetupDialog open gatewayID="saved-gateway" environments={[fixture.environment]} selectEnvironment={choose}
+   i18n={i18n} refresh={async()=>true} recover={async()=>({ok:true})} edit={()=>{}} close={()=>{}}/>,root);
+ await settle();
+ document.querySelector<HTMLElement>('[data-gateway-environment-choice] [data-floe-dropdown-trigger]')!.click();await settle();
+ const option=[...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(element=>element.textContent?.includes(fixture.environment.label));
+ expect(option).toBeTruthy();option!.click();await settle();
+ expect(choose).toHaveBeenCalledExactlyOnceWith(fixture.environment.id);expect(perform).not.toHaveBeenCalled();
 });

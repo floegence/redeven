@@ -1,4 +1,3 @@
-import { chooseGatewayPicker } from './gateway-picker-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -93,10 +92,26 @@ await session.run(async () => {
   const owner = page.locator('[data-owner-id="local"]');
   await owner.getByRole('button', { name: 'Actions', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Add Gateway access', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await page.getByRole('dialog').waitFor({ state: 'hidden' });
+  await page.getByRole('button', { name: 'Gateways', exact: true }).click();
+  const sourceCard = page.locator('[data-gateway-id="enrollment-qualification"]');
+  await sourceCard.getByRole('button', { name: 'More actions for Empty-address Gateway', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Gateway settings', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Add environment', exact: true }).click();
   const dialog = page.getByRole('dialog');
+  const choice = dialog.locator('[data-gateway-environment-choice] [data-floe-dropdown-trigger]');
+  await choice.click();
+  const local = (await snapshot()).environments.find(entry => entry.id === 'local');
+  await page.getByRole('menuitem').filter({ hasText: local.label }).click();
   await dialog.getByRole('button', { name: 'Connect and continue', exact: true }).click();
   const picker = dialog.locator('[data-gateway-picker]');
-  await chooseGatewayPicker(picker, source.display_name);
+  assert.ok((await picker.innerText()).includes(source.display_name), 'Gateway-side entry preselects registration with an empty address');
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('dialog').getByRole('tab', { name: 'Overview', exact: true }).waitFor();
+  await page.getByRole('dialog').getByRole('button', { name: 'Add environment', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Restore connection', exact: true }).click();
   await dialog.locator('[data-gateway-endpoint-draft]').waitFor();
   await dialog.screenshot({ path: path.join(output, 'empty-address.png') });
   await dialog.locator('[data-gateway-endpoint-draft]').fill(origin);
@@ -115,6 +130,9 @@ await session.run(async () => {
   assert.equal((await snapshot()).gateway_sources.find(value => value.gateway_id === gatewayID).environments.length, 0);
   await dialog.screenshot({ path: path.join(output, 'verified-before-consent.png') });
   await dialog.getByRole('button', { name: 'Confirm and enable', exact: true }).click();
+  await dialog.locator('[data-gateway-enrollment-result]').waitFor();
+  await dialog.screenshot({ path: path.join(output, 'enrollment-result.png') });
+  await dialog.getByRole('button', { name: 'Done', exact: true }).click();
   await dialog.waitFor({ state: 'hidden' });
   await action({ kind: 'refresh_gateway', gateway_id: gatewayID });
   const joined = await bounded(async () => { while (true) {
@@ -126,6 +144,10 @@ await session.run(async () => {
   } }, 30000, 'Runtime joined and connected to the real Gateway');
   assert.equal(joined.environments.length, 1);
   assert.deepEqual(errors, []);
+  await page.getByRole('dialog').getByRole('tab', { name: 'Overview', exact: true }).waitFor();
+  await page.getByRole('dialog').screenshot({ path: path.join(output, 'returned-management.png') });
+  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).last().click();
+  await page.getByRole('dialog').waitFor({ state: 'hidden' });
   await page.screenshot({ path: path.join(output, 'connected.png') });
   await page.getByRole('button', { name: 'Gateways', exact: true }).click();
   const gatewayCard = page.locator('[data-gateway-id="enrollment-qualification"]');
@@ -142,7 +164,8 @@ await session.run(async () => {
   await session.writeEvidence(path.join(output, 'report.json'), { scenarioStatus: 'passed', runtimeCommit: manifest.commit, gatewayCommit, gatewayVersion,
     gatewayPIDUnchanged: finalService.pid === started.pid, gatewayBinaryUnchanged: true,
     cases: ['Existing Gateway stays online across pairing, refresh and Runtime enrollment without update or restart',
-      'Actual Desktop main and renderer display a paired Gateway with no advertised addresses',
+      'Both Welcome entry points share one enrollment task; suspend/resume restores the selected Gateway',
+    'Actual Desktop main and renderer display a paired Gateway with no advertised addresses',
       'Wizard endpoint save persists to the real Gateway without replacing listener settings',
       'Gateway issues a real invitation; Runtime verifies it before membership exists',
       'Explicit confirmation creates one connected Runtime member'], errors });

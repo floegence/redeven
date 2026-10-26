@@ -57,6 +57,23 @@ async function chooseSavedGateway(id:string) {
 beforeEach(()=>{vi.stubGlobal('CSS',{escape:(v:string)=>v});HTMLElement.prototype.scrollIntoView=vi.fn();});
 afterEach(()=>{dispose?.();document.body.replaceChildren();vi.unstubAllGlobals();vi.restoreAllMocks();vi.useRealTimers();});
 
+it('queries the exact membership after an uncertain join without consuming the invitation again', async () => {
+ let checks=0;
+ const perform=vi.fn(async request => {
+  if(request.operation==='preview')return verified();
+  if(request.operation==='join')throw new Error('Connection lost after submission');
+  if(request.operation==='status')return status(++checks===1 ? {joined:false,phase:'not_joined'} : {joined:true,phase:'joined',gateway_id:preview.gateway_id,gateway_name:preview.gateway_name});
+  return {ok:true};
+ });
+ mount(perform);await settle();button(i18n.t('gatewayJoin.verify')).click();await settle();
+ button(i18n.t('gatewayJoin.confirmEnable')).click();await settle();
+ expect(document.querySelector('[data-gateway-enrollment-result]')?.textContent).toContain(i18n.t('gatewayExperience.confirming'));
+ expect([...document.querySelectorAll('button')].some(button=>controlText(button)===i18n.t('gatewayJoin.confirmEnable'))).toBe(false);
+ button(i18n.t('common.refresh')).click();await settle();
+ expect(document.querySelector('[data-gateway-enrollment-result]')?.textContent).toContain(i18n.t('gatewayExperience.joined'));
+ expect(perform.mock.calls.filter(([request])=>request.operation==='join')).toHaveLength(1);
+});
+
 describe('Runtime Gateway address and code interaction',()=>{
  it('pauses status polling while the user restores SSH authentication',async()=>{
   vi.useFakeTimers();

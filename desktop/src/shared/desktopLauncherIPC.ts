@@ -926,6 +926,7 @@ export type DesktopLauncherActionRequest = Readonly<
 >;
 
 export type DesktopLauncherActionSuccess = Readonly<{
+  gateway_id?: string;
   gateway_access_code?: GatewayClientAccessCode;
   gateway_clients?: readonly GatewayAuthorizedClient[];
   gateway_invitation_code?: GatewayInvitationCodeDelivery;

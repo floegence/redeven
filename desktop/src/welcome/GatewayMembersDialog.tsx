@@ -1,3 +1,4 @@
+import { GatewayPicker } from './GatewayPicker';
 import { gatewayAllowedHost, gatewayConnectionOrigin, gatewayListenAddress } from '../shared/gatewayNetworkSettings';
 import { KeyedFor, Button, Checkbox, Input, StableText } from '@floegence/floe-webapp-core/ui';
 import { ChevronDown, Plus, Trash, Copy } from '@floegence/floe-webapp-core/icons';
@@ -5,28 +6,26 @@ import { createEffect, createMemo, createSignal, For, on, onCleanup, Show, untra
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import type { DesktopLauncherActionRequest, DesktopLauncherActionSuccess } from '../shared/desktopLauncherIPC';
 import type { GatewayCloudPermission, GatewayEndpoint, GatewayInvitationCodeDelivery, GatewayPolicy } from '../shared/gatewayMembership';
-import type { DesktopCloudRuntimeLinkTarget } from '../shared/providerRuntimeLinkTarget';
 import type { DesktopI18n } from '../shared/i18n';
-import { RuntimeGatewayJoinPanel } from './RuntimeGatewayJoinPanel';
 import { gatewayInteractionIdentity } from './environmentInteractionIdentity';
 import { DesktopTooltip } from './DesktopTooltip';
 
 export function GatewayMembersPanel(props: Readonly<{
   available?: boolean;
-  gateway?: DesktopGatewaySource; i18n: DesktopI18n; targets: readonly DesktopCloudRuntimeLinkTarget[];
+  gateway?: DesktopGatewaySource; i18n: DesktopI18n;
   section?: 'connection' | 'runtimes'; refresh: () => Promise<unknown>;
+  onEnroll?: () => void;
+  onRestart?: () => void;
 }>) {
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal('');
   const [invitation, setInvitation] = createSignal<GatewayInvitationCodeDelivery>();
   const [invitationInvalidated, setInvitationInvalidated] = createSignal(false);
-  const [targetID, setTargetID] = createSignal('');
   const [shareAddress, setShareAddress] = createSignal('');
   const [copied, setCopied] = createSignal('');
   const [now, setNow] = createSignal(Date.now());
   const expiryTimer = setInterval(() => setNow(Date.now()),1000);
   onCleanup(() => clearInterval(expiryTimer));
-  const invitationExpired = createMemo(() => !!invitation() && invitation()!.expires_at_unix_ms <= now());
   const [draftPolicy, setDraftPolicy] = createSignal<GatewayPolicy>();
   const [overrides, setOverrides] = createSignal<Record<string, GatewayCloudPermission>>({});
   const [results, setResults] = createSignal<DesktopLauncherActionSuccess['gateway_member_results']>();
@@ -49,7 +48,7 @@ export function GatewayMembersPanel(props: Readonly<{
     if (next === gatewayID) return;
     if (removalTimer !== undefined) window.clearTimeout(removalTimer);
     removalTimer = undefined;
-    gatewayID = next; generation++; setBusy(false); setError(''); setInvitation(undefined); setTargetID('');
+    gatewayID = next; generation++; setBusy(false); setError(''); setInvitation(undefined);
     setDraftPolicy(undefined); setOverrides({}); setResults(undefined); setRemoving(''); setSavingPolicy(false); setRemovingEndpointID(''); setEndpointDraft([...(props.gateway?.member_endpoints ?? [])]);
     setSavedEndpoints(props.gateway?.member_endpoints ?? []);
     const listen = props.gateway?.listener_addresses?.length ? props.gateway.listener_addresses : [props.gateway?.listener_address || ':7443'];
@@ -74,8 +73,6 @@ export function GatewayMembersPanel(props: Readonly<{
   const authority = createMemo(() => JSON.stringify([props.gateway && gatewayInteractionIdentity(props.gateway), props.gateway?.permissions]));
   createEffect(on(authority, () => { generation++; setBusy(false); setInvitationInvalidated(true); setRemoving(''); setSavingPolicy(false); }, { defer: true }));
   const policy = () => draftPolicy() ?? props.gateway?.policy;
-  const targets = createMemo(() => [...new Map(props.targets.filter(target => target.runtime_running && target.runtime_control_status.state === 'available').map(target => [target.id, target])).values()]);
-  const target = createMemo<DesktopCloudRuntimeLinkTarget | undefined>(previous => targets().find(value => value.id === targetID()) ?? (previous?.id === targetID() ? previous : undefined));
   const normalizedEndpoints = () => endpointDraft().map(endpoint => ({
     ...endpoint, address: gatewayConnectionOrigin(endpoint.address) ?? endpoint.address.trim(),
   }));
@@ -222,78 +219,21 @@ export function GatewayMembersPanel(props: Readonly<{
         <summary class="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden"><span>{props.i18n.t('gatewayNetwork.advanced')}</span><span class="ml-auto text-xs font-normal text-muted-foreground">{props.i18n.t(entries(hostsDraft()).length ? 'gatewayNetwork.restrictedHosts' : 'gatewayNetwork.allHosts',{count:entries(hostsDraft()).length})}</span><ChevronDown class="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" /></summary>
         <div class="redeven-gateway-network-advanced__content"><label class="redeven-gateway-field"><span>{props.i18n.t('gatewayNetwork.allowedHosts')}</span><Input ref={hostsInput} aria-invalid={networkFieldError() === 'hosts' || undefined} id="gateway-allowed-hosts" class="font-mono" value={hostsDraft()} placeholder="gateway.example, 192.168.1.10" size="sm" spellcheck={false} disabled={props.available === false || busy() || !props.gateway?.permissions?.manage_members} onInput={event => { setHostsDraft(event.currentTarget.value); setNetworkSaved(false); setNetworkFieldError(undefined); setError(''); }} /></label><p class="redeven-gateway-help">{props.i18n.t('gatewayNetwork.hostsHelp')}</p></div>
       </details>
-      <div class="redeven-gateway-network-actions"><Show when={networkSaved() || restartRequired()}><p role="status" class="redeven-gateway-help">{props.i18n.t(restartRequired() ? 'gatewayNetwork.restartRequired' : 'gatewayNetwork.saved')}</p></Show><Button class="ml-auto cursor-pointer whitespace-nowrap" size="sm" disabled={props.available === false || busy() || Boolean(removingEndpointID()) || !props.gateway?.permissions?.manage_members || !networkDirty()} onClick={() => void saveEndpoints()}><StableText reserve={[props.i18n.t('gatewayNetwork.save'),props.i18n.t('gatewayNetwork.saving')]}>{props.i18n.t(busy() ? 'gatewayNetwork.saving' : 'gatewayNetwork.save')}</StableText></Button></div>
+      <div class="redeven-gateway-network-actions"><Show when={networkSaved() || restartRequired()}><p role="status" class="redeven-gateway-help">{props.i18n.t(restartRequired() ? 'gatewayNetwork.restartRequired' : 'gatewayNetwork.saved')}</p></Show><Show when={restartRequired() && props.onRestart}><Button variant="outline" size="sm" onClick={() => props.onRestart?.()}>{props.i18n.t('gatewayExperience.reviewRestart')}</Button></Show><Button class="ml-auto cursor-pointer whitespace-nowrap" size="sm" disabled={props.available === false || busy() || Boolean(removingEndpointID()) || !props.gateway?.permissions?.manage_members || !networkDirty()} onClick={() => void saveEndpoints()}><StableText reserve={[props.i18n.t('gatewayNetwork.save'),props.i18n.t('gatewayNetwork.saving')]}>{props.i18n.t(busy() ? 'gatewayNetwork.saving' : 'gatewayNetwork.save')}</StableText></Button></div>
       </Show>
       <Show when={props.section !== 'connection'}>
       <section class="redeven-gateway-settings-section">
-        <div class="redeven-gateway-section-heading">
-          <div class="min-w-0">
-            <h3>{props.i18n.t('gatewayMembers.invite')}</h3>
-            <p>{props.i18n.t('gatewayMembers.inviteHelp')}</p>
-          </div>
-          <Button class="cursor-pointer" size="sm" disabled={props.available === false || busy() || !props.gateway?.permissions?.manage_members || savedEndpoints().length === 0 || endpointsDirty() || !endpointsValid()} onClick={() => void invite()}>{props.i18n.t('gatewayMembers.createInvitation')}</Button>
-        </div>
-        <Show when={!savedEndpoints().length}><p role="status" class="redeven-gateway-empty-state">{props.i18n.t('gatewayMembers.noConnectionAddresses')}</p></Show>
-        <Show when={invitation() && !endpointsDirty()}>
-          <div class="redeven-gateway-content-enter redeven-gateway-invitation-card">
-            <p role="status" class="text-sm font-medium text-primary">{props.i18n.t('gatewayMembers.invitationReady')}</p>
-            <p class="font-medium">{invitation()?.gateway_name}</p>
-            <label class="block space-y-2 text-sm"><span>{props.i18n.t('gatewayJoin.address')}</span><select class="w-full cursor-pointer rounded-md border border-border bg-background px-3 py-2.5" value={shareAddress()} onChange={event => { setShareAddress(event.currentTarget.value); setCopied(''); }}><For each={invitation()?.share_addresses}>{address => <option value={address}>{address}</option>}</For></select></label>
-            <Button class="cursor-pointer whitespace-nowrap" size="sm" variant="outline" icon={Copy} disabled={invitationInvalidated() || props.available === false || !props.gateway?.permissions?.manage_members || invitation()!.expires_at_unix_ms<=now()} onClick={() => void copyInvitation(shareAddress(),'address')}><StableText reserve={[props.i18n.t('gatewayJoin.copyAddress'),props.i18n.t('gatewayJoin.copied')]}>{props.i18n.t(copied()==='address'?'gatewayJoin.copied':'gatewayJoin.copyAddress')}</StableText></Button>
-            <div><p class="text-sm">{props.i18n.t('gatewayJoin.code')}</p><p class="select-text break-all rounded-md bg-muted p-3 font-mono tracking-wide">{invitation()?.code.match(/.{1,5}/g)?.join('-')}</p></div>
-            <Button class="cursor-pointer whitespace-nowrap" size="sm" variant="outline" icon={Copy} disabled={invitationInvalidated() || props.available === false || !props.gateway?.permissions?.manage_members || invitation()!.expires_at_unix_ms<=now()} onClick={() => void copyInvitation(invitation()!.code,'code')}><StableText reserve={[props.i18n.t('gatewayJoin.copyCode'),props.i18n.t('gatewayJoin.copied')]}>{props.i18n.t(copied()==='code'?'gatewayJoin.copied':'gatewayJoin.copyCode')}</StableText></Button>
-            <p role="timer" class="text-sm text-muted-foreground">{invitation()!.expires_at_unix_ms<=now()?props.i18n.t('gatewayJoin.expired'):props.i18n.t('gatewayJoin.expiresIn',{minutes:Math.max(0,Math.ceil((invitation()!.expires_at_unix_ms-now())/60000))})}</p>
-            <Button class="cursor-pointer whitespace-nowrap" size="sm" variant="outline" disabled={props.available === false || busy()} onClick={() => void invite()}>{props.i18n.t('gatewayJoin.regenerate')}</Button>
-            <label class="block space-y-1 text-xs"><span>{props.i18n.t('gatewayMembers.chooseRuntime')}</span>
-              <select class="w-full cursor-pointer rounded-md border border-border bg-background px-3 py-2.5 text-sm" value={targetID()} onChange={event => setTargetID(event.currentTarget.value)}>
-                <option value="">{props.i18n.t('gatewayMembers.importOnRuntime')}</option>
-                <KeyedFor each={targets()} by={item => item.id}>{item => <option value={item().id}>{item().label}</option>}</KeyedFor>
-              </select>
-            </label>
-            <Show when={target()}>{item => <RuntimeGatewayJoinPanel authorityKey={JSON.stringify([authority(), invitation()?.invitation_id, invitationInvalidated(), invitationExpired(), props.available !== false, targets().some(value => value.id === targetID())])} submissionBlocked={invitationInvalidated() || invitationExpired() || props.available === false || !targets().some(value => value.id === targetID())} targetID={item().id} address={shareAddress()} code={invitation()?.code} targetLabel={item().label} i18n={props.i18n} />}</Show>
-          </div>
-        </Show>
-      </section>
-      <Show when={policy()}>{current => <details class="redeven-gateway-disclosure redeven-gateway-policy group">
-        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">{props.i18n.t('gatewayMembers.policy')}<ChevronDown class="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" /></summary>
-        <div class="redeven-gateway-policy-content">
-        <Checkbox label={props.i18n.t('gatewayMembers.defaultAllow')} checked={current().default_cloud_allowed}
-          disabled={props.available === false || busy() || !props.gateway?.permissions?.configure_cloud}
-          onChange={default_cloud_allowed => { setDraftPolicy({ ...current(), default_cloud_allowed }); setSavingPolicy(false); }} />
-        <label class="block space-y-1 text-xs"><span>{props.i18n.t('gatewayMembers.publication')}</span>
-          <select class="w-full cursor-pointer rounded border border-border bg-background p-2 disabled:cursor-not-allowed" value={current().publication_mode}
-            disabled={props.available === false || busy() || !props.gateway?.permissions?.configure_cloud}
-            onChange={event => { setDraftPolicy({ ...current(), publication_mode: event.currentTarget.value as GatewayPolicy['publication_mode'] }); setSavingPolicy(false); }}>
-            <option value="manual">{props.i18n.t('gatewayMembers.manual')}</option><option value="automatic">{props.i18n.t('gatewayMembers.automatic')}</option>
-          </select>
-        </label>
-        <details class="redeven-gateway-disclosure"><summary class="cursor-pointer text-xs text-muted-foreground">{props.i18n.t('gatewayJoin.technicalDetails')}</summary><p class="py-2 text-xs text-muted-foreground">{props.i18n.t('gatewayMembers.automaticHelp')}</p>
-        <div class="space-y-1 text-xs text-muted-foreground"><For each={['member.admit', 'access.open', 'cloud.publish'] as const}>{action =>
-          <p>{action}: {props.i18n.t(props.gateway?.hook_status?.[action] === 'invalid' ? 'gatewayMembers.hookInvalid' : props.gateway?.hook_status?.[action] === 'configured' ? 'gatewayMembers.hookConfigured' : 'gatewayMembers.hookAbsent')}</p>}
-        </For></div></details>
-        <Show when={draftPolicy()}>
-          <div class="redeven-gateway-content-enter space-y-2">
-            <p class="text-xs">{props.i18n.t('gatewayMembers.affected')}: {affected().map(member => member.display_name).join(', ') || props.i18n.t('gatewayMembers.none')}</p>
-            <Show when={savingPolicy()}><p role="alert" class="redeven-gateway-content-enter text-xs text-warning">{props.i18n.t('gatewayMembers.cloudImpact')}</p></Show>
-            <Button class="cursor-pointer" size="sm" disabled={props.available === false || busy()} onClick={() => savingPolicy() ? void savePolicy() : setSavingPolicy(true)}>{props.i18n.t(savingPolicy() ? 'gatewayMembers.confirmSave' : 'common.save')}</Button>
-          </div>
-        </Show>
-        </div>
-      </details>}</Show>
-      <section class="redeven-gateway-settings-section redeven-gateway-section-divider">
-        <h3 class="redeven-gateway-section-title">{props.i18n.t('gatewayMembers.members')}</h3>
+        <div class="redeven-gateway-section-heading"><h3 class="redeven-gateway-section-title">{props.i18n.t('gatewayMembers.members')}</h3><Show when={props.onEnroll}><Button data-gateway-add-environment size="sm" icon={Plus} disabled={busy()} onClick={() => props.onEnroll?.()}>{props.i18n.t('gatewayExperience.addEnvironment')}</Button></Show></div>
         <Show when={members().length} fallback={<p class="redeven-gateway-empty-state redeven-gateway-member-empty">{props.i18n.t('gatewayMembers.empty')}</p>}>
           <ul class="redeven-gateway-member-list"><KeyedFor each={members()} by={member => member.member_id}>{member => <li class="redeven-gateway-member-row">
             <div class="flex flex-wrap items-center justify-between gap-2"><strong class="break-all text-sm">{member().display_name}</strong>
               <span class="text-xs">{props.i18n.t(member().connected ? 'gatewayMembers.connected' : 'gatewayMembers.offline')}</span></div>
             <p class="break-all text-xs text-muted-foreground">{member().member_id}</p>
-            <label class="flex flex-wrap items-center gap-2 text-xs"><span>{props.i18n.t('gatewayMembers.cloudPermission')}</span>
-              <select class="cursor-pointer rounded border border-border bg-background p-1 disabled:cursor-not-allowed"
-                disabled={props.available === false || busy() || !currentMember(member().member_id) || !props.gateway?.permissions?.configure_cloud} value={overrides()[member().member_id] ?? member().cloud_permission}
-                onChange={event => setOverrides(current => ({ ...current, [member().member_id]: event.currentTarget.value as GatewayCloudPermission }))}>
-                <For each={['inherit', 'allow', 'deny'] as const}>{value => <option value={value}>{props.i18n.t(`gatewayMembers.${value}`)}</option>}</For>
-              </select>
-            </label>
+            <GatewayPicker label={props.i18n.t('gatewayMembers.cloudPermission')} placeholder=""
+              disabled={props.available === false || busy() || !currentMember(member().member_id) || !props.gateway?.permissions?.configure_cloud}
+              value={overrides()[member().member_id] ?? member().cloud_permission}
+              options={(['inherit', 'allow', 'deny'] as const).map(value => ({ value, label: props.i18n.t('gatewayMembers.' + value as 'gatewayMembers.inherit') }))}
+              onChange={value => setOverrides(current => ({ ...current, [member().member_id]: value as GatewayCloudPermission }))} />
             <Button class="cursor-pointer" size="xs" variant="outline" disabled={props.available === false || busy() || !currentMember(member().member_id) || !props.gateway?.permissions?.manage_members}
               onClick={() => props.gateway && void perform({ kind: 'reevaluate_gateway_member', gateway_id: props.gateway.gateway_id,
                 member_id: member().member_id, member_version: member().member_version })}>{props.i18n.t('gatewayMembers.reevaluate')}</Button>
@@ -312,6 +252,58 @@ export function GatewayMembersPanel(props: Readonly<{
           <Button class="cursor-pointer" size="sm" disabled={props.available === false || busy()} onClick={() => void saveMembers()}>{props.i18n.t('gatewayMembers.confirmSave')}</Button>
         </div></Show>
       </section>
+      <details class="redeven-gateway-disclosure" data-gateway-invite-others>
+        <summary class="cursor-pointer">{props.i18n.t('gatewayExperience.inviteOthers')}</summary>
+        <div class="redeven-gateway-settings-section mt-3">
+        <div class="redeven-gateway-section-heading">
+          <div class="min-w-0">
+            <h3>{props.i18n.t('gatewayMembers.invite')}</h3>
+            <p>{props.i18n.t('gatewayMembers.inviteHelp')}</p>
+          </div>
+          <Button class="cursor-pointer" size="sm" disabled={props.available === false || busy() || !props.gateway?.permissions?.manage_members || savedEndpoints().length === 0 || endpointsDirty() || !endpointsValid()} onClick={() => void invite()}>{props.i18n.t('gatewayMembers.createInvitation')}</Button>
+        </div>
+        <Show when={!savedEndpoints().length}><p role="status" class="redeven-gateway-empty-state">{props.i18n.t('gatewayMembers.noConnectionAddresses')}</p></Show>
+        <Show when={invitation() && !endpointsDirty()}>
+          <div class="redeven-gateway-content-enter redeven-gateway-invitation-card">
+            <p role="status" class="text-sm font-medium text-primary">{props.i18n.t('gatewayMembers.invitationReady')}</p>
+            <p class="font-medium">{invitation()?.gateway_name}</p>
+            <GatewayPicker label={props.i18n.t('gatewayJoin.address')} placeholder="" disabled={busy()} value={shareAddress()}
+              options={(invitation()?.share_addresses ?? []).map(value => ({ value, label: value }))}
+              onChange={value => { setShareAddress(value); setCopied(''); }} />
+            <Button class="cursor-pointer whitespace-nowrap" size="sm" variant="outline" icon={Copy} disabled={invitationInvalidated() || props.available === false || !props.gateway?.permissions?.manage_members || invitation()!.expires_at_unix_ms<=now()} onClick={() => void copyInvitation(shareAddress(),'address')}><StableText reserve={[props.i18n.t('gatewayJoin.copyAddress'),props.i18n.t('gatewayJoin.copied')]}>{props.i18n.t(copied()==='address'?'gatewayJoin.copied':'gatewayJoin.copyAddress')}</StableText></Button>
+            <div><p class="text-sm">{props.i18n.t('gatewayJoin.code')}</p><p class="select-text break-all rounded-md bg-muted p-3 font-mono tracking-wide">{invitation()?.code.match(/.{1,5}/g)?.join('-')}</p></div>
+            <Button class="cursor-pointer whitespace-nowrap" size="sm" variant="outline" icon={Copy} disabled={invitationInvalidated() || props.available === false || !props.gateway?.permissions?.manage_members || invitation()!.expires_at_unix_ms<=now()} onClick={() => void copyInvitation(invitation()!.code,'code')}><StableText reserve={[props.i18n.t('gatewayJoin.copyCode'),props.i18n.t('gatewayJoin.copied')]}>{props.i18n.t(copied()==='code'?'gatewayJoin.copied':'gatewayJoin.copyCode')}</StableText></Button>
+            <p role="timer" class="text-sm text-muted-foreground">{invitation()!.expires_at_unix_ms<=now()?props.i18n.t('gatewayJoin.expired'):props.i18n.t('gatewayJoin.expiresIn',{minutes:Math.max(0,Math.ceil((invitation()!.expires_at_unix_ms-now())/60000))})}</p>
+            <Button class="cursor-pointer whitespace-nowrap" size="sm" variant="outline" disabled={props.available === false || busy()} onClick={() => void invite()}>{props.i18n.t('gatewayJoin.regenerate')}</Button>
+
+          </div>
+        </Show>
+      </div></details>
+
+      <Show when={policy()}>{current => <details class="redeven-gateway-disclosure redeven-gateway-policy group">
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">{props.i18n.t('gatewayMembers.policy')}<ChevronDown class="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" /></summary>
+        <div class="redeven-gateway-policy-content">
+        <Checkbox label={props.i18n.t('gatewayMembers.defaultAllow')} checked={current().default_cloud_allowed}
+          disabled={props.available === false || busy() || !props.gateway?.permissions?.configure_cloud}
+          onChange={default_cloud_allowed => { setDraftPolicy({ ...current(), default_cloud_allowed }); setSavingPolicy(false); }} />
+        <GatewayPicker label={props.i18n.t('gatewayMembers.publication')} placeholder=""
+          disabled={props.available === false || busy() || !props.gateway?.permissions?.configure_cloud} value={current().publication_mode}
+          options={(['manual', 'automatic'] as const).map(value => ({ value, label: props.i18n.t('gatewayMembers.' + value as 'gatewayMembers.manual') }))}
+          onChange={value => { setDraftPolicy({ ...current(), publication_mode: value as GatewayPolicy['publication_mode'] }); setSavingPolicy(false); }} />
+        <details class="redeven-gateway-disclosure"><summary class="cursor-pointer text-xs text-muted-foreground">{props.i18n.t('gatewayJoin.technicalDetails')}</summary><p class="py-2 text-xs text-muted-foreground">{props.i18n.t('gatewayMembers.automaticHelp')}</p>
+        <div class="space-y-1 text-xs text-muted-foreground"><For each={['member.admit', 'access.open', 'cloud.publish'] as const}>{action =>
+          <p>{action}: {props.i18n.t(props.gateway?.hook_status?.[action] === 'invalid' ? 'gatewayMembers.hookInvalid' : props.gateway?.hook_status?.[action] === 'configured' ? 'gatewayMembers.hookConfigured' : 'gatewayMembers.hookAbsent')}</p>}
+        </For></div></details>
+        <Show when={draftPolicy()}>
+          <div class="redeven-gateway-content-enter space-y-2">
+            <p class="text-xs">{props.i18n.t('gatewayMembers.affected')}: {affected().map(member => member.display_name).join(', ') || props.i18n.t('gatewayMembers.none')}</p>
+            <Show when={savingPolicy()}><p role="alert" class="redeven-gateway-content-enter text-xs text-warning">{props.i18n.t('gatewayMembers.cloudImpact')}</p></Show>
+            <Button class="cursor-pointer" size="sm" disabled={props.available === false || busy()} onClick={() => savingPolicy() ? void savePolicy() : setSavingPolicy(true)}>{props.i18n.t(savingPolicy() ? 'gatewayMembers.confirmSave' : 'common.save')}</Button>
+          </div>
+        </Show>
+        </div>
+      </details>}</Show>
+
       </Show>
       <Show when={error()}><p role="alert" class="redeven-gateway-content-enter text-sm text-error">{error()}</p></Show>
     </div>

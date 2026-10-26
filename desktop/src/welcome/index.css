@@ -4724,3 +4724,15 @@ pre,
   flex: 1;
   user-select: text;
 }
+
+/* Gateway tasks retain the established Welcome shell and dialog geometry. */
+.redeven-gateway-onboarding-choices { display: grid; gap: 1rem; padding: .5rem 0; }
+.redeven-gateway-onboarding-choices > button { min-height: 5rem; justify-content: flex-start; text-align: left; white-space: normal; }
+.redeven-gateway-onboarding-choices strong { display: block; margin-bottom: .375rem; }
+.redeven-gateway-overview-facts { display: grid; gap: 1rem; margin: 1rem 0 1.5rem; }
+.redeven-gateway-overview-facts > div { display: flex; justify-content: space-between; gap: 1.5rem; font-size: .8125rem; }
+.redeven-gateway-overview-facts dt { color: var(--muted-foreground); flex-shrink: 0; }
+.redeven-gateway-overview-facts dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+.redeven-gateway-cloud-embedded { margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); }
+.redeven-gateway-resume { display: flex; gap: .5rem; padding: .75rem 1.5rem; flex-wrap: wrap; }
+@media (max-width: 480px) { .redeven-gateway-overview-facts > div { flex-direction: column; gap: .25rem; } .redeven-gateway-overview-facts dd { text-align: left; } }

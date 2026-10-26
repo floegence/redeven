@@ -442,6 +442,12 @@ type RuntimeContainerConnectionDialogState = Readonly<{
   auto_runtime_probe_configurable: boolean;
 }>;
 
+type GatewayServiceSurface = Readonly<{
+  open: (action: GatewaySourceActionModel) => void;
+  content: () => JSX.Element;
+  close: () => void;
+}>;
+
 type GatewaySetupDialogState = Readonly<{
   opening_id: number;
   interaction_identity?: string;
@@ -454,7 +460,9 @@ type GatewaySetupDialogState = Readonly<{
   connection_kind: DesktopGatewayConnectionKind;
   gateway_url: string;
   access_code: string;
-  settings_tab: 'connection' | 'runtimes' | 'clients';
+  settings_tab: 'overview' | 'connection' | 'runtimes' | 'clients';
+  onboarding_intent?: 'connect' | 'deploy';
+  onboarding_complete?: boolean;
   allow_loopback_http: boolean;
   ssh_destination: string;
   ssh_port: string;
@@ -1943,7 +1951,8 @@ function createGatewaySetupDialogState(
     connection_kind: connectionKind,
     gateway_url: trimString(overrides.gateway_url),
     access_code: trimString(overrides.access_code),
-    settings_tab: overrides.settings_tab ?? 'connection',
+    settings_tab: overrides.settings_tab ?? (overrides.mode === 'edit' ? 'overview' : 'connection'),
+    onboarding_intent: overrides.onboarding_intent,
     allow_loopback_http: overrides.allow_loopback_http === true,
     ssh_destination: sshDestination,
     ssh_port: sshPort,
@@ -2624,6 +2633,25 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
   let gatewaySetupReturnFocus: HTMLElement | undefined;
   const [gatewaySetupDialogState, setGatewaySetupDialogState] = createSignal<GatewaySetupDialogState | null>(null);
+  const [gatewayServiceSurfaces, setGatewayServiceSurfaces] = createSignal<Record<string, GatewayServiceSurface>>({});
+  const [embeddedGatewayService, setEmbeddedGatewayService] = createSignal('');
+  const [gatewayManagementPresent, setGatewayManagementPresent] = createSignal(false);
+  const [gatewayEnrollmentPresent, setGatewayEnrollmentPresent] = createSignal(false);
+  const registerGatewayService = (id: string, surface?: GatewayServiceSurface) => setGatewayServiceSurfaces(current => {
+    const next = { ...current }; if (surface) next[id] = surface; else delete next[id]; return next;
+  });
+  function closeManagedGatewayService() {
+    const id = embeddedGatewayService();
+    gatewayServiceSurfaces()[id]?.close();
+    setEmbeddedGatewayService('');
+  }
+  function openManagedGatewayService(action: GatewaySourceActionModel) {
+    const id = gatewaySetupDialogState()?.gateway_id;
+    const surface = id && gatewayServiceSurfaces()[id];
+    if (!surface || !action.enabled) return;
+    setEmbeddedGatewayService(id); surface.open(action);
+  }
+
   const [gatewaySetupRecovery, setGatewaySetupRecovery] = createSignal<GatewayActionRecovery | null>(null);
   const [gatewaySetupTechnicalDetail, setGatewaySetupTechnicalDetail] = createSignal('');
   const [gatewaySetupDialogError, setGatewaySetupDialogError] = createSignal('');
@@ -2689,8 +2717,22 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [gatewaySourceFilter, setGatewaySourceFilter] = createSignal('');
   const [gatewayQuery, setGatewayQuery] = createSignal('');
   const [joinGatewayAfterCreate, setJoinGatewayAfterCreate] = createSignal(false);
-  const [gatewaySetupEnvironmentID, setGatewaySetupEnvironmentID] = createSignal('');
+  const [gatewayEnrollment, setGatewayEnrollment] = createSignal<{ environmentID: string; gatewayID?: string; visible: boolean } | null>(null);
+  const gatewaySetupEnvironmentID = () => gatewayEnrollment()?.environmentID ?? '';
+  const setGatewaySetupEnvironmentID = (environmentID: string) => setGatewayEnrollment(current => environmentID
+    ? { ...current, environmentID, visible: true } : null);
+  function openGatewayEnrollment(gatewayID?: string, environmentID = '', restoreFocus?: () => void) {
+    if (gatewayEnrollment()) { setGatewayEnrollment(current => current && { ...current, visible: true }); return; }
+    completedEnrollmentReturnFocus = undefined;
+    runtimeGatewaySetupReturnFocus = restoreFocus;
+    setGatewayEnrollment({ environmentID, gatewayID, visible: true });
+  }
   let runtimeGatewaySetupReturnFocus: (() => void) | undefined;
+  let completedEnrollmentReturnFocus: (() => void) | undefined;
+  const restoreCompletedEnrollmentFocus = () => {
+    const restore = completedEnrollmentReturnFocus; completedEnrollmentReturnFocus = undefined;
+    if (restore) requestAnimationFrame(restore);
+  };
   const [activeCenterTab, setActiveCenterTab] = createSignal<EnvironmentCenterTab>('environments');
   const [lifecycleProgressFocusRequest, setLifecycleProgressFocusRequest] = createSignal<LifecycleProgressFocusRequest | null>(null);
   const actionToastTimers = new Map<number, number>();
@@ -3768,7 +3810,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return undefined;
   }
 
-  function openCreateGatewaySetup(gateway?: DesktopGatewaySource, focusSection?: DesktopGatewayResolveFocus): void {
+  function openCreateGatewaySetup(gateway?: DesktopGatewaySource, focusSection?: DesktopGatewayResolveFocus | 'clients'): void {
     if (activeSurface() !== 'connect_environment') {
       showConnectEnvironment(i18n().t('environmentCenter.addGatewayLauncherPrompt'));
       return;
@@ -3804,7 +3846,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           container_label: gateway.container_label,
           gateway_url: gateway.gateway_url ?? '',
           allow_loopback_http: gateway.allow_loopback_http === true,
-          focus_section: gatewaySetupFocusForGateway(gateway, focusSection),
+          focus_section: gatewaySetupFocusForGateway(gateway, focusSection === 'clients' ? undefined : focusSection),
+          settings_tab: focusSection === 'clients' ? 'clients' : focusSection || gateway.status === 'pairing_required' || gateway.trust_state === 'unpaired' ? 'connection' : 'overview',
         }
       : {}));
   }
@@ -3878,6 +3921,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function closeGatewaySetupDialog(): void {
+    closeManagedGatewayService();
     setGatewaySetupDialogState(null);
     setGatewaySetupRecovery(null);
     setGatewaySetupTechnicalDetail('');
@@ -5737,9 +5781,15 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return;
     }
     if (result.outcome === 'saved_gateway') {
-      closeGatewaySetupDialog();
       showActionToast(i18n().t('toast.gatewaySaved'));
       await refreshSnapshot().catch(error => showActionToast(getErrorMessage(error), 'error'));
+      if (!current()) return;
+      if ((state.mode === 'create' || state.created_gateway_id) && result.gateway_id) {
+        const source = snapshot().gateway_sources.find(gateway => gateway.gateway_id === result.gateway_id);
+        setGatewaySetupDialogState(draft => draft ? { ...draft, gateway_id: result.gateway_id!, created_gateway_id: result.gateway_id,
+          mode: 'edit', settings_tab: 'overview', onboarding_intent: undefined, onboarding_complete: true,
+          ssh_password: '', access_code: '', interaction_identity: source ? gatewayInteractionIdentity(source) : undefined } : draft);
+      } else closeGatewaySetupDialog();
     } else {
       setGatewaySetupDialogError(i18n().t('toast.unexpectedLauncherResult'));
     }
@@ -6291,7 +6341,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   return (
     <>
       <RuntimeGatewaySetupDialog gateways={snapshot().gateway_sources} environment={gatewaySetupEnvironment()}
-        suspended={!!settingsSession()}
+        recoverGateway={async gateway => {
+          if (gateway.service_state?.status !== 'not_started' || !gateway.service_state.can_start) return false;
+          const result = await runGatewayLauncherAction({ kind: 'start_gateway', gateway_id: gateway.gateway_id });
+          return result.ok && result.outcome === 'started_gateway';
+        }}
+        gatewayID={gatewayEnrollment()?.gatewayID} open={gatewayEnrollment() !== null}
+        covered={gatewayManagementPresent()} onPresenceChange={present => { setGatewayEnrollmentPresent(present); if (!present && !gatewaySetupDialogState()) restoreCompletedEnrollmentFocus(); }} environments={snapshot().environments}
+        selectEnvironment={setGatewaySetupEnvironmentID}
+        suspend={() => setGatewayEnrollment(current => current && { ...current, visible: false })}
+        suspended={!!settingsSession() || gatewayEnrollment()?.visible === false}
         available={snapshot().environments.some(entry => entry.id === gatewaySetupEnvironmentID())}
         operationBusy={gatewaySetupOperation()?.actionsDisabled}
         progress={gatewaySetupOperation()?.activeProgress}
@@ -6299,7 +6358,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         i18n={i18n()} close={() => {
           const id = gatewaySetupEnvironmentID(); setGatewaySetupEnvironmentID('');
           const restore = runtimeGatewaySetupReturnFocus; runtimeGatewaySetupReturnFocus = undefined;
-          requestAnimationFrame(() => restore ? restore() : document.querySelector<HTMLElement>(`[data-owner-id="${CSS.escape(id)}"]`)?.focus());
+          completedEnrollmentReturnFocus = () => restore ? restore() : document.querySelector<HTMLElement>(`[data-owner-id="${CSS.escape(id)}"]`)?.focus();
         }}
         refresh={environment => refreshEnvironmentRuntime(environment, 'dialog', { announceSuccess: false })}
         recover={async (environment, operation, sshPassword) => {
@@ -6466,6 +6525,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         <Show when={environmentsVisited()}>
           <div class="h-full min-h-0" style={{ display: environmentsVisible() ? undefined : 'none' }}
             data-desktop-page="environments" aria-hidden={!environmentsVisible() ? 'true' : undefined} inert={!environmentsVisible()}>
+            <Show when={gatewayEnrollment() && !gatewayEnrollment()?.visible}><div class="redeven-gateway-resume"><Button variant="outline" onClick={() => setGatewayEnrollment(current => current && { ...current, visible: true })}>{i18n().t('gatewayExperience.resumeEnrollment')}</Button></div></Show>
             <ConnectEnvironmentSurface
               i18n={i18n()}
               visible={environmentsVisible()}
@@ -6499,6 +6559,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               openCreateConnectionDialog={openCreateConnectionDialog}
               openCreateGatewaySetup={openCreateGatewaySetup}
               runGatewayLauncherAction={runGatewayLauncherAction}
+              managedGatewayID={gatewaySetupDialogState()?.gateway_id ?? ''}
+              registerGatewayService={registerGatewayService}
+              embeddedGatewayService={embeddedGatewayService()}
+              closeEmbeddedGatewayService={() => setEmbeddedGatewayService('')}
               openGatewayMembers={openGatewayMembers}
               openCreateControlPlaneDialog={openCreateControlPlaneDialog}
               refreshAllEnvironmentRuntimes={refreshAllEnvironmentRuntimes}
@@ -6507,7 +6571,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               setDefaultWSLEnvironment={setDefaultWSLEnvironment}
               openRemoteEnvironment={openRemoteEnvironment}
               openSSHEnvironment={openSSHEnvironment}
-              openRuntimeGatewaySetup={(environment, restoreFocus) => { runtimeGatewaySetupReturnFocus = restoreFocus; setGatewaySetupEnvironmentID(environment.id); }}
+              openRuntimeGatewaySetup={(environment, restoreFocus) => openGatewayEnrollment(undefined, environment.id, restoreFocus)}
               runLocalEnvironmentAction={triggerLocalEnvironmentAction}
               refreshEnvironmentRuntime={refreshEnvironmentRuntime}
               openEnvironmentFlowerSurface={openEnvironmentFlowerSurface}
@@ -6847,12 +6911,17 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       <ConnectionDialog {...connectionFormProps} state={newConnectionState()} />
 
       <GatewaySetupDialog
+        hidden={gatewayEnrollment()?.visible === true || gatewayEnrollmentPresent()}
+        onPresenceChange={present => { setGatewayManagementPresent(present); if (present) restoreCompletedEnrollmentFocus(); }}
+        serviceContent={embeddedGatewayService() ? gatewayServiceSurfaces()[embeddedGatewayService()]?.content : undefined}
+        closeService={closeManagedGatewayService}
+        onService={openManagedGatewayService}
+        onEnroll={() => { const gatewayID = gatewaySetupDialogState()?.gateway_id; const trigger = document.activeElement as HTMLElement; if (gatewayID) openGatewayEnrollment(gatewayID, '', () => requestAnimationFrame(() => trigger?.focus())); }}
         available={gatewaySetupOwnerAvailable()}
         canRevalidate={!!snapshot().gateway_sources.find(source => source.gateway_id === gatewaySetupDialogState()?.gateway_id)}
         onRevalidate={() => { const source = snapshot().gateway_sources.find(source => source.gateway_id === gatewaySetupDialogState()?.gateway_id); if (source) setGatewaySetupDialogState(state => state ? { ...state, interaction_identity: gatewayInteractionIdentity(source), authority_revoked: false } : state); }}
         restoreFocus={() => { if (!gatewaySetupDialogState()) gatewaySetupReturnFocus?.focus(); }}
         gateway={snapshot().gateway_sources.find(source => source.gateway_id === gatewaySetupDialogState()?.gateway_id)}
-        targets={snapshot().environments.flatMap(entry => entry.provider_runtime_link_target ? [entry.provider_runtime_link_target] : [])}
         refresh={refreshSnapshot}
         nativeHostSupported={snapshot().platform_capabilities.native_host_runtime}
         i18n={i18n()}
@@ -7476,9 +7545,13 @@ function ConnectEnvironmentSurface(props: Readonly<{
   openLocalEnvironment: () => Promise<void>;
   openSettingsSurface: (environmentID?: string) => void;
   openCreateConnectionDialog: (message?: string, preferredKind?: ConnectionDialogKind) => void;
-  openCreateGatewaySetup: (gateway?: DesktopGatewaySource, focusSection?: DesktopGatewayResolveFocus) => void;
+  openCreateGatewaySetup: (gateway?: DesktopGatewaySource, focusSection?: DesktopGatewayResolveFocus | 'clients') => void;
   runGatewayLauncherAction: (request: DesktopLauncherActionRequest) => Promise<GatewayLauncherActionResult>;
   openGatewayMembers: (gateway: DesktopGatewaySource) => void;
+  managedGatewayID: string;
+  registerGatewayService: (id: string, surface?: GatewayServiceSurface) => void;
+  embeddedGatewayService: string;
+  closeEmbeddedGatewayService: () => void;
   openCreateControlPlaneDialog: (message?: string) => void;
   refreshAllEnvironmentRuntimes: () => Promise<void>;
   refreshWSLDiscovery: () => Promise<DesktopWSLDiscoverySnapshot>;
@@ -7970,6 +8043,10 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 gatewayQuery={props.gatewayQuery}
                 openCreateGatewaySetup={props.openCreateGatewaySetup}
                 runGatewayLauncherAction={props.runGatewayLauncherAction}
+                managedGatewayID={props.managedGatewayID}
+                registerGatewayService={props.registerGatewayService}
+                embeddedGatewayService={props.embeddedGatewayService}
+                closeEmbeddedGatewayService={props.closeEmbeddedGatewayService}
                 openGatewayMembers={props.openGatewayMembers}
                 editEnvironment={props.editEnvironment}
                 deleteEnvironment={props.deleteEnvironment}
@@ -10525,9 +10602,13 @@ function GatewaySourcesPanel(props: Readonly<{
   consumeLifecycleProgressFocusRequest: (requestID: number) => void;
   gatewaySourceFilter: string;
   gatewayQuery: string;
-  openCreateGatewaySetup: (gateway?: DesktopGatewaySource, focusSection?: DesktopGatewayResolveFocus) => void;
+  openCreateGatewaySetup: (gateway?: DesktopGatewaySource, focusSection?: DesktopGatewayResolveFocus | 'clients') => void;
   runGatewayLauncherAction: (request: DesktopLauncherActionRequest) => Promise<GatewayLauncherActionResult>;
   openGatewayMembers: (gateway: DesktopGatewaySource) => void;
+  managedGatewayID: string;
+  registerGatewayService: (id: string, surface?: GatewayServiceSurface) => void;
+  embeddedGatewayService: string;
+  closeEmbeddedGatewayService: () => void;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
   cancelOperation: (progress: DesktopLauncherActionProgress) => void;
@@ -10559,14 +10640,14 @@ function GatewaySourcesPanel(props: Readonly<{
       return updated;
     });
   };
-  const [nestedGatewayOwners, setNestedGatewayOwners] = createSignal<ReadonlySet<string>>(new Set());
   const gatewaySourcesByID = createMemo<Record<string, DesktopGatewaySource>>(previous => {
     const record = Object.fromEntries(props.gatewaySources.map(gateway => [gateway.gateway_id, gateway]));
     const active = activeGatewayOverlayState();
     if (active.kind !== 'none' && previous?.[active.gateway_id] && !record[active.gateway_id]) {
       record[active.gateway_id] = previous[active.gateway_id]!;
     }
-    for (const id of nestedGatewayOwners()) if (!record[id] && previous?.[id]) record[id] = previous[id]!;
+    const id = props.managedGatewayID;
+    if (id && !record[id] && previous?.[id]) record[id] = previous[id]!;
     return record;
   }, {});
   const gatewaySourceIDs = createMemo(() => Object.keys(gatewaySourcesByID()));
@@ -10593,7 +10674,7 @@ function GatewaySourcesPanel(props: Readonly<{
   });
   const visibleGatewaySourceIDs = createMemo(() => visibleGatewaySources().map((gateway) => gateway.gateway_id));
   const renderedGatewaySourceIDs = createMemo(() => gatewaySourceIDsWithActiveOverlay(
-    [...new Set([...visibleGatewaySourceIDs(), ...nestedGatewayOwners()])],
+    [...new Set([...visibleGatewaySourceIDs(), ...(props.managedGatewayID ? [props.managedGatewayID] : [])])],
     gatewaySourceIDs(),
     activeGatewayOverlayState(),
   ));
@@ -10658,10 +10739,6 @@ function GatewaySourcesPanel(props: Readonly<{
                   i18n={props.i18n}
                   gateway={gateway()}
                   available={props.gatewaySources.some(source => source.gateway_id === gatewayID)}
-                  onInteractionActive={active => setNestedGatewayOwners(current => {
-                    if (current.has(gatewayID) === active) return current;
-                    const next = new Set(current); if (active) next.add(gatewayID); else next.delete(gatewayID); return next;
-                  })}
                   gatewayEntries={gatewayEntriesByGatewayID()[gatewayID] ?? []}
                   foregroundAction={foregroundGatewayAction(gatewayID)}
                   setForegroundAction={(next) => setForegroundGatewayAction(gatewayID, next)}
@@ -10675,6 +10752,10 @@ function GatewaySourcesPanel(props: Readonly<{
                   onMoreActionsMenuOpenChange={(open) => setGatewayMoreActionsMenuOpen(gatewayID, open)}
                   openCreateGatewaySetup={props.openCreateGatewaySetup}
                   runGatewayLauncherAction={props.runGatewayLauncherAction}
+                  managedGatewayID={props.managedGatewayID}
+                  registerGatewayService={props.registerGatewayService}
+                  embeddedGatewayService={props.embeddedGatewayService}
+                  closeEmbeddedGatewayService={props.closeEmbeddedGatewayService}
                   openGatewayMembers={props.openGatewayMembers}
                   editEnvironment={props.editEnvironment}
                   deleteEnvironment={props.deleteEnvironment}
@@ -11016,7 +11097,6 @@ function gatewaySourceActionForLifecycleProgress(
 
 function GatewaySourceCard(props: Readonly<{
   available: boolean;
-  onInteractionActive: (active: boolean) => void;
   i18n: DesktopI18n;
   gateway: DesktopGatewaySource;
   gatewayEntries: readonly DesktopEnvironmentEntry[];
@@ -11032,9 +11112,13 @@ function GatewaySourceCard(props: Readonly<{
   onActionPopoverOpenChange: (open: boolean) => void;
   moreActionsMenuOpen: boolean;
   onMoreActionsMenuOpenChange: (open: boolean) => void;
-  openCreateGatewaySetup: (gateway?: DesktopGatewaySource, focusSection?: DesktopGatewayResolveFocus) => void;
+  openCreateGatewaySetup: (gateway?: DesktopGatewaySource, focusSection?: DesktopGatewayResolveFocus | 'clients') => void;
   runGatewayLauncherAction: (request: DesktopLauncherActionRequest) => Promise<GatewayLauncherActionResult>;
   openGatewayMembers: (gateway: DesktopGatewaySource) => void;
+  managedGatewayID: string;
+  registerGatewayService: (id: string, surface?: GatewayServiceSurface) => void;
+  embeddedGatewayService: string;
+  closeEmbeddedGatewayService: () => void;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
   cancelOperation: (progress: DesktopLauncherActionProgress) => void;
@@ -11827,6 +11911,9 @@ function GatewaySourceCard(props: Readonly<{
   const closeActionPopoverAfterExit = (task: () => void) => {
     actionPopoverExitTask = { owner: foregroundSessionKey(), task };
     closeActionPopover();
+    if (props.embeddedGatewayService === props.gateway.gateway_id) {
+      props.closeEmbeddedGatewayService(); releaseClosedForegroundAction();
+    }
   };
   const openActionPopover = () => {
     if (foregroundAction()?.admission) { props.onActionPopoverOpenChange(true); return; }
@@ -11893,53 +11980,11 @@ function GatewaySourceCard(props: Readonly<{
     runAction(action);
   };
 
-  return (
-    <section class="redeven-gateway-card" data-gateway-id={props.gateway.gateway_id} aria-labelledby={gatewayHeadingID}><Show when={!props.available}><p role="alert">{props.i18n.t('interactionContinuity.unavailable')}</p></Show>
-      <div class="redeven-gateway-card__main">
-        <div class="redeven-gateway-card__identity">
-          <span class="redeven-gateway-card__mark" aria-hidden="true"><GatewayMark /></span>
-          <div class="redeven-gateway-card__identity-text">
-            <h2 id={gatewayHeadingID} class="redeven-gateway-card__name" title={row().label}>{row().label}</h2>
-            <div class="redeven-gateway-card__connection">
-              <span>{transportLabel()}</span>
-              <Show when={props.gateway.connection_kind !== 'local_host' && row().endpoint_label}>
-                <span class="redeven-gateway-card__endpoint" title={row().endpoint_label}>{row().endpoint_label}</span>
-              </Show>
-            </div>
-          </div>
-        </div>
-        <div class="redeven-gateway-card__directory">
-          <div class="redeven-gateway-card__directory-row">
-            <button type="button" class="redeven-gateway-card__directory-link"
-              aria-label={props.i18n.t('environmentCenter.viewEnvironments')}
-              aria-expanded={environmentsOpen() && row().environment_count > 0} aria-controls={environmentsOpen() && row().environment_count > 0 ? environmentListID : undefined}
-              disabled={row().environment_count === 0}
-              onClick={() => setEnvironmentsOpen(value => !value)}>
-              <span class="redeven-gateway-card__count-label">{props.i18n.t('gatewayAccess.directory')}</span>
-              <span class="redeven-gateway-card__count-value">
-                <span class="redeven-gateway-card__count">{catalogReady() || row().environment_count > 0 ? props.i18n.tn('plural.environmentCount', row().environment_count) : '—'}</span>
-                <Show when={row().environment_count > 0}><ChevronRight class="redeven-gateway-card__disclosure h-3 w-3" /></Show>
-              </span>
-            </button>
-            <button type="button" class="redeven-gateway-card__help"
-              aria-label={props.i18n.t('gatewayAccess.directoryHelpLabel')}
-              aria-expanded={directoryHelpOpen()} aria-controls={directoryHelpPresence.mounted() ? directoryHelpID : undefined}
-              onClick={() => setDirectoryHelpOpen(value => !value)}><HelpIcon class="h-3.5 w-3.5" /></button>
-          </div>
-        </div>
-        <div class="redeven-gateway-card__actions">
-          <GatewayCloudPanel showTrigger={props.gateway.connection_kind !== 'url'} available={props.available && props.gateway.connection_kind !== 'url'} onOpenChange={props.onInteractionActive} gatewayID={props.gateway.gateway_id} gatewayName={row().label} i18n={props.i18n} disabled={primaryActionRunning()} />
-          <DesktopActionPopover
-            open={actionPopoverOpen()}
-            onOpenChange={(open) => {
-              if (open) {
-                openActionPopover();
-                return;
-              }
-              closeActionPopover();
-            }}
-            onExitComplete={releaseClosedForegroundAction}
-            content={(
+  const closeServiceSurface = () => {
+    if (props.embeddedGatewayService === props.gateway.gateway_id) props.closeEmbeddedGatewayService();
+    closeActionPopover();
+  };
+  const serviceContent = () => (
               <Show
                 when={visibleGatewayProgress()}
                 fallback={(
@@ -11953,7 +11998,7 @@ function GatewaySourceCard(props: Readonly<{
                     runAction={runPanelAction}
                     runGatewayLauncherAction={runForegroundRequest}
                     foregroundActionBusy={foregroundActionBusy}
-                    close={closeActionPopover}
+                    close={closeServiceSurface}
                   />
                 )}
               >
@@ -11961,7 +12006,7 @@ function GatewaySourceCard(props: Readonly<{
                   <EnvironmentProgressPanel
                     i18n={props.i18n}
                     progress={progress()}
-                    close={closeActionPopover}
+                    close={closeServiceSurface}
                     cancelOperation={props.cancelOperation}
                     dismissOperation={(currentProgress) => {
                       closeActionPopoverAfterExit(() => {
@@ -12012,7 +12057,60 @@ function GatewaySourceCard(props: Readonly<{
                   />
                 )}
               </Show>
-            )}
+  );
+  onMount(() => props.registerGatewayService(props.gateway.gateway_id, {
+    open: action => activeGatewayLifecycleProgress() ? runPrimaryAction() : runAction(action), content: serviceContent,
+    close: () => { closeActionPopover(); releaseClosedForegroundAction(); },
+  }));
+  onCleanup(() => props.registerGatewayService(props.gateway.gateway_id));
+
+  return (
+    <section class="redeven-gateway-card" data-gateway-id={props.gateway.gateway_id} aria-labelledby={gatewayHeadingID}><Show when={!props.available}><p role="alert">{props.i18n.t('interactionContinuity.unavailable')}</p></Show>
+      <div class="redeven-gateway-card__main">
+        <div class="redeven-gateway-card__identity">
+          <span class="redeven-gateway-card__mark" aria-hidden="true"><GatewayMark /></span>
+          <div class="redeven-gateway-card__identity-text">
+            <h2 id={gatewayHeadingID} class="redeven-gateway-card__name" title={row().label}>{row().label}</h2>
+            <div class="redeven-gateway-card__connection">
+              <span>{transportLabel()}</span>
+              <Show when={props.gateway.connection_kind !== 'local_host' && row().endpoint_label}>
+                <span class="redeven-gateway-card__endpoint" title={row().endpoint_label}>{row().endpoint_label}</span>
+              </Show>
+            </div>
+          </div>
+        </div>
+        <div class="redeven-gateway-card__directory">
+          <div class="redeven-gateway-card__directory-row">
+            <button type="button" class="redeven-gateway-card__directory-link"
+              aria-label={props.i18n.t('environmentCenter.viewEnvironments')}
+              aria-expanded={environmentsOpen() && row().environment_count > 0} aria-controls={environmentsOpen() && row().environment_count > 0 ? environmentListID : undefined}
+              disabled={row().environment_count === 0}
+              onClick={() => setEnvironmentsOpen(value => !value)}>
+              <span class="redeven-gateway-card__count-label">{props.i18n.t('gatewayAccess.directory')}</span>
+              <span class="redeven-gateway-card__count-value">
+                <span class="redeven-gateway-card__count">{catalogReady() || row().environment_count > 0 ? props.i18n.tn('plural.environmentCount', row().environment_count) : '—'}</span>
+                <Show when={row().environment_count > 0}><ChevronRight class="redeven-gateway-card__disclosure h-3 w-3" /></Show>
+              </span>
+            </button>
+            <button type="button" class="redeven-gateway-card__help"
+              aria-label={props.i18n.t('gatewayAccess.directoryHelpLabel')}
+              aria-expanded={directoryHelpOpen()} aria-controls={directoryHelpPresence.mounted() ? directoryHelpID : undefined}
+              onClick={() => setDirectoryHelpOpen(value => !value)}><HelpIcon class="h-3.5 w-3.5" /></button>
+          </div>
+        </div>
+        <div class="redeven-gateway-card__actions">
+          <Show when={props.gateway.connection_kind !== 'url'}><Button size="sm" variant="outline" disabled={primaryActionRunning()} onClick={() => props.openCreateGatewaySetup(props.gateway, 'clients')}>{props.i18n.t('gatewayCloud.title')}</Button></Show>
+          <DesktopActionPopover
+            open={props.embeddedGatewayService !== props.gateway.gateway_id && actionPopoverOpen()}
+            onOpenChange={(open) => {
+              if (open) {
+                openActionPopover();
+                return;
+              }
+              closeActionPopover();
+            }}
+            onExitComplete={releaseClosedForegroundAction}
+            content={<Show when={props.embeddedGatewayService !== props.gateway.gateway_id}>{serviceContent()}</Show>}
             anchorClass="redeven-gateway-card__primary-anchor"
             allowMainAxisOverflow={false}
             popoverAriaLabel={
@@ -13415,12 +13513,17 @@ function GatewayActionRecoveryNotice(props: Readonly<{
 }
 
 function GatewaySetupDialog(props: Readonly<{
+  hidden?: boolean;
+  onPresenceChange: (present: boolean) => void;
+  serviceContent?: () => JSX.Element;
+  closeService: () => void;
+  onService: (action: GatewaySourceActionModel) => void;
+  onEnroll: () => void;
   available: boolean;
   canRevalidate: boolean;
   onRevalidate: () => void;
   restoreFocus: () => void;
   gateway?: DesktopGatewaySource;
-  targets: readonly DesktopCloudRuntimeLinkTarget[];
   refresh: () => Promise<unknown>;
   nativeHostSupported: boolean;
   i18n: DesktopI18n;
@@ -13446,21 +13549,30 @@ function GatewaySetupDialog(props: Readonly<{
   onSave: () => Promise<void>;
 }>) {
   const connectionKind = createMemo(() => props.state?.connection_kind ?? 'url');
-  const tabs = ['connection', 'runtimes', 'clients'] as const;
+  const tabs = ['overview', 'runtimes', 'clients', 'connection'] as const;
   const canManage = createMemo(() => props.available && connectionKind() !== 'url' && props.gateway?.permissions?.manage_members === true);
   const managedOpening = createMemo<{ id: number; managed: boolean } | null>(previous => {
     const state = props.state;
     return state ? { id: state.opening_id, managed: canManage() || (previous?.id === state.opening_id && previous.managed) } : null;
   }, null);
-  const managedSession = () => managedOpening()?.managed === true;
-  const activeTab = createMemo(() => managedSession() ? props.state?.settings_tab ?? 'connection' : 'connection');
+  const managedSession = () => props.state?.mode === 'edit';
+  const canConfigure = () => managedOpening()?.managed === true;
+  const hostManaged = () => connectionKind() !== 'url';
+  const overviewAction = () => props.gateway ? buildGatewaySourceRowModel(props.gateway).primary_action : undefined;
+  const choosingIntent = () => props.state?.mode === 'create' && !props.state.onboarding_intent;
+  const accessSession = createMemo<{ opening: number; visited: boolean } | undefined>(previous => {
+    const state = props.state;
+    return state ? { opening: state.opening_id, visited: state.settings_tab === 'clients' || previous?.opening === state.opening_id && previous.visited } : undefined;
+  });
+  const accessVisited = () => accessSession()?.visited === true;
+  const activeTab = createMemo(() => managedSession() ? props.state?.settings_tab ?? 'overview' : 'connection');
   function selectTab(tab: typeof tabs[number]) {
     props.updateField('settings_tab', tab);
     const panels = document.querySelector<HTMLElement>('.redeven-gateway-settings-panels');
     if (panels) panels.scrollTop = 0;
     queueMicrotask(() => document.getElementById('gateway-settings-tab-' + tab)?.focus());
   }
-  const isOpen = createMemo(() => props.state !== null);
+  const isOpen = createMemo(() => props.state !== null && !props.hidden);
   const isSSHBacked = createMemo(() => connectionKind() === 'ssh_host' || connectionKind() === 'ssh_container');
   const [advancedState, setAdvancedState] = createSignal<{ open: boolean; initialized_for_state_key: string }>({
     open: false,
@@ -13484,35 +13596,12 @@ function GatewaySetupDialog(props: Readonly<{
     });
   });
 
-  return (
-    <Dialog
-      open={isOpen()}
-      onOpenChange={props.onOpenChange}
-      onPresenceChange={present => { if (!present && !props.state) queueMicrotask(props.restoreFocus); }}
-      title={props.i18n.t(props.state?.mode === 'edit' ? 'environmentCenter.gatewayActionOpenSettings' : 'connectionDialog.addGatewayTitle')}
-      class={cn(CONNECTION_DIALOG_CLASS, 'redeven-gateway-dialog', 'redeven-gateway-settings-dialog')}
-      contentClass="redeven-gateway-settings-dialog__content"
-      footer={(
-        <div class="flex justify-end gap-2">
-          <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)}>
-            {props.i18n.t(activeTab() === 'connection' ? 'common.cancel' : 'common.close')}
-          </Button>
-          <Show when={activeTab() === 'connection'}><Button
-            size="sm"
-            variant="default"
-            loading={busyStateMatchesAction(props.busyState, 'upsert_gateway')}
-            disabled={!props.available || props.busyState.action !== IDLE_LAUNCHER_BUSY_STATE.action}
-            onClick={() => {
-              void props.onSave();
-            }}
-            icon={Save}
-          >
-            {props.i18n.t('connectionDialog.saveGateway')}
-          </Button></Show>
-        </div>
-      )}
-    >
-      <div class="redeven-gateway-settings-body"><Show when={!props.available}><p role="alert">{props.i18n.t('interactionContinuity.unavailable')}</p><Button variant="outline" disabled={!props.canRevalidate} onClick={props.onRevalidate}>{props.i18n.t('interactionContinuity.revalidate')}</Button></Show>
+  // Keep member/network drafts alive while enrollment temporarily owns the modal layer.
+  const managementBody = (
+      <div class="redeven-gateway-settings-body" hidden={!!props.serviceContent} inert={!!props.serviceContent} aria-hidden={props.serviceContent ? 'true' : undefined}><Show when={choosingIntent()}><div class="redeven-gateway-onboarding-choices" data-gateway-onboarding-intent>
+        <Button variant="outline" onClick={() => { props.updateField('onboarding_intent', 'connect'); props.updateField('connection_kind', 'url'); }}><span><strong>{props.i18n.t('gatewayExperience.connectExisting')}</strong><span class="block text-xs text-muted-foreground">{props.i18n.t('gatewayExperience.connectExistingHelp')}</span></span></Button>
+        <Button variant="outline" onClick={() => { props.updateField('onboarding_intent', 'deploy'); props.updateField('connection_kind', props.nativeHostSupported ? 'local_host' : 'ssh_host'); }}><span><strong>{props.i18n.t('gatewayExperience.deployNew')}</strong><span class="block text-xs text-muted-foreground">{props.i18n.t('gatewayExperience.deployNewHelp')}</span></span></Button>
+      </div></Show><Show when={!choosingIntent()}><Show when={!props.available}><p role="alert">{props.i18n.t('interactionContinuity.unavailable')}</p><Button variant="outline" disabled={!props.canRevalidate} onClick={props.onRevalidate}>{props.i18n.t('interactionContinuity.revalidate')}</Button></Show>
         <div class="redeven-gateway-authority">{props.i18n.t(connectionKind() === 'url' ? 'gatewayClients.clientOnly' : props.gateway?.permissions?.manage_members ? 'gatewayClients.hostAccess' : 'gatewayClients.hostVerification')}</div>
         <Show when={managedSession()}>
           <div class="redeven-gateway-settings-tablist" role="tablist" aria-label={props.i18n.t('environmentCenter.gatewayActionOpenSettings')}>
@@ -13520,22 +13609,37 @@ function GatewaySetupDialog(props: Readonly<{
               const index = tabs.indexOf(tab);
               const target = event.key === 'ArrowRight' ? tabs[(index + 1) % tabs.length] : event.key === 'ArrowLeft' ? tabs[(index + tabs.length - 1) % tabs.length] : event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[tabs.length - 1] : undefined;
               if (target) { event.preventDefault(); selectTab(target); }
-            }}>{props.i18n.t(tab === 'connection' ? 'gatewayClients.connectionSettings' : tab === 'runtimes' ? 'gatewayClients.runtimes' : 'gatewayClients.clientAccess')}</button>}</For>
+            }}>{props.i18n.t(tab === 'overview' ? 'gatewayExperience.overview' : tab === 'connection' ? 'common.settings' : tab === 'runtimes' ? 'environmentCenter.environmentsSection' : 'gatewayExperience.access')}</button>}</For>
           </div>
         </Show>
         <div class="redeven-gateway-settings-panels">
+        <Show when={managedSession()}><div id="gateway-settings-panel-overview" class={cn('redeven-gateway-settings-panel', activeTab() !== 'overview' && 'redeven-gateway-settings-panel--inactive')} role="tabpanel" aria-labelledby="gateway-settings-tab-overview" aria-hidden={activeTab() !== 'overview' ? 'true' : undefined} inert={activeTab() !== 'overview'}>
+          <Show when={props.state?.onboarding_complete}><p role="status" class="redeven-gateway-help">{props.i18n.t('gatewayExperience.saved')}</p></Show><div class="redeven-gateway-section-heading"><h3>{props.i18n.t('gatewayExperience.overview')}</h3><Show when={overviewAction()}>{action => <Button variant="outline" size="sm" disabled={!props.available || !action().enabled} onClick={() => props.onService(action())}>{localizedGatewaySourceActionLabel(props.i18n, action())}</Button>}</Show></div>
+          <dl class="redeven-gateway-overview-facts">
+            <div><dt>{props.i18n.t('gatewayExperience.desktopConnection')}</dt><dd>{localizedGatewaySourceText(props.i18n, props.gateway ? buildGatewaySourceRowModel(props.gateway).status_label : '')}</dd></div>
+            <div><dt>{props.i18n.t('gatewayJoin.address')}</dt><dd>{props.gateway?.member_endpoints?.map(endpoint => endpoint.address).join(', ') || props.gateway?.gateway_url || props.i18n.t('gatewayMembers.noConnectionAddresses')}</dd></div>
+            <div><dt>{props.i18n.t('gatewayExperience.identity')}</dt><dd>{props.gateway?.identity_fingerprint || props.i18n.t('gatewayClients.hostVerification')}</dd></div>
+          </dl>
+          <div class="redeven-gateway-section-heading"><h3>{props.i18n.t('gatewayMembers.members')}</h3><Button data-gateway-add-environment size="sm" icon={Plus} onClick={props.onEnroll}>{props.i18n.t('gatewayExperience.addEnvironment')}</Button></div>
+          <Show when={props.gateway?.environments.length} fallback={<p class="redeven-gateway-empty-state">{props.i18n.t('gatewayMembers.empty')}</p>}><ul class="redeven-gateway-member-list"><For each={props.gateway?.environments}>{member => <li class="redeven-gateway-member-row"><strong>{member.display_name}</strong><span class="text-xs text-muted-foreground">{props.i18n.t(member.connected ? 'gatewayMembers.connected' : 'gatewayMembers.offline')}</span></li>}</For></ul></Show>
+          <Button variant="ghost" onClick={() => selectTab('runtimes')}>{props.i18n.t('environmentCenter.viewEnvironments')}</Button>
+        </div></Show>
+
         <div id="gateway-settings-panel-connection" class={cn('redeven-gateway-settings-panel', activeTab() !== 'connection' && 'redeven-gateway-settings-panel--inactive')} role={managedSession() ? 'tabpanel' : undefined} aria-labelledby={managedSession() ? 'gateway-settings-tab-connection' : undefined} aria-hidden={managedSession() && activeTab() !== 'connection' ? 'true' : undefined} inert={managedSession() && activeTab() !== 'connection'}>
+        <Show when={props.state?.mode === 'create'}><Button variant="ghost" size="sm" onClick={() => { props.updateField('onboarding_intent', ''); props.updateField('ssh_password', ''); props.updateField('access_code', ''); }}>{props.i18n.t('gatewayJoin.back')}</Button></Show>
         <div class="redeven-gateway-settings-section redeven-gateway-connection-kind">
           <div class="redeven-gateway-eyebrow">
             {props.i18n.t('connectionDialog.gatewayTransport')}
           </div>
           <div class="flex flex-wrap gap-2" role="group" aria-label={props.i18n.t('connectionDialog.gatewayTransport')}>
             <For each={[
-              { kind: 'url', key: 'connectionDialog.gatewayTransportUrl' },
-              ...(props.nativeHostSupported ? [{ kind: 'local_host', key: 'gatewayAccess.localService' }] : []),
-              { kind: 'ssh_host', key: 'connectionDialog.gatewayTransportSshHost' },
-              { kind: 'local_container', key: 'connectionDialog.localContainer' },
-              { kind: 'ssh_container', key: 'connectionDialog.gatewayTransportSshContainer' },
+              ...(props.state?.onboarding_intent === 'deploy' ? [] : [{ kind: 'url', key: 'connectionDialog.gatewayTransportUrl' }]),
+              ...(props.state?.onboarding_intent === 'connect' ? [] : [
+                ...(props.nativeHostSupported ? [{ kind: 'local_host', key: 'gatewayAccess.localService' }] : []),
+                { kind: 'ssh_host', key: 'connectionDialog.gatewayTransportSshHost' },
+                { kind: 'local_container', key: 'connectionDialog.localContainer' },
+                { kind: 'ssh_container', key: 'connectionDialog.gatewayTransportSshContainer' },
+              ]),
             ] as readonly { kind: DesktopGatewayConnectionKind; key: DesktopTranslationKey }[]}>
               {option => <Button size="sm" variant={connectionKind() === option.kind ? 'default' : 'outline'}
                 aria-pressed={connectionKind() === option.kind} disabled={props.state?.mode === 'edit'}
@@ -13896,10 +14000,17 @@ function GatewaySetupDialog(props: Readonly<{
           </div>
         </Show>
 
-        <Show when={managedSession()}><GatewayMembersPanel available={canManage()} gateway={props.gateway} i18n={props.i18n} targets={props.targets} refresh={props.refresh} section="connection" /></Show>
+        <Show when={canConfigure()}><GatewayMembersPanel available={canManage()} gateway={props.gateway} i18n={props.i18n} refresh={props.refresh} onRestart={() => props.onService({ intent: 'restart_gateway', label: 'Restart Gateway', variant: 'outline', enabled: props.gateway?.service_state?.can_restart === true })} section="connection" /></Show>
+        <Show when={props.state?.mode === 'edit' && props.gateway?.connection_kind !== 'url'}><section class="redeven-gateway-settings-section redeven-gateway-section-divider">
+          <h3>{props.i18n.t('gatewayExperience.maintenance')}</h3><div class="flex flex-wrap gap-2">
+          <For each={(['start', 'restart', 'stop', 'update'] as const).filter(operation => props.gateway?.service_state?.[('can_' + operation) as 'can_start' | 'can_restart' | 'can_stop' | 'can_update'])}>{operation => {
+            const action = (): GatewaySourceActionModel => ({ intent: (operation + '_gateway') as GatewaySourceActionModel['intent'], label: operation[0].toUpperCase() + operation.slice(1) + ' Gateway', variant: 'outline', enabled: props.available });
+            return <Button variant="outline" size="sm" disabled={!props.available || props.busyState.action !== IDLE_LAUNCHER_BUSY_STATE.action} onClick={() => props.onService(action())}>{localizedGatewaySourceActionLabel(props.i18n, action())}</Button>;
+          }}</For></div>
+        </section></Show>
         </div>
-        <Show when={managedSession()}><div id="gateway-settings-panel-runtimes" class={cn('redeven-gateway-settings-panel', activeTab() !== 'runtimes' && 'redeven-gateway-settings-panel--inactive')} role="tabpanel" aria-labelledby="gateway-settings-tab-runtimes" aria-hidden={activeTab() !== 'runtimes' ? 'true' : undefined} inert={activeTab() !== 'runtimes'}><GatewayMembersPanel available={canManage()} gateway={props.gateway} i18n={props.i18n} targets={props.targets} refresh={props.refresh} section="runtimes" /></div></Show>
-        <Show when={managedSession()}><div id="gateway-settings-panel-clients" class={cn('redeven-gateway-settings-panel', activeTab() !== 'clients' && 'redeven-gateway-settings-panel--inactive')} role="tabpanel" aria-labelledby="gateway-settings-tab-clients" aria-hidden={activeTab() !== 'clients' ? 'true' : undefined} inert={activeTab() !== 'clients'}><GatewayClientsPanel available={canManage()} gatewayID={props.state?.gateway_id ?? ''} i18n={props.i18n} /></div></Show>
+        <Show when={managedSession()}><div id="gateway-settings-panel-runtimes" class={cn('redeven-gateway-settings-panel', activeTab() !== 'runtimes' && 'redeven-gateway-settings-panel--inactive')} role="tabpanel" aria-labelledby="gateway-settings-tab-runtimes" aria-hidden={activeTab() !== 'runtimes' ? 'true' : undefined} inert={activeTab() !== 'runtimes'}><GatewayMembersPanel available={props.available} gateway={props.gateway} i18n={props.i18n} refresh={props.refresh} onEnroll={props.onEnroll} section="runtimes" /></div></Show>
+        <Show when={managedSession()}><div id="gateway-settings-panel-clients" class={cn('redeven-gateway-settings-panel', activeTab() !== 'clients' && 'redeven-gateway-settings-panel--inactive')} role="tabpanel" aria-labelledby="gateway-settings-tab-clients" aria-hidden={activeTab() !== 'clients' ? 'true' : undefined} inert={activeTab() !== 'clients'}><Show when={hostManaged() && accessVisited()} fallback={<p class="redeven-gateway-help">{props.i18n.t('gatewayClients.clientOnly')}</p>}><GatewayClientsPanel available={props.available && hostManaged()} gatewayID={props.state?.gateway_id ?? ''} i18n={props.i18n} /></Show><Show when={hostManaged() && accessVisited()}><h3 class="redeven-gateway-section-title">{props.i18n.t('gatewayCloud.title')}</h3><GatewayCloudPanel embedded available={props.available && props.gateway?.permissions?.configure_cloud === true} gatewayID={props.state?.gateway_id ?? ''} gatewayName={props.state?.display_name ?? ''} i18n={props.i18n} /></Show></div></Show>
         </div>
         <Show when={props.recovery}>
           {recovery => <GatewayActionRecoveryNotice i18n={props.i18n} recovery={recovery()}
@@ -13916,7 +14027,42 @@ function GatewaySetupDialog(props: Readonly<{
             <pre class="mt-2 whitespace-pre-wrap break-words">{props.technicalDetail}</pre>
           </details>
         </Show>
+      </Show>
       </div>
+  );
+  return (
+    <Dialog
+      open={isOpen()}
+      onOpenChange={props.onOpenChange}
+      onPresenceChange={present => { props.onPresenceChange(present); if (!present && !props.state) queueMicrotask(props.restoreFocus); }}
+      title={props.state?.mode === 'edit' ? props.gateway?.display_name ?? props.state.display_name : props.i18n.t('connectionDialog.addGatewayTitle')}
+      class={cn(CONNECTION_DIALOG_CLASS, 'redeven-gateway-dialog', 'redeven-gateway-settings-dialog')}
+      contentClass="redeven-gateway-settings-dialog__content"
+      footer={!props.serviceContent && (
+        <div class="flex justify-end gap-2">
+          <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)}>
+            {props.i18n.t(activeTab() === 'connection' ? 'common.cancel' : 'common.close')}
+          </Button>
+          <Show when={activeTab() === 'connection' && !choosingIntent()}><Button
+            size="sm"
+            variant="default"
+            loading={busyStateMatchesAction(props.busyState, 'upsert_gateway')}
+            disabled={!props.available || props.busyState.action !== IDLE_LAUNCHER_BUSY_STATE.action}
+            onClick={() => {
+              void props.onSave();
+            }}
+            icon={Save}
+          >
+            {props.i18n.t('connectionDialog.saveGateway')}
+          </Button></Show>
+        </div>
+      )}
+    >
+      {managementBody}
+      <Show when={props.serviceContent}>
+        <Button variant="ghost" size="sm" onClick={props.closeService}>{props.i18n.t('gatewayJoin.back')}</Button>
+        {props.serviceContent?.()}
+      </Show>
     </Dialog>
   );
 }

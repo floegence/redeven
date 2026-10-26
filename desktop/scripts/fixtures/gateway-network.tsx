@@ -19,5 +19,5 @@ if (params.get('scenario') === 'long') gateway.display_name = 'Gateway for the d
 if (params.get('scenario') === 'multiple') gateway.member_endpoints = [...gateway.member_endpoints!,{endpoint_id:'public',address:'https://office.example:7443',scope:'public',priority:1}];
 const gateways = params.get('scenario') === 'none' ? [] : [gateway];
 render(() => <FloeProvider config={{storage:{enabled:false},theme:{defaultTheme:params.get('theme') === 'dark' ? 'dark' : 'light'}}}><main class="p-4">{params.get('view') === 'settings'
- ? <Dialog open onOpenChange={() => {}} title={i18n.t('gatewayClients.connectionSettings')} class="redeven-gateway-dialog" contentClass="redeven-gateway-dialog__content"><GatewayMembersPanel gateway={gateway} i18n={i18n} targets={[]} section="connection" refresh={async()=>{}} /></Dialog>
+ ? <Dialog open onOpenChange={() => {}} title={i18n.t('gatewayClients.connectionSettings')} class="redeven-gateway-dialog" contentClass="redeven-gateway-dialog__content"><GatewayMembersPanel gateway={gateway} i18n={i18n} section="connection" refresh={async()=>{}} /></Dialog>
  : <RuntimeGatewayJoinPanel targetID="local:local" targetLabel={i18n.t('desktop.localEnvironment')} gateways={gateways} i18n={i18n}/>}</main></FloeProvider>,document.getElementById('root')!);

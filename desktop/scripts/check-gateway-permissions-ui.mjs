@@ -52,20 +52,20 @@ try {
         };
         await openSettings();
         const dialog = page.getByRole('dialog');
-        assert.equal(await dialog.getByRole('tab').count(), 3);
+        assert.equal(await dialog.getByRole('tab').count(), 4);
         assert.equal(await dialog.locator('fieldset').count(), 0);
         const bounds = await dialog.boundingBox();
         assert.ok(bounds.width <= width - 16 && (width < 1000 || bounds.width >= 760));
         const fixedHeight = bounds.height;
-        for (const translationKey of ['runtimes', 'clientAccess', 'connectionSettings']) {
-          await dialog.getByRole('tab', { name: i18n.t(`gatewayClients.${translationKey}`), exact: true }).click();
+        for (const translationKey of ['gatewayExperience.overview', 'environmentCenter.environmentsSection', 'gatewayExperience.access', 'common.settings']) {
+          await dialog.getByRole('tab', { name: i18n.t(translationKey), exact: true }).click();
           await page.waitForTimeout(240);
           assert.ok(Math.abs((await dialog.boundingBox()).height - fixedHeight) < 1, `${locale}/${width}: fixed dialog height across tabs`);
         }
         assert.equal(await dialog.evaluate(element => element.scrollWidth > element.clientWidth + 1), false);
-        const connection = dialog.getByRole('tab', { name: i18n.t('gatewayClients.connectionSettings'), exact: true });
-        await connection.focus(); await page.keyboard.press('End');
-        const clientsTab = dialog.getByRole('tab', { name: i18n.t('gatewayClients.clientAccess'), exact: true });
+        const connection = dialog.getByRole('tab', { name: i18n.t('common.settings'), exact: true });
+        await connection.focus(); await page.keyboard.press('ArrowLeft');
+        const clientsTab = dialog.getByRole('tab', { name: i18n.t('gatewayExperience.access'), exact: true });
         assert.equal(await clientsTab.getAttribute('aria-selected'), 'true');
         assert.equal(await clientsTab.evaluate(element => element === document.activeElement), true);
         await dialog.getByText('Studio Desktop', { exact: true }).waitFor();
@@ -78,7 +78,7 @@ try {
         await detail.locator('summary').focus(); await page.keyboard.press('Enter'); await page.waitForTimeout(280);
         assert.equal(await detail.getAttribute('open'), '');
         assert.equal(await detail.locator('summary').evaluate(element => getComputedStyle(element).cursor), 'pointer');
-        await dialog.getByRole('tab', { name: i18n.t('gatewayClients.runtimes'), exact: true }).click();
+        await dialog.getByRole('tab', { name: i18n.t('environmentCenter.environmentsSection'), exact: true }).click();
         await clientsTab.click();
         assert.equal(await dialog.getByText('private-one-time-code', { exact: true }).isVisible(), true, 'Tab changes retain an issued code');
         const beforeRevoke = await page.evaluate(() => window.settingsFixture.requests.length);
@@ -96,9 +96,12 @@ try {
           ...gateway, connection_kind: 'url', management_capability: 'access_only', gateway_url: 'https://gateway.example/'
         }] }), { snapshot, gateway });
         await openSettings();
-        assert.equal(await dialog.getByRole('tab').count(), 0, 'URL cannot gain management from stale local permissions');
-        assert.equal(await dialog.getByRole('checkbox').count(), 1);
-        await dialog.getByText(i18n.t('gatewayClients.clientOnly'), { exact: true }).waitFor();
+        assert.equal(await dialog.getByRole('tab').count(), 4, 'All connections retain the same navigation groups');
+        await dialog.getByRole('tab', { name: i18n.t('gatewayExperience.access'), exact: true }).click();
+        assert.equal(await dialog.getByRole('button', { name: i18n.t('gatewayClients.createCode'), exact: true }).count(), 0, 'URL cannot gain management from stale local permissions');
+        await dialog.getByRole('tab', { name: i18n.t('common.settings'), exact: true }).click();
+        assert.equal(await dialog.getByRole('button', { name: i18n.t('gatewayMembers.createInvitation'), exact: true }).count(), 0);
+        await dialog.locator('.redeven-gateway-authority').getByText(i18n.t('gatewayClients.clientOnly'), { exact: true }).waitFor();
         await dialog.locator('#gateway-name').fill('Renamed Gateway');
         await dialog.getByRole('button', { name: i18n.t('connectionDialog.saveGateway'), exact: true }).click();
         const saved = await page.evaluate(() => window.settingsFixture.requests.at(-1));

@@ -34,7 +34,7 @@ async function checkDialog(dialog, width) {
   await dialog.waitFor();
   const bounds = await dialog.boundingBox();
   assert.ok(bounds.width <= width - 16);
-  if (width > 1000) assert.ok(bounds.width >= 760, 'Desktop dialogs are comfortably wide');
+  if (width > 1000) assert.ok(bounds.width >= (await dialog.evaluate(element => element.classList.contains('redeven-gateway-wizard-dialog')) ? 560 : 760), 'Desktop dialogs respect management and focused-task widths');
   assert.equal(await dialog.evaluate(element => element.scrollWidth > element.clientWidth + 1), false);
 }
 async function capture(page, filename) {
@@ -49,7 +49,7 @@ async function capture(page, filename) {
 try {
   const load = relative => server.ssrLoadModule(fileURLToPath(new URL(relative, import.meta.url)));
   const { compactEnvironmentPreviewFixture } = await load('../src/testSupport/compactEnvironmentPreviewFixture.ts');
-  const { mixedEnvironmentFixture } = await load('../src/testSupport/mixedEnvironmentFixture.ts');
+  const { runtimeGatewayAccessFixture } = await load('../src/testSupport/runtimeGatewayAccessFixture.ts');
   const { catalogFixture } = await load('../src/testSupport/gatewayMembershipFixture.ts');
   const { createDesktopI18n } = await load('../src/shared/i18n/index.ts');
   const source = compactEnvironmentPreviewFixture().coverage;
@@ -58,7 +58,7 @@ try {
     member_endpoints: [{ ...catalogFixture.gateway.member_endpoints[0], address: 'https://gateway-office.example.internal:7443' }],
     listener_addresses: [':7443'], listener_running: true, policy: catalogFixture.policy,
     permissions: catalogFixture.gateway.permissions, environments: [] };
-  const mixed = mixedEnvironmentFixture().snapshot;
+  const mixed = runtimeGatewayAccessFixture('local', 'ready').snapshot;
   const runtime = mixed.environments.find(entry => entry.kind === 'local_environment');
   runtime.runtime_service.capabilities.runtime_gateway = { supported: true };
   const snapshot = { ...mixed, gateway_sources: [gateway] };
@@ -98,6 +98,7 @@ try {
         await page.getByRole('menuitem', { name: i18n.t('environmentCenter.gatewayActionOpenSettings'), exact: true }).click();
         let dialog = page.getByRole('dialog');
         await checkDialog(dialog, width);
+        await dialog.getByRole('tab', { name: i18n.t('common.settings'), exact: true }).click();
         await dialog.locator('#gateway-access-code').waitFor();
         assert.equal(await dialog.locator('#gateway-access-code').count(), 1);
         await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' });
@@ -112,6 +113,7 @@ try {
         await more.click();
         await page.getByRole('menuitem', { name: i18n.t('environmentCenter.gatewayActionOpenSettings'), exact: true }).click();
         dialog = page.getByRole('dialog'); await checkDialog(dialog, width);
+        await dialog.getByRole('tab', { name: i18n.t('common.settings'), exact: true }).click();
         const address = dialog.getByRole('textbox', { name: i18n.t('gatewayMembers.address'), exact: true });
         if (width > 1000) assert.ok((await address.boundingBox()).width > 600);
         assert.equal(await dialog.getByRole('spinbutton').count(), 0, 'Endpoint priority is not user-configured');
@@ -119,8 +121,8 @@ try {
         const fixedHeight = (await dialog.boundingBox()).height;
         assert.equal(await dialog.locator('.redeven-gateway-settings-dialog__content').evaluate(element => getComputedStyle(element).overflowY), 'hidden');
         assert.equal(await dialog.locator('.redeven-gateway-settings-panels').evaluate(element => getComputedStyle(element).overflowY), 'auto');
-        for (const translationKey of ['runtimes', 'clientAccess', 'connectionSettings']) {
-          const tab = dialog.getByRole('tab', { name: i18n.t(`gatewayClients.${translationKey}`), exact: true });
+        for (const translationKey of ['gatewayExperience.overview', 'environmentCenter.environmentsSection', 'gatewayExperience.access', 'common.settings']) {
+          const tab = dialog.getByRole('tab', { name: i18n.t(translationKey), exact: true });
           await tab.click();
           await page.waitForTimeout(240);
           assert.ok(Math.abs((await dialog.boundingBox()).height - fixedHeight) < 1, 'Gateway dialog height stays fixed across tabs');
@@ -130,12 +132,12 @@ try {
           });
           assert.deepEqual(underline, { left: '0px', right: '0px', opacity: '1' }, 'Selected tab underline spans the full tab button');
         }
-        await dialog.getByRole('tab', { name: i18n.t('gatewayClients.clientAccess'), exact: true }).click();
+        await dialog.getByRole('tab', { name: i18n.t('gatewayExperience.access'), exact: true }).click();
         await dialog.getByText('Studio Desktop', { exact: true }).waitFor();
         await dialog.getByRole('button', { name: i18n.t('gatewayClients.createCode'), exact: true }).click();
         await dialog.getByText('studio-access-42', { exact: true }).waitFor();
         await capture(page, `${locale}-${width}-${reducedMotion}-clients`);
-        await dialog.getByRole('tab', { name: i18n.t('gatewayClients.connectionSettings'), exact: true }).click();
+        await dialog.getByRole('tab', { name: i18n.t('common.settings'), exact: true }).click();
         await page.waitForTimeout(240);
         const endpointRows = dialog.locator('.redeven-gateway-endpoint-shell');
         await dialog.getByRole('button', { name: i18n.t('gatewayMembers.addAddress'), exact: true }).click();
@@ -172,18 +174,18 @@ try {
         });
         if (!reducedMotion) assert.ok(tabOpacityFrames.some(opacity => opacity > 0.05 && opacity < 0.95), 'Tab panels cross-fade smoothly');
         assert.equal(await panelScroller.evaluate(element => element.scrollTop), 0, 'Tab changes start at the top of the selected panel');
+        await dialog.locator('[data-gateway-invite-others] summary').click();
         await dialog.getByRole('heading', { name: i18n.t('gatewayMembers.invite'), exact: true }).waitFor();
         const policy = dialog.locator('details').filter({ has: page.locator('summary', { hasText: i18n.t('gatewayMembers.policy') }) }).first();
         await capture(page, `${locale}-${width}-${reducedMotion}-members-compact`);
         const policyOpening = await checkDisclosure(policy, reducedMotion);
         await capture(page, `${locale}-${width}-${reducedMotion}-members`);
         const policyClosing = await checkDisclosure(policy, reducedMotion);
-        await dialog.getByRole('tab', { name: i18n.t('gatewayClients.connectionSettings'), exact: true }).click();
+        await dialog.getByRole('tab', { name: i18n.t('common.settings'), exact: true }).click();
         await page.waitForTimeout(240);
-        const listener = dialog.locator('details').filter({ has: page.locator('summary', { hasText: i18n.t('gatewayMembers.listenerAddress') }) }).first();
-        await listener.locator('summary').focus(); await page.keyboard.press('Enter');
-        assert.equal(await listener.getAttribute('open'), '');
-        await page.keyboard.press('Enter'); assert.equal(await listener.getAttribute('open'), null);
+        const listener = dialog.locator('#gateway-listen-addresses');
+        await listener.focus();
+        assert.equal(await listener.evaluate(element => element === document.activeElement), true);
         await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' });
         await page.getByRole('button', { name: i18n.t('environmentCenter.environmentsSection'), exact: true }).click();
         const owner = page.locator(`[data-owner-id="${runtime.id}"]`);
@@ -194,24 +196,25 @@ try {
         assert.equal(await dialog.getByRole('button', { name: i18n.t('gatewayMembers.createInvitation'), exact: true }).count(), 0, 'Runtime access does not create invitations');
         assert.equal(await dialog.locator('input[type="file"]').count(), 0, 'Runtime access has no invitation file entry');
         assert.equal(await dialog.locator('input[type="radio"]').count(), 0, 'Cloud choices appear only after verification');
-        const inputs = dialog.locator('input');
-        await inputs.nth(0).fill('https://gateway-office.example.internal:7443');
-        await inputs.nth(1).fill('123456789ABCDEFGHJKMNPQRSTV');
+        await dialog.getByRole('button', { name: i18n.t('gatewayJoin.connectAndContinue'), exact: true }).click();
+        await dialog.getByRole('tab', { name: i18n.t('gatewayDiscovery.enterAddress'), exact: true }).click();
+        const addressInput = dialog.getByRole('textbox', { name: i18n.t('gatewayJoin.address'), exact: true });
+        const codeInput = dialog.getByRole('textbox', { name: i18n.t('gatewayJoin.code'), exact: true });
+        await addressInput.fill('https://gateway-office.example.internal:7443');
+        await codeInput.fill('123456789ABCDEFGHJKMNPQRSTV');
         await capture(page, `${locale}-${width}-${reducedMotion}-runtime-input`);
         await dialog.getByRole('button', { name: i18n.t('gatewayJoin.verify'), exact: true }).click();
         await dialog.getByText(i18n.t('gatewayJoin.verified'), { exact: true }).waitFor();
         assert.equal(await dialog.isVisible(), true);
         await dialog.getByText(i18n.t('gatewayJoin.accessImpact'), { exact: true }).waitFor();
         const confirm = dialog.getByRole('button', { name: i18n.t('gatewayJoin.confirmEnable'), exact: true });
-        assert.equal(await confirm.isDisabled(), true, 'Cloud environment choice is explicit');
-        const preserve = dialog.getByRole('radio').first();
-        await preserve.check();
-        assert.equal(await confirm.isEnabled(), true);
-        await capture(page, `${locale}-${width}-${reducedMotion}-runtime`);
-        await inputs.nth(0).fill('https://gateway-new.example.internal:7443');
+        assert.equal(await confirm.isEnabled(), true, 'Verified invitation can be confirmed explicitly without unrelated Cloud choices');
+        assert.equal(await dialog.getByRole('radio').count(), 0);
+        await capture(page, locale + '-' + width + '-' + reducedMotion + '-runtime');
+        await dialog.getByRole('button', { name: i18n.t('gatewayJoin.back'), exact: true }).click();
+        await addressInput.fill('https://gateway-new.example.internal:7443');
         assert.equal(await confirm.count(), 0, 'Changing the address invalidates the preview');
-        assert.equal(await inputs.nth(1).inputValue(), '123456789ABCDEFGHJKMNPQRSTV');
-        assert.equal(await dialog.locator('input[type="radio"]').count(), 0);
+        assert.equal(await codeInput.inputValue(), '123456789ABCDEFGHJKMNPQRSTV');
         assert.equal(await dialog.getByRole('button', { name: i18n.t('gatewayJoin.verify'), exact: true }).isEnabled(), true);
         await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' });
         assert.equal(await page.evaluate(() => window.settingsFixture.requests.some(request => ['upsert_gateway', 'update_gateway_policy', 'configure_gateway_cloud'].includes(request.kind))), false);

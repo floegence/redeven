@@ -1,6 +1,6 @@
 import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
-import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
+import { Button, Dialog, Dropdown } from '@floegence/floe-webapp-core/ui';
 import { createEffect, createMemo, createSignal, on, onCleanup, Show } from 'solid-js';
 import type { DesktopEnvironmentEntry, DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
 import type { DesktopI18n } from '../shared/i18n';
@@ -11,6 +11,14 @@ import { environmentInteractionIdentity } from './environmentInteractionIdentity
 /** One enrollment session survives direct-executor recovery and observational snapshots. */
 export function RuntimeGatewaySetupDialog(props: Readonly<{
   gateways?: readonly DesktopGatewaySource[];
+  gatewayID?: string;
+  recoverGateway?: (gateway: DesktopGatewaySource) => Promise<boolean>;
+  open?: boolean;
+  covered?: boolean;
+  onPresenceChange?: (present: boolean) => void;
+  environments?: readonly DesktopEnvironmentEntry[];
+  selectEnvironment?: (id: string) => void;
+  suspend?: () => void;
   environment?: DesktopEnvironmentEntry;
   i18n: DesktopI18n;
   operationBusy?: boolean;
@@ -124,7 +132,7 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
   onCleanup(() => { generation++; });
   // Retain the enrollment owner and drafts while settings temporarily covers the dialog.
   const enrollment = <Show when={retainedTarget()}>{targetID =>
-      <RuntimeGatewayJoinPanel wizard connectionRequest={connectionRequest()} gateways={props.gateways} embedded targetID={targetID()} targetLabel={props.environment?.label}
+      <RuntimeGatewayJoinPanel wizard gatewayID={props.gatewayID} recoverGateway={props.recoverGateway} connectionRequest={connectionRequest()} gateways={props.gateways} embedded targetID={targetID()} targetLabel={props.environment?.label}
         suspended={props.suspended}
         onPreparationRequired={failure => setRequiredPreparation(failure === 'runtime_not_started' ? 'start' : failure === 'SECURITY_RESTART_REQUIRED' ? 'restart' : 'update')}
         i18n={props.i18n} onClose={props.close} canConnect={canConnect()} submissionBlocked={submissionBlocked()}
@@ -154,9 +162,25 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
         preparationAction={recovery() ? { label: recoveryLabel(), run: recover,
           disabled: props.suspended === true || props.available === false || busy() || !!props.operationBusy || !presentation()?.recovery_enabled } : undefined} />
     }</Show>;
-  return <Dialog open={!!props.environment && !props.suspended} onOpenChange={value => { if (!value) props.close(); }} title={props.i18n.t('gatewayJoin.title')}
+  return <Dialog open={(props.open ?? !!props.environment) && !props.suspended && !props.covered} onPresenceChange={props.onPresenceChange} onOpenChange={value => { if (!value) (props.suspend ?? props.close)(); }} title={props.i18n.t('gatewayJoin.title')}
     closeLabel={props.i18n.t('common.close')}
     class="redeven-gateway-dialog redeven-gateway-join-dialog redeven-gateway-wizard-dialog" contentClass="redeven-gateway-join-content">
+    <Show when={!props.environment}>
+      <div class="redeven-gateway-settings-section" data-gateway-environment-choice>
+        <p class="redeven-gateway-help">{props.i18n.t('gatewayExperience.chooseEnvironmentHelp')}</p>
+        <Dropdown triggerInputSurface triggerAriaLabel={props.i18n.t('gatewayMembers.chooseRuntime')}
+          trigger={props.i18n.t('gatewayMembers.chooseRuntime')}
+          items={() => (props.environments ?? []).filter(environment => !!runtimeGatewayAccessPresentation(environment)).map(environment => ({
+            id: environment.id, label: environment.label,
+            description: props.i18n.t(environment.provider_runtime_link_target?.runtime_running ? 'gatewayMembers.connected' : 'gatewayJoin.startAndContinue'),
+          }))}
+          onSelect={id => props.selectEnvironment?.(id)} />
+        <Show when={!(props.environments ?? []).some(environment => !!runtimeGatewayAccessPresentation(environment))}>
+          <p role="status" class="redeven-gateway-help">{props.i18n.t('gatewayExperience.noManagedEnvironments')}</p>
+        </Show>
+        <Button variant="ghost" onClick={props.close}>{props.i18n.t('common.cancel')}</Button>
+      </div>
+    </Show>
     {enrollment}
   </Dialog>;
 }
