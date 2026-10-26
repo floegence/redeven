@@ -1,6 +1,6 @@
 import { withFlowerReadDeadline } from './requestDeadline';
 import { HISTORY_READ_RETRY_DELAYS, recoverableHistoryRead } from './historyReadRecovery';
-import { createActivityReadQueue } from './activityReadQueue';
+import { createActivityReadQueue, type ActivityReadPriority } from './activityReadQueue';
 
 export const HISTORY_BODY_CONCURRENCY = 2;
 export const HISTORY_BODY_VIEWPORT_MARGIN_PX = 160;
@@ -11,6 +11,8 @@ type BodyRead = {
   read: (signal: AbortSignal) => Promise<void | boolean>;
   state: 'queued' | 'loading' | 'waiting' | 'failed';
   failures: number;
+  priority: ActivityReadPriority;
+  queuedAt: number;
   recoverable: boolean;
   timer?: ReturnType<typeof setTimeout>;
   cancel: () => void;
@@ -24,6 +26,8 @@ export function createHistoryBodyLoader(timeoutMessage: () => string, changed: (
   const reads = new Map<string, BodyRead>();
   let active = 0;
   let sequence = 0;
+  let dispatches = 0;
+  const priorities = { background: 0, visible: 1, interactive: 2 };
   const remove = (key: string, entry: BodyRead) => {
     entry.signal.removeEventListener('abort', entry.cancel);
     if (entry.timer !== undefined) clearTimeout(entry.timer);
@@ -32,18 +36,20 @@ export function createHistoryBodyLoader(timeoutMessage: () => string, changed: (
     if (reads.get(key) === entry) { reads.delete(key); changed(); }
   };
   const pump = () => {
-    for (const [key, entry] of reads) {
+    const queued = [...reads].filter(([, entry]) => entry.state === 'queued').sort(([, a], [, b]) =>
+      (priorities[b.priority] + Math.floor((dispatches - b.queuedAt) / 8)) - (priorities[a.priority] + Math.floor((dispatches - a.queuedAt) / 8)));
+    for (const [key, entry] of queued) {
       if (active >= HISTORY_BODY_CONCURRENCY) break;
       if (entry.state !== 'queued') continue;
       if (entry.signal.aborted) { remove(key, entry); continue; }
-      active++; entry.state = 'loading'; changed();
-      void withFlowerReadDeadline(signal => queue.run('body:' + ++sequence, signal, entry.read), timeoutMessage(), entry.signal).then(
+      active++; dispatches++; entry.state = 'loading'; changed();
+      void withFlowerReadDeadline(signal => queue.run('body:' + ++sequence, signal, entry.read, entry.priority), timeoutMessage(), entry.signal).then(
         more => {
           entry.failures = 0;
           if (more && !entry.signal.aborted && reads.get(key) === entry) {
             // A chunk yields its slot to queued visible items. New extent
             // notifications coalesce into the same read owner.
-            entry.state = 'queued'; reads.delete(key); reads.set(key, entry);
+            entry.state = 'queued'; entry.queuedAt = dispatches; reads.delete(key); reads.set(key, entry);
           } else remove(key, entry);
         },
         error => {
@@ -86,14 +92,17 @@ export function createHistoryBodyLoader(timeoutMessage: () => string, changed: (
       const state = reads.get(key)?.state;
       return state === 'queued' || state === 'waiting' ? 'loading' : state;
     },
-    request(key: string, identity: object | string, signal: AbortSignal, read: BodyRead['read']) {
+    request(key: string, identity: object | string, signal: AbortSignal, read: BodyRead['read'], priority: ActivityReadPriority = 'visible') {
       if (signal.aborted) return;
       const previous = reads.get(key);
-      if (previous?.identity === identity) return;
+      if (previous?.identity === identity) {
+        if (priorities[priority] > priorities[previous.priority]) previous.priority = priority;
+        return;
+      }
       if (previous) remove(key, previous);
       const controller = new AbortController();
       const ownedSignal = AbortSignal.any([signal, controller.signal]);
-      const entry: BodyRead = { identity, signal: ownedSignal, controller, read, state: 'queued', failures: 0, recoverable: false, cancel: () => { remove(key, entry); pump(); } };
+      const entry: BodyRead = { identity, signal: ownedSignal, controller, read, priority, queuedAt: dispatches, state: 'queued', failures: 0, recoverable: false, cancel: () => { remove(key, entry); pump(); } };
       reads.set(key, entry);
       ownedSignal.addEventListener('abort', entry.cancel, { once: true });
       changed(); pump();

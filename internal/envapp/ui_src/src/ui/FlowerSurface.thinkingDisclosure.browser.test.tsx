@@ -392,15 +392,37 @@ it('retains correction disclosure, selection and focus through real provider che
   button.focus();
   const transcript = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
   transcript.scrollTop = 0;
-  for (const checkpoint of checkpoints.slice(2, 4)) {
-    live.push(checkpoint);
-    await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="' + checkpoint.items!.at(-1)!.id + '"]')));
-    expect(root.querySelector('[data-flower-message-id="source-2"]')).toBe(row);
-    expect(disclosure(root, 'source-2').dataset.flowerThinkingView).toBe('expanded');
-    expect(document.activeElement).toBe(button);
-    expect(selection.toString()).toBe(selected);
-    expect(transcript.scrollTop).toBe(0);
-  }
+  // Native scrolling/focus dispatches after the DOM write. Establish the
+  // user's actual painted position before measuring subsequent checkpoints.
+  const painted = () => new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+  await painted(); await painted();
+  const readingTop = button.getBoundingClientRect().top;
+  const contentTop = content.getBoundingClientRect().top;
+  const displacements: number[] = [];
+  let sampling = true;
+  const sample = async () => {
+    while (sampling) {
+      await painted();
+      if (sampling) displacements.push(Math.max(Math.abs(button.getBoundingClientRect().top - readingTop), Math.abs(content.getBoundingClientRect().top - contentTop)));
+    }
+  };
+  const sampled = sample();
+  try {
+    for (const checkpoint of checkpoints.slice(2, 4)) {
+      live.push(checkpoint);
+      await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="' + checkpoint.items!.at(-1)!.id + '"]')));
+      await painted();
+      expect(root.querySelector('[data-flower-message-id="source-2"]')).toBe(row);
+      expect(disclosure(root, 'source-2').dataset.flowerThinkingView).toBe('expanded');
+      expect(document.activeElement).toBe(button);
+      expect(selection.toString()).toBe(selected);
+      // A new process header changes document offset; inspected content must stay put.
+      expect(Math.abs(button.getBoundingClientRect().top - readingTop)).toBeLessThanOrEqual(1);
+      expect(Math.abs(content.getBoundingClientRect().top - contentTop)).toBeLessThanOrEqual(1);
+    }
+  } finally { sampling = false; await sampled; }
+  expect(displacements.length).toBeGreaterThan(0);
+  expect(Math.max(...displacements)).toBeLessThanOrEqual(1);
   live.fail();
   await waitFor(() => Boolean(root.querySelector('[data-flower-sync-state="failed"]')));
   expect(disclosure(root, 'source-2').dataset.flowerThinkingView).toBe('expanded');

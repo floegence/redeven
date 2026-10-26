@@ -5,7 +5,7 @@ description: Recorded source-volume and bounded reading recovery qualification.
 tags: [flower, performance, streaming, qualification]
 timestamp: 2026-10-22T00:00:00Z
 lifecycle: active_evidence
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-10-26"
 ---
 # Summary
 
@@ -144,3 +144,28 @@ the draft across close/reopen, and returned subscriptions and queued bytes to ze
 after disposal. Each mounted surface owned one subscription. No page exceptions
 or convergence errors occurred. This is fixed-workload lifecycle evidence, not an
 arbitrary-content memory bound; active Markdown and terminal documents remain uncapped.
+
+
+## Incremental presentation qualification, 2026-10-26
+
+Eight minified production-renderer samples cover Chromium/Electron, 72/500 historical
+messages, 20/100 tools and 30/60 Hz output, eight seconds each. Frame P95 is
+16.7–17.6 ms; click P95 is 26.0–31.7 ms. All samples have zero long tasks, zero
+protected DOM changes, zero skeleton flashes, retained selection/drafts and the
+expected 72 baseline / three load recovery counts. Output-progress probes pass.
+These short synthetic samples establish bounded interaction acceptance, not a
+production CPU bound or a long-duration stress guarantee. The benchmark reads
+reference modules from Git, including files deleted by the candidate, and measures
+the same minification and workload on both sides.
+
+The indexed-record regression separately proves that twenty appends do not visit
+100 or 10,000 historical ordinals. Canonical bodies and field readers keep their
+existing bounded transport; this change introduces no durable index or schema.
+
+
+The paired reference is fa3a56ca0 with identical minification and fixture geometry.
+Across the eight short samples, candidate renderer task CPU is 32.4–55.4% lower
+and sampled allocation is 72.2–85.0% lower. At 500 messages / 60 Hz the reference
+only emits about 282 KiB during the measurement, versus 508–513 KiB for the
+candidate because its timer falls behind; those pairs are throughput evidence,
+not equal-work CPU comparisons. Other pairs deliver comparable payload volumes.

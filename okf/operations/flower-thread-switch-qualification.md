@@ -5,11 +5,11 @@ description: Reproduce point-read scaling, bounded read recovery and actual side
 tags: [flower, performance, qualification, navigation]
 timestamp: 2026-10-19T00:00:00Z
 lifecycle: active_evidence
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-10-26"
 ---
 # Summary
 
-Published Floret v7.87.0 owns windows, bounded item-text reads, View and Summary. Redeven owns
+Published Floret v7.87.1 owns windows, bounded item-text reads, View and Summary. Redeven owns
 bounded reads and presentation through the [sidebar](../ui/flower-thread-sidebar.md)
 and [Desktop bridge](../desktop/desktop-runtime-bridge.md). Local qualification
 targets >=70% lower short-detail P95, warm synchronous P95 <8 ms, and feedback
@@ -159,3 +159,40 @@ those records unchanged. The independent full-locator byte budget measured
 91,073 / 1,160,931 bytes for twenty rows and 798,196 / 10,448,051 bytes for 180 rows
 (7.84% / 7.64%). These are metadata record bytes, not physical WAL or disk write
 amplification. Repeated equal single/batched SQLite puts changed zero rows.
+
+
+## Stable history and detail qualification, 2026-10-26
+
+The isolated consistent historical copy passes the production HTTP/Electron qualifier
+with execution deferred. Two sequential samples measure 586.7 and 343.7 ms from
+trusted click to stable readable content and usable composer. The latter covers
+25 upward plus 25 downward wheel gestures, exact canonical identity at every position,
+no HTTP/page errors, ninety stationary opening frames, and no additional history
+requests after each settled reading interval. Tool inspection in the final deep-scroll run matches the complete 703-character
+command returned by the authorized reader. An earlier full-scroll run also matches
+a 783-character command and 346-character output;
+all fourteen tool rows and manual disclosure survive repeated scrolling and reopening.
+No source text is committed as evidence. A fresh backend restart measures 534.0 ms
+under the same one-second gate. The nested full-command disclosure exposes the
+exact authorized command and retains all fourteen members through repeated scroll.
+One visibility-cancelled body read is recorded separately; there are no page or
+non-cancellation transport errors. A read-only opaque-record digest before and
+after qualification matches across 2,828,261 records (3,471,867,039 bytes), including
+metadata. Qualification does not alter canonical conversation records.
+
+An earlier candidate fails the one-second opening gate at 1,580.1 ms because turn
+boundary completion reads 150 items to discover nine missing members. The final
+adaptive boundary read starts at sixteen and grows to 150 only as needed. Its first
+extra page is 40,076 bytes rather than 238,048 bytes. The same 150-item summary
+comparison is 459,662 versus 236,228 bytes before adding canonical cost metadata.
+The optional window_bytes field preserves the upstream selection budget; exact
+membership no longer overflows after summary compaction.
+
+Browser acceptance additionally covers short collapsed tails, return-to-latest,
+thread switching, complete groups, focus/selection and retained manual inspection.
+A delayed multichunk historical Markdown test samples twenty displayed frames:
+tables, lists, code text, row height and screen position are stable from first reveal.
+The real copy's current tail is taller than the viewport, so short-tail coverage is
+deterministic browser evidence rather than a claim about that real tail.
+These are local prepared-store samples, not a universal latency guarantee or proof
+that arbitrary legacy upgrades finish within one second.

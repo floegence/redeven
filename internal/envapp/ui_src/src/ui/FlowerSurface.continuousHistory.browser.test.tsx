@@ -381,7 +381,7 @@ describe('continuous history navigation', () => {
     let first = true;
     let preparing = false;
     const history = vi.fn(async (_id: string, request: FlowerHistoryRequest) => {
-      if (request.anchor_id && request.limit === 150) { preparing = true; await held.promise; }
+      if (request.anchor_id && request.direction === 'before') { preparing = true; await held.promise; }
       const selected = first ? items.slice(-2) : selectPage(items, request); first = false;
       const ids = new Set(selected.map(item => item.id));
       const current: FlowerRuntimeCurrentView = { thread_id: seed.thread_id, activity: 'idle', view_version: 1, items: selected,

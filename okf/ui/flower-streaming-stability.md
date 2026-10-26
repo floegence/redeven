@@ -5,7 +5,7 @@ description: Incremental Markdown and local record updates preserve interactive 
 tags: [flower, streaming, performance, interaction]
 timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-10-26"
 ---
 # Summary
 
@@ -14,7 +14,7 @@ Flower renders actor-native changes through the indexed ThreadCache and the publ
 # Contract
 
 ## Local data and rendering
-Snapshots initialize indexed item/message records. Growth updates the affected region while preserving interactive identity; tests assert canonical fields rather than obsolete JSON signatures. Actual removal moves focus to an adjacent action or composer unless navigation already moved it.
+Snapshots initialize indexed item/message records. Text/body extent growth retains history-window, turn and decoration identity; only membership, replacement, turn or context changes recompute their relevant metadata. Growing argument previews update their existing reactive block without revisiting completed tools; the same canonical validation still rejects invalid counters and retires withdrawn/stale attempts. Actual removal moves focus to an adjacent action or composer unless navigation already moved it. Regression fixtures retain 100 and 10,000 archived items and require zero historical ordinal reads for twenty text appends.
 
 ## One Markdown parser
 Released Floe `createIncrementalMarkdownParser` owns Marked/CJK/GFM: reset sets a complete source baseline, append returns changed regions, finish authoritatively parses/corrects all content. Changed snapshots reset the complete baseline because tokens can move offsets and identities; reuse exact tokens at unchanged offsets and retire other old regions. Identical-source metadata retains regions. Completion, process collapse and replacement preserve all authored blocks. See [highlighting](flower-code-highlighting.md) and [media](flower-inline-media.md).
@@ -25,12 +25,16 @@ Added prose ranges fade to theme color over 320 ms through CSS custom highlights
 Each owner has at most 32 transient groups; diff inspection is bounded at 8,192 characters/128 text nodes per region. Larger changes remain immediately readable. Completion lets valid effects settle; reset, unmount, hidden documents, reduced motion and forced colors clear them. Historical owners schedule no frames/listeners; unsupported highlight APIs use immediate text.
 
 ## Disclosure and layout
+Cold historical text remains a loading presentation until all canonical chunks arrive. A reconnect retains both read offset and unpublished staging. Complete bodies enter at final geometry without height animation; browser acceptance samples table, code, list and text geometry from the first exposed frame. Existing readable text and live output retain their separate incremental behavior.
+
 Composer/approval font measurements use releasable completion/error listeners, never retaining detached surfaces through `FontFaceSet.ready`. Companion reads only the newest relevant record and a bounded normalized Unicode tail.
 
 ## Interaction cadence and resources
-One bounded frame queue applies updates in order inside the host reactive batch. Coalesce only contiguous single-item appends with matching wire/runtime thread, item, turn and run. Facts must match except timestamp and monotonic output/progress growth in the same request attempt; keep latest counters. Attempt/phase/non-append changes flush first. Join chunks once; UTF-8 offsets and versions remain contiguous. Gaps flush valid prefixes then report one recoverable synchronization error to the connection owner.
+One bounded frame queue applies every envelope in order, including semantic boundaries. Transport callbacks enqueue; each envelope commits atomically inside its host reactive batch. A four-millisecond cooperative budget includes reactive work and yields between envelopes through a timer task. It cannot preempt an individual expensive envelope. Apply failures are captured inside the reactive batch, allowing recovery notifications to commit before the error is rethrown to the connection owner. Ready waits for the queue to drain before admitting navigation; other reads pause at sixteen pending frames or one MiB. Disposal, failure and epoch changes release waiting readers and fence obsolete callbacks.
 
-Limits are 64 updates, 4 MiB encoded bytes and a 250 ms flush deadline (not main-thread preemption); drag/resize cadence is 75 ms. A replaceable performance mark exposes current/high-water bytes, age and count. Reconnect/disposal cancel callbacks and fence epochs. Copy feedback starts only on success, lasts 1.6 seconds, and never reports clipboard failures as successful.
+Coalesce only contiguous single-item appends with matching thread, item, turn, run and reading revision. Facts must match except timestamps and monotonic progress in the same request attempt. Preserve semantic boundaries and component clears. Join chunks once, preserving UTF-8 offsets and versions. A detected pending gap invalidates that batch and reports one synchronization error to the connection owner; no partially accepted batch is published.
+
+Growth limits remain 64 frames, four MiB encoded bytes and a 250 ms presentation deadline; drag/resize cadence is 75 ms. Semantic work replaces a stalled animation-frame schedule with an immediate timer without overtaking earlier growth. One supported atomic wire envelope can use the existing 32 MiB allowance plus the growth reserve, while backpressure blocks further reads. Diagnostics expose bytes, age, count and application duration without transcript content. Copy feedback starts only on success, lasts 1.6 seconds, and never reports clipboard failure as success.
 
 The opt-in real-Service qualifier freezes history/provider cadence, builds production UI and measures runtime, all Electron process CPU, frame/input/click/output latency, allocations and wire bytes. After timing it opens exact turn/nested-sequence controls and compares every assistant/thinking item with canonical content. Task-specific thresholds are hard gates, separate from bounded CI/main integration.
 

@@ -61,7 +61,7 @@ function touchMove(target: Element, clientY: number) {
 }
 
 describe('Flower viewport input ownership', () => {
-  it('positions resize geometry before paint while deferring presentation mutations and keeping reading ownership', () => {
+  it('positions resize geometry before paint while deferring presentation mutations and keeping reading ownership', async () => {
     let resize!: () => void;
     const observe = vi.fn();
     const disconnect = vi.fn();
@@ -91,6 +91,7 @@ describe('Flower viewport input ownership', () => {
     resize();
     frame();
     expect(viewport.scrollTop).toBe(200);
+    await Promise.resolve(); // The child observer attaches after Solid adopts the transcript.
     expect(observe).toHaveBeenCalledTimes(2);
     controller.dispose();
     expect(disconnect).toHaveBeenCalledTimes(1);

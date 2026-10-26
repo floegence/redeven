@@ -354,8 +354,10 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
   };
 });
 
-export function flush(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
+export async function flush(): Promise<void> {
+  // Live presentation commits in a separate task after transport admission.
+  await new Promise(resolve => setTimeout(resolve, 0));
+  await new Promise(resolve => setTimeout(resolve, 0));
 }
 
 export function wait(ms: number): Promise<void> {

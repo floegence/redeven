@@ -56,8 +56,13 @@ try {
   }), true, 'summary must follow the user message');
   await assertOrder();
   if (await process.getAttribute('aria-expanded') === 'false') await process.click();
+  for (const sequence of await page.locator('.flower-tool-sequence-toggle').all()) {
+    if (await sequence.getAttribute('aria-expanded') === 'false') await sequence.click();
+  }
   const sourceBody = page.locator('[data-parent-event-kind="report"] [data-parent-event-body]');
+  await page.locator('[data-parent-event-kind="report"] .flower-parent-event-disclosure').click();
   await sourceBody.waitFor();
+  await page.waitForFunction(expected => document.querySelector('[data-parent-event-kind="report"] [data-parent-event-body]')?.textContent === expected, setup.report);
   assert.equal(await sourceBody.textContent(), setup.report);
   await api('arm');
   await sourceCard.hover();
@@ -68,21 +73,30 @@ try {
   assert.ok(forkID && forkID !== setup.source);
   assert.equal((await api('counts')).forks, 1);
   await page.locator('.flower-thread-load-error').getByRole('button', { name: 'Retry', exact: true }).click();
-  await page.locator('.flower-parent-event-reading').waitFor();
+  await page.locator('.flower-thread-load-error').waitFor({ state: 'detached' });
   assert.equal(await page.locator('.flower-thread-load-error').count(), 0);
   assert.equal(await page.locator('.flower-composer textarea').isEnabled(), true);
-  await page.locator('.flower-parent-event-reading').getByRole('button', { name: 'Retry', exact: true }).click();
   await process.waitFor();
   await assertOrder();
   if (await process.getAttribute('aria-expanded') === 'false') await process.click();
+  for (const sequence of await page.locator('.flower-tool-sequence-toggle').all()) {
+    if (await sequence.getAttribute('aria-expanded') === 'false') await sequence.click();
+  }
   const body = page.locator('[data-parent-event-kind="report"] [data-parent-event-body]');
+  assert.equal(await page.locator('[data-parent-event-kind="report"] .flower-parent-event-disclosure').getAttribute('aria-expanded'), 'false', 'a fork owns its disclosure choice independently of its source');
+  await page.locator('[data-parent-event-kind="report"] .flower-parent-event-disclosure').click();
   await body.waitFor();
+  await page.waitForFunction(() => { const body = document.querySelector('[data-parent-event-kind="report"] [data-parent-event-body]'); return body?.getAttribute('aria-busy') === 'false' && /couldn.t|failed|unable/i.test(body.textContent ?? ''); });
+  const retryReport = page.locator('[data-parent-event-kind="report"] .flower-parent-event-disclosure');
+  await retryReport.click(); await retryReport.click();
+  await page.waitForFunction(expected => document.querySelector('[data-parent-event-kind="report"] [data-parent-event-body]')?.textContent === expected, setup.report);
   assert.equal(await body.textContent(), setup.report);
   const row = page.locator('[data-parent-event-kind="report"]');
   assert.equal(await row.locator('button.flower-parent-event-source, .flower-parent-event-open').count(), 0);
   const disclosure = row.locator('.flower-parent-event-disclosure');
-  await disclosure.click();
   assert.equal(await disclosure.getAttribute('aria-expanded'), 'true');
+  await disclosure.click();
+  assert.equal(await disclosure.getAttribute('aria-expanded'), 'false');
   assert.equal(await page.locator('.flower-error-card').count(), 0);
   const before = await api('counts');
   assert.equal(before.forks, 1);
@@ -93,14 +107,27 @@ try {
   await process.waitFor();
   await assertOrder();
   if (await process.getAttribute('aria-expanded') === 'false') await process.click();
+  for (const sequence of await page.locator('.flower-tool-sequence-toggle').all()) {
+    if (await sequence.getAttribute('aria-expanded') === 'false') await sequence.click();
+  }
+  await page.locator('[data-parent-event-kind="report"] .flower-parent-event-disclosure').click();
   await body.waitFor();
+  await page.waitForFunction(expected => document.querySelector('[data-parent-event-kind="report"] [data-parent-event-body]')?.textContent === expected, setup.report);
   assert.equal(await body.textContent(), setup.report);
+  await disclosure.click();
   await page.locator('[data-thread-id="' + setup.source + '"] .flower-thread-card-select-button').click();
   await page.waitForFunction(id => document.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === id, setup.source);
   await page.locator('[data-thread-id="' + forkID + '"] .flower-thread-card-select-button').click();
   await page.waitForFunction(id => document.querySelector('main')?.getAttribute('data-flower-selected-thread-id') === id, forkID);
-  await body.waitFor();
+  await process.waitFor();
+  if (await process.getAttribute('aria-expanded') === 'false') await process.click();
+  for (const sequence of await page.locator('.flower-tool-sequence-toggle').all()) {
+    if (await sequence.getAttribute('aria-expanded') === 'false') await sequence.click();
+  }
+  await disclosure.waitFor();
   assert.equal(await disclosure.getAttribute('aria-expanded'), 'false');
+  await disclosure.click();
+  await page.waitForFunction(expected => document.querySelector('[data-parent-event-kind="report"] [data-parent-event-body]')?.textContent === expected, setup.report);
   const after = await api('counts');
   assert.equal(after.forks, 1);
   assert.equal(after.parent_requests, before.parent_requests);

@@ -1055,7 +1055,7 @@ describe('canonical original and Fork process regression', () => {
     const group = projectFlowerTurnProcess(entries, snapshot.turns).groups.get('research-turn')!;
     expect(entries[0]).toMatchObject({ type: 'message', message: { id: 'research-user' } });
     expect(entries.findIndex(row => row.key === group.summaryKey)).toBe(1);
-    expect(group.disclosure).toBe('manual');
+    expect(group.disclosure).toBe('automatic');
     expect(group.parentEventCount).toBe(6);
     expect(group.processKeys).toHaveLength(10);
     expect(entries.filter(row => row.type === 'message' || row.type === 'parent_event').map(row => row.type === 'message' ? row.message.canonical_ordinal : row.event.canonical_ordinal))

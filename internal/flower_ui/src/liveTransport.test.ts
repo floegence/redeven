@@ -335,3 +335,20 @@ it.each([
   expect(terminal).not.toHaveBeenCalled();
   stop();
 });
+
+
+it('awaits presentation capacity and never publishes ready from an obsolete owner', async () => {
+  const fixture = controlledConnections<{ kind: string }>();
+  const transport = createLiveTransport<{ kind: string }>();
+  let release!: () => void;
+  const onCurrent = vi.fn(() => new Promise<void>(resolve => { release = resolve; }));
+  const terminal = vi.fn();
+  const stop = transport.start({ ...fixture, onCurrent, onTerminalError: terminal, isReady: value => value.kind === 'ready' });
+  fixture.connections[0].push({ kind: 'ready' });
+  await Promise.resolve(); await Promise.resolve();
+  expect(onCurrent).toHaveBeenCalledOnce();
+  expect(transport.state().status).not.toBe('ready');
+  stop(); release(); await Promise.resolve(); await Promise.resolve();
+  expect(transport.state().status).not.toBe('ready');
+  expect(terminal).not.toHaveBeenCalled();
+});

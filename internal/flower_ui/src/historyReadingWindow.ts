@@ -13,7 +13,9 @@ export function historyReadingItemBytes(item: FlowerRuntimeCurrentItem): number 
     // Go's JSON encoder escapes HTML and JavaScript line separators. Count
     // those bytes too; this value never includes separately hydrated bodies.
     const json = JSON.stringify(item).replace(/[<>&\u2028\u2029]/g, value => '\\u' + value.charCodeAt(0).toString(16).padStart(4, '0'));
-    bytes = encoder.encode(json).length + 1;
+    if (item.window_bytes !== undefined && (!Number.isSafeInteger(item.window_bytes) || item.window_bytes < 1))
+      throw new Error('Invalid canonical history item byte cost.');
+    bytes = Math.max(encoder.encode(json).length, item.window_bytes ?? 0) + 1;
     itemSizes.set(item, bytes);
   }
   return bytes;

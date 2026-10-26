@@ -123,6 +123,7 @@ main() {
     ui_pkg_run_pnpm exec vitest run --root "$ROOT_DIR" --config "$dir/vite.config.ts" --environment=node --maxWorkers=2 --testTimeout=10000 \
       internal/flower_ui/src/requestDeadline.test.ts \
       internal/flower_ui/src/historyBodyLoader.test.ts \
+      internal/flower_ui/src/historyBodyLayout.client.test.ts \
       internal/flower_ui/src/activityFieldReader.test.ts \
       internal/flower_ui/src/activityFieldValue.test.ts \
       internal/flower_ui/src/activityReadQueue.test.ts \

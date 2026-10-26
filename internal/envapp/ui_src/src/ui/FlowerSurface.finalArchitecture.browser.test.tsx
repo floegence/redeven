@@ -885,9 +885,10 @@ describe('Flower final thread cache and workspace transport', () => {
       },
     });
     await waitFor(() => runtime.textContent?.includes('Final workspace explanation') === true);
-    expect(runtime.querySelector('.flower-thinking-disclosure')?.getAttribute('data-flower-thinking-view')).toBe('collapsed');
-    expect(runtime.querySelector('.flower-thinking-toggle')?.getAttribute('aria-expanded')).toBe('false');
-    expect(runtime.querySelector('.flower-thinking-content')).toBeNull();
+    // Completion cannot override the user's explicit inspection choice.
+    expect(runtime.querySelector('.flower-thinking-disclosure')?.getAttribute('data-flower-thinking-view')).toBe('expanded');
+    expect(runtime.querySelector('.flower-thinking-toggle')?.getAttribute('aria-expanded')).toBe('true');
+    expect(runtime.querySelector('.flower-thinking-content')?.textContent).toContain('and configuration');
   });
 
   it('keeps stop then continue on one stream and presents each truthful live stage', async () => {

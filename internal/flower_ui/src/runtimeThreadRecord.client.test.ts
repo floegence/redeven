@@ -68,3 +68,36 @@ it('retains growing records across an authoritative snapshot and continues the s
     expect(prior.text_source?.read(0)).toEqual([' next', '!']);
   } finally { dispose(); }
 }));
+
+
+it('updates a preview subscriber without rebuilding completed tools or the timeline', () => createRoot(dispose => {
+  try {
+    const call = { thread_id: 'thread', turn_id: 'turn', run_id: 'run', logical_request_id: 'request',
+      attempt_id: 'attempt', attempt_epoch: 1, call_id: 'call', name: 'write', arguments_complete: false, preview: { additions: 1 } };
+    const current: FlowerRuntimeCurrentView = { thread_id: 'thread', view_version: 1, activity: 'active', turn_id: 'turn', run_id: 'run',
+      run_progress: { phase: 'streaming' }, tool_call_previews: [call], items: [{ id: 'done', kind: 'tool', ordinal: 1, turn_id: 'turn', run_id: 'run',
+        activity: { item_id: 'done', tool_id: 'done', tool_name: 'read', kind: 'tool', status: 'success', severity: 'normal' } }] };
+    const base = { thread_id: 'thread', title: '', title_status: 'unset', title_generation: 0, created_at_ms: 1, updated_at_ms: 1,
+      model_id: 'model', working_dir: '/', settings_revision: 0, status: 'running', source_label: '', target_labels: [], messages: [],
+      read_status: { is_unread: false, snapshot: { activity_revision: 1 }, read_state: { last_seen_activity_revision: 1 } } } satisfies FlowerThreadSnapshot;
+    const record = createRuntimeThreadRecord(current, applyFlowerRuntimeCurrentView(base, current));
+    const thread = record.initializeThread();
+    const messages = thread.messages, preview = messages.at(-1)!;
+    const timeline = createFlowerTimelineProjection();
+    let previews = 0, historical = 0, structures = 0;
+    createComputed(() => { const block = preview.blocks?.[0]; if (block?.type === 'tool-call-preview') void block.call.preview; previews++; });
+    createComputed(() => { void thread.messages[0].blocks; historical++; });
+    createComputed(() => { timeline(thread); structures++; });
+    record.apply(thread, { thread_id: 'thread', turn_id: 'turn', run_id: 'run', base_version: 1, view_version: 2,
+      facts: { activity: 'active', queue_count: 0, run_progress: { phase: 'streaming' } },
+      tool_call_previews: { value: [{ ...call, preview: { additions: 2 } }] } });
+    expect({ previews, historical, structures }).toEqual({ previews: 2, historical: 1, structures: 1 });
+    expect(thread.messages).toBe(messages);
+    expect(thread.messages.at(-1)).toBe(preview);
+    expect(preview.blocks?.[0]).toMatchObject({ type: 'tool-call-preview', call: { preview: { additions: 2 } } });
+    record.apply(thread, { thread_id: 'thread', turn_id: 'turn', run_id: 'run', base_version: 2, view_version: 3,
+      facts: { activity: 'active', queue_count: 0, run_progress: { phase: 'streaming' } }, tool_call_previews: { value: [] } });
+    expect(thread.messages).toHaveLength(1);
+    expect(structures).toBe(2);
+  } finally { dispose(); }
+}));

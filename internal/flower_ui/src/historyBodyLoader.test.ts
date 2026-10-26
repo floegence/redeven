@@ -29,6 +29,27 @@ describe('history body request ownership', () => {
     await settle(); expect(read).toHaveBeenCalledTimes(2);
     controller.abort();
   });
+  it('admits a visible live body ahead of queued history without increasing concurrency', async () => {
+    const loader = createHistoryBodyLoader(() => 'timeout');
+    const controller = new AbortController();
+    const finish: (() => void)[] = [];
+    const order: string[] = [];
+    const read = (id: string) => async () => {
+      order.push(id);
+      return new Promise<void>(resolve => finish.push(resolve));
+    };
+    loader.request('one', 'one', controller.signal, read('one'));
+    loader.request('two', 'two', controller.signal, read('two'));
+    loader.request('history', 'history', controller.signal, read('history'));
+    loader.request('live', 'live', controller.signal, read('live'), 'interactive');
+    await settle();
+    expect(order).toEqual(['one', 'two']);
+    finish.shift()!(); await settle();
+    expect(order).toEqual(['one', 'two', 'live']);
+    finish.shift()!(); await settle();
+    expect(order).toEqual(['one', 'two', 'live', 'history']);
+    controller.abort(); finish.splice(0).forEach(resolve => resolve()); await settle();
+  });
   it('limits concurrent body reads, deduplicates identities and drops queued invisible work', async () => {
     const loader = createHistoryBodyLoader(() => 'timeout');
     const controllers = Array.from({ length: 20 }, () => new AbortController());
