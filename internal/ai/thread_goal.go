@@ -107,7 +107,7 @@ func (s *Service) ManageThreadGoal(ctx context.Context, meta *session.Meta, req 
 		return result, view, fmt.Errorf("%w: %w", ErrThreadGoalOutcomeUnknown, err)
 	}
 	if execution == flruntime.GoalExecutionStarted {
-		s.acceptAIUserTurnLease(leaseKey, req.ThreadID, view)
+		s.acceptAIUserTurnReceipt(ctx, leaseKey, req.ThreadID)
 	} else {
 		s.rejectAIUserTurnLease(leaseKey, newlyAdmitted)
 	}

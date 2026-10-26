@@ -555,6 +555,7 @@ describe('Flower composer attachment browser presentation', () => {
       uploadAttachment,
       previewStagedAttachment: vi.fn(async () => undefined),
     });
+    runtime.style.height = '680px';
 
     await waitFor(() => Boolean(runtime.querySelector('input[type="file"]')));
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;

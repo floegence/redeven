@@ -147,6 +147,7 @@ func TestThreadGoalSubmissionStartsUpdatesStopsAndReplays(t *testing.T) {
 }
 
 type goalSubmitLostResponseRuntime struct {
+	flruntime.ThreadSummaryReader
 	flruntime.ThreadService
 	flruntime.ThreadGoalController
 	flruntime.ThreadGoalSubmitter
@@ -168,7 +169,7 @@ func TestThreadGoalSubmissionLostResponseDoesNotReactivateStoppedThread(t *testi
 		t.Fatal(err)
 	}
 	req := ThreadGoalRequest{StorageGeneration: svc.storageGeneration, ClientRequestID: "lost-submit", ThreadID: created.ThreadID, Operation: "submit", Text: "Recover the verified result"}
-	svc.threadRuntime = goalSubmitLostResponseRuntime{canonical, canonical.(flruntime.ThreadGoalController), canonical.(flruntime.ThreadGoalSubmitter)}
+	svc.threadRuntime = goalSubmitLostResponseRuntime{canonical.(flruntime.ThreadSummaryReader), canonical, canonical.(flruntime.ThreadGoalController), canonical.(flruntime.ThreadGoalSubmitter)}
 	if _, _, err := svc.ManageThreadGoal(t.Context(), meta, req); !errors.Is(err, ErrThreadGoalOutcomeUnknown) {
 		t.Fatalf("unknown=%v", err)
 	}

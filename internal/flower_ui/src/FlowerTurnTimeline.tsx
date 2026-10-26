@@ -76,22 +76,34 @@ function HistorySection(props: Readonly<{ entries: readonly FlowerTimelineEntry[
 }
 
 export function FlowerTurnTimeline(props: TimelineProps) {
-  const sections = createMemo<{ key: string; entries: FlowerTimelineEntry[] }[]>((previous = []) => {
-    const prior = new Map(previous.map(section => [section.key, section]));
+  const sections = createMemo<{ key: string; threadID: string | undefined; entries: FlowerTimelineEntry[] }[]>((previous = []) => {
+    const threadID = props.thread?.thread_id;
+    const prior = new Map(previous.filter(section => section.threadID === threadID).map(section => [section.key, section]));
     const id = (entry: FlowerTimelineEntry) => entry.type === 'message' ? entry.message.turn_id : entry.type === 'parent_event'
       ? entry.event.parent_turn_id : entry.type === 'context_compaction' ? entry.decoration.compaction.turn_id : undefined;
+    const priorByTurn = new Map<string, string>();
+    const priorByEntry = new Map<string, string>();
+    for (const section of prior.values()) for (const entry of section.entries) {
+      const turn = id(entry);
+      if (turn) priorByTurn.set(turn, section.key);
+      priorByEntry.set(entry.key, section.key);
+    }
     const last = new Map<string, number>();
     props.entries.forEach((entry, index) => { const turn = id(entry); if (turn) last.set(turn, index); });
-    const result: { key: string; entries: FlowerTimelineEntry[] }[] = [];
+    const result: { key: string; threadID: string | undefined; entries: FlowerTimelineEntry[] }[] = [];
     for (let first = 0; first < props.entries.length;) {
       let end = first;
       for (let i = first; i <= end; i++) end = Math.max(end, last.get(id(props.entries[i]) ?? '') ?? i);
       const entry = props.entries[first];
-      const key = JSON.stringify([props.thread?.thread_id, id(entry) ?? entry.key]);
+      // Retain the mounted section when a pending request gains its turn,
+      // and when history prepends earlier rows into an existing turn.
+      const turn = id(entry);
+      const key = (turn ? priorByTurn.get(turn) : undefined) ?? priorByEntry.get(entry.key)
+        ?? JSON.stringify([threadID, turn ?? entry.key]);
       const entries = props.entries.slice(first, end + 1);
       const retained = prior.get(key);
       result.push(retained && retained.entries.length === entries.length && entries.every((value, index) => value === retained.entries[index])
-        ? retained : { key, entries });
+        ? retained : { key, threadID, entries });
       first = end + 1;
     }
     return result;

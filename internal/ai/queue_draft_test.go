@@ -83,8 +83,12 @@ func TestQueuedDraftPreservesSnapshotsAndCopiesAttachmentsForOrdinarySend(t *tes
 		t.Fatalf("copied attachment=%q err=%v", content, err)
 	}
 	sent, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ClientRequestID: "send-restored", ThreadID: thread.ThreadID, StagingScopeID: scope.StagingScopeID, StagingCapability: scope.Capability, Input: RunInput{Text: "revised", Attachments: []RunAttachmentIn{{AttachmentID: draft.Attachments[0].AttachmentID}}}})
-	if err != nil || len(sent.Current.Items) == 0 || len(sent.Current.Items[0].Attachments) != 1 {
-		t.Fatalf("ordinary send=%+v err=%v", sent, err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := svc.threadRuntime.View(t.Context(), identity.ThreadID(sent.ThreadID))
+	if err != nil || len(current.Items) == 0 || len(current.Items[0].Attachments) != 1 {
+		t.Fatalf("ordinary send canonical contents=%+v err=%v", current, err)
 	}
 }
 

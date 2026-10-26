@@ -140,7 +140,8 @@ for (const embedded of [false, true]) {
     await expect.poll(() => runtime.sent.mock.calls.length).toBe(1);
     const boundary = embedded ? '.tessiven-flower-conversation' : '.flower-chat-bottom-dock';
     const indicator = () => document.querySelector<HTMLElement>(`${boundary} .flower-model-status-indicator`);
-    await expect.element(editor()).toHaveValue('Draw a service architecture');
+    await expect.element(editor()).toHaveValue('');
+    expect(document.querySelector('[data-flower-pending-message]')?.textContent).toContain('Draw a service architecture');
     expect(document.querySelector('.flower-composer-submit')?.getAttribute('aria-busy')).toBe('true');
     expect(document.querySelector('[data-flower-transport-outbox-id]')).toBeNull();
     expect(indicator()).toBeNull();
@@ -202,7 +203,8 @@ it('clears delivery feedback after a rejected send without leaving an endless an
   await expect.poll(() => document.querySelector('.flower-composer-submit')?.getAttribute('aria-busy')).toBe('true');
   runtime.reject();
   await expect.poll(() => document.querySelector('.flower-model-status-indicator')).toBeNull();
-  await expect.element(editor()).toHaveValue('Draw this canvas');
+  await expect.element(editor()).toHaveValue('');
+  expect(document.querySelector('[data-flower-pending-message]')?.textContent).toContain('Draw this canvas');
   expect(document.querySelector('.flower-composer-submit')?.getAttribute('aria-busy')).not.toBe('true');
   await expect.element(page.getByRole('button', { name: 'Retry send', exact: true })).toBeEnabled();
 });
@@ -220,7 +222,8 @@ it('keeps pending delivery scoped to the originating canvas while another canvas
   await editor().fill('Analytics draft');
   runtime.setRequest({ selection: { canvas_id: 'commerce', version_id: 1, object_refs: [] }, labels: {}, nonce: 2 });
   await expect.poll(() => document.querySelector('.flower-composer-submit')?.getAttribute('aria-busy')).toBe('true');
-  await expect.element(editor()).toHaveValue('Draw commerce');
+  await expect.element(editor()).toHaveValue('');
+  expect(document.querySelector('[data-flower-pending-message]')?.textContent).toContain('Draw commerce');
   expect(runtime.sent).toHaveBeenCalledTimes(1);
   runtime.reject();
   await expect.poll(() => document.querySelector('.flower-model-status-indicator')).toBeNull();

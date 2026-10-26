@@ -13,7 +13,7 @@ Flower owns connection-local attachment editing; host adapters authenticate stag
 
 # Contract
 
-Selection during capability loading retains queued local bytes. Invalid Unicode, drift, quota, upload/restore or pre-admission failure preserves the editor. Attachment-only sends never synthesize prompts; restoration never sends automatically.
+Selection during capability loading retains queued local bytes. Invalid Unicode, drift, quota, upload/restore or pre-capture failure preserves the editor. Once captured, the transport outbox owns submission and explicit recovery; later failures never overwrite newer composer edits. Attachment-only sends never synthesize prompts; restoration never sends automatically.
 
 ## Connection-local editing
 Env App uses one Shell-owned coordinator across Activity/Workbench; Desktop uses one per connection, never a module singleton. Admission uncertainty retains request identity for reconciliation/retry.

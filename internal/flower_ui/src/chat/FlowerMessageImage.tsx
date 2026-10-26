@@ -42,14 +42,19 @@ export const FlowerMessageImage: Component<FlowerMessageImageProps> = (props) =>
       });
     };
 
-    if (typeof IntersectionObserver === 'function' && loadingElement) {
-      observer = new IntersectionObserver((entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) load();
-      }, { rootMargin: '240px' });
-      observer.observe(loadingElement);
-    } else {
-      load();
-    }
+    // A changed source reinstalls the loading shell. Observe after that DOM
+    // handoff; the previous shell may already be detached after a loaded image.
+    queueMicrotask(() => {
+      if (controller.signal.aborted) return;
+      if (typeof IntersectionObserver === 'function' && loadingElement?.isConnected) {
+        observer = new IntersectionObserver((entries) => {
+          if (entries.some((entry) => entry.isIntersecting)) load();
+        }, { rootMargin: '240px' });
+        observer.observe(loadingElement);
+      } else {
+        load();
+      }
+    });
 
     onCleanup(() => {
       controller.abort();

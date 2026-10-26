@@ -9,7 +9,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Redeven owns authorized reference discovery and unadmitted connection-local drafts; Floret owns ordered references after admission. Composer chips show files/directories, frozen conversation references and page context. Stale discovery or admission failures preserve the editor; labels never supply canonical identity or authorization.
+Redeven owns authorized reference discovery and unadmitted connection-local drafts; Floret owns ordered references after admission. Composer chips show files/directories, frozen conversation references and page context. Stale discovery preserves the editor; captured submission failures retain outbox recovery without overwriting newer edits; labels never supply canonical identity or authorization.
 
 # Contract
 

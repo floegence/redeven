@@ -218,7 +218,7 @@ describe('Flower new conversation page context', () => {
     await waitFor(() => !(runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).disabled);
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
     await waitFor(() => launchTurn.mock.calls.length === 1);
-    expect(textarea.value).toBe('First request');
+    expect(textarea.value).toBe('');
     const original = launchTurn.mock.calls[0]![0];
     if (delivery === 'retry') await waitFor(() => Boolean(runtime.querySelector('[aria-label="Retry send"]')));
     setOpen(false);
@@ -263,7 +263,7 @@ describe('Flower new conversation page context', () => {
     await waitFor(() => !(runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).disabled);
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
     await waitFor(() => launchTurn.mock.calls.length === 1);
-    expect(textarea.value).toBe('First conversation');
+    expect(textarea.value).toBe('');
     const requestID = launchTurn.mock.calls[0]![0].client_request_id;
     capture.mockReturnValue({ label: 'Files', title: 'Files page', content: '{"page_id":"files"}' });
     (runtime.querySelector('.flower-new-chat-button') as HTMLButtonElement).click();

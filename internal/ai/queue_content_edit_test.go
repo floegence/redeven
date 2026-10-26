@@ -42,7 +42,7 @@ func TestQueuedContentEditClaimsResourcesAndReplaysAfterDeletion(t *testing.T) {
 	req := EditQueuedInputRequest{ClientRequestID: "queue-content-edit", Content: &EditQueuedContent{ExpectedInputFingerprint: queuedInputFingerprint(original), Text: "updated", Attachments: []RunAttachmentIn{{AttachmentID: upload.AttachmentID}}, StagingScopeID: scope.StagingScopeID, StagingCapability: scope.Capability, ContextAction: &ContextActionEnvelope{SchemaVersion: ContextActionSchemaVersion, ActionID: "assistant.ask.flower", Provider: "flower", Target: ContextActionTarget{TargetID: "current", Locality: "auto"}, Source: ContextActionSource{Surface: "flower_composer"}, Context: []ContextActionContextItem{{Kind: "text_snapshot", Title: "New context", Content: "NEW_CONTEXT"}}}}}
 	base := svc.threadRuntime
 	failure := errors.New("canonical edit write failed")
-	svc.threadRuntime = &failingQueuedEditor{ThreadService: base, ThreadQueueController: base.(flruntime.ThreadQueueController), ThreadQueueEditReader: base.(flruntime.ThreadQueueEditReader), failure: failure}
+	svc.threadRuntime = &failingQueuedEditor{ThreadService: base, ThreadQueueController: base.(flruntime.ThreadQueueController), ThreadQueueEditReader: base.(flruntime.ThreadQueueEditReader), ThreadSummaryReader: base.(flruntime.ThreadSummaryReader), failure: failure}
 	if _, err := svc.EditQueuedInput(t.Context(), meta, thread.ThreadID, "queue:queued-content", req); !errors.Is(err, failure) {
 		t.Fatalf("write failure=%v", err)
 	}
@@ -197,6 +197,7 @@ func TestQueuedContentEditConcurrentReplay(t *testing.T) {
 
 // Fail only the canonical mutation, after the host has claimed new resources.
 type failingQueuedEditor struct {
+	flruntime.ThreadSummaryReader
 	flruntime.ThreadService
 	flruntime.ThreadQueueController
 	flruntime.ThreadQueueEditReader

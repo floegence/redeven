@@ -36,7 +36,12 @@ func TestThreadPermissionCanChangeWhileBusy(t *testing.T) {
 				t.Fatal(err)
 			}
 			view.ThreadID = "thread"
-			svc := &Service{threadsDB: store, floretEffects: newFloretEffectAdapter(), threadRuntime: &authorityContinuityRuntime{view: func(context.Context, identity.ThreadID) (flruntime.ThreadView, error) { return view, nil }}}
+			svc := &Service{threadsDB: store, floretEffects: newFloretEffectAdapter(), threadRuntime: &authorityContinuityRuntime{list: func(context.Context, flruntime.ThreadScope) ([]flruntime.ThreadSummary, error) {
+				return []flruntime.ThreadSummary{{ID: view.ThreadID, Activity: view.Activity, QueueCount: len(view.Queue)}}, nil
+			}, view: func(context.Context, identity.ThreadID) (flruntime.ThreadView, error) {
+				t.Fatal("settings materialized history")
+				return view, nil
+			}}}
 			if err := svc.SetThreadPermissionType(t.Context(), meta, "thread", "full_access"); err != nil {
 				t.Fatalf("change permission while busy: %v", err)
 			}

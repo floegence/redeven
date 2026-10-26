@@ -6,6 +6,13 @@ Recent changes only. The linked concepts own current contracts and evidence; Git
 
 - Recover transient [Flower history synchronization](ui/flower-live-timeline.md) within one bounded detail demand; reuse canonically confirmed historical prefixes without weakening complete-turn preparation, preserve accepted interaction state, and distinguish exhausted refresh from first-load failure.
 - Bind [historical thinking hydration](ui/flower-tool-sequences.md) to its displayed movable node, cancel obsolete disclosure demand and avoid observers for unopened sealed thinking. Qualify unopened tool reads, body mounts and browser/Desktop responsiveness with the built-renderer performance harness.
+- Show [submitted messages](ui/flower-live-timeline.md) immediately from immutable
+  outbox ownership, retain DOM identity through admission, and keep failed/unknown
+  recovery separate from newer drafts. Use narrow SendAck receipts and summaries
+  without post-acceptance history materialization or duplicate authority writes.
+  Adopt published Floret v7.87.3, retain attachment geometry across admission,
+  and record [acceptance and remaining cold costs](operations/flower-thread-switch-qualification.md).
+
 
 - Adopt published Floret v7.87.1 and keep [collapsed patch titles](ui/flower-live-timeline.md) in Activity summaries,
   with localized file counts and stable patch totals; disclosure alone reads

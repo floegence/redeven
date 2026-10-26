@@ -119,7 +119,7 @@ func (s *Service) SendUserTurn(ctx context.Context, meta *session.Meta, req Send
 			s.rejectAIUserTurnLease(leaseKey, newlyAdmitted)
 			return SendUserTurnResponse{}, err
 		}
-		s.acceptAIUserTurnLease(leaseKey, response.ThreadID, response.Current)
+		s.acceptAIUserTurnReceipt(ctx, leaseKey, response.ThreadID)
 		return response, nil
 	}
 	if threadID == "" {
@@ -141,7 +141,7 @@ func (s *Service) SendUserTurn(ctx context.Context, meta *session.Meta, req Send
 			s.rejectAIUserTurnLease(leaseKey, newlyAdmitted)
 			return response, err
 		}
-		s.acceptAIUserTurnLease(leaseKey, response.ThreadID, response.Current)
+		s.acceptAIUserTurnReceipt(ctx, leaseKey, response.ThreadID)
 		return response, err
 	}
 	s.rejectAIUserTurnLease(leaseKey, newlyAdmitted)
@@ -277,7 +277,11 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 		return finish(SendUserTurnResponse{}, err)
 	}
 	s.floretEffects.put(identity.ThreadID(req.ThreadID), executionKey, floretEffectRequest{meta: *meta, req: req, effect: effect})
-	result, err := s.threadRuntime.Send(ctx, flruntime.SendInput{
+	commands, ok := s.threadRuntime.(flruntime.ThreadCommandService)
+	if !ok {
+		return finish(SendUserTurnResponse{}, errors.New("published Floret command acknowledgment is unavailable"))
+	}
+	result, err := commands.SendAck(ctx, flruntime.SendInput{
 		ThreadID:   identity.ThreadID(req.ThreadID),
 		Input:      turnInput,
 		RequestKey: flruntime.RequestKey(executionKey),
@@ -286,27 +290,10 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 		s.floretEffects.drop(identity.ThreadID(req.ThreadID), executionKey)
 		return finish(SendUserTurnResponse{}, err)
 	}
-	_, queued := queuedInputFor(result, executionKey)
-	if result.TurnID != "" && !queued {
-		if err := s.persistExecutionAuthority(ctx, meta, req.ThreadID, executionKey, result.TurnID.String(), req.Options.PermissionType); err != nil {
-			return finish(SendUserTurnResponse{}, err)
-		}
-	}
-	response := SendUserTurnResponse{
-		ClientRequestID: req.ClientRequestID,
-		ThreadID:        string(result.ThreadID),
-		TurnID:          string(result.TurnID),
-		RunID:           string(result.RunID),
-		Kind:            "start",
-		Current:         result,
-	}
-	if queuedInput, ok := queuedInputFor(result, executionKey); ok {
-		response.Kind = "queued"
-		response.QueueID = queuedInput.ID
-		response.QueuePosition = len(result.Queue)
-		response.TurnID = ""
-		response.RunID = ""
-	}
+	// Agent preparation binds the admitted turn to the authority persisted above.
+	// A second product write after canonical acceptance must not turn an accepted
+	// request into a rejected response, or duplicate that execution-owned write.
+	response := sendUserTurnReceipt(req.ClientRequestID, result)
 	return finish(response, nil)
 }
 
@@ -338,6 +325,16 @@ func freezeExistingThreadModel(requestedModel string, persistedModel string) (st
 		return "", ErrThreadModelConflict
 	}
 	return persistedModel, nil
+}
+
+// Receipt identity comes from this request's canonical marker, never the active
+// execution of another queued request. Presentation is read independently.
+func sendUserTurnReceipt(requestID string, ack flruntime.ThreadCommandAck) SendUserTurnResponse {
+	response := SendUserTurnResponse{ClientRequestID: requestID, ThreadID: ack.ThreadID.String(), TurnID: ack.TurnID.String(), RunID: ack.RunID.String(), Kind: "start"}
+	if ack.TurnID == "" {
+		response.Kind, response.QueueID = "queued", "queue:"+requestID
+	}
+	return response
 }
 
 func queuedInputFor(view flruntime.ThreadView, requestKey string) (flruntime.QueuedInput, bool) {
@@ -405,29 +402,15 @@ func (s *Service) typedSendLookup(ctx context.Context, meta *session.Meta, req S
 	if err := s.validateTypedSendReplay(meta, req.Input, original); err != nil {
 		return SendUserTurnResponse{}, true, err
 	}
-	view, err := typed.View(ctx, identity.ThreadID(threadID))
+	commands, ok := typed.(flruntime.ThreadCommandService)
+	if !ok {
+		return SendUserTurnResponse{}, false, errors.New("published Floret command acknowledgment is unavailable")
+	}
+	ack, err := commands.SendAck(ctx, flruntime.SendInput{ThreadID: identity.ThreadID(threadID), RequestKey: flruntime.RequestKey(requestID), Input: original})
 	if err != nil {
 		return SendUserTurnResponse{}, false, err
 	}
-	userID := "user:" + strings.TrimSpace(requestID)
-	for _, item := range view.Items {
-		if item.ID != userID {
-			continue
-		}
-		runID := ""
-		if view.TurnID == item.TurnID {
-			runID = string(view.RunID)
-		}
-		return SendUserTurnResponse{ClientRequestID: requestID, ThreadID: threadID, TurnID: string(item.TurnID), RunID: runID, Kind: "start", Current: view}, true, nil
-	}
-	for _, queued := range view.Queue {
-		if queued.RequestKey == requestID {
-			return SendUserTurnResponse{ClientRequestID: requestID, ThreadID: threadID, QueueID: queued.ID, Kind: "queued", Current: view}, true, nil
-		}
-	}
-	// A removed queue item remains an accepted send. Returning the canonical
-	// current view acknowledges transport replay without re-admitting that work.
-	return SendUserTurnResponse{ClientRequestID: requestID, ThreadID: threadID, QueueID: "queue:" + requestID, Kind: "queued", Current: view}, true, nil
+	return sendUserTurnReceipt(requestID, ack), true, nil
 }
 
 func (s *Service) validateTypedSendReplay(meta *session.Meta, input RunInput, original flruntime.UserInput) error {

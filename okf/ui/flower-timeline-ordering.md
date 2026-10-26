@@ -5,11 +5,11 @@ description: Canonical typed views, separate submission feedback, and stable row
 tags: [ui, flower, timeline, ordering]
 timestamp: 2026-10-14T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-26"
 ---
 # Summary
 
-Flower renders the ordered items in Floret's typed current view. Canonical stable IDs plus each item's exact TurnID and RunID determine user, assistant, tool, interaction, queue, and terminal rows. Ordinary unconfirmed input remains in the composer with Send button loading. A short-lived transport outbox shows queued submissions only in the queue dock; matching canonical request-key confirmation updates that same row without duplicating the transcript. Summaries never write timeline detail.
+Flower renders the ordered items in Floret's typed current view. Canonical stable IDs plus each item's exact TurnID and RunID determine user, assistant, tool, interaction, queue, and terminal rows. Ordinary captured input appears immediately as a pending user row; only the captured draft is consumed. Queued submissions appear in the queue dock. Canonical request-key confirmation retains the corresponding mounted row without duplicating the transcript; newer drafts remain editable. Summaries never write timeline detail.
 
 # Contract
 
@@ -19,7 +19,7 @@ Cancel and Reject update the corresponding turn or tool row without a global fai
 
 # Boundaries
 
-Stable row identity and order come only from the published Floret current view. The outbox, cache, live transport, renderer keys, and summaries may present or temporarily confirm those rows but cannot assign a canonical item ID, ordinal, queue identity, terminal state, or lower `ViewVersion`.
+Stable row identity and order come only from the published Floret current view. Pending user presentation derives its stable key from the submitted request ID but does not assert admission. The outbox, cache, transport and renderer cannot invent canonical TurnID, RunID, ordinal, queue membership or terminal state, or lower ViewVersion.
 
 # Evidence
 

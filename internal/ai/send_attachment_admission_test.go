@@ -84,8 +84,9 @@ func TestExistingThreadClaimsStagedAttachmentBeforeAdmission(t *testing.T) {
 			if err != nil {
 				t.Fatalf("send staged attachment: %v", err)
 			}
-			if len(response.Current.Items) == 0 || len(response.Current.Items[0].Attachments) != 1 {
-				t.Fatalf("missing canonical attachment: %+v", response.Current)
+			current, readErr := svc.threadRuntime.View(t.Context(), identity.ThreadID(response.ThreadID))
+			if readErr != nil || len(current.Items) == 0 || len(current.Items[0].Attachments) != 1 {
+				t.Fatalf("missing canonical attachment: %+v %v", current, readErr)
 			}
 			if _, err := svc.OpenCanonicalLiveAttachmentForTurn(t.Context(), owner, response.ThreadID, response.TurnID, upload.AttachmentID); err != nil {
 				t.Fatalf("canonical attachment unreadable: %v", err)

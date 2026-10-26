@@ -5196,11 +5196,6 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			"kind":      strings.TrimSpace(resp.Kind),
 			"model":     strings.TrimSpace(body.Model),
 		}, nil)
-		resp.PublicCurrent, err = aiSvc.MarshalFlowerHistoryCurrent(r.Context(), meta, resp.Current.ThreadID.String())
-		if err != nil {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error()})
-			return
-		}
 		writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: resp})
 		return
 
@@ -5783,11 +5778,6 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				"kind":      strings.TrimSpace(resp.Kind),
 				"model":     strings.TrimSpace(body.Model),
 			}, nil)
-			resp.PublicCurrent, err = aiSvc.MarshalFlowerHistoryCurrent(r.Context(), meta, resp.Current.ThreadID.String())
-			if err != nil {
-				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error()})
-				return
-			}
 			writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: resp})
 			return
 

@@ -9,7 +9,7 @@ reviewed_at: "2026-10-26"
 ---
 # Summary
 
-Published Floret v7.87.1 owns windows, bounded item-text reads, View and Summary. Redeven owns
+Published Floret v7.87.3 owns windows, bounded item-text reads, View and Summary. Redeven owns
 bounded reads and presentation through the [sidebar](../ui/flower-thread-sidebar.md)
 and [Desktop bridge](../desktop/desktop-runtime-bridge.md). Local qualification
 targets >=70% lower short-detail P95, warm synchronous P95 <8 ms, and feedback
@@ -22,10 +22,12 @@ Point-read scaling requires ≥70% short-target P95 reduction; warm synchronous 
 is <8 ms and visible feedback precedes commit. Keep raw source identities/results
 locally; never commit user databases/credentials or continue real tasks.
 
-Root detail uses Floret window subscriptions; GET/PATCH, command receipts and root
-observation share public projection. Child reads own an independent bounded interest.
+Root detail uses Floret window subscriptions. GET/PATCH and root observation share
+public projection; send acknowledgments carry exact identities without a current
+view. Child reads own an independent bounded interest.
 Initial windows and explicit body requests bound transport, excluding metadata and
-pending controls. Cold actor initialization may still read complete state; explicitly
+pending controls. Cold send admission reads bounded current facts but still scans
+historical metadata; complete execution preparation follows admission. Explicitly
 expanded activities use selected values and bounded field ranges. Backend read and loopback/render timings are
 separate measurements, never additive.
 
@@ -55,6 +57,45 @@ failures and report their scope; passing focused suites cannot recertify other k
 failing fixtures. Canonical history remains complete.
 
 # Evidence
+
+## Immediate send and history continuity, 2026-10-26
+
+The eight browser suites for transport delivery, continuous history, disclosure,
+tool sequences, send feedback, streaming, composer attachments and canonical
+references passed 168 cases together. An additional thousand-retained-row case
+then passed with the 33-case transport suite: pending text appears by the next
+animation frame within 100 ms while storage generation and HTTP remain blocked;
+all historical message nodes retain identity. These are local browser acceptance
+thresholds, not a production latency distribution.
+
+Receipt-first and live-first tests preserve the user row through canonical
+admission and history prepend. Image handoff retains the image lane and text DOM
+with at most 1 px height change and loads the admitted image. Tool qualification
+includes a complete 680-call turn, exact disclosed content, wheel/keyboard
+interaction, disclosure ownership and settled first-frame history publication.
+Failure/retry/reload cases retain immutable submissions and newer editor drafts.
+
+Two fresh isolated copies of a 5.6 GiB historical store used the exact checksummed
+v7.87.3 release, public APIs and a blocking factory: Open 9.0/13.3 ms, initial
+24-item window 265.0/358.7 ms, cold SendAck 4099.6/4203.5 ms, and subsequent
+queued Ack 59.6/47.9 ms. Cold Ack serialized to 207 bytes with about 475 MB
+cumulative allocation; this is internal command JSON, not HTTP payload or RSS.
+The earlier v7.87.1 cold-Ack diagnostic was 6329 ms and 1.10 GB cumulative
+allocation. Samples identify costs, not p95 or identical-load guarantees. Restart
+replay returned in 0.49 ms without a new active execution. Both samples and replay
+closed cleanly with zero provider/tool calls. No source database was modified.
+
+Cold admission remains proportional to historical metadata; immediate UI feedback
+does not imply immediate provider dispatch. The optimization adds no storage schema
+or index and removes duplicated post-admission product reads/writes. Floret
+qualification includes the complete Go suite, repeated shutdown/admission race
+tests, released-writer history and blank-module candidate/published adoption.
+
+Product backend tests, 155 focused draft/navigation/attachment/adapter unit tests,
+typechecking, lint and initial bundle budgets passed. Full UI qualification has
+17 pre-existing unit failures: the clean main baseline and feature each reproduce
+the identical 17 names across seven files. Both also fail the existing semantic
+theme-color source guard. They are not passing evidence and were not suppressed.
 
 ## Deep history scrolling, 2026-10-25
 

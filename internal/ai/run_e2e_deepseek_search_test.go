@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"github.com/floegence/floret/v7/identity"
 	"io"
 	"log/slog"
 	"os"
@@ -106,7 +107,7 @@ func TestE2E_FlowerDeepSeekV4WebResearchBoundary(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if detail.Current.TurnID == response.Current.TurnID && detail.Current.Activity == flruntime.ThreadActivityIdle && detail.Current.LastOutcome != nil {
+				if detail.Current.TurnID == identity.TurnID(response.TurnID) && detail.Current.Activity == flruntime.ThreadActivityIdle && detail.Current.LastOutcome != nil {
 					break
 				}
 				select {

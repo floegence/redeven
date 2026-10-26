@@ -42,6 +42,7 @@ describe('Flower message attachment previews', () => {
       alt="image.png" name="image.png" unavailableLabel="暂时无法预览" load={load} onOpen={() => undefined} />, host);
     try {
       expect(load).not.toHaveBeenCalled();
+      await Promise.resolve(); // Observe the inserted loading shell.
       enterViewport();
       await waitFor(() => Boolean(host.querySelector('img')));
       expect(host.querySelector('img')?.getAttribute('src')).toBe('blob:attachment-image');

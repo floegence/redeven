@@ -59,6 +59,11 @@ ThreadCache evicts inactive detail at twelve threads or 32 MiB estimated detail 
 
 Upward history loading uses the sidebar running indicator's four animated wave bars with localized status text, accessible live status and reduced-motion support. The notice overlays the transcript without changing its scroll geometry.
 
+## Immediate send feedback
+[Command/composer ownership](flower-turn-launcher.md) renders captured input immediately,
+retains request-key DOM identity through admission, and separates narrow SendAck
+receipts from authorized window presentation. No duplicate lifecycle is introduced.
+
 ## Recovery and interaction
 The coalesced detail loader owns recovery under one fifteen-second deadline: retry the entire baseline/preparation after 200, 600 and 1200 ms, at most four attempts. New revisions discard unpublished pages and obsolete envelopes. Leaf changes are recoverable; foreign threads and malformed ordering are terminal. Navigation, disposal and connection changes cancel reads/backoff. Success adds no timer or read. Accepted DOM, drafts and scroll remain; exhausted refresh offers Retry with interrupted-sync wording, while first-load failure keeps its own title. Recovery never replays commands or execution.
 

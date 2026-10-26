@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/floegence/floret/v7/identity"
 	"github.com/floegence/floret/v7/observation"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	fltools "github.com/floegence/floret/v7/tools"
@@ -61,7 +62,11 @@ func TestUploadedImageLocatorReusesCanonicalBytesAndTypedAttachment(t *testing.T
 			if err != nil {
 				t.Fatal(err)
 			}
-			descriptor := response.Current.Items[0].Attachments[0]
+			current, err := svc.threadRuntime.View(t.Context(), identity.ThreadID(response.ThreadID))
+			if err != nil || len(current.Items) == 0 || len(current.Items[0].Attachments) != 1 {
+				t.Fatalf("canonical attachment missing: %+v %v", current, err)
+			}
+			descriptor := current.Items[0].Attachments[0]
 			locator, err := descriptor.Locator()
 			if err != nil {
 				t.Fatal(err)

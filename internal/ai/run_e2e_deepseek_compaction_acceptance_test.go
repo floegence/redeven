@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/floegence/floret/v7/identity"
 	"io"
 	"log/slog"
 	"os"
@@ -249,7 +250,7 @@ func sendDeepSeekQualificationInput(t *testing.T, ctx context.Context, svc *Serv
 		t.Fatal(err)
 	}
 	return waitForDeepSeekAskUserDetail(t, ctx, svc, meta, threadID, func(detail *FlowerThreadDetail) bool {
-		if detail.Current.TurnID != response.Current.TurnID || detail.Current.Activity != flruntime.ThreadActivityIdle || detail.Current.LastOutcome == nil {
+		if detail.Current.TurnID != identity.TurnID(response.TurnID) || detail.Current.Activity != flruntime.ThreadActivityIdle || detail.Current.LastOutcome == nil {
 			return false
 		}
 		if *detail.Current.LastOutcome != flruntime.TurnOutcomeCompleted {

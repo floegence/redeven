@@ -1812,7 +1812,7 @@ describe('Env local Flower surface adapter', () => {
   });
 
   it('reports command and transport failures while recovering a missing current view', async () => {
-    let turnOutcome: 'definite' | 'transport' | 'malformed' | 'invalid_json' = 'definite';
+    let turnOutcome: 'definite' | 'transport' | 'malformed' | 'invalid_json' | 'server' = 'definite';
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/settings') {
         return jsonResponse({
@@ -1827,8 +1827,9 @@ describe('Env local Flower surface adapter', () => {
         return jsonResponse({ current_model: 'default/gpt-5.4' });
       }
       if (url === '/_redeven_proxy/api/ai/threads/thread_existing/turns' && init?.method === 'POST') {
-        if (turnOutcome === 'definite') return errorResponse('turn_rejected', { message: 'Turn rejected.' });
+        if (turnOutcome === 'definite') return errorResponse('turn_rejected', { message: 'Turn rejected.' }, 400);
         if (turnOutcome === 'transport') throw new Error('transport disconnected');
+        if (turnOutcome === 'server') return errorResponse('INTERNAL_ERROR', { message: 'Receipt unavailable.' }, 500);
         if (turnOutcome === 'invalid_json') {
           return {
             ok: true,
@@ -1867,6 +1868,10 @@ describe('Env local Flower surface adapter', () => {
       code: 'turn_rejected',
     });
     expect(definiteFailure).not.toHaveProperty('uncertain_admission');
+
+    turnOutcome = 'server';
+    await expect(createAdapter().launchTurn({ client_request_id: 'client_server', thread_id: 'thread_existing', prompt: 'send once' }))
+      .rejects.toMatchObject({ admission_kind: 'unknown', code: 'INTERNAL_ERROR' });
 
     turnOutcome = 'transport';
     await expect(createAdapter().launchTurn({

@@ -29,7 +29,7 @@ func TestRunInputRejectsLegacyMessageIdentityField(t *testing.T) {
 	}
 }
 
-func TestSendUserTurnReturnsImmediateTypedCurrent(t *testing.T) {
+func TestSendUserTurnReturnsImmediateTypedReceipt(t *testing.T) {
 	svc := newRealtimeTestService(t, 2*time.Second)
 	meta := testSendTurnMeta()
 	thread, err := svc.CreateThread(t.Context(), meta, "typed acceptance", "", "", "")
@@ -50,11 +50,26 @@ func TestSendUserTurnReturnsImmediateTypedCurrent(t *testing.T) {
 	if response.Kind != "start" || response.ClientRequestID != "request-immediate-current" || response.TurnID == "" {
 		t.Fatalf("typed response=%#v", response)
 	}
-	if response.RunID == "" || response.RunID != response.Current.RunID.String() || response.RunID == response.TurnID {
-		t.Fatalf("typed response identities=(turn=%q run=%q current_run=%q), want exact distinct RunID", response.TurnID, response.RunID, response.Current.RunID)
+	if response.RunID == "" || response.RunID == response.TurnID {
+		t.Fatalf("invalid exact execution identities: %#v", response)
 	}
-	if response.Current.Activity != flruntime.ThreadActivityActive || response.Current.TurnID.String() != response.TurnID || len(response.Current.Items) != 1 || response.Current.Items[0].Kind != flruntime.ThreadItemUser {
-		t.Fatalf("command current=%#v, want immediate canonical user/running view", response.Current)
+	if response.Current.ViewVersion != 0 || len(response.Current.Items) != 0 {
+		t.Fatal("send hydrated presentation")
+	}
+	encoded, err := json.Marshal(response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &wire); err != nil {
+		t.Fatal(err)
+	}
+	if _, found := wire["current"]; found {
+		t.Fatalf("receipt contains current: %s", encoded)
+	}
+	view, err := svc.threadRuntime.View(t.Context(), identity.ThreadID(thread.ThreadID))
+	if err != nil || len(view.Items) != 1 || view.Items[0].Kind != flruntime.ThreadItemUser {
+		t.Fatalf("canonical message unavailable: %#v %v", view, err)
 	}
 }
 

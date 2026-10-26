@@ -156,7 +156,7 @@ func (d FlowerSubagentDetailResponse) MarshalJSON() ([]byte, error) {
 
 func (r SendUserTurnResponse) MarshalJSON() ([]byte, error) {
 	public := r.PublicCurrent
-	if public == nil {
+	if public == nil && r.Current.ViewVersion > 0 {
 		var err error
 		public, err = flowerCurrentJSON(r.Current)
 		if err != nil {
@@ -166,7 +166,7 @@ func (r SendUserTurnResponse) MarshalJSON() ([]byte, error) {
 	type wire SendUserTurnResponse
 	return json.Marshal(struct {
 		wire
-		Current json.RawMessage `json:"current"`
+		Current json.RawMessage `json:"current,omitempty"`
 	}{wire(r), public})
 }
 
@@ -204,7 +204,7 @@ func (r SubmitFlowerApprovalResponse) MarshalJSON() ([]byte, error) {
 
 func (r aiSendUserTurnResp) MarshalJSON() ([]byte, error) {
 	public := r.PublicCurrent
-	if public == nil {
+	if public == nil && r.Current.ViewVersion > 0 {
 		var err error
 		public, err = flowerCurrentJSON(r.Current)
 		if err != nil {
@@ -214,7 +214,7 @@ func (r aiSendUserTurnResp) MarshalJSON() ([]byte, error) {
 	type wire aiSendUserTurnResp
 	return json.Marshal(struct {
 		wire
-		Current json.RawMessage `json:"current"`
+		Current json.RawMessage `json:"current,omitempty"`
 	}{wire(r), public})
 }
 

@@ -141,12 +141,8 @@ func RegisterRPCServiceProviderWithAccessGate(r *sessionrpc.Router, meta *sessio
 		if err != nil {
 			return nil, toAIRPCError(err)
 		}
-		public, err := service.MarshalFlowerHistoryCurrent(leaseCtx, meta, resp.Current.ThreadID.String())
-		if err != nil {
-			return nil, toAIRPCError(err)
-		}
 		return &aiSendUserTurnResp{
-			PublicCurrent:         public,
+			PublicCurrent:         resp.PublicCurrent,
 			ClientRequestID:       strings.TrimSpace(resp.ClientRequestID),
 			RunID:                 strings.TrimSpace(resp.RunID),
 			TurnID:                strings.TrimSpace(resp.TurnID),

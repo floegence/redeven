@@ -72,10 +72,10 @@ func runTypedTurnForTest(t *testing.T, ctx context.Context, svc *Service, meta *
 	if err != nil {
 		return flruntime.ThreadView{}, err
 	}
-	if response.Current.Activity != flruntime.ThreadActivityActive {
-		return response.Current, fmt.Errorf("typed send activity=%q, want active", response.Current.Activity)
+	if response.Kind != "start" || response.TurnID == "" || response.RunID == "" {
+		return flruntime.ThreadView{}, fmt.Errorf("missing admitted execution: %+v", response)
 	}
-	turnID := response.Current.TurnID
+	turnID := identity.TurnID(response.TurnID)
 	deadline := time.NewTimer(20 * time.Second)
 	defer deadline.Stop()
 	ticker := time.NewTicker(10 * time.Millisecond)
