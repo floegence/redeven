@@ -136,7 +136,10 @@ func TestTaskFilesCleanupAuthorizationActivityAndDownloads(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	release := svc.taskFiles.acquire(thread.ThreadID)
+	release, err := svc.taskFiles.acquire(t.Context(), thread.ThreadID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err = svc.CleanTaskFiles(t.Context(), meta, thread.ThreadID); !errors.Is(err, ErrThreadBusy) {
 		t.Fatalf("active cleanup: %v", err)
 	}

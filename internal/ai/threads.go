@@ -996,12 +996,33 @@ func (s *Service) ForkThreadWithOptions(ctx context.Context, meta *session.Meta,
 	if err != nil {
 		return nil, err
 	}
+	// Serialize fork preparation with source filesystem effects and cleanup.
+	releaseFiles, err := s.taskFiles.freeze(ctxOrBackground(ctx), sourceThreadID)
+	if err != nil {
+		return nil, err
+	}
+	defer releaseFiles()
 	current, err := runtime.Fork(ctxOrBackground(ctx), flruntime.ForkThreadInput{
 		SourceThreadID: identity.ThreadID(sourceThreadID), SourceItemID: strings.TrimSpace(req.SourceItemID), RequestKey: flruntime.RequestKey(clientRequestID),
 	})
 	if err != nil {
 		return nil, err
 	}
+	existing, err := db.GetThreadSettings(ctxOrBackground(ctx), endpointID, current.ThreadID.String())
+	if err != nil {
+		return nil, err
+	}
+	if existing == nil {
+		// Canonical identity is idempotent; settings publish only after file preparation.
+		// A failed preparation stays unadmitted and the same request can finish it.
+		if s.taskFilesProcessesBusy(endpointID, sourceThreadID) {
+			return nil, ErrThreadBusy
+		}
+		if err = inheritForkTaskFiles(ctxOrBackground(ctx), s.stateDir, sourceThreadID, current.ThreadID.String(), clientRequestID, strings.TrimSpace(req.SourceItemID)); err != nil {
+			return nil, err
+		}
+	}
+
 	now := time.Now().UnixMilli()
 	forked := *source
 	forked.ThreadID = current.ThreadID.String()

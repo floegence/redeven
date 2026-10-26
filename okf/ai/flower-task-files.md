@@ -42,8 +42,40 @@ heuristic silently reroutes project writes.
 
 The task scope is a current-policy snapshot with one private writable root.
 Sibling thread roots remain denied, including symlink aliases. Adding scratch
-never expands normal project permissions. Fork uses a new writable scratch root;
-historical references do not grant access to its parent's working files.
+never expands normal project permissions. Fork uses a new writable scratch root; historical references never grant
+access to an ancestor's working files.
+
+## Fork continuity
+
+Fork remains one action, without a working-file selector or technical warning.
+Both current and historical conversation cuts inherit independent copies of the
+source's current scratch/staging files. Conversation history stops at the selected
+canonical item; working files are not historical filesystem snapshots. Project
+files and final destinations remain shared and are never copied or redirected.
+
+Preparation excludes new source filesystem admissions and cleanup, waits for
+admitted operations with caller cancellation, and refuses unreaped background
+processes. Copying uses rooted operations, bounded buffers, executable helper
+preservation, source identity/size/time checks and a final tree validation. Only a
+complete private staging tree is renamed into the new ThreadID directory.
+Unsupported file types and external links fail without following them. No hard
+links or writable parent aliases are created.
+
+Product settings are published only after files are ready. Failed preparation is
+not a visible/admitted product thread; replaying the same canonical Fork request
+finishes preparation. An already admitted fork is never recopied, including after
+its work files have been edited or explicitly cleaned. A small file-source marker
+supports interrupted publication and dynamic context; it is not an artifact or
+conversation ledger. Cleanup preserves the marker, while thread deletion removes
+it with the private root. Unpublished copies are removed on failure and replaced
+on retry after a process interruption.
+
+The current execution-environment context tells the model to inspect inherited
+files, map old scratch/staging paths by their relative suffix into its own root,
+and repair hardcoded helper paths before execution. This applies to nested forks
+without rewriting history or file contents. The model handles these details
+internally; users are not asked to choose directory or snapshot behavior. Cleanup
+or deletion of an ancestor cannot remove a descendant's independent files.
 
 ## Delivery and discovery
 
@@ -105,8 +137,9 @@ remain separate capabilities and are not claimed here.
 - [File owner and verification](../../internal/ai/task_files.go).
 - [Canonical queries, downloads and cleanup](../../internal/ai/task_files_service.go).
 - [Permission and lifecycle regressions](../../internal/ai/task_files_test.go).
+- [Fork copies, retry, cancellation and publication regressions](../../internal/ai/task_files_fork_test.go).
 - [Canonical Fork/restart regression](../../internal/ai/task_files_persistence_test.go).
 - [Authenticated HTTP chunk regression](../../internal/codeapp/appserver/server_ai_task_files_test.go).
 - [Desktop/mobile dialog regression](../../internal/envapp/ui_src/src/ui/FlowerTaskFiles.browser.test.tsx).
 - [Destination abort and bounded chunk tests](../../internal/envapp/ui_src/src/ui/downloads/flowerTaskFileDownload.test.ts).
-- [Explicit local DeepSeek qualification](../../internal/ai/task_files_qualification_test.go) uses the configured DeepSeek V4.1 Flash (1017) profile (deepseek-flash) with isolated state and verifies the source config and secrets stay unchanged. It checks project cleanliness, cross-turn reuse, final placement, canonical provenance, Fork, restart, modification detection, cleanup and deletion. It never changes the selected production model.
+- [Explicit local DeepSeek qualification](../../internal/ai/task_files_qualification_test.go) uses the configured DeepSeek V4.1 Flash (1017) profile (deepseek-flash) with isolated state and verifies the source config and secrets stay unchanged. It checks project cleanliness, cross-turn reuse, final placement, canonical provenance, Fork continuation, nested Fork continuation after ancestor cleanup, restart, parent deletion, modification detection and final-file preservation. It never changes the selected production model.
