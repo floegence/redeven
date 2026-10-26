@@ -48,7 +48,7 @@ function buildGoEnvironment(root) {
 
 export function captureBuildContext(root) {
   const environment = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
-    /^(GO|CGO_|RUST|CARGO|VITE_|npm_config_|PNPM|REDEVEN_DESKTOP_BUNDLE_|REDEVEN_DESKTOP_(RUNTIME|AGENT)_TARBALL$|REDEVEN_NODE_ARCHIVE$|REDEVEN_DESKTOP_VERSION$)/u.test(key)
+    /^(GO|CGO_|RUST|CARGO|VITE_|npm_config_|PNPM|REDEVEN_ASSET_BUILD_PROFILE$|REDEVEN_DESKTOP_BUNDLE_|REDEVEN_DESKTOP_(RUNTIME|AGENT)_TARBALL$|REDEVEN_NODE_ARCHIVE$|REDEVEN_DESKTOP_VERSION$)/u.test(key)
     || /^(PATH|NODE_OPTIONS|NODE_ENV|CC|CXX|CFLAGS|CPPFLAGS|LDFLAGS|AR|SDKROOT|DEVELOPER_DIR|MACOSX_DEPLOYMENT_TARGET|SOURCE_DATE_EPOCH|CI)$/u.test(key)
   ).sort(([a], [b]) => a.localeCompare(b)));
   const tools = {
@@ -105,6 +105,8 @@ export function verifyBuildContexts(before, after) {
   if (JSON.stringify(before) !== JSON.stringify(comparable)) throw new Error('Build inputs changed during preparation; rerun from a stable checkout.');
 }
 
+export function buildInputKey(context) { return hash(JSON.stringify(context)); }
+
 function receiptPath(stateRoot) { return path.join(stateRoot, 'desktop/dev-build-v1.json'); }
 function bundleRoot(stateRoot, name) {
   if (!/^[a-f0-9]{64}$/u.test(name || '')) throw new Error('Invalid cached bundle identity');
@@ -119,7 +121,7 @@ function outputs(root, bundle) {
 export function lookupBuild(root, stateRoot, context) {
   try {
     const receipt = JSON.parse(readFileSync(receiptPath(stateRoot), 'utf8'));
-    if (receipt.schema !== 1 || receipt.input !== hash(JSON.stringify(context))) return { reason: 'source, dependencies or build environment changed' };
+    if (receipt.schema !== 1 || receipt.input !== buildInputKey(context)) return { reason: 'source, dependencies or build environment changed' };
     const bundle = bundleRoot(stateRoot, receipt.bundle);
     if (hash(readFileSync(path.join(bundle, 'desktop-bundle-manifest.json'))) !== receipt.bundle) return { reason: 'bundle manifest changed' };
     if (JSON.stringify(outputs(root, bundle)) !== JSON.stringify(receipt.outputs)) return { reason: 'built files changed' };
@@ -134,7 +136,7 @@ export function lookupBuild(root, stateRoot, context) {
 export function recordBuild(root, stateRoot, context, bundle) {
   if (path.resolve(bundle) !== bundleRoot(stateRoot, path.basename(bundle))) throw new Error('Build must belong to this development profile');
   verifySourceBuildIdentity(root, context.source);
-  const receipt = { schema: 1, input: hash(JSON.stringify(context)), bundle: path.basename(bundle), outputs: outputs(root, bundle) };
+  const receipt = { schema: 1, input: buildInputKey(context), bundle: path.basename(bundle), outputs: outputs(root, bundle) };
   const file = receiptPath(stateRoot);
   mkdirSync(path.dirname(file), { recursive: true });
   const temporary = file + '.tmp.' + process.pid;
@@ -146,13 +148,14 @@ if (import.meta.main) {
   try {
     const [operation, root, stateRoot, input, bundle] = process.argv.slice(2);
     if (operation === 'capture') console.log(JSON.stringify(captureBuildContext(root)));
+    else if (operation === 'key') console.log(buildInputKey(JSON.parse(input)));
     else if (operation === 'lookup') {
       const result = lookupBuild(root, stateRoot, JSON.parse(input));
       if (result.bundle) console.log(result.bundle);
       else console.error('[dev-build] Rebuild required: ' + result.reason + '.');
     } else if (operation === 'compare') verifyBuildContexts(JSON.parse(input), JSON.parse(bundle));
     else if (operation === 'record') recordBuild(root, stateRoot, JSON.parse(input), bundle);
-    else throw new Error('Expected capture, lookup or record');
+    else throw new Error('Expected capture, key, lookup, compare or record');
   } catch (error) {
     console.error('[dev-build] ' + error.message);
     process.exitCode = 1;

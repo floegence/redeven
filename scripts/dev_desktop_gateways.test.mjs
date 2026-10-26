@@ -124,3 +124,43 @@ test('cleanup refuses an inventory that does not match an exact saved Gateway se
   await writeFile(path.join(root, 'desktop/dev-gateways-v1.json'), JSON.stringify([{ gatewayID: 'local', runtimeRoot: root, stateRoot: directory }]));
   await assert.rejects(runDevelopmentGateways({ mode: 'stop', stateRoot: root, sourceRoot: directory }), /does not match/u);
 });
+
+test('reuses verified Gateway packages only for matching complete build inputs', async context => {
+  const { root, save, record } = await fixture(context);
+  await save([record('local')]);
+  const calls = [];
+  const options = { mode: 'start', stateRoot: root, sourceRoot: '/current-checkout',
+    buildKey: 'a'.repeat(64), sourceIdentity: { head: 'head', digest: 'digest' }, log: () => {}, dependencies: {
+      verifySourceBuildIdentity: () => {},
+      ensureManagedGatewayServiceReady: async input => {
+        calls.push(input);
+        await mkdir(input.assetCacheRoot, { recursive: true });
+        await writeFile(path.join(input.assetCacheRoot, 'verified-package'), 'verified');
+      },
+    },
+  };
+  await runDevelopmentGateways(options);
+  await runDevelopmentGateways(options);
+  assert.equal(calls[0].assetCacheRoot, calls[1].assetCacheRoot);
+  assert.equal(await readFile(path.join(calls[1].assetCacheRoot, 'verified-package'), 'utf8'), 'verified');
+  await runDevelopmentGateways({ ...options, buildKey: 'b'.repeat(64) });
+  assert.notEqual(calls[1].assetCacheRoot, calls[2].assetCacheRoot);
+  for (const call of calls) {
+    assert.equal(call.forceUpdate, true);
+    assert.equal(call.sourceRuntimeRoot, '/current-checkout');
+  }
+});
+
+test('removes a persistent Gateway cache if source changes during preparation', async context => {
+  const { root, save, record } = await fixture(context);
+  await save([record('local')]);
+  let checks = 0, cacheRoot;
+  await assert.rejects(runDevelopmentGateways({
+    mode: 'start', stateRoot: root, sourceRoot: '/current-checkout', buildKey: 'a'.repeat(64),
+    sourceIdentity: { head: 'head', digest: 'digest' }, log: () => {}, dependencies: {
+      verifySourceBuildIdentity: () => { if (++checks === 2) throw new Error('Source changed during build'); },
+      ensureManagedGatewayServiceReady: async input => { cacheRoot = input.assetCacheRoot; },
+    },
+  }), /Source changed/);
+  await assert.rejects(stat(cacheRoot), { code: 'ENOENT' });
+});

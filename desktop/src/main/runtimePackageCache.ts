@@ -195,6 +195,9 @@ function normalizeSourceRuntimeRoot(sourceRoot: string): string {
 }
 
 const sourceRuntimeCopyExcludedSubtrees = [
+  '.claude/worktrees',
+  '.codex/worktrees',
+  'desktop/native/computer-host/.build',
   'desktop/dist',
   'desktop/release',
   'desktop/.bundle',

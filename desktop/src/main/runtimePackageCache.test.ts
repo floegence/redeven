@@ -707,6 +707,27 @@ describe('runtimePackageCache', () => {
     }
   });
 
+  it('does not copy unrelated worktrees or native build caches into Gateway source builds', async () => {
+    const fixture = await createSourceRuntimeFixture();
+    try {
+      for (const relative of ['.claude/worktrees/other-task', 'desktop/native/computer-host/.build']) {
+        const directory = path.join(fixture.root, relative);
+        await fs.mkdir(directory, { recursive: true });
+        await fs.writeFile(path.join(directory, 'unrelated-marker'), 'not a source input');
+      }
+      const builder = path.join(fixture.root, 'scripts/build_runtime_binary.sh');
+      const script = await fs.readFile(builder, 'utf8');
+      await fs.writeFile(builder, script.replace('GOWORK=off GOOS=', [
+        'test ! -e .claude/worktrees/other-task/unrelated-marker',
+        'test ! -e desktop/native/computer-host/.build/unrelated-marker',
+        'GOWORK=off GOOS=',
+      ].join('\n')), { mode: 0o755 });
+      const asset = await preparePackage({ cacheRoot: fixture.cacheRoot, platform: resolveDesktopSSHRemotePlatform('linux', 'x86_64'),
+        packageKind: 'gateway', sourceRuntimeRoot: fixture.root });
+      expect(asset.source).toBe('source_build');
+    } finally { await fs.rm(path.dirname(fixture.root), { recursive: true, force: true }); }
+  });
+
   it('prepares Gateway packages independently of unavailable Runtime frontend builds', async () => {
     const fixture = await createSourceRuntimeFixture();
     try {

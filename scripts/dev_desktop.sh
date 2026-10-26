@@ -25,6 +25,8 @@ DEVELOPMENT_OWNER=""
 DEVELOPMENT_PORT_BASE=""
 DEVELOPMENT_INSTANCE_ID=""
 DEVELOPMENT_BUNDLE_ROOT=""
+DEVELOPMENT_BUILD_KEY=""
+DEVELOPMENT_SOURCE_IDENTITY=""
 DEVELOPMENT_PORT_LEASE=""
 DEVELOPMENT_PORT_LEASE_ROOT=""
 DEVELOPMENT_DESKTOP_PID_FILE=""
@@ -512,12 +514,14 @@ stop_current_instance_runtime() {
 
 manage_development_gateways() {
 	local mode="$1" helper_status=0
+	local build_args=()
+	if [ -n "$DEVELOPMENT_BUILD_KEY" ]; then build_args=(--build-key "$DEVELOPMENT_BUILD_KEY" --source-identity "$DEVELOPMENT_SOURCE_IDENTITY"); fi
 	if [ "$DRY_RUN" -eq 1 ]; then
 		printf 'Would %s local Gateway services saved in %q using the current source tree.\n' "$mode" "$DEVELOPMENT_STATE_ROOT"
 		return 0
 	fi
 	node "$SCRIPT_DIR/dev_desktop_gateways.mjs" --mode "$mode" \
-		--state-root "$DEVELOPMENT_STATE_ROOT" --source-root "$ROOT_DIR" &
+		--state-root "$DEVELOPMENT_STATE_ROOT" --source-root "$ROOT_DIR" ${build_args[@]+"${build_args[@]}"} &
 	SERVICE_HELPER_PID=$!
 	wait "$SERVICE_HELPER_PID" || helper_status=$?
 	if [ "$mode" = start ] && [ "$SHUTDOWN_REQUESTED" -eq 1 ]; then
@@ -827,10 +831,12 @@ start_desktop() {
     export REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT="${REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT:-$ROOT_DIR}"
     local source_identity
     source_identity=$(node "$SCRIPT_DIR/source_build_identity.mjs" capture "$ROOT_DIR" "$REDEVEN_DESKTOP_BUNDLE_COMMIT")
+    DEVELOPMENT_SOURCE_IDENTITY="$source_identity"
 
     previous_dir="$PWD"
     cd "$DESKTOP_DIR"
     local cache_context cached_bundle after_context phase_start
+    export REDEVEN_ASSET_BUILD_PROFILE=development
     export REDEVEN_REDEVPLUGIN_BUILD_CACHE="$DEVELOPMENT_STATE_ROOT/desktop/build-cache/redevplugin"
     # Explicit force-install has already prepared all three packages once.
     if [ "${REDEVEN_AGENT_FORCE_INSTALL:-}" = 1 ]; then REBUILD=1; fi
@@ -859,7 +865,9 @@ start_desktop() {
       after_context=$(node "$SCRIPT_DIR/dev_desktop_build_cache.mjs" capture "$ROOT_DIR")
       node "$SCRIPT_DIR/dev_desktop_build_cache.mjs" compare "$ROOT_DIR" "$DEVELOPMENT_STATE_ROOT" "$cache_context" "$after_context"
       node "$SCRIPT_DIR/dev_desktop_build_cache.mjs" record "$ROOT_DIR" "$DEVELOPMENT_STATE_ROOT" "$after_context" "$DEVELOPMENT_BUNDLE_ROOT"
+      cache_context="$after_context"
     fi
+    DEVELOPMENT_BUILD_KEY=$(node "$SCRIPT_DIR/dev_desktop_build_cache.mjs" key "$ROOT_DIR" "$DEVELOPMENT_STATE_ROOT" "$cache_context")
     prune_instance_bundles
     node "$SCRIPT_DIR/source_build_identity.mjs" verify "$ROOT_DIR" "$source_identity"
     cd "$previous_dir"
@@ -894,6 +902,7 @@ start_desktop() {
   ui_pkg_log "Local Gateway preparation: $((SECONDS - gateway_start))s"
   node "$SCRIPT_DIR/source_build_identity.mjs" verify "$ROOT_DIR" "$source_identity"
   stop_current_instance_runtime
+  ui_pkg_log "Desktop preparation complete: ${SECONDS}s; opening the window."
   [ "$SHUTDOWN_REQUESTED" -eq 0 ] || return "$SHUTDOWN_EXIT_STATUS"
 
   mkdir -p "$(dirname -- "$DEVELOPMENT_DESKTOP_PID_FILE")"
