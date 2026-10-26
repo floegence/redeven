@@ -6,7 +6,7 @@ import { retainEqualValue } from './presentationIdentity';
 import { projectFlowerRuntimeComponents, runtimeMessages, validateFlowerRuntimeTurns } from './runtimeCurrentView';
 import { retainThinkingTiming } from './thinkingTiming';
 import { createMessageTextSource } from './messageTextSource';
-import { historyWindowForItems, type PreparedHistoryPage } from './historyTurnPreparation';
+import { historyItemConfirmsPrefix, historyWindowForItems, type PreparedHistoryPage } from './historyTurnPreparation';
 import { flowerCurrentToolCallPreviews } from './toolCallPreview';
 
 type ItemRecord = { item: FlowerRuntimeCurrentItem; bytes: number; preview?: FlowerRuntimeCurrentItem; retained?: boolean; displayText?: string };
@@ -96,9 +96,7 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
   const sharedPrefix = current.window?.leaf_id && priorReading?.window?.leaf_id
     ? Math.max(-1, ...priorReading.records.flatMap(record => {
       const incoming = items.get(record.item.id)?.item;
-      return incoming && !incoming.live && !record.item.live && sameItem(incoming, record.item)
-        && incoming.canonical_ordinal !== undefined && incoming.canonical_ordinal === record.item.canonical_ordinal
-        && incoming.ordinal === record.item.ordinal ? [incoming.ordinal] : [];
+      return incoming && historyItemConfirmsPrefix(incoming, record.item) ? [incoming.ordinal] : [];
     })) : -1;
   const retainedPrefix = sameLeaf || sharedPrefix >= 0;
   const sharedCanonicalOrdinal = current.items?.find(item => item.ordinal === sharedPrefix)?.canonical_ordinal ?? -1;

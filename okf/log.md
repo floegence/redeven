@@ -4,6 +4,8 @@ Recent changes only. The linked concepts own current contracts and evidence; Git
 
 ## 2026-10-26
 
+- Recover transient [Flower history synchronization](ui/flower-live-timeline.md) within one bounded detail demand; reuse canonically confirmed historical prefixes without weakening complete-turn preparation, preserve accepted interaction state, and distinguish exhausted refresh from first-load failure.
+
 - Adopt published Floret v7.87.1 and keep [collapsed patch titles](ui/flower-live-timeline.md) in Activity summaries,
   with localized file counts and stable patch totals; disclosure alone reads
   mutation details.

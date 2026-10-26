@@ -8,6 +8,14 @@ export class HistorySourceChangedError extends Error {
   constructor() { super('Historical source changed during turn preparation.'); }
 }
 
+// A matching immutable entry proves the preceding active-path prefix. Share
+// this rule with document retention so preparation never skips unretained rows.
+export function historyItemConfirmsPrefix(incoming: FlowerRuntimeCurrentItem, cached: FlowerRuntimeCurrentItem): boolean {
+  return !incoming.live && !cached.live && incoming.id === cached.id && incoming.kind === cached.kind
+    && incoming.turn_id === cached.turn_id && incoming.run_id === cached.run_id && incoming.ordinal === cached.ordinal
+    && incoming.canonical_ordinal !== undefined && incoming.canonical_ordinal === cached.canonical_ordinal;
+}
+
 // Exact reading interests may contain islands. Resolve both boundaries and all
 // internal gaps of every affected sealed turn before exposing group counts.
 export async function prepareHistoryTurn<T extends WindowPage>(
@@ -18,11 +26,19 @@ export async function prepareHistoryTurn<T extends WindowPage>(
   if (!window?.leaf_id) return [];
   const initial = first.current.items ?? [];
   const targetTurns = new Set(initial.filter(item => !item.live && item.turn_id).map(item => item.turn_id));
+  if (!targetTurns.size) return [];
   const known = new Map<number, FlowerRuntimeCurrentItem>();
-  if (cachedWindow?.leaf_id === window.leaf_id) for (const item of cached) known.set(item.ordinal, item);
+  const sameLeaf = cachedWindow?.leaf_id === window.leaf_id;
+  const incoming = new Map(initial.map(item => [item.id, item]));
+  let sharedPrefix = -1;
+  if (!sameLeaf && cachedWindow?.leaf_id) for (const item of cached) {
+    const next = incoming.get(item.id);
+    if (next && historyItemConfirmsPrefix(next, item)) sharedPrefix = Math.max(sharedPrefix, item.ordinal);
+  }
+  for (const item of cached) if (sameLeaf || !item.live && item.ordinal <= sharedPrefix) known.set(item.ordinal, item);
   for (const item of initial) known.set(item.ordinal, item);
   let end = !window.has_after ? initial.at(-1)?.ordinal : undefined;
-  if (cachedWindow?.leaf_id === window.leaf_id && !cachedWindow.has_after && cached.length) end = Math.max(end ?? 0, ...cached.map(item => item.ordinal));
+  if (sameLeaf && !cachedWindow!.has_after && cached.length) end = Math.max(end ?? 0, ...cached.map(item => item.ordinal));
   const pages: T[] = [];
   for (const turnID of targetTurns) {
     // Most boundary fragments are short. Avoid hydrating 150 unrelated items
@@ -50,7 +66,8 @@ export async function prepareHistoryTurn<T extends WindowPage>(
       limits[direction] = Math.min(150, limits[direction] * 2);
       signal.throwIfAborted();
       const nextWindow = page.current.window ?? page.window;
-      if (page.current.thread_id !== first.current.thread_id || nextWindow?.leaf_id !== window.leaf_id) throw new HistorySourceChangedError();
+      if (page.current.thread_id !== first.current.thread_id) throw new Error('Flower contract error: historical turn page belongs to another thread.');
+      if (nextWindow?.leaf_id !== window.leaf_id) throw new HistorySourceChangedError();
       const values = page.current.items ?? [];
       if (values.some((item, index) => !Number.isSafeInteger(item.ordinal) || item.ordinal < 1
         || index > 0 && item.ordinal !== values[index - 1].ordinal + 1

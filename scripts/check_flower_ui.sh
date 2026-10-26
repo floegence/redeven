@@ -130,6 +130,7 @@ main() {
       internal/flower_ui/src/activityTextWindow.test.ts \
       internal/flower_ui/src/historyHandoffQueue.test.ts \
       internal/flower_ui/src/historyReadRecovery.test.ts \
+      internal/flower_ui/src/historyTurnPreparation.test.ts \
       internal/flower_ui/src/historyReadingWindow.test.ts \
       internal/flower_ui/src/conversationPreferences.test.ts \
       internal/flower_ui/src/providerRequestProgress.test.ts \
@@ -215,6 +216,7 @@ main() {
       local browser_tests=(
         src/ui/FlowerSurface.threadPresentation.browser.test.tsx
         src/ui/FlowerSurface.history.browser.test.tsx
+        src/ui/FlowerSurface.historySyncRecovery.browser.test.tsx
         src/ui/FlowerSurface.continuousHistory.browser.test.tsx
         src/ui/FlowerSurface.activityFields.browser.test.tsx
         src/ui/ActivityFieldRows.browser.test.tsx
