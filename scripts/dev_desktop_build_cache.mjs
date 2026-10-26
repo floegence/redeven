@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { lstatSync, readFileSync, readdirSync, readlinkSync, realpathSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { captureSourceBuildIdentity, verifySourceBuildIdentity } from './source_build_identity.mjs';
 
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -46,7 +47,20 @@ function buildGoEnvironment(root) {
   return environment;
 }
 
-export function captureBuildContext(root) {
+export function dependencyDigests(root) {
+  return Promise.all(packages.map(directory => new Promise((resolve, reject) => {
+    const worker = new Worker(new URL(import.meta.url), { workerData: { root: path.join(root, directory, 'node_modules') } });
+    worker.once('message', digest => resolve([directory, digest]));
+    worker.once('error', reject);
+    worker.once('exit', code => { if (code !== 0) reject(new Error('Dependency verification worker exited: ' + code)); });
+  })));
+}
+
+export async function captureBuildContext(root) {
+  // Independent package reads overlap tool probes. Hash every byte and retain
+  // deterministic ordering; never substitute timestamps or install receipts.
+  const pendingDependencies = dependencyDigests(root);
+  pendingDependencies.catch(() => {});
   const environment = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
     /^(GO|CGO_|RUST|CARGO|VITE_|npm_config_|PNPM|REDEVEN_ASSET_BUILD_PROFILE$|REDEVEN_DESKTOP_BUNDLE_|REDEVEN_DESKTOP_(RUNTIME|AGENT)_TARBALL$|REDEVEN_NODE_ARCHIVE$|REDEVEN_DESKTOP_VERSION$)/u.test(key)
     || /^(PATH|NODE_OPTIONS|NODE_ENV|CC|CXX|CFLAGS|CPPFLAGS|LDFLAGS|AR|SDKROOT|DEVELOPER_DIR|MACOSX_DEPLOYMENT_TARGET|SOURCE_DATE_EPOCH|CI)$/u.test(key)
@@ -79,7 +93,7 @@ export function captureBuildContext(root) {
     tools.cc = probe(root, process.env.CC || 'gcc', ['--version']);
     tools.cxx = probe(root, process.env.CXX || 'g++', ['--version']);
   }
-  const dependencies = packages.map(directory => [directory, treeDigest(path.join(root, directory, 'node_modules'), { dependencies: true })]);
+  const dependencies = await pendingDependencies;
   const external = [];
   // Vite also reads ignored local environment files. Track their presence and
   // content even when Git intentionally omits them.
@@ -144,10 +158,12 @@ export function recordBuild(root, stateRoot, context, bundle) {
   renameSync(temporary, file);
 }
 
-if (import.meta.main) {
+if (!isMainThread) parentPort.postMessage(treeDigest(workerData.root, { dependencies: true }));
+
+if (isMainThread && import.meta.main) {
   try {
     const [operation, root, stateRoot, input, bundle] = process.argv.slice(2);
-    if (operation === 'capture') console.log(JSON.stringify(captureBuildContext(root)));
+    if (operation === 'capture') console.log(JSON.stringify(await captureBuildContext(root)));
     else if (operation === 'key') console.log(buildInputKey(JSON.parse(input)));
     else if (operation === 'lookup') {
       const result = lookupBuild(root, stateRoot, JSON.parse(input));

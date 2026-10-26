@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." &> /dev/null && pwd)
 if [ "${FAKE_SESSION_CASE:-}" = "" ]; then
-  for session_case in interrupt terminate normal electron-download electron-reinstall gateway-failure gateway-interrupt source-drift cache-hit build-failure; do
+  for session_case in interrupt terminate normal electron-download electron-reinstall gateway-failure gateway-interrupt source-drift cache-hit build-failure build-interrupt; do
     FAKE_SESSION_CASE="$session_case" "$0"
   done
   exit 0
@@ -22,6 +22,7 @@ FAKE_ELECTRON_STOPPED="$TEST_ROOT/electron-stopped"
 FAKE_RUNTIME_STOPPED="$TEST_ROOT/runtime-stopped"
 FAKE_GATEWAY_STOPPED="$TEST_ROOT/gateway-stopped"
 FAKE_GATEWAY_PREPARING="$TEST_ROOT/gateway-preparing"
+FAKE_BUILD_PID="$TEST_ROOT/build-pid"
 FAKE_ELECTRON_PATH="$TEST_ROOT/fake Electron"
 SESSION_PID=""
 
@@ -37,7 +38,7 @@ trap cleanup EXIT
 
 mkdir -p "$FAKE_CHECKOUT/internal/envapp/ui_src/node_modules" "$FAKE_CHECKOUT/internal/codeapp/ui_src/node_modules" "$FAKE_DESKTOP/node_modules/electron" "$FAKE_SCRIPTS" "$FAKE_BIN" "$TEST_HOME"
 cp "$ROOT_DIR/scripts/dev_desktop.sh" "$ROOT_DIR/scripts/ui_package_common.sh" "$ROOT_DIR/scripts/source_build_identity.mjs" "$FAKE_SCRIPTS/"
-cp "$ROOT_DIR/scripts/prune_dev_desktop_bundles.mjs" "$FAKE_SCRIPTS/"
+cp "$ROOT_DIR/scripts/prune_dev_desktop_bundles.mjs" "$ROOT_DIR/scripts/run_parallel_builds.mjs" "$FAKE_SCRIPTS/"
 cp "$ROOT_DIR/scripts/dev_desktop_gateways.mjs" "$FAKE_SCRIPTS/"
 cp "$ROOT_DIR/.node-version" "$FAKE_CHECKOUT/.node-version"
 cat > "$FAKE_SCRIPTS/dev_desktop_build_cache.mjs" <<'JS'
@@ -82,6 +83,7 @@ printf '%s\n' \
   'set -euo pipefail' \
   'case "${1:-}:${2:-}" in' \
   '  run:build)' \
+  '    if [ "$FAKE_SESSION_CASE" = build-interrupt ]; then echo "$$" > "$FAKE_BUILD_PID"; while :; do sleep 0.05; done; fi' \
   '    if [ "$FAKE_SESSION_CASE" = cache-hit ] || [ "$FAKE_SESSION_CASE" = build-failure ]; then echo "unexpected or failed build" >&2; exit 23; fi' \
   '    if [ "$FAKE_SESSION_CASE" = source-drift ]; then printf "changed during Desktop build\n" >> "$PWD/package.json"; fi' \
   '    exit 0' \
@@ -99,7 +101,7 @@ printf '%s\n' \
   'esac' > "$FAKE_BIN/npm"
 chmod 700 "$FAKE_BIN/npm"
 
-export FAKE_ELECTRON_PATH FAKE_ELECTRON_STARTED FAKE_ELECTRON_STOPPED FAKE_RUNTIME_STOPPED FAKE_GATEWAY_STOPPED FAKE_GATEWAY_PREPARING FAKE_SESSION_CASE
+export FAKE_BUILD_PID FAKE_ELECTRON_PATH FAKE_ELECTRON_STARTED FAKE_ELECTRON_STOPPED FAKE_RUNTIME_STOPPED FAKE_GATEWAY_STOPPED FAKE_GATEWAY_PREPARING FAKE_SESSION_CASE
 mkdir -p "$FAKE_DESKTOP/dist/main" "$STATE_ROOT/local-environment/gateway"
 cat > "$FAKE_DESKTOP/dist/main/gatewayServiceHost.js" <<'JS'
 const fs = require('node:fs/promises');
@@ -166,14 +168,38 @@ SESSION_PID="$(node -e '
   child.unref();
   process.stdout.write(String(child.pid));
 ' "$FAKE_SCRIPTS/dev_desktop.sh" "$TEST_ROOT/session.log" --no-devtools)"
-for _ in $(seq 1 100); do
-  if [ "$FAKE_SESSION_CASE" = gateway-interrupt ]; then
+# Process startup can be delayed by concurrent builds on developer hosts.
+# Wait for the actual milestone, bounded to 20s, and stop early on failure.
+for _ in $(seq 1 400); do
+  kill -0 "$SESSION_PID" 2>/dev/null || break
+  if [ "$FAKE_SESSION_CASE" = build-interrupt ]; then
+    [ -f "$FAKE_BUILD_PID" ] && break
+  elif [ "$FAKE_SESSION_CASE" = gateway-interrupt ]; then
     [ -f "$FAKE_GATEWAY_PREPARING" ] && break
   else
     [ -f "$FAKE_ELECTRON_STARTED" ] && break
   fi
   sleep 0.05
 done
+if [ "$FAKE_SESSION_CASE" = build-interrupt ]; then
+  [ -f "$FAKE_BUILD_PID" ] || { cat "$TEST_ROOT/session.log" >&2; exit 1; }
+  build_pid=$(cat "$FAKE_BUILD_PID")
+  kill -TERM "$SESSION_PID"
+  for _ in $(seq 1 160); do
+    if ! kill -0 "$build_pid" 2>/dev/null && ! kill -0 "$SESSION_PID" 2>/dev/null; then break; fi
+    sleep 0.05
+  done
+  if kill -0 "$build_pid" 2>/dev/null || kill -0 "$SESSION_PID" 2>/dev/null || [ -f "$FAKE_ELECTRON_STARTED" ]; then
+    cat "$TEST_ROOT/session.log" >&2
+    printf 'Canceled parallel build retained a process or launched Desktop\n' >&2
+    exit 1
+  fi
+  bundle_count=$(node -e 'process.stdout.write(String(require("node:fs").readdirSync(process.argv[1]).length))' "$STATE_ROOT/desktop/bundles")
+  [ "$bundle_count" -eq 6 ] || { printf 'Canceled build left staging or published output\n' >&2; exit 1; }
+  SESSION_PID=""
+  printf 'dev Desktop cleanup test passed: %s\n' "$FAKE_SESSION_CASE"
+  exit 0
+fi
 if [ "$FAKE_SESSION_CASE" = build-failure ]; then
   if ! rg -Fq 'unexpected or failed build' "$TEST_ROOT/session.log" || [ -f "$FAKE_ELECTRON_STARTED" ]; then
     cat "$TEST_ROOT/session.log" >&2

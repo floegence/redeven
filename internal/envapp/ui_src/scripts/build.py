@@ -25,6 +25,15 @@ def main():
     cache = package_root / "node_modules/.vite"
     if cache.exists():
         shutil.rmtree(cache)
+    if os.environ.get("REDEVEN_ASSET_BUILD_PROFILE") == "development":
+        # tsconfig.noEmit makes checking independent of Vite's output. Keep the
+        # checkout lock in the supervisor until both finish or are canceled.
+        runner = package_root.parents[2] / "scripts/run_parallel_builds.mjs"
+        os.execvp("node", ["node", str(runner),
+                  "--task", "Types", "sh", "-ec",
+                  "node scripts/buildHostApplicationAppearance.mjs --check && tsc -p tsconfig.json",
+                  "--task", "Assets", "sh", "-ec",
+                  "vite build && node scripts/checkInitialBuildBudget.mjs && node scripts/precompressAssets.mjs"])
     os.execvp("sh", ["sh", "-ec", (
         "node scripts/buildHostApplicationAppearance.mjs --check "
         "&& tsc -p tsconfig.json && vite build "

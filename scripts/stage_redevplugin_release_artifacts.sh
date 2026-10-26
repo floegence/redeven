@@ -221,6 +221,29 @@ if [[ "$profile" == development && -n "${REDEVEN_REDEVPLUGIN_BUILD_CACHE:-}" ]];
   export CARGO_HOME="$cache_root/cargo-home"
   export CARGO_TARGET_DIR="$cache_root/target"
   echo "[redevplugin-stage] Reusing development Cargo cache: $cache_root"
+  cached_sources=()
+  if [[ -d "$CARGO_HOME/registry/src" ]]; then
+    while IFS= read -r candidate; do cached_sources+=("$candidate"); done < <(find "$CARGO_HOME/registry/src" -mindepth 2 -maxdepth 2 -type d -name "redevplugin-runtime-$version" -print)
+  fi
+  if [[ "${#cached_sources[@]}" -eq 1 ]]; then
+    cached_source="${cached_sources[0]}"
+    cached_archive="$CARGO_HOME/registry/cache/$(basename -- "$(dirname -- "$cached_source")")/redevplugin-runtime-$version.crate"
+    if [[ -f "$cached_archive" && ! -L "$cached_archive" ]]; then
+      cached_digest=$(node -e 'process.stdout.write(require("node:crypto").createHash("sha256").update(require("node:fs").readFileSync(process.argv[1])).digest("hex"))' "$cached_archive")
+      [[ "$cached_digest" == "$expected_runtime_crate_sha" ]] || die "cached runtime crate digest does not match the published release manifest"
+      # Resolve the locked dependency graph locally before selecting offline
+      # installation. A partial cache may download; compiler failures never retry.
+      if PATH="$toolchain_root/bin:$PATH" "$toolchain_cargo" metadata --offline --locked \
+        --format-version 1 --filter-platform "$rust_target" \
+        --manifest-path "$cached_source/Cargo.toml" >"$tmpdir/offline-metadata.json" 2>"$tmpdir/offline-metadata.log"; then
+        export CARGO_NET_OFFLINE=true
+        echo "[redevplugin-stage] Verified locked dependencies are cached; building without registry requests."
+      else
+        echo "[redevplugin-stage] Offline dependency check failed; preparing the exact locked crate with the configured network policy."
+        cat "$tmpdir/offline-metadata.log" >&2
+      fi
+    fi
+  fi
 else
   export CARGO_HOME="$tmpdir/cargo-home"
   export CARGO_TARGET_DIR="$tmpdir/cargo-target"
