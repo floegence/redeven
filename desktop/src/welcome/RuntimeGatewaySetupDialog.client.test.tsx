@@ -110,6 +110,8 @@ it('recovers authentication without losing invitation drafts and starts a fresh 
   button('common.cancel').click(); await settle();
   expect(perform.mock.calls.at(-1)?.[0]).toEqual({ kind: 'close_runtime_gateway', runtime_target_id: target.id, connection_token: firstToken });
   setCurrent(selected); await settle();
+  expect(document.querySelector('input[type="password"]')).toBeNull();
+  button('gatewayJoin.connectAndContinue').click(); await settle();
   expect(document.querySelector<HTMLInputElement>('input[type="password"]')?.value).toBe('');
   await enterPassword('correct');
   expect(perform.mock.calls.at(-1)?.[0].connection_token).toBeGreaterThan(firstToken);
@@ -117,7 +119,7 @@ it('recovers authentication without losing invitation drafts and starts a fresh 
   expect(perform.mock.calls.some(([request]) => request.operation === 'join')).toBe(false);
 });
 
-it.each(['ssh', 'ssh_container'] as const)('offers %s password input immediately for a health-only authentication diagnosis', async kind => {
+it.each(['ssh', 'ssh_container'] as const)('tries the current %s connection before asking for credentials from a passive diagnosis', async kind => {
   const fixture = runtimeGatewayAccessFixture(kind);
   const saved = fixture.inputs.preferences.saved_runtime_targets[0];
   if (saved.host_access.kind !== 'ssh_host') throw new Error('SSH fixture required');
@@ -135,18 +137,16 @@ it.each(['ssh', 'ssh_container'] as const)('offers %s password input immediately
   const root = document.createElement('div'); document.body.append(root);
   dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} i18n={i18n} refresh={refresh} recover={vi.fn()} edit={() => {}} close={() => {}} />, root);
   await settle();
-  const password = document.querySelector<HTMLInputElement>('input[type="password"]')!;
-  expect(password).not.toBeNull(); expect(document.activeElement).toBe(password);
+  expect(document.querySelector('input[type="password"]')).toBeNull();
   expect(refresh).not.toHaveBeenCalled(); expect(perform).not.toHaveBeenCalled();
   expect(document.querySelector('[role="alert"]')).toBeNull();
-  expect(button('gatewayJoin.connectAndContinue').hasAttribute('disabled')).toBe(true);
-  password.value = ' temporary password '; password.dispatchEvent(new Event('input', { bubbles: true }));
+  expect(button('gatewayJoin.connectAndContinue').hasAttribute('disabled')).toBe(false);
   setCurrent({ ...entry, runtime_health: { ...entry.runtime_health, freshness: 'checking',
     observed_runtime_control_status: entry.provider_runtime_link_target!.runtime_control_status } }); await settle();
-  expect(document.querySelector('input[type="password"]')).toBe(password); expect(password.value).toBe(' temporary password ');
-  password.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await settle();
+  button('gatewayJoin.connectAndContinue').click(); await settle();
   expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', runtime_target_id: entry.provider_runtime_link_target!.id,
-    connection_token: expect.any(Number), operation: 'status', ssh_password: ' temporary password ' });
+    connection_token: expect.any(Number), operation: 'status' });
+  setCurrent({ ...entry }); await settle();
   expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('1');
   expect(document.querySelector('input[type="password"]')).toBeNull();
 });
@@ -196,7 +196,8 @@ it.each([true, false])('offers explicit startup and reconnects only with authent
     provider_runtime_link_target: { ...target, runtime_control_status: { state: 'missing' as const, reason_code: 'auth_required' as const, message: 'Authenticate.' } } };
   const [current, setCurrent] = createSignal<DesktopEnvironmentEntry>(selected);
   const perform = vi.fn().mockResolvedValueOnce({ ok: false, gateway_error_code: 'runtime_not_started' })
-    .mockResolvedValue({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } });
+    .mockResolvedValue(connected ? { ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }
+      : { ok: false, gateway_error_code: 'SSH_AUTHENTICATION_REQUIRED' });
   vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
   const recover = vi.fn(async () => {
     expect(document.querySelector<HTMLInputElement>('input[type="password"]')?.value ?? '').toBe('');
@@ -206,13 +207,11 @@ it.each([true, false])('offers explicit startup and reconnects only with authent
   const root = document.createElement('div'); document.body.append(root);
   dispose = render(() => <RuntimeGatewaySetupDialog environment={current()} i18n={i18n} refresh={refresh} recover={recover} edit={() => {}} close={() => {}} />, root);
   await settle();
-  let password = document.querySelector<HTMLInputElement>('input[type="password"]')!;
-  password.value = 'temporary'; password.dispatchEvent(new Event('input', { bubbles: true }));
-  password.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await settle();
+  button('gatewayJoin.connectAndContinue').click(); await settle();
   expect(document.body.textContent).toContain(i18n.t('gatewayJoin.startHelp'));
   expect(recover).not.toHaveBeenCalled();
   expect(button('gatewayJoin.startAndContinue').hasAttribute('disabled')).toBe(true);
-  password = document.querySelector<HTMLInputElement>('input[type="password"]')!;
+  const password = document.querySelector<HTMLInputElement>('input[type="password"]')!;
   expect(password.value).toBe('');
   password.value = ' temporary '; password.dispatchEvent(new Event('input', { bubbles: true }));
   button('gatewayJoin.startAndContinue').click(); await settle();
@@ -222,8 +221,8 @@ it.each([true, false])('offers explicit startup and reconnects only with authent
     expect(document.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('1');
   } else {
     expect(document.querySelector<HTMLInputElement>('input[type="password"]')?.value).toBe('');
-    expect(button('gatewayJoin.connectAndContinue').hasAttribute('disabled')).toBe(true);
-    expect(perform).toHaveBeenCalledTimes(1);
+    expect(button('common.retry').hasAttribute('disabled')).toBe(true);
+    expect(perform).toHaveBeenCalledTimes(2);
   }
 });
 

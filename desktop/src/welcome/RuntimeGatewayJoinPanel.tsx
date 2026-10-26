@@ -17,7 +17,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   connectionRequest?: number; verificationResetRequest?: number; wizard?: boolean; canConnect?: boolean; submissionBlocked?: boolean; runtimeStartedAtUnixMS?: number;
   managementCoordinates?: string; settingsAction?: JSX.Element; preparation?: JSX.Element; preparationActions?: JSX.Element;
   authorityKey?: string;
-  sshAuthenticationRequired?: boolean; suspended?: boolean;
+  suspended?: boolean;
   onPreparationRequired?: (failure: 'runtime_not_started' | 'SECURITY_RESTART_REQUIRED' | 'SETTINGS_RUNTIME_INCOMPATIBLE') => void;
 }>) {
   const [open, setOpen] = createSignal(false);
@@ -29,7 +29,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const busy = () => pending() !== null;
   const [error, setError] = createSignal('');
   const [statusError, setStatusError] = createSignal('');
-  const [authenticationRequired, setAuthenticationRequired] = createSignal(props.sshAuthenticationRequired === true);
+  const [authenticationRequired, setAuthenticationRequired] = createSignal(false);
   const [password, setPassword] = createSignal('');
   const [connectionLost, setConnectionLost] = createSignal(false);
   let passwordInput: HTMLInputElement | undefined;
@@ -126,16 +126,12 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   onCleanup(() => { generation++; statusGeneration++; clearTimeout(timer); clearInterval(expiryTimer); releaseConnection(); });
   const focusConnection = () => authenticationRequired() ? passwordInput?.focus() : connectionHeading?.focus({ preventScroll: true });
   const openDialog = () => { setOpen(true); if (!blocked() && !props.wizard) void refresh(); queueMicrotask(() => { if (props.wizard) focusConnection(); else if (!blocked()) focusAddress(); }); };
-  createEffect(on(() => props.sshAuthenticationRequired === true, required => {
-    if (required) { setAuthenticationRequired(true); queueMicrotask(() => { if (!props.suspended) passwordInput?.focus(); }); }
-  }, { defer: true }));
   createEffect(on(() => props.suspended === true, suspended => {
     if (suspended) {
       generation++; statusGeneration++; clearTimeout(timer); setPending(null); releaseConnection();
       setConnectionLost(true); setPreviewInvalidated(true);
     } else {
       setConnectionLost(true);
-      setAuthenticationRequired(props.sshAuthenticationRequired === true);
       queueMicrotask(() => { if (currentStep() === 0 || connectionLost()) focusConnection(); });
     }
   }, { defer: true }));

@@ -54,6 +54,7 @@ export type SSHStreamOptions = Readonly<{
 export type SSHTransportAcquireInput = Readonly<{
   target: DesktopSSHHostAccessDetails;
   credentialScope: string;
+  // Omission reuses this scope's credentials; an explicit value requests a credential change.
   sshPassword?: string;
   sshBinary?: string;
   readyTimeoutMs?: number;
@@ -363,7 +364,7 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
     const password = String(input.sshPassword ?? '');
     const key = transportKey(target, sshBinary, credentialScope);
     let entry = await this.getOrCreateEntry({ key, target, credentialScope, password, sshBinary });
-    if (entry && entry.password !== password) {
+    if (input.sshPassword !== undefined && entry.password !== password) {
       if (entry.leases > 0) {
         throw new DesktopSSHTransportUnavailableError('SSH credentials changed while the transport is in use.');
       }
