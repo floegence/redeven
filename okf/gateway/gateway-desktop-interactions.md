@@ -19,7 +19,7 @@ Creation offers Not now or After setup, add Gateway access before inspection/sta
 
 Each dialog opening owns a sender/target-bound bridge lease across all steps. Env App closure cannot release it. Cancellation, renderer navigation/destruction or target authority changes release the lease and reject late requests; admitted writes retain transport until settlement.
 
-Password-mode SSH authentication is inline, focused and Enter-submittable. A known authentication requirement shows the password field immediately, without a failing connection attempt or a credential-free refresh loop. Rejection stays distinct from Gateway/container-engine failure. Among enrollment commands, only scoped status accepts a temporary password; it overrides saved credentials for that connection without updating preferences. Verification/consent never carry it. Clear the renderer password after connection, failure or closure. Reopening creates a fresh scope.
+Connection first acquires an independent lease on the exact Env App bridge, or attempts the saved management channel with available SSH transport/OpenSSH authentication. A passive `auth_required` diagnosis or absent saved password cannot require password entry before this attempt. Only a current authentication failure shows the inline, focused, Enter-submittable password field; it stops credential-free retries. Rejection stays distinct from Gateway/container-engine failure. Among enrollment commands, only scoped status accepts a temporary password; it overrides saved credentials for that connection without updating preferences. Verification/consent never carry it. Clear the renderer password after connection, failure or closure. Reopening creates a fresh scope and retries available authentication.
 
 When authenticated inspection proves the Runtime or its container is stopped, show an explicit startup action instead of retrying without credentials. Startup uses the existing lifecycle owner. An unsaved SSH password is entered for that action, passed unchanged through startup and access verification, and never persisted or retained in retry state. The field clears on submission; subsequent enrollment proves a fresh connection and requests authentication again when needed. Opening or connecting never implicitly starts a Runtime.
 
@@ -45,7 +45,8 @@ UI state and observations cannot expand authority or imply completion.
 
 # Evidence
 
-- `redeven:desktop/scripts/check-gateway-auth-ui.mjs` — Ten-locale connection and consent flows.
+- `redeven:desktop/scripts/check-gateway-auth-ui.mjs` — Ten-locale connection reuse, authentication failure and consent flows.
+- `redeven:desktop/src/main/runtimeGatewayLauncher.test.ts` — Exact Env App bridge reuse, independent ownership and explicit SSH authentication.
 - `redeven:desktop/scripts/check-gateway-network-ui.mjs` — Address tabs and network settings.
 - `redeven:desktop/src/main/environmentManagementConnections.test.ts` — Lease ownership, cancellation and admitted writes.
 - `redeven:desktop/src/welcome/GatewaySetup.client.test.tsx` — Confirmation, admission, observed service steps and stable trigger continuity.

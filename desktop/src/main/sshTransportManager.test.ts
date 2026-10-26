@@ -261,12 +261,15 @@ describe('Windows native SSH transport', () => {
     const fixture = windowsManagerFixture();
     const first = await fixture.manager.acquire({ target: target('password'), credentialScope: 'first', sshPassword: 'first-only' });
     const second = await fixture.manager.acquire({ target: target('password'), credentialScope: 'second', sshPassword: 'second-only' });
+    const third = await fixture.manager.acquire({ target: target('password'), credentialScope: 'third' });
     await first.run('true');
     await second.run('true');
-    expect(fixture.calls.slice(-2).map((call) => call.options.env?.REDEVEN_DESKTOP_SSH_PASSWORD))
-      .toEqual(['first-only', 'second-only']);
+    await third.run('true');
+    expect(fixture.calls.slice(-3).map((call) => call.options.env?.REDEVEN_DESKTOP_SSH_PASSWORD))
+      .toEqual(['first-only', 'second-only', '']);
     await first.release();
     await second.release();
+    await third.release();
     await fixture.manager.dispose();
   });
 });
@@ -284,6 +287,27 @@ describe('DefaultDesktopSSHTransportManager', () => {
     await first.release();
     await second.release();
     await fixture.manager.dispose();
+  });
+
+  it.each(['darwin', 'win32'] as const)('reuses %s credentials in the same scope when no new password is supplied', async platform => {
+    const fixture = platform === 'win32' ? windowsManagerFixture() : managerFixture();
+    try {
+      const first = await fixture.manager.acquire({ target: target('password'), credentialScope: 'environment-a', sshPassword: 'transient' });
+      const connectionCalls = fixture.spawnProcess.mock.calls.length;
+      const reused = await fixture.manager.acquire({ target: target('password'), credentialScope: 'environment-a' });
+      expect(reused.generation).toBe(first.generation);
+      expect(fixture.spawnProcess).toHaveBeenCalledTimes(connectionCalls);
+      await first.release();
+      expect(await reused.run('true')).toMatchObject({ exit_code: 0 });
+      await expect(fixture.manager.acquire({ target: target('password'), credentialScope: 'environment-a', sshPassword: 'changed' }))
+        .rejects.toThrow('SSH credentials changed');
+      await expect(fixture.manager.acquire({ target: target('password'), credentialScope: 'environment-a', sshPassword: '' }))
+        .rejects.toThrow('SSH credentials changed');
+      await reused.release();
+      const idle = await fixture.manager.acquire({ target: target('password'), credentialScope: 'environment-a' });
+      expect(idle.generation).toBe(first.generation);
+      await idle.release();
+    } finally { await fixture.manager.dispose(); }
   });
 
   it('isolates password transports by credential scope without putting the password in argv', async () => {

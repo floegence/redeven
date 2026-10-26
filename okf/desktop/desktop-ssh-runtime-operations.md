@@ -16,6 +16,8 @@ Desktop manages SSH-host and SSH-container Runtime only through the saved connec
 ## Transport and authentication
 Connection keys include normalized destination/port, authentication, SSH binary and credential scope. Failure retains SSH diagnostics without route substitution or command replay. macOS/Linux reuse ControlMaster; Windows uses native OpenSSH bounded commands and one persistent child per private Bridge, without WSL or ControlMaster. Cancellation/disposal terminate only owned children.
 
+An omitted acquisition password reuses credentials already held privately by that exact transport scope; it is not a request to replace them with an empty password. Explicit credential changes still reject while leases exist, and other scopes never inherit those credentials. Without an existing transport, OpenSSH may use configured keys or its agent even for a password-mode registration. Explicit management connection attempts allow this authentication; passive status inspection may defer it when no password is saved. Password availability is not management authority.
+
 One normalized Connect Timeout covers connection, probe, inventory and startup-readiness control; startup/package transfer keep their own deadlines. Windows uses the packaged x64 askpass helper: accept password/passphrase prompts, refuse host-key prompts, emit secrets only through private stdout and retain OpenSSH host-key checks. Passwords never enter arguments, files or logs; missing helper fails visibly.
 
 Discovery follows bounded SSH includes and excludes wildcard/negated aliases from selection, while explicit destinations remain allowed. Registrations separate display name from destination and save exact root and container engine/id.

@@ -15,6 +15,8 @@ import { runtimeGatewayAccessFixture } from '../testSupport/runtimeGatewayAccess
 import { runtimeGatewayAccessPresentation } from '../shared/runtimeGatewayAccessPresentation';
 import type { DesktopRuntimeHealth } from '../shared/desktopRuntimeHealth';
 import { desktopRuntimeControlStatusMissing } from '../shared/desktopRuntimePresence';
+import { RuntimePlacementBridgeRegistry, type RuntimePlacementBridgeRecord } from './runtimePlacementBridgeRegistry';
+import type { RuntimePlacementBridgeTermination } from './runtimePlacementBridgeSession';
 
 function productionBoundary(name: string, context: object) {
   const source = ts.createSourceFile('main.ts', fs.readFileSync(path.join(__dirname, 'main.ts'), 'utf8'), ts.ScriptTarget.ESNext, true);
@@ -40,6 +42,87 @@ function fixture() {
 }
 
 describe('Runtime Gateway launcher ownership', () => {
+  it('reuses the exact Env App bridge without credentials and retains it after the app closes', async () => {
+    const target = runtimeGatewayAccessFixture('ssh').inputs.preferences.saved_runtime_targets[0];
+    const registry = new RuntimePlacementBridgeRegistry(vi.fn());
+    let finish!: (value: RuntimePlacementBridgeTermination) => void;
+    const closed = new Promise<RuntimePlacementBridgeTermination>(resolve => { finish = resolve; });
+    const disconnect = vi.fn(async () => { finish({ kind: 'closed' }); });
+    const record = { runtime_key: target.id, environment_id: target.id, target_id: `ssh:${target.id}`,
+      session: { placement_target_id: target.id, closed, disconnect } } as unknown as RuntimePlacementBridgeRecord;
+    const app = await registry.acquire(target.id, 'env-app', async () => record);
+    const inspect = vi.fn();
+    const connect = productionBoundary('acquireEnvironmentManagementConnection', {
+      loadDesktopPreferencesCached: async () => ({ saved_runtime_targets: [{ ...target, ssh_password: '', ssh_password_configured: false }] }),
+      runtimePlacementBridgeRegistry: registry, inspectRuntimePlacementTargetState: inspect,
+    });
+    const manager = new EnvironmentManagementConnections(connect, 'gateway');
+    const request = { environment_id: target.id, dialog_token: 11 };
+    expect(await manager.use(42, request, async current => current)).toBe(record);
+    await app.release();
+    expect(disconnect).not.toHaveBeenCalled();
+    expect(await manager.use(42, request, async current => current)).toBe(record);
+    expect(inspect).not.toHaveBeenCalled();
+    manager.close(42, request.dialog_token);
+    await vi.waitFor(() => expect(disconnect).toHaveBeenCalledOnce());
+    expect(registry.size).toBe(0);
+  });
+
+  it.each(['ssh', 'ssh_container'] as const)('explicitly inspects %s with available OpenSSH authentication before requiring a password', async kind => {
+    const original = runtimeGatewayAccessFixture(kind).inputs.preferences.saved_runtime_targets[0];
+    if (original.host_access.kind !== 'ssh_host') throw new Error('SSH fixture required');
+    const target = { ...original, host_access: { ...original.host_access, ssh: { ...original.host_access.ssh, auth_mode: 'password' } } };
+    const startup = { pid: 123, started_at_unix_ms: 1000, runtime_service: {} };
+    const ready = new Map();
+    const probe = vi.fn(async () => ({ status: 'ready', startup }));
+    const release = vi.fn(async () => undefined);
+    const resolver = vi.fn(() => ({ release }));
+    const resolve = vi.fn(async () => ({ status: 'running', placement: target.placement }));
+    const executor = { run: vi.fn(async () => ({ stdout: '' })), release };
+    const inspect = productionBoundary('inspectRuntimePlacementTargetState', {
+      runtimePlacementInspectionFromBridge: async () => null, runtimePlacementMaintenanceByTargetID: new Map(),
+      runtimePlacementReadyByTargetID: ready, desktopRuntimeControlStatusMissing,
+      sshDetailsFromRuntimePlacement: () => ({ runtime_root: '/runtime' }), sshDesktopSessionKey: () => target.id,
+      probeManagedSSHRuntimeStatus: probe, desktopSSHTransportManager: {}, resolveSSHRuntimeReleaseTag: () => 'fixture',
+      desktopRuntimePlacementStateRoot: () => '/runtime/state', runtimePlacementMaintenanceForRuntimeService: () => undefined,
+      runtimeServiceAllowsOpenAttempt: () => true, providerRuntimeLinkTargetIDForRuntimeTarget: () => `ssh:${target.id}`,
+      sshRuntimeReadyByKey: new Map(), clearSSHRuntimeReadyState: vi.fn(),
+      runtimeContainerResolver: resolver, resolveRuntimeContainerPlacement: resolve, runtimeHostExecutor: () => executor,
+      containerRuntimeProbeCommand: vi.fn(), parseManagedSSHRuntimeProbeResult: () => ({ status: 'ready', binary_path: '/runtime/redeven' }),
+      containerRuntimeDaemonStatusCommand: vi.fn(), parseLaunchReport: () => ({ status: 'ready', startup }),
+      clearRuntimePlacementTargetRecords: vi.fn(), runtimeControlReasonCodeForContainerResolution: (status: string) => status,
+    });
+    const input = { targetID: target.id, environmentID: target.id, label: target.label,
+      hostAccess: target.host_access, placement: target.placement, allowUnsavedSSHAuthentication: true };
+    expect(await inspect(input)).toMatchObject({ running: true, runtime_target_available: true });
+    expect(ready.has(target.id)).toBe(true);
+    if (kind === 'ssh') {
+      expect(probe).toHaveBeenCalledWith(expect.objectContaining({ sshPassword: undefined, sshCredentialScope: target.id }));
+      probe.mockResolvedValueOnce({ status: 'failed', message: 'Authentication rejected', failure: { code: 'ssh_authentication_failed' } } as never);
+    } else {
+      expect(resolver).toHaveBeenCalledWith(target.host_access, target.id, undefined, undefined);
+      expect(release).toHaveBeenCalledTimes(2);
+      resolve.mockResolvedValueOnce({ status: 'auth_required', message: 'Authentication rejected' } as never);
+    }
+    expect(await inspect(input)).toMatchObject({ runtime_control_status: { state: 'missing', reason_code: 'auth_required' } });
+  });
+
+  it('preserves omission of a saved password when acquiring a bridge over a reusable SSH transport', async () => {
+    const target = runtimeGatewayAccessFixture('ssh').inputs.preferences.saved_runtime_targets[0];
+    const start = vi.fn(async () => ({}));
+    const acquire = productionBoundary('acquireRuntimePlacementBridgeForReadyRecord', {
+      runtimePlacementBridgeRegistry: { acquire: (_id: string, _owner: string, create: (signal: AbortSignal) => unknown) => create(new AbortController().signal) },
+      loadDesktopPreferencesCached: async () => ({}), savedRuntimePlacementSSHPassword: () => '',
+      startRuntimePlacementBridgeSession: start, desktopSSHTransportManager: {},
+      bridgeRecordFromSession: vi.fn(), DEFAULT_DESKTOP_SSH_RUNTIME_ROOT: '~/.redeven',
+    });
+    const ready = { runtime_key: target.id, environment_id: target.id, host_access: target.host_access, placement: target.placement };
+    await acquire(ready, 'gateway:42:11');
+    expect(start).toHaveBeenLastCalledWith(expect.objectContaining({ ssh_password: undefined, ssh_credential_scope: target.id }));
+    await acquire(ready, 'gateway:42:12', undefined, ' temporary password ');
+    expect(start).toHaveBeenLastCalledWith(expect.objectContaining({ ssh_password: ' temporary password ' }));
+  });
+
   it.each(['unknown', 'failed', 'online'] as const)('does not grant management authority or invent stopped state from %s health alone', state => {
     const fixture = runtimeGatewayAccessFixture('ssh');
     const target = fixture.inputs.preferences.saved_runtime_targets[0];
@@ -182,6 +265,7 @@ describe('Runtime Gateway launcher ownership', () => {
     }) as (id: string, owner: string) => Promise<unknown>;
     await connect(target.id, 'cloud-link');
     expect(inspect).toHaveBeenCalledOnce();
+    expect(inspect).toHaveBeenCalledWith(expect.objectContaining({ allowUnsavedSSHAuthentication: true }));
     expect(acquire).toHaveBeenCalledExactlyOnceWith(ready, 'cloud-link', undefined, undefined);
   });
   it('passes a transient password to both the host inspection and bridge without saving it', async () => {

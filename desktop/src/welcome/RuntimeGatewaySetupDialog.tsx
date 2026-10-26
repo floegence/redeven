@@ -53,10 +53,6 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
   const submissionBlocked = () => props.suspended === true || props.available === false || !props.environment?.provider_runtime_link_target || !canConnect() || busy() || !!props.operationBusy;
   const control = () => presentation()?.revalidating ? props.environment?.runtime_health.observed_runtime_control_status
     ?? props.environment?.provider_runtime_link_target?.runtime_control_status : props.environment?.provider_runtime_link_target?.runtime_control_status;
-  const needsAuthentication = () => {
-    const diagnosis = control();
-    return canConnect() && diagnosis?.state === 'missing' && diagnosis.reason_code === 'auth_required';
-  };
   const technicalDetail = () => {
     const diagnosis = control();
     return diagnosis?.state === 'missing' ? diagnosis.message : props.environment?.runtime_health.offline_reason;
@@ -136,7 +132,7 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
   // Retain the enrollment owner and drafts while settings temporarily covers the dialog.
   const enrollment = <Show when={retainedTarget()}>{targetID =>
       <RuntimeGatewayJoinPanel wizard connectionRequest={connectionRequest()} verificationResetRequest={verificationResetRequest()} gateways={props.gateways} embedded targetID={targetID()} targetLabel={props.environment?.label}
-        suspended={props.suspended} sshAuthenticationRequired={needsAuthentication()}
+        suspended={props.suspended}
         onPreparationRequired={failure => setRequiredPreparation(failure === 'runtime_not_started' ? 'start' : failure === 'SECURITY_RESTART_REQUIRED' ? 'restart' : 'update')}
         i18n={props.i18n} onClose={props.close} canConnect={canConnect()} submissionBlocked={submissionBlocked()}
         runtimeStartedAtUnixMS={props.environment?.runtime_started_at_unix_ms}
