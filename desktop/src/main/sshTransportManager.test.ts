@@ -275,6 +275,19 @@ describe('Windows native SSH transport', () => {
 });
 
 describe('DefaultDesktopSSHTransportManager', () => {
+  it.each(['darwin', 'win32'] as const)('uses noninteractive %s authentication when no password is available', async platform => {
+    const fixture = platform === 'win32' ? windowsManagerFixture() : managerFixture();
+    try {
+      const lease = await fixture.manager.acquire({ target: target('password'), credentialScope: 'environment-a' });
+      await lease.run('true');
+      for (const [, args] of fixture.spawnProcess.mock.calls) {
+        expect(args).toContain('BatchMode=yes');
+        expect(args).not.toContain('NumberOfPasswordPrompts=3');
+      }
+      await lease.release();
+    } finally { await fixture.manager.dispose(); }
+  });
+
   it('coalesces concurrent acquisitions and reuses one ControlMaster', async () => {
     const fixture = managerFixture();
     const [first, second] = await Promise.all([
