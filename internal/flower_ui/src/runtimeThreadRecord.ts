@@ -8,7 +8,7 @@ import { retainThinkingTiming } from './thinkingTiming';
 import { createMessageTextSource } from './messageTextSource';
 import { historyWindowForItems, type PreparedHistoryPage } from './historyTurnPreparation';
 
-type ItemRecord = { item: FlowerRuntimeCurrentItem; bytes: number; preview?: FlowerRuntimeCurrentItem; retained?: boolean };
+type ItemRecord = { item: FlowerRuntimeCurrentItem; bytes: number; preview?: FlowerRuntimeCurrentItem; retained?: boolean; displayText?: string };
 type MutableMessage = { -readonly [K in keyof FlowerChatMessage]: FlowerChatMessage[K] };
 type MessageRecord = { value: FlowerChatMessage; set: SetStoreFunction<MutableMessage>; appendText: (text: string) => void };
 const utf8 = new TextEncoder();
@@ -41,12 +41,22 @@ function retainBody(before: ItemRecord | undefined, incoming: FlowerRuntimeCurre
   const source = before.item.body ?? before.preview?.body;
   const body = incoming.body;
   if (!body || !['assistant', 'thinking', 'user'].includes(incoming.kind)
-    || source && (source.source_id !== body.source_id || source.entry_id !== body.entry_id || source.field !== body.field)
-    || body.run_id && body.run_id !== incoming.run_id
-    || body.run_id && !(before.item.text ?? '').startsWith(incoming.text ?? '')) return;
+    || body.run_id && body.run_id !== incoming.run_id) return;
+  const sameSource = source
+    ? source.run_id === body.run_id && source.source_id === body.source_id && source.entry_id === body.entry_id && source.field === body.field
+    : Boolean(before.item.live) === Boolean(incoming.live);
+  if (!sameSource) {
+    // Sealing can normalize or replace text under the same item ID. Live byte
+    // offsets never belong to the canonical source, even if its preview matches.
+    // Keep the visible prose while reading the new source in bounded chunks;
+    // publish it once complete instead of flashing a preview or mixed sources.
+    return { item: incoming, bytes: utf8.encode(incoming.text ?? '').length, preview: incoming, retained: true,
+      displayText: before.displayText ?? before.item.text ?? '' };
+  }
+  if (!(before.item.text ?? '').startsWith(incoming.text ?? '')) return;
   const sameLiveSource = Boolean(body.run_id) && body.run_id === (source?.run_id ?? before.item.run_id);
-  return { item: { ...incoming, text: before.item.text, body: sameLiveSource && before.bytes >= body.bytes ? undefined : body },
-    bytes: before.bytes, preview: incoming, retained: before.retained || !before.item.body || Boolean(incoming.live) };
+  return { ...before, item: { ...incoming, text: before.item.text, body: sameLiveSource && before.bytes >= body.bytes ? undefined : body },
+    preview: incoming, retained: before.retained || !before.item.body || Boolean(incoming.live) };
 }
 
 type PreviousRecord = {
@@ -181,7 +191,11 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
     messages.set(message.id, record);
     return record;
   };
-  const present = (record: ItemRecord, message: FlowerChatMessage): FlowerChatMessage => message.body_pending && record.retained ? { ...message, body_pending: { ...message.body_pending, retained: true } } : message;
+  const present = (record: ItemRecord, message: FlowerChatMessage): FlowerChatMessage => ({ ...message,
+    ...(message.body_pending && record.retained ? { body_pending: { ...message.body_pending, retained: true } } : {}),
+    ...(record.displayText !== undefined ? record.item.kind === 'thinking'
+      ? { blocks: [{ type: 'thinking' as const, content: record.displayText }] } : { content: record.displayText } : {}),
+  });
   const retainedMessages = new Map(runtimeMessages(initial, { ...current, tool_call_previews: [], items: [...items.values()].filter(value => value.preview || value.item.body && value.retained).map(value => value.item) }).map(message => [message.id, present(items.get(message.id)!, message)]));
   let projectedMessages: readonly FlowerChatMessage[] = initial.messages.map(message =>
     makeMessage(retainThinkingTiming(retainedMessages.get(message.id) ?? message, message)).value);
@@ -258,9 +272,17 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
         || before.bytes + size > chunk.through_bytes || chunk.through_bytes > body.bytes || chunk.through_bytes > chunk.bytes) invalid('invalid body chunk extent');
       const bytes = before.bytes + size;
       const item = { ...before.item, text: (before.item.text ?? '') + chunk.text, body: bytes < (body.run_id ? body.bytes : Math.min(body.bytes, chunk.bytes)) ? body : undefined };
-      const after = { item, bytes, preview: before.preview ?? before.item, retained: true };
+      const after = { item, bytes, preview: before.preview ?? before.item, retained: true,
+        ...(item.body && before.displayText !== undefined ? { displayText: before.displayText } : {}) };
       batch(() => {
         (items.has(item.id) ? items : archive).set(item.id, after);
+        if (before.displayText !== undefined) {
+          if (item.body) return;
+          const projected = runtimeMessages(thread, { ...components, items: [item] }).find(message => message.id === item.id);
+          if (!projected) invalid('sealed item has no presentation');
+          updateMessage(present(after, projected));
+          return;
+        }
         const message = messages.get(item.id)!;
         if (item.kind === 'thinking') message.set('blocks', [{ type: 'thinking', content: item.text }]);
         else { message.set('content', item.text); message.appendText(chunk.text); }

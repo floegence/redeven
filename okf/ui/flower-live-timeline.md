@@ -5,7 +5,7 @@ description: One workspace facts stream, two bounded reading interests, and one 
 tags: [ui, flower, live, threads]
 timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-10-26"
 ---
 # Summary
 
@@ -35,7 +35,7 @@ Before publication, resolve both boundaries and internal gaps of every affected 
 
 Only unseen text uses skeletons. Accepted prose, attachments/references, anchors and chosen follow state survive growth, refresh and completion. One observer admits demand within 160 pixels; text/open tools share two slots and a fifteen-second deadline. Interactive disclosure precedes visible reads, then background work; aging every eight admissions prevents starvation. Offscreen/navigation cancellation removes demand and aborts reads; failures offer local Retry.
 
-ThreadCache alone retains expanded bodies by item/turn/run/source identity. Freshly authorized ThreadItemTextReader.ReadItemText reads return at most 16 KiB from the accepted UTF-8 offset. One source task coalesces extents, accepts earlier in-flight prefixes and yields between chunks. No polling, full-prefix/history downloads or duplicate transcript store. Completion verifies canonical content without removing prose; stale runs/locators cannot overwrite it.
+ThreadCache alone retains expanded bodies by item/turn/run/source identity. Freshly authorized ThreadItemTextReader.ReadItemText reads return at most 16 KiB from the accepted UTF-8 offset. One source task coalesces extents, accepts earlier in-flight prefixes and yields between chunks. No polling, full-prefix/history downloads or duplicate transcript store. A changed source, including live-to-canonical sealing, restarts at its canonical preview byte offset; live and sealed text need not share a suffix or extent. Retain visible prose while bounded chunks assemble the new source, then publish the complete replacement once. Same-source refreshes retain read progress; late old-source chunks cannot overwrite it. Exhausted or terminal body failures expose an explicit localized Retry without replaying execution.
 
 Schema v3 has one decoder. Fragments carry identity, zero-based index/count, total bytes and Base64. Only matching revision/thread/item/turn/run, contiguous version and UTF-8 offset can merge appends inside a 32 KiB fragment. Growth sends locators, not prefixes. Same-source extents coalesce server-side/per browser frame with constant storage, original base version and preserved semantic boundaries. Limits: 16 pending batches, 32 MiB per envelope/subscriber and 32 MiB global retained references. Started frames are immutable; byte-accounted covered versions suppress represented deltas. Summary, private read state and child inventory use independent mailboxes.
 

@@ -263,15 +263,66 @@ describe('bounded Flower history', () => {
     push({ schema_version: 3, kind: 'summary.batch', summaries: [snapshot] });
     push({ schema_version: 3, kind: 'thread.batch', thread_id: 'history', reading_revision: readingRevision, update: { thread_id: 'history', turn_id: 'turn', run_id: 'run', base_version: version++, view_version: version, facts: { activity: 'idle', attention: {}, queue_count: 0, last_outcome: 'completed' }, items: [{ kind: 'replace', item_id: 'latest', item: canonical }] } });
     await waitFor(() => incremental.mock.calls.length === 3);
-    expect(incremental.mock.calls[2][1]).toMatchObject({ item_id: 'latest', offset_bytes: 128, through_bytes: 128 });
+    expect(incremental.mock.calls[2][1]).toMatchObject({ item_id: 'latest', offset_bytes: 12, through_bytes: 128 });
     expect(body).not.toHaveBeenCalled();
     expect(bubble.textContent).toContain(text);
     expect(root.querySelector('.flower-history-text-loading')).toBeNull();
-    finish('');
+    finish(text.slice(12));
     await waitFor(() => !root.querySelector('.flower-history-body-control'));
     expect(root.querySelector('.flower-history-message .flower-message-bubble')).toBe(bubble);
     expect(incremental).toHaveBeenCalledTimes(3);
   });
+  it.each([false, true])('replaces live prose from the canonical preview without reusing its offset (refresh=%s)', async (refresh) => {
+    const canonicalText = 'Preview text ' + 'Confirmed complete answer. '.repeat(30);
+    const liveText = 'Preview text ' + 'Draft output that will change. '.repeat(35);
+    let source = liveText;
+    let release!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    const incremental = vi.fn<NonNullable<FlowerSurfaceAdapter['loadHistoryBody']>>(async (_tid, input) => {
+      if (input.offset_bytes > input.through_bytes) throw Object.assign(new Error('invalid thread query'), { status: 400 });
+      if (!input.run_id) await held;
+      return { thread_id: 'history', bytes: new TextEncoder().encode(source).length, ...input, text: source.slice(input.offset_bytes, input.through_bytes) };
+    });
+    const { root, push, history, body, rename } = await mount(false, false, { live: true, text: liveText, loadHistoryBody: incremental });
+    await waitFor(() => root.textContent?.includes(liveText) === true);
+    const bubble = root.querySelector('.flower-history-message .flower-message-bubble');
+    const viewport = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
+    const priorHeight = bubble!.getBoundingClientRect().height;
+    const canonical = { ...fixture('latest', true), canonical_ordinal: 4,
+      body: { field: 'content', source_id: 'latest', bytes: canonicalText.length, preview_bytes: 12 } };
+    const terminal: FlowerRuntimeCurrentView = { thread_id: 'history', turn_id: 'turn', run_id: 'run', view_version: 8, activity: 'idle', last_outcome: 'completed', items: [canonical], turns: [], interactions: [], queue: [], window: { first_item_id: 'latest', last_item_id: 'latest', has_before: false, has_after: false } };
+    const snapshot = applyFlowerRuntimeCurrentView(thread({ thread_id: 'history', title: 'Bounded history', messages: [] }), terminal);
+    const revision = history.mock.calls.at(-1)![1].reading_revision;
+    history.mockResolvedValue({ thread: snapshot, current: terminal });
+    source = canonicalText;
+    push({ schema_version: 3, kind: 'summary.batch', summaries: [snapshot] });
+    if (refresh) {
+      await page.getByRole('button', { name: 'Rename conversation' }).click();
+      const input = root.querySelector<HTMLInputElement>('.flower-chat-header-title-input')!;
+      input.value = 'Updated'; input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await waitFor(() => rename.mock.calls.length === 1);
+    } else {
+      push({ schema_version: 3, kind: 'thread.batch', thread_id: 'history', reading_revision: revision, update: { thread_id: 'history', turn_id: 'turn', run_id: 'run', base_version: 7, view_version: 8, facts: { activity: 'idle', attention: {}, queue_count: 0, last_outcome: 'completed' }, items: [{ kind: 'replace', item_id: 'latest', item: canonical }] } });
+    }
+    await waitFor(() => incremental.mock.calls.some(call => !call[1].run_id));
+    expect(incremental.mock.calls.at(-1)![1].offset_bytes).toBe(12);
+    expect(root.querySelector('.flower-history-message .flower-message-bubble')).toBe(bubble);
+    expect(root.textContent).toContain(liveText);
+    expect(bubble!.getBoundingClientRect().height).toBe(priorHeight);
+    release();
+    await waitFor(() => root.textContent?.includes(canonicalText) === true);
+    expect(root.textContent).not.toContain(liveText);
+    expect(root.querySelector('.flower-history-body-control')).toBeNull();
+    expect(body).not.toHaveBeenCalled();
+    const reads = incremental.mock.calls.length;
+    viewport.scrollTop = 0; viewport.dispatchEvent(new Event('scroll'));
+    await new Promise(resolve => setTimeout(resolve, 100));
+    viewport.scrollTop = viewport.scrollHeight; viewport.dispatchEvent(new Event('scroll'));
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect(incremental.mock.calls.length).toBe(reads);
+  });
+
   it('cancels obsolete live body reads when the canonical source is sealed', async () => {
     const incremental = vi.fn<NonNullable<FlowerSurfaceAdapter['loadHistoryBody']>>(async (_tid, input, signal) => {
       if (input.run_id) return new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
@@ -412,6 +463,24 @@ describe('bounded Flower history', () => {
     await waitFor(() => root.textContent?.includes('Preview text expanded body!!') === true);
     expect(body).toHaveBeenCalledTimes(2);
   });
+  it('offers an explicit retry after a body failure and resumes only the missing bytes', async () => {
+    let ready = false;
+    const incremental = vi.fn<NonNullable<FlowerSurfaceAdapter['loadHistoryBody']>>(async (_tid, input) => {
+      if (!ready) throw Object.assign(new Error('invalid thread query'), { status: 400 });
+      return { thread_id: 'history', bytes: input.through_bytes, ...input, text: ' expanded body!!' };
+    });
+    const { root, body } = await mount(false, false, { loadHistoryBody: incremental });
+    await waitFor(() => Boolean(root.querySelector('.flower-history-body-control button')));
+    expect(incremental).toHaveBeenCalledOnce();
+    ready = true;
+    root.querySelector<HTMLButtonElement>('.flower-history-body-control button')!.click();
+    await waitFor(() => root.textContent?.includes('Preview text expanded body!!') === true);
+    expect(incremental).toHaveBeenCalledTimes(2);
+    expect(incremental.mock.calls[1][1].offset_bytes).toBe(12);
+    expect(body).not.toHaveBeenCalled();
+    expect(root.querySelector('.flower-history-body-control')).toBeNull();
+  });
+
   it('cancels an expanded body read when switching conversations and rejects its late result', async () => {
     const { root, body, history, complete } = await mount(false, true);
     await waitFor(() => body.mock.calls.length === 1);
