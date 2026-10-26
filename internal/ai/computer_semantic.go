@@ -15,22 +15,23 @@ const computerSemanticMaxBytes = 262144
 // Platform adapters collect native facts. This is the single model-visible
 // schema boundary; unsupported facts are omitted rather than inferred.
 type computerSemanticNode struct {
-	Ref             string                  `json:"ref"`
-	ParentRef       string                  `json:"parent_ref,omitempty"`
-	ChildRefs       []string                `json:"child_refs"`
-	FrameID         string                  `json:"frame_id,omitempty"`
-	Role            string                  `json:"role"`
-	PlatformRole    string                  `json:"platform_role"`
-	CanonicalRole   string                  `json:"canonical_role"`
-	Name            string                  `json:"name"`
-	Description     string                  `json:"description,omitempty"`
-	Relations       map[string][]string     `json:"relations,omitempty"`
-	States          map[string]any          `json:"states"`
-	Actions         []string                `json:"actions"`
-	PlatformActions []string                `json:"platform_actions,omitempty"`
-	Value           any                     `json:"value,omitempty"`
-	Bounds          *computerSemanticBounds `json:"bounds,omitempty"`
-	Subrole         string                  `json:"platform_subrole,omitempty"`
+	Ref               string                  `json:"ref"`
+	ParentRef         string                  `json:"parent_ref,omitempty"`
+	ChildRefs         []string                `json:"child_refs"`
+	ChildrenTruncated bool                    `json:"children_truncated,omitempty"`
+	FrameID           string                  `json:"frame_id,omitempty"`
+	Role              string                  `json:"role"`
+	PlatformRole      string                  `json:"platform_role"`
+	CanonicalRole     string                  `json:"canonical_role"`
+	Name              string                  `json:"name"`
+	Description       string                  `json:"description,omitempty"`
+	Relations         map[string][]string     `json:"relations,omitempty"`
+	States            map[string]any          `json:"states"`
+	Actions           []string                `json:"actions"`
+	PlatformActions   []string                `json:"platform_actions,omitempty"`
+	Value             any                     `json:"value,omitempty"`
+	Bounds            *computerSemanticBounds `json:"bounds,omitempty"`
+	Subrole           string                  `json:"platform_subrole,omitempty"`
 }
 type computerSemanticBounds struct {
 	X      float64 `json:"x"`
@@ -296,6 +297,8 @@ func normalizeComputerObservation(value any) (map[string]any, error) {
 			for _, ref := range original.ChildRefs {
 				if included[ref] {
 					node.ChildRefs = append(node.ChildRefs, ref)
+				} else {
+					node.ChildrenTruncated = true
 				}
 			}
 			node.Relations = map[string][]string{}

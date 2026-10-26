@@ -17,7 +17,7 @@ func isComputerUseToolName(name string) bool {
 }
 
 func builtInComputerToolDefinitions() []ToolDef {
-	target := map[string]any{"target": map[string]any{"type": "string", "minLength": 1, "description": "Target ID; omit or use current for the selected page/window."}}
+	target := map[string]any{"target": map[string]any{"type": "string", "minLength": 1, "description": "Selected target ID; omit or use current. First pass candidate_ref to computer.select_target."}}
 	schema := func(properties map[string]any, required []string) json.RawMessage {
 		properties["description"] = map[string]any{"type": "string", "minLength": 1, "maxLength": 500, "description": "User-facing action and target; omit secrets."}
 		if !slices.Contains(required, "description") {
@@ -44,7 +44,7 @@ func builtInComputerToolDefinitions() []ToolDef {
 		defs = append(defs, ToolDef{Name: name, Description: description, InputSchema: input, Mutating: mutating, RequiresApproval: mutating, Visibility: ToolVisibilityStandard, Capabilities: capabilities, Source: "builtin", Namespace: "builtin.computer", Priority: 100, Presentation: aitools.MustPresentationSpec(name)})
 	}
 	add("computer.observe", "Read the semantic accessibility tree; root_ref selects a subtree. screenshot adds an image. Node refs expire after navigation, removal or user takeover.", map[string]any{"root_ref": map[string]any{"type": "string"}, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 1000}, "screenshot": map[string]any{"type": "boolean"}}, nil, false, []ToolCapabilityClass{ToolCapabilityReadonlyLocal})
-	add("computer.exec", "Run JavaScript in a persistent namespace scoped to this Turn and target; save variables on globalThis. APIs: await ui.observe(), ui.getByRole(role,{name?,exact?,root_ref?}).read/click/fill/press/scroll/waitFor(), ui.ref(ref), ui.screenshot(), ui.assert(), browser.navigate/back/reload/waitForDownload(), log(). Await UI operations sequentially. ui.observe({emit:false}) returns {observation:{nodes:[...]}} without emitting. Script observations are full; full:true forces a full emitted snapshot instead of diffs. Name matching is case-insensitive contains unless exact:true; role-only selectors require uniqueness in a complete tree. Check waitFor().state for timeout. Managed downloads include the saved path. Limits: 50 operations, 30 seconds, 64 MiB; no Node, filesystem, network or raw CDP.", map[string]any{"code": map[string]any{"type": "string", "minLength": 1, "maxLength": 65536}}, []string{"code", "description"}, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityMutation, ToolCapabilityOpenWorld})
+	add("computer.exec", computerScriptDocumentation, map[string]any{"code": map[string]any{"type": "string", "minLength": 1, "maxLength": 65536}}, []string{"code", "description"}, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityMutation, ToolCapabilityOpenWorld})
 	add("computer.screenshot", "Capture the selected target viewport.", map[string]any{}, nil, false, []ToolCapabilityClass{ToolCapabilityReadonlyLocal})
 	add("computer.click", "Click at CSS viewport coordinates on the selected target.", map[string]any{"x": map[string]any{"type": "number"}, "y": map[string]any{"type": "number"}}, []string{"x", "y"}, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityMutation})
 	add("computer.double_click", "Double click at CSS viewport coordinates on the selected target.", map[string]any{"x": map[string]any{"type": "number"}, "y": map[string]any{"type": "number"}}, []string{"x", "y"}, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityMutation})
@@ -56,5 +56,22 @@ func builtInComputerToolDefinitions() []ToolDef {
 	add("browser.navigate", "Navigate to an absolute browser URL, including file://, data:, about: and extension/internal pages.", map[string]any{"url": map[string]any{"type": "string", "minLength": 1, "maxLength": 4096}}, []string{"url"}, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityOpenWorld})
 	add("browser.back", "Navigate the selected browser target one history entry back.", map[string]any{}, nil, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityOpenWorld})
 	add("browser.reload", "Reload the selected browser target.", map[string]any{}, nil, true, []ToolCapabilityClass{ToolCapabilityInteraction, ToolCapabilityOpenWorld})
+	for i := range defs {
+		switch defs[i].Name {
+		case "computer.select_target":
+			defs[i].Description += " For a new unspecified web task select default_candidate_ref; reuse an existing tab only when the user refers to it or it belongs to this task. Pass the returned target_id to subsequent tools, never candidate_ref. Preserve the requested account/workspace scope."
+		case "computer.observe":
+			defs[i].Description += " truncated or children_truncated means omitted content, not empty rows or virtualization. Read those subtrees with root_ref before claiming completeness."
+		}
+	}
 	return defs
 }
+
+const computerScriptDocumentation = `Run JavaScript in a persistent Turn-and-target namespace; save variables on globalThis. Await UI operations sequentially. This is a bounded JSON API, not Playwright or browser JavaScript.
+APIs (all UI/browser calls are async):
+ui.observe({root_ref?:string,limit?:1..1000,emit?:boolean,full?:boolean,screenshot?:boolean}) returns {url,title,observation:{url,title,nodes,truncated}}. emit:false keeps the tree local; full:true forces a full emitted snapshot instead of a diff.
+ui.getByRole(role:string,{name?:string,exact?:boolean,root_ref?:string}) or ui.ref(ref:string) returns a locator with read(), click(), fill(text:string), press(key:string), scroll(delta_y:number,delta_x:number=0), waitFor({state:'visible'|'hidden'|'enabled',timeout_ms:0..30000}). read() returns {node}; inspect a row's subtree using ui.observe({root_ref:node.ref}). Use the observed canonical_role (search inputs are searchbox, not textbox). Regex names and string scroll directions are unsupported. Name matching is case-insensitive contains unless exact:true; locators require uniqueness across the complete scope even when observation is truncated. Check waitFor().state for timeout.
+ui.click(x:number,y:number), ui.drag(from_x,from_y,to_x,to_y,duration_ms=0), ui.key(key:string), ui.screenshot(), ui.assert(condition,message?), log(...values).
+browser.navigate(url:string), browser.back(), browser.reload(). Downloads: const {cursor}=await browser.downloadCursor(); await ui.getByRole('link',{name:'Export',exact:true}).click(); const result=await browser.waitForDownload({after:cursor,timeout_ms:10000}); check result.download.state==='completed'. Use {id:string} for an already identified download. Multiple new downloads are ambiguous; inspect returned downloads and choose the exact ID. Never identify a download by latest file or filename alone. Managed downloads include the saved path.
+There is no setTimeout, ui.waitFor, DOM, Node, filesystem, network or raw CDP. Use locator.waitFor for conditions. Limits: 50 operations, 30 seconds, 64 MiB, 64 KiB total logs. Keep observations local with emit:false and log only selected facts or compact computed summaries; logging a complete tree may exceed the limit. SCRIPT_REFERENCE_ERROR means unavailable name; SCRIPT_TYPE_ERROR means unsupported method/type; SCRIPT_ARGUMENT_ERROR means invalid documented arguments; SCRIPT_OUTPUT_LIMIT means too much logged output. completed_actions preserves effects before failure: observe first and never repeat completed or uncertain effects automatically. A failed script loses its namespace.
+Verify current URL, title and account/workspace before data collection and final conclusions. Stay within the user's requested scope. truncated and children_truncated indicate omitted observation content: narrow with root_ref; do not infer empty rows or virtualization. Report incomplete coverage explicitly.`

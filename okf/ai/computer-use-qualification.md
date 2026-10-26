@@ -5,7 +5,7 @@ description: Establish scope-specific evidence for decoded frames, real target i
 tags: [ai, computer-use, desktop, testing]
 timestamp: 2026-10-18T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-26"
 ---
 # Summary
 
@@ -29,6 +29,11 @@ Browser and desktop belong to one delivery scope.
 Cancellation and revocation before the click prevent dispatch; unknown click acknowledgements remain terminal.
 
 Foreground macOS and credentialed model qualification remain explicit runs; the integration gate cannot substitute for their evidence.
+
+## Real DeepSeek reliability acceptance
+`TestComputerReliabilityDeepSeek` is an explicit paid lane through the production Service, Floret, configured DeepSeek provider and catalog-installed Chromium. It resolves the local `deepseek-flash` model (catalog display: DeepSeek V4.1 Flash (1017)) and rejects substitution. Required environment: `REDEVEN_COMPUTER_RELIABILITY_E2E=1`, absolute `REDEVEN_COMPUTER_CONFIG_ROOT`, `REDEVEN_COMPUTER_EVIDENCE_DIR` and `REDEVEN_BROWSER_TEST_INSTALLATION`. Run `go test ./internal/ai -run '^TestComputerReliabilityDeepSeek$' -count=1 -v -timeout=22m` with `GOWORK=off`.
+
+Scenarios verify a 2,800+ node page and complete table totals, task-tab isolation and account restrictions, current-download identity/content despite an older same-named file, and one counted save followed by a diagnostic failure with no replay. Reports retain provider wire IDs, tool error counts, canonical histories, final answers and fixture outcomes. Configuration hashes must stay unchanged. This scope does not certify production accounts, native desktop UI or a universal model success rate.
 
 ## Existing product fixtures
 Desktop qualification observes the preload workspace stream; Linux Webtop uses CDP's passive HTTP workspace stream copy. A missing native or browser live-frame match fails that scope.

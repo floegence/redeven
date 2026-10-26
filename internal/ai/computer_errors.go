@@ -89,6 +89,10 @@ func computerBrowserFailure(call TargetToolCall, private bool, code string, payl
 	if known && payload != nil {
 		executed, _ := payload["action_executed"].(bool)
 		result.Result = map[string]any{"action_executed": executed, "needs_observation": executed}
+		if code == "ELEMENT_NOT_ACTIONABLE" && payload["preparation_executed"] == true {
+			result.Result.(map[string]any)["preparation_executed"] = true
+			result.Result.(map[string]any)["needs_observation"] = true
+		}
 		if code == "TARGET_PERMISSION_REQUIRED" {
 			if payload["permission_reason"] == "extension_file_access" {
 				var failure *targetToolPolicyError
@@ -133,7 +137,7 @@ func computerTargetFailure(call TargetToolCall, wireCode string) error {
 		failure.code, failure.repairAction = "target_observation_unavailable", "observe_target"
 	case "FRAME_UNAVAILABLE":
 		failure.code, failure.repairAction = "frame_unavailable", "observe_target"
-	case "STALE_REFERENCE", "AMBIGUOUS_ELEMENT", "ELEMENT_NOT_FOUND", "CONDITION_TIMEOUT", "TARGET_CAPABILITY_UNAVAILABLE":
+	case "ELEMENT_NOT_ACTIONABLE", "AMBIGUOUS_DOWNLOAD", "STALE_REFERENCE", "AMBIGUOUS_ELEMENT", "ELEMENT_NOT_FOUND", "CONDITION_TIMEOUT", "TARGET_CAPABILITY_UNAVAILABLE":
 		failure.code = strings.ToLower(strings.TrimSpace(wireCode))
 	case "INVALID_REQUEST", "INVALID_ARGUMENT":
 		failure.code = "invalid_computer_arguments"
@@ -145,7 +149,7 @@ func computerTargetFailure(call TargetToolCall, wireCode string) error {
 
 func computerCallMutates(call TargetToolCall) bool {
 	switch call.ToolName {
-	case "computer.screenshot", "computer.observe", "computer.wait", "computer.targets", "browser.wait_for_download":
+	case "computer.screenshot", "computer.observe", "computer.wait", "computer.targets", "browser.wait_for_download", "browser.download_cursor":
 		return false
 	case "computer.action":
 		var operation map[string]any
@@ -196,7 +200,7 @@ func computerKnownRejection(err error) bool {
 		return false
 	}
 	switch failure.code {
-	case "target_in_use", "target_observation_unavailable", "stale_reference", "ambiguous_element", "element_not_found", "condition_timeout", "target_capability_unavailable", "invalid_computer_arguments", "target_not_allowed", "interaction_takeover_required", "target_permission_required":
+	case "element_not_actionable", "ambiguous_download", "target_in_use", "target_observation_unavailable", "stale_reference", "ambiguous_element", "element_not_found", "condition_timeout", "target_capability_unavailable", "invalid_computer_arguments", "target_not_allowed", "interaction_takeover_required", "target_permission_required":
 		return true
 	default:
 		return false

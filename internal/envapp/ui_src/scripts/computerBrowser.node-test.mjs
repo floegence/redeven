@@ -295,12 +295,14 @@ test('nested cross-site frames use semantic actions and downloads survive helper
     assert.equal((await call('computer.action', { action: 'read', selector })).node.value, 'Across processes');
     await call('computer.action', { action: 'click', selector: { role: 'button', name: 'Apply nested' } });
     assert.equal((await call('computer.action', { action: 'wait', selector: { role: 'button', name: 'Applied' }, timeout_ms: 2000 })).state, 'visible');
+    const firstCursor = (await call('browser.download_cursor')).cursor;
     await call('computer.action', { action: 'click', selector: { role: 'link', name: 'Export' } });
-    const first = (await call('browser.wait_for_download', { timeout_ms: 5000 })).download;
+    const first = (await call('browser.wait_for_download', { after: firstCursor, timeout_ms: 5000 })).download;
     assert.equal(first.state, 'completed'); assert.equal(first.filename, 'results.csv');
     assert.equal(await readFile(first.path, 'utf8'), 'name,count\nfixture,42\n');
+    const secondCursor = (await call('browser.download_cursor')).cursor;
     assert.equal((await call('browser.navigate', { url: origins[0] + '/export' })).download_started, true);
-    const second = (await call('browser.wait_for_download', { timeout_ms: 5000 })).download;
+    const second = (await call('browser.wait_for_download', { after: secondCursor, timeout_ms: 5000 })).download;
     assert.equal(second.state, 'completed'); assert.notEqual(first.id, second.id);
     const timeout = await call('browser.wait_for_download', { id: 'missing', timeout_ms: 5 });
     assert.equal(timeout.state, 'timeout');

@@ -119,8 +119,13 @@ func TestManagedBrowserProfilesShareOnlyTheirOwnLogin(t *testing.T) {
 	if !strings.Contains(observe(target.ID), "Signed in") {
 		t.Fatal("disconnect affected another tab")
 	}
+	cursorResult, err := runtime.ExecuteTargetTool(ctx, TargetToolCall{TargetID: target.ID, ToolName: "browser.download_cursor", Arguments: json.RawMessage(`{}`), allowedOrigins: []string{server.URL}, scriptOperation: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	downloadArguments, _ := json.Marshal(map[string]any{"after": cursorResult.Result.(map[string]any)["cursor"], "timeout_ms": 5000})
 	navigate(target.ID, server.URL+"/export")
-	result, err := runtime.ExecuteTargetTool(ctx, TargetToolCall{TargetID: target.ID, ToolName: "browser.wait_for_download", Arguments: json.RawMessage(`{"timeout_ms":5000}`), allowedOrigins: []string{server.URL}, scriptOperation: true})
+	result, err := runtime.ExecuteTargetTool(ctx, TargetToolCall{TargetID: target.ID, ToolName: "browser.wait_for_download", Arguments: downloadArguments, allowedOrigins: []string{server.URL}, scriptOperation: true})
 	if err != nil {
 		t.Fatal(err)
 	}

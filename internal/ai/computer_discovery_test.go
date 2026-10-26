@@ -39,6 +39,19 @@ func TestComputerDiscoveryToolsDoNotRequireAPreselectedTarget(t *testing.T) {
 	}
 }
 
+func TestComputerCandidateIsNotAnExecutableTarget(t *testing.T) {
+	host, executor, store, _ := computerBindingFixture(t)
+	_, err := host.ResolveTargetForThread(t.Context(), "thread-first", "candidate-discovered")
+	var failure *targetToolPolicyError
+	if !errors.As(err, &failure) || failure.code != "invalid_computer_arguments" || !strings.Contains(err.Error(), "computer.select_target") {
+		t.Fatalf("candidate misuse lost its repair guidance: %v", err)
+	}
+	bound, err := store.GetComputerTarget(t.Context(), "thread-first")
+	if err != nil || bound != "" || len(executor.calls) != 0 {
+		t.Fatal("candidate misuse changed target state")
+	}
+}
+
 func TestComputerCandidateSelectionPreservesBindingWhenBusyOrStale(t *testing.T) {
 	host, executor, store, _ := computerBindingFixture(t)
 	if err := store.SetComputerTarget(t.Context(), "thread-first", "browser-main"); err != nil {

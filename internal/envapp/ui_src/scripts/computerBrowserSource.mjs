@@ -78,9 +78,7 @@ async function createSourceOwner(source, disposeSource, captureDownloads) {
     source.reportDownload(download);
     const changed = () => {
       const state = download.state;
-      if (controller.page.downloads.size >= 32 && !controller.page.downloads.has(state.id)) controller.page.downloads.delete(controller.page.downloads.keys().next().value);
-      controller.page.downloads.set(state.id, { id: state.id, filename: state.filename, state: state.status === 'receiving' ? 'in_progress' : state.status === 'complete' ? 'completed' : state.status, ...(state.size === undefined ? {} : { size_bytes: state.size }) });
-      controller.page.changed();
+      controller.page.recordDownload({ id: state.id, filename: state.filename, state: state.status === 'receiving' ? 'in_progress' : state.status === 'complete' ? 'completed' : state.status, ...(state.size === undefined ? {} : { size_bytes: state.size }) });
     };
     download.subscribe(changed); changed();
   }) : undefined;

@@ -3107,6 +3107,15 @@ func targetToolResultPayload(result TargetToolResult, requestedTargetID string, 
 		if len(target) == 1 {
 			if payload, ok := payloadOut.(map[string]any); ok {
 				payload["target_kind"] = target[0].Kind
+				if strings.HasPrefix(target[0].Kind, "browser.") && (result.Safety == nil || result.Safety.SafeToSendToModel) {
+					identity := payload
+					if observation, ok := payload["observation"].(map[string]any); ok {
+						identity = observation
+					}
+					if title := strings.TrimSpace(anyToString(identity["title"])); title != "" {
+						payload["target_name"] = title
+					}
+				}
 			}
 		}
 	}()
@@ -3246,7 +3255,14 @@ func (e *targetToolPolicyError) Error() string {
 	case "frame_unavailable":
 		return "The screenshot is unavailable."
 	case "invalid_computer_arguments":
+		if e.repairAction == "select_computer_candidate" {
+			return "candidate_ref is a discovery reference. Pass it to computer.select_target, then use the returned target_id or current."
+		}
 		return "The computer action has invalid arguments."
+	case "element_not_actionable":
+		return "The control is hidden, disabled, moving or covered. Inspect its current state before trying again."
+	case "ambiguous_download":
+		return "Multiple downloads started after the cursor. Inspect their exact IDs before choosing a download."
 	case "target_action_failed":
 		return "The computer action failed."
 	case "interaction_takeover_required":
