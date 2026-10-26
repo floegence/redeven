@@ -75,6 +75,25 @@ function createController() {
 }
 
 describe('Flower scroll tail controller', () => {
+  it('reports directional input at an immovable edge without treating layout as input', () => {
+    const raf = createRafHarness();
+    const intents: string[] = [];
+    const controller = createFlowerScrollTailController({ reducedMotionPreferred: () => true,
+      onScrollIntent: direction => intents.push(direction),
+      requestAnimationFrame: raf.requestAnimationFrame, cancelAnimationFrame: raf.cancelAnimationFrame });
+    const metrics = createViewport(80);
+    controller.bind(metrics.viewport);
+    controller.onWheel({ target: metrics.viewport, deltaY: -100 } as unknown as WheelEvent);
+    expect(intents).toEqual(['before']);
+    metrics.setScrollHeight(700);
+    controller.measureAfterLayout();
+    raf.flushAll();
+    controller.onScroll();
+    expect(intents).toEqual(['before']);
+    controller.onWheel({ target: metrics.viewport, deltaY: 100 } as unknown as WheelEvent);
+    expect(intents).toEqual(['before', 'after']);
+    controller.dispose();
+  });
   it('does not follow the end of a history window that has later content', () => {
     const raf = createRafHarness();
     let hasAfter = true;

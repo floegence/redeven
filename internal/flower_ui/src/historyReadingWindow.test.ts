@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { historyReadingKey, historyReadingRequest, HISTORY_READING_ITEMS, HISTORY_PAGE_ITEMS, historyReadingSelection, historyReadingGaps } from './historyReadingWindow';
+import { historyReadingKey, historyReadingRequest, HISTORY_READING_ITEMS, HISTORY_READING_BYTES, HISTORY_PAGE_ITEMS, historyReadingSelection, historyReadingGaps, historyGapRequest, historyReadingItemBytes } from './historyReadingWindow';
 
 describe('continuous reading interest', () => {
   const window = { first_item_id: 'first', last_item_id: 'last', has_before: true, has_after: true };
@@ -33,6 +33,22 @@ describe('continuous reading interest', () => {
 });
 
 describe('finite adjacent history selection', () => {
+  it('bounds large metadata while preserving visible islands and making progress', () => {
+    const ids = Array.from({ length: 190 }, (_, i) => String(i + 1));
+    const bytes = new Map(ids.map(id => [id, 8192]));
+    const ordinals = new Map(ids.map(id => [id, Number(id)]));
+    const selection = historyReadingSelection(ids.slice(40), ids.slice(0, 40), 'before', ['120', '190'], undefined, ordinals, bytes)!;
+    expect(selection).toContain('1');
+    expect(selection).toContain('120');
+    expect(selection).toContain('190');
+    expect(selection.length).toBeLessThan(HISTORY_READING_ITEMS);
+    expect(selection.reduce((sum, id) => sum + bytes.get(id)!, 0)).toBeLessThanOrEqual(HISTORY_READING_BYTES);
+    expect(historyReadingSelection(['1'], ['2'], 'after', ['1'], undefined, ordinals, new Map([['1', HISTORY_READING_BYTES], ['2', 1]]))).toBeUndefined();
+  });
+  it('accounts for canonical JSON escaping and UTF-8 metadata', () => {
+    const item = { id: 'item', ordinal: 1, kind: 'assistant' as const, text: '<>&中🌸' };
+    expect(historyReadingItemBytes(item)).toBeGreaterThan(new TextEncoder().encode(JSON.stringify(item)).length + 14);
+  });
   it('adds adjacent membership and evicts only the opposite unprotected edge', () => {
     expect(historyReadingSelection(['3', '4', '5'], ['1', '2'], 'before', ['3'], 4)).toEqual(['1', '2', '3', '4']);
     expect(historyReadingSelection(['1', '2', '3'], ['4', '5'], 'after', ['3'], 4)).toEqual(['2', '3', '4', '5']);
@@ -57,6 +73,31 @@ describe('finite adjacent history selection', () => {
 });
 
 describe('finite history gap geometry', () => {
+  function viewportGap(top: number, bottom: number, first: number, last: number): HTMLElement {
+    return { getBoundingClientRect: () => ({ top: 0, bottom: 700 }), querySelectorAll: () => [{
+      getBoundingClientRect: () => ({ top, bottom, height: bottom - top }),
+      dataset: { flowerHistoryGapBefore: String(first - 1), flowerHistoryGapAfter: String(last), flowerHistoryGapFirst: String(first), flowerHistoryGapLast: String(last) },
+    }] } as unknown as HTMLElement;
+  }
+  it('does not let a small gap refill evict unrelated retained history', () => {
+    expect(historyGapRequest(viewportGap(750, 800, 2707, 2710), 'after'))
+      .toEqual({ anchor_id: '2706', direction: 'after', limit: 3 });
+    expect(historyGapRequest(viewportGap(-200, -150, 2707, 2710), 'before'))
+      .toEqual({ anchor_id: '2710', direction: 'before', limit: 3 });
+    expect(historyGapRequest(viewportGap(750, 800, 2705, 2706), 'after'))
+      .toEqual({ anchor_id: '2704', direction: 'after', limit: 1 });
+  });
+  it('does not refill gaps behind the reading edge and alternate bounded windows', () => {
+    // Collapsed tool groups can put both retained islands in one viewport.
+    // Refilling either side here can evict the other within the byte budget.
+    expect(historyGapRequest(viewportGap(150, 235, 2417, 2421), 'before')).toBeUndefined();
+    expect(historyGapRequest(viewportGap(370, 402, 2517, 2520), 'before')).toBeUndefined();
+    expect(historyGapRequest(viewportGap(150, 235, 2417, 2421), 'after')).toBeUndefined();
+    expect(historyGapRequest(viewportGap(-10, 235, 2417, 2421), 'before'))
+      .toEqual({ anchor_id: '2421', direction: 'before', limit: 4 });
+    expect(historyGapRequest(viewportGap(600, 750, 2517, 2520), 'after'))
+      .toEqual({ anchor_id: '2516', direction: 'after', limit: 3 });
+  });
   const members = Array.from({ length: 20 }, (_, i) => ({ id: String(i + 1), ordinal: i + 1 }));
   const heights = new Map(members.map(item => [item.id, item.ordinal * 10]));
   it('records only evicted intervals between protected islands', () => {

@@ -29,12 +29,12 @@ function pageBounds(items: FlowerRuntimeCurrentItem[], selected: FlowerRuntimeCu
     has_before: selected.length > 0 && selected[0].id !== items[0].id,
     has_after: selected.length > 0 && selected.at(-1)!.id !== items.at(-1)!.id };
 }
-async function mountContinuous(count = 330, _varied = false) {
+async function mountContinuous(count = 330, _varied = false, collapsed = false) {
   await page.viewport(1280, 900);
   const seed = thread({ thread_id: 'continuous-history', title: 'Continuous reading', messages: [] });
   const items: FlowerRuntimeCurrentItem[] = Array.from({ length: count }, (_, index) => ({
     id: 'entry-' + index, kind: 'assistant', turn_id: 'turn', run_id: 'run', ordinal: index + 1,
-    text: 'Message ' + index + '\n\nA readable paragraph for the continuous history viewport.', live: true,
+    text: collapsed ? 'Message ' + index : 'Message ' + index + '\n\nA readable paragraph for the continuous history viewport.', live: true,
   }));
   let version = 7;
   const events: FlowerLiveStreamEnvelope[] = [];
@@ -76,6 +76,11 @@ async function mountContinuous(count = 330, _varied = false) {
     },
   }, { focusThreadRequest: { request_id: 'open-continuous', thread_id: seed.thread_id } });
   root.style.height = '780px';
+  if (collapsed) {
+    const style = document.createElement('style');
+    style.textContent = '[data-flower-row-message-id]:not([data-flower-row-message-id="entry-' + (count - 1) + '"]) { display: none !important; }';
+    root.append(style);
+  }
   await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="entry-' + (count - 1) + '"]')));
   await new Promise(resolve => setTimeout(resolve, 300));
   const viewport = root.querySelector<HTMLDivElement>('.flower-chat-transcript')!;
@@ -150,6 +155,25 @@ async function mountChild(count = 330, _varied = false) {
 }
 
 describe('continuous history navigation', () => {
+  it('bounds collapsed history reads to scroll demand, including input at an immovable edge', async () => {
+    const { root, history, viewport, scroll } = await mountContinuous(600, false, true);
+    scroll(0, -100);
+    await waitFor(() => history.mock.calls.length >= 3);
+    await new Promise(resolve => setTimeout(resolve, 350));
+    const firstCalls = history.mock.calls.length;
+    expect(firstCalls).toBeLessThanOrEqual(5);
+    await new Promise(resolve => setTimeout(resolve, 350));
+    expect(history.mock.calls.length).toBe(firstCalls);
+    const first = history.mock.calls.at(-1)![1].item_ids![0];
+    viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true }));
+    await waitFor(() => history.mock.calls.length > firstCalls);
+    await new Promise(resolve => setTimeout(resolve, 350));
+    expect(history.mock.calls.at(-1)![1].item_ids![0]).not.toBe(first);
+    const settled = history.mock.calls.length;
+    await new Promise(resolve => setTimeout(resolve, 350));
+    expect(history.mock.calls.length).toBe(settled);
+    expect(root.querySelector('[role="alert"]')).toBeNull();
+  });
   it('retains the currently visible tail when the reader moves during interest installation', async () => {
     const { root, history, viewport, scroll, afterNextSnapshot } = await mountContinuous();
     const tail = root.querySelector<HTMLElement>('[data-flower-message-id="entry-329"]')!;

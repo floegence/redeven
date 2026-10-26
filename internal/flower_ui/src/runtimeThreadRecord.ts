@@ -101,6 +101,7 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
     threadID,
     get version() { return acceptedVersion; },
     item(id: string) { return items.get(id)?.item; },
+    previewItem(id: string) { const record = items.get(id); return record?.preview ?? record?.item; },
     itemIDs(): readonly string[] { return [...order]; },
     retainedItem(item: FlowerRuntimeCurrentItem) {
       return retainBody(items.get(item.id), item);

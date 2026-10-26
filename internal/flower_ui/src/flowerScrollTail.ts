@@ -37,6 +37,7 @@ export type FlowerScrollTailControllerOptions = Readonly<{
   requestAnimationFrame: (callback: FrameRequestCallback) => number;
   cancelAnimationFrame: (handle: number) => void;
   onUserInteraction?: () => void;
+  onScrollIntent?: (direction: 'before' | 'after') => void;
   onLayout?: () => void;
 }>;
 
@@ -185,8 +186,9 @@ export function createFlowerScrollTailController(
   };
   const startUserScroll = (direction: number) => {
     if (!node) return;
+    const notifyIntent = () => { if (direction) options.onScrollIntent?.(direction < 0 ? 'before' : 'after'); };
     // Input cannot leave the tail while all content fits in the viewport.
-    if (followingLatest() && node.scrollHeight <= node.clientHeight) return;
+    if (followingLatest() && node.scrollHeight <= node.clientHeight) { notifyIntent(); return; }
     clearAnchor();
     stopFollowing();
     options.onUserInteraction?.();
@@ -203,6 +205,7 @@ export function createFlowerScrollTailController(
     });
     if (direction > 0 && node.scrollHeight - node.clientHeight - node.scrollTop <= 1
       && (options.canFollowLatest?.() ?? true)) startFollowing();
+    notifyIntent();
   };
   const stabilizeAnchor = () => {
     if (!anchor || !node) return;
@@ -299,6 +302,7 @@ export function createFlowerScrollTailController(
       input.moved ||= moved;
       if (moved) {
         direction = delta < 0 ? 'before' : 'after';
+        options.onScrollIntent?.(direction);
         const current = gesture();
         if (current) current.scrolled = true;
         if (delta < 0) stopFollowing();
