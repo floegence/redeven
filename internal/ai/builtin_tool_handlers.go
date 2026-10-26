@@ -58,7 +58,10 @@ func (h *builtInToolHandler) Execute(ctx context.Context, call ToolCall) (result
 	if h == nil || h.r == nil {
 		return ToolResult{}, fmt.Errorf("tool handler unavailable")
 	}
-	releaseFiles := h.r.taskFiles.acquire(h.r.threadID)
+	releaseFiles, err := h.r.taskFiles.acquire(ctx, h.r.threadID)
+	if err != nil {
+		return ToolResult{}, err
+	}
 	defer releaseFiles()
 	toolName := strings.TrimSpace(call.Name)
 	if toolName == "" {

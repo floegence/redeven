@@ -438,7 +438,10 @@ func (r *run) beginExecutionAdmission(ctx context.Context) (context.Context, fun
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
 	}
-	releaseFiles := r.taskFiles.acquire(r.threadID)
+	releaseFiles, err := r.taskFiles.acquire(ctx, r.threadID)
+	if err != nil {
+		return nil, nil, err
+	}
 	r.muExecution.Lock()
 	if r.executionClosed {
 		releaseFiles()

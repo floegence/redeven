@@ -21,42 +21,100 @@ type taskFileSpace struct{ Root, Scratch, Staging string }
 type taskFileManager struct {
 	mu      sync.Mutex
 	active  map[string]int
+	frozen  map[string]chan struct{}
 	changed chan struct{}
 }
 
-func (m *taskFileManager) acquire(id string) func() {
+// acquire orders filesystem work against fork preparation without blocking other threads.
+func (m *taskFileManager) acquire(ctx context.Context, id string) (func(), error) {
 	if m == nil {
-		return func() {}
+		return func() {}, ctx.Err()
 	}
-	m.mu.Lock()
-	if m.active == nil {
-		m.active = map[string]int{}
-	}
-	if m.changed == nil {
-		m.changed = make(chan struct{})
-	}
-	m.active[id]++
-	m.mu.Unlock()
-	var once sync.Once
-	return func() {
-		once.Do(func() {
-			m.mu.Lock()
-			m.active[id]--
-			if m.active[id] == 0 {
-				delete(m.active, id)
-			}
-			close(m.changed)
-			m.changed = make(chan struct{})
+	for {
+		m.mu.Lock()
+		if err := ctx.Err(); err != nil {
 			m.mu.Unlock()
-		})
+			return nil, err
+		}
+		if done := m.frozen[id]; done != nil {
+			m.mu.Unlock()
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-done:
+				continue
+			}
+		}
+		if m.active == nil {
+			m.active = map[string]int{}
+		}
+		if m.changed == nil {
+			m.changed = make(chan struct{})
+		}
+		m.active[id]++
+		m.mu.Unlock()
+		var once sync.Once
+		return func() {
+			once.Do(func() {
+				m.mu.Lock()
+				m.active[id]--
+				if m.active[id] == 0 {
+					delete(m.active, id)
+				}
+				close(m.changed)
+				m.changed = make(chan struct{})
+				m.mu.Unlock()
+			})
+		}, nil
+	}
+}
+
+// freeze waits for admitted filesystem effects, then excludes new effects and cleanup.
+func (m *taskFileManager) freeze(ctx context.Context, id string) (func(), error) {
+	for {
+		m.mu.Lock()
+		if err := ctx.Err(); err != nil {
+			m.mu.Unlock()
+			return nil, err
+		}
+		if m.changed == nil {
+			m.changed = make(chan struct{})
+		}
+		if m.active[id] == 0 && m.frozen[id] == nil {
+			if m.frozen == nil {
+				m.frozen = map[string]chan struct{}{}
+			}
+			done := make(chan struct{})
+			m.frozen[id] = done
+			m.mu.Unlock()
+			var once sync.Once
+			return func() {
+				once.Do(func() {
+					m.mu.Lock()
+					delete(m.frozen, id)
+					close(done)
+					close(m.changed)
+					m.changed = make(chan struct{})
+					m.mu.Unlock()
+				})
+			}, nil
+		}
+		changed := m.changed
+		m.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-changed:
+		}
 	}
 }
 func (m *taskFileManager) waitIdle(ctx context.Context, id string) error {
 	for {
 		m.mu.Lock()
 		count, changed := m.active[id], m.changed
+		frozen := m.frozen[id] != nil
 		m.mu.Unlock()
-		if count == 0 {
+		if count == 0 && !frozen {
 			return nil
 		}
 		select {
@@ -127,7 +185,13 @@ func prepareTaskFiles(state, thread string) (taskFileSpace, error) {
 	return space, nil
 }
 func (r *run) prepareTaskFiles() (taskFileSpace, error) {
-	release := r.taskFiles.acquire(r.threadID)
+	return r.prepareTaskFilesContext(context.Background())
+}
+func (r *run) prepareTaskFilesContext(ctx context.Context) (taskFileSpace, error) {
+	release, err := r.taskFiles.acquire(ctx, r.threadID)
+	if err != nil {
+		return taskFileSpace{}, err
+	}
 	defer release()
 	return prepareTaskFiles(r.stateDir, r.threadID)
 }

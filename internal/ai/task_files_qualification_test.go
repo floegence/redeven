@@ -173,6 +173,44 @@ func TestE2E_FlowerTaskFilesDeepSeek(t *testing.T) {
 	if err != nil || len(forkFiles.Files) != 3 || forkFiles.WorkingPath == space.Root {
 		t.Fatalf("fork files %+v %v", forkFiles, err)
 	}
+	childSpace, err := taskFiles(svc.stateDir, fork.ThreadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeParent := map[string][32]byte{}
+	if err = filepath.WalkDir(space.Root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if !entry.Type().IsRegular() {
+			return nil
+		}
+		bytes, e := os.ReadFile(path)
+		if e != nil {
+			return e
+		}
+		beforeParent[path] = sha256.Sum256(bytes)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	send("fork-followup", fork.ThreadID, "Continue from the saved calculation. Use the existing CSV and helper to create fork-summary.txt in the project containing total 27. Do not recreate the input data or alter the earlier deliverables. Present the new file and its link.")
+	if bytes, e := os.ReadFile(filepath.Join(work, "fork-summary.txt")); e != nil || !strings.Contains(string(bytes), "27") {
+		t.Fatal("fork failed to continue from copied work", e)
+	}
+	for path, want := range beforeParent {
+		bytes, e := os.ReadFile(path)
+		if e != nil || sha256.Sum256(bytes) != want {
+			t.Fatal("fork changed source working files", e)
+		}
+	}
+	if _, e := os.Stat(childSpace.Scratch); e != nil {
+		t.Fatal("fork scratch absent", e)
+	}
+	nested, err := svc.ForkThreadWithOptions(ctx, meta, fork.ThreadID, ForkThreadRequest{ClientRequestID: "files-nested-fork", Title: "Nested files fork"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err = svc.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -216,10 +254,27 @@ func TestE2E_FlowerTaskFilesDeepSeek(t *testing.T) {
 		t.Fatal("thread deletion deleted final file", err)
 	}
 	forkFiles, err = svc.GetTaskFiles(ctx, meta, fork.ThreadID, "")
-	if err != nil || len(forkFiles.Files) != 3 {
+	if err != nil || len(forkFiles.Files) != 4 {
 		t.Fatal("fork lost canonical files", err)
 	}
-	report["assertions"] = []string{"project contains final files only", "explicit docs destination survives scratch command cwd", "scratch helper retained across turns", "final file.present provenance", "fork isolated scratch and retained history", "restart retained delivery references", "user changes visible", "scratch cleanup preserves deliverables", "thread deletion preserves deliverables"}
+	send("fork-after-delete", fork.ThreadID, "Continue using your saved calculation files after the restart. Create fork-after-restart.txt in the project with the same total 27. Reuse the existing input file, keep other deliverables unchanged, and present the new result.")
+	if bytes, e := os.ReadFile(filepath.Join(work, "fork-after-restart.txt")); e != nil || !strings.Contains(string(bytes), "27") {
+		t.Fatal("fork failed after parent deletion/restart", e)
+	}
+	if err = svc.CleanTaskFiles(ctx, meta, fork.ThreadID); err != nil {
+		t.Fatal(err)
+	}
+	send("nested-after-clean", nested.ThreadID, "Reuse the inherited calculation files to create nested-summary.txt in the project containing total 27. Do not recreate the input data. Keep existing final files unchanged and present the new file.")
+	if bytes, e := os.ReadFile(filepath.Join(work, "nested-summary.txt")); e != nil || !strings.Contains(string(bytes), "27") {
+		t.Fatal("nested fork failed after ancestor cleanup", e)
+	}
+	nestedFiles, e := svc.GetTaskFiles(ctx, meta, nested.ThreadID, "")
+	if e != nil || len(nestedFiles.Files) != 5 {
+		t.Fatal("nested delivery history is not pinned to fork", e)
+	}
+	report["nested_final_files"] = nestedFiles
+
+	report["assertions"] = []string{"project contains final files only", "explicit docs destination survives scratch command cwd", "scratch helper retained across turns", "final file.present provenance", "fork isolated scratch and retained history", "restart retained delivery references", "user changes visible", "scratch cleanup preserves deliverables", "thread deletion preserves deliverables", "model continues from inherited files after fork", "fork writes preserve source files", "model continues after restart and parent deletion", "nested fork continues after ancestor cleanup"}
 	report["final_files"] = forkFiles
 	for _, request := range recorder.snapshot() {
 		if request.Model != "" && !strings.Contains(request.Model, "deepseek-flash") {

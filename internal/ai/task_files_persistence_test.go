@@ -79,6 +79,13 @@ func TestTaskFilesCanonicalDeliverySurvivesForkAndRestart(t *testing.T) {
 		}
 	}
 	check(thread.ThreadID, "available")
+	sourceFiles, err := prepareTaskFiles(svc.stateDir, thread.ThreadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(sourceFiles.Scratch, "retained.csv"), []byte("27"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	fork, err := svc.ForkThreadWithOptions(ctx, meta, thread.ThreadID, ForkThreadRequest{ClientRequestID: "fork", Title: "Fork"})
 	if err != nil {
 		t.Fatal(err)
@@ -103,6 +110,10 @@ func TestTaskFilesCanonicalDeliverySurvivesForkAndRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	check(fork.ThreadID, "changed")
+	childFiles, _ := taskFiles(svc.stateDir, fork.ThreadID)
+	if bytes, e := os.ReadFile(filepath.Join(childFiles.Scratch, "retained.csv")); e != nil || string(bytes) != "27" {
+		t.Fatalf("fork lost working files after restart/delete: %q %v", bytes, e)
+	}
 	if err = os.Remove(path); err != nil {
 		t.Fatal(err)
 	}

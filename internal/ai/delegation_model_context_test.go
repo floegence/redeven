@@ -219,11 +219,12 @@ func TestFlowerProviderContextIgnoresChildInventoryChanges(t *testing.T) {
 
 func TestFlowerProviderContextRefreshesThreadScopeAfterFork(t *testing.T) {
 	root := t.TempDir()
+	state := t.TempDir()
 	children := &delegationContextThreadService{}
 	now := func() time.Time { return time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC) }
 	gateway := delegationContextGateway(delegationContextDone(), delegationContextDone(), delegationContextDone())
 	service := delegationContextThread(t, gateway, func(ctx context.Context, request flruntime.ToolSurfaceRequest) (flruntime.ToolSurface, error) {
-		r := newRun(runOptions{WorkingDir: root, AgentHomeDir: root, ThreadID: request.ThreadID.String()})
+		r := newRun(runOptions{StateDir: state, WorkingDir: root, AgentHomeDir: root, ThreadID: request.ThreadID.String()})
 		r.ensureSkillManager().userHome = root
 		r.subagentRuntime = newServiceFloretSubagentRuntime(&Service{threadRuntime: children}, r)
 		snapshot, err := r.collectModelContextSnapshot(ctx, FlowerPermissionFullAccess, now)
@@ -238,6 +239,9 @@ func TestFlowerProviderContextRefreshesThreadScopeAfterFork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err = inheritForkTaskFiles(t.Context(), state, source.ThreadID.String(), fork.ThreadID.String(), "context-fork", ""); err != nil {
+		t.Fatal(err)
+	}
 	delegationContextSend(t, service, fork.ThreadID, "after-fork", nil)
 	delegationContextSend(t, service, fork.ThreadID, "same-scope", nil)
 	requests := gateway.Requests()
@@ -249,6 +253,10 @@ func TestFlowerProviderContextRefreshesThreadScopeAfterFork(t *testing.T) {
 		updates := delegationContextUpdates(request)
 		if len(updates) != 2 || len(original) != 1 || updates[0] != original[0] || !strings.Contains(updates[1], "Current thread ID: "+fork.ThreadID.String()) {
 			t.Fatalf("fork lost exact scope or repeated its update: %v", updates)
+		}
+		space, _ := taskFiles(state, fork.ThreadID.String())
+		if !strings.Contains(updates[1], space.Scratch) || !strings.Contains(updates[1], "Fork working files:") {
+			t.Fatal("fork current paths absent", updates[1])
 		}
 		var delta struct {
 			Sections []flruntime.ModelContextSection

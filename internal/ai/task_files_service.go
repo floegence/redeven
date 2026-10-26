@@ -171,7 +171,7 @@ func (s *Service) GetTaskFiles(ctx context.Context, meta *session.Meta, threadID
 // Read directory entries in fixed batches; a huge single directory must not
 // allocate or enumerate its entire contents before the visible limit applies.
 func scanTaskWorkingFiles(ctx context.Context, root *os.Root, absolute string, out *FlowerTaskFiles) error {
-	pending := []string{"."}
+	pending := []string{"scratch", "staging"}
 	visited := 0
 	for len(pending) > 0 {
 		name := pending[len(pending)-1]
@@ -239,9 +239,12 @@ func (s *Service) taskFilesBusy(endpoint, thread string) bool {
 	return s.taskFilesBusyLocked(endpoint, thread)
 }
 func (s *Service) taskFilesBusyLocked(endpoint, thread string) bool {
-	if s.taskFiles.active[thread] > 0 {
+	if s.taskFiles.active[thread] > 0 || s.taskFiles.frozen[thread] != nil {
 		return true
 	}
+	return s.taskFilesProcessesBusy(endpoint, thread)
+}
+func (s *Service) taskFilesProcessesBusy(endpoint, thread string) bool {
 	manager := s.terminalProcessManager()
 	if manager == nil {
 		return false
@@ -313,7 +316,10 @@ func (s *Service) OpenTaskFile(ctx context.Context, meta *session.Meta, threadID
 		return nil, filesystemscope.ErrPathOutsideScope
 	}
 	if working {
-		release := s.taskFiles.acquire(threadID)
+		release, err := s.taskFiles.acquire(ctx, threadID)
+		if err != nil {
+			return nil, err
+		}
 		defer release()
 		space, err := prepareTaskFiles(s.stateDir, threadID)
 		if err != nil {

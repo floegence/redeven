@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -76,10 +77,21 @@ func TestFlowerAnswerForkPinsHistoricalCompletedAnswer(t *testing.T) {
 	if userAnchor == "" {
 		t.Fatal("missing middle user item for invalid-anchor check")
 	}
+	space, err := prepareTaskFiles(svc.stateDir, source.ThreadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(space.Scratch, "current.csv"), []byte("current files, not historical"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	request := ForkThreadRequest{ClientRequestID: "answer-fork", Title: "Answers · Fork", SourceItemID: anchor}
 	fork, err := svc.ForkThreadWithOptions(t.Context(), meta, source.ThreadID, request)
 	if err != nil {
 		t.Fatal(err)
+	}
+	childSpace, _ := taskFiles(svc.stateDir, fork.ThreadID)
+	if bytes, e := os.ReadFile(filepath.Join(childSpace.Scratch, "current.csv")); e != nil || string(bytes) != "current files, not historical" {
+		t.Fatalf("historical fork lost current work: %q %v", bytes, e)
 	}
 	view, err := canonical.View(t.Context(), identity.ThreadID(fork.ThreadID))
 	if err != nil || view.LastOutcome == nil || *view.LastOutcome != flruntime.TurnOutcomeCompleted || len(view.Turns) != 2 || !view.Turns[1].FinalBoundaryComplete {
