@@ -388,6 +388,8 @@ describe('bounded Flower history', () => {
     await waitFor(() => firstMessage.textContent?.includes('Expanded paragraph') === true);
     await new Promise(resolve => setTimeout(resolve, 100));
     expect(Math.abs(anchor.getBoundingClientRect().top - top)).toBeLessThanOrEqual(2);
+    await new Promise(resolve => setTimeout(resolve, 280));
+    expect(Math.abs(anchor.getBoundingClientRect().top - top)).toBeLessThanOrEqual(2);
   });
 
   it('retains a hydrated immutable message across an authoritative refresh without a second body read', async () => {

@@ -309,3 +309,46 @@ describe('continuous visible bodies', () => {
     expect(next.initializeThread().messages[0].body_pending).toBeUndefined();
   });
 });
+
+
+describe('visited history presentation', () => {
+  it('retains only the canonically confirmed prefix when live publication advances or replaces the leaf', () => {
+    const { current, initial } = fixture();
+    const make = (id: string, ordinal: number) => ({ ...current.items![0], id, ordinal, canonical_ordinal: ordinal * 10, live: false, text: id });
+    const one = make('one', 1), two = make('two', 2), old = make('old-suffix', 3);
+    const firstPage = { ...current, items: [one, two, old], window: { leaf_id: 'before', first_item_id: one.id, last_item_id: old.id, has_before: false, has_after: false } };
+    const first = createRuntimeThreadRecord(firstPage, applyFlowerRuntimeCurrentView(initial, firstPage));
+    const identity = first.initializeThread().messages[0];
+    const replacement = make('replacement', 3);
+    const nextPage = { ...current, items: [two, replacement], window: { ...firstPage.window, leaf_id: 'after', first_item_id: two.id, last_item_id: replacement.id, has_before: true } };
+    const next = createRuntimeThreadRecord(nextPage, applyFlowerRuntimeCurrentView(initial, nextPage), first);
+    expect(next.readingItemIDs()).toEqual(['one', 'two', 'replacement']);
+    expect(next.initializeThread().messages[0]).toBe(identity);
+    expect(next.initializeThread().history_window?.has_before).toBe(false);
+    expect(next.initializeThread().history_window?.leaf_id).toBe('after');
+  });
+
+  it('keeps hydrated history when the observed window moves away and back', () => {
+    const { current, initial } = fixture();
+    const one = { ...current.items![0], live: false, text: '中文', body: { field: 'content', source_id: 'one', bytes: 10, preview_bytes: 6 } };
+    const window = { leaf_id: 'stable-leaf', first_item_id: 'one', last_item_id: 'one', has_before: false, has_after: true };
+    const firstPage = { ...current, items: [one], window };
+    const first = createRuntimeThreadRecord(firstPage, applyFlowerRuntimeCurrentView(initial, firstPage));
+    first.hydrate(one, { ...one, text: '中文🌸', body: undefined });
+    const identity = first.initializeThread().messages[0];
+    const two = { ...one, id: 'two', ordinal: 2, body: undefined, text: 'Second' };
+    const secondPage = { ...current, items: [two], window: { ...window, first_item_id: 'two', last_item_id: 'two', has_before: true, has_after: false } };
+    const second = createRuntimeThreadRecord(secondPage, applyFlowerRuntimeCurrentView(initial, secondPage), first);
+    expect(second.itemIDs()).toEqual(['two']);
+    expect(second.initializeThread().messages.map(message => message.id)).toEqual(['one', 'two']);
+    expect(second.initializeThread().messages[0]).toBe(identity);
+    expect(second.initializeThread().history_window).toEqual({ ...window, last_item_id: 'two', has_after: false });
+    const returned = createRuntimeThreadRecord(firstPage, applyFlowerRuntimeCurrentView(initial, firstPage), second);
+    expect(returned.bodyOffset('one')).toBe(10);
+    expect(returned.item('one')?.body).toBeUndefined();
+    expect(returned.initializeThread().messages[0]).toBe(identity);
+    const changed = { ...secondPage, window: { ...secondPage.window, leaf_id: 'other-leaf' } };
+    const replaced = createRuntimeThreadRecord(changed, applyFlowerRuntimeCurrentView(initial, changed), returned);
+    expect(replaced.initializeThread().messages.map(message => message.id)).toEqual(['two']);
+  });
+});

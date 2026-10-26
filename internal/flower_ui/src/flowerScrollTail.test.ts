@@ -39,6 +39,7 @@ function createViewport(initialScrollHeight = 500) {
   let scrollHeight = initialScrollHeight;
   let scrollTop = Math.max(0, initialScrollHeight - 100);
   const viewport = {
+    getBoundingClientRect: () => ({ top: 0, bottom: 100, left: 0, width: 500, height: 100 }),
     get clientHeight() {
       return 100;
     },
@@ -75,6 +76,39 @@ function createController() {
 }
 
 describe('Flower scroll tail controller', () => {
+  it('preserves native wheel movement before its scroll event while correcting late content growth', () => {
+    const { controller, raf } = createController();
+    const metrics = createViewport(2000);
+    let documentTop = 1920;
+    const title = { isConnected: true, getBoundingClientRect: () => ({ top: documentTop - metrics.scrollTop(), height: 20 }) } as HTMLElement;
+    Object.assign(metrics.viewport, { contains: (value: unknown) => value === title });
+    controller.bind(metrics.viewport);
+    controller.onWheel({ target: metrics.viewport, deltaY: -900 } as unknown as WheelEvent);
+    controller.preserveLayoutAnchor(title);
+    metrics.setScrollTop(1000);
+    documentTop += 120;
+    metrics.setScrollHeight(2120);
+    controller.flushLayout(false);
+    expect(metrics.scrollTop()).toBe(1120);
+    controller.onScroll();
+    raf.flushAll();
+    expect(metrics.scrollTop()).toBe(1120);
+    controller.dispose();
+  });
+  it('preserves scheduled readiness notifications during before-paint anchor correction', () => {
+    const raf = createRafHarness();
+    let notifications = 0;
+    const controller = createFlowerScrollTailController({ reducedMotionPreferred: () => true,
+      onLayout: () => { notifications++; }, requestAnimationFrame: raf.requestAnimationFrame, cancelAnimationFrame: raf.cancelAnimationFrame });
+    controller.bind(createViewport().viewport);
+    controller.measureAfterLayout();
+    controller.flushLayout(false);
+    expect(notifications).toBe(0);
+    expect(raf.pending()).toBe(1);
+    raf.flushAll();
+    expect(notifications).toBe(1);
+    controller.dispose();
+  });
   it('reports directional input at an immovable edge without treating layout as input', () => {
     const raf = createRafHarness();
     const intents: string[] = [];
@@ -367,4 +401,42 @@ describe('Flower scroll tail controller', () => {
     expect(metrics.scrollTop()).toBe(740);
     controller.dispose();
   });
+});
+
+
+it('preserves a reader through late layout after the initiating mutation finishes', () => {
+  const { controller, raf } = createController();
+  const metrics = createViewport(2000);
+  metrics.setScrollTop(400);
+  let documentTop = 420;
+  const title = { isConnected: true, getBoundingClientRect: () => ({ top: documentTop - metrics.scrollTop() }) } as HTMLElement;
+  Object.assign(metrics.viewport, { contains: (candidate: unknown) => candidate === title });
+  controller.bind(metrics.viewport); controller.stopFollowing();
+  controller.preserveLayoutAnchor(title);
+  documentTop += 120;
+  controller.finishDisclosure(title);
+  raf.flushAll();
+  expect(title.getBoundingClientRect().top).toBe(20);
+  documentTop += 700;
+  controller.measureAfterLayout(); raf.flushAll();
+  expect(title.getBoundingClientRect().top).toBe(20);
+  expect(raf.pending()).toBe(0);
+  controller.dispose();
+});
+
+it('keeps the original anchor when another completion arrives before its offscreen position is corrected', () => {
+  const { controller, raf } = createController();
+  const metrics = createViewport(2000); metrics.setScrollTop(400);
+  let documentTop = 420;
+  const title = { isConnected: true, getBoundingClientRect: () => ({ top: documentTop - metrics.scrollTop(), height: 20 }) } as HTMLElement;
+  const inserted = { isConnected: true, getBoundingClientRect: () => ({ top: 25, height: 20 }) } as HTMLElement;
+  Object.assign(metrics.viewport, { contains: () => true });
+  controller.bind(metrics.viewport); controller.stopFollowing();
+  controller.preserveLayoutAnchor(title);
+  documentTop += 900;
+  controller.preserveLayoutAnchor(inserted);
+  documentTop += 180;
+  controller.flushLayout();
+  expect(title.getBoundingClientRect().top).toBe(20);
+  raf.flushAll(); expect(raf.pending()).toBe(0); controller.dispose();
 });

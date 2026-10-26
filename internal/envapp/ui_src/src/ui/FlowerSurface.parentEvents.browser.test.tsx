@@ -75,7 +75,7 @@ it('preserves receipt projection identity when unrelated cache metadata changes'
   expect(read).toHaveBeenCalledTimes(1);
 });
 
-it('opens the latest bounded receipts when the message tail contains many later receipts', async () => {
+it('publishes the complete displayed receipt interval using bounded preview pages', async () => {
   const host = document.createElement('div'); document.body.append(host);
   const all = Array.from({ length: 1000 }, (_, index) => ({ ...event('dense-' + index, 'completed'), canonical_ordinal: index + 1 }));
   const source: FlowerParentEventPage = { thread_id: 'parent', leaf_id: 'leaf', first_event_id: all[0].id,
@@ -92,8 +92,9 @@ it('opens the latest bounded receipts when the message tail contains many later 
     interval: { first: 100, last: 200, hasAfter: false } }); return null; }, host);
   onTestFinished(() => { dispose(); host.remove(); });
   await waitFor(() => !reading.busy());
-  expect(reading.events().map(value => value.id)).toEqual(all.slice(-50).map(value => value.id));
-  expect(read).toHaveBeenCalledTimes(1);
+  expect(reading.events().map(value => value.id)).toEqual(all.slice(99).map(value => value.id));
+  expect(read).toHaveBeenCalledTimes(19);
+  expect(read.mock.calls.every(([, query]) => query.limit === 50)).toBe(true);
   expect(reading.cursor()).toBe('');
 });
 
@@ -205,7 +206,8 @@ it('coalesces moving live message bounds without canceling the accepted receipt 
   expect(read).toHaveBeenCalledTimes(1);
   expect(read.mock.calls[0][2]?.aborted).toBe(false);
   release();
-  await waitFor(() => read.mock.calls.length === 2 && !reading.busy());
+  await waitFor(() => !reading.busy());
+  expect(read).toHaveBeenCalledTimes(1);
   expect(reading.initialReady()).toBe(true);
   expect(reading.failed()).toBe(false);
   expect(reading.events().map(value => value.id)).toEqual(['tail']);

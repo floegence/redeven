@@ -7,7 +7,7 @@ export function recoverableHistoryRead(error: unknown): boolean {
   const failure = error as { status?: number; code?: string } | null;
   if (!failure) return false;
   if (failure.status === 408 || failure.status === 429 || failure.status !== undefined && failure.status >= 500 && failure.status <= 599) return true;
-  return ['transport', 'network_error', 'connection_closed', 'transport_unavailable'].includes(failure.code ?? '');
+  return ['transport', 'network_error', 'connection_closed', 'transport_unavailable', 'history_source_changed'].includes(failure.code ?? '');
 }
 
 export async function recoverHistoryRead<T>(read: () => Promise<T>, signal: AbortSignal): Promise<T> {

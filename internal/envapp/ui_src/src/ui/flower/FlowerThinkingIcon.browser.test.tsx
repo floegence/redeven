@@ -26,7 +26,7 @@ function mount() {
   const [live, setLive] = createSignal(true);
   const [confirmed, setConfirmed] = createSignal(true);
   dispose = render(() => <FlowerThinkingDisclosure contentID="petal-test" content={() => 'Inspecting the request.'}
-    live={live} liveConfirmed={confirmed} preserveOnEnd={() => false}
+      live={live} liveConfirmed={confirmed}
     label={() => live() && confirmed() ? 'Thinking...' : 'Thought process'}
     expandLabel={() => 'Expand thinking'} collapseLabel={() => 'Collapse thinking'}
     contentBody={() => <p>Inspecting the request.</p>} />, root);

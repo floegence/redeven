@@ -9,7 +9,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-Floret owns turn identity, outcome, timing and explicit final boundaries. Flower collapses successful ordinary turns and older abnormal work while protecting the latest abnormal turn, pending controls and active reading. Dialogue/finals stay visible. Interleaved answered inputs retain visible checkpoints between independently folded sequences.
+Floret owns turn identity, outcome, timing and explicit final boundaries. Fresh history defaults successful ordinary turns and older abnormal work to closed while keeping the latest abnormal turn and pending controls visible. Once displayed, visibility remains stable until the user changes it. Dialogue/finals stay visible. Interleaved answered inputs retain visible checkpoints between independently folded sequences.
 
 # Contract
 
@@ -19,7 +19,7 @@ Validated ThreadView/HistoryPage turn facts include exact TurnID/RunID, optional
 Summaries show at most two nonzero time units with subsecond copy. Interleaved answers use a static overview counting calls, failures and answered inputs, never a whole-turn toggle. [Sequences](flower-tool-sequences.md) independently fold settled work on each side.
 
 ## Reading and interface state
-Running/preparing/retrying/finalizing/waiting turns stay expanded without a toggle. Latest failed/cancelled/interrupted ordinary work retains process, thinking and details; users may hide only confirmed intermediate/typed process rows. Newer work permits older abnormal collapse; explicit choices/reading protection survive updates. Main, embedded and child views share rendering with separate scroll owners.
+Running/preparing/retrying/finalizing/waiting turns stay expanded without a toggle. Latest failed/cancelled/interrupted ordinary work retains process, thinking and details; users may hide only confirmed intermediate/typed process rows. Completion and newer work may add a disclosure control but cannot automatically fold previously visible work. Open/closed choices survive pagination, reconnects and regrouping. A newly classified row under inspection remains visible until the next explicit group toggle, without reopening other folded rows. Only an explicit disclosure or navigation action can open a closed group. Inspected bodies stay mounted and inert when folded, preserving nested choices and offsets. Main, embedded and child views share rendering with separate scroll owners.
 
 ## Layout and accessibility
 Canonical Path order, never timestamps, positions messages/receipts. Dialogue, final segments and secret-answer redaction remain intact.

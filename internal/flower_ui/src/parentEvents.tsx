@@ -9,6 +9,7 @@ import { FlowerReadDeadlineError, withFlowerReadDeadline } from './requestDeadli
 import { recoverHistoryRead } from './historyReadRecovery';
 import { historyReadingSelection } from './historyReadingWindow';
 import type { FlowerScrollTailController } from './flowerScrollTail';
+import { retainKeyedItems } from './presentationIdentity';
 
 type ParentEventReader = (threadID: string, query: FlowerParentEventQuery, signal?: AbortSignal) => Promise<FlowerParentEventPage>;
 
@@ -87,6 +88,23 @@ export function createParentEventReading(props: Readonly<{
   let previousInterval = '';
   let previousReadingRevision: number | undefined;
   let pendingAlignment: EventReadRequest | undefined;
+  // Immutable source-bound pages are presentation cache, not a lifecycle.
+  // Repeated tail alignment must not download or reinstall the same receipts.
+  const pagesByQuery = new Map<string, FlowerParentEventPage>();
+  let pagesLeaf = '';
+  const readPage = async (reader: ParentEventReader, threadID: string, query: FlowerParentEventQuery, signal: AbortSignal) => {
+    const key = query.leaf_id ? JSON.stringify(query) : '';
+    const cached = key && pagesByQuery.get(key);
+    if (cached) { signal.throwIfAborted(); return cached; }
+    const page = validateParentEventPage(await recoverHistoryRead(() => withFlowerReadDeadline(
+      readSignal => reader(threadID, query, readSignal), props.timeoutMessage ?? 'Event read timed out.', signal), signal), threadID, query);
+    signal.throwIfAborted();
+    if (key && pagesLeaf === query.leaf_id) {
+      pagesByQuery.set(key, page);
+      if (pagesByQuery.size > 32) pagesByQuery.delete(pagesByQuery.keys().next().value!);
+    }
+    return page;
+  };
   const [initialReady, setInitialReady] = createSignal(true);
   let refreshController: AbortController | undefined;
   let requestedLeaf = '';
@@ -97,9 +115,9 @@ export function createParentEventReading(props: Readonly<{
   const invalidate = () => { generation++; controller?.abort(); controller = undefined; pendingAlignment = undefined; };
   onCleanup(invalidate);
   const currentPage = createMemo(() => props.page);
-  const events = createMemo(() => retained().map(event => ({
+  const events = createMemo<readonly FlowerParentEvent[]>(previous => retainKeyedItems(previous, retained().map(event => ({
     ...event, ...(bodies()[event.id]?.message !== undefined ? { message: bodies()[event.id].message } : {}),
-  })));
+  })), event => event.id));
   const rows = () => [...(props.scroll?.viewport()?.querySelectorAll<HTMLElement>('[data-parent-event]') ?? [])];
   const protectedIDs = () => {
     const bounds = props.scroll?.viewport()?.getBoundingClientRect();
@@ -144,7 +162,9 @@ export function createParentEventReading(props: Readonly<{
     for (const event of page.events) combined.set(event.id, event);
     const ordinals = [...combined.values()].every(event => event.canonical_ordinal !== undefined)
       ? new Map([...combined.values()].map(event => [event.id, event.canonical_ordinal!])) : undefined;
-    const selected = reset ? page.events.map(event => event.id) : historyReadingSelection(previous.map(event => event.id), page.events.map(event => event.id), direction, protectedIDs(), 150, ordinals)
+    const selected = reset ? page.events.map(event => event.id) : props.interval && ordinals
+      ? [...combined.keys()].sort((a, b) => ordinals.get(a)! - ordinals.get(b)!)
+      : historyReadingSelection(previous.map(event => event.id), page.events.map(event => event.id), direction, protectedIDs(), 150, ordinals)
       ?? previous.map(event => event.id);
     const selectedSet = new Set(selected);
     const heights = new Map(rows().map(row => [row.dataset.parentEvent!, row.getBoundingClientRect().height]));
@@ -185,11 +205,25 @@ export function createParentEventReading(props: Readonly<{
     try {
       const pages: { page: FlowerParentEventPage; query: FlowerParentEventQuery }[] = [];
       for (const query of intervalQueries ?? [request.query]) {
-        const page = validateParentEventPage(await recoverHistoryRead(() => withFlowerReadDeadline(
-          signal => reader(request.threadID, query, signal), props.timeoutMessage ?? 'Event read timed out.', scope.signal,
-        ), scope.signal), request.threadID, query);
+        const page = await readPage(reader, request.threadID, query, scope.signal);
         if (current !== generation) return;
         pages.push({ page, query });
+        // A group label is a complete count, not the size of its last network
+        // page. Resolve the frozen displayed interval before publishing it.
+        if (replaceInterval && props.interval) {
+          const lower = query.after_ordinal ?? Math.max(0, (request.tailFirst ?? 1) - 1);
+          let previous = page;
+          while (previous.events.length >= (query.limit ?? 50) && previous.events[0].id !== previous.first_event_id
+            && previous.events[0].canonical_ordinal! > lower + 1) {
+            const before = previous.events[0].canonical_ordinal!;
+            const continuation: FlowerParentEventQuery = { action: 'list', leaf_id: query.leaf_id,
+              after_ordinal: lower, before_ordinal: before, limit: query.limit ?? 50 };
+            const earlier = await readPage(reader, request.threadID, continuation, scope.signal);
+            if (current !== generation) return;
+            pages.push({ page: earlier, query: continuation });
+            previous = earlier;
+          }
+        }
       }
       // Latest is the canonical owner's bounded reverse seek. Filtering its
       // small result avoids reading an arbitrarily dense receipt-only tail
@@ -219,14 +253,19 @@ export function createParentEventReading(props: Readonly<{
       }
       if (!replaceInterval && result.events.every(event => loaded.has(event.id))) throw new Error('Flower contract error: event continuation repeated loaded events.');
       if (replaceInterval) {
-        // Keep visible, selected and focused receipts as isolated owners while
-        // the message window moves. Unrelated old page members are discarded.
+        // The active document retains every displayed interval. Keep its
+        // receipts as well, so warm scrolling cannot split a tool group.
         const pinned = new Set(protectedIDs());
-        preserve(() => setRetained(retained().filter(event => pinned.has(event.id))));
-        for (const value of pages) rememberNeighbors(value.page, value.query);
-        install(result, request.query, retained().length === 0, false);
+        const interval = props.interval;
+        const spans = interval?.spans ?? (interval ? [{ first: interval.first, last: interval.last }] : []);
+        preserve(() => {
+          setRetained(retained().filter(event => pinned.has(event.id) || event.canonical_ordinal !== undefined && spans.some((span, index) =>
+            event.canonical_ordinal! >= span.first && (index === spans.length - 1 && !interval!.hasAfter || event.canonical_ordinal! <= span.last))));
+          for (const value of pages) rememberNeighbors(value.page, value.query);
+          install(result, request.query, retained().length === 0, false);
+          setInitialReady(true);
+        });
       } else install(result, request.query);
-      if (replaceInterval) setInitialReady(true);
       setState({ status: 'idle' });
     } catch (error) {
       if (current === generation) setState({ status: 'failed', request, failure: error instanceof FlowerReadDeadlineError ? 'timeout' : 'error' });
@@ -365,6 +404,9 @@ export function createParentEventReading(props: Readonly<{
     const threadID = props.threadID;
     const page = props.page;
     const epoch = props.connectionEpoch;
+    if (pagesLeaf !== page?.leaf_id || epoch !== previousEpoch || props.read !== previousReader || props.threadID !== previousThread) {
+      pagesByQuery.clear(); pagesLeaf = page?.leaf_id ?? '';
+    }
     const reader = props.read;
     const interval = props.interval;
     const spans = interval?.spans ?? (interval ? [{ first: interval.first, last: interval.last }] : []);
@@ -417,6 +459,7 @@ export function createParentEventReading(props: Readonly<{
       if (requestedLeaf !== page?.leaf_id) setRefreshFailure(false);
       requestedLeaf = page?.leaf_id ?? '';
       if (align) {
+        setInitialReady(false);
         const queries: FlowerParentEventQuery[] = spans.map((span, index) => ({ action: 'list', leaf_id: page!.leaf_id,
           ...(index === spans.length - 1 && !interval!.hasAfter ? { latest: true }
             : { after_ordinal: span.first - 1, before_ordinal: span.last + 1 }),

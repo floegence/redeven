@@ -145,6 +145,7 @@ async function mountChild(count = 330, _varied = false) {
     await waitFor(() => Boolean(root.querySelector('[data-flower-subagent-capsule]')));
     root.querySelector<HTMLButtonElement>('[data-flower-subagent-capsule]')!.click();
     await waitFor(() => Boolean(document.querySelector('[data-flower-message-id="child-entry-' + (count - 1) + '"]')));
+    await waitFor(() => document.querySelector('.flower-subagent-detail-transcript')?.getAttribute('data-flower-tail-preparing') !== 'true');
     await new Promise(resolve => setTimeout(resolve, 300));
     const viewport = document.querySelector<HTMLDivElement>('.flower-subagent-detail-transcript')!;
     return { root, summary, parent, items, events, loadChild, releaseHistory, viewport,
@@ -155,6 +156,139 @@ async function mountChild(count = 330, _varied = false) {
 }
 
 describe('continuous history navigation', () => {
+  it('holds an ordered live baseline until its historical tool group is complete', async () => {
+    await page.viewport(1280, 900);
+    const seed = thread({ thread_id: 'atomic-history', messages: [] });
+    const held = deferred<void>();
+    const items: FlowerRuntimeCurrentItem[] = [
+      { id: 'start', kind: 'user', text: 'Inspect files', turn_id: 'large', run_id: 'large-run', ordinal: 1 },
+      ...Array.from({ length: 180 }, (_, i): FlowerRuntimeCurrentItem => ({ id: `call-${i}`, kind: 'tool', turn_id: 'large', run_id: 'large-run', ordinal: i + 2,
+        activity: { item_id: `call-${i}`, tool_id: `call-${i}`, kind: 'tool', tool_name: 'terminal.exec', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
+          presentation: { label: `Inspect file ${i}`, renderer: 'terminal', payload: { command: `echo ${i}`, output: 'Done' } } } })),
+      { id: 'done', kind: 'assistant', text: 'Complete', turn_id: 'large', run_id: 'large-run', ordinal: 182 },
+      { id: 'tail-user', kind: 'user', text: 'Another request', turn_id: 'tail', run_id: 'tail-run', ordinal: 183 },
+      { id: 'tail-final', kind: 'assistant', text: 'Latest answer.\n\n'.repeat(80), turn_id: 'tail', run_id: 'tail-run', ordinal: 184 },
+    ].map(value => ({ ...value, kind: value.kind as FlowerRuntimeCurrentItem['kind'], canonical_ordinal: value.ordinal }));
+    const events: FlowerLiveStreamEnvelope[] = [];
+    let wake: (() => void) | undefined;
+    let first = true;
+    let preparing = false;
+    const history = vi.fn(async (_id: string, request: FlowerHistoryRequest) => {
+      if (request.anchor_id && request.limit === 150) { preparing = true; await held.promise; }
+      const selected = first ? items.slice(-2) : selectPage(items, request); first = false;
+      const ids = new Set(selected.map(item => item.id));
+      const current: FlowerRuntimeCurrentView = { thread_id: seed.thread_id, activity: 'idle', view_version: 1, items: selected,
+        window: { ...pageBounds(items, selected), leaf_id: 'leaf' },
+        turns: ['large', 'tail'].filter(id => selected.some(item => item.turn_id === id)).map(id => ({
+          turn_id: id, run_id: `${id}-run`, started_at: id === 'large' ? '2026-10-01T00:00:00Z' : '2026-10-02T00:00:00Z',
+          ended_at: id === 'large' ? '2026-10-01T00:01:00Z' : '2026-10-02T00:01:00Z', outcome: 'completed', elapsed_ms: 60000, waiting_ms: 0, work_duration_ms: 60000,
+          final_boundary_complete: true, final_item_ids: [id === 'large' ? 'done' : 'tail-final'].filter(id => ids.has(id)),
+        })) };
+      if (request.item_ids && request.observer_id) {
+        events.push({ schema_version: 3, kind: 'thread.batch', thread_id: seed.thread_id, reading_revision: request.reading_revision, current, window: current.window });
+        wake?.();
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+      return { current, thread: applyFlowerRuntimeCurrentView(seed, current) };
+    });
+    const root = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [seed], loadHistory: history,
+      async *connectLiveStream({ signal }) {
+        yield { schema_version: 3, kind: 'ready', baseline_complete: true, observer_id: 'atomic-reader', summaries: [seed] };
+        const abort = () => wake?.(); signal.addEventListener('abort', abort, { once: true });
+        try { while (!signal.aborted) { const next = events.shift(); if (next) yield next; else await new Promise<void>(resolve => { wake = resolve; }); } }
+        finally { signal.removeEventListener('abort', abort); }
+      },
+    }, { focusThreadRequest: { request_id: 'atomic', thread_id: seed.thread_id } });
+    root.style.height = '780px';
+    await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="tail-final"]')));
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const retained = root.querySelector('[data-flower-message-id="tail-final"]');
+    const viewport = root.querySelector<HTMLDivElement>('.flower-chat-transcript')!;
+    viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -900, bubbles: true }));
+    viewport.scrollTop = 0; viewport.dispatchEvent(new Event('scroll'));
+    await waitFor(() => preparing);
+    expect(root.querySelector('[data-flower-turn-id="large"]')).toBeNull();
+    held.resolve();
+    await waitFor(() => Boolean(root.querySelector('[data-flower-turn-id="large"] .flower-turn-summary-button')));
+    const summary = root.querySelector<HTMLButtonElement>('[data-flower-turn-id="large"] .flower-turn-summary-button')!;
+    summary.click();
+    await waitFor(() => root.querySelector('.flower-tool-sequence-toggle')?.textContent?.includes('180 tool calls') === true);
+    expect(root.querySelector('[data-flower-message-id="tail-final"]')).toBe(retained);
+    expect(root.querySelector('[role="alert"]')).toBeNull();
+  });
+  it('publishes a complete 680-call turn and retains its inspected rows on warm scrolling', async () => {
+    await page.viewport(1280, 900);
+    const seed = thread({ thread_id: 'complete-turn-history', messages: [] });
+    const held = deferred<void>();
+    const items: FlowerRuntimeCurrentItem[] = [
+      { id: 'large-user', kind: 'user', text: 'Inspect the complete sequence.', turn_id: 'large', run_id: 'large-run', ordinal: 1 },
+      ...Array.from({ length: 680 }, (_, i): FlowerRuntimeCurrentItem => ({ id: `tool-${i}`, kind: 'tool', turn_id: 'large', run_id: 'large-run', ordinal: i + 2,
+        activity: { item_id: `tool-${i}`, tool_id: `tool-${i}`, kind: 'tool', tool_name: 'terminal.exec', status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
+          presentation: { label: `Inspect file ${i}`, renderer: 'terminal', payload: { command: `echo ${i}`, output: 'Complete result' } } } })),
+      { id: 'pending-thought', kind: 'thinking', turn_id: 'large', run_id: 'large-run', ordinal: 682, text: 'Preview',
+        body: { field: 'content', source_id: 'pending-thought', bytes: 8000, preview_bytes: 7 } },
+      { id: 'large-final', kind: 'assistant', turn_id: 'large', run_id: 'large-run', ordinal: 683, text: 'Complete answer.' },
+      { id: 'tail-user', kind: 'user', turn_id: 'tail', run_id: 'tail-run', ordinal: 684, text: 'Another request.' },
+      { id: 'tail-answer', kind: 'assistant', turn_id: 'tail', run_id: 'tail-run', ordinal: 685, text: 'Latest answer.' },
+    ].map(value => ({ ...value, kind: value.kind as FlowerRuntimeCurrentItem['kind'], canonical_ordinal: value.ordinal * 2 }));
+    const history = vi.fn(async (_id: string, request: FlowerHistoryRequest) => {
+      if (request.anchor_id) await held.promise;
+      const selected = selectPage(items, request), ids = new Set(selected.map(item => item.id));
+      const current: FlowerRuntimeCurrentView = { thread_id: seed.thread_id, activity: 'idle', view_version: 1, items: selected,
+        window: { ...pageBounds(items, selected), leaf_id: 'complete-leaf' },
+        turns: ['large', 'tail'].filter(id => selected.some(item => item.turn_id === id)).map(id => ({
+          turn_id: id, run_id: `${id}-run`, started_at: id === 'large' ? '2026-10-01T00:00:00Z' : '2026-10-02T00:00:00Z',
+          ended_at: id === 'large' ? '2026-10-01T00:01:00Z' : '2026-10-02T00:01:00Z', outcome: 'completed',
+          elapsed_ms: 60000, waiting_ms: 0, work_duration_ms: 60000, final_boundary_complete: true,
+          final_item_ids: [id === 'large' ? 'large-final' : 'tail-answer'].filter(id => ids.has(id)),
+        })) };
+      return { current, thread: applyFlowerRuntimeCurrentView(seed, current) };
+    });
+    const body = vi.fn(async () => { throw new Error('Unopened thinking must not read its body'); });
+    const root = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [seed], loadHistory: history, loadHistoryItem: body,
+      async *connectLiveStream({ signal }) {
+        yield { schema_version: 3, kind: 'ready', baseline_complete: true, observer_id: 'complete-reader', summaries: [seed] };
+        await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+      },
+    }, { focusThreadRequest: { request_id: 'complete-history', thread_id: seed.thread_id } });
+    root.style.height = '780px';
+    await waitFor(() => history.mock.calls.length >= 2);
+    expect(root.querySelector('.flower-tool-sequence-label')).toBeNull();
+    held.resolve();
+    await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="tail-answer"]')));
+    await waitFor(() => Boolean(root.querySelector('[data-flower-turn-id="large"] .flower-turn-summary-button')));
+    const summary = root.querySelector<HTMLButtonElement>('[data-flower-turn-id="large"] .flower-turn-summary-button')!;
+    summary.click();
+    await waitFor(() => Boolean(root.querySelector('.flower-tool-sequence-toggle')));
+    const group = root.querySelector<HTMLButtonElement>('.flower-tool-sequence-toggle')!;
+    expect(group.textContent).toContain('680 tool calls');
+    expect(group.textContent).toContain('1 thinking segment');
+    if (group.getAttribute('aria-expanded') === 'false') group.click();
+    await waitFor(() => group.closest('.flower-tool-sequence-node')?.getAttribute('data-state') === 'open');
+    const inspected = root.querySelector('[data-flower-activity-item-id="tool-679"]');
+    expect(inspected).not.toBeNull();
+    const viewport = root.querySelector<HTMLDivElement>('.flower-chat-transcript')!;
+    const calls = history.mock.calls.length;
+    for (let pass = 0; pass < 3; pass++) {
+      viewport.scrollTop = 0; viewport.dispatchEvent(new Event('scroll'));
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      viewport.scrollTop = viewport.scrollHeight; viewport.dispatchEvent(new Event('scroll'));
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      expect(root.querySelector('.flower-tool-sequence-toggle')).toBe(group);
+      expect(group.textContent).toContain('680 tool calls');
+      expect(group.getAttribute('aria-expanded')).toBe('true');
+      expect(root.querySelector('[data-flower-activity-item-id="tool-679"]')).toBe(inspected);
+    }
+    group.click();
+    await waitFor(() => group.closest('.flower-tool-sequence-node')?.getAttribute('data-state') === 'closed');
+    viewport.scrollTop = 0; viewport.dispatchEvent(new Event('scroll'));
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect(group.getAttribute('aria-expanded')).toBe('false');
+    expect(history.mock.calls.length).toBe(calls);
+    expect(body).not.toHaveBeenCalled();
+    expect(history.mock.calls.every(([, request]) => (request.limit ?? request.item_ids?.length ?? 150) <= 150)).toBe(true);
+  });
+
   it('bounds collapsed history reads to scroll demand, including input at an immovable edge', async () => {
     const { root, history, viewport, scroll } = await mountContinuous(600, false, true);
     scroll(0, -100);

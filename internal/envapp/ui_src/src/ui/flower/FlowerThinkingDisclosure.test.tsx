@@ -14,17 +14,19 @@ afterEach(() => {
   while (disposers.length) disposers.pop()?.();
   document.body.replaceChildren();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 function mount(initialLive = true, elapsed = '4s') {
+  vi.stubGlobal('matchMedia', () => ({ matches: true }));
   const root = document.createElement('div');
   document.body.append(root);
   const [live, setLive] = createSignal(initialLive);
   const [confirmed, setConfirmed] = createSignal(true);
-  const [abnormal, setAbnormal] = createSignal(false);
+  const [, setAbnormal] = createSignal(false);
   const [content, setContent] = createSignal('First reasoning line');
   disposers.push(render(() => <FlowerThinkingDisclosure contentID="thinking-test" content={content}
-    live={live} liveConfirmed={confirmed} preserveOnEnd={abnormal}
+    live={live} liveConfirmed={confirmed}
     label={() => live() && confirmed() ? 'Thinking...' : 'Thought process'} elapsed={() => elapsed}
     expandLabel={() => 'Expand full thinking'} collapseLabel={() => 'Collapse thinking'}
     contentBody={() => <><span>{content()}</span><button data-inner-control>Copy reasoning</button></>} />, root));
@@ -59,18 +61,18 @@ describe('Thinking segment disclosure', () => {
     expect(thinking.view()).toBe('expanded');
   });
 
-  it.each(['collapsed', 'expanded'] as const)('collapses a normally completed %s immediately and permits reopening', (view) => {
+  it.each(['collapsed', 'expanded'] as const)('preserves a manually chosen %s state through normal completion', (view) => {
     const thinking = mount();
     expect(thinking.view()).toBe('collapsed');
     if (view === 'expanded') thinking.button().click();
     expect(thinking.view()).toBe(view);
     thinking.finish();
-    expect(thinking.view()).toBe('collapsed');
-    expect(thinking.content()).toBeNull();
+    expect(thinking.view()).toBe(view);
+    expect(Boolean(thinking.content())).toBe(view === 'expanded');
     expect(thinking.button().textContent).toContain('Thought process');
     expect(thinking.button().querySelector('.flower-activity-inline-duration')?.textContent).toBe('4s');
-    expect(thinking.button().getAttribute('aria-expanded')).toBe('false');
-    thinking.button().click();
+    expect(thinking.button().getAttribute('aria-expanded')).toBe(String(view === 'expanded'));
+    if (view === 'collapsed') thinking.button().click();
     expect(thinking.view()).toBe('expanded');
     expect(thinking.content()?.textContent).toContain('First reasoning line');
     thinking.setContent('Accepted complete reasoning');
@@ -118,7 +120,7 @@ describe('Thinking segment disclosure', () => {
     expect(thinking.view()).toBe('expanded');
     thinking.setConfirmed(false);
     thinking.finish();
-    expect(thinking.view()).toBe('collapsed');
+    expect(thinking.view()).toBe('expanded');
   });
 
   it('omits unavailable historical timing', () => {
@@ -139,18 +141,21 @@ describe('Thinking segment disclosure', () => {
     expect(second.view()).toBe('collapsed');
   });
 
-  it('returns focus from completed content to its reachable disclosure button', () => {
+  it('keeps completion focus and returns it only when the user collapses content', () => {
     const thinking = mount();
     thinking.button().click();
     const inner = thinking.root.querySelector<HTMLButtonElement>('[data-inner-control]')!;
     inner.focus();
     expect(document.activeElement).toBe(inner);
     thinking.finish();
+    expect(document.activeElement).toBe(inner);
+    thinking.button().click();
     expect(document.activeElement).toBe(thinking.button());
     expect(thinking.button().getAttribute('aria-expanded')).toBe('false');
   });
 
   it('follows confirmed active thinking only while the shared disclosure is expanded', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: true }));
     const thinking = mount();
     expect(thinking.view()).toBe('collapsed');
     expect(thinking.content()).toBeNull();

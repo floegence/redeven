@@ -392,6 +392,8 @@ type MessageProjection = Readonly<{
 }>;
 const messageProjections = new WeakMap<FlowerChatMessage, MessageProjection>();
 const decorationProjections = new WeakMap<readonly FlowerTimelineDecoration[], ReadonlyMap<string, readonly FlowerTimelineDecorationEntry[]>>();
+const decorationsByMessage = new WeakMap<readonly FlowerTimelineDecoration[], ReadonlyMap<string, readonly FlowerTimelineDecoration[]>>();
+const parentEventProjections = new WeakMap<FlowerParentEvent, Extract<FlowerTimelineEntry, { type: 'parent_event' }>>();
 const timelineProjections = new WeakMap<readonly FlowerChatMessage[], Readonly<{
   threadID: string;
   cursorID: string;
@@ -461,6 +463,17 @@ function projectFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | unde
     decorations = decorationsByTimelineAnchor(sourceDecorations);
     decorationProjections.set(sourceDecorations, decorations);
   }
+  let messageDecorations = decorationsByMessage.get(sourceDecorations);
+  if (!messageDecorations) {
+    const byMessage = new Map<string, FlowerTimelineDecoration[]>();
+    for (const decoration of sourceDecorations) {
+      const id = decoration.anchor.message_id;
+      const values = byMessage.get(id);
+      if (values) values.push(decoration); else byMessage.set(id, [decoration]);
+    }
+    messageDecorations = byMessage;
+    decorationsByMessage.set(sourceDecorations, byMessage);
+  }
   const seenMessageIDs = new Set<string>();
   const positions = new Map<string, number>();
   const entries: FlowerTimelineEntry[] = thread.messages.flatMap((message): readonly FlowerTimelineEntry[] => {
@@ -469,9 +482,11 @@ function projectFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | unde
     seenMessageIDs.add(messageID);
     const activeCursor = message.id === activeCursorMessageID;
     const prior = messageProjections.get(message);
+    const localDecorations = messageDecorations.get(message.id) ?? emptyDecorations;
     let entries: readonly FlowerTimelineEntry[];
     if (prior && prior.threadID === thread.thread_id && prior.activeCursor === activeCursor
-      && prior.decorations === sourceDecorations) {
+      && prior.decorations.length === localDecorations.length
+      && prior.decorations.every((value, index) => value === localDecorations[index])) {
       entries = prior.entries;
     } else {
       const projectedMessage = activeCursor === message.active_cursor
@@ -480,7 +495,7 @@ function projectFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | unde
         // This view lives as long as the cached message projection.
         : new Proxy(message, { get: (target, key, receiver) => key === 'active_cursor' ? activeCursor : Reflect.get(target, key, receiver) });
       entries = messageTimelineEntries(thread.thread_id, projectedMessage, decorations);
-      messageProjections.set(message, { threadID: thread.thread_id, activeCursor, decorations: sourceDecorations, entries });
+      messageProjections.set(message, { threadID: thread.thread_id, activeCursor, decorations: localDecorations, entries });
     }
     if (message.canonical_ordinal !== undefined) {
       for (const entry of entries) {
@@ -500,7 +515,9 @@ function projectFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | unde
     seenEvents.add(event.id);
     const key = 'parent-event:' + event.id;
     if (event.canonical_ordinal !== undefined) positions.set(key, event.canonical_ordinal);
-    entries.push({ type: 'parent_event', key, event });
+    let projected = parentEventProjections.get(event);
+    if (!projected) { projected = { type: 'parent_event', key, event }; parentEventProjections.set(event, projected); }
+    entries.push(projected);
   }
   entries.sort((left, right) => {
     const a = positions.get(left.key), b = positions.get(right.key);
