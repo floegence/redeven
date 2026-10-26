@@ -15,7 +15,24 @@ window.__flowerPerfCounts = { parses: 0, lexes: 0 };
 function setup() {
   const query = new URLSearchParams(location.search);
   const fixture = streamingFixture(Number(query.get('messages') || 72), Number(query.get('tools') || 20));
-  const initial = fixture.current();
+  let initial = fixture.current();
+  const unopened = query.get('disclosures') === 'closed';
+  let detailReads = 0;
+  if (unopened) {
+    // Synthetic locators exercise lazy history without transferring hidden data.
+    initial = { ...initial, items: initial.items?.flatMap(item => item.kind === 'tool' ? [
+      { ...item, activity_bodies: [{ entry_id: item.id, bytes: 65536, sha256: 'synthetic' }] },
+      { id: item.id + '-thinking', kind: 'thinking' as const, turn_id: item.turn_id, run_id: item.run_id, ordinal: 0,
+        text: 'Retained reasoning preview. '.repeat(40).slice(0, 1024),
+        body: { source_id: item.id + '-thinking', field: 'reasoning' as const, bytes: 65536, preview_bytes: 1024 } },
+    ] : [item]).map((item, index) => ({ ...item, ordinal: index + 1 })) };
+    const unexpectedRead = async (): Promise<never> => { detailReads++; throw new Error('Unopened details must not be read'); };
+    fixture.adapter.loadHistoryItem = unexpectedRead;
+    fixture.adapter.loadHistoryBody = unexpectedRead;
+    fixture.adapter.loadActivityField = unexpectedRead;
+    fixture.adapter.loadActivityValue = unexpectedRead;
+    fixture.adapter.loadActivityStructure = unexpectedRead;
+  }
   const request = { logical_request_id: 'performance-request', attempt_id: 'performance-attempt', attempt_epoch: 1,
     started_at: new Date().toISOString(), first_output_at: new Date().toISOString(), estimated_output_tokens: 128 };
   const call = { thread_id: initial.thread_id, turn_id: initial.turn_id!, run_id: initial.run_id!, logical_request_id: request.logical_request_id,
@@ -44,7 +61,7 @@ function setup() {
   const tasks = new PerformanceObserver((list) => { if (running) longTasks.push(...list.getEntries().map((entry) => entry.duration)); });
   tasks.observe({ type: 'longtask', buffered: false });
   const clicked = (event: Event) => {
-    if (!running || !(event.target instanceof Element) || !event.target.closest('[data-flower-disclosure-trigger]')) return;
+    if (!running || !(event.target instanceof Element) || !event.target.closest(unopened ? '.flower-composer textarea' : '[data-flower-disclosure-trigger]')) return;
     const start = event.timeStamp;
     requestAnimationFrame(() => requestAnimationFrame(() => { clicks.push(performance.now() - start); }));
   };
@@ -144,7 +161,8 @@ function setup() {
       const queueMetrics = (performance.getEntriesByName('flower.live.frame_queue').at(-1) as PerformanceMark | undefined)?.detail;
       const percentile = (values: number[], p: number) => [...values].sort((a, b) => a - b)[Math.min(values.length - 1, Math.floor(values.length * p))] ?? 0;
       return { frames, clicks, longTasks, frameP95: percentile(frames, .95), clickP95: percentile(clicks, .95), maxLongTask: Math.max(0, ...longTasks), additions, removals, protectedChanges,
-        livePayloadBytes, liveEnvelopes, queueMetrics, parsers: { ...window.__flowerPerfCounts }, calls: fixture.calls, callsBefore, domElements: root.querySelectorAll('*').length, version: fixture.current().view_version, userAgent: navigator.userAgent };
+        livePayloadBytes, liveEnvelopes, queueMetrics, parsers: { ...window.__flowerPerfCounts }, calls: fixture.calls, callsBefore, domElements: root.querySelectorAll('*').length, version: fixture.current().view_version, userAgent: navigator.userAgent,
+        unopened, detailReads, itemCount: fixture.current().items?.length ?? 0, mountedToolDetails: root.querySelectorAll('.flower-activity-inline-details').length, mountedThinkingBodies: root.querySelectorAll('.flower-thinking-content').length };
     },
     dispose() { running = false; clearInterval(interval); cancelAnimationFrame(raf); mutations.disconnect(); tasks.disconnect(); root.removeEventListener('click', clicked, true); dispose(); },
   };

@@ -230,16 +230,15 @@ describe('consecutive tools in the shared Flower surface', () => {
     const transcript = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
     await expect.poll(() => content.closest('.flower-thinking-viewport')!.getAttribute('data-state')).toBe('open');
     expect(content.scrollHeight).toBeGreaterThan(content.clientHeight * 2);
-    const wheel = commands as unknown as { wheelScrollRegion: (request: { regionSelector: string; targetSelector: string; deltaY: number }) => Promise<{ before: number; after: number }> };
-    const input = async (direction: number) => {
+    const wheel = commands as unknown as { wheelScrollRegion: (request: { regionSelector: string; targetSelector: string; deltaY: number; preserveScroll?: boolean }) => Promise<{ before: number; after: number }> };
+    const input = async (direction: number, preserveScroll = false) => {
       if (source === 'keyboard') { content.focus({ preventScroll: true }); await userEvent.keyboard(direction < 0 ? '{ArrowUp}' : '{PageDown}'); }
-      else await wheel.wheelScrollRegion({ regionSelector: '.flower-chat-transcript', targetSelector: '.flower-thinking-content', deltaY: direction * 120 });
+      else await wheel.wheelScrollRegion({ regionSelector: '.flower-chat-transcript', targetSelector: '.flower-thinking-content', deltaY: direction * 120, preserveScroll });
     };
     content.scrollTop = 200;
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     let outerTop = transcript.scrollTop;
-    // Playwright hover first scrolls an offscreen reading region into view.
-    // Assert ownership from the actual wheel dispatch, after that setup move.
+    // Initial hover makes the reading region visible before measuring ownership.
     if (source === 'wheel') transcript.addEventListener('wheel', () => { outerTop = transcript.scrollTop; }, { once: true });
     const innerEnd = new Promise<void>(resolve => content.addEventListener('scrollend', () => resolve(), { once: true }));
     await input(-1);
@@ -250,9 +249,11 @@ describe('consecutive tools in the shared Flower surface', () => {
     const sequence = content.closest<HTMLElement>('.flower-tool-sequence-scroll');
     expect(Boolean(sequence)).toBe(grouped);
     if (sequence) {
+      sequence.scrollTop = sequence.scrollHeight;
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       expect(sequence.scrollTop).toBeGreaterThan(0);
       const sequenceEnd = new Promise<void>(resolve => sequence.addEventListener('scrollend', () => resolve(), { once: true }));
-      await input(-1);
+      await input(-1, true);
       await expect.poll(() => sequence.scrollTop).toBe(0);
       await sequenceEnd;
       expect(transcript.scrollTop).toBe(outerTop);

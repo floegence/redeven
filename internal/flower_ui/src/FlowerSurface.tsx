@@ -1,4 +1,4 @@
-import { createActivityReadQueue } from './activityReadQueue';
+import { createActivityReadQueue, type ActivityReadPriority } from './activityReadQueue';
 import { createActivityFieldReader } from './activityFieldReader';
 import { createHistoryHandoffQueue } from './historyHandoffQueue';
 import { createThreadRailResize, loadThreadRailWidth, saveThreadRailWidth, THREAD_RAIL_WIDTH_DEFAULT, THREAD_RAIL_WIDTH_MIN, THREAD_RAIL_WIDTH_MAX } from './threadRailResize';
@@ -4160,7 +4160,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const historyBodyKey = (threadID: string, itemID: string) => JSON.stringify([threadID, itemID]);
-  const loadHistoryItem = (threadID: string, itemID: string, visibleSignal?: AbortSignal, viewportScope?: FlowerScrollTailController) => {
+  const loadHistoryItem = (threadID: string, itemID: string, visibleSignal?: AbortSignal, viewportScope?: FlowerScrollTailController, priority?: ActivityReadPriority) => {
     const initial = threadCache().runtimeItem(threadID, itemID);
     if (!initial || (!initial.body && !initial.activity_bodies?.length) || !props.adapter.loadHistoryItem) return;
     const signal = visibleSignal ? AbortSignal.any([navigationReadController.signal, visibleSignal]) : navigationReadController.signal;
@@ -4194,16 +4194,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setTranscriptLayoutRevision(value => value + 1);
       const remaining = threadCache().runtimeItem(threadID, itemID);
       return Boolean(remaining?.body || remaining?.activity_bodies?.length);
-    }, initial.live ? 'interactive' : 'visible');
+    }, priority ?? (initial.live ? 'interactive' : 'visible'));
   };
   const historyBodyControl = (threadID: Accessor<string>, itemID: Accessor<string>) => {
     const state = () => { historyBodyRevision(); return historyBodies.state(historyBodyKey(threadID(), itemID())); };
-    return <div class="flower-history-body-control" role="status" aria-busy={state() !== 'failed'}>
+    return <Show when={state()}><div class="flower-history-body-control" role="status" aria-busy={state() === 'loading'}>
       <Show when={state() === 'failed'} fallback={<span>{copy().chat.history.loading}</span>}>
         <span>{copy().chat.history.failed}</span>
         <Button size="xs" variant="ghost" onClick={() => historyBodies.retry(historyBodyKey(threadID(), itemID()))}>{copy().chat.handlerRetry}</Button>
       </Show>
-    </div>;
+    </div></Show>;
   };
   const releaseHistoryInterest = (threadID: string, revision: number, subagent = false) => {
     const observer = computerObserverID();
@@ -11854,6 +11854,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     thread: Accessor<FlowerThreadSnapshot | null | undefined>,
     media: ReturnType<typeof createThreadMedia>,
     viewportScope: FlowerScrollTailController,
+    bindThinkingElement: (element: HTMLDivElement | undefined) => void,
   ) => {
     const markdown = createMemo(() => block().block_type === 'markdown');
     const thinking = createMemo(() => block().block_type === 'thinking');
@@ -11956,6 +11957,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       >
         <FlowerToolSequenceNode nodeKey={block().key}>
           <FlowerThinkingDisclosure
+            bindElement={bindThinkingElement}
             scroll={viewportScope}
             contentID={block().key}
             manualExpanded={() => expandedDetails[detailDisclosureKey(message().thread_id ?? '', 'thinking', block().key)]}
@@ -12151,16 +12153,25 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   && contentBlock().key === assistantCopyBlockKey();
                 const streaming = () => streamingBlockKey() === contentBlock().key;
                 let shell!: HTMLDivElement;
+                const [thinkingElement, setThinkingElement] = createSignal<HTMLDivElement>();
+                const isThinking = createMemo(() => contentBlock().block_type === 'thinking');
+                // Sequence placement moves thinking out of its original shell.
+                // Observe the same displayed node across grouping and folding.
+                const readElement = () => isThinking() ? thinkingElement() : shell;
                 onMount(() => observeHistoryBodyLayout(() => contentBlock().block_type !== 'thinking'
                   && message().body_pending?.kind === 'text' && !message().body_pending?.retained && !message().live, viewportScope));
                 const [visible, setVisible] = createSignal(false);
                 const hasPendingText = createMemo(() => message().body_pending?.kind === 'text');
-                const needsBody = () => contentBlock().block_type !== 'thinking' || message().live
-                  || expandedDetails[detailDisclosureKey(message().thread_id ?? '', 'thinking', contentBlock().key)] === true;
+                const needsBody = createMemo(() => hasPendingText() && (!isThinking() || message().live === true
+                  || expandedDetails[detailDisclosureKey(message().thread_id ?? '', 'thinking', contentBlock().key)] === true));
                 onMount(() => createEffect(() => {
-                  if (!hasPendingText()) return;
+                  if (!hasPendingText() || !needsBody()) return;
+                  const element = readElement();
                   const viewport = viewportScope.viewport();
-                  if (viewport) onCleanup(historyBodyVisibility.observe(shell, viewport, setVisible));
+                  if (element && viewport) {
+                    onCleanup(historyBodyVisibility.observe(element, viewport, setVisible));
+                    onCleanup(() => setVisible(false));
+                  }
                 }));
                 // Read ownership changes only on visibility/navigation/connection,
                 // never on a new byte extent. Slow reads can finish during growth.
@@ -12190,13 +12201,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   const viewport = viewportScope.viewport();
                   if (!viewport) return;
                   const bounds = viewport.getBoundingClientRect();
-                  const rect = shell.getBoundingClientRect();
+                  const element = readElement();
+                  if (!element) return;
+                  const rect = element.getBoundingClientRect();
                   if (rect.height <= 0 || rect.bottom <= bounds.top - HISTORY_BODY_VIEWPORT_MARGIN_PX || rect.top >= bounds.bottom + HISTORY_BODY_VIEWPORT_MARGIN_PX) return;
                   const controller = readController();
-                  if (controller) untrack(() => loadHistoryItem(tid, itemID, controller.signal, viewportScope));
+                  if (controller) untrack(() => loadHistoryItem(tid, itemID, controller.signal, viewportScope, contentBlock().block_type === 'thinking' ? 'interactive' : undefined));
                 });
                 return <div ref={shell} class="flower-history-message"><div class="flower-history-message-content">
-                  <Show when={contentBlock().block_type !== 'thinking' && message().body_pending?.kind === 'text' && !message().body_pending?.retained && !message().live} fallback={messageContentBubble(message, contentBlock, streaming, showCopyAction, copyText, thread, media, viewportScope)}>
+                  <Show when={contentBlock().block_type !== 'thinking' && message().body_pending?.kind === 'text' && !message().body_pending?.retained && !message().live} fallback={messageContentBubble(message, contentBlock, streaming, showCopyAction, copyText, thread, media, viewportScope, setThinkingElement)}>
                     <div class={cn('flower-history-text-loading', 'flower-message-bubble', message().role === 'user' && 'flower-message-bubble-user')}>
                       <div class="flower-history-text-skeleton" aria-hidden="true"><span /><span /><span /></div>
                       {historyBodyControl(() => thread()?.thread_id ?? '', () => message().id)}

@@ -20,6 +20,7 @@ export type FlowerThinkingDisclosureProps = Readonly<{
   expandLabel: Accessor<string>;
   collapseLabel: Accessor<string>;
   contentBody: Component;
+  bindElement?: (element: HTMLDivElement | undefined) => void;
   manualExpanded?: Accessor<boolean | undefined>;
   onManualExpanded?: (expanded: boolean) => void;
   scroll?: FlowerScrollTailController;
@@ -57,6 +58,7 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
     followFrame = requestAnimationFrame(advance);
   };
   onCleanup(() => { cancelFollow(); cancelAnimationFrame(restoreFrame); });
+  onCleanup(() => props.bindElement?.(undefined));
   const contentID = `flower-thinking-content-${safeContentID(props.contentID)}`;
   const active = () => props.live() && props.liveConfirmed();
   const revealTitle = useFlowerActivityTitleReveal(() => props.contentID);
@@ -105,6 +107,7 @@ export const FlowerThinkingDisclosure: Component<FlowerThinkingDisclosureProps> 
 
   return (
     <div
+      ref={element => props.bindElement?.(element)}
       class="flower-thinking-disclosure flower-activity-inline"
       data-state={view() === 'collapsed' ? 'closed' : 'open'}
       data-flower-thinking-view={view()}

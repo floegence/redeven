@@ -566,6 +566,7 @@ export default mergeConfig(viteConfig, defineConfig({
             regionSelector: string;
             targetSelector?: string;
             deltaY: number;
+            preserveScroll?: boolean;
           }>,
         ) => {
           const frame = await frameForSelector(page, request.regionSelector);
@@ -574,7 +575,13 @@ export default mergeConfig(viteConfig, defineConfig({
             ? frame.locator(request.targetSelector).first()
             : region;
           const before = await region.evaluate((element) => element.scrollTop);
-          await target.hover();
+          if (request.preserveScroll) {
+            // Scroll-chain tests establish their own nested offsets. Locator
+            // hover would scroll the target into view and change those offsets.
+            const bounds = await target.boundingBox();
+            if (!bounds) throw new Error('Wheel target has no visible bounds');
+            await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+          } else await target.hover();
           await page.mouse.wheel(0, request.deltaY);
           await page.waitForTimeout(50);
           const after = await region.evaluate((element) => element.scrollTop);
