@@ -240,6 +240,9 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
     readingItemIDs(): readonly string[] { return readingRecords().map(record => record.item.id); },
     hydrate(expected: FlowerRuntimeCurrentItem, loaded: FlowerRuntimeCurrentItem) {
       const before = items.get(expected.id) ?? archive.get(expected.id);
+      const source = before?.item.body ?? before?.preview?.body;
+      if (expected.body && (!source || source.run_id !== expected.body.run_id || source.source_id !== expected.body.source_id
+        || source.entry_id !== expected.body.entry_id || source.field !== expected.body.field)) return false;
       // A response may finish after a newer live replacement or navigation.
       if (!before || before.item !== expected && (!expected.body || !sameItem(before.item, expected)
         || Boolean(before.item.live) !== Boolean(expected.live) || before.item.canonical_ordinal !== expected.canonical_ordinal
