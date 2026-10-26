@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"github.com/floegence/floret/v7/identity"
 	"net/url"
 	"strings"
 	"testing"
@@ -47,10 +48,10 @@ func sendDeepSeekCompactionTurn(t *testing.T, ctx context.Context, svc *Service,
 	if err != nil {
 		t.Fatalf("send compaction turn %s: %v", requestID, err)
 	}
-	if response.Current.Activity != flruntime.ThreadActivityActive {
-		t.Fatalf("send compaction turn %s activity=%q, want active", requestID, response.Current.Activity)
+	if response.Kind != "start" || response.TurnID == "" || response.RunID == "" {
+		t.Fatalf("send compaction turn %s missing execution: %+v", requestID, response)
 	}
-	turnID := response.Current.TurnID
+	turnID := identity.TurnID(response.TurnID)
 	deadline := time.NewTimer(deepSeekCompactionEETurnTimeout)
 	defer deadline.Stop()
 	ticker := time.NewTicker(100 * time.Millisecond)

@@ -6574,8 +6574,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           return durableOutbox;
         });
         // The outbox owns frozen submission contents before request preparation.
-        // Ordinary sends retain the editor until admission; queued sends release
-        // it now. Later edits never belong to this request.
+        // Presentation hands off immediately. Dispatch still waits for durable
+        // storage; the frozen outbox owns recovery and never owns later edits.
         handedToOutbox = true;
         const submittedFiles = launchController.localFiles().filter(file => consumedAttachmentLocalIDs.includes(file.local_id));
         const submittedAttachments = flowerComposerDraftAttachments(readyItems);
@@ -6598,9 +6598,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           });
           return true;
         });
-        if (presentation === 'queue') {
-          consumeSubmittedComposerDraft(durableOutbox.entries.get(clientRequestID)!, submissionScopeKey());
-        }
+        consumeSubmittedComposerDraft(durableOutbox.entries.get(clientRequestID)!, submissionScopeKey());
         // Do not wait for IndexedDB or HTTP in the preparation guard.
         // Dispatch waits for durable storage in the sole owner above.
         void durableOutbox.flushPersistence().catch(() => undefined);
@@ -7385,8 +7383,31 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return itemStatus;
   });
 
-  const visibleTimelineEntries = createMemo((): readonly FlowerTimelineEntry[] => {
-    return selectedTimelineEntries().filter((entry) => entry.type !== 'queued_turn');
+  const visibleTimelineEntries = createMemo((previous: readonly FlowerTimelineEntry[] = []): readonly FlowerTimelineEntry[] => {
+    const canonical = selectedTimelineEntries().filter((entry) => entry.type !== 'queued_turn');
+    const keys = new Set(canonical.map(entry => entry.key));
+    const prior = new Map(previous.map(entry => [entry.key, entry]));
+    const pending = visibleTransportOutbox().filter(entry => entry.presentation === 'composer' && !entry.operation
+      && !keys.has(`message:user:${entry.requestId}`)).map(entry => {
+      const id = `user:${entry.requestId}`;
+      const key = `message:${id}`;
+      const retained = prior.get(key);
+      const content = entry.input.prompt;
+      if (retained?.type === 'message' && !retained.message.turn_id && retained.message.content === content) return retained;
+      const blocks: FlowerRenderableMessageBlock[] = entry.draftAttachments?.map((attachment, index) => {
+        const url = attachment.admitted?.url ?? (attachment.staged ? `staged:${attachment.staged.attachment_id}` : undefined);
+        const key = `${id}:block:${index}`;
+        if (attachment.mime_type.startsWith('image/')) return {
+          type: 'image', key, block_index: index, src: url ?? '', alt: attachment.name,
+        };
+        return { type: 'file', key, block_index: index, url,
+          name: attachment.name, mimeType: attachment.mime_type, size: attachment.size_bytes };
+      }) ?? [];
+      if (content) blocks.push({ type: 'content', key: `${id}:content`, block_index: blocks.length, block_type: 'markdown', content });
+      return { type: 'message', key, blocks, message: { id, role: 'user', content, status: 'sending',
+        created_at_ms: entry.createdAtMs, context_action: entry.input.context_action } } satisfies FlowerTimelineEntry;
+    });
+    return [...canonical, ...pending];
   });
 
 
@@ -12008,6 +12029,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const loadMessageAttachmentBlob = async (url: string, signal: AbortSignal): Promise<Blob> => {
     try {
+      if (url.startsWith('staged:')) {
+        const id = url.slice('staged:'.length);
+        for (const entry of transportOutbox().entries.values()) {
+          const attachment = entry.draftAttachments?.find(item => item.staged?.attachment_id === id)?.staged;
+          if (attachment && entry.input.staging_scope && props.adapter.loadStagedAttachmentPreview) {
+            return await props.adapter.loadStagedAttachmentPreview(attachment, entry.input.staging_scope, signal);
+          }
+        }
+        throw new Error('Staged attachment is unavailable.');
+      }
       if (!props.adapter.loadMessageAttachment) throw new Error('Attachment loader is unavailable.');
       return await props.adapter.loadMessageAttachment({ url, signal });
     } catch (error) {
@@ -12251,7 +12282,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const contextDisplay = createMemo(() => {
       const msg = message();
       if (msg.role !== 'user') return null;
-      return parseChatMessageReferences(msg.references);
+      return parseChatMessageReferences(msg.references) ?? (!msg.turn_id ? parseChatContextAction(msg.context_action) : null);
     });
     const visible = createMemo(() => Boolean(message().goal) || hasRenderableBlock() || Boolean(contextDisplay()) || activeCursor());
     const blocks = createMemo(() => entry().blocks);
@@ -12261,6 +12292,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     // Copy normalization belongs to the visible action boundary, not each delta.
     const copyText = () => messageCopyText(message(), blocks());
     const messageTime = createMemo(() => formatMessageTime(message().created_at_ms));
+    const pendingDelivery = createMemo(() => message().role === 'user' && !message().turn_id
+      ? visibleTransportOutbox().find(value => `user:${value.requestId}` === message().id) : undefined);
     const assistantCopyBlockKey = createMemo(() => {
       const currentMessage = message();
       const turn = thread()?.turns?.find(value => value.turn_id === currentMessage.turn_id && value.run_id === currentMessage.run_id);
@@ -12354,6 +12387,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           data-flower-message-id={message().id}
           data-flower-message-role={message().role}
           data-flower-message-status={message().status}
+          data-flower-pending-message={pendingDelivery()?.requestId}
         >
           <Show
             when={message().role === 'user'}
@@ -12403,6 +12437,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     {(value) => <time class="flower-message-time" datetime={new Date(message().created_at_ms).toISOString()}>{value()}</time>}
                   </Show>
                   <MessageCopyButton message={message()} text={copyText()} placement="user" />
+                  <Show when={pendingDelivery()}>{pending => <span role="status" title={pending().deliveryError}>
+                    {pending().delivery === 'failed' ? copy().chat.sendFailed : pending().delivery === 'unknown' ? copy().chat.sendUnknown
+                      : pending().delivery === 'accepted' ? copy().chat.sendWaiting : copy().chat.pendingSending}
+                  </span>}</Show>
                 </div>
               </Show>
             </div>

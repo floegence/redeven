@@ -900,7 +900,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
           const responseWasUnusable = error.code === 'INVALID_JSON_RESPONSE'
             && error.status >= 200
             && error.status < 300;
-          throw flowerTurnAdmissionError(responseWasUnusable ? 'unknown' : 'rejected', error);
+          throw flowerTurnAdmissionError(responseWasUnusable || error.status >= 500 ? 'unknown' : 'rejected', error);
         }
         throw flowerTurnAdmissionError('unknown', error, 'Flower response was not received.');
       }

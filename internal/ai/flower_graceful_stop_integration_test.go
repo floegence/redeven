@@ -65,7 +65,7 @@ func TestFlowerGracefulStopConfirmsRealTerminalExit(t *testing.T) {
 	var process *terminalProcess
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		for _, candidate := range svc.terminalProcesses.ProcessesForRun(meta.EndpointID, thread.ThreadID, sent.Current.RunID.String()) {
+		for _, candidate := range svc.terminalProcesses.ProcessesForRun(meta.EndpointID, thread.ThreadID, sent.RunID) {
 			if strings.Contains(candidate.Snapshot().Output, "FLOWER_STOP_OUTPUT") {
 				process = candidate
 				break

@@ -26,10 +26,17 @@ async function waitForCommittedSelection(runtime: HTMLElement, threadID: string)
   });
 }
 
-async function setup(options: { generation?: Promise<string> | (() => Promise<string>); newThread?: boolean; idle?: boolean; overrides?: Partial<FlowerSurfaceAdapter> } = {}) {
+async function setup(options: { generation?: Promise<string> | (() => Promise<string>); newThread?: boolean; idle?: boolean; historyCount?: number; overrides?: Partial<FlowerSurfaceAdapter> } = {}) {
   const initial = thread({ thread_id: 'delivery-thread', status: options.idle ? 'idle' : 'running', active_run_id: options.idle ? undefined : 'original-run' });
   const other = thread({ thread_id: 'other-thread' });
   let authoritative = liveBootstrap(initial, 1);
+  if (options.historyCount) {
+    const current: FlowerRuntimeCurrentView = { ...authoritative.current, items: Array.from({ length: options.historyCount }, (_, index) => ({
+      id: `history:${index}`, kind: 'user', turn_id: `history-turn:${index}`, run_id: `history-run:${index}`,
+      ordinal: index + 1, text: `Retained historical message ${index}`,
+    })) };
+    authoritative = { thread: applyFlowerRuntimeCurrentView(initial, current), current };
+  }
   const queued: FlowerLiveStreamEnvelope[] = [{ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [initial, other] }];
   let wake = () => {};
   const requests: ReturnType<typeof deferred<FlowerTurnLaunchReceipt>>[] = [];
@@ -72,20 +79,43 @@ function queuedCurrent(threadID: string, requestID: string, prompt: string, vers
     run_progress: { phase: 'waiting_response' }, items: [], interactions: [], queue: [{ id: `queue:${requestID}`, request_key: requestID, input: { text: prompt } }] };
 }
 
-it('retains the preparing draft and exposes the preparation guard', async () => {
+it('paints the submitted message before storage preparation or HTTP completes', async () => {
   const generation = deferred<string>();
   const s = await setup({ idle: true, generation: generation.promise });
-  s.type('Preparing input'); s.submit(); s.submit();
+  s.type('Preparing input'); const started = performance.now(); s.submit(); s.submit();
   await waitFor(() => s.runtime.querySelector('[data-flower-primary-action="send"]')?.getAttribute('aria-busy') === 'true');
-  expect(s.editor().value).toBe('Preparing input');
+  expect(performance.now() - started).toBeLessThan(100);
+  expect(s.editor().value).toBe('');
+  expect(s.runtime.querySelector('.flower-chat-transcript')?.textContent).toContain('Preparing input');
   expect(s.runtime.querySelector('[data-flower-primary-action="send"]')?.getAttribute('aria-label')).toContain('Sending');
   expect(s.launch).not.toHaveBeenCalled();
   generation.resolve('b'.repeat(32));
   await waitFor(() => s.launch.mock.calls.length === 1);
-  expect(s.editor().value).toBe('Preparing input');
+  expect(s.editor().value).toBe('');
+  expect(s.runtime.querySelector('.flower-chat-transcript')?.textContent).toContain('Preparing input');
   expect(s.rows()).toHaveLength(0);
   s.receipt(0);
   await waitFor(() => s.editor().value === '');
+});
+
+it('paints a send within 100 ms while preserving one thousand retained history rows', async () => {
+  const generation = deferred<string>();
+  const s = await setup({ idle: true, historyCount: 1000, generation: generation.promise });
+  const retained = [...s.runtime.querySelectorAll('[data-flower-message-id]')];
+  expect(retained).toHaveLength(1000);
+  s.type('Immediate feedback after long history');
+  const started = performance.now(); s.submit();
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  const pending = s.runtime.querySelector('[data-flower-pending-message]');
+  expect(pending?.textContent).toContain('Immediate feedback after long history');
+  expect(performance.now() - started).toBeLessThan(100);
+  expect([...s.runtime.querySelectorAll('[data-flower-message-id]')].slice(0, 1000)).toEqual(retained);
+  expect(retained.every(row => row.isConnected)).toBe(true);
+  expect(s.editor().value).toBe('');
+  expect(s.launch).not.toHaveBeenCalled();
+  generation.resolve('b'.repeat(32));
+  await waitFor(() => s.launch.mock.calls.length === 1);
+  s.receipt(0);
 });
 
 it('preserves text edited away and back to the submitted value during preparation', async () => {
@@ -276,7 +306,8 @@ it('keeps another thread usable while the first thread awaits confirmation', asy
   await waitFor(() => s.launch.mock.calls.length === 2);
   expect(s.launch.mock.calls[1][0].thread_id).toBe(s.other.thread_id);
   expect(s.rows()).toHaveLength(0);
-  expect(s.editor().value).toBe('Independent message');
+  expect(s.editor().value).toBe('');
+  expect(s.runtime.querySelector('.flower-chat-transcript')?.textContent).toContain('Independent message');
 });
 
 it('waits for an in-flight later send before retrying an older definite failure', async () => {
@@ -436,8 +467,8 @@ it('releases ordinary loading on a receipt without current and retries unchanged
   await waitFor(() => s.launch.mock.calls.length === 1);
   s.requests[0].reject(flowerTurnAdmissionError('rejected', new Error('Rejected')));
   await waitFor(() => s.rows()[0]?.dataset.flowerTransportDelivery === 'failed');
-  expect(s.editor().value).toBe('Ordinary request');
-  s.submit();
+  expect(s.editor().value).toBe('');
+  (s.rows()[0].querySelector('[aria-label="Retry send"]') as HTMLButtonElement).click();
   await waitFor(() => s.launch.mock.calls.length === 2);
   expect(s.launch.mock.calls[1][0]).toEqual(s.launch.mock.calls[0][0]);
   s.receipt(1);
@@ -602,8 +633,85 @@ it.each([false, true])('preserves long-text cancellation before outbox capture a
   s.submit();
   await waitFor(() => s.launch.mock.calls.length === 1);
   expect(s.launch.mock.calls[0][0]).toMatchObject({ prompt: '', attachment_ids: ['upl_long_text'] });
-  expect(s.editor().value).toBe(idle ? longText : '');
+  expect(s.editor().value).toBe('');
   s.receipt(0);
   await waitFor(() => s.editor().value === '');
   expect(s.drafts.read(s.initial.thread_id).value.attachments).toEqual([]);
+});
+
+
+it.each(['receipt-first', 'live-first'] as const)('retains the submitted DOM row through %s admission and earlier history', async order => {
+  const s = await setup({ idle: true });
+  s.type('Immediate stable user message'); s.submit();
+  await waitFor(() => s.launch.mock.calls.length === 1);
+  const requestID = s.launch.mock.calls[0][0].client_request_id;
+  const selector = '[data-flower-message-id="user:' + requestID + '"]';
+  const row = s.runtime.querySelector<HTMLElement>(selector)!;
+  expect(row).not.toBeNull();
+  const content = row.querySelector('.flower-message-bubble-user');
+  expect(content).not.toBeNull();
+  const current: FlowerRuntimeCurrentView = { thread_id: s.initial.thread_id, view_version: 2,
+    activity: 'active', turn_id: 'admitted-turn', run_id: 'admitted-run', queue: [], interactions: [],
+    run_progress: { phase: 'preparing' },
+    items: [{ id: 'user:' + requestID, kind: 'user', turn_id: 'admitted-turn', run_id: 'admitted-run', ordinal: 2,
+      text: 'Immediate stable user message' }] };
+  s.type('A newer draft');
+  if (order === 'receipt-first') { s.receipt(0); await new Promise(resolve => requestAnimationFrame(resolve)); }
+  s.emit(current);
+  await waitFor(() => !s.runtime.querySelector('[data-flower-pending-message]'));
+  if (order === 'live-first') s.receipt(0);
+  expect(s.runtime.querySelector(selector)).toBe(row);
+  expect(row.querySelector('.flower-message-bubble-user')).toBe(content);
+  expect(s.editor().value).toBe('A newer draft');
+  s.emit({ ...current, view_version: 3, items: [
+    { id: 'earlier-user', kind: 'user', turn_id: 'earlier-turn', run_id: 'earlier-run', ordinal: 1, text: 'Earlier history' },
+    ...(current.items ?? []),
+  ] });
+  await waitFor(() => s.runtime.querySelector('[data-flower-message-id="earlier-user"]') !== null);
+  expect(s.runtime.querySelector(selector)).toBe(row);
+  expect(s.runtime.querySelectorAll(selector)).toHaveLength(1);
+});
+
+
+it('keeps image and text geometry stable through canonical admission', async () => {
+  const capability: FlowerAttachmentCapability = {
+    model_id: 'openai/gpt-5.2', revision: 'image-continuity', enabled: true, supports_long_text: true,
+    max_attachments: 4, max_file_size_bytes: 1_000_000, max_total_size_bytes: 2_000_000,
+    routes: { 'image/png': 'native_full_content' },
+  };
+  const canvas = document.createElement('canvas'); canvas.width = 80; canvas.height = 40;
+  const blob = await new Promise<Blob>(resolve => canvas.toBlob(value => resolve(value!), 'image/png'));
+  const file = new File([blob], 'stable.png', { type: 'image/png' });
+  const s = await setup({ idle: true, overrides: {
+    loadAttachmentCapability: async () => capability,
+    uploadAttachment: async input => ({ attachment_id: 'upl_stable', name: input.file.name, mime_type: input.file.type,
+      size_bytes: input.file.size, digest_sha256: 'e'.repeat(64), locator: 'attachment://v1/upl_stable/stable.png',
+      source: input.source, capability_revision: capability.revision }),
+    loadStagedAttachmentPreview: async () => blob,
+    loadMessageAttachment: async () => blob,
+  } });
+  const picker = s.runtime.querySelector<HTMLInputElement>('input[type="file"]')!;
+  const transfer = new DataTransfer(); transfer.items.add(file);
+  Object.defineProperty(picker, 'files', { configurable: true, value: transfer.files });
+  picker.dispatchEvent(new Event('change', { bubbles: true }));
+  await waitFor(() => s.runtime.querySelector('[data-attachment-status="staged_ready"]') !== null);
+  s.type('Describe this image'); s.submit();
+  await waitFor(() => s.launch.mock.calls.length === 1);
+  const id = 'user:' + s.launch.mock.calls[0][0].client_request_id;
+  const row = s.runtime.querySelector<HTMLElement>('[data-flower-message-id="' + id + '"]')!;
+  await waitFor(() => Boolean(row.querySelector('.flower-message-image img')));
+  const lane = row.querySelector<HTMLElement>('.flower-message-images')!;
+  const bubble = row.querySelector<HTMLElement>('.flower-message-bubble-user')!;
+  const height = row.getBoundingClientRect().height;
+  expect(lane.getBoundingClientRect().height).toBeGreaterThan(100);
+  s.emit({ thread_id: s.initial.thread_id, view_version: 2, activity: 'active', turn_id: 'image-turn', run_id: 'image-run', run_progress: { phase: 'preparing' },
+    items: [{ id, kind: 'user', ordinal: 2, turn_id: 'image-turn', run_id: 'image-run', text: 'Describe this image',
+      attachments: [{ name: file.name, mime_type: file.type, size_bytes: file.size, url: '/uploads/upl_stable?thread_id=delivery-thread&turn_id=image-turn' }] }] });
+  await waitFor(() => !s.runtime.querySelector('[data-flower-pending-message]'));
+  s.receipt(0);
+  await waitFor(() => Boolean(row.querySelector('.flower-message-image img')));
+  expect(row.querySelector('.flower-message-images')).toBe(lane);
+  expect(row.querySelector('.flower-message-bubble-user')).toBe(bubble);
+  expect(Math.abs(row.getBoundingClientRect().height - height)).toBeLessThanOrEqual(1);
+  expect(s.runtime.querySelectorAll('[data-flower-message-id="' + id + '"]')).toHaveLength(1);
 });

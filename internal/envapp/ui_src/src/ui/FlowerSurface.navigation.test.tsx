@@ -1426,7 +1426,7 @@ describe('FlowerSurface navigation', () => {
 
     await waitFor(() => runtime.querySelector('[data-flower-transport-delivery="unknown"]') !== null);
     expect(launchTurn).toHaveBeenCalledTimes(1);
-    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('send exactly once');
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
     (runtime.querySelector('[aria-label="Retry send"]') as HTMLButtonElement).click();
     await waitFor(() => launchTurn.mock.calls.length === 2);
     expect(launchTurn.mock.calls[0]?.[0].client_request_id).toBe(launchTurn.mock.calls[1]?.[0].client_request_id);
@@ -1538,7 +1538,7 @@ describe('FlowerSurface navigation', () => {
     expect(rejected.textContent).toContain('Keep this draft while the previous reply stops');
     expect(rejected.getAttribute('title')).toBe('thread already has an active turn');
     expect(rejected.querySelector('[aria-label="Retry send"]')).not.toBeNull();
-    expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).value).toBe('Keep this draft while the previous reply stops');
+    expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).value).toBe('');
     expect(loadThread.mock.calls.length).toBeGreaterThanOrEqual(2);
     textarea.value = 'New draft while the previous reply stops';
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));

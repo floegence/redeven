@@ -1,9 +1,11 @@
 package ai
 
 import (
+	"context"
 	"strings"
 	"sync"
 
+	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/runtimeservice"
 )
@@ -84,19 +86,23 @@ func (s *Service) admitAIUserTurn(endpointID, threadID, requestID string) (strin
 	return key, true, nil
 }
 
-func (s *Service) acceptAIUserTurnLease(key, threadID string, current flruntime.ThreadView) {
+// Mark acceptance before sampling current facts: terminal publication may race
+// the receipt. The existing facts subscriber owns later lease settlement.
+func (s *Service) acceptAIUserTurnReceipt(ctx context.Context, key, threadID string) {
 	if s == nil || key == "" {
 		return
 	}
 	s.workloadMu.Lock()
 	lease := s.workloadLeases[key]
 	if lease != nil {
-		lease.threadID = strings.TrimSpace(threadID)
-		lease.accepted = true
+		lease.threadID, lease.accepted = strings.TrimSpace(threadID), true
 	}
 	s.workloadMu.Unlock()
-	if current.Activity != flruntime.ThreadActivityActive && len(current.Queue) == 0 {
-		s.reconcileAIWorkloadLeases(strings.TrimSpace(threadID), current.Activity, len(current.Queue))
+	if lease == nil {
+		return
+	}
+	if summary, err := threadSummaryFromRuntime(context.WithoutCancel(ctx), s.threadRuntime, identity.ThreadID(threadID)); err == nil {
+		s.reconcileAIWorkloadLeases(threadID, summary.Activity, summary.QueueCount)
 	}
 }
 

@@ -134,7 +134,7 @@ func TestServer_AIQueueEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SendUserTurn active: %v", err)
 	}
-	if started.Kind != "start" || strings.TrimSpace(started.TurnID) == "" || started.Current.Activity != flruntime.ThreadActivityActive {
+	if started.Kind != "start" || strings.TrimSpace(started.TurnID) == "" || strings.TrimSpace(started.RunID) == "" {
 		t.Fatalf("active command result=%#v", started)
 	}
 

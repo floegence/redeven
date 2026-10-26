@@ -96,6 +96,8 @@ describe('Flower canonical reference browser presentation', () => {
       openCanonicalReference,
       loadMessageAttachment: vi.fn(async () => image),
     });
+    // Match the product's finite flex viewport during responsive resizing.
+    runtime.style.height = '760px';
 
     // At this width the real navigation is a drawer. Open it before selecting
     // history, then keep the original narrow conversation geometry assertions.

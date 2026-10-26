@@ -289,7 +289,7 @@ func (s *Service) lockCanonicalThreadSettingsMutation(ctx context.Context, endpo
 	if settings == nil {
 		return fail(sql.ErrNoRows)
 	}
-	if _, err := s.readCanonicalThreadState(ctxOrBackground(ctx), threadID); err != nil {
+	if _, err := threadSummaryFromRuntime(ctxOrBackground(ctx), s.threadRuntime, identity.ThreadID(threadID)); err != nil {
 		return fail(err)
 	}
 	return db, settings, unlock, nil

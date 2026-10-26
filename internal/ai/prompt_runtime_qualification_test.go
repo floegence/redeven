@@ -83,7 +83,7 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 			t.Fatal(err)
 		}
 		detail := waitForDeepSeekAskUserDetail(t, ctx, svc, meta, thread.ThreadID, func(d *FlowerThreadDetail) bool {
-			if d.Current.TurnID != response.Current.TurnID || d.Current.Activity != flruntime.ThreadActivityIdle || d.Current.LastOutcome == nil {
+			if d.Current.TurnID != identity.TurnID(response.TurnID) || d.Current.Activity != flruntime.ThreadActivityIdle || d.Current.LastOutcome == nil {
 				return false
 			}
 			if *d.Current.LastOutcome != flruntime.TurnOutcomeCompleted {
@@ -119,7 +119,7 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 			t.Fatal(err)
 		}
 		detail := waitForDeepSeekAskUserDetail(t, ctx, svc, meta, consultation.ThreadID, func(d *FlowerThreadDetail) bool {
-			return d.Current.TurnID == response.Current.TurnID && d.Current.Activity == flruntime.ThreadActivityIdle && d.Current.LastOutcome != nil
+			return d.Current.TurnID == identity.TurnID(response.TurnID) && d.Current.Activity == flruntime.ThreadActivityIdle && d.Current.LastOutcome != nil
 		})
 		if *detail.Current.LastOutcome != flruntime.TurnOutcomeCompleted || (detail.Current.Goal != nil && detail.Current.Goal.Status != "absent") || strings.TrimSpace(ollamaTaskText(detail.Current)) == "" {
 			t.Errorf("%s: brief assessment did not complete without Goal", tc.name)
@@ -245,7 +245,7 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 	waiting := waitForDeepSeekAskUserDetail(t, ctx, svc, meta, thread.ThreadID, func(d *FlowerThreadDetail) bool {
-		return d.Current.TurnID == response.Current.TurnID && d.Thread.WaitingPrompt != nil
+		return d.Current.TurnID == identity.TurnID(response.TurnID) && d.Thread.WaitingPrompt != nil
 	})
 	prompt := waiting.Thread.WaitingPrompt
 	if len(prompt.Questions) != 1 || len(prompt.Questions[0].Choices) < 2 {
@@ -258,7 +258,7 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 	detail = waitForDeepSeekAskUserDetail(t, ctx, svc, meta, thread.ThreadID, func(d *FlowerThreadDetail) bool {
-		return d.Current.TurnID == response.Current.TurnID && d.Current.Activity == flruntime.ThreadActivityIdle && d.Current.LastOutcome != nil
+		return d.Current.TurnID == identity.TurnID(response.TurnID) && d.Current.Activity == flruntime.ThreadActivityIdle && d.Current.LastOutcome != nil
 	})
 	if *detail.Current.LastOutcome != flruntime.TurnOutcomeCompleted || !strings.Contains(ollamaTaskText(detail.Current), choice.Label) {
 		t.Error("structured answer did not complete with selected choice")
@@ -277,7 +277,7 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 	detail = waitForDeepSeekAskUserDetail(t, ctx, svc, meta, readonly.ThreadID, func(d *FlowerThreadDetail) bool {
-		return d.Current.TurnID == response.Current.TurnID && d.Current.Activity == flruntime.ThreadActivityIdle && d.Current.LastOutcome != nil
+		return d.Current.TurnID == identity.TurnID(response.TurnID) && d.Current.Activity == flruntime.ThreadActivityIdle && d.Current.LastOutcome != nil
 	})
 	if *detail.Current.LastOutcome != flruntime.TurnOutcomeCompleted || !strings.Contains(ollamaTaskText(detail.Current), "READONLY_8527") {
 		t.Error("readonly tool execution did not report the file marker")
