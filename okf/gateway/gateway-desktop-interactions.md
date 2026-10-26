@@ -39,7 +39,7 @@ Member dialogs list members, issue invitations and manage policy. Refresh failur
 
 Internal enrollment checks use inline feedback, without status-refreshed toasts. Unknown status never implies rejected credentials; expandable technical details retain the actual diagnosis. Opening Environment settings suspends enrollment, releases its connection and invalidates verification while preserving invitation drafts and the current step. Returning requires a fresh connection before submission.
 
-Use explicit translations and viewport-bounded panels.
+Use explicit translations and viewport-bounded panels. Saved Gateway and endpoint pickers use the published shared Dropdown with its field-surface marker, keyboard navigation and focus restoration. Focus changes the existing border color without adding an outer frame; native selects and parallel menu behavior do not belong to this enrollment flow. Settings and enrollment address inputs share an explicit HTTPS hostname-and-port example from every locale catalog.
 
 Gateway service confirmation presents the action, target and affected sessions without a diagnostic inventory. Its close icon shares the title row. Admission replaces confirmation controls with a pending state until authoritative operation progress arrives; it cannot resubmit the same action.
 

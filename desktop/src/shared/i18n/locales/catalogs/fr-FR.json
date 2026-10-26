@@ -3764,6 +3764,7 @@
     "invitationIntro": "Choisissez un Gateway enregistré ou saisissez l’adresse et le code d’invitation qui vous ont été communiqués."
   },
   "gatewayNetwork": {
+    "addressPlaceholder": "https://gateway.example.com:7443",
     "listenTitle": "Écoute locale",
     "listenHelp": "Définissez les adresses IP et les ports locaux auxquels Gateway se lie. Séparez plusieurs entrées par des virgules.",
     "listenAddress": "Adresses d’écoute",

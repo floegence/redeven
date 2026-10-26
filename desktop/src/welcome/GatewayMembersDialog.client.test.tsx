@@ -68,6 +68,13 @@ it('retains nested invitation consent on expiry but blocks submission until a fr
 });
 
 describe('Gateway member management', () => {
+  it('shows an HTTPS host and port example on an empty access address', async () => {
+    mount(vi.fn(), undefined, gateway, 'connection'); await settle();
+    button(i18n.t('gatewayMembers.addAddress')).click(); await settle();
+    const inputs=[...document.querySelectorAll<HTMLInputElement>('.redeven-gateway-endpoint input')];
+    expect(inputs.at(-1)?.value).toBe('');
+    expect(inputs.at(-1)?.placeholder).toBe('https://gateway.example.com:7443');
+  });
   it('keeps the connection editor focused on reachable addresses', async () => {
     mount(vi.fn(), undefined, gateway, 'connection'); await settle();
     const endpoint = document.querySelector('.redeven-gateway-endpoint')!;

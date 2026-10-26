@@ -442,13 +442,17 @@ describe('linked environment owner interactions', () => {
     const inputs = [...dialog.querySelectorAll<HTMLInputElement>('input')];
     const expected = method === 'typed' ? 'https://typed.example:7443' : gateway.member_endpoints[0].address;
     if (method !== 'typed') {
-      const picker = dialog.querySelector<HTMLSelectElement>('[data-gateway-picker]')!;
+      const picker = dialog.querySelector<HTMLElement>('[data-gateway-picker]')!;
       [...dialog.querySelectorAll<HTMLElement>('[role="tab"]')].find(tab => tab.textContent?.trim() === 'Saved Gateway')!.click();
       await settle();
-      expect([...picker.options].map(option => option.value)).toContain('local-gateway');
-      picker.value = 'local-gateway'; picker.dispatchEvent(new Event('change', { bubbles: true }));
+      const trigger = picker.querySelector<HTMLElement>('[data-floe-dropdown-trigger]')!;
+      trigger.click(); await settle();
+      const menu = document.getElementById(trigger.getAttribute('aria-controls')!)!;
+      const option = [...menu.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(item => item.textContent?.includes(gateway.display_name));
+      expect(option).toBeDefined();
+      option!.click();
       await settle();
-      expect(picker.value).toBe('local-gateway');
+      expect(picker.dataset.value).toBe('local-gateway');
     } else {
       [...dialog.querySelectorAll<HTMLElement>('[role="tab"]')].find(tab => tab.textContent?.trim() === 'Enter an address')!.click();
       await settle();
@@ -462,7 +466,7 @@ describe('linked environment owner interactions', () => {
     expect(document.querySelector('[role="dialog"]')).toBe(dialog);
     expect(dialog.querySelector('input')).toBe(inputs[0]);
     expect(inputs.map(input => input.value)).toEqual([method === 'typed' ? expected : '', 'draft-code']);
-    expect(dialog.querySelector<HTMLSelectElement>('[data-gateway-picker]')?.value).toBe(method !== 'typed' ? 'local-gateway' : '');
+    expect(dialog.querySelector<HTMLElement>('[data-gateway-picker]')?.dataset.value).toBe(method !== 'typed' ? 'local-gateway' : '');
     expect(document.activeElement).toBe(inputs[1]);
     expect(perform).toHaveBeenCalledOnce();expect(harness.performAction).not.toHaveBeenCalled();
   });

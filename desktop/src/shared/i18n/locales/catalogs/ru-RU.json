@@ -3812,6 +3812,7 @@
     "invitationIntro": "Выберите сохранённый Gateway или введите полученные адрес и код приглашения."
   },
   "gatewayNetwork": {
+    "addressPlaceholder": "https://gateway.example.com:7443",
     "listenTitle": "Локальный слушатель",
     "listenHelp": "Укажите локальные IP-адреса и порты, к которым привязывается Gateway. Разделяйте несколько записей запятыми.",
     "listenAddress": "Адреса привязки",
