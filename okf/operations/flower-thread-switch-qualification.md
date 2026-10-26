@@ -60,13 +60,14 @@ failing fixtures. Canonical history remains complete.
 
 ## Immediate send and history continuity, 2026-10-26
 
-The eight browser suites for transport delivery, continuous history, disclosure,
-tool sequences, send feedback, streaming, composer attachments and canonical
-references passed 168 cases together. An additional thousand-retained-row case
-then passed with the 33-case transport suite: pending text appears by the next
-animation frame within 100 ms while storage generation and HTTP remain blocked;
-all historical message nodes retain identity. These are local browser acceptance
-thresholds, not a production latency distribution.
+The final ten browser suites for transport delivery, continuous history, disclosure,
+tool sequences, send feedback, streaming, composer attachments, canonical references,
+history synchronization recovery and thinking hydration passed 184 cases together.
+A thousand-retained-row case publishes pending text by the next animation frame
+within 100 ms while storage generation and HTTP remain blocked; all historical
+message nodes retain identity. These are local browser acceptance thresholds,
+not a production latency distribution. Combined history preparation, read recovery
+and retained-record unit tests passed 64 cases after integration with current main.
 
 Receipt-first and live-first tests preserve the user row through canonical
 admission and history prepend. Image handoff retains the image lane and text DOM
