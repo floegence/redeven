@@ -2,6 +2,10 @@
 
 Recent changes only. The linked concepts own current contracts and evidence; Git preserves the complete change history.
 
+## 2026-10-26
+
+- Require [Flower file delivery](ai/flower-prompt-and-rule-sources.md) to provide named Markdown links to confirmed absolute paths, including space/parenthesis handling and code-example exceptions; preserve existing preview and authorization ownership.
+
 ## 2026-10-25
 
 - Reveal [thread navigation](ui/flower-live-timeline.md) at settled tail geometry, open [tool groups](ui/flower-tool-sequences.md) directly at their latest call, reuse the running wave for history loading, and automatically fold terminal [work processes](ui/flower-turn-process-disclosure.md) while retaining user inspection.

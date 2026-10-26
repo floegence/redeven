@@ -4380,14 +4380,14 @@
             "path": "ai/flower-prompt-and-rule-sources.md",
             "type": "AI Prompt Contract",
             "title": "Flower prompt and rule sources",
-            "description": "Keep one Flower introduction separate from runtime facts, capabilities and native engine guidance.",
+            "description": "Keep shared Flower identity and output guidance separate from runtime facts, capabilities and native engine guidance.",
             "tags": [
               "ai",
               "context",
               "flower",
               "prompts"
             ],
-            "summary": "Flower's host-owned base system prompt contains only its English introduction as\nRedeven's general assistant. Every run profile uses the same introduction.\nRuntime facts, tool definitions and native Floret guidance retain their own owners\nand remain available independently of the product identity.",
+            "summary": "Flower's host-owned base system prompt contains its English introduction as\nRedeven's general assistant, visual output guidance and local file-delivery rules.\nEvery run profile uses the same base prompt.\nRuntime facts, tool definitions and native Floret guidance retain their own owners\nand remain available independently of the product identity.",
             "section_count": 2
           },
           {
@@ -9359,7 +9359,7 @@
       "concept_id": "ai.flower-prompt-and-rule-sources",
       "type": "AI Prompt Contract",
       "title": "Flower prompt and rule sources",
-      "description": "Keep one Flower introduction separate from runtime facts, capabilities and native engine guidance.",
+      "description": "Keep shared Flower identity and output guidance separate from runtime facts, capabilities and native engine guidance.",
       "tags": [
         "ai",
         "context",
@@ -9368,9 +9368,9 @@
       ],
       "timestamp": "2026-10-21T00:00:00Z",
       "frontmatter": {
-        "description": "Keep one Flower introduction separate from runtime facts, capabilities and native engine guidance.",
+        "description": "Keep shared Flower identity and output guidance separate from runtime facts, capabilities and native engine guidance.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-26",
         "tags": [
           "ai",
           "context",
@@ -9381,25 +9381,33 @@
         "title": "Flower prompt and rule sources",
         "type": "AI Prompt Contract"
       },
-      "body_length": 1455,
-      "summary": "Flower's host-owned base system prompt contains only its English introduction as\nRedeven's general assistant. Every run profile uses the same introduction.\nRuntime facts, tool definitions and native Floret guidance retain their own owners\nand remain available independently of the product identity.",
+      "body_length": 2640,
+      "summary": "Flower's host-owned base system prompt contains its English introduction as\nRedeven's general assistant, visual output guidance and local file-delivery rules.\nEvery run profile uses the same base prompt.\nRuntime facts, tool definitions and native Floret guidance retain their own owners\nand remain available independently of the product identity.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "`internal/ai/prompt_builder.go` is the sole source of the base system prompt.\n\nDiscovery checks symlinks and Git boundaries; incomplete discovery and context overflow fail admission rather than silently clipping facts.\n\nThere is no separate social or creative prompt path.\n\nDeterministic tests require the exact introduction across all 18 permission, profile and allowlist combinations.\n\nSynthetic receipts never execute proposed tools; the Service lane runs inside disposable state. Skipped paid runs are not new model qualification, and historical scores do not establish quality for this prompt.",
-          "char_count": 598
+          "body": "`internal/ai/prompt_builder.go` is the sole source of the base system prompt.\n\nVisual output uses the existing [inline HTML preview](../ui/flower-inline-media.md)\ncontract when it communicates better than text; ordinary nonvisual answers remain\ntext. Existing direct WebGL guidance remains unchanged.\n\nDelivering a created or confirmed local file requires a clickable Markdown link\nwith a clear file name or title and the full absolute path. Plain text or inline\ncode cannot be the only delivery entry point. Destinations containing spaces or\nparentheses use angle brackets, such as `[Report](\u003c/workspace/report (final).html\u003e)`.\nPaths must not be invented and links must not use `file://`. Paths inside commands\nand code examples may remain code. Existing authorized file previews own opening;\nthis prompt rule does not change historical messages or file authorization.\n\nDiscovery checks symlinks and Git boundaries; incomplete discovery and context overflow fail admission rather than silently clipping facts.\n\nThere is no separate social or creative prompt path.\n\nDeterministic tests require the exact base prompt across all 18 permission, profile\nand allowlist combinations, preserve tool-definition hashes, check file-delivery\nrequirements and bound the prompt to 1,200 bytes.\n\nSynthetic receipts never execute proposed tools; the Service lane runs inside disposable state. Skipped paid runs are not new model qualification, and historical scores do not establish quality for this prompt.",
+          "char_count": 1492
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Redeven owns Flower's product identity and tool adaptation. Published Floret owns canonical interaction, approval, cancellation, context validation, Goal and recovery. The identity change adds no upstream API, tool schema, storage migration, rule loader or parallel lifecycle.",
-          "char_count": 276
+          "body": "Redeven owns Flower's product identity, output guidance and tool adaptation. Published Floret owns canonical interaction, approval, cancellation, context validation, Goal and recovery. These prompt rules add no upstream API, tool schema, storage migration, rule loader or parallel lifecycle.",
+          "char_count": 291
         }
       ],
-      "snippet": "Flower's host-owned base system prompt contains only its English introduction as Redeven's general assistant. Every run profile uses the same introduction. Runtime facts, tool definitions and native Floret guidance retain their own owners",
+      "snippet": "Flower's host-owned base system prompt contains its English introduction as Redeven's general assistant, visual output guidance and local file-delivery rules. Every run profile uses the same base prompt. Runtime facts, tool definitions and ",
+      "links": [
+        {
+          "label": "inline HTML preview",
+          "path": "ui/flower-inline-media.md",
+          "concept_id": "ui.flower-inline-media",
+          "title": "Flower inline media"
+        }
+      ],
       "backlinks": [
         {
           "label": "AI model and context runtime",
@@ -29004,6 +29012,12 @@
       "snippet": "Assistant images, screenshots, video, audio and self-contained HTML render in shared Flower through released Floe media/HTML isolation. Redeven authorizes resource routing; canonical Floret messages remain the display source. Unavailable, f",
       "backlinks": [
         {
+          "label": "Flower prompt and rule sources",
+          "path": "ai/flower-prompt-and-rule-sources.md",
+          "concept_id": "ai.flower-prompt-and-rule-sources",
+          "title": "Flower prompt and rule sources"
+        },
+        {
           "label": "Redeven OKF Bundle",
           "path": "index.md",
           "title": "Redeven OKF Bundle"
@@ -33576,5 +33590,5 @@
       ]
     }
   ],
-  "source_sha256": "ae1fb081085de65c6656a686c510d28a2f50a164d62d0654a079db46dc8519cd"
+  "source_sha256": "fb012ff65f97a318f1afd36f9feb0f546e050f8a83540ee94ad2a79a49d7bdd6"
 }

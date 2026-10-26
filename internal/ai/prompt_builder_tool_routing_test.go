@@ -7,7 +7,7 @@ import (
 
 func assertFlowerSystemPrompt(t *testing.T, prompt string) {
 	t.Helper()
-	const want = flowerIdentityIntroduction + "\n\n" + flowerHTMLPreviewInstruction
+	const want = flowerIdentityIntroduction + "\n\n" + flowerHTMLPreviewInstruction + "\n\n" + flowerFileDeliveryInstruction
 	if prompt != want {
 		t.Fatalf("core system prompt differs from its expected contract:\ngot: %q\nwant: %q", prompt, want)
 	}
@@ -27,6 +27,24 @@ func assertPromptNotContains(t *testing.T, prompt string, forbidden string) {
 	t.Helper()
 	if strings.Contains(prompt, forbidden) {
 		t.Fatalf("prompt unexpectedly contains %q:\n%s", forbidden, prompt)
+	}
+}
+
+func TestFlowerPromptFileDeliveryContract(t *testing.T) {
+	prompt := buildFlowerSystemPrompt()
+	for _, required := range []string{
+		"local file you created or confirmed exists",
+		"clickable Markdown link with a clear file name or title and the full absolute path",
+		"[Report](/workspace/report.html)",
+		"Never use a plain or inline-code path as the only delivery entry point",
+		"Wrap link destinations containing spaces or parentheses in angle brackets",
+		"[Report](</workspace/report (final).html>)",
+		"Do not invent paths or use file:// links",
+		"Paths inside commands and code examples may remain code",
+	} {
+		if !strings.Contains(prompt, required) {
+			t.Errorf("file delivery instruction missing %q", required)
+		}
 	}
 }
 
