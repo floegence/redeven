@@ -414,7 +414,7 @@ describe('linked environment owner interactions', () => {
     },
   );
 
-  it.each(['typed', 'saved selection'] as const)('retains Gateway %s drafts across launcher snapshots', async method => {
+  it.each(['typed', 'saved selection', 'saved URL'] as const)('retains Gateway %s drafts across launcher snapshots', async method => {
     const fixture = mixedEnvironmentFixture();
     const original = fixture.snapshot.environments.find(entry => entry.kind === 'local_environment')!;
     const runtime = { ...original, runtime_service: { ...original.runtime_service!,
@@ -422,12 +422,13 @@ describe('linked environment owner interactions', () => {
       capabilities: { ...original.runtime_service!.capabilities!, runtime_gateway: { supported: true } },
     } };
     const gateway = { gateway_id: 'local-gateway', display_name: 'Gateway-local', local_enabled: true as const,
-      connection_kind: 'local_host' as const, management_capability: 'managed_local_host' as const,
-      capabilities: [], status: 'online' as const, trust_state: 'paired' as const, listener_running: true,
+      connection_kind: method === 'saved URL' ? 'url' as const : 'ssh_host' as const, management_capability: 'access_only' as const,
+      capabilities: [], status: 'unknown' as const, trust_state: 'paired' as const,
+      gateway_url: 'https://office.local:7443/',
       created_at_ms: 1, updated_at_ms: 1, environments: [],
       member_endpoints: [{ endpoint_id: 'local', address: 'https://office.local:7443', scope: 'lan' as const, priority: 0 }],
     };
-    const snapshot = { ...fixture.snapshot, gateway_sources: [gateway],
+    const snapshot = { ...fixture.snapshot, gateway_sources: [{ ...gateway, member_endpoints: method === 'saved URL' ? undefined : gateway.member_endpoints }],
       environments: fixture.snapshot.environments.map(entry => entry.id === runtime.id ? runtime : entry),
     };
     const perform = vi.fn(async () => ({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }));
@@ -440,7 +441,7 @@ describe('linked environment owner interactions', () => {
     button(dialog, 'Connect and continue').click(); await settle();
     const inputs = [...dialog.querySelectorAll<HTMLInputElement>('input')];
     const expected = method === 'typed' ? 'https://typed.example:7443' : gateway.member_endpoints[0].address;
-    if (method === 'saved selection') {
+    if (method !== 'typed') {
       const picker = dialog.querySelector<HTMLSelectElement>('[data-gateway-picker]')!;
       [...dialog.querySelectorAll<HTMLElement>('[role="tab"]')].find(tab => tab.textContent?.trim() === 'Saved Gateway')!.click();
       await settle();
@@ -461,7 +462,7 @@ describe('linked environment owner interactions', () => {
     expect(document.querySelector('[role="dialog"]')).toBe(dialog);
     expect(dialog.querySelector('input')).toBe(inputs[0]);
     expect(inputs.map(input => input.value)).toEqual([method === 'typed' ? expected : '', 'draft-code']);
-    expect(dialog.querySelector<HTMLSelectElement>('[data-gateway-picker]')?.value).toBe(method === 'saved selection' ? expected : '');
+    expect(dialog.querySelector<HTMLSelectElement>('[data-gateway-picker]')?.value).toBe(method !== 'typed' ? expected : '');
     expect(document.activeElement).toBe(inputs[1]);
     expect(perform).toHaveBeenCalledOnce();expect(harness.performAction).not.toHaveBeenCalled();
   });

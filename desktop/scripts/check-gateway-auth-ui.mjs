@@ -10,8 +10,9 @@ const server = await createSSHSettingsPreviewServer(0, ['gateway-auth.html']);
 await server.watcher.close();
 const browser = await chromium.launch({ headless: true });
 const report = { cases: [], errors: [] };
-function mockActions({ environment, connected }) {
+function mockActions({ environment, connected, gateways }) {
   window.gatewayEnvironment = environment;
+  window.savedGateways = gateways;
   window.gatewayRequests = [];
   window.gatewayConnected = connected;
   window.redevenDesktopLauncher = { performAction: async request => {
@@ -106,6 +107,41 @@ try {
     assert.ok(reopened.connection_token > requests[0].connection_token);
     await button('common.cancel').click(); await dialog.waitFor({ state: 'hidden' });
     report.cases.push({ locale, width, connected, status: 'passed' }); await page.close();
+  }
+  for (const [locale, width, theme, kind] of [
+    ['zh-CN', 1280, 'dark', 'ssh_host'], ['zh-CN', 390, 'light', 'ssh_container'],
+    ['zh-CN', 1280, 'light', 'url'], ['de-DE', 390, 'dark', 'url'],
+  ]) {
+    const i18n = createDesktopI18n(locale);
+    const page = await browser.newPage({ viewport: { width, height: 844 }, reducedMotion: 'reduce' });
+    page.on('pageerror', error => report.errors.push(error.message));
+    const gateways = [{ gateway_id: 'saved-office', display_name: 'Office Gateway', local_enabled: true,
+      connection_kind: kind, management_capability: 'access_only', capabilities: [], status: 'offline',
+      trust_state: 'paired', listener_running: false, created_at_ms: 1, updated_at_ms: 1, environments: [],
+      ...(kind === 'url' ? { gateway_url: 'https://office.example:7443/' }
+        : { member_endpoints: [{ endpoint_id: 'public', address: 'https://office.example:7443', priority: 0, scope: 'public' }] }),
+    }];
+    await page.addInitScript(mockActions, { environment, connected: true, gateways });
+    await page.goto(new URL(`gateway-auth.html?locale=${locale}&theme=${theme}`, server.resolvedUrls.local[0]).href);
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('button', { name: i18n.t('gatewayJoin.connectAndContinue'), exact: true }).click();
+    const picker = dialog.getByRole('combobox', { name: i18n.t('gatewayDiscovery.savedGateway'), exact: true });
+    await picker.waitFor();
+    assert.equal(await picker.locator('option').count(), 2);
+    await picker.selectOption('https://office.example:7443');
+    const invitation = dialog.getByLabel(i18n.t('gatewayJoin.code'), { exact: true });
+    assert.equal(await invitation.evaluate(el => el === document.activeElement), true);
+    await invitation.fill('saved-gateway-invitation');
+    const layout = await dialog.evaluate(el => ({ width: el.getBoundingClientRect().width, overflow: el.scrollWidth - el.clientWidth }));
+    assert.ok(layout.width <= width - 16 && layout.overflow <= 1);
+    await dialog.screenshot({ path: `${output}/${locale}-${width}-${theme}-saved-${kind}.png` });
+    await dialog.getByRole('button', { name: i18n.t('gatewayJoin.verify'), exact: true }).click();
+    await dialog.getByRole('button', { name: i18n.t('gatewayJoin.confirmEnable'), exact: true }).waitFor();
+    const requests = await page.evaluate(() => window.gatewayRequests);
+    assert.equal(requests.find(request => request.operation === 'preview').address, 'https://office.example:7443');
+    assert.equal(requests.some(request => request.operation === 'join' || request.ssh_password), false);
+    report.cases.push({ locale, width, theme, kind, savedGateway: true, status: 'passed' });
+    await page.close();
   }
   assert.deepEqual(report.errors, []);
   await writeFile(output + '/report.json', JSON.stringify(report, null, 2));

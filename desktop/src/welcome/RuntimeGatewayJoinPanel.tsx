@@ -1,5 +1,5 @@
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
-import { localGatewaySuggestions } from './localGatewaySuggestions';
+import { savedGatewaySuggestions } from './savedGatewaySuggestions';
 import { Monitor, ArrowRight } from '@floegence/floe-webapp-core/icons';
 import { Button, Dialog, Input, KeyedFor, StableText, Stepper, Tabs, TabPanel } from '@floegence/floe-webapp-core/ui';
 import { createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount, Show, type JSX } from 'solid-js';
@@ -67,7 +67,8 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const initialAddress = createMemo(() => props.address ?? '');
   const initialCode = createMemo(() => props.code ?? '');
   const initialPurpose = createMemo(purpose);
-  const suggestions = createMemo(() => localGatewaySuggestions(props.gateways ?? [], props.targetID));
+  const suggestions = createMemo(() => savedGatewaySuggestions(props.gateways ?? [], props.targetID));
+  let addressInteracted = false;
   type AddressMode = 'saved' | 'new';
   const initialSavedAddress = () => suggestions().find(suggestion => suggestion.address === initialAddress().trim())?.address ?? '';
   const [addressMode, setAddressMode] = createSignal<AddressMode>(suggestions().length && (!initialAddress().trim() || initialSavedAddress()) ? 'saved' : 'new');
@@ -79,19 +80,22 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const effectiveAddress = createMemo(() => addressMode() === 'saved' ? selectedSavedAddress() : address().trim());
   const focusAddress = () => (addressMode() === 'saved' ? savedGatewayInput : addressInput)?.focus();
   const changeAddressMode = (mode: AddressMode) => {
+    addressInteracted = true;
     if (mode === addressMode()) return;
     setAddressMode(mode);
     invalidate();
   };
   const updateSavedAddress = (value: string) => {
+    addressInteracted = true;
     const previousAddress = effectiveAddress();
     setSavedAddress(value);
     if (previousAddress !== value) invalidate();
   };
   const manualAddressField = () => <label class="redeven-gateway-join-field"><span>{text('gatewayJoin.address')}</span><Input ref={addressInput} value={address()} placeholder="https://gateway.example:7443" autocomplete="off" spellcheck={false} disabled={busy()}
-    onInput={event => { invalidate(); setAddress(event.currentTarget.value); }} /></label>;
+    onInput={event => { addressInteracted = true; invalidate(); setAddress(event.currentTarget.value); }} /></label>;
   const invalidate = () => { generation++; setPreview(undefined); setPending(null); setError(''); };
   const chooseInitialAddress = (value: string) => {
+    addressInteracted = false;
     const matching = suggestions().find(suggestion => suggestion.address === value.trim());
     setAddress(value);
     setSavedAddress(matching?.address ?? '');
@@ -106,6 +110,10 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
     if (!available.length && addressMode() === 'saved') {
       setAddressMode('new');
       invalidate();
+    } else if (available.length && !addressInteracted && !address().trim() && addressMode() === 'new') {
+      const restoreFocus = document.activeElement === addressInput;
+      setAddressMode('saved');
+      if (restoreFocus) queueMicrotask(focusAddress);
     }
   }, { defer: true }));
   createEffect(on(currentStep, () => {
@@ -324,17 +332,18 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
                 slotClassNames={{ tab: 'redeven-gateway-source-tab', indicator: 'redeven-gateway-source-indicator' }}
                 ariaLabel={text('gatewayJoin.address')} class="redeven-gateway-source-tabs" />
               <TabPanel id={savedPanelID} labelledBy={savedTabID} active={addressMode() === 'saved'} keepMounted class="redeven-gateway-source-panel">
-                <label class="redeven-gateway-join-field"><span>{text('gatewayDiscovery.savedGateway')}</span><select ref={savedGatewayInput} data-gateway-picker class="redeven-gateway-local-picker" value={selectedSavedAddress()} disabled={busy()}
+                <label class="redeven-gateway-join-field"><span>{text('gatewayDiscovery.savedGateway')}</span><select ref={savedGatewayInput} data-gateway-picker class="redeven-gateway-saved-picker" value={selectedSavedAddress()} disabled={busy()}
                   onChange={event => { const value = event.currentTarget.value; updateSavedAddress(value); if (value) queueMicrotask(() => codeInput?.focus()); }}>
                   <option value="">{text('gatewayDiscovery.chooseSavedGateway')}</option>
                   <KeyedFor each={suggestions()} by={suggestion => suggestion.address}>{suggestion => <option value={suggestion().address}>{suggestion().name} · {new URL(suggestion().address).host}</option>}</KeyedFor>
                 </select></label>
               </TabPanel>
-              <TabPanel id={newPanelID} labelledBy={newTabID} active={addressMode() === 'new'} keepMounted class="redeven-gateway-source-panel">
-                {manualAddressField()}
-              </TabPanel>
             </Show>
-            <Show when={!suggestions().length}>{manualAddressField()}</Show>
+            <TabPanel id={newPanelID} role={suggestions().length ? 'tabpanel' : undefined}
+              labelledBy={suggestions().length ? newTabID : undefined} active={addressMode() === 'new'}
+              keepMounted class="redeven-gateway-source-panel">
+              {manualAddressField()}
+            </TabPanel>
           </div>
           <label class="redeven-gateway-join-field"><span>{text('gatewayJoin.code')}</span><Input ref={codeInput} value={code()} autocomplete="off" spellcheck={false} disabled={busy()}
             onInput={event => { invalidate(); setCode(event.currentTarget.value); }} onKeyDown={event => { if (event.key === 'Enter' && !blocked() && !busy() && effectiveAddress() && code().trim()) { event.preventDefault(); void verify(); } }} /></label>

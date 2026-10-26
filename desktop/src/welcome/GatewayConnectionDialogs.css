@@ -1009,8 +1009,10 @@
   flex-direction: column;
 }
 
-.redeven-gateway-local-picker {
+.redeven-gateway-saved-picker {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   min-height: 2.5rem;
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   border-radius: .375rem;
@@ -1019,6 +1021,17 @@
   color: var(--foreground);
   cursor: pointer;
   font-size: var(--floe-type-body);
+  text-overflow: ellipsis;
+}
+
+.redeven-gateway-saved-picker:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.redeven-gateway-saved-picker:disabled {
+  cursor: not-allowed;
+  opacity: .5;
 }
 
 .redeven-gateway-setting-badge {

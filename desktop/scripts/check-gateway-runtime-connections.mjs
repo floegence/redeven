@@ -46,7 +46,7 @@ async function assertWizardTypography(dialog) {
    .map(element=>parseFloat(getComputedStyle(element).fontSize)/rem);
   return {coarse:matchMedia('(pointer: coarse)').matches,title:font('h2'),heading:font('h3'),
    copy:font('.redeven-gateway-join-section p'),labels:font('label'),inputs:font('input'),
-   gatewayPicker:font('.redeven-gateway-local-picker')};
+   gatewayPicker:font('.redeven-gateway-saved-picker')};
  });
  assert.ok(typography.title.every(size=>Math.abs(size-1)<.01),JSON.stringify(typography));
  assert.ok(typography.heading.every(size=>Math.abs(size-.8125)<.01),JSON.stringify(typography));
