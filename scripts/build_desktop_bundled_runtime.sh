@@ -332,7 +332,7 @@ stage_redevplugin_runtime() {
   local goarch="$3"
   local tmpdir
 
-  tmpdir="$(mktemp -d)"
+  tmpdir="$(mktemp -d "$(dirname -- "$bundle_dir")/.plugin.XXXXXX")"
   ui_pkg_log "Building the verified ReDevPlugin runtime from published source crates..."
   if ! "$SCRIPT_DIR/stage_redevplugin_release_artifacts.sh" \
     --dest-dir "$tmpdir/redevplugin-release" \
@@ -451,8 +451,21 @@ main() {
   else
     from_archive=0
     mkdir -p "$working_bundle"
-    bundle_from_source "$goos" "$goarch" "$working_bundle_path" "$bundle_version" "$bundle_commit"
-    if [[ "$goos" != "windows" ]]; then
+    if [ "${REDEVEN_DESKTOP_BUNDLE_PROVENANCE:-}" = development_bundle ]; then
+      local source_identity node_arch="$goarch"
+      source_identity=$(node "$SCRIPT_DIR/source_build_identity.mjs" capture "$ROOT_DIR" "$bundle_commit")
+      [ "$node_arch" != amd64 ] || node_arch=x64
+      # Distinct outputs share read-only source/dependencies. Go still waits for
+      # embedded assets inside bundle_from_source; publication waits for all.
+      export SCRIPT_DIR ROOT_DIR
+      export -f bundle_from_source build_go_command stage_redevplugin_runtime ui_pkg_log ui_pkg_die
+      node "$SCRIPT_DIR/run_parallel_builds.mjs" \
+        --task Assets-Go bash -euc 'bundle_from_source "$@"' build "$goos" "$goarch" "$working_bundle_path" "$bundle_version" "$bundle_commit" \
+        --task Plugin bash -euc 'stage_redevplugin_runtime "$@"' build "$working_bundle" "$goos" "$goarch" \
+        --task Computer node "$SCRIPT_DIR/stage_computer_resources.mjs" "$working_bundle/computer" "$goos" "$node_arch"
+      node "$SCRIPT_DIR/source_build_identity.mjs" verify "$ROOT_DIR" "$source_identity"
+    else
+      bundle_from_source "$goos" "$goarch" "$working_bundle_path" "$bundle_version" "$bundle_commit"
       stage_redevplugin_runtime "$working_bundle" "$goos" "$goarch"
     fi
   fi
@@ -470,7 +483,9 @@ main() {
     local node_arch="$goarch"
     if [ "$node_arch" = "amd64" ]; then node_arch="x64"; fi
     rm -f "$working_bundle/computer.zip"
-    node "$SCRIPT_DIR/stage_computer_resources.mjs" "$working_bundle/computer" "$goos" "$node_arch"
+    if [ "$from_archive" -eq 1 ] || [ "${REDEVEN_DESKTOP_BUNDLE_PROVENANCE:-}" != development_bundle ]; then
+      node "$SCRIPT_DIR/stage_computer_resources.mjs" "$working_bundle/computer" "$goos" "$node_arch"
+    fi
   fi
   write_bundle_manifest "$working_bundle" "$goos" "$goarch" "$bundle_version" "$bundle_commit"
   assert_bundle_inventory "$working_bundle" "$from_archive" "$goos"

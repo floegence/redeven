@@ -34,6 +34,7 @@ PORTS_EXPLICIT=0
 DESKTOP_PID=""
 DEVELOPMENT_SERVICES_OWNED=0
 SERVICE_HELPER_PID=""
+BUILD_HELPER_PID=""
 SHUTDOWN_REQUESTED=0
 SHUTDOWN_EXIT_STATUS=0
 CLEANUP_RUNNING=0
@@ -628,6 +629,9 @@ request_shutdown() {
   if [ -n "$DESKTOP_PID" ] && pid_exists "$DESKTOP_PID"; then
     kill -TERM "$DESKTOP_PID" >/dev/null 2>&1 || true
   fi
+  if [ -n "$BUILD_HELPER_PID" ]; then
+    kill -TERM "$BUILD_HELPER_PID" >/dev/null 2>&1 || true
+  fi
   if [ -n "$SERVICE_HELPER_PID" ]; then
     kill -TERM "$SERVICE_HELPER_PID" >/dev/null 2>&1 || true
   fi
@@ -744,12 +748,23 @@ prepare_instance_bundle_snapshot() {
 	mkdir -p "$snapshots_root"
 	build_root="$(mktemp -d "$snapshots_root/.build.XXXXXX")"
 	working_bundle="$build_root/bundle"
-	if ! REDEVEN_DESKTOP_BUNDLE_OUTPUT_DIR="$working_bundle" \
+	local build_status=0
+	REDEVEN_DESKTOP_BUNDLE_OUTPUT_DIR="$working_bundle" \
 		REDEVEN_DESKTOP_BUNDLE_PROVENANCE=development_bundle \
-		npm run prepare:bundled-runtime
-	then
+		node "$SCRIPT_DIR/run_parallel_builds.mjs" \
+		--task Desktop npm run build \
+		--task Runtime npm run prepare:bundled-runtime &
+	BUILD_HELPER_PID=$!
+	wait "$BUILD_HELPER_PID" || build_status=$?
+	if [ "$SHUTDOWN_REQUESTED" -eq 1 ]; then
+		kill -TERM "$BUILD_HELPER_PID" >/dev/null 2>&1 || true
+		wait "$BUILD_HELPER_PID" || true
+		build_status="$SHUTDOWN_EXIT_STATUS"
+	fi
+	BUILD_HELPER_PID=""
+	if [ "$build_status" -ne 0 ]; then
 		rm -rf "$build_root"
-		return 1
+		return "$build_status"
 	fi
 	if ! node "$SCRIPT_DIR/source_build_identity.mjs" verify "$ROOT_DIR" "$source_identity"; then
 		rm -rf "$build_root"
@@ -857,11 +872,8 @@ start_desktop() {
       ui_pkg_log "Reusing verified Desktop and Runtime build: $cached_bundle"
     else
       phase_start=$SECONDS
-      npm run build
-      ui_pkg_log "Desktop build: $((SECONDS - phase_start))s"
-      phase_start=$SECONDS
       prepare_instance_bundle_snapshot "$source_identity"
-      ui_pkg_log "Runtime bundle preparation: $((SECONDS - phase_start))s"
+      ui_pkg_log "Parallel Desktop and Runtime preparation: $((SECONDS - phase_start))s"
       after_context=$(node "$SCRIPT_DIR/dev_desktop_build_cache.mjs" capture "$ROOT_DIR")
       node "$SCRIPT_DIR/dev_desktop_build_cache.mjs" compare "$ROOT_DIR" "$DEVELOPMENT_STATE_ROOT" "$cache_context" "$after_context"
       node "$SCRIPT_DIR/dev_desktop_build_cache.mjs" record "$ROOT_DIR" "$DEVELOPMENT_STATE_ROOT" "$after_context" "$DEVELOPMENT_BUNDLE_ROOT"
@@ -888,7 +900,7 @@ start_desktop() {
 
   if [ "$DRY_RUN" -eq 1 ]; then
     printf 'Would verify current source, dependencies, toolchains and cached output integrity (force rebuild: %s).\n' "$REBUILD"
-    printf 'Would run in %q on cache miss: npm run build\n' "$DESKTOP_DIR"
+    printf 'Would build Desktop and Runtime concurrently in %q on cache miss.\n' "$DESKTOP_DIR"
 		printf 'Would build an immutable development bundle snapshot below %q\n' "$DEVELOPMENT_STATE_ROOT/desktop/bundles"
 		printf 'Would retain the three newest bundles, the selected bundle, and bundles referenced by running processes.\n'
     printf 'Would run in %q: ' "$DESKTOP_DIR"

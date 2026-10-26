@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { treeDigest, lookupBuild, recordBuild, buildInputKey } from './dev_desktop_build_cache.mjs';
+import { treeDigest, lookupBuild, recordBuild, buildInputKey, dependencyDigests } from './dev_desktop_build_cache.mjs';
 import { captureSourceBuildIdentity } from './source_build_identity.mjs';
 
 function fixture(t) {
@@ -96,4 +96,21 @@ test('Gateway cache key binds dirty source, dependencies and compression profile
   assert.notEqual(buildInputKey(f.context()), key);
   assert.notEqual(buildInputKey({ ...context, dependencies: ['changed'] }), key);
   assert.notEqual(buildInputKey({ ...context, environment: { REDEVEN_ASSET_BUILD_PROFILE: 'development' } }), key);
+});
+
+test('parallel dependency verification matches serial bytes and rejects a broken package', async t => {
+  const f = fixture(t);
+  const packages = ['desktop', 'internal/envapp/ui_src', 'internal/codeapp/ui_src'];
+  for (const directory of packages) {
+    const modules = path.join(f.root, directory, 'node_modules');
+    mkdirSync(modules, { recursive: true });
+    writeFileSync(path.join(modules, 'input'), directory);
+  }
+  const expected = packages.map(directory => [directory, treeDigest(path.join(f.root, directory, 'node_modules'), { dependencies: true })]);
+  assert.deepEqual(await dependencyDigests(f.root), expected);
+  const file = path.join(f.root, packages[1], 'node_modules/input'), stat = statSync(file);
+  writeFileSync(file, 'changed bytes'); utimesSync(file, stat.atime, stat.mtime);
+  assert.notDeepEqual(await dependencyDigests(f.root), expected);
+  symlinkSync(path.join(f.root, 'input.ts'), path.join(f.root, packages[2], 'node_modules/external'));
+  await assert.rejects(dependencyDigests(f.root), /leaves its package/);
 });

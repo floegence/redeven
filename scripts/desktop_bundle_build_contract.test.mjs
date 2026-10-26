@@ -214,7 +214,8 @@ test('Windows Desktop validates and preserves one exact Linux x64 managed WSL ar
 });
 
 test('every native Desktop bundle stages the complete published ReDevPlugin runtime suite', () => {
-  assert.match(source, /if \[\[ "\$goos" != "windows" \]\]; then\n\s+stage_redevplugin_runtime/u);
+  assert.match(source, /--task Plugin bash -euc 'stage_redevplugin_runtime/u);
+  assert.match(source, /else\n\s+bundle_from_source[^\n]*\n\s+stage_redevplugin_runtime/u);
   assert.match(source, /if \[\[ "\$goos" != "windows" \]\]; then\n\s+allow_args\+=/u);
   assert.match(source, /platform !== "windows"[\s\S]*\["redevplugin-runtime", true\]/u);
 });

@@ -38,8 +38,25 @@ The first launch after this change installs once to establish these receipts.
 Development Rust staging may reuse profile-owned Cargo registry/target caches,
 while installing the exact locked published crate into fresh staging. Digest,
 executable and consumption checks still run and product evidence is regenerated.
+After verifying the cached published crate and resolving its locked dependencies
+offline, development installs without registry requests. Incomplete caches report
+the offline diagnostic and use the configured acquisition policy; corrupt crates
+fail, and compiler failures are not retried through a different path.
 Release staging always has isolated Cargo directories. Source changes conservatively
 rebuild the full product; this is not per-component or watch-mode compilation.
+Development overlaps Desktop compilation with Runtime preparation. Within the
+Runtime, embedded-assets/Go, verified plugin staging and Computer resources run
+independently. Env App, Code App and knowledge assets have distinct outputs;
+Env App's no-emit type check overlaps asset bundling under the same checkout lock.
+Go compilation waits for every embedded asset. Publication and cache receipts
+wait for all builds plus unchanged-source/input checks. Release builds retain
+their ordered preparation.
+
+Package dependency byte scans run in three workers alongside toolchain probes;
+their digests and ordering match serial verification. Parallel build supervisors
+label diagnostics, preserve failures and stop owned process groups (including
+nested supervisors) on cancellation or sibling failure.
+
 Saved local Gateways reuse intact compatible installations through the Gateway
 service owner. Startup does not force replacement on Desktop source changes;
 missing or damaged packages are prepared by that owner, and explicit Update
@@ -92,6 +109,7 @@ in-progress directories.
 
 - `redeven:scripts/dev_desktop.sh` - Publication, launch and cleanup.
 - `redeven:scripts/dev_desktop_build_cache.test.mjs` - Input drift, corruption and toolchain admission.
+- `redeven:scripts/run_parallel_builds.test.mjs` - Overlap, failure and descendant cleanup.
 - `redeven:scripts/ui_package_install.test.mjs` - Manager selection, repeat installs and failure.
 - `redeven:scripts/redevplugin_build_cache.test.mjs` - Development reuse and release isolation.
 - `redeven:scripts/source_build_identity.mjs` - Mixed-source rejection.

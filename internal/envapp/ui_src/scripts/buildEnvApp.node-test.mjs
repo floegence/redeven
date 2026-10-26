@@ -12,10 +12,12 @@ const buildCommand = JSON.parse(readFileSync(path.join(packageRoot, 'package.jso
 
 function fixture(t) {
   const root = mkdtempSync(path.join(tmpdir(), 'redeven-env-build-'));
-  const cwd = path.join(root, 'ui_src');
+  const cwd = path.join(root, 'repo/internal/envapp/ui_src');
   const bin = path.join(root, 'bin');
-  const assets = path.join(root, 'ui/dist/env/assets');
+  const assets = path.join(cwd, '../ui/dist/env/assets');
   mkdirSync(path.join(cwd, 'scripts'), { recursive: true });
+  mkdirSync(path.join(root, 'repo/scripts'), { recursive: true });
+  copyFileSync(new URL('../../../../scripts/run_parallel_builds.mjs', import.meta.url), path.join(root, 'repo/scripts/run_parallel_builds.mjs'));
   mkdirSync(bin);
   t.after(() => rmSync(root, { recursive: true, force: true }));
   for (const name of ['build.py', 'precompressAssets.mjs']) {
@@ -53,6 +55,7 @@ function fixture(t) {
   `, { mode: 0o755 });
   writeFileSync(path.join(bin, 'vite'), `#!${process.execPath}
     const fs = require('node:fs');
+    console.log('bundling:' + process.env.TEST_BUILD_ID);
     fs.rmSync('../ui/dist/env', { recursive: true, force: true });
     fs.mkdirSync('../ui/dist/env/assets', { recursive: true });
     fs.writeFileSync('../ui/dist/env/assets/json.worker-abcdefgh.js', 'worker:' + process.env.TEST_BUILD_ID);
@@ -119,6 +122,31 @@ test('serializes concurrent builds through worker generation, validation, and co
   assert.equal(await first.done, 0, first.output());
   assert.equal(await second.done, 0, second.output());
   verifyAssets(f, 'second');
+});
+
+test('development overlaps no-emit checking with assets while retaining the checkout lock', async t => {
+  const f = fixture(t);
+  const first = build(t, f, 'first', { REDEVEN_ASSET_BUILD_PROFILE: 'development', TEST_BUILD_HOLD: f.release });
+  await first.until(/entered:first/);
+  await first.until(/precompressed/);
+  verifyAssets(f, 'first');
+  const second = build(t, f, 'second', { REDEVEN_ASSET_BUILD_PROFILE: 'development' });
+  await second.until(/Waiting for|entered:second/);
+  assert.match(second.output(), /Waiting for/);
+  assert.doesNotMatch(second.output(), /bundling:second/);
+  writeFileSync(f.release, 'release');
+  assert.equal(await first.done, 0, first.output());
+  assert.equal(await second.done, 0, second.output());
+  verifyAssets(f, 'second');
+});
+
+test('development type errors fail the full build and release its lock', async t => {
+  const f = fixture(t);
+  const failed = build(t, f, 'failed', { REDEVEN_ASSET_BUILD_PROFILE: 'development', TEST_BUILD_FAIL: '1' });
+  assert.equal(await failed.done, 31, failed.output());
+  const next = build(t, f, 'next', { REDEVEN_ASSET_BUILD_PROFILE: 'development' });
+  assert.equal(await next.done, 0, next.output());
+  verifyAssets(f, 'next');
 });
 
 test('releases the build lock after a failed command', async (t) => {
