@@ -42,7 +42,7 @@ test('only manages local host Gateways explicitly saved in the selected profile,
   await assert.rejects(developmentGatewayTargets(root), /Invalid development Gateway identity/u);
 });
 
-test('every launch forces current-source installation with a fresh session cache, and cleanup includes removed and newly added connections', async context => {
+test('launches reuse compatible Gateway installations and cleanup includes removed and newly added connections', async context => {
   const { root, save, record } = await fixture(context);
   await save([record('local'), record('disabled', undefined, false)]);
   const calls = [];
@@ -63,7 +63,7 @@ test('every launch forces current-source installation with a fresh session cache
   assert.equal(calls.length, 2);
   assert.notEqual(calls[0].assetCacheRoot, calls[1].assetCacheRoot);
   for (const call of calls) {
-    assert.equal(call.forceUpdate, true);
+    assert.notEqual(call.forceUpdate, true);
     assert.equal(call.sourceRuntimeRoot, '/current-checkout');
     await assert.rejects(stat(call.assetCacheRoot), { code: 'ENOENT' });
   }
@@ -146,7 +146,7 @@ test('reuses verified Gateway packages only for matching complete build inputs',
   await runDevelopmentGateways({ ...options, buildKey: 'b'.repeat(64) });
   assert.notEqual(calls[1].assetCacheRoot, calls[2].assetCacheRoot);
   for (const call of calls) {
-    assert.equal(call.forceUpdate, true);
+    assert.notEqual(call.forceUpdate, true);
     assert.equal(call.sourceRuntimeRoot, '/current-checkout');
   }
 });

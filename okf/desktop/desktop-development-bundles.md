@@ -40,9 +40,12 @@ while installing the exact locked published crate into fresh staging. Digest,
 executable and consumption checks still run and product evidence is regenerated.
 Release staging always has isolated Cargo directories. Source changes conservatively
 rebuild the full product; this is not per-component or watch-mode compilation.
-Saved local Gateways retain current-source installation and lifecycle. Their
-verified package archives persist only within a cache generation bound to the
-launcher's complete build input key, including dirty source bytes. Different
+Saved local Gateways reuse intact compatible installations through the Gateway
+service owner. Startup does not force replacement on Desktop source changes;
+missing or damaged packages are prepared by that owner, and explicit Update
+selects the current build. Verified package archives persist only within a cache
+generation bound to the launcher's complete build input key, including dirty
+source bytes. Different
 inputs discard the previous generation; calls without an input key use a fresh
 session cache. Archive verification remains owned by the package cache.
 
