@@ -4200,6 +4200,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return <div class="flower-history-body-control" role="status" aria-busy={state() !== 'failed'}>
       <Show when={state() === 'failed'} fallback={<span>{copy().chat.history.loading}</span>}>
         <span>{copy().chat.history.failed}</span>
+        <Button size="xs" variant="ghost" onClick={() => historyBodies.retry(historyBodyKey(threadID(), itemID()))}>{copy().chat.handlerRetry}</Button>
       </Show>
     </div>;
   };

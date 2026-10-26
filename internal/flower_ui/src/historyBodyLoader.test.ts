@@ -75,6 +75,21 @@ describe('history body request ownership', () => {
     expect(denied).toHaveBeenCalledOnce(); expect(malformed).toHaveBeenCalledOnce();
     controller.abort();
   });
+  it('retries only an explicitly selected failed read without reviving canceled owners', async () => {
+    const loader = createHistoryBodyLoader(() => 'timeout');
+    const controller = new AbortController();
+    const read = vi.fn().mockRejectedValue({ status: 400 });
+    loader.request('a', 'source', controller.signal, read);
+    loader.request('b', 'source', controller.signal, read);
+    await settle();
+    read.mockResolvedValue(undefined);
+    loader.retry('a'); loader.retry('a'); await settle();
+    expect(read).toHaveBeenCalledTimes(3);
+    expect(loader.state('a')).toBeUndefined();
+    expect(loader.state('b')).toBe('failed');
+    controller.abort(); loader.retry('b'); await settle();
+    expect(read).toHaveBeenCalledTimes(3);
+  });
   it('cancels pending retries without reviving a replacement disclosure', async () => {
     vi.useFakeTimers();
     const loader = createHistoryBodyLoader(() => 'timeout');

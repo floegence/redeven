@@ -209,6 +209,58 @@ describe('history page anchors', () => {
 
 
 describe('continuous visible bodies', () => {
+  it('stages a sealed source independently of longer live text until its bounded read completes', () => {
+    const { current, initial } = fixture();
+    const liveText = '中文🌸' + 'draft '.repeat(30);
+    const live = { ...current.items![0], text: liveText, body: { field: 'content', source_id: 'one', run_id: 'run', bytes: 200, preview_bytes: 10 } };
+    const page = { ...current, items: [live] };
+    const record = createRuntimeThreadRecord(page, applyFlowerRuntimeCurrentView(initial, page));
+    const sealed = { ...live, live: false, canonical_ordinal: 4, text: '中文', body: { field: 'content', source_id: 'one', bytes: 14, preview_bytes: 6 } };
+    record.apply(record.initializeThread(), { ...append(), items: [{ kind: 'replace', item_id: 'one', item: sealed }] });
+    expect(record.bodyOffset('one')).toBe(6);
+    expect(record.initializeThread().messages[0].content).toBe(liveText);
+    const chunk = { thread_id: 'thread', item_id: 'one', field: 'content', source_id: 'one', bytes: 14, offset_bytes: 6, through_bytes: 14, text: '🌸' };
+    expect(record.appendBody(chunk)).toBe(true);
+    expect(record.bodyOffset('one')).toBe(10);
+    expect(record.initializeThread().messages[0].content).toBe(liveText);
+    // An unchanged canonical baseline must retain the in-flight read prefix.
+    const refreshed = createRuntimeThreadRecord({ ...page, view_version: 3, items: [sealed] }, applyFlowerRuntimeCurrentView(initial, { ...page, items: [sealed] }), record);
+    expect(refreshed.bodyOffset('one')).toBe(10);
+    expect(refreshed.appendBody({ ...chunk, offset_bytes: 10, text: 'done' })).toBe(true);
+    expect(refreshed.initializeThread().messages[0].content).toBe('中文🌸done');
+    expect(refreshed.initializeThread().messages[0].body_pending).toBeUndefined();
+    expect(refreshed.retainedItem(sealed)?.bytes).toBe(14);
+  });
+
+  it.each(['assistant', 'thinking'] as const)('stages a new %s source after fully loaded live text and rejects its late chunks', (kind) => {
+    const { current, initial } = fixture();
+    const field = kind === 'thinking' ? 'reasoning' : 'content';
+    const live = { ...current.items![0], kind, text: '中文draft' };
+    const page = { ...current, items: [live] };
+    const record = createRuntimeThreadRecord(page, applyFlowerRuntimeCurrentView(initial, page));
+    const sealed = { ...live, live: false, text: '中文', body: { field, source_id: 'sealed', bytes: 11, preview_bytes: 6 } };
+    record.apply(record.initializeThread(), { ...append(), items: [{ kind: 'replace', item_id: 'one', item: sealed }] });
+    expect(record.bodyOffset('one')).toBe(6);
+    const chunk = { thread_id: 'thread', item_id: 'one', field, source_id: 'sealed', bytes: 11, offset_bytes: 6, through_bytes: 11, text: 'final' };
+    expect(record.appendBody({ ...chunk, run_id: 'run' })).toBe(false);
+    expect(record.appendBody(chunk)).toBe(true);
+    const message = record.initializeThread().messages[0];
+    expect(kind === 'thinking' ? message.blocks?.[0] : message.content).toEqual(kind === 'thinking' ? { type: 'thinking', content: '中文final' } : '中文final');
+    expect(message.body_pending).toBeUndefined();
+  });
+
+  it('revalidates changed source text even when the old offset fits the sealed extent', () => {
+    const { current, initial } = fixture();
+    const live = { ...current.items![0], text: '中文draft', body: { field: 'content', source_id: 'one', run_id: 'run', bytes: 40, preview_bytes: 6 } };
+    const page = { ...current, items: [live] };
+    const record = createRuntimeThreadRecord(page, applyFlowerRuntimeCurrentView(initial, page));
+    const sealed = { ...live, live: false, text: '中文', body: { field: 'content', source_id: 'one', bytes: 16, preview_bytes: 6 } };
+    record.apply(record.initializeThread(), { ...append(), items: [{ kind: 'replace', item_id: 'one', item: sealed }] });
+    expect(record.bodyOffset('one')).toBe(6);
+    expect(record.appendBody({ thread_id: 'thread', item_id: 'one', field: 'content', source_id: 'one', bytes: 16, offset_bytes: 6, through_bytes: 16, text: 'final text' })).toBe(true);
+    expect(record.initializeThread().messages[0].content).toBe('中文final text');
+  });
+
   it('keeps an ahead-of-observation read and settles trimmed canonical output once', () => {
     const { current, initial } = fixture();
     const preview = { ...current.items![0], text: '中文', body: { field: 'content', source_id: 'one', run_id: 'run', bytes: 10, preview_bytes: 6 } };

@@ -75,6 +75,12 @@ export function createHistoryBodyLoader(timeoutMessage: () => string, changed: (
       }
       changed(); pump();
     },
+    retry(key: string) {
+      const entry = reads.get(key);
+      if (!entry || entry.state !== 'failed' || entry.signal.aborted) return;
+      entry.failures = 0; entry.state = 'queued';
+      changed(); pump();
+    },
     dispose() { for (const [key, entry] of reads) remove(key, entry); },
     state(key: string): 'loading' | 'failed' | undefined {
       const state = reads.get(key)?.state;
