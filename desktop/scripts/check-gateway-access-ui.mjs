@@ -57,10 +57,12 @@ try {
       const gatewayMenu = page.locator('.redeven-gateway-menu');
       await gatewayMenu.getByRole('menuitem', { name: i18n.t('environmentCenter.gatewayActionOpenSettings'), exact: true }).click();
       const dialog = page.getByRole('dialog');
-      await dialog.getByRole('tab', { name: i18n.t('gatewayClients.runtimes'), exact: true }).click();
+      await dialog.getByRole('tab', { name: i18n.t('environmentCenter.environmentsSection'), exact: true }).click();
+      const membersPanel = dialog.getByRole('tabpanel', { name: i18n.t('environmentCenter.environmentsSection'), exact: true });
+      await dialog.locator('[data-gateway-invite-others] > summary').click();
       await dialog.getByRole('button', { name: i18n.t('gatewayMembers.createInvitation'), exact: true }).click();
       await dialog.getByText(i18n.t('gatewayMembers.failed'), { exact: true }).waitFor();
-      assert.equal(await dialog.getByText('Inherited', { exact: true }).isVisible(), true);
+      assert.equal(await membersPanel.getByText('Inherited', { exact: true }).isVisible(), true);
       await dialog.getByRole('button', { name: i18n.t('gatewayMembers.createInvitation'), exact: true }).click();
       await dialog.getByText(i18n.t('gatewayMembers.invitationReady'), { exact: true }).waitFor();
       assert.equal(await dialog.getByRole('button', { name: i18n.t('gatewayJoin.copyAddress'), exact: true }).count(), 1);
@@ -76,7 +78,11 @@ try {
       assert.equal((await page.evaluate(() => window.settingsFixture.requests)).some(r => r.kind === 'update_gateway_policy'), false);
       await dialog.getByRole('button', { name: i18n.t('gatewayMembers.confirmSave'), exact: true }).click();
       await page.waitForFunction(() => window.settingsFixture.requests.some(r => r.kind === 'update_gateway_policy'));
-      for (const select of await dialog.locator('li select').all()) await select.selectOption('allow');
+      await dialog.locator('.redeven-gateway-policy > summary').click();
+      for (const row of await membersPanel.locator('.redeven-gateway-member-row').all()) {
+        await row.getByRole('button', { name: i18n.t('gatewayMembers.cloudPermission'), exact: true }).click();
+        await page.getByRole('menuitem', { name: i18n.t('gatewayMembers.allow'), exact: true }).click();
+      }
       await dialog.getByRole('button', { name: i18n.t('gatewayMembers.confirmSave'), exact: true }).click();
       await dialog.getByText('MEMBER_CONFLICT', { exact: true }).waitFor();
       await dialog.getByRole('button', { name: i18n.t('gatewayMembers.confirmSave'), exact: true }).click();

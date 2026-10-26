@@ -18848,7 +18848,7 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
         if (record.trust_profile) {
           await syncGatewayRecord(record, { force: true, priority: 'foreground', mode: 'refresh_catalog', startPolicy: 'require_ready' }).catch(() => undefined);
         }
-        return launcherActionSuccess('saved_gateway');
+        return { ...launcherActionSuccess('saved_gateway'), gateway_id: record.gateway_id };
       } catch (error) {
         let saved: GatewayRecord | null = null;
         try {

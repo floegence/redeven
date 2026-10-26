@@ -1,39 +1,24 @@
+import { GatewayPicker } from './GatewayPicker';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import { gatewayRuntimeAddress, savedGatewaySuggestions } from './savedGatewaySuggestions';
-import { Monitor, ArrowRight, ChevronDown } from '@floegence/floe-webapp-core/icons';
-import { Button, Dialog, Dropdown, Input, StableText, Stepper, Tabs, TabPanel } from '@floegence/floe-webapp-core/ui';
+import { Monitor, ArrowRight } from '@floegence/floe-webapp-core/icons';
+import { Button, Dialog, Input, StableText, Stepper, Tabs, TabPanel } from '@floegence/floe-webapp-core/ui';
 import { createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
-import type { GatewayJoinPreview, GatewayMembershipOperation, GatewayEnrollmentPurpose } from '../shared/gatewayJoin';
+import type { GatewayJoinPreview, GatewayMembershipOperation, GatewayEnrollmentPurpose, GatewayMembershipStatus } from '../shared/gatewayJoin';
 import type { GatewayEndpoint } from '../shared/gatewayMembership';
 import { gatewayInteractionIdentity } from './environmentInteractionIdentity';
 import type { DesktopI18n } from '../shared/i18n';
 
 let nextConnectionToken = Date.now();
 
-/** Shared Dropdown owns the menu, keyboard navigation and field focus. */
-function GatewayPicker(props: Readonly<{
-  label: string; placeholder: string; value: string; disabled: boolean;
-  options: { value: string; label: string }[]; onChange: (value: string) => void;
-}>) {
-  const selected = () => props.options.find(option => option.value === props.value);
-  return <div class="redeven-gateway-join-field">
-    <span>{props.label}</span>
-    <Dropdown class="redeven-gateway-saved-picker" triggerClass="redeven-gateway-picker-trigger"
-      triggerInputSurface triggerAriaLabel={props.label} disabled={props.disabled}
-      value={props.value} items={() => props.options.map(option => ({ id: option.value, label: option.label }))}
-      onSelect={props.onChange} trigger={<>
-        <span class="min-w-0 truncate" classList={{ 'text-muted-foreground': !selected() }} title={selected()?.label}>{selected()?.label ?? props.placeholder}</span>
-        <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-      </>} />
-  </div>;
-}
-
 export type RuntimeGatewayPreparationResult = Readonly<{ ok: boolean; authenticationRequired?: boolean }>;
 
 /** Verification belongs to the selected Runtime; only a verified preview can be confirmed. */
 export function RuntimeGatewayJoinPanel(props: Readonly<{
   targetID: DesktopCloudRuntimeLinkTargetID; targetLabel?: string; i18n: DesktopI18n; disabled?: boolean;
+  gatewayID?: string;
+  recoverGateway?: (gateway: DesktopGatewaySource) => Promise<boolean>;
   gateways?: readonly DesktopGatewaySource[]; address?: string; code?: string; focusOwner?: () => void;
   purpose?: GatewayEnrollmentPurpose; embedded?: boolean; onClose?: () => void; openRequest?: number; hideTrigger?: boolean;
   connectionRequest?: number; wizard?: boolean; canConnect?: boolean; submissionBlocked?: boolean; runtimeStartedAtUnixMS?: number;
@@ -46,9 +31,11 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const [open, setOpen] = createSignal(false);
   const [address, setAddress] = createSignal(props.address ?? '');
   const [code, setCode] = createSignal(props.code ?? '');
+  const [joined, setJoined] = createSignal<GatewayMembershipStatus>();
+  const [uncertainGateway, setUncertainGateway] = createSignal<string>();
   const [preview, setPreview] = createSignal<GatewayJoinPreview>();
   const [previewInvalidated, setPreviewInvalidated] = createSignal(false);
-  const [pending, setPending] = createSignal<'preparing' | 'connecting' | 'verifying' | 'joining' | 'saving-address' | 'creating-invitation' | null>(null);
+  const [pending, setPending] = createSignal<'preparing' | 'connecting' | 'verifying' | 'joining' | 'saving-address' | 'creating-invitation' | 'starting-gateway' | null>(null);
   const busy = () => pending() !== null;
   const [error, setError] = createSignal('');
   const [statusError, setStatusError] = createSignal('');
@@ -103,10 +90,10 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const suggestions = createMemo(() => savedGatewaySuggestions(sources(), props.targetID));
   let addressInteracted = false;
   type AddressMode = 'saved' | 'new';
-  const initialSavedGateway = () => suggestions().find(suggestion => suggestion.addresses.includes(initialAddress().trim()));
+  const initialSavedGateway = () => suggestions().find(suggestion => props.gatewayID ? suggestion.gatewayID === props.gatewayID : suggestion.addresses.includes(initialAddress().trim()));
   const [addressMode, setAddressMode] = createSignal<AddressMode>(suggestions().length && (!initialAddress().trim() || initialSavedGateway()) ? 'saved' : 'new');
   const [savedGatewayID, setSavedGatewayID] = createSignal(initialSavedGateway()?.gatewayID ?? '');
-  const [savedAddress, setSavedAddress] = createSignal(initialSavedGateway() ? initialAddress().trim() : '');
+  const [savedAddress, setSavedAddress] = createSignal(initialSavedGateway()?.addresses.find(value => value === initialAddress().trim()) ?? initialSavedGateway()?.addresses[0] ?? '');
   const [endpointDrafts, setEndpointDrafts] = createSignal<Record<string, string>>({});
   let endpointInput: HTMLInputElement | undefined;
   const addressTabsID = createUniqueId();
@@ -138,13 +125,13 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   };
   const manualAddressField = () => <label class="redeven-gateway-join-field"><span>{text('gatewayJoin.address')}</span><Input ref={addressInput} value={address()} placeholder={text('gatewayNetwork.addressPlaceholder')} autocomplete="off" spellcheck={false} disabled={busy()}
     onInput={event => { addressInteracted = true; invalidate(); setAddress(event.currentTarget.value); }} /></label>;
-  const invalidate = () => { generation++; setPreview(undefined); setPending(null); setError(''); };
+  const invalidate = () => { if (pending() === 'joining' || uncertainGateway()) return; generation++; setPreview(undefined); setPending(null); setError(''); };
   const chooseInitialAddress = (value: string) => {
     addressInteracted = false;
-    const matching = suggestions().find(suggestion => suggestion.addresses.includes(value.trim()));
+    const matching = suggestions().find(suggestion => props.gatewayID ? suggestion.gatewayID === props.gatewayID : suggestion.addresses.includes(value.trim()));
     setAddress(value);
     setSavedGatewayID(matching?.gatewayID ?? '');
-    setSavedAddress(matching ? value.trim() : '');
+    setSavedAddress(matching?.addresses.find(address => address === value.trim()) ?? matching?.addresses[0] ?? '');
     setAddressMode(matching ? 'saved' : value.trim() || !suggestions().length ? 'new' : 'saved');
   };
   createEffect(on(suggestions, available => {
@@ -190,6 +177,14 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
     } catch { if (current === generation) setError(text('gatewayMembers.failed')); }
     finally { if (current === generation) setPending(null); }
   }
+  async function startGateway() {
+    const gateway = selectedGateway();
+    if (!gateway || gateway.service_state?.status !== 'not_started' || !gateway.service_state.can_start || !props.recoverGateway || blocked() || busy()) return;
+    invalidate(); const current = generation; setPending('starting-gateway');
+    try { if (!await props.recoverGateway(gateway) && generation === current) setError(text('gatewayJoin.recoveryFailed')); }
+    catch { if (generation === current) setError(text('gatewayJoin.recoveryFailed')); }
+    finally { if (generation === current) setPending(null); }
+  }
   async function createGatewayInvitation() {
     const gateway = selectedGateway();
     if (!gateway || !selectedSavedAddress() || !canManageGateway() || blocked() || busy()) return;
@@ -206,7 +201,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   createEffect(on(currentStep, () => {
     if (props.wizard && scrollViewport) scrollViewport.scrollTop = 0;
   }, { defer: true }));
-  createEffect(on([initialAddress, initialCode, initialPurpose], ([nextAddress, nextCode]) => {
+  createEffect(on([initialAddress, initialCode, initialPurpose, () => props.gatewayID], ([nextAddress, nextCode]) => {
     if (open()) return;
     invalidate(); chooseInitialAddress(nextAddress); setCode(nextCode);
   }));
@@ -216,13 +211,14 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
     generation++; statusGeneration++; clearTimeout(timer); setPending(null);
     if (open()) { setPreviewInvalidated(true); setError(text('gatewayJoin.changed')); }
   }, { defer: true }));
-  const close = () => { invalidate(); statusGeneration++; clearTimeout(timer); releaseConnection(); setCode(''); setStep(0); setOpen(false); props.onClose?.();
+  const close = () => { if (pending() === 'joining') return; setUncertainGateway(undefined); invalidate(); statusGeneration++; clearTimeout(timer); releaseConnection(); setCode(''); setJoined(undefined); setStep(0); setOpen(false); props.onClose?.();
     queueMicrotask(() => trigger?.isConnected ? trigger.focus() : props.focusOwner?.()); };
   onCleanup(() => { generation++; statusGeneration++; clearTimeout(timer); clearInterval(expiryTimer); releaseConnection(); });
   const focusConnection = () => authenticationRequired() ? passwordInput?.focus() : connectionHeading?.focus({ preventScroll: true });
   const openDialog = () => { setOpen(true); if (!blocked() && !props.wizard) void refresh(); queueMicrotask(() => { if (props.wizard) focusConnection(); else if (!blocked()) focusAddress(); }); };
   createEffect(on(() => props.suspended === true, suspended => {
     if (suspended) {
+      if (pending() === 'joining') { setPassword(''); return; }
       generation++; statusGeneration++; clearTimeout(timer); setPending(null); releaseConnection();
       setConnectionLost(true); setPreviewInvalidated(true);
     } else {
@@ -310,7 +306,8 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
       setPassword(''); setAuthenticationRequired(false); setConnectionLost(false);
       if (!props.wizard && open()) { clearTimeout(timer); timer = setTimeout(() => void refresh(), 3000); }
       if (preview() && preview()!.expires_at_unix_ms <= Date.now()) { setPreview(undefined); setError(text('gatewayJoin.expired')); }
-      setStep(preview() ? 2 : 1);
+      if (joined() || uncertainGateway()) { reconcileMembership(result.gateway_membership); }
+      else setStep(preview() ? 2 : 1);
       queueMicrotask(() => preview() ? focusConfirmation() : focusAddress());
     } catch { if (current === statusGeneration) connectionFailure('RUNTIME_CONTROL_UNREACHABLE'); }
     finally { if (current === statusGeneration) { setPending(null); setPassword(''); } }
@@ -319,14 +316,24 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
     const request = props.connectionRequest ?? 0;
     if (canConnect() && !blocked() && !busy() && request > lastConnectionRequest) { lastConnectionRequest = request; void connect(); }
   });
+  function reconcileMembership(status: GatewayMembershipStatus) {
+    const id = joined()?.gateway_id ?? uncertainGateway();
+    if (!id) return;
+    const member = status.memberships?.find(value => value.gateway_id === id) ?? (status.gateway_id === id ? status : undefined);
+    if (member?.joined) { setJoined(member); setUncertainGateway(undefined); setPreview(undefined); setCode(''); }
+    else if (uncertainGateway() && (status.phase === 'not_joined' || status.memberships)) {
+      setUncertainGateway(undefined); setPreview(undefined); setCode(''); setStep(1);
+      setError(text('gatewayJoin.failed'));
+    }
+  }
   async function refresh() {
-    if (blocked() || connectionLost()) return;
+    if (blocked() || busy() || connectionLost()) return;
     const current = ++statusGeneration;
     clearTimeout(timer);
     try {
       const result = await window.redevenDesktopLauncher?.performAction({kind:'manage_runtime_gateway',...connectionScope(),operation:'status'});
       if (current !== statusGeneration) return;
-      if (result?.ok && result.gateway_membership) { setStatusError(''); }
+      if (result?.ok && result.gateway_membership) { setStatusError(''); reconcileMembership(result.gateway_membership); }
       else if (!connectionFailure(result && !result.ok ? result.gateway_error_code ?? result.code : undefined)) setStatusError(text('gatewayJoin.failed'));
     } catch { if (current === statusGeneration) setStatusError(text('gatewayJoin.failed')); }
     finally { if (current === statusGeneration && open() && !connectionLost()) timer = setTimeout(() => void refresh(),3000); }
@@ -350,7 +357,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   }
   async function act(operation: GatewayMembershipOperation) {
     const consent = preview();
-    if (blocked() || connectionLost() || busy() || !consent || previewInvalidated() || consent.expires_at_unix_ms <= Date.now() || consent.purpose !== purpose() || operation !== purpose()) return;
+    if (uncertainGateway() || joined() || blocked() || connectionLost() || busy() || !consent || previewInvalidated() || consent.expires_at_unix_ms <= Date.now() || consent.purpose !== purpose() || operation !== purpose()) return;
     const current = generation; setPending('joining'); setError('');
     try {
       const result = await window.redevenDesktopLauncher?.performAction({kind:'manage_runtime_gateway',...connectionScope(),operation,
@@ -359,22 +366,26 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
       if (!result?.ok || !result.gateway_membership) {
         const code = result && !result.ok ? result.gateway_error_code ?? result.code : undefined;
         if (!connectionFailure(code)) setError(errorText(code));
+        if (!code || ['RUNTIME_CONTROL_UNREACHABLE', 'RUNTIME_CONTROL_TIMEOUT', 'GATEWAY_CONNECTION_CLOSED'].includes(code)) {
+          setUncertainGateway(consent.gateway_id); setPreviewInvalidated(true); setCode('');
+        }
         if (code === 'GATEWAY_PREVIEW_CHANGED' || code === 'GATEWAY_PREVIEW_EXPIRED') {
           setPreviewInvalidated(true);
         }
         return;
       }
-      setPreview(undefined); setCode('');  close();
-    } catch { if (current === generation) setError(text('gatewayJoin.failed')); }
+      setPreview(undefined); setCode('');
+      if (props.wizard) { setJoined(result.gateway_membership.memberships?.find(member => member.gateway_id === consent.gateway_id) ?? result.gateway_membership); setStep(3); } else { setPending(null); close(); }
+    } catch { if (current === generation) { setUncertainGateway(consent.gateway_id); setPreviewInvalidated(true); setCode(''); setError(text('gatewayJoin.failed')); } }
     finally {
       if (current === generation) {
         setPending(null);
-        if (props.wizard && step() === 2 && !preview()) setStep(1);
+        if (props.wizard && !joined() && step() === 2 && !preview()) setStep(1);
       }
     }
   }
   onMount(() => { if (props.embedded) openDialog(); });
-  const body = () => <div class="redeven-gateway-join-layout" data-gateway-step={props.wizard ? currentStep() : undefined}>
+  const formBody = () => <div class="redeven-gateway-join-layout" data-gateway-step={props.wizard ? currentStep() : undefined}>
     <Show when={props.wizard}><div class="redeven-gateway-wizard-steps" aria-label={text('gatewayJoin.title')}>
       <Stepper orientation="horizontal" variant="minimal" size="sm" currentStep={currentStep()} allowClickCompleted={false}
         steps={[{ id: 'environment', label: text('gatewayJoin.connectEnvironment') },
@@ -409,6 +420,10 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
         </Show>
         <section class="redeven-gateway-join-section" hidden={props.wizard && currentStep() !== 1}>
           <Show when={props.wizard}><h3>{text('gatewayJoin.gatewayInvitation')}</h3><p class="text-sm text-muted-foreground">{text('gatewayDiscovery.invitationIntro')}</p></Show>
+          <Show when={selectedGateway()?.service_state?.status === 'not_started'}><div class="redeven-gateway-connection-notice" data-gateway-service-recovery>
+            <p>{text('gatewayExperience.serviceStopped')}</p>
+            <Show when={selectedGateway()?.service_state?.can_start && props.recoverGateway}><Button disabled={busy() || blocked()} onClick={() => void startGateway()}>{text('gatewayExperience.startGateway')}</Button></Show>
+          </div></Show>
           <div class="redeven-gateway-join-address">
             <Show when={suggestions().length}>
               <Tabs items={[
@@ -497,6 +512,26 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
       <Button class="cursor-pointer whitespace-nowrap" variant="ghost" onClick={close}>{text('common.cancel')}</Button>
     </div>
   </div>;
+  const body = () => <Show when={joined() || uncertainGateway()} fallback={formBody()}>
+    <div class="redeven-gateway-settings-section" data-gateway-enrollment-result>
+      <h3 role="status">{text(uncertainGateway() ? 'gatewayExperience.confirming' : joined()?.phase === 'joined' ? 'gatewayExperience.joined' : 'gatewayExperience.waiting')}</h3>
+      <p class="redeven-gateway-help">{text(uncertainGateway() ? 'gatewayExperience.confirmingHelp' : 'gatewayExperience.joinedHelp')}</p>
+      <p class="font-medium">{joined()?.gateway_name ?? preview()?.gateway_name ?? props.targetLabel}</p>
+      <Show when={statusError()}><p role="alert">{statusError()}</p></Show>
+      {passwordField()}
+      <Show when={!canConnect() || blocked()}>{props.preparation}</Show>
+      <Show when={!canConnect()}>
+        {props.preparationActions}
+        <Show when={props.preparationAction}>{action => <Button variant="outline"
+          disabled={busy() || action().disabled || authenticationRequired() && !password()} onClick={() => void prepare()}>{action().label}</Button>}</Show>
+        {props.settingsAction}
+      </Show>
+      <div class="redeven-gateway-dialog-actions">
+        <Show when={joined()?.phase !== 'joined' || connectionLost()}><Button variant="outline" disabled={busy() || blocked() || authenticationRequired() && !password()} onClick={() => void (connectionLost() ? connect() : refresh())}>{text('common.refresh')}</Button></Show>
+        <Button disabled={!!uncertainGateway()} onClick={close}>{text('gatewayExperience.done')}</Button>
+      </div>
+    </div>
+  </Show>;
   return <Show when={props.embedded} fallback={<><Show when={!props.hideTrigger}><Button ref={trigger} class="mt-2 cursor-pointer" size="sm" variant="outline" disabled={props.disabled} onClick={openDialog}>{text('gatewayJoin.title')}</Button></Show>
     <Dialog open={open()} onOpenChange={value => { if (!value) close(); }} title={text(purpose() === 'update-endpoints' ? 'gatewayJoin.updateEndpoints' : 'gatewayJoin.title')} bodyDescription={text('gatewayDiscovery.invitationIntro')} closeLabel={text('common.close')} class="redeven-gateway-dialog redeven-gateway-join-dialog" contentClass="redeven-gateway-join-content">{body()}</Dialog>
   </>}>{body()}</Show>;

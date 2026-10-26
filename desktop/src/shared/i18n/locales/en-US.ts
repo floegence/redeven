@@ -2,7 +2,33 @@ import { plural, type DeepWidenMessages, type DotPathByLeaf, type PluralMessage 
 import flowerSurfaceEnUS from './catalogs/en-US-flower.json';
 
 export const enUS = {
-  developmentCredentials: {
+  gatewayExperience: {
+    confirming: "Confirming enrollment",
+    confirmingHelp: "The request may have been accepted. Check the environment status before starting another enrollment. This check does not submit the invitation again.",
+    saved: "Gateway connection saved. You can now add an environment.",
+    "serviceStopped": "Gateway service is stopped. Your selection is preserved.",
+    "startGateway": "Start Gateway and continue",
+    "maintenance": "Service maintenance",
+    "overview": "Overview",
+    "access": "Access",
+    "desktopConnection": "Desktop connection",
+    "identity": "Gateway identity",
+    "addEnvironment": "Add environment",
+    "inviteOthers": "Invite someone else",
+    "chooseEnvironmentHelp": "Choose an environment. Desktop can prepare and connect it here, even when its window is closed.",
+    "noManagedEnvironments": "Add a managed local or remote environment to Welcome first.",
+    "resumeEnrollment": "Continue environment enrollment",
+    "connectExisting": "Connect an existing Gateway",
+    "connectExistingHelp": "Use a service address and your existing authorization or an administrator-provided access code.",
+    "deployNew": "Deploy a new Gateway",
+    "deployNewHelp": "Choose this computer or a remote host, then explicitly start the service.",
+    "joined": "Environment connected",
+    "waiting": "Joined; waiting for connection",
+    "joinedHelp": "Membership is saved. Connection checks do not consume another invitation.",
+    "done": "Done",
+    "reviewRestart": "Review restart"
+  },
+    developmentCredentials: {
     title: 'Unlock development credentials',
     description: 'This development profile contains credentials encrypted by macOS Keychain. Migrate them once to the private profile key to continue. Only this action requests Keychain authorization; launching Desktop does not. Existing accounts, connections, and Runtime data are preserved.',
     unavailable: 'The development credential file or profile key cannot be read. Restore the matching profile key and credential files, then restart Desktop. Existing data has been preserved.',

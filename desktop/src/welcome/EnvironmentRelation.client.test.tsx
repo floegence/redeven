@@ -164,7 +164,18 @@ it.each([['status', false, false], ['preview', false, false], ['join', false, fa
   complete(requestFailure ? { ok: false, gateway_error_code: 'RUNTIME_CONTROL_UNREACHABLE' } : resultFor(operation)); await settle();
   if (requestFailure) {
     expect(dialog.textContent).toContain('Could not connect to this environment. Retry or check its connection settings.');
-    expect(button(dialog, 'Confirm and enable').disabled).toBe(true);
+    expect(dialog.querySelector('[data-gateway-enrollment-result]')?.textContent).toContain('Confirming enrollment');
+    expect([...dialog.querySelectorAll('button')].some(control => controlText(control) === 'Confirm and enable')).toBe(false);
+    expect(button(dialog, 'Done').disabled).toBe(true);
+    h.performAction.mockImplementationOnce(async request => {
+      expect(request.kind).toBe('refresh_environment_runtime');
+      const recovery = f.beginProbe(); h.publish(await recovery.finish());
+      return { ok: true, outcome: 'refreshed_environment_runtime' };
+    });
+    button(dialog, 'Retry').click(); await settle();
+    await vi.waitFor(() => expect(dialog.querySelector('[data-gateway-enrollment-result]')).toBeNull());
+    expect(dialog.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('1');
+    expect([...dialog.querySelectorAll<HTMLInputElement>('input')].at(-1)?.value).toBe('');
   } else if (operation === 'join') expect(dialog.querySelector('[data-gateway-step]')).toBeNull();
   else expect(dialog.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe(operation === 'status' ? '1' : '2');
   if (!completedFailure) { h.publish(await check.finish()); await settle(); }
@@ -298,7 +309,8 @@ describe('linked environment owner interactions', () => {
     expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', connection_token: expect.any(Number), runtime_target_id: runtime.provider_runtime_link_target!.id, operation: 'status' });
     expect(h.performAction).not.toHaveBeenCalled();
     button(document.querySelector('[role="dialog"]')!, 'Cancel').click(); await settle();
-    expect(document.activeElement).toBe(toggle);
+    await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+    await vi.waitFor(() => expect(document.activeElement).toBe(toggle));
   });
   it.each(['start', 'restart', 'update'] as const)('uses the shared enrollment authentication for card %s recovery', async operation => {
     const f = runtimeGatewayAccessFixture('ssh', operation === 'start' ? 'stopped' : operation === 'restart' ? 'control_missing' : 'update_required', 100);
