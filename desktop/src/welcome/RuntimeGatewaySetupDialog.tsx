@@ -1,11 +1,11 @@
 import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
-import { Button, Dialog, Input, StableText } from '@floegence/floe-webapp-core/ui';
+import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import { createEffect, createMemo, createSignal, on, onCleanup, Show } from 'solid-js';
 import type { DesktopEnvironmentEntry, DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
 import type { DesktopI18n } from '../shared/i18n';
 import { runtimeGatewayAccessPresentation, type RuntimeGatewayRecovery } from '../shared/runtimeGatewayAccessPresentation';
-import { RuntimeGatewayJoinPanel } from './RuntimeGatewayJoinPanel';
+import { RuntimeGatewayJoinPanel, type RuntimeGatewayPreparationResult } from './RuntimeGatewayJoinPanel';
 import { environmentInteractionIdentity } from './environmentInteractionIdentity';
 
 /** One enrollment session survives direct-executor recovery and observational snapshots. */
@@ -19,7 +19,7 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
   progress?: DesktopLauncherActionProgress | null;
   progressDetail?: string;
   refresh: (environment: DesktopEnvironmentEntry) => Promise<boolean>;
-  recover: (environment: DesktopEnvironmentEntry, operation: Exclude<RuntimeGatewayRecovery, 'refresh'>, sshPassword?: string) => Promise<boolean>;
+  recover: (environment: DesktopEnvironmentEntry, operation: Exclude<RuntimeGatewayRecovery, 'refresh'>, sshPassword?: string) => Promise<RuntimeGatewayPreparationResult>;
   edit: (environment: DesktopEnvironmentEntry) => void;
   close: () => void;
 }>) {
@@ -27,9 +27,7 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
   const busy = () => pending() !== null;
   const [error, setError] = createSignal('');
   const [connectionRequest, setConnectionRequest] = createSignal(0);
-  const [verificationResetRequest, setVerificationResetRequest] = createSignal(0);
   const [requiredPreparation, setRequiredPreparation] = createSignal<'start' | 'restart' | 'update'>();
-  const [recoveryPassword, setRecoveryPassword] = createSignal('');
   let generation = 0;
   const environmentID = createMemo(() => props.environment?.id ?? '');
   const available = createMemo(() => props.available !== false);
@@ -60,8 +58,6 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
   const progressText = () => props.progressDetail || (props.progress?.detail_key ? props.i18n.t(props.progress.detail_key)
     : props.progress?.title_key ? props.i18n.t(props.progress.title_key) : '');
   const recovery = () => presentation()?.recovery;
-  const recoveryNeedsPassword = () => recovery() === 'start' && props.environment?.managed_runtime_host_access?.kind === 'ssh_host'
-    && props.environment.managed_runtime_host_access.ssh.auth_mode === 'password' && !props.environment.ssh_password_configured;
   const recoveryLabel = () => props.i18n.t(recovery() === 'start' ? 'gatewayJoin.startAndContinue'
     : recovery() === 'restart' ? 'environmentAction.restartRuntime'
       : recovery() === 'update' ? 'environmentAction.updateRuntime' : 'common.retry');
@@ -93,31 +89,28 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
     } catch { if (current === generation) setError(props.i18n.t('gatewayJoin.checkFailed')); }
     finally { if (current === generation) setPending(null); }
   }
-  async function recover() {
+  async function recover(password?: string): Promise<RuntimeGatewayPreparationResult> {
     const environment = props.environment, operation = recovery();
-    if (!environment || props.suspended || props.available === false || !operation || !presentation()?.recovery_enabled || busy() || props.operationBusy
-      || recoveryNeedsPassword() && !recoveryPassword()) return;
-    if (operation === 'refresh') return refresh();
+    if (!environment || props.suspended || props.available === false || !operation || !presentation()?.recovery_enabled || busy() || props.operationBusy) return { ok: false };
+    if (operation === 'refresh') { await refresh(); return { ok: true }; }
     const current = generation;
     setPending(operation); setError('');
-    const password = recoveryNeedsPassword() ? recoveryPassword() : undefined;
-    setRecoveryPassword('');
     try {
-      const completed = await (password === undefined ? props.recover(environment, operation) : props.recover(environment, operation, password));
-      if (current !== generation) return;
-      if (!completed) setError(props.i18n.t('gatewayJoin.recoveryFailed'));
-      else {
+      const result = await (password === undefined ? props.recover(environment, operation) : props.recover(environment, operation, password));
+      if (current !== generation) return { ok: false };
+      if (!result.ok && !result.authenticationRequired) setError(props.i18n.t('gatewayJoin.recoveryFailed'));
+      else if (result.ok) {
         setRequiredPreparation(undefined);
-        setVerificationResetRequest(value => value + 1);
         if (!await props.refresh(environment) && current === generation) setError(props.i18n.t('gatewayJoin.checkFailed'));
         else if (current === generation) setConnectionRequest(value => value + 1);
       }
-    } catch { if (current === generation) setError(props.i18n.t('gatewayJoin.recoveryFailed')); }
-    finally { if (current === generation) { setPending(null); setRecoveryPassword(''); } }
+      return result;
+    } catch { if (current === generation) setError(props.i18n.t('gatewayJoin.recoveryFailed')); return { ok: false }; }
+    finally { if (current === generation) setPending(null); }
   }
   createEffect(on([environmentID, managementCoordinates, available], ([id], previous) => {
     generation++; setPending(null);
-    setRequiredPreparation(undefined); setRecoveryPassword('');
+    setRequiredPreparation(undefined);
     if (id !== previous?.[0]) {
       setError(''); setConnectionRequest(0);
       // Checking is read-only; opening never starts, restarts or updates the Runtime.
@@ -125,13 +118,13 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
     } else if (id) setError(props.i18n.t('interactionContinuity.unavailable'));
   }));
   createEffect(on(() => props.suspended === true, suspended => {
-    if (suspended) { generation++; setPending(null); setRecoveryPassword(''); }
+    if (suspended) { generation++; setPending(null); }
     else setRequiredPreparation(undefined);
   }, { defer: true }));
   onCleanup(() => { generation++; });
   // Retain the enrollment owner and drafts while settings temporarily covers the dialog.
   const enrollment = <Show when={retainedTarget()}>{targetID =>
-      <RuntimeGatewayJoinPanel wizard connectionRequest={connectionRequest()} verificationResetRequest={verificationResetRequest()} gateways={props.gateways} embedded targetID={targetID()} targetLabel={props.environment?.label}
+      <RuntimeGatewayJoinPanel wizard connectionRequest={connectionRequest()} gateways={props.gateways} embedded targetID={targetID()} targetLabel={props.environment?.label}
         suspended={props.suspended}
         onPreparationRequired={failure => setRequiredPreparation(failure === 'runtime_not_started' ? 'start' : failure === 'SECURITY_RESTART_REQUIRED' ? 'restart' : 'update')}
         i18n={props.i18n} onClose={props.close} canConnect={canConnect()} submissionBlocked={submissionBlocked()}
@@ -142,10 +135,6 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
           <p class="text-sm text-muted-foreground">{detail()}</p>
           <Show when={technicalDetail()}><details class="mt-2 text-sm text-muted-foreground"><summary class="cursor-pointer">{props.i18n.t('windowStatus.technicalDetails')}</summary><p class="mt-2 whitespace-pre-wrap break-words">{technicalDetail()}</p></details></Show>
           <Show when={recovery() === 'restart' || recovery() === 'update'}><p class="text-sm text-muted-foreground">{props.i18n.t('gatewayJoin.recoveryImpact')}</p></Show>
-          <Show when={recoveryNeedsPassword()}><label class="redeven-gateway-join-field"><span>{props.i18n.t('gatewayJoin.sshPassword')}</span>
-            <Input type="password" autocomplete="current-password" value={recoveryPassword()} disabled={busy() || props.operationBusy}
-              onInput={event => setRecoveryPassword(event.currentTarget.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void recover(); } }} />
-          </label><p class="text-sm text-muted-foreground">{props.i18n.t('gatewayJoin.sshPasswordHelp')}</p></Show>
         </section></Show>
           <Show when={busy() || props.operationBusy}><div class="redeven-gateway-connect-progress" role="status">
             <span class="redeven-gateway-connect-progress-dot" aria-hidden="true" />
@@ -161,9 +150,9 @@ export function RuntimeGatewaySetupDialog(props: Readonly<{
           <Show when={presentation()?.phase === 'control_missing'}><Button class="cursor-pointer whitespace-nowrap" variant="outline"
             disabled={busy() || props.operationBusy || props.environment?.runtime_operations.refresh.availability !== 'available'}
             onClick={() => void refresh()}>{props.i18n.t('environmentAction.refreshRuntimeStatus')}</Button></Show>
-          <Show when={recovery()}><Button class="cursor-pointer whitespace-nowrap" disabled={busy() || props.operationBusy || !presentation()?.recovery_enabled || recoveryNeedsPassword() && !recoveryPassword()}
-            onClick={() => void recover()}><StableText reserve={[recoveryLabel()]}>{recoveryLabel()}</StableText></Button></Show>
-        </>} />
+        </>}
+        preparationAction={recovery() ? { label: recoveryLabel(), run: recover,
+          disabled: props.suspended === true || props.available === false || busy() || !!props.operationBusy || !presentation()?.recovery_enabled } : undefined} />
     }</Show>;
   return <Dialog open={!!props.environment && !props.suspended} onOpenChange={value => { if (!value) props.close(); }} title={props.i18n.t('gatewayJoin.title')}
     closeLabel={props.i18n.t('common.close')}

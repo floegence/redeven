@@ -4,6 +4,7 @@ import { runtimeGatewayBackgroundProbeFixture } from '../testSupport/runtimeGate
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import { mixedEnvironmentFixture } from '../testSupport/mixedEnvironmentFixture';
 import { controlText } from '../testSupport/controlText';
+import { createDesktopI18n } from '../shared/i18n';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { DesktopWelcomeShell, type DesktopWelcomeRuntime } from './App';
@@ -298,6 +299,75 @@ describe('linked environment owner interactions', () => {
     expect(h.performAction).not.toHaveBeenCalled();
     button(document.querySelector('[role="dialog"]')!, 'Cancel').click(); await settle();
     expect(document.activeElement).toBe(toggle);
+  });
+  it.each(['start', 'restart', 'update'] as const)('uses the shared enrollment authentication for card %s recovery', async operation => {
+    const f = runtimeGatewayAccessFixture('ssh', operation === 'start' ? 'stopped' : operation === 'restart' ? 'control_missing' : 'update_required', 100);
+    const ready = runtimeGatewayAccessFixture('ssh', 'ready', 200);
+    const h = await mount(f.snapshot);
+    const perform = vi.fn(async () => ({ ok: true, gateway_membership: { joined: false, phase: 'not_joined' } }));
+    vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
+    h.performAction.mockImplementation(async request => {
+      if (request.kind === 'refresh_environment_runtime') return { ok: true, outcome: 'refreshed_environment_runtime' };
+      if (request.kind !== `${operation}_environment_runtime`) throw new Error('Unexpected lifecycle request');
+      if (!('ssh_password' in request) || request.ssh_password !== ' temporary ') return {
+        ok: false, code: 'runtime_start_failed', scope: 'environment', message: 'Authentication rejected',
+        failure: { code: 'ssh_authentication_failed', severity: 'error', title: 'SSH authentication failed', summary: 'Authentication rejected' },
+      };
+      h.publish(ready.snapshot);
+      return { ok: true, outcome: operation === 'start' ? 'started_environment_runtime' : operation === 'restart' ? 'restarted_environment_runtime' : 'updated_environment_runtime' };
+    });
+    const card = document.querySelector(`[data-environment-group="${f.environment.id}"]`)!;
+    button(card, 'Actions').click(); await settle();
+    button(document.querySelector('[role="menu"]')!, 'Add Gateway access').click(); await settle();
+    const dialog = document.querySelector('[role="dialog"]')!;
+    expect(dialog.querySelector('input[type="password"]')).toBeNull();
+    button(dialog, createDesktopI18n('en-US').t(operation === 'start' ? 'gatewayJoin.startAndContinue' : operation === 'restart' ? 'environmentAction.restartRuntime' : 'environmentAction.updateRuntime')).click(); await settle();
+    const requests = () => h.performAction.mock.calls.map(([request]) => request).filter(request => request.kind === `${operation}_environment_runtime`);
+    expect(requests()).toHaveLength(1);
+    expect(requests()[0]).not.toHaveProperty('ssh_password');
+    expect(dialog.querySelectorAll('input[type="password"]')).toHaveLength(1);
+    const password = dialog.querySelector<HTMLInputElement>('input[type="password"]')!;
+    expect(document.activeElement).toBe(password);
+    password.value = ' temporary '; password.dispatchEvent(new Event('input', { bubbles: true }));
+    password.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await settle();
+    expect(requests()).toHaveLength(2);
+    expect(requests()[1]).toMatchObject({ environment_id: f.environment.id, ssh_password: ' temporary ' });
+    expect(dialog.querySelector('input[type="password"]')).toBeNull();
+    expect(dialog.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('1');
+    expect(perform).toHaveBeenCalledExactlyOnceWith({ kind: 'manage_runtime_gateway', connection_token: expect.any(Number), runtime_target_id: f.environment.provider_runtime_link_target!.id, operation: 'status' });
+  });
+  it('preserves the card enrollment draft and revokes verification while settings covers its shared owner', async () => {
+    const f = runtimeGatewayAccessFixture('ssh');
+    await mount(f.snapshot);
+    const perform = vi.fn(async (request: DesktopLauncherActionRequest) => request.kind === 'manage_runtime_gateway' && request.operation === 'preview'
+      ? { ok: true, gateway_preview: { preview_id: 'a'.repeat(43), purpose: 'join', gateway_id: 'office', gateway_name: 'Office', target_runtime_id: 'runtime', expires_at_unix_ms: Date.now() + 300000 } }
+      : { ok: true, gateway_membership: { joined: false, phase: 'not_joined' } });
+    vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
+    button(document.querySelector(`[data-environment-group="${f.environment.id}"]`)!, 'Actions').click(); await settle();
+    button(document.querySelector('[role="menu"]')!, 'Add Gateway access').click(); await settle();
+    const dialog = document.querySelector('[role="dialog"]')!;
+    button(dialog, 'Connect and continue').click(); await settle();
+    const inputs = [...dialog.querySelectorAll<HTMLInputElement>('input')];
+    for (const [index, value] of ['https://office.example:7443', 'retained-code'].entries()) {
+      inputs[index].value = value; inputs[index].dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    button(dialog, 'Verify').click(); await settle();
+    expect(dialog.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('2');
+    button(dialog, 'Back').click(); await settle();
+    button(dialog, 'Back').click(); await settle();
+    button(dialog, 'Settings').click(); await settle();
+    expect(perform).toHaveBeenCalledWith(expect.objectContaining({ kind: 'close_runtime_gateway' }));
+    const settings = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].find(element => element !== dialog)!;
+    expect(settings).toBeDefined();
+    button(settings, 'Close').click(); await settle();
+    const resumed = document.querySelector('.redeven-gateway-wizard-dialog')!;
+    expect(resumed.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('0');
+    expect([...resumed.querySelectorAll<HTMLInputElement>('input')].map(input => input.value)).toEqual(['https://office.example:7443', 'retained-code']);
+    expect(perform.mock.calls.filter(([request]) => request.kind === 'manage_runtime_gateway' && request.operation === 'status')).toHaveLength(1);
+    button(resumed, 'Connect and continue').click(); await settle();
+    expect(resumed.querySelector('[data-gateway-step]')?.getAttribute('data-gateway-step')).toBe('2');
+    expect(button(resumed, 'Verify').disabled).toBe(false);
+    expect(button(resumed, 'Confirm and enable').disabled).toBe(true);
   });
   it.each([0, 1])('disables Gateway submission for busy Runtime owner from perspective %s while keeping settings available', async perspective => {
     const fixture = runtimeConnectionFixture({ kind: 'ssh_environment' });

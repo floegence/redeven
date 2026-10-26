@@ -31,9 +31,9 @@ const operationSnapshotHasNoLegacyInterruptionFields: [
   : false = true;
 
 describe('desktopLauncherIPC', () => {
-  it('preserves an explicit startup password verbatim without adding it to observation requests', () => {
+  it.each(['start_environment_runtime', 'restart_environment_runtime', 'update_environment_runtime'])('preserves an explicit %s password verbatim without adding it to observation requests', kind => {
     const target = { environment_id: 'chosen', ssh_password: ' temporary password ' };
-    expect(normalizeDesktopLauncherActionRequest({ kind: 'start_environment_runtime', ...target }))
+    expect(normalizeDesktopLauncherActionRequest({ kind, ...target }))
       .toMatchObject({ ssh_password: target.ssh_password });
     expect(normalizeDesktopLauncherActionRequest({ kind: 'refresh_environment_runtime', ...target }))
       .not.toHaveProperty('ssh_password');

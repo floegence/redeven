@@ -138,21 +138,26 @@ describe('Runtime Gateway launcher ownership', () => {
     expect(entry.provider_runtime_link_target?.can_connect_cloud).toBe(false);
     if (state === 'failed') expect(entry.provider_runtime_link_target?.runtime_control_status).toMatchObject({ reason_code: 'unverified' });
   });
-  it.each(['ssh', 'ssh_container'] as const)('uses the explicit %s startup password through readiness verification without saving it', async kind => {
+  it.each((['ssh', 'ssh_container'] as const).flatMap(kind => (['start', 'restart', 'update'] as const).flatMap(operation => [true, false].map(explicit => ({ kind, operation, explicit })))))('uses $kind $operation authentication through preflight and readiness without saving it (explicit=$explicit)', async ({ kind, operation, explicit }) => {
     const target = runtimeGatewayAccessFixture(kind).inputs.preferences.saved_runtime_targets[0];
     const preferences = { saved_runtime_targets: [target] };
     const before = JSON.stringify(preferences);
-    const savedPassword = vi.fn(() => 'saved-password');
+    const password = explicit ? ' temporary password ' : undefined;
+    const savedPassword = vi.fn(() => '');
     const prepareContainer = vi.fn(async () => ({ running: true, placement: target.placement }));
     const ensureSSH = vi.fn(async () => ({ startup: {} }));
     const ensureContainer = vi.fn(async () => ({ startup: {}, placement: target.placement }));
     const verify = vi.fn(async () => undefined);
     const context = {
       desktopRuntimeTargetID: () => target.id, runtimeLifecycleTargetKey: () => target.id,
-      launcherOperations: { get: () => ({ action: 'start_environment_runtime', started_at_unix_ms: 1 }), finishCurrentAttempt: vi.fn() },
+      launcherOperations: { get: () => ({ action: `${operation}_environment_runtime`, started_at_unix_ms: 1 }), finishCurrentAttempt: vi.fn() },
       _initializeRuntimeLifecycleOperation: vi.fn(), updateRuntimeLifecycleOperation: vi.fn(),
       runtimePackageProgressReporter: () => vi.fn(), runtimeLifecyclePhaseFromPlacement: vi.fn(), sshRuntimeLifecyclePhase: vi.fn(),
       loadDesktopPreferencesCached: async () => preferences, savedRuntimePlacementSSHPassword: savedPassword,
+      runManagedRuntimeAuthority: vi.fn(async () => ({ local_ui_protocol: 'https', local_ui_bind: '127.0.0.1' })),
+      parseRuntimeAccessSettings: (value: unknown) => value, manageEnvironmentCertificate: vi.fn(),
+      requireHTTPSCertificateBeforeRestart: async (_protocol: string, run: (operation: string) => Promise<unknown>) => run('status'),
+      prepareRuntimeRestartWindows: vi.fn(), clearRuntimePlacementTargetRecords: vi.fn(),
       sshDetailsFromRuntimePlacement: () => ({ bootstrap_strategy: 'desktop_upload' }), sshDesktopSessionKey: () => target.id,
       prepareRuntimeContainerForLifecycle: prepareContainer, ensureManagedSSHRuntimeReady: ensureSSH, ensureRuntimePlacementReady: ensureContainer,
       verifyManagedRuntimeLifecycleAccess: verify, desktopSSHTransportManager: {}, resolveSSHRuntimeReleaseTag: () => 'fixture',
@@ -166,17 +171,21 @@ describe('Runtime Gateway launcher ownership', () => {
       launcherActionSuccess: (outcome: string) => ({ ok: true, outcome }), desktopFailureFromError: (error: unknown) => { throw error; },
     };
     const run = productionBoundary('executeDirectManagedEnvironmentLifecycle', context);
-    expect(await run({ request: { kind: 'start_environment_runtime', ssh_password: ' temporary password ' },
+    expect(await run({ request: { kind: `${operation}_environment_runtime`, ...(explicit ? { ssh_password: password } : {}) },
       environment_id: target.id, label: target.label, host_access: target.host_access, placement: target.placement,
-      operation: 'start', operation_key: 'startup', operation_owner: 'runtime_lifecycle', lifecycle_signal: new AbortController().signal,
-    })).toEqual({ ok: true, outcome: 'started_environment_runtime' });
-    if (kind === 'ssh') expect(ensureSSH).toHaveBeenCalledWith(expect.objectContaining({ sshPassword: ' temporary password ', sshCredentialScope: target.id }));
-    else {
-      expect(prepareContainer).toHaveBeenCalledWith(target.host_access, target.placement, target.id, expect.objectContaining({ sshPassword: ' temporary password ' }));
-      expect(ensureContainer).toHaveBeenCalledWith(expect.objectContaining({ ssh_password: ' temporary password ', ssh_credential_scope: target.id }));
+      operation, operation_key: 'lifecycle', operation_owner: 'runtime_lifecycle', lifecycle_signal: new AbortController().signal,
+    })).toEqual({ ok: true, outcome: `${operation === 'start' ? 'started' : operation === 'restart' ? 'restarted' : 'updated'}_environment_runtime` });
+    if (operation === 'restart') {
+      expect(context.runManagedRuntimeAuthority).toHaveBeenCalledWith(target.id, ['access', 'get'], undefined, password);
+      expect(context.manageEnvironmentCertificate).toHaveBeenCalledWith({ environment_id: target.id, operation: 'status' }, undefined, '127.0.0.1', password);
     }
-    expect(verify).toHaveBeenCalledWith(expect.objectContaining({ sshPassword: ' temporary password ', environmentID: target.id }));
-    expect(savedPassword).not.toHaveBeenCalled();
+    if (kind === 'ssh') expect(ensureSSH).toHaveBeenCalledWith(expect.objectContaining({ sshPassword: password, sshCredentialScope: target.id }));
+    else {
+      expect(prepareContainer).toHaveBeenCalledWith(target.host_access, target.placement, target.id, expect.objectContaining({ sshPassword: password }));
+      expect(ensureContainer).toHaveBeenCalledWith(expect.objectContaining({ ssh_password: password, ssh_credential_scope: target.id }));
+    }
+    expect(verify).toHaveBeenCalledWith(expect.objectContaining({ sshPassword: password, environmentID: target.id }));
+    expect(savedPassword).toHaveBeenCalledTimes(explicit ? 0 : 1);
     expect(JSON.stringify(preferences)).toBe(before);
     expect(JSON.stringify(context.launcherOperations.finishCurrentAttempt.mock.calls)).not.toContain('temporary password');
   });

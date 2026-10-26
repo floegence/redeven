@@ -8,14 +8,16 @@ import type { GatewayJoinPreview, GatewayMembershipOperation, GatewayEnrollmentP
 import type { DesktopI18n } from '../shared/i18n';
 
 let nextConnectionToken = Date.now();
+export type RuntimeGatewayPreparationResult = Readonly<{ ok: boolean; authenticationRequired?: boolean }>;
 
 /** Verification belongs to the selected Runtime; only a verified preview can be confirmed. */
 export function RuntimeGatewayJoinPanel(props: Readonly<{
   targetID: DesktopCloudRuntimeLinkTargetID; targetLabel?: string; i18n: DesktopI18n; disabled?: boolean;
   gateways?: readonly DesktopGatewaySource[]; address?: string; code?: string; focusOwner?: () => void;
   purpose?: GatewayEnrollmentPurpose; embedded?: boolean; onClose?: () => void; openRequest?: number; hideTrigger?: boolean;
-  connectionRequest?: number; verificationResetRequest?: number; wizard?: boolean; canConnect?: boolean; submissionBlocked?: boolean; runtimeStartedAtUnixMS?: number;
+  connectionRequest?: number; wizard?: boolean; canConnect?: boolean; submissionBlocked?: boolean; runtimeStartedAtUnixMS?: number;
   managementCoordinates?: string; settingsAction?: JSX.Element; preparation?: JSX.Element; preparationActions?: JSX.Element;
+  preparationAction?: Readonly<{ label: string; disabled: boolean; run: (sshPassword?: string) => Promise<RuntimeGatewayPreparationResult> }>;
   authorityKey?: string;
   suspended?: boolean;
   onPreparationRequired?: (failure: 'runtime_not_started' | 'SECURITY_RESTART_REQUIRED' | 'SETTINGS_RUNTIME_INCOMPATIBLE') => void;
@@ -25,7 +27,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const [code, setCode] = createSignal(props.code ?? '');
   const [preview, setPreview] = createSignal<GatewayJoinPreview>();
   const [previewInvalidated, setPreviewInvalidated] = createSignal(false);
-  const [pending, setPending] = createSignal<'connecting' | 'verifying' | 'joining' | null>(null);
+  const [pending, setPending] = createSignal<'preparing' | 'connecting' | 'verifying' | 'joining' | null>(null);
   const busy = () => pending() !== null;
   const [error, setError] = createSignal('');
   const [statusError, setStatusError] = createSignal('');
@@ -47,7 +49,6 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const runtimeStart = createMemo(() => props.runtimeStartedAtUnixMS);
   const managementCoordinates = createMemo(() => props.managementCoordinates);
   const authorityKey = createMemo(() => props.authorityKey);
-  const verificationResetRequest = createMemo(() => props.verificationResetRequest);
   const [step, setStep] = createSignal(0);
   const currentStep = createMemo(() => props.wizard ? step() : preview() ? 2 : 1);
   const [now, setNow] = createSignal(Date.now());
@@ -120,7 +121,6 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
     generation++; statusGeneration++; clearTimeout(timer); setPending(null);
     if (open()) { setPreviewInvalidated(true); setError(text('gatewayJoin.changed')); }
   }, { defer: true }));
-  createEffect(on(verificationResetRequest, () => { generation++; setPending(null); setPreviewInvalidated(true); }, { defer: true }));
   const close = () => { invalidate(); statusGeneration++; clearTimeout(timer); releaseConnection(); setCode(''); setStep(0); setOpen(false); props.onClose?.();
     queueMicrotask(() => trigger?.isConnected ? trigger.focus() : props.focusOwner?.()); };
   onCleanup(() => { generation++; statusGeneration++; clearTimeout(timer); clearInterval(expiryTimer); releaseConnection(); });
@@ -139,7 +139,9 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   createEffect(on(runtimeStart, value => {
     if (!value) return;
     if (observedRuntimeStart && value !== observedRuntimeStart) {
-      generation++; statusGeneration++; setPending(null); setPreviewInvalidated(true);
+      generation++;
+      if (pending() !== 'preparing') { statusGeneration++; setPending(null); }
+      setPreviewInvalidated(true);
       setError(text('gatewayJoin.changed'));
     }
     observedRuntimeStart = value;
@@ -179,10 +181,25 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
     <label class="redeven-gateway-join-field"><span>{text('gatewayJoin.sshPassword')}</span>
       <Input ref={passwordInput} type="password" autocomplete="current-password" value={password()} disabled={busy()}
         aria-describedby={passwordHelpID} onInput={event => setPassword(event.currentTarget.value)}
-        onKeyDown={event => { if (event.key === 'Enter' && password() && !busy()) { event.preventDefault(); void connect(); } }} />
+        onKeyDown={event => { if (event.key === 'Enter' && password() && !busy()) { event.preventDefault(); void (canConnect() ? connect() : prepare()); } }} />
     </label>
     <p id={passwordHelpID} class="text-sm text-muted-foreground">{text('gatewayJoin.sshPasswordHelp')}</p>
   </Show>;
+  async function prepare() {
+    const action = props.preparationAction;
+    if (!action || action.disabled || props.suspended || busy() || authenticationRequired() && !password()) return;
+    const current = ++statusGeneration;
+    setPending('preparing'); setStatusError('');
+    try {
+      const result = await action.run(authenticationRequired() ? password() : undefined);
+      if (current !== statusGeneration) return;
+      if (result.authenticationRequired) connectionFailure('SSH_AUTHENTICATION_REQUIRED');
+      else {
+        setAuthenticationRequired(false); setPassword('');
+        if (result.ok) { generation++; setPreviewInvalidated(true); }
+      }
+    } finally { if (current === statusGeneration) { setPending(null); setPassword(''); } }
+  }
   async function connect() {
     if (!canConnect() || blocked() || busy() || authenticationRequired() && !password()) return;
     const current = ++statusGeneration;
@@ -281,7 +298,13 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
             <Show when={statusError()}><p role="alert" class="text-sm text-error">{statusError()}</p></Show>
             {passwordField()}
             <div class="redeven-gateway-step-actions">
-              <Show when={canConnect()} fallback={props.preparationActions}>
+              <Show when={canConnect()} fallback={<>
+                {props.preparationActions}
+                <Show when={props.preparationAction}>{action => <Button class="cursor-pointer whitespace-nowrap"
+                  disabled={busy() || action().disabled || authenticationRequired() && !password()} onClick={() => void prepare()}>
+                  <StableText reserve={[action().label]}>{action().label}</StableText>
+                </Button>}</Show>
+              </>}>
                 <Button class="cursor-pointer whitespace-nowrap" disabled={busy() || blocked() || authenticationRequired() && !password()}
                   onClick={() => void connect()}><StableText reserve={[text('gatewayJoin.connectAndContinue'), text('gatewayJoin.connecting'), text('common.retry')]}>{text(pending() === 'connecting' ? 'gatewayJoin.connecting' : statusError() ? 'common.retry' : 'gatewayJoin.connectAndContinue')}</StableText><ArrowRight class="h-4 w-4 shrink-0" aria-hidden="true" /></Button>
               </Show>

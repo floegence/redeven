@@ -14,5 +14,5 @@ const [open, setOpen] = createSignal(true);
 render(() => <FloeProvider config={{ storage: { enabled: false }, theme: { defaultTheme: 'light' } }}><main class="p-4">
   <Button onClick={() => setOpen(true)}>{i18n.t('gatewayJoin.title')}</Button>
   <RuntimeGatewaySetupDialog environment={open() ? environment : undefined} i18n={i18n} refresh={async () => true}
-    recover={async () => false} edit={() => {}} close={() => setOpen(false)} />
+    recover={async () => ({ ok: false })} edit={() => {}} close={() => setOpen(false)} />
 </main></FloeProvider>, document.getElementById('root')!);
