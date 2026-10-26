@@ -31,9 +31,7 @@ check_envapp_ui() {
   [ -d "$ENV_UI_DIR" ] || ui_pkg_die "Env App UI directory is missing: $ENV_UI_DIR"
   (
     cd "$ENV_UI_DIR"
-    if ui_pkg_need_install "$ENV_UI_DIR"; then
-      ui_pkg_run_pnpm install --frozen-lockfile
-    fi
+    ui_pkg_ensure_dependencies "$ENV_UI_DIR"
     ui_pkg_run_pnpm exec playwright install chromium
     ui_pkg_run_pnpm test
     ui_pkg_run_pnpm run test:browser
@@ -46,9 +44,7 @@ check_codeapp_ui() {
   command -v npm >/dev/null 2>&1 || ui_pkg_die "npm not found (install Node.js)"
   (
     cd "$CODE_UI_DIR"
-    if ui_pkg_need_install "$CODE_UI_DIR"; then
-      npm ci
-    fi
+    ui_pkg_ensure_dependencies "$CODE_UI_DIR"
     npm test
   )
 }

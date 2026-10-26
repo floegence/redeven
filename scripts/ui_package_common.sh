@@ -43,17 +43,17 @@ ui_pkg_run_pnpm() {
   if command -v corepack >/dev/null 2>&1; then
     # pnpm refuses to recreate node_modules without a TTY unless CI is set.
     if [ "${1:-}" = "install" ] && { [ ! -t 0 ] || [ ! -t 1 ]; } && [ -z "${CI:-}" ]; then
-      CI=true corepack pnpm "$@"
+      CI=true corepack pnpm "$@" || return $?
     else
-      corepack pnpm "$@"
+      corepack pnpm "$@" || return $?
     fi
     return 0
   fi
   if command -v pnpm >/dev/null 2>&1; then
     if [ "${1:-}" = "install" ] && { [ ! -t 0 ] || [ ! -t 1 ]; } && [ -z "${CI:-}" ]; then
-      CI=true pnpm "$@"
+      CI=true pnpm "$@" || return $?
     else
-      pnpm "$@"
+      pnpm "$@" || return $?
     fi
     return 0
   fi
@@ -114,48 +114,64 @@ ui_pkg_first_broken_node_modules_link() {
   return 1
 }
 
-ui_pkg_need_install() {
-  local dir="$1"
-  local broken_link
+# One owner selects the manager from package.json, not compatibility lockfiles.
+# Receipts bind successful installs to manifests, locks and toolchain versions.
+ui_pkg_manager() {
+  node -e 'const p=require(process.argv[1]); process.stdout.write(p.packageManager?.startsWith("pnpm@") ? "pnpm" : "npm")' "$1/package.json"
+}
 
-  if [ "${REDEVEN_AGENT_FORCE_INSTALL:-}" = "1" ]; then
-    return 0
-  fi
-  if [ ! -d "$dir/node_modules" ]; then
-    return 0
-  fi
+ui_pkg_install_identity() {
+  local dir="$1" manager="$2" version
+  if [ "$manager" = pnpm ]; then version=$(cd "$dir" && ui_pkg_run_pnpm --version) || return $?; else version=$(npm --version) || return $?; fi
+  node -e '
+    const fs=require("node:fs"), crypto=require("node:crypto"), path=require("node:path");
+    const [dir, manager, version]=process.argv.slice(1);
+    const hash=crypto.createHash("sha256");
+    hash.update(JSON.stringify([1, manager, version, process.version, process.platform, process.arch,
+      process.env.NODE_ENV || "", process.env.npm_config_omit || "", process.env.npm_config_ignore_scripts || ""]));
+    for(const name of ["package.json", manager === "pnpm" ? "pnpm-lock.yaml" : "package-lock.json", ".npmrc"])
+      hash.update(name+"\0"+(fs.existsSync(path.join(dir,name)) ? fs.readFileSync(path.join(dir,name)) : "missing"));
+    process.stdout.write(hash.digest("hex"));
+  ' "$dir" "$manager" "$version"
+}
+
+ui_pkg_need_install() {
+  local dir="$1" broken_link manager identity receipt
+  [ "${REDEVEN_AGENT_FORCE_INSTALL:-}" != 1 ] || return 0
+  [ -d "$dir/node_modules" ] || return 0
   if broken_link="$(ui_pkg_first_broken_node_modules_link "$dir")"; then
     ui_pkg_log "Dependency install looks stale (broken symlink: $broken_link)"
     return 0
   fi
-
-  if [ -f "$dir/pnpm-lock.yaml" ]; then
-    local marker="$dir/node_modules/.modules.yaml"
-    if [ ! -f "$marker" ]; then
-      return 0
-    fi
-    if [ "$dir/pnpm-lock.yaml" -nt "$marker" ]; then
-      return 0
-    fi
-    if [ -f "$dir/package.json" ] && [ "$dir/package.json" -nt "$marker" ]; then
-      return 0
-    fi
-    return 1
+  # Small launcher fixtures without a lockfile have no dependency install step.
+  [ -f "$dir/pnpm-lock.yaml" ] || [ -f "$dir/package-lock.json" ] || return 1
+  manager=$(ui_pkg_manager "$dir")
+  receipt="$dir/node_modules/.redeven-install-v1"
+  [ -f "$receipt" ] && [ ! -L "$receipt" ] || return 0
+  if [ "$manager" = pnpm ]; then
+    [ -f "$dir/node_modules/.modules.yaml" ] || return 0
+  else
+    [ -f "$dir/node_modules/.package-lock.json" ] || return 0
   fi
-
-  if [ -f "$dir/package-lock.json" ]; then
-    local marker="$dir/node_modules/.package-lock.json"
-    if [ ! -f "$marker" ]; then
-      return 0
-    fi
-    if ! cmp -s "$dir/package-lock.json" "$marker"; then
-      return 0
-    fi
-    if [ -f "$dir/package.json" ] && [ "$dir/package.json" -nt "$marker" ]; then
-      return 0
-    fi
-    return 1
-  fi
-
-  return 1
+  identity=$(ui_pkg_install_identity "$dir" "$manager") || return 0
+  [ "$(cat "$receipt")" != "$identity" ]
 }
+
+ui_pkg_ensure_dependencies() (
+  local dir="$1" manager identity receipt
+  ui_pkg_need_install "$dir" || exit 0
+  manager=$(ui_pkg_manager "$dir")
+  identity=$(ui_pkg_install_identity "$dir" "$manager")
+  receipt="$dir/node_modules/.redeven-install-v1"
+  rm -f "$receipt"
+  cd "$dir"
+  ui_pkg_log "Installing $manager dependencies: $dir"
+  if [ "$manager" = pnpm ]; then
+    ui_pkg_run_pnpm install --frozen-lockfile || return $?
+  else
+    npm ci --no-audit --no-fund || return $?
+  fi
+  [ "$(ui_pkg_install_identity "$dir" "$manager")" = "$identity" ] || ui_pkg_die "Dependency inputs changed during installation; rerun from a stable checkout."
+  printf '%s\n' "$identity" > "$receipt.tmp.$$"
+  mv "$receipt.tmp.$$" "$receipt"
+)

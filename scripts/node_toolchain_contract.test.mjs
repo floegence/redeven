@@ -73,7 +73,7 @@ test("dev Desktop installs dependencies before resolving Electron", () => {
   assert.ok(desktopStart >= 0, "dev Desktop must start after dependency preflight");
   assert.ok(dependencyInstall < desktopStart, "dependency installation must precede Desktop start");
   assert.ok(dependencyFunctionEnd > dependencyFunction, "dependency preflight must be a complete function");
-  assert.match(desktop.slice(dependencyFunction, dependencyFunctionEnd), /npm ci/);
+  assert.match(desktop.slice(dependencyFunction, dependencyFunctionEnd), /ui_pkg_ensure_dependencies/);
   assert.match(desktop.slice(dependencyFunction, dependencyFunctionEnd), /require\.resolve\("electron"\)/);
 });
 

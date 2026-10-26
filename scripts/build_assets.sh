@@ -17,9 +17,7 @@ build_envapp_ui() {
   ui_pkg_log "Env App UI: building..."
   (
     cd "$dir"
-    if ui_pkg_need_install "$dir"; then
-      ui_pkg_run_pnpm install --frozen-lockfile
-    fi
+    ui_pkg_ensure_dependencies "$dir"
     ui_pkg_run_pnpm build
   )
   ui_pkg_log "Env App UI: done."
@@ -40,9 +38,7 @@ build_codeapp_ui() {
   ui_pkg_log "Code App UI: building..."
   (
     cd "$dir"
-    if ui_pkg_need_install "$dir"; then
-      npm ci --no-audit --no-fund
-    fi
+    ui_pkg_ensure_dependencies "$dir"
     npm run --silent build
   )
   ui_pkg_log "Code App UI: done."
@@ -66,9 +62,7 @@ prepare_desktop_ui_dependencies() {
   # from Desktop even when the source checkout has no installed packages.
   (
     cd "$dir"
-    if ui_pkg_need_install "$dir"; then
-      ui_pkg_run_pnpm install --frozen-lockfile
-    fi
+    ui_pkg_ensure_dependencies "$dir"
   )
 }
 

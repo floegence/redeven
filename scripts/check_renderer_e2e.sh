@@ -12,9 +12,7 @@ run_terminal_carrier() {
 }
 
 cd "$UI_DIR"
-if ui_pkg_need_install "$UI_DIR"; then
-  ui_pkg_run_pnpm install --frozen-lockfile
-fi
+ui_pkg_ensure_dependencies "$UI_DIR"
 ui_pkg_run_pnpm exec playwright install chromium
 bash "$ROOT_DIR/scripts/check_local_access_browser.sh"
 corepack pnpm run test:built-dist-shell

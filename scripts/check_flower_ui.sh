@@ -42,9 +42,7 @@ main() {
 
   (
     cd "$dir"
-    if ui_pkg_need_install "$dir"; then
-      ui_pkg_run_pnpm install --frozen-lockfile
-    fi
+    ui_pkg_ensure_dependencies "$dir"
     ui_pkg_log ""
     ui_pkg_log "Flower UI: Env App interaction contracts..."
     # EnvAppShell's integration fixtures intentionally share one module-level
