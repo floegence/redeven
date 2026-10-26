@@ -4,6 +4,8 @@ Recent changes only. The linked concepts own current contracts and evidence; Git
 
 ## 2026-10-26
 
+- Verify [Runtime asset notices](desktop/desktop-development-bundles.md) only after parallel package tasks finish, preserving clean-source dependency ordering and build failures.
+
 - Keep [Flower intermediate files](ai/flower-task-files.md) in thread-owned scratch while final deliverables stay at user destinations; use canonical delivery results, authorized chunked downloads and active-work-safe cleanup.
 
 - Recover transient [Flower history synchronization](ui/flower-live-timeline.md) within one bounded detail demand; reuse canonically confirmed historical prefixes without weakening complete-turn preparation, preserve accepted interaction state, and distinguish exhausted refresh from first-load failure.

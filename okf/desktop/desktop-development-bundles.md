@@ -48,6 +48,9 @@ Development overlaps Desktop compilation with Runtime preparation. Within the
 Runtime, embedded-assets/Go, verified plugin staging and Computer resources run
 independently. Env App, Code App and knowledge assets have distinct outputs;
 Env App's no-emit type check overlaps asset bundling under the same checkout lock.
+Third-party notice verification runs after all embedded-asset tasks succeed; it
+reads installed package metadata and Env App's YAML parser, so it cannot overlap
+cold dependency installation in a clean Runtime source copy.
 Go compilation waits for every embedded asset. Publication and cache receipts
 wait for all builds plus unchanged-source/input checks. Release builds retain
 their ordered preparation.
@@ -110,6 +113,7 @@ in-progress directories.
 - `redeven:scripts/dev_desktop.sh` - Publication, launch and cleanup.
 - `redeven:scripts/dev_desktop_build_cache.test.mjs` - Input drift, corruption and toolchain admission.
 - `redeven:scripts/run_parallel_builds.test.mjs` - Overlap, failure and descendant cleanup.
+- `redeven:scripts/build_assets.test.mjs` - Cold-install ordering and asset/notice failure propagation.
 - `redeven:scripts/ui_package_install.test.mjs` - Manager selection, repeat installs and failure.
 - `redeven:scripts/redevplugin_build_cache.test.mjs` - Development reuse and release isolation.
 - `redeven:scripts/source_build_identity.mjs` - Mixed-source rejection.

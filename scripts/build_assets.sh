@@ -91,19 +91,21 @@ main() {
   prepare_desktop_ui_dependencies
   if [ "${REDEVEN_ASSET_BUILD_PROFILE:-}" = development ]; then
     export SCRIPT_DIR ROOT_DIR
-    export -f build_envapp_ui build_codeapp_ui build_okf_bundle verify_third_party_notices
+    export -f build_envapp_ui build_codeapp_ui build_okf_bundle
     # Each package owns separate outputs. Dependency preparation remains owned
     # by its package; Desktop was prepared before either renderer reads it.
     node "$SCRIPT_DIR/run_parallel_builds.mjs" \
       --task Env-App bash -euc 'source "$SCRIPT_DIR/ui_package_common.sh"; build_envapp_ui' \
       --task Code-App bash -euc 'source "$SCRIPT_DIR/ui_package_common.sh"; build_codeapp_ui' \
-      --task Knowledge bash -euc 'source "$SCRIPT_DIR/ui_package_common.sh"; build_okf_bundle; verify_third_party_notices'
+      --task Knowledge bash -euc 'source "$SCRIPT_DIR/ui_package_common.sh"; build_okf_bundle'
   else
     build_envapp_ui
     build_codeapp_ui
     build_okf_bundle
-    verify_third_party_notices
   fi
+  # Notice verification reads installed package metadata and Env App's js-yaml.
+  # Wait for every package task, including cold installs, before reading them.
+  verify_third_party_notices
 
   ui_pkg_log ""
   ui_pkg_log "All embedded assets built."
