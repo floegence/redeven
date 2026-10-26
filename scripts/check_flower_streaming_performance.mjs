@@ -23,6 +23,9 @@ await session.run(async () => {
   const reference = argument('ref');
   const referenceFiles = reference ? new Set(execFileSync('git', ['ls-tree', '-r', '--name-only', reference, 'internal/flower_ui/src'], { cwd: root, encoding: 'utf8' }).trim().split('\n')) : undefined;
   const host = argument('host', 'both');
+  const disclosures = argument('disclosures', 'toggle');
+  if (!['toggle', 'closed'].includes(disclosures)) throw new Error('Expected --disclosures=toggle|closed');
+  const unopened = disclosures === 'closed';
   const seconds = Number(argument('seconds', '8'));
   if (!['browser', 'desktop', 'both'].includes(host) || !Number.isFinite(seconds) || seconds <= 0)
     throw new Error('Expected --host=browser|desktop|both and positive --seconds');
@@ -39,6 +42,7 @@ await session.run(async () => {
         encoding: 'utf8',
       }).trim(),
     workingTree: !reference,
+    disclosures,
     host: { os: `${platform()} ${release()}`, cpu: cpus()[0]?.model },
     runs: [],
   };
@@ -152,7 +156,7 @@ await session.run(async () => {
                 ...process.env,
                 ELECTRON_RUN_AS_NODE: undefined,
                 FLOWER_PERF_PROFILE: path.join(temporary, name),
-                FLOWER_PERF_URL: `${url}/?messages=${messages}&tools=${tools}`,
+                FLOWER_PERF_URL: `${url}/?messages=${messages}&tools=${tools}&disclosures=${disclosures}`,
               },
             });
             page = await application.firstWindow();
@@ -175,14 +179,14 @@ await session.run(async () => {
           page.on('pageerror', (error) => {
             pageErrors.push(error);
           });
-          if (runtime === 'browser') await page.goto(`${url}/?messages=${messages}&tools=${tools}`);
+          if (runtime === 'browser') await page.goto(`${url}/?messages=${messages}&tools=${tools}&disclosures=${disclosures}`);
           await page.waitForSelector('[data-flower-queued-turn-dock-id="queued-first"]', { timeout: 30_000 });
           await page.waitForFunction(
             () => document.querySelector('.flower-chat-transcript')?.getAttribute('data-flower-tail-preparing') !== 'true',
           );
           await page.waitForTimeout(300);
-          const row = page.locator('[data-flower-activity-item-id]').last();
-          const toggle = row.locator('[data-flower-disclosure-trigger]');
+          const toggle = unopened ? page.locator('.flower-composer textarea')
+            : page.locator('[data-flower-activity-item-id]').last().locator('[data-flower-disclosure-trigger]');
           await toggle.scrollIntoViewIfNeeded();
           const cdp = await context.newCDPSession(page);
           await cdp.send('Performance.enable');
@@ -212,6 +216,10 @@ await session.run(async () => {
           const started = Date.now();
           while (Date.now() - started < seconds * 1000) {
             await toggle.click();
+            if (unopened) {
+              await page.locator('.flower-chat-transcript').hover();
+              await page.mouse.wheel(0, Math.floor((Date.now() - started) / 1200) % 2 ? 360 : -360);
+            }
             await page.waitForTimeout(220);
           }
           const result = await page.evaluate(() => window.flowerPerformance.stop());
@@ -224,7 +232,7 @@ await session.run(async () => {
           // and continuity checks. Reference and candidate measure identical
           // input; the probe never rewinds already-streamed canonical items.
           let outputProgress = null;
-          if (!reference) {
+          if (!reference && !unopened) {
             await page.reload();
             await page.waitForSelector('[data-flower-queued-turn-dock-id="queued-first"]');
             await page.waitForFunction(() => document.querySelector('.flower-chat-transcript')?.getAttribute('data-flower-tail-preparing') !== 'true');
@@ -271,6 +279,9 @@ await session.run(async () => {
               rendererCpuMs: run.rendererCpuMs,
               sampledAllocationBytes: run.sampledAllocationBytes,
               livePayloadBytes: run.livePayloadBytes,
+              detailReads: run.detailReads,
+              mountedToolDetails: run.mountedToolDetails,
+              mountedThinkingBodies: run.mountedThinkingBodies,
               continuity,
             }),
           );
@@ -289,7 +300,8 @@ await session.run(async () => {
   }
   evidence.acceptance = evidence.runs.every(
     (run) =>
-      (reference || run.outputProgress?.valid) &&
+      (reference || unopened || run.outputProgress?.valid) &&
+      (!unopened || run.detailReads === 0 && run.mountedToolDetails === 0 && run.mountedThinkingBodies === 0) &&
       run.continuity.flashes === 0 &&
       run.continuity.stableMessage &&
       run.continuity.stableSelection &&

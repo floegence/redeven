@@ -5,7 +5,7 @@ description: Compact tools and bounded thinking without hiding dialogue or takin
 tags: [ui, flower, activity, thinking, disclosure, accessibility]
 timestamp: 2026-10-21T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-10-26"
 ---
 # Summary
 
@@ -32,6 +32,8 @@ Each choice owns its reactive subscription; changing one group cannot notify eve
 
 Closed groups initially mount only row shells and summary. Details mount on first expansion and remain mounted but inert after folding; new members of manually closed groups wait. Whole-turn closure likewise retains previously inspected bodies after motion. Existing row owners lend DOM to the first node's viewport and restore it on disposal, preserving focus, selection and nested detail state. Unchanged groups/members retain identity during content growth; membership, status, disclosure and order changes replace only affected immutable projections.
 
+Historical thinking reads observe the displayed thinking node, which moves with its sequence, rather than the vacated message shell. Pending sealed thinking registers visibility demand only while explicitly expanded; nested viewport clipping still gates reads. Visible live thinking retains its existing read policy. One shared two-slot queue owns reads, cancellation and retries; explicit thinking demand receives interactive priority. Folding, leaving the viewport and navigation cancel obsolete demand. Completed text stays reusable, and loading status reflects an actual queued/in-flight request. Closed tools never acquire body reads or mount their detail content.
+
 Sequence height is bounded by the minimum of 24rem, half the window and 65% of transcript height; thinking uses 20rem, 45% and the same transcript limit. Short content retains natural height, with no canonical truncation. Both expose thin scrollbars, keyboard focus, localized names and reachable summary controls.
 
 Thinking, sequences and read-only terminal/file/diff/excerpt/code details use native ancestor scroll chaining. Inner regions consume only input they can scroll; short regions and outward edge input reach the next ancestor. The transcript controller uses the same wheel/touch/keyboard chain: upward input reaching it pauses following; an actual return to bottom resumes it. Explicit CSS containment, cancelled events and zoom remain local. Interactive terminals/editors retain their input owners.
@@ -52,4 +54,6 @@ and [whole-turn disclosure](flower-turn-process-disclosure.md).
 - `redeven:internal/flower_ui/src/flowerToolSequences.test.ts` - Classification, counts, boundaries, collapse and stable identity.
 - `redeven:internal/flower_ui/src/flowerToolSequenceLayout.ts` - Stable row placement inside a shared bounded viewport.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.toolSequences.browser.test.tsx` - Running and completed row layout, updates, interaction state, details, navigation, theme and reading anchors.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.thinkingHydration.browser.test.tsx` - Moved thinking hydration, nested visibility, cancellation, observer cleanup and unopened-detail read bounds.
+- `redeven:scripts/check_flower_streaming_performance.mjs` - Built browser/Desktop qualification; `--disclosures=closed` measures streaming, scrolling and composer clicks with hidden detail reads and mounts forbidden.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.turnProcess.browser.test.tsx` - Whole-turn disclosure and interleaved user-response checkpoints.
