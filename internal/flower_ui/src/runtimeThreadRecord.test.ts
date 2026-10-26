@@ -249,6 +249,18 @@ describe('continuous visible bodies', () => {
     expect(message.body_pending).toBeUndefined();
   });
 
+  it('rejects a late full-item response after its canonical locator changes', () => {
+    const { current, initial } = fixture();
+    const first = { ...current.items![0], live: false, text: '中文', body: { field: 'content', source_id: 'old', bytes: 11, preview_bytes: 6 } };
+    const page = { ...current, items: [first] };
+    const record = createRuntimeThreadRecord(page, applyFlowerRuntimeCurrentView(initial, page));
+    const replacement = { ...first, body: { ...first.body, source_id: 'new' } };
+    record.apply(record.initializeThread(), { ...append(), items: [{ kind: 'replace', item_id: 'one', item: replacement }] });
+    expect(record.hydrate(first, { ...first, body: undefined, text: '中文stale' })).toBe(false);
+    expect(record.hydrate(record.item('one')!, { ...replacement, body: undefined, text: '中文final' })).toBe(true);
+    expect(record.initializeThread().messages[0].content).toBe('中文final');
+  });
+
   it('revalidates changed source text even when the old offset fits the sealed extent', () => {
     const { current, initial } = fixture();
     const live = { ...current.items![0], text: '中文draft', body: { field: 'content', source_id: 'one', run_id: 'run', bytes: 40, preview_bytes: 6 } };
