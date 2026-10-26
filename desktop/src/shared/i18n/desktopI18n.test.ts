@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import ts from 'typescript';
 import {
   createDesktopI18n,
   DESKTOP_I18N_DICTIONARIES,
@@ -250,6 +251,23 @@ describe('Desktop shared i18n resolver', () => {
 });
 
 describe('Desktop shared i18n dictionaries', () => {
+  it('keeps Gateway JSX copy and accessible field labels in locale catalogs', () => {
+    const root = path.resolve(__dirname, '../../welcome');
+    const violations: string[] = [];
+    for (const name of fs.readdirSync(root).filter(name => /Gateway.*\.tsx$/.test(name) && !name.includes('.test.'))) {
+      const source = ts.createSourceFile(name, fs.readFileSync(path.join(root, name), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+      function visit(node: ts.Node) {
+        if (ts.isJsxText(node) && /[A-Za-z]{2,}/.test(node.text)) violations.push(`${name}: ${node.text.trim()}`);
+        if (ts.isJsxAttribute(node) && /^(aria-label|title|placeholder|label|description)$/.test(node.name.getText(source))
+          && node.initializer && ts.isStringLiteral(node.initializer) && node.initializer.text) {
+          violations.push(`${name}: ${node.getText(source)}`);
+        }
+        ts.forEachChild(node, visit);
+      }
+      visit(source);
+    }
+    expect(violations).toEqual([]);
+  });
   it('provides neutral Flower provider failure recovery copy in every locale', () => {
     const key = 'flowerSurface.chat.runErrorProviderRequestFailed';
     for (const locale of REDEVEN_SUPPORTED_LOCALES) {
@@ -518,6 +536,39 @@ describe('Desktop shared i18n dictionaries', () => {
       ].join(' ').toLowerCase();
       expect(gatewayHelp, locale).not.toMatch(/namespace|命名空间|命名空間/u);
     }
+  });
+
+  it.each(REDEVEN_SUPPORTED_LOCALES)('covers Gateway dynamic states and invitation plurals explicitly in %s', locale => {
+    const dictionary = DESKTOP_I18N_DICTIONARIES[locale];
+    const i18n = createDesktopI18n(locale);
+    for (const state of ['unconfigured', 'pending', 'active', 'revoked', 'expired', 'retired', 'registering'] as const) {
+      expect(dictionary.gatewayCloud[state]).toBeTruthy();
+      expect(i18n.t(`gatewayCloud.${state}`)).toBe(dictionary.gatewayCloud[state]);
+    }
+    for (const state of Object.keys(enUS.gatewayMembership) as (keyof typeof enUS.gatewayMembership)[]) {
+      expect(dictionary.gatewayMembership[state]).toBeTruthy();
+      expect(i18n.t(`gatewayMembership.${state}`)).toBe(dictionary.gatewayMembership[state]);
+    }
+    const expiry = dictionary.gatewayJoin.expiresIn;
+    expect(isPluralMessage(expiry)).toBe(true);
+    for (const category of new Intl.PluralRules(locale).resolvedOptions().pluralCategories) {
+      expect(expiry.forms[category], `${locale}:${category}`).toBeTruthy();
+    }
+    for (const count of [0, 1, 2, 5, 21]) {
+      const message = i18n.tn('gatewayJoin.expiresIn', count);
+      expect(message).toContain(String(count));
+      expect(message).not.toMatch(/gatewayJoin|\{(?:count|minutes)\}/);
+    }
+  });
+
+  it('uses grammatical English and Russian invitation countdowns', () => {
+    expect(createDesktopI18n('en-US').tn('gatewayJoin.expiresIn', 1)).toBe('Expires in 1 minute');
+    expect(createDesktopI18n('en-US').tn('gatewayJoin.expiresIn', 2)).toBe('Expires in 2 minutes');
+    const ru = createDesktopI18n('ru-RU');
+    expect(ru.tn('gatewayJoin.expiresIn', 1)).toBe('Истекает через 1 минуту');
+    expect(ru.tn('gatewayJoin.expiresIn', 2)).toBe('Истекает через 2 минуты');
+    expect(ru.tn('gatewayJoin.expiresIn', 5)).toBe('Истекает через 5 минут');
+    expect(ru.tn('gatewayJoin.expiresIn', 21)).toBe('Истекает через 21 минуту');
   });
 
   it('keeps Flower surface copy localized for every supported Desktop locale', () => {

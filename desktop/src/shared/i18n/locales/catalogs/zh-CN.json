@@ -3638,7 +3638,12 @@
     "invitationType": "邀请类型",
     "oneTime": "一次性",
     "expiry": "有效期",
-    "expiresIn": "{minutes} 分钟",
+    "expiresIn": {
+      "kind": "plural",
+      "forms": {
+        "other": "{count} 分钟后过期"
+      }
+    },
     "selection": "选择方式",
     "automatic": "自动",
     "technicalDetails": "技术详情",
@@ -3747,7 +3752,13 @@
     "confirmRemove": "确认移除",
     "remove": "移除成员",
     "refreshFailed": "操作已成功，但成员列表刷新失败。操作结果已保留，请刷新查看最新状态。",
-    "hookInvalid": "配置无效，操作将被拒绝"
+    "hookInvalid": "配置无效，操作将被拒绝",
+    "memberChanged": "此成员已发生变化。请刷新成员列表，确认当前访问权限后重试。",
+    "memberDenied": "网关策略拒绝了此操作。请检查成员的访问规则后重试。",
+    "memberCapacity": "此网关的成员数量已达上限。请检查成员列表后重试。",
+    "hookMemberAdmission": "成员接入",
+    "hookSessionAccess": "会话访问",
+    "hookCloudPublication": "Cloud 发布"
   },
   "gatewayClients": {
     "connectionSettings": "连接设置",
@@ -3800,7 +3811,9 @@
     "save": "保存网络设置",
     "saving": "正在保存…",
     "saved": "网络设置已保存。",
-    "restartRequired": "请重启 Gateway，使已保存的绑定地址生效。"
+    "restartRequired": "请重启 Gateway，使已保存的绑定地址生效。",
+    "listenAddressPlaceholder": "0.0.0.0:7443, [::]:7443",
+    "allowedHostsPlaceholder": "gateway.example, 192.168.1.10"
   },
   "gatewayConnections": {
     "unpairTitle": "取消 Gateway 配对",

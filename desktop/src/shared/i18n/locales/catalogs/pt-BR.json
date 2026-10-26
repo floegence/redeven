@@ -3644,7 +3644,14 @@
     "invitationType": "Convite",
     "oneTime": "Uso único",
     "expiry": "Expira",
-    "expiresIn": "{minutes} min",
+    "expiresIn": {
+      "kind": "plural",
+      "forms": {
+        "one": "Expira em {count} minuto",
+        "many": "Expira em {count} minutos",
+        "other": "Expira em {count} minutos"
+      }
+    },
     "selection": "Seleção",
     "automatic": "Automática",
     "technicalDetails": "Detalhes técnicos",
@@ -3753,7 +3760,13 @@
     "confirmRemove": "Confirmar remoção",
     "remove": "Remover membro",
     "refreshFailed": "A operação foi concluída, mas não foi possível atualizar a lista de membros. O resultado foi preservado. Atualize para ver o estado mais recente.",
-    "hookInvalid": "Configuração inválida — as operações são negadas"
+    "hookInvalid": "Configuração inválida — as operações são negadas",
+    "memberChanged": "Este membro foi alterado. Atualize a lista de membros, confira as permissões de acesso atuais e tente novamente.",
+    "memberDenied": "A política do gateway negou esta ação. Confira as regras de acesso do membro antes de tentar novamente.",
+    "memberCapacity": "Este gateway atingiu o limite de membros. Confira a lista de membros antes de tentar novamente.",
+    "hookMemberAdmission": "Admissão de membros",
+    "hookSessionAccess": "Acesso a sessões",
+    "hookCloudPublication": "Publicação no Cloud"
   },
   "gatewayClients": {
     "connectionSettings": "Configurações de conexão",
@@ -3806,7 +3819,9 @@
     "save": "Salvar configurações de rede",
     "saving": "Salvando…",
     "saved": "Configurações de rede salvas.",
-    "restartRequired": "Reinicie o Gateway para aplicar os endereços de escuta salvos."
+    "restartRequired": "Reinicie o Gateway para aplicar os endereços de escuta salvos.",
+    "listenAddressPlaceholder": "0.0.0.0:7443, [::]:7443",
+    "allowedHostsPlaceholder": "gateway.example, 192.168.1.10"
   },
   "gatewayConnections": {
     "unpairTitle": "Desvincular Gateway",

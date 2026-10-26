@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import { createSignal } from 'solid-js';
 import { GatewayMembersPanel } from './GatewayMembersDialog';
-import { createDesktopI18n } from '../shared/i18n';
+import { createDesktopI18n, REDEVEN_SUPPORTED_LOCALES } from '../shared/i18n';
 import { controlText } from '../testSupport/controlText';
 import { catalogFixture, invitationFixture, memberFixture } from '../testSupport/gatewayMembershipFixture';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
@@ -40,6 +40,47 @@ beforeEach(() => { vi.stubGlobal('CSS', { escape: (v: string) => v }); HTMLEleme
 afterEach(() => { dispose?.(); document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe('Gateway member management', () => {
+  it.each([
+    ['MEMBER_DENIED', 'gatewayMembers.memberDenied'],
+    ['MEMBER_CAPACITY', 'gatewayMembers.memberCapacity'],
+    ['FUTURE_GATEWAY_FAILURE', 'gatewayMembers.failed'],
+  ] as const)('keeps %s technical while presenting a translated recovery message', async (code, key) => {
+    mount(vi.fn().mockResolvedValue({ ok: true, outcome: 'gateway_members_updated', gateway_member_results: [{ member_id: memberFixture.member_id, error_code: code }] }));
+    await settle();
+    await select(document.querySelector<HTMLElement>('li [data-floe-dropdown-trigger]')!, 'allow');
+    button(i18n.t('gatewayMembers.confirmSave')).click(); await settle();
+    expect(document.querySelector('li [role="status"]')?.textContent).toBe(i18n.t(key));
+    expect(document.querySelector('li details code')?.textContent).toBe(code);
+    expect(document.querySelector('li details')?.hasAttribute('open')).toBe(false);
+  });
+  it.each(REDEVEN_SUPPORTED_LOCALES)('localizes policy actions, member failures, and invitation expiry in %s', async locale => {
+    const localized = createDesktopI18n(locale);
+    const perform = vi.fn(async (request: { kind: string }) => request.kind === 'invite_gateway_runtime'
+      ? { ok: true, outcome: 'gateway_invitation_created', gateway_invitation_code: { ...invitationFixture, expires_at_unix_ms: Date.now() + 60_000 } }
+      : { ok: true, outcome: 'gateway_members_updated', gateway_member_results: [{ member_id: memberFixture.member_id, error_code: 'MEMBER_VERSION_CONFLICT' }] });
+    vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
+    const root = document.createElement('div'); document.body.append(root);
+    dispose = render(() => <GatewayMembersPanel gateway={gateway} section="runtimes" i18n={localized} refresh={async () => {}} />, root);
+    await settle();
+    for (const key of ['hookMemberAdmission', 'hookSessionAccess', 'hookCloudPublication'] as const) {
+      expect(document.body.textContent).toContain(localized.t(`gatewayMembers.${key}`));
+    }
+    const picker = document.querySelector<HTMLElement>('li [data-floe-dropdown-trigger]')!;
+    picker.click(); await settle();
+    const menu = document.getElementById(picker.getAttribute('aria-controls')!)!;
+    const option = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(item => item.textContent?.trim() === localized.t('gatewayMembers.allow'));
+    expect(option).toBeTruthy(); option!.click(); await settle();
+    button(localized.t('gatewayMembers.confirmSave')).click(); await settle();
+    const result = document.querySelector('li [role="status"]')!;
+    expect(result.textContent).toBe(localized.t('gatewayMembers.memberChanged'));
+    expect(result.textContent).not.toContain('MEMBER_VERSION_CONFLICT');
+    const diagnostic = document.querySelector('li details')!;
+    expect(diagnostic.hasAttribute('open')).toBe(false);
+    expect(diagnostic.querySelector('summary')?.textContent).toBe(localized.t('gatewayJoin.technicalDetails'));
+    expect(diagnostic.querySelector('code')?.textContent).toBe('MEMBER_VERSION_CONFLICT');
+    button(localized.t('gatewayMembers.createInvitation')).click(); await settle();
+    expect(document.querySelector('[role="timer"]')?.textContent).toBe(localized.tn('gatewayJoin.expiresIn', 1));
+  });
   it('starts the shared enrollment task before invitation issuance or Runtime connection', async () => {
     const perform = vi.fn();
     const enroll = vi.fn();
@@ -119,12 +160,12 @@ describe('Gateway member management', () => {
   it('keeps failed and missing batch results retryable, without resubmitting successful members', async () => {
     const perform = vi.fn().mockResolvedValue({ ok: true, outcome: 'gateway_members_updated', gateway_member_results: [
       { member_id: 'one', member: { ...memberFixture, member_id: 'one', cloud_permission: 'allow' } },
-      { member_id: 'two', error_code: 'MEMBER_CONFLICT' },
+      { member_id: 'two', error_code: 'MEMBER_VERSION_CONFLICT' },
     ] });
     mount(perform, undefined, { ...gateway, environments: ['one', 'two', 'three'].map(member_id => ({ ...memberFixture, member_id, display_name: member_id })) }); await settle();
     for (const item of document.querySelectorAll<HTMLElement>('li [data-floe-dropdown-trigger]')) await select(item, 'allow');
     button(i18n.t('gatewayMembers.confirmSave')).click(); await settle();
-    expect(document.body.textContent).toContain('MEMBER_CONFLICT');
+    expect(document.body.textContent).toContain(i18n.t('gatewayMembers.memberChanged'));
     expect(document.body.textContent).toContain(i18n.t('gatewayMembers.saved'));
     button(i18n.t('gatewayMembers.confirmSave')).click(); await settle();
     expect(perform.mock.calls[1]?.[0].items.map((item: { member_id: string }) => item.member_id)).toEqual(['two', 'three']);

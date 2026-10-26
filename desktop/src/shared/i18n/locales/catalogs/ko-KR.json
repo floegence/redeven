@@ -3638,7 +3638,12 @@
     "invitationType": "초대",
     "oneTime": "일회성",
     "expiry": "만료",
-    "expiresIn": "{minutes}분",
+    "expiresIn": {
+      "kind": "plural",
+      "forms": {
+        "other": "{count}분 후 만료"
+      }
+    },
     "selection": "선택",
     "automatic": "자동",
     "technicalDetails": "기술 세부 정보",
@@ -3747,7 +3752,13 @@
     "confirmRemove": "제거 확인",
     "remove": "멤버 제거",
     "refreshFailed": "작업은 성공했지만 멤버 목록을 새로 고치지 못했습니다. 결과는 유지됩니다. 새로 고쳐 최신 상태를 확인하세요.",
-    "hookInvalid": "설정이 잘못되어 작업이 거부됩니다"
+    "hookInvalid": "설정이 잘못되어 작업이 거부됩니다",
+    "memberChanged": "이 멤버의 정보가 변경되었습니다. 멤버 목록을 새로 고치고 현재 접근 권한을 확인한 후 다시 시도하세요.",
+    "memberDenied": "게이트웨이 정책에 따라 이 작업이 거부되었습니다. 멤버의 접근 규칙을 확인한 후 다시 시도하세요.",
+    "memberCapacity": "이 게이트웨이의 멤버 수가 한도에 도달했습니다. 멤버 목록을 확인한 후 다시 시도하세요.",
+    "hookMemberAdmission": "멤버 가입 승인",
+    "hookSessionAccess": "세션 접근",
+    "hookCloudPublication": "Cloud 게시"
   },
   "gatewayClients": {
     "connectionSettings": "연결 설정",
@@ -3800,7 +3811,9 @@
     "save": "네트워크 설정 저장",
     "saving": "저장 중…",
     "saved": "네트워크 설정을 저장했습니다.",
-    "restartRequired": "저장된 바인딩 주소를 적용하려면 Gateway를 재시작하세요."
+    "restartRequired": "저장된 바인딩 주소를 적용하려면 Gateway를 재시작하세요.",
+    "listenAddressPlaceholder": "0.0.0.0:7443, [::]:7443",
+    "allowedHostsPlaceholder": "gateway.example, 192.168.1.10"
   },
   "gatewayConnections": {
     "unpairTitle": "Gateway 페어링 해제",

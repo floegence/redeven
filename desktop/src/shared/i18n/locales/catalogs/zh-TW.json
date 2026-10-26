@@ -3638,7 +3638,12 @@
     "invitationType": "邀請",
     "oneTime": "一次性",
     "expiry": "有效期",
-    "expiresIn": "{minutes} 分鐘",
+    "expiresIn": {
+      "kind": "plural",
+      "forms": {
+        "other": "{count} 分鐘後到期"
+      }
+    },
     "selection": "選擇方式",
     "automatic": "自動",
     "technicalDetails": "技術詳細資料",
@@ -3747,7 +3752,13 @@
     "confirmRemove": "確認移除",
     "remove": "移除成員",
     "refreshFailed": "操作已成功，但成員清單重新整理失敗。操作結果已保留，請重新整理以查看最新狀態。",
-    "hookInvalid": "設定無效，操作將遭到拒絕"
+    "hookInvalid": "設定無效，操作將遭到拒絕",
+    "memberChanged": "此成員已變更。請重新整理成員清單，確認目前的存取權限後重試。",
+    "memberDenied": "閘道原則拒絕了此操作。請檢查成員的存取規則後重試。",
+    "memberCapacity": "此閘道的成員數量已達上限。請檢查成員清單後重試。",
+    "hookMemberAdmission": "成員加入",
+    "hookSessionAccess": "工作階段存取",
+    "hookCloudPublication": "Cloud 發佈"
   },
   "gatewayClients": {
     "connectionSettings": "連線設定",
@@ -3800,7 +3811,9 @@
     "save": "儲存網路設定",
     "saving": "正在儲存…",
     "saved": "網路設定已儲存。",
-    "restartRequired": "請重新啟動 Gateway，使已儲存的綁定位址生效。"
+    "restartRequired": "請重新啟動 Gateway，使已儲存的綁定位址生效。",
+    "listenAddressPlaceholder": "0.0.0.0:7443, [::]:7443",
+    "allowedHostsPlaceholder": "gateway.example, 192.168.1.10"
   },
   "gatewayConnections": {
     "unpairTitle": "取消 Gateway 配對",

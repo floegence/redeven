@@ -3644,7 +3644,14 @@
     "invitationType": "Invitation",
     "oneTime": "À usage unique",
     "expiry": "Expire",
-    "expiresIn": "{minutes} min",
+    "expiresIn": {
+      "kind": "plural",
+      "forms": {
+        "one": "Expire dans {count} minute",
+        "many": "Expire dans {count} minutes",
+        "other": "Expire dans {count} minutes"
+      }
+    },
     "selection": "Sélection",
     "automatic": "Automatique",
     "technicalDetails": "Détails techniques",
@@ -3753,7 +3760,13 @@
     "confirmRemove": "Confirmer la suppression",
     "remove": "Supprimer le membre",
     "refreshFailed": "L’opération a réussi, mais la liste des membres n’a pas pu être actualisée. Le résultat est conservé. Actualisez pour voir le dernier état.",
-    "hookInvalid": "Configuration invalide : les opérations sont refusées"
+    "hookInvalid": "Configuration invalide : les opérations sont refusées",
+    "memberChanged": "Ce membre a été modifié. Actualisez la liste des membres, vérifiez ses droits d’accès actuels, puis réessayez.",
+    "memberDenied": "La politique de la passerelle a refusé cette action. Vérifiez les règles d’accès du membre avant de réessayer.",
+    "memberCapacity": "Cette passerelle a atteint sa limite de membres. Vérifiez la liste des membres avant de réessayer.",
+    "hookMemberAdmission": "Admission des membres",
+    "hookSessionAccess": "Accès aux sessions",
+    "hookCloudPublication": "Publication dans Cloud"
   },
   "gatewayClients": {
     "connectionSettings": "Paramètres de connexion",
@@ -3806,7 +3819,9 @@
     "save": "Enregistrer les paramètres réseau",
     "saving": "Enregistrement…",
     "saved": "Paramètres réseau enregistrés.",
-    "restartRequired": "Redémarrez Gateway pour appliquer les adresses d’écoute enregistrées."
+    "restartRequired": "Redémarrez Gateway pour appliquer les adresses d’écoute enregistrées.",
+    "listenAddressPlaceholder": "0.0.0.0:7443, [::]:7443",
+    "allowedHostsPlaceholder": "gateway.example, 192.168.1.10"
   },
   "gatewayConnections": {
     "unpairTitle": "Dissocier le Gateway",

@@ -114,6 +114,8 @@ export const enUS = {
     enterAddress: "Enter an address",
   },
   gatewayNetwork: {
+    listenAddressPlaceholder: '0.0.0.0:7443, [::]:7443',
+    allowedHostsPlaceholder: 'gateway.example, 192.168.1.10',
     addressPlaceholder: 'https://gateway.example.com:7443',
     "listenTitle": "Local listener",
     "listenHelp": "Choose the local IP addresses and ports Gateway binds to. Separate multiple bindings with commas.",
@@ -241,7 +243,7 @@ export const enUS = {
     "invitationType": "Invitation",
     "oneTime": "One-time",
     "expiry": "Expires",
-    "expiresIn": "{minutes} min",
+    expiresIn: plural({ one: 'Expires in {count} minute', other: 'Expires in {count} minutes' }),
     "selection": "Selection",
     "automatic": "Automatic",
     "technicalDetails": "Technical details",
@@ -262,6 +264,12 @@ export const enUS = {
     "removal_pending": "Leaving · Revocation pending"
 },
   gatewayMembers: {
+    memberChanged: 'This member changed. Refresh the member list, review its current access, and retry.',
+    memberDenied: 'Gateway policy denied this action. Review the member’s access rules before retrying.',
+    memberCapacity: 'This Gateway has reached its member limit. Review its members before retrying.',
+    hookMemberAdmission: 'Member admission',
+    hookSessionAccess: 'Session access',
+    hookCloudPublication: 'Cloud publication',
     reevaluate: 'Recheck access',
     refreshFailed: 'The operation succeeded, but the member list could not be refreshed. Your result is preserved. Refresh to see the latest state.',
     "title": "Gateway access",

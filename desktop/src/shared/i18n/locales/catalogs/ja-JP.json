@@ -3638,7 +3638,12 @@
     "invitationType": "招待",
     "oneTime": "1 回限り",
     "expiry": "有効期限",
-    "expiresIn": "{minutes} 分",
+    "expiresIn": {
+      "kind": "plural",
+      "forms": {
+        "other": "{count} 分後に期限切れ"
+      }
+    },
     "selection": "選択方法",
     "automatic": "自動",
     "technicalDetails": "技術情報",
@@ -3747,7 +3752,13 @@
     "confirmRemove": "削除を確定",
     "remove": "メンバーを削除",
     "refreshFailed": "操作は成功しましたが、メンバー一覧を更新できませんでした。結果は保持されています。再読み込みして最新の状態を確認してください。",
-    "hookInvalid": "設定が無効なため、操作は拒否されます"
+    "hookInvalid": "設定が無効なため、操作は拒否されます",
+    "memberChanged": "このメンバーは変更されています。メンバー一覧を更新し、現在のアクセス権を確認してから再試行してください。",
+    "memberDenied": "ゲートウェイのポリシーにより、この操作は拒否されました。メンバーのアクセスルールを確認してから再試行してください。",
+    "memberCapacity": "このゲートウェイのメンバー数は上限に達しています。メンバー一覧を確認してから再試行してください。",
+    "hookMemberAdmission": "メンバーの参加承認",
+    "hookSessionAccess": "セッションへのアクセス",
+    "hookCloudPublication": "Cloud への公開"
   },
   "gatewayClients": {
     "connectionSettings": "接続設定",
@@ -3800,7 +3811,9 @@
     "save": "ネットワーク設定を保存",
     "saving": "保存中…",
     "saved": "ネットワーク設定を保存しました。",
-    "restartRequired": "保存したバインドアドレスを適用するには Gateway を再起動してください。"
+    "restartRequired": "保存したバインドアドレスを適用するには Gateway を再起動してください。",
+    "listenAddressPlaceholder": "0.0.0.0:7443, [::]:7443",
+    "allowedHostsPlaceholder": "gateway.example, 192.168.1.10"
   },
   "gatewayConnections": {
     "unpairTitle": "Gateway のペアリングを解除",
