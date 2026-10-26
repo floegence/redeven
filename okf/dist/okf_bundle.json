@@ -3512,7 +3512,7 @@
               "thinking",
               "ui"
             ],
-            "summary": "Flower groups consecutive tool calls in the shared Desktop and Env App timeline.\nThinking after the first tool becomes an inline node in that sequence, including\nthinking after the final tool. Active sequences default open. Settled sequences fold when following assistant output completes or the canonical turn ends; temporary gaps between calls and unfinished prose do not trigger a fold. Explicit choices and active inspection survive those boundaries.\nWhen an answered input falls between work segments in a settled turn, each\nsettled tool sequence remains independently collapsed, including the newest\nsequence. Active tools retain their existing disclosure behavior.\nThis is product presentation over existing published Floret facts; it introduces\nno upstream contract, canonical summary or backend migration.",
+            "summary": "Flower groups consecutive tools in Desktop and Env App.\nThinking after the first tool becomes an inline node in that sequence, including the final thought. Active sequences default open. Settled sequences fold when following assistant output completes or the canonical turn ends; temporary gaps between calls and unfinished prose do not trigger a fold. Explicit choices and active inspection survive those boundaries.\nWhen an answered input falls between work segments in a settled turn, each\nsettled tool sequence remains independently collapsed, including the newest\nsequence. Active tools retain their existing disclosure behavior.\nThis is product presentation over existing published Floret facts; it introduces\nno upstream contract, canonical summary or backend migration.",
             "section_count": 2
           },
           {
@@ -30979,8 +30979,8 @@
         "title": "Flower consecutive tool sequences",
         "type": "UI Contract"
       },
-      "body_length": 5988,
-      "summary": "Flower groups consecutive tool calls in the shared Desktop and Env App timeline.\nThinking after the first tool becomes an inline node in that sequence, including\nthinking after the final tool. Active sequences default open. Settled sequences fold when following assistant output completes or the canonical turn ends; temporary gaps between calls and unfinished prose do not trigger a fold. Explicit choices and active inspection survive those boundaries.\nWhen an answered input falls between work segments in a settled turn, each\nsettled tool sequence remains independently collapsed, including the newest\nsequence. Active tools retain their existing disclosure behavior.\nThis is product presentation over existing published Floret facts; it introduces\nno upstream contract, canonical summary or backend migration.",
+      "body_length": 5951,
+      "summary": "Flower groups consecutive tools in Desktop and Env App.\nThinking after the first tool becomes an inline node in that sequence, including the final thought. Active sequences default open. Settled sequences fold when following assistant output completes or the canonical turn ends; temporary gaps between calls and unfinished prose do not trigger a fold. Explicit choices and active inspection survive those boundaries.\nWhen an answered input falls between work segments in a settled turn, each\nsettled tool sequence remains independently collapsed, including the newest\nsequence. Active tools retain their existing disclosure behavior.\nThis is product presentation over existing published Floret facts; it introduces\nno upstream contract, canonical summary or backend migration.",
       "sections": [
         {
           "id": "contract",
@@ -31019,7 +31019,7 @@
           "description": "Whole-turn disclosure and interleaved user-response checkpoints."
         }
       ],
-      "snippet": "Flower groups consecutive tool calls in the shared Desktop and Env App timeline. Thinking after the first tool becomes an inline node in that sequence, including thinking after the final tool. Active sequences default open. Settled sequence",
+      "snippet": "Flower groups consecutive tools in Desktop and Env App. Thinking after the first tool becomes an inline node in that sequence, including the final thought. Active sequences default open. Settled sequences fold when following assistant outpu",
       "links": [
         {
           "label": "Activity motion",
@@ -33561,5 +33561,5 @@
       ]
     }
   ],
-  "source_sha256": "d1cb54f7044a77cfaaa24d959ce13284239e739916714a78f7706dfbfe880e28"
+  "source_sha256": "9cce9c33ae10c2ba88ed5e228130ce8624347c6623793a1fc8eaff2adb9ffcdd"
 }
