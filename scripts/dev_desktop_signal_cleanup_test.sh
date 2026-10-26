@@ -105,7 +105,8 @@ cat > "$FAKE_DESKTOP/dist/main/gatewayServiceHost.js" <<'JS'
 const fs = require('node:fs/promises');
 const path = require('node:path');
 exports.ensureManagedGatewayServiceReady = async options => {
-  if (!options.forceUpdate || options.targetCommit !== process.env.REDEVEN_DESKTOP_BUNDLE_COMMIT) throw new Error('Gateway was not refreshed from current source');
+  if (options.forceUpdate === true) throw new Error('Development startup must reuse compatible Gateway installations');
+  if (options.targetCommit !== process.env.REDEVEN_DESKTOP_BUNDLE_COMMIT) throw new Error('Gateway installation target does not match the current Desktop build');
   const binary = path.join(options.stateRoot, 'managed/bin/redeven-gateway');
   await fs.mkdir(path.dirname(binary), { recursive: true });
   await fs.writeFile(binary, '#!/usr/bin/env node\nrequire("node:fs").writeFileSync(process.env.FAKE_GATEWAY_STOPPED, process.argv.slice(2).join(" "));\n', { mode: 0o700 });
