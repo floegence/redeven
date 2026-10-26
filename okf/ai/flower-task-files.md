@@ -14,7 +14,9 @@ files at the user's destination. Redeven owns filesystem policy, bytes and UI;
 published Floret owns tool results and conversation identities. No artifact
 index, duplicated transcript, new Floret API or domain migration is introduced.
 
-# Placement
+# Contract
+
+## Placement
 
     <StateDir>/task-files/<ThreadID>/scratch
     <StateDir>/task-files/<ThreadID>/staging
@@ -43,7 +45,7 @@ Sibling thread roots remain denied, including symlink aliases. Adding scratch
 never expands normal project permissions. Fork uses a new writable scratch root;
 historical references do not grant access to its parent's working files.
 
-# Delivery and discovery
+## Delivery and discovery
 
 The file.present tool verifies a regular file outside application state, hashes
 bytes with cancellation, checks file identity/size/modification consistency, and
@@ -74,7 +76,7 @@ abort the destination. Desktop routes admit only exact thread endpoints and
 validated query keys. Downloads do not publish files or change their original
 location. Browser Blob fallback retains its existing browser-memory behavior.
 
-# Cleanup
+## Cleanup
 
 The panel lists at most 200 working files and inspects at most 10,000 entries;
 truncation and lower-bound totals are visible. Manual cleanup requires RWX and
@@ -89,6 +91,8 @@ processes before removing its private tree. Normal deletion refuses live work;
 force deletion uses the existing explicit cancellation semantics. Final files
 are never in cleanup scope. Archival has no automatic file deletion. No TTL is
 enabled. Project-local application state is disclosed in the panel.
+
+# Boundaries
 
 Legacy files scattered in a project remain untouched: names such as tmp or
 task-evidence do not prove ownership. The existing file browser permits explicit
