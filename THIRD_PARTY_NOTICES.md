@@ -3042,7 +3042,7 @@ SOFTWARE.
 | @floegence/floe-webapp-boot | 0.86.60 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.86.60 |  |
 | @floegence/floe-webapp-core | 0.86.60 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.86.60 |  |
 | @floegence/floe-webapp-protocol | 0.86.60 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.86.60 |  |
-| @floegence/floebrowser | 0.1.27 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloebrowser/v/0.1.27 |  |
+| @floegence/floebrowser | 0.1.28 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloebrowser/v/0.1.28 |  |
 | @floegence/floeterm-terminal-web | 0.19.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.19.2 | Built-in theme attribution and license texts are reproduced below from the verified 0.19.2 package. |
 | @floegence/flowersec-core | 5.11.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/5.11.1 |  |
 | @floegence/flowersec-node-native-darwin-arm64 | 5.11.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-arm64/v/5.11.1 |  |
@@ -3140,10 +3140,10 @@ SOFTWARE.
 | @rolldown/binding-win32-arm64-msvc | 1.2.15 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40rolldown%2Fbinding-win32-arm64-msvc/v/1.2.15 |  |
 | @rolldown/binding-win32-x64-msvc | 1.2.15 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40rolldown%2Fbinding-win32-x64-msvc/v/1.2.15 |  |
 | @rolldown/pluginutils | 1.0.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40rolldown%2Fpluginutils/v/1.0.1 |  |
-| @rrweb/record | 2.1.6 | MIT | Env App UI | https://www.npmjs.com/package/%40rrweb%2Frecord/v/2.1.6 |  |
-| @rrweb/replay | 2.1.6 | MIT | Env App UI | https://www.npmjs.com/package/%40rrweb%2Freplay/v/2.1.6 |  |
-| @rrweb/types | 2.1.6 | MIT | Env App UI | https://www.npmjs.com/package/%40rrweb%2Ftypes/v/2.1.6 |  |
-| @rrweb/utils | 2.1.6 | MIT | Env App UI | https://www.npmjs.com/package/%40rrweb%2Futils/v/2.1.6 |  |
+| @rrweb/record | 2.1.7 | MIT | Env App UI | https://www.npmjs.com/package/%40rrweb%2Frecord/v/2.1.7 |  |
+| @rrweb/replay | 2.1.7 | MIT | Env App UI | https://www.npmjs.com/package/%40rrweb%2Freplay/v/2.1.7 |  |
+| @rrweb/types | 2.1.7 | MIT | Env App UI | https://www.npmjs.com/package/%40rrweb%2Ftypes/v/2.1.7 |  |
+| @rrweb/utils | 2.1.7 | MIT | Env App UI | https://www.npmjs.com/package/%40rrweb%2Futils/v/2.1.7 |  |
 | @shikijs/core | 3.23.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40shikijs%2Fcore/v/3.23.0 |  |
 | @shikijs/engine-javascript | 3.23.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40shikijs%2Fengine-javascript/v/3.23.0 |  |
 | @shikijs/engine-oniguruma | 3.23.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40shikijs%2Fengine-oniguruma/v/3.23.0 |  |
@@ -3812,10 +3812,10 @@ SOFTWARE.
 | robust-predicates | 3.0.3 | Unlicense | Desktop shell, Env App UI | https://www.npmjs.com/package/robust-predicates/v/3.0.3 |  |
 | rolldown | 1.2.15 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/rolldown/v/1.2.15 |  |
 | roughjs | 4.6.6 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/roughjs/v/4.6.6 |  |
-| rrdom | 2.1.6 | MIT | Env App UI | https://www.npmjs.com/package/rrdom/v/2.1.6 |  |
+| rrdom | 2.1.7 | MIT | Env App UI | https://www.npmjs.com/package/rrdom/v/2.1.7 |  |
 | rrweb-cssom | 0.8.0 | MIT | Env App UI | https://www.npmjs.com/package/rrweb-cssom/v/0.8.0 |  |
-| rrweb-snapshot | 2.1.6 | MIT | Env App UI | https://www.npmjs.com/package/rrweb-snapshot/v/2.1.6 |  |
-| rrweb | 2.1.6 | MIT | Env App UI | https://www.npmjs.com/package/rrweb/v/2.1.6 |  |
+| rrweb-snapshot | 2.1.7 | MIT | Env App UI | https://www.npmjs.com/package/rrweb-snapshot/v/2.1.7 |  |
+| rrweb | 2.1.7 | MIT | Env App UI | https://www.npmjs.com/package/rrweb/v/2.1.7 |  |
 | rw | 1.3.3 | BSD-3-Clause | Desktop shell, Env App UI | https://www.npmjs.com/package/rw/v/1.3.3 |  |
 | safe-buffer | 5.1.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/safe-buffer/v/5.1.2 |  |
 | safe-buffer | 5.2.1 | MIT | Env App UI | https://www.npmjs.com/package/safe-buffer/v/5.2.1 |  |
@@ -3957,6 +3957,7 @@ SOFTWARE.
 | wrappy | 1.0.2 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/wrappy/v/1.0.2 |  |
 | ws | 8.21.0 | MIT | Env App UI | https://www.npmjs.com/package/ws/v/8.21.0 |  |
 | ws | 8.21.3 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/ws/v/8.21.3 |  |
+| ws | 8.22.0 | MIT | Env App UI | https://www.npmjs.com/package/ws/v/8.22.0 |  |
 | xml-name-validator | 5.0.0 | Apache-2.0 | Desktop shell, Env App UI | https://www.npmjs.com/package/xml-name-validator/v/5.0.0 |  |
 | xmlbuilder | 15.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/xmlbuilder/v/15.1.1 |  |
 | xmlchars | 2.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/xmlchars/v/2.2.0 |  |
@@ -5861,7 +5862,7 @@ Flower's headless Chromium browser is installed separately, only after user conf
 
 ## FloeBrowser Projection and Media Collector
 
-Redeven bundles the published `@floegence/floebrowser@0.1.27` SDK and its native element-media collector. The following original license texts cover its JavaScript runtime components and compiled Go dependencies, including Pion WebRTC, mediacommon, the Go runtime and platform-specific modules. They are reproduced from the SDK's verified `dist/THIRD_PARTY_LICENSES.txt`, which is also retained in the computer-helper resource bundle.
+Redeven bundles the published `@floegence/floebrowser@0.1.28` SDK and its native element-media collector. The following original license texts cover its JavaScript runtime components and compiled Go dependencies, including Pion WebRTC, mediacommon, the Go runtime and platform-specific modules. They are reproduced from the SDK's verified `dist/THIRD_PARTY_LICENSES.txt`, which is also retained in the computer-helper resource bundle.
 
 ````text
 # Third-party notices
@@ -5936,21 +5937,21 @@ SOFTWARE.
 
 
 
-@rrweb/record@2.1.6 — MIT
+@rrweb/record@2.1.7 — MIT
 
 
 Original license: git+https://github.com/rrweb-io/rrweb.git
 See the upstream project and the notices above.
 
 
-@rrweb/replay@2.1.6 — MIT
+@rrweb/replay@2.1.7 — MIT
 
 
 Original license: git+https://github.com/rrweb-io/rrweb.git
 See the upstream project and the notices above.
 
 
-@rrweb/types@2.1.6 — MIT
+@rrweb/types@2.1.7 — MIT
 
 
 Original license: git+https://github.com/rrweb-io/rrweb.git
@@ -6259,7 +6260,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 
 
 
-ws@8.21.3 — MIT
+ws@8.22.0 — MIT
 
 
 Copyright (c) 2011 Einar Otto Stangvik <einaros@gmail.com>
@@ -6285,7 +6286,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 
-zod@4.6.5 — MIT
+zod@4.6.7 — MIT
 
 
 MIT License
@@ -6312,14 +6313,14 @@ SOFTWARE.
 
 
 
-rrweb@2.1.6 — MIT
+rrweb@2.1.7 — MIT
 
 
 Original license: git+ssh://git@github.com/rrweb-io/rrweb.git
 See the upstream project and the notices above.
 
 
-@rrweb/utils@2.1.6 — MIT
+@rrweb/utils@2.1.7 — MIT
 
 
 Original license: git+https://github.com/rrweb-io/rrweb.git
@@ -6588,7 +6589,7 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 
 
-source-map-js@1.2.1 — BSD-3-Clause
+source-map-js@1.2.2 — BSD-3-Clause
 
 
 
@@ -6769,21 +6770,21 @@ SOFTWARE.
 
 
 
-rrdom@2.1.6 — MIT
+rrdom@2.1.7 — MIT
 
 
 Original license: git+https://github.com/rrweb-io/rrweb.git
 See the upstream project and the notices above.
 
 
-rrweb-snapshot@2.1.6 — MIT
+rrweb-snapshot@2.1.7 — MIT
 
 
 Original license: git+https://github.com/rrweb-io/rrweb.git
 See the upstream project and the notices above.
 
 
-github.com/bluenviron/mediacommon/v2@v2.9.5
+github.com/bluenviron/mediacommon/v2@v2.9.6
 
 
 MIT License
@@ -6858,7 +6859,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 
 
-github.com/pion/dtls/v3@v3.1.9
+github.com/pion/dtls/v3@v3.1.10
 
 
 MIT License
@@ -6873,7 +6874,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 
 
-github.com/pion/ice/v4@v4.4.4
+github.com/pion/ice/v4@v4.4.7
 
 
 MIT License
@@ -6918,7 +6919,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 
 
-github.com/pion/mdns/v2@v2.2.1
+github.com/pion/mdns/v2@v2.2.2
 
 
 MIT License
@@ -6972,7 +6973,7 @@ SOFTWARE.
 
 
 
-github.com/pion/rtcp@v1.2.18
+github.com/pion/rtcp@v1.2.19
 
 
 MIT License
@@ -7002,7 +7003,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 
 
-github.com/pion/sctp@v1.11.3
+github.com/pion/sctp@v1.12.0
 
 
 MIT License
@@ -7032,7 +7033,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 
 
-github.com/pion/srtp/v3@v3.1.0
+github.com/pion/srtp/v3@v3.1.3
 
 
 MIT License
@@ -7092,7 +7093,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 
 
-github.com/pion/webrtc/v4@v4.2.22
+github.com/pion/webrtc/v4@v4.2.23
 
 
 MIT License
@@ -7141,7 +7142,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 
-golang.org/x/crypto@v0.56.0
+golang.org/x/crypto@v0.57.0
 
 
 Copyright 2009 The Go Authors.
@@ -7174,7 +7175,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 
-golang.org/x/net@v0.57.0
+golang.org/x/net@v0.60.0
 
 
 Copyright 2009 The Go Authors.
@@ -7207,7 +7208,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 
-golang.org/x/sys@v0.47.0
+golang.org/x/sys@v0.48.0
 
 
 Copyright 2009 The Go Authors.
@@ -7272,7 +7273,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-Go runtime go1.27.1
+Go runtime go1.27.3
 
 Copyright 2009 The Go Authors.
 
