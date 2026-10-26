@@ -422,6 +422,38 @@ describe('bounded Flower history', () => {
     expect(root.querySelector('.flower-history-body-control button')).toBeNull();
   });
 
+  it('retries a failed older-page handoff without resetting the transcript or draft', async () => {
+    const { root, history, full } = await mount(false, false, { text: 'Preview text' + '\n\nLong paragraph.'.repeat(120) });
+    await waitFor(() => root.textContent?.includes('Long paragraph') === true);
+    const editor = root.querySelector<HTMLTextAreaElement>('.flower-composer textarea')!;
+    editor.value = 'Keep my draft'; editor.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    const original = history.getMockImplementation()!;
+    let rejected = false;
+    history.mockImplementation(async (id, input) => {
+      if (input.item_ids && !rejected) { rejected = true; throw Object.assign(new Error('invalid history window'), { status: 400 }); }
+      return original(id, input);
+    });
+    const bubble = root.querySelector('.flower-history-message .flower-message-bubble');
+    const viewport = root.querySelector<HTMLDivElement>('.flower-chat-transcript')!;
+    viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true }));
+    viewport.scrollTop = 0; viewport.dispatchEvent(new Event('scroll'));
+    await waitFor(() => Boolean(root.querySelector('[role="alert"]')));
+    expect(root.querySelector('.flower-history-message .flower-message-bubble')).toBe(bubble);
+    expect(root.querySelector('.flower-thread-sync-error')).toBeNull();
+    const count = history.mock.calls.length;
+    await new Promise(resolve => setTimeout(resolve, 150));
+    expect(history).toHaveBeenCalledTimes(count);
+    const retry = root.querySelector<HTMLButtonElement>('[role="alert"] button');
+    expect(retry).not.toBeNull();
+    retry!.click();
+    await waitFor(() => root.textContent?.includes('Older conversation') === true);
+    expect(root.querySelector('[role="alert"]')).toBeNull();
+    expect(root.querySelector('.flower-composer textarea')).toBe(editor);
+    expect(editor.value).toBe('Keep my draft');
+    expect(full).not.toHaveBeenCalled();
+    expect(history.mock.calls.at(-1)?.[1].item_ids).toEqual(['old', 'latest']);
+  });
+
   it('keeps the reading interval after a settings command returns its latest-page receipt', async () => {
     const { root, history, rename } = await mount(false, false, { text: 'Preview text' + '\n\nLong paragraph.'.repeat(120) });
     await waitFor(() => root.textContent?.includes('Long paragraph') === true);

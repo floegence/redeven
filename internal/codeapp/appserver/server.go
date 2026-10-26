@@ -58,6 +58,10 @@ import (
 	"github.com/floegence/redeven/internal/workbenchlayout"
 )
 
+// A reading window carries up to 150 canonical IDs, including longer retry
+// and tool identities. Single-item/body locators keep their smaller 8 KiB cap.
+const flowerHistoryRequestMaxBytes = 64 << 10
+
 type Options struct {
 	ChatGPT              *chatgpt.Client
 	Logger               *slog.Logger
@@ -5281,7 +5285,11 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !ok || !g.requireAIService(w, aiSvc) {
 				return
 			}
-			dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10))
+			requestLimit := int64(8 << 10)
+			if action == "history" {
+				requestLimit = flowerHistoryRequestMaxBytes
+			}
+			dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, requestLimit))
 			dec.DisallowUnknownFields()
 			if action == "history-body" {
 				var input ai.FlowerHistoryBodyRequest
@@ -5313,12 +5321,12 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusOK, apiResp{OK: true, Data: item})
 				return
 			}
-			var input ai.FlowerHistoryRequest
-			if err := dec.Decode(&input); err != nil || dec.Decode(&struct{}{}) != io.EOF {
+			var input *ai.FlowerHistoryRequest
+			if err := dec.Decode(&input); err != nil || input == nil || dec.Decode(&struct{}{}) != io.EOF {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid history window"})
 				return
 			}
-			detail, err := aiSvc.GetFlowerThreadHistory(r.Context(), meta, threadID, input)
+			detail, err := aiSvc.GetFlowerThreadHistory(r.Context(), meta, threadID, *input)
 			if err != nil {
 				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
 				return
@@ -5423,14 +5431,14 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			var resp *ai.FlowerSubagentDetailResponse
 			var err error
 			if r.Method == http.MethodPost {
-				var input ai.FlowerHistoryRequest
-				dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10))
+				var input *ai.FlowerHistoryRequest
+				dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, flowerHistoryRequestMaxBytes))
 				dec.DisallowUnknownFields()
-				if err = dec.Decode(&input); err != nil || dec.Decode(&struct{}{}) != io.EOF {
+				if err = dec.Decode(&input); err != nil || input == nil || dec.Decode(&struct{}{}) != io.EOF {
 					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid history request"})
 					return
 				}
-				resp, err = aiSvc.GetFlowerSubagentHistory(r.Context(), meta, threadID, childID, input)
+				resp, err = aiSvc.GetFlowerSubagentHistory(r.Context(), meta, threadID, childID, *input)
 			} else {
 				resp, err = aiSvc.GetFlowerSubagentDetail(r.Context(), meta, threadID, childID)
 			}

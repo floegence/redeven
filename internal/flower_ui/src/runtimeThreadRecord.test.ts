@@ -147,9 +147,11 @@ describe('bounded history body residency', () => {
     const page = { ...current, items: [preview] };
     const first = createRuntimeThreadRecord(page, applyFlowerRuntimeCurrentView(initial, page));
     expect(first.hydrate(preview, { ...preview, body: undefined, text: '中文🌸' })).toBe(true);
+    expect(first.previewItem('one')).toEqual(preview);
     expect(first.initializeThread().messages[0].body_pending).toBeUndefined();
     const next = createRuntimeThreadRecord({ ...page, view_version: 2 }, applyFlowerRuntimeCurrentView(initial, page), first);
     expect(next.item('one')!.text).toBe('中文🌸');
+    expect(next.previewItem('one')).toEqual(preview);
     expect(next.initializeThread().messages[0].content).toBe('中文🌸');
     expect(next.initializeThread().messages[0].body_pending).toBeUndefined();
   });
@@ -161,6 +163,8 @@ describe('bounded history body residency', () => {
     record.apply(record.initializeThread(), { ...append(), items: [{ kind: 'body', item_id: 'one', body: { ...preview.body, bytes: 11 } }] });
     expect(record.initializeThread().messages[0].body_pending?.bytes).toBe(11);
     expect(record.hydrate(preview, { ...preview, body: undefined, text: '中文🌸' })).toBe(true);
+    expect(record.previewItem('one')?.text).toBe('中文');
+    expect(record.previewItem('one')?.body?.bytes).toBe(11);
     expect(record.initializeThread().messages[0].content).toBe('中文🌸');
     expect(record.initializeThread().messages[0].body_pending?.bytes).toBe(11);
   });

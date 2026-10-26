@@ -1,8 +1,23 @@
-import type { FlowerHistoryRequest, FlowerHistoryWindow } from './contracts/flowerSurfaceContracts';
+import type { FlowerHistoryRequest, FlowerHistoryWindow, FlowerRuntimeCurrentItem } from './contracts/flowerSurfaceContracts';
 
 export const HISTORY_READING_ITEMS = 150;
+// Leave space for window metadata and source growth below the canonical 512 KiB cap.
+export const HISTORY_READING_BYTES = 448 * 1024;
 export const HISTORY_PAGE_ITEMS = 40;
 export const HISTORY_EDGE_MARGIN_PX = 960;
+const itemSizes = new WeakMap<FlowerRuntimeCurrentItem, number>();
+const encoder = new TextEncoder();
+export function historyReadingItemBytes(item: FlowerRuntimeCurrentItem): number {
+  let bytes = itemSizes.get(item);
+  if (bytes === undefined) {
+    // Go's JSON encoder escapes HTML and JavaScript line separators. Count
+    // those bytes too; this value never includes separately hydrated bodies.
+    const json = JSON.stringify(item).replace(/[<>&\u2028\u2029]/g, value => '\\u' + value.charCodeAt(0).toString(16).padStart(4, '0'));
+    bytes = encoder.encode(json).length + 1;
+    itemSizes.set(item, bytes);
+  }
+  return bytes;
+}
 
 // Edge reads acquire an adjacent page without changing the installed interest.
 // The accepted selection then contains the retained interval and that page.
@@ -32,7 +47,7 @@ export function historyReadingKey(threadID: string, window: FlowerHistoryWindow,
 // This is disposable page membership only. The canonical owner rereads these
 // identities in one baseline before the visible surface adopts the new range.
 export function historyReadingSelection(retained: readonly string[], page: readonly string[], direction: 'before' | 'after',
-  pinned: readonly string[], maximum = HISTORY_READING_ITEMS, ordinals?: ReadonlyMap<string, number>): readonly string[] | undefined {
+  pinned: readonly string[], maximum = HISTORY_READING_ITEMS, ordinals?: ReadonlyMap<string, number>, itemBytes?: ReadonlyMap<string, number>): readonly string[] | undefined {
   if (new Set(retained).size !== retained.length || new Set(page).size !== page.length
     || retained.some(id => !id) || page.some(id => !id) || maximum < 1) throw new Error('Invalid history page membership.');
   const old = new Set(retained);
@@ -46,6 +61,9 @@ export function historyReadingSelection(retained: readonly string[], page: reado
   }
   const protectedIDs = new Set(pinned.filter(id => combined.includes(id)));
   const candidates = new Set(protectedIDs);
+  const cost = (id: string) => itemBytes?.get(id) ?? 0;
+  let bytes = [...protectedIDs].reduce((sum, id) => sum + cost(id), 0);
+  if (itemBytes && bytes > HISTORY_READING_BYTES) return;
   const addedSet = new Set(added);
   const first = combined.findIndex(id => addedSet.has(id));
   const last = combined.length - 1 - [...combined].reverse().findIndex(id => addedSet.has(id));
@@ -54,7 +72,10 @@ export function historyReadingSelection(retained: readonly string[], page: reado
     : [...combined.slice(0, last + 1).reverse(), ...combined.slice(last + 1)];
   for (const id of ordered) {
     if (candidates.size >= maximum) break;
+    if (candidates.has(id)) continue;
+    if (itemBytes && bytes + cost(id) > HISTORY_READING_BYTES) break;
     candidates.add(id);
+    bytes += cost(id);
   }
   // Protected islands stay mounted without retaining the intervening history.
   // A measured gap represents each evicted interval and drives ordinary scroll reads.
@@ -90,7 +111,12 @@ export function historyGapRequest(viewport: HTMLElement, direction: 'before' | '
   const bounds = viewport.getBoundingClientRect();
   const gaps = [...viewport.querySelectorAll<HTMLElement>('[data-flower-history-gap]')].filter(node => {
     const rect = node.getBoundingClientRect();
-    return rect.height > 0 && rect.bottom > bounds.top - HISTORY_EDGE_MARGIN_PX && rect.top < bounds.bottom + HISTORY_EDGE_MARGIN_PX;
+    if (rect.height <= 0 || rect.bottom <= bounds.top - HISTORY_EDGE_MARGIN_PX || rect.top >= bounds.bottom + HISTORY_EDGE_MARGIN_PX) return false;
+    // Only the leading reading edge owns prefetch. A short/collapsed transcript
+    // may expose several protected islands at once; filling gaps behind that
+    // edge would evict its opposite page and immediately request it again.
+    return direction === 'before' ? rect.top <= bounds.top
+      : direction === 'after' ? rect.bottom >= bounds.bottom : true;
   });
   const gap = direction === 'before' ? gaps.at(-1) : gaps[0];
   if (!gap) return;
@@ -99,12 +125,16 @@ export function historyGapRequest(viewport: HTMLElement, direction: 'before' | '
   if (!before || !after) return;
   const rect = gap.getBoundingClientRect();
   const first = Number(gap.dataset.flowerHistoryGapFirst), last = Number(gap.dataset.flowerHistoryGapLast);
-  if (rect.top <= bounds.top && rect.bottom >= bounds.bottom && Number.isSafeInteger(first) && Number.isSafeInteger(last) && last > first) {
+  if (!Number.isSafeInteger(first) || !Number.isSafeInteger(last) || last <= first) return;
+  const limit = Math.min(HISTORY_PAGE_ITEMS, last - first);
+  if (rect.top <= bounds.top && rect.bottom >= bounds.bottom) {
     const target = Math.min(last - 1, first + Math.floor((bounds.top - rect.top) / rect.height * (last - first)));
     return { anchor_id: before, anchor_offset: target - first + 1, direction: 'around', limit: HISTORY_PAGE_ITEMS };
   }
   // Read from the edge facing the viewport. The last scroll direction must
   // never turn a nearby gap into a read at its distant opposite end.
   const edge = rect.top < bounds.top ? 'before' : 'after';
-  return { anchor_id: edge === 'before' ? after : before, direction: edge, limit: HISTORY_PAGE_ITEMS };
+  // Do not read past a small missing interval into another retained island.
+  // Overshooting would evict the opposite page and alternate between gaps.
+  return { anchor_id: edge === 'before' ? after : before, direction: edge, limit };
 }

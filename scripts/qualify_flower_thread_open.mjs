@@ -8,6 +8,8 @@ const root = process.cwd();
 const argument = name => process.argv.find(value => value.startsWith('--' + name + '='))?.slice(name.length + 3);
 const fixture = argument('fixture'), output = argument('output');
 const maximumInteractiveMs = argument('max-interactive-ms');
+const historyScrollSteps = Number(argument('history-scroll-steps') ?? 0);
+assert.ok(Number.isInteger(historyScrollSteps) && historyScrollSteps >= 0 && historyScrollSteps <= 500, 'Use 0–500 --history-scroll-steps.');
 if (maximumInteractiveMs !== undefined) assert.ok(Number.isFinite(Number(maximumInteractiveMs)) && Number(maximumInteractiveMs) > 0, 'Provide a positive --max-interactive-ms.');
 assert.ok(fixture && output, 'Provide --fixture and --output. The backend must use an isolated consistent copy.');
 const info = JSON.parse(await readFile(fixture, 'utf8'));
@@ -16,7 +18,7 @@ const desktop = createRequire(path.join(root, 'desktop/package.json'));
 const { _electron: electron } = require('playwright');
 const evidence = { fixture: info, requests: [], errors: [], opening: undefined, stability: [] };
 await mkdir(path.dirname(output), { recursive: true });
-const session = await createDesktopTestSession(import.meta.url, { timeoutMs: 180000 });
+const session = await createDesktopTestSession(import.meta.url, { timeoutMs: 180000 + historyScrollSteps * 1600 });
 try {
   await session.run(async () => {
     const application = await session.launchElectron(electron, {
@@ -26,6 +28,8 @@ try {
     });
     const page = await application.firstWindow();
     const pending = [];
+    const ordinals = new Map();
+    try {
     page.on('pageerror', error => evidence.errors.push(String(error)));
     page.on('console', message => { if (message.type() === 'error') evidence.errors.push(message.text()); });
     page.on('response', response => {
@@ -33,9 +37,11 @@ try {
       if (url.pathname !== '/fixture') return;
       pending.push((async () => {
         const bytes = await response.body();
+        const body = response.ok() && url.searchParams.get('op') === 'history' ? JSON.parse(bytes.toString()) : undefined;
+        for (const item of body?.current?.items ?? []) ordinals.set(item.id, item.ordinal);
         evidence.requests.push({ op: url.searchParams.get('op'), status: response.status(), bytes: bytes.length,
-          input: request.postData(), timing: request.timing() });
-        if (!response.ok()) evidence.errors.push({ op: url.searchParams.get('op'), status: response.status() });
+          input: request.postData(), timing: request.timing(), window: body?.window ?? body?.current?.window });
+        if (!response.ok()) evidence.errors.push({ op: url.searchParams.get('op'), status: response.status(), error: bytes.toString() });
       })().catch(error => evidence.errors.push(String(error))));
     });
     const target = page.locator('[data-thread-id=' + JSON.stringify(info.thread) + '] .flower-thread-card-select-button');
@@ -132,7 +138,7 @@ try {
     await editor.fill('');
     if (process.argv.includes('--interactions')) {
       const viewport = page.locator('.flower-chat-transcript');
-      const failures = '.flower-thread-load-error,.flower-thread-sync-error,.flower-history-read-error';
+      const failures = '.flower-thread-load-error,.flower-thread-sync-error,.flower-chat-transcript [role="alert"]';
       const checkReady = async () => {
         await page.waitForFunction(() => {
           const viewport = document.querySelector('.flower-chat-transcript');
@@ -182,6 +188,59 @@ try {
       }
       await page.screenshot({ path: output + '.returned.png' });
     }
+    if (historyScrollSteps > 0) {
+      assert.equal(info.boundary, 'product-http', 'Deep scrolling must cross the production HTTP boundary.');
+      const viewport = page.locator('.flower-chat-transcript');
+      evidence.historyScroll = [];
+      const responses = evidence.requests.length;
+      evidence.historyIdle = [];
+      const historyCount = () => evidence.requests.filter(read => read.op === 'history').length;
+      const verifyIdle = async direction => {
+        await page.waitForTimeout(1000);
+        const before = historyCount();
+        await page.waitForTimeout(1500);
+        const after = historyCount();
+        evidence.historyIdle.push({ direction, before, after });
+        assert.equal(after, before, 'History requests must stop after scrolling settles.');
+      };
+      for (const direction of [-1, 1]) {
+        const start = evidence.historyScroll.length;
+        for (let step = 0; step < historyScrollSteps; step++) {
+          const box = await viewport.boundingBox();
+          assert.ok(box, 'The transcript must remain mounted.');
+          // Use the transcript gutter so an informational tooltip cannot hold
+          // Playwright's hit-test while the native wheel gesture is pending.
+          await page.mouse.move(box.x + 16, box.y + box.height / 2);
+          await page.mouse.wheel(0, direction * 900);
+          await page.waitForTimeout(700);
+          assert.equal(await viewport.locator('[role="alert"]').count(), 0, 'Historical reading failed.');
+          assert.equal(await page.locator('.flower-thread-load-error,.flower-thread-sync-error').count(), 0);
+          const state = await viewport.evaluate(element => ({
+            top: element.scrollTop, height: element.scrollHeight,
+            first: element.querySelector('[data-flower-message-id]')?.getAttribute('data-flower-message-id'),
+            visible: [...element.querySelectorAll('[data-flower-message-id]')].filter(node => {
+              const box = node.getBoundingClientRect(), bounds = element.getBoundingClientRect();
+              return box.height > 0 && box.bottom > bounds.top && box.top < bounds.bottom;
+            }).map(node => node.getAttribute('data-flower-message-id')),
+          }));
+          evidence.historyScroll.push({ ...state, direction, ordinal: ordinals.get(state.first),
+            visibleOrdinals: state.visible.map(id => ordinals.get(id)) });
+          if (step % 10 === 9) await verifyIdle(direction);
+        }
+        await verifyIdle(direction);
+        const travel = evidence.historyScroll.slice(start).map(step => step.ordinal).filter(Number.isSafeInteger);
+        assert.ok(travel.length === historyScrollSteps, 'Every reading position must retain canonical identity.');
+        if (historyScrollSteps >= 20) {
+          assert.ok(new Set(travel).size >= 8, 'Scrolling must advance beyond a few alternating windows.');
+          assert.ok(direction < 0 ? travel.at(-1) < travel[0] : travel.at(-1) > travel[0], 'Reading must advance in the requested direction.');
+        }
+      }
+      await Promise.all(pending);
+      const reads = evidence.requests.slice(responses).filter(read => read.op === 'history');
+      assert.ok(reads.some(read => read.status === 200 && Buffer.byteLength(read.input ?? '') > 8192), 'Exercise an actual reading selection above 8 KiB.');
+      assert.ok(new Set(evidence.historyScroll.map(step => step.first)).size > 2, 'Historical windows must advance.');
+      await page.screenshot({ path: output + '.history.png' });
+    }
     await Promise.all(pending);
     await writeFile(output, JSON.stringify(evidence, null, 2) + '\n');
     assert.equal(evidence.errors.length, 0, JSON.stringify(evidence.errors));
@@ -191,6 +250,10 @@ try {
       requests: evidence.requests.map(({ op, bytes, status, timing }) => ({ op, bytes, status, timing })), errors: evidence.errors }));
     if (maximumInteractiveMs !== undefined) {
       assert.ok(evidence.opening.interactiveMs < Number(maximumInteractiveMs), 'Click-to-interactive exceeds the requested limit.');
+    }
+    } finally {
+      await Promise.all(pending);
+      await writeFile(output, JSON.stringify(evidence, null, 2) + '\n');
     }
   });
 } finally {

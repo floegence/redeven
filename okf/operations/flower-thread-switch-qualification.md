@@ -40,6 +40,13 @@ tool-sequence browser suites, both host typechecks and locale validation. Synthe
 and released-writer qualification stays outside ordinary CI/hooks. Private baseline
 frames must validate before shared-frame assertions; do not discard arbitrary frames.
 
+Deep-scroll qualification must cross the product HTTP decoder.
+`TestServerFlowerHistoryScrollQualification` serves only an owned isolated copy with
+execution deferred. `qualify_flower_thread_open.mjs --history-scroll-steps=80` checks
+both directions, canonical progress, successful membership requests above 8 KiB,
+and idle request stability after each ten gestures. The service-only fixture cannot
+qualify HTTP request-size limits. Never commit its raw history or database.
+
 # Boundaries
 
 These local sequential diagnostics identify specific costs, not population latency
@@ -48,6 +55,16 @@ failures and report their scope; passing focused suites cannot recertify other k
 failing fixtures. Canonical history remains complete.
 
 # Evidence
+
+## Deep history scrolling, 2026-10-25
+
+An isolated 2,945-item historical copy reproduced HTTP 400 at a 9,129-byte
+membership request. A published-writer regression produces 10,289 bytes. After
+the request/metadata bounds and scroll-demand fixes, Electron 42.11.16 traversed
+to ordinal 1 and back to the latest window in 160 wheel gestures. All eighteen
+idle checks retained the same history-request count; no page/transport error or
+owned process remained. Largest request/response: 11,839/487,446 bytes. Opening
+took 352.8 ms on this prepared local copy. This is one diagnostic sample, not P95.
 
 ## Layout and destination exposure, 2026-10-23
 
