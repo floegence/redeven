@@ -193,7 +193,11 @@ test('source ownership releases AI navigation restrictions only for user browsin
     const page = await browser.newPage();
     owner = await createComputerBrowserSource(page, 'navigation-owner');
     const execute = (tool_name, args = {}, extra = {}) => owner.controller.execute({ tool_name, args, allowed_origins: [], script_operation: true, ...extra });
-    assert.equal((await execute('browser.navigate', { url: origin })).result.code, 'TAKEOVER_REQUIRED');
+    const initial = await execute('browser.navigate', { url: origin });
+    assert.equal(initial.error, 'TARGET_PERMISSION_REQUIRED');
+    assert.equal(initial.result.action_executed, false);
+    assert.equal(initial.result.required_navigation_url, new URL(origin).href);
+    assert.equal(page.url(), 'about:blank', 'A missing navigation grant cannot execute the request');
     await owner.setUserBrowsing(true);
     await page.goto(origin);
     assert.equal(await page.title(), 'Personal navigation');
