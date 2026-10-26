@@ -58,9 +58,7 @@ main() {
 
   (
     cd "$dir"
-    if ui_pkg_need_install "$dir"; then
-      npm ci
-    fi
+    ui_pkg_ensure_dependencies "$dir"
     npm run lint
     npm run typecheck
     npm run test:runtime-compatibility

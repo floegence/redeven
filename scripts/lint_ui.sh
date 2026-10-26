@@ -17,9 +17,7 @@ lint_envapp_ui() {
   ui_pkg_log "Env App UI: linting..."
   (
     cd "$dir"
-    if ui_pkg_need_install "$dir"; then
-      ui_pkg_run_pnpm install --frozen-lockfile
-    fi
+    ui_pkg_ensure_dependencies "$dir"
     ui_pkg_run_pnpm lint
     ui_pkg_run_pnpm check:workbench-wheel
   )
@@ -41,9 +39,7 @@ lint_codeapp_ui() {
   ui_pkg_log "Code App UI: linting..."
   (
     cd "$dir"
-    if ui_pkg_need_install "$dir"; then
-      npm ci
-    fi
+    ui_pkg_ensure_dependencies "$dir"
     npm run lint
   )
   ui_pkg_log "Code App UI: done."

@@ -30,6 +30,8 @@ The closed runtime target set is linux/amd64, linux/arm64, darwin/amd64, and
 darwin/arm64. Manifest downloads retry TLS/network failures up to three times,
 with a 15-second connection timeout, 60-second transfer timeout, and 120-second
 retry window. HTTPS and certificate verification remain required.
+Development launches may set REDEVEN_REDEVPLUGIN_BUILD_CACHE to an absolute
+profile-owned cache. Release staging always uses isolated Cargo directories.
 Rustup reuses installed components and recovers transient network
 failures with bounded retries. Set REDEVEN_RUSTUP_OFFLINE=1 for explicit
 Rustup cache-only preparation; set REDEVEN_RUSTUP_MAX_ATTEMPTS or
@@ -201,7 +203,28 @@ toolchain_rustc="$toolchain_root/bin/rustc"
 cargo_version=$("$toolchain_cargo" --version)
 rustc_version=$("$toolchain_rustc" --version)
 
-export CARGO_HOME="$tmpdir/cargo-home"
+# Only development launches opt into a profile-owned Cargo download/build cache.
+# Cargo still installs into a fresh root with --locked, and the crate digest,
+# executable, signature and product provenance are verified/generated each time.
+if [[ "$profile" == development && -n "${REDEVEN_REDEVPLUGIN_BUILD_CACHE:-}" ]]; then
+  case "$REDEVEN_REDEVPLUGIN_BUILD_CACHE" in /*) ;; *) die "ReDevPlugin build cache must be absolute" ;; esac
+  cache_key=$(node -e '
+    const fs=require("node:fs"), crypto=require("node:crypto");
+    const h=crypto.createHash("sha256");
+    for(const file of process.argv.slice(1,3)) h.update(fs.readFileSync(file));
+    h.update(JSON.stringify(process.argv.slice(3)));
+    process.stdout.write(h.digest("hex"));
+  ' "$SCRIPT_DIR/stage_redevplugin_release_artifacts.sh" "$SCRIPT_DIR/link_redevplugin_runtime_static_pie.sh" \
+    "$expected_runtime_crate_sha" "$cargo_version" "$rustc_version")
+  cache_root="$REDEVEN_REDEVPLUGIN_BUILD_CACHE/$RUST_TOOLCHAIN/$rust_target/$cache_key"
+  mkdir -p "$cache_root/cargo-home" "$cache_root/target"
+  export CARGO_HOME="$cache_root/cargo-home"
+  export CARGO_TARGET_DIR="$cache_root/target"
+  echo "[redevplugin-stage] Reusing development Cargo cache: $cache_root"
+else
+  export CARGO_HOME="$tmpdir/cargo-home"
+  export CARGO_TARGET_DIR="$tmpdir/cargo-target"
+fi
 install_root="$tmpdir/runtime-install"
 rustflags_key="CARGO_TARGET_$(printf '%s' "$rust_target" | tr '[:lower:]-' '[:upper:]_')_RUSTFLAGS"
 if [[ "$goos" == "linux" ]]; then

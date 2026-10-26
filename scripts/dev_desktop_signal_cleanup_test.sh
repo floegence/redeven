@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." &> /dev/null && pwd)
 if [ "${FAKE_SESSION_CASE:-}" = "" ]; then
-  for session_case in interrupt terminate normal electron-download electron-reinstall gateway-failure gateway-interrupt source-drift; do
+  for session_case in interrupt terminate normal electron-download electron-reinstall gateway-failure gateway-interrupt source-drift cache-hit build-failure; do
     FAKE_SESSION_CASE="$session_case" "$0"
   done
   exit 0
@@ -35,11 +35,24 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$FAKE_DESKTOP/node_modules/electron" "$FAKE_SCRIPTS" "$FAKE_BIN" "$TEST_HOME"
+mkdir -p "$FAKE_CHECKOUT/internal/envapp/ui_src/node_modules" "$FAKE_CHECKOUT/internal/codeapp/ui_src/node_modules" "$FAKE_DESKTOP/node_modules/electron" "$FAKE_SCRIPTS" "$FAKE_BIN" "$TEST_HOME"
 cp "$ROOT_DIR/scripts/dev_desktop.sh" "$ROOT_DIR/scripts/ui_package_common.sh" "$ROOT_DIR/scripts/source_build_identity.mjs" "$FAKE_SCRIPTS/"
 cp "$ROOT_DIR/scripts/prune_dev_desktop_bundles.mjs" "$FAKE_SCRIPTS/"
 cp "$ROOT_DIR/scripts/dev_desktop_gateways.mjs" "$FAKE_SCRIPTS/"
 cp "$ROOT_DIR/.node-version" "$FAKE_CHECKOUT/.node-version"
+cat > "$FAKE_SCRIPTS/dev_desktop_build_cache.mjs" <<'JS'
+if (process.argv[2] === 'capture') console.log('{}');
+if (process.argv[2] === 'lookup' && process.env.FAKE_SESSION_CASE === 'cache-hit') {
+  const fs = await import('node:fs'), path = await import('node:path'), crypto = await import('node:crypto');
+  const manifest = '{"schema_version":1}';
+  const root = path.join(process.env.REDEVEN_STATE_ROOT, 'desktop/bundles', crypto.createHash('sha256').update(manifest).digest('hex'));
+  fs.mkdirSync(root, { recursive: true });
+  fs.writeFileSync(path.join(root, 'desktop-bundle-manifest.json'), manifest);
+  fs.writeFileSync(path.join(root, 'redeven'), '#!/bin/sh\nif [ "$1" = desktop-runtime-stop ]; then echo "$*" >> "$FAKE_RUNTIME_STOPPED"; fi\n', { mode: 0o700 });
+  console.log(root);
+}
+JS
+
 printf '%s\n' '{"name":"@floegence/redeven-desktop"}' > "$FAKE_DESKTOP/package.json"
 cat > "$FAKE_DESKTOP/node_modules/electron/index.js" <<'JS'
 if (process.env.FAKE_SESSION_CASE === 'electron-download') {
@@ -59,7 +72,7 @@ printf '%s\n' \
   '  exit 0' \
   '}' \
   'trap on_signal INT TERM' \
-  'if [ "$FAKE_SESSION_CASE" = normal ] || [ "$FAKE_SESSION_CASE" = electron-download ] || [ "$FAKE_SESSION_CASE" = electron-reinstall ] || [ "$FAKE_SESSION_CASE" = gateway-failure ]; then sleep 0.2; exit 0; fi' \
+  'if [ "$FAKE_SESSION_CASE" = normal ] || [ "$FAKE_SESSION_CASE" = electron-download ] || [ "$FAKE_SESSION_CASE" = electron-reinstall ] || [ "$FAKE_SESSION_CASE" = gateway-failure ] || [ "$FAKE_SESSION_CASE" = cache-hit ]; then sleep 0.2; exit 0; fi' \
   'while :; do sleep 0.05; done' > "$FAKE_ELECTRON_PATH"
 chmod 700 "$FAKE_ELECTRON_PATH"
 
@@ -68,6 +81,7 @@ printf '%s\n' \
   'set -euo pipefail' \
   'case "${1:-}:${2:-}" in' \
   '  run:build)' \
+  '    if [ "$FAKE_SESSION_CASE" = cache-hit ] || [ "$FAKE_SESSION_CASE" = build-failure ]; then echo "unexpected or failed build" >&2; exit 23; fi' \
   '    if [ "$FAKE_SESSION_CASE" = source-drift ]; then printf "changed during Desktop build\n" >> "$PWD/package.json"; fi' \
   '    exit 0' \
   '    ;;' \
@@ -158,6 +172,14 @@ for _ in $(seq 1 100); do
   fi
   sleep 0.05
 done
+if [ "$FAKE_SESSION_CASE" = build-failure ]; then
+  if ! rg -Fq 'unexpected or failed build' "$TEST_ROOT/session.log" || [ -f "$FAKE_ELECTRON_STARTED" ]; then
+    cat "$TEST_ROOT/session.log" >&2
+    exit 1
+  fi
+  printf 'dev Desktop cleanup test passed: %s\n' "$FAKE_SESSION_CASE"
+  exit 0
+fi
 if [ "$FAKE_SESSION_CASE" = source-drift ]; then
   if ! rg -Fq 'Source changed during build' "$TEST_ROOT/session.log" \
     || [ -f "$FAKE_ELECTRON_STARTED" ] || [ -f "$FAKE_GATEWAY_STOPPED" ] || [ -f "$FAKE_RUNTIME_STOPPED" ]; then

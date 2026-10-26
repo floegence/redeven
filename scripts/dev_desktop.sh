@@ -15,6 +15,7 @@ LOCAL_UI_BIND="${REDEVEN_DESKTOP_LOCAL_UI_BIND:-}"
 STOP_EXISTING=1
 STOP_ONLY=0
 DRY_RUN=0
+REBUILD=0
 STOP_TIMEOUT_SECONDS="${REDEVEN_DESKTOP_STOP_TIMEOUT_SECONDS:-8}"
 ELECTRON_ARGS=()
 ELECTRON_DEBUG_ARGS=()
@@ -55,10 +56,13 @@ Development credentials use a private profile-local encryption key instead of
 the system secret store. Profiles with existing Keychain credentials open a
 recovery screen; only its explicit migration action requests authorization.
 Keep the encryption key with this profile.
+Unchanged source, dependencies and toolchains reuse a verified build.
+Changed or damaged inputs rebuild automatically; --rebuild forces preparation.
 After building, keep the three newest development bundles plus the selected
 bundle and any older bundles still referenced by running processes.
 
 Options:
+  --rebuild                 Rebuild even when the last verified build matches.
   --no-devtools             Do not open Desktop DevTools automatically.
   --no-stop                 Skip Desktop shutdown; fails if this instance is still running.
   --stop-only               Stop this development Desktop, local Runtime, and local Gateways.
@@ -716,10 +720,16 @@ ensure_desktop_dependencies() {
 
   (
     cd "$DESKTOP_DIR"
-    if ui_pkg_need_install "$DESKTOP_DIR" || ! node -e 'require.resolve("electron")' >/dev/null 2>&1; then
-      ui_pkg_log "Installing Desktop dependencies before resolving Electron..."
-      npm ci
+    ui_pkg_ensure_dependencies "$DESKTOP_DIR"
+    ui_pkg_ensure_dependencies "$ROOT_DIR/internal/envapp/ui_src"
+    ui_pkg_ensure_dependencies "$ROOT_DIR/internal/codeapp/ui_src"
+    if ! node -e 'require.resolve("electron")' >/dev/null 2>&1; then
+      REDEVEN_AGENT_FORCE_INSTALL=1 ui_pkg_ensure_dependencies "$DESKTOP_DIR"
     fi
+    # Resolve lazy Electron downloads before fingerprinting dependencies.
+    local electron_binary
+    electron_binary=$(ui_pkg_electron_binary "$DESKTOP_DIR")
+    [ -x "$electron_binary" ] || ui_pkg_die "Electron executable is unavailable: $electron_binary"
   )
 }
 
@@ -759,6 +769,10 @@ prepare_instance_bundle_snapshot() {
 	export REDEVEN_DESKTOP_BUNDLED_RUNTIME_ROOT="$snapshot_root"
 	ui_pkg_log "Development bundle snapshot: $snapshot_root"
 	ui_pkg_log "Development bundle manifest SHA-256: $manifest_digest"
+}
+
+prune_instance_bundles() {
+	local snapshot_root="$DEVELOPMENT_BUNDLE_ROOT"
 	if ! node "$SCRIPT_DIR/prune_dev_desktop_bundles.mjs" \
 		--state-root "$DEVELOPMENT_STATE_ROOT" --current-bundle "$snapshot_root"; then
 		ui_pkg_log "WARNING: development bundle cleanup was incomplete; older bundles may still occupy disk space."
@@ -816,8 +830,38 @@ start_desktop() {
 
     previous_dir="$PWD"
     cd "$DESKTOP_DIR"
-    npm run build
-    prepare_instance_bundle_snapshot "$source_identity"
+    local cache_context cached_bundle after_context phase_start
+    export REDEVEN_REDEVPLUGIN_BUILD_CACHE="$DEVELOPMENT_STATE_ROOT/desktop/build-cache/redevplugin"
+    # Explicit force-install has already prepared all three packages once.
+    if [ "${REDEVEN_AGENT_FORCE_INSTALL:-}" = 1 ]; then REBUILD=1; fi
+    unset REDEVEN_AGENT_FORCE_INSTALL
+    phase_start=$SECONDS
+    cache_context=$(node "$SCRIPT_DIR/dev_desktop_build_cache.mjs" capture "$ROOT_DIR")
+    ui_pkg_log "Build input verification: $((SECONDS - phase_start))s"
+    cached_bundle=""
+    if [ "$REBUILD" -eq 0 ]; then
+      cached_bundle=$(node "$SCRIPT_DIR/dev_desktop_build_cache.mjs" lookup "$ROOT_DIR" "$DEVELOPMENT_STATE_ROOT" "$cache_context")
+    else
+      ui_pkg_log "Rebuild requested; preparing current source."
+    fi
+    if [ -n "$cached_bundle" ]; then
+      DEVELOPMENT_BUNDLE_ROOT="$cached_bundle"
+      export REDEVEN_DESKTOP_BUNDLED_RUNTIME_ROOT="$cached_bundle"
+      printf '%s\n' "$cached_bundle" > "$DEVELOPMENT_STATE_ROOT/desktop/dev-runtime-bundle-v1"
+      ui_pkg_log "Reusing verified Desktop and Runtime build: $cached_bundle"
+    else
+      phase_start=$SECONDS
+      npm run build
+      ui_pkg_log "Desktop build: $((SECONDS - phase_start))s"
+      phase_start=$SECONDS
+      prepare_instance_bundle_snapshot "$source_identity"
+      ui_pkg_log "Runtime bundle preparation: $((SECONDS - phase_start))s"
+      after_context=$(node "$SCRIPT_DIR/dev_desktop_build_cache.mjs" capture "$ROOT_DIR")
+      node "$SCRIPT_DIR/dev_desktop_build_cache.mjs" compare "$ROOT_DIR" "$DEVELOPMENT_STATE_ROOT" "$cache_context" "$after_context"
+      node "$SCRIPT_DIR/dev_desktop_build_cache.mjs" record "$ROOT_DIR" "$DEVELOPMENT_STATE_ROOT" "$after_context" "$DEVELOPMENT_BUNDLE_ROOT"
+    fi
+    prune_instance_bundles
+    node "$SCRIPT_DIR/source_build_identity.mjs" verify "$ROOT_DIR" "$source_identity"
     cd "$previous_dir"
     [ "$SHUTDOWN_REQUESTED" -eq 0 ] || return "$SHUTDOWN_EXIT_STATUS"
   fi
@@ -835,7 +879,8 @@ start_desktop() {
   fi
 
   if [ "$DRY_RUN" -eq 1 ]; then
-    printf 'Would run in %q: npm run build\n' "$DESKTOP_DIR"
+    printf 'Would verify current source, dependencies, toolchains and cached output integrity (force rebuild: %s).\n' "$REBUILD"
+    printf 'Would run in %q on cache miss: npm run build\n' "$DESKTOP_DIR"
 		printf 'Would build an immutable development bundle snapshot below %q\n' "$DEVELOPMENT_STATE_ROOT/desktop/bundles"
 		printf 'Would retain the three newest bundles, the selected bundle, and bundles referenced by running processes.\n'
     printf 'Would run in %q: ' "$DESKTOP_DIR"
@@ -844,7 +889,10 @@ start_desktop() {
   fi
 
   DEVELOPMENT_SERVICES_OWNED=1
+  local gateway_start=$SECONDS
   manage_development_gateways start
+  ui_pkg_log "Local Gateway preparation: $((SECONDS - gateway_start))s"
+  node "$SCRIPT_DIR/source_build_identity.mjs" verify "$ROOT_DIR" "$source_identity"
   stop_current_instance_runtime
   [ "$SHUTDOWN_REQUESTED" -eq 0 ] || return "$SHUTDOWN_EXIT_STATUS"
 
@@ -870,6 +918,10 @@ start_desktop() {
 parse_args() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
+      --rebuild)
+        REBUILD=1
+        shift 1
+        ;;
       --no-devtools)
         OPEN_DEVTOOLS=0
         shift 1
@@ -950,7 +1002,9 @@ main() {
   fi
   verify_development_ports
   ensure_desktop_workspace
+  local dependency_start=$SECONDS
   ensure_desktop_dependencies
+  ui_pkg_log "Dependency preparation: $((SECONDS - dependency_start))s"
   start_desktop
 }
 
