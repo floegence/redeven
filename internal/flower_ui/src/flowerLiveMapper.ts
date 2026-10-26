@@ -954,6 +954,13 @@ export function mapFlowerActivitySummary(raw: unknown): import('./contracts/flow
     'query', 'pattern', 'process_id', 'execution_location', 'content_type', 'format']);
   const normalizedValues: Record<string, unknown> = {};
   for (const [path, value] of Object.entries(values ?? {})) {
+    if (path === '/payload/mutations/0/display_name' || path === '/payload/mutations/0/change_type') {
+      const mutations = fields.find(field => field.path === '/payload/mutations');
+      if (mutations?.kind !== 'array' || mutations.count !== 1 || typeof value !== 'string'
+        || new TextEncoder().encode(value).length > 2048) return fail();
+      normalizedValues[path] = value;
+      continue;
+    }
     if (!paths.has(path)) return fail();
     if (path === '/payload/goal') {
       const goal = plainRecordValue(value);

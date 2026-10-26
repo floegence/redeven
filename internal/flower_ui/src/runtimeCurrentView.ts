@@ -197,7 +197,7 @@ function activityBlock(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentVie
     for (const field of field_summary.fields) if (field.path.startsWith('/payload/') && field.kind === 'scalar') {
       payload[field.path.slice('/payload/'.length)] = field.value;
     }
-    for (const [path, value] of Object.entries(field_summary.values ?? {})) if (path.startsWith('/payload/')) payload[path.slice('/payload/'.length)] = value;
+    for (const [path, value] of Object.entries(field_summary.values ?? {})) if (/^\/payload\/[^/]+$/u.test(path)) payload[path.slice('/payload/'.length)] = value;
     activity = { ...activity, label: field_summary.label, description: field_summary.description,
       renderer: field_summary.renderer, ...(Object.keys(payload).length ? { payload } : {}),
       ...(field_summary.values?.['/chips'] ? { chips: field_summary.values['/chips'] as FlowerActivityItem['chips'] } : {}),

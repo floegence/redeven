@@ -16,6 +16,65 @@ afterEach(() => {
 });
 
 describe('field-backed activity in the product surface', () => {
+  it.each([['update', 1, 'Edit panda-bicycle.html'], ['delete', 1, 'Delete panda-bicycle.html'], ['noop', 1, 'Edit panda-bicycle.html'], ['update', 2, 'Edit 2 files']] as const)('shows %s patch titles for %d files without collapsed detail requests', async (changeType, count, label) => {
+    await page.viewport(1280, 900);
+    const seed = thread({ thread_id: 'patch-fields', title: 'Patch summary', messages: [] });
+    const patchItem = (version: string) => ({ id: 'tool:turn:patch', turn_id: 'turn', run_id: 'run', ordinal: 1, kind: 'tool' as const,
+      activity: { item_id: 'patch', tool_id: 'patch', tool_name: 'apply_patch', kind: 'tool', status: 'success', severity: 'normal' },
+      activity_summary: { version, label: 'apply_patch', renderer: 'patch' as const,
+        values: count === 1 ? { '/payload/mutations/0/display_name': 'panda-bicycle.html', '/payload/mutations/0/change_type': changeType } : {},
+        fields: [{ path: '/payload/mutations', kind: 'array' as const, count },
+          { path: '/payload/files_changed', kind: 'scalar' as const, value: count },
+          { path: '/payload/additions', kind: 'scalar' as const, value: 13 }, { path: '/payload/deletions', kind: 'scalar' as const, value: 11 }] },
+    });
+    const current: FlowerRuntimeCurrentView = { thread_id: seed.thread_id, activity: 'idle', view_version: 1, items: [patchItem('v1')] };
+    const events: FlowerLiveStreamEnvelope[] = [];
+    let wake: (() => void) | undefined;
+    const forbidden = vi.fn(async () => { throw new Error('Collapsed patch must not load details.'); });
+    const loadActivityValue = vi.fn<NonNullable<FlowerSurfaceAdapter['loadActivityValue']>>(async (_thread, request) => ({
+      thread_id: seed.thread_id, item_id: request.item_id, turn_id: 'turn', run_id: 'run', path: request.path,
+      value: request.path === '/payload' ? { files_changed: count, additions: 13, deletions: 11 }
+        : { display_name: 'panda-bicycle.html', change_type: changeType, additions: 111, deletions: 109, unified_diff: '--- a/panda-bicycle.html\n+++ b/panda-bicycle.html\n@@ -1 +1 @@\n-before\n+after' },
+    }));
+    const root = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [seed], loadActivityValue,
+      loadActivityField: forbidden, loadActivityStructure: forbidden, loadHistoryItem: forbidden, loadHistoryBody: forbidden,
+      loadHistory: async () => ({ current, thread: applyFlowerRuntimeCurrentView(seed, current) }),
+      async *connectLiveStream({ signal }) {
+        yield { schema_version: 3, kind: 'ready', baseline_complete: true, observer_id: 'patch-observer', summaries: [seed] };
+        const abort = () => wake?.(); signal.addEventListener('abort', abort, { once: true });
+        try { while (!signal.aborted) { const value = events.shift(); if (value) yield value; else await new Promise<void>(resolve => { wake = resolve; }); } }
+        finally { signal.removeEventListener('abort', abort); }
+      },
+    }, { focusThreadRequest: { request_id: 'open-patch', thread_id: seed.thread_id } });
+    root.style.height = '780px';
+    const row = () => root.querySelector('[data-flower-activity-item-id="patch"]');
+    await waitFor(() => row()?.textContent?.replaceAll(/\s/gu, '').includes(label.replaceAll(/\s/gu, '')) === true);
+    await new Promise(resolve => setTimeout(resolve, 150));
+    expect(loadActivityValue).not.toHaveBeenCalled();
+    expect(forbidden).not.toHaveBeenCalled();
+    events.push({ schema_version: 3, kind: 'thread.batch', thread_id: seed.thread_id,
+      update: { thread_id: seed.thread_id, base_version: 1, view_version: 2, facts: { activity: 'idle', queue_count: 0 },
+        items: [{ kind: 'replace', item_id: 'tool:turn:patch', item: patchItem('v2') }] } }); wake?.();
+    await new Promise(resolve => setTimeout(resolve, 150));
+    expect(loadActivityValue).not.toHaveBeenCalled();
+    const toggle = row()!.querySelector<HTMLButtonElement>('[data-flower-disclosure-trigger]')!;
+    toggle.click();
+    await waitFor(() => loadActivityValue.mock.calls.some(([, request]) => request.path.startsWith('/payload/mutations/')));
+    await waitFor(() => row()?.textContent?.includes('after') === true);
+    expect(row()?.querySelector('.flower-activity-inline-line')?.textContent?.replaceAll(/\s/gu, '')).toContain(label.replaceAll(/\s/gu, ''));
+    expect(row()?.querySelector('.flower-activity-inline-change-stats')?.textContent?.replaceAll(/\s/gu, '')).toContain('+13/−11');
+    toggle.click();
+    await new Promise(resolve => setTimeout(resolve, 150));
+    const calls = loadActivityValue.mock.calls.length;
+    await new Promise(resolve => setTimeout(resolve, 150));
+    expect(loadActivityValue).toHaveBeenCalledTimes(calls);
+    toggle.click();
+    await new Promise(resolve => setTimeout(resolve, 150));
+    expect(row()?.querySelector('.flower-activity-inline-line')?.textContent?.replaceAll(/\s/gu, '')).toContain(label.replaceAll(/\s/gu, ''));
+    expect(forbidden).not.toHaveBeenCalled();
+    disposeRenderedSurface(root);
+  });
+
   it('observes activity visibility only after DOM adoption and releases it on disposal', async () => {
     const NativeObserver = globalThis.IntersectionObserver;
     const early: string[] = [];

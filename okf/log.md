@@ -4,6 +4,10 @@ Recent changes only. The linked concepts own current contracts and evidence; Git
 
 ## 2026-10-26
 
+- Adopt published Floret v7.87.1 and keep [collapsed patch titles](ui/flower-live-timeline.md) in Activity summaries,
+  with localized file counts and stable patch totals; disclosure alone reads
+  mutation details.
+
 - Require [Flower file delivery](ai/flower-prompt-and-rule-sources.md) to provide named Markdown links to confirmed absolute paths, including space/parenthesis handling and code-example exceptions; preserve existing preview and authorization ownership.
 
 ## 2026-10-25

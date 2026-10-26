@@ -1495,6 +1495,59 @@ Go Runtime`}}));
     expect(presentation.title).toEqual({ kind: 'file', verb: 'Edit', display_name: 'actual.ts' });
   });
 
+  it('uses a single mutation title from the summary without manufacturing diff details', () => {
+    const presentation = presentFlowerActivityItem(item({ tool_name: 'apply_patch', label: 'apply_patch', renderer: 'patch',
+      payload: { files_changed: 1, additions: 13, deletions: 11 },
+      field_summary: { values: { '/payload/mutations/0/display_name': 'panda-bicycle.html', '/payload/mutations/0/change_type': 'delete' },
+        fields: [{ path: '/payload/mutations', kind: 'array', count: 1 }] },
+    }));
+    expect(presentation.label).toBe('Delete panda-bicycle.html');
+    expect(presentation.changeStats).toEqual({ additions: 13, deletions: 11 });
+    expect(presentation.detailBlocks).toEqual([]);
+    expect(presentation.primaryAction).toBeUndefined();
+  });
+
+  it('uses localized summary counts without loading mutation rows', () => {
+    const presentation = presentFlowerActivityItem(item({ tool_name: 'apply_patch', label: 'apply_patch', renderer: 'patch',
+      payload: { files_changed: 2, additions: 13, deletions: 11 },
+      field_summary: { fields: [{ path: '/payload/mutations', kind: 'array', count: 2 }] },
+    }), { tools: { ...toolActivityEnUS, edit: '编辑', fileCount: '{count} 个文件' } });
+    expect(presentation.label).toBe('编辑 2 个文件');
+    expect(presentation.detailBlocks).toEqual([]);
+  });
+
+  it('never treats patch totals as a file when a title is unavailable', () => {
+    const presentation = presentFlowerActivityItem(item({ tool_name: 'apply_patch', label: 'apply_patch', renderer: 'patch',
+      payload: { files_changed: 1, additions: 13, deletions: 11 },
+      field_summary: { fields: [{ path: '/payload/mutations', kind: 'array', count: 1 }] },
+    }));
+    expect(presentation.label).toBe('Edit files');
+    expect(presentation.changeStats).toEqual({ additions: 13, deletions: 11 });
+    expect(presentation.primaryAction).toBeUndefined();
+    expect(presentation.detailBlocks).toEqual([]);
+  });
+
+  it('keeps a confirmed no-op summary at zero without retaining argument counts', () => {
+    const presentation = presentFlowerActivityItem(item({ tool_name: 'apply_patch', label: 'apply_patch', renderer: 'patch',
+      argument_preview: { display_name: 'candidate.ts', additions: 99 },
+      field_summary: { values: { '/payload/mutations/0/display_name': 'same.ts', '/payload/mutations/0/change_type': 'noop' },
+        fields: [{ path: '/payload/mutations', kind: 'array', count: 1 }] },
+    }));
+    expect(presentation.label).toBe('Edit same.ts');
+    expect(presentation.changeStats).toEqual({ additions: 0, deletions: 0 });
+    expect(presentation.detailBlocks).toEqual([]);
+  });
+
+  it('keeps patch totals stable after mutation details arrive', () => {
+    const presentation = presentFlowerActivityItem(item({ tool_name: 'apply_patch', renderer: 'patch',
+      payload: { files_changed: 1, additions: 13, deletions: 11, mutations: [
+        { display_name: 'panda-bicycle.html', change_type: 'update', additions: 111, deletions: 109, unified_diff: 'diff' },
+      ] },
+    }));
+    expect(presentation.changeStats).toEqual({ additions: 13, deletions: 11 });
+    expect(presentation.detailBlocks[0]).toMatchObject({ kind: 'file_diff', files: [{ additions: 111, deletions: 109 }] });
+  });
+
   it('renders multi-file apply_patch as Edit N files and keeps per-file actions', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'apply_patch',
