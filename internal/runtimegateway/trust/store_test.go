@@ -47,6 +47,9 @@ func TestPairingChallengePreservesStableMachineIdentity(t *testing.T) {
 		t.Fatalf("PairingChallenge() error = %v", err)
 	}
 
+	if challenge.CompatibilityEpoch != protocol.CompatibilityEpoch {
+		t.Fatal("pairing must use the independent Gateway authority epoch")
+	}
 	if challenge.GatewayID == security.StableGatewayID(audience) {
 		t.Fatal("Gateway identity still depends on its address")
 	}

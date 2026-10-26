@@ -1414,6 +1414,7 @@
             "type": "string"
           },
           "compatibility_epoch": {
+            "description": "Gateway authority contract epoch, independent of Runtime Service releases.",
             "type": "integer"
           }
         },
@@ -1874,6 +1875,7 @@
             "type": "string"
           },
           "compatibility_epoch": {
+            "description": "Gateway authority contract epoch, independent of Runtime Service releases.",
             "type": "integer"
           }
         },

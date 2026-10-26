@@ -5,13 +5,31 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/floegence/redeven/internal/gatewaymembership"
 	gp "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
+
+func TestDesktopAndGatewayShareIndependentAuthorityContract(t *testing.T) {
+	_, file, _, _ := runtime.Caller(0)
+	root := filepath.Join(filepath.Dir(file), "../../..")
+	raw, err := os.ReadFile(filepath.Join(root, "desktop/src/shared/gatewayMembership.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	match := regexp.MustCompile(`GATEWAY_COMPATIBILITY_EPOCH = (\d+)`).FindSubmatch(raw)
+	if len(match) != 2 || string(match[1]) != strconv.Itoa(gp.CompatibilityEpoch) {
+		t.Fatal("Desktop and Gateway authority epochs differ")
+	}
+	if !strings.Contains(string(raw), "'"+gp.Version+"'") {
+		t.Fatal("Desktop and Gateway protocol versions differ")
+	}
+}
 
 func TestMembershipOpenAPIContainsOnlyCurrentContract(t *testing.T) {
 	_, file, _, _ := runtime.Caller(0)

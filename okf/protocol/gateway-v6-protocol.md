@@ -5,7 +5,7 @@ description: Define signed pairing, member invitations, policy, reverse access a
 tags: [gateway, protocol, security, identity]
 timestamp: 2026-10-10T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-26"
 ---
 # Summary
 
@@ -19,6 +19,10 @@ The signed Desktop surface includes pairing, identity proof, catalog, invitation
 A Runtime mTLS certificate must be current for that exact member and version.
 
 Service descriptions are signed separately and bind the Runtime's TLS application identity.
+
+## Compatibility ownership
+
+`protocol.Version` and `protocol.CompatibilityEpoch` own Gateway wire and host-authority admission. Desktop mirrors these in `gatewayMembership.ts`; Runtime Service compatibility changes do not change either. Preserve the deployed signed `compatibility_epoch` value 69 independently of Runtime release cadence. It remains covered by identity and pairing signatures. Different binary releases/commits are allowed within this contract; incompatible wire or authority contracts still fail explicitly. Runtime member version metadata is descriptive, not a software-version admission condition.
 
 ## Version and persistence
 Member version controls removal and replacement. Directory and policy revisions prevent stale messages from restoring permissions.

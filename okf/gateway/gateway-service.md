@@ -5,7 +5,7 @@ description: Manage Runtime-initiated membership without acquiring Runtime lifec
 tags: [gateway, desktop, access, identity]
 timestamp: 2026-10-14T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-26"
 ---
 # Summary
 
@@ -28,6 +28,12 @@ The separate Gateway archive and state root contain no Runtime lifecycle data. S
 
 Cancellation still stops development startup and exact owned-process cleanup remains required.
 
+## Compatibility and updates
+
+Gateway release tags and source commits are diagnostics, not admission gates. Desktop validates the installed binary against its own installation stamp, then observes service readiness and the actual Gateway wire/authority contract. An unrelated Desktop or Runtime release never forces Gateway replacement. Start/restart reuse an intact installed package; explicit Update validates the staged archive against the selected release and commit before activation. Package corruption, stopped service, pairing failure and protocol incompatibility remain distinct diagnoses; authorization rejection never implies an outdated build.
+
+Gateway v6 owns its authority epoch independently of Runtime Service. The existing value 69 is preserved so deployed services remain compatible; change it only for a reviewed Gateway authority break. Runtime metadata versions do not gate membership. Preserve signed identity, consent, permissions, freshness and current protocol validation; best-effort compatibility does not accept unknown security contracts. A feature failure affects that operation, not unrelated members or Runtime lifecycle authority.
+
 ## Address changes and upgrade
 [Gateway network settings](gateway-network-settings.md) owns atomic network configuration, next-start listener changes, request Host admission and its persistent migration boundary.
 
@@ -40,6 +46,9 @@ Optional Cloud publishing remains a separate flow.
 Gateway owns membership, policy, invitations, and restricted forwarding. Gateway never dials arbitrary Runtime addresses or turns observations into authority.
 
 # Evidence
+
+- `redeven:desktop/src/main/gatewayServiceHost.test.ts` — Different release/commit reuse and independent package integrity.
+- `redeven:desktop/scripts/check-gateway-enrollment-electron.mjs` — Optional real historical Gateway binary, current Desktop and Runtime enrollment, unchanged PID/binary/stamp and owned cleanup.
 
 - `redeven:internal/config/cloud_config_version_test.go` - Unsupported configuration fails without rewriting operator state.
 

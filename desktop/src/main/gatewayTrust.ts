@@ -1,4 +1,3 @@
-import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 import {
   createHash,
   generateKeyPairSync,
@@ -14,7 +13,7 @@ import {
   type GatewayRecord,
   type GatewayTrustProfile,
 } from './gatewayStore';
-import { GATEWAY_PROTOCOL_VERSION, type GatewayPermissions } from '../shared/gatewayMembership';
+import { GATEWAY_COMPATIBILITY_EPOCH, GATEWAY_PROTOCOL_VERSION, type GatewayPermissions } from '../shared/gatewayMembership';
 
 export const GATEWAY_TRUST_SIGNATURE_ALGORITHM = 'ed25519';
 
@@ -293,7 +292,7 @@ export function assertGatewayPairingChallenge(input: Readonly<{
   if (input.challenge.protocol_version !== GATEWAY_PROTOCOL_VERSION) {
     throw new GatewayTrustError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'Gateway protocol version is not supported.');
   }
-  if (input.challenge.compatibility_epoch !== RUNTIME_SERVICE_COMPATIBILITY_EPOCH) throw new GatewayTrustError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'Update Gateway and Desktop to matching versions.');
+  if (input.challenge.compatibility_epoch !== GATEWAY_COMPATIBILITY_EPOCH) throw new GatewayTrustError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'This Gateway uses an unsupported Gateway authority contract. Update the incompatible peer.');
   const expectedFingerprint = gatewayPublicKeyFingerprint(input.challenge.gateway_public_key);
   const observedFingerprint = compact(input.challenge.gateway_public_key_fingerprint) || expectedFingerprint;
   if (observedFingerprint !== expectedFingerprint) {
@@ -393,7 +392,7 @@ export function assertGatewayAddressProof(record: GatewayRecord, nonce: string, 
   const profile = assertGatewayTrustForCall(record);
   if (!response || typeof response !== 'object') throw new GatewayTrustError('GATEWAY_TRUST_CHANGED', 'Gateway identity proof is missing.');
   const item = response as Record<string, unknown>;
-  if (item.compatibility_epoch !== RUNTIME_SERVICE_COMPATIBILITY_EPOCH) throw new GatewayTrustError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'Update Gateway and Desktop to matching versions.');
+  if (item.compatibility_epoch !== GATEWAY_COMPATIBILITY_EPOCH) throw new GatewayTrustError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'This Gateway uses an unsupported Gateway authority contract. Update the incompatible peer.');
   if (Object.keys(item).length !== 7 || item.protocol_version !== GATEWAY_PROTOCOL_VERSION
     || item.gateway_id !== profile.gateway_id || item.binding_audience !== profile.binding_audience || item.nonce !== nonce
     || !Number.isSafeInteger(item.expires_at_unix_ms) || Number(item.expires_at_unix_ms) <= now

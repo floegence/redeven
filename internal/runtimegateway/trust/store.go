@@ -17,7 +17,6 @@ import (
 	"github.com/floegence/redeven/internal/gatewaystate"
 	"github.com/floegence/redeven/internal/runtimegateway/protocol"
 	"github.com/floegence/redeven/internal/runtimegateway/security"
-	"github.com/floegence/redeven/internal/runtimeservice"
 )
 
 const challengeTTL = 5 * time.Minute
@@ -157,7 +156,7 @@ func (s *Store) PairingChallenge(req protocol.PairingChallengeRequest, hostAdmin
 	if err != nil {
 		return protocol.PairingChallengeResponse{}, err
 	}
-	epoch := runtimeservice.CurrentCompatibilityContract().CompatibilityEpoch
+	epoch := protocol.CompatibilityEpoch
 	expires := time.Now().Add(challengeTTL).UnixMilli()
 	fields := map[string]any{"binding_audience": req.BindingAudience, "client_nonce": req.ClientNonce, "client_public_key": req.ClientPublicKey, "expires_at_unix_ms": expires, "gateway_id": state.Gateway.GatewayID, "gateway_nonce": gatewayNonce, "gateway_public_key": state.Gateway.PublicKey, "protocol_version": protocol.Version, "compatibility_epoch": epoch}
 	payload, err := security.CanonicalJSON(fields)

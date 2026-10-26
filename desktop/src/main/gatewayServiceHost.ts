@@ -254,6 +254,8 @@ function gatewayStampShell(): string {
   ].join('\n');
 }
 
+// Installed package integrity is independent of the Desktop update target.
+// Only explicit installation validates the archive against that target.
 function gatewayProbeShell(): string {
   return [
     'probe_status=""',
@@ -320,22 +322,9 @@ function gatewayProbeShell(): string {
     '    probe_reason="managed Gateway stamp release does not match the installed binary"',
     '    return 1',
     '  fi',
-    '  if [ -n "$target_release_tag" ]; then',
-    '    case "$target_release_tag" in v*) ;; *) target_release_tag="v$target_release_tag" ;; esac',
-    '    if [ "$reported_release_tag" != "$target_release_tag" ]; then',
-    '      probe_status="slot_version_mismatch"',
-    '      probe_reason="managed Gateway version does not match the Desktop target release"',
-    '      return 1',
-    '    fi',
-    '  fi',
     '  if [ -n "$slot_source_commit" ] && [ "$reported_commit" != "$slot_source_commit" ]; then',
     '    probe_status="build_identity_mismatch"',
     '    probe_reason="managed Gateway stamp commit does not match the installed binary"',
-    '    return 1',
-    '  fi',
-    '  if [ -n "$target_commit" ] && { [ "$reported_commit" != "$target_commit" ] || [ "$slot_source_commit" != "$target_commit" ]; }; then',
-    '    probe_status="build_identity_mismatch"',
-    '    probe_reason="managed Gateway build does not match the Desktop source build"',
     '    return 1',
     '  fi',
     '  probe_status="ready"',
@@ -685,7 +674,7 @@ function gatewayPackageProbeFallbackReason(status: GatewayServicePackageProbeSta
     case 'slot_version_mismatch':
       return 'managed Gateway stamp release does not match the installed binary';
     case 'build_identity_mismatch':
-      return 'managed Gateway build identity does not match the Desktop target';
+      return 'managed Gateway stamp commit does not match the installed binary';
     case 'stamp_missing':
       return 'managed Gateway stamp is missing';
     case 'stamp_invalid':
@@ -698,10 +687,10 @@ function describeGatewayPackageProbe(probe: GatewayPackageProbe): string {
     return `Managed Gateway at ${probe.binary_path} is ready (${probe.reported_release_tag ?? probe.slot_release_tag ?? 'unknown version'}).`;
   }
   if (probe.status === 'slot_version_mismatch') {
-    return `Managed Gateway at ${probe.binary_path} reports ${probe.reported_release_tag ?? 'an unknown version'}, but Desktop expects ${probe.target_release_tag ?? 'the current release'}.`;
+    return `Managed Gateway at ${probe.binary_path} reports ${probe.reported_release_tag ?? 'an unknown version'}, but its installation stamp records ${probe.slot_release_tag ?? 'an unknown version'}.`;
   }
   if (probe.status === 'build_identity_mismatch') {
-    return `Managed Gateway at ${probe.binary_path} reports commit ${probe.reported_commit ?? 'unknown'}, but Desktop expects ${probe.target_commit ?? probe.slot_source_commit ?? 'the installed build'}.`;
+    return `Managed Gateway at ${probe.binary_path} reports commit ${probe.reported_commit ?? 'unknown'}, but its installation stamp records ${probe.slot_source_commit ?? 'an unknown build'}.`;
   }
   return `${probe.reason} (${probe.binary_path}).`;
 }

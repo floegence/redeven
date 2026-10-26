@@ -247,6 +247,7 @@ import {
   GatewayNotManageableError,
   GatewayReinstallRequiredError,
   GatewayServiceStartRequiredError,
+  GatewayServiceUpdateRequiredError,
   GatewayServiceUnavailableError,
   type GatewayLifecycleProgressSink,
   type GatewayStartPolicy,
@@ -5504,6 +5505,9 @@ function gatewaySyncErrorCode(error: unknown): string {
   if (error instanceof GatewayServiceUnavailableError) {
     return error.code;
   }
+  if (error instanceof GatewayServiceUpdateRequiredError) {
+    return 'gateway_update_required';
+  }
   if (error instanceof GatewayServiceStartRequiredError) {
     return 'gateway_start_required';
   }
@@ -5523,7 +5527,7 @@ function gatewaySyncStateForError(error: unknown): DesktopGatewaySyncState {
     }
     return 'catalog_failed';
   }
-  if (error instanceof GatewayServiceUnavailableError || error instanceof GatewayServiceStartRequiredError) {
+  if (error instanceof GatewayServiceUnavailableError || error instanceof GatewayServiceStartRequiredError || error instanceof GatewayServiceUpdateRequiredError) {
     return 'gateway_unreachable';
   }
   return 'catalog_failed';
@@ -6164,6 +6168,12 @@ function gatewayActionFailure(record: GatewayRecord, error: unknown, gatewayEnvi
         summary: 'The Runtime member is not connected. Check its Gateway connection and retry.',
         summaryKey: 'gatewayAccess.targetUnavailableHelp', targetLabel: record.display_name,
       }) } : {}),
+      ...(error instanceof GatewayServiceUpdateRequiredError ? { failure: desktopOperationFailurePresentation({
+        code: 'operation_failed', title: 'Gateway update required',
+        titleKey: 'environmentCenter.gatewayPanelUpdateRequiredTitle',
+        summary: 'The installed Gateway package failed its integrity check. Use Update Gateway to repair it, then retry.',
+        summaryKey: 'gatewayAccess.packageRepairRequired', targetLabel: record.display_name,
+      }) } : {}),
       ...(requiresService ? { failure: desktopOperationFailurePresentation({
         code: 'operation_failed', title: 'Gateway service required',
         titleKey: 'environmentCenter.gatewayPanelFactGatewayService',
@@ -6186,6 +6196,9 @@ function gatewayServiceFailureCode(error: unknown): DesktopLauncherActionFailure
 function gatewayLauncherActionFailureCode(error: unknown): DesktopLauncherActionFailureCode {
   if (error instanceof GatewayTrustError) {
     return 'gateway_pairing_required';
+  }
+  if (error instanceof GatewayServiceUpdateRequiredError) {
+    return 'gateway_update_required';
   }
   if (error instanceof GatewayServiceStartRequiredError) {
     return 'gateway_start_required';
@@ -6322,7 +6335,7 @@ function gatewayDiagnosisForServiceState(
         ...base,
         classification: 'needs_update',
         summary: 'Gateway update required',
-        detail: 'Desktop must update this Gateway service before Refresh can pair and refresh catalog data.',
+        detail: serviceState?.message || 'The installed Gateway package failed its integrity check. Repair it with Update, then refresh.',
       };
     case 'needs_reinstall':
       return {
@@ -6431,40 +6444,6 @@ function desktopManagedProbeFromServiceProbe(probe: GatewayServiceDeepProbe | un
   };
 }
 
-function normalizeGatewayProbeVersion(value: string | undefined): string {
-  const clean = compact(value);
-  if (clean === '') {
-    return '';
-  }
-  return clean.startsWith('v') ? clean : `v${clean}`;
-}
-
-function gatewayProbeVersionIsDev(version: string): boolean {
-  return version === 'v0.0.0-dev';
-}
-
-function gatewayManagedProbeNeedsUpdate(probe: DesktopGatewayManagedProbe | undefined): boolean {
-  if (!probe) {
-    return false;
-  }
-  const packageStatus = compact(probe.package_status);
-  if (packageStatus !== '' && packageStatus !== 'ready') {
-    return true;
-  }
-  const version = normalizeGatewayProbeVersion(probe.version);
-  const targetVersion = normalizeGatewayProbeVersion(probe.target_version);
-  if (version !== '' && targetVersion !== '' && version !== targetVersion) {
-    return true;
-  }
-  const commit = compact(probe.commit);
-  const targetCommit = compact(probe.target_commit);
-  return gatewayProbeVersionIsDev(version)
-    && gatewayProbeVersionIsDev(targetVersion)
-    && commit !== ''
-    && targetCommit !== ''
-    && commit !== targetCommit;
-}
-
 function gatewayDiagnosisForError(
   record: GatewayRecord,
   error: unknown,
@@ -6490,7 +6469,7 @@ function gatewayDiagnosisForError(
       classification: 'needs_update',
       catalog_state: 'catalog_failed',
       summary: 'Gateway update required',
-      detail: message || 'Update Gateway and Desktop to matching versions.',
+      detail: message || 'The Gateway protocol is incompatible. Update the incompatible peer.',
     };
   }
   if ((error instanceof GatewayTrustError && gatewayTrustErrorNeedsReinstall(error)) || code === 'GATEWAY_TRUST_CHANGED') {
@@ -6514,7 +6493,7 @@ function gatewayDiagnosisForError(
       detail: message,
     };
   }
-  if (error instanceof GatewayServiceStartRequiredError) {
+  if (error instanceof GatewayServiceStartRequiredError || error instanceof GatewayServiceUpdateRequiredError) {
     return gatewayDiagnosisForServiceState(record, error.service_state);
   }
   if (error instanceof GatewayReinstallRequiredError) {
@@ -6554,15 +6533,6 @@ function gatewayDiagnosisForError(
   }
   if (error instanceof GatewayClientError) {
     if (gatewayClientErrorIsPairingRejected(error)) {
-      if (gatewayManagedProbeNeedsUpdate(managedProbe)) {
-        return {
-          ...base,
-          classification: 'needs_update',
-          catalog_state: 'pairing_failed',
-          summary: 'Gateway update required',
-          detail: 'Desktop can reach the Gateway service, but the service rejected the catalog request before pairing could be trusted. Update Gateway to align the managed service with this Desktop before refreshing again.',
-        };
-      }
       return {
         ...base,
         classification: 'pairing_required',
@@ -14912,11 +14882,12 @@ async function openGatewayEnvironmentFromLauncher(
     }
     const summaryKey = gatewayUnavailable ? 'gatewayAccess.unavailable'
       : code === 'MEMBER_REMOVED' ? 'gatewayAccess.memberRemoved'
+      : error instanceof GatewayServiceUpdateRequiredError ? 'gatewayAccess.packageRepairRequired'
       : error instanceof GatewayServiceStartRequiredError ? 'toast.gatewayStartRequired'
+      : code === 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED' ? 'gatewayAccess.protocolMismatch'
       : error instanceof GatewayTrustError ? code === 'GATEWAY_PAIRING_REQUIRED' || code === 'GATEWAY_TRUST_REVOKED'
         ? 'environmentCenter.gatewayGuidancePreparingTrustDetail' : 'environmentCenter.gatewayPanelTrustCheckFailedTitle'
       : code === 'GATEWAY_CAPABILITY_UNSUPPORTED' ? 'gatewayAccess.unsupported'
-      : code === 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED' ? 'gatewayAccess.protocolMismatch'
       : code === 'GATEWAY_TARGET_UNAVAILABLE' ? 'gatewayAccess.targetUnavailable'
       : 'progress.environmentOpenFailedSummary';
     const failure = desktopFailureFromError(error, { code: 'environment_open_failed', title: 'Open Failed',

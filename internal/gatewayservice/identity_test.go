@@ -51,6 +51,9 @@ func TestGatewayAddressProofUsesPersistentMachineKey(t *testing.T) {
 			t.Fatal(err)
 		}
 		proof := result.Data
+		if proof.CompatibilityEpoch != gp.CompatibilityEpoch {
+			t.Fatal("identity proof must use the independent Gateway authority epoch")
+		}
 		signature := proof.Signature
 		proof.Signature = ""
 		payload, err := security.CanonicalJSON(proof)

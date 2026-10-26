@@ -4,10 +4,54 @@ import os from 'node:os';
 
 import { describe, expect, it } from 'vitest';
 
-import { ensureManagedGatewayServiceReady, GatewayServiceStartError, gatewayServiceBinaryPath, probeManagedGatewayServiceStatus } from './gatewayServiceHost';
+import { ensureManagedGatewayServiceReady, GatewayServiceStartError, gatewayServiceBinaryPath, probeManagedGatewayServiceDeep, probeManagedGatewayServiceStatus } from './gatewayServiceHost';
 import type { DesktopSSHTransportManager } from './sshTransportManager';
 
 describe('gatewayServiceHost', () => {
+  it.each([
+    ['v0.0.0-dev', 'v0.0.0-dev'],
+    ['v1.2.0', 'v1.3.0'],
+    ['v1.4.0', 'v1.3.0'],
+  ])('keeps a valid %s Gateway usable with Desktop targeting %s', async (installedRelease, targetRelease) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-gateway-compatible-'));
+    const stateRoot = path.join(root, 'state');
+    const binary = gatewayServiceBinaryPath(stateRoot);
+    fs.mkdirSync(path.dirname(binary), { recursive: true });
+    fs.writeFileSync(binary, `#!/bin/sh
+case "$1" in
+version) echo 'redeven-gateway ${installedRelease} (installed-build)' ;;
+service-status|service-start) echo '{"status":"running","pid":123,"listen":"127.0.0.1:7443"}' ;;
+*) exit 2 ;;
+esac
+`, { mode: 0o700 });
+    const stamp = path.join(stateRoot, 'managed/managed-gateway.stamp');
+    const stampText = 'schema_version=3\ninstalled_by=redeven-desktop\nslot_release_tag=' + installedRelease + '\nsource_commit=installed-build\n';
+    fs.writeFileSync(stamp, stampText);
+    const phases: string[] = [];
+    const options = {
+      hostAccess: { kind: 'local_host' as const }, placement: { kind: 'host_process' as const, runtime_root: root },
+      stateRoot, releaseTag: targetRelease, targetCommit: 'desktop-build', releaseBaseURL: '',
+      assetCacheRoot: path.join(root, 'cache'), tempRoot: root,
+      sshCredentialScope: 'compatibility-test', sshTransportManager: {} as DesktopSSHTransportManager,
+      onProgress: (progress: { phase: string }) => phases.push(progress.phase),
+    };
+    try {
+      expect(await probeManagedGatewayServiceStatus(options)).toMatchObject({ status: 'running', package_status: 'ready', pid: 123 });
+      expect(await probeManagedGatewayServiceDeep(options)).toMatchObject({
+        package_status: 'ready', service_status: 'running', version: installedRelease, target_version: targetRelease,
+        commit: 'installed-build', target_commit: 'desktop-build',
+      });
+      await expect(ensureManagedGatewayServiceReady(options)).resolves.toBe(binary);
+      expect(phases).not.toContain('preparing_gateway_package');
+      expect(phases).not.toContain('installing_gateway');
+      expect(fs.readFileSync(stamp, 'utf8')).toBe(stampText);
+      fs.writeFileSync(stamp, stampText.replace('source_commit=installed-build', 'source_commit=unexpected-build'));
+      expect(await probeManagedGatewayServiceStatus(options)).toMatchObject({ status: 'needs_update', package_status: 'build_identity_mismatch' });
+      fs.writeFileSync(stamp, stampText.replace('slot_release_tag=' + installedRelease, 'slot_release_tag=v9.9.9'));
+      expect(await probeManagedGatewayServiceStatus(options)).toMatchObject({ status: 'needs_update', package_status: 'slot_version_mismatch' });
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
   it('preserves structured state failures across a real host command and allows recovery after repair', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-gateway-start-failure-'));
     const stateRoot = path.join(root, 'state');

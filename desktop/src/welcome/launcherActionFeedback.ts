@@ -76,6 +76,8 @@ function gatewayFailureMessage(i18n: DesktopI18n, failure: DesktopLauncherAction
       return detailOr('toast.gatewayCatalogFailed');
     case 'gateway_start_required':
       return detailOr('toast.gatewayStartRequired');
+    case 'gateway_update_required':
+      return detailOr('gatewayAccess.packageRepairRequired');
     default:
       return detail || i18n.t('toast.gatewayActionFailed');
   }
@@ -210,6 +212,7 @@ export function launcherActionFailurePresentation(
         refresh_snapshot: refreshSnapshot,
         delivery,
       };
+    case 'gateway_update_required':
     case 'gateway_not_manageable':
       return {
         message: gatewayFailureMessage(i18n, failure),

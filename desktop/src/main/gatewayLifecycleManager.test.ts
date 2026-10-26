@@ -32,6 +32,7 @@ import {
   GatewayNotManageableError,
   GatewayReinstallRequiredError,
   GatewayServiceStartRequiredError,
+  GatewayServiceUpdateRequiredError,
   GatewayServiceUnavailableError,
 } from './gatewayLifecycleManager';
 import type { GatewayRecord } from './gatewayStore';
@@ -210,6 +211,15 @@ describe('GatewayLifecycleManager', () => {
     });
     lifecycleMocks.stopManagedGatewayService.mockResolvedValue(undefined);
     lifecycleMocks.startRuntimePlacementBridgeSession.mockResolvedValue(fakeBridgeSession());
+  });
+
+  it('reports package repair separately from a stopped Gateway without starting it', async () => {
+    lifecycleMocks.probeManagedGatewayServiceStatus.mockResolvedValue({ status: 'needs_update', message: 'Installed package stamp does not match its binary.' });
+    const promise = manager().client(sshGateway(), { startPolicy: 'require_ready' });
+    await expect(promise).rejects.toBeInstanceOf(GatewayServiceUpdateRequiredError);
+    await expect(promise).rejects.toMatchObject({ message: 'Installed package stamp does not match its binary.', service_state: { status: 'service_needs_update' } });
+    expect(lifecycleMocks.ensureManagedGatewayServiceReady).not.toHaveBeenCalled();
+    expect(lifecycleMocks.startRuntimePlacementBridgeSession).not.toHaveBeenCalled();
   });
 
   it('requires a ready Gateway for member administration without mutating its service', async () => {

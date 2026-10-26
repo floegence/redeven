@@ -1,7 +1,6 @@
 package gatewayservice
 
 import (
-	"github.com/floegence/redeven/internal/runtimeservice"
 	"net/http"
 	"time"
 
@@ -27,7 +26,7 @@ func (s *Server) handleIdentity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response := gp.IdentityResponse{ProtocolVersion: gp.Version, GatewayID: metadata.GatewayID,
-		CompatibilityEpoch: runtimeservice.CurrentCompatibilityContract().CompatibilityEpoch, BindingAudience: client.BindingAudience, Nonce: request.Nonce, ExpiresAtUnixMS: time.Now().Add(time.Minute).UnixMilli()}
+		CompatibilityEpoch: gp.CompatibilityEpoch, BindingAudience: client.BindingAudience, Nonce: request.Nonce, ExpiresAtUnixMS: time.Now().Add(time.Minute).UnixMilli()}
 	payload, err := security.CanonicalJSON(response)
 	if err != nil {
 		writeResult(w, nil, err)

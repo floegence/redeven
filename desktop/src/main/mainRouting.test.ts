@@ -651,7 +651,7 @@ describe('main routing', () => {
     expect(mainSrc).not.toContain("label: 'Review Trust'");
   });
 
-  it('treats Gateway authorization rejection as facts-only pairing state unless the managed package is stale', () => {
+  it('keeps Gateway authorization rejection separate from build and release differences', () => {
     const mainSrc = readMainSource();
     const gatewayTypeSrc = readSharedGatewaySource();
     const syncStateStart = mainSrc.indexOf('function gatewayClientErrorIsPairingRejected(');
@@ -674,9 +674,9 @@ describe('main routing', () => {
     expect(gatewayTypeSrc).toContain('target_version?: string;');
     expect(gatewayTypeSrc).toContain('target_commit?: string;');
     expect(mainSrc).toContain('target_commit: bundle.commit');
-    expect(mainSrc).toContain('function gatewayManagedProbeNeedsUpdate(');
+    expect(mainSrc).not.toContain('function gatewayManagedProbeNeedsUpdate(');
     expect(diagnosisSrc).toContain('if (gatewayClientErrorIsPairingRejected(error)) {');
-    expect(diagnosisSrc).toContain('if (gatewayManagedProbeNeedsUpdate(managedProbe)) {');
+    expect(diagnosisSrc).not.toContain('gatewayManagedProbeNeedsUpdate');
     expect(diagnosisSrc).toContain("classification: 'needs_update'");
     expect(diagnosisSrc).toContain("catalog_state: 'pairing_failed'");
     expect(diagnosisSrc).toContain("classification: 'pairing_required'");

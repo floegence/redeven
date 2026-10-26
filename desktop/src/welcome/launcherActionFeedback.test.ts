@@ -279,6 +279,12 @@ describe('launcherActionFeedback', () => {
     });
   });
 
+  it('reports package repair without asking users to start a running Gateway', () => {
+    expect(launcherActionFailurePresentation(i18n, { ok: false, code: 'gateway_update_required', scope: 'dialog', message: '' })).toMatchObject({
+      message: 'The installed Gateway package failed its integrity check. Use Update Gateway to repair it, then retry.', tone: 'warning', delivery: 'inline',
+    });
+  });
+
   it('explains Gateway start requirements and recovery paths', () => {
     expect(launcherActionFailurePresentation(i18n, {
       ok: false,
