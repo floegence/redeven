@@ -202,7 +202,7 @@ func requiredTargetCapabilities(toolName string) []string {
 		return []string{"read"}
 	case "file.edit", "file.write", "apply_patch":
 		return []string{"write"}
-	case "computer.screenshot", "computer.observe", "browser.wait_for_download":
+	case "computer.screenshot", "computer.observe", "browser.wait_for_download", "browser.download_cursor":
 		return []string{"observe"}
 	case "computer.exec", "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.drag", "computer.wait",
 		"browser.navigate", "browser.back", "browser.reload":

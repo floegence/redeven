@@ -121,7 +121,7 @@ func TestComputerScriptObservationOutput(t *testing.T) {
 	}
 	observation["nodes"].([]any)[1].(map[string]any)["value"] = "after"
 	observation["nodes"] = []any{observation["nodes"].([]any)[1], observation["nodes"].([]any)[2]}
-	local := execute(`const state = await ui.observe({emit:false}); ui.assert(state.observation.nodes[0].value === 'after'); log('checked');`)
+	local := execute(`const state = await ui.observe({emit:false}); ui.assert(state.observation.nodes[0].value === 'after'); ui.assert(state.observation.url === 'https://example.test/work' && state.observation.title === 'Work'); log('checked');`)
 	if local["observation"] != nil {
 		t.Fatalf("local read leaked a tree: %+v", local)
 	}

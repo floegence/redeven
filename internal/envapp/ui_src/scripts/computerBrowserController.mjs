@@ -1,6 +1,6 @@
 import { BrowserComputerPage, BrowserNavigationError, navigationURL, redactedNavigationURL } from './computerBrowserPage.mjs';
 
-const rejections = new Set(['INVALID_REQUEST', 'STALE_REFERENCE', 'AMBIGUOUS_ELEMENT', 'ELEMENT_NOT_FOUND', 'CONDITION_TIMEOUT', 'TARGET_CAPABILITY_UNAVAILABLE', 'TARGET_PERMISSION_REQUIRED', 'TARGET_CONNECTION_REQUIRED', 'TARGET_NOT_READY', 'TARGET_NOT_ALLOWED', 'TAKEOVER_REQUIRED']);
+const rejections = new Set(['INVALID_REQUEST', 'ELEMENT_NOT_ACTIONABLE', 'AMBIGUOUS_DOWNLOAD', 'STALE_REFERENCE', 'AMBIGUOUS_ELEMENT', 'ELEMENT_NOT_FOUND', 'CONDITION_TIMEOUT', 'TARGET_CAPABILITY_UNAVAILABLE', 'TARGET_PERMISSION_REQUIRED', 'TARGET_CONNECTION_REQUIRED', 'TARGET_NOT_READY', 'TARGET_NOT_ALLOWED', 'TAKEOVER_REQUIRED']);
 
 // One tool/safety/result path for the managed helper and the extension. The
 // Runtime passes each invocation's current grants; the page never owns them.
@@ -107,6 +107,8 @@ export class BrowserComputerController {
       else if (tool === 'computer.wait') {
         if (!Number.isFinite(args.milliseconds) || args.milliseconds < 0 || args.milliseconds > 30000) throw new Error('INVALID_REQUEST');
         await page.delay(args.milliseconds);
+      } else if (tool === 'browser.download_cursor') {
+        result = page.downloadCursor();
       } else if (tool === 'browser.wait_for_download') {
         result = await page.waitForDownload(args);
       } else if (tool.startsWith('browser.')) {
@@ -169,6 +171,8 @@ export class BrowserComputerController {
         safety: { level: 'routine', reason_codes: [], safe_to_capture: false, safe_to_send_to_model: false },
       };
       if (error instanceof BrowserNavigationError) return { error: error.message, result: error.result };
+      if (error.message === 'ELEMENT_NOT_ACTIONABLE') return { error: error.message,
+        result: { action_executed: false, needs_observation: dispatched(), preparation_executed: dispatched() } };
       return { error: rejections.has(error.message) ? error.message : dispatched() ? 'EFFECT_OUTCOME_UNKNOWN' : 'TARGET_ACTION_FAILED',
         result: { action_executed: dispatched(), needs_observation: dispatched(), ...(error.permissionReason === 'extension_file_access' ? { permission_reason: 'extension_file_access', ...(args.url ? { required_navigation_url: redactedNavigationURL(args.url) } : {}) } : {}) } };
     }

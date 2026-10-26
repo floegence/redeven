@@ -296,6 +296,10 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				stopped = ErrInteractionTakeoverRequired
 			}
 			if payload, ok := observed.Result.(map[string]any); ok {
+				if payload["preparation_executed"] == true {
+					observationInvalidated = true
+					lastObservation = nil
+				}
 				requiredNavigationURL = anyToString(payload["required_navigation_url"])
 				if payload["target_changed"] == true {
 					targetChange = map[string]any{"target_changed": true, "opened_pages": payload["opened_pages"], "opener_tab_id": payload["opener_tab_id"]}
@@ -309,17 +313,17 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 					lastObservation = nil
 				}
 				if observation, ok := payload["observation"]; ok {
+					if tree, ok := observation.(map[string]any); ok {
+						tree = cloneAnyMap(tree)
+						for _, field := range []string{"url", "title"} {
+							if value, exists := payload[field]; exists {
+								tree[field] = value
+							}
+						}
+						observation, payload["observation"] = tree, tree
+					}
 					if msg.Operation["emit"] != false {
 						lastObservation = observation
-						if tree, ok := observation.(map[string]any); ok {
-							tree = cloneAnyMap(tree)
-							for _, field := range []string{"url", "title"} {
-								if value, exists := payload[field]; exists {
-									tree[field] = value
-								}
-							}
-							lastObservation = tree
-						}
 						scope, _ := json.Marshal([]any{msg.Operation["root_ref"], msg.Operation["limit"]})
 						observationScope, fullObservation = string(scope), msg.Operation["full"] == true
 					}
@@ -392,6 +396,12 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 			}
 			if stopped != nil || msg.Type == "error" {
 				code := "SCRIPT_STOPPED"
+				if diagnostic, ok := msg.Result["diagnostic"].(map[string]any); ok && stopped == nil {
+					switch safe := anyToString(diagnostic["code"]); safe {
+					case "SCRIPT_ARGUMENT_ERROR", "SCRIPT_REFERENCE_ERROR", "SCRIPT_TYPE_ERROR", "SCRIPT_SYNTAX_ERROR", "SCRIPT_RUNTIME_ERROR", "SCRIPT_OUTPUT_LIMIT", "SCRIPT_OPERATION_LIMIT", "SCRIPT_CONCURRENT_OPERATION", "SCRIPT_TIMEOUT", "SCRIPT_NO_PROGRESS", "SCRIPT_UNFINISHED_OPERATIONS":
+						code = safe
+					}
+				}
 				var failure *targetToolPolicyError
 				if errors.As(stopped, &failure) {
 					code = strings.ToUpper(failure.code)
@@ -412,7 +422,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 
 func computerOperationMutates(op map[string]any) bool {
 	switch anyToString(op["action"]) {
-	case "observe", "read", "wait", "screenshot", "wait_for_download":
+	case "observe", "read", "wait", "screenshot", "wait_for_download", "download_cursor":
 		return false
 	default:
 		return true
@@ -439,7 +449,7 @@ func computerScriptOperation(parent TargetToolCall, operation map[string]any) (T
 	case "screenshot":
 		call.ToolName = "computer.screenshot"
 		delete(args, "action")
-	case "navigate", "back", "reload", "wait_for_download":
+	case "navigate", "back", "reload", "wait_for_download", "download_cursor":
 		call.ToolName = "browser." + anyToString(operation["action"])
 		delete(args, "action")
 	case "read", "click", "fill", "key", "scroll", "wait", "pointer_click", "drag":

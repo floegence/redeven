@@ -5,7 +5,7 @@ description: Bind an explicit profile and tab to the Runtime while preserving lo
 tags: [ai, browser-use, chrome, profiles]
 timestamp: 2026-09-26T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-26"
 ---
 # Summary
 
@@ -25,6 +25,10 @@ It is not a model tool or a second browser-opening path.
 Both Flower carriers use the shared browser installation controller at `/_redeven_proxy/api/browser/installation`.
 
 The default profile creates its first page lazily; later loss of a selected page fails explicitly.
+
+Semantic clicks check visible/enabled state, stable bounds and the actual input-session hit target before input, including parent-frame overlays. Preparatory scrolling is not a completed click; a blocked click reports `action_executed:false` and requires fresh observation when preparation changed the viewport. Condition waits inspect rendered state and use bounded sampling for CSS changes. Browser result labels use the current safe observation title when available; they do not treat a discovery label as current account identity.
+
+Download association uses `browser.downloadCursor()` before the triggering input, followed sequentially by `browser.waitForDownload({after:cursor})`; an exact known `id` is also accepted. A cursor is bounded in-memory state owned by the page. Old files never satisfy it and multiple new files fail as ambiguous. No automatic input replay, latest-file inference or durable download ledger exists.
 
 The guest cannot choose filesystem destinations or read file bytes; a later authorized file/command tool handles data processing.
 

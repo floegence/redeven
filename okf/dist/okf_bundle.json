@@ -7118,7 +7118,7 @@
       "frontmatter": {
         "description": "Bind an explicit profile and tab to the Runtime while preserving login state and unrelated user browsing.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-26",
         "tags": [
           "ai",
           "browser-use",
@@ -7129,15 +7129,15 @@
         "title": "Managed browsers and authorized Chrome tabs",
         "type": "Browser Integration Contract"
       },
-      "body_length": 2245,
+      "body_length": 3178,
       "summary": "`ComputerUseRuntime` owns browser connections, authorization and target control.\nManaged Chromium, explicit CDP and Chrome extension bindings share the same\nrestricted page executor. A selected tab never implies authority over sibling\ntabs or a different device. Disconnect, revocation, closed tabs and uncertain\neffects stop subsequent work without automatically selecting a replacement.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Connecting an explicitly chosen tab or creating a new tab in Browser and desktop also selects that target for the current conversation. Approval Required uses the current target and URL through tool approval; temporary URL authorization never becomes a saved origin grant.\n\nIt is not a model tool or a second browser-opening path.\n\n## Managed profiles\nBoth Flower carriers use the shared browser installation controller at `/_redeven_proxy/api/browser/installation`.\n\nThe default profile creates its first page lazily; later loss of a selected page fails explicitly.\n\nThe guest cannot choose filesystem destinations or read file bytes; a later authorized file/command tool handles data processing.\n\n## Chrome extension and explicit CDP\nThe MV3 extension uses Native Messaging and `chrome.debugger` bound to an exact tab.\n\nIts webNavigation creation events retain bounded, in-memory popup source facts; Chrome tab-group opener metadata is not treated as the source of an action.\n\nA remote Linux task uses its remote managed browser or private desktop; it cannot silently drive local user Chrome.",
-          "char_count": 1094
+          "body": "Connecting an explicitly chosen tab or creating a new tab in Browser and desktop also selects that target for the current conversation. Approval Required uses the current target and URL through tool approval; temporary URL authorization never becomes a saved origin grant.\n\nIt is not a model tool or a second browser-opening path.\n\n## Managed profiles\nBoth Flower carriers use the shared browser installation controller at `/_redeven_proxy/api/browser/installation`.\n\nThe default profile creates its first page lazily; later loss of a selected page fails explicitly.\n\nSemantic clicks check visible/enabled state, stable bounds and the actual input-session hit target before input, including parent-frame overlays. Preparatory scrolling is not a completed click; a blocked click reports `action_executed:false` and requires fresh observation when preparation changed the viewport. Condition waits inspect rendered state and use bounded sampling for CSS changes. Browser result labels use the current safe observation title when available; they do not treat a discovery label as current account identity.\n\nDownload association uses `browser.downloadCursor()` before the triggering input, followed sequentially by `browser.waitForDownload({after:cursor})`; an exact known `id` is also accepted. A cursor is bounded in-memory state owned by the page. Old files never satisfy it and multiple new files fail as ambiguous. No automatic input replay, latest-file inference or durable download ledger exists.\n\nThe guest cannot choose filesystem destinations or read file bytes; a later authorized file/command tool handles data processing.\n\n## Chrome extension and explicit CDP\nThe MV3 extension uses Native Messaging and `chrome.debugger` bound to an exact tab.\n\nIts webNavigation creation events retain bounded, in-memory popup source facts; Chrome tab-group opener metadata is not treated as the source of an action.\n\nA remote Linux task uses its remote managed browser or private desktop; it cannot silently drive local user Chrome.",
+          "char_count": 2027
         },
         {
           "id": "boundaries",
@@ -7964,7 +7964,7 @@
       "frontmatter": {
         "description": "Establish scope-specific evidence for decoded frames, real target input, control handback and isolated cleanup.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-26",
         "tags": [
           "ai",
           "computer-use",
@@ -7975,15 +7975,15 @@
         "title": "Computer use product qualification",
         "type": "Acceptance Contract"
       },
-      "body_length": 2790,
+      "body_length": 3896,
       "summary": "Redeven qualifies Computer use through the actual product renderer, Runtime,\nmedia decoder and target adapter. A passing scenario proves only its declared\ntarget and provider scope. Fixture outcomes, decoded pixels and cleanup are\nrequired evidence; successful HTTP responses or tool metadata alone are\ninsufficient. Failed input and uncertain effects must never be replayed to\nmanufacture a passing result.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Result encoding recovery\nRun the explicit local browser qualification from the repository root:\n\nIt builds the production FlowerSurface with installed published UI packages, uses the production runtime adapter and canonical detail projection against a real task-owned Service, and injects one counted executor effect followed by an invalid optional result. It is opt-in and stays outside ordinary CI and exact-main gates.\n\n## Semantic execution acceptance\nBrowser and desktop belong to one delivery scope.\n\nCancellation and revocation before the click prevent dispatch; unknown click acknowledgements remain terminal.\n\nForeground macOS and credentialed model qualification remain explicit runs; the integration gate cannot substitute for their evidence.\n\n## Existing product fixtures\nDesktop qualification observes the preload workspace stream; Linux Webtop uses CDP's passive HTTP workspace stream copy. A missing native or browser live-frame match fails that scope.\n\nThe report names the native macOS, connected Chrome and other scopes it does not qualify.\n\n## Private preview and handback\n`checkDesktopSystemBrowser.mjs` runs a deterministic provider against the real built Desktop, Runtime, Chrome extension and Native Messaging. Both carriers must show canonical connection assistance with no target bound, then continue after a verified extension connection.\n\nTest threads and fixture servers are removed on exit; the owner of the isolated Desktop launch must stop its exact process tree and verify port release.",
-          "char_count": 1521
+          "body": "## Result encoding recovery\nRun the explicit local browser qualification from the repository root:\n\nIt builds the production FlowerSurface with installed published UI packages, uses the production runtime adapter and canonical detail projection against a real task-owned Service, and injects one counted executor effect followed by an invalid optional result. It is opt-in and stays outside ordinary CI and exact-main gates.\n\n## Semantic execution acceptance\nBrowser and desktop belong to one delivery scope.\n\nCancellation and revocation before the click prevent dispatch; unknown click acknowledgements remain terminal.\n\nForeground macOS and credentialed model qualification remain explicit runs; the integration gate cannot substitute for their evidence.\n\n## Real DeepSeek reliability acceptance\n`TestComputerReliabilityDeepSeek` is an explicit paid lane through the production Service, Floret, configured DeepSeek provider and catalog-installed Chromium. It resolves the local `deepseek-flash` model (catalog display: DeepSeek V4.1 Flash (1017)) and rejects substitution. Required environment: `REDEVEN_COMPUTER_RELIABILITY_E2E=1`, absolute `REDEVEN_COMPUTER_CONFIG_ROOT`, `REDEVEN_COMPUTER_EVIDENCE_DIR` and `REDEVEN_BROWSER_TEST_INSTALLATION`. Run `go test ./internal/ai -run '^TestComputerReliabilityDeepSeek$' -count=1 -v -timeout=22m` with `GOWORK=off`.\n\nScenarios verify a 2,800+ node page and complete table totals, task-tab isolation and account restrictions, current-download identity/content despite an older same-named file, and one counted save followed by a diagnostic failure with no replay. Reports retain provider wire IDs, tool error counts, canonical histories, final answers and fixture outcomes. Configuration hashes must stay unchanged. This scope does not certify production accounts, native desktop UI or a universal model success rate.\n\n## Existing product fixtures\nDesktop qualification observes the preload workspace stream; Linux Webtop uses CDP's passive HTTP workspace stream copy. A missing native or browser live-frame match fails that scope.\n\nThe report names the native macOS, connected Chrome and other scopes it does not qualify.\n\n## Private preview and handback\n`checkDesktopSystemBrowser.mjs` runs a deterministic provider against the real built Desktop, Runtime, Chrome extension and Native Messaging. Both carriers must show canonical connection assistance with no target bound, then continue after a verified extension connection.\n\nTest threads and fixture servers are removed on exit; the owner of the isolated Desktop launch must stop its exact process tree and verify port release.",
+          "char_count": 2627
         },
         {
           "id": "boundaries",
@@ -8239,7 +8239,7 @@
       "frontmatter": {
         "description": "Execute bounded JavaScript against one authorized target without exposing host capabilities or replaying partial effects.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-26",
         "tags": [
           "accessibility",
           "ai",
@@ -8250,15 +8250,15 @@
         "title": "Computer script execution and semantic observations",
         "type": "Execution Contract"
       },
-      "body_length": 1826,
+      "body_length": 2589,
       "summary": "One `computer.exec` is one Floret tool invocation and one effect attempt.\n`ComputerUseRuntime` owns its isolated QuickJS process and checks every host\noperation. The guest receives only the controlled `ui`, `browser` and `log`\ninterfaces. Partial progress survives failure; uncertain effects never replay.\nA page change ends the batch with successful partial progress for the Agent.\nA permission requirement or private input ends it through Floret's existing\ninteraction boundary.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Guest API and limits\n`computer.exec` requires a target, code and a user-readable description.\n\nApproval Required uses the current target and URL in the existing tool approval; temporary authorization expires with the target lease and never becomes a persistent origin grant.\n\nThe Runtime admits at most eight active script namespaces.\n\n## Observation and references\nThe [semantic snapshot contract](computer-use-semantics.md) owns schema v2, role normalization, tree validation, states, relationships and privacy projection. `ui.getByRole(role, {name?, exact?, root_ref?})` uses a canonical role.\n\nPrivate takeover keeps observations and pixels out of model history.",
-          "char_count": 669
+          "body": "## Guest API and limits\n`computer.exec` requires a target, code and a user-readable description.\n\nApproval Required uses the current target and URL in the existing tool approval; temporary authorization expires with the target lease and never becomes a persistent origin grant.\n\nThe Runtime admits at most eight active script namespaces. Tool-local documentation owns exact signatures: string names (no RegExp selectors), numeric scroll deltas, condition waits, and sequential awaited operations. Unsupported guest arguments fail before dispatch. Closed diagnostic codes distinguish reference/type/syntax/argument errors, operation concurrency and bounded output; raw interpreter exceptions remain private. A failed invocation retires its namespace while confirmed earlier actions survive.\n\nSemantic snapshots retain their 256 KiB output budget. The script response allows a bounded 512 KiB envelope so metadata cannot make a valid snapshot fail at the transport boundary. Logs have a separate 64 KiB total budget. Local `emit:false` reads receive the same URL/title identity as emitted observations.\n\n## Observation and references\nThe [semantic snapshot contract](computer-use-semantics.md) owns schema v2, role normalization, tree validation, states, relationships and privacy projection. `ui.getByRole(role, {name?, exact?, root_ref?})` uses a canonical role.\n\nPrivate takeover keeps observations and pixels out of model history.",
+          "char_count": 1432
         },
         {
           "id": "boundaries",
@@ -8318,7 +8318,7 @@
       "frontmatter": {
         "description": "Normalize browser, AX and AT-SPI facts into bounded, revision-scoped semantic trees at the Runtime boundary.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-26",
         "tags": [
           "accessibility",
           "ai",
@@ -8329,15 +8329,15 @@
         "title": "Computer semantic snapshots",
         "type": "Protocol Contract"
       },
-      "body_length": 1941,
+      "body_length": 2531,
       "summary": "ComputerUseRuntime owns the model-visible semantic schema, version 2. Browser,\nmacOS AX and Linux AT-SPI collect native facts; Runtime validates and normalizes\none bounded tree. Relationships never point outside that tree. Unsupported\nfacts stay absent. Invalid protocol, protected fields or inconsistent graphs\nproduce a closed observation failure, discard content and preserve confirmed\ninput effects without replay. Existing target authority and privacy scans remain\nmandatory; semantic metadata does not grant input or capture permission.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Snapshot and node identity\nObservations include `semantic_schema_version: 2`, `document_id`, `roots`, `nodes`, `truncated`, optional `focus_ref`, `total` and `execution_mode`.\n\nBoth directions of every parent/child edge must agree. An observation describes the bounded returned tree, not an exhaustive view of every application node.\n\n## Roles, states and relationships\nOne Runtime alias inventory owns normalization and canonical selector expansion.\n\nAn ignored or truncated target has no invented reference; a platform-computed name or safe description may still be available.",
-          "char_count": 581
+          "body": "## Snapshot and node identity\nObservations include `semantic_schema_version: 2`, `document_id`, `roots`, `nodes`, `truncated`, optional `focus_ref`, `total` and `execution_mode`.\n\nBrowser role resolution scans the complete authorized AX scope independently of the bounded model observation. A unique control after node 1000 remains resolvable; a duplicate beyond the presentation boundary remains ambiguous. References still require document revision and fresh DOM/AX identity validation.\n\n`children_truncated` marks exported nodes with omitted descendants, including Runtime byte pruning. It is not evidence of empty rows or virtualization. Agents can read a row or table subtree through `root_ref`; completeness claims require checking the returned truncation facts.\n\nBoth directions of every parent/child edge must agree. An observation describes the bounded returned tree, not an exhaustive view of every application node.\n\n## Roles, states and relationships\nOne Runtime alias inventory owns normalization and canonical selector expansion.\n\nAn ignored or truncated target has no invented reference; a platform-computed name or safe description may still be available.",
+          "char_count": 1171
         },
         {
           "id": "boundaries",
@@ -33753,5 +33753,5 @@
       ]
     }
   ],
-  "source_sha256": "ded1bee9306e5b31c205e9455478dabfaddcc512dbf252959e79786de399143e"
+  "source_sha256": "cfe70f245305372b7044104f8e925ff52c5140e6c28a131832599e23c46781ba"
 }

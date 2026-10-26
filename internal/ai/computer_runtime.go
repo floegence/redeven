@@ -139,6 +139,9 @@ func (r *ComputerUseRuntime) targetBindings() ComputerTargetBindingStore {
 
 func (r *ComputerUseRuntime) ResolveTargetForThread(ctx context.Context, threadID, alias string) (TargetDescriptor, error) {
 	alias = strings.TrimSpace(alias)
+	if strings.HasPrefix(alias, "candidate-") {
+		return TargetDescriptor{}, &targetToolPolicyError{code: "invalid_computer_arguments", repairAction: "select_computer_candidate"}
+	}
 	if strings.TrimSpace(threadID) != "" && (alias == "" || alias == "current") {
 		bindings := r.targetBindings()
 		if bindings == nil {

@@ -80,6 +80,24 @@ func TestComputerUseUsesCurrentTargetWhenModelOmitsTarget(t *testing.T) {
 	}
 }
 
+func TestComputerBrowserTargetLabelUsesCurrentObservation(t *testing.T) {
+	for _, payload := range []map[string]any{
+		{"title": "Current account", "url": "https://example.test/current"},
+		{"observation": map[string]any{"title": "Current account", "url": "https://example.test/current"}},
+	} {
+		result := TargetToolResult{TargetName: "Old account", Result: payload}
+		got := targetToolResultPayload(result, "browser-main", TargetDescriptor{Kind: "browser.managed"}).(map[string]any)
+		if got["target_name"] != "Current account" {
+			t.Fatalf("stale browser target label: %v", got["target_name"])
+		}
+		result.Safety = &InteractionSafetyDecision{Level: "takeover", SafeToSendToModel: false}
+		private := targetToolResultPayload(result, "browser-main", TargetDescriptor{Kind: "browser.managed"}).(map[string]any)
+		if private["target_name"] != "Old account" {
+			t.Fatal("private title crossed the presentation boundary")
+		}
+	}
+}
+
 func TestBrowserToolsNeverExecuteAgainstDesktopTarget(t *testing.T) {
 	executor := &recordingTargetExecutor{}
 	run := &run{

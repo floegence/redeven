@@ -306,8 +306,9 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     await call('execute', { tab_id: selected.id, request: { tool_name: 'computer.screenshot', recovery_observation: true, allowed_origins: origins } });
     await user.bringToFront();
     const activeBeforeDownload = await worker.evaluate(async () => (await chrome.tabs.query({ active: true })).map(tab => tab.id));
+    const downloadCursor = (await execute('browser.download_cursor')).result.cursor;
     await execute('computer.action', { action: 'click', selector: { role: 'link', name: 'Export' } });
-    const downloaded = await execute('browser.wait_for_download', { timeout_ms: 5000 });
+    const downloaded = await execute('browser.wait_for_download', { after: downloadCursor, timeout_ms: 5000 });
     assert.equal(downloaded.result.download.state, 'completed', JSON.stringify(downloaded));
     assert.equal(downloaded.result.download.filename, 'extension.csv');
     assert.equal(downloaded.result.download.path, undefined, 'extension must not expose filesystem paths');

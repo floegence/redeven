@@ -151,6 +151,9 @@ func TestComputerSemanticByteBudgetPreservesTree(t *testing.T) {
 	if len(body) > computerSemanticMaxBytes || got["truncated"] != true || len(got["nodes"].([]any)) >= len(nodes) {
 		t.Fatalf("unbounded snapshot: %d bytes", len(body))
 	}
+	if got["nodes"].([]any)[0].(map[string]any)["children_truncated"] != true {
+		t.Fatal("byte pruning concealed omitted children")
+	}
 	if _, err := normalizeComputerObservation(got); err != nil {
 		t.Fatalf("pruned snapshot is not self-consistent: %v", err)
 	}

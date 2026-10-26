@@ -94,6 +94,8 @@ export class BrowserComputerPage {
     this.requiredURL = undefined;
     this.openedPages = [];
     this.downloads = new Map();
+    this.downloadSequence = 0;
+    this.downloadCursors = new Map();
     this.guardFailure = false;
     this.privateInput = false;
     this.userBrowsing = false;
@@ -145,9 +147,7 @@ export class BrowserComputerPage {
         this.invalidate();
       });
       listen('Page.downloadWillBegin', event => {
-        if (this.downloads.size >= 32) this.downloads.delete(this.downloads.keys().next().value);
-        this.downloads.set(event.guid, { id: event.guid, filename: String(event.suggestedFilename || '').slice(0, 512), state: 'in_progress' });
-        this.changed();
+        this.recordDownload({ id: event.guid, filename: String(event.suggestedFilename || '').slice(0, 512), state: 'in_progress' });
       });
       listen('Page.downloadProgress', event => {
         const download = this.downloads.get(event.guid);
@@ -369,10 +369,8 @@ export class BrowserComputerPage {
           if (['mixed', 'grammar', 'spelling'].includes(value)) states[property.name] = value;
           else if ([true, false, 0, 1, 'true', 'false'].includes(value)) states[property.name] = value === true || value === 1 || value === 'true';
         }
-        const ref = `${this.prefix}:${this.revision}:${frame.frame.id}:${node.backendDOMNodeId}`;
-        const entry = { ref, frame, backendNodeId: node.backendDOMNodeId, axNodeId: node.nodeId, role, name: Array.from(node.name?.value || '').slice(0, 2000).join(''), revision: this.revision };
-        if (this.references.size >= 2000 && !this.references.has(ref)) this.references.delete(this.references.keys().next().value);
-        this.references.set(ref, entry);
+        const entry = this.rememberNode(frame, node);
+        const ref = entry.ref;
         const actions = ['read'];
         if (!states.disabled && (states.focusable || ['button','link','checkbox','radio','switch','tab','menuitem','menuitemcheckbox','menuitemradio','treeitem','slider','scrollbar','canvas'].includes(role))) actions.push('click');
         if (['textbox', 'searchbox', 'combobox'].includes(role) && !states.readonly && !states.disabled) actions.push('fill');
@@ -384,6 +382,17 @@ export class BrowserComputerPage {
         backendRefs.set(node.backendDOMNodeId, ref);
         frameNodes.push(node);
         nodes.push(output);
+      }
+      // Missing descendants are truncation, never evidence of an empty row.
+      for (const node of snapshot.nodes) {
+        if (represented.has(node.nodeId) || node.ignored || !node.backendDOMNodeId || ['none', 'InlineTextBox'].includes(node.role?.value)) continue;
+        let parent = source.get(node.parentId);
+        const visited = new Set();
+        while (parent && !visited.has(parent.nodeId)) {
+          visited.add(parent.nodeId);
+          if (represented.has(parent.nodeId)) { represented.get(parent.nodeId).children_truncated = true; break; }
+          parent = source.get(parent.parentId);
+        }
       }
       for (const node of frameNodes) {
         const output = represented.get(node.nodeId);
@@ -405,6 +414,14 @@ export class BrowserComputerPage {
     return { semantic_schema_version: 2, document_id: `${this.prefix}:${this.revision}`, nodes, truncated: total > nodes.length, total, execution_mode: 'background' };
   }
 
+  rememberNode(frame, node) {
+    const ref = `${this.prefix}:${this.revision}:${frame.frame.id}:${node.backendDOMNodeId}`;
+    const entry = { ref, frame, backendNodeId: node.backendDOMNodeId, axNodeId: node.nodeId, role: node.role?.value || 'unknown', name: Array.from(node.name?.value || '').slice(0, 2000).join(''), revision: this.revision };
+    if (this.references.size >= 2000 && !this.references.has(ref)) this.references.delete(this.references.keys().next().value);
+    this.references.set(ref, entry);
+    return entry;
+  }
+
   async resolve(selector) {
     if (!selector || typeof selector !== 'object' || Object.keys(selector).some(key => !['ref', 'role', 'roles', 'name', 'exact', 'root_ref'].includes(key))) throw new Error('INVALID_REQUEST');
     let entry;
@@ -415,14 +432,39 @@ export class BrowserComputerPage {
     } else {
       const roles = selector.roles || [selector.role];
       if (!Array.isArray(roles) || !roles.length || roles.some(role => typeof role !== 'string')) throw new Error('INVALID_REQUEST');
-      const observed = await this.observe({ limit: 1000, root_ref: selector.root_ref });
       const exact = selector.exact === true;
       const wantedName = selector.name;
       if (wantedName !== undefined && typeof wantedName !== 'string') throw new Error('INVALID_REQUEST');
-      const matches = observed.nodes.filter(node => roles.some(role => role === node.role || role.toLowerCase() === node.role.toLowerCase())
-        && (wantedName === undefined || (exact ? node.name === wantedName : node.name.toLocaleLowerCase().includes(wantedName.toLocaleLowerCase()))));
-      if (matches.length !== 1 || observed.truncated) throw new Error(matches.length > 1 || observed.truncated ? 'AMBIGUOUS_ELEMENT' : 'ELEMENT_NOT_FOUND');
-      entry = this.references.get(matches[0].ref);
+      const root = selector.root_ref ? await this.resolve({ ref: selector.root_ref }) : undefined;
+      const revision = this.revision;
+      // Resolution uses authoritative AX input independently of presentation.
+      // A duplicate outside the model's bounded observation still fails closed.
+      for (const frame of await this.frames()) {
+        if (root && root.frame.frame.id !== frame.frame.id) continue;
+        const { nodes } = await frame.session.send('Accessibility.getFullAXTree', { frameId: frame.frame.id });
+        const source = new Map(nodes.map(node => [node.nodeId, node]));
+        let allowed;
+        if (root) {
+          allowed = new Set();
+          const pending = [root.axNodeId];
+          while (pending.length) {
+            const id = pending.pop();
+            if (allowed.has(id)) continue;
+            allowed.add(id); pending.push(...(source.get(id)?.childIds || []));
+          }
+        }
+        for (const node of nodes) {
+          if (node.ignored || !node.backendDOMNodeId || (allowed && !allowed.has(node.nodeId))) continue;
+          const role = node.role?.value || '';
+          const name = node.name?.value || '';
+          if (!roles.some(wanted => wanted.toLowerCase() === role.toLowerCase())
+            || (wantedName !== undefined && !(exact ? name === wantedName : name.toLocaleLowerCase().includes(wantedName.toLocaleLowerCase())))) continue;
+          if (entry) throw new Error('AMBIGUOUS_ELEMENT');
+          entry = this.rememberNode(frame, node);
+        }
+      }
+      if (revision !== this.revision) throw new Error('STALE_REFERENCE');
+      if (!entry) throw new Error('ELEMENT_NOT_FOUND');
     }
     try {
       const { node } = await entry.frame.session.send('DOM.describeNode', { backendNodeId: entry.backendNodeId });
@@ -446,18 +488,66 @@ export class BrowserComputerPage {
         let enabled = false;
         try {
           const element = await this.resolve(selector);
-          found = true;
-          const { nodes } = await element.frame.session.send('Accessibility.getPartialAXTree', { backendNodeId: element.backendNodeId, fetchRelatives: false });
-          enabled = !nodes[0]?.properties?.some(prop => prop.name === 'disabled' && prop.value?.value);
+          const current = await this.elementState(element);
+          found = current.visible;
+          enabled = current.visible && current.enabled;
         } catch (error) {
           if (error.message !== 'ELEMENT_NOT_FOUND') throw error;
         }
         if ((state === 'hidden' && !found) || (state === 'visible' && found) || (state === 'enabled' && enabled)) return { state };
         if (this.stopped || this.invalid) throw new Error('TAKEOVER_REQUIRED');
         if (Date.now() >= deadline) return { state: 'timeout', requested_state: state, last_known: { found, enabled } };
-        await Promise.race([notification, new Promise(resolve => { timer = setTimeout(resolve, deadline - Date.now()); })]);
+        // CSS transitions do not necessarily emit accessibility events.
+        await Promise.race([notification, new Promise(resolve => { timer = setTimeout(resolve, Math.min(100, deadline - Date.now())); })]);
       } finally { clearTimeout(timer); this.listeners.delete(changed); }
     }
+  }
+
+  async elementState(element) {
+    const session = element.frame.session;
+    const { executionContextId } = await session.send('Page.createIsolatedWorld', { frameId: element.frame.frame.id, worldName: 'flower-observation' });
+    const { object } = await session.send('DOM.resolveNode', { backendNodeId: element.backendNodeId, executionContextId });
+    try {
+      const result = await session.send('Runtime.callFunctionOn', { objectId: object.objectId, returnByValue: true,
+        functionDeclaration: 'function(){const e=this.nodeType===9?this.documentElement:this;if(!e?.isConnected||!e.getBoundingClientRect)return {visible:false,enabled:false};const r=e.getBoundingClientRect();let visible=r.width>0&&r.height>0;for(let p=e;p;p=p.parentElement||p.getRootNode()?.host){const s=getComputedStyle(p);if(s.visibility==="hidden"||s.display==="none"||Number(s.opacity)===0)visible=false;}const x=r.left+r.width/2;const y=r.top+r.height/2;let hit=document.elementFromPoint(x,y);while(hit?.shadowRoot?.elementFromPoint){const inner=hit.shadowRoot.elementFromPoint(x,y);if(!inner||inner===hit)break;hit=inner;}let receives=false;for(let p=hit;p;p=p.parentElement||p.getRootNode()?.host)if(p===e){receives=true;break;}return {visible,enabled:!e.matches(":disabled")&&!e.closest("[inert],[aria-disabled=true]"),readonly:e.readOnly===true,receives,bounds:[r.x,r.y,r.width,r.height]};}' });
+      if (result.exceptionDetails || !result.result?.value) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
+      return result.result.value;
+    } finally { if (object.objectId) await session.send('Runtime.releaseObject', { objectId: object.objectId }); }
+  }
+
+  async actionable(element, hitTest = false) {
+    const before = await this.elementState(element);
+    if (!before.visible || !before.enabled || (!hitTest && before.readonly)) throw new Error('ELEMENT_NOT_ACTIONABLE');
+    if (!hitTest) return;
+    await this.effect(() => element.frame.session.send('DOM.scrollIntoViewIfNeeded', { backendNodeId: element.backendNodeId }));
+    let previous = await this.elementState(element);
+    const deadline = Date.now() + 1000;
+    do {
+      await this.delay(32);
+      const current = await this.elementState(element);
+      if (current.visible && current.enabled && current.receives && current.bounds.every((value, index) => Math.abs(value - previous.bounds[index]) < 0.5)) return;
+      previous = current;
+    } while (Date.now() < deadline);
+    throw new Error('ELEMENT_NOT_ACTIONABLE');
+  }
+
+  async receivesPoint(element, x, y) {
+    const session = element.frame.session;
+    const objects = [];
+    try {
+      // CDP hit testing shares the input session's coordinates, including
+      // nested frames. Local DOM rectangles alone cannot validate that point.
+      const hit = await session.send('DOM.getNodeForLocation', { x: Math.floor(x), y: Math.floor(y), includeUserAgentShadowDOM: true });
+      const { executionContextId } = await session.send('Page.createIsolatedWorld', { frameId: element.frame.frame.id, worldName: 'flower-observation' });
+      for (const backendNodeId of [element.backendNodeId, hit.backendNodeId]) {
+        const { object } = await session.send('DOM.resolveNode', { backendNodeId, executionContextId });
+        objects.push(object.objectId);
+      }
+      const result = await session.send('Runtime.callFunctionOn', { objectId: objects[0], arguments: [{ objectId: objects[1] }], returnByValue: true,
+        functionDeclaration: 'function(hit){for(let p=hit;p;p=p.parentElement||p.getRootNode()?.host)if(p===this)return true;return false;}' });
+      return !result.exceptionDetails && result.result?.value === true;
+    } catch { return false; }
+    finally { for (const objectId of objects) if (objectId) await session.send('Runtime.releaseObject', { objectId }); }
   }
 
   async effect(operation) {
@@ -570,15 +660,34 @@ export class BrowserComputerPage {
     }
   }
 
-  async waitForDownload({ id, timeout_ms = 10000 } = {}) {
-    if ((id !== undefined && (typeof id !== 'string' || !id || id.length > 128)) || !Number.isInteger(timeout_ms) || timeout_ms < 0 || timeout_ms > 30000) throw new Error('INVALID_REQUEST');
+  recordDownload(record) {
+    const previous = this.downloads.get(record.id);
+    if (!previous && this.downloads.size >= 32) this.downloads.delete(this.downloads.keys().next().value);
+    this.downloads.set(record.id, { ...previous, ...record, sequence: previous?.sequence ?? ++this.downloadSequence });
+    this.changed();
+  }
+
+  downloadCursor() {
+    const cursor = crypto.randomUUID();
+    if (this.downloadCursors.size >= 32) this.downloadCursors.delete(this.downloadCursors.keys().next().value);
+    this.downloadCursors.set(cursor, this.downloadSequence);
+    return { cursor };
+  }
+
+  async waitForDownload({ id, after, timeout_ms = 10000 } = {}) {
+    if ((id === undefined) === (after === undefined) || (id !== undefined && (typeof id !== 'string' || !id || id.length > 128))
+      || (after !== undefined && (typeof after !== 'string' || !this.downloadCursors.has(after)))
+      || !Number.isInteger(timeout_ms) || timeout_ms < 0 || timeout_ms > 30000) throw new Error('INVALID_REQUEST');
+    const sequence = after === undefined ? undefined : this.downloadCursors.get(after);
     const deadline = Date.now() + timeout_ms;
     for (;;) {
       let changed, timer;
       const notification = new Promise(resolve => { changed = resolve; this.listeners.add(changed); });
       try {
         if (this.stopped || this.invalid) throw new Error('TAKEOVER_REQUIRED');
-        const download = id ? this.downloads.get(id) : [...this.downloads.values()].at(-1);
+        const candidates = id ? [this.downloads.get(id)].filter(Boolean) : [...this.downloads.values()].filter(download => download.sequence > sequence);
+        if (candidates.length > 1) throw new Error('AMBIGUOUS_DOWNLOAD');
+        const download = candidates[0];
         if (download && download.state !== 'in_progress') return { download: { ...download } };
         if (Date.now() >= deadline) return { state: 'timeout', ...(download ? { download: { ...download } } : {}) };
         await Promise.race([notification, new Promise(resolve => { timer = setTimeout(resolve, deadline - Date.now()); })]);
@@ -608,17 +717,19 @@ export class BrowserComputerPage {
     if (['click', 'fill'].includes(args.action) && !element) throw new Error('INVALID_REQUEST');
     if (args.action === 'fill') {
       if (typeof args.text !== 'string' || args.text.length > 20000 || !['textbox', 'searchbox', 'combobox'].includes(element.role)) throw new Error('INVALID_REQUEST');
+      await this.actionable(element);
       await this.editText(element, args.text, true);
     } else if (args.action === 'click' || args.action === 'pointer_click' || args.action === 'double_click') {
       let x = args.x, y = args.y;
       let target = this.transport;
       if (element) {
         target = element.frame.session;
-        await this.effect(() => target.send('DOM.scrollIntoViewIfNeeded', { backendNodeId: element.backendNodeId }));
+        await this.actionable(element, true);
         const { quads } = await target.send('DOM.getContentQuads', { backendNodeId: element.backendNodeId });
         if (!quads?.length) throw new Error('ELEMENT_NOT_FOUND');
         x = (quads[0][0] + quads[0][2] + quads[0][4] + quads[0][6]) / 4;
         y = (quads[0][1] + quads[0][3] + quads[0][5] + quads[0][7]) / 4;
+        if (!await this.receivesPoint(element, x, y)) throw new Error('ELEMENT_NOT_ACTIONABLE');
       }
       if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0) throw new Error('INVALID_REQUEST');
       for (let clickCount = 1; clickCount <= (args.action === 'double_click' ? 2 : 1); clickCount++) {
