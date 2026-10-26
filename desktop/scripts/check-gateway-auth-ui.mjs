@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '../../internal/envapp/ui_src/node_modules/playwright/index.mjs';
 import { createSSHSettingsPreviewServer } from './ssh-settings-preview.mjs';
@@ -17,6 +17,8 @@ function mockActions({ environment, connected, gateways }) {
   window.gatewayConnected = connected;
   window.redevenDesktopLauncher = { performAction: async request => {
     window.gatewayRequests.push(request);
+    if (request.kind === 'update_gateway_endpoints') return { ok: true, gateway_endpoints: request.endpoints };
+    if (request.kind === 'invite_gateway_runtime') return { ok: true, gateway_invitation_code: { code: '123456789ABCDEFGHJKMNPQRSTV', share_addresses: ['https://office.example:7443'] } };
     if (request.kind === 'close_runtime_gateway') { window.gatewayConnected = false; return { ok: true }; }
     if (request.operation === 'status' && request.ssh_password === ' fixture password ') window.gatewayConnected = true;
     if (!window.gatewayConnected) return { ok: false, gateway_error_code: 'SSH_AUTHENTICATION_REQUIRED' };
@@ -128,7 +130,7 @@ try {
     const picker = dialog.getByRole('combobox', { name: i18n.t('gatewayDiscovery.savedGateway'), exact: true });
     await picker.waitFor();
     assert.equal(await picker.locator('option').count(), 2);
-    await picker.selectOption('https://office.example:7443');
+    await picker.selectOption('saved-office');
     const invitation = dialog.getByLabel(i18n.t('gatewayJoin.code'), { exact: true });
     assert.equal(await invitation.evaluate(el => el === document.activeElement), true);
     await invitation.fill('saved-gateway-invitation');
@@ -141,6 +143,62 @@ try {
     assert.equal(requests.find(request => request.operation === 'preview').address, 'https://office.example:7443');
     assert.equal(requests.some(request => request.operation === 'join' || request.ssh_password), false);
     report.cases.push({ locale, width, theme, kind, savedGateway: true, status: 'passed' });
+    await page.close();
+  }
+  for (const [locale, width, theme] of [...listDesktopI18nLocales().map(locale => [locale, 390, 'light']), ['zh-CN', 1280, 'dark']]) {
+    const i18n = createDesktopI18n(locale);
+    const page = await browser.newPage({ viewport: { width, height: 844 }, reducedMotion: 'reduce' });
+    page.on('pageerror', error => report.errors.push(error.message));
+    const gateways = ['ssh_host', 'local_host'].map((connection_kind, index) => ({
+      gateway_id: 'empty-' + index, display_name: index ? 'Gateway-local' : 'Gateway-gzcom', local_enabled: true,
+      connection_kind, management_capability: 'managed_local_host', capabilities: [], status: 'online', trust_state: 'paired',
+      listener_running: true, listener_addresses: [':7443'], active_listener_addresses: ['[::]:7443'],
+      allowed_hosts: [], member_endpoints: [], permissions: { access: true, manage_members: true, configure_cloud: true },
+      created_at_ms: 1, updated_at_ms: 1, environments: [],
+    }));
+    await page.addInitScript(mockActions, { environment, connected: true, gateways });
+    await page.goto(new URL('gateway-auth.html?locale=' + locale + '&theme=' + theme, server.resolvedUrls.local[0]).href);
+    const dialog = page.getByRole('dialog');
+    const button = key => dialog.getByRole('button', { name: i18n.t(key), exact: true });
+    await button('gatewayJoin.connectAndContinue').click();
+    const picker = dialog.locator('[data-gateway-picker]');
+    assert.equal(await picker.locator('option').count(), 3);
+    await picker.selectOption('empty-0');
+    const draft = dialog.locator('[data-gateway-endpoint-draft]');
+    await draft.waitFor();
+    assert.equal(await draft.evaluate(element => element === document.activeElement), true);
+    assert.equal(await button('gatewayJoin.verify').isDisabled(), true);
+    const layout = await dialog.evaluate(element => ({ width: element.getBoundingClientRect().width, overflow: element.scrollWidth - element.clientWidth }));
+    assert.ok(layout.width <= width - 16 && layout.overflow <= 1, locale + ': address setup must fit the viewport');
+    if (['zh-CN', 'de-DE', 'en-US'].includes(locale)) await dialog.screenshot({ path: output + '/' + locale + '-' + width + '-empty-address.png' });
+    await draft.fill('https://office.example:7443');
+    await button('gatewayDiscovery.saveAddress').click();
+    await button('gatewayMembers.createInvitation').click();
+    await button('gatewayJoin.verify').click();
+    await button('gatewayJoin.confirmEnable').waitFor();
+    assert.equal(await page.evaluate(() => window.gatewayRequests.some(request => request.operation === 'join')), false);
+    report.cases.push({ locale, width, theme, emptyAddress: true, status: 'passed' });
+    await page.close();
+  }
+  if (process.env.REDEVEN_GATEWAY_INVENTORY_FILE) {
+    const gateways = JSON.parse(await readFile(process.env.REDEVEN_GATEWAY_INVENTORY_FILE, 'utf8'));
+    assert.ok(gateways.length && gateways.every(gateway => !gateway.member_endpoints.length));
+    const i18n = createDesktopI18n('zh-CN');
+    const page = await browser.newPage({ viewport: { width: 1280, height: 1000 }, reducedMotion: 'reduce' });
+    await page.addInitScript(mockActions, { environment, connected: true, gateways });
+    await page.goto(new URL('gateway-auth.html?locale=zh-CN', server.resolvedUrls.local[0]).href);
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('button', { name: i18n.t('gatewayJoin.connectAndContinue'), exact: true }).click();
+    const picker = dialog.locator('[data-gateway-picker]');
+    assert.deepEqual(await picker.locator('option').evaluateAll(options => options.slice(1).map(option => option.value)), gateways.map(gateway => gateway.gateway_id));
+    for (const gateway of gateways) {
+      await picker.selectOption(gateway.gateway_id);
+      await dialog.locator('[data-gateway-endpoint-draft]').waitFor();
+      assert.ok((await picker.locator('option:checked').innerText()).includes(gateway.display_name));
+    }
+    await dialog.screenshot({ path: output + '/actual-saved-inventory.png' });
+    assert.equal(await page.evaluate(() => window.gatewayRequests.some(request => request.kind === 'update_gateway_endpoints' || request.kind === 'invite_gateway_runtime')), false);
+    report.cases.push({ actualSavedInventory: gateways.map(gateway => gateway.display_name), status: 'passed' });
     await page.close();
   }
   assert.deepEqual(report.errors, []);

@@ -3747,7 +3747,14 @@
   "gatewayDiscovery": {
     "savedGateway": "已保存的 Gateway",
     "chooseSavedGateway": "选择已保存的 Gateway",
-    "enterAddress": "输入新地址"
+    "enterAddress": "输入新地址",
+    "setupNeeded": "待配置接入地址",
+    "setupHelp": "此 Gateway 已保存，但尚无适用于当前 运行时 的接入地址。请在此添加地址后继续。",
+    "cannotManage": "请向 Gateway 管理员获取可访问的地址和邀请码，然后选择“输入地址”。",
+    "addressRequirement": "请输入当前 运行时 能访问的 HTTPS 地址，且符合允许的 Host 限制。远程 运行时 不能使用 localhost。",
+    "saveAddress": "保存接入地址",
+    "invitationHelp": "为此 Gateway 生成邀请码，或粘贴已有的邀请码。",
+    "invitationIntro": "选择已保存的 Gateway，或输入收到的接入地址和邀请码。"
   },
   "gatewayNetwork": {
     "listenTitle": "本机监听",

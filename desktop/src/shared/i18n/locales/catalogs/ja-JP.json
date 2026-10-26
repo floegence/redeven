@@ -3747,7 +3747,14 @@
   "gatewayDiscovery": {
     "savedGateway": "保存済み Gateway",
     "chooseSavedGateway": "保存済み Gateway を選択",
-    "enterAddress": "アドレスを入力"
+    "enterAddress": "アドレスを入力",
+    "setupNeeded": "接続先アドレスの設定が必要",
+    "setupHelp": "この Gateway は保存されていますが、この ランタイム が使用できるアドレスがありません。ここでアドレスを追加して続行してください。",
+    "cannotManage": "Gateway 管理者から接続可能なアドレスと招待コードを取得し、「アドレスを入力」を選択してください。",
+    "addressRequirement": "この ランタイム が到達でき、許可された Host に一致する HTTPS アドレスを入力してください。リモート ランタイム では localhost を使用できません。",
+    "saveAddress": "接続先アドレスを保存",
+    "invitationHelp": "この Gateway の招待コードを生成するか、既存のコードを貼り付けてください。",
+    "invitationIntro": "保存済みの Gateway を選択するか、共有されたアドレスと招待コードを入力してください。"
   },
   "gatewayNetwork": {
     "listenTitle": "ローカルリスナー",

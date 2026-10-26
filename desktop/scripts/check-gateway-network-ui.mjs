@@ -50,8 +50,8 @@ try {
     assert.equal(await manualPanel.locator('[data-gateway-picker]').count(),0,'manual entry tab has no saved Gateway picker');
     if(['en-US','zh-CN','de-DE'].includes(locale))await page.screenshot({path:`${output}/${locale}-join-manual.png`});
     await savedTab.click();
-    await picker.selectOption('https://office.local:7443');
-    assert.equal(await picker.inputValue(),'https://office.local:7443');
+    await picker.selectOption('local-gateway');
+    assert.equal(await picker.inputValue(),'local-gateway');
     assert.equal(await savedPanel.locator('input').count(),0);
     await newAddressTab.click();
     assert.equal(await manualAddress.inputValue(),'https://draft.example:7443','manual draft survives switching to a saved Gateway');
@@ -101,7 +101,7 @@ try {
   const trigger=page.getByRole('button',{name:i18n.t('gatewayJoin.title'),exact:true});
   await trigger.click();
   const picker=page.locator('[data-gateway-picker]');
-  const optionCount=scenario==='none' ? 0 : scenario==='multiple' ? 3 : 2;
+  const optionCount=scenario==='none' ? 0 : 2;
   assert.equal(await picker.count(),scenario==='none' ? 0 : 1);
   if(scenario!=='none')assert.equal(await picker.locator('option').count(),optionCount);
   const dialog=page.getByRole('dialog');
@@ -109,13 +109,14 @@ try {
   assert.ok(layout.width<=width-16 && layout.overflow<=1);
   if(scenario==='long') {
    assert.match(await picker.locator('option').nth(1).innerText(),/design and engineering team/);
-   await picker.selectOption('https://office.local:7443');
+   await picker.selectOption('local-gateway');
    const bounds=await picker.boundingBox();
    assert.ok(bounds && bounds.width<=width-32,'long selected names fit the narrow panel');
   }
   if(scenario==='multiple') {
    assert.match(await picker.locator('option').nth(1).innerText(),/office\.local:7443/);
-   assert.match(await picker.locator('option').nth(2).innerText(),/office\.example:7443/);
+   await picker.selectOption('local-gateway');
+   assert.match(await page.locator('[data-gateway-address-picker] option').nth(2).innerText(),/office\.example:7443/);
   }
   await page.screenshot({path:`${output}/${locale}-${width}-${theme}-${scenario}.png`});
   if(locale==='zh-CN' && width===1280 && scenario==='default')await dialog.screenshot({path:`${output}/zh-CN-dialog-${theme}.png`});

@@ -1,4 +1,4 @@
-import { gatewayAllowedHost, gatewayListenAddress } from '../shared/gatewayNetworkSettings';
+import { gatewayAllowedHost, gatewayConnectionOrigin, gatewayListenAddress } from '../shared/gatewayNetworkSettings';
 import { KeyedFor, Button, Checkbox, Input, StableText } from '@floegence/floe-webapp-core/ui';
 import { ChevronDown, Plus, Trash, Copy } from '@floegence/floe-webapp-core/icons';
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show, untrack } from 'solid-js';
@@ -76,15 +76,9 @@ export function GatewayMembersPanel(props: Readonly<{
   const policy = () => draftPolicy() ?? props.gateway?.policy;
   const targets = createMemo(() => [...new Map(props.targets.filter(target => target.runtime_running && target.runtime_control_status.state === 'available').map(target => [target.id, target])).values()]);
   const target = createMemo<DesktopCloudRuntimeLinkTarget | undefined>(previous => targets().find(value => value.id === targetID()) ?? (previous?.id === targetID() ? previous : undefined));
-  const normalizedEndpoints = () => endpointDraft().map(endpoint => {
-    try {
-      const url = new URL(endpoint.address.trim());
-      if (url.protocol !== 'https:' || url.username || url.password || url.pathname !== '/' || url.search || url.hash) return { ...endpoint, address: endpoint.address.trim() };
-      return { ...endpoint, address: url.origin };
-    } catch {
-      return { ...endpoint, address: endpoint.address.trim() };
-    }
-  });
+  const normalizedEndpoints = () => endpointDraft().map(endpoint => ({
+    ...endpoint, address: gatewayConnectionOrigin(endpoint.address) ?? endpoint.address.trim(),
+  }));
   const endpointsDirty = () => JSON.stringify(normalizedEndpoints()) !== JSON.stringify(savedEndpoints());
   const endpointsValid = () => {
     const endpoints = normalizedEndpoints();
@@ -92,9 +86,7 @@ export function GatewayMembersPanel(props: Readonly<{
     const ids = new Set<string>();
     const addresses = new Set<string>();
     return endpoints.every(endpoint => {
-      let url: URL;
-      try { url = new URL(endpoint.address); } catch { return false; }
-      if (url.protocol !== 'https:' || url.origin !== endpoint.address || url.username || url.password || url.pathname !== '/' || url.search || url.hash) return false;
+      if (gatewayConnectionOrigin(endpoint.address) !== endpoint.address) return false;
       if (ids.has(endpoint.endpoint_id) || addresses.has(endpoint.address)) return false;
       ids.add(endpoint.endpoint_id); addresses.add(endpoint.address);
       return Number.isSafeInteger(endpoint.priority) && endpoint.priority >= 0 && endpoint.priority <= 1000;

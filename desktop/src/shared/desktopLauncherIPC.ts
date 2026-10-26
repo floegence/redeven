@@ -934,6 +934,7 @@ export type DesktopLauncherActionSuccess = Readonly<{
   gateway_member_results?: readonly GatewayMemberOperationResult[];
   gateway_cloud?: GatewayCloudSummary;
   gateway_membership?: GatewayMembershipStatus;
+  gateway_endpoints?: readonly GatewayEndpoint[];
   gateway_network_settings?: Readonly<{ settings: GatewayNetworkSettings; restart_required: boolean }>;
   ok: true;
   outcome: DesktopLauncherActionOutcome;
