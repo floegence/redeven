@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { treeDigest, lookupBuild, recordBuild } from './dev_desktop_build_cache.mjs';
+import { treeDigest, lookupBuild, recordBuild, buildInputKey } from './dev_desktop_build_cache.mjs';
 import { captureSourceBuildIdentity } from './source_build_identity.mjs';
 
 function fixture(t) {
@@ -86,4 +86,14 @@ test('first toolchain preparation is allowed but installed compiler changes are 
   assert.doesNotThrow(() => verifyBuildContexts(before, after));
   assert.throws(() => verifyBuildContexts(before, { ...after, source: 'changed' }), /Build inputs changed/);
   assert.throws(() => verifyBuildContexts(after, { ...after, tools: { rust: { cargo: ['changed'], rustc: ['rustc', 'hash'] } } }), /Build inputs changed/);
+});
+
+test('Gateway cache key binds dirty source, dependencies and compression profile', t => {
+  const f = fixture(t), context = f.context();
+  const key = buildInputKey(context);
+  assert.equal(buildInputKey(f.context()), key);
+  writeFileSync(path.join(f.root, 'input.ts'), 'latest uncommitted code');
+  assert.notEqual(buildInputKey(f.context()), key);
+  assert.notEqual(buildInputKey({ ...context, dependencies: ['changed'] }), key);
+  assert.notEqual(buildInputKey({ ...context, environment: { REDEVEN_ASSET_BUILD_PROFILE: 'development' } }), key);
 });

@@ -40,8 +40,22 @@ while installing the exact locked published crate into fresh staging. Digest,
 executable and consumption checks still run and product evidence is regenerated.
 Release staging always has isolated Cargo directories. Source changes conservatively
 rebuild the full product; this is not per-component or watch-mode compilation.
-Saved local Gateways keep their existing current-source preparation and lifecycle.
-Logs report dependency, input verification, Desktop, Runtime and Gateway timings.
+Saved local Gateways retain current-source installation and lifecycle. Their
+verified package archives persist only within a cache generation bound to the
+launcher's complete build input key, including dirty source bytes. Different
+inputs discard the previous generation; calls without an input key use a fresh
+session cache. Archive verification remains owned by the package cache.
+
+Development launches select gzip level 1 and Brotli quality 4 for embedded assets;
+decompression yields the original bytes. Ordinary/release builds default to
+maximum compression. The selected profile participates in build identity.
+Gateway source copies exclude unrelated agent worktrees and native build caches.
+
+Logs report dependency, input verification, Desktop, Runtime and Gateway timings,
+Gateway preparation phases, and total preparation before opening the window.
+A warm empty-profile launch is not an end-to-end latency claim for source changes
+or saved Gateways. Qualify both rebuilt and unchanged launches with a local
+Gateway, checking the current Runtime commit and owned-service cleanup.
 
 Normal exit, startup failure, Ctrl+C and SIGTERM stop owned local services.
 The launcher owns coordination; product shutdown semantics remain unchanged.

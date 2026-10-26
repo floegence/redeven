@@ -42,6 +42,7 @@ cp "$ROOT_DIR/scripts/dev_desktop_gateways.mjs" "$FAKE_SCRIPTS/"
 cp "$ROOT_DIR/.node-version" "$FAKE_CHECKOUT/.node-version"
 cat > "$FAKE_SCRIPTS/dev_desktop_build_cache.mjs" <<'JS'
 if (process.argv[2] === 'capture') console.log('{}');
+if (process.argv[2] === 'key') console.log('a'.repeat(64));
 if (process.argv[2] === 'lookup' && process.env.FAKE_SESSION_CASE === 'cache-hit') {
   const fs = await import('node:fs'), path = await import('node:path'), crypto = await import('node:crypto');
   const manifest = '{"schema_version":1}';

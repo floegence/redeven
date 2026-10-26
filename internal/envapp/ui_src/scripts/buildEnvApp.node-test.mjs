@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -169,4 +169,38 @@ test('allows separate worktree outputs to build independently', async (t) => {
   verifyAssets(secondFixture, 'second');
   writeFileSync(firstFixture.release, 'release');
   assert.equal(await first.done, 0, first.output());
+});
+
+for (const [profile, gzipLevel, brotliQuality] of [['development', 1, 4], ['release', 9, 11]]) {
+  test(`uses ${profile} compression without changing asset bytes`, t => {
+    const f = fixture(t);
+    mkdirSync(f.assets, { recursive: true });
+    writeFileSync(path.join(f.assets, 'sample-abcdefgh.js'), 'export const value = 42;'.repeat(200));
+    const preload = path.join(f.cwd, 'compression-options.cjs');
+    writeFileSync(preload, `
+      const assert = require('node:assert/strict'), zlib = require('node:zlib');
+      const gzip = zlib.gzipSync, brotli = zlib.brotliCompressSync;
+      zlib.gzipSync = (bytes, options) => { assert.equal(options.level, ${gzipLevel}); return gzip(bytes, options); };
+      zlib.brotliCompressSync = (bytes, options) => { assert.equal(options.params[zlib.constants.BROTLI_PARAM_QUALITY], ${brotliQuality}); return brotli(bytes, options); };
+    `);
+    const result = spawnSync(process.execPath, ['--require', preload, 'scripts/precompressAssets.mjs'], {
+      cwd: f.cwd, encoding: 'utf8', env: { ...process.env, REDEVEN_ASSET_BUILD_PROFILE: profile },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const original = readFileSync(path.join(f.assets, 'sample-abcdefgh.js'));
+    assert.deepEqual(gunzipSync(readFileSync(path.join(f.assets, 'sample-abcdefgh.js.gz'))), original);
+    assert.deepEqual(brotliDecompressSync(readFileSync(path.join(f.assets, 'sample-abcdefgh.js.br'))), original);
+  });
+}
+
+test('rejects unknown compression profiles before touching existing outputs', t => {
+  const f = fixture(t);
+  mkdirSync(f.assets, { recursive: true });
+  const existing = path.join(f.assets, 'sample-abcdefgh.js.br');
+  writeFileSync(existing, 'previous output');
+  const result = spawnSync(process.execPath, ['scripts/precompressAssets.mjs'], {
+    cwd: f.cwd, encoding: 'utf8', env: { ...process.env, REDEVEN_ASSET_BUILD_PROFILE: 'invalid' },
+  });
+  assert.notEqual(result.status, 0);
+  assert.equal(readFileSync(existing, 'utf8'), 'previous output');
 });
