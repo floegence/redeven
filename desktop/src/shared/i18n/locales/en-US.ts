@@ -88,6 +88,7 @@ export const enUS = {
     enterAddress: "Enter an address",
   },
   gatewayNetwork: {
+    addressPlaceholder: 'https://gateway.example.com:7443',
     "listenTitle": "Local listener",
     "listenHelp": "Choose the local IP addresses and ports Gateway binds to. Separate multiple bindings with commas.",
     "listenAddress": "Bind addresses",

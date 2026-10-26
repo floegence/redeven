@@ -3758,6 +3758,7 @@
     "invitationIntro": "选择已保存的 Gateway，或输入收到的接入地址和邀请码。"
   },
   "gatewayNetwork": {
+    "addressPlaceholder": "https://gateway.example.com:7443",
     "listenTitle": "本机监听",
     "listenHelp": "设置 Gateway 在本机绑定的 IP 地址和端口。多个地址用逗号分隔。",
     "listenAddress": "绑定地址",

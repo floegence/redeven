@@ -3758,6 +3758,7 @@
     "invitationIntro": "저장된 Gateway를 선택하거나 공유받은 주소와 초대 코드를 입력하세요."
   },
   "gatewayNetwork": {
+    "addressPlaceholder": "https://gateway.example.com:7443",
     "listenTitle": "로컬 리스너",
     "listenHelp": "Gateway가 로컬에서 바인딩할 IP 주소와 포트를 지정하세요. 여러 주소는 쉼표로 구분합니다.",
     "listenAddress": "바인딩 주소",

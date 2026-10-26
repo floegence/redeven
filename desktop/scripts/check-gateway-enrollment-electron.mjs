@@ -1,3 +1,4 @@
+import { chooseGatewayPicker } from './gateway-picker-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -95,7 +96,7 @@ await session.run(async () => {
   const dialog = page.getByRole('dialog');
   await dialog.getByRole('button', { name: 'Connect and continue', exact: true }).click();
   const picker = dialog.locator('[data-gateway-picker]');
-  await picker.selectOption(gatewayID);
+  await chooseGatewayPicker(picker, source.display_name);
   await dialog.locator('[data-gateway-endpoint-draft]').waitFor();
   await dialog.screenshot({ path: path.join(output, 'empty-address.png') });
   await dialog.locator('[data-gateway-endpoint-draft]').fill(origin);

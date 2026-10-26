@@ -1,3 +1,4 @@
+import { gatewayPickerTrigger, gatewayPickerLabels, chooseGatewayPicker } from './gateway-picker-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -127,10 +128,10 @@ try {
     await page.goto(new URL(`gateway-auth.html?locale=${locale}&theme=${theme}`, server.resolvedUrls.local[0]).href);
     const dialog = page.getByRole('dialog');
     await dialog.getByRole('button', { name: i18n.t('gatewayJoin.connectAndContinue'), exact: true }).click();
-    const picker = dialog.getByRole('combobox', { name: i18n.t('gatewayDiscovery.savedGateway'), exact: true });
+    const picker = dialog.locator('[data-gateway-picker]');
     await picker.waitFor();
-    assert.equal(await picker.locator('option').count(), 2);
-    await picker.selectOption('saved-office');
+    assert.equal((await gatewayPickerLabels(picker)).length, 1);
+    await chooseGatewayPicker(picker, 'Office Gateway');
     const invitation = dialog.getByLabel(i18n.t('gatewayJoin.code'), { exact: true });
     assert.equal(await invitation.evaluate(el => el === document.activeElement), true);
     await invitation.fill('saved-gateway-invitation');
@@ -162,8 +163,8 @@ try {
     const button = key => dialog.getByRole('button', { name: i18n.t(key), exact: true });
     await button('gatewayJoin.connectAndContinue').click();
     const picker = dialog.locator('[data-gateway-picker]');
-    assert.equal(await picker.locator('option').count(), 3);
-    await picker.selectOption('empty-0');
+    assert.equal((await gatewayPickerLabels(picker)).length, 2);
+    await chooseGatewayPicker(picker, 'Gateway-gzcom');
     const draft = dialog.locator('[data-gateway-endpoint-draft]');
     await draft.waitFor();
     assert.equal(await draft.evaluate(element => element === document.activeElement), true);
@@ -190,11 +191,11 @@ try {
     const dialog = page.getByRole('dialog');
     await dialog.getByRole('button', { name: i18n.t('gatewayJoin.connectAndContinue'), exact: true }).click();
     const picker = dialog.locator('[data-gateway-picker]');
-    assert.deepEqual(await picker.locator('option').evaluateAll(options => options.slice(1).map(option => option.value)), gateways.map(gateway => gateway.gateway_id));
+    assert.equal((await gatewayPickerLabels(picker)).length, gateways.length);
     for (const gateway of gateways) {
-      await picker.selectOption(gateway.gateway_id);
+      await chooseGatewayPicker(picker, gateway.display_name);
       await dialog.locator('[data-gateway-endpoint-draft]').waitFor();
-      assert.ok((await picker.locator('option:checked').innerText()).includes(gateway.display_name));
+      assert.ok((await gatewayPickerTrigger(picker).innerText()).includes(gateway.display_name));
     }
     await dialog.screenshot({ path: output + '/actual-saved-inventory.png' });
     assert.equal(await page.evaluate(() => window.gatewayRequests.some(request => request.kind === 'update_gateway_endpoints' || request.kind === 'invite_gateway_runtime')), false);

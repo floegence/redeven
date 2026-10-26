@@ -1010,28 +1010,44 @@
 }
 
 .redeven-gateway-saved-picker {
+  display: block;
   width: 100%;
   min-width: 0;
-  max-width: 100%;
+}
+
+.redeven-gateway-picker-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  width: 100%;
+  min-width: 0;
   min-height: 2.5rem;
-  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border: 1px solid var(--input);
   border-radius: .375rem;
-  background: color-mix(in srgb, var(--muted) 22%, var(--background));
-  padding-inline: .75rem;
+  background: var(--background);
+  padding: .5rem .75rem;
   color: var(--foreground);
-  cursor: pointer;
   font-size: var(--floe-type-body);
-  text-overflow: ellipsis;
+  transition: border-color 100ms;
 }
 
-.redeven-gateway-saved-picker:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
+/* Shared Dropdown portals beside the dialog inside its owning surface. */
+[data-floe-surface-portal-layer]:has(.redeven-gateway-join-dialog) [data-floe-dropdown][role='menu'] {
+  width: max-content;
+  max-width: min(32rem, calc(100% - 2rem));
+  max-height: min(20rem, calc(100dvh - 4rem));
+  overflow: auto;
 }
 
-.redeven-gateway-saved-picker:disabled {
-  cursor: not-allowed;
-  opacity: .5;
+[data-floe-surface-portal-layer]:has(.redeven-gateway-join-dialog) [data-floe-dropdown] [role='menuitem'] {
+  min-height: 2.25rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+[data-floe-surface-portal-layer]:has(.redeven-gateway-join-dialog) [data-floe-dropdown] [role='menuitem'] > span {
+  min-width: 0;
 }
 
 .redeven-gateway-setting-badge {

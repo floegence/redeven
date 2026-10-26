@@ -1,3 +1,4 @@
+import { gatewayPickerTrigger, openGatewayPicker, gatewayPickerLabels, chooseGatewayPicker } from './gateway-picker-test-helpers.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -36,12 +37,11 @@ try {
     const savedTab=page.getByRole('tab',{name:i18n.t('gatewayDiscovery.savedGateway'),exact:true});
     const newAddressTab=page.getByRole('tab',{name:i18n.t('gatewayDiscovery.enterAddress'),exact:true});
     const savedPanel=join.locator('[role="tabpanel"]:not([aria-hidden="true"])');
-    const picker=savedPanel.getByRole('combobox',{name:i18n.t('gatewayDiscovery.savedGateway')});
+    const picker=savedPanel.locator('[data-gateway-picker]');
     assert.equal(await savedTab.getAttribute('aria-selected'),'true');
     assert.equal(await savedPanel.locator('input').count(),0,'saved Gateway tab has no manual address field');
-    assert.equal(await picker.inputValue(),'');
-    assert.equal(await picker.locator('option').count(),2);
-    assert.match(await picker.locator('option').nth(1).innerText(),/Office Gateway.*office\.local:7443/);
+    assert.equal(await picker.getAttribute('data-value'),'');
+    assert.deepEqual(await gatewayPickerLabels(picker),['Office Gateway · office.local:7443']);
     if(['en-US','zh-CN','de-DE'].includes(locale))await page.screenshot({path:`${output}/${locale}-join-saved.png`});
     await newAddressTab.click();
     const manualPanel=join.locator('[role="tabpanel"]:not([aria-hidden="true"])');
@@ -50,8 +50,8 @@ try {
     assert.equal(await manualPanel.locator('[data-gateway-picker]').count(),0,'manual entry tab has no saved Gateway picker');
     if(['en-US','zh-CN','de-DE'].includes(locale))await page.screenshot({path:`${output}/${locale}-join-manual.png`});
     await savedTab.click();
-    await picker.selectOption('local-gateway');
-    assert.equal(await picker.inputValue(),'local-gateway');
+    await chooseGatewayPicker(picker,'Office Gateway');
+    assert.equal(await picker.getAttribute('data-value'),'local-gateway');
     assert.equal(await savedPanel.locator('input').count(),0);
     await newAddressTab.click();
     assert.equal(await manualAddress.inputValue(),'https://draft.example:7443','manual draft survives switching to a saved Gateway');
@@ -66,6 +66,12 @@ try {
     assert.equal(await page.evaluate(()=>window.gatewayRequests.filter(r=>r.operation==='join').length),0);
    } else {
     const advanced=page.locator('[data-gateway-network-advanced]');
+    await page.getByRole('button',{name:i18n.t('gatewayMembers.addAddress'),exact:true}).click();
+    const blank=page.locator('.redeven-gateway-endpoint input').last();
+    assert.equal(await blank.inputValue(),'');
+    assert.equal(await blank.getAttribute('placeholder'),'https://gateway.example.com:7443');
+    if(['en-US','zh-CN','de-DE'].includes(locale))await page.screenshot({path:output+'/'+locale+'-settings-placeholder.png'});
+    await page.getByRole('button',{name:i18n.t('gatewayMembers.removeAddress'),exact:true}).last().click();
     if(locale==='zh-CN')await page.screenshot({path:`${output}/zh-CN-settings-default.png`});
     assert.equal(await advanced.evaluate(el=>el.open),false);
     await advanced.locator('summary').click();
@@ -101,22 +107,52 @@ try {
   const trigger=page.getByRole('button',{name:i18n.t('gatewayJoin.title'),exact:true});
   await trigger.click();
   const picker=page.locator('[data-gateway-picker]');
-  const optionCount=scenario==='none' ? 0 : 2;
+  const optionCount=scenario==='none' ? 0 : 1;
   assert.equal(await picker.count(),scenario==='none' ? 0 : 1);
-  if(scenario!=='none')assert.equal(await picker.locator('option').count(),optionCount);
+  if(scenario!=='none')assert.equal((await gatewayPickerLabels(picker)).length,optionCount);
   const dialog=page.getByRole('dialog');
   const layout=await dialog.evaluate(el=>({width:el.getBoundingClientRect().width,overflow:el.scrollWidth-el.clientWidth}));
   assert.ok(layout.width<=width-16 && layout.overflow<=1);
   if(scenario==='long') {
-   assert.match(await picker.locator('option').nth(1).innerText(),/design and engineering team/);
-   await picker.selectOption('local-gateway');
+   assert.match((await gatewayPickerLabels(picker))[0],/design and engineering team/);
+   await chooseGatewayPicker(picker,'design and engineering team');
    const bounds=await picker.boundingBox();
    assert.ok(bounds && bounds.width<=width-32,'long selected names fit the narrow panel');
   }
   if(scenario==='multiple') {
-   assert.match(await picker.locator('option').nth(1).innerText(),/office\.local:7443/);
-   await picker.selectOption('local-gateway');
-   assert.match(await page.locator('[data-gateway-address-picker] option').nth(2).innerText(),/office\.example:7443/);
+   assert.match((await gatewayPickerLabels(picker))[0],/office\.local:7443/);
+   await chooseGatewayPicker(picker,'Office Gateway');
+   const addresses=page.locator('[data-gateway-address-picker]');
+   assert.match((await gatewayPickerLabels(addresses))[1],/office\.example:7443/);
+   await chooseGatewayPicker(addresses,'office.example:7443');
+   assert.equal(await addresses.getAttribute('data-value'),'https://office.example:7443');
+  }
+  if(scenario!=='none') {
+   const field=gatewayPickerTrigger(picker);
+   await page.getByRole('tab').last().focus();
+   await page.waitForTimeout(150);
+   const idle=await field.evaluate(el=>({border:getComputedStyle(el).borderColor,shadow:getComputedStyle(el).boxShadow}));
+   await field.focus();
+   await page.waitForTimeout(150);
+   const focused=await field.evaluate(el=>({border:getComputedStyle(el).borderColor,outline:getComputedStyle(el).outlineStyle,shadow:getComputedStyle(el).boxShadow,width:getComputedStyle(el).borderTopWidth}));
+   assert.notEqual(focused.border,idle.border,'focus lights the existing border');
+   assert.equal(focused.outline,'none','field focus has no second outline');
+   assert.equal(focused.shadow,idle.shadow,'field focus does not add a ring');
+   assert.equal(focused.width,'1px');
+   await field.press('ArrowDown');
+   const menu=await openGatewayPicker(picker);
+   const menuBounds=await menu.boundingBox();
+   assert.ok(menuBounds && menuBounds.x>=0 && menuBounds.x+menuBounds.width<=width,'menu stays inside viewport');
+   assert.ok(await menu.evaluate(el=>el.contains(document.activeElement)),'keyboard opening focuses an option');
+   await page.screenshot({path:output+'/'+locale+'-'+width+'-'+theme+'-'+scenario+'-menu.png'});
+   await page.keyboard.press('Escape');
+   await page.waitForFunction(id=>document.activeElement?.getAttribute('aria-controls')===id,await field.getAttribute('aria-controls'));
+   assert.equal(await field.evaluate(el=>el===document.activeElement),true);
+   await field.press('Enter');
+   const keyboardMenu=await openGatewayPicker(picker);
+   await page.keyboard.press('Enter');
+   await keyboardMenu.waitFor({state:'hidden'});
+   await page.waitForFunction(()=>document.querySelector('[data-gateway-picker]')?.getAttribute('data-value')==='local-gateway');
   }
   await page.screenshot({path:`${output}/${locale}-${width}-${theme}-${scenario}.png`});
   if(locale==='zh-CN' && width===1280 && scenario==='default')await dialog.screenshot({path:`${output}/zh-CN-dialog-${theme}.png`});

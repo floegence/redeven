@@ -1,7 +1,7 @@
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import { gatewayRuntimeAddress, savedGatewaySuggestions } from './savedGatewaySuggestions';
-import { Monitor, ArrowRight } from '@floegence/floe-webapp-core/icons';
-import { Button, Dialog, Input, KeyedFor, StableText, Stepper, Tabs, TabPanel } from '@floegence/floe-webapp-core/ui';
+import { Monitor, ArrowRight, ChevronDown } from '@floegence/floe-webapp-core/icons';
+import { Button, Dialog, Dropdown, Input, StableText, Stepper, Tabs, TabPanel } from '@floegence/floe-webapp-core/ui';
 import { createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount, Show, type JSX } from 'solid-js';
 import type { DesktopCloudRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
 import type { GatewayJoinPreview, GatewayMembershipOperation, GatewayEnrollmentPurpose } from '../shared/gatewayJoin';
@@ -10,6 +10,25 @@ import { gatewayInteractionIdentity } from './environmentInteractionIdentity';
 import type { DesktopI18n } from '../shared/i18n';
 
 let nextConnectionToken = Date.now();
+
+/** Shared Dropdown owns the menu, keyboard navigation and field focus. */
+function GatewayPicker(props: Readonly<{
+  label: string; placeholder: string; value: string; disabled: boolean;
+  options: { value: string; label: string }[]; onChange: (value: string) => void;
+}>) {
+  const selected = () => props.options.find(option => option.value === props.value);
+  return <div class="redeven-gateway-join-field">
+    <span>{props.label}</span>
+    <Dropdown class="redeven-gateway-saved-picker" triggerClass="redeven-gateway-picker-trigger"
+      triggerInputSurface triggerAriaLabel={props.label} disabled={props.disabled}
+      value={props.value} items={() => props.options.map(option => ({ id: option.value, label: option.label }))}
+      onSelect={props.onChange} trigger={<>
+        <span class="min-w-0 truncate" classList={{ 'text-muted-foreground': !selected() }} title={selected()?.label}>{selected()?.label ?? props.placeholder}</span>
+        <ChevronDown class="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+      </>} />
+  </div>;
+}
+
 export type RuntimeGatewayPreparationResult = Readonly<{ ok: boolean; authenticationRequired?: boolean }>;
 
 /** Verification belongs to the selected Runtime; only a verified preview can be confirmed. */
@@ -55,7 +74,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const currentStep = createMemo(() => props.wizard ? step() : preview() ? 2 : 1);
   const [now, setNow] = createSignal(Date.now());
   let generation = 0, statusGeneration = 0;
-  let trigger: HTMLButtonElement | undefined, addressInput: HTMLInputElement | undefined, savedGatewayInput: HTMLSelectElement | undefined, codeInput: HTMLInputElement | undefined, confirmButton: HTMLButtonElement | undefined;
+  let trigger: HTMLButtonElement | undefined, addressInput: HTMLInputElement | undefined, savedGatewayInput: HTMLDivElement | undefined, codeInput: HTMLInputElement | undefined, confirmButton: HTMLButtonElement | undefined;
   let connectionHeading: HTMLHeadingElement | undefined, confirmationHeading: HTMLHeadingElement | undefined;
   const focusConfirmation = () => props.wizard ? confirmationHeading?.focus({ preventScroll: true }) : confirmButton?.focus();
   let scrollViewport: HTMLDivElement | undefined;
@@ -101,7 +120,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
   const canManageGateway = () => !!selectedGateway()?.permissions?.manage_members && selectedGateway()?.connection_kind !== 'url';
   const endpointDraft = () => endpointDrafts()[savedGatewayID()] ?? '';
   const draftAddress = () => selectedGateway() ? gatewayRuntimeAddress(endpointDraft(), selectedGateway()!, props.targetID) : null;
-  const focusAddress = () => (addressMode() === 'saved' ? savedGatewayInput : addressInput)?.focus();
+  const focusAddress = () => (addressMode() === 'saved' ? savedGatewayInput?.querySelector<HTMLElement>('[data-floe-dropdown-trigger]') : addressInput)?.focus();
   const changeAddressMode = (mode: AddressMode) => {
     addressInteracted = true;
     if (mode === addressMode()) return;
@@ -117,7 +136,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
     setSavedAddress(selectedAddresses()[0] ?? '');
     queueMicrotask(() => selectedAddresses().length ? codeInput?.focus() : endpointInput?.focus());
   };
-  const manualAddressField = () => <label class="redeven-gateway-join-field"><span>{text('gatewayJoin.address')}</span><Input ref={addressInput} value={address()} placeholder="https://gateway.example:7443" autocomplete="off" spellcheck={false} disabled={busy()}
+  const manualAddressField = () => <label class="redeven-gateway-join-field"><span>{text('gatewayJoin.address')}</span><Input ref={addressInput} value={address()} placeholder={text('gatewayNetwork.addressPlaceholder')} autocomplete="off" spellcheck={false} disabled={busy()}
     onInput={event => { addressInteracted = true; invalidate(); setAddress(event.currentTarget.value); }} /></label>;
   const invalidate = () => { generation++; setPreview(undefined); setPending(null); setError(''); };
   const chooseInitialAddress = (value: string) => {
@@ -400,11 +419,11 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
                 slotClassNames={{ tab: 'redeven-gateway-source-tab', indicator: 'redeven-gateway-source-indicator' }}
                 ariaLabel={text('gatewayJoin.address')} class="redeven-gateway-source-tabs" />
               <TabPanel id={savedPanelID} labelledBy={savedTabID} active={addressMode() === 'saved'} keepMounted class="redeven-gateway-source-panel">
-                <label class="redeven-gateway-join-field"><span>{text('gatewayDiscovery.savedGateway')}</span><select ref={savedGatewayInput} data-gateway-picker class="redeven-gateway-saved-picker" value={savedGatewayID()} disabled={busy()}
-                  onChange={event => updateSavedGateway(event.currentTarget.value)}>
-                  <option value="">{text('gatewayDiscovery.chooseSavedGateway')}</option>
-                  <KeyedFor each={suggestions()} by={suggestion => suggestion.gatewayID}>{suggestion => <option value={suggestion().gatewayID}>{suggestion().name} · {suggestion().addresses.length ? new URL(suggestion().addresses[0]!).host : text('gatewayDiscovery.setupNeeded')}</option>}</KeyedFor>
-                </select></label>
+                <div ref={savedGatewayInput} data-gateway-picker data-value={savedGatewayID()}>
+                  <GatewayPicker label={text('gatewayDiscovery.savedGateway')} placeholder={text('gatewayDiscovery.chooseSavedGateway')}
+                    value={savedGatewayID()} disabled={busy()} onChange={updateSavedGateway}
+                    options={suggestions().map(suggestion => ({ value: suggestion.gatewayID, label: suggestion.name + ' · ' + (suggestion.addresses.length ? new URL(suggestion.addresses[0]!).host : text('gatewayDiscovery.setupNeeded')) }))} />
+                </div>
                 <Show when={selectedGateway()}>
                   <Show when={selectedAddresses().length} fallback={
                     <div class="redeven-gateway-address-setup" data-gateway-address-setup aria-busy={pending() === 'saving-address'}>
@@ -412,7 +431,7 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
                       <p class="text-sm text-muted-foreground">{text(canManageGateway() ? 'gatewayDiscovery.setupHelp' : 'gatewayDiscovery.cannotManage')}</p>
                       <Show when={canManageGateway()}>
                         <label class="redeven-gateway-join-field"><span>{text('gatewayJoin.address')}</span>
-                          <Input ref={endpointInput} data-gateway-endpoint-draft value={endpointDraft()} placeholder="https://gateway.example:7443"
+                          <Input ref={endpointInput} data-gateway-endpoint-draft value={endpointDraft()} placeholder={text('gatewayNetwork.addressPlaceholder')}
                             autocomplete="off" spellcheck={false} disabled={busy()} aria-describedby={addressTabsID + '-setup-help'}
                             onInput={event => { invalidate(); setEndpointDrafts(current => ({ ...current, [savedGatewayID()]: event.currentTarget.value })); }} />
                         </label>
@@ -424,13 +443,11 @@ export function RuntimeGatewayJoinPanel(props: Readonly<{
                     </div>
                   }>
                     <Show when={selectedAddresses().length > 1} fallback={<p class="redeven-gateway-selected-address" data-gateway-selected-address>{selectedSavedAddress()}</p>}>
-                      <label class="redeven-gateway-join-field"><span>{text('gatewayJoin.address')}</span>
-                        <select class="redeven-gateway-saved-picker" data-gateway-address-picker value={selectedSavedAddress()} disabled={busy()}
-                          onChange={event => { invalidate(); setSavedAddress(event.currentTarget.value); }}>
-                          <option value="" disabled>{text('gatewayJoin.address')}</option>
-                          <KeyedFor each={selectedAddresses()} by={value => value}>{value => <option value={value()}>{value()}</option>}</KeyedFor>
-                        </select>
-                      </label>
+                      <div data-gateway-address-picker data-value={selectedSavedAddress()}>
+                        <GatewayPicker label={text('gatewayJoin.address')} placeholder={text('gatewayJoin.address')}
+                          value={selectedSavedAddress()} disabled={busy()} options={selectedAddresses().map(value => ({ value, label: value }))}
+                          onChange={value => { invalidate(); setSavedAddress(value); }} />
+                      </div>
                     </Show>
                   </Show>
                 </Show>

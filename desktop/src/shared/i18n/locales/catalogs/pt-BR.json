@@ -3764,6 +3764,7 @@
     "invitationIntro": "Selecione um Gateway salvo ou insira o endereço e o código de convite que você recebeu."
   },
   "gatewayNetwork": {
+    "addressPlaceholder": "https://gateway.example.com:7443",
     "listenTitle": "Escuta local",
     "listenHelp": "Escolha os endereços IP e as portas locais aos quais o Gateway se vincula. Separe várias entradas por vírgulas.",
     "listenAddress": "Endereços de escuta",

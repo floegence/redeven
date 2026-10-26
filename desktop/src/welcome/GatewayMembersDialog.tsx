@@ -199,7 +199,7 @@ export function GatewayMembersPanel(props: Readonly<{
             <div class="redeven-gateway-endpoint">
             <div class="redeven-gateway-endpoint__address">
               <label class="redeven-gateway-field"><span>{props.i18n.t('gatewayMembers.address')}</span>
-                <Input aria-label={props.i18n.t('gatewayMembers.address')} disabled={props.available === false || busy() || Boolean(removingEndpointID()) || !props.gateway?.permissions?.manage_members} size="sm" class="w-full min-w-0 font-mono" value={endpoint().address}
+                <Input aria-label={props.i18n.t('gatewayMembers.address')} disabled={props.available === false || busy() || Boolean(removingEndpointID()) || !props.gateway?.permissions?.manage_members} size="sm" class="w-full min-w-0 font-mono" value={endpoint().address} placeholder={props.i18n.t('gatewayNetwork.addressPlaceholder')} autocomplete="off" spellcheck={false}
                   onInput={event => setEndpointDraft(current => current.map(item => item.endpoint_id === endpoint().endpoint_id ? { ...item, address: event.currentTarget.value.trim() } : item))} />
               </label>
               <DesktopTooltip content={props.i18n.t('gatewayMembers.removeAddress')}><Button class="h-8 w-8 cursor-pointer" size="xs" variant="ghost" aria-label={props.i18n.t('gatewayMembers.removeAddress')} disabled={props.available === false || busy() || Boolean(removingEndpointID()) || !props.gateway?.permissions?.manage_members} onClick={() => removeEndpoint(endpoint().endpoint_id)}><Trash class="h-3.5 w-3.5" /></Button></DesktopTooltip>

@@ -3763,6 +3763,7 @@
     "invitationIntro": "Wählen Sie ein gespeichertes Gateway oder geben Sie eine erhaltene Adresse und einen Einladungscode ein."
   },
   "gatewayNetwork": {
+    "addressPlaceholder": "https://gateway.example.com:7443",
     "listenTitle": "Lokaler Listener",
     "listenHelp": "Legen Sie die lokalen IP-Adressen und Ports fest, an die Gateway gebunden wird. Trennen Sie mehrere Einträge durch Kommas.",
     "listenAddress": "Bind-Adressen",
