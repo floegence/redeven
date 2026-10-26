@@ -1,3 +1,4 @@
+import { FlowerTaskFiles } from './FlowerTaskFiles';
 import { createActivityReadQueue, type ActivityReadPriority } from './activityReadQueue';
 import { createActivityFieldReader } from './activityFieldReader';
 import { createHistoryHandoffQueue } from './historyHandoffQueue';
@@ -55,7 +56,7 @@ import { Dynamic } from 'solid-js/web';
 import { For, Match, Show, Suspense, Switch, batch, createComputed, createEffect, createMemo, createResource, createSignal, createUniqueId, lazy, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn, useMobileLayout, createAdaptiveSidebar, createRetainedContent } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
-import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, Globe, GripVertical, Link, Menu, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Search, Send, Settings, Shield, Terminal, Trash, X, XCircle, Zap } from '@floegence/floe-webapp-core/icons';
+import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Copy, ExternalLink, FileText, Folder, Globe, GripVertical, Link, Menu, MoreHorizontal, MonitorPointer, Paperclip, Pencil, Plus, Refresh, Search, Send, Settings, Shield, Terminal, Trash, X, XCircle, Zap } from '@floegence/floe-webapp-core/icons';
 import { createInputHistoryController, MarkdownMedia, type InputHistoryEntry, type MarkdownMediaProps } from '@floegence/floe-webapp-core/chat';
 import { flowerInputHistoryEntries } from './composer/flowerInputHistory';
 
@@ -14520,11 +14521,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       `${subagentStatusLabel(status)}: ${subagentsCopy().activity.agentsCount(String(items.filter(item => item.status === status).length))}`
     )).join(' · ')}`;
   };
+  const [taskFilesOpen, setTaskFilesOpen] = createSignal(false);
   const headerActionDefinitions: readonly (Omit<FlowerConversationAction, 'label' | 'disabled'> & {
     visible: Accessor<boolean>;
     label: Accessor<string>;
     disabled?: Accessor<boolean>;
   })[] = [
+    { id: 'task-files', visible: () => Boolean(props.adapter.loadTaskFiles && selectedThreadID()), label: () => copy().taskFiles.title,
+      icon: () => <Folder class="h-4 w-4" aria-hidden="true" />, run: () => setTaskFilesOpen(true) },
     { id: 'connections', visible: () => Boolean(selectedThreadID() && props.adapter.computerManagement),
       label: () => copy().computer.title, icon: () => <Link class="h-4 w-4" aria-hidden="true" />,
       run: () => setComputerDialog('settings') },
@@ -14551,6 +14555,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const chatHeaderActions = () => (
           <div class="flower-chat-header-actions">
+
             <Show when={!props.embeddedConversation && presentation() !== 'companion'}><FlowerWorkingDirectoryControl
               variant="browse"
               name={displayedWorkingDirectoryLabel()}
@@ -14697,7 +14702,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </div>
       </div>
       </Show>
-      <Show when={subagentDetailMounted()}><Suspense>{subagentDetailDialog()}</Suspense></Show>
+      <FlowerTaskFiles open={taskFilesOpen()} onOpenChange={setTaskFilesOpen} threadID={selectedThreadID()} adapter={props.adapter} copy={copy().taskFiles}
+        onPreview={!props.adapter.openLinkedFilePreview && props.adapter.loadMessageFile ? path => openQueuedPathPreview(
+          { kind: 'file', label: path.split(/[/\\]/).pop() || path, path }, { thread_id: selectedThreadID(), message_id: '' }) : undefined}
+        onOpenFolder={!props.adapter.openLinkedDirectoryBrowser && props.adapter.listWorkingDirectoryEntries ? path => openQueuedPathPreview(
+          { kind: 'directory', label: path, path }, { thread_id: selectedThreadID(), message_id: '' }) : undefined} />
+ <Show when={subagentDetailMounted()}><Suspense>{subagentDetailDialog()}</Suspense></Show>
       <FlowerComputerConnections open={computerDialog() !== null} onOpenChange={open => { if (!open) setComputerDialog(null); }}
         continuationKey={`${activeThreadID()}:${selectedInputRequest()?.prompt_id ?? ''}`}
         connectionOnly={computerDialog() === 'connection'} installationOnly={computerDialog() === 'installation'} onContinue={async (enabled) => {

@@ -68,7 +68,7 @@ func mutationActivityTarget(data map[string]any) *fltools.ActivityTargetRef {
 
 func localFileActivityTool(name string) bool {
 	switch name {
-	case "read_file", "file.read", "read_files", "file.edit", "file.write", "apply_patch", "image.read":
+	case "read_file", "file.read", "read_files", "file.edit", "file.write", "file.present", "apply_patch", "image.read":
 		return true
 	}
 	return false

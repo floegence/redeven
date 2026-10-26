@@ -7,7 +7,7 @@ import (
 
 func assertFlowerSystemPrompt(t *testing.T, prompt string) {
 	t.Helper()
-	const want = flowerIdentityIntroduction + "\n\n" + flowerHTMLPreviewInstruction + "\n\n" + flowerFileDeliveryInstruction
+	const want = flowerIdentityIntroduction + "\n\n" + flowerHTMLPreviewInstruction + "\n\n" + flowerTaskFilesInstruction + "\n\n" + flowerFileDeliveryInstruction
 	if prompt != want {
 		t.Fatalf("core system prompt differs from its expected contract:\ngot: %q\nwant: %q", prompt, want)
 	}

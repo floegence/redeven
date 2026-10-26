@@ -248,3 +248,11 @@ describe('Flower saved tool preview route', () => {
     for (const suffix of ['?tool_id=call', '/child', '#fragment']) expect(() => runtimeFlowerPath(path + suffix)).toThrow();
   });
 });
+
+ it('allows scoped task file reads and rejects ambiguous download queries',()=>{
+  const root='/_redeven_proxy/api/ai/threads/thread-one';
+  for(const path of [root+'/task-files',root+'/task-files?cursor=next',root+'/task-file-content?path=%2Fproject%2Freport.pdf&kind=delivered&offset=0']){expect(runtimeFlowerPath(path)).toBe(path);expect(runtimeFlowerMethodAllowed(path,'GET')).toBe(true)}
+  expect(runtimeFlowerMethodAllowed(root+'/task-files','DELETE')).toBe(true);
+  expect(runtimeFlowerMethodAllowed(root+'/task-files?cursor=next','DELETE')).toBe(false);
+  for(const suffix of ['?path=x&kind=working&offset=-1','?path=x&path=y&kind=working&offset=0','?path=x&kind=unknown&offset=0','?path=x&kind=working&offset=0&extra=1'])expect(()=>runtimeFlowerPath(root+'/task-file-content'+suffix)).toThrow();
+ });

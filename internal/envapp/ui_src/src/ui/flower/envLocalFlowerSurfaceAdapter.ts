@@ -1,3 +1,4 @@
+import { downloadFlowerTaskFile, flowerTaskFilePath, type FlowerTaskFileChunk } from '../downloads/flowerTaskFileDownload';
 import { withFlowerReadDeadline } from '../../../../../flower_ui/src/requestDeadline';
 import { createFlowerConversationPreferenceClient } from '../../../../../flower_ui/src/conversationPreferences';
 import type { FlowerConversationPreferences } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -606,6 +607,10 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(parentThreadID)}/subagents/${encodeURIComponent(childThreadID)}/detail`,
         { method: input ? 'POST' : 'GET', ...(input ? { body: JSON.stringify(input) } : {}), signal },
       ),
+      loadTaskFiles: (threadID, cursor) => fetchLocalApiJSON(
+        '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/task-files' + (cursor ? '?cursor=' + encodeURIComponent(cursor) : ''), { method: 'GET' }),
+      cleanTaskFiles: async (threadID) => { await fetchLocalApiJSON('/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/task-files', { method: 'DELETE' }); },
+      downloadTaskFile: (threadID, path, working, signal) => downloadFlowerTaskFile(path, offset => fetchLocalApiJSON<FlowerTaskFileChunk>(flowerTaskFilePath(threadID,path,working,offset), {method:'GET',signal}),signal),
       loadToolPreview: (input) => fetchLocalApiJSON<FlowerToolPreview>(
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(input.thread_id)}/tool-preview`,
         { method: 'POST', body: JSON.stringify({ turn_id: input.turn_id, run_id: input.run_id, tool_call_id: input.tool_call_id }) },

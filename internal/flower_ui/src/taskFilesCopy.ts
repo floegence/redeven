@@ -1,0 +1,26 @@
+export const taskFilesEnUS = {
+  title: 'Files',
+  results: 'Deliverables',
+  working: 'Working files',
+  empty: 'No files have been delivered yet.',
+  preview: 'Preview',
+  folder: 'Open folder',
+  download: 'Download',
+  refresh: 'Refresh',
+  more: 'Load more',
+  clean: 'Clean working files',
+  confirm: 'Delete working files? Delivered files stay in their saved locations.',
+  cancel: 'Cancel',
+  close: 'Close',
+  loading: 'Loading files\u2026',
+  failed: 'Could not load files. Try again.',
+  available: 'Available',
+  changed: 'Changed since delivery',
+  missing: 'File missing',
+  unavailable: 'Unavailable',
+  busy: 'Working files cannot be cleaned while this conversation or its processes are active.',
+  warning:
+    'Application state is inside this workspace. Move it outside the project to keep intermediate files separate.',
+  truncated: 'Only the first 200 working files are shown.',
+} as const;
+export type TaskFilesCopy = { readonly [K in keyof typeof taskFilesEnUS]: string };

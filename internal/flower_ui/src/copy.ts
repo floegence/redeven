@@ -1,3 +1,4 @@
+import { taskFilesEnUS, type TaskFilesCopy } from './taskFilesCopy';
 import { kimiCodeCopy, type KimiCodeCopy } from './settings/kimiCodeCopy';
 import type { FlowerContextSource } from './chat/flowerContextPresentation';
 import { extensionI18n, type ExtensionI18n } from './extensions/context';
@@ -384,6 +385,7 @@ export type FlowerSubagentsCopy = Readonly<{
 }>;
 
 export type FlowerSurfaceCopy = Readonly<{
+  taskFiles: TaskFilesCopy;
   extensions: ExtensionI18n;
   computer: FlowerComputerCopy;
   reasoningControl: ReasoningControlCopy;
@@ -862,6 +864,7 @@ export type FlowerSurfaceCopy = Readonly<{
 }>;
 
 export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
+  taskFiles: taskFilesEnUS,
   extensions: extensionI18n(),
   computer: computerUseEnUS,
   reasoningControl: reasoningControlEnUS,

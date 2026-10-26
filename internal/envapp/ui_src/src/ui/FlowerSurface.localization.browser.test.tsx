@@ -1,5 +1,8 @@
 import { createRoot, createSignal } from 'solid-js';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
+import { page } from 'vitest/browser';
+import '../index.css';
+import './flower-feature.css';
 import { createLocalizedFlowerSurfaceCopy } from '../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
 import { createI18nHelpers } from './i18n/createI18n';
 import { SUPPORTED_LOCALES, type RedevenLocale } from './i18n/localeMeta';
@@ -16,12 +19,13 @@ function localizedCopy(locale: RedevenLocale, dictionary: EnvAppTranslationShape
 
 describe('Flower complete locale presentation', () => {
   it.each(SUPPORTED_LOCALES)('localizes model preference failure notifications in %s', async locale => {
+    await page.viewport(1280, 900);
     const copy = localizedCopy(locale, await loadEnvAppDictionary(locale));
     const surface = renderSurfaceWithAdapterProps({ ...adapter(), listThreads: async () => [],
       persistDefaultModel: async () => { throw new Error('Request failed'); },
     }, { copy });
-    await waitFor(() => !!surface.querySelector('.flower-model-reasoning-model-trigger'));
-    surface.querySelector<HTMLButtonElement>('.flower-model-reasoning-model-trigger')!.click();
+    await waitFor(() => !!surface.querySelector('button.flower-model-reasoning-model-trigger:not(:disabled)'));
+    surface.querySelector<HTMLButtonElement>('button.flower-model-reasoning-model-trigger')!.click();
     await waitFor(() => !!document.querySelector('.flower-model-menu-item:not(:disabled)'));
     document.querySelector<HTMLButtonElement>('.flower-model-menu-item:not(:disabled)')!.click();
     await waitFor(() => flowerSurfaceNotifications().length > 0);

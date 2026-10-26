@@ -1,3 +1,4 @@
+import { taskFilesEnUS, type TaskFilesCopy } from '../taskFilesCopy';
 import { kimiCodeCopy } from '../settings/kimiCodeCopy';
 import { localizedComputerCopy } from '../computerUseCopy';
 import { extensionI18n } from '../extensions/context';
@@ -23,6 +24,7 @@ function t(i18n: FlowerSurfaceTranslator, key: string, params?: TranslationParam
 export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator): FlowerSurfaceCopy {
   const k = (suffix: string) => `flowerSurface.${suffix}`;
   return {
+    taskFiles: Object.fromEntries(Object.keys(taskFilesEnUS).map(key => [key, i18n.t(k('taskFiles.' + key))])) as TaskFilesCopy,
     extensions: extensionI18n(i18n.locale),
     computer: localizedComputerCopy(key => i18n.t(key)),
     reasoningControl: createLocalizedReasoningControlCopy(i18n),

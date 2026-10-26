@@ -6483,6 +6483,30 @@
       "chromeRemoteHint": "별도의 브라우저 프로필을 사용하여 로그인 상태를 따로 저장합니다.",
       "chromeRemotePrepare": "별도 브라우저 설정",
       "chromeRemoteFailed": "별도 브라우저를 준비하지 못했습니다. 다시 시도해 주세요."
+    },
+    "taskFiles": {
+      "title": "파일",
+      "results": "결과물",
+      "working": "작업 파일",
+      "empty": "아직 전달된 파일이 없습니다.",
+      "preview": "미리 보기",
+      "folder": "폴더 열기",
+      "download": "다운로드",
+      "refresh": "새로 고침",
+      "more": "더 보기",
+      "clean": "작업 파일 정리",
+      "confirm": "작업 파일을 삭제할까요? 결과물은 저장 위치에 유지됩니다.",
+      "cancel": "취소",
+      "close": "닫기",
+      "loading": "파일을 불러오는 중…",
+      "failed": "파일을 불러오지 못했습니다. 다시 시도하세요.",
+      "available": "사용 가능",
+      "changed": "전달 후 변경됨",
+      "missing": "파일 없음",
+      "unavailable": "사용 불가",
+      "busy": "대화나 관련 프로세스 실행 중에는 작업 파일을 정리할 수 없습니다.",
+      "warning": "앱 상태 디렉터리가 작업 공간 안에 있습니다. 중간 파일을 분리하려면 프로젝트 밖으로 옮기세요.",
+      "truncated": "처음 200개 작업 파일만 표시됩니다."
     }
   },
   "uiCopy": {

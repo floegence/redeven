@@ -129,6 +129,7 @@ type Service struct {
 	readState              *threadreadstate.Store
 	skipStorageMaintenance bool
 
+	taskFiles    taskFileManager
 	stateDir     string
 	agentHomeDir string
 	scope        *filesystemscope.Registry
@@ -1503,6 +1504,7 @@ func (s *Service) prepareThreadEffect(meta *session.Meta, executionKey string, r
 	}
 	builder := newRun(runOptions{
 		PlatformHTTPTransport: s.platformHTTPTransport,
+		TaskFiles:             &s.taskFiles,
 		Log:                   s.log, StateDir: s.stateDir, AgentHomeDir: s.agentHomeDir,
 		WorkingDir: workingDir, FilesystemScope: s.scope, Shell: s.shell,
 		HostCapabilities: hostCapabilities, AIConfig: cfg, SessionMeta: metaRef,

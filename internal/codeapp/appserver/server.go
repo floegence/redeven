@@ -5220,6 +5220,38 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 
 		switch {
 
+		case action == "task-files" && len(parts) == 2 && (r.Method == http.MethodGet || r.Method == http.MethodDelete):
+			permission := requiredPermissionRead
+			if r.Method == http.MethodDelete {
+				permission = requiredPermissionFull
+			}
+			meta, ok := g.requirePermission(w, r, permission)
+			if !ok || !g.requireAIService(w, aiSvc) {
+				return
+			}
+			if r.Method == http.MethodDelete {
+				if err := aiSvc.CleanTaskFiles(r.Context(), meta, threadID); err != nil {
+					writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
+					return
+				}
+				writeJSON(w, http.StatusOK, apiResp{OK: true})
+				return
+			}
+			files, err := aiSvc.GetTaskFiles(r.Context(), meta, threadID, r.URL.Query().Get("cursor"))
+			if err != nil {
+				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: files})
+			return
+		case (action == "task-file-download" || action == "task-file-content") && len(parts) == 2 && r.Method == http.MethodGet:
+			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+			if !ok || !g.requireAIService(w, aiSvc) {
+				return
+			}
+			serveFlowerTaskFile(w, r, aiSvc, meta, threadID, action == "task-file-content")
+			return
+
 		case action == "history-release" && r.Method == http.MethodPost && len(parts) == 2:
 			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
 			if !ok || !g.requireAIService(w, aiSvc) {

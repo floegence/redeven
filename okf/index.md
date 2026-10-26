@@ -21,6 +21,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 - [Native Runtime bridge](architecture/native-runtime-bridge.md)
 
+- [Flower working files and deliverables](ai/flower-task-files.md)
 - [Flower browser source ownership](architecture/flower-browser-sources.md)
 - [Flower browser Linux preparation](architecture/flower-browser-linux-preparation.md)
 - [Database schema migration ownership](architecture/database-schema-migrations.md)
