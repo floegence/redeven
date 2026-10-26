@@ -21,6 +21,7 @@ await session.run(async () => {
   const argument = (name, fallback = '') =>
     process.argv.find((value) => value.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
   const reference = argument('ref');
+  const referenceFiles = reference ? new Set(execFileSync('git', ['ls-tree', '-r', '--name-only', reference, 'internal/flower_ui/src'], { cwd: root, encoding: 'utf8' }).trim().split('\n')) : undefined;
   const host = argument('host', 'both');
   const seconds = Number(argument('seconds', '8'));
   if (!['browser', 'desktop', 'both'].includes(host) || !Number.isFinite(seconds) || seconds <= 0)
@@ -49,6 +50,14 @@ await session.run(async () => {
       {
         name: 'flower-performance-evidence',
         enforce: 'pre',
+        resolveId(source, importer) {
+          if (!referenceFiles || !importer || !source.startsWith('.') || !importer.startsWith(path.join(root, 'internal/flower_ui/src/'))) return;
+          const requested = path.resolve(path.dirname(importer.split('?')[0]), source);
+          for (const suffix of ['', '.ts', '.tsx', '/index.ts', '/index.tsx']) {
+            const candidate = requested + suffix;
+            if (referenceFiles.has(path.relative(root, candidate))) return candidate;
+          }
+        },
         load(id) {
           if (!reference || !id.startsWith(path.join(root, 'internal/flower_ui/src/'))) return;
           const relative = path.relative(root, id.split('?')[0]);
@@ -72,6 +81,7 @@ await session.run(async () => {
     ],
     build: {
       outDir: dist,
+      minify: !process.argv.includes('--profile'),
       emptyOutDir: true,
       cssCodeSplit: false,
       rollupOptions: {
@@ -180,6 +190,7 @@ await session.run(async () => {
           // retained heap alone would hide the cost of short-lived append data.
           await cdp.send('HeapProfiler.startSampling', { samplingInterval: 32768,
             includeObjectsCollectedByMajorGC: true, includeObjectsCollectedByMinorGC: true });
+          if (process.argv.includes('--profile')) { await cdp.send('Profiler.enable'); await cdp.send('Profiler.start'); }
           const before = await cdp.send('Performance.getMetrics');
           let frameIndex = 0;
           if (runtime === 'desktop') {
@@ -206,6 +217,7 @@ await session.run(async () => {
           const result = await page.evaluate(() => window.flowerPerformance.stop());
           if (pageErrors.length) throw new AggregateError(pageErrors, 'Flower renderer failed during measurement');
           const after = await cdp.send('Performance.getMetrics');
+          if (process.argv.includes('--profile')) await writeFile(path.join(artifacts, name + '.cpuprofile'), JSON.stringify((await cdp.send('Profiler.stop')).profile));
           const { profile: allocations } = await cdp.send('HeapProfiler.stopSampling');
           const continuity = await page.evaluate(() => window.flowerPerformance.checkContinuity());
           // Run state-mutating output probes on a fresh fixture after timing

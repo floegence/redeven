@@ -279,9 +279,10 @@ describe('Flower queued send now', () => {
     await open(runtime);
     sendButton(runtime).click();
     await waitFor(() => sendButton(runtime).getAttribute('aria-busy') === 'true');
-    const loadNew = vi.fn(async () => liveBootstrap(value, 3));
-    replaceAdapter({ ...original, loadThread: loadNew, connectLiveStream: canonicalStream(value, 3) });
-    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    const updated = { ...value, queued_turns: value.queued_turns!.map(turn => ({ ...turn, prompt: `New connection: ${turn.prompt}` })) };
+    const loadNew = vi.fn(async () => liveBootstrap(updated, 3));
+    replaceAdapter({ ...original, loadThread: loadNew, connectLiveStream: canonicalStream(updated, 3) });
+    await waitFor(() => runtime.querySelector('[data-flower-queued-turn-dock-id="queued-first"]')?.textContent?.includes('New connection:') === true);
     loadOriginal.mockClear(); loadNew.mockClear();
     reject(flowerTurnAdmissionError('unknown', new Error('Response lost after reconnect')));
     await waitFor(() => !sendButton(runtime).hasAttribute('aria-busy'));

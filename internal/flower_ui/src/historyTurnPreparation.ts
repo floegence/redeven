@@ -25,6 +25,9 @@ export async function prepareHistoryTurn<T extends WindowPage>(
   if (cachedWindow?.leaf_id === window.leaf_id && !cachedWindow.has_after && cached.length) end = Math.max(end ?? 0, ...cached.map(item => item.ordinal));
   const pages: T[] = [];
   for (const turnID of targetTurns) {
+    // Most boundary fragments are short. Avoid hydrating 150 unrelated items
+    // to discover a nearby user boundary; long turns grow to the normal cap.
+    const limits = { before: 16, after: 16 };
     while (true) {
       signal.throwIfAborted();
       const members = [...known.values()].filter(item => item.turn_id === turnID).sort((a, b) => a.ordinal - b.ordinal);
@@ -43,7 +46,8 @@ export async function prepareHistoryTurn<T extends WindowPage>(
       }
       if (!edge && trailing.ordinal !== end && !known.has(trailing.ordinal + 1)) { edge = trailing; direction = 'after'; }
       if (!edge) break;
-      const page = await read({ anchor_id: edge.id, direction, limit: 150 });
+      const page = await read({ anchor_id: edge.id, direction, limit: limits[direction] });
+      limits[direction] = Math.min(150, limits[direction] * 2);
       signal.throwIfAborted();
       const nextWindow = page.current.window ?? page.window;
       if (page.current.thread_id !== first.current.thread_id || nextWindow?.leaf_id !== window.leaf_id) throw new HistorySourceChangedError();

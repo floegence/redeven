@@ -29,6 +29,8 @@ try {
     const page = await application.firstWindow();
     const pending = [];
     const ordinals = new Map();
+    const activityFields = [];
+    const activityValues = [];
     try {
     page.on('pageerror', error => evidence.errors.push(String(error)));
     page.on('console', message => { if (message.type() === 'error') evidence.errors.push(message.text()); });
@@ -38,11 +40,20 @@ try {
       pending.push((async () => {
         const bytes = await response.body();
         const body = response.ok() && url.searchParams.get('op') === 'history' ? JSON.parse(bytes.toString()) : undefined;
+        if (response.ok() && url.searchParams.get('op') === 'activity_field') activityFields.push(JSON.parse(bytes.toString()));
+        if (response.ok() && url.searchParams.get('op') === 'activity_value') activityValues.push(JSON.parse(bytes.toString()));
         for (const item of body?.current?.items ?? []) ordinals.set(item.id, item.ordinal);
         evidence.requests.push({ op: url.searchParams.get('op'), status: response.status(), bytes: bytes.length,
           input: request.postData(), timing: request.timing(), window: body?.window ?? body?.current?.window });
         if (!response.ok()) evidence.errors.push({ op: url.searchParams.get('op'), status: response.status(), error: bytes.toString() });
-      })().catch(error => evidence.errors.push(String(error))));
+      })().catch(error => {
+        const op = url.searchParams.get('op'), failure = request.failure();
+        // Visibility/navigation legitimately aborts a bounded body read after
+        // headers. CDP cannot retrieve that body; retain cancellation evidence.
+        if (failure?.errorText === 'net::ERR_ABORTED' && op === 'history_body') {
+          (evidence.cancelledReads ??= []).push({ op, timing: request.timing() });
+        } else evidence.errors.push({ error: String(error), op, failure, timing: request.timing() });
+      }));
     });
     const target = page.locator('[data-thread-id=' + JSON.stringify(info.thread) + '] .flower-thread-card-select-button');
     await target.scrollIntoViewIfNeeded();
@@ -133,12 +144,14 @@ try {
       return frames;
     });
     const editor = page.locator('.flower-composer textarea');
+    await editor.click();
+    assert.equal(await editor.evaluate(node => node === document.activeElement), true);
     await editor.pressSequentially('Qualification draft');
     assert.equal(await editor.inputValue(), 'Qualification draft');
     await editor.fill('');
     if (process.argv.includes('--interactions')) {
       const viewport = page.locator('.flower-chat-transcript');
-      const failures = '.flower-thread-load-error,.flower-thread-sync-error,.flower-chat-transcript [role="alert"]';
+      const failures = '.flower-thread-load-error,.flower-thread-sync-error,.flower-history-navigation[role="alert"],.flower-history-body-control[aria-busy="false"]';
       const checkReady = async () => {
         await page.waitForFunction(() => {
           const viewport = document.querySelector('.flower-chat-transcript');
@@ -160,26 +173,86 @@ try {
         await checkReady();
         evidence.interactions.push({ action: 'scroll-earlier', step });
       }
-      const disclosure = await page.evaluate(() => {
-        const bounds = document.querySelector('.flower-chat-transcript')?.getBoundingClientRect();
-        return [...document.querySelectorAll('.flower-activity-inline-row')].find(row => {
-          const box = row.getBoundingClientRect();
-          return bounds && box.height > 0 && box.top >= bounds.top && box.bottom <= bounds.bottom
-            && row.querySelector('button[data-flower-disclosure-trigger]');
-        })?.getAttribute('data-flower-activity-item-id');
-      });
-      if (disclosure) {
+      // Completed work is intentionally collapsed. Exercise the actual nesting
+      // before requiring a tool body, rather than silently skipping this check.
+      let selectedTurn;
+      for (const process of (await page.locator('.flower-turn-summary-button').all()).reverse()) {
+        if (await process.getAttribute('aria-expanded') === 'false') await process.click();
+        const turnID = await process.evaluate(node => node.closest('[data-flower-turn-id]')?.getAttribute('data-flower-turn-id'));
+        const turn = page.locator('[data-flower-turn-id=' + JSON.stringify(turnID) + ']');
+        for (const sequence of await turn.locator('.flower-tool-sequence-toggle').all()) {
+          if (await sequence.getAttribute('aria-expanded') === 'false') await sequence.click();
+        }
+        if (await turn.locator('[data-flower-activity-item-id][data-flower-activity-status="success"] button[data-flower-disclosure-trigger]').count()) { selectedTurn = turn; break; }
+      }
+      assert.ok(selectedTurn, 'The opened process must contain inspectable tools.');
+      const disclosures = await selectedTurn.locator('[data-flower-activity-item-id][data-flower-activity-status="success"]:has(button[data-flower-disclosure-trigger])').all();
+      assert.ok(disclosures.length, 'Tool expansion is mandatory for interaction qualification.');
+      let verifiedDetail = false;
+      const toolIDs = await Promise.all(disclosures.slice(-12).reverse().map(row => row.getAttribute('data-flower-activity-item-id')));
+      for (const disclosure of toolIDs) {
         const row = page.locator('[data-flower-activity-item-id=' + JSON.stringify(disclosure) + ']');
         const button = row.locator('button[data-flower-disclosure-trigger]').first();
-        const original = await button.getAttribute('aria-expanded');
-        await button.click();
-        await page.waitForFunction(({ id, original }) => document.querySelector('[data-flower-activity-item-id=' + JSON.stringify(id) + '] button[data-flower-disclosure-trigger]')?.getAttribute('aria-expanded') !== original, { id: disclosure, original });
+        if (await button.getAttribute('aria-expanded') === 'false') await button.click();
+        await row.locator('.flower-activity-inline-details').waitFor({ state: 'visible' });
         await checkReady();
+        await page.waitForTimeout(350);
+        await Promise.all(pending);
+        const rendered = await row.locator('[data-field-path]').evaluateAll(nodes => nodes.flatMap(node => [...node.querySelectorAll('[data-field-offset]')].map(chunk => ({
+          path: node.getAttribute('data-field-path'), offset: Number(chunk.getAttribute('data-field-offset')), text: chunk.textContent,
+        }))));
+        const matching = rendered.filter(chunk => chunk.text?.trim() && activityFields.some(field => field.path === chunk.path
+          && field.offset_bytes === chunk.offset && field.text === chunk.text));
+        const detailText = await row.locator('.flower-activity-inline-details').textContent();
+        const messageID = await row.evaluate(node => node.closest('[data-flower-message-id]')?.getAttribute('data-flower-message-id'));
+        const normalize = text => text.replace(/\s+/gu, '');
+        for (const value of activityValues.filter(value => value.item_id === messageID)) {
+          for (const key of ['command', 'output']) {
+            const text = value.value?.[key];
+            if (typeof text === 'string' && text.trim().length > 20 && normalize(detailText).includes(normalize(text)))
+              matching.push({ path: value.path + '/' + key, offset: 0, text });
+          }
+        }
+        if (!matching.length) { await button.click(); continue; }
+        verifiedDetail = true;
+        const commandToggle = row.locator('.flower-activity-terminal-action-button[aria-expanded]');
+        if (await commandToggle.count()) {
+          if (await commandToggle.getAttribute('aria-expanded') === 'false') await commandToggle.click();
+          assert.equal(await commandToggle.getAttribute('aria-expanded'), 'true');
+          const command = row.locator('.flower-activity-terminal-command-expanded');
+          await command.waitFor({ state: 'visible' });
+          const fullCommand = await command.textContent();
+          assert.ok(matching.some(field => field.path.endsWith('/command') && normalize(fullCommand) === normalize(field.text)), 'Expanded command must show exact authorized text.');
+        }
+        assert.equal(await row.locator('.flower-activity-empty-detail,.flower-history-body-control[aria-busy="false"]').count(), 0);
+        const before = await row.locator('.flower-activity-inline-details').textContent();
+        const memberCount = await page.locator('.flower-activity-inline-row').count();
+        await button.evaluate(node => { window.qualifiedToolButton = node; });
+        const box = await viewport.boundingBox();
+        await page.mouse.move(box.x + 16, box.y + box.height / 2);
+        for (const delta of [-500, 500, -500, 500]) { await page.mouse.wheel(0, delta); await page.waitForTimeout(250); }
+        assert.equal(await button.evaluate(node => node === window.qualifiedToolButton), true);
+        assert.equal(await button.getAttribute('aria-expanded'), 'true');
+        if (await commandToggle.count()) assert.equal(await commandToggle.getAttribute('aria-expanded'), 'true');
+        assert.equal(await page.locator('.flower-activity-inline-row').count(), memberCount);
+        assert.equal(await row.locator('.flower-activity-inline-details').textContent(), before);
+        await button.scrollIntoViewIfNeeded();
         await page.screenshot({ path: output + '.detail.png' });
         await button.click();
-        assert.equal(await button.getAttribute('aria-expanded'), original);
-        evidence.interactions.push({ action: 'toggle-detail-twice', item: disclosure });
+        assert.equal(await button.getAttribute('aria-expanded'), 'false');
+        await button.click();
+        await page.waitForTimeout(300);
+        assert.equal(await row.locator('.flower-activity-inline-details').textContent(), before);
+        evidence.interactions.push({ action: 'verify-tool-detail', item: disclosure, matchedFields: matching.map(({ path, offset, text }) => ({ path, offset, characters: text.length })), memberCount, retainedAcrossScroll: true });
+        await button.click();
+        break;
       }
+      assert.ok(verifiedDetail, 'At least one expanded tool must render exact authorized field content.');
+      // Restore collapsed work before testing whole-history navigation.
+      const openSequences = page.locator('.flower-tool-sequence-toggle[aria-expanded="true"]');
+      while (await openSequences.count()) await openSequences.last().click();
+      const openProcesses = page.locator('.flower-turn-summary-button[aria-expanded="true"]');
+      while (await openProcesses.count()) await openProcesses.last().click();
       for (let step = 0; step < 4; step++) {
         await viewport.hover();
         await page.mouse.wheel(0, 550);
@@ -196,7 +269,10 @@ try {
       evidence.historyIdle = [];
       const historyCount = () => evidence.requests.filter(read => read.op === 'history').length;
       const verifyIdle = async direction => {
-        await page.waitForTimeout(1000);
+        // A complete sealed turn may span several bounded requests. Wait for
+        // its atomic publication, then prove that layout cannot trigger reads.
+        await page.waitForFunction(() => !document.querySelector('.flower-history-loading-notice'), undefined, { timeout: 30000 });
+        await Promise.all(pending);
         const before = historyCount();
         await page.waitForTimeout(1500);
         const after = historyCount();
@@ -213,7 +289,12 @@ try {
           await page.mouse.move(box.x + 16, box.y + box.height / 2);
           await page.mouse.wheel(0, direction * 900);
           await page.waitForTimeout(700);
-          assert.equal(await viewport.locator('[role="alert"]').count(), 0, 'Historical reading failed.');
+          if (await viewport.locator('.flower-history-navigation[role="alert"],.flower-history-body-control[aria-busy="false"]').count()) {
+            await Promise.all(pending);
+            await page.screenshot({ path: output + '.failure.png' });
+            evidence.errors.push({ historyAlert: await viewport.locator('.flower-history-navigation[role="alert"],.flower-history-body-control[aria-busy="false"]').allTextContents() });
+          }
+          assert.equal(await viewport.locator('.flower-history-navigation[role="alert"],.flower-history-body-control[aria-busy="false"]').count(), 0, 'Historical reading failed.');
           assert.equal(await page.locator('.flower-thread-load-error,.flower-thread-sync-error').count(), 0);
           const state = await viewport.evaluate(element => ({
             top: element.scrollTop, height: element.scrollHeight,
@@ -223,7 +304,7 @@ try {
               return box.height > 0 && box.bottom > bounds.top && box.top < bounds.bottom;
             }).map(node => node.getAttribute('data-flower-message-id')),
           }));
-          evidence.historyScroll.push({ ...state, direction, ordinal: ordinals.get(state.first),
+          evidence.historyScroll.push({ ...state, direction, ordinal: state.visible.map(id => ordinals.get(id)).find(Number.isSafeInteger),
             visibleOrdinals: state.visible.map(id => ordinals.get(id)) });
           if (step % 10 === 9) await verifyIdle(direction);
         }
@@ -238,7 +319,7 @@ try {
       await Promise.all(pending);
       const reads = evidence.requests.slice(responses).filter(read => read.op === 'history');
       assert.ok(reads.some(read => read.status === 200 && Buffer.byteLength(read.input ?? '') > 8192), 'Exercise an actual reading selection above 8 KiB.');
-      assert.ok(new Set(evidence.historyScroll.map(step => step.first)).size > 2, 'Historical windows must advance.');
+      assert.ok(new Set(evidence.historyScroll.map(step => step.ordinal)).size > 2, 'Historical windows must advance.');
       await page.screenshot({ path: output + '.history.png' });
     }
     await Promise.all(pending);
@@ -251,6 +332,9 @@ try {
     if (maximumInteractiveMs !== undefined) {
       assert.ok(evidence.opening.interactiveMs < Number(maximumInteractiveMs), 'Click-to-interactive exceeds the requested limit.');
     }
+    } catch (error) {
+      evidence.failure = String(error);
+      throw error;
     } finally {
       await Promise.all(pending);
       await writeFile(output, JSON.stringify(evidence, null, 2) + '\n');

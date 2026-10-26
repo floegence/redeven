@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFlowerLiveFrameQueue } from './flowerLiveFrameQueue';
 import { FlowerLiveSyncError } from './flowerLiveWire';
 import type { FlowerLiveStreamEnvelope } from './contracts/flowerSurfaceContracts';
+
+beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }));
+afterEach(() => vi.useRealTimers());
 
 function append(version: number): FlowerLiveStreamEnvelope {
   return { schema_version: 3, kind: 'thread.batch', thread_id: 'thread', update: {
@@ -18,10 +21,98 @@ function harness() {
     requestFrame: callback => { callbacks.set(++next, callback); return next; },
     cancelFrame: id => { callbacks.delete(id); },
   });
-  return { queue, apply, onError, metrics, callbacks, nextEpoch() { epoch++; }, flush() { [...callbacks.values()][0]?.(0); } };
+  return { queue, apply, onError, metrics, callbacks, nextEpoch() { epoch++; }, flush() { [...callbacks.values()][0]?.(0); vi.advanceTimersByTime(0); } };
 }
 
 describe('ordered native live frame queue', () => {
+  it('commits batched recovery notifications before reporting an application failure', () => {
+    const recover = vi.fn();
+    const failure = new Error('invalid canonical update');
+    const committed = vi.fn();
+    const queue = createFlowerLiveFrameQueue({
+      apply: () => { throw failure; },
+      batch: callback => { callback(); committed(); },
+      onError: error => { expect(committed).toHaveBeenCalledOnce(); recover(error); },
+      requestFrame: () => 1, cancelFrame: () => {},
+    });
+    try {
+      queue.push({ schema_version: 3, kind: 'ready', baseline_complete: true });
+      vi.advanceTimersByTime(0);
+      expect(recover).toHaveBeenCalledExactlyOnceWith(failure);
+      expect(queue.waitUntilIdle()).toBeUndefined();
+    } finally { queue.dispose(); }
+  });
+
+  it('delivers semantic boundaries promptly when an earlier animation frame is stalled', () => {
+    const h = harness();
+    try {
+      h.queue.push(append(1));
+      const boundary = { ...append(2), update: { ...append(2).update!, interactions: { value: [] } } };
+      h.queue.push(boundary);
+      expect(h.apply).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(0);
+      expect(h.apply.mock.calls.map(([value]) => value)).toEqual([append(1), boundary]);
+      expect(h.callbacks.size).toBe(0);
+    } finally { h.queue.dispose(); }
+  });
+
+  it('admits a supported large atomic baseline and backpressures the next read', async () => {
+    const h = harness();
+    const value: FlowerLiveStreamEnvelope = { schema_version: 3, kind: 'thread.batch', thread_id: 'thread', current: {
+      thread_id: 'thread', view_version: 1, activity: 'idle', items: [{ id: 'body', ordinal: 1, kind: 'assistant', text: 'x'.repeat(5 << 20) }],
+    } };
+    try {
+      h.queue.push(value);
+      expect(h.onError).not.toHaveBeenCalled();
+      const capacity = h.queue.waitForCapacity();
+      expect(capacity).toBeInstanceOf(Promise);
+      h.flush(); await capacity;
+      expect(h.apply).toHaveBeenCalledExactlyOnceWith(value, 1);
+    } finally { h.queue.dispose(); }
+  });
+
+  it('releases bounded consumer backpressure after draining or invalidating the epoch', async () => {
+    const h = harness();
+    try {
+      for (let version = 1; version <= 16; version++) {
+        const value = append(version);
+        h.queue.push({ ...value, update: { ...value.update!, interactions: { value: [] } } });
+      }
+      const ready = vi.fn(); const waiting = h.queue.waitForCapacity();
+      expect(waiting).toBeInstanceOf(Promise);
+      void waiting!.then(ready); await Promise.resolve(); expect(ready).not.toHaveBeenCalled();
+      h.flush(); await waiting; expect(ready).toHaveBeenCalledOnce();
+      for (let version = 17; version <= 32; version++) {
+        const value = append(version);
+        h.queue.push({ ...value, update: { ...value.update!, interactions: { value: [] } } });
+      }
+      const cancelled = h.queue.waitForCapacity();
+      h.queue.boundary(); await cancelled;
+      expect(h.queue.waitForCapacity()).toBeUndefined();
+    } finally { h.queue.dispose(); }
+  });
+
+  it('yields semantic bursts between bounded batches while preserving every boundary', () => {
+    vi.useFakeTimers();
+    const h = harness(); let now = 0;
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => now);
+    h.apply.mockImplementation(() => { now += 3; });
+    try {
+      for (let version = 1; version <= 8; version++) {
+        const value = append(version);
+        h.queue.push({ ...value, update: { ...value.update!, interactions: { value: [] } } });
+      }
+      expect(h.apply).not.toHaveBeenCalled();
+      vi.advanceTimersToNextTimer();
+      expect(h.apply.mock.calls.map(([value]) => value.update.view_version)).toEqual([1, 2]);
+      expect(vi.getTimerCount()).toBe(1);
+      vi.runAllTimers();
+      expect(h.apply.mock.calls.map(([value]) => value.update.view_version)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+      expect(h.callbacks.size).toBe(0);
+      expect(h.onError).not.toHaveBeenCalled();
+    } finally { h.queue.dispose(); clock.mockRestore(); vi.useRealTimers(); }
+  });
+
   it('coalesces 2000 body extents into one constant-size frame without polling', () => {
     const h = harness();
     for (let version = 1; version <= 2000; version++) {
@@ -91,7 +182,7 @@ describe('ordered native live frame queue', () => {
   it('flushes growth before semantic boundaries and retains component clears', () => {
     const h = harness(); h.queue.push(append(1));
     const boundary = { ...append(2), update: { ...append(2).update!, interactions: { value: [] } } };
-    h.queue.push(boundary);
+    h.queue.push(boundary); h.flush();
     expect(h.apply.mock.calls.map(([value]) => value)).toEqual([append(1), boundary]);
     h.queue.dispose();
   });
@@ -108,18 +199,18 @@ describe('ordered native live frame queue', () => {
     expect(h.apply).toHaveBeenCalledOnce();
     expect(h.apply.mock.calls[0]![0].update.items[0].append.text).toBe('xx');
     expect(h.apply.mock.calls[0]![0].update.facts.run_progress.request.estimated_output_tokens).toBe(2);
-    h.queue.push(progress(3)); h.queue.push(progress(4, { attempt_id: 'new', attempt_epoch: 2 }));
+    h.queue.push(progress(3)); h.queue.push(progress(4, { attempt_id: 'new', attempt_epoch: 2 })); h.flush();
     expect(h.apply.mock.calls.map(([value]) => value.update.view_version)).toEqual([2, 3, 4]);
-    h.queue.push(progress(5)); h.queue.push(progress(6, { estimated_output_tokens: 1 }));
+    h.queue.push(progress(5)); h.queue.push(progress(6, { estimated_output_tokens: 1 })); h.flush();
     expect(h.apply.mock.calls.map(([value]) => value.update.view_version)).toEqual([2, 3, 4, 5, 6]);
     h.queue.dispose();
   });
-  it('flushes a contiguous prefix before a version or offset gap', () => {
+  it('invalidates a pending batch atomically on a version or offset gap', () => {
     const h = harness();
     h.queue.push(append(1));
     const gap = append(3);
     h.queue.push({ ...gap, update: { ...gap.update!, base_version: 2, items: [{ ...gap.update!.items![0]!, append: { offset_bytes: 2, text: 'z' } }] } });
-    expect(h.apply.mock.calls.map(([value]) => value.update.view_version)).toEqual([1]);
+    expect(h.apply).not.toHaveBeenCalled();
     expect(h.onError).toHaveBeenCalledExactlyOnceWith(expect.any(FlowerLiveSyncError), 1);
     h.queue.dispose();
   });

@@ -88,6 +88,7 @@ type flowerPublicInteraction struct {
 	ComputerAssistance *ComputerInputAssistance         `json:"computer_assistance,omitempty"`
 }
 type flowerPublicItem struct {
+	WindowBytes      int                              `json:"window_bytes,omitempty"`
 	ActivitySummary  *flruntime.ThreadActivitySummary `json:"activity_summary,omitempty"`
 	OutputStartedAt  *time.Time                       `json:"output_started_at,omitempty"`
 	OutputEndedAt    *time.Time                       `json:"output_ended_at,omitempty"`
@@ -190,6 +191,20 @@ func projectFlowerItem(value flruntime.ThreadItem, threadID string, evidence *fl
 	return out
 }
 
+func projectFlowerWindowItem(value flruntime.ThreadItem, threadID string, evidence *flruntime.ThreadView) (flowerPublicItem, error) {
+	out := projectFlowerItem(value, threadID, evidence)
+	if value.ActivitySummary != nil {
+		// The canonical window is budgeted before product-only compaction. Keep
+		// that exact cost without sending the stripped locators back to clients.
+		raw, err := json.Marshal(value)
+		if err != nil {
+			return flowerPublicItem{}, err
+		}
+		out.WindowBytes = len(raw)
+	}
+	return out, nil
+}
+
 // Field mode carries the canonical shape and small display values. Apply the
 // same product sanitizers as complete presentations to chips and target refs.
 func publicFlowerActivitySummary(source *flruntime.ThreadActivitySummary) *flruntime.ThreadActivitySummary {
@@ -197,6 +212,16 @@ func publicFlowerActivitySummary(source *flruntime.ThreadActivitySummary) *flrun
 		return nil
 	}
 	result := *source
+	// Collapsed rows use shape and small display facts only. Detail readers
+	// resolve fresh authorized sources when opened; repeating source locators
+	// on every summary field adds bytes without providing a read capability.
+	if source.Fields != nil {
+		result.Fields = make([]flruntime.ThreadActivityField, len(source.Fields))
+		for i, field := range source.Fields {
+			result.Fields[i] = flruntime.ThreadActivityField{Path: field.Path, Kind: field.Kind,
+				Bytes: field.Bytes, Count: field.Count, Value: field.Value}
+		}
+	}
 	result.Values = make(map[string]json.RawMessage, len(source.Values))
 	for path, raw := range source.Values {
 		if path == "/chips" || path == "/target_refs" {
@@ -262,7 +287,11 @@ func projectFlowerCurrent(current flruntime.ThreadView, sampledAt time.Time, evi
 	if current.Items != nil {
 		out.Items = make([]flowerPublicItem, len(current.Items))
 		for i, value := range current.Items {
-			out.Items[i] = projectFlowerItem(value, current.ThreadID.String(), source)
+			item, err := projectFlowerWindowItem(value, current.ThreadID.String(), source)
+			if err != nil {
+				return flowerPublicCurrent{}, err
+			}
+			out.Items[i] = item
 		}
 	}
 	if current.Interactions != nil {
@@ -323,7 +352,10 @@ func flowerUpdateJSONAt(update flruntime.ThreadUpdate, sampledAt time.Time, evid
 			if err := validateFlowerCurrentIdentity(flruntime.ThreadView{ThreadID: update.ThreadID, Items: []flruntime.ThreadItem{*change.Item}}); err != nil {
 				return nil, err
 			}
-			item := projectFlowerItem(*change.Item, update.ThreadID.String(), evidence)
+			item, err := projectFlowerWindowItem(*change.Item, update.ThreadID.String(), evidence)
+			if err != nil {
+				return nil, err
+			}
 			value.Item = &item
 		}
 		out.Items = append(out.Items, value)

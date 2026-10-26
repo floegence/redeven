@@ -21,6 +21,66 @@ function append(base = 1, text = '!', offset = 10): FlowerRuntimeUpdate {
 }
 
 describe('runtime item records', () => {
+  it('validates growing preview counters and removes a withdrawn preview without changing history', () => {
+    const { current, initial } = fixture();
+    const call = { thread_id: 'thread', turn_id: 'turn', run_id: 'run', logical_request_id: 'request',
+      attempt_id: 'attempt', attempt_epoch: 1, call_id: 'new', name: 'inspect', arguments_complete: false, preview: { additions: 1 } };
+    const baseline = { ...current, tool_call_previews: [call] };
+    const record = createRuntimeThreadRecord(baseline, applyFlowerRuntimeCurrentView(initial, baseline));
+    const change = { ...append(), items: [], tool_call_previews: { value: [{ ...call, preview: { additions: -1 } }] } };
+    expect(() => record.apply(record.initializeThread(), change)).toThrow('invalid tool argument preview line count');
+    expect(record.initializeThread().messages.at(-1)?.blocks?.[0]).toMatchObject({ call: { preview: { additions: 1 } } });
+    record.apply(record.initializeThread(), { ...change, tool_call_previews: { value: [{ ...call, preview: null }] } });
+    expect(record.initializeThread().messages.map(message => message.id)).toEqual(['one']);
+  });
+
+  it('updates argument counters without visiting completed tools or replacing timeline membership', () => {
+    const { current, initial } = fixture();
+    let toolReads = 0;
+    const activity = { item_id: 'done', tool_id: 'done', kind: 'tool', status: 'success',
+      tool_name: 'inspect', severity: 'quiet', presentation: { renderer: 'structured', payload: {} } };
+    const call = { thread_id: 'thread', turn_id: 'turn', run_id: 'run', logical_request_id: 'request',
+      attempt_id: 'attempt', attempt_epoch: 1, call_id: 'new', name: 'inspect', arguments_complete: false, preview: { additions: 1 } };
+    const baseline = { ...current, items: [...Array.from({ length: 100 }, (_, index) => ({
+      id: 'done-' + index, turn_id: 'turn', run_id: 'run', ordinal: index, kind: 'tool' as const,
+      get activity() { toolReads++; return { ...activity, item_id: 'done-' + index, tool_id: 'done-' + index }; },
+    })), { ...current.items![0], ordinal: 100 }], tool_call_previews: [call] };
+    const record = createRuntimeThreadRecord(baseline, applyFlowerRuntimeCurrentView(initial, baseline));
+    const messages = record.initializeThread().messages;
+    const preview = messages.at(-1)!;
+    toolReads = 0;
+    const update = { ...append(), tool_call_previews: { value: [{ ...call, preview: { additions: 2 } }] } };
+    record.apply(record.initializeThread(), update);
+    expect(toolReads).toBe(0);
+    expect(record.initializeThread().messages).toBe(messages);
+    expect(record.initializeThread().messages.at(-1)).toBe(preview);
+    expect(preview.blocks?.[0]).toMatchObject({ type: 'tool-call-preview', call: { preview: { additions: 2 } } });
+  });
+
+  it.each([100, 10000])('does not revisit %i archived items for a text append', count => {
+    const { current, initial } = fixture();
+    let historicalReads = 0;
+    const history = Array.from({ length: count }, (_, index) => ({ ...current.items![0],
+      id: 'history-' + index, live: false, text: 'Stable history',
+      get ordinal() { historicalReads++; return index + 1; },
+    }));
+    const window = { leaf_id: 'leaf', first_item_id: history[0].id, last_item_id: history.at(-1)!.id, has_before: false, has_after: true };
+    const old = { ...current, items: history, window };
+    const previous = createRuntimeThreadRecord(old, applyFlowerRuntimeCurrentView(initial, old));
+    const tail = { ...current, items: [{ ...current.items![0], ordinal: count + 1 }],
+      window: { ...window, first_item_id: 'one', last_item_id: 'one', has_before: true, has_after: false } };
+    const record = createRuntimeThreadRecord(tail, applyFlowerRuntimeCurrentView(initial, tail), previous);
+    const before = record.initializeThread();
+    const messages = before.messages, turns = before.turns, bounds = before.history_window;
+    historicalReads = 0;
+    for (let i = 0; i < 20; i++) record.apply(record.initializeThread(), append(i + 1, '!', 10 + i));
+    expect(historicalReads).toBe(0);
+    expect(before.messages).toBe(messages);
+    expect(before.turns).toBe(turns);
+    expect(before.history_window).toBe(bounds);
+    expect(before.messages.at(-1)!.content).toBe('中文🌸' + '!'.repeat(20));
+  });
+
   it('retains canonical timing from a first sealed baseline across cold loads and hydration', () => {
     const { current, initial } = fixture();
     const start = '2026-10-23T12:00:00.123456Z';
@@ -209,6 +269,34 @@ describe('history page anchors', () => {
 
 
 describe('continuous visible bodies', () => {
+  it.each(['assistant', 'user', 'thinking'] as const)('publishes a cold sealed %s body only after all chunks arrive, including reconnect', kind => {
+    const { current, initial } = fixture();
+    const parts = [['# Stable', '', ''].join(String.fromCharCode(10)),
+      ['| Item | Value |', '| --- | --- |', '| A | 1 |', '', '```ts', ''].join(String.fromCharCode(10)),
+      ['const ready = true;', '```', '', '- Complete list', ''].join(String.fromCharCode(10))];
+    const full = parts.join('');
+    const bytes = new TextEncoder().encode(full).length;
+    const field = kind === 'thinking' ? 'reasoning' : 'content';
+    const item = { ...current.items![0], kind, live: false, text: parts[0],
+      body: { field, source_id: 'sealed', bytes, preview_bytes: parts[0].length } };
+    const page = { ...current, items: [item] };
+    let record = createRuntimeThreadRecord(page, applyFlowerRuntimeCurrentView(initial, page));
+    const visibleText = () => kind === 'thinking'
+      ? (record.initializeThread().messages[0].blocks?.[0] as { content: string }).content
+      : record.initializeThread().messages[0].content;
+    const chunk = { thread_id: 'thread', item_id: 'one', field, source_id: 'sealed', bytes, through_bytes: bytes };
+    expect(record.appendBody({ ...chunk, offset_bytes: parts[0].length, text: parts[1] })).toBe(true);
+    expect(visibleText()).toBe(parts[0]);
+    expect(record.initializeThread().messages[0].body_pending?.retained).not.toBe(true);
+    record = createRuntimeThreadRecord({ ...page, view_version: 2 }, applyFlowerRuntimeCurrentView(initial, page), record);
+    expect(visibleText()).toBe(parts[0]);
+    expect(record.initializeThread().messages[0].body_pending?.retained).not.toBe(true);
+    expect(record.bodyOffset('one')).toBe(parts[0].length + parts[1].length);
+    expect(record.appendBody({ ...chunk, offset_bytes: record.bodyOffset('one')!, text: parts[2] })).toBe(true);
+    expect(visibleText()).toBe(full);
+    expect(record.initializeThread().messages[0].body_pending).toBeUndefined();
+  });
+
   it('stages a sealed source independently of longer live text until its bounded read completes', () => {
     const { current, initial } = fixture();
     const liveText = '中文🌸' + 'draft '.repeat(30);

@@ -971,6 +971,8 @@ export type FlowerActivityFieldChunk = Readonly<{
 }>;
 export type FlowerItemBody = Readonly<{ run_id?: string; entry_id?: string; source_id?: string; field: string; bytes: number; preview_bytes: number }>;
 export type FlowerRuntimeCurrentItem = Readonly<{
+  /** Canonical window cost before product summary compaction; never body bytes. */
+  window_bytes?: number;
   body?: FlowerItemBody;
   activity_summary?: FlowerActivitySummary;
   activity_bodies?: readonly Readonly<{ entry_id: string; bytes: number; sha256: string }>[];

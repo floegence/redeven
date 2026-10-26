@@ -62,6 +62,8 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
 // jsdom has no layout or viewport observation. These component tests represent
 // a visible transcript; real browser suites qualify clipping and scroll geometry.
 if (typeof navigator !== 'undefined' && navigator.userAgent.includes('jsdom')) {
+  // No hit testing exists without layout. Browser suites own anchor geometry.
+  document.elementFromPoint ??= () => null;
   Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get() {
     return this.classList.contains('flower-chat-transcript') ? 600 : 0;
   } });

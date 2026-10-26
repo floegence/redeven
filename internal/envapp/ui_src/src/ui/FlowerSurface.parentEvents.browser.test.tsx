@@ -337,6 +337,7 @@ it('shows reports and terminal events with child avatars in the parent transcrip
   const read = vi.fn(async () => ({ thread_id: 'parent', first_event_id: 'report', last_event_id: 'report', events: [{ ...event('report'), message: 'Verified source dates\nComplete findings' }] }));
   const loadChild = vi.fn(async () => { throw new Error('Child details unavailable'); });
   const runtime = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [parent]), loadThread: vi.fn(async () => bootstrap), readParentEvents: read, loadSubagentDetail: loadChild }, { focusThreadRequest: { request_id: 'focus-events', thread_id: 'parent' } });
+  runtime.style.height = '100dvh';
   await waitFor(() => Boolean(runtime.querySelector('[data-parent-event="report"] .flower-parent-event-disclosure')));
   expect(read).not.toHaveBeenCalled();
   runtime.querySelector<HTMLButtonElement>('[data-parent-event="report"] .flower-parent-event-disclosure')!.click();

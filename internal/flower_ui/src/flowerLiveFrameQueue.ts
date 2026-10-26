@@ -1,10 +1,11 @@
-import { FlowerLiveSyncError } from './flowerLiveWire';
+import { FLOWER_LIVE_ENVELOPE_BYTES, FlowerLiveSyncError } from './flowerLiveWire';
 import type { FlowerLiveStreamEnvelope, FlowerToolCallPreview } from './contracts/flowerSurfaceContracts';
 
 const INTERACTION_PRESENTATION_REFRESH_MS = 75;
 const MAX_PENDING_UPDATES = 64;
 const MAX_PENDING_UPDATE_BYTES = 4 * 1024 * 1024;
 const MAX_PENDING_AGE_MS = 250;
+const APPLY_BUDGET_MS = 4;
 const utf8 = new TextEncoder();
 
 /** One transient frame in the live connection; ThreadCache remains the owner. */
@@ -18,7 +19,7 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
   cancelFrame: (id: number) => void;
   interaction?: Readonly<{ root: HTMLElement; attribute: string }>;
 }>) {
-  type Frame = { envelope: FlowerLiveStreamEnvelope; connectionEpoch: number; append?: {
+  type Frame = { bytes: number; queuedAt: number; urgent?: boolean; envelope: FlowerLiveStreamEnvelope; connectionEpoch: number; append?: {
     chunks: string[]; offset: number; endOffset: number; baseVersion: number; factsKey: string;
   }; body?: { baseVersion: number; factsKey: string; encodedBytes: number } };
   let pending: Frame[] = [];
@@ -34,6 +35,14 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
   let scheduleRevision = 0;
   let generation = 0;
   let disposed = false;
+  const idleWaiters = new Set<() => void>();
+  const capacityWaiters = new Set<() => void>();
+  const releaseCapacity = () => {
+    if (!pending.length) { for (const resolve of idleWaiters) resolve(); idleWaiters.clear(); }
+    if (pending.length >= 16 || pendingBytes >= 1024 * 1024) return;
+    for (const resolve of capacityWaiters) resolve();
+    capacityWaiters.clear();
+  };
   const previewIdentities = new Map<string, readonly FlowerToolCallPreview[]>();
   const samePreviewAttempt = (before: readonly FlowerToolCallPreview[] | undefined, after: readonly FlowerToolCallPreview[] | null | undefined) => Boolean(before?.length && after?.length === before.length
     && after.every((call, index) => {
@@ -59,6 +68,7 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
     pendingBytes = 0;
     pendingStartedAt = undefined;
     previewIdentities.clear();
+    releaseCapacity();
   };
   const current = (value: Frame) => !disposed && failedEpoch !== value.connectionEpoch
     && (!options.connectionEpoch || options.connectionEpoch() === value.connectionEpoch);
@@ -98,23 +108,38 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
   };
   const flush = () => {
     cancelScheduled();
-    const values = pending;
+    const started = performance.now();
+    const scheduledGeneration = generation;
     const bytes = pendingBytes;
-    const ageMs = pendingStartedAt === undefined ? 0 : Math.max(0, performance.now() - pendingStartedAt);
-    pending = [];
-    pendingBytes = 0;
-    pendingStartedAt = undefined;
+    const ageMs = pendingStartedAt === undefined ? 0 : Math.max(0, started - pendingStartedAt);
+    let updates = 0;
+    // Include reactive commits in the budget. Each envelope remains atomic;
+    // yielding between envelopes gives input and painting a real task boundary.
+    while (pending.length && scheduledGeneration === generation) {
+      const value = pending.shift()!;
+      pendingBytes -= value.bytes;
+      if (options.batch) {
+        let failure: { error: unknown } | undefined;
+        options.batch(() => {
+          // A throwing Solid batch discards queued reactive notifications.
+          // Commit the owner's recovery state before handing off the error.
+          try { apply(value); } catch (error) { failure = { error }; }
+        });
+        if (failure) throw failure.error;
+      } else apply(value);
+      updates++;
+      if (performance.now() - started >= APPLY_BUDGET_MS) break;
+    }
+    pendingStartedAt = pending[0]?.queuedAt;
+    releaseCapacity();
     maxPendingAgeMs = Math.max(maxPendingAgeMs, ageMs);
-    if (values.length) {
-      const metrics = { bytes, ageMs, updates: values.length, maxPendingBytes, maxPendingAgeMs };
+    if (updates) {
+      const metrics = { bytes, ageMs, updates, maxPendingBytes, maxPendingAgeMs, durationMs: performance.now() - started };
       options.onPendingMetrics?.(metrics);
-      // One replaceable diagnostic entry, with no transcript or thread data.
       performance.clearMarks('flower.live.frame_queue');
       performance.mark('flower.live.frame_queue', { detail: metrics });
     }
-    const applyPending = () => { for (const value of values) apply(value); };
-    if (options.batch) options.batch(applyPending);
-    else applyPending();
+    schedule(true);
   };
   const encodedBytes = (value: FlowerLiveStreamEnvelope) => utf8.encode(JSON.stringify(value)).byteLength;
   const appendOnly = (value: FlowerLiveStreamEnvelope) => {
@@ -152,13 +177,22 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
       && before.reading_revision === after.reading_revision && before.thread_id === after.thread_id && left?.thread_id === right?.thread_id && left?.turn_id === right?.turn_id
       && left?.run_id === right?.run_id && left?.items?.[0]?.item_id === right?.items?.[0]?.item_id);
   };
+  const hasUrgent = () => pending.some(value => value.urgent);
   const interactionActive = () => options.interaction?.root.getAttribute(options.interaction.attribute)
     ?.split(/\s+/).some(kind => kind === 'drag' || kind === 'resize') === true;
-  const schedule = () => {
+  const schedule = (continuation = false) => {
     if (!pending.length || disposed || frame !== undefined || timer !== undefined) return;
     const scheduledGeneration = generation;
     const revision = ++scheduleRevision;
     const connectionEpoch = pending[0]!.connectionEpoch;
+    if (continuation || hasUrgent()) {
+      timer = setTimeout(() => {
+        if (scheduledGeneration !== generation || revision !== scheduleRevision || disposed) return;
+        timer = undefined;
+        try { flush(); } catch (error) { reportError(error, connectionEpoch); }
+      }, 0);
+      return;
+    }
     if (deadline === undefined) {
       const remainingAge = MAX_PENDING_AGE_MS - (performance.now() - pendingStartedAt!);
       deadline = setTimeout(() => {
@@ -166,7 +200,7 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
         try { flush(); } catch (error) { reportError(error, connectionEpoch); }
       }, Math.max(0, remainingAge));
     }
-    const remaining = interactionActive() ? INTERACTION_PRESENTATION_REFRESH_MS - (performance.now() - lastAppliedAt) : 0;
+    const remaining = !hasUrgent() && interactionActive() ? INTERACTION_PRESENTATION_REFRESH_MS - (performance.now() - lastAppliedAt) : 0;
     if (remaining > 0) {
       timer = setTimeout(() => {
         if (scheduledGeneration !== generation || revision !== scheduleRevision || disposed) return;
@@ -179,7 +213,7 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
       if (scheduledGeneration !== generation || revision !== scheduleRevision || disposed) return;
       try {
         // Interaction may start after a normal streaming frame was requested.
-        if (interactionActive() && performance.now() - lastAppliedAt < INTERACTION_PRESENTATION_REFRESH_MS) {
+        if (!hasUrgent() && interactionActive() && performance.now() - lastAppliedAt < INTERACTION_PRESENTATION_REFRESH_MS) {
           frame = undefined;
           schedule();
         } else flush();
@@ -197,10 +231,9 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
   });
   return {
     push(envelope: FlowerLiveStreamEnvelope, connectionEpoch = options.connectionEpoch?.() ?? 0) {
-      const value: Frame = { envelope, connectionEpoch };
+      const value: Frame = { envelope, connectionEpoch, bytes: 0, queuedAt: performance.now() };
       if (!current(value)) return;
       if (pending.length && pending[0]!.connectionEpoch !== connectionEpoch) clear();
-      const currentGeneration = generation;
       try {
         const update = envelope.update ?? envelope.subagent_update;
         const previewGrowth = update?.tool_call_previews && samePreviewAttempt(previewIdentities.get(update.thread_id), update.tool_call_previews.value);
@@ -227,6 +260,7 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
               && last.body.factsKey === factsKey(envelope) && progressAdvances(last.envelope, envelope)) {
               if (pendingBytes + bytes - last.body.encodedBytes > MAX_PENDING_UPDATE_BYTES) throw new FlowerLiveSyncError('Flower presentation update byte budget exceeded.');
               pendingBytes += bytes - last.body.encodedBytes;
+              last.bytes = bytes;
               last.body.encodedBytes = bytes; last.envelope = envelope;
               maxPendingBytes = Math.max(maxPendingBytes, pendingBytes);
               schedule(); return;
@@ -237,13 +271,12 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
           if (last?.append && fragment && sameAppendStream(last.envelope, envelope)) {
             const previous = (last.envelope.update ?? last.envelope.subagent_update)!;
             if (previous.view_version !== update.base_version || last.append.endOffset !== fragment.offset_bytes) {
-              flush();
-              if (currentGeneration !== generation || !current(value)) return;
               throw new FlowerLiveSyncError('Flower streaming append lost its contiguous baseline.');
             }
             if (last.append.factsKey === factsKey(envelope) && progressAdvances(last.envelope, envelope)) {
               if (pendingBytes + bytes > MAX_PENDING_UPDATE_BYTES) throw new FlowerLiveSyncError('Flower presentation update byte budget exceeded.');
               pendingBytes += bytes;
+              last.bytes += bytes;
               last.append.chunks.push(fragment.text);
               last.append.endOffset += utf8.encode(fragment.text).byteLength;
               last.envelope = envelope;
@@ -251,16 +284,12 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
               schedule();
               return;
             }
-            flush();
-            if (currentGeneration !== generation || !current(value)) return;
-            apply(value);
-            return;
           }
           if (pending.length >= MAX_PENDING_UPDATES || pendingBytes + bytes > MAX_PENDING_UPDATE_BYTES) {
             throw new FlowerLiveSyncError('Flower presentation update queue overflow.');
           }
           if (!pending.length) pendingStartedAt = performance.now();
-          pendingBytes += bytes;
+          pendingBytes += bytes; value.bytes = bytes;
           maxPendingBytes = Math.max(maxPendingBytes, pendingBytes);
           if (fragment) value.append = { chunks: [fragment.text], offset: fragment.offset_bytes,
             endOffset: fragment.offset_bytes + utf8.encode(fragment.text).byteLength, baseVersion: update.base_version, factsKey: factsKey(envelope) };
@@ -269,12 +298,33 @@ export function createFlowerLiveFrameQueue(options: Readonly<{
           schedule();
           return;
         }
-        flush();
-        if (currentGeneration !== generation || !current(value)) return;
-        apply(value);
+        const bytes = encodedBytes(envelope);
+        // A supported atomic baseline may exceed the growth queue budget.
+        // Reserve one wire envelope; the consumer waits before reading another.
+        if (pending.length >= MAX_PENDING_UPDATES || bytes > FLOWER_LIVE_ENVELOPE_BYTES
+          || pendingBytes + bytes > MAX_PENDING_UPDATE_BYTES + FLOWER_LIVE_ENVELOPE_BYTES) {
+          throw new FlowerLiveSyncError('Flower presentation update queue overflow.');
+        }
+        if (!pending.length) pendingStartedAt = value.queuedAt;
+        const hadUrgent = hasUrgent();
+        value.bytes = bytes; value.urgent = true;
+        pendingBytes += bytes; maxPendingBytes = Math.max(maxPendingBytes, pendingBytes);
+        pending.push(value);
+        // Semantic events bypass drag throttling, but never preceding data or
+        // the shared task budget. No WebSocket callback performs UI work.
+        if (!hadUrgent) cancelScheduled();
+        schedule();
       } catch (error) {
         reportError(error, connectionEpoch);
       }
+    },
+    waitUntilIdle(): Promise<void> | undefined {
+      if (!pending.length) return;
+      return new Promise(resolve => idleWaiters.add(resolve));
+    },
+    waitForCapacity(): Promise<void> | undefined {
+      if (pending.length < 16 && pendingBytes < 1024 * 1024) return;
+      return new Promise(resolve => capacityWaiters.add(resolve));
     },
     boundary() { clear(); failedEpoch = undefined; },
     dispose() { disposed = true; interactionObserver?.disconnect(); clear(); },

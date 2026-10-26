@@ -102,7 +102,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
 
   it('renders context usage in standard actions and compact companion More outside timeline entries', () => {
     const src = surfaceSource();
-    const timelineListIndex = src.indexOf('<FlowerTurnTimeline thread={selectedThread()}');
+    const timelineListIndex = src.indexOf('<FlowerTurnTimeline thread={selectedTimelineDocument().thread}');
     const headerIndex = src.indexOf('class="flower-chat-header ');
     const headerRowIndex = src.indexOf('flower-chat-header-row');
     const dockIndex = src.indexOf('flower-chat-bottom-dock-track', src.indexOf('const composerPanel ='));
@@ -207,7 +207,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain('aria-label={copy().chat.scrollToLatest}');
     expect(src).toContain('title={copy().chat.scrollToLatest}');
     expect(src).toContain('transcriptScroll.startFollowing();');
-    expect(src).toContain('scrollTranscriptToBottom({ smooth: true });');
+    expect(src).toContain('scroll.scrollToBottom({ smooth: true });');
     expect(scrollTail).toContain('FLOWER_TRANSCRIPT_SCROLL_TO_LATEST_MS');
     expect(scrollTail).not.toContain('captureWasNearBottom');
   });

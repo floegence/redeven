@@ -10,7 +10,7 @@ export type LiveTransportState = Readonly<{
 
 type LiveTransportInput<T> = Readonly<{
   connect: LiveTransportConnect<T>;
-  onCurrent: (value: T, connectionEpoch: number) => void;
+  onCurrent: (value: T, connectionEpoch: number) => void | Promise<void>;
   isReady?: (value: T) => boolean;
   onState?: (state: LiveTransportState) => void;
   onBoundary?: () => void;
@@ -123,7 +123,8 @@ export function createLiveTransport<T>(): LiveTransport<T> {
         for await (const value of current.input.connect({ signal: attempt.controller.signal })) {
           if (!currentAttempt(current, attempt)) return;
           try {
-            current.input.onCurrent(value, attempt.epoch);
+            const capacity = current.input.onCurrent(value, attempt.epoch);
+            if (capacity) await capacity;
             if (!currentAttempt(current, attempt)) return;
             if (state.status !== 'ready' && (!current.input.isReady || current.input.isReady(value))) {
               if (attempt.handshakeTimer !== undefined) window.clearTimeout(attempt.handshakeTimer);

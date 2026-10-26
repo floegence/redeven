@@ -106,6 +106,7 @@ it('shows skill inputs and expandable instructions without a repeated result hea
     ] })],
   }] });
   const surface = renderSurfaceWithAdapter({ ...adapter(), listThreads: async () => [seed], loadThread: async () => liveBootstrap(seed, 1) });
+  surface.style.height = '100dvh';
   await waitFor(() => Boolean(surface.querySelector('[data-thread-id="skill-presentation"] button')));
   surface.querySelector<HTMLButtonElement>('[data-thread-id="skill-presentation"] button')!.click();
   await waitFor(() => Boolean(surface.querySelector('[data-flower-disclosure-trigger]')));
@@ -147,9 +148,10 @@ it('keeps production rows compact and reveals concise facts on desktop and mobil
     ]})],
   }]});
   const surface=renderSurfaceWithAdapter({...adapter(),listThreads:async()=>[seed],loadThread:async()=>liveBootstrap(seed,1)});
+  surface.style.height = '100dvh';
   await waitFor(()=>Boolean(surface.querySelector('[data-thread-id="tool-presentation"] button')));
   surface.querySelector<HTMLButtonElement>('[data-thread-id="tool-presentation"] button')!.click();
-  await waitFor(()=>surface.querySelectorAll('[data-flower-disclosure-trigger]').length===2);
+  await waitFor(()=>surface.querySelectorAll('[data-flower-activity-item-id] [data-flower-disclosure-trigger]').length===2);
   expect(surface.querySelector('.flower-activity-tool-identity')).toBeNull();
   expect(surface.querySelectorAll('.flower-activity-inline-duration')).toHaveLength(2);
   for (const width of [1280,390]) {
@@ -195,6 +197,7 @@ it('loads saved thread tool details only on expansion and keeps the preview comp
       return { tool_name: 'threads.aggregate', inputs: [{ title: 'object', content: 'messages', format: 'text' }], rows: [], total: 0, has_more: false };
     },
   });
+  surface.style.height = '100dvh';
   await waitFor(() => Boolean(surface.querySelector('[data-thread-id="saved-query"] button')));
   surface.querySelector<HTMLButtonElement>('[data-thread-id="saved-query"] button')!.click();
   await waitFor(() => surface.querySelectorAll('[data-flower-disclosure-trigger]').length === 3);

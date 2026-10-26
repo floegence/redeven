@@ -104,7 +104,7 @@ import { FlowerToolSequenceNode } from './FlowerToolSequenceNode';
 import { FlowerThinkingDisclosure } from './FlowerThinkingDisclosure';
 import { FlowerTurnTimeline } from './FlowerTurnTimeline';
 import { prepareHistoryTurn, type PreparedHistoryPage } from './historyTurnPreparation';
-import { observeHistoryBodyMotion } from './historyBodyMotion';
+import { observeHistoryBodyLayout } from './historyBodyLayout';
 import { useFlowerActivityTitleReveal } from './flowerActivityTitleReveal';
 import { createFlowerTurnDisclosureStore } from './flowerTurnDisclosure';
 import type { FlowerComputerStageSessionState, FlowerComputerStageSnapshot } from './FlowerComputerStage';
@@ -4194,7 +4194,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setTranscriptLayoutRevision(value => value + 1);
       const remaining = threadCache().runtimeItem(threadID, itemID);
       return Boolean(remaining?.body || remaining?.activity_bodies?.length);
-    });
+    }, initial.live ? 'interactive' : 'visible');
   };
   const historyBodyControl = (threadID: Accessor<string>, itemID: Accessor<string>) => {
     const state = () => { historyBodyRevision(); return historyBodies.state(historyBodyKey(threadID(), itemID())); };
@@ -5684,7 +5684,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
     const stop = liveTransport.start({
       connect,
-      onCurrent: frames.push,
+      onCurrent: (envelope, epoch) => {
+        frames.push(envelope, epoch);
+        return envelope.kind === 'ready' ? frames.waitUntilIdle() : frames.waitForCapacity();
+      },
       isReady: envelope => envelope.kind === 'ready',
       onState: setLiveSyncState,
       onBoundary: () => {
@@ -12143,9 +12146,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   && contentBlock().key === assistantCopyBlockKey();
                 const streaming = () => streamingBlockKey() === contentBlock().key;
                 let shell!: HTMLDivElement;
-                let bodyContent!: HTMLDivElement;
-                onMount(() => observeHistoryBodyMotion(shell, bodyContent, () => contentBlock().block_type !== 'thinking'
-                  && message().body_pending?.kind === 'text' && !message().body_pending?.retained && !message().live, viewportScope, reducedMotionPreferred));
+                onMount(() => observeHistoryBodyLayout(() => contentBlock().block_type !== 'thinking'
+                  && message().body_pending?.kind === 'text' && !message().body_pending?.retained && !message().live, viewportScope));
                 const [visible, setVisible] = createSignal(false);
                 const hasPendingText = createMemo(() => message().body_pending?.kind === 'text');
                 const needsBody = () => contentBlock().block_type !== 'thinking' || message().live
@@ -12188,7 +12190,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   const controller = readController();
                   if (controller) untrack(() => loadHistoryItem(tid, itemID, controller.signal, viewportScope));
                 });
-                return <div ref={shell} class="flower-history-message"><div ref={bodyContent} class="flower-history-message-content">
+                return <div ref={shell} class="flower-history-message"><div class="flower-history-message-content">
                   <Show when={contentBlock().block_type !== 'thinking' && message().body_pending?.kind === 'text' && !message().body_pending?.retained && !message().live} fallback={messageContentBubble(message, contentBlock, streaming, showCopyAction, copyText, thread, media, viewportScope)}>
                     <div class={cn('flower-history-text-loading', 'flower-message-bubble', message().role === 'user' && 'flower-message-bubble-user')}>
                       <div class="flower-history-text-skeleton" aria-hidden="true"><span /><span /><span /></div>
@@ -12593,8 +12595,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         const source = () => event().parent_thread_id === selectedThreadID()
           ? selectedSubagentItems().find(item => item.threadID === event().source_thread_id) : undefined;
         return <ParentEventRow loadingLabel={copy().chat.history.loading} visible={visible()} connection={liveSyncState().connectionEpoch} retainBody={receiptReading.retainBody} bodyState={receiptReading.bodyState(event().id)} event={event()} copy={subagentsCopy()} sourceName={source() ? subagentRowTitle(source()!) : event().source_thread_id}
-          expanded={expandedDetails[detailDisclosureKey(event().parent_thread_id, 'report', event().id)] === true}
-          onExpandedChange={expanded => setExpandedDetails(detailDisclosureKey(event().parent_thread_id, 'report', event().id), expanded)}
+          expanded={expandedDetails[detailDisclosureKey(thread()?.thread_id ?? event().parent_thread_id, 'report', event().id)] === true}
+          onExpandedChange={expanded => setExpandedDetails(detailDisclosureKey(thread()?.thread_id ?? event().parent_thread_id, 'report', event().id), expanded)}
           canOpenSource={Boolean(source())} onOpenSource={() => { const item = source(); if (item) openSubagentDetail(item); }}
           onDisclosureClick={title => {
             viewportScope.activateDisclosure(title);

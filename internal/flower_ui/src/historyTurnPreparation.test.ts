@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { HistorySourceChangedError, prepareHistoryTurn } from './historyTurnPreparation';
 import { recoverableHistoryRead } from './historyReadRecovery';
-import type { FlowerRuntimeCurrentItem, FlowerRuntimeCurrentView } from './contracts/flowerSurfaceContracts';
+import type { FlowerHistoryRequest, FlowerRuntimeCurrentItem, FlowerRuntimeCurrentView } from './contracts/flowerSurfaceContracts';
 
 const item = (ordinal: number, turn = 'turn'): FlowerRuntimeCurrentItem => ({ id: String(ordinal), ordinal, turn_id: turn, run_id: turn, kind: 'tool' });
 const page = (items: FlowerRuntimeCurrentItem[], before = true, leaf = 'leaf', after = false) => ({ current: {
@@ -10,13 +10,25 @@ const page = (items: FlowerRuntimeCurrentItem[], before = true, leaf = 'leaf', a
 } as FlowerRuntimeCurrentView });
 
 describe('historical turn preparation', () => {
+  it('starts with a small boundary read and grows bounded pages only for genuinely long work', async () => {
+    const items = Array.from({ length: 400 }, (_, index) => item(index + 1));
+    items[0] = { ...items[0], kind: 'user' };
+    const read = vi.fn(async (input: FlowerHistoryRequest) => {
+      const end = Number(input.anchor_id) - 1;
+      return page(items.slice(Math.max(0, end - input.limit!), end), end > input.limit!, 'leaf', true);
+    });
+    const pages = await prepareHistoryTurn(page(items.slice(-2)), read, new AbortController().signal);
+    expect(read.mock.calls[0][0].limit).toBe(16);
+    expect(read.mock.calls.map(call => call[0].limit)).toEqual([16, 32, 64, 128, 150, 150]);
+    expect(new Set(pages.flatMap(value => value.current.items!.map(item => item.id))).size).toBe(398);
+  });
   it('fills a sparse middle and missing trailing boundary before publication', async () => {
     const first = page([{ ...item(2), kind: 'user' }, item(5)], true, 'leaf', true);
     const read = vi.fn().mockResolvedValueOnce(page([item(3), item(4)]))
       .mockResolvedValueOnce(page([item(6), item(7, 'next')]));
     const result = await prepareHistoryTurn(first, read, new AbortController().signal);
     expect(read.mock.calls.map(call => call[0])).toEqual([
-      { anchor_id: '5', direction: 'before', limit: 150 }, { anchor_id: '5', direction: 'after', limit: 150 },
+      { anchor_id: '5', direction: 'before', limit: 16 }, { anchor_id: '5', direction: 'after', limit: 16 },
     ]);
     expect(result.flatMap(value => value.current.items?.map(item => item.id))).toEqual(['3', '4', '6']);
     expect(recoverableHistoryRead(new HistorySourceChangedError())).toBe(true);
@@ -32,7 +44,7 @@ describe('historical turn preparation', () => {
     const read = vi.fn().mockResolvedValueOnce(page([item(4), item(5)])).mockResolvedValueOnce(page([item(1, 'previous'), item(2), item(3)]));
     const result = await prepareHistoryTurn(page([item(6), item(7)]), read, new AbortController().signal);
     expect(read.mock.calls.map(call => call[0])).toEqual([
-      { anchor_id: '6', direction: 'before', limit: 150 }, { anchor_id: '4', direction: 'before', limit: 150 },
+      { anchor_id: '6', direction: 'before', limit: 16 }, { anchor_id: '4', direction: 'before', limit: 32 },
     ]);
     expect(result.flatMap(value => value.current.items?.map(item => item.id))).toEqual(['4', '5', '2', '3']);
   });

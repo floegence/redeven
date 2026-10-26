@@ -49,6 +49,14 @@ describe('finite adjacent history selection', () => {
     const item = { id: 'item', ordinal: 1, kind: 'assistant' as const, text: '<>&中🌸' };
     expect(historyReadingItemBytes(item)).toBeGreaterThan(new TextEncoder().encode(JSON.stringify(item)).length + 14);
   });
+  it('budgets compact tool summaries by their canonical window cost', () => {
+    const item = { id: 'tool', ordinal: 1, kind: 'tool' as const, window_bytes: 8192 };
+    expect(historyReadingItemBytes(item)).toBe(8193);
+    const ids = Array.from({ length: 150 }, (_, index) => String(index));
+    const bytes = new Map(ids.map(id => [id, historyReadingItemBytes({ ...item, id })]));
+    const selected = historyReadingSelection(ids.slice(40), ids.slice(0, 40), 'before', [], undefined, undefined, bytes)!;
+    expect(selected.length).toBeLessThan(60);
+  });
   it('adds adjacent membership and evicts only the opposite unprotected edge', () => {
     expect(historyReadingSelection(['3', '4', '5'], ['1', '2'], 'before', ['3'], 4)).toEqual(['1', '2', '3', '4']);
     expect(historyReadingSelection(['1', '2', '3'], ['4', '5'], 'after', ['3'], 4)).toEqual(['2', '3', '4', '5']);

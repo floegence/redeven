@@ -8,6 +8,8 @@ Recent changes only. The linked concepts own current contracts and evidence; Git
   with localized file counts and stable patch totals; disclosure alone reads
   mutation details.
 
+- Isolate [live growth](ui/flower-streaming-stability.md) from retained history, bound reactive frame work and prioritize visible body reads. Publish complete historical Markdown at settled geometry; preserve canonical byte costs after compacting tool summaries and grow boundary reads only when needed. Require exact tool-detail content and first-visible-frame stability in [qualification](operations/flower-thread-switch-qualification.md).
+
 - Require [Flower file delivery](ai/flower-prompt-and-rule-sources.md) to provide named Markdown links to confirmed absolute paths, including space/parenthesis handling and code-example exceptions; preserve existing preview and authorization ownership.
 
 ## 2026-10-25

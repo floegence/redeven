@@ -326,7 +326,8 @@ describe('Flower complete interaction subtree stability', () => {
     const transfer = new DataTransfer();
     rows[0]!.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: transfer }));
     await unrelatedUpdates(fixture);
-    await waitFor(() => runtime.textContent?.includes('Unrelated stream update 299') === true);
+    // A burst of 300 complete baselines yields between commits; interaction stays live.
+    await waitFor(() => runtime.textContent?.includes('Unrelated stream update 299') === true, 5000);
     expect(rows[0]!.getAttribute('data-flower-queued-turn-dragging')).toBe('true');
     expect([...runtime.querySelectorAll('[data-flower-queued-turn-dock-id]')]).toEqual(rows);
     for (const type of ['dragover', 'drop']) rows[1]!.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, clientY: rows[1]!.getBoundingClientRect().bottom + 1, dataTransfer: transfer }));
@@ -377,7 +378,8 @@ describe('Flower complete interaction subtree stability', () => {
     await waitFor(() => fixture.calls.terminal === 1);
     const requests = { ...fixture.calls };
     await unrelatedUpdates(fixture);
-    await waitFor(() => runtime.textContent?.includes('Unrelated stream update 299') === true);
+    // A burst of 300 complete baselines yields between commits; interaction stays live.
+    await waitFor(() => runtime.textContent?.includes('Unrelated stream update 299') === true, 5000);
     records.push(...observer.takeRecords()); observer.disconnect();
     expect(records).toHaveLength(0);
     expect([...runtime.querySelectorAll('.flower-activity-inline-details')]).toEqual(roots);
@@ -440,7 +442,8 @@ describe('Flower complete interaction subtree stability', () => {
     expect(document.activeElement).toBe(button);
     const nodes = [...panel.querySelectorAll('button, input, textarea')];
     const records: MutationRecord[] = []; const observer = new MutationObserver((values) => records.push(...values)); observer.observe(panel, { childList: true, subtree: true });
-    await unrelatedUpdates(fixture); await waitFor(() => runtime.textContent?.includes('Unrelated stream update 299') === true);
+    await unrelatedUpdates(fixture); // A burst of 300 complete baselines yields between commits; interaction stays live.
+    await waitFor(() => runtime.textContent?.includes('Unrelated stream update 299') === true, 5000);
     records.push(...observer.takeRecords()); observer.disconnect();
     expect(records).toHaveLength(0);
     expect([...panel.querySelectorAll('button, input, textarea')]).toEqual(nodes);
