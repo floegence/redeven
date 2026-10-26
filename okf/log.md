@@ -4,7 +4,9 @@ Recent changes only. The linked concepts own current contracts and evidence; Git
 
 ## 2026-10-25
 
-- Keep [history reading](ui/flower-live-timeline.md) stable through bounded pagination: retain inspected documents, publish complete grouping facts atomically, and preserve [tool](ui/flower-tool-sequences.md), thinking and [turn disclosure](ui/flower-turn-process-disclosure.md) choices without automatic folds.
+- Reveal [thread navigation](ui/flower-live-timeline.md) at settled tail geometry, open [tool groups](ui/flower-tool-sequences.md) directly at their latest call, reuse the running wave for history loading, and automatically fold terminal [work processes](ui/flower-turn-process-disclosure.md) while retaining user inspection.
+
+- Keep [history reading](ui/flower-live-timeline.md) stable through bounded pagination: retain inspected documents, publish complete grouping facts atomically, and preserve [tool](ui/flower-tool-sequences.md), thinking and [turn disclosure](ui/flower-turn-process-disclosure.md) choices across pagination; canonical completion may settle untouched defaults as specified by the disclosure contracts.
 
 - Bound [history navigation](ui/flower-live-timeline.md) by request/preview bytes and user scroll demand; preserve Retry and qualify deep scrolling through the [product HTTP boundary](operations/flower-thread-switch-qualification.md).
 - Align [Flower qualification](operations/flower-live-queue-performance.md) with the published SSE parser and product framing. Retain failed CPU/lifecycle samples alongside exact-content and [bounded metadata-write evidence](operations/flower-thread-switch-qualification.md).

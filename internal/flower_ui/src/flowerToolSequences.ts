@@ -63,10 +63,9 @@ export function projectFlowerToolSequences(
   previous?: FlowerToolSequenceProjection,
   breakBefore: ReadonlySet<string> = new Set(),
 ): FlowerToolSequenceProjection {
-  const tokens: (SequenceNode | null)[] = [];
+  const tokens: (SequenceNode | { completedOutputScope: string } | null)[] = [];
   const turnsByID = uniqueTurnsByID(turns);
   const entryPositions = new Map(entries.map((entry, index) => [entry.key, index]));
-  const inputResponsePositions = new Map<string, number[]>();
   const sequenceScope = (ownerThreadID: string | undefined, turnID: string | undefined, runID: string | undefined) =>
     ownerThreadID && turnID && runID ? JSON.stringify([ownerThreadID, turnID, runID]) : '';
   const parentEventNode = (entry: Extract<FlowerTimelineEntry, { type: 'parent_event' }>): SequenceNode | null => {
@@ -85,14 +84,6 @@ export function projectFlowerToolSequences(
       tokens.push(parentEventNode(entry));
       continue;
     }
-    if (entry.type === 'message' && entry.blocks.some((block) => block.type === 'input_response')) {
-      const turnID = entry.message.turn_id;
-      if (turnID) {
-        const positions = inputResponsePositions.get(turnID) ?? [];
-        positions.push(entryPositions.get(entry.key)!);
-        inputResponsePositions.set(turnID, positions);
-      }
-    }
     if (entry.type !== 'message' || entry.message.role !== 'assistant' || entry.message.goal) {
       tokens.push(null);
       continue;
@@ -105,7 +96,7 @@ export function projectFlowerToolSequences(
         if (block.block_type === 'thinking') {
           tokens.push({ key: block.key, entryKey: entry.key, scope, turnID: entry.message.turn_id, kind: 'thinking', active: entry.message.live === true, failed: false });
         } else if (block.content.trim()) {
-          tokens.push(null);
+          tokens.push(!entry.message.live && entry.message.status === 'complete' ? { completedOutputScope: scope } : null);
         }
       } else if (block.type === 'tool_preview') {
         const call = block.block.call;
@@ -147,39 +138,29 @@ export function projectFlowerToolSequences(
     }
   }
 
-  const runs: SequenceNode[][] = [];
+  const runs: { nodes: SequenceNode[]; outputComplete: boolean }[] = [];
   let pending: SequenceNode[] = [];
-  const flush = () => {
-    if (pending.some(node => node.kind !== 'thinking')) runs.push(pending);
+  const flush = (completedScope = '') => {
+    if (pending.some(node => node.kind !== 'thinking')) runs.push({ nodes: pending,
+      outputComplete: Boolean(completedScope) && pending[0].scope === completedScope });
     pending = [];
   };
   for (const node of tokens) {
-    if (!node || pending.length && pending[0].scope !== node.scope) flush();
-    if (node) pending.push(node);
+    if (!node || 'completedOutputScope' in node) {
+      flush(node?.completedOutputScope);
+      continue;
+    }
+    if (pending.length && pending[0].scope !== node.scope) flush();
+    pending.push(node);
   }
   flush();
 
   const groups = new Map<string, FlowerToolSequence>();
   const members = new Map<string, FlowerToolSequenceMember>();
   const continuingEntries = new Set<string>();
-  const processPositions = new Map<string, number[]>();
-  for (const nodes of runs) for (const node of nodes) {
-    const position = entryPositions.get(node.entryKey);
-    if (position === undefined) continue;
-    if (!node.turnID) continue;
-    const positions = processPositions.get(node.turnID) ?? [];
-    positions.push(position);
-    processPositions.set(node.turnID, positions);
-  }
-  const separatedTurns = new Set<string>();
-  for (const [turnID, checkpoints] of inputResponsePositions) {
-    const positions = processPositions.get(turnID) ?? [];
-    if (checkpoints.some((checkpoint) => positions.some((position) => position < checkpoint)
-      && positions.some((position) => position > checkpoint))) separatedTurns.add(turnID);
-  }
   const settledTurns = new Set([...turnsByID.values()].filter((turn) => turn.outcome && turn.ended_at)
     .map((turn) => turn.turn_id));
-  runs.forEach((nodes, index) => {
+  runs.forEach(({ nodes, outputComplete }, index) => {
     if (nodes.length < 2) return;
     const tools = nodes.filter(node => node.kind === 'tool');
     const thinking = nodes.filter(node => node.kind === 'thinking');
@@ -187,7 +168,7 @@ export function projectFlowerToolSequences(
     const firstEntry = Math.min(...nodes.map(node => entryPositions.get(node.entryKey) ?? 0));
     const lastEntry = Math.max(...nodes.map(node => entryPositions.get(node.entryKey) ?? firstEntry));
     const entryKeys = entries.slice(firstEntry, lastEntry + 1).map(entry => entry.key);
-    const separated = Boolean(nodes[0].turnID && settledTurns.has(nodes[0].turnID) && separatedTurns.has(nodes[0].turnID));
+    const settled = Boolean(nodes[0].turnID && settledTurns.has(nodes[0].turnID));
     let group: FlowerToolSequence = {
       key: nodes[0].key,
       nodeKeys: nodes.map(node => node.key),
@@ -198,7 +179,7 @@ export function projectFlowerToolSequences(
       thinkingCount: thinking.length,
       subagentEventCount: subagentEvents.length,
       runningCount: tools.filter(node => node.active).length,
-      disclosure: nodes.some(node => node.active) || !separated && index === runs.length - 1 ? 'manual' : 'automatic',
+      disclosure: nodes.some(node => node.active) || !settled && !outputComplete && index === runs.length - 1 ? 'manual' : 'automatic',
     };
     const prior = previous?.groups.get(group.key);
     if (prior && (Object.keys(group) as (keyof FlowerToolSequence)[]).every(key => {

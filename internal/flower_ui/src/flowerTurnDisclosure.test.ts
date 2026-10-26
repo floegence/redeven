@@ -1,16 +1,40 @@
 import { createRoot } from 'solid-js';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createFlowerTurnDisclosureStore } from './flowerTurnDisclosure';
 
 describe('stable disclosure state', () => {
-  it.each(['none', 'manual', 'automatic'] as const)('applies the %s default only on first observation', initial => createRoot(dispose => {
+  it.each(['none', 'manual', 'automatic'] as const)('settles the %s default once without reopening on observation', initial => createRoot(dispose => {
     const store = createFlowerTurnDisclosureStore();
     store.observe('turn', initial);
-    const expanded = initial !== 'automatic';
-    for (const next of ['manual', 'automatic', 'manual', 'automatic'] as const) {
+    for (const next of ['automatic', 'manual', 'automatic'] as const) {
       store.observe('turn', next);
-      expect(store.expanded('turn', next)).toBe(expanded);
+      expect(store.expanded('turn', next)).toBe(false);
     }
+    dispose();
+  }));
+  it.each(['none', 'manual'] as const)('retains inspected %s work when it first completes', initial => createRoot(dispose => {
+    const store = createFlowerTurnDisclosureStore();
+    store.observe('turn', initial);
+    store.observe('turn', 'automatic', () => true);
+    expect(store.expanded('turn', 'automatic')).toBe(true);
+    store.observe('turn', 'automatic', () => false);
+    expect(store.expanded('turn', 'automatic')).toBe(true);
+    dispose();
+  }));
+  it('checks reading geometry only at an untouched completion boundary', () => createRoot(dispose => {
+    const store = createFlowerTurnDisclosureStore();
+    const inspected = vi.fn(() => false);
+    const anchor = vi.fn();
+    store.observe('turn', 'manual', inspected, anchor);
+    store.observe('turn', 'manual', inspected, anchor);
+    expect(inspected).not.toHaveBeenCalled();
+    store.observe('turn', 'automatic', inspected, anchor);
+    expect(inspected).toHaveBeenCalledOnce();
+    expect(anchor).toHaveBeenCalledOnce();
+    store.observe('turn', 'automatic', inspected, anchor);
+    store.observe('historical', 'automatic', () => true);
+    expect(store.expanded('historical', 'automatic')).toBe(false);
+    expect(inspected).toHaveBeenCalledOnce();
     dispose();
   }));
   it.each([false, true])('preserves manual expanded=%s across completion, regrouping and navigation', expanded => createRoot(dispose => {

@@ -7,6 +7,7 @@ import { ArrowUp, ArrowDown, Copy, GitBranch, MessageSquare, MoreHorizontal, Pen
 
 import { FlowerPinIcon } from '../icons/FlowerPinIcon';
 import { FlowerThreadRows } from './FlowerThreadRows';
+import { FlowerThreadWave } from '../FlowerThreadWave';
 import type { FlowerThreadPinPosition } from '../contracts/flowerSurfaceContracts';
 import { FlowerContextMenu } from '../FlowerContextMenu';
 import { FlowerDirectoryMenuItems, type FlowerDirectoryMenuAvailability } from '../FlowerDirectoryMenuItems';
@@ -128,12 +129,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
       >
         <div class="flower-thread-indicator relative flex h-2 shrink-0 items-center justify-center" aria-hidden="true" title={indicator().title}>
           <Show when={indicator().visual === 'wave'}>
-            <div class="flower-thread-wave h-2 items-center gap-0.5">
-              <div class="flower-thread-wave-bar" style="animation-delay: 0ms" />
-              <div class="flower-thread-wave-bar" style="animation-delay: 180ms" />
-              <div class="flower-thread-wave-bar" style="animation-delay: 360ms" />
-              <div class="flower-thread-wave-bar" style="animation-delay: 540ms" />
-            </div>
+            <FlowerThreadWave />
           </Show>
           <div class="flower-thread-status-dot h-1.5 w-1.5 rounded-full" />
         </div>

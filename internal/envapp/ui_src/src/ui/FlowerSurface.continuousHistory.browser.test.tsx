@@ -207,6 +207,9 @@ describe('continuous history navigation', () => {
     viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -900, bubbles: true }));
     viewport.scrollTop = 0; viewport.dispatchEvent(new Event('scroll'));
     await waitFor(() => preparing);
+    const loading = root.querySelector<HTMLElement>('.flower-history-loading-notice[role="status"]')!;
+    expect(loading.querySelectorAll('.flower-thread-wave-bar')).toHaveLength(4);
+    expect(getComputedStyle(loading.querySelector('.flower-thread-wave-bar')!).animationName).toBe('flower-thread-wave');
     expect(root.querySelector('[data-flower-turn-id="large"]')).toBeNull();
     held.resolve();
     await waitFor(() => Boolean(root.querySelector('[data-flower-turn-id="large"] .flower-turn-summary-button')));

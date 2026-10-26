@@ -70,7 +70,7 @@ async function mount(initial = current(), copy?: FlowerSurfaceCopy, overrides: P
   root.style.height = '780px';
   await waitFor(() => Boolean(root.querySelector('[data-thread-id="process"] button')));
   root.querySelector<HTMLButtonElement>('[data-thread-id="process"] button')!.click();
-  await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="final-a"]')));
+  await waitFor(() => Boolean(root.querySelector('[data-flower-row-message-id="final-a"]')));
   await waitFor(() => root.querySelector('.flower-chat-transcript')?.getAttribute('data-flower-tail-preparing') !== 'true');
   return { root, live };
 }
@@ -132,7 +132,8 @@ describe('completed turn process disclosure', () => {
     send(2);
     const row = () => root.querySelector<HTMLElement>('[data-flower-decoration-id="only-compaction"]');
     await waitFor(() => Boolean(summary(root)) && Boolean(root.querySelector('[data-flower-row-decoration-id="only-compaction"]')));
-    expect(summary(root)!.getAttribute('aria-expanded')).toBe('true');
+    expect(summary(root)!.getAttribute('aria-expanded')).toBe('false');
+    summary(root)!.click();
     await waitFor(() => row()?.closest('.flower-turn-row-viewport')?.getAttribute('aria-hidden') !== 'true');
     expect(row()!.closest('.flower-turn-row-viewport')?.hasAttribute('inert')).toBe(false);
     send(1, []); send(1, []);
@@ -165,8 +166,6 @@ describe('completed turn process disclosure', () => {
     const divider = (id: string) => root.querySelector<HTMLElement>('[data-flower-decoration-id="' + id + '"]')!;
     const collapsed = (id: string) => root.querySelector(`[data-flower-row-decoration-id="${id}"] .flower-turn-row-viewport`)?.getAttribute('aria-hidden') === 'true';
     await waitFor(() => Boolean(summary(root)));
-    expect(collapsed('third')).toBe(false);
-    summary(root)!.click();
     await waitFor(() => collapsed('third'));
     expect(['first', 'second', 'third'].every(collapsed)).toBe(true);
     expect(collapsed('manual')).toBe(false);
@@ -200,8 +199,7 @@ describe('completed turn process disclosure', () => {
     const { root } = await mount(current(true, { last_outcome: 'failed', items, turns: [turn({ outcome: 'failed', intermediate_item_ids: ['progress', 'second-progress'], final_item_ids: [], final_boundary_complete: false })], parent_events: parentProcessPage(events) }));
     const user = message(root, 'user');
     expect(user.compareDocumentPosition(summary(root)!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
-    summary(root)!.click();
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
     expect(hidden(root, 'progress')).toBe(true);
     expect(hidden(root, 'second-progress')).toBe(true);
     expect(events.every(event => eventHidden(root, event.id))).toBe(true);
@@ -245,6 +243,7 @@ describe('completed turn process disclosure', () => {
     expect(read).not.toHaveBeenCalled();
     expect(root.querySelector('.flower-transcript-stack > button.flower-parent-event-action')).toBeNull();
     summary(root)!.click();
+    root.querySelectorAll<HTMLButtonElement>('.flower-tool-sequence-toggle[aria-expanded="false"]').forEach(button => button.click());
     await waitFor(() => Boolean(eventRow(root, report.id)));
     const disclosure = () => eventRow(root, report.id).querySelector<HTMLButtonElement>('.flower-parent-event-disclosure')!;
     disclosure().click();
@@ -265,6 +264,8 @@ describe('completed turn process disclosure', () => {
   it('folds all eleven child dynamics with failed work and preserves reports, order and late updates', async () => {
     const failed = current(true, { last_outcome: 'failed', turns: [turn({ outcome: 'failed', intermediate_item_ids: ['progress'], final_item_ids: [], final_boundary_complete: false })], parent_events: parentProcessPage(parentProcessEvents.slice(0, 9)) });
     const { root, live } = await mount(failed);
+    summary(root)!.click();
+    root.querySelectorAll<HTMLButtonElement>('.flower-tool-sequence-toggle[aria-expanded="false"]').forEach(button => button.click());
     await waitFor(() => root.querySelectorAll('[data-parent-event]').length === 9);
     const report = eventRow(root, 'event-0');
     let full = report.querySelector<HTMLButtonElement>('.flower-parent-event-disclosure')!;
@@ -359,7 +360,7 @@ describe('completed turn process disclosure', () => {
     expect(message(root, 'final-a')).toBe(final);
     expect(final.querySelector('time')?.dateTime).toBe('2026-10-11T12:02:38.000Z');
     expect(message(root, 'final-b').querySelector('.flower-answer-actions')).not.toBeNull();
-    expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
     expect(message(root, 'progress').querySelector('.flower-answer-actions')).toBeNull();
     expect(message(root, 'progress').querySelector('time')).toBeNull();
   });
@@ -406,21 +407,20 @@ describe('completed turn process disclosure', () => {
     await waitFor(() => [...root.querySelectorAll('.flower-turn-row-viewport[aria-hidden="true"]')].every((row) => getComputedStyle(row).display === 'none'));
     expect(message(root, 'final-a').getBoundingClientRect().top - summary(root)!.getBoundingClientRect().bottom).toBeLessThanOrEqual(32);
   });
-  it('retains successful live work until manually folded, preserving final DOM and both final segments', async () => {
+  it('automatically folds successful live work, preserving final DOM and both final segments', async () => {
     const { root, live } = await mount();
     expect(summary(root)).toBeNull();
     const final = message(root, 'final-a');
     live.push(current(true));
-    await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'true');
+    await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'false');
     expect(summary(root)?.textContent).toContain('2 minutes 18 seconds');
-    expect(hidden(root, 'progress')).toBe(false);
-    expect(hidden(root, 'tool')).toBe(false);
+    expect(hidden(root, 'progress')).toBe(true);
+    expect(hidden(root, 'tool')).toBe(true);
     expect(hidden(root, 'user')).toBe(false);
     expect(hidden(root, 'final-a')).toBe(false);
     expect(hidden(root, 'final-b')).toBe(false);
     expect(message(root, 'final-a')).toBe(final);
     const button = summary(root)!;
-    button.click();
     await waitFor(() => hidden(root, 'progress'));
     await new Promise(resolve => setTimeout(resolve, 240));
     const top = button.getBoundingClientRect().top;
@@ -458,16 +458,13 @@ describe('completed turn process disclosure', () => {
     expect(root.querySelector('.flower-error-card')).toBeNull();
     expect(root.querySelector('[data-flower-turn-id="turn"] .flower-turn-ended')).not.toBeNull();
   });
-  it.each(['failed', 'cancelled', 'interrupted'] as const)('keeps %s work while active thinking stays folded', async (outcome) => {
+  it.each(['failed', 'cancelled', 'interrupted'] as const)('automatically folds %s work and keeps partial output visible', async (outcome) => {
     const { root, live } = await mount();
     expect(root.querySelector('[data-flower-thinking-view="collapsed"]')).not.toBeNull();
     live.push(current(true, { last_outcome: outcome, turns: [turn({ outcome, intermediate_item_ids: ['progress'], final_item_ids: [], final_boundary_complete: false })] }));
     const outcomeNotice = () => root.querySelector(outcome === 'cancelled' ? '.flower-turn-ended' : '.flower-run-error');
     await waitFor(() => Boolean(outcomeNotice()));
-    expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
-    expect(hidden(root, 'progress')).toBe(false);
-    expect(root.querySelector('[data-flower-thinking-view="collapsed"]')).not.toBeNull();
-    summary(root)!.click();
+    await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'false');
     expect(hidden(root, 'thinking')).toBe(true);
     expect(hidden(root, 'tool')).toBe(true);
     expect(hidden(root, 'progress')).toBe(true);
@@ -478,6 +475,7 @@ describe('completed turn process disclosure', () => {
   it.each(['failed', 'cancelled', 'interrupted'] as const)('preserves expanded %s work when a newer ordinary turn starts', async outcome => {
     const stopped = current(true, { last_outcome: outcome, turns: [turn({ outcome, final_item_ids: [], final_boundary_complete: false })] });
     const { root, live } = await mount(stopped);
+    summary(root)!.click();
     expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
     const partial = message(root, 'final-a');
     live.push(continued(stopped));
@@ -496,6 +494,8 @@ describe('completed turn process disclosure', () => {
   it.each(['selection', 'focus', 'tool', 'pointer', 'keyboard', 'menu', 'reading', 'manual-open', 'manual-collapse'] as const)('preserves %s inspection or choice when abnormal work becomes historical', async protection => {
     const stopped = current(true, { last_outcome: 'failed', turns: [turn({ outcome: 'failed', final_item_ids: [], final_boundary_complete: false })] });
     const { root, live } = await mount(stopped);
+    summary(root)!.click();
+    await waitFor(() => !hidden(root, 'progress'));
     const process = message(root, 'progress');
     if (protection === 'selection') {
       (document.activeElement as HTMLElement | null)?.blur();
@@ -579,8 +579,8 @@ describe('completed turn process disclosure', () => {
     const { root, live } = await mount(stopped);
     live.push({ ...stopped, view_version: 3, turns: [...stopped.turns!, turn({ turn_id: 'compact', run_id: 'compact-run', kind: 'context_compaction', intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })] });
     await new Promise(resolve => setTimeout(resolve, 80));
-    expect(summary(root)?.getAttribute('aria-expanded')).toBe('true');
-    expect(hidden(root, 'progress')).toBe(false);
+    expect(summary(root)?.getAttribute('aria-expanded')).toBe('false');
+    expect(hidden(root, 'progress')).toBe(true);
   });
   it.each(['selection', 'focus', 'tool', 'pointer', 'keyboard', 'menu', 'reading'] as const)('protects %s inspection once at completion', async (protection) => {
     const { root, live } = await mount();
@@ -661,7 +661,7 @@ describe('completed turn process disclosure', () => {
     expect(message(root, 'progress').getBoundingClientRect().bottom).toBeLessThan(viewport.getBoundingClientRect().top);
     const top = final.getBoundingClientRect().top;
     live.push({ ...current(true), items: [...content.map((item) => ({ ...item, live: false })), current(true).items!.at(-1)!] });
-    await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'true');
+    await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'false');
     await new Promise((resolve) => setTimeout(resolve, 240));
     expect(Math.abs(final.getBoundingClientRect().top - top)).toBeLessThanOrEqual(1);
     expect(message(root, 'final-a')).toBe(final);

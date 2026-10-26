@@ -51,7 +51,7 @@ async function mount(items: FlowerRuntimeCurrentItem[], previews: readonly Flowe
   root.style.height = '780px';
   await waitFor(() => Boolean(root.querySelector('[data-thread-id="sequences"] button')));
   root.querySelector<HTMLButtonElement>('[data-thread-id="sequences"] button')!.click();
-  await waitFor(() => Boolean(root.querySelector('[data-flower-activity-item-id], .flower-thinking-disclosure')));
+  await waitFor(() => Boolean(root.querySelector('[data-flower-activity-item-id], .flower-thinking-disclosure, .flower-tool-sequence-toggle')));
   await waitFor(() => root.querySelector('.flower-chat-transcript')?.getAttribute('data-flower-tail-preparing') !== 'true');
   return { root, push(next: FlowerRuntimeCurrentItem[], nextPreviews: readonly FlowerToolCallPreview[] = []) {
     latest = { ...current(next, latest.view_version + 1), ...(nextPreviews.length ? { tool_call_previews: nextPreviews } : {}) };
@@ -88,6 +88,61 @@ function expectConnectorBetween(root: HTMLElement, previousID: string, nextID: s
 afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('consecutive tools in the shared Flower surface', () => {
+  it('folds completed tools after output finishes without flickering between consecutive calls', async () => {
+    const initial = [tool('auto-a'), tool('auto-b', 'running')];
+    const { root, push } = await mount(initial);
+    const header = toggle(root, 'auto-a');
+    expect(header.getAttribute('aria-expanded')).toBe('true');
+    push([tool('auto-a'), tool('auto-b')]);
+    await waitFor(() => !root.querySelector('.flower-tool-sequence-running'));
+    expect(header.getAttribute('aria-expanded')).toBe('true');
+    push([tool('auto-a'), tool('auto-b'), tool('auto-c', 'running')]);
+    await waitFor(() => Boolean(row(root, 'auto-c')));
+    expect(header.getAttribute('aria-expanded')).toBe('true');
+    const prose = item('auto-output', 'assistant', 'Here is the result.');
+    const calls = [tool('auto-a'), tool('auto-b'), tool('auto-c')];
+    push([...calls, { ...prose, live: true }]);
+    await waitFor(() => Boolean(root.querySelector('[data-flower-message-id="auto-output"]')));
+    expect(header.getAttribute('aria-expanded')).toBe('true');
+    push([...calls, prose]);
+    await waitFor(() => header.getAttribute('aria-expanded') === 'false');
+    expect(header.textContent).toContain('3 tool calls');
+    header.click();
+    await waitFor(() => group(root, 'auto-a').dataset.state === 'open');
+    push([...calls, prose, tool('auto-next')]);
+    await waitFor(() => Boolean(row(root, 'auto-next')));
+    expect(header.getAttribute('aria-expanded')).toBe('true');
+    header.click();
+    push([...calls, prose, tool('auto-next'), tool('auto-last')]);
+    await waitFor(() => Boolean(toggle(root, 'auto-next')));
+    expect(header.getAttribute('aria-expanded')).toBe('false');
+  });
+  it('opens a long sequence at the latest call on every painted frame', async () => {
+    await media.emulateMediaPreferences({ reducedMotion: 'no-preference' });
+    const calls = Array.from({ length: 126 }, (_, index) => tool(`entry-${index}`));
+    const { root } = await mount([...calls, item('later-text', 'assistant'), tool('next-a'), tool('next-b')]);
+    const header = toggle(root, 'entry-0');
+    const body = group(root, 'entry-0').querySelector<HTMLElement>('.flower-tool-sequence-scroll')!;
+    const inspectOpen = async () => {
+      const samples: number[] = [];
+      header.click();
+      for (let frame = 0; frame < 24; frame++) {
+        await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+        const panel = body.parentElement!;
+        if (panel.getBoundingClientRect().height > 1 && Number(getComputedStyle(panel).opacity) > 0.01) {
+          samples.push(body.scrollHeight - body.clientHeight - body.scrollTop);
+        }
+      }
+      expect(samples.length).toBeGreaterThan(0);
+      expect(Math.max(...samples), JSON.stringify(samples)).toBeLessThanOrEqual(1);
+    };
+    await inspectOpen();
+    body.scrollTop = 40; body.dispatchEvent(new Event('scroll'));
+    header.click();
+    await waitFor(() => group(root, 'entry-0').dataset.state === 'closed');
+    await inspectOpen();
+  });
+
   it('defers unopened historical tool details until expansion and retains inspected content', async () => {
     const history = Array.from({ length: 300 }, (_, index) => tool(`deferred-${index}`));
     const tail = [item('progress', 'assistant'), tool('active-a'), tool('active-b', 'running')];
@@ -317,7 +372,7 @@ describe('consecutive tools in the shared Flower surface', () => {
   it.each([
     ['success', 'reduce'], ['success', 'no-preference'],
     ['running', 'reduce'], ['running', 'no-preference'],
-  ] as const)('preserves a collapsed %s sequence reading offset with %s motion', async (status, reducedMotion) => {
+  ] as const)('reopens a collapsed %s sequence at latest with %s motion', async (status, reducedMotion) => {
     await media.emulateMediaPreferences({ reducedMotion });
     const initial = Array.from({ length: 40 }, (_, index) => tool(`latest-${index}`, index === 39 ? status : 'success'));
     const later = status === 'success' ? [item('later-prose', 'assistant'), tool('later-first'), tool('later-last')] : [];
@@ -342,8 +397,10 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(row(root, 'latest-40')).toBeNull();
     header.click();
     await waitFor(() => group(root, 'latest-0').dataset.state === 'open');
-    await expect.poll(() => viewport.scrollTop).toBe(40);
-    expect(viewport.hasAttribute('data-flower-reading-paused')).toBe(true);
+    await expect.poll(() => viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop).toBeLessThanOrEqual(1);
+    expect(viewport.hasAttribute('data-flower-reading-paused')).toBe(false);
+    viewport.scrollTop = 40;
+    viewport.dispatchEvent(new Event('scroll'));
     if (status === 'running') {
       push([...updated.slice(0, -1), tool('latest-40'), tool('latest-41', 'running')]);
       await waitFor(() => Boolean(row(root, 'latest-41')));
@@ -793,7 +850,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     const top = prose.getBoundingClientRect().top;
     push([...initial, tool('c')]);
     await waitFor(() => Boolean(row(root, 'c')));
-    expect(collapsed(root, 'a')).toBe(false);
+    expect(collapsed(root, 'a')).toBe(true);
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     expect(Math.abs(prose.getBoundingClientRect().top - top)).toBeLessThan(2);
   });

@@ -40,8 +40,6 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
   let node!: HTMLDivElement;
   let body!: HTMLDivElement;
   let following = true;
-  let opened = false;
-  let savedReadingTop = 0;
   let previousHeight = 0;
   let previousScrollTop = 0;
   let arrivalFrame = 0;
@@ -59,7 +57,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
     if (!arrivalMotion) writeScrollTop(body.scrollHeight);
   };
   const prepareArrival = () => {
-    if (!following || !expanded() || context?.reducedMotion() || body.scrollHeight - body.clientHeight - body.scrollTop <= 1) return 0;
+    if (!following || !expanded() || motion.state() !== 'open' || context?.reducedMotion() || body.scrollHeight - body.clientHeight - body.scrollTop <= 1) return 0;
     if (!arrivalMotion) {
       arrivalMotion = { startTop: body.scrollTop, startedAt: performance.now() };
       const advance = (now: number) => {
@@ -78,10 +76,15 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
   const motionKey = `tools:${props.nodeKey}`;
   const motion = createFlowerActivityDisclosureMotion(expanded, {
     initialOpen: untrack(expanded), reducedMotion: context?.reducedMotion,
-    onLayoutFrame: () => context?.onLayoutFrame(motionKey, motion.state() === 'opening' || motion.state() === 'closing'),
-    onMotionEnd: () => context?.onMotionEnd(motionKey),
+    onLayoutFrame: () => {
+      if (first() && expanded() && following) scrollToLatest();
+      context?.onLayoutFrame(motionKey, motion.state() === 'opening' || motion.state() === 'closing');
+    },
+    onMotionEnd: () => {
+      if (first() && expanded() && following) scrollToLatest();
+      context?.onMotionEnd(motionKey);
+    },
     onBeforeClose: () => {
-      savedReadingTop = body.scrollTop;
       cancelArrival();
       if (content?.contains(document.activeElement)) trigger?.focus({ preventScroll: true });
     },
@@ -92,20 +95,31 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
     onCleanup(() => unregister?.());
   });
   createEffect(() => {
-    if (!first() || motion.state() !== 'open') return;
-    const frame = requestAnimationFrame(() => {
-      if (!opened) { scrollToLatest(); opened = true; }
-      else writeScrollTop(savedReadingTop);
-      body.toggleAttribute('data-flower-reading-paused', !following);
+    if (!first() || !expanded()) return;
+    // Opening is an explicit request to inspect the latest call. Position after
+    // row placement, before paint; never reveal the old offset then scroll it.
+    following = true;
+    cancelArrival();
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      scrollToLatest();
+      body.removeAttribute('data-flower-reading-paused');
     });
-    onCleanup(() => cancelAnimationFrame(frame));
+    onCleanup(() => { cancelled = true; });
   });
   createEffect(() => {
     if (!first() || !expanded()) return;
     const observer = new ResizeObserver(() => {
       const height = body.scrollHeight;
-      if (following && height > previousHeight && member()?.group.runningCount) {
-        if (context?.reducedMotion()) scrollToLatest(); else prepareArrival();
+      if (motion.state() === 'opening' && following) {
+        // Every child opens concurrently and changes the shared scroll extent.
+        // Resize delivery precedes paint, so all visible opening frames stay at
+        // the final call without an internal scrolling animation.
+        cancelArrival();
+        scrollToLatest();
+      } else if (following && height > previousHeight) {
+        if (context?.reducedMotion() || !member()?.group.runningCount) scrollToLatest(); else prepareArrival();
       }
       previousHeight = height;
     });
@@ -181,7 +195,6 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
           if (element.scrollTop === previousScrollTop) return;
           cancelArrival();
           previousScrollTop = element.scrollTop;
-          savedReadingTop = element.scrollTop;
           following = element.scrollHeight - element.clientHeight - element.scrollTop <= 24;
           element.toggleAttribute('data-flower-reading-paused', !following);
         }}>

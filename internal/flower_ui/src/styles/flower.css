@@ -12601,6 +12601,9 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
 }
 
 .flower-history-loading-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   position: absolute;
   inset-block-start: 0.5rem;
   inset-inline-start: 50%;
@@ -12614,6 +12617,7 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
   pointer-events: none;
   z-index: 2;
 }
+.flower-history-loading-notice .flower-thread-wave { display: flex; }
 
 .flower-history-navigation,
 .flower-history-body-control {

@@ -76,6 +76,30 @@ function createController() {
 }
 
 describe('Flower scroll tail controller', () => {
+  it('suppresses late arrival animations until the destination is ready', () => {
+    const raf = createRafHarness();
+    let preparing = false;
+    const controller = createFlowerScrollTailController({ preparing: () => preparing, reducedMotionPreferred: () => false,
+      requestAnimationFrame: raf.requestAnimationFrame, cancelAnimationFrame: raf.cancelAnimationFrame });
+    const metrics = createViewport();
+    controller.bind(metrics.viewport);
+    controller.prepareArrival();
+    preparing = true;
+    metrics.setScrollHeight(1000);
+    expect(controller.prepareArrival()).toBe(0);
+    controller.scheduleTailScroll({ smooth: true });
+    raf.flushFrame();
+    expect(metrics.scrollTop()).toBe(900);
+    preparing = false;
+    metrics.setScrollHeight(1200);
+    expect(controller.prepareArrival()).toBe(220);
+    raf.flushFrame(); raf.flushFrame();
+    expect(metrics.scrollTop()).toBeGreaterThanOrEqual(900);
+    expect(metrics.scrollTop()).toBeLessThan(1100);
+    raf.flushAll();
+    expect(metrics.scrollTop()).toBe(1100);
+    controller.dispose();
+  });
   it('preserves native wheel movement before its scroll event while correcting late content growth', () => {
     const { controller, raf } = createController();
     const metrics = createViewport(2000);

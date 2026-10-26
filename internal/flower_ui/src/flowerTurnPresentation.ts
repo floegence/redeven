@@ -24,7 +24,6 @@ export type FlowerTurnProcessProjection = Readonly<{
 
 export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[], turns: readonly FlowerRuntimeTurn[] = [], pendingTurnIDs: readonly string[] = [], previous?: FlowerTurnProcessProjection): FlowerTurnProcessProjection {
   const facts = new Map(turns.map((turn) => [turn.turn_id, turn]));
-  const latestTurnID = turns.filter((turn) => turn.kind !== 'context_compaction').at(-1)?.turn_id;
   const groups = new Map<string, string[]>();
   const rowTurns = new Map<string, string>();
   const eventCounts = new Map<string, number>();
@@ -98,8 +97,7 @@ export function projectFlowerTurnProcess(entries: readonly FlowerTimelineEntry[]
         }
       }
     }
-    const disclosure: FlowerTurnDisclosurePolicy = !disclosable || staticOverview ? 'none'
-      : turnID === latestTurnID && turn?.outcome !== 'completed' ? 'manual' : 'automatic';
+    const disclosure: FlowerTurnDisclosurePolicy = !disclosable || staticOverview ? 'none' : 'automatic';
     const next = { turnID, turn, processKeys, parentEventCount: eventCounts.get(turnID) ?? 0, staticOverview, inputResponseCount,
       toolCallCount, failedCallCount, summaryKey: processKeys[0], terminalKey: terminalKeys.get(turnID), disclosure };
     const prior = previous?.groups.get(turnID);

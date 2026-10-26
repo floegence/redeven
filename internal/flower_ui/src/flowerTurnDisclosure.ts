@@ -24,17 +24,21 @@ export function createFlowerTurnDisclosureStore() {
     expanded(key: string, policy: FlowerTurnDisclosurePolicy): boolean {
       return policy === 'none' || (state(key)[0]()?.expanded ?? policy !== 'automatic');
     },
-    observe(key: string, policy: FlowerTurnDisclosurePolicy): boolean {
+    observe(key: string, policy: FlowerTurnDisclosurePolicy, inspected: () => boolean = () => false, beforeCollapse?: () => void): boolean {
       const previous = current(key);
       if (policy === 'none') {
         if (!previous) update(key, { policy, expanded: true, retained: false });
         return false;
       }
-      // Defaults apply once. Completion and newer turns cannot change content
-      // the reader already saw, even when its initial state was automatic.
+      // A completed boundary settles the automatic default once. Explicit
+      // choices and content being inspected survive later observations.
       if (previous) {
         if (previous.policy !== policy) {
-          update(key, { ...previous, policy });
+          const retained = previous.retained || policy === 'automatic' && previous.expanded && inspected();
+          const collapse = policy === 'automatic' && previous.expanded && !retained;
+          if (collapse) beforeCollapse?.();
+          update(key, { policy, retained, expanded: previous.expanded && !collapse });
+          return collapse;
         }
         return false;
       }

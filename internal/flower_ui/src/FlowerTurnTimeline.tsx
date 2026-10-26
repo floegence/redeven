@@ -254,7 +254,8 @@ export function FlowerTurnTimeline(props: TimelineProps) {
       for (const group of groups.groups.values()) {
         // Automatic folding must not hide a title that has just arrived.
         if (group.disclosure === 'automatic' && group.processKeys.some(key => revealing.has(key))) continue;
-        props.choices.observe(identity(group.turnID), group.disclosure);
+        props.choices.observe(identity(group.turnID), group.disclosure,
+          () => inspectionProtected(group.turnID, group.processKeys, true), () => preserveReadingAnchor(group.processKeys));
       }
     }));
   });
@@ -269,7 +270,14 @@ export function FlowerTurnTimeline(props: TimelineProps) {
       const revealing = titleReveal.revealingEntries();
       for (const group of projection.groups.values()) {
         if (group.disclosure === 'automatic' && group.entryKeys.some(key => revealing.has(key))) continue;
-        props.choices.observe(sequenceIdentity(group.key), group.disclosure);
+        props.choices.observe(sequenceIdentity(group.key), group.disclosure, () => {
+          const inspectedNodes = group.nodeKeys.flatMap(key => {
+            const element = sequenceLayout.element(key);
+            return element ? [element] : [];
+          });
+          const turnID = processes().rows.get(group.entryKeys[0])?.turnID ?? '';
+          return inspectionProtected(turnID, group.entryKeys, true, inspectedNodes);
+        }, () => preserveReadingAnchor(group.entryKeys));
       }
     }));
   });
