@@ -31,6 +31,7 @@ function mount(perform: ReturnType<typeof vi.fn>, gateways: readonly DesktopGate
  dispose=render(()=><RuntimeGatewayJoinPanel targetID={snapshot().target} targetLabel="Build Runtime" gateways={snapshot().gateways} address={snapshot().address} code={snapshot().code} i18n={i18n}/>,root);
  const trigger=button(i18n.t('gatewayJoin.title'));trigger.focus();trigger.click();return {trigger,
   setTarget:(target:DesktopCloudRuntimeLinkTargetID)=>setSnapshot(current=>({...current,target})),
+  setGateways:(gateways:readonly DesktopGatewaySource[])=>setSnapshot(current=>({...current,gateways})),
   refreshSnapshot:()=>setSnapshot(current=>({...current,gateways:structuredClone(current.gateways)})),
   setInvitation:(address:string,code:string)=>setSnapshot(current=>({...current,address,code})),
  };
@@ -158,7 +159,57 @@ const localGateway: DesktopGatewaySource = {
  management_capability:'managed_local_host',capabilities:[],status:'online',trust_state:'paired',listener_running:true,
  created_at_ms:1,updated_at_ms:1,environments:[],member_endpoints:[{endpoint_id:'lan',address:'https://office.local:7443',scope:'lan',priority:0}],
 };
-describe('local Gateway quick selection',()=>{
+describe('saved Gateway selection',()=>{
+ it.each(['url','local_host','local_container','ssh_host','ssh_container'] as const)('offers a saved %s Gateway independently of live status',async connection_kind=>{
+  const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
+  const gateway={...localGateway,connection_kind,status:'unknown' as const,listener_running:false};
+  const {setGateways}=mount(perform,[gateway],'');await settle();
+  chooseSavedGateway('https://office.local:7443');await settle();
+  const picker=document.querySelector<HTMLSelectElement>('[data-gateway-picker]')!;
+  const code=document.querySelector<HTMLInputElement>('input[autocomplete=off]:not([placeholder])')!;
+  code.focus();setGateways([{...gateway,status:'offline'}]);await settle();
+  expect(document.querySelector('[data-gateway-picker]')).toBe(picker);
+  expect(picker.value).toBe('https://office.local:7443');
+  expect(document.activeElement).toBe(code);
+  button(i18n.t('gatewayJoin.verify')).click();await settle();
+  expect(perform.mock.calls.at(-1)?.[0]).toMatchObject({operation:'preview',address:'https://office.local:7443'});
+ });
+ it('offers a saved URL before its first catalog sync',async()=>{
+  const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
+  mount(perform,[{...localGateway,connection_kind:'url',status:'unknown',trust_state:undefined,member_endpoints:undefined,gateway_url:'https://saved.example:7443/'}],'');await settle();
+  chooseSavedGateway('https://saved.example:7443');await settle();
+  expect(document.querySelector<HTMLSelectElement>('[data-gateway-picker]')?.value).toBe('https://saved.example:7443');
+ });
+ it('retains verified consent through status refreshes and revokes it when the saved address is removed',async()=>{
+  const perform=vi.fn().mockImplementation(async request=>request.operation==='preview'?verified():status({joined:false,phase:'not_joined'}));
+  const {setGateways}=mount(perform,[localGateway],'');await settle();chooseSavedGateway('https://office.local:7443');
+  button(i18n.t('gatewayJoin.verify')).click();await settle();
+  setGateways([{...localGateway,status:'offline',listener_running:false}]);await settle();
+  expect(button(i18n.t('gatewayJoin.confirmEnable')).disabled).toBe(false);
+  expect(document.querySelector<HTMLSelectElement>('[data-gateway-picker]')?.value).toBe('https://office.local:7443');
+  setGateways([]);await settle();
+  expect(document.querySelector('.redeven-gateway-join-summary')).toBeNull();
+  expect(button(i18n.t('gatewayJoin.verify')).disabled).toBe(true);
+  expect(document.querySelector<HTMLInputElement>('input[placeholder]')?.value).toBe('');
+ });
+ it('defaults to saved selection when inventory arrives before address interaction',async()=>{
+  const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
+  const {setGateways}=mount(perform,[],'');await settle();
+  setGateways([localGateway]);await settle();
+  expect(addressTab(i18n.t('gatewayDiscovery.savedGateway')).getAttribute('aria-selected')).toBe('true');
+  expect(activeAddressPanel()?.querySelector('[data-gateway-picker]')).not.toBeNull();
+ });
+ it('preserves the manual input node, caret and focus when inventory arrives',async()=>{
+  const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
+  const {setGateways}=mount(perform,[],'');await settle();
+  const input=document.querySelector<HTMLInputElement>('input[placeholder]')!;
+  input.focus();edit(0,'https://draft.example');input.setSelectionRange(12,12);
+  setGateways([localGateway]);await settle();
+  expect(addressTab(i18n.t('gatewayDiscovery.enterAddress')).getAttribute('aria-selected')).toBe('true');
+  expect(activeAddressPanel()?.querySelector('input')).toBe(input);
+  expect(input.value).toBe('https://draft.example');
+  expect(input.selectionStart).toBe(12);expect(document.activeElement).toBe(input);
+ });
  it('separates saved Gateway selection from manual entry and preserves each draft',async()=>{
   const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
   const {refreshSnapshot}=mount(perform,[localGateway],'');await settle();
@@ -222,9 +273,9 @@ describe('local Gateway quick selection',()=>{
   expect(document.querySelector<HTMLSelectElement>('[data-gateway-picker]')?.value).toBe('https://office.local:7443');
   expect(activeAddressPanel()?.querySelector('input')).toBeNull();
  });
- it('excludes offline, disabled and remote Gateways and loopback addresses for remote Runtimes',async()=>{
+ it('excludes disabled, Host-rejected and remote loopback addresses',async()=>{
   const perform=vi.fn().mockResolvedValue(status({joined:false,phase:'not_joined'}));
-  mount(perform,[{...localGateway,status:'offline'},{...localGateway,allowed_hosts:['other.example']},{...localGateway,local_enabled:false},{...localGateway,connection_kind:'ssh_host'},
+  mount(perform,[{...localGateway,allowed_hosts:['other.example']},{...localGateway,local_enabled:false},
    {...localGateway,member_endpoints:[{endpoint_id:'loopback',address:'https://127.0.0.1:7443',scope:'lan',priority:0}]}]);await settle();
   expect(document.querySelector('[data-gateway-picker]')).toBeNull();
   expect(document.querySelector('[role="tablist"]')).toBeNull();

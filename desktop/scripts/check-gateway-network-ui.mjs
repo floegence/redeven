@@ -109,6 +109,9 @@ try {
   assert.ok(layout.width<=width-16 && layout.overflow<=1);
   if(scenario==='long') {
    assert.match(await picker.locator('option').nth(1).innerText(),/design and engineering team/);
+   await picker.selectOption('https://office.local:7443');
+   const bounds=await picker.boundingBox();
+   assert.ok(bounds && bounds.width<=width-32,'long selected names fit the narrow panel');
   }
   if(scenario==='multiple') {
    assert.match(await picker.locator('option').nth(1).innerText(),/office\.local:7443/);

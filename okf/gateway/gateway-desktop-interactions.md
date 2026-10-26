@@ -27,7 +27,7 @@ When authenticated inspection proves the Runtime or its container is stopped, sh
 
 Connection loss blocks submission and polling; explicit recovery retains drafts and uses the original lifecycle owner. Lost connection or changed authority requires fresh verification. Observations never cancel pending requests.
 
-Saved-address and manual-entry tabs preserve independent drafts. Suggestions use confirmed share addresses from member_endpoints; selection grants no authority. Address changes invalidate verification. Success clears the consumed code; reopening clears consent and code.
+Saved-address and manual-entry tabs preserve independent drafts and input nodes. The picker uses enabled registrations saved on this Desktop across URL, local/SSH host and container kinds; observed connectivity and listener state do not hide known addresses or clear selection. Prefer confirmed member_endpoints; before catalog sync, a saved URL may supply a canonical HTTPS origin (an optional root slash is removed). Never infer share addresses from SSH or listener coordinates. Reject revoked/changed trust, invalid origins, Host-rejected addresses and loopback for remote targets. Late inventory defaults untouched empty entry to saved selection without replacing a typed draft or its focus. Removing an eligible selected address invalidates verification. Selection grants no authority: the target Runtime still verifies reachability, identity and invitation before explicit consent. Success clears the consumed code; reopening clears consent and code.
 
 ## Management and presentation
 
