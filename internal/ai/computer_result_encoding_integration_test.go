@@ -139,7 +139,7 @@ func TestComputerProviderPreservesTypesAcrossHistoryRetryAndRestart(t *testing.T
 	}
 	send := func(key string) {
 		t.Helper()
-		if _, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: key, Model: "openai/gpt-5-mini", Input: RunInput{Text: "Inspect current state."}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess}}); err != nil {
+		if _, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: key, Model: "openai/gpt-5-mini", Input: RunInput{Text: "Inspect current state."}, Options: RunOptions{ToolAllowlist: legacyComputerFixtureTools(), PermissionType: config.AIPermissionFullAccess}}); err != nil {
 			t.Fatal(err)
 		}
 		waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(v *ThreadView) bool { return v.RunStatus == "success" })
@@ -238,7 +238,7 @@ func TestComputerCompletedEncodingFailureWaitsAndNeverReplays(t *testing.T) {
 			if err := svc.SetThreadPermissionType(t.Context(), meta, thread.ThreadID, string(FlowerPermissionFullAccess)); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "effect", Model: "openai/gpt-5-mini", Input: RunInput{Text: "Update fixture once."}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess}}); err != nil {
+			if _, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "effect", Model: "openai/gpt-5-mini", Input: RunInput{Text: "Update fixture once."}, Options: RunOptions{ToolAllowlist: legacyComputerFixtureTools(), PermissionType: config.AIPermissionFullAccess}}); err != nil {
 				t.Fatal(err)
 			}
 			if mode == "unknown" {

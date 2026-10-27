@@ -66,7 +66,7 @@ func TestComputerProductionThreadsReleaseCanonicalTargetOwnership(t *testing.T) 
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: name, Model: "openai/gpt-5-mini", Input: RunInput{Text: "Observe the managed browser."}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess}}); err != nil {
+		if _, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: name, Model: "openai/gpt-5-mini", Input: RunInput{Text: "Observe the managed browser."}, Options: RunOptions{ToolAllowlist: legacyComputerFixtureTools(), PermissionType: config.AIPermissionFullAccess}}); err != nil {
 			t.Fatal(err)
 		}
 		view := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(v *ThreadView) bool { return v.RunStatus == "success" || v.RunStatus == "failed" })

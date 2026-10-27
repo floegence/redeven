@@ -24,12 +24,37 @@ interaction boundary.
 
 Approval Required uses the current target and URL in the existing tool approval; temporary authorization expires with the target lease and never becomes a persistent origin grant.
 
-The Runtime admits at most eight active script namespaces. Tool-local documentation owns exact signatures: string names (no RegExp selectors), numeric scroll deltas, condition waits, and sequential awaited operations. Unsupported guest arguments fail before dispatch. Closed diagnostic codes distinguish reference/type/syntax/argument errors, operation concurrency and bounded output; raw interpreter exceptions remain private. A failed invocation retires its namespace while confirmed earlier actions survive.
+The Runtime admits at most eight active script namespaces. The short tool definition teaches the entry point; selection returns the core guide and ui.help(topic) discloses read, visual, downloads or legacy signatures. Both selection and runtime help share one authored source. Exact signatures include: string names (no RegExp selectors), numeric scroll deltas, condition waits, and sequential awaited operations. Unsupported guest arguments fail before dispatch. Closed diagnostic codes distinguish reference/type/syntax/argument errors, operation concurrency and bounded output; raw interpreter exceptions remain private. A failed invocation retires its namespace while confirmed earlier actions survive.
 
 Semantic snapshots retain their 256 KiB output budget. The script response allows a bounded 512 KiB envelope so metadata cannot make a valid snapshot fail at the transport boundary. Logs have a separate 64 KiB total budget. Local `emit:false` reads receive the same URL/title identity as emitted observations.
 
+## Small default surface
+New unrestricted turns discover only computer.targets, computer.select_target and
+computer.exec. Filtering occurs after current permission and explicit allowlist
+selection, never grants authority, and does not remove primitive executors.
+Explicit primitive consumers and saved provider surfaces retain legacy discovery.
+Canonical Retry queries only primitive names actually used in its source Turn,
+through authorized public canonical queries, then applies current permissions.
+Missing released query metadata is prepared once through Floret Host before the
+query is retried. It does not expand unrelated retries or create a second history store. Without exec permission,
+primitive read-only consumers keep their existing tools.
+
+Computer calls other than inventory must be sent alone. The Floret authorization
+request carries batch metadata into the host handler; a multiple-call batch returns
+paired INVALID_REQUEST feedback before any target operation. It does not stop the
+turn, replay input, change target binding or disable unrelated tool concurrency.
+
 ## Observation and references
 The [semantic snapshot contract](computer-use-semantics.md) owns schema v2, role normalization, tree validation, states, relationships and privacy projection. `ui.getByRole(role, {name?, exact?, root_ref?})` uses a canonical role.
+
+ui.snapshot returns the canonical flat snapshot directly, with one role per node;
+locator.node and locator.snapshot provide direct node/subtree reads. Legacy
+observe/read wrappers remain unchanged. ui.type inserts at current focus; fill
+replaces contents. ui.doubleClick and ui.scroll provide native input parity.
+browser.downloadCursor returns its existing fields plus an immutable wait method
+bound to that cursor. Download recovery inspects existing IDs after a confirmed
+click; it never repeats the export. Browser screenshots return immutable image-bound input methods with captured
+frame/document identity; mutating returned metadata cannot retarget the handle.
 
 Private takeover keeps observations and pixels out of model history.
 
@@ -40,7 +65,7 @@ phase, field, expected form and recovery; page errors and supplied secrets are
 never copied into it. Keys use characters or documented names with
 Alt/Control/Meta/Shift modifiers; physical codes such as Equal are not names.
 Primitive computer.wait defaults to zero milliseconds and adds no settling
-promise. Conditional waits retain their state and timeout contract.
+promise. Legacy waitFor retains its returned state. requireState throws CONDITION_TIMEOUT and seals later host operations, even if guest code catches the error. Earlier completed input remains recorded.
 
 Browser locators expose query({limit,cursor}) over the authorized loaded AX
 scope and an attribute allowlist. Results carry total, truncation, document and
@@ -48,6 +73,15 @@ cursor; changed contents invalidate pagination. Only returned page references
 enter the bounded reference table. Each page is at most 200 items and 48 KiB of
 items. Virtualized, unloaded rows are never counted as visited. href removes
 credentials, query and fragment and must not be reconstructed as an action URL.
+Browser rows reads a unique table/grid and returns header/data rows and cell roles,
+with explicit loaded-tree scope. Pages contain at most 200 rows/48 KiB of item
+content; each row is limited to 200 cells/44 KiB, each cell to 2,000 Unicode
+characters. cells_truncated/text_truncated mark loss; exact totals cannot be
+inferred from incomplete rows. Cursor identity includes full cell contents.
+Nested tables are excluded. count reports loaded matches. attribute returns a
+scalar safe attribute; linkSummary labels its redacted URL as non-actionable.
+Native targets reject these browser reads inside scripts before adapter dispatch.
+
 scroll_progress belongs to the scroll return value. It reports immediate
 before/after measurements, with null or unchanged values remaining inconclusive.
 

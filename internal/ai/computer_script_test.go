@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -365,5 +366,54 @@ func TestComputerScriptReadFailurePreservesConfirmedPrefixWithoutContentOrReplay
 	actions := payload["completed_actions"].([]string)
 	if len(actions) != 2 || actions[1] != "pointer_click" {
 		t.Fatalf("confirmed click lost: %+v", payload)
+	}
+}
+
+func TestComputerScriptHelpAndStrictWaitPreserveEffects(t *testing.T) {
+	calls := 0
+	runtime, call := scriptRuntimeFixture(t, func(_ context.Context, c TargetToolCall) (TargetToolResult, error) {
+		calls++
+		var input map[string]any
+		_ = json.Unmarshal(c.Arguments, &input)
+		if input["action"] == "wait" {
+			return TargetToolResult{Result: map[string]any{"state": "timeout"}}, nil
+		}
+		return TargetToolResult{Result: map[string]any{"action_executed": true}}, nil
+	})
+	result, err := executeTestScript(t.Context(), runtime, call, "await ui.help('core'); await ui.type('hello'); await ui.ref('r').requireState({timeout_ms:0}); await ui.type('bad');")
+	if err == nil || calls != 2 {
+		t.Fatalf("calls=%d err=%v result=%+v", calls, err, result)
+	}
+	payload := result.Result.(map[string]any)
+	if payload["script_error"] != "CONDITION_TIMEOUT" || payload["action_executed"] != true || !strings.Contains(fmt.Sprint(payload["logs"]), "ui.snapshot") {
+		t.Fatalf("lost help or prefix: %+v", payload)
+	}
+	result, err = executeTestScript(t.Context(), runtime, call, "await ui.type('hello'); await ui.help('unknown');")
+	if err == nil || result.Result.(map[string]any)["action_executed"] != true {
+		t.Fatalf("help failure lost effects: %+v %v", result, err)
+	}
+}
+
+func TestComputerScriptCompactSnapshotAndNativeCapability(t *testing.T) {
+	calls := 0
+	runtime, call := scriptRuntimeFixture(t, func(_ context.Context, c TargetToolCall) (TargetToolResult, error) {
+		calls++
+		return TargetToolResult{Result: map[string]any{"observation": map[string]any{"semantic_schema_version": 2, "document_id": "d", "nodes": []any{semanticFixtureNode("r", "AXButton", "Apply")}, "truncated": false}}}, nil
+	})
+	result, err := executeTestScript(t.Context(), runtime, call, "await ui.snapshot();")
+	if err != nil {
+		t.Fatal(err)
+	}
+	node := result.Result.(map[string]any)["observation"].(map[string]any)["nodes"].([]any)[0].(map[string]any)
+	if node["role"] != "button" || node["canonical_role"] != nil || node["platform_role"] != nil {
+		t.Fatalf("noncompact node: %+v", node)
+	}
+	// The locked execution path must also reject browser-only operations.
+	raw, _ := json.Marshal(map[string]any{"action": "table", "selector": map[string]any{"ref": "r"}})
+	call.ToolName = "computer.action"
+	call.Arguments = raw
+	_, err = runtime.ExecuteTargetTool(t.Context(), call)
+	if err == nil || calls != 1 {
+		t.Fatalf("native table dispatched: %d %v", calls, err)
 	}
 }

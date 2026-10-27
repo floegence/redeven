@@ -36,10 +36,16 @@ Discovery checks symlinks and Git boundaries; incomplete discovery and context o
 There is no separate social or creative prompt path.
 
 Deterministic tests require the exact base prompt across all 18 permission, profile
-and allowlist combinations, preserve tool-definition hashes, check file-delivery
+and allowlist combinations, pin reviewed tool-definition hashes, check file-delivery
 requirements and bound the prompt to 1,200 bytes.
 
 Synthetic receipts never execute proposed tools; the Service lane runs inside disposable state. Skipped paid runs are not new model qualification, and historical scores do not establish quality for this prompt.
+
+Computer simplification changes provider-visible tool definitions, not the shared
+base system prompt. Default discovery has three computer entry points; exact
+script signatures move to selection/help responses. The short definition retains
+sequential calls, observation, scope, partial-effect and no-replay rules. Historical
+primitive consumers retain executable contracts under current permissions.
 
 # Boundaries
 

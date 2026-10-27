@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -105,7 +106,7 @@ func testComputerAutonomousProductionToolLoop(t *testing.T, stale bool) {
 		}
 		switch sequence {
 		case 0:
-			name = "computer_observe"
+			name, args = "computer_exec", map[string]any{"code": "await ui.snapshot();", "description": "Inspect the selected task page"}
 		case 1:
 			name = "computer_targets"
 		case 2:
@@ -114,7 +115,7 @@ func testComputerAutonomousProductionToolLoop(t *testing.T, stale bool) {
 			}
 			name, args = "computer_select_target", map[string]any{"candidate_ref": defaultRef}
 		case 3:
-			name, args = "browser_navigate", map[string]any{"url": site.URL}
+			name, args = "computer_exec", map[string]any{"code": "await browser.navigate(" + strconv.Quote(site.URL) + "); await ui.snapshot();", "description": "Open the local browser fixture"}
 		case 4:
 			name, args = "computer_exec", map[string]any{"description": "Open details once", "code": `await ui.getByRole('button',{name:'Details'}).click(); await ui.getByRole('button',{name:'Details'}).click();`}
 		case 5:
@@ -128,7 +129,7 @@ func testComputerAutonomousProductionToolLoop(t *testing.T, stale bool) {
 			}
 			name, args = "computer_select_target", map[string]any{"candidate_ref": childRef}
 		case 7:
-			name = "computer_observe"
+			name, args = "computer_exec", map[string]any{"code": "await ui.snapshot();", "description": "Inspect the selected task page"}
 		default:
 			if !observed {
 				t.Error("provider did not observe child page")

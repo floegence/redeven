@@ -16,6 +16,7 @@ import (
 // floretBootstrapResult keeps Floret lifecycle, canonical retention, and the
 // typed thread service behind their published runtime contracts.
 type floretBootstrapResult struct {
+	prepareThread        func(context.Context, identity.ThreadID) error
 	threadReadiness      func(context.Context, identity.ThreadID) (flruntime.ThreadReadiness, error)
 	activate             func(context.Context) error
 	prepareRestore       func(context.Context) (flruntime.RestorePreparation, error)
@@ -111,6 +112,15 @@ func (adapter *floretEffectAdapter) Agent(ctx context.Context, request flruntime
 		effect.turnKind = request.TurnKind
 	}
 	if effect != nil && effect.builder != nil {
+		// Canonical Retry may replay a released primitive call before the new
+		// Turn has a checkpoint. Preserve discovery without restoring authority.
+		if request.RetrySource != "" {
+			names, err := service.retryComputerToolNames(ctx, &pending.meta, request)
+			if err != nil {
+				return nil, err
+			}
+			effect.builder.retainedComputerTools = names
+		}
 		effect.builder.threadID = request.ThreadID.String()
 		effect.builder.turnID = request.TurnID.String()
 		effect.builder.messageID = request.TurnID.String()
@@ -225,6 +235,7 @@ func configureFloretRuntime(host *flruntime.Host) (*floretBootstrapResult, error
 	}
 	return &floretBootstrapResult{
 		threadReadiness:      host.Readiness,
+		prepareThread:        host.PrepareThread,
 		activate:             host.Activate,
 		prepareRestore:       host.PrepareRestore,
 		mediaInventory:       host.MediaInventory,

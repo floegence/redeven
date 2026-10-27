@@ -52,9 +52,14 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 			}
 		}
 	})
-	source, err := config.Load(filepath.Join(sourceRoot, "config.json"))
-	if err != nil || source.AI == nil {
-		t.Fatal("local AI configuration unavailable")
+	// Qualification reads only the user's provider profile. It never opens,
+	// migrates or enrolls the unrelated production Runtime configuration.
+	body, err := os.ReadFile(filepath.Join(sourceRoot, "config.json"))
+	var source struct {
+		AI *config.AIConfig `json:"ai"`
+	}
+	if err != nil || json.Unmarshal(body, &source) != nil || source.AI == nil || source.AI.Validate() != nil {
+		t.Fatal("local AI profile unavailable or invalid")
 	}
 	var provider config.AIProvider
 	var model config.AIProviderModel
@@ -97,7 +102,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 		}
 	}
 	for repeat := 1; repeat <= repetitions; repeat++ {
-		for _, scenario := range []string{"large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait"} {
+		for _, scenario := range []string{"large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait"} {
 			t.Run(fmt.Sprintf("%s/%d", scenario, repeat), func(t *testing.T) {
 				// Every case owns its service, browser, fixture and output directory.
 				t.Parallel()
@@ -106,6 +111,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					t.Fatal(err)
 				}
 				var exports, otherAccount, submissions, focused, entered, pointerClicks atomic.Int32
+				var typedValue atomic.Value
 				site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					switch r.URL.Path {
 					case "/pointer":
@@ -113,6 +119,9 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 						return
 					case "/focused":
 						focused.Add(1)
+						return
+					case "/typed":
+						typedValue.Store(r.URL.Query().Get("value"))
 						return
 					case "/entered":
 						entered.Add(1)
@@ -142,7 +151,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					}
 					_, _ = io.WriteString(w, "<script>document.addEventListener('click',()=>fetch('/pointer',{method:'POST'}),true)</script>")
 					if scenario != "large_scope" {
-						_, _ = io.WriteString(w, "<label>Probe<input aria-label='Probe' onfocus=\"fetch('/focused',{method:'POST'})\" onkeydown=\"if(event.key==='Enter')fetch('/entered',{method:'POST'})\"></label><a href='https://example.test/safe?token=private#hidden'>Safe reference</a><div role='region' aria-label='Scrollable' style='height:80px;overflow:auto'><div style='height:500px'>Scroll contents</div></div><button id='ready' disabled>Ready</button><script>setTimeout(()=>document.getElementById('ready').disabled=false,300)</script>")
+						_, _ = io.WriteString(w, "<label>Probe<input aria-label='Probe' oninput=\"fetch('/typed?value='+encodeURIComponent(this.value))\" onfocus=\"fetch('/focused',{method:'POST'})\" onkeydown=\"if(event.key==='Enter')fetch('/entered',{method:'POST'})\"></label><a href='https://example.test/safe?token=private#hidden'>Safe reference</a><div role='region' aria-label='Scrollable' style='height:80px;overflow:auto'><div style='height:500px'>Scroll contents</div></div><button id='ready' disabled>Ready</button><script>setTimeout(()=>document.getElementById('ready').disabled=false,300)</script>")
 						for i := 0; i < 7; i++ {
 							_, _ = fmt.Fprintf(w, "<button>Query item %d</button>", i)
 						}
@@ -231,6 +240,12 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				}
 
 				switch scenario {
+				case "natural_input":
+					prompt = "On the selected page, enter exactly Orchid acceptance 1017 in Probe, then press Enter once. Verify the field's exact contents and report them. Do not save, switch accounts or use shell/network tools."
+				case "natural_read":
+					prompt = "On the selected page, count every Query item button and report each name. Read the safe summary URL of the Safe reference link without navigating to it. Do not input anything or use shell/network tools."
+				case "strict_wait":
+					prompt = "Run this diagnostic once: await ui.getByRole('textbox',{name:'Probe',exact:true}).fill('first'); await ui.getByRole('button',{name:'Never exists',exact:true}).requireState({state:'visible',timeout_ms:0}); await ui.getByRole('button',{name:'Save once',exact:true}).click(); . The timeout is intentional. Report its diagnostic, observe the page, and do not retry the save."
 				case "key_validation":
 					prompt = "This fixture test requires TWO separate computer.exec calls. First run await ui.getByRole('textbox',{name:'Probe',exact:true}).press('Meta+Equal') exactly once. Its validation rejection is intentional. You must then make a second call: await ui.getByRole('textbox',{name:'Probe',exact:true}).press('Enter'); . Complete both steps before reporting their results. Do not retry Meta+Equal. Never click Save once or switch accounts."
 				case "scoped_query":
@@ -244,7 +259,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				case "stale_frame":
 					prompt = "Exercise the stale-frame boundary by running this exact script once through computer.exec, without wrappers or try/catch: const old = (await ui.screenshot()).frame_geometry; await browser.navigate('" + site.URL + "/dashboard?new=1'); await ui.click(4,4,{coordinate_space:'image_pixels',frame:old.frame,document_id:old.document_id}); . Report the returned diagnostic and observe the current page. Do not retry the click."
 				case "invalid_options":
-					prompt = "Run await ui.getByRole('button',{name:'Save once',exact:true}).waitFor({timeout_ms:-1}) exactly once. Report SCRIPT_ARGUMENT_ERROR, then observe the page. Do not click or save."
+					prompt = "Run await ui.getByRole('button',{name:'Save once',exact:true}).waitFor({timeout_ms:-1}) exactly once without wrappers or try/catch. Report the returned SCRIPT_ARGUMENT_ERROR, then observe the page. Do not click or save."
 				case "scroll_progress":
 					prompt = "Observe the selected page, then scroll the region named Scrollable downward by 80 pixels using locator.scroll. Log its scroll_progress with before, after and measurement. Observe afterwards and report what was measured; do not assume unchanged means failure."
 				case "condition_wait":
@@ -254,7 +269,13 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				ctx, cancel := context.WithTimeout(t.Context(), 6*time.Minute)
 				defer cancel()
 				start := time.Now()
-				response, e := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "acceptance", Model: modelID, Input: RunInput{Text: prompt}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess, NoUserInteraction: true, MaxOutputTokens: 8000, ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, ToolAllowlist: []string{"computer.targets", "computer.select_target", "computer.observe", "computer.exec", "computer.screenshot", "browser.navigate", "computer.click", "computer.scroll", "computer.key", "computer.wait"}}})
+				// Natural tasks use the production default surface, without a test allowlist.
+				// Only the legacy primitive contract case explicitly retains its tool.
+				var allowlist []string
+				if scenario == "wait_default" {
+					allowlist = []string{"computer.targets", "computer.select_target", "computer.exec", "computer.wait"}
+				}
+				response, e := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "acceptance", Model: modelID, Input: RunInput{Text: prompt}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess, NoUserInteraction: true, MaxOutputTokens: 8000, ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, ToolAllowlist: allowlist}})
 				if e != nil {
 					t.Fatal(e)
 				}
@@ -280,8 +301,26 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				saveCompactionQualificationJSON(t, filepath.Join(output, scenario+"-history.json"), history)
 				// Assertions inspect actual tool facts; the user prompt is never evidence.
 				var toolEvidence strings.Builder
+				scriptErrors := map[string]int{}
+				var confirmedToolFacts []map[string]any
+				reader := svc.threadRuntime.(flruntime.ThreadToolResultReader)
 				for _, item := range history.Items {
 					if item.Activity != nil {
+						if isComputerUseTool(item.Activity.ToolName) {
+							confirmed, found, err := reader.LookupToolResult(ctx, flruntime.LookupToolResultInput{ThreadID: identity.ThreadID(thread.ThreadID), TurnID: item.TurnID, RunID: item.RunID, ToolCallID: item.Activity.ToolID})
+							if err != nil || !found {
+								t.Fatalf("canonical result unavailable: %v", err)
+							}
+							var envelope struct{ Data map[string]any }
+							if err := json.Unmarshal([]byte(confirmed.Content), &envelope); err != nil {
+								t.Fatal("invalid canonical tool result")
+							}
+							code := anyToString(envelope.Data["script_error"])
+							if code != "" {
+								scriptErrors[code]++
+							}
+							confirmedToolFacts = append(confirmedToolFacts, map[string]any{"tool": confirmed.ToolName, "status": confirmed.Status, "script_error": code, "completed_actions": envelope.Data["completed_actions"], "action_executed": envelope.Data["action_executed"]})
+						}
 						activity := publicActivityItem(*item.Activity)
 						toolEvidence.WriteString(activity.ToolName)
 						if activity.Presentation != nil {
@@ -310,7 +349,13 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				}
 				report := map[string]any{"scope": "production-service-real-deepseek-isolated-chromium", "model": model.ModelName, "wire_model": model.EffectiveWireModelName(), "display_model": "DeepSeek V4.1 Flash (1017)", "elapsed_ms": time.Since(start).Milliseconds(), "requests": recorder.snapshot(), "exports": exports.Load(), "other_account_requests": otherAccount.Load(), "submissions": submissions.Load(), "focused": focused.Load(), "entered": entered.Load(), "repeat": repeat}
 				report["tool_calls"], report["tool_errors"], report["final_text"] = toolCalls, toolErrors, finalText
+				report["script_errors"], report["confirmed_tool_facts"] = scriptErrors, confirmedToolFacts
 				report["pointer_clicks"] = pointerClicks.Load()
+				report["typed_value"] = typedValue.Load()
+				report["surface"] = "production_default"
+				if scenario == "wait_default" {
+					report["surface"] = "explicit_legacy_consumer"
+				}
 				defer func() {
 					report["passed"] = !t.Failed()
 					saveCompactionQualificationJSON(t, filepath.Join(output, scenario+"-report.json"), report)
@@ -327,11 +372,38 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					t.Fatal("no real provider requests")
 				}
 				for _, request := range requests {
+					if scenario != "wait_default" {
+						for _, name := range request.DefinitionToolNames {
+							normalized := strings.ReplaceAll(name, "_", ".")
+							if strings.HasPrefix(normalized, "computer.") || strings.HasPrefix(normalized, "browser.") {
+								if normalized != "computer.targets" && normalized != "computer.select.target" && normalized != "computer.exec" {
+									t.Errorf("noncompact default tool: %s", name)
+								}
+							}
+						}
+					}
 					if request.Model != "deepseek-flash" {
 						t.Errorf("model substitution: %s", request.Model)
 					}
 				}
 				switch scenario {
+				case "natural_input":
+					if typedValue.Load() != "Orchid acceptance 1017" || entered.Load() != 1 || !strings.Contains(finalText, "Orchid acceptance 1017") || submissions.Load() != 0 {
+						t.Errorf("input verification failed: typed=%v enter=%d", typedValue.Load(), entered.Load())
+					}
+				case "natural_read":
+					for i := 0; i < 7; i++ {
+						if !strings.Contains(finalText, fmt.Sprintf("Query item %d", i)) {
+							t.Error("missing query item")
+						}
+					}
+					if !strings.Contains(text, "https://example.test/safe") || pointerClicks.Load() != 0 {
+						t.Error("safe read facts missing")
+					}
+				case "strict_wait":
+					if scriptErrors["CONDITION_TIMEOUT"] == 0 || submissions.Load() != 0 {
+						t.Error("strict timeout failed to stop following input")
+					}
 				case "key_validation":
 					if !strings.Contains(text, "Meta+= or Enter") || entered.Load() != 1 || focused.Load() != 1 {
 						t.Errorf("key validation/recovery: focused=%d entered=%d", focused.Load(), entered.Load())
@@ -353,11 +425,11 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 						t.Error("fresh identity not verified")
 					}
 				case "stale_frame":
-					if !strings.Contains(text, "STALE_REFERENCE") || pointerClicks.Load() != 0 {
+					if scriptErrors["STALE_REFERENCE"] == 0 || pointerClicks.Load() != 0 {
 						t.Error("stale frame rejection not verified")
 					}
 				case "invalid_options":
-					if !strings.Contains(text, "SCRIPT_ARGUMENT_ERROR") || submissions.Load() != 0 || pointerClicks.Load() != 0 {
+					if scriptErrors["SCRIPT_ARGUMENT_ERROR"] == 0 || submissions.Load() != 0 || pointerClicks.Load() != 0 {
 						t.Error("invalid options did not fail before input")
 					}
 				case "scroll_progress":
@@ -416,7 +488,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 						t.Error("current download content/identity not verified")
 					}
 				case "partial_effect":
-					if submissions.Load() != 1 || !strings.Contains(text, "SCRIPT_REFERENCE_ERROR") || !strings.Contains(text, "Saved once") {
+					if submissions.Load() != 1 || scriptErrors["SCRIPT_REFERENCE_ERROR"] == 0 || !strings.Contains(text, "Saved once") {
 						t.Errorf("partial effect recovery failed: submissions=%d", submissions.Load())
 					}
 				}

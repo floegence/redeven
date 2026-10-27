@@ -160,3 +160,32 @@ test('image transform excludes scrollbar width and maps an edge target exactly',
   assert.equal(result.error,undefined,JSON.stringify(result));assert.equal(await tab.title(),'hit',JSON.stringify(g));controller.close();
  }finally{await browser.close();}
 });
+
+test('table pages preserve cells, exclude nested rows and reject changed cursors',async()=>{
+ const browser=await chromium.launch({headless:true});
+ try{
+  const tab=await browser.newPage();await tab.setContent('<table aria-label="Domains"><tr><th>Domain</th><th>Score</th></tr><tr><td>One</td><td>7</td></tr><tr><td>Two</td><td>8</td></tr></table><table aria-label="Other"><tr><td>Unrelated</td></tr></table>');
+  const controller=new BrowserComputerController(await tab.context().newCDPSession(tab));await controller.initialize();
+  const call=args=>controller.execute({tool_name:'computer.action',script_operation:true,args});
+  const first=await call({action:'table',selector:{role:'table',name:'Domains',exact:true},limit:2});
+  assert.equal(first.error,undefined,JSON.stringify(first));assert.equal(first.result.total,3);assert.deepEqual(first.result.rows[0].cells,[{role:'columnheader',text:'Domain'},{role:'columnheader',text:'Score'}]);
+  const second=await call({action:'table',selector:{role:'table',name:'Domains',exact:true},cursor:first.result.next_cursor});
+  assert.deepEqual(second.result.rows[0].cells,[{role:'cell',text:'Two'},{role:'cell',text:'8'}]);assert.equal(second.result.truncated,false);
+  await tab.locator('td').first().evaluate(e=>e.textContent='Changed');
+  const stale=await call({action:'table',selector:{role:'table',name:'Domains',exact:true},cursor:first.result.next_cursor});assert.equal(stale.error,'STALE_REFERENCE');
+  const denied=await call({action:'table',selector:{role:'cell',name:'Changed',exact:true}});assert.equal(denied.error,'INVALID_REQUEST');
+  controller.close();
+ }finally{await browser.close();}
+});
+
+test('table content and page budgets explicitly mark omitted cells and text',async()=>{
+ const browser=await chromium.launch({headless:true});
+ try{
+  const tab=await browser.newPage();await tab.setContent('<table role="table" aria-label="Huge"><tr>'+Array.from({length:300},()=>'<td>'+'x'.repeat(3000)+'</td>').join('')+'</tr><tr><td>Tail</td></tr></table>');
+  const controller=new BrowserComputerController(await tab.context().newCDPSession(tab));await controller.initialize();
+  const result=await controller.page.action({action:'table',selector:{role:'table',name:'Huge'},limit:1});
+  assert.equal(result.total,2);assert.equal(result.rows[0].cells_truncated,true);assert.equal(result.rows[0].cells[0].text_truncated,true);assert.ok(Buffer.byteLength(JSON.stringify(result))<48000);
+  const second=await controller.page.action({action:'table',selector:{role:'table',name:'Huge'},cursor:result.next_cursor});assert.equal(second.rows[0].cells[0].text,'Tail');
+  controller.close();
+ }finally{await browser.close();}
+});

@@ -106,7 +106,7 @@ func testComputerDeepSeekImageOverflow(t *testing.T, longHistory bool) {
 	if err := svc.SetThreadPermissionType(t.Context(), meta, thread.ThreadID, string(FlowerPermissionFullAccess)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "start", Model: "deepseek/deepseek-v4-flash-vision-exp", Input: RunInput{Text: "Complete eight browser steps."}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess}}); err != nil {
+	if _, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: "start", Model: "deepseek/deepseek-v4-flash-vision-exp", Input: RunInput{Text: "Complete eight browser steps."}, Options: RunOptions{ToolAllowlist: legacyComputerFixtureTools(), PermissionType: config.AIPermissionFullAccess}}); err != nil {
 		t.Fatal(err)
 	}
 	// Eight image steps and compaction must fit the configured run deadline,
