@@ -88,7 +88,7 @@ func TestComputerNavigationFailureContinuesProductionTurn(t *testing.T) {
 			if !failed || !diagnosis {
 				t.Error("model did not receive a normal navigation failure")
 			}
-			name = "computer_observe"
+			name, args = "computer_exec", map[string]any{"code": "await ui.snapshot();", "description": "Inspect the page after navigation failed"}
 		case 5:
 			name, args = "computer_exec", map[string]any{"code": fmt.Sprintf(`await browser.navigate(%q); await ui.observe();`, site.URL), "description": "Recover and inspect the page"}
 		default:

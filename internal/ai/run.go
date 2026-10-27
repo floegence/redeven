@@ -191,6 +191,7 @@ type run struct {
 	subagentDepth               int
 	allowSubagentDelegate       bool
 	toolAllowlist               map[string]struct{}
+	retainedComputerTools       map[string]struct{}
 	noUserInteraction           bool
 	permissionSnapshot          PermissionSnapshot
 	toolTargetPolicy            ToolTargetPolicy

@@ -5,7 +5,7 @@ description: Resolve logical targets without side effects and preserve each auth
 tags: [ai, computer-use, targets, permissions]
 timestamp: 2026-10-21T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-26"
 ---
 # Summary
 
@@ -33,9 +33,10 @@ The migrated product store remains the only selection store.
 A lost task page fails until an authorized candidate is selected. Deleting product settings removes the selection and grants; a later bind never recreates a deleted thread.
 
 ## Binding contract and observation identity
-Selection returns a compact versioned contract for the exact backend, including
-coordinate/key grammar, read availability, mouse limits, waits, frames and download
-identity. It is not a new registry or authorization source. Native adapters reject
+Selection returns version 2 with exact backend availability and the shared core
+script guide. ui.help discloses focused read, visual and download details on demand.
+The earlier verbose capability fields are superseded by this model-facing guide;
+there are no product consumers of those fields. It is not a new registry or authorization source. Native adapters reject
 browser-only query, attribute and image-coordinate operations before dispatch.
 
 discovery_name is the discovery label. target_name comes from this call's

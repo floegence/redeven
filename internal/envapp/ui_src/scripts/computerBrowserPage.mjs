@@ -484,7 +484,11 @@ export class BrowserComputerPage {
   async query(selector, {limit=50,cursor} = {}) {
     const matches = await this.resolve(selector,true);
     const items = matches.map(({ref,role,name})=>({ref,role,name}));
-    const fingerprint = createHash('sha256').update(JSON.stringify([this.prefix,this.revision,selector,items])).digest('hex');
+    return this.collectionPage(selector, items, matches, {limit,cursor}, 'items');
+  }
+
+  collectionPage(selector, items, entries, {limit=50,cursor}, key, contentIdentity = items) {
+    const fingerprint = createHash('sha256').update(JSON.stringify([this.prefix,this.revision,selector,key,contentIdentity])).digest('hex');
     let offset=0;
     if (cursor !== undefined) {
       const parts=String(cursor).split(':');
@@ -495,17 +499,49 @@ export class BrowserComputerPage {
     let end=offset, bytes=0;
     while (end < items.length && end-offset < limit) {
       const size=Buffer.byteLength(JSON.stringify(items[end]));
-      if (end>offset && bytes+size>48000) break;
+      if (bytes+size>48000) break;
       bytes+=size;end++;
     }
-    // Retain only this returned page, after scanning. Large collections must
-    // not evict their own first page from the bounded reference table.
-    for (const entry of matches.slice(offset,end)) {
+    if (end === offset && offset < items.length) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
+    for (const entry of entries.slice(offset,end)) {
       if (this.references.size>=2000 && !this.references.has(entry.ref)) this.references.delete(this.references.keys().next().value);
       this.references.set(entry.ref,entry);
     }
     return {document_id:this.prefix+':'+this.revision, scope:'loaded_accessibility_tree', total:items.length,
-      items:items.slice(offset,end), truncated:end<items.length, ...(end<items.length?{next_cursor:fingerprint+':'+end}:{})};
+      [key]:items.slice(offset,end), truncated:end<items.length, ...(end<items.length?{next_cursor:fingerprint+':'+end}:{})};
+  }
+
+  async table(element, options) {
+    if (!['table','grid','treegrid'].includes(element.role)) throw new Error('INVALID_REQUEST');
+    const revision=this.revision;
+    const {nodes}=await element.frame.session.send('Accessibility.getFullAXTree',{frameId:element.frame.frame.id});
+    const source=new Map(nodes.map(node=>[node.nodeId,node]));
+    const rows=[], entries=[], identity=[];
+    const visit=(id,row) => {
+      const node=source.get(id);
+      if (!node || visited.has(id)) return;
+      visited.add(id);
+      const role=node.role?.value;
+      if (id!==element.axNodeId && ['table','grid','treegrid'].includes(role)) return;
+      if (!node.ignored && role==='row' && node.backendDOMNodeId) {
+        const entry=this.rememberNode(element.frame,node,false);
+        row={ref:entry.ref,cells:[]}; rows.push(row); entries.push(entry);
+      }
+      if (row && !node.ignored && ['cell','gridcell','columnheader','rowheader'].includes(role)) {
+        const full=node.name?.value || '';
+        identity.push([node.nodeId,role,full]);
+        const text=Array.from(full).slice(0,2000).join('');
+        const cell={role:role==='gridcell'?'cell':role,text,...(text!==full?{text_truncated:true}:{})};
+        // A single pathological row must never exceed the page budget.
+        if (row.cells.length<200 && Buffer.byteLength(JSON.stringify(row))+Buffer.byteLength(JSON.stringify(cell))<44000) row.cells.push(cell);
+        else row.cells_truncated=true;
+        return;
+      }
+      for (const child of node.childIds || []) visit(child,row);
+    };
+    const visited=new Set(); visit(element.axNodeId);
+    if (revision!==this.revision || !source.has(element.axNodeId)) throw new Error('STALE_REFERENCE');
+    return this.collectionPage({ref:element.ref},rows,entries,options,'rows',[rows,identity]);
   }
 
   async attribute(element, name) {
@@ -777,6 +813,7 @@ export class BrowserComputerPage {
     if (args.action === 'query') return this.query(args.selector,args);
     if (args.action === 'wait') return this.wait(args.selector, args);
     const element = args.selector ? await this.resolve(args.selector) : undefined;
+    if (args.action === 'table') return this.table(element,args);
     if (args.action === 'attribute') return this.attribute(element,args.attribute);
     if (args.action === 'read') {
       const observed = await this.observe({ root_ref: element.ref, limit: 1 });

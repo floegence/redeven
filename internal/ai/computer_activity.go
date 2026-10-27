@@ -95,7 +95,10 @@ func computerActivityResultRows(tool string, payload map[string]any) []fltools.S
 			node, _ := item.(map[string]any)
 			role := anyToString(node["canonical_role"])
 			if role == "" {
-				role = computerCanonicalRole(anyToString(node["role"]))
+				role = anyToString(node["role"])
+				if _, canonical := computerRoleAliases[role]; !canonical {
+					role = computerCanonicalRole(role)
+				}
 			}
 			name := firstNonEmptyString(anyToString(node["name"]), anyToString(node["text"]))
 			value := strings.TrimSpace(toolDetailValue(node["value"]))
@@ -194,7 +197,10 @@ func computerActivityBlankPage(payload map[string]any) bool {
 	}
 	for _, value := range toAnySlice(nodes) {
 		node, _ := value.(map[string]any)
-		role := firstNonEmptyString(anyToString(node["canonical_role"]), computerCanonicalRole(anyToString(node["role"])))
+		role := firstNonEmptyString(anyToString(node["canonical_role"]), anyToString(node["role"]))
+		if _, canonical := computerRoleAliases[role]; !canonical {
+			role = computerCanonicalRole(role)
+		}
 		if role != "document" || strings.TrimSpace(anyToString(node["name"])) != "" || node["value"] != nil {
 			return false
 		}

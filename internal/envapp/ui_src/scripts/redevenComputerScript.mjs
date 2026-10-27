@@ -20,9 +20,13 @@ export async function createComputerScript({ browser = true } = {}) {
     if (active) active.diagnostic = 'SCRIPT_ARGUMENT_ERROR';
     return { error: vm.newError('SCRIPT_ARGUMENT_ERROR') };
   });
+  install('__conditionTimeout', () => {
+    if (active) { active.sealed = true; active.diagnostic = 'CONDITION_TIMEOUT'; }
+    return { error: vm.newError('CONDITION_TIMEOUT') };
+  });
   install('__operation', (encoded) => {
     if (!active || active.sealed || active.pending.size || ++active.count > 50) {
-      if (active) { active.sealed = true; active.diagnostic = active.pending.size ? 'SCRIPT_CONCURRENT_OPERATION' : 'SCRIPT_OPERATION_LIMIT'; }
+      if (active) { active.sealed = true; active.diagnostic ||= active.pending.size ? 'SCRIPT_CONCURRENT_OPERATION' : 'SCRIPT_OPERATION_LIMIT'; }
       return { error: vm.newError('SCRIPT_OPERATION_LIMIT') };
     }
     const execution = active;
@@ -69,8 +73,8 @@ export async function createComputerScript({ browser = true } = {}) {
   active = { deadline: Date.now() + 5000 };
   const bootstrap = vm.evalCode(`
     (() => {
-      const invoke = __operation, emit = __log, invalid = __invalidArgument;
-      delete globalThis.__operation; delete globalThis.__log; delete globalThis.__invalidArgument;
+      const invoke = __operation, emit = __log, invalid = __invalidArgument, timedOut = __conditionTimeout;
+      delete globalThis.__operation; delete globalThis.__log; delete globalThis.__invalidArgument; delete globalThis.__conditionTimeout;
       const options = (value, keys) => {
         if (!value || Object.getPrototypeOf(value) !== Object.prototype || Object.keys(value).some(key => !keys.includes(key))) invalid();
         return value;
@@ -99,10 +103,52 @@ export async function createComputerScript({ browser = true } = {}) {
       };
       const call = async (operation) => JSON.parse(await invoke(JSON.stringify(operation)));
       const imageOptions = (value) => { options(value, ['coordinate_space','frame','document_id']); if (value.coordinate_space !== 'image_pixels' || typeof value.frame !== 'string' || typeof value.document_id !== 'string') invalid(); return value; };
+      const canonicalNode = (value) => {
+        const {canonical_role, platform_role, ...node} = value;
+        return {...node, role: canonical_role || node.role};
+      };
+      const snapshot = async (value = {}) => {
+        const result = await call({action:'snapshot', ...observeOptions(value)});
+        const observation = result.observation || result;
+        return {...observation, ...(result.url === undefined ? {} : {url:result.url}), ...(result.title === undefined ? {} : {title:result.title}), nodes:(observation.nodes || []).map(canonicalNode)};
+      };
+      const pageOptions = (value) => {
+        options(value,['limit','cursor']);
+        if(value.limit!==undefined&&(!Number.isInteger(value.limit)||value.limit<1||value.limit>200)) invalid();
+        if(value.cursor!==undefined) string(value.cursor);
+        return value;
+      };
+      const attribute = async (selector, name, href = false) => {
+        string(name);
+        if(!['title','aria-label','aria-checked','aria-selected','aria-expanded','aria-rowcount','aria-colcount',...(href?['href']:[])].includes(name)) invalid();
+        return (await call({action:'attribute',selector,attribute:name})).value;
+      };
+      const screenshot = async () => {
+        const result = await call({action:'screenshot'});
+        if (!${browser ? 'true' : 'false'}) return result;
+        // Capture scalar identities so guest mutation cannot retarget an image.
+        const identity = {coordinate_space:'image_pixels',frame:result.frame_geometry?.frame,document_id:result.frame_geometry?.document_id};
+        return Object.freeze({...result,
+          click:(x,y)=>call({action:'pointer_click',x:number(x),y:number(y),...imageOptions(identity)}),
+          doubleClick:(x,y)=>call({action:'double_click',x:number(x),y:number(y),...imageOptions(identity)}),
+          drag:(from_x,from_y,to_x,to_y,duration_ms=0)=>call({action:'drag',from_x:number(from_x),from_y:number(from_y),to_x:number(to_x),to_y:number(to_y),duration_ms:number(duration_ms),...imageOptions(identity)}),
+          scroll:(x,y,delta_y,delta_x=0)=>call({action:'scroll',x:number(x),y:number(y),delta_y:number(delta_y),delta_x:number(delta_x),...imageOptions(identity)}),
+        });
+      };
       const locator = (selector) => Object.freeze({
+        node: async () => canonicalNode((await call({action:'read',selector})).node),
+        snapshot: async (value={}) => {
+          options(value,['limit','emit']); observeOptions(value);
+          const {node} = await call({action:'read',selector});
+          return snapshot({...value,root_ref:node.ref});
+        },
         read: () => call({action: 'read', selector}),
         ...(${browser ? 'true' : 'false'} ? {
-          query: (value={}) => { options(value,['limit','cursor']); if(value.limit!==undefined&&(!Number.isInteger(value.limit)||value.limit<1||value.limit>200)) invalid(); if(value.cursor!==undefined) string(value.cursor); return call({action:'query',selector,...value}); },
+          query: (value={}) => call({action:'query',selector,...pageOptions(value)}),
+          count: async () => (await call({action:'query',selector,limit:1})).total,
+          rows: (value={}) => call({action:'table',selector,...pageOptions(value)}),
+          attribute: (name) => attribute(selector,name),
+          linkSummary: async () => ({url:await attribute(selector,'href',true),redacted:true}),
           getAttribute: (attribute) => { string(attribute); if(!['href','title','aria-label','aria-checked','aria-selected','aria-expanded','aria-rowcount','aria-colcount'].includes(attribute)) invalid(); return call({action:'attribute',selector,attribute}); },
         } : {}),
         click: () => call({action: 'click', selector}),
@@ -110,11 +156,17 @@ export async function createComputerScript({ browser = true } = {}) {
         press: (key) => call({action: 'key', selector, key: string(key)}),
         scroll: (delta_y, delta_x = 0) => call({action: 'scroll', selector, delta_y: number(delta_y), delta_x: number(delta_x)}),
         waitFor: (value = {}) => call({action: 'wait', selector, ...waitOptions(value)}),
+        requireState: async (value={}) => { const result=await call({action:'wait',selector,...waitOptions(value)}); if(result.state==='timeout') timedOut(); },
       });
       Object.defineProperties(globalThis, {
         ui: {value: Object.freeze({
           observe: (value = {}) => call({action: 'observe', ...observeOptions(value)}),
-          screenshot: () => call({action: 'screenshot'}),
+          snapshot,
+          screenshot,
+          help: async (topic='core') => { string(topic); const {documentation}=await call({action:'help',topic}); emit(JSON.stringify([documentation])); return documentation; },
+          type: (text) => call({action:'type',text:string(text)}),
+          doubleClick: (x,y) => call({action:'double_click',x:number(x),y:number(y)}),
+          scroll: (delta_y,delta_x=0) => call({action:'scroll',delta_y:number(delta_y),delta_x:number(delta_x)}),
           getByRole: (role, value = {}) => locator(selector(role, value)),
           ref: (ref) => locator({ref: string(ref)}),
           click: (x, y, image) => call({action: 'pointer_click', x: number(x), y: number(y), ...(image === undefined ? {} : imageOptions(image))}),
@@ -126,7 +178,13 @@ export async function createComputerScript({ browser = true } = {}) {
           navigate: (url) => call({action: 'navigate', url: string(url)}),
           back: () => call({action: 'back'}),
           reload: () => call({action: 'reload'}),
-          downloadCursor: () => call({action: 'download_cursor'}),
+          downloadCursor: async () => {
+            const result=await call({action:'download_cursor'}), cursor=result.cursor;
+            return Object.freeze({...result, wait:(value={})=>{
+              options(value,['timeout_ms']); waitOptions(value);
+              return call({action:'wait_for_download',after:string(cursor),...value});
+            }});
+          },
           waitForDownload: (value = {}) => {
             options(value, ['id', 'after', 'timeout_ms']);
             if ((value.id === undefined) === (value.after === undefined)) invalid();

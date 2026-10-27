@@ -10,7 +10,7 @@ export function validateBrowserAction(args, privateInput = false) {
     click: ['selector'], pointer_click: ['x', 'y'], double_click: ['x', 'y'],
     scroll: ['selector', 'x', 'y', 'delta_x', 'delta_y'],
     drag: ['from_x', 'from_y', 'to_x', 'to_y', 'duration_ms'],
-    wait: ['selector', 'state', 'timeout_ms'], query: ['selector', 'limit', 'cursor'],
+    wait: ['selector', 'state', 'timeout_ms'], query: ['selector', 'limit', 'cursor'], table: ['selector', 'limit', 'cursor'],
     attribute: ['selector', 'attribute'], read: ['selector'],
   };
   const allowed = fields[args.action];
@@ -18,7 +18,7 @@ export function validateBrowserAction(args, privateInput = false) {
   const image = ['coordinate_space', 'frame', 'document_id'];
   if (Object.keys(args).some(key => !['action', 'target', 'description', ...allowed, ...image].includes(key))) throw argumentFailure('arguments', 'documented_fields');
   if (image.some(key => args[key] !== undefined) && (!['pointer_click', 'double_click', 'scroll', 'drag'].includes(args.action) || args.selector || args.coordinate_space !== 'image_pixels' || typeof args.frame !== 'string' || typeof args.document_id !== 'string')) throw argumentFailure('coordinate_space', 'image_pixels_with_frame');
-  if (['click', 'fill', 'read', 'query', 'attribute', 'wait'].includes(args.action) && !args.selector) throw argumentFailure('selector', 'documented_selector');
+  if (['click', 'fill', 'read', 'query', 'table', 'attribute', 'wait'].includes(args.action) && !args.selector) throw argumentFailure('selector', 'documented_selector');
   if (args.selector !== undefined) {
     const s = args.selector;
     if (!s || Array.isArray(s) || typeof s !== 'object' || Object.keys(s).some(key => !['ref', 'role', 'roles', 'name', 'exact', 'root_ref'].includes(key)) ||
@@ -51,7 +51,7 @@ export function validateBrowserAction(args, privateInput = false) {
       if (args.state !== undefined && !['visible','hidden','enabled'].includes(args.state)) throw argumentFailure('state', 'visible_hidden_enabled');
       if (args.timeout_ms !== undefined && (!Number.isInteger(args.timeout_ms) || args.timeout_ms < 0 || args.timeout_ms > 30000)) throw argumentFailure('timeout_ms', 'integer_0_30000');
       break;
-    case 'query':
+    case 'query': case 'table':
       if (args.limit !== undefined && (!Number.isInteger(args.limit) || args.limit<1 || args.limit>200)) throw argumentFailure('limit','integer_1_200');
       if (args.cursor !== undefined && (typeof args.cursor!=='string' || args.cursor.length>100)) throw argumentFailure('cursor','current_cursor');
       break;

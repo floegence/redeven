@@ -56,6 +56,7 @@ func (r *run) buildRunToolSurface(cfg runToolSurfaceConfig, permissionType Flowe
 	permissionFilter := newPermissionToolFilter(!r.noUserInteraction)
 	permissionFilter = r.withToolAllowlistFilter(permissionFilter)
 	activeTools := permissionFilter.FilterTools(permissionType, registry.Snapshot())
+	activeTools = compactComputerToolSurface(activeTools, r.toolAllowlist, cfg.InitialProviderSurface, r.retainedComputerTools)
 	if cfg.InitialProviderSurface != nil {
 		for i := range activeTools {
 			if !isFloretNativeTool(activeTools[i].Name) {

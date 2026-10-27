@@ -258,9 +258,21 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 			if stopped != nil || pause != nil || operations > 50 || msg.ID == "" {
 				return result, errors.New("computer script exceeded its operation boundary")
 			}
+
 			inner, err := computerScriptOperation(call, msg.Operation)
 			var observed TargetToolResult
-			if err == nil {
+			if msg.Operation["action"] == "help" {
+				target, resolveErr := r.registry.ResolveTarget(ctx, call.TargetID)
+				documentation, valid := computerScriptHelp(anyToString(msg.Operation["topic"]), computerBrowserTarget(target.Kind))
+				err = resolveErr
+				if err == nil && (!valid || len(msg.Operation) != 2) {
+					err = computerTargetFailure(call, "INVALID_REQUEST")
+				}
+				if err == nil {
+					err = call.revalidate(ctx)
+				}
+				observed.Result = map[string]any{"documentation": documentation}
+			} else if err == nil {
 				// Keep the target lease for the whole batch and serialize each
 				// operation through its gate. Live viewers can sample between
 				// operations without granting another thread control.
@@ -336,6 +348,24 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 						for _, field := range []string{"url", "title"} {
 							if value, exists := payload[field]; exists {
 								tree[field] = value
+							}
+						}
+						if msg.Operation["action"] == "snapshot" {
+							delete(tree, "semantic_schema_version")
+							if nodes, ok := tree["nodes"].([]any); ok {
+								compact := make([]any, 0, len(nodes))
+								for _, raw := range nodes {
+									node, ok := raw.(map[string]any)
+									if !ok {
+										continue
+									}
+									node = cloneAnyMap(node)
+									node["role"] = node["canonical_role"]
+									delete(node, "canonical_role")
+									delete(node, "platform_role")
+									compact = append(compact, node)
+								}
+								tree["nodes"] = compact
 							}
 						}
 						observation, payload["observation"] = tree, tree
@@ -416,7 +446,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				code := "SCRIPT_STOPPED"
 				if diagnostic, ok := msg.Result["diagnostic"].(map[string]any); ok && stopped == nil {
 					switch safe := anyToString(diagnostic["code"]); safe {
-					case "SCRIPT_ARGUMENT_ERROR", "SCRIPT_REFERENCE_ERROR", "SCRIPT_TYPE_ERROR", "SCRIPT_SYNTAX_ERROR", "SCRIPT_RUNTIME_ERROR", "SCRIPT_OUTPUT_LIMIT", "SCRIPT_OPERATION_LIMIT", "SCRIPT_CONCURRENT_OPERATION", "SCRIPT_TIMEOUT", "SCRIPT_NO_PROGRESS", "SCRIPT_UNFINISHED_OPERATIONS":
+					case "SCRIPT_ARGUMENT_ERROR", "SCRIPT_REFERENCE_ERROR", "SCRIPT_TYPE_ERROR", "SCRIPT_SYNTAX_ERROR", "SCRIPT_RUNTIME_ERROR", "SCRIPT_OUTPUT_LIMIT", "SCRIPT_OPERATION_LIMIT", "SCRIPT_CONCURRENT_OPERATION", "SCRIPT_TIMEOUT", "SCRIPT_NO_PROGRESS", "SCRIPT_UNFINISHED_OPERATIONS", "CONDITION_TIMEOUT":
 						code = safe
 					}
 				}
@@ -440,7 +470,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 
 func computerOperationMutates(op map[string]any) bool {
 	switch anyToString(op["action"]) {
-	case "observe", "read", "query", "attribute", "wait", "screenshot", "wait_for_download", "download_cursor":
+	case "observe", "snapshot", "read", "query", "table", "attribute", "help", "wait", "screenshot", "wait_for_download", "download_cursor":
 		return false
 	default:
 		return true
@@ -453,7 +483,7 @@ func computerScriptOperation(parent TargetToolCall, operation map[string]any) (T
 	call.ToolName = "computer.action"
 	args := cloneAnyMap(operation)
 	switch anyToString(operation["action"]) {
-	case "observe":
+	case "observe", "snapshot":
 		call.ToolName = "computer.observe"
 		delete(args, "action")
 		for _, option := range []string{"emit", "full"} {
@@ -470,7 +500,13 @@ func computerScriptOperation(parent TargetToolCall, operation map[string]any) (T
 	case "navigate", "back", "reload", "wait_for_download", "download_cursor":
 		call.ToolName = "browser." + anyToString(operation["action"])
 		delete(args, "action")
-	case "read", "query", "attribute", "click", "fill", "key", "scroll", "wait", "pointer_click", "drag":
+	case "type":
+		call.ToolName = "computer.type"
+		delete(args, "action")
+	case "double_click":
+		call.ToolName = "computer.double_click"
+		delete(args, "action")
+	case "read", "query", "table", "attribute", "click", "fill", "key", "scroll", "wait", "pointer_click", "drag":
 	default:
 		return TargetToolCall{}, computerTargetFailure(parent, "INVALID_REQUEST")
 	}

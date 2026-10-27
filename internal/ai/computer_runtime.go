@@ -347,15 +347,6 @@ func (r *ComputerUseRuntime) ExecuteTargetTool(ctx context.Context, call TargetT
 		call.bindSelection = false
 	}
 
-	var input map[string]any
-	_ = json.Unmarshal(call.Arguments, &input)
-	if input["coordinate_space"] != nil || input["frame"] != nil || input["document_id"] != nil || input["action"] == "query" || input["action"] == "attribute" {
-		target, resolveErr := r.registry.ResolveTarget(ctx, call.TargetID)
-		if resolveErr != nil || !strings.HasPrefix(target.Kind, "browser.") {
-			unlock()
-			return TargetToolResult{}, computerTargetFailure(call, "TARGET_CAPABILITY_UNAVAILABLE")
-		}
-	}
 	if call.ToolName == "computer.exec" {
 		r.releasePreviousComputerTarget(call)
 		unlock()
@@ -366,6 +357,14 @@ func (r *ComputerUseRuntime) ExecuteTargetTool(ctx context.Context, call TargetT
 }
 
 func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call TargetToolCall, control *computerTargetControl) (TargetToolResult, error) {
+	var input map[string]any
+	_ = json.Unmarshal(call.Arguments, &input)
+	if input["coordinate_space"] != nil || input["frame"] != nil || input["document_id"] != nil || input["action"] == "query" || input["action"] == "attribute" || input["action"] == "table" {
+		target, resolveErr := r.registry.ResolveTarget(ctx, call.TargetID)
+		if resolveErr != nil || !strings.HasPrefix(target.Kind, "browser.") {
+			return TargetToolResult{}, computerTargetFailure(call, "TARGET_CAPABILITY_UNAVAILABLE")
+		}
+	}
 	if err := r.checkManagedTarget(call.TargetID); err != nil {
 		return TargetToolResult{}, err
 	}

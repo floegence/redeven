@@ -1,5 +1,14 @@
 # Redeven OKF Update Log
 
+## 2026-10-26 — Compact Computer Use surface
+
+Reduce default discovery to three entry points, share selection/runtime help,
+add direct canonical snapshots, image-bound input and strict waits, and preserve
+legacy consumers. Reject concurrent computer batches before target effects;
+retain complete paired feedback and ordinary tool concurrency. See
+[script contracts](ai/computer-use-scripts.md) and
+[prompt ownership](ai/flower-prompt-and-rule-sources.md).
+
 ## 2026-10-26 — Computer operation contracts
 
 Document validated input ordering, browser frame mappings, bounded collection

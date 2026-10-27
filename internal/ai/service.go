@@ -125,6 +125,7 @@ type Service struct {
 	serviceWorkers         sync.WaitGroup
 	activateFloret         func(context.Context) error
 	floretThreadReadiness  func(context.Context, identity.ThreadID) (flruntime.ThreadReadiness, error)
+	prepareFloretThread    func(context.Context, identity.ThreadID) error
 	prepareFloretRestore   func(context.Context) (flruntime.RestorePreparation, error)
 	readState              *threadreadstate.Store
 	skipStorageMaintenance bool
@@ -435,6 +436,7 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		tessiven:              opts.Tessiven, tessivenResources: opts.TessivenResources,
 		activateFloret:                  floretBootstrap.activate,
 		floretThreadReadiness:           floretBootstrap.threadReadiness,
+		prepareFloretThread:             floretBootstrap.prepareThread,
 		prepareFloretRestore:            floretBootstrap.prepareRestore,
 		readState:                       reads,
 		storageGeneration:               storageGeneration,

@@ -321,3 +321,10 @@ func TestComputerActivityPreservesPartialAndBoundedResults(t *testing.T) {
 		t.Fatal("candidate output must stay bounded with explicit truncation")
 	}
 }
+
+func TestComputerActivityKeepsCanonicalSnapshotText(t *testing.T) {
+	rows := computerActivityResultRows("computer.exec", map[string]any{"observation": map[string]any{"nodes": []any{map[string]any{"role": "text", "name": "Static page copy"}}}})
+	if len(rows) != 1 || rows[0].Meta == "textbox" {
+		t.Fatalf("canonical text became a control: %+v", rows)
+	}
+}
