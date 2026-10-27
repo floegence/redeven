@@ -26141,15 +26141,15 @@
         "title": "Adaptive desktop layout",
         "type": "UI Contract"
       },
-      "body_length": 3081,
+      "body_length": 3368,
       "summary": "Redeven chooses interaction mode through released Floe layout configuration.\nNative Desktop always uses desktop interaction. Browser mobile interaction\nrequires all three conditions: width below 768 CSS pixels, a coarse primary\npointer, and no primary hover capability. Narrow mouse windows retain Activity\nand Workbench. Floe owns media-query observation, local space measurement, and\ndrawer placement/focus; Redeven owns navigation disclosure and content.\nAutomatic sidebar placement never changes saved navigation or collapse preferences.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## One interaction mode\nDesktop Welcome and Desktop-hosted Env App configure `mobileQuery: 'not all'`; the Env App recognizes its native host through the existing Desktop bridge.\n\nResizing a desktop browser cannot rewrite its saved Activity/Workbench choice or activate mobile terminal input.\n\nA hidden toolbar action must retain an explicit reachable entry.\n\n## Temporary desktop navigation\nShell, Flower conversations, Files/Git navigation, and Terminal sessions measure their own shared navigation/content region. When that region cannot fit the current sidebar width plus 480 CSS pixels of main content, the sidebar becomes a transient left side drawer.\n\nFiles/Git navigation begins with its mode switch, without a separate Files title row or reserved header space. The switch uses the published field height, including its border and padding, so the sidebar and single-row file toolbar dividers align at every interface scale. The mobile close action shares that row; desktop drawers retain their accessible dialog title and dismissal. Sidebar resizing and local tree scrolling remain available.\n\nMobile navigation retains its product-specific bottom/side panel behavior under the [mobile Shell](mobile-shell-navigation.md) and [Flower](flower-mobile-navigation.md) contracts.",
-          "char_count": 1281
+          "body": "## One interaction mode\nDesktop Welcome and Desktop-hosted Env App configure `mobileQuery: 'not all'`; the Env App recognizes its native host through the existing Desktop bridge.\n\nResizing a desktop browser cannot rewrite its saved Activity/Workbench choice or activate mobile terminal input.\n\nA hidden toolbar action must retain an explicit reachable entry.\n\n## Temporary desktop navigation\nShell, Flower conversations, Files/Git navigation, and Terminal sessions measure their own shared navigation/content region. When that region cannot fit the current sidebar width plus 480 CSS pixels of main content, the sidebar becomes a transient left side drawer.\n\nFiles/Git navigation begins with its mode switch, without a separate Files title row or reserved header space. The switch uses the published field height, including its border and padding, so the sidebar and single-row file toolbar dividers align at every interface scale. The mobile close action shares that row; desktop drawers retain their accessible dialog title and dismissal. Sidebar resizing and local tree scrolling remain available.\n\nFile filtering never adds header feedback or changes toolbar height. The shared bottom status bar owns the filtered item count and view indicator; path-entry instructions and errors retain their accessible header feedback.\n\nMobile navigation retains its product-specific bottom/side panel behavior under the [mobile Shell](mobile-shell-navigation.md) and [Flower](flower-mobile-navigation.md) contracts.",
+          "char_count": 1505
         },
         {
           "id": "boundaries",
@@ -26181,9 +26181,9 @@
           "description": "Checks compact sidebar geometry, mobile dismissal, and retained navigation across inline/drawer transitions."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.toolbar.browser.test.tsx:0:checks divider alignment at standard and enlarged root sizes across sidebar widths, plus responsive toolbar geometry.",
+          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.toolbar.browser.test.tsx:0:checks divider alignment at standard and enlarged root sizes across sidebar widths, responsive toolbar geometry, and stable header/content bounds when applying or clearing filters.",
           "source": "redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.toolbar.browser.test.tsx",
-          "description": "Checks divider alignment at standard and enlarged root sizes across sidebar widths, plus responsive toolbar geometry."
+          "description": "Checks divider alignment at standard and enlarged root sizes across sidebar widths, responsive toolbar geometry, and stable header/content bounds when applying or clearing filters."
         }
       ],
       "snippet": "Redeven chooses interaction mode through released Floe layout configuration. Native Desktop always uses desktop interaction. Browser mobile interaction requires all three conditions: width below 768 CSS pixels, a coarse primary",
@@ -33779,5 +33779,5 @@
       ]
     }
   ],
-  "source_sha256": "d0848f8429aba839aff14b8e8c2699d359f524dc36f2d129901566137a1a0c2a"
+  "source_sha256": "21a8b24bbd83b15e5fb333ffffb31ee1a1b86e551392a6af44aefaa6117306c1"
 }
