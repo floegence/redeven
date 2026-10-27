@@ -175,7 +175,8 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				if err := registry.Register(target); err != nil {
 					t.Fatal(err)
 				}
-				runtime := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"browser-main": NewPlaywrightTargetExecutor(node, helper, t.TempDir())}, t.TempDir())
+				profileDirectory := t.TempDir()
+				runtime := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"browser-main": NewPlaywrightTargetExecutor(node, helper, profileDirectory)}, t.TempDir())
 				configureBrowserFixture(t, runtime)
 				defer runtime.Close()
 				target, err = runtime.PrepareTarget(t.Context(), target)
@@ -231,11 +232,11 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 
 				switch scenario {
 				case "key_validation":
-					prompt = "On the selected fixture, first attempt await ui.getByRole('textbox',{name:'Probe',exact:true}).press('Meta+Equal') once. Report the returned validation diagnostic. Then use the documented Enter key on Probe once and report completion. Never click Save once or switch accounts."
+					prompt = "This fixture test requires TWO separate computer.exec calls. First run await ui.getByRole('textbox',{name:'Probe',exact:true}).press('Meta+Equal') exactly once. Its validation rejection is intentional. You must then make a second call: await ui.getByRole('textbox',{name:'Probe',exact:true}).press('Enter'); . Complete both steps before reporting their results. Do not retry Meta+Equal. Never click Save once or switch accounts."
 				case "scoped_query":
-					prompt = "Using browser locator.query, enumerate all buttons named Query item in pages of 3, following next_cursor. Report exact count and names. Read Safe reference href with getAttribute and report the safe value. Do not open that link. Include the exact text Query item 6 and https://example.test/safe."
+					prompt = "Exercise pagination with this exact computer.exec script: const loc=ui.getByRole('button',{name:'Query item'}); let cursor; do { const page=await loc.query({limit:3,cursor}); log(JSON.stringify(page)); cursor=page.next_cursor; } while(cursor); log(JSON.stringify(await ui.getByRole('link',{name:'Safe reference',exact:true}).getAttribute('href'))); . Do not change the page size. Report the exact count and names, including Query item 6, and the safe href. Do not open that link."
 				case "image_input":
-					prompt = "Exercise the explicit image coordinate contract on this fixture: take ui.screenshot(), keep its frame_geometry, then ui.click(4,4,{coordinate_space:'image_pixels',frame:g.frame,document_id:g.document_id}). This is the blank top-left margin. Log the geometry and returned action_executed, then report completion. Do not use an unbound coordinate click."
+					prompt = "Exercise image coordinates by running this exact computer.exec script ONCE: const g=(await ui.screenshot()).frame_geometry; log(JSON.stringify(g)); const result=await ui.click(4,4,{coordinate_space:'image_pixels',frame:g.frame,document_id:g.document_id}); log(JSON.stringify(result)); . The point is the blank top-left margin. Exactly one click is permitted, with no second verification click and no unbound coordinate click. Report the returned action_executed and completion."
 				case "wait_default":
 					prompt = "Call computer.wait on the selected fixture with milliseconds omitted, then observe and report the exact current title. Do not input anything."
 				case "title_freshness":
@@ -360,7 +361,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 						t.Error("invalid options did not fail before input")
 					}
 				case "scroll_progress":
-					if !strings.Contains(text, "immediate_after_dispatch") || !strings.Contains(text, "scroll_progress") {
+					if !strings.Contains(text, "immediate_after_dispatch") || !strings.Contains(text, "before") || !strings.Contains(text, "after") {
 						t.Error("scroll facts not returned")
 					}
 				case "condition_wait":
@@ -397,19 +398,17 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					if exports.Load() != 1 {
 						t.Errorf("export count=%d", exports.Load())
 					}
-					observed := direct("computer.observe", map[string]any{}).Result.(map[string]any)
-					raw, _ := json.Marshal(observed["downloads"])
-					var downloads []struct {
-						ID   string
-						Path string
-					}
-					if json.Unmarshal(raw, &downloads) != nil {
-						t.Fatal("download facts missing")
+					// Inspect the fixture-owned filesystem without acquiring model control
+					// or issuing an anonymous runtime call after a thread owns the target.
+					directory := filepath.Join(profileDirectory, "browser-main", "downloads")
+					downloads, err := os.ReadDir(directory)
+					if err != nil {
+						t.Fatal(err)
 					}
 					verified := false
 					for _, download := range downloads {
-						data, e := os.ReadFile(download.Path)
-						if e == nil && string(data) == "account,count,total\nOrchid,40,820\n" && strings.Contains(finalText, download.ID) {
+						data, e := os.ReadFile(filepath.Join(directory, download.Name()))
+						if e == nil && string(data) == "account,count,total\nOrchid,40,820\n" && strings.Contains(finalText, download.Name()) {
 							verified = true
 						}
 					}

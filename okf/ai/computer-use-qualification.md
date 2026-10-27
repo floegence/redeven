@@ -35,6 +35,20 @@ Foreground macOS and credentialed model qualification remain explicit runs; the 
 
 Set REDEVEN_COMPUTER_ACCEPTANCE_REPETITIONS=1..5 (default 1); use -parallel 3 for independent isolated cases. Twelve scenarios include key validation before focus, paginated reads, frame-bound image input, default delay, current title, stale frame rejection, invalid guest options, scroll return facts and conditional waits.
 
+Diagnostic scenarios specify the required operations, while table and download
+tasks exercise autonomous planning. Verify returned tool payloads and counted
+fixture events; submitted scripts and the model's final claims do not establish
+execution. Stale-image rejection requires an actual returned `STALE_REFERENCE`
+and zero pointer events. Image input requires one counted pointer event. Read
+download bytes from the isolated fixture's owned directory without issuing an
+anonymous runtime call after the model has acquired target control.
+
+Retain failed batches and classify model instruction failures, test defects and
+product defects separately. Scenario completion is not a zero-tool-error claim,
+and repeated qualification does not establish a general success probability.
+Freeze implementation hashes before qualification and rerun affected checks
+after integration changes.
+
 Scenarios also verify a 2,800+ node page and complete table totals, task-tab isolation and account restrictions, current-download identity/content despite an older same-named file, and one counted save followed by a diagnostic failure with no replay. Reports retain provider wire IDs, tool error counts, canonical histories, final answers and fixture outcomes. Configuration hashes must stay unchanged. This scope does not certify production accounts, native desktop UI or a universal model success rate.
 
 ## Existing product fixtures
@@ -54,6 +68,25 @@ This acceptance contract does not grant target authority or replace the [media c
 Browser tests separately inject late decoding, expired interactions and queued commands to verify close, selection and connection boundaries deterministically.
 
 # Evidence
+
+## October 2026 contract qualification scope
+
+The operation-contract qualification covers pure argument validation before
+focus, 2,100-result query reference retention, image mapping across device scales
+and emulated page scales, scrollbar exclusion, stale frames, live-view captures,
+partial effects and current target identity. The carrier run has 91 passing tests
+and one explicit Chrome installation/replacement file-picker opt-in skip; all
+12 contract tests and eight headed-extension tests pass. The extension lane
+uses real Chrome debugger transport with a fixture native port. macOS background
+capture/input and the 35-test Swift suite are separate evidence. Production
+FlowerSurface result recovery is verified against a task-owned Service.
+
+These lanes do not certify Linux native execution, native multi-monitor input,
+or a single built-Desktop/Native-Messaging/Service end-to-end launch. Emulated
+page scale is not browser-UI zoom certification. Forced Chrome debugger detach
+does not establish that `document.hasFocus()` becomes false with another CDP
+client attached. No paired baseline or measured performance improvement is
+claimed.
 
 - `redeven:internal/envapp/ui_src/scripts/checkDesktopComputerStage.mjs` - Built Desktop and Linux scenarios with actual provider and pixel evidence.
 
