@@ -263,10 +263,8 @@ vi.mock('@floegence/floe-webapp-core/layout', async (importOriginal) => ({
         ))}
       </div>
       {props.children}
-      <Show when={props.bottomBarMode !== 'hidden'}><footer data-testid="activity-bottom-bar">{props.bottomBarItems}</footer></Show>
     </div>
   ),
-  StatusIndicator: (props: any) => <div>{props.label ?? props.status}</div>,
   TopBarIconButton: (props: any) => <button type="button" onClick={props.onClick}>{props.children}</button>,
 }));
 

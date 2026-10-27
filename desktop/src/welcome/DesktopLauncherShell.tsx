@@ -1,6 +1,6 @@
 import { Show, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { BottomBar, TopBar } from '@floegence/floe-webapp-core/layout';
+import { TopBar } from '@floegence/floe-webapp-core/layout';
 
 export type DesktopLauncherShellProps = Readonly<{
   mainContentId: string;
@@ -9,10 +9,6 @@ export type DesktopLauncherShellProps = Readonly<{
   logo: JSX.Element;
   trailingActions?: JSX.Element;
   topBarCornerActions?: JSX.Element;
-  bottomBarLeading?: JSX.Element;
-  bottomBarTrailing?: JSX.Element;
-  /** Tailwind height class for the bottom bar, defaults to 'h-7' (28px). */
-  bottomBarHeight?: string;
   children: JSX.Element;
 }>;
 
@@ -69,11 +65,6 @@ export function DesktopLauncherShell(props: DesktopLauncherShellProps) {
       </div>
 
       <div class="relative min-h-0 min-w-0 flex-1 overflow-hidden">{props.children}</div>
-
-      <BottomBar class="safe-left safe-right !px-3" height={props.bottomBarHeight ?? 'h-7'}>
-        <div class="flex min-w-0 items-center gap-2">{props.bottomBarLeading}</div>
-        <div class="flex items-center gap-2">{props.bottomBarTrailing}</div>
-      </BottomBar>
     </div>
   );
 }

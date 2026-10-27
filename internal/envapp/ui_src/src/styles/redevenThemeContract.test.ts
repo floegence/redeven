@@ -38,7 +38,8 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain("html[data-redeven-theme-switching='true'] [data-floe-shell-slot='top-bar']");
     expect(src).toContain("html[data-redeven-theme-switching='true'] [data-floe-shell-slot='activity-bar']");
     expect(src).toContain("html[data-redeven-theme-switching='true'] [data-floe-shell-slot='sidebar']");
-    expect(src).toContain("html[data-redeven-theme-switching='true'] [data-floe-shell-slot='bottom-bar']");
+    expect(src).toContain("html[data-redeven-theme-switching='true'] [data-floe-shell-slot='mobile-tab-bar']");
+    expect(src).not.toContain("data-floe-shell-slot='bottom-bar'");
     expect(src).not.toContain("html[data-theme-switching='true'] *");
     expect(src).not.toContain("html[data-redeven-theme-switching='true'] *");
     expect(src).not.toContain("html[data-redeven-theme-switching='true'] .workbench");

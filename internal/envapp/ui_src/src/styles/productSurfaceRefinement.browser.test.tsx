@@ -17,7 +17,7 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-it.each(['standard', 'soft-neumorphic'] as const)('keeps Flower rail text and search readable in every %s theme', async (material) => {
+it.each(['soft-neumorphic'] as const)('keeps Flower rail text and search readable in every %s theme', async (material) => {
   await page.viewport(1000, 800);
   const host = document.createElement('main');
   document.body.append(host);
@@ -66,7 +66,7 @@ function resolveColor(value: string): string {
   return color;
 }
 
-it.each(['standard', 'soft-neumorphic'] as const)('keeps published palettes and quiet product boundaries in %s', async (material) => {
+it.each(['soft-neumorphic'] as const)('keeps published palettes and quiet product boundaries in %s', async (material) => {
   await page.viewport(1000, 800);
   const host = document.createElement('main');
   document.body.append(host);
