@@ -3174,7 +3174,8 @@
         "desktopRecovery": "Docker Desktop이 아직 준비되지 않았습니다. 이 컴퓨터에서 Docker Desktop을 열어 설정을 완료하거나 시작 오류를 해결한 후 상태를 확인하세요.",
         "checkStatus": "상태 확인",
         "history": "작업 기록"
-      }
+      },
+      "confirmAction": "{name}: {action}"
     },
     "views": {
       "containers": "컨테이너",

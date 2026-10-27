@@ -3174,7 +3174,8 @@
         "desktopRecovery": "O Docker Desktop ainda não está pronto. Abra o Docker Desktop neste computador, conclua a configuração ou resolva o erro de inicialização e verifique o status aqui.",
         "checkStatus": "Verificar status",
         "history": "Histórico de operações"
-      }
+      },
+      "confirmAction": "{action}: {name}"
     },
     "views": {
       "containers": "Contêineres",

@@ -3264,7 +3264,8 @@
         "desktopRecovery": "Docker Desktop ещё не готов. Откройте Docker Desktop на этом компьютере, завершите настройку или устраните ошибку запуска, затем проверьте состояние здесь.",
         "checkStatus": "Проверить состояние",
         "history": "История операций"
-      }
+      },
+      "confirmAction": "{action}: {name}"
     },
     "views": {
       "containers": "Контейнеры",
