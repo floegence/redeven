@@ -3802,8 +3802,9 @@ export function EnvContainersPage(props: { registerPageContext?: FlowerPageConte
   const renderContainerServicesPage = (): JSX.Element => (
     <section class="container-services-page" data-container-services-page aria-busy={containerServicesLoading()}>
       <header class="container-services-page__header">
-        <Button size="sm" variant="ghost" class="container-icon-action" onClick={closeContainerServices} aria-label={i18n.t('containers.detail.back')}><ArrowLeft class="h-4 w-4" /></Button>
-        <div><h2>{i18n.t('containers.services.title')}</h2><p>{i18n.t('containers.services.description')}</p></div>
+        <Button size="icon" variant="outline" class="container-services-page__back" onClick={closeContainerServices} aria-label={i18n.t('containers.detail.back')} title={i18n.t('containers.detail.back')}><ArrowLeft class="h-[18px] w-[18px]" /></Button>
+        <h2>{i18n.t('containers.services.title')}</h2>
+        <p>{i18n.t('containers.services.description')}</p>
       </header>
 
       <Show when={!containerServicesInitialLoading()} fallback={renderContainerServicesSkeleton()}>

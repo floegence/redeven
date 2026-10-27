@@ -1377,6 +1377,40 @@ describe('native Containers responsive product surface', () => {
     expect(servicePage.scrollWidth).toBeLessThanOrEqual(servicePage.clientWidth + 1);
   });
 
+  it.each([
+    [1440, 'zh-CN', 'dark'], [1440, 'en-US', 'light'],
+    [390, 'zh-CN', 'dark'], [390, 'en-US', 'light'],
+  ] as const)('aligns engine service back navigation with its heading at %spx in %s %s', async (width, locale, appearance) => {
+    await page.viewport(width, 900);
+    window.localStorage.setItem('redeven_ui_language_preference', locale);
+    const mounted = mount('activity', appearance); dispose = mounted.dispose;
+    const title = locale === 'zh-CN' ? '容器引擎服务' : 'Container engine services';
+    await page.getByRole('button', { name: title, exact: true }).click();
+    await expect.element(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
+    for (const animation of document.getAnimations()) if (Number.isFinite(animation.effect?.getComputedTiming().endTime)) animation.finish();
+    await settle();
+    const header = mounted.host.querySelector<HTMLElement>('.container-services-page__header')!;
+    const back = header.querySelector<HTMLButtonElement>('button')!;
+    const heading = header.querySelector('h2')!;
+    const description = header.querySelector('p')!;
+    const bounds = back.getBoundingClientRect();
+    const headingBounds = heading.getBoundingClientRect();
+    expect(Math.abs(bounds.width - bounds.height)).toBeLessThanOrEqual(1);
+    expect(bounds.width).toBeGreaterThanOrEqual(width === 390 ? 44 : 36);
+    expect(Math.abs(bounds.top + bounds.height / 2 - headingBounds.top - headingBounds.height / 2)).toBeLessThanOrEqual(1);
+    expect(Math.abs(description.getBoundingClientRect().left - headingBounds.left)).toBeLessThanOrEqual(1);
+    expect(Math.abs(bounds.left - mounted.host.querySelector('.container-services-grid')!.getBoundingClientRect().left)).toBeLessThanOrEqual(1);
+    expect(Number.parseFloat(getComputedStyle(back).borderTopWidth)).toBeGreaterThanOrEqual(1);
+    expect(back.getAttribute('title')).toBe(back.getAttribute('aria-label'));
+    expect(header.scrollWidth).toBeLessThanOrEqual(header.clientWidth + 1);
+    back.focus();
+    expect(document.activeElement).toBe(back);
+    await page.screenshot({ path: `__screenshots__/container-engine-back-${width}-${locale}-${appearance}.png` });
+    await userEvent.keyboard('{Enter}');
+    await expect.poll(() => mounted.host.querySelector('[data-container-services-page]')).toBeNull();
+    await expect.poll(() => mounted.host.textContent).toContain('postgres-development');
+  });
+
   it('shows official service branding and complete local Docker CLI configuration', async () => {
     await page.viewport(1440, 900);
     const mounted = mount('workbench');
