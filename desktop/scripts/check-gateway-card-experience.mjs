@@ -56,7 +56,11 @@ try {
     assert.ok((await card.innerText()).includes(i18n.t('gatewayAccess.directoryPending')));
     assert.equal(await card.locator('.redeven-gateway-card__add').count(), 0, 'Gateway access actions stay in More actions');
     assert.equal(await library.evaluate(element => element.scrollWidth > element.clientWidth + 1), false);
-    for (const button of await library.locator('button[data-floe-control="button"]').all()) assert.equal(await button.evaluate(el => getComputedStyle(el).whiteSpace), 'nowrap');
+    for (const button of await library.locator('button[data-floe-control="button"]').all()) {
+      const geometry = await button.evaluate(el => ({ overflow: el.scrollWidth - el.clientWidth, enrollment: !!el.closest('.redeven-gateway-enrollment-actions'), whiteSpace: getComputedStyle(el).whiteSpace }));
+      assert.ok(geometry.overflow <= 1, 'Control labels fit without clipping');
+      if (!geometry.enrollment) assert.equal(geometry.whiteSpace, 'nowrap');
+    }
     await library.evaluate(async el => { await Promise.all(el.getAnimations({ subtree: true }).filter(a => a.effect?.getTiming().iterations !== Infinity).map(a => a.finished)); });
     assert.equal(await card.locator('[data-gateway-mark]').count(), 1);
     assert.equal(await card.locator('.redeven-gateway-card__endpoint').count(), 0, 'Local host is identified once');

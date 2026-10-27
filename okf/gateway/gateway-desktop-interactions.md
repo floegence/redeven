@@ -35,7 +35,7 @@ For host-managed Gateways with manage_members permission, the enrollment owner s
 
 Preserve the existing Welcome toolbar, horizontal Environment / Redeven Cloud / Gateway navigation, search, filters, full-width cards and bottom status bar. A Gateway name or Manage opens a full page within this shell: Overview, Clients, Runtimes, Network, Redeven Cloud and Service maintenance. There is no separate Desktop connection section. All Gateways restores the list query, position and focus; reopening the selected Gateway retains drafts. Global Welcome navigation suspends the same page and task owners.
 
-Cards expose parallel Connect client / Connect Runtime actions. The shared Floe Dropdown contains only local saved-connection actions: Edit connection, Enable/Disable connection, Remove from list. Connection editing uses a bounded Dialog. Removal confirmation explains local scope; it neither stops the service nor revokes remote clients. Clients and Cloud initialize independently on first visit. URL connections cannot inherit host administration from stale permissions. The source action owner remains mounted independently of filtering or card presentation; no hidden duplicate card owns maintenance.
+Cards separate identity/management, enrollment and observed status. Connect client / Connect Runtime use equal-width peer controls; service refresh or recovery stays separate. Manage and More share the Floe small-control height and centerline; touch targets expand together. Narrow layouts keep enrollment choices together and wrap long translations without clipping. Overview fields use a common value edge and member rows align names with status. Cards expose parallel Connect client / Connect Runtime actions. The shared Floe Dropdown contains only local saved-connection actions: Edit connection, Enable/Disable connection, Remove from list. Connection editing uses a bounded Dialog. Removal confirmation explains local scope; it neither stops the service nor revokes remote clients. Clients and Cloud initialize independently on first visit. URL connections cannot inherit host administration from stale permissions. The source action owner remains mounted independently of filtering or card presentation; no hidden duplicate card owns maintenance.
 
 Creation starts with an explicit existing-service or new-deployment intent. URL pairing and host/container preparation have separate transport choices. A successful save returns the exact saved registration ID and leads to its overview, with observed status and the next supported service action. Saving a connection never claims deployment or connectivity; starting remains explicit through the existing lifecycle executor.
 
@@ -64,6 +64,8 @@ Service progress prioritizes observed step labels, current-step state and elapse
 UI state and observations cannot expand authority or imply completion.
 
 # Evidence
+
+- `redeven:desktop/scripts/check-gateway-visual-layout.mjs` — Rendered control geometry, peer sizing, menu focus, multilingual narrow layouts, touch and enlarged text.
 
 - `redeven:desktop/scripts/check-gateway-management-ui.mjs` — Six sections, task dialogs, active-only scroll extent, retained network drafts/client codes, explicit issuance, service confirmation, shared object menus and ten locale catalogs at 390, 430, 768 and 1280 pixels.
 - `redeven:desktop/src/shared/i18n/desktopI18n.test.ts` — Explicit ten-locale catalogs, placeholders, dynamic Gateway states, and invitation plural forms.

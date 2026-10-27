@@ -52,7 +52,8 @@
 
 .redeven-gateway-section-heading {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: .75rem 1rem;
 }
@@ -788,8 +789,6 @@
   .redeven-gateway-join-scroll { padding: .875rem 1rem; }
   .redeven-gateway-join-actions { padding: .75rem 1rem; }
   .redeven-gateway-join-summary { gap: .625rem .75rem; padding: .75rem; }
-  .redeven-gateway-section-heading { align-items: stretch; flex-direction: column; }
-  .redeven-gateway-section-heading > button { align-self: flex-start; }
     .redeven-gateway-endpoint { padding: .75rem; }
   .redeven-gateway-field input,
   .redeven-gateway-field [role="button"] { min-height: 2.75rem; }
@@ -992,33 +991,48 @@
 
 /* Gateway management shares the Welcome content plane and Floe chrome tokens. */
 .redeven-gateway-workspace { min-width: 0; color: var(--foreground); }
-.redeven-gateway-workspace-header { display: flex; flex-direction: column; align-items: flex-start; gap: .75rem; padding-block: .25rem 1.25rem; }
+.redeven-gateway-workspace-header { display: flex; flex-direction: column; align-items: flex-start; gap: .75rem; padding-block: .25rem 1rem; }
 .redeven-gateway-workspace-title { display: flex; align-items: center; gap: .75rem; width: 100%; min-width: 0; }
 .redeven-gateway-workspace-title > div:first-of-type { min-width: 0; flex: 1; }
 .redeven-gateway-workspace-title h2 { margin-bottom: .25rem; overflow-wrap: anywhere; font-size: 1.25rem; font-weight: 600; line-height: 1.4; }
-.redeven-gateway-workspace-layout { display: grid; grid-template-columns: 11.5rem minmax(0,1fr); border-top: 1px solid var(--border); }
+.redeven-gateway-workspace-layout { display: grid; grid-template-columns: 11rem minmax(0,1fr); border-top: 1px solid var(--border); }
 .redeven-gateway-workspace-nav { display: flex; flex-direction: column; align-self: start; gap: .25rem; padding: .75rem .625rem .75rem 0; }
-.redeven-gateway-workspace-nav button { text-align: start; white-space: normal; min-width: 0; padding: .65rem .75rem; border: 1px solid transparent; border-radius: .375rem; color: var(--muted-foreground); font-size: var(--floe-type-control); cursor: pointer; transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease; }
+.redeven-gateway-workspace-nav button { text-align: start; white-space: normal; min-width: 0; padding: .5rem .75rem; min-height: var(--floe-control-height-md); border: 1px solid transparent; border-radius: .375rem; color: var(--muted-foreground); font-size: var(--floe-type-control); cursor: pointer; transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease; }
 .redeven-gateway-workspace-nav button:hover { color: var(--foreground); background: var(--muted); }
-.redeven-gateway-workspace-nav button[aria-current='page'] { color: var(--foreground); background: var(--sidebar); font-weight: 600; border-color: var(--border); }
+.redeven-gateway-workspace-nav button[aria-current='page'] { color: var(--foreground); background: var(--floe-state-hover); font-weight: 600; border-color: transparent; }
 .redeven-gateway-workspace-nav button:focus-visible { outline: none; border-color: var(--primary); }
-.redeven-gateway-workspace-content { min-width: 0; border-left: 1px solid var(--border); padding: 1.25rem 0 1.25rem 1.5rem; }
+.redeven-gateway-workspace-content { min-width: 0; border-inline-start: 1px solid var(--border); padding: 1.25rem 0 1.25rem 1.5rem; }
 .redeven-gateway-workspace-section, .redeven-gateway-connection-form { display: flex; flex-direction: column; gap: 1.25rem; min-width: 0; }
 .redeven-gateway-workspace [hidden], .redeven-center-content [hidden] { display: none !important; }
-.redeven-gateway-workspace-enrollment { display: flex; flex-wrap: wrap; gap: .625rem; }
 .redeven-gateway-workspace-notice { display: flex; flex-wrap: wrap; gap: .75rem; margin-bottom: 1rem; font-size: var(--floe-type-control); }
-.redeven-gateway-workspace .redeven-gateway-overview-facts { margin: 0; }
+/* Labels and values share a stable reading edge across overview and maintenance. */
+.redeven-gateway-overview-facts { display: grid; gap: 0; margin: 0; }
+.redeven-gateway-overview-facts > div { display: grid; grid-template-columns: minmax(7rem, 10rem) minmax(0, 1fr); gap: .5rem 1.25rem; align-items: baseline; padding-block: .75rem; font-size: var(--floe-type-control); }
+.redeven-gateway-overview-facts > div + div { border-top: 1px solid var(--border); }
+.redeven-gateway-overview-facts dt { color: var(--muted-foreground); }
+.redeven-gateway-overview-facts dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.redeven-gateway-overview-members { margin: 0; padding: 0; list-style: none; }
+.redeven-gateway-overview-members li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; padding-block: .75rem; border-top: 1px solid var(--border); font-size: var(--floe-type-control); }
+.redeven-gateway-overview-members strong { min-width: 0; font-weight: 500; overflow-wrap: anywhere; }
+.redeven-gateway-overview-members .redeven-status-indicator { flex: none; }
 .redeven-gateway-task-dialog { max-width: min(36rem, calc(100vw - 2rem)); }
 .redeven-welcome-dialog-panel--connection.redeven-gateway-dialog { width: min(40rem, calc(100vw - 2rem)); max-width: min(40rem, calc(100vw - 2rem)); }
 @media (max-width: 767px) {
   .redeven-gateway-workspace-layout { display: block; }
   .redeven-gateway-workspace-nav { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); padding: .625rem 0; gap: .25rem; border-bottom: 1px solid var(--border); }
   .redeven-gateway-workspace-nav button { padding: .625rem .375rem; text-align: center; overflow-wrap: anywhere; }
-  .redeven-gateway-workspace-content { border-left: 0; padding: 1rem 0; }
+  .redeven-gateway-workspace-content { border-inline-start: 0; padding: 1rem 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .redeven-gateway-workspace-nav button { transition: none; }
 }
 
 .redeven-welcome-surface [hidden] { display: none !important; }
-.redeven-gateway-workspace-title [data-floe-dropdown-trigger] { min-width: 2rem; }
+@media (max-width: 480px) {
+  .redeven-gateway-overview-facts > div { grid-template-columns: minmax(0, 1fr); gap: .25rem; }
+}
+
+@media (pointer: coarse) {
+  :is(.redeven-gateway-card, .redeven-gateway-workspace, .redeven-gateway-dialog) [data-floe-control='button'],
+  .redeven-gateway-workspace-nav button { min-height: 2.75rem; }
+}

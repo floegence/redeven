@@ -3457,7 +3457,35 @@ pre,
   align-items: start;
 }
 
-/* Surface and overview spacing are shared with Redeven Cloud below. */
+/* Gateway identity, tasks and observed status have separate layout ownership. */
+.redeven-gateway-card {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: .75rem;
+  background: var(--card);
+}
+.redeven-gateway-card__main { display: flex; align-items: center; gap: 1rem; padding: 1rem 1.25rem .75rem; }
+.redeven-gateway-card__identity { display: flex; align-items: center; gap: .75rem; min-width: 0; flex: 1; }
+.redeven-gateway-card__name { min-width: 0; font-size: .9375rem; font-weight: 600; color: var(--foreground); }
+.redeven-gateway-card__name > button { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: .25rem; }
+.redeven-gateway-card__name > button:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+.redeven-gateway-card__mark { display: grid; place-items: center; flex: 0 0 2.5rem; height: 2.5rem; border: 1px solid var(--border); border-radius: .625rem; color: var(--foreground); background: var(--muted); }
+.redeven-gateway-card__mark > svg { width: 1.625rem; height: 1.625rem; color: inherit; }
+.redeven-gateway-card__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; padding: 0 1.25rem 1rem; }
+.redeven-gateway-enrollment-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; gap: .5rem; max-width: 100%; width: max-content; }
+.redeven-gateway-enrollment-actions > button { min-width: 0; width: 100%; height: auto; min-height: var(--floe-control-height-sm); padding-block: .125rem; line-height: var(--floe-line-control); white-space: normal; text-wrap: balance; }
+.redeven-gateway-card__menu { display: flex; align-items: center; gap: .375rem; flex: none; }
+.redeven-gateway-object-menu { display: flex; }
+.redeven-gateway-more-trigger { display: inline-flex; align-items: center; justify-content: center; width: var(--floe-control-height-sm); height: var(--floe-control-height-sm); border: 1px solid transparent; border-radius: var(--radius-md); color: var(--floe-ink-soft); transition: color var(--floe-duration-fast) var(--floe-ease-out), background-color var(--floe-duration-fast) var(--floe-ease-out); }
+.redeven-gateway-more-trigger:hover, .redeven-gateway-more-trigger[aria-expanded='true'] { color: var(--foreground); background: var(--floe-state-hover); }
+.redeven-gateway-more-trigger:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+@media (pointer: coarse) {
+  .redeven-gateway-more-trigger { width: 2.75rem; height: 2.75rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .redeven-gateway-more-trigger { transition: none; }
+}
+.redeven-gateway-card__statusbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; padding: .5rem 1.25rem; border-top: 1px solid var(--border); border-radius: 0 0 .75rem .75rem; background: color-mix(in srgb, var(--muted) 25%, transparent); font-size: .6875rem; }
 .redeven-gateway-card__identity-text { flex: 1; min-width: 0; }
 
 .redeven-gateway-mark {
@@ -3507,8 +3535,6 @@ pre,
   opacity: 0.45;
 }
 
-.redeven-gateway-card .redeven-gateway-card__actions { min-width: 16rem; justify-content: flex-end; }
-.redeven-gateway-card__menu { display: flex; flex: 0 0 auto; }
 .redeven-gateway-card__statusbar:not(:last-child) { border-radius: 0; }
 .redeven-gateway-card__status-row { display: flex; flex-wrap: wrap; align-items: center; gap: .375rem .875rem; }
 .redeven-gateway-card__trust { color: var(--muted-foreground); }
@@ -3595,12 +3621,13 @@ pre,
   animation: redeven-action-popover-exit 160ms ease both;
 }
 
-.redeven-gateway-card__primary-anchor { display: inline-flex; min-width: 0; }
+.redeven-gateway-card__primary-anchor { display: inline-flex; min-width: 0; margin-inline-start: auto; }
 
 @media (max-width: 640px) {
-  .redeven-gateway-card .redeven-gateway-card__identity { flex-basis: 100%; }
+  .redeven-gateway-card__main { padding: 1rem 1rem .75rem; gap: .625rem; }
+  .redeven-gateway-card__actions { padding-inline: 1rem; }
+  .redeven-gateway-card__statusbar { padding-inline: 1rem; }
   .redeven-gateway-card__directory { flex-basis: auto; padding-inline-start: 0; border-inline-start: 0; }
-  .redeven-gateway-card .redeven-gateway-card__actions { min-width: 0; margin-inline-start: auto; }
   .redeven-gateway-card__environments { padding-inline: 1rem; }
   .redeven-gateway-environment { gap: .75rem; }
   .redeven-gateway-environment__identity { flex-basis: 100%; }
@@ -4243,24 +4270,23 @@ pre,
   background: var(--warning);
   box-shadow: 0 0 0 1px var(--card);
 }
-/* Cloud and Gateway share the overview shell; each owns its inventory and status semantics. */
-.redeven-cloud-source-header, .redeven-gateway-card {
+/* Redeven Cloud overview shell. */
+.redeven-cloud-source-header {
   min-width: 0;
   border: 1px solid var(--border);
   border-radius: .75rem;
   background: var(--card);
 }
-.redeven-cloud-account-main, .redeven-gateway-card__main { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 2rem; padding: 1.125rem 1.25rem; }
-.redeven-cloud-account-identity, .redeven-gateway-card__identity { display: flex; align-items: center; gap: .75rem; min-width: 0; flex: 1 1 13rem; }
-.redeven-cloud-account-mark, .redeven-gateway-card__mark {
+.redeven-cloud-account-main { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 2rem; padding: 1.125rem 1.25rem; }
+.redeven-cloud-account-identity { display: flex; align-items: center; gap: .75rem; min-width: 0; flex: 1 1 13rem; }
+.redeven-cloud-account-mark {
   display: grid; place-items: center; flex: 0 0 2.75rem; height: 2.75rem;
   border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--border));
   border-radius: .875rem; color: var(--primary);
   background: linear-gradient(145deg, color-mix(in srgb, var(--primary) 12%, var(--card)), var(--card));
 }
 .redeven-cloud-account-mark > svg { width: 1.5rem; height: 1.5rem; }
-.redeven-gateway-card__mark > svg { width: 1.875rem; height: 1.875rem; color: inherit; }
-.redeven-cloud-account-name, .redeven-gateway-card__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9375rem; font-weight: 600; color: var(--foreground); }
+.redeven-cloud-account-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9375rem; font-weight: 600; color: var(--foreground); }
 .redeven-cloud-account-address { display: flex; gap: .375rem; margin-top: .25rem; font-size: .6875rem; color: var(--muted-foreground); }
 .redeven-cloud-account-address > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .redeven-cloud-account-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; flex: 1 1 21rem; min-width: 0; }
@@ -4269,8 +4295,8 @@ pre,
 .redeven-cloud-account-stats dt > svg { width: .8125rem; height: .8125rem; flex-shrink: 0; }
 .redeven-cloud-account-stats dd { order: -1; font-size: 1.375rem; line-height: 1.3; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--foreground); }
 .redeven-cloud-account-stats [data-cloud-stat="online"]:not([data-stale="true"]) dd { color: var(--success); }
-.redeven-cloud-account-actions, .redeven-gateway-card__actions { display: flex; flex: 0 1 auto; flex-wrap: wrap; align-items: center; gap: .375rem; }
-.redeven-cloud-account-sync, .redeven-gateway-card__statusbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; padding: .625rem 1.25rem; border-top: 1px solid var(--border); border-radius: 0 0 .75rem .75rem; background: color-mix(in srgb, var(--muted) 25%, transparent); font-size: .6875rem; }
+.redeven-cloud-account-actions { display: flex; flex: 0 1 auto; flex-wrap: wrap; align-items: center; gap: .375rem; }
+.redeven-cloud-account-sync { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; padding: .625rem 1.25rem; border-top: 1px solid var(--border); border-radius: 0 0 .75rem .75rem; background: color-mix(in srgb, var(--muted) 25%, transparent); font-size: .6875rem; }
 .redeven-cloud-account-sync-state, .redeven-cloud-account-sync-meta { display: flex; align-items: center; flex-wrap: wrap; gap: .375rem .875rem; min-width: 0; }
 .redeven-cloud-account-status, .redeven-cloud-account-sync-time { display: inline-flex; align-items: center; gap: .375rem; }
 .redeven-cloud-account-status { font-weight: 500; }
@@ -4284,15 +4310,15 @@ pre,
 .redeven-cloud-account-details-trigger:hover { color: var(--foreground); }
 .redeven-cloud-account-details { width: min(23rem, calc(100vw - 2rem)); }
 @media (max-width: 640px) {
-  .redeven-cloud-account-main, .redeven-gateway-card__main { gap: 1rem; padding: 1rem; }
+  .redeven-cloud-account-main { gap: 1rem; padding: 1rem; }
   .redeven-cloud-account-stats { flex-basis: 100%; gap: .25rem; }
   .redeven-cloud-account-stats > div { position: relative; padding-inline: .5rem 0; }
   .redeven-cloud-account-stats dt { display: block; }
   .redeven-cloud-account-stats dt > svg { position: absolute; top: .5rem; right: .5rem; }
   .redeven-cloud-account-stats dd { padding-inline-end: 1rem; }
   .redeven-cloud-account-stats > div:first-child { border-inline-start: 0; padding-inline-start: 0; }
-  .redeven-cloud-account-actions, .redeven-gateway-card__actions { margin-inline-start: auto; }
-  .redeven-cloud-account-sync, .redeven-gateway-card__statusbar { padding-inline: 1rem; }
+  .redeven-cloud-account-actions { margin-inline-start: auto; }
+  .redeven-cloud-account-sync { padding-inline: 1rem; }
 }
 
 .redeven-other-owner-pin { display: flex; align-items: center; gap: .375rem; padding: 0 1rem .5rem; font-size: .6875rem; color: var(--muted-foreground); }
@@ -4576,9 +4602,4 @@ pre,
 .redeven-gateway-onboarding-choices { display: grid; gap: 1rem; padding: .5rem 0; }
 .redeven-gateway-onboarding-choices > button { min-height: 5rem; justify-content: flex-start; text-align: left; white-space: normal; }
 .redeven-gateway-onboarding-choices strong { display: block; margin-bottom: .375rem; }
-.redeven-gateway-overview-facts { display: grid; gap: 1rem; margin: 1rem 0 1.5rem; }
-.redeven-gateway-overview-facts > div { display: flex; justify-content: space-between; gap: 1.5rem; font-size: .8125rem; }
-.redeven-gateway-overview-facts dt { color: var(--muted-foreground); flex-shrink: 0; }
-.redeven-gateway-overview-facts dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
 .redeven-gateway-cloud-embedded { margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); }
-@media (max-width: 480px) { .redeven-gateway-overview-facts > div { flex-direction: column; gap: .25rem; } .redeven-gateway-overview-facts dd { text-align: left; } }
