@@ -1292,7 +1292,7 @@ describe('FileBrowserWorkspace interactions', () => {
       const filterInput = host.querySelector('input[aria-label="Filter files"]');
       const viewSwitcher = host.querySelector('[role="group"]');
 
-      expect(upButton?.className).toContain('h-7');
+      expect(upButton?.className).toContain('h-[var(--floe-control-height-sm)]');
       expect(upButton?.className).not.toContain('redeven-surface-control');
       expect(breadcrumb?.parentElement?.className).toContain('h-8');
       expect(breadcrumb?.parentElement?.className).not.toContain('redeven-surface-control--muted');

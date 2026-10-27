@@ -494,8 +494,7 @@
       "confirm": "確認",
       "connected": "接続済み",
       "disconnected": "未接続",
-      "connecting": "接続中",
-      "error": "エラー"
+      "connecting": "接続中"
     },
     "status": {
       "localRuntime": "ローカルランタイム",
