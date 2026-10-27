@@ -187,7 +187,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     });
   };
   const preserveReadingAnchor = (processKeys: readonly string[]) => {
-    if (props.scroll.followingLatest()) return;
+    if (props.scroll.followingLatest()) { props.scroll.preserveCollapseOffset(); return; }
     const bounds = props.scroll.viewport()?.getBoundingClientRect();
     if (!bounds) return;
     const hidden = new Set(processKeys);
@@ -256,6 +256,13 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     for (const group of next.groups.values()) props.choices.alias(sequenceIdentity(group.nodeKeys[0]), sequenceIdentity(group.key));
     if (previous) untrack(() => {
       for (const group of next.groups.values()) {
+        // A mounted singleton may become a settled group in the same frame as
+        // its final tool arrives. Let that row mount and claim its title reveal
+        // before the existing automatic-disclosure observer settles the group.
+        if (!previous.groups.has(group.key) && previous.headerKeys.has(group.nodeKeys[0])
+          && sequenceLayout.element(group.nodeKeys[0]) && props.liveConfirmed?.()) {
+          props.choices.observe(sequenceIdentity(group.key), 'manual');
+        }
         const addedKeys = new Set(group.nodeKeys.filter(key => !previous.members.has(key)));
         if (!addedKeys.size) continue;
         const inspectedNodes = [...addedKeys].flatMap(key => {
@@ -434,8 +441,9 @@ export function FlowerTurnTimeline(props: TimelineProps) {
         data-flower-row-decoration-id={entry().type === 'context_compaction' ? (entry() as Extract<FlowerTimelineEntry, { type: 'context_compaction' }>).decoration.decoration_id : undefined}
         data-flower-sequence-continues={sequences().continuingEntries.has(key) ? 'true' : undefined}
         data-flower-turn-settled={settled() ? 'true' : undefined}>
-        <Show when={summary()}>
-          <div class="flower-turn-summary">
+        <Show when={group()?.summaryKey === key && group()?.turn?.kind !== 'context_compaction'}>
+          <div class="flower-turn-summary" data-reserved={!summary() ? 'true' : undefined} aria-hidden={!summary() ? 'true' : undefined}>
+            <Show when={summary()}>
             <button type="button" class="flower-turn-summary-button" data-flower-disclosure-trigger
               aria-expanded={turnExpanded()} aria-controls={group()!.processKeys.map(contentID).join(' ')}
               aria-label={`${turnExpanded() ? props.copy.collapse : props.copy.expand}: ${summaryLabel()}`}
@@ -443,6 +451,7 @@ export function FlowerTurnTimeline(props: TimelineProps) {
               <span>{summaryLabel()}</span>
               <ChevronRight class="flower-turn-summary-chevron" aria-hidden="true" />
             </button>
+            </Show>
           </div>
         </Show>
         <div id={contentID(key)} class="flower-turn-row-viewport" ref={motion.bindViewport}

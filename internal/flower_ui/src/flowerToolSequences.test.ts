@@ -44,6 +44,18 @@ const parentEvent = (id: string, kind: FlowerParentEvent['kind'] = 'completed'):
 });
 
 describe('consecutive tool presentation', () => {
+  it('reserves candidate headers before grouping and preserves projection identity', () => {
+    const first = projectFlowerToolSequences([tool('a')]);
+    expect([...first.headerKeys]).toEqual([JSON.stringify(['thread', 'run', 'turn', 'a'])]);
+    expect(first.groups.size).toBe(0);
+    const next = projectFlowerToolSequences([tool('a'), tool('b')], undefined, [], first);
+    expect(next.headerKeys).toEqual(first.headerKeys);
+    expect(next.groups.size).toBe(1);
+    expect(projectFlowerToolSequences([tool('a'), tool('b')], undefined, [], next)).toBe(next);
+    const separate = projectFlowerToolSequences([text('thought', true), text('boundary'), tool('later')]);
+    expect([...separate.headerKeys]).toEqual(['thought', JSON.stringify(['thread', 'run', 'turn', 'later'])]);
+    expect([...projectFlowerToolSequences([text('thought', true), tool('later')]).headerKeys]).toEqual(['thought']);
+  });
   it('reports counts only when the loaded sequence has both boundaries', () => {
     const entries = [tool('a'), tool('b')];
     for (const [hasBefore, hasAfter, complete] of [[true, false, false], [false, true, false], [true, true, false], [false, false, true]]) {

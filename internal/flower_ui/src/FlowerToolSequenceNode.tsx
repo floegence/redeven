@@ -156,8 +156,10 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
     data-flower-sequence={member()?.group.key}
     data-flower-sequence-start={first() === undefined ? undefined : String(first())}
     data-flower-sequence-end={last() === undefined ? undefined : String(last())} data-state={motion.state()}>
-    <Show when={member()?.first && context}>
-      <Toggle />
+    <Show when={context?.projection().headerKeys.has(props.nodeKey)}>
+      <div class="flower-tool-sequence-header" aria-hidden={!member()?.first ? 'true' : undefined}>
+        <Show when={member()?.first && context}><Toggle /></Show>
+      </div>
     </Show>
     <div id={context?.contentID(props.nodeKey)} class="flower-tool-sequence-viewport" ref={motion.bindViewport}
       data-state={motion.state()} aria-hidden={!expanded() ? 'true' : undefined} inert={!expanded()}

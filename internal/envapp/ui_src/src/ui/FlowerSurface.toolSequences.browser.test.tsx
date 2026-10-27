@@ -12,7 +12,7 @@ import type { EnvAppTranslationKey } from './i18n';
 import { flowerActivityIdentity } from '../../../../flower_ui/src/flowerActivityIdentity';
 import { adapter, liveBootstrap, renderSurfaceWithAdapterProps, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
-const media = commands as unknown as { emulateMediaPreferences: (input: { reducedMotion?: 'reduce' | 'no-preference'; forcedColors?: 'active' | 'none' }) => Promise<void> };
+const media = commands as unknown as { emulateTouchInput: (enabled: boolean) => Promise<void>; emulateMediaPreferences: (input: { reducedMotion?: 'reduce' | 'no-preference'; forcedColors?: 'active' | 'none' }) => Promise<void> };
 const item = (id: string, kind: FlowerRuntimeCurrentItem['kind'], text = id): FlowerRuntimeCurrentItem => ({ id, kind, text, turn_id: 'turn', run_id: 'run', ordinal: 0 });
 const emptyLiveText = (id: string): FlowerRuntimeCurrentItem => ({ ...item(id, 'assistant', ''), live: true });
 const tool = (id: string, status: 'success' | 'running' | 'error' = 'success', toolName = 'terminal.exec', renderer = 'terminal'): FlowerRuntimeCurrentItem => ({ ...item(id, 'tool'), activity: {
@@ -90,9 +90,70 @@ function expectConnectorBetweenNodes(previousNode: HTMLElement, nextNode: HTMLEl
 function expectConnectorBetween(root: HTMLElement, previousID: string, nextID: string) {
   expectConnectorBetweenNodes(group(root, previousID), group(root, nextID));
 }
-afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
+afterEach(async () => { await media.emulateTouchInput(false); document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('consecutive tools in the shared Flower surface', () => {
+  it.each([{ width: 1280, touch: false }, { width: 360, touch: false }, { width: 360, touch: true }])('reserves the sequence header without shifting the first tool at $width pixels, touch=$touch', async ({ width, touch }) => {
+    await media.emulateTouchInput(touch);
+    const { root, push } = await mount([tool('reserve-first', 'running')]);
+    await page.viewport(width, 900);
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    expect(matchMedia('(pointer: coarse)').matches).toBe(touch);
+    const first = row(root, 'reserve-first').querySelector<HTMLElement>('.flower-activity-inline-button')!;
+    const top = first.getBoundingClientRect().top;
+    const height = first.getBoundingClientRect().height;
+    const widthBefore = first.getBoundingClientRect().width;
+    expect(height).toBe(touch ? 44 : 32);
+    push([tool('reserve-first'), tool('reserve-second', 'running')]);
+    await waitFor(() => Boolean(toggle(root, 'reserve-first')));
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    expect(Math.abs(first.getBoundingClientRect().top - top)).toBeLessThanOrEqual(1);
+    expect(first.getBoundingClientRect().height).toBe(height);
+    expect(first.getBoundingClientRect().width).toBe(widthBefore);
+    expect(toggle(root, 'reserve-first').getBoundingClientRect().height).toBe(height);
+  });
+
+  it('reserves the same header for leading thinking before the first tool arrives', async () => {
+    const thought = { ...item('reserved-thinking', 'thinking', 'Reviewing the evidence.'), live: true };
+    const { root, push } = await mount([thought]);
+    const thinking = root.querySelector<HTMLElement>('.flower-thinking-disclosure')!;
+    const title = thinking.querySelector<HTMLElement>('.flower-thinking-toggle')!;
+    const header = thinking.closest('.flower-tool-sequence-node')!.querySelector('.flower-tool-sequence-header');
+    expect(header).not.toBeNull();
+    const top = title.getBoundingClientRect().top;
+    push([thought, tool('thinking-first', 'running')]);
+    await waitFor(() => Boolean(root.querySelector('.flower-tool-sequence-toggle')));
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    expect(thinking.closest('.flower-tool-sequence-node')!.querySelector('.flower-tool-sequence-header')).toBe(header);
+    expect(Math.abs(title.getBoundingClientRect().top - top)).toBeLessThanOrEqual(1);
+  });
+
+  it.each(['reduce', 'no-preference'] as const)('keeps earlier content stationary during automatic folding with %s motion', async reducedMotion => {
+    await media.emulateMediaPreferences({ reducedMotion });
+    const prefix = item('stationary-prefix', 'assistant', 'Earlier visible content. '.repeat(160));
+    const calls = Array.from({ length: 18 }, (_, i) => tool('stationary-' + i));
+    const output = item('stationary-output', 'assistant', 'Final result.');
+    const { root, push } = await mount([prefix, ...calls, { ...output, live: true }]);
+    const viewport = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
+    const header = toggle(root, 'stationary-0');
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    const initialTop = header.getBoundingClientRect().top;
+    const initialOffset = viewport.scrollTop;
+    expect(initialOffset).toBeGreaterThan(100);
+    const samples: { top: number; offset: number }[] = [];
+    let sampling = true;
+    const sample = () => { samples.push({ top: header.getBoundingClientRect().top, offset: viewport.scrollTop }); if (sampling) requestAnimationFrame(sample); };
+    requestAnimationFrame(sample);
+    push([prefix, ...calls, output]);
+    await waitFor(() => collapsed(root, 'stationary-0'));
+    await new Promise(resolve => setTimeout(resolve, 260));
+    sampling = false;
+    expect(samples.length).toBeGreaterThan(0);
+    expect(Math.max(...samples.map(value => Math.abs(value.top - initialTop)))).toBeLessThanOrEqual(1);
+    expect(Math.max(...samples.map(value => Math.abs(value.offset - initialOffset)))).toBeLessThanOrEqual(1);
+    expect(Number.parseFloat(viewport.style.getPropertyValue('--flower-reading-tail-space'))).toBeGreaterThan(0);
+  });
+
   it.each(['zh-CN', 'en-US', 'de-DE', 'ja-JP'] as const)('keeps the incomplete label concise and accessible at 320 pixels in %s', async locale => {
     const i18n = createTestI18nHelpers(locale);
     const copy = createLocalizedFlowerSurfaceCopy({ locale, t: (key, params) => i18n.t(key as EnvAppTranslationKey, params),
@@ -171,7 +232,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     await expect.poll(() => body.scrollHeight - body.clientHeight - body.scrollTop).toBeLessThanOrEqual(1);
     const bounds = body.getBoundingClientRect();
     const rows = [...body.querySelectorAll<HTMLElement>('.flower-activity-inline-button')];
-    expect(rows.every(row => Math.abs(row.getBoundingClientRect().height - 28) <= 1)).toBe(true);
+    expect(rows.every(row => Math.abs(row.getBoundingClientRect().height - 32) <= 1)).toBe(true);
     expect(rows.filter(row => { const rect = row.getBoundingClientRect(); return rect.top >= bounds.top - 1 && rect.bottom <= bounds.bottom + 1; })).toHaveLength(10);
     if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: root, path: '__screenshots__/flower-tool-sequence-ten-rows.png' });
   });
@@ -780,7 +841,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(thoughts.map(node => Boolean(node.closest<HTMLElement>('.flower-tool-sequence-node')?.dataset.flowerSequence))).toEqual([true, true, true]);
     expect(thoughts[1].querySelectorAll('.flower-thinking-petal')).toHaveLength(5);
     expect(collapsed(root, 'b')).toBe(false);
-    expect(row(root, 'a').getBoundingClientRect().height).toBe(28);
+    expect(row(root, 'a').getBoundingClientRect().height).toBe(32);
     expect(Math.abs(row(root, 'b').getBoundingClientRect().top - thoughts[1].getBoundingClientRect().bottom)).toBeLessThan(1);
     expect(getComputedStyle(group(root, 'a').querySelector('.flower-tool-sequence-content')!, '::after').width).toBe('1px');
     expect(getComputedStyle(row(root, 'a').querySelector('.flower-activity-inline-title')!).fontSize).toBe('12px');

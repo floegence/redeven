@@ -119,6 +119,22 @@ describe('Flower scroll tail controller', () => {
     expect(metrics.scrollTop()).toBe(1120);
     controller.dispose();
   });
+  it('keeps native input when reserved space has no new reading target', () => {
+    const { controller, raf } = createController();
+    const metrics = createViewport(2000);
+    const title = { isConnected: true, getBoundingClientRect: () => ({ top: 1920 - metrics.scrollTop(), height: 20 }) } as HTMLElement;
+    Object.assign(metrics.viewport, { contains: (value: unknown) => value === title });
+    controller.bind(metrics.viewport);
+    controller.onWheel({ target: metrics.viewport, deltaY: -200 } as unknown as WheelEvent);
+    controller.preserveLayoutAnchor(title);
+    metrics.setScrollTop(1700);
+    controller.onScroll();
+    raf.flushAll();
+    expect(metrics.scrollTop()).toBe(1700);
+    expect(controller.followingLatest()).toBe(false);
+    controller.dispose();
+  });
+
   it('preserves scheduled readiness notifications during before-paint anchor correction', () => {
     const raf = createRafHarness();
     let notifications = 0;
