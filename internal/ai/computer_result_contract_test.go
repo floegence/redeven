@@ -2,6 +2,7 @@ package ai
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -12,6 +13,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/floegence/floret/v7/florettest"
+	flprovider "github.com/floegence/floret/v7/provider"
+	flruntime "github.com/floegence/floret/v7/runtime"
 	fltools "github.com/floegence/floret/v7/tools"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
@@ -86,6 +90,43 @@ func computerEncodingCode(result fltools.Result) string {
 	record, _ := result.Structured["error"].(map[string]any)
 	return anyToString(record["code"])
 }
+
+func TestComputerUncertainOutputRetainsWarningAndCompleteFacts(t *testing.T) {
+	calls := 0
+	tool := fltools.Define[map[string]any](fltools.Definition{Name: "computer.exec", InputSchema: fltools.StrictObject(nil, nil), Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}}, nil, nil,
+		func(context.Context, fltools.Invocation[map[string]any]) (fltools.Result, error) {
+			calls++
+			return floretToolResultFromFlower(nil, ToolResult{ToolID: "key", ToolName: "computer.exec", Status: toolResultStatusError, effectUncertain: true,
+				Data: map[string]any{"completed_actions": []string{"snapshot"}, "failed_action": "key", "stage": "input_delivery", "reason": "response_unavailable", "needs_observation": true}})
+		})
+	gateway := delegationContextGateway(florettest.Step{Events: []flprovider.Event{{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: "key", Name: "computer.exec", Args: "{}"}}}, {Type: flprovider.EventDone, Reason: "tool_calls"}}}, delegationContextDone())
+	service := delegationContextThread(t, gateway, func(context.Context, flruntime.ToolSurfaceRequest) (flruntime.ToolSurface, error) {
+		return flruntime.ToolSurface{Tools: fltools.NewRegistry(tool)}, nil
+	})
+	created, err := service.Create(t.Context(), flruntime.CreateThreadInput{RequestKey: "uncertain-output"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	delegationContextSend(t, service, created.ThreadID, "inspect-after-uncertainty", nil)
+	requests := gateway.Requests()
+	if calls != 1 || len(requests) != 2 {
+		t.Fatalf("unexpected replay: calls=%d requests=%d", calls, len(requests))
+	}
+	for _, message := range requests[1].Messages {
+		if message.ToolResult == nil || message.ToolResult.CallID != "key" {
+			continue
+		}
+		text := message.ToolResult.Text
+		for _, fact := range []string{"External effect unconfirmed.", "completed_actions", "snapshot", "response_unavailable", "needs_observation"} {
+			if !strings.Contains(text, fact) {
+				t.Fatalf("published engine dropped %q: %s", fact, text)
+			}
+		}
+		return
+	}
+	t.Fatal("published engine omitted the uncertain result")
+}
+
 func TestComputerFinalEnvelopeBoundaryAndIndependentArchive(t *testing.T) {
 	for _, size := range []int{65535, 65536, 65537, 1048575, 1048576, 1048577} {
 		source := ToolResult{ToolID: "observe", ToolName: "computer.observe", Status: toolResultStatusSuccess, Data: map[string]any{"text": ""}}

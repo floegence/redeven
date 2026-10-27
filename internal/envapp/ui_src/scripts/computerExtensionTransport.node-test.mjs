@@ -66,6 +66,18 @@ test('loss and oversized native frames reject a pending command without replay',
   });
 });
 
+test('confirmed focus rejection preserves the channel and is scoped to DOM.focus', async t => {
+  const { peer, transport, incoming } = await fixture(t);
+  for (const method of ['DOM.focus', 'Input.dispatchKeyEvent']) {
+    const reply = transport.send(method, {});
+    const rejected = assert.rejects(reply, method === 'DOM.focus' ? /ELEMENT_NOT_ACTIONABLE/ : /BROWSER_EXTENSION_COMMAND_FAILED/);
+    const { value: request } = await incoming.next();
+    peer.write(frame({ id: request.id, error: 'ELEMENT_NOT_ACTIONABLE' }));
+    await rejected;
+    assert.equal(transport.closed, false);
+  }
+});
+
 test('outgoing CDP commands respect the native-host one MiB boundary', async t => {
   const { transport } = await fixture(t);
   await assert.rejects(transport.send('Runtime.evaluate', { expression: 'x'.repeat(1024 * 1024) }), /BROWSER_SOURCE_UNAVAILABLE/);

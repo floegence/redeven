@@ -1,5 +1,12 @@
 # Redeven OKF Update Log
 
+## 2026-10-27 — Browser effect certainty and tool continuity
+
+Distinguish confirmed focus rejections from missing effect acknowledgements in
+[browser execution](ai/computer-use-browser.md), keep returned uncertain errors
+in [tool sequences](ui/flower-tool-sequences.md) with a visible count, and adopt
+published Floret v7.87.4 to preserve complete model-visible diagnostics.
+
 ## 2026-10-27 — Compact Computer Use qualification
 
 Record 45/45 real DeepSeek scenarios on the compact default surface, canonical

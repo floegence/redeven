@@ -53,7 +53,7 @@ export class ExtensionTransport extends EventEmitter {
     const id = String(++this.sequence);
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => this.close(), 30000);
-      this.pending.set(id, { resolve, reject, timer });
+      this.pending.set(id, { resolve, reject, timer, method });
       try { this.write({ id, method, params, session }); }
       catch { this.close(); }
     });
@@ -79,7 +79,7 @@ export class ExtensionTransport extends EventEmitter {
     const request = this.pending.get(message.id);
     if (!request) throw new Error('BROWSER_EXTENSION_REPLY_INVALID');
     this.pending.delete(message.id); clearTimeout(request.timer);
-    if (message.error) request.reject(Object.assign(new Error(['TARGET_PERMISSION_REQUIRED', 'TARGET_CAPABILITY_UNAVAILABLE'].includes(message.error) ? message.error : 'BROWSER_EXTENSION_COMMAND_FAILED'), message.error === 'TARGET_PERMISSION_REQUIRED' ? { permissionReason: 'extension_file_access' } : {}));
+    if (message.error) request.reject(Object.assign(new Error(['TARGET_PERMISSION_REQUIRED', 'TARGET_CAPABILITY_UNAVAILABLE'].includes(message.error) || request.method === 'DOM.focus' && message.error === 'ELEMENT_NOT_ACTIONABLE' ? message.error : 'BROWSER_EXTENSION_COMMAND_FAILED'), message.error === 'TARGET_PERMISSION_REQUIRED' ? { permissionReason: 'extension_file_access' } : {}));
     else request.resolve(message.result ?? {});
     if (message.sequence) this.write({ ack: message.sequence });
   }

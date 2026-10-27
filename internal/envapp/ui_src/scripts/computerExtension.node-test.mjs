@@ -283,6 +283,20 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
       const clicked=await execute('computer.click',point);assert.equal(clicked.error,undefined,JSON.stringify(clicked));
       assert.equal(clicked.result.action_executed,true);
     });
+    await t.test('document and nonfocusable presses retain the real extension connection', async () => {
+      const tree = (await execute('computer.observe')).result.observation;
+      const root = tree.nodes.find(node => node.role === 'RootWebArea');
+      await task.evaluate(() => { const node = document.createElement('h2'); node.textContent = 'Focus rejection fixture'; document.body.append(node); });
+      try {
+        for (const selector of [{ ref: root.ref }, { role: 'heading', name: 'Focus rejection fixture' }]) {
+          const rejected = await execute('computer.action', { action: 'key', selector, key: 'PageDown' });
+          assert.equal(rejected.error, 'ELEMENT_NOT_ACTIONABLE', JSON.stringify(rejected));
+          assert.deepEqual(rejected.result, { action_executed: false, needs_observation: false, stage: 'focus', reason: 'not_focusable' });
+          assert.equal(owners.get(selected.id).controller.page.invalid, false);
+        }
+        assert.equal((await execute('computer.key', { key: 'Escape' })).error, undefined);
+      } finally { await task.locator('h2', { hasText: 'Focus rejection fixture' }).evaluate(node => node.remove()); }
+    });
     const nested = await execute('computer.action', { action: 'fill', selector: { role: 'textbox', name: 'Nested query' }, text: 'Cross-site value' });
     assert.equal(nested.error, undefined, JSON.stringify(nested));
     assert.equal(nested.safety?.level, 'routine', JSON.stringify(nested));

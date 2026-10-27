@@ -194,6 +194,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 	var fullObservation bool
 	observationInvalidated := false
 	var observationFailureStage string
+	var failureStage, failureReason string
 	var navigationFailure *computerNavigationError
 	operations := 0
 	actionExecuted := false
@@ -209,8 +210,12 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 			output.Result = map[string]any{"summary": args.Description, "completed_actions": completed, "action_executed": actionExecuted, "operations": operations, "completed": false, "script_error": "SCRIPT_STOPPED"}
 		}
 		output.executionFacts.completedActions = append([]string(nil), completed...)
-		output.executionFacts.needsObservation = observationInvalidated || observationFailureStage != "" || actionExecuted
+		output.executionFacts.needsObservation = observationInvalidated || observationFailureStage != "" || actionExecuted || errors.Is(outputErr, errComputerEffectUnknown)
 		if payload, ok := output.Result.(map[string]any); ok {
+			if failureStage != "" {
+				payload["stage"] = failureStage
+				payload["reason"] = failureReason
+			}
 			if preparationExecuted {
 				payload["preparation_executed"] = true
 			}
@@ -224,7 +229,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				payload["failed_operation_index"] = failedOperationIndex
 				payload["failed_action"] = failedAction
 			}
-			payload["needs_observation"] = observationInvalidated || observationFailureStage != "" || (actionExecuted && lastObservation == nil)
+			payload["needs_observation"] = observationInvalidated || observationFailureStage != "" || (actionExecuted && lastObservation == nil) || errors.Is(outputErr, errComputerEffectUnknown)
 			payload["observation_invalidated"] = observationInvalidated
 			payload["effect_outcome_unknown"] = errors.Is(outputErr, errComputerEffectUnknown)
 			if requiredNavigationURL != "" {
@@ -300,6 +305,9 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 			}
 			if err != nil {
 				stopped = err
+				facts, _ := observed.Result.(map[string]any)
+				failureStage = computerDiagnosticValue("stage", facts["stage"])
+				failureReason = computerDiagnosticValue("reason", facts["reason"])
 				if errors.As(err, &navigationFailure) {
 					lastObservation = nil
 					result.Attachments = nil

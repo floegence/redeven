@@ -88,6 +88,25 @@ function expectConnectorBetween(root: HTMLElement, previousID: string, nextID: s
 afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('consecutive tools in the shared Flower surface', () => {
+  it('keeps returned uncertainty grouped and visible while preserving manual disclosure', async () => {
+    const failed = tool('uncertain', 'error', 'computer.exec', 'structured');
+    const uncertain = { ...failed, activity: { ...failed.activity!, presentation: { ...failed.activity!.presentation as Record<string, unknown>,
+      chips: [{ kind: 'effect_outcome', label: 'result', value: 'uncertain', tone: 'warning' }] } } };
+    const { root, push } = await mount([tool('before'), tool('uncertain', 'running')]);
+    const header = toggle(root, 'before');
+    header.click();
+    await waitFor(() => collapsed(root, 'before'));
+    push([tool('before'), uncertain, tool('after')]);
+    await waitFor(() => header.textContent?.includes('3 tool calls') === true);
+    expect(root.querySelectorAll('.flower-tool-sequence-toggle')).toHaveLength(1);
+    expect(toggle(root, 'before')).toBe(header);
+    expect(collapsed(root, 'before')).toBe(true);
+    expect(header.textContent).toContain('Result unconfirmed · 1');
+    expect(header.getAttribute('aria-label')).toContain('Result unconfirmed');
+    header.click();
+    await waitFor(() => group(root, 'before').getAttribute('data-state') === 'open');
+    expect(row(root, 'uncertain').textContent).toContain('Result unconfirmed');
+  });
   it('keeps following after layout and programmatic scrolling without reading input', async () => {
     const calls = Array.from({ length: 36 }, (_, index) => tool(`layout-${index}`));
     const { root, push } = await mount(calls);

@@ -5,7 +5,7 @@ description: Compact tools and bounded thinking without hiding dialogue or takin
 tags: [ui, flower, activity, thinking, disclosure, accessibility]
 timestamp: 2026-10-21T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-26"
+reviewed_at: "2026-10-27"
 ---
 # Summary
 
@@ -22,7 +22,7 @@ no upstream contract, canonical summary or backend migration.
 ## Boundaries and identity
 A sequence contains at least two nodes in one thread/turn/run, including a tool; one call plus following thinking qualifies. Calls, failures and argument previews qualify. Leading thinking is standalone; thinking after the first tool joins, including after the last call. Counts report calls, thinking and failures without synthesizing summaries. A newer single-call segment can settle an older sequence without changing its explicit disclosure choice.
 
-Prose, user messages, interactions, parent events, compaction, Goal updates, SubAgent operations, approvals, uncertain effects and non-tool errors break groups. Goal calls and Web Search remain tools; running attention does not break a sequence, waiting/approval does. Empty assistant placeholders are transparent. An answered input splits work in a settled turn: sequences on both sides default closed, including the newest, while explicit choices and active calls retain disclosure policy. Whole-turn disclosure remains independent.
+Prose, user messages, interactions, compaction, Goal updates, approvals and non-tool errors break groups. SubAgent tools and canonically scoped report/completion events join the sequence; unresolvable parent-event ownership remains a boundary. Returned uncertain tool errors stay in their exact thread/turn/run sequence and show a localized unconfirmed-result count even when collapsed; invalid success-with-uncertainty facts and uncertain parent lifecycle events remain boundaries. Goal calls and Web Search remain tools; running attention and SubAgent waits remain in the sequence; other waiting states and approvals break it. Empty assistant placeholders are transparent. An answered input splits work in a settled turn: sequences on both sides default closed, including the newest, while explicit choices and active calls retain disclosure policy. Whole-turn disclosure remains independent.
 
 Canonical call identity retains row lifetime; the first call anchors a group and thinking moves in place. Preserve source order, final output, actions and errors. Adjacent icons connect with theme-owned active/completed/failure states.
 
