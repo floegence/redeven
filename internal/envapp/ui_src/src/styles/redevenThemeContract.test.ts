@@ -253,7 +253,9 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).not.toContain('redeven-terminal-freeze-snapshot');
     expect(src).not.toContain("data-redeven-terminal-freeze");
     expect(src).toContain(".redeven-workbench-page[data-redeven-workbench-layout-interacting='true'] .workbench-widget {");
-    expect(src).toContain('scale 120ms ease-out');
+    // The interaction transition keeps its lightweight intent while reading the
+    // shared motion tokens, so the fast tier and easing stay one definition.
+    expect(src).toContain('scale var(--floe-duration-fast) var(--floe-ease-out)');
     expect(src).toContain(".workbench-widget[data-redeven-workbench-widget-closing='true'] {");
     expect(src).toContain('scale: 0.985;');
     expect(src).not.toContain('redeven-terminal-work-indicator');
