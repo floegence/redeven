@@ -172,7 +172,7 @@ html:not(.dark) .redeven-welcome-surface {
   background: color-mix(in srgb, var(--muted) 38%, transparent);
   color: var(--muted-foreground);
   padding: 0 0.625rem;
-  font-size: 0.75rem;
+  font-size: var(--floe-type-supporting);
   font-weight: 500;
   letter-spacing: 0;
   line-height: 1;
@@ -236,7 +236,7 @@ html:not(.dark) .redeven-welcome-surface {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.875rem;
+  font-size: var(--floe-type-body);
   font-weight: 600;
   letter-spacing: 0;
   line-height: 1.25rem;
@@ -281,7 +281,7 @@ html:not(.dark) .redeven-welcome-surface {
 .redeven-theme-picker__section-label {
   min-width: 0;
   color: var(--foreground);
-  font-size: 0.75rem;
+  font-size: var(--floe-type-supporting);
   font-weight: 600;
   letter-spacing: 0;
   line-height: 1rem;
@@ -305,7 +305,7 @@ html:not(.dark) .redeven-welcome-surface {
   background: transparent;
   color: var(--muted-foreground);
   padding: 0.375rem 0.5rem;
-  font-size: 0.75rem;
+  font-size: var(--floe-type-supporting);
   font-weight: 500;
   letter-spacing: 0;
   line-height: 1rem;
@@ -328,7 +328,7 @@ html:not(.dark) .redeven-welcome-surface {
 .redeven-theme-picker__system-status {
   margin: 0.5rem 0 0;
   color: var(--muted-foreground);
-  font-size: 0.6875rem;
+  font-size: var(--floe-type-caption);
   letter-spacing: 0;
   line-height: 1rem;
   overflow-wrap: anywhere;
@@ -341,7 +341,7 @@ html:not(.dark) .redeven-welcome-surface {
 .redeven-theme-picker__theme-count {
   flex: 0 0 auto;
   color: var(--muted-foreground);
-  font-size: 0.6875rem;
+  font-size: var(--floe-type-caption);
   font-variant-numeric: tabular-nums;
   line-height: 1rem;
 }
@@ -448,7 +448,7 @@ html:not(.dark) .redeven-welcome-surface {
 
 .redeven-theme-picker__theme-name {
   min-width: 0;
-  font-size: 0.75rem;
+  font-size: var(--floe-type-supporting);
   font-weight: 500;
   letter-spacing: 0;
   line-height: 1rem;
@@ -515,7 +515,7 @@ html:not(.dark) .redeven-welcome-surface {
   background: color-mix(in srgb, var(--error) 8%, var(--popover));
   color: color-mix(in srgb, var(--error) 82%, var(--foreground));
   padding: 0.625rem 0.875rem;
-  font-size: 0.75rem;
+  font-size: var(--floe-type-supporting);
   letter-spacing: 0;
   line-height: 1.125rem;
   overflow-wrap: anywhere;
@@ -991,12 +991,10 @@ html:not(.dark) .redeven-new-environment-card:hover {
   width: 100%;
   max-height: calc(100dvh - 1rem);
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-  border-radius: 0.875rem;
+  border: 1px solid var(--floe-line);
+  border-radius: var(--floe-radius-panel);
   background: var(--popover);
-  box-shadow:
-    0 2px 5px color-mix(in srgb, var(--redeven-surface-shadow-source) 7%, transparent),
-    0 16px 44px -12px color-mix(in srgb, var(--redeven-surface-shadow-source) 23%, transparent);
+  box-shadow: var(--floe-elevation-float);
   opacity: 1;
   transform: translateY(0);
   transition: opacity 180ms ease-out, transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -1055,14 +1053,14 @@ html:not(.dark) .redeven-new-environment-card:hover {
 
 .redeven-endpoints-popover-eyebrow {
   color: var(--muted-foreground);
-  font-size: 0.6875rem;
+  font-size: var(--floe-type-caption);
   line-height: 1.4;
 }
 
 .redeven-endpoints-popover-title {
   min-width: 0;
   overflow-wrap: anywhere;
-  font-size: 0.9375rem;
+  font-size: var(--floe-type-heading-sm);
   font-weight: 600;
   line-height: 1.4;
   color: var(--foreground);
@@ -1149,8 +1147,8 @@ html:not(.dark) .redeven-new-environment-card:hover {
   grid-row: 1;
   min-width: 0;
   color: var(--muted-foreground);
-  font-size: 0.75rem;
-  font-weight: 450;
+  font-size: var(--floe-type-supporting);
+  font-weight: 400;
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -1177,7 +1175,7 @@ html:not(.dark) .redeven-new-environment-card:hover {
   display: block;
   margin-top: 0.25rem;
   color: var(--muted-foreground);
-  font-size: 0.75rem;
+  font-size: var(--floe-type-supporting);
   line-height: 1.6;
   text-wrap: pretty;
 }
@@ -1217,7 +1215,7 @@ html:not(.dark) .redeven-new-environment-card:hover {
   margin-top: 0.5rem;
   min-width: 0;
   color: var(--muted-foreground);
-  font-size: 0.75rem;
+  font-size: var(--floe-type-supporting);
   line-height: 1.6;
 }
 
@@ -1296,7 +1294,7 @@ html:not(.dark) .redeven-new-environment-card:hover {
   gap: .75rem;
   padding: 0;
 }
-.redeven-address-heading .redeven-address-title > .redeven-card-endpoint-label { font-size: 12px; font-weight: 550; color: var(--foreground); }
+.redeven-address-heading .redeven-address-title > .redeven-card-endpoint-label { font-size: var(--floe-type-supporting); font-weight: 500; color: var(--foreground); }
 .redeven-address-restricted { padding-top: 4px; }
 :root[data-floe-shell-theme^='hc-'] .redeven-address-group { --redeven-address-rule: var(--border); }
 .redeven-address-title { display: flex; align-items: center; gap: 0.25rem; min-width: 0; }
@@ -1311,7 +1309,7 @@ html:not(.dark) .redeven-new-environment-card:hover {
   border-radius: 1rem;
   background: color-mix(in srgb, var(--muted) 65%, transparent);
   color: var(--muted-foreground);
-  font-size: 0.6875rem;
+  font-size: var(--floe-type-caption);
   font-variant-numeric: tabular-nums;
   line-height: 1.5;
 }
@@ -1331,7 +1329,7 @@ html:not(.dark) .redeven-new-environment-card:hover {
 .redeven-address-viewport:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 0.25rem; }
 .redeven-address-table { width: 100%; border-collapse: collapse; table-layout: auto; }
 .redeven-address-table thead { position: sticky; top: 0; z-index: 1; background: color-mix(in srgb, var(--foreground) 4%, var(--redeven-address-background)); }
-.redeven-address-table th { height: 28px; padding: 4px 12px; text-align: left; font-size: 11px; font-weight: 400; color: var(--muted-foreground); border-bottom: 1px solid var(--redeven-address-rule); }
+.redeven-address-table th { height: 28px; padding: 4px 12px; text-align: left; font-size: var(--floe-type-caption); font-weight: 400; color: var(--muted-foreground); border-bottom: 1px solid var(--redeven-address-rule); }
 .redeven-address-table th + th { text-align: right; }
 .redeven-address-table .redeven-card-endpoint-content {
   width: 100%;
@@ -1341,8 +1339,8 @@ html:not(.dark) .redeven-new-environment-card:hover {
 .redeven-address-table .redeven-endpoint-action-cell { width: 1%; padding: 4px 8px 4px 0; vertical-align: middle; }
 .redeven-address-table .redeven-card-endpoint-row { display: table-row; height: 36px; }
 .redeven-address-table .redeven-card-endpoint-row + .redeven-card-endpoint-row { border-top: 1px solid var(--redeven-address-rule); }
-.redeven-address-table .redeven-card-endpoint-value { font-size: 12px; font-weight: 450; }
-.redeven-address-empty { padding: .75rem; font-size: .75rem; color: var(--muted-foreground); }
+.redeven-address-table .redeven-card-endpoint-value { font-size: var(--floe-type-supporting); font-weight: 400; }
+.redeven-address-empty { padding: .75rem; font-size: var(--floe-type-supporting); color: var(--muted-foreground); }
 .redeven-address-filter {
   display: flex;
   align-items: center;
@@ -1363,7 +1361,7 @@ html:not(.dark) .redeven-new-environment-card:hover {
   background: transparent;
   color: var(--foreground);
   box-shadow: none;
-  font-size: 0.75rem;
+  font-size: var(--floe-type-supporting);
 }
 .redeven-address-filter input::placeholder { color: var(--muted-foreground); }
 .redeven-address-filter input::-webkit-search-cancel-button { display: none; }
@@ -1431,7 +1429,7 @@ html:not(.dark) .redeven-endpoint-qr-panel {
   border-radius: 0.2rem;
   background: color-mix(in srgb, var(--foreground) 4%, transparent);
   padding: 0.12rem 0.32rem;
-  font-size: 0.55rem;
+  font-size: var(--floe-type-caption);
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -1446,7 +1444,7 @@ html:not(.dark) .redeven-endpoint-qr-panel {
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.68rem;
+  font-size: var(--floe-type-caption);
   font-weight: 600;
   color: var(--foreground);
 }
@@ -1496,7 +1494,7 @@ html:not(.dark) .redeven-endpoint-qr-panel {
   border: 0;
   background: transparent;
   padding: 0;
-  font-size: 0.6875rem;
+  font-size: var(--floe-type-caption);
   font-weight: 500;
   letter-spacing: normal;
   text-transform: none;
@@ -1507,7 +1505,7 @@ html:not(.dark) .redeven-endpoint-qr-panel {
   white-space: normal;
   overflow-wrap: anywhere;
   font-family: var(--font-sans);
-  font-size: 0.6875rem;
+  font-size: var(--floe-type-caption);
   line-height: 1.5;
   font-weight: 400;
 }
@@ -1531,19 +1529,34 @@ html:not(.dark) .redeven-endpoint-qr-panel {
 
 /* ── Tabs ── */
 
+/* Floe's tab recipe on the shared control scale: 28px row, 10px radius, one
+ * control type tier and the language's fast palette fade. The selected face
+ * stays a filled control rather than Floe's card-on-well tab face: the rail
+ * here sits directly on the page ground, where a card fill measures about
+ * 1.1:1 and would fail the 3:1 selection gate. */
 .redeven-console-tab {
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--floe-gap-control);
+  height: var(--floe-control-height-sm);
   border: 1px solid transparent;
-  border-radius: 0.375rem;
+  border-radius: var(--floe-radius-control);
   background: transparent;
-  padding: 0.3125rem 0.625rem;
+  padding: 0 var(--floe-control-padding-md);
   font-size: var(--floe-type-control);
+  line-height: var(--floe-line-control);
   font-weight: 500;
-  color: var(--muted-foreground);
-  transition: color 120ms ease, border-color 120ms ease, background-color 120ms ease;
+  letter-spacing: var(--floe-tracking-normal, normal);
+  color: var(--floe-ink-soft);
+  transition:
+    color var(--floe-duration-fast) var(--floe-ease-out),
+    border-color var(--floe-duration-fast) var(--floe-ease-out),
+    background-color var(--floe-duration-fast) var(--floe-ease-out);
 }
 
 .redeven-console-tab:hover {
+  background: var(--floe-state-hover);
   color: var(--foreground);
 }
 
@@ -1555,41 +1568,20 @@ html:not(.dark) .redeven-endpoint-qr-panel {
   transition: none;
 }
 
+.redeven-console-tab:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--background),
+    0 0 0 4px var(--ring);
+}
+
 /* ── Filters ── */
-
-.redeven-console-filter {
-  cursor: pointer;
-  border: 1px solid color-mix(in srgb, var(--foreground) 8%, transparent);
-  border-radius: 0.3rem;
-  background: transparent;
-  padding: 0.34rem 0.68rem;
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted-foreground);
-  transition:
-    background-color 120ms ease, border-color 120ms ease, color 120ms ease;
-}
-
-.redeven-console-filter:hover {
-  border-color: color-mix(in srgb, var(--foreground) 16%, transparent);
-  color: var(--foreground);
-}
-
-.redeven-console-filter[data-active='true'] {
-  border-color: var(--primary);
-  background: var(--primary);
-  color: var(--primary-foreground);
-  box-shadow: none;
-  transition: none;
-}
 
 .redeven-native-select {
   width: 100%;
   cursor: pointer;
   border: 1px solid var(--border);
-  border-radius: 0.375rem;
+  border-radius: var(--floe-radius-control);
   background: var(--background);
   padding: 0.55rem 0.7rem;
   font-size: var(--floe-type-control);
@@ -1615,22 +1607,33 @@ html:not(.dark) .redeven-header-separator {
 
 /* ── Provider filter pill ── */
 
+/* Segments, not tabs: a filter pill is a committed choice on a rail, so the
+ * selected face is the opaque semantic pair and the rest sits flat. Type stays
+ * on the control tier — no upper-case transform and no tracking, both of which
+ * read as a foreign label style next to Floe's sentence-case controls. */
 .redeven-provider-pill {
   cursor: pointer;
-  border: 1px solid color-mix(in srgb, var(--foreground) 8%, transparent);
-  border-radius: 0.3rem;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--floe-gap-inline);
+  height: var(--floe-control-height-xs);
+  border: 1px solid transparent;
+  border-radius: var(--floe-radius-sm);
   background: transparent;
-  padding: 0.32rem 0.65rem;
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  color: var(--muted-foreground);
+  padding: 0 var(--floe-control-padding-sm);
+  font-size: var(--floe-type-supporting);
+  line-height: var(--floe-line-control);
+  font-weight: 500;
+  letter-spacing: var(--floe-tracking-normal, normal);
+  color: var(--floe-ink-soft);
   transition:
-    background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+    background-color var(--floe-duration-fast) var(--floe-ease-out),
+    border-color var(--floe-duration-fast) var(--floe-ease-out),
+    color var(--floe-duration-fast) var(--floe-ease-out);
 }
 
 .redeven-provider-pill:hover {
-  border-color: color-mix(in srgb, var(--foreground) 16%, transparent);
+  background: var(--floe-state-hover);
   color: var(--foreground);
 }
 
@@ -1642,20 +1645,30 @@ html:not(.dark) .redeven-header-separator {
   transition: none;
 }
 
+.redeven-provider-pill:focus-visible,
+.redeven-runtime-chip:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--background),
+    0 0 0 4px var(--ring);
+}
+
 /* ── Runtime target / control plane filter chip ── */
 
 .redeven-runtime-chip {
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: var(--floe-gap-inline);
+  height: var(--floe-control-height-xs);
   border: 1px solid var(--primary);
-  border-radius: 0.3rem;
+  border-radius: var(--floe-radius-sm);
   background: var(--primary);
-  padding: 0.32rem 0.5rem 0.32rem 0.6rem;
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
+  padding: 0 var(--floe-control-padding-sm);
+  font-size: var(--floe-type-supporting);
+  line-height: var(--floe-line-control);
+  font-weight: 500;
+  letter-spacing: var(--floe-tracking-normal, normal);
   color: var(--primary-foreground);
   transition: none;
 }
@@ -1663,7 +1676,7 @@ html:not(.dark) .redeven-header-separator {
 .redeven-runtime-chip svg {
   flex-shrink: 0;
   opacity: 1;
-  transition: opacity 120ms ease;
+  transition: opacity var(--floe-duration-fast) var(--floe-ease-out);
 }
 
 .redeven-runtime-chip:hover svg {
@@ -1735,7 +1748,7 @@ html:not(.dark) .redeven-header-separator {
 }
 
 .redeven-desktop-toast__title {
-  font-size: 0.72rem;
+  font-size: var(--floe-type-supporting);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1756,7 +1769,7 @@ html:not(.dark) .redeven-header-separator {
   border-radius: 0.375rem;
   background: color-mix(in srgb, var(--primary) 9%, transparent);
   padding: 0.42rem 0.62rem;
-  font-size: 0.75rem;
+  font-size: var(--floe-type-supporting);
   font-weight: 700;
   line-height: 1;
   color: color-mix(in srgb, var(--primary) 86%, var(--foreground));
@@ -1781,7 +1794,7 @@ html:not(.dark) .redeven-header-separator {
   border: none;
   background: transparent;
   padding: 0.1rem 0;
-  font-size: 0.72rem;
+  font-size: var(--floe-type-supporting);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1833,7 +1846,7 @@ html:not(.dark) .redeven-header-separator {
   border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
   border-radius: 0.375rem;
   padding: 0.6rem 0.75rem;
-  font-size: 0.75rem;
+  font-size: var(--floe-type-supporting);
   line-height: 1.35;
 }
 
@@ -1861,7 +1874,7 @@ html:not(.dark) .redeven-header-separator {
   border: none;
   background: transparent;
   padding: 0.1rem 0;
-  font-size: 0.7rem;
+  font-size: var(--floe-type-caption);
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -1888,8 +1901,8 @@ html:not(.dark) .redeven-header-separator {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  font-size: 0.67rem;
-  font-weight: 575;
+  font-size: var(--floe-type-caption);
+  font-weight: 600;
   letter-spacing: 0.03em;
   white-space: nowrap;
   transition: color 120ms ease;
@@ -1981,7 +1994,7 @@ html:not(.dark) .redeven-header-separator {
   border-radius: 0.3rem;
   background: color-mix(in srgb, var(--muted) 20%, transparent);
   padding: 0.25rem 0.75rem;
-  font-size: 11px;
+  font-size: var(--floe-type-caption);
   font-weight: 500;
   color: var(--muted-foreground);
 }
@@ -1994,12 +2007,13 @@ html:not(.dark) .redeven-header-separator {
 
 .redeven-split-action {
   --redeven-split-action-primary-min-width: 7.5rem;
+  --redeven-split-action-toggle-width: var(--floe-control-height-sm);
   position: relative;
   display: flex;
   flex: 1 1 auto;
   min-width: 0;
   align-items: stretch;
-  min-width: min(100%, calc(var(--redeven-split-action-primary-min-width) + 2.1rem));
+  min-width: min(100%, calc(var(--redeven-split-action-primary-min-width) + var(--redeven-split-action-toggle-width)));
 }
 
 .redeven-split-action-primary {
@@ -2016,24 +2030,26 @@ html:not(.dark) .redeven-header-separator {
  * as the divider between the two actions.
  */
 .redeven-split-action:has(.redeven-split-action-toggle) {
-  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-  border-radius: 0.375rem;
+  border: 1px solid var(--floe-line);
+  border-radius: var(--floe-radius-md);
 }
 
+/* The two halves share the container's hairline, so their own corners step in
+ * by that same 1px and never double the stroke. */
 .redeven-split-action:has(.redeven-split-action-toggle) .redeven-split-action-primary button:not(.redeven-split-action-trigger--blocked) {
   border: 0;
-  border-radius: 0.375rem 0 0 0.375rem;
+  border-radius: calc(var(--floe-radius-md) - 1px) 0 0 calc(var(--floe-radius-md) - 1px);
 }
 
 .redeven-split-action:has(.redeven-split-action-toggle) .redeven-split-action-toggle {
   border: 0;
-  border-left: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  border-radius: 0 0.375rem 0.375rem 0;
+  border-left: 1px solid var(--floe-line);
+  border-radius: 0 calc(var(--floe-radius-md) - 1px) calc(var(--floe-radius-md) - 1px) 0;
 }
 
 .redeven-split-action:has(.redeven-split-action-toggle) .redeven-split-action-primary button:disabled:not(.redeven-split-action-trigger--blocked),
 .redeven-split-action:has(.redeven-split-action-toggle) .redeven-split-action-toggle:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
 }
 
 .redeven-control-label {
@@ -2138,54 +2154,56 @@ html:not(.dark) .redeven-header-separator {
 .redeven-split-action-toggle {
   cursor: pointer;
   display: inline-flex;
-  width: 2.1rem;
+  width: var(--redeven-split-action-toggle-width);
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border: 1px solid var(--floe-line);
   border-left: 0;
-  border-radius: 0 0.375rem 0.375rem 0;
-  background: color-mix(in srgb, var(--background) 92%, var(--card));
-  color: var(--muted-foreground);
+  border-radius: 0 var(--floe-radius-md) var(--floe-radius-md) 0;
+  background: var(--floe-well);
+  color: var(--floe-ink-soft);
   transition:
-    background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+    background-color var(--floe-duration-fast) var(--floe-ease-out),
+    border-color var(--floe-duration-fast) var(--floe-ease-out),
+    color var(--floe-duration-fast) var(--floe-ease-out);
 }
 
 .redeven-split-action-toggle:hover {
-  background: color-mix(in srgb, var(--muted) 34%, transparent);
+  background: var(--floe-well-strong);
   color: var(--foreground);
 }
 
 .redeven-split-action-toggle:disabled {
   cursor: not-allowed;
-  opacity: 0.6;
+  opacity: 0.5;
 }
 
 .redeven-split-action-toggle:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--ring) 70%, transparent);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
 }
 
+/* Floe's menu surface: one hairline, the panel radius, the float elevation and
+ * a row stack — no per-item card chrome. */
 .redeven-split-menu {
   display: grid;
   width: max-content;
   min-width: min(13rem, calc(100vw - 1rem));
   max-width: min(26rem, calc(100vw - 1rem));
-  gap: 0.125rem;
-  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-  border-radius: 0.5rem;
+  gap: 0.0625rem;
+  border: 1px solid var(--floe-line);
+  border-radius: var(--floe-radius-panel);
   background: var(--popover);
   padding: 0.25rem;
-  box-shadow:
-    0 2px 6px color-mix(in srgb, var(--redeven-surface-shadow-source) 16%, transparent), 0 16px 36px -18px color-mix(in srgb, var(--redeven-surface-shadow-source) 32%, transparent);
+  box-shadow: var(--floe-elevation-float);
 }
 
-/* semantic tone colors driven by data-tone attribute */
+/* Tone carries meaning, not emphasis: only destructive intents take a hue, and
+ * the rest sit on the menu's own ink — a coloured label for a plain action is
+ * the loud-menu pattern Floe's Dropdown deliberately avoids. */
 .redeven-split-menu-item[data-tone="danger"] {
-  color: color-mix(in srgb, var(--error) 78%, var(--foreground));
-}
-.redeven-split-menu-item[data-tone="primary"] {
-  color: color-mix(in srgb, var(--primary) 78%, var(--foreground));
+  color: var(--error);
 }
 .redeven-split-menu-item[data-tone="accent"] {
   color: color-mix(in srgb, var(--warning) 78%, var(--foreground));
@@ -2194,53 +2212,59 @@ html:not(.dark) .redeven-header-separator {
 .redeven-split-menu-item {
   cursor: pointer;
   min-width: 0;
-  height: 2rem;
+  min-height: var(--floe-row-height);
   white-space: nowrap;
   width: 100%;
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
-  border-radius: 0.375rem;
-  background: color-mix(in srgb, var(--muted) 28%, var(--card));
-  padding: 0.35rem 0.6rem;
+  gap: var(--floe-gap-inline);
+  border: 0;
+  border-radius: var(--floe-radius-sm);
+  background: transparent;
+  padding: 0 var(--floe-control-padding-sm);
   text-align: left;
-  font-size: 0.74rem;
-  font-weight: 550;
-  line-height: 1.3;
+  font-size: var(--floe-type-control);
+  font-weight: 400;
+  line-height: var(--floe-line-control);
+  letter-spacing: var(--floe-tracking-normal, normal);
+  color: var(--floe-ink-soft);
   transition:
-    background-color 120ms ease, border-color 120ms ease;
+    background-color var(--floe-duration-fast) var(--floe-ease-out),
+    color var(--floe-duration-fast) var(--floe-ease-out);
 }
 
 .redeven-split-menu-item:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--muted) 30%, transparent);
-  border-color: color-mix(in srgb, var(--border) 70%, currentColor 30%);
+  background: var(--floe-state-hover);
+  color: var(--foreground);
+}
+
+.redeven-split-menu-item:focus-visible {
+  outline: none;
+  background: var(--floe-state-hover);
+  color: var(--foreground);
 }
 
 .redeven-split-menu-item:disabled {
   cursor: not-allowed;
-  color: var(--muted-foreground);
+  color: var(--floe-ink-quiet, var(--muted-foreground));
   opacity: 0.5;
 }
 
+/* Menu glyphs sit on the text baseline as quiet marks, not as filled badges. */
 .redeven-split-menu-item-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.35rem;
-  height: 1.35rem;
+  width: 1rem;
+  height: 1rem;
   flex-shrink: 0;
-  border-radius: 9999px;
-  background: color-mix(in srgb, currentColor 10%, transparent);
-}
-
-.redeven-split-menu-item:disabled .redeven-split-menu-item-icon {
-  background: color-mix(in srgb, var(--muted-foreground) 8%, transparent);
+  color: currentColor;
+  opacity: 0.72;
 }
 
 .redeven-split-menu-item-icon svg {
-  width: 0.8rem;
-  height: 0.8rem;
+  width: 0.875rem;
+  height: 0.875rem;
 }
 
 .redeven-action-popover-surface {
@@ -2248,7 +2272,7 @@ html:not(.dark) .redeven-header-separator {
   --redeven-action-popover-border: color-mix(in srgb, var(--redeven-stroke-overlay, var(--border)) 86%, var(--foreground) 14%);
   width: var(--redeven-action-popover-width);
   opacity: 1;
-  animation: redeven-action-popover-enter 220ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+  animation: redeven-action-popover-enter 240ms var(--floe-ease-out) both;
   transform-origin: var(--redeven-action-popover-origin, 50% 100%);
 }
 
@@ -2257,12 +2281,11 @@ html:not(.dark) .redeven-header-separator {
   width: 100%;
   min-height: 2.75rem;
   max-height: var(--redeven-anchored-overlay-max-height, none);
-  border-radius: 0.75rem;
+  border-radius: var(--floe-radius-panel);
   overflow: hidden;
-  border: 1px solid var(--redeven-action-popover-border);
+  border: 1px solid var(--floe-line);
   background: var(--popover);
-  box-shadow:
-    0 2px 6px color-mix(in srgb, var(--redeven-surface-shadow-source) 16%, transparent), 0 16px 36px -18px color-mix(in srgb, var(--redeven-surface-shadow-source) 32%, transparent);
+  box-shadow: var(--floe-elevation-float);
 }
 
 .redeven-action-popover-surface[data-placement='top'] > .redeven-anchored-overlay-arrow {
@@ -2282,7 +2305,7 @@ html:not(.dark) .redeven-header-separator {
 }
 
 .redeven-action-popover-surface--closing {
-  animation: redeven-action-popover-exit 160ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+  animation: redeven-action-popover-exit var(--floe-duration-fast) var(--floe-ease-out) both;
   pointer-events: none;
 }
 
@@ -2339,7 +2362,7 @@ html:not(.dark) .redeven-header-separator {
 
 .redeven-action-popover__detail {
   min-width: 0;
-  font-size: 0.75rem;
+  font-size: var(--floe-type-supporting);
   font-weight: 400;
   line-height: 1.55;
   color: var(--muted-foreground);
@@ -2406,7 +2429,7 @@ html:not(.dark) .redeven-header-separator {
 
 .redeven-action-popover__eyebrow {
   min-width: 0;
-  font-size: 0.65rem;
+  font-size: var(--floe-type-caption);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2477,7 +2500,7 @@ html:not(.dark) .redeven-header-separator {
 .redeven-runtime-impact__summary {
   min-width: 0;
   color: var(--popover-foreground);
-  font-size: 0.76rem;
+  font-size: var(--floe-type-supporting);
   font-weight: 600;
   line-height: 1.45;
   overflow-wrap: anywhere;
@@ -2486,7 +2509,7 @@ html:not(.dark) .redeven-header-separator {
 .redeven-runtime-impact__detail {
   min-width: 0;
   color: var(--muted-foreground);
-  font-size: 0.72rem;
+  font-size: var(--floe-type-supporting);
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -2505,7 +2528,7 @@ html:not(.dark) .redeven-header-separator {
   padding: 0.42rem 0.5rem;
   background: color-mix(in srgb, var(--background) 48%, transparent);
   color: var(--popover-foreground);
-  font-size: 0.68rem;
+  font-size: var(--floe-type-caption);
   font-weight: 600;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -2521,7 +2544,7 @@ html:not(.dark) .redeven-header-separator {
   border-top: 1px solid color-mix(in srgb, var(--border) 52%, transparent);
   padding-top: 0.5rem;
   color: var(--muted-foreground);
-  font-size: 0.66rem;
+  font-size: var(--floe-type-caption);
   line-height: 1.4;
 }
 
@@ -2539,7 +2562,7 @@ html:not(.dark) .redeven-header-separator {
 
 .redeven-action-popover__notice-title {
   min-width: 0;
-  font-size: 0.72rem;
+  font-size: var(--floe-type-supporting);
   font-weight: 600;
   line-height: 1.35;
   color: var(--popover-foreground);
@@ -2548,7 +2571,7 @@ html:not(.dark) .redeven-header-separator {
 
 .redeven-action-popover__notice-detail {
   min-width: 0;
-  font-size: 0.7rem;
+  font-size: var(--floe-type-caption);
   line-height: 1.45;
   color: var(--muted-foreground);
   overflow-wrap: anywhere;
@@ -2558,7 +2581,7 @@ html:not(.dark) .redeven-header-separator {
 .redeven-action-popover__failure-recovery {
   margin-top: 0.35rem;
   color: var(--popover-foreground);
-  font-size: 0.7rem;
+  font-size: var(--floe-type-caption);
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -2578,7 +2601,7 @@ html:not(.dark) .redeven-header-separator {
   gap: 0.5rem;
   cursor: pointer;
   color: var(--popover-foreground);
-  font-size: 0.7rem;
+  font-size: var(--floe-type-caption);
   font-weight: 600;
   line-height: 1.35;
   list-style: none;
@@ -2619,7 +2642,7 @@ html:not(.dark) .redeven-header-separator {
 
 .redeven-action-popover__failure-explanation {
   color: var(--muted-foreground);
-  font-size: 0.68rem;
+  font-size: var(--floe-type-caption);
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -2631,7 +2654,7 @@ html:not(.dark) .redeven-header-separator {
   padding: 0.5rem;
   color: var(--muted-foreground);
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: var(--floe-type-caption);
   line-height: 1.45;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -2640,7 +2663,7 @@ html:not(.dark) .redeven-header-separator {
 
 .redeven-action-popover__failure-diagnostic > div {
   color: var(--muted-foreground);
-  font-size: 0.65rem;
+  font-size: var(--floe-type-caption);
   font-weight: 600;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -2653,7 +2676,7 @@ html:not(.dark) .redeven-header-separator {
   padding: 0.5rem;
   color: var(--muted-foreground);
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: var(--floe-type-caption);
   line-height: 1.45;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -2777,7 +2800,7 @@ html:not(.dark) .redeven-header-separator {
 .redeven-environment-progress__target {
   min-width: 0;
   overflow-wrap: anywhere;
-  font-size: 0.68rem;
+  font-size: var(--floe-type-caption);
   font-weight: 600;
   line-height: 1.35;
   color: var(--muted-foreground);
@@ -2789,7 +2812,7 @@ html:not(.dark) .redeven-header-separator {
   border-radius: 9999px;
   background: color-mix(in srgb, var(--primary) 6%, transparent);
   padding: 0.12rem 0.45rem;
-  font-size: 0.62rem;
+  font-size: var(--floe-type-caption);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -2898,7 +2921,7 @@ html:not(.dark) .redeven-header-separator {
   display: block;
   min-width: 0;
   padding-bottom: 0.4rem;
-  font-size: 0.7rem;
+  font-size: var(--floe-type-caption);
   font-weight: 500;
   line-height: 1.4;
   color: var(--muted-foreground);
@@ -2919,7 +2942,7 @@ html:not(.dark) .redeven-header-separator {
   display: block;
   padding-bottom: 0.35rem;
   color: var(--muted-foreground);
-  font-size: 0.675rem;
+  font-size: var(--floe-type-caption);
   line-height: 1.35;
   opacity: 0.88;
   overflow-wrap: anywhere;
@@ -2941,7 +2964,7 @@ html:not(.dark) .redeven-header-separator {
   min-width: 0;
   align-items: baseline;
   column-gap: 0.45rem;
-  font-size: 0.6rem;
+  font-size: var(--floe-type-caption);
   line-height: 1.3;
 }
 
@@ -2966,7 +2989,7 @@ html:not(.dark) .redeven-header-separator {
   gap: 0.45rem;
   margin-bottom: 0.25rem;
   color: var(--muted-foreground);
-  font-size: 0.56rem;
+  font-size: var(--floe-type-caption);
   font-variant-numeric: tabular-nums;
 }
 
@@ -3006,7 +3029,7 @@ html:not(.dark) .redeven-header-separator {
   min-width: 0;
   overflow: hidden;
   color: var(--muted-foreground);
-  font-size: 0.56rem;
+  font-size: var(--floe-type-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3065,7 +3088,7 @@ html:not(.dark) .redeven-header-separator {
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 0.75rem;
-  font-size: 0.68rem;
+  font-size: var(--floe-type-caption);
   font-weight: 600;
   line-height: 1.35;
   color: var(--muted-foreground);
@@ -3169,7 +3192,7 @@ html:not(.dark) .redeven-settings-hero::before {
   border: 1px solid color-mix(in srgb, var(--foreground) 8%, transparent);
   border-radius: 0.2rem;
   padding: 0.18rem 0.5rem;
-  font-size: 0.58rem;
+  font-size: var(--floe-type-caption);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -3189,7 +3212,7 @@ html:not(.dark) .redeven-settings-hero::before {
   background: color-mix(in srgb, var(--primary) 8%, transparent);
   color: var(--primary);
   font-weight: 700;
-  font-size: 0.8rem;
+  font-size: var(--floe-type-control);
   flex-shrink: 0;
 }
 
@@ -3318,12 +3341,6 @@ html:not(.dark) .redeven-tile {
   border-color: color-mix(in srgb, var(--redeven-welcome-rail-border) 78%, transparent);
 }
 
-/* ── Override floe-webapp Tag component radius to match angular design ── */
-
-.floe-tag {
-  border-radius: 0.25rem;
-}
-
 /* ── Dialog scroll viewport wheel fix ── */
 [data-floe-dialog-panel] [class*='overflow-auto'] {
   overscroll-behavior: auto;
@@ -3398,7 +3415,7 @@ pre,
   align-items: center;
   gap: 0.375rem;
   min-width: 0;
-  font-size: 0.6875rem;
+  font-size: var(--floe-type-caption);
   line-height: 1rem;
   white-space: nowrap;
 }
@@ -3468,7 +3485,7 @@ pre,
 }
 .redeven-gateway-card__main { display: flex; align-items: center; gap: 1rem; padding: 1rem 1.25rem .75rem; }
 .redeven-gateway-card__identity { display: flex; align-items: center; gap: .75rem; min-width: 0; flex: 1; }
-.redeven-gateway-card__name { min-width: 0; font-size: .9375rem; font-weight: 600; color: var(--foreground); }
+.redeven-gateway-card__name { min-width: 0; font-size: var(--floe-type-heading-sm); font-weight: 600; color: var(--foreground); }
 .redeven-gateway-card__name > button { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: .25rem; }
 .redeven-gateway-card__name > button:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
 .redeven-gateway-card__mark { display: grid; place-items: center; flex: 0 0 2.5rem; height: 2.5rem; border: 1px solid var(--border); border-radius: .625rem; color: var(--foreground); background: var(--muted); }
@@ -3489,7 +3506,7 @@ pre,
 @media (prefers-reduced-motion: reduce) {
   .redeven-gateway-more-trigger { transition: none; }
 }
-.redeven-gateway-card__statusbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; padding: .5rem 1.25rem; border-top: 1px solid var(--border); border-radius: 0 0 .75rem .75rem; background: color-mix(in srgb, var(--muted) 25%, transparent); font-size: .6875rem; }
+.redeven-gateway-card__statusbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; padding: .5rem 1.25rem; border-top: 1px solid var(--border); border-radius: 0 0 .75rem .75rem; background: color-mix(in srgb, var(--muted) 25%, transparent); font-size: var(--floe-type-caption); }
 .redeven-gateway-card__identity-text { flex: 1; min-width: 0; }
 
 .redeven-gateway-mark {
@@ -3518,7 +3535,7 @@ pre,
   min-width: 0;
   margin-top: 0.25rem;
   color: var(--muted-foreground);
-  font-size: 0.6875rem;
+  font-size: var(--floe-type-caption);
   line-height: 1.5;
 }
 
@@ -3549,8 +3566,8 @@ pre,
 .redeven-gateway-card__directory-link:disabled { cursor: default; }
 .redeven-gateway-card__directory-link:not(:disabled):hover .redeven-gateway-card__count { color: var(--primary); }
 .redeven-gateway-card__count-value { display: inline-flex; align-items: center; gap: .5rem; }
-.redeven-gateway-card__count { font-size: .75rem; font-weight: 500; line-height: 1.5; font-variant-numeric: tabular-nums; color: var(--foreground); }
-.redeven-gateway-card__empty { flex-basis: 100%; color: var(--muted-foreground); font-size: .6875rem; line-height: 1.65; text-wrap: pretty; }
+.redeven-gateway-card__count { font-size: var(--floe-type-supporting); font-weight: 500; line-height: 1.5; font-variant-numeric: tabular-nums; color: var(--foreground); }
+.redeven-gateway-card__empty { flex-basis: 100%; color: var(--muted-foreground); font-size: var(--floe-type-caption); line-height: 1.65; text-wrap: pretty; }
 .redeven-gateway-card__environments { border-top: 1px solid var(--border); padding: 0 1.25rem; }
 
 .redeven-gateway-card__disclosure {
@@ -3570,18 +3587,18 @@ pre,
 .redeven-gateway-environment { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1.5rem; padding-block: 1rem; }
 .redeven-gateway-environment + .redeven-gateway-environment { border-top: 1px solid var(--border); }
 .redeven-gateway-environment__identity { display: grid; flex: 1 1 15rem; min-width: 0; gap: .25rem; }
-.redeven-gateway-environment__identity strong { font-size: .8125rem; font-weight: 500; }
-.redeven-gateway-environment__identity span { color: var(--muted-foreground); font-size: .6875rem; }
+.redeven-gateway-environment__identity strong { font-size: var(--floe-type-control); font-weight: 500; }
+.redeven-gateway-environment__identity span { color: var(--muted-foreground); font-size: var(--floe-type-caption); }
 .redeven-gateway-environment__identity > * { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .redeven-gateway-environment__controls { display: flex; flex: 0 0 auto; gap: .25rem; }
 .redeven-gateway-environment__actions { display: flex; flex-wrap: wrap; align-items: center; gap: .375rem; margin-inline-start: auto; }
-.redeven-gateway-environment__mode { font-size: .6875rem; color: var(--muted-foreground); }
+.redeven-gateway-environment__mode { font-size: var(--floe-type-caption); color: var(--muted-foreground); }
 
 .redeven-gateway-context { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; border-radius: 0.5rem; background: var(--muted); }
 .redeven-gateway-context .redeven-gateway-mark { width: 2rem; height: 2rem; }
 .redeven-gateway-context > div { display: grid; min-width: 0; gap: 0.125rem; }
-.redeven-gateway-context span { color: var(--muted-foreground); font-size: 0.6875rem; }
-.redeven-gateway-context strong { font-size: 0.8125rem; font-weight: 500; overflow-wrap: anywhere; }
+.redeven-gateway-context span { color: var(--muted-foreground); font-size: var(--floe-type-caption); }
+.redeven-gateway-context strong { font-size: var(--floe-type-control); font-weight: 500; overflow-wrap: anywhere; }
 
 .redeven-gateway-card__help {
   display: grid;
@@ -3612,7 +3629,7 @@ pre,
   padding-inline-start: 0.75rem;
   border-inline-start: 2px solid var(--border);
   color: var(--muted-foreground);
-  font-size: 0.6875rem;
+  font-size: var(--floe-type-caption);
   line-height: 1.65;
   animation: redeven-action-popover-enter 180ms ease both;
 }
@@ -3750,7 +3767,7 @@ pre,
 
 .redeven-gateway-action-panel__hero .redeven-action-popover__title {
   margin-bottom: 0.22rem;
-  font-size: 0.93rem;
+  font-size: var(--floe-type-heading-sm);
   line-height: 1.28;
   overflow-wrap: anywhere;
 }
@@ -3771,7 +3788,7 @@ pre,
   padding: 0.18rem 0.48rem;
   overflow: hidden;
   color: var(--muted-foreground);
-  font-size: 0.7rem;
+  font-size: var(--floe-type-caption);
   line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3795,7 +3812,7 @@ pre,
   border-radius: 9999px;
   background: color-mix(in srgb, var(--muted) 12%, transparent);
   padding: 0.18rem 0.48rem;
-  font-size: 0.66rem;
+  font-size: var(--floe-type-caption);
   line-height: 1.25;
 }
 
@@ -3817,7 +3834,7 @@ pre,
 .redeven-gateway-action-panel__result-fact-label {
   overflow: hidden;
   color: var(--muted-foreground);
-  font-weight: 650;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3827,7 +3844,7 @@ pre,
   overflow: hidden;
   color: var(--foreground);
   flex: 1 1 auto;
-  font-weight: 750;
+  font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3840,7 +3857,7 @@ pre,
 
 .redeven-gateway-action-panel__section-label {
   color: var(--muted-foreground);
-  font-size: 0.66rem;
+  font-size: var(--floe-type-caption);
   font-weight: 700;
   letter-spacing: 0.08em;
   line-height: 1.2;
@@ -3908,13 +3925,13 @@ pre,
   border-radius: 0.45rem;
   background: color-mix(in srgb, var(--muted) 12%, transparent);
   padding: 0.45rem 0.55rem;
-  font-size: 0.7rem;
+  font-size: var(--floe-type-caption);
 }
 
 .redeven-gateway-action-panel__fact-label {
   min-width: 0;
   color: var(--muted-foreground);
-  font-size: 0.64rem;
+  font-size: var(--floe-type-caption);
   font-weight: 700;
   letter-spacing: 0.04em;
   line-height: 1.25;
@@ -3925,7 +3942,7 @@ pre,
 .redeven-gateway-action-panel__fact-value {
   min-width: 0;
   color: var(--foreground);
-  font-weight: 550;
+  font-weight: 500;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -3955,7 +3972,7 @@ pre,
   background: color-mix(in srgb, var(--muted) 9%, transparent);
   padding: 0.42rem 0.55rem;
   color: var(--muted-foreground);
-  font-size: 0.68rem;
+  font-size: var(--floe-type-caption);
   font-weight: 700;
   letter-spacing: 0.08em;
   line-height: 1.2;
@@ -3991,7 +4008,7 @@ pre,
   background: color-mix(in srgb, var(--warning) 9%, var(--card));
   padding: 0.3rem 0.45rem;
   color: var(--foreground);
-  font-size: 0.7rem;
+  font-size: var(--floe-type-caption);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -4034,12 +4051,12 @@ pre,
   }
 }
 
-/* ── Kind tag refinement ── */
+/* ── Kind tag ── */
 
+/* Floe's tag owns its own type recipe (600 weight, 0.005em, caption tier).
+ * The card only needs to keep the label from crowding the header icons. */
 .redeven-environment-card .floe-tag {
-  font-weight: 650;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  flex: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -4116,7 +4133,6 @@ pre,
     }
 
     .redeven-console-tab,
-    .redeven-console-filter,
     .redeven-provider-pill,
     .redeven-runtime-chip,
     .redeven-theme-picker__mode,
@@ -4128,7 +4144,6 @@ pre,
     }
 
     .redeven-console-tab:not([data-active='true']):hover,
-    .redeven-console-filter:not([data-active='true']):hover,
     .redeven-provider-pill:not([data-active='true']):hover,
     .redeven-theme-picker__mode:not([aria-checked='true']):hover,
     .redeven-theme-picker__theme:hover {
@@ -4144,7 +4159,6 @@ pre,
 
 @media (forced-colors: active) {
   .redeven-console-tab[data-active='true'],
-  .redeven-console-filter[data-active='true'],
   .redeven-provider-pill[data-active='true'],
   .redeven-runtime-chip,
   .redeven-theme-picker__mode[aria-checked='true'] {
@@ -4201,7 +4215,7 @@ pre,
   border: 1px solid transparent;
   border-radius: .3125rem;
   white-space: nowrap;
-  font-size: .6875rem;
+  font-size: var(--floe-type-caption);
   font-weight: 600;
   line-height: 1rem;
   color: var(--muted-foreground);
@@ -4290,17 +4304,17 @@ pre,
   background: linear-gradient(145deg, color-mix(in srgb, var(--primary) 12%, var(--card)), var(--card));
 }
 .redeven-cloud-account-mark > svg { width: 1.5rem; height: 1.5rem; }
-.redeven-cloud-account-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9375rem; font-weight: 600; color: var(--foreground); }
-.redeven-cloud-account-address { display: flex; gap: .375rem; margin-top: .25rem; font-size: .6875rem; color: var(--muted-foreground); }
+.redeven-cloud-account-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--floe-type-heading-sm); font-weight: 600; color: var(--foreground); }
+.redeven-cloud-account-address { display: flex; gap: .375rem; margin-top: .25rem; font-size: var(--floe-type-caption); color: var(--muted-foreground); }
 .redeven-cloud-account-address > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .redeven-cloud-account-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; flex: 1 1 21rem; min-width: 0; }
 .redeven-cloud-account-stats > div { display: flex; flex-direction: column; gap: .125rem; min-width: 0; padding-inline: .75rem; border-inline-start: 1px solid var(--border); }
-.redeven-cloud-account-stats dt { display: flex; align-items: center; gap: .375rem; font-size: .6875rem; color: var(--muted-foreground); overflow-wrap: anywhere; }
+.redeven-cloud-account-stats dt { display: flex; align-items: center; gap: .375rem; font-size: var(--floe-type-caption); color: var(--muted-foreground); overflow-wrap: anywhere; }
 .redeven-cloud-account-stats dt > svg { width: .8125rem; height: .8125rem; flex-shrink: 0; }
-.redeven-cloud-account-stats dd { order: -1; font-size: 1.375rem; line-height: 1.3; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--foreground); }
+.redeven-cloud-account-stats dd { order: -1; font-size: var(--floe-type-display); line-height: 1.3; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--foreground); }
 .redeven-cloud-account-stats [data-cloud-stat="online"]:not([data-stale="true"]) dd { color: var(--success); }
 .redeven-cloud-account-actions { display: flex; flex: 0 1 auto; flex-wrap: wrap; align-items: center; gap: .375rem; }
-.redeven-cloud-account-sync { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; padding: .625rem 1.25rem; border-top: 1px solid var(--border); border-radius: 0 0 .75rem .75rem; background: color-mix(in srgb, var(--muted) 25%, transparent); font-size: .6875rem; }
+.redeven-cloud-account-sync { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; padding: .625rem 1.25rem; border-top: 1px solid var(--border); border-radius: 0 0 .75rem .75rem; background: color-mix(in srgb, var(--muted) 25%, transparent); font-size: var(--floe-type-caption); }
 .redeven-cloud-account-sync-state, .redeven-cloud-account-sync-meta { display: flex; align-items: center; flex-wrap: wrap; gap: .375rem .875rem; min-width: 0; }
 .redeven-cloud-account-status, .redeven-cloud-account-sync-time { display: inline-flex; align-items: center; gap: .375rem; }
 .redeven-cloud-account-status { font-weight: 500; }
@@ -4325,7 +4339,7 @@ pre,
   .redeven-cloud-account-sync { padding-inline: 1rem; }
 }
 
-.redeven-other-owner-pin { display: flex; align-items: center; gap: .375rem; padding: 0 1rem .5rem; font-size: .6875rem; color: var(--muted-foreground); }
+.redeven-other-owner-pin { display: flex; align-items: center; gap: .375rem; padding: 0 1rem .5rem; font-size: var(--floe-type-caption); color: var(--muted-foreground); }
 .redeven-environment-owner-tab > span:last-child {
   min-width: 0;
   max-width: none;
@@ -4361,11 +4375,32 @@ pre,
 .redeven-cloud-source-header button > svg { flex-shrink: 0; }
 .redeven-environment-card .redeven-split-action { --redeven-split-action-primary-min-width: 0px; flex: 1 1 0; }
 .redeven-environment-card .redeven-split-action-primary button {
-  height: 2rem;
-  min-height: 2rem;
+  height: var(--floe-control-height-sm);
+  min-height: var(--floe-control-height-sm);
   min-width: 0;
-  padding-block: .3rem;
+  padding-block: 0;
+  padding-inline: var(--floe-control-padding-sm);
+  font-size: var(--floe-type-control);
+  line-height: var(--floe-line-control);
+  font-weight: 500;
+  letter-spacing: var(--floe-tracking-normal, normal);
   white-space: nowrap;
+}
+
+/* A card's own action is a secondary control: nine cards open the same kind of
+ * thing, so a filled accent on each one would compete with the page-level
+ * create action and leave the view without a single focal point. Progress,
+ * attention and blocked faces keep their own treatment. */
+.redeven-environment-card .redeven-split-action-primary button:not(.redeven-split-action-trigger--blocked):not(.redeven-split-action-trigger--progress):not(.redeven-split-action-trigger--attention) {
+  border: 0;
+  background: var(--floe-well);
+  color: var(--foreground);
+  box-shadow: none;
+  transition: background-color var(--floe-duration-fast) var(--floe-ease-out);
+}
+
+.redeven-environment-card .redeven-split-action-primary button:not(.redeven-split-action-trigger--blocked):not(.redeven-split-action-trigger--progress):not(.redeven-split-action-trigger--attention):hover {
+  background: var(--floe-well-strong);
 }
 .redeven-environment-card .redeven-split-action-primary button > svg { flex-shrink: 0; }
 .redeven-environment-kind-tag { max-width: 100%; }
@@ -4440,27 +4475,27 @@ pre,
 
 /* ── Compact environment overlays ────────────────────────────────────────── */
 .redeven-endpoints-surface { width: min(26rem, calc(100vw - 1rem)); }
-.redeven-endpoints-popover { border-radius: .6875rem; }
+.redeven-endpoints-popover { border-radius: var(--floe-radius-panel); }
 .redeven-endpoints-popover-header { gap: .5rem; padding: .625rem .75rem; }
 .redeven-endpoints-popover-mark { width: 1.75rem; height: 1.75rem; border-radius: .4375rem; }
 .redeven-endpoints-popover-heading { gap: 0; }
-.redeven-endpoints-popover-eyebrow { font-size: .625rem; line-height: 1.35; }
-.redeven-endpoints-popover-title { font-size: .8125rem; line-height: 1.3; }
+.redeven-endpoints-popover-eyebrow { font-size: var(--floe-type-caption); line-height: 1.35; }
+.redeven-endpoints-popover-title { font-size: var(--floe-type-control); line-height: 1.3; }
 .redeven-endpoints-popover-close { width: 1.5rem; height: 1.5rem; }
 .redeven-endpoints-popover-body { padding-inline: .75rem; }
 .redeven-endpoints-popover .redeven-card-endpoint-row { grid-template-columns: 6.25rem minmax(0, 1fr) auto; column-gap: .5rem; row-gap: 0; align-items: center; padding-block: .4375rem; }
-.redeven-endpoints-popover .redeven-card-endpoint-label { grid-column: 1; grid-row: 1; padding-top: 0; font-size: .6875rem; line-height: 1.35; }
+.redeven-endpoints-popover .redeven-card-endpoint-label { grid-column: 1; grid-row: 1; padding-top: 0; font-size: var(--floe-type-caption); line-height: 1.35; }
 .redeven-endpoints-popover .redeven-card-endpoint-content { grid-column: 2; grid-row: 1; min-width: 0; }
-.redeven-endpoints-popover .redeven-card-endpoint-value { font-size: .75rem; line-height: 1.35; }
-.redeven-endpoints-popover .redeven-card-endpoint-detail { margin-top: .125rem; font-size: .625rem; line-height: 1.35; }
+.redeven-endpoints-popover .redeven-card-endpoint-value { font-size: var(--floe-type-supporting); line-height: 1.35; }
+.redeven-endpoints-popover .redeven-card-endpoint-detail { margin-top: .125rem; font-size: var(--floe-type-caption); line-height: 1.35; }
 .redeven-endpoints-popover .redeven-endpoint-actions { grid-column: 3; grid-row: 1; gap: .125rem; }
 .redeven-endpoints-popover .redeven-endpoint-action { width: 1.375rem; height: 1.375rem; min-height: 1.375rem; }
 .redeven-endpoints-popover .redeven-address-heading { gap: .5rem; }
-.redeven-endpoints-popover .redeven-address-heading .redeven-card-endpoint-label { font-size: .6875rem; }
+.redeven-endpoints-popover .redeven-address-heading .redeven-card-endpoint-label { font-size: var(--floe-type-caption); }
 .redeven-endpoints-popover .redeven-address-help { width: 1.25rem; height: 1.25rem; }
-.redeven-endpoints-popover .redeven-address-count { font-size: .625rem; }
+.redeven-endpoints-popover .redeven-address-count { font-size: var(--floe-type-caption); }
 .redeven-endpoints-popover .redeven-card-endpoint-row + .redeven-card-endpoint-row { margin-top: 0; }
-.redeven-endpoints-popover .redeven-endpoint-listener { margin-top: .375rem; font-size: .6875rem; line-height: 1.45; }
+.redeven-endpoints-popover .redeven-endpoint-listener { margin-top: .375rem; font-size: var(--floe-type-caption); line-height: 1.45; }
 .redeven-endpoints-popover .redeven-endpoint-listener-content { margin-top: .375rem; padding-inline-start: .5rem; }
 .redeven-endpoints-popover .redeven-address-viewport { max-block-size: min(14rem, 34dvh); }
 .redeven-endpoints-popover .redeven-endpoint-qr-panel { margin: .375rem 0 .25rem; padding: .625rem; gap: .75rem; }
@@ -4489,7 +4524,7 @@ pre,
   min-height: 1.5rem;
   gap: .5rem;
   border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
-  font-size: .6875rem;
+  font-size: var(--floe-type-caption);
   line-height: 1rem;
 }
 .redeven-cloud-connection-label { display: flex; align-items: center; gap: .3rem; min-width: 0; flex: 0 0 auto; color: var(--muted-foreground); }
@@ -4510,7 +4545,7 @@ pre,
 .redeven-cloud-connection-action {
   flex: 0 0 auto;
   border: 1px solid transparent; border-radius: .25rem; padding: .0625rem .3125rem;
-  font-size: .625rem; line-height: 1rem; white-space: nowrap;
+  font-size: var(--floe-type-caption); line-height: 1rem; white-space: nowrap;
   color: var(--warning); background: color-mix(in srgb, var(--warning) 10%, transparent); cursor: pointer;
 }
 .redeven-cloud-connection-action:hover { background: color-mix(in srgb, var(--warning) 18%, transparent); }
@@ -4521,11 +4556,11 @@ pre,
 .redeven-cloud-connection-panel {
   max-height: calc(var(--redeven-anchored-overlay-max-height, 100dvh - 1rem) - 2px);
   overflow-y: auto; overscroll-behavior: contain; padding: .875rem;
-  color: var(--popover-foreground); font-size: .75rem; line-height: 1.6;
+  color: var(--popover-foreground); font-size: var(--floe-type-supporting); line-height: 1.6;
 }
 .redeven-cloud-connection-heading { display: flex; align-items: center; gap: .5rem; }
 .redeven-cloud-connection-heading > svg { width: 1rem; height: 1rem; flex-shrink: 0; }
-.redeven-cloud-connection-heading h3 { flex: 1; min-width: 0; font-size: .8125rem; font-weight: 600; overflow-wrap: anywhere; }
+.redeven-cloud-connection-heading h3 { flex: 1; min-width: 0; font-size: var(--floe-type-control); font-weight: 600; overflow-wrap: anywhere; }
 .redeven-cloud-connection-heading button { width: 1.5rem; height: 1.5rem; flex-shrink: 0; color: var(--muted-foreground); }
 .redeven-cloud-connection-heading button svg { width: .875rem; height: .875rem; }
 .redeven-cloud-connection-explanation { margin: .625rem 0; color: var(--muted-foreground); }
@@ -4536,7 +4571,7 @@ pre,
 .redeven-cloud-connection-panel button:disabled { cursor: not-allowed; }
 .redeven-cloud-connection-diagnostics { margin-top: .5rem; color: var(--muted-foreground); }
 .redeven-cloud-connection-diagnostics summary { padding-block: .25rem; cursor: pointer; }
-.redeven-cloud-connection-diagnostics dl { display: grid; gap: .375rem; margin-top: .375rem; padding: .625rem; border-radius: .375rem; background: var(--background); font-size: .6875rem; }
+.redeven-cloud-connection-diagnostics dl { display: grid; gap: .375rem; margin-top: .375rem; padding: .625rem; border-radius: .375rem; background: var(--background); font-size: var(--floe-type-caption); }
 .redeven-cloud-connection-diagnostics dl > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .25rem .75rem; }
 .redeven-cloud-connection-diagnostics dd { margin-inline-start: auto; text-align: end; overflow-wrap: anywhere; min-width: 0; }
 .redeven-cloud-connection-panel-actions { display: flex; justify-content: flex-end; margin-top: .75rem; }

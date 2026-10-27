@@ -3,7 +3,7 @@
   max-width: min(52rem, calc(100vw - 2rem));
   max-height: min(88dvh, var(--redeven-welcome-dialog-available-height));
   overflow: hidden;
-  border-radius: .875rem;
+  border-radius: var(--floe-radius-panel);
   font-size: var(--floe-type-body);
 }
 
@@ -14,9 +14,10 @@
 }
 
 .redeven-gateway-dialog h2 {
-  font-size: 1rem;
-  font-weight: 650;
-  line-height: 1.4;
+  font-size: var(--floe-type-heading);
+  font-weight: 600;
+  line-height: var(--floe-line-heading);
+  letter-spacing: var(--floe-tracking-normal, normal);
 }
 
 .redeven-gateway-dialog__content {
@@ -29,7 +30,7 @@
 .redeven-gateway-dialog__content > p {
   margin: 0 0 .875rem;
   color: var(--muted-foreground);
-  font-size: .8125rem;
+  font-size: var(--floe-type-control);
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
@@ -40,7 +41,7 @@
   flex-direction: column;
   gap: 1.25rem;
   color: var(--foreground);
-  font-size: .875rem;
+  font-size: var(--floe-type-body);
   line-height: 1.5;
 }
 
@@ -61,8 +62,8 @@
 .redeven-gateway-section-heading h3,
 .redeven-gateway-section-title {
   color: var(--foreground);
-  font-size: .9375rem;
-  font-weight: 650;
+  font-size: var(--floe-type-heading-sm);
+  font-weight: 600;
   line-height: 1.4;
 }
 
@@ -70,7 +71,7 @@
   max-width: 46rem;
   margin-top: .25rem;
   color: var(--muted-foreground);
-  font-size: .8125rem;
+  font-size: var(--floe-type-control);
   line-height: 1.55;
 }
 
@@ -81,7 +82,7 @@
 
 .redeven-gateway-workspace .redeven-gateway-eyebrow {
   color: var(--muted-foreground);
-  font-size: .75rem;
+  font-size: var(--floe-type-supporting);
   font-weight: 600;
   letter-spacing: 0;
   line-height: 1.4;
@@ -94,7 +95,7 @@
   border-inline-start: 2px solid color-mix(in srgb, var(--border) 85%, transparent);
   padding: .125rem 0 .125rem .75rem;
   color: var(--muted-foreground);
-  font-size: .8125rem;
+  font-size: var(--floe-type-control);
   line-height: 1.5;
 }
 
@@ -115,8 +116,8 @@
 .redeven-gateway-form-group label,
 .redeven-gateway-form-field label {
   color: var(--foreground);
-  font-size: .8125rem;
-  font-weight: 550;
+  font-size: var(--floe-type-control);
+  font-weight: 500;
   line-height: 1.45;
 }
 
@@ -145,22 +146,22 @@
 
 .redeven-gateway-field > span {
   color: var(--muted-foreground);
-  font-size: .8125rem;
-  font-weight: 550;
+  font-size: var(--floe-type-control);
+  font-weight: 500;
 }
 
 .redeven-gateway-field label,
 .redeven-gateway-field > label,
 .redeven-gateway-form-label {
   color: var(--foreground);
-  font-size: .8125rem;
-  font-weight: 550;
+  font-size: var(--floe-type-control);
+  font-weight: 500;
   line-height: 1.45;
 }
 
 .redeven-gateway-help {
   color: var(--muted-foreground);
-  font-size: .8125rem;
+  font-size: var(--floe-type-control);
   line-height: 1.55;
 }
 
@@ -228,7 +229,7 @@
 
 .redeven-gateway-endpoint__meta {
   color: var(--muted-foreground);
-  font-size: .75rem;
+  font-size: var(--floe-type-supporting);
   line-height: 1.45;
 }
 
@@ -241,7 +242,7 @@
 .redeven-gateway-policy > summary {
   min-height: 2.5rem;
   color: var(--foreground);
-  font-size: .875rem;
+  font-size: var(--floe-type-body);
   font-weight: 600;
 }
 
@@ -255,7 +256,7 @@
   border-radius: .5rem;
   background: color-mix(in srgb, var(--muted) 30%, var(--background));
   padding: .625rem .75rem;
-  font-size: .8125rem;
+  font-size: var(--floe-type-control);
   line-height: 1.5;
 }
 
@@ -327,7 +328,7 @@
 .redeven-gateway-access-code code {
   min-width: 0;
   color: var(--foreground);
-  font-size: .9375rem;
+  font-size: var(--floe-type-heading-sm);
   font-weight: 600;
   line-height: 1.4;
   overflow-wrap: anywhere;
@@ -338,7 +339,7 @@
   flex-wrap: wrap;
   gap: .75rem 2rem;
   color: var(--muted-foreground);
-  font-size: .75rem;
+  font-size: var(--floe-type-supporting);
   line-height: 1.45;
 }
 
@@ -357,7 +358,7 @@
   background: color-mix(in srgb, var(--muted) 24%, var(--background));
   padding: .875rem 1rem;
   color: var(--muted-foreground);
-  font-size: .8125rem;
+  font-size: var(--floe-type-control);
   line-height: 1.55;
 }
 
@@ -423,7 +424,7 @@
 }
 
 .redeven-gateway-wizard-dialog .redeven-gateway-join-section h3 {
-  font-size: .8125rem;
+  font-size: var(--floe-type-control);
   font-weight: 600;
   line-height: 1.5;
 }
@@ -569,7 +570,7 @@
 .redeven-gateway-join-field {
   display: grid;
   gap: .5rem;
-  font-size: .875rem;
+  font-size: var(--floe-type-body);
   line-height: 1.4;
 }
 
@@ -610,7 +611,7 @@
   border-radius: .5rem;
   background: color-mix(in srgb, var(--muted) 30%, var(--background));
   padding: .75rem;
-  font-size: .8125rem;
+  font-size: var(--floe-type-control);
 }
 
 .redeven-gateway-connect-progress-dot {
@@ -624,8 +625,8 @@
 .redeven-gateway-join-section > h3,
 .redeven-gateway-join-section > legend {
   color: var(--foreground);
-  font-size: .9375rem;
-  font-weight: 650;
+  font-size: var(--floe-type-heading-sm);
+  font-weight: 600;
   line-height: 1.4;
 }
 
@@ -643,18 +644,18 @@
   display: grid;
   gap: .2rem;
   min-width: 0;
-  font-size: .8125rem;
+  font-size: var(--floe-type-control);
   line-height: 1.45;
 }
 
 .redeven-gateway-join-summary > div > span {
   color: var(--muted-foreground);
-  font-size: .75rem;
+  font-size: var(--floe-type-supporting);
 }
 
 .redeven-gateway-join-summary strong {
   color: var(--foreground);
-  font-weight: 550;
+  font-weight: 500;
   overflow-wrap: anywhere;
 }
 
@@ -667,7 +668,7 @@
   border-radius: .5rem;
   padding: .75rem .875rem;
   color: var(--foreground);
-  font-size: .8125rem;
+  font-size: var(--floe-type-control);
   transition: border-color 150ms ease, background-color 150ms ease;
 }
 
@@ -686,7 +687,7 @@
 
 .redeven-gateway-cloud-state__name {
   color: var(--foreground);
-  font-size: .9375rem;
+  font-size: var(--floe-type-heading-sm);
   font-weight: 600;
 }
 
@@ -696,12 +697,12 @@
   align-items: baseline;
   gap: .5rem .75rem;
   color: var(--muted-foreground);
-  font-size: .8125rem;
+  font-size: var(--floe-type-control);
 }
 
 .redeven-gateway-cloud-state__status code {
   color: var(--foreground);
-  font-size: .75rem;
+  font-size: var(--floe-type-supporting);
   overflow-wrap: anywhere;
 }
 
@@ -725,7 +726,7 @@
   border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
   border-radius: .5rem;
   color: var(--muted-foreground);
-  font-size: .8125rem;
+  font-size: var(--floe-type-control);
 }
 
 .redeven-gateway-join-disclosure > summary {
@@ -745,7 +746,7 @@
   border-top: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
   padding: .75rem;
   color: var(--muted-foreground);
-  font-size: .8125rem;
+  font-size: var(--floe-type-control);
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -843,7 +844,7 @@
   gap: .5rem;
   min-width: 0;
   color: var(--foreground);
-  font-size: .8125rem;
+  font-size: var(--floe-type-control);
 }
 
 .redeven-gateway-connection-notice {
@@ -931,7 +932,7 @@
   background: color-mix(in srgb, var(--muted) 42%, var(--background));
   padding: .25rem .5rem;
   color: var(--muted-foreground);
-  font-size: .6875rem;
+  font-size: var(--floe-type-caption);
   line-height: 1.4;
 }
 
@@ -995,7 +996,7 @@
 .redeven-gateway-workspace-back { flex: none; }
 .redeven-gateway-workspace-title { display: flex; align-items: center; gap: .75rem; flex: 1; min-width: 0; }
 .redeven-gateway-workspace-title > div:first-of-type { min-width: 0; flex: 1; }
-.redeven-gateway-workspace-title h2 { margin-bottom: .25rem; overflow-wrap: anywhere; font-size: 1.25rem; font-weight: 600; line-height: 1.4; }
+.redeven-gateway-workspace-title h2 { margin-bottom: .25rem; overflow-wrap: anywhere; font-size: var(--floe-type-heading); font-weight: 600; line-height: var(--floe-line-heading); letter-spacing: var(--floe-tracking-normal, normal); }
 .redeven-gateway-workspace-layout { display: grid; grid-template-columns: 11rem minmax(0,1fr); border-top: 1px solid var(--border); }
 .redeven-gateway-workspace-nav { display: flex; flex-direction: column; align-self: start; gap: .25rem; padding: .75rem .625rem .75rem 0; }
 .redeven-gateway-workspace-nav button { text-align: start; white-space: normal; min-width: 0; padding: .5rem .75rem; min-height: var(--floe-control-height-md); border: 1px solid transparent; border-radius: .375rem; color: var(--muted-foreground); font-size: var(--floe-type-control); cursor: pointer; transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease; }

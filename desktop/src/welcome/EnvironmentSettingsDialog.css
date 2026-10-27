@@ -1,7 +1,7 @@
 .redeven-environment-settings-dialog, .environment-settings-panel {
   --environment-settings-surface: var(--card);
   --environment-settings-border: var(--border);
-  --environment-settings-radius: 14px;
+  --environment-settings-radius: var(--floe-radius-control);
   --environment-settings-inset: 18px;
   --environment-settings-control-height: 36px;
 }
@@ -13,7 +13,7 @@
   height: min(44.375rem, var(--redeven-welcome-dialog-panel-max-height));
   max-height: var(--redeven-welcome-dialog-panel-max-height);
   overflow: hidden;
-  border-radius: 14px;
+  border-radius: var(--floe-radius-panel);
   background: var(--popover);
   font-size: var(--floe-type-body);
 }
@@ -23,10 +23,10 @@
   flex-shrink: 0;
 }
 .redeven-environment-settings-dialog > div:first-child > div { min-width: 0; }
-.redeven-environment-settings-dialog h2 { font-size: 16px; line-height: 1.3; font-weight: 600; }
+.redeven-environment-settings-dialog h2 { font-size: var(--floe-type-heading); line-height: 1.3; font-weight: 600; }
 .redeven-environment-settings-dialog > div:first-child button { width: 32px; height: 32px; }
 .redeven-environment-settings-dialog > div:first-child p {
-  margin-top: 4px; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere;
+  margin-top: 4px; font-size: var(--floe-type-supporting); line-height: 1.5; overflow-wrap: anywhere;
 }
 .redeven-environment-settings-dialog button, .redeven-environment-settings-dialog select { cursor: pointer; }
 .redeven-environment-settings-dialog button:disabled { cursor: not-allowed; }
@@ -71,20 +71,20 @@
 }
 .environment-settings-icon {
   display: grid; place-items: center; flex: 0 0 36px; height: 36px;
-  border-radius: 10px; background: var(--muted); color: var(--muted-foreground);
+  border-radius: var(--floe-radius-control); background: var(--muted); color: var(--muted-foreground);
 }
-.environment-settings-information { display: grid; gap: 12px; padding: var(--environment-settings-inset); font-size: 12px; line-height: 1.7; }
+.environment-settings-information { display: grid; gap: 12px; padding: var(--environment-settings-inset); font-size: var(--floe-type-supporting); line-height: 1.7; }
 .environment-settings-information > p { color: var(--muted-foreground); }
 .environment-settings-information > code { overflow-wrap: anywhere; }
 .environment-settings-information > button { justify-self: start; }
 .environment-settings-information-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .environment-settings-information button { min-height: 32px; height: auto; white-space: nowrap; }
 .environment-certificate-header { padding: 12px var(--environment-settings-inset) 8px; }
-.environment-certificate-header h4 { font-size: 13px; font-weight: 550; line-height: 1.5; }
+.environment-certificate-header h4 { font-size: var(--floe-type-control); font-weight: 500; line-height: 1.5; }
 .environment-certificate-body { padding: 0 var(--environment-settings-inset) var(--environment-settings-inset); }
 .environment-certificate-setting button { height: auto; min-height: 32px; white-space: nowrap; }
 .environment-certificate-header > button { width: 32px; height: 32px; }
-.environment-certificate-body > div > span[aria-hidden] { width: 36px; height: 36px; border-radius: 10px; background: var(--muted); }
+.environment-certificate-body > div > span[aria-hidden] { width: 36px; height: 36px; border-radius: var(--floe-radius-control); background: var(--muted); }
 .redeven-environment-settings-dialog .two-factor-setting-actions { flex-wrap: wrap; max-width: 100%; }
 .redeven-environment-settings-dialog .two-factor-setting-actions button,
 .redeven-environment-settings-dialog .two-factor-text-action,
@@ -158,13 +158,13 @@
 .environment-access-overview-header { justify-content: space-between; padding: var(--environment-settings-inset); }
 .environment-access-overview-identity { display: flex; align-items: center; gap: 12px; flex: 1 1 13rem; min-width: 0; }
 .environment-access-overview-heading { flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
-.environment-access-overview h3 { font-size: 13px; font-weight: 550; line-height: 1.5; }
+.environment-access-overview h3 { font-size: var(--floe-type-control); font-weight: 500; line-height: 1.5; }
 .environment-access-status {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   color: var(--muted-foreground);
-  font-size: 12px;
+  font-size: var(--floe-type-supporting);
   line-height: 1.6;
 }
 .environment-access-status::before { content: ''; width: 6px; height: 6px; flex: none; border-radius: 50%; background: currentColor; }
@@ -185,7 +185,7 @@
   cursor: pointer;
   list-style: none;
   color: var(--muted-foreground);
-  font-size: 12px;
+  font-size: var(--floe-type-supporting);
   line-height: 1.5;
 }
 .environment-access-advanced summary::-webkit-details-marker { display: none; }
@@ -194,7 +194,7 @@
 .environment-access-advanced summary svg { flex-shrink: 0; transition: transform 160ms ease-out; }
 .environment-access-advanced[open] summary svg { transform: rotate(90deg); }
 .environment-access-advanced-content { display: grid; gap: .875rem; padding-top: 1rem; }
-.environment-settings-draft-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; padding-bottom: .75rem; color: var(--muted-foreground); font-size: .75rem; }
+.environment-settings-draft-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; padding-bottom: .75rem; color: var(--muted-foreground); font-size: var(--floe-type-supporting); }
 .environment-access-actions { display: flex; width: 100%; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .5rem; }
 
 .environment-access-blocked-action { display: inline-flex; min-width: 0; border-radius: var(--radius); cursor: not-allowed; }
@@ -211,7 +211,7 @@
   border-radius: .5rem;
   background: color-mix(in srgb, var(--error) 6%, var(--background));
   color: var(--error);
-  font-size: 12px;
+  font-size: var(--floe-type-supporting);
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -231,22 +231,22 @@
 .ssh-settings-form { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
 .ssh-settings-section { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .ssh-settings-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.ssh-settings-section h3 { font-size: 13px; font-weight: 550; color: var(--foreground); }
+.ssh-settings-section h3 { font-size: var(--floe-type-control); font-weight: 500; color: var(--foreground); }
 .ssh-settings-fields.floe-settings-list { padding: 0 var(--environment-settings-inset); border: 1px solid var(--environment-settings-border); border-radius: var(--environment-settings-radius); background: var(--environment-settings-surface); }
 .ssh-settings-field, .ssh-settings-probe { display: flex; align-items: center; justify-content: space-between; gap: 28px; min-height: 65px; padding: 14px 0; min-width: 0; }
 .ssh-settings-field + .ssh-settings-field { border-top: 1px solid var(--environment-settings-border); }
 .ssh-settings-field-label, .ssh-settings-probe > div { flex: 1; min-width: 0; }
-.ssh-settings-field-label label, .ssh-settings-field-label > span, .ssh-settings-probe label { font-size: 13px; font-weight: 400; line-height: 1.6; }
+.ssh-settings-field-label label, .ssh-settings-field-label > span, .ssh-settings-probe label { font-size: var(--floe-type-control); font-weight: 400; line-height: 1.6; }
 .ssh-settings-field-control { width: 258px; max-width: 56%; display: flex; flex-direction: column; gap: 6px; align-items: stretch; min-width: 0; }
 .ssh-settings-field:has(#ssh-settings-ssh_port) .ssh-settings-field-control { width: 88px; }
 .ssh-settings-form input:not([type='checkbox']), .ssh-settings-form select { width: 100%; min-width: 0; height: var(--environment-settings-control-height); }
 .ssh-settings-form select { padding-right: 24px; }
-.ssh-settings-help { font-size: 12px; line-height: 1.65; color: var(--muted-foreground); overflow-wrap: anywhere; margin-top: 3px; }
-.ssh-settings-help-link { color: var(--muted-foreground); font-size: 12px; text-align: left; width: fit-content; height: auto; min-height: 32px; }
+.ssh-settings-help { font-size: var(--floe-type-supporting); line-height: 1.65; color: var(--muted-foreground); overflow-wrap: anywhere; margin-top: 3px; }
+.ssh-settings-help-link { color: var(--muted-foreground); font-size: var(--floe-type-supporting); text-align: left; width: fit-content; height: auto; min-height: 32px; }
 .ssh-settings-help-link:hover { color: var(--foreground); text-decoration: underline; text-underline-offset: 3px; }
 .ssh-settings-disclosure-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; min-width: 0; }
-.ssh-settings-disclosure { display: flex; align-items: center; height: auto; min-height: 32px; gap: 8px; text-align: left; color: var(--muted-foreground); font-size: 12px; white-space: nowrap; }
-.ssh-settings-summary { margin: 0; min-width: 0; text-align: right; font-size: 11px; overflow-wrap: anywhere; }
+.ssh-settings-disclosure { display: flex; align-items: center; height: auto; min-height: 32px; gap: 8px; text-align: left; color: var(--muted-foreground); font-size: var(--floe-type-supporting); white-space: nowrap; }
+.ssh-settings-summary { margin: 0; min-width: 0; text-align: right; font-size: var(--floe-type-caption); overflow-wrap: anywhere; }
 .ssh-settings-disclosure-title { flex: none; }
 .ssh-settings-chevron { width: 14px; height: 14px; flex: none; transition: transform 160ms ease; }
 .ssh-settings-chevron--open { transform: rotate(90deg); }
@@ -254,11 +254,11 @@
 .ssh-settings-timeout { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
 .ssh-settings-timeout input { width: 88px !important; }
 .ssh-settings-field--invalid { scroll-margin-block: 16px; }
-.ssh-settings-error { color: var(--destructive); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
-.ssh-settings-help-popover { max-width: min(340px, calc(100vw - 32px)); padding: 16px; font-size: 13px; line-height: 1.6; }
+.ssh-settings-error { color: var(--destructive); font-size: var(--floe-type-supporting); line-height: 1.6; overflow-wrap: anywhere; }
+.ssh-settings-help-popover { max-width: min(340px, calc(100vw - 32px)); padding: 16px; font-size: var(--floe-type-control); line-height: 1.6; }
 .ssh-settings-form [role='radiogroup'] { align-self: flex-end; width: fit-content; max-width: 100%; flex-wrap: wrap; border: 0; border-radius: 8px; padding: 3px; background: var(--background); }
 .environment-connection-form [role='radiogroup'] { max-width: 100%; flex-wrap: wrap; }
-.ssh-settings-form [role='radio'] { min-height: 32px; padding: 4px 10px; font-size: 12px; border: 0; box-shadow: none; }
+.ssh-settings-form [role='radio'] { min-height: 32px; padding: 4px 10px; font-size: var(--floe-type-supporting); border: 0; box-shadow: none; }
 .environment-connection-form [role='radio'] { min-height: 32px; white-space: nowrap; }
 .ssh-settings-probe > label, .environment-connection-probe > label { min-height: 32px; align-items: center; }
 @media (max-width: 600px) {
@@ -293,18 +293,18 @@
 @media (prefers-reduced-motion: reduce) { .ssh-settings-chevron { transition: none; } }
 
 .environment-connection-form { display: flex; flex-direction: column; gap: 24px; }
-.environment-connection-section-title { font-size: 13px; font-weight: 550; color: var(--foreground); }
+.environment-connection-section-title { font-size: var(--floe-type-control); font-weight: 500; color: var(--foreground); }
 .environment-connection-group { margin-top: 10px; padding: 0 var(--environment-settings-inset); border: 1px solid var(--environment-settings-border); border-radius: var(--environment-settings-radius); background: var(--environment-settings-surface); }
 .environment-connection-field { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,258px); align-items: center; column-gap: 28px; row-gap: 4px; min-width: 0; min-height: 65px; padding-block: 14px; }
 .environment-connection-field + .environment-connection-field { border-top: 1px solid var(--environment-settings-border); }
-.environment-connection-field > label { grid-column: 1; grid-row: 1; font-size: 13px; font-weight: 400; }
+.environment-connection-field > label { grid-column: 1; grid-row: 1; font-size: var(--floe-type-control); font-weight: 400; }
 .environment-connection-field > :not(label) { grid-column: 2; min-width: 0; }
-.environment-connection-field > input, .environment-connection-field > select, .environment-connection-field > div:has(input) { grid-row: 1 / span 2; width: 100%; height: var(--environment-settings-control-height); font-size: 12px; }
-.environment-connection-field > .text-muted-foreground { grid-column: 1; grid-row: 2; font-size: 12px; line-height: 1.65; }
+.environment-connection-field > input, .environment-connection-field > select, .environment-connection-field > div:has(input) { grid-row: 1 / span 2; width: 100%; height: var(--environment-settings-control-height); font-size: var(--floe-type-supporting); }
+.environment-connection-field > .text-muted-foreground { grid-column: 1; grid-row: 2; font-size: var(--floe-type-supporting); line-height: 1.65; }
 .environment-connection-field > .environment-connection-help { grid-column: 1; grid-row: 2; }
-.environment-connection-help, .environment-connection-guidance { font-size: 12px; line-height: 1.65; color: var(--muted-foreground); overflow-wrap: anywhere; }
+.environment-connection-help, .environment-connection-guidance { font-size: var(--floe-type-supporting); line-height: 1.65; color: var(--muted-foreground); overflow-wrap: anywhere; }
 .environment-connection-help { margin-top: 3px; }
-.environment-connection-error { font-size: 12px; line-height: 1.6; color: var(--error); overflow-wrap: anywhere; }
+.environment-connection-error { font-size: var(--floe-type-supporting); line-height: 1.6; color: var(--error); overflow-wrap: anywhere; }
 .environment-connection-guidance { padding-block: 14px; border-bottom: 1px solid var(--environment-settings-border); }
 .environment-connection-fields > .environment-connection-fields { border-bottom: 1px solid var(--environment-settings-border); }
 .environment-connection-fields > .environment-connection-fields:last-child { border-bottom: 0; }
@@ -314,11 +314,11 @@
 .environment-connection-facts { margin: 0; }
 .environment-connection-facts > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 258px); align-items: center; gap: 28px; min-height: 65px; padding-block: 14px; }
 .environment-connection-facts > div + div { border-top: 1px solid var(--environment-settings-border); }
-.environment-connection-facts dt { font-size: 13px; }
-.environment-connection-facts dd { margin: 0; font-size: 12px; text-align: right; overflow-wrap: anywhere; }
+.environment-connection-facts dt { font-size: var(--floe-type-control); }
+.environment-connection-facts dd { margin: 0; font-size: var(--floe-type-supporting); text-align: right; overflow-wrap: anywhere; }
 .environment-connection-form .environment-container-picker { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 258px); column-gap: 28px; row-gap: 8px; padding-block: 14px; border-top: 1px solid var(--environment-settings-border); }
 .environment-connection-form .environment-container-picker-heading { display: contents; }
-.environment-connection-form .environment-container-picker-heading label { grid-column: 1; grid-row: 1; align-self: center; font-size: 13px; font-weight: 400; }
+.environment-connection-form .environment-container-picker-heading label { grid-column: 1; grid-row: 1; align-self: center; font-size: var(--floe-type-control); font-weight: 400; }
 .environment-connection-form .environment-container-picker-heading button { grid-column: 2; grid-row: 2; justify-self: end; }
 .environment-connection-form .environment-container-picker-control { grid-column: 2; grid-row: 1; margin: 0; }
 .environment-connection-form .environment-container-picker > :not(.environment-container-picker-heading):not(.environment-container-picker-control) { grid-column: 1 / -1; margin: 0; }
@@ -340,18 +340,18 @@
   padding: 0;
   border: 0;
 }
-.redeven-access-settings legend { font-size: 13px; font-weight: 550; padding: 0; margin-bottom: 10px; }
+.redeven-access-settings legend { font-size: var(--floe-type-control); font-weight: 500; padding: 0; margin-bottom: 10px; }
 .redeven-access-settings__body { padding: var(--environment-settings-inset); }
-.redeven-access-settings__body > p { color: var(--muted-foreground); font-size: 12px; line-height: 1.6; margin-bottom: 12px; }
+.redeven-access-settings__body > p { color: var(--muted-foreground); font-size: var(--floe-type-supporting); line-height: 1.6; margin-bottom: 12px; }
 .redeven-access-settings__body button { height: auto; min-height: 32px; white-space: nowrap; }
 .environment-connection-form > .redeven-access-settings, .ssh-settings-form > .redeven-access-settings { margin-bottom: 0; }
 .redeven-access-settings__routes { display: grid; gap: 0.5rem; margin-bottom: 0.75rem; }
-.redeven-access-choice { display: flex; align-items: start; gap: 0.625rem; padding: 0.75rem; border: 1px solid var(--border); border-radius: 10px; cursor: pointer; transition: border-color 120ms, background-color 120ms; }
+.redeven-access-choice { display: flex; align-items: start; gap: var(--floe-gap-control); padding: var(--floe-pad-control) var(--floe-pad-group); border: 1px solid var(--border); border-radius: var(--floe-radius-control); cursor: pointer; transition: border-color 120ms, background-color 120ms; }
 .redeven-access-choice[data-selected="true"] { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); background: color-mix(in srgb, var(--primary) 4%, var(--background)); }
 .redeven-access-choice input { margin-top: 0.2rem; flex-shrink: 0; accent-color: var(--primary); cursor: pointer; }
 .redeven-access-choice span { min-width: 0; display: grid; gap: 0.25rem; }
-.redeven-access-choice strong { font-size: 0.75rem; font-weight: 500; overflow-wrap: anywhere; }
-.redeven-access-choice small { color: var(--muted-foreground); font-size: 0.6875rem; line-height: 1.6; }
+.redeven-access-choice strong { font-size: var(--floe-type-control); font-weight: 500; overflow-wrap: anywhere; }
+.redeven-access-choice small { color: var(--muted-foreground); font-size: var(--floe-type-caption); line-height: var(--floe-line-caption); }
 .redeven-access-settings:disabled .redeven-access-choice { cursor: not-allowed; opacity: 0.65; }
-.redeven-access-verification { border-left: 2px solid var(--success); padding: 0.375rem 0.625rem; font-size: 0.75rem; line-height: 1.6; color: var(--muted-foreground); }
+.redeven-access-verification { border-left: 2px solid var(--success); padding: 0.375rem 0.625rem; font-size: var(--floe-type-supporting); line-height: 1.6; color: var(--muted-foreground); }
 @media (pointer: coarse) { .redeven-access-settings__body button { min-height: 44px; } }

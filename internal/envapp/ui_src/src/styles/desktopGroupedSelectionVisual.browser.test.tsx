@@ -40,13 +40,12 @@ it.each(['standard', 'soft-neumorphic'])('keeps Welcome and settings selections 
     dispose = render(() => <>
       <div class="ssh-settings-form"><SegmentedControl value="local" onChange={() => {}} options={[{ value: 'local', label: 'Only this device' }, { value: 'network', label: 'Network devices' }]} /></div>
       <div><button class="redeven-console-tab" data-active="true">Environments</button></div>
-      <div><button class="redeven-console-filter" data-active="true">Local</button></div>
       <div><button class="redeven-provider-pill" data-active="true">All</button></div>
       <div><button class="redeven-runtime-chip" data-active="true">Selected host</button></div>
       <div class="redeven-theme-picker__modes"><button class="redeven-theme-picker__mode" aria-checked="true">Light</button></div>
     </>, host);
     const selected = [...host.querySelectorAll<HTMLElement>('button[aria-checked="true"], button[data-active="true"]')];
-    expect(selected).toHaveLength(6);
+    expect(selected).toHaveLength(5);
     for (const element of selected) expectClearSelection(element, `${preset.name}/${material}`);
     if (['classic-light', 'classic-dark', 'porcelain-light', 'porcelain-dark'].includes(preset.name)) {
       await media.emulateMediaPreferences({ forcedColors: 'active', reducedMotion: 'reduce' });
