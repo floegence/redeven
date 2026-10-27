@@ -1,4 +1,4 @@
-import { KeyedFor, Button, Input } from '@floegence/floe-webapp-core/ui';
+import { KeyedFor, Button, Input, Dialog } from '@floegence/floe-webapp-core/ui';
 import { Copy, Plus, Trash } from '@floegence/floe-webapp-core/icons';
 import { createEffect, createMemo, createSignal, on, onCleanup, Show, untrack } from 'solid-js';
 import { gatewayConnectionOrigin } from '../shared/gatewayNetworkSettings';
@@ -6,7 +6,7 @@ import type { DesktopI18n } from '../shared/i18n';
 import type { GatewayAuthorizedClient, GatewayClientAccessCode, GatewayEndpoint } from '../shared/gatewayMembership';
 import type { DesktopLauncherActionRequest } from '../shared/desktopLauncherIPC';
 
-export function GatewayClientsPanel(props: Readonly<{ available?: boolean; gatewayID: string; endpoints?: readonly GatewayEndpoint[]; enrolling: boolean; onEnrollmentChange: (value: boolean) => void; i18n: DesktopI18n }>) {
+export function GatewayClientsPanel(props: Readonly<{ available?: boolean; suspended?: boolean; onPresenceChange?: (present: boolean) => void; gatewayID: string; endpoints?: readonly GatewayEndpoint[]; enrolling: boolean; onEnrollmentChange: (value: boolean) => void; i18n: DesktopI18n }>) {
   const enrolling = () => props.enrolling;
   let enrollmentTrigger: HTMLButtonElement | undefined, addressInput: HTMLInputElement | undefined;
   const setEnrollment = (value: boolean) => {
@@ -61,11 +61,10 @@ export function GatewayClientsPanel(props: Readonly<{ available?: boolean; gatew
     } catch { if (current === generation) setError(props.i18n.t('gatewayMembers.failed')); }
   }
   return <div class="redeven-gateway-clients-panel">
-    <div class="redeven-gateway-section-heading" hidden={enrolling()}><h3>{props.i18n.t('gatewayExperience.clients')}</h3><Button ref={enrollmentTrigger} size="sm" icon={Plus} disabled={props.available === false} onClick={() => setEnrollment(true)}>{props.i18n.t('gatewayExperience.connectClient')}</Button></div>
-    <section class="redeven-gateway-client-access" data-gateway-client-enrollment hidden={!enrolling()}>
-      <Button class="self-start" variant="ghost" size="sm" onClick={() => setEnrollment(false)}>{props.i18n.t('gatewayJoin.back')}</Button>
+    <div class="redeven-gateway-section-heading"><h3>{props.i18n.t('gatewayExperience.clients')}</h3><Button ref={enrollmentTrigger} size="sm" icon={Plus} disabled={props.available === false} onClick={() => setEnrollment(true)}>{props.i18n.t('gatewayExperience.connectClient')}</Button></div>
+    <Dialog open={enrolling() && !props.suspended} onOpenChange={setEnrollment} onPresenceChange={props.onPresenceChange} title={props.i18n.t('gatewayExperience.connectClient')} closeLabel={props.i18n.t('common.close')} class="redeven-gateway-dialog redeven-gateway-task-dialog"><section class="redeven-gateway-client-access" data-gateway-client-enrollment>
       <div class="redeven-gateway-section-heading">
-        <div><h3>{props.i18n.t('gatewayExperience.connectClient')}</h3></div>
+        <div><h3>{props.i18n.t('gatewayClients.createCode')}</h3></div>
         <Button size="sm" icon={Plus} disabled={props.available === false || busy() || !validAddress()} onClick={() => void perform({ kind: 'issue_gateway_access_code', gateway_id: props.gatewayID })}>{props.i18n.t('gatewayClients.createCode')}</Button>
       </div>
       <label class="redeven-gateway-field"><span>{props.i18n.t('gatewayJoin.address')}</span><Input ref={addressInput} value={address()} placeholder={props.i18n.t('gatewayNetwork.addressPlaceholder')} aria-invalid={address() !== '' && !validAddress() || undefined} disabled={props.available === false || busy()} onInput={event => { setAddress(event.currentTarget.value); setCopied(undefined); }} /></label>
@@ -77,8 +76,8 @@ export function GatewayClientsPanel(props: Readonly<{ available?: boolean; gatew
         <Button variant="outline" size="sm" disabled={!remaining() || !validAddress() || props.available === false} onClick={() => void copyCode('all')}>{props.i18n.t(copied() === 'all' ? 'gatewayJoin.copied' : 'gatewayExperience.copyConnection')}</Button>
         <p class="basis-full text-xs text-muted-foreground" role="status">{remaining() ? props.i18n.t('gatewayClients.codeExpires', { time: `${Math.floor(remaining() / 60)}:${String(remaining() % 60).padStart(2, '0')}` }) : props.i18n.t('gatewayClients.codeExpired')}</p>
       </div>}</Show>
-    </section>
-    <section class="redeven-gateway-settings-section" hidden={enrolling()}>
+    </section><Show when={error()}><p role="alert" class="text-sm text-error">{error()}</p></Show></Dialog>
+    <section class="redeven-gateway-settings-section">
       <div class="redeven-gateway-section-heading"><div><h3>{props.i18n.t('gatewayClients.authorizedClients')}</h3></div>
         <Button variant="ghost" size="sm" disabled={props.available === false || busy()} onClick={() => void perform({ kind: 'list_gateway_clients', gateway_id: props.gatewayID })}>{props.i18n.t('common.refresh')}</Button></div>
       <Show when={clients().length} fallback={<p class="redeven-gateway-empty-state">{props.i18n.t('gatewayClients.emptyClients')}</p>}>
@@ -96,6 +95,6 @@ export function GatewayClientsPanel(props: Readonly<{ available?: boolean; gatew
         </li>}</KeyedFor></ul>
       </Show>
     </section>
-    <Show when={error()}><p role="alert" class="redeven-gateway-content-enter text-sm text-error">{error()}</p></Show>
+    <Show when={error() && !enrolling()}><p role="alert" class="redeven-gateway-content-enter text-sm text-error">{error()}</p></Show>
   </div>;
 }

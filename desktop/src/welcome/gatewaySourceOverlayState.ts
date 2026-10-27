@@ -1,4 +1,4 @@
-export type GatewaySourceOverlayKind = 'action_popover' | 'more_actions_menu';
+export type GatewaySourceOverlayKind = 'action_popover';
 
 export type GatewaySourceOverlayState =
   | Readonly<{ kind: 'none' }>
@@ -26,10 +26,6 @@ export function gatewaySourceOverlayOpenFor(
   return state.kind === kind && state.gateway_id === gatewayID;
 }
 
-export function gatewaySourceOverlayGatewayID(state: GatewaySourceOverlayState): string | null {
-  return state.kind === 'none' ? null : state.gateway_id;
-}
-
 export function closeGatewaySourceOverlayState(
   state: GatewaySourceOverlayState,
   kind: GatewaySourceOverlayKind,
@@ -38,24 +34,4 @@ export function closeGatewaySourceOverlayState(
   return gatewaySourceOverlayOpenFor(state, kind, gatewayID)
     ? closedGatewaySourceOverlayState()
     : state;
-}
-
-
-
-export function gatewaySourceIDsWithActiveOverlay(
-  visibleGatewayIDs: readonly string[],
-  allGatewayIDs: readonly string[],
-  state: GatewaySourceOverlayState,
-): readonly string[] {
-  const activeGatewayID = gatewaySourceOverlayGatewayID(state);
-  if (
-    activeGatewayID === null
-    || visibleGatewayIDs.includes(activeGatewayID)
-    || !allGatewayIDs.includes(activeGatewayID)
-  ) {
-    return visibleGatewayIDs;
-  }
-
-  const visible = new Set(visibleGatewayIDs);
-  return allGatewayIDs.filter((gatewayID) => gatewayID === activeGatewayID || visible.has(gatewayID));
 }

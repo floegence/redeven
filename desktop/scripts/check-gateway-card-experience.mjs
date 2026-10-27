@@ -56,7 +56,7 @@ try {
     assert.ok((await card.innerText()).includes(i18n.t('gatewayAccess.directoryPending')));
     assert.equal(await card.locator('.redeven-gateway-card__add').count(), 0, 'Gateway access actions stay in More actions');
     assert.equal(await library.evaluate(element => element.scrollWidth > element.clientWidth + 1), false);
-    for (const button of await library.getByRole('button').all()) assert.equal(await button.evaluate(el => getComputedStyle(el).whiteSpace), 'nowrap');
+    for (const button of await library.locator('button[data-floe-control="button"]').all()) assert.equal(await button.evaluate(el => getComputedStyle(el).whiteSpace), 'nowrap');
     await library.evaluate(async el => { await Promise.all(el.getAnimations({ subtree: true }).filter(a => a.effect?.getTiming().iterations !== Infinity).map(a => a.finished)); });
     assert.equal(await card.locator('[data-gateway-mark]').count(), 1);
     assert.equal(await card.locator('.redeven-gateway-card__endpoint').count(), 0, 'Local host is identified once');
@@ -181,11 +181,10 @@ try {
     await page.keyboard.press('Escape'); await popover.waitFor({ state: 'detached' });
 
     await card.getByRole('button', { name: i18n.t('environmentCenter.moreActionsForLabel', { label: 'Gateway-local' }), exact: true }).click();
-    const menu = page.locator('.redeven-gateway-menu');
+    const menu = page.getByRole('menu');
     await menu.waitFor();
-    assert.notEqual(await menu.evaluate(el => getComputedStyle(el).animationName), 'none');
     const menuItems = menu.locator('[role="menuitem"]:not([disabled])');
-    await page.waitForFunction(() => document.querySelector('.redeven-gateway-menu')?.contains(document.activeElement));
+    await page.waitForFunction(() => document.querySelector('[role="menu"]')?.contains(document.activeElement));
     await page.keyboard.press('End');
     assert.equal(await menuItems.last().evaluate(el => document.activeElement === el), true);
     await page.keyboard.press('ArrowDown');
@@ -195,14 +194,13 @@ try {
     await page.keyboard.press('Home');
     assert.equal(await menuItems.first().evaluate(el => document.activeElement === el), true);
     await page.keyboard.press('Escape');
-    await page.waitForFunction(() => document.querySelector('.redeven-gateway-menu--closing'));
     await menu.waitFor({ state: 'detached' });
-    assert.equal(await card.getByRole('button', { name: i18n.t('environmentCenter.moreActionsForLabel', { label: 'Gateway-local' }), exact: true }).evaluate(el => document.activeElement === el), true);
+    await page.waitForFunction(element => document.activeElement === element, await card.getByRole('button', { name: i18n.t('environmentCenter.moreActionsForLabel', { label: 'Gateway-local' }), exact: true }).elementHandle());
 
     await card.getByRole('button', { name: i18n.t('environmentCenter.moreActionsForLabel', { label: 'Gateway-local' }), exact: true }).click();
-    await page.getByRole('menuitem', { name: i18n.t('environmentCenter.gatewayActionOpenSettings'), exact: true }).click();
+    await page.getByRole('menuitem', { name: i18n.t('gatewayExperience.editConnection'), exact: true }).click();
     const setup = page.getByRole('dialog');
-    await setup.getByText(i18n.t('gatewayClients.hostVerification'), { exact: true }).waitFor();
+    await setup.locator('#gateway-name').waitFor();
     assert.equal(await setup.getByRole('tablist').count(), 0, 'Unverified host registration cannot expose member management');
     await setup.evaluate(async el => { await Promise.all(el.getAnimations({ subtree: true }).filter(a => a.effect?.getTiming().iterations !== Infinity).map(a => a.finished)); });
     await page.screenshot({ path: `${output}/permission-${width}.png` });

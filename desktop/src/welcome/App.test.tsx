@@ -390,10 +390,10 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("if (requestedFocus === 'url_endpoint' || requestedFocus === 'identity_trust') {");
     expect(appSrc).toContain("focus_section: gatewaySetupFocusForGateway(gateway, focusSection === 'url_endpoint' || focusSection === 'identity_trust' ? focusSection : undefined)");
     expect(appSrc).toContain("setActiveCenterTab('gateways')");
-    expect(appSrc).toContain('<GatewaySetupDialog');
+    expect(appSrc).toContain('<GatewayWorkspace');
     expect(appSrc).toContain("kind: 'upsert_gateway'");
     expect(appSrc).toContain('gatewayAccess.managedServiceHelp');
-    const gatewayDialogStart = appSrc.indexOf('function GatewaySetupDialog');
+    const gatewayDialogStart = appSrc.indexOf('function GatewayWorkspace');
     const gatewayDialogEnd = appSrc.indexOf('function ControlPlaneDialog');
     const gatewayDialogSrc = appSrc.slice(gatewayDialogStart, gatewayDialogEnd);
     expect(gatewayDialogSrc).toContain("props.i18n.t('connectionDialog.gatewayUrl')");
@@ -442,7 +442,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("case 'view_gateway_environments':");
     expect(appSrc).toContain("case 'manage_gateway_members':");
     expect(appSrc).not.toContain("props.i18n.t('environmentCenter.syncGatewayForLabel'");
-    expect(appSrc).toContain("props.i18n.t('environmentCenter.moreActions')");
+    expect(appSrc).toContain("props.i18n.t('gatewayExperience.moreActions')");
     expect(appSrc).toContain("props.i18n.t('environmentCenter.moreActionsForLabel'");
     expect(appSrc).toContain('popoverAriaLabel={');
     expect(appSrc).not.toContain('>\\n            View\\n');
@@ -508,7 +508,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain(
       'const visibleGatewaySourceIDs = createMemo(() => visibleGatewaySources().map((gateway) => gateway.gateway_id));',
     );
-    expect(appSrc).toContain('const renderedGatewaySourceIDs = createMemo(() => gatewaySourceIDsWithActiveOverlay(');
+    expect(appSrc).toContain('const renderedGatewaySourceIDs = gatewaySourceIDs;');
+    expect(appSrc).toContain('function GatewaySourceOwner(');
+    expect(appSrc).toContain('return <Show when={props.visible}><GatewaySourceCard /></Show>;');
     expect(appSrc).toContain('<For each={renderedGatewaySourceIDs()}>');
     expect(appSrc).not.toContain('<For each={visibleGatewaySourceIDs()}>');
     expect(appSrc).toContain('gatewayEntriesByGatewayID()[gatewayID] ?? []');
@@ -1780,7 +1782,7 @@ describe('DesktopWelcomeShell', () => {
     );
     expect((styles.match(/100dvh/g) ?? []).length).toBe(4);
 
-    expect((appSrc.match(/class=\{(?:cn\()?CONNECTION_DIALOG_CLASS/g) ?? []).length).toBe(2);
+    expect((appSrc.match(/class=\{(?:cn\()?CONNECTION_DIALOG_CLASS/g) ?? []).length).toBe(3);
     expect(appSrc).toContain('function ControlPlaneDialog');
     expect(appSrc).toContain("title={props.i18n.t('connectionDialog.addProviderTitle')}");
     expect(appSrc).toContain('open={providerRuntimeLinkDialogOpen()}');

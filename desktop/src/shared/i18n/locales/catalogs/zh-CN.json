@@ -4,7 +4,6 @@
     "startGateway": "启动 Gateway 并继续",
     "maintenance": "服务维护",
     "overview": "概览",
-    "desktopConnection": "Desktop 连接",
     "identity": "网关身份",
     "chooseEnvironmentHelp": "选择一个环境。即使尚未打开环境窗口，Desktop 也会在这里完成准备和连接。",
     "noManagedEnvironments": "请先在 Welcome 中添加可管理的本机或远程环境。",
@@ -29,7 +28,16 @@
     "otherRuntime": "由其他管理员管理",
     "otherRuntimeHelp": "生成运行时邀请码，交给对应管理员确认接入。",
     "copyConnection": "复制接入信息",
-    "clientDelivery": "网关地址：{address}\n客户端访问码：{code}"
+    "clientDelivery": "网关地址：{address}\n客户端访问码：{code}",
+    "allGateways": "全部网关",
+    "network": "网络",
+    "manage": "管理",
+    "editConnection": "编辑连接",
+    "removeConnection": "从列表移除",
+    "moreActions": "更多操作",
+    "enableConnection": "启用连接",
+    "disableConnection": "禁用连接",
+    "serviceVersion": "服务版本"
   },
   "interactionContinuity": {
     "accepted": "操作已受理，正在等待执行详情。",

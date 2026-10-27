@@ -4,7 +4,6 @@
     "startGateway": "Gateway を起動して続行",
     "maintenance": "サービスの保守",
     "overview": "概要",
-    "desktopConnection": "Desktop 接続",
     "identity": "Gateway の識別情報",
     "chooseEnvironmentHelp": "環境を選択してください。環境ウィンドウを開いていなくても、Desktop がここで準備と接続を行います。",
     "noManagedEnvironments": "まず Welcome に管理可能なローカル環境またはリモート環境を追加してください。",
@@ -29,7 +28,16 @@
     "otherRuntime": "他の管理者が管理",
     "otherRuntimeHelp": "ランタイムの招待コードを作成し、管理者に登録を依頼します。",
     "copyConnection": "接続情報をコピー",
-    "clientDelivery": "ゲートウェイアドレス: {address}\nクライアントアクセスコード: {code}"
+    "clientDelivery": "ゲートウェイアドレス: {address}\nクライアントアクセスコード: {code}",
+    "allGateways": "すべてのゲートウェイ",
+    "network": "ネットワーク",
+    "manage": "管理",
+    "editConnection": "接続を編集",
+    "removeConnection": "一覧から削除",
+    "moreActions": "その他の操作",
+    "enableConnection": "接続を有効化",
+    "disableConnection": "接続を無効化",
+    "serviceVersion": "サービスのバージョン"
   },
   "interactionContinuity": {
     "accepted": "操作が受け付けられました。実行の詳細を待っています。",

@@ -112,9 +112,7 @@ await session.run(async () => {
   const picker = dialog.locator('[data-gateway-picker]');
   assert.ok((await picker.innerText()).includes(source.display_name), 'Gateway-side entry preselects registration with an empty address');
   await dialog.getByRole('button', { name: 'Close', exact: true }).click();
-  await page.getByRole('dialog').getByRole('tab', { name: 'Overview', exact: true }).waitFor();
-  await page.getByRole('dialog').getByRole('tab', { name: 'Overview', exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Connect Runtime', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Runtimes I manage', exact: true }).waitFor();
   await page.getByRole('dialog').getByRole('button', { name: 'Runtimes I manage', exact: true }).click();
   await dialog.getByRole('button', { name: 'Restore connection', exact: true }).click();
   await dialog.locator('[data-gateway-endpoint-draft]').waitFor();
@@ -138,6 +136,8 @@ await session.run(async () => {
   await dialog.locator('[data-gateway-enrollment-result]').waitFor();
   await dialog.screenshot({ path: path.join(output, 'enrollment-result.png') });
   await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Runtimes I manage', exact: true }).waitFor();
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
   await dialog.waitFor({ state: 'hidden' });
   await action({ kind: 'refresh_gateway', gateway_id: gatewayID });
   const joined = await bounded(async () => { while (true) {
@@ -149,10 +149,9 @@ await session.run(async () => {
   } }, 30000, 'Runtime joined and connected to the real Gateway');
   assert.equal(joined.environments.length, 1);
   assert.deepEqual(errors, []);
-  await page.getByRole('dialog').getByRole('tab', { name: 'Overview', exact: true }).waitFor();
-  await page.getByRole('dialog').screenshot({ path: path.join(output, 'returned-management.png') });
-  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).last().click();
-  await page.getByRole('dialog').waitFor({ state: 'hidden' });
+  await page.locator('[data-gateway-management-page]').waitFor();
+  await page.locator('[data-gateway-management-page]').screenshot({ path: path.join(output, 'returned-management.png') });
+  await page.getByRole('button', { name: 'All Gateways', exact: true }).click();
   await page.screenshot({ path: path.join(output, 'connected.png') });
   await page.getByRole('button', { name: 'Gateways', exact: true }).click();
   const gatewayCard = page.locator('[data-gateway-id="enrollment-qualification"]');
@@ -169,12 +168,14 @@ await session.run(async () => {
   await accessCode.waitFor();
   const issuedCode = await accessCode.innerText();
   assert.ok(issuedCode.length > 10, 'The real Gateway issues a client access code');
-  await dialog.getByRole('button', { name: 'Back', exact: true }).click();
-  await dialog.getByRole('button', { name: 'Connect client', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await dialog.waitFor({ state: 'hidden' });
+  await page.locator('[data-gateway-management-page]').getByRole('button', { name: 'Connect client', exact: true }).click();
   assert.equal(await accessCode.innerText(), issuedCode, 'Returning to enrollment retains the issued code');
   await dialog.screenshot({ path: path.join(output, 'client-enrollment.png') });
   await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'hidden' });
-  await page.waitForFunction(element => element === document.activeElement, await connectClient.elementHandle());
+  await page.locator('[data-gateway-management-page]').getByRole('button', { name: 'All Gateways', exact: true }).click();
+  await gatewayCard.waitFor();
   const finalService = JSON.parse(execFileSync(gatewayBinary, ['service-status', '--state-root', gatewayState], { encoding: 'utf8' }));
   assert.equal(finalService.pid, started.pid, 'Pairing, refresh and enrollment must not restart a compatible Gateway');
   assert.equal(createHash('sha256').update(await readFile(gatewayBinary)).digest('hex'), binaryHash);

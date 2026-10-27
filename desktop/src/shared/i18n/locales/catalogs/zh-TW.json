@@ -4,7 +4,6 @@
     "startGateway": "啟動 Gateway 並繼續",
     "maintenance": "服務維護",
     "overview": "概覽",
-    "desktopConnection": "Desktop 連線",
     "identity": "閘道身分",
     "chooseEnvironmentHelp": "選擇一個環境。即使尚未開啟環境視窗，Desktop 也會在這裡完成準備和連線。",
     "noManagedEnvironments": "請先在 Welcome 中新增可管理的本機或遠端環境。",
@@ -29,7 +28,16 @@
     "otherRuntime": "由其他管理員管理",
     "otherRuntimeHelp": "產生執行階段邀請碼，交由對應的管理員確認接入。",
     "copyConnection": "複製接入資訊",
-    "clientDelivery": "閘道位址：{address}\n用戶端存取碼：{code}"
+    "clientDelivery": "閘道位址：{address}\n用戶端存取碼：{code}",
+    "allGateways": "所有閘道",
+    "network": "網路",
+    "manage": "管理",
+    "editConnection": "編輯連線",
+    "removeConnection": "從清單移除",
+    "moreActions": "更多操作",
+    "enableConnection": "啟用連線",
+    "disableConnection": "停用連線",
+    "serviceVersion": "服務版本"
   },
   "interactionContinuity": {
     "accepted": "操作已受理，正在等待執行詳細資訊。",
