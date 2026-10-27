@@ -10,6 +10,12 @@ const server = await createSSHSettingsPreviewServer(0, ['environment-settings.ht
 await server.watcher.close();
 const browser = await chromium.launch({ headless: true });
 const report = { cases: [], errors: [] };
+async function settleVisuals(page) {
+  await page.evaluate(async () => {
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await Promise.all(document.getAnimations().filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished.catch(() => {})));
+  });
+}
 const locales = (process.env.REDEVEN_GATEWAY_QA_LOCALES || 'en-US,zh-CN,zh-TW,ja-JP,ko-KR,de-DE,es-ES,fr-FR,pt-BR,ru-RU').split(',');
 const widths = (process.env.REDEVEN_GATEWAY_QA_WIDTHS || '390,430,768,1280').split(',').map(Number);
 try {
@@ -51,6 +57,7 @@ try {
       await button(page, 'environmentCenter.gatewaysSection').click();
       const card = page.locator('.redeven-gateway-card');
       await card.waitFor();
+      await settleVisuals(page);
       await page.screenshot({ path: output + '/' + caseID + '-list.png', fullPage: true });
       const manage = await button(card, 'gatewayExperience.manage').boundingBox();
       const more = card.locator('[data-floe-dropdown-trigger]');
@@ -76,6 +83,7 @@ try {
       const trigger = workspace.locator('[data-floe-dropdown-trigger]');
       const triggerBounds = await trigger.boundingBox();
       assert.ok(Math.abs(triggerBounds.width - triggerBounds.height) <= 1 && triggerBounds.height >= manage.height, 'Management menu is a complete square control');
+      await settleVisuals(page);
       await page.screenshot({ path: output + '/' + caseID + '-overview.png', fullPage: true });
       assert.equal(await workspace.evaluate(element => element.scrollWidth > element.clientWidth + 1), false, 'Overview has no horizontal overflow');
       await button(workspace, 'gatewayExperience.allGateways').click();
