@@ -5,7 +5,7 @@ description: Read bounded presentations through the released Floe renderer witho
 tags: [ui, files, preview, pptx]
 timestamp: 2026-10-17T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-26"
 ---
 # Summary
 
@@ -19,6 +19,8 @@ MPL source remain available with redistribution.
 # Contract
 
 PPTX uses the lazy published `@floegence/floe-webapp-core/pptx` entrypoint. Opening another file type must not load the PPTX engine.
+
+Preview opens directly to the slides without a generic PowerPoint compatibility notice or an empty notice bar. Document-specific guidance appears only when external resources are disabled or some content cannot be rendered.
 
 The renderer's original licenses, ECMA geometry notice, bundled dependency notices, and MPL corresponding source are verified and retained in the distributed third-party notice.
 

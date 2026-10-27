@@ -7196,7 +7196,6 @@
       "zoomInPptx": "PPTX-Vorschau vergrößern",
       "zoomOutPptx": "PPTX-Vorschau verkleinern",
       "loadingPptx": "Präsentation wird geladen…",
-      "pptxStaticNotice": "Statische Vorschau. Animationen und einige Effekte können von PowerPoint abweichen.",
       "pptxExternalNotice": "Externe Links und Ressourcen sind deaktiviert.",
       "pptxIncomplete": "Einige Folieninhalte konnten nicht dargestellt werden. Laden Sie die Datei herunter, um das Original zu prüfen."
     },

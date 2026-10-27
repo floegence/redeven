@@ -246,18 +246,18 @@ export function PptxPreviewPane(props: PptxPreviewPaneProps) {
           : redevenSurfaceRoleClass('main')
       )}
     >
-      <div class="shrink-0 border-b border-border/50 px-3 py-2 text-[11px] text-muted-foreground">
-        {i18n.t('uiCopy.preview.pptxStaticNotice')}
-        <Show when={document()?.hasExternalLinks}>
-          {' '}
-          {i18n.t('uiCopy.preview.pptxExternalNotice')}
-        </Show>
-        <Show when={incomplete()}>
-          <p role="status" class="mt-1 text-warning">
-            {i18n.t('uiCopy.preview.pptxIncomplete')}
-          </p>
-        </Show>
-      </div>
+      <Show when={document()?.hasExternalLinks || incomplete()}>
+        <div class="flex shrink-0 flex-col gap-1 border-b border-border/50 px-3 py-2 text-[11px] text-muted-foreground">
+          <Show when={document()?.hasExternalLinks}>
+            <p>{i18n.t('uiCopy.preview.pptxExternalNotice')}</p>
+          </Show>
+          <Show when={incomplete()}>
+            <p role="status" class="text-warning">
+              {i18n.t('uiCopy.preview.pptxIncomplete')}
+            </p>
+          </Show>
+        </div>
+      </Show>
       <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
         <FilePreviewZoomControls
           zoom={zoom}

@@ -7192,7 +7192,6 @@
       "zoomInPptx": "PPTX プレビューを拡大",
       "zoomOutPptx": "PPTX プレビューを縮小",
       "loadingPptx": "プレゼンテーションを読み込み中…",
-      "pptxStaticNotice": "静的プレビューです。アニメーションや一部の効果は PowerPoint と異なる場合があります。",
       "pptxExternalNotice": "外部リンクと外部リソースは無効です。",
       "pptxIncomplete": "一部のスライド内容を表示できませんでした。ファイルをダウンロードして元の内容を確認してください。"
     },

@@ -43,23 +43,32 @@ function mount(bytes: () => Uint8Array<ArrayBuffer>) {
   return host;
 }
 describe('PPTX preview ownership', () => {
-  it('windows pages, removes old page owners, and disposes the source', async () => {
-    const active = surface();
-    state.open.mockResolvedValue(active);
-    const bytes = new Uint8Array([1]);
-    const host = mount(() => bytes);
-    await vi.waitFor(() => expect(active.renderPage).toHaveBeenCalled());
-    expect(active.renderPage.mock.calls.length).toBeLessThan(8);
-    expect(host.textContent).toContain('Static preview');
-    expect(host.textContent).toContain('External links');
-    const viewport = host.querySelector<HTMLElement>('.pptx-preview-pane')!;
-    viewport.scrollTop = 15000;
-    viewport.dispatchEvent(new Event('scroll'));
-    await vi.waitFor(() => expect(active.release).toHaveBeenCalled());
-    expect(host.querySelector('[data-page-number="1"]')).toBeNull();
-    disposers.pop()!();
-    expect(active.dispose).toHaveBeenCalledTimes(1);
-  });
+  it.each([false, true])(
+    'windows pages and disposes the source with external links %s',
+    async (hasExternalLinks) => {
+      const active = surface();
+      active.hasExternalLinks = hasExternalLinks;
+      state.open.mockResolvedValue(active);
+      const bytes = new Uint8Array([1]);
+      const host = mount(() => bytes);
+      await vi.waitFor(() => expect(active.renderPage).toHaveBeenCalled());
+      expect(active.renderPage.mock.calls.length).toBeLessThan(8);
+      expect(host.textContent).not.toContain('Static preview');
+      if (hasExternalLinks) {
+        expect(host.textContent).toContain('External links');
+      } else {
+        expect(host.textContent).not.toContain('External links');
+        expect(host.firstElementChild?.children).toHaveLength(1);
+      }
+      const viewport = host.querySelector<HTMLElement>('.pptx-preview-pane')!;
+      viewport.scrollTop = 15000;
+      viewport.dispatchEvent(new Event('scroll'));
+      await vi.waitFor(() => expect(active.release).toHaveBeenCalled());
+      expect(host.querySelector('[data-page-number="1"]')).toBeNull();
+      disposers.pop()!();
+      expect(active.dispose).toHaveBeenCalledTimes(1);
+    }
+  );
   it('aborts replaced opens and disposes completed stale documents', async () => {
     let finish!: (value: ReturnType<typeof surface>) => void;
     state.open
@@ -83,9 +92,11 @@ describe('PPTX preview ownership', () => {
     expect(stale.renderPage).not.toHaveBeenCalled();
   });
   it('discloses node failures without discarding readable pages', async () => {
+    const active = surface();
+    active.hasExternalLinks = false;
     state.open.mockImplementation(async (_bytes, options) => {
       options.onNodeError('shape', new Error('unsupported'));
-      return surface();
+      return active;
     });
     const bytes = new Uint8Array([1]);
     const host = mount(() => bytes);

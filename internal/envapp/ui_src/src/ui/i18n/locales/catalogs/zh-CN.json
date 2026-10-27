@@ -7192,7 +7192,6 @@
       "zoomInPptx": "放大 PPTX 预览",
       "zoomOutPptx": "缩小 PPTX 预览",
       "loadingPptx": "正在加载演示文稿…",
-      "pptxStaticNotice": "静态预览，动画及部分效果可能与 PowerPoint 不同。",
       "pptxExternalNotice": "已禁用外部链接和资源。",
       "pptxIncomplete": "部分幻灯片内容无法渲染，请下载文件查看原稿。"
     },
