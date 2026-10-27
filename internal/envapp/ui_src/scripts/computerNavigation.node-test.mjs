@@ -90,7 +90,7 @@ test('lost navigation acknowledgement remains unknown and never replays', async 
   const { transport, controller, execute } = navigationFixture();
   let navigations = 0;
   transport.send = async () => { navigations++; throw new Error('lost acknowledgement with private details'); };
-  assert.deepEqual(await execute(), { error: 'EFFECT_OUTCOME_UNKNOWN' });
+  assert.deepEqual(await execute(), { error: 'EFFECT_OUTCOME_UNKNOWN', result: { stage: 'action', reason: 'response_unavailable', needs_observation: true } });
   assert.equal(controller.page.invalid, true);
   assert.equal(navigations, 1);
 });
@@ -100,7 +100,7 @@ test('invalid navigation replies cannot claim confirmed failure', async t => {
     await t.test(JSON.stringify(reply), async () => {
       const { transport, controller, execute } = navigationFixture();
       transport.send = async () => reply;
-      assert.deepEqual(await execute(), { error: 'EFFECT_OUTCOME_UNKNOWN' });
+      assert.deepEqual(await execute(), { error: 'EFFECT_OUTCOME_UNKNOWN', result: { stage: 'action', reason: 'response_unavailable', needs_observation: true } });
       assert.equal(controller.page.invalid, true);
     });
   }
@@ -114,7 +114,7 @@ test('a failed key release still wins over a confirmed navigation failure', asyn
     if (method === 'Page.navigate') return { errorText: 'net::ERR_CONNECTION_FAILED' };
     assert.equal(method, 'Input.dispatchKeyEvent'); releases++; throw new Error('release acknowledgement lost');
   };
-  assert.deepEqual(await execute(), { error: 'EFFECT_OUTCOME_UNKNOWN' });
+  assert.deepEqual(await execute(), { error: 'EFFECT_OUTCOME_UNKNOWN', result: { stage: 'input_release', reason: 'response_unavailable', needs_observation: true } });
   assert.equal(releases, 1);
   assert.equal(controller.page.invalid, true);
 });

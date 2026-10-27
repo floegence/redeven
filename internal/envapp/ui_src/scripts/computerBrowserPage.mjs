@@ -651,18 +651,39 @@ export class BrowserComputerPage {
     finally { for (const objectId of objects) if (objectId) await session.send('Runtime.releaseObject', { objectId }); }
   }
 
-  async effect(operation) {
+  async effect(operation, stage = 'action') {
     if ((this.stopped && !this.privateInput) || this.invalid) throw new Error('TAKEOVER_REQUIRED');
     this.uncertainEffect = true;
+    this.effectStage = stage;
     let result;
     try { result = await operation(); }
     catch (error) {
-      if (['TARGET_PERMISSION_REQUIRED', 'TARGET_CAPABILITY_UNAVAILABLE'].includes(error.message)) this.uncertainEffect = false;
+      if (['TARGET_PERMISSION_REQUIRED', 'TARGET_CAPABILITY_UNAVAILABLE'].includes(error.message) || error.focusRejected === true) this.uncertainEffect = false;
       throw error;
     }
     this.uncertainEffect = false;
     this.effectCount++;
     return result;
+  }
+
+  async focus(element) {
+    const rejected = () => Object.assign(new Error('ELEMENT_NOT_ACTIONABLE'), { focusRejected: true });
+    // RootWebArea is AX-focusable but its backing Document is not an element.
+    // Page-level keys use ui.key; never silently change a locator's target.
+    const { node } = await element.frame.session.send('DOM.describeNode', { backendNodeId: element.backendNodeId });
+    if (node.nodeType !== 1) throw rejected();
+    await this.effect(async () => {
+      try { await element.frame.session.send('DOM.focus', { backendNodeId: element.backendNodeId }); }
+      catch (error) {
+        // These exact rejections precede input. Detachment and missing replies
+        // cannot prove that focus did not happen and must remain uncertain.
+        if (error.message === 'ELEMENT_NOT_ACTIONABLE' || [
+          'cdpSession.send: Protocol error (DOM.focus): Node is not an Element',
+          'cdpSession.send: Protocol error (DOM.focus): Element is not focusable',
+        ].includes(error.message)) throw rejected();
+        throw error;
+      }
+    }, 'focus');
   }
 
   async input(session, method, parameters, releasing = false) {
@@ -672,7 +693,7 @@ export class BrowserComputerPage {
     const up = ['keyUp', 'mouseReleased'].includes(parameters.type);
     if (down) this.heldInput.set(heldKey, { session, method, parameters });
     if (releasing) await session.send(method, parameters);
-    else await this.effect(() => session.send(method, parameters));
+    else await this.effect(() => session.send(method, parameters), 'input_delivery');
     if (up) this.heldInput.delete(heldKey);
   }
 
@@ -847,7 +868,7 @@ export class BrowserComputerPage {
       if (typeof args.text !== 'string' || args.text.length > 20000) throw new Error('INVALID_REQUEST');
       await this.editText(undefined, args.text, false);
     } else if (args.action === 'key') {
-      if (element) await this.effect(() => element.frame.session.send('DOM.focus', { backendNodeId: element.backendNodeId }));
+      if (element) await this.focus(element);
       const parameters = validated.key;
       const target = element?.frame.session || this.transport;
       await this.input(target, 'Input.dispatchKeyEvent', { type: 'keyDown', ...parameters });

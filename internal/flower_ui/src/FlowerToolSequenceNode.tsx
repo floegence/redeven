@@ -107,6 +107,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
       const parts = [
         group.toolCount ? copy.toolCalls(group.toolCount) : '',
         group.failedCount ? copy.failedCalls(group.failedCount) : '',
+        group.uncertainCount ? copy.effectUncertain + ' · ' + group.uncertainCount : '',
         group.failedSubagentEventCount ? copy.failedSubtaskUpdates(group.failedSubagentEventCount) : '',
         group.thinkingCount ? copy.thinkingSegments(group.thinkingCount) : '',
         group.subagentEventCount ? copy.subtaskUpdates(group.subagentEventCount) : '',
@@ -135,6 +136,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
         <span class="flower-tool-sequence-label">
           <Show when={member()!.group.toolCount}>{count => <span>{context!.copy().toolCalls(count())}</span>}</Show>
           <Show when={member()!.group.failedCount}>{count => <span class="flower-tool-sequence-failures">{context!.copy().failedCalls(count())}</span>}</Show>
+          <Show when={member()!.group.uncertainCount}>{count => <span class="flower-tool-sequence-failures">{context!.copy().effectUncertain} · {count()}</span>}</Show>
           <Show when={member()!.group.failedSubagentEventCount}>{count => <span class="flower-tool-sequence-subagent-failures">{context!.copy().failedSubtaskUpdates(count())}</span>}</Show>
           <Show when={member()!.group.thinkingCount}>{count => <span class="flower-tool-sequence-thinking">{context!.copy().thinkingSegments(count())}</span>}</Show>
           <Show when={member()!.group.subagentEventCount}>{count => <span class="flower-tool-sequence-subtasks">{context!.copy().subtaskUpdates(count())}</span>}</Show>

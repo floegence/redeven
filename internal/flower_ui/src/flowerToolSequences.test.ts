@@ -256,6 +256,20 @@ describe('consecutive tool presentation', () => {
     const uncertain = tool('uncertain', { chips: [{ kind: 'effect_outcome', label: 'uncertain', value: 'uncertain' }] });
     expect(projectFlowerToolSequences([tool('a'), uncertain, tool('b')]).groups.size).toBe(0);
   });
+  it('keeps returned uncertain errors in one stable sequence with a visible count', () => {
+    const prior = projectFlowerToolSequences([tool('a'), tool('uncertain', { status: 'running' })]);
+    const uncertain = { status: 'error' as const, severity: 'error' as const, needs_attention: true };
+    const full = projectFlowerToolSequences([tool('a'), tool('uncertain', { ...uncertain,
+      chips: [{ kind: 'effect_outcome', label: 'result', value: 'uncertain' }] }), tool('b')], undefined, [], prior);
+    const partial = projectFlowerToolSequences([tool('a'), tool('uncertain', { ...uncertain,
+      field_summary: { fields: [], uncertain_effect: true } }), tool('b')]);
+    expect(partial).toEqual(full);
+    expect(full.groups.size).toBe(1);
+    const group = [...full.groups.values()][0];
+    expect(group).toMatchObject({ toolCount: 3, failedCount: 1, uncertainCount: 1 });
+    expect(group.key).toBe([...prior.groups.keys()][0]);
+    expect(projectFlowerToolSequences([tool('a'), tool('uncertain', { ...uncertain, requires_approval: true }), tool('b')]).groups.size).toBe(0);
+  });
   it('keeps recorded goal state messages outside tool sequences', () => {
     const source = text('goal-state');
     const goalState: Message = { ...source, message: { ...source.message, goal: {

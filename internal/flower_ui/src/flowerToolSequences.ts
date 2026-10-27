@@ -13,6 +13,7 @@ type SequenceNode = Readonly<{
   label?: string;
   active: boolean;
   failed: boolean;
+  uncertain?: boolean;
 }>;
 
 const sequenceBoundaryToolNames = new Set(['ask_user']);
@@ -29,6 +30,7 @@ export type FlowerToolSequence = Readonly<{
   toolCount: number;
   latestToolLabel?: string;
   failedCount: number;
+  uncertainCount: number;
   failedSubagentEventCount: number;
   thinkingCount: number;
   subagentEventCount: number;
@@ -107,6 +109,7 @@ export function projectFlowerToolSequences(
       } else if (block.type === 'activity') {
         for (const item of block.block.items) {
           const failed = item.status === 'error';
+          const uncertain = Boolean(item.field_summary?.uncertain_effect || item.chips?.some(chip => chip.kind === 'effect_outcome' && chip.value === 'uncertain'));
           const attentionReasons = item.attention_reasons ?? [];
           const subagentWait = item.tool_name === 'subagents' && item.renderer === 'subagent_operation'
             && (item.field_summary?.action ?? item.payload?.action) === 'wait' && (item.status === 'running' || item.status === 'waiting');
@@ -124,14 +127,14 @@ export function projectFlowerToolSequences(
             && !item.requires_approval && !item.approval_state
             && (!(item.field_summary?.has_error || item.payload?.error) || failed)
             && (!['warning', 'error', 'blocking'].includes(item.severity) || failed || waitingAttention)
-            && !item.field_summary?.uncertain_effect
-            && !item.chips?.some(chip => chip.kind === 'effect_outcome' && chip.value === 'uncertain');
+            && (!uncertain || failed);
           tokens.push(foldable ? {
             key: flowerActivityIdentity({ threadID: block.block.thread_id, runID: block.block.run_id, turnID: block.block.turn_id,
               itemID: item.kind === 'tool' && item.tool_id ? item.tool_id : item.item_id }),
             entryKey: entry.key, scope, turnID: entry.message.turn_id, kind: 'tool', label: item.label || item.tool_name,
             active: item.status === 'pending' || item.status === 'running' || subagentWait,
             failed,
+            uncertain,
           } : null);
         }
       } else {
@@ -178,6 +181,7 @@ export function projectFlowerToolSequences(
       toolCount: tools.length,
       latestToolLabel: tools.at(-1)?.label,
       failedCount: tools.filter(node => node.failed).length,
+      uncertainCount: tools.filter(node => node.uncertain).length,
       failedSubagentEventCount: subagentEvents.filter(node => node.failed).length,
       thinkingCount: thinking.length,
       subagentEventCount: subagentEvents.length,

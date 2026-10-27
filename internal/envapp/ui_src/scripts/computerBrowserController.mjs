@@ -57,14 +57,17 @@ export class BrowserComputerController {
     catch {
       this.page.close();
       await this.page.releasePage();
-      return { error: 'EFFECT_OUTCOME_UNKNOWN' };
+      return this.unknownEffect('input_release');
     }
     if (this.page.uncertainEffect || response.error === 'EFFECT_OUTCOME_UNKNOWN') {
       this.page.close();
       await this.page.releasePage();
-      return { error: 'EFFECT_OUTCOME_UNKNOWN' };
+      return this.unknownEffect();
     }
     return response;
+  }
+  unknownEffect(stage = this.page.effectStage || 'action') {
+    return { error: 'EFFECT_OUTCOME_UNKNOWN', result: { stage, reason: 'response_unavailable', needs_observation: true } };
   }
   async executeOperation(request) {
     // The Runtime's source owner changes this mode under the same target gate
@@ -86,6 +89,7 @@ export class BrowserComputerController {
     page.privateInput = privateInput;
     const initialEffects = page.effectCount;
     page.uncertainEffect = false;
+    page.effectStage = undefined;
     const dispatched = () => page.effectCount > initialEffects;
     try {
       if (privateInput) {
@@ -166,7 +170,10 @@ export class BrowserComputerController {
       return { result: { ...result, ...(frame?.geometry ? {frame_geometry:frame.geometry} : {}), summary: tool === 'computer.action' ? args.action : tool, ...metadata,
         action_executed: dispatched(), execution_mode: 'background', ...(page.downloads.size ? { downloads: [...page.downloads.values()] } : {}) }, safety: captured, ...(frame ? { screenshot: frame } : {}) };
     } catch (error) {
-      if (page.uncertainEffect) return { error: 'EFFECT_OUTCOME_UNKNOWN' };
+      if (page.uncertainEffect) return this.unknownEffect();
+      if (error.focusRejected) return { error: 'ELEMENT_NOT_ACTIONABLE', result: {
+        action_executed: false, needs_observation: false, stage: 'focus', reason: 'not_focusable',
+      } };
       if (error.diagnostic) return { error: error.message, result: { action_executed: dispatched(), needs_observation: dispatched(), diagnostic: error.diagnostic } };
       if (page.guardFailure) return { error: 'TARGET_CONNECTION_REQUIRED', result: { action_executed: dispatched(), needs_observation: dispatched() } };
       if (page.requiredURL) return { error: 'TARGET_PERMISSION_REQUIRED', result: { action_executed: dispatched(), required_navigation_url: page.requiredURL, needs_observation: true } };

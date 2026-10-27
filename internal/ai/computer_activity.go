@@ -212,8 +212,8 @@ func computerActivityBlankPage(payload map[string]any) bool {
 func computerDiagnosticValue(key string, value any) string {
 	text, _ := value.(string)
 	allowed := map[string][]string{
-		"stage":             {"preparation", "input_delivery", "input_observed", "action", "helper_exchange"},
-		"reason":            {"unavailable", "receipt_timeout", "cancelled", "target_unavailable", "target_not_ready", "permission_required", "invalid_request", "action_failed", "response_unavailable"},
+		"stage":             {"preparation", "focus", "input_delivery", "input_release", "input_observed", "action", "helper_exchange"},
+		"reason":            {"unavailable", "not_focusable", "receipt_timeout", "cancelled", "target_unavailable", "target_not_ready", "permission_required", "invalid_request", "action_failed", "response_unavailable"},
 		"target_state":      {"available", "unavailable", "unknown"},
 		"observation_stage": {"frame_inventory", "safety_scan", "semantic_read", "capture", "metadata"},
 	}

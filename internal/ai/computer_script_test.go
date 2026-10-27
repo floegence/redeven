@@ -228,6 +228,30 @@ func TestComputerScriptUncertainResultRetainsCompletedPrefixAndProgress(t *testi
 	}
 }
 
+func TestComputerScriptUncertaintyRequiresObservationWithoutConfirmedInput(t *testing.T) {
+	runtime, call := scriptRuntimeFixture(t, func(_ context.Context, inner TargetToolCall) (TargetToolResult, error) {
+		result, err, _ := computerBrowserFailure(inner, false, "EFFECT_OUTCOME_UNKNOWN", map[string]any{"stage": "input_delivery", "reason": "response_unavailable"}, "connected_browser")
+		return result, err
+	})
+	result, err := executeTestScript(t.Context(), runtime, call, "await ui.key('PageDown');")
+	payload := result.Result.(map[string]any)
+	if !errors.Is(err, errComputerEffectUnknown) || payload["needs_observation"] != true || !result.executionFacts.needsObservation || payload["action_executed"] != false || payload["stage"] != "input_delivery" || payload["reason"] != "response_unavailable" {
+		t.Fatalf("missing uncertain recovery facts: %+v %v", result, err)
+	}
+}
+
+func TestComputerScriptFocusRejectionRetainsKnownFailure(t *testing.T) {
+	runtime, call := scriptRuntimeFixture(t, func(_ context.Context, inner TargetToolCall) (TargetToolResult, error) {
+		result, err, _ := computerBrowserFailure(inner, false, "ELEMENT_NOT_ACTIONABLE", map[string]any{"action_executed": false, "stage": "focus", "reason": "not_focusable"}, "connected_browser")
+		return result, err
+	})
+	result, err := executeTestScript(t.Context(), runtime, call, "await ui.ref('document').press('PageDown');")
+	payload := result.Result.(map[string]any)
+	if err == nil || errors.Is(err, errComputerEffectUnknown) || payload["effect_outcome_unknown"] != false || payload["action_executed"] != false || payload["stage"] != "focus" || payload["reason"] != "not_focusable" {
+		t.Fatalf("focus rejection facts lost: %+v %v", result, err)
+	}
+}
+
 func TestComputerScriptTakeoverDiscardsObservedContent(t *testing.T) {
 	dispatched := 0
 	runtime, call := scriptRuntimeFixture(t, func(_ context.Context, _ TargetToolCall) (TargetToolResult, error) {

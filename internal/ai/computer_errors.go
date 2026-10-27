@@ -79,6 +79,15 @@ func computerBrowserFailure(call TargetToolCall, private bool, code string, payl
 		}
 		return result, err, true
 	}
+	if code == "EFFECT_OUTCOME_UNKNOWN" {
+		facts := map[string]any{"needs_observation": true}
+		for _, key := range []string{"stage", "reason"} {
+			if value := computerDiagnosticValue(key, payload[key]); value != "" {
+				facts[key] = value
+			}
+		}
+		return TargetToolResult{TargetID: call.TargetID, ExecutionLocation: location, Result: facts}, errComputerEffectUnknown, true
+	}
 	err := computerTargetFailure(call, code)
 	_, confirmed := payload["action_executed"].(bool)
 	known := computerKnownRejection(err) || code == "TARGET_ACTION_FAILED" && confirmed || code == "TARGET_CONNECTION_REQUIRED" && confirmed
@@ -89,6 +98,10 @@ func computerBrowserFailure(call TargetToolCall, private bool, code string, payl
 	if known && payload != nil {
 		executed, _ := payload["action_executed"].(bool)
 		result.Result = map[string]any{"action_executed": executed, "needs_observation": executed}
+		if code == "ELEMENT_NOT_ACTIONABLE" && !executed && payload["stage"] == "focus" && payload["reason"] == "not_focusable" {
+			result.Result.(map[string]any)["stage"] = "focus"
+			result.Result.(map[string]any)["reason"] = "not_focusable"
+		}
 		if diagnostic := computerArgumentDiagnostic(payload["diagnostic"]); diagnostic != nil {
 			result.Result.(map[string]any)["diagnostic"] = diagnostic
 		}
