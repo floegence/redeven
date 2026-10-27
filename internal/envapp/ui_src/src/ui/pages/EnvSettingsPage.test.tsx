@@ -207,7 +207,9 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
   ),
   ConfirmDialog: (props: any) => <Show when={props.open}><div role="dialog"><h2>{props.title}</h2>{props.children}<button onClick={props.onConfirm} disabled={props.loading}>{props.confirmText}</button></div></Show>,
   Dialog: () => null,
-  Input: (props: any) => <input value={props.value} onInput={props.onInput} placeholder={props.placeholder} disabled={props.disabled} />,
+  // Forward the attributes the page relies on (accessible name, search type),
+  // so the double matches the floe field's real contract instead of only its value.
+  Input: (props: any) => <input type={props.type} aria-label={props['aria-label']} value={props.value} onInput={props.onInput} placeholder={props.placeholder} disabled={props.disabled} />,
   Select: (props: any) => (
     <select value={props.value} onChange={(event) => props.onChange?.((event.currentTarget as HTMLSelectElement).value)} disabled={props.disabled}>
       {(props.options ?? []).map((option: any) => (
