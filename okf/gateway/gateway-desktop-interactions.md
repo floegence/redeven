@@ -6,6 +6,7 @@ tags: [gateway, desktop, interaction, validation]
 timestamp: 2026-10-14T00:00:00Z
 lifecycle: contract
 reviewed_at: "2026-10-27"
+quality_exception: Cross-boundary consent contract spanning enrollment, welcome task ownership, and management presentation; each surface keeps its own authority check inside one Desktop interaction.
 ---
 # Summary
 
