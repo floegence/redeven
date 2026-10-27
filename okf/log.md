@@ -1,5 +1,11 @@
 # Redeven OKF Update Log
 
+## 2026-10-27 — Compact Computer Use qualification
+
+Record 45/45 real DeepSeek scenarios on the compact default surface, canonical
+diagnostic assertions, retained failed batches, deterministic regression results
+and scope limits in [qualification evidence](ai/computer-use-qualification-evidence.md).
+
 ## 2026-10-26 — Compact Computer Use surface
 
 Reduce default discovery to three entry points, share selection/runtime help,

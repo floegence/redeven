@@ -4313,7 +4313,7 @@
               "evidence",
               "testing"
             ],
-            "summary": "The production qualification runners establish scope-specific outcomes under\n[the acceptance contract](computer-use-qualification.md). The following results\nwere observed on 2026-09-17. A passing worktree run does not replace the exact-main\npre-push gate, certify arbitrary applications, or turn earlier failed runs into\nsuccesses. Private text and pixels are excluded from retained diagnostics.",
+            "summary": "The production qualification runners establish scope-specific outcomes under\n[the acceptance contract](computer-use-qualification.md). The following results\ninclude September and October 2026 runs. A passing worktree run does not replace the exact-main\npre-push gate, certify arbitrary applications, or turn earlier failed runs into\nsuccesses. Private text and pixels are excluded from retained diagnostics.",
             "section_count": 2
           },
           {
@@ -8074,7 +8074,7 @@
         "description": "Read measured browser and desktop outcomes without conflating adapter, model and final integration scopes.",
         "lifecycle": "retained_history",
         "retention_reason": "Retains platform qualification failures and scope boundaries that prevent unsupported claims about current Computer Use behavior.",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-27",
         "tags": [
           "ai",
           "computer-use",
@@ -8085,8 +8085,8 @@
         "title": "Computer use qualification evidence",
         "type": "Verification Evidence"
       },
-      "body_length": 2386,
-      "summary": "The production qualification runners establish scope-specific outcomes under\n[the acceptance contract](computer-use-qualification.md). The following results\nwere observed on 2026-09-17. A passing worktree run does not replace the exact-main\npre-push gate, certify arbitrary applications, or turn earlier failed runs into\nsuccesses. Private text and pixels are excluded from retained diagnostics.",
+      "body_length": 4979,
+      "summary": "The production qualification runners establish scope-specific outcomes under\n[the acceptance contract](computer-use-qualification.md). The following results\ninclude September and October 2026 runs. A passing worktree run does not replace the exact-main\npre-push gate, certify arbitrary applications, or turn earlier failed runs into\nsuccesses. Private text and pixels are excluded from retained diagnostics.",
       "sections": [
         {
           "id": "contract",
@@ -8103,7 +8103,7 @@
           "char_count": 159
         }
       ],
-      "snippet": "The production qualification runners establish scope-specific outcomes under were observed on 2026-09-17. A passing worktree run does not replace the exact-main pre-push gate, certify arbitrary applications, or turn earlier failed runs into",
+      "snippet": "The production qualification runners establish scope-specific outcomes under include September and October 2026 runs. A passing worktree run does not replace the exact-main pre-push gate, certify arbitrary applications, or turn earlier fail",
       "links": [
         {
           "label": "Paired measurements",
@@ -33764,5 +33764,5 @@
       ]
     }
   ],
-  "source_sha256": "650811d23e81df81d77e06c2273d9cab4a2d16617d6235c9526e75079da3c932"
+  "source_sha256": "59e209573b7dad0f67430d1ee92ce89d3542a1469eeaccab1786374cd7fd24a7"
 }
