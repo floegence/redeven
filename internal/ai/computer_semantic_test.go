@@ -33,6 +33,24 @@ func TestComputerSemanticSnapshotPreservesTreeAndStates(t *testing.T) {
 	}
 }
 
+func TestComputerSemanticSnapshotPreservesApplicationCoverage(t *testing.T) {
+	tree := semanticTestTree()
+	tree["source"], tree["coverage"] = "macos_accessibility", "application_provided"
+	got, err := normalizeComputerObservation(tree)
+	if err != nil || got["source"] != tree["source"] || got["coverage"] != tree["coverage"] {
+		t.Fatalf("coverage lost: %#v %v", got, err)
+	}
+	var output computerObservationOutput
+	compact := output.render(got, "all", false).(map[string]any)
+	if compact["coverage"] != tree["coverage"] {
+		t.Fatal("compact output lost coverage")
+	}
+	tree["coverage"] = "complete_screen"
+	if _, err := normalizeComputerObservation(tree); err == nil {
+		t.Fatal("invented coverage accepted")
+	}
+}
+
 func TestComputerSemanticSnapshotRejectsInvalidProtocolAndGraph(t *testing.T) {
 	for _, mutate := range []func(map[string]any){
 		func(tree map[string]any) { delete(tree, "semantic_schema_version") },

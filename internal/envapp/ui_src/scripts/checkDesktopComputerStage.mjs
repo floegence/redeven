@@ -16,7 +16,7 @@ import { qualifyComputerStop } from './computerLifecycleQualification.mjs';
 import { qualifyComputerRecovery } from './computerRecoveryQualification.mjs';
 import { webtopRuntimeQualification } from './webtopRuntimeQualification.mjs';
 import { forwardQualificationResponse } from '../../../../scripts/qualification_response_stream.mjs';
-import { createComputerTask, configureComputerTask, openComputerStage } from './computerTaskQualification.mjs';
+import { createComputerTask, configureComputerTask, openComputerStage, collectComputerActivities } from './computerTaskQualification.mjs';
 import { fileAnimationFacts, assertFileAnimationEvidence, providerStreamCompleted } from './computerFileAcceptance.mjs';
 
 // This qualification drives the built Desktop welcome surface. It deliberately
@@ -35,9 +35,9 @@ const source = process.env.REDEVEN_COMPUTER_CONFIG_ROOT;
 assert(source, 'REDEVEN_COMPUTER_CONFIG_ROOT must contain the authorized local DeepSeek configuration');
 const config = JSON.parse(await readFile(path.join(source, 'config.json'), 'utf8'));
 const secrets = JSON.parse(await readFile(path.join(source, 'secrets.json'), 'utf8'));
-const model = process.env.REDEVEN_COMPUTER_USE_MODEL ?? 'deepseek-v4-flash';
-assert.equal(model, 'deepseek-v4-flash', 'acceptance must use the configured Flash model');
-const { provider, apiKey } = findDeepSeekProvider(config, secrets, { model, requireCurrent: true });
+const model = process.env.REDEVEN_COMPUTER_USE_MODEL ?? 'deepseek-flash';
+assert.equal(model, 'deepseek-flash', 'acceptance must use the configured Flash model');
+const { provider, apiKey } = findDeepSeekProvider(config, secrets, { model, requireConfigured: true });
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
 const catalog = JSON.parse(await readFile(path.join(root, 'internal/config/model_catalog.generated.json'), 'utf8'));
 const modelCapability = catalog.providers.deepseek.find(entry => entry.model_name === model);
@@ -283,16 +283,6 @@ async function waitForProgress(predicate, label, timeout = 180_000, requireActiv
   }
   throw new Error(`${label} timed out`);
 }
-function collectComputerActivities(detail) {
-  const activities = [];
-  const collect = (value) => {
-    if (!value || typeof value !== 'object') return;
-    if (value.presentation && /^(computer|browser)\./u.test(value.tool_name ?? '')) activities.push({ tool: value.tool_name, toolID: value.tool_id, targetRefs: value.presentation.target_refs });
-    for (const child of Object.values(value)) if (typeof child === 'object') collect(child);
-  };
-  collect(detail);
-  return activities;
-}
 function verifyDecodedTargetFrames(liveEvidence, target, turns) {
   for (const [index, turn] of turns.entries()) {
     const live = decodedLiveFramesForTarget({ ...liveEvidence, frames: liveEvidence.frames.filter(frame => frame.at >= turn.startedAt && frame.at <= turn.finishedAt) }, target);
@@ -467,7 +457,7 @@ try {
     await configureComputerTask({ page, request, threadID, targetID: nativeTargetID, app: 'dev.floegence.redeven.computer-fixture', foreground: true });
     const nativeTurns = [];
     for (const [index, prompt] of [
-      'In the macOS Flower Native Fixture application, click Complete native step exactly twice and confirm that Clicks is 2. Let me watch the application as you work. Use only computer tools on the selected native application.',
+      'In the macOS Flower Native Fixture application, click Complete native step exactly twice and confirm that Clicks is 2. Take a fresh screenshot after the clicks so I can review the saved image after you finish. Let me watch the application as you work. Use only computer tools on the selected native application.',
       'Continue in the macOS Flower Native Fixture application. Double click the blue area. Enter Flower in the text field and press Enter. Click inside the Scroll area and scroll down. Wait for the app to settle, then take a fresh screenshot to verify all four indicators are complete. Use only computer tools on the native desktop.',
       'In the same macOS Flower Native Fixture application, click Complete native step exactly two more times. Take a fresh screenshot after each click and confirm Clicks is 4, with the other indicators still complete. Use only computer tools on the native desktop.',
     ].entries()) {
@@ -477,7 +467,7 @@ try {
       await composer.fill(prompt); await composer.press('Enter');
       await page.locator('[data-flower-primary-action="stop"], .flower-composer-stop-inline').first().waitFor({ state: 'visible' });
       console.log(`Native application turn ${index + 1} submitted through Flower Composer.`);
-      await openComputerStage(page);
+      await openComputerStage(page, { live: true });
       await waitForProgress(async () => {
         const state = JSON.parse(await readFile(resultFile, 'utf8'));
         return state.clicks === expectedClicks && (index === 0 || state.complete && state.scrollOffset > 0 && state.wheelEvents > 0);
@@ -502,6 +492,10 @@ try {
       await page.screenshot({ path: screenshot });
       nativeTurns.push({ startedAt, finishedAt: Date.now(), frame, state, screenshot });
       console.log(JSON.stringify({ nativeTurn: index + 1, frame, state }));
+      // End the saved-image review explicitly before watching the next run.
+      // A historical window is not evidence of a current live subscription.
+      await page.locator('.flower-computer-stage [data-floe-floating-window-control=close]').click();
+      await page.locator('.flower-computer-stage').waitFor({ state: 'detached' });
     }
     nativeEvidence = { targetID: nativeTargetID, turns: nativeTurns };
     nativeProcess.kill('SIGTERM');

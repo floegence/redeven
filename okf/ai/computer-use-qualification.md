@@ -33,7 +33,7 @@ Foreground macOS and credentialed model qualification remain explicit runs; the 
 ## Real DeepSeek reliability acceptance
 `TestComputerReliabilityDeepSeek` is an explicit paid lane through the production Service, Floret, configured DeepSeek provider and catalog-installed Chromium. It resolves the local `deepseek-flash` model (catalog display: DeepSeek V4.1 Flash (1017)) and rejects substitution. Required environment: `REDEVEN_COMPUTER_RELIABILITY_E2E=1`, absolute `REDEVEN_COMPUTER_CONFIG_ROOT`, `REDEVEN_COMPUTER_EVIDENCE_DIR` and `REDEVEN_BROWSER_TEST_INSTALLATION`. Run `go test ./internal/ai -run '^TestComputerReliabilityDeepSeek$' -count=1 -v -timeout=22m` with `GOWORK=off`.
 
-Set REDEVEN_COMPUTER_ACCEPTANCE_REPETITIONS=1..5 (default 1); use -parallel 3 for independent isolated cases. Nineteen scenarios include key validation before focus, paginated reads, frame-bound image input, default delay, current title, stale frame rejection, invalid guest options, scroll return facts, conditional waits, natural input/read tasks, strict timeout termination, below-fold semantic input, exact asynchronous content waits, canonical navigation landmarks and failure namespace reset. Reset diagnostics and completed waits are checked against canonical tool results.
+Set REDEVEN_COMPUTER_ACCEPTANCE_REPETITIONS=1..5 (default 1); use -parallel 3 for independent isolated cases. Twenty-two scenarios include bounded text, limit repair, budget/prefix retention, key validation before focus, paginated reads, frame-bound image input, default delay, current title, stale frame rejection, invalid guest options, scroll return facts, conditional waits, natural input/read tasks, strict timeout termination, below-fold semantic input, exact asynchronous content waits, canonical navigation landmarks and failure namespace reset. Reset diagnostics and completed waits are checked against canonical tool results.
 
 Natural tasks use the production default tool surface. Only the legacy default-wait
 case explicitly retains its primitive. Read canonical tool results through
@@ -60,6 +60,13 @@ after integration changes.
 Scenarios also verify a 2,800+ node page and complete table totals, task-tab isolation and account restrictions, current-download identity/content despite an older same-named file, and one counted save followed by a diagnostic failure with no replay. Reports retain provider wire IDs, tool error counts, canonical histories, final answers and fixture outcomes. Configuration hashes must stay unchanged. This scope does not certify production accounts, native desktop UI or a universal model success rate.
 
 ## Existing product fixtures
+
+The built Desktop computer lane selects configured exact deepseek-flash in its
+isolated provider copy without requiring or changing the current user model.
+Missing configured identity or an alternate wire override fails qualification.
+TestComputerNativeScriptQualification separately exercises QuickJS, Go and Swift
+scroll/screenshot against a disposable native fixture, checking counted effects
+and focus/pointer restoration. External desktop input invalidates that evidence.
 Desktop qualification observes the preload workspace stream; Linux Webtop uses CDP's passive HTTP workspace stream copy. A missing native or browser live-frame match fails that scope.
 
 The report names the native macOS, connected Chrome and other scopes it does not qualify.

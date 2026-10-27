@@ -11,14 +11,14 @@ export function validateBrowserAction(args, privateInput = false) {
     scroll: ['selector', 'x', 'y', 'delta_x', 'delta_y'],
     drag: ['from_x', 'from_y', 'to_x', 'to_y', 'duration_ms'],
     wait: ['selector', 'state', 'equals', 'timeout_ms'], query: ['selector', 'limit', 'cursor'], table: ['selector', 'limit', 'cursor'],
-    attribute: ['selector', 'attribute'], read: ['selector'],
+    attribute: ['selector', 'attribute'], read: ['selector'], text: ['selector'],
   };
   const allowed = fields[args.action];
   if (!allowed) throw argumentFailure('action', 'supported_action');
   const image = ['coordinate_space', 'frame', 'document_id'];
   if (Object.keys(args).some(key => !['action', 'target', 'description', ...allowed, ...image].includes(key))) throw argumentFailure('arguments', 'documented_fields');
   if (image.some(key => args[key] !== undefined) && (!['pointer_click', 'double_click', 'scroll', 'drag'].includes(args.action) || args.selector || args.coordinate_space !== 'image_pixels' || typeof args.frame !== 'string' || typeof args.document_id !== 'string')) throw argumentFailure('coordinate_space', 'image_pixels_with_frame');
-  if (['click', 'fill', 'read', 'query', 'table', 'attribute', 'wait'].includes(args.action) && !args.selector) throw argumentFailure('selector', 'documented_selector');
+  if (['click', 'fill', 'read', 'query', 'table', 'attribute', 'text', 'wait'].includes(args.action) && !args.selector) throw argumentFailure('selector', 'documented_selector');
   if (args.selector !== undefined) {
     const s = args.selector;
     if (!s || Array.isArray(s) || typeof s !== 'object' || Object.keys(s).some(key => !['ref', 'role', 'roles', 'name', 'exact', 'root_ref'].includes(key)) ||
@@ -59,7 +59,7 @@ export function validateBrowserAction(args, privateInput = false) {
     case 'attribute':
       if (!['href','title','aria-label','aria-checked','aria-selected','aria-expanded','aria-rowcount','aria-colcount'].includes(args.attribute)) throw argumentFailure('attribute','readable_attribute');
       break;
-    case 'click': case 'read': break;
+    case 'click': case 'read': case 'text': break;
     default: throw argumentFailure('action', 'supported_action');
   }
   return {};

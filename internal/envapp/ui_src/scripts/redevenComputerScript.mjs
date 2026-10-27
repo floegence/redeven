@@ -16,8 +16,9 @@ export async function createComputerScript({ browser = true } = {}) {
     vm.setProp(vm.global, name, handle);
     handle.dispose();
   };
-  install('__invalidArgument', () => {
-    if (active) { active.sealed = true; active.diagnostic = 'SCRIPT_ARGUMENT_ERROR'; }
+  install('__budget', () => vm.newString(JSON.stringify({remaining_ms:Math.max(0, active.deadline-Date.now()),remaining_operations:Math.max(0,50-active.count)})));
+  install('__invalidArgument', (method, field, expected) => {
+    if (active) { active.sealed = true; active.diagnostic = 'SCRIPT_ARGUMENT_ERROR'; active.argumentDiagnostic={method:vm.getString(method),field:vm.getString(field),expected:vm.getString(expected),recovery:'correct_arguments'}; }
     return { error: vm.newError('SCRIPT_ARGUMENT_ERROR') };
   });
   install('__conditionTimeout', () => {
@@ -61,46 +62,51 @@ export async function createComputerScript({ browser = true } = {}) {
   install('__log', (encoded) => {
     if (!active || active.sealed) return vm.undefined;
     const text = vm.getString(encoded);
-    if (active.outputBytes + text.length > 65536) {
+    if (active.outputBytes + Buffer.byteLength(text) > 65536) {
       active.sealed = true;
       active.outputTruncated = true;
       active.diagnostic = 'SCRIPT_OUTPUT_LIMIT';
       return { error: vm.newError('SCRIPT_OUTPUT_LIMIT') };
     }
-    active.outputBytes += text.length;
-    active.logs.push(JSON.parse(text));
+    active.outputBytes += Buffer.byteLength(text);
+    const values = JSON.parse(text);
+    active.logs.push(values);
+    active.onLog?.(values);
     return vm.undefined;
   });
   active = { deadline: Date.now() + 5000 };
   const bootstrap = vm.evalCode(`
     (() => {
-      const invoke = __operation, emit = __log, invalid = __invalidArgument, timedOut = __conditionTimeout;
-      delete globalThis.__operation; delete globalThis.__log; delete globalThis.__invalidArgument; delete globalThis.__conditionTimeout;
+      const invoke = __operation, emit = __log, reject = __invalidArgument, timedOut = __conditionTimeout, budget = __budget;
+      let currentMethod = 'ui';
+      const invalid = (field='arguments',expected='documented_fields') => reject(currentMethod,field,expected);
+      const expose = (prefix, methods) => Object.freeze(Object.fromEntries(Object.entries(methods).map(([name,method])=>[name,(...args)=>{currentMethod=prefix+'.'+name;return method(...args);}])));
+      delete globalThis.__operation; delete globalThis.__log; delete globalThis.__invalidArgument; delete globalThis.__conditionTimeout; delete globalThis.__budget;
       const options = (value, keys) => {
         if (!value || Object.getPrototypeOf(value) !== Object.prototype || Object.keys(value).some(key => !keys.includes(key))) invalid();
         return value;
       };
-      const string = (value) => { if (typeof value !== 'string') invalid(); return value; };
-      const number = (value) => { if (!Number.isFinite(value)) invalid(); return value; };
+      const string = (value,field='text') => { if (typeof value !== 'string') invalid(field,'string'); return value; };
+      const number = (value) => { if (!Number.isFinite(value)) invalid('coordinates','finite_number'); return value; };
       const waitOptions = (value) => {
         options(value, ['state', 'equals', 'timeout_ms']);
-        if (value.state !== undefined && !['visible', 'hidden', 'enabled', ...(${browser ? 'true' : 'false'} ? ['text','value']:[])].includes(value.state)) invalid();
-        if (['text','value'].includes(value.state) ? typeof value.equals!=='string'||value.equals.length>2000 : value.equals!==undefined) invalid();
-        if (value.timeout_ms !== undefined && (!Number.isInteger(value.timeout_ms) || value.timeout_ms < 0 || value.timeout_ms > 30000)) invalid();
+        if (value.state !== undefined && !['visible', 'hidden', 'enabled', ...(${browser ? 'true' : 'false'} ? ['text','value']:[])].includes(value.state)) invalid('state','documented_condition');
+        if (['text','value'].includes(value.state) ? typeof value.equals!=='string'||value.equals.length>2000 : value.equals!==undefined) invalid('equals','condition_text_max_2000');
+        if (value.timeout_ms !== undefined && (!Number.isInteger(value.timeout_ms) || value.timeout_ms < 0 || value.timeout_ms > 30000)) invalid('timeout_ms','integer_0_30000');
         return value;
       };
       const selector = (role, value) => {
-        string(role); options(value, ['name', 'exact', 'root_ref']);
-        if (value.name !== undefined) string(value.name);
-        if (value.root_ref !== undefined) string(value.root_ref);
+        string(role,'selector'); options(value, ['name', 'exact', 'root_ref']);
+        if (value.name !== undefined) string(value.name,'selector');
+        if (value.root_ref !== undefined) string(value.root_ref,'root_ref');
         if (value.exact !== undefined && typeof value.exact !== 'boolean') invalid();
         return {canonical_role: role, ...value};
       };
       const observeOptions = (value) => {
         options(value, ['root_ref', 'limit', 'emit', 'full', 'screenshot']);
-        if (value.root_ref !== undefined) string(value.root_ref);
-        if (value.limit !== undefined && (!Number.isInteger(value.limit) || value.limit < 1 || value.limit > 1000)) invalid();
-        for (const key of ['emit', 'full', 'screenshot']) if (value[key] !== undefined && typeof value[key] !== 'boolean') invalid();
+        if (value.root_ref !== undefined) string(value.root_ref,'root_ref');
+        if (value.limit !== undefined && (!Number.isInteger(value.limit) || value.limit < 1 || value.limit > 1000)) invalid('limit','integer_1_1000');
+        for (const key of ['emit', 'full', 'screenshot']) if (value[key] !== undefined && typeof value[key] !== 'boolean') invalid(key,'boolean');
         return value;
       };
       const call = async (operation) => JSON.parse(await invoke(JSON.stringify(operation)));
@@ -116,12 +122,12 @@ export async function createComputerScript({ browser = true } = {}) {
       };
       const pageOptions = (value) => {
         options(value,['limit','cursor']);
-        if(value.limit!==undefined&&(!Number.isInteger(value.limit)||value.limit<1||value.limit>200)) invalid();
-        if(value.cursor!==undefined) string(value.cursor);
+        if(value.limit!==undefined&&(!Number.isInteger(value.limit)||value.limit<1||value.limit>200)) invalid('limit','integer_1_200');
+        if(value.cursor!==undefined) string(value.cursor,'cursor');
         return value;
       };
       const attribute = async (selector, name, href = false) => {
-        string(name);
+        string(name,'attribute');
         if(!['title','aria-label','aria-checked','aria-selected','aria-expanded','aria-rowcount','aria-colcount',...(href?['href']:[])].includes(name)) invalid();
         return (await call({action:'attribute',selector,attribute:name})).value;
       };
@@ -137,7 +143,7 @@ export async function createComputerScript({ browser = true } = {}) {
           scroll:(x,y,delta_y,delta_x=0)=>call({action:'scroll',x:number(x),y:number(y),delta_y:number(delta_y),delta_x:number(delta_x),...imageOptions(identity)}),
         });
       };
-      const locator = (selector) => Object.freeze({
+      const locator = (selector) => expose('locator',{
         node: async () => canonicalNode((await call({action:'read',selector})).node),
         snapshot: async (value={}) => {
           options(value,['limit','emit']); observeOptions(value);
@@ -146,52 +152,55 @@ export async function createComputerScript({ browser = true } = {}) {
         },
         read: () => call({action: 'read', selector}),
         ...(${browser ? 'true' : 'false'} ? {
+          text: () => call({action:'text',selector}),
           query: (value={}) => call({action:'query',selector,...pageOptions(value)}),
           count: async () => (await call({action:'query',selector,limit:1})).total,
           rows: (value={}) => call({action:'table',selector,...pageOptions(value)}),
           attribute: (name) => attribute(selector,name),
           linkSummary: async () => ({url:await attribute(selector,'href',true),redacted:true}),
-          getAttribute: (attribute) => { string(attribute); if(!['href','title','aria-label','aria-checked','aria-selected','aria-expanded','aria-rowcount','aria-colcount'].includes(attribute)) invalid(); return call({action:'attribute',selector,attribute}); },
+          getAttribute: (attribute) => { string(attribute,'attribute'); if(!['href','title','aria-label','aria-checked','aria-selected','aria-expanded','aria-rowcount','aria-colcount'].includes(attribute)) invalid(); return call({action:'attribute',selector,attribute}); },
         } : {}),
         click: () => call({action: 'click', selector}),
         fill: (text) => call({action: 'fill', selector, text: string(text)}),
-        press: (key) => call({action: 'key', selector, key: string(key)}),
+        press: (key) => call({action: 'key', selector, key: string(key,'key')}),
         scroll: (delta_y, delta_x = 0) => call({action: 'scroll', selector, delta_y: number(delta_y), delta_x: number(delta_x)}),
         waitFor: (value = {}) => call({action: 'wait', selector, ...waitOptions(value)}),
         requireState: async (value={}) => { const result=await call({action:'wait',selector,...waitOptions(value)}); if(result.state==='timeout') timedOut(); },
       });
       Object.defineProperties(globalThis, {
-        ui: {value: Object.freeze({
+        ui: {value: expose('ui',{
+          budget: () => JSON.parse(budget()),
           observe: (value = {}) => call({action: 'observe', ...observeOptions(value)}),
           snapshot,
           screenshot,
-          help: async (topic='core') => { string(topic); const {documentation}=await call({action:'help',topic}); emit(JSON.stringify([documentation])); return documentation; },
+          help: async (topic='core') => { string(topic,'topic'); const {documentation}=await call({action:'help',topic}); emit(JSON.stringify([documentation])); return documentation; },
           type: (text) => call({action:'type',text:string(text)}),
           doubleClick: (x,y) => call({action:'double_click',x:number(x),y:number(y)}),
           scroll: (delta_y,delta_x=0) => call({action:'scroll',delta_y:number(delta_y),delta_x:number(delta_x)}),
+          scrollAt: (x,y,delta_y,delta_x=0) => call({action:'scroll',x:number(x),y:number(y),delta_y:number(delta_y),delta_x:number(delta_x)}),
           getByRole: (role, value = {}) => locator(selector(role, value)),
-          ref: (ref) => locator({ref: string(ref)}),
+          ref: (ref) => locator({ref: string(ref,'selector')}),
           click: (x, y, image) => call({action: 'pointer_click', x: number(x), y: number(y), ...(image === undefined ? {} : imageOptions(image))}),
           drag: (from_x, from_y, to_x, to_y, duration_ms = 0, image) => call({action: 'drag', from_x: number(from_x), from_y: number(from_y), to_x: number(to_x), to_y: number(to_y), duration_ms: number(duration_ms), ...(image === undefined ? {} : imageOptions(image))}),
-          key: (key) => call({action: 'key', key: string(key)}),
+          key: (key) => call({action: 'key', key: string(key,'key')}),
           assert: (condition, message = 'Result check failed') => { if (!condition) throw new Error(message); },
         })},
-        ...(${browser ? 'true' : 'false'} ? {browser: {value: Object.freeze({
-          navigate: (url) => call({action: 'navigate', url: string(url)}),
+        ...(${browser ? 'true' : 'false'} ? {browser: {value: expose('browser',{
+          navigate: (url) => call({action: 'navigate', url: string(url,'url')}),
           back: () => call({action: 'back'}),
           reload: () => call({action: 'reload'}),
           downloadCursor: async () => {
             const result=await call({action:'download_cursor'}), cursor=result.cursor;
             return Object.freeze({...result, wait:(value={})=>{
               options(value,['timeout_ms']); waitOptions(value);
-              return call({action:'wait_for_download',after:string(cursor),...value});
+              return call({action:'wait_for_download',after:string(cursor,'cursor'),...value});
             }});
           },
           waitForDownload: (value = {}) => {
             options(value, ['id', 'after', 'timeout_ms']);
             if ((value.id === undefined) === (value.after === undefined)) invalid();
-            if (value.id !== undefined) string(value.id);
-            if (value.after !== undefined) string(value.after);
+            if (value.id !== undefined) string(value.id,'id');
+            if (value.after !== undefined) string(value.after,'after');
             waitOptions(value.timeout_ms === undefined ? {} : {timeout_ms: value.timeout_ms});
             return call({action: 'wait_for_download', ...value});
           },
@@ -203,9 +212,9 @@ export async function createComputerScript({ browser = true } = {}) {
   vm.unwrapResult(bootstrap).dispose();
   active = undefined;
   return {
-    async execute(code, dispatch, timeout = 30000) {
+    async execute(code, dispatch, timeout = 30000, onLog) {
       if (active || typeof code !== 'string' || !code.trim() || code.length > 65536) throw new Error('INVALID_REQUEST');
-      active = { dispatch, deadline: Date.now() + Math.min(timeout, 30000), pending: new Set(), deferred: [], count: 0, logs: [], outputBytes: 0, sealed: false };
+      active = { dispatch, onLog, deadline: Date.now() + Math.min(timeout, 30000), pending: new Set(), deferred: [], count: 0, logs: [], outputBytes: 0, sealed: false };
       const execution = active;
       const diagnose = error => {
         execution.sealed = true;
@@ -251,7 +260,7 @@ export async function createComputerScript({ browser = true } = {}) {
         // Preserve bounded output without exposing guest exception text, which
         // can include values from the page or sensitive input.
         const failure = new Error('SCRIPT_FAILED');
-        failure.result = { logs: execution.logs, operations: execution.count, truncated: execution.outputTruncated === true, diagnostic: { ...diagnostic, code: execution.diagnostic || 'SCRIPT_RUNTIME_ERROR' } };
+        failure.result = { logs: execution.logs, operations: execution.count, truncated: execution.outputTruncated === true, diagnostic: { ...diagnostic, ...execution.argumentDiagnostic, code: execution.diagnostic || 'SCRIPT_RUNTIME_ERROR' } };
         throw failure;
       } finally {
         execution.sealed = true;
@@ -272,7 +281,7 @@ async function main() {
   let running = false;
   let call = 0;
   const send = (value) => process.stdout.write(JSON.stringify(value) + '\n');
-  send({ type: 'ready', protocol_version: 2 });
+  send({ type: 'ready', protocol_version: 3 });
   lines.on('line', (line) => {
     if (line.length > 1048576) process.exit(1);
     let message;
@@ -290,7 +299,7 @@ async function main() {
       const id = String(++call);
       pending = { id, resolve, reject };
       send({ type: 'operation', id, operation });
-    })).then(
+    }), message.timeout_ms, values => send({ type: 'log', id: message.id, values })).then(
       (result) => { running = false; send({ type: 'result', id: message.id, result }); },
       (failure) => {
         running = false;

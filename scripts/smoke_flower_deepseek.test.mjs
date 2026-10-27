@@ -21,6 +21,7 @@ import {
   orderedToolCommand,
   orderedPendingApprovalForTool,
   orderedToolPayload,
+  prepareIsolatedProviderState,
   scanSecretLeaks,
   validateOrderedPresentationCheckpoints,
   withSensitiveState,
@@ -59,6 +60,19 @@ test('Desktop launch and cleanup record the actual allocated ports', async () =>
   assert.doesNotMatch(runner, /4392[456]/u);
   assert.match(runner, /owned_pids=\$\(node .* owned-pids/u);
   assert.doesNotMatch(runner, /\$\{owned\[@\]\}/u);
+});
+
+test('computer launcher preserves explicit native qualification scope', async () => {
+  const runner = await readFile(new URL('./check_computer_use_deepseek.sh', import.meta.url), 'utf8');
+  const start = runner.indexOf('  export REDEVEN_FLOWER_SMOKE_SUITE=computer');
+  const end = runner.indexOf('  export REDEVEN_FLOWER_SMOKE_MODEL', start);
+  assert(start >= 0 && end > start);
+  const block = runner.slice(start, end);
+  for (const [flag, expected] of [['0', 'computer'], ['1', 'computer-native']]) {
+    const command = block + String.fromCharCode(10) + 'node -p process.env.REDEVEN_FLOWER_SMOKE_SUITE';
+    const result = execFileSync('bash', ['-eu', '-c', command], {env: {...process.env, REDEVEN_COMPUTER_NATIVE_E2E:flag}, encoding:'utf8'}).trim();
+    assert.equal(result, expected);
+  }
 });
 
 test('shell launch metadata preserves bundle, paths, ports, and model without argument drift', async () => {
@@ -453,13 +467,52 @@ test('secret leak scan reports only paths and never secret content', async () =>
 });
 
 
-test('Computer acceptance requires current Flash and preserves the source configuration', () => {
-  const config = { ai: { current_model_id: 'ds/deepseek-v4-flash', providers: [{ id: 'ds', type: 'deepseek', base_url: 'https://api.deepseek.com' }] } };
+test('Computer acceptance selects configured Flash without changing the current user model', () => {
+  const config = { ai: { current_model_id: 'ds/deepseek-v4-flash-vision-exp', providers: [{ id: 'ds', type: 'deepseek', base_url: 'https://api.deepseek.com', model_selection: {selected_models: ['deepseek-flash']} }] } };
   const original = structuredClone(config);
   const secrets = { ai: { provider_api_keys: { ds: 'test-only-secret' } } };
-  const selected = findDeepSeekProvider(config, secrets, { model: 'deepseek-v4-flash', requireCurrent: true });
-  assert.deepEqual(selected.provider.model_selection.selected_models, ['deepseek-v4-flash']);
+  const options = {model: 'deepseek-flash', requireConfigured: true};
+  const selected = findDeepSeekProvider(config, secrets, options);
+  assert.deepEqual(selected.provider.model_selection.selected_models, ['deepseek-flash']);
   assert.deepEqual(config, original);
-  config.ai.current_model_id = 'ds/deepseek-v4-flash-vision-exp';
-  assert.throws(() => findDeepSeekProvider(config, secrets, { model: 'deepseek-v4-flash', requireCurrent: true }), /configured current/u);
+  config.ai.providers[0].model_selection.model_overrides = [{model_name:'deepseek-flash',wire_model_name:'other'}];
+  assert.throws(() => findDeepSeekProvider(config, secrets, options), /exact Flash/u);
+  config.ai.providers[0].model_selection = {selected_models:[]};
+  assert.throws(() => findDeepSeekProvider(config, secrets, options), /exact Flash/u);
+});
+
+test('isolated computer suites select exact Flash before Desktop startup', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'flower-computer-provider-'));
+  const source = path.join(root, 'source');
+  const originalSuite = process.env.REDEVEN_FLOWER_SMOKE_SUITE;
+  const originalScenario = process.env.REDEVEN_COMPUTER_UI_SCENARIO;
+  try {
+    await mkdir(source);
+    const config = JSON.stringify({ai:{current_model_id:'ds/deepseek-v4-flash-vision-exp',providers:[{id:'ds',type:'deepseek',model_selection:{selected_models:['deepseek-flash']}}]}});
+    const secrets = JSON.stringify({ai:{provider_api_keys:{ds:'test-only-secret'}}});
+    await writeFile(path.join(source, 'config.json'), config);
+    await writeFile(path.join(source, 'secrets.json'), secrets);
+    for (const [suite, scenario, model] of [
+      ['computer', '', 'deepseek-flash'],
+      ['computer-native', 'native', 'deepseek-flash'],
+      ['flower', '', 'deepseek-v4-flash-vision-exp'],
+    ]) {
+      process.env.REDEVEN_FLOWER_SMOKE_SUITE = suite;
+      process.env.REDEVEN_COMPUTER_UI_SCENARIO = scenario;
+      const target = path.join(root, suite);
+      const metadata = path.join(root, suite + '.json');
+      const selected = await prepareIsolatedProviderState(source, target, metadata);
+      assert.equal(selected.currentModelID, 'ds/' + model);
+      assert.equal(JSON.parse(await readFile(metadata, 'utf8')).model, model);
+      assert.equal(JSON.parse(await readFile(path.join(target, 'config.json'), 'utf8')).ai.current_model_id, 'ds/' + model);
+    }
+    assert.equal(await readFile(path.join(source, 'config.json'), 'utf8'), config);
+    assert.equal(await readFile(path.join(source, 'secrets.json'), 'utf8'), secrets);
+  } finally {
+    if (originalSuite === undefined) delete process.env.REDEVEN_FLOWER_SMOKE_SUITE;
+    else process.env.REDEVEN_FLOWER_SMOKE_SUITE = originalSuite;
+    if (originalScenario === undefined) delete process.env.REDEVEN_COMPUTER_UI_SCENARIO;
+    else process.env.REDEVEN_COMPUTER_UI_SCENARIO = originalScenario;
+    await rm(root, {recursive:true, force:true});
+  }
 });

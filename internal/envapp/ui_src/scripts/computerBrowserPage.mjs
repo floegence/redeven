@@ -103,6 +103,7 @@ export class BrowserComputerPage {
     this.userBrowsing = false;
     this.observedFrames = new Set();
     this.stopped = false;
+    this.operationCancelled = false;
     this.invalid = false;
     this.heldInput = new Map();
     this.effectCount = 0;
@@ -126,7 +127,12 @@ export class BrowserComputerPage {
   invalidate() { this.revision++; this.references.clear(); this.observedFrames.clear(); this.changed(); }
   changed() { for (const listener of this.listeners) listener(); }
   close() { this.invalid = true; this.invalidate(); }
-  cancel() { this.stopped = true; this.invalidate(); }
+  cancel(internal = false) {
+    if (internal) this.operationCancelled = true;
+    else this.stopped = true;
+    this.invalidate();
+  }
+  finishCancellation() { this.operationCancelled = false; }
   handback() { this.openedPages = []; this.stopped = false; this.requiredOrigin = undefined; this.invalidate(); }
 
   async initialize() { await this.initializeSession(this.transport); }
@@ -250,6 +256,7 @@ export class BrowserComputerPage {
   }
 
   async safety({ authorizedNavigation = false } = {}) {
+    if (this.operationCancelled) throw new Error('BROWSER_TOOL_CANCELLED');
     const revision = this.revision;
     const reasons = new Set();
     const checkedSessions = new Set();
@@ -564,6 +571,18 @@ export class BrowserComputerPage {
     return {attribute:name,value:value===null?null:Array.from(value).slice(0,2000).join('')};
   }
 
+  async text(element) {
+    const session = element.frame.session;
+    const {executionContextId} = await session.send('Page.createIsolatedWorld', {frameId:element.frame.frame.id, worldName:'flower-observation'});
+    const {object} = await session.send('DOM.resolveNode', {backendNodeId:element.backendNodeId, executionContextId});
+    try {
+      const result = await session.send('Runtime.callFunctionOn', {objectId:object.objectId, returnByValue:true,
+        functionDeclaration:'function(){const source=this.getClientRects().length&&getComputedStyle(this).visibility!=="hidden"?this.innerText||"":"";let text="",count=0;for(const character of source){if(count++===12000)return {text,truncated:true,scope:"rendered_element"};text+=character;}return {text,truncated:false,scope:"rendered_element"};}'});
+      if (result.exceptionDetails || !result.result?.value) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
+      return result.result.value;
+    } finally { if (object.objectId) await session.send('Runtime.releaseObject', {objectId:object.objectId}); }
+  }
+
   async wait(selector, { state = 'visible', equals, timeout_ms = 10000 } = {}) {
     validateBrowserAction({action:'wait',selector,state,...(equals===undefined?{}:{equals}),timeout_ms});
     const deadline = Date.now() + timeout_ms;
@@ -593,7 +612,7 @@ export class BrowserComputerPage {
           if (error.message !== 'ELEMENT_NOT_FOUND') throw error;
         }
         if (matches || (state === 'hidden' && !found) || (state === 'visible' && found) || (state === 'enabled' && enabled)) return { state };
-        if (this.stopped || this.invalid) throw new Error('TAKEOVER_REQUIRED');
+        if (this.stopped || this.operationCancelled || this.invalid) throw new Error('TAKEOVER_REQUIRED');
         if (Date.now() >= deadline) return { state: 'timeout', requested_state: state, last_known: { found, enabled } };
         // CSS transitions do not necessarily emit accessibility events.
         await Promise.race([notification, new Promise(resolve => { timer = setTimeout(resolve, Math.min(100, deadline - Date.now())); })]);
@@ -691,7 +710,7 @@ export class BrowserComputerPage {
   }
 
   async effect(operation, stage = 'action') {
-    if ((this.stopped && !this.privateInput) || this.invalid) throw new Error('TAKEOVER_REQUIRED');
+    if (((this.stopped || this.operationCancelled) && !this.privateInput) || this.invalid) throw new Error('TAKEOVER_REQUIRED');
     this.uncertainEffect = true;
     this.effectStage = stage;
     let result;
@@ -726,7 +745,7 @@ export class BrowserComputerPage {
   }
 
   async input(session, method, parameters, releasing = false) {
-    if (!releasing && this.stopped && !this.privateInput) throw new Error('TAKEOVER_REQUIRED');
+    if (!releasing && (this.stopped || this.operationCancelled) && !this.privateInput) throw new Error('TAKEOVER_REQUIRED');
     const heldKey = method === 'Input.dispatchKeyEvent' ? `key:${parameters.key}` : `mouse:${parameters.button}`;
     const down = ['keyDown', 'mousePressed'].includes(parameters.type);
     const up = ['keyUp', 'mouseReleased'].includes(parameters.type);
@@ -749,7 +768,7 @@ export class BrowserComputerPage {
   }
 
   async editText(element, text, replace) {
-    if (this.stopped && !this.privateInput) throw new Error('TAKEOVER_REQUIRED');
+    if ((this.stopped || this.operationCancelled) && !this.privateInput) throw new Error('TAKEOVER_REQUIRED');
     let frame = element?.frame;
     if (!frame) {
       const frames = await this.frames();
@@ -763,7 +782,7 @@ export class BrowserComputerPage {
     const { executionContextId } = await frame.session.send('Page.createIsolatedWorld', { frameId: frame.frame.id, worldName: 'flower-observation' });
     const node = element ? (await frame.session.send('DOM.resolveNode', { backendNodeId: element.backendNodeId, executionContextId })).object : undefined;
     try {
-      if (this.stopped && !this.privateInput) throw new Error('TAKEOVER_REQUIRED');
+      if ((this.stopped || this.operationCancelled) && !this.privateInput) throw new Error('TAKEOVER_REQUIRED');
       const result = await this.effect(() => frame.session.send('Runtime.callFunctionOn', { executionContextId: node ? undefined : executionContextId, ...(node ? { objectId: node.objectId } : {}),
         functionDeclaration: `function(text,replace){const element=replace?this:document.activeElement;if(!element)return false;element.focus();if(replace){if(typeof element.select==='function')element.select();else{const range=document.createRange();range.selectNodeContents(element);const selection=getSelection();selection.removeAllRanges();selection.addRange(range);}}return document.execCommand(text===''&&replace?'delete':'insertText',false,text);}`,
         arguments: [{ value: text }, { value: replace }], returnByValue: true }));
@@ -787,7 +806,7 @@ export class BrowserComputerPage {
     this.transport.on('Page.navigatedWithinDocument', listener);
     this.transport.on('Page.lifecycleEvent', lifecycle);
     let interrupted;
-    const cancelled = new Promise(resolve => { interrupted = () => { if (this.stopped || this.invalid) resolve(); }; this.listeners.add(interrupted); });
+    const cancelled = new Promise(resolve => { interrupted = () => { if (this.stopped || this.operationCancelled || this.invalid) resolve(); }; this.listeners.add(interrupted); });
     let timer;
     try {
       const result = await this.effect(() => this.transport.send(command, parameters));
@@ -811,7 +830,7 @@ export class BrowserComputerPage {
         throw new BrowserNavigationError('response', result.errorText);
       }
       await Promise.race([loaded, cancelled, new Promise((_, reject) => { timer = setTimeout(() => reject(new BrowserNavigationError('load')), 20000); })]);
-      if (this.stopped || this.invalid) throw new Error('TAKEOVER_REQUIRED');
+      if (this.stopped || this.operationCancelled || this.invalid) throw new Error('TAKEOVER_REQUIRED');
     } finally {
       clearTimeout(timer);
       this.transport.off('Page.loadEventFired', listener);
@@ -845,7 +864,7 @@ export class BrowserComputerPage {
       let changed, timer;
       const notification = new Promise(resolve => { changed = resolve; this.listeners.add(changed); });
       try {
-        if (this.stopped || this.invalid) throw new Error('TAKEOVER_REQUIRED');
+        if (this.stopped || this.operationCancelled || this.invalid) throw new Error('TAKEOVER_REQUIRED');
         const candidates = id ? [this.downloads.get(id)].filter(Boolean) : [...this.downloads.values()].filter(download => download.sequence > sequence);
         if (candidates.length > 1) throw new Error('AMBIGUOUS_DOWNLOAD');
         const download = candidates[0];
@@ -861,9 +880,9 @@ export class BrowserComputerPage {
     try {
       await Promise.race([
         new Promise(resolve => { timer = setTimeout(resolve, milliseconds); }),
-        new Promise(resolve => { changed = () => { if (this.stopped || this.invalid) resolve(); }; this.listeners.add(changed); changed(); }),
+        new Promise(resolve => { changed = () => { if (this.stopped || this.operationCancelled || this.invalid) resolve(); }; this.listeners.add(changed); changed(); }),
       ]);
-      if (this.stopped || this.invalid) throw new Error('TAKEOVER_REQUIRED');
+      if (this.stopped || this.operationCancelled || this.invalid) throw new Error('TAKEOVER_REQUIRED');
     } finally { clearTimeout(timer); this.listeners.delete(changed); }
   }
 
@@ -875,6 +894,7 @@ export class BrowserComputerPage {
     const element = args.selector ? await this.resolve(args.selector) : undefined;
     if (args.action === 'table') return this.table(element,args);
     if (args.action === 'attribute') return this.attribute(element,args.attribute);
+    if (args.action === 'text') return this.text(element);
     if (args.action === 'read') {
       const observed = await this.observe({ root_ref: element.ref, limit: 1 });
       return { semantic_schema_version: 2, node: observed.nodes[0] };

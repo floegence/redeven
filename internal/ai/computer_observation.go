@@ -99,7 +99,7 @@ func compactComputerObservation(current map[string]any) map[string]any {
 	original := toAnySlice(current["nodes"])
 	project := func(count int) map[string]any {
 		out := map[string]any{"detail": "compact", "scope": "loaded_accessibility_tree"}
-		for _, key := range []string{"document_id", "url", "title", "truncated", "total", "execution_mode"} {
+		for _, key := range []string{"document_id", "url", "title", "truncated", "total", "execution_mode", "source", "coverage"} {
 			if value, exists := current[key]; exists {
 				out[key] = value
 			}

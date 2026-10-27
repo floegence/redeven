@@ -7,6 +7,42 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createComputerScript } from './redevenComputerScript.mjs';
 
+test('budget and closed argument diagnostics describe repair', async () => {
+  const script = await createComputerScript();
+  try {
+    const r = await script.execute('log(ui.budget()); await ui.snapshot(); log(ui.budget());', async () => ({}));
+    assert.equal(r.logs[0][0].remaining_operations, 50);
+    assert.equal(r.logs[1][0].remaining_operations, 49);
+    assert.ok(r.logs[1][0].remaining_ms <= r.logs[0][0].remaining_ms);
+    await assert.rejects(script.execute('await ui.snapshot({limit:1200});', async () => assert.fail('invalid dispatch')), error => {
+      assert.equal(error.result.diagnostic.method, 'ui.snapshot');
+      assert.equal(error.result.diagnostic.field, 'limit');
+      assert.equal(error.result.diagnostic.expected, 'integer_1_1000');
+      assert.equal(JSON.stringify(error.result).includes('1200'), false);
+      return true;
+    });
+  } finally { script.dispose(); }
+});
+
+test('explicit output streams before failure and is bounded in UTF-8 bytes', async () => {
+  const script = await createComputerScript();
+  const events = [];
+  try {
+    await assert.rejects(script.execute("log('safe-prefix'); await ui.click(1,2);", async () => {events.push('input'); throw new Error('unknown');}, 30000, values => events.push(values)));
+    assert.deepEqual(events, [['safe-prefix'],'input']);
+    await assert.rejects(script.execute("log('中'.repeat(22000));", async () => assert.fail(), 30000, () => assert.fail('oversized log emitted')));
+  } finally { script.dispose(); }
+});
+
+test('coordinate scrolling and visible text use one operation each', async () => {
+  const script = await createComputerScript();
+  const operations = [];
+  try {
+    await script.execute("await ui.scrollAt(10,20,300); log(await ui.ref('known').text());", async op => {operations.push(op); return {text:'ready',truncated:false,scope:'rendered_element'};});
+    assert.deepEqual(operations, [{action:'scroll',x:10,y:20,delta_y:300,delta_x:0},{action:'text',selector:{ref:'known'}}]);
+  } finally {script.dispose();}
+});
+
 test('compact script supplies input and immutable image bindings', async () => {
   const script = await createComputerScript();
   const operations=[];
@@ -49,7 +85,7 @@ test('script JSONL entrypoint starts through a symlinked bundle path', { timeout
           const end = buffer.indexOf('\n');
           const message = JSON.parse(buffer.slice(0, end)); buffer = buffer.slice(end + 1);
           if (message.type === 'ready') child.stdin.write(JSON.stringify({ type: 'execute', id: 'entry', code: 'log(typeof browser, typeof ui);' }) + '\n');
-          else resolve(message);
+          else if (message.type !== 'log') resolve(message);
         }
       });
     });

@@ -62,7 +62,7 @@ function aiConfig(value) {
   return value?.ai && typeof value.ai === 'object' ? value.ai : value;
 }
 
-export function findDeepSeekProvider(config, secrets, { model = SMOKE_MODEL, requireCurrent = false } = {}) {
+export function findDeepSeekProvider(config, secrets, { model = SMOKE_MODEL, requireCurrent = false, requireConfigured = false } = {}) {
   const ai = aiConfig(config) ?? {};
   const secretAI = aiConfig(secrets) ?? {};
   const providers = Array.isArray(ai.providers) ? ai.providers : [];
@@ -74,6 +74,15 @@ export function findDeepSeekProvider(config, secrets, { model = SMOKE_MODEL, req
   const providerID = String(provider?.id ?? '').trim();
   if (!providerID) throw new Error('DeepSeek provider ID is missing');
   if (requireCurrent && ai.current_model_id !== `${providerID}/${model}`) throw new Error('Computer acceptance requires the configured current DeepSeek Flash model');
+  if (requireConfigured) {
+    const selection = provider.model_selection;
+    const configured = Array.isArray(selection?.selected_models) ? selection.selected_models.includes(model)
+      : selection ? !selection.disabled_models?.includes(model) : provider.models?.some(entry => entry.model_name === model);
+    const entries = [...(provider.models ?? []), ...(selection?.model_overrides ?? []), ...(selection?.custom_models ?? [])];
+    if (!configured || entries.some(entry => entry.model_name === model && entry.wire_model_name && entry.wire_model_name !== model)) {
+      throw new Error('Computer acceptance requires the configured exact Flash wire model');
+    }
+  }
   const apiKey = String(secretAI?.provider_api_keys?.[providerID] ?? '');
   if (!apiKey) throw new Error('DeepSeek provider API key is missing');
   const selectedProvider = structuredClone(provider);
@@ -255,8 +264,8 @@ export async function prepareIsolatedProviderState(sourceRoot, runtimeStateRoot,
   const sourceSecretsFile = path.join(sourceRoot, 'secrets.json');
   const sourceConfig = JSON.parse(await readFile(sourceConfigFile, 'utf8'));
   const sourceSecrets = JSON.parse(await readFile(sourceSecretsFile, 'utf8'));
-  const computerAcceptance = process.env.REDEVEN_COMPUTER_UI_SCENARIO === 'file-animation';
-  const selected = findDeepSeekProvider(sourceConfig, sourceSecrets, computerAcceptance ? { model: 'deepseek-v4-flash', requireCurrent: true } : {});
+  const computerAcceptance = ['computer', 'computer-native'].includes(process.env.REDEVEN_FLOWER_SMOKE_SUITE) || Boolean(process.env.REDEVEN_COMPUTER_UI_SCENARIO);
+  const selected = findDeepSeekProvider(sourceConfig, sourceSecrets, computerAcceptance ? { model: 'deepseek-flash', requireConfigured: true } : {});
   const targetConfig = structuredClone(sourceConfig);
   targetConfig.agent_home_dir = SMOKE_WORKSPACE;
   targetConfig.ai = {

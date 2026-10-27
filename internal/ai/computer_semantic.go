@@ -40,6 +40,8 @@ type computerSemanticBounds struct {
 	Height float64 `json:"height"`
 }
 type computerSemanticSnapshot struct {
+	Source        string                 `json:"source,omitempty"`
+	Coverage      string                 `json:"coverage,omitempty"`
 	Version       int                    `json:"semantic_schema_version"`
 	DocumentID    string                 `json:"document_id"`
 	Roots         []string               `json:"roots"`
@@ -220,6 +222,9 @@ func normalizeComputerObservation(value any) (map[string]any, error) {
 	var snapshot computerSemanticSnapshot
 	if json.Unmarshal(body, &snapshot) != nil || snapshot.Version != computerSemanticSchemaVersion || snapshot.DocumentID == "" || len(snapshot.DocumentID) > 1024 || snapshot.Nodes == nil || len(snapshot.Nodes) > 1000 {
 		return nil, errors.New("invalid semantic snapshot protocol")
+	}
+	if snapshot.Source != "" && snapshot.Source != "macos_accessibility" || snapshot.Coverage != "" && snapshot.Coverage != "application_provided" {
+		return nil, errors.New("invalid semantic coverage")
 	}
 	byRef := make(map[string]*computerSemanticNode, len(snapshot.Nodes))
 	for index := range snapshot.Nodes {

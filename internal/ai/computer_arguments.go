@@ -17,6 +17,15 @@ func computerScriptDiagnostic(value any, code string) map[string]any {
 		return nil
 	}
 	out := map[string]any{"phase": phase}
+	validation := cloneAnyMap(raw)
+	validation["phase"] = "validation"
+	if details := computerArgumentDiagnostic(validation); details != nil {
+		for key, value := range details {
+			if key != "phase" {
+				out[key] = value
+			}
+		}
+	}
 	if line, ok := raw["line"].(float64); ok && line >= 1 && line <= float64(strings.Count(code, "\n")+1) && line == float64(int(line)) {
 		out["line"] = int(line)
 		if column, ok := raw["column"].(float64); ok && column >= 1 && column <= 65536 && column == float64(int(column)) {
@@ -32,18 +41,27 @@ func computerScriptDiagnostic(value any, code string) map[string]any {
 // Closed product-authored diagnostics. Never retain raw page errors or arguments.
 func computerArgumentDiagnostic(value any) map[string]any {
 	raw, _ := value.(map[string]any)
-	if raw["phase"] != "validation" || raw["recovery"] != "correct_arguments" {
+	if raw["phase"] != "validation" && raw["phase"] != "execution" || raw["recovery"] != "correct_arguments" {
 		return nil
 	}
 	field := anyToString(raw["field"])
 	expected := anyToString(raw["expected"])
-	if !slices.Contains([]string{"arguments", "selector", "key", "text", "coordinates", "x", "y", "from_x", "from_y", "to_x", "to_y", "delta_x", "delta_y", "duration_ms", "milliseconds", "timeout_ms", "state", "equals", "action", "coordinate_space", "attribute", "limit", "cursor"}, field) {
+	if !slices.Contains([]string{"arguments", "selector", "key", "text", "coordinates", "x", "y", "from_x", "from_y", "to_x", "to_y", "delta_x", "delta_y", "duration_ms", "milliseconds", "timeout_ms", "state", "equals", "action", "coordinate_space", "attribute", "limit", "cursor", "root_ref", "topic", "url", "id", "after", "emit", "full", "screenshot"}, field) {
 		return nil
 	}
-	if !slices.Contains([]string{"documented_fields", "documented_selector", "canonical_role_or_observed_ref", "key_chord", "finite_number", "nonnegative_coordinates", "text_max_20000", "integer_0_5000", "integer_0_30000", "visible_hidden_enabled", "documented_condition", "condition_text_max_2000", "supported_action", "image_pixels_with_frame", "inside_image", "readable_attribute", "integer_1_200", "current_cursor"}, expected) {
+	if !slices.Contains([]string{"documented_fields", "documented_selector", "canonical_role_or_observed_ref", "key_chord", "finite_number", "nonnegative_coordinates", "text_max_20000", "integer_0_5000", "integer_0_30000", "visible_hidden_enabled", "documented_condition", "condition_text_max_2000", "supported_action", "image_pixels_with_frame", "inside_image", "readable_attribute", "integer_1_200", "current_cursor", "integer_1_1000", "string", "boolean"}, expected) {
 		return nil
 	}
-	out := map[string]any{"phase": "validation", "field": field, "expected": expected, "recovery": "correct_arguments"}
+	out := map[string]any{"phase": raw["phase"], "field": field, "expected": expected, "recovery": "correct_arguments"}
+	if method := anyToString(raw["method"]); slices.Contains([]string{"ui.snapshot", "ui.observe", "ui.screenshot", "ui.help", "ui.type", "ui.doubleClick", "ui.scroll", "ui.scrollAt", "ui.getByRole", "ui.ref", "ui.click", "ui.drag", "ui.key", "locator.node", "locator.snapshot", "locator.read", "locator.query", "locator.count", "locator.rows", "locator.attribute", "locator.linkSummary", "locator.getAttribute", "locator.click", "locator.fill", "locator.press", "locator.scroll", "locator.waitFor", "locator.requireState", "browser.navigate", "browser.waitForDownload"}, method) {
+		out["method"] = method
+	}
+	if expected == "integer_1_1000" {
+		out["example"] = "await ui.snapshot({limit:200})"
+	}
+	if expected == "integer_0_30000" {
+		out["example"] = "{timeout_ms:5000}"
+	}
 	if expected == "key_chord" {
 		out["example"] = "Meta+= or Enter"
 	}

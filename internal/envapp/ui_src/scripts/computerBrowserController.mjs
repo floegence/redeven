@@ -13,7 +13,7 @@ export class BrowserComputerController {
   }
   async initialize() { await this.page.initialize(); }
   close() { this.page.close(); }
-  cancel() { this.page.cancel(); }
+  cancel(internal = false) { this.page.cancel(internal); }
   async capture(targetID) {
     const before = targetID ? await viewportGeometry(this.transport) : undefined;
     // Let Chromium capture its complete rendered viewport. A CSS-sized clip is
@@ -181,6 +181,8 @@ export class BrowserComputerController {
       if (page.requiredURL) return { error: 'TARGET_PERMISSION_REQUIRED', result: { action_executed: dispatched(), required_navigation_url: page.requiredURL, needs_observation: true } };
       if (page.requiredOrigin || page.stopped) return this.pause({ level: 'takeover', reason_codes: [page.requiredOrigin ? 'site_permission' : 'user_control'],
         safe_to_capture: false, safe_to_send_to_model: false, ...(page.requiredOrigin ? { required_origin: page.requiredOrigin } : {}) }, dispatched());
+      if (page.operationCancelled) return { error: 'TARGET_OBSERVATION_UNAVAILABLE',
+        result: { action_executed: dispatched(), needs_observation: true, observation_stage: 'semantic_read' } };
       if (error.message === 'TARGET_OBSERVATION_UNAVAILABLE') return {
         error: 'TARGET_OBSERVATION_UNAVAILABLE',
         result: { action_executed: dispatched(), observation_stage: error.observationStage },

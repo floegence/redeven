@@ -22,6 +22,21 @@ interaction boundary.
 ## Guest API and limits
 `computer.exec` requires a target, code and a user-readable description.
 
+Each call allows 30 seconds and 50 operations. ui.budget() and returned budget
+metadata expose remaining time and operations. Explicit logs stream before later
+operations under a 64 KiB UTF-8 budget, retaining safe findings on timeout or
+uncertain effects. Private pauses, failed safety reads and navigation failures
+discard content. Keep batches to one page or verified subtask. Argument
+diagnostics identify the method when known, field, expected form and fixed repair
+examples; raw errors remain private.
+
+Native ui.scroll uses the window center; ui.scrollAt(x,y,delta_y,delta_x=0)
+targets a region without clicking first. Selector scroll remains semantic.
+Browser locator.text() reads rendered innerText from one unique observed element
+through a fixed isolated-world function, bounded to 12,000 Unicode characters
+with explicit truncation and rendered_element scope. Hidden and unloaded content
+is excluded. No arbitrary DOM execution is exposed.
+
 Approval Required uses the current target and URL in the existing tool approval; temporary authorization expires with the target lease and never becomes a persistent origin grant.
 
 The Runtime admits at most eight active script namespaces. The short tool definition teaches the entry point; selection returns the core guide and ui.help(topic) discloses read, visual, downloads or legacy signatures. Both selection and runtime help share one authored source. Exact signatures include: string names (no RegExp selectors), numeric scroll deltas, condition waits, and sequential awaited operations. Unsupported guest arguments fail before dispatch. Closed diagnostic codes distinguish reference/type/syntax/argument errors, operation concurrency and bounded output; raw interpreter exceptions remain private. A failed invocation retires its namespace while confirmed earlier actions survive.

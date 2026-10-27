@@ -52,6 +52,14 @@ A remote Linux task uses its remote managed browser or private desktop; it canno
 
 # Boundaries
 
+Internal source cancellation drains the active operation before clearing its
+ephemeral cancellation flag. It never sets user_control, changes private mode,
+or clears permission/Stop barriers. Drained cancelled reads return observation
+failure and permit later authorized same-target reads; uncertain mutations stay
+terminal without replay. Routine invalidated screenshots with no bytes or
+attachments retain observation_invalidated and needs_observation. Inconsistent
+target, safety or frame payloads still fail.
+
 Private control recovery after Runtime restart uses the same initial managed profile preparation as ordinary tools. The private input helper cannot create a second owner of the default profile; passive sampling never launches resources.
 
 See the [Codex design evidence](computer-use-design-evidence.md) for the public and installed-code comparison; no forced reload or CSP rewriting is used.

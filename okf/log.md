@@ -14,6 +14,15 @@ Increase the default [history window](ui/flower-live-timeline.md) from 24 to
 bodies and existing byte budgets. Count completeness depends on already-loaded group boundaries, independently
 of the initial page size.
 
+## 2026-10-27 — Computer recovery and native input contracts
+
+Repair [native scrolling](ai/computer-use-desktop.md), distinguish internal
+[browser cancellation](ai/computer-use-browser.md) from takeover, and preserve
+safe bounded [script output](ai/computer-use-scripts.md) and screenshot
+invalidation. Document budget and parameter diagnostics, AX coverage and
+rendered text. Record 66/66 real-Flash browser cases and built Desktop native
+qualification with explicit limits in [evidence](ai/computer-use-qualification-evidence.md).
+
 ## 2026-10-27 — Browser coordinates and explicit script contracts
 
 Fix scrolled hit tests, real browser zoom and parent-frame overlays; clarify

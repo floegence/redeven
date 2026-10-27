@@ -37,9 +37,9 @@ case "$SMOKE_SUITE" in
   *) echo "Unknown Flower smoke suite: $SMOKE_SUITE" >&2; exit 2 ;;
 esac
 if [[ "$SMOKE_SUITE" == computer* ]]; then
-  export REDEVEN_COMPUTER_USE_MODEL=deepseek-v4-flash
+  export REDEVEN_COMPUTER_USE_MODEL=deepseek-flash
   export REDEVEN_COMPUTER_UI_SCENARIO="${REDEVEN_COMPUTER_UI_SCENARIO:-file-animation}"
-  REDEVEN_FLOWER_SMOKE_MODEL=${REDEVEN_FLOWER_SMOKE_MODEL:-deepseek-v4-flash}
+  REDEVEN_FLOWER_SMOKE_MODEL=${REDEVEN_FLOWER_SMOKE_MODEL:-deepseek-flash}
 else
   REDEVEN_FLOWER_SMOKE_MODEL=${REDEVEN_FLOWER_SMOKE_MODEL:-deepseek-v4-flash-vision-exp}
 fi
