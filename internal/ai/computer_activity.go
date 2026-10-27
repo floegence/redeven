@@ -28,7 +28,7 @@ func computerActivityResultRows(tool string, payload map[string]any) []fltools.S
 		rows = append(rows, toolDetailRow(title, meta, content, format, "", false))
 	}
 	if diagnostic := computerArgumentDiagnostic(payload["diagnostic"]); diagnostic != nil {
-		for _, key := range []string{"phase", "field", "expected", "example", "recovery"} {
+		for _, key := range []string{"phase", "method", "field", "expected", "example", "recovery"} {
 			if value, exists := diagnostic[key]; exists {
 				add(key, "", toolDetailValue(value), fltools.StructuredActivityRowFormatText)
 			}

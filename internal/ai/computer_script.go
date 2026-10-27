@@ -30,12 +30,13 @@ type computerScriptProcess struct {
 	cancel       context.CancelFunc
 }
 type computerScriptMessage struct {
-	Type            string         `json:"type"`
-	ID              string         `json:"id"`
-	ProtocolVersion int            `json:"protocol_version"`
-	Operation       map[string]any `json:"operation"`
-	Result          map[string]any `json:"result"`
-	Error           string         `json:"error"`
+	Type            string          `json:"type"`
+	ID              string          `json:"id"`
+	ProtocolVersion int             `json:"protocol_version"`
+	Operation       map[string]any  `json:"operation"`
+	Result          map[string]any  `json:"result"`
+	Values          json.RawMessage `json:"values"`
+	Error           string          `json:"error"`
 }
 
 var errComputerEffectUnknown = errors.New("computer effect outcome is unknown; inspect the target without replaying the action")
@@ -179,11 +180,14 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 		_, err = p.stdin.Write(append(body, '\n'))
 		return err
 	}
-	if err := send(map[string]any{"type": "execute", "id": call.ToolCallID, "code": args.Code}); err != nil {
+	deadline, _ := ctx.Deadline()
+	if err := send(map[string]any{"type": "execute", "id": call.ToolCallID, "code": args.Code, "timeout_ms": max(1, time.Until(deadline).Milliseconds())}); err != nil {
 		return TargetToolResult{}, err
 	}
 	result := TargetToolResult{TargetID: call.TargetID, ActionSummary: args.Description}
 	completed := []string{}
+	var prefixLogs []any
+	logBytes := 0
 	var stopped error
 	var pause *InteractionSafetyDecision
 	var targetChange map[string]any
@@ -213,6 +217,12 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 		output.executionFacts.needsObservation = observationInvalidated || observationFailureStage != "" || actionExecuted || errors.Is(outputErr, errComputerEffectUnknown)
 		if payload, ok := output.Result.(map[string]any); ok {
 			payload["context_reset"] = !healthy
+			if pause == nil && observationFailureStage == "" && navigationFailure == nil {
+				payload["logs"] = prefixLogs
+			} else {
+				delete(payload, "logs")
+			}
+			payload["budget"] = map[string]any{"remaining_ms": max(0, time.Until(deadline).Milliseconds()), "remaining_operations": max(0, 50-operations)}
 			if failureStage != "" {
 				payload["stage"] = failureStage
 				payload["reason"] = failureReason
@@ -240,6 +250,10 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 		if pause != nil {
 			output.Safety = pause
 			output.Attachments = nil
+			if payload, ok := output.Result.(map[string]any); ok {
+				delete(payload, "observation")
+				delete(payload, "frame_geometry")
+			}
 		}
 	}()
 	for {
@@ -255,9 +269,16 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 		}
 		switch msg.Type {
 		case "ready":
-			if msg.ProtocolVersion != 2 {
+			if msg.ProtocolVersion != 3 {
 				return result, errors.New("computer script protocol mismatch")
 			}
+		case "log":
+			var values []any
+			if msg.ID != call.ToolCallID || json.Unmarshal(msg.Values, &values) != nil || values == nil || logBytes+len(msg.Values) > 65536 {
+				return result, errors.New("invalid computer script output")
+			}
+			logBytes += len(msg.Values)
+			prefixLogs = append(prefixLogs, values)
 		case "operation":
 			operations++
 			failedOperationIndex, failedAction = operations-1, anyToString(msg.Operation["action"])
@@ -290,6 +311,10 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 					release()
 				}
 				if errors.Is(err, errComputerEffectUnknown) {
+					if takeoverResult(observed, err) {
+						safety := computerPauseSafety(observed, err)
+						pause = &safety
+					}
 					// The failed operation's safe progress and same-target read
 					// belong to this result alongside the completed prefix.
 					facts, _ := observed.Result.(map[string]any)
@@ -485,7 +510,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 
 func computerOperationMutates(op map[string]any) bool {
 	switch anyToString(op["action"]) {
-	case "observe", "snapshot", "read", "query", "table", "attribute", "help", "wait", "screenshot", "wait_for_download", "download_cursor":
+	case "observe", "snapshot", "read", "text", "query", "table", "attribute", "help", "wait", "screenshot", "wait_for_download", "download_cursor":
 		return false
 	default:
 		return true
@@ -521,7 +546,12 @@ func computerScriptOperation(parent TargetToolCall, operation map[string]any) (T
 	case "double_click":
 		call.ToolName = "computer.double_click"
 		delete(args, "action")
-	case "read", "query", "table", "attribute", "click", "fill", "key", "scroll", "wait", "pointer_click", "drag":
+	case "scroll":
+		if operation["selector"] == nil {
+			call.ToolName = "computer.scroll"
+			delete(args, "action")
+		}
+	case "read", "text", "query", "table", "attribute", "click", "fill", "key", "wait", "pointer_click", "drag":
 	default:
 		return TargetToolCall{}, computerTargetFailure(parent, "INVALID_REQUEST")
 	}

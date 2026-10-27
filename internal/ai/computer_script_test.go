@@ -344,7 +344,7 @@ func TestComputerScriptTimeoutPreservesConfirmedPrefix(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	go func() { <-entered; time.AfterFunc(100*time.Millisecond, cancel) }()
-	result, err := executeTestScript(ctx, runtime, call, `await ui.click(1, 2); while (true) {}`)
+	result, err := executeTestScript(ctx, runtime, call, `await ui.click(1, 2); log('confirmed-prefix'); while (true) {}`)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("timeout: %v", err)
 	}
@@ -354,6 +354,41 @@ func TestComputerScriptTimeoutPreservesConfirmedPrefix(t *testing.T) {
 	}
 	if len(runtime.scripts) != 0 {
 		t.Fatal("cancelled namespace survived")
+	}
+	if logs, ok := payload["logs"].([]any); !ok || len(logs) != 1 {
+		t.Fatalf("timeout lost explicit log: %#v", payload)
+	}
+}
+
+func TestComputerScriptArgumentRepairFields(t *testing.T) {
+	rt, call := scriptRuntimeFixture(t, func(context.Context, TargetToolCall) (TargetToolResult, error) {
+		t.Fatal("invalid arguments dispatched")
+		return TargetToolResult{}, nil
+	})
+	result, err := executeTestScript(t.Context(), rt, call, "await ui.snapshot({limit:1200});")
+	if err == nil {
+		t.Fatal("missing rejection")
+	}
+	diagnostic := result.Result.(map[string]any)["diagnostic"].(map[string]any)
+	if diagnostic["method"] != "ui.snapshot" || diagnostic["field"] != "limit" || diagnostic["expected"] != "integer_1_1000" || diagnostic["example"] == nil {
+		t.Fatalf("incomplete diagnostic: %#v", diagnostic)
+	}
+}
+
+func TestComputerScriptScrollCoordinatesAndSemanticRouting(t *testing.T) {
+	var calls []TargetToolCall
+	rt, call := scriptRuntimeFixture(t, func(_ context.Context, inner TargetToolCall) (TargetToolResult, error) {
+		calls = append(calls, inner)
+		return TargetToolResult{Result: map[string]any{}}, nil
+	})
+	_, err := executeTestScript(t.Context(), rt, call, "await ui.scrollAt(12,34,80); await ui.ref('area').scroll(40);")
+	if err != nil || len(calls) != 2 || calls[0].ToolName != "computer.scroll" || calls[1].ToolName != "computer.action" {
+		t.Fatalf("routing: %#v %v", calls, err)
+	}
+	var args map[string]any
+	_ = json.Unmarshal(calls[0].Arguments, &args)
+	if args["x"] != float64(12) || args["y"] != float64(34) || args["delta_y"] != float64(80) {
+		t.Fatalf("coordinates lost: %#v", args)
 	}
 }
 
@@ -530,5 +565,91 @@ func TestComputerCompactObservationTruncationAndModeBoundary(t *testing.T) {
 	output.render(small, "all", true)
 	if next := output.render(small, "all", false).(map[string]any); next["format"] != "full" {
 		t.Fatalf("detail switch reused diff baseline: %#v", next)
+	}
+}
+
+func TestComputerScriptNativeScrollUsesCoordinateRoute(t *testing.T) {
+	var tool string
+	var args map[string]any
+	rt, call := scriptRuntimeFixture(t, func(_ context.Context, inner TargetToolCall) (TargetToolResult, error) {
+		tool = inner.ToolName
+		_ = json.Unmarshal(inner.Arguments, &args)
+		return TargetToolResult{Result: map[string]any{}}, nil
+	})
+	_, err := executeTestScript(t.Context(), rt, call, "await ui.scroll(539);")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tool != "computer.scroll" || args["selector"] != nil {
+		t.Fatalf("unexpected routing: %s %#v", tool, args)
+	}
+	t.Logf("documented ui.scroll dispatches %s without selector: %#v", tool, args)
+}
+func TestComputerScriptScreenshotInvalidationPreservesRecoveryFacts(t *testing.T) {
+	rt, call := scriptRuntimeFixture(t, func(_ context.Context, inner TargetToolCall) (TargetToolResult, error) {
+		return TargetToolResult{TargetID: inner.TargetID, Result: map[string]any{"observation_invalidated": true, "action_executed": false}, Safety: &InteractionSafetyDecision{Level: "routine", SafeToCapture: false, SafeToSendToModel: false}}, nil
+	})
+	result, err := executeTestScript(t.Context(), rt, call, "await ui.screenshot();")
+	p := result.Result.(map[string]any)
+	if err != nil || p["observation_invalidated"] != true || p["needs_observation"] != true {
+		t.Fatalf("unexpected: %#v %v", p, err)
+	}
+}
+func TestComputerScriptUnknownEffectPreservesExplicitPrefixLog(t *testing.T) {
+	rt, call := scriptRuntimeFixture(t, func(context.Context, TargetToolCall) (TargetToolResult, error) {
+		return TargetToolResult{}, errComputerEffectUnknown
+	})
+	result, err := executeTestScript(t.Context(), rt, call, "log('completed-safe-read'); await ui.click(1,2);")
+	p := result.Result.(map[string]any)
+	if !errors.Is(err, errComputerEffectUnknown) || p["logs"] == nil {
+		t.Fatalf("unexpected: %#v %v", p, err)
+	}
+}
+
+func TestComputerScriptScreenshotInvalidationRejectsInconsistentFrames(t *testing.T) {
+	for _, kind := range []string{"wrong_target", "unexpected_bytes", "capture_allowed", "missing_safety"} {
+		t.Run(kind, func(t *testing.T) {
+			rt, call := scriptRuntimeFixture(t, func(_ context.Context, inner TargetToolCall) (TargetToolResult, error) {
+				result := TargetToolResult{TargetID: inner.TargetID, Result: map[string]any{"observation_invalidated": true}, Safety: &InteractionSafetyDecision{Level: "routine"}}
+				switch kind {
+				case "wrong_target":
+					result.TargetID = "other"
+				case "unexpected_bytes":
+					result.frameBytes = []byte("bad image")
+				case "capture_allowed":
+					result.Safety.SafeToCapture = true
+				case "missing_safety":
+					result.Safety = nil
+				}
+				return result, nil
+			})
+			result, err := executeTestScript(t.Context(), rt, call, "await ui.screenshot();")
+			if err == nil || len(result.Attachments) != 0 {
+				t.Fatalf("invalid frame accepted: %#v %v", result, err)
+			}
+		})
+	}
+}
+
+func TestComputerScriptLogBudgetUsesWireUTF8Bytes(t *testing.T) {
+	rt, call := scriptRuntimeFixture(t, func(context.Context, TargetToolCall) (TargetToolResult, error) { return TargetToolResult{}, nil })
+	result, err := executeTestScript(t.Context(), rt, call, "log('<>&中'.repeat(10000));")
+	if err != nil {
+		t.Fatal(err)
+	}
+	logs := result.Result.(map[string]any)["logs"].([]any)
+	if len(logs) != 1 || len(logs[0].([]any)[0].(string)) != 60000 {
+		t.Fatal("safe bounded UTF-8 log lost")
+	}
+}
+
+func TestComputerScriptUnknownEffectWithTakeoverDiscardsContent(t *testing.T) {
+	rt, call := scriptRuntimeFixture(t, func(context.Context, TargetToolCall) (TargetToolResult, error) {
+		return TargetToolResult{Result: map[string]any{"observation": map[string]any{"text": "private-observation"}}, Safety: &InteractionSafetyDecision{Level: "takeover", ReasonCodes: []string{"user_control"}}}, errComputerEffectUnknown
+	})
+	result, err := executeTestScript(t.Context(), rt, call, "log('private-prefix'); await ui.click(1,2);")
+	payload := result.Result.(map[string]any)
+	if !errors.Is(err, errComputerEffectUnknown) || payload["logs"] != nil || payload["observation"] != nil || len(result.Attachments) != 0 {
+		t.Fatalf("takeover leaked output: %#v %v", result, err)
 	}
 }

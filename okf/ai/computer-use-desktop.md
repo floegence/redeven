@@ -5,7 +5,7 @@ description: Use macOS window Accessibility and private Linux AT-SPI before imag
 tags: [ai, computer-use, accessibility, desktop]
 timestamp: 2026-09-17T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-27"
 ---
 # Summary
 
@@ -21,6 +21,11 @@ that every application or action can run unobtrusively in the background.
 The Swift helper inventories regular and accessory application windows, reads AX roles, labels, non-sensitive values, supported actions and bounds, and exposes bounded subtree queries.
 
 Secret fields enter the existing private takeover channel rather than model observations.
+
+Snapshots declare source macos_accessibility and application_provided coverage.
+truncated:false means the available tree was not cut, not that all visible content
+is present. Use screenshots and targeted scrolling when application AX content
+is sparse. No global accessibility opt-in attribute is forced.
 
 ## Linux private desktop
 The Xvfb owner starts a private session D-Bus and AT-SPI bus. The executor rejects socket or environment paths leading outside that private desktop; it never discovers or attaches to another logged-in user's session.

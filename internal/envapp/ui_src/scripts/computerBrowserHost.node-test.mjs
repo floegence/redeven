@@ -63,6 +63,24 @@ test('the Runtime host shares one connection, isolates pending navigation, and f
   await host.cancel('source-1');
   await cancelled;
   assert.equal(await pages[1].getByRole('textbox', { name: 'Name' }).inputValue(), '', 'Cancellation before dispatch cannot run the later input');
+  const afterCancel = await tool('source-1', 'computer.observe');
+  assert.equal(afterCancel.error, undefined);
+  assert.equal(afterCancel.safety.level, 'routine', 'Internal cancellation is not a user takeover');
+  const waiting = tool('source-1', 'computer.action', {action:'wait', selector:{role:'button', name:'Absent'}, state:'visible', timeout_ms:20000});
+  await new Promise(resolve => setTimeout(resolve, 100));
+  await host.cancel('source-1');
+  const interrupted = await waiting;
+  assert.notEqual(interrupted.safety?.reason_codes?.includes('user_control'), true);
+  assert.equal((await tool('source-1', 'computer.observe')).safety.level, 'routine');
+  const navigation = tool('source-1', 'browser.navigate', {url:origin+'/pending'});
+  await new Promise(resolve => setTimeout(resolve, 100));
+  const cancellation = host.cancel('source-1');
+  finishNavigation();
+  await cancellation;
+  const navigationResult = await navigation;
+  assert.notEqual(navigationResult.safety?.reason_codes?.includes('user_control'), true);
+  await pages[1].waitForLoadState('load');
+  assert.equal((await tool('source-1', 'computer.observe')).safety.level, 'routine', 'Drained navigation keeps same-target observation available');
   assert.equal((await tool('source-1', 'computer.screenshot', {}, { recovery_observation: true })).error, undefined);
 
   host.privacy('source-0', true);

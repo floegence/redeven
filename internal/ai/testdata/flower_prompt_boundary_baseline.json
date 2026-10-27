@@ -1,7 +1,7 @@
 {
   "approval_required/main_autonomous/restricted=false": {
     "system_bytes": 8330,
-    "tools_sha256": "50116f230377d219a8a8a47129eba4f90aebdc21e694eff34aebf62f10ae7381"
+    "tools_sha256": "0a492c705304e167e25b1f19b72e43bdb7357b79e81c54ddb28adb954bf40557"
   },
   "approval_required/main_autonomous/restricted=true": {
     "system_bytes": 4502,
@@ -9,7 +9,7 @@
   },
   "approval_required/main_interactive/restricted=false": {
     "system_bytes": 8849,
-    "tools_sha256": "50116f230377d219a8a8a47129eba4f90aebdc21e694eff34aebf62f10ae7381"
+    "tools_sha256": "0a492c705304e167e25b1f19b72e43bdb7357b79e81c54ddb28adb954bf40557"
   },
   "approval_required/main_interactive/restricted=true": {
     "system_bytes": 4502,
@@ -17,7 +17,7 @@
   },
   "approval_required/subagent_autonomous/restricted=false": {
     "system_bytes": 7886,
-    "tools_sha256": "9bb1a6bcaa9975f6357de378491949cfcf52fa923e7ea0a4e39df082f91257ab"
+    "tools_sha256": "a33e75b265e8c47cb7c9bd49c9bdc79d49d1bbd0597c4b4b069beb05810f2502"
   },
   "approval_required/subagent_autonomous/restricted=true": {
     "system_bytes": 4574,
@@ -25,7 +25,7 @@
   },
   "full_access/main_autonomous/restricted=false": {
     "system_bytes": 8324,
-    "tools_sha256": "50116f230377d219a8a8a47129eba4f90aebdc21e694eff34aebf62f10ae7381"
+    "tools_sha256": "0a492c705304e167e25b1f19b72e43bdb7357b79e81c54ddb28adb954bf40557"
   },
   "full_access/main_autonomous/restricted=true": {
     "system_bytes": 4496,
@@ -33,7 +33,7 @@
   },
   "full_access/main_interactive/restricted=false": {
     "system_bytes": 8843,
-    "tools_sha256": "50116f230377d219a8a8a47129eba4f90aebdc21e694eff34aebf62f10ae7381"
+    "tools_sha256": "0a492c705304e167e25b1f19b72e43bdb7357b79e81c54ddb28adb954bf40557"
   },
   "full_access/main_interactive/restricted=true": {
     "system_bytes": 4496,
@@ -41,7 +41,7 @@
   },
   "full_access/subagent_autonomous/restricted=false": {
     "system_bytes": 7880,
-    "tools_sha256": "9bb1a6bcaa9975f6357de378491949cfcf52fa923e7ea0a4e39df082f91257ab"
+    "tools_sha256": "a33e75b265e8c47cb7c9bd49c9bdc79d49d1bbd0597c4b4b069beb05810f2502"
   },
   "full_access/subagent_autonomous/restricted=true": {
     "system_bytes": 4568,

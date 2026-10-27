@@ -16,7 +16,7 @@ test('semantic browser reads, fills, waits and rejects stale or ambiguous nodes 
     res.setHeader('content-type', 'text/html');
     res.end(req.url === '/next' ? '<h1>Next document</h1>' : `<!doctype html><title>Semantic fixture</title>
       <label>Search<input aria-label="Search" aria-invalid="spelling" aria-busy="true" required aria-describedby="search-help" aria-controls="result"></label>
-      <p id="search-help">Enter a search term</p>
+      <p id="search-help">Enter a search term</p><section aria-label="Metrics"><span>Revenue 42</span><span hidden>Hidden metric</span></section><section aria-label="Long text">${'x'.repeat(12001)}</section>
       <button onclick="document.querySelector('output').textContent=document.querySelector('input').value">Apply</button>
       <output id="result" aria-label="Result"></output><button>Duplicate</button><button>Duplicate</button>
       <div style="position:absolute;top:100px;left:100px;width:200px;height:100px;overflow:auto" onscroll="document.querySelector('output').setAttribute('aria-label','Scrolled region')"><div style="height:1000px">Scroll region</div></div>
@@ -74,6 +74,11 @@ test('semantic browser reads, fills, waits and rejects stale or ambiguous nodes 
     assert.equal(bounded.nodes.length, 2);
     assert.ok(bounded.nodes[0].child_refs.includes(bounded.nodes[1].ref));
     const perform = async (args) => send('computer.action', args, { script_operation: true });
+    const text = await perform({action:'text',selector:{role:'region',name:'Metrics'}});
+    assert.deepEqual({text:text.result.text,truncated:text.result.truncated,scope:text.result.scope},{text:'Revenue 42',truncated:false,scope:'rendered_element'});
+    const longText=await perform({action:'text',selector:{role:'region',name:'Long text'}});
+    assert.equal(longText.result.text.length,12000);
+    assert.equal(longText.result.truncated,true);
     const filled = await perform({ action: 'fill', selector: { ref: input.ref }, text: 'Completed' });
     assert.equal(filled.error, undefined, JSON.stringify(filled));
     assert.equal(filled.screenshot, undefined);

@@ -102,7 +102,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 		}
 	}
 	for repeat := 1; repeat <= repetitions; repeat++ {
-		for _, scenario := range []string{"large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
+		for _, scenario := range []string{"bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
 			t.Run(fmt.Sprintf("%s/%d", scenario, repeat), func(t *testing.T) {
 				// Every case owns its service, browser, fixture and output directory.
 				t.Parallel()
@@ -249,6 +249,12 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				}
 
 				switch scenario {
+				case "bounded_read":
+					prompt = "Use ui.help('read') and locator.text() to read visible text of the region named Scrollable, then log its text, truncated and scope. Do not click, scroll, navigate or use shell/network tools."
+				case "repair_limit":
+					prompt = "Run await ui.snapshot({limit:1200}) exactly once as an intentional diagnostic. Report its method, field and expected range. Correct the limit in a separate call, observe the page, and report its title. Do not click or use shell/network tools."
+				case "budget_prefix":
+					prompt = "Submit all four statements verbatim as one computer.exec call exactly once: log(ui.budget()); log('completed-safe-read'); await ui.getByRole('button',{name:'Save once',exact:true}).click(); setTimeout(()=>{},1); . The unavailable timer is intentional and must not be removed, replaced or caught. Report the returned diagnostic, retained logs and context_reset, then observe Save status. Never repeat the click."
 				case "scrolled_click":
 					prompt = "On the selected page, find Save once (below the fold), click it exactly once, and verify Save status. Do not click any other control or use shell/network tools."
 				case "content_wait":
@@ -320,7 +326,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				var toolEvidence strings.Builder
 				scriptErrors := map[string]int{}
 				var confirmedToolFacts []map[string]any
-				contentWaitConfirmed, resetConfirmed := false, false
+				contentWaitConfirmed, resetConfirmed, clickRejected := false, false, false
 				reader := svc.threadRuntime.(flruntime.ThreadToolResultReader)
 				for _, item := range history.Items {
 					if item.Activity != nil {
@@ -339,6 +345,11 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 							}
 							fact := map[string]any{"tool": confirmed.ToolName, "status": confirmed.Status, "script_error": code, "completed_actions": data["completed_actions"], "action_executed": data["action_executed"]}
 							fact["context_reset"], fact["diagnostic"] = data["context_reset"], data["diagnostic"]
+							fact["logs"], fact["budget"] = data["logs"], data["budget"]
+							fact["failed_action"] = data["failed_action"]
+							if code == "ELEMENT_NOT_ACTIONABLE" && data["failed_action"] == "click" {
+								clickRejected = true
+							}
 							if code == "SCRIPT_REFERENCE_ERROR" && data["context_reset"] == true {
 								diagnostic, _ := data["diagnostic"].(map[string]any)
 								resetConfirmed = diagnostic["symbol"] == "setTimeout" && diagnostic["line"] != nil
@@ -423,8 +434,21 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				}
 				switch scenario {
 				case "scrolled_click":
-					if submissions.Load() != 1 || scriptErrors["ELEMENT_NOT_ACTIONABLE"] != 0 || !strings.Contains(text, "Saved once") {
+					if submissions.Load() != 1 || clickRejected || !strings.Contains(text, "Saved once") {
 						t.Errorf("scrolled click failed: submissions=%d errors=%v", submissions.Load(), scriptErrors)
+					}
+				case "bounded_read":
+					if !strings.Contains(text, "rendered_element") || !strings.Contains(text, "Scroll contents") || pointerClicks.Load() != 0 {
+						t.Error("bounded visible text not verified")
+					}
+				case "repair_limit":
+					factsJSON, _ := json.Marshal(confirmedToolFacts)
+					if scriptErrors["SCRIPT_ARGUMENT_ERROR"] != 1 || !strings.Contains(string(factsJSON), "integer_1_1000") || !strings.Contains(text, "Orchid domain console") || pointerClicks.Load() != 0 {
+						t.Error("limit diagnostic and recovery not verified")
+					}
+				case "budget_prefix":
+					if scriptErrors["SCRIPT_REFERENCE_ERROR"] != 1 || !strings.Contains(text, "completed-safe-read") || !strings.Contains(text, "remaining_operations") || submissions.Load() != 1 {
+						t.Error("budget and explicit prefix not verified")
 					}
 				case "content_wait":
 					if !contentWaitConfirmed || entered.Load() != 1 || !strings.Contains(text, "value") || !strings.Contains(finalText, "2") {

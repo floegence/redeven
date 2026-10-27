@@ -245,8 +245,11 @@ export async function createComputerBrowserHost(options) {
       const task = source.toolTask;
       if (!task) return;
       task.cancelled = true;
-      source.owner.controller.cancel();
+      source.owner.controller.cancel(true);
       await task.done;
+      // Only this completed invocation is released. Runtime privacy, user
+      // control, site permissions and invalid sources remain authoritative.
+      source.owner.controller.page.finishCancellation();
     },
     privacy(id, privateMode) {
       requireSource(id);

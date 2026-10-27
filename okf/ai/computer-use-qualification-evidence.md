@@ -28,6 +28,48 @@ See the acceptance contract for cleanup, evidence binding and scope restrictions
 
 # Evidence
 
+## Recovery contracts and native facade, October 27
+
+The recovery repair qualifies the local DeepSeek V4.1 Flash (1017) profile, wire
+model deepseek-flash, against 22 isolated managed-browser scenarios repeated
+three times: 66/66 pass in 171.268 seconds, with 327 real provider requests.
+Median case time is 7,171.5 ms. Canonical computer activities include 210 success
+and 42 error statuses, including prescribed negative cases and recovered model
+misuse. Fixture counters verify no replayed save, click or export. This is not
+a zero-error or general success-rate claim. Earlier 19/22, 65/66 and 64/66
+batches remain failed evidence, with model-instruction and assertion defects
+classified separately. Source configuration and secrets remain hash-identical.
+
+Independent browser qualification passes 313 checks; the execution matrix
+passes 142 checks with one explicit optional installation-picker skip. Swift
+passes 35 tests. A real QuickJS-to-Go-to-Swift AppKit fixture verifies default
+and coordinate scrolling, two wheel events, offset 200, screenshot and restored
+focus/pointer. External desktop input invalidates restoration measurements.
+
+Built Desktop with the real configured Flash provider also passes three native
+turns: exact click counts 2 then 4, double-click, text/Enter, wheel offset 240,
+decoded 720-by-582 screenshots, continuous workspace frames, canonical target
+references and provider image output. The runner verifies unchanged source
+state, credential removal and port release. This scope uses a disposable AppKit
+application, not the user's production applications. It does not qualify Linux,
+arbitrary AX coverage or one real-model connected-Chrome end-to-end chain.
+
+Exploratory Desktop runs exposed outdated runner assumptions: an AX-only turn
+without a saved capture has no historical preview; a saved-image review does
+not prove a current live subscription; canonical activity target references
+now live in activity_summary. Qualification explicitly requests its captures,
+waits for current-run observation and reads current summary facts. Frame and
+effect assertions remain strict. Failed runs are not relabeled as successes.
+
+After the 66-case batch, a deterministic failing regression identified residual
+observation content when unknown effect and takeover coincide. The final
+cleanup clears that content and attachments; all script regressions and the
+complete internal/ai suite pass (98.411 seconds). The final native run includes
+this repair. Shared base system prompts and the three default entry points are
+unchanged; tool/help text adds exact scrolling, bounded reads, budget guidance
+and safe prefix output. No AXManualAccessibility override, domain migration or
+Floret public API change is introduced. Final rebased integration is separate.
+
 ## Browser coordinates and explicit script contracts, October 27
 
 The contract repair qualifies the production Service, Floret v7.87.4, local

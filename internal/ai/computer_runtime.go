@@ -359,7 +359,7 @@ func (r *ComputerUseRuntime) ExecuteTargetTool(ctx context.Context, call TargetT
 func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call TargetToolCall, control *computerTargetControl) (TargetToolResult, error) {
 	var input map[string]any
 	_ = json.Unmarshal(call.Arguments, &input)
-	if input["coordinate_space"] != nil || input["frame"] != nil || input["document_id"] != nil || input["action"] == "query" || input["action"] == "attribute" || input["action"] == "table" {
+	if input["coordinate_space"] != nil || input["frame"] != nil || input["document_id"] != nil || input["action"] == "text" || input["action"] == "query" || input["action"] == "attribute" || input["action"] == "table" {
 		target, resolveErr := r.registry.ResolveTarget(ctx, call.TargetID)
 		if resolveErr != nil || !strings.HasPrefix(target.Kind, "browser.") {
 			return TargetToolResult{}, computerTargetFailure(call, "TARGET_CAPABILITY_UNAVAILABLE")
@@ -471,6 +471,8 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 			}
 		}
 	}
+	payload, _ := result.Result.(map[string]any)
+	invalidatedFrame := result.TargetID == call.TargetID && payload["observation_invalidated"] == true && len(result.Attachments) == 0 && len(result.frameBytes) == 0 && result.Safety != nil && result.Safety.Level == "routine" && !result.Safety.SafeToCapture && !result.Safety.SafeToSendToModel
 	if result.Safety != nil && (!result.Safety.SafeToCapture || !result.Safety.SafeToSendToModel) {
 		result.Attachments, result.frameBytes = nil, nil
 	}
@@ -480,7 +482,7 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 			return computerObservationFailure(call, map[string]any{"action_executed": payload["action_executed"] == true, "observation_stage": "semantic_read"}, result.ExecutionLocation)
 		}
 	}
-	if err == nil && !takeoverResult(result, err) && call.ToolName == "computer.screenshot" && (result.TargetID != call.TargetID || len(result.Attachments) != 1 || !strings.HasPrefix(result.Attachments[0].ResourceRef, "computer://"+call.TargetID+"/") || validateComputerFrame(result.Attachments[0], result.frameBytes) != nil) {
+	if err == nil && !takeoverResult(result, err) && call.ToolName == "computer.screenshot" && !invalidatedFrame && (result.TargetID != call.TargetID || len(result.Attachments) != 1 || !strings.HasPrefix(result.Attachments[0].ResourceRef, "computer://"+call.TargetID+"/") || validateComputerFrame(result.Attachments[0], result.frameBytes) != nil) {
 		return TargetToolResult{}, computerTargetFailure(call, "FRAME_UNAVAILABLE")
 	}
 	if err == nil && len(result.Attachments) > 0 {

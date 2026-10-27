@@ -877,6 +877,11 @@ func (e *extensionTargetExecutor) execute(ctx context.Context, call TargetToolCa
 		if drained != nil && e.pipe != nil {
 			e.pipe.close()
 		}
+		if drained == nil && ctx.Err() != nil && !private && !computerCallMutates(call) {
+			// Drained read cancellation does not retire a live source or claim
+			// user ownership. A later same-target read still revalidates grants.
+			return computerObservationFailure(call, map[string]any{"action_executed": false, "observation_stage": "semantic_read"}, "connected_browser")
+		}
 		return failedExchange(err)
 	}
 

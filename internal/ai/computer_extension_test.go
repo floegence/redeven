@@ -166,6 +166,39 @@ func TestExtensionExistingSourceStillValidatesExplicitFlowerSelection(t *testing
 		t.Fatal("a current explicit selection did not reuse the single validated owner", target, err, validations.Load())
 	}
 }
+func TestExtensionDrainedReadCancellationDoesNotClaimUserControl(t *testing.T) {
+	var calls, cancellations atomic.Int32
+	entered := make(chan struct{})
+	host, _ := browserHostFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		var request struct{ ID, Method string }
+		_ = json.NewDecoder(r.Body).Decode(&request)
+		if request.Method == "source.cancel" {
+			cancellations.Add(1)
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": request.ID, "result": true})
+			return
+		}
+		if calls.Add(1) == 1 {
+			close(entered)
+			<-r.Context().Done()
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": request.ID, "result": map[string]any{"result": map[string]any{"fresh": true}}})
+	})
+	executor := &extensionTargetExecutor{sourceHost: host, targetID: "chrome-task"}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	go func() { <-entered; cancel() }()
+	call := TargetToolCall{TargetID: "chrome-task", ToolName: "computer.observe"}
+	result, err := executor.ExecuteTargetTool(ctx, call)
+	if err == nil || takeoverResult(result, err) || errors.Is(err, errComputerEffectUnknown) || cancellations.Load() != 1 {
+		t.Fatalf("drained read claimed ownership or unknown effect: %#v %v", result, err)
+	}
+	result, err = executor.ExecuteTargetTool(t.Context(), call)
+	if err != nil || result.Result.(map[string]any)["fresh"] != true || calls.Load() != 2 {
+		t.Fatalf("same-source read did not recover: %#v %v", result, err)
+	}
+}
+
 func TestExtensionLostEffectIsTerminalAndNeverReplayed(t *testing.T) {
 	var calls atomic.Int32
 	host, _ := browserHostFixture(t, func(w http.ResponseWriter, r *http.Request) {

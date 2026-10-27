@@ -222,7 +222,7 @@ final class NativeWindow {
                 nodes[index]["relations"] = ["labelled_by": [nodes[related]["ref"] as! String]]
             }
         }
-        return ["semantic_schema_version": 2, "document_id": "\(id):\(revision)", "nodes": nodes, "truncated": !queue.isEmpty, "execution_mode": "background"]
+        return ["source": "macos_accessibility", "coverage": "application_provided", "semantic_schema_version": 2, "document_id": "\(id):\(revision)", "nodes": nodes, "truncated": !queue.isEmpty, "execution_mode": "background"]
     }
 
     func resolve(_ selector: [String: Any]) throws -> AXUIElement {
