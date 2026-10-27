@@ -188,6 +188,8 @@ try {
         assert.equal(await listener.evaluate(element => element === document.activeElement), true);
         await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' });
         await page.getByRole('button', { name: i18n.t('environmentCenter.environmentsSection'), exact: true }).click();
+        const welcomeSurface = page.locator('[data-desktop-page="environments"] > .redeven-welcome-surface');
+        const welcomeBounds = await welcomeSurface.boundingBox();
         const owner = page.locator(`[data-owner-id="${runtime.id}"]`);
         await owner.getByRole('button', { name: i18n.t('environmentAction.runtimeActions'), exact: true }).click();
         await page.getByRole('menuitem', { name: i18n.t('gatewayJoin.menuAction'), exact: true }).click();
@@ -217,9 +219,25 @@ try {
         assert.equal(await codeInput.inputValue(), '123456789ABCDEFGHJKMNPQRSTV');
         assert.equal(await dialog.getByRole('button', { name: i18n.t('gatewayJoin.verify'), exact: true }).isEnabled(), true);
         await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' });
+        // Dialog presence can retain a closing visual after its accessible role detaches.
+        await page.waitForTimeout(300);
+        assert.deepEqual(await welcomeSurface.boundingBox(), welcomeBounds, 'Hiding enrollment does not shift or resize Welcome');
+        assert.equal(await page.locator('[data-desktop-page="environments"] > *').count(), 1, 'Enrollment adds no standalone Welcome content');
+        await page.screenshot({ path: `${output}/${locale}-${width}-${reducedMotion}-enrollment-dismissed.png` });
+        await owner.getByRole('button', { name: i18n.t('environmentAction.runtimeActions'), exact: true }).click();
+        await page.getByRole('menuitem', { name: i18n.t('gatewayJoin.menuAction'), exact: true }).click();
+        await dialog.waitFor();
+        assert.equal(await addressInput.inputValue(), 'https://gateway-new.example.internal:7443');
+        assert.equal(await codeInput.inputValue(), '123456789ABCDEFGHJKMNPQRSTV');
+        const beforeRestore = await page.evaluate(() => window.settingsFixture.requests.filter(request => request.kind === 'manage_runtime_gateway').length);
+        await dialog.getByRole('button', { name: i18n.t('gatewayJoin.restoreConnection'), exact: true }).click();
+        await dialog.getByRole('button', { name: i18n.t('gatewayJoin.verify'), exact: true }).waitFor({ state: 'visible' });
+        assert.equal(await page.evaluate(() => window.settingsFixture.requests.filter(request => request.kind === 'manage_runtime_gateway').length), beforeRestore + 1);
+        await dialog.getByRole('button', { name: i18n.t('common.cancel'), exact: true }).click();
+        await dialog.waitFor({ state: 'detached' });
         assert.equal(await page.evaluate(() => window.settingsFixture.requests.some(request => ['upsert_gateway', 'update_gateway_policy', 'configure_gateway_cloud'].includes(request.kind))), false);
         report.cases.push({ locale, width, reducedMotion, policyOpening, policyClosing, verifiedConfirmation: true, inputInvalidation: true,
-          singleSettingsEntry: true, labelledEndpoints: true, nestedSelectDismissal: true, keyboardDisclosure: true, unchangedPermissions: true });
+          contextualResume: true, stableWelcomeLayout: true, singleSettingsEntry: true, labelledEndpoints: true, nestedSelectDismissal: true, keyboardDisclosure: true, unchangedPermissions: true });
       } finally { await context.close(); }
     }
   }

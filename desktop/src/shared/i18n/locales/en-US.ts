@@ -17,7 +17,6 @@ export const enUS = {
     "inviteOthers": "Invite someone else",
     "chooseEnvironmentHelp": "Choose an environment. Desktop can prepare and connect it here, even when its window is closed.",
     "noManagedEnvironments": "Add a managed local or remote environment to Welcome first.",
-    "resumeEnrollment": "Continue environment enrollment",
     "connectExisting": "Connect an existing Gateway",
     "connectExistingHelp": "Use a service address and your existing authorization or an administrator-provided access code.",
     "deployNew": "Deploy a new Gateway",
