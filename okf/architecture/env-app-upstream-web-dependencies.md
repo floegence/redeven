@@ -6,13 +6,13 @@ tags: [architecture, dependencies, protocol, ui]
 timestamp: 2026-10-18T00:00:00Z
 quality_exception: Published web dependency and terminal package boundary covering version pins, shell ownership, and renderer-free loading.
 lifecycle: contract
-reviewed_at: "2026-10-26"
+reviewed_at: "2026-10-27"
 ---
 # Summary
 
 Env App adapts published floe-webapp UI/runtime and protocol, FloeBrowser projection, Floeterm terminal-web, and Flowersec artifact helpers into the Redeven shell.
 
-Pins are Floe Webapp Boot, Core, and Protocol v0.86.60 (Env App Core v0.86.60), FloeBrowser v0.1.28, Floeterm terminal-web v0.19.2, and Flowersec Core v5.11.1. Floeterm supplies semantic Presentation and session exports.
+Pins are Floe Webapp Boot, Core, and Protocol v0.86.63 (Env App Core v0.86.63), FloeBrowser v0.1.28, Floeterm terminal-web v0.19.2, and Flowersec Core v5.11.1. Floeterm supplies semantic Presentation and session exports.
 
 [Page asset recovery](../ui/page-asset-recovery.md) uses Floe's document asset monitor and per-view error boundary for deployment and lazy imports.
 
