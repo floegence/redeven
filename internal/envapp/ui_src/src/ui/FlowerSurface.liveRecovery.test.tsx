@@ -161,7 +161,7 @@ describe('Flower workspace synchronization recovery', () => {
     editor.dispatchEvent(new InputEvent('input', { bubbles: true }));
     disconnect.resolve();
     await waitFor(() => attempts === 3, 2000);
-    expect(surface.querySelector('.flower-model-status-lane [role="status"]')?.textContent).toContain('Reconnecting live updates');
+    expect(surface.querySelector('.flower-workspace-sync')?.textContent).toContain('Reconnecting');
     expect(surface.querySelector('[data-flower-progress-kind]')).toBeNull();
     expect(surface.querySelector('[data-flower-sync-state="failed"]')).toBeNull();
     expect(surface.textContent).toContain('Plan deploy');
@@ -173,7 +173,7 @@ describe('Flower workspace synchronization recovery', () => {
     expect(launchTurn).not.toHaveBeenCalled(); expect(stopThread).not.toHaveBeenCalled();
   });
 
-  it('keeps a terminal sync failure actionable in the progress lane without showing stale execution', async () => {
+  it('keeps a terminal sync failure actionable in the floating notice without showing stale execution', async () => {
     const running = thread({ thread_id: 'thread-sync-indicator', status: 'running' });
     const stream = failedStream([running]);
     const surface = renderSurfaceWithAdapter({ ...adapter(true), connectLiveStream: stream.connectLiveStream,
@@ -183,8 +183,9 @@ describe('Flower workspace synchronization recovery', () => {
     await waitFor(() => Boolean(surface.querySelector('[data-flower-progress-kind]')));
     stream.fail();
     await waitFor(() => Boolean(surface.querySelector('[data-flower-sync-state="failed"]')));
-    const lane = surface.querySelector('.flower-model-status-lane')!;
-    expect(lane.querySelector('[role="status"]')?.textContent).toContain('Status unconfirmed');
+    const lane = surface.querySelector('.flower-workspace-sync')!;
+    expect(lane.getAttribute('role')).toBe('alert');
+    expect(lane.textContent).toContain('Displayed state may be outdated');
     expect(lane.querySelector('[data-flower-progress-kind]')).toBeNull();
     expect(lane.querySelector('[data-floe-progress-shimmer]')).toBeNull();
     const retry = lane.querySelector<HTMLButtonElement>('button')!;

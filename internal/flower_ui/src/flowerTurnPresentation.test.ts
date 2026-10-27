@@ -43,7 +43,7 @@ const withRun = (value: MessageEntry, runID: string): MessageEntry => ({
 describe('canonical turn process presentation', () => {
   it('treats goal continuation as business work with the existing disclosure owner', () => {
     expect(projectFlowerTurnProcess(entries, [turn({ kind: 'goal_continuation' })]).groups.get('turn')?.disclosure).toBe('automatic');
-    expect(projectFlowerTurnProcess([thinking], [turn({ kind: 'goal_continuation', outcome: 'failed' })]).groups.get('turn')?.disclosure).toBe('automatic');
+    expect(projectFlowerTurnProcess([thinking], [turn({ kind: 'goal_continuation', outcome: 'failed' })]).groups.get('turn')?.disclosure).toBe('none');
   });
 
   it('preserves historical groups when only the active turn structure changes', () => {
@@ -116,14 +116,14 @@ describe('canonical turn process presentation', () => {
     }] };
     expect(projectFlowerTurnProcess([screenshot, ...entries], [turn()]).groups.get('turn')?.disclosure).toBe(disclosure);
   });
-  it('defaults successful legacy process to collapsed without hiding uncertain assistant content', () => {
+  it('retains the thinking disclosure without wrapping uncertain assistant content', () => {
     const result = projectFlowerTurnProcess([entries[0], thinking, ...entries.slice(1)], [turn({ intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })]).groups.get('turn');
-    expect(result?.disclosure).toBe('automatic');
+    expect(result?.disclosure).toBe('none');
     expect(result?.processKeys).toEqual(['thinking']);
   });
-  it.each(['failed', 'cancelled', 'interrupted'] as const)('automatically folds %s work', (outcome) => {
+  it.each(['failed', 'cancelled', 'interrupted'] as const)('retains the single thinking disclosure after %s work', (outcome) => {
     const result = projectFlowerTurnProcess([thinking, ...entries], [turn({ outcome, intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })]).groups.get('turn');
-    expect(result?.disclosure).toBe('automatic');
+    expect(result?.disclosure).toBe('none');
     expect(result?.processKeys).toEqual(['thinking']);
   });
   it('keeps mixed thinking and answer rows visible when their final boundary is unknown', () => {
@@ -143,7 +143,7 @@ describe('canonical turn process presentation', () => {
     const answer = entry('answer', 'user');
     const result = projectFlowerTurnProcess([thinking, image, answer, ...entries], [turn({ intermediate_item_ids: [], final_item_ids: [], final_boundary_complete: false })]).groups.get('turn');
     expect(result?.processKeys).toEqual(['thinking']);
-    expect(result?.disclosure).toBe('automatic');
+    expect(result?.disclosure).toBe('none');
   });
   it('keeps every explicit final segment and user message outside the process', () => {
     const result = projectFlowerTurnProcess(entries, [turn()]);

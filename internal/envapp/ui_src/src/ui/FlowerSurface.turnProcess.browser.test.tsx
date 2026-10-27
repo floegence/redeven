@@ -435,6 +435,52 @@ describe('completed turn process disclosure', () => {
     expect(document.activeElement).toBe(button);
     expect(message(root, 'final-a')).toBe(final);
   });
+  it.each([1280, 390])('keeps a thinking-only reply stationary when it completes at %i pixels', async width => {
+    const simple = (terminal: boolean) => current(terminal, {
+      items: current(terminal).items!.filter(item => ['user', 'thinking', 'final-a'].includes(item.id)),
+      turns: [turn({ ...(terminal ? { ended_at: '2026-10-11T12:00:00.400Z', work_duration_ms: 400, elapsed_ms: 400, waiting_ms: 0 } : { ended_at: undefined, outcome: undefined, elapsed_ms: 0, waiting_ms: 0, work_duration_ms: 0, final_boundary_complete: false }), intermediate_item_ids: [], final_item_ids: terminal ? ['final-a'] : [] })],
+    });
+    const { root, live } = await mount(simple(false));
+    await page.viewport(width, 900);
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    const final = message(root, 'final-a');
+    const thinking = root.querySelector('.flower-thinking-disclosure');
+    const top = final.getBoundingClientRect().top;
+    const samples: number[] = [];
+    let sampling = true;
+    const sample = () => { samples.push(final.getBoundingClientRect().top); if (sampling) requestAnimationFrame(sample); };
+    requestAnimationFrame(sample);
+    live.push(simple(true));
+    await new Promise(resolve => setTimeout(resolve, 350));
+    sampling = false;
+    expect(summary(root)).toBeNull();
+    expect(root.querySelector('.flower-thinking-disclosure')).toBe(thinking);
+    expect(message(root, 'final-a')).toBe(final);
+    expect(Math.max(...samples.map(value => Math.abs(value - top)))).toBeLessThanOrEqual(1);
+  });
+
+  it('settles automatic completion in one layout update and still animates manual disclosure', async () => {
+    const { root, live } = await mount();
+    const samples: string[] = [];
+    let sampling = true;
+    const sample = () => {
+      if (summary(root)) samples.push(messageRow(root, 'progress').querySelector('.flower-turn-row-viewport')!.getAttribute('data-state')!);
+      if (sampling) requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+    live.push(current(true));
+    await waitFor(() => summary(root)?.getAttribute('aria-expanded') === 'false');
+    await new Promise(resolve => setTimeout(resolve, 200));
+    sampling = false;
+    expect(samples.length).toBeGreaterThan(0);
+    expect(samples.every(state => state === 'closed')).toBe(true);
+    summary(root)!.click();
+    await waitFor(() => messageRow(root, 'progress').querySelector('.flower-turn-row-viewport')!.getAttribute('data-state') === 'opening');
+    await waitFor(() => messageRow(root, 'progress').querySelector('.flower-turn-row-viewport')!.getAttribute('data-state') === 'open');
+    summary(root)!.click();
+    await waitFor(() => messageRow(root, 'progress').querySelector('.flower-turn-row-viewport')!.getAttribute('data-state') === 'closing');
+  });
+
   it('shows one failure explanation while preserving older failed-turn status', async () => {
     const done = current(true);
     const oldItems = done.items!.filter((item) => item.id === 'user').map((item) => ({ ...item, id: 'old-user', turn_id: 'old-turn', run_id: 'old-run' }));

@@ -10,7 +10,7 @@ it('keeps loading focused on progress while sidebar navigation can leave the pen
     { focusThreadRequest: { request_id: 'loading', thread_id: selected.thread_id } });
   await waitFor(() => surface.querySelector('.flower-thread-loading') !== null);
   expect(surface.querySelector('.flower-thread-loading button')).toBeNull();
-  expect(surface.querySelector('.flower-thread-loading [role="progressbar"]')).not.toBeNull();
+  expect(surface.querySelectorAll('.flower-thread-loading .flower-thread-wave-bar')).toHaveLength(4);
   const button = surface.querySelector<HTMLButtonElement>('.flower-new-chat-button');
   expect(button).not.toBeNull();
   button!.click();

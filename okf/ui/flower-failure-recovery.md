@@ -5,7 +5,7 @@ description: One turn-level failure owner and bounded manual recovery without re
 tags: [ai, flower, recovery, interaction]
 timestamp: 2026-10-20T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-10-26"
 ---
 # Summary
 
@@ -15,7 +15,7 @@ Floret owns outcomes, retry checkpoints and automatic historical migrations. Flo
 
 Stream recovery displays only canonical progress attempts/deadlines. [Live delivery](flower-live-timeline.md#recovery-and-interaction) owns local read failure, revision fencing, one bounded window refresh and connection recovery; reader failure cannot restart the workspace stream.
 
-Before accepted detail, show one centered transcript error/Retry, not duplicate workspace/composer notices. Unconfirmed Stop remains separate. Loaded conversations retain live-sync recovery; embedded views omit global navigation. Leaving a read fences its completion and preserves Shell drafts without replay.
+Before accepted detail, show one floating error/Retry above the transcript without consuming its height or duplicating workspace/composer notices. The shared [notice stack](flower-live-timeline.md#recovery-and-interaction) preserves error explanations and recovery controls while keeping loaded messages and the composer stationary. Unconfirmed Stop remains separate. Loaded conversations retain live-sync recovery; embedded views omit global navigation. Leaving a read fences its completion and preserves Shell drafts without replay.
 
 Full child reports bypass ordinary preview limits but retain provider budget; canonical Retry reuses confirmed complete reports without tool dispatch. [Historical compatibility](../ai/flower-upgrade-compatibility.md) owns supported migration evidence rather than a UI-pinned schema version.
 

@@ -177,17 +177,18 @@ describe('Flower destination presentation', () => {
 
   it('keeps delayed detail behind a stable loading surface until actual content can be positioned', async () => {
     const { root, resolveDetail, events } = await fixture({ delayedDetail: true });
-    await waitFor(() => Boolean(root.querySelector('.flower-thread-preparing [role="status"]')));
+    await waitFor(() => Boolean(root.querySelector('.flower-chat-notices .flower-thread-loading')));
     expect(preparing(root)).toBe(true);
     expect(events).not.toContain('target:content_presented');
-    const loading = root.querySelector<HTMLElement>('.flower-thread-preparing [role="status"]');
+    const loading = root.querySelector<HTMLElement>('.flower-chat-notices .flower-thread-loading');
     expect(loading).not.toBeNull();
     expect(root.querySelectorAll('.flower-thread-loading')).toHaveLength(1);
     expect(getComputedStyle(loading!).visibility).toBe('visible');
-    const panel = root.querySelector('.flower-thread-preparing')!.getBoundingClientRect();
+    const panel = root.querySelector('.flower-chat-notices')!.getBoundingClientRect();
     const bounds = viewport(root).getBoundingClientRect();
-    expect(panel.top).toBeCloseTo(bounds.top, 0);
-    expect(panel.bottom).toBeCloseTo(bounds.bottom, 0);
+    expect(panel.top).toBeGreaterThanOrEqual(bounds.top);
+    expect(panel.bottom).toBeLessThan(bounds.bottom);
+    expect(getComputedStyle(root.querySelector('.flower-chat-notices')!).position).toBe('absolute');
     resolveDetail();
     await waitFor(() => !preparing(root) && Boolean(root.querySelector('[data-flower-message-id="body-23"]')), 5000);
     expect(bottomDistance(root)).toBeLessThanOrEqual(1);
@@ -204,7 +205,7 @@ describe('Flower destination presentation', () => {
       resolveDetail();
       await waitFor(() => loadHistoryItem.mock.calls.length === 2);
       expect(feedbackTimers()).toHaveLength(1);
-      await waitFor(() => Boolean(root.querySelector('.flower-thread-preparing [role="status"]')));
+      await waitFor(() => Boolean(root.querySelector('.flower-chat-notices .flower-thread-loading')));
       expect(preparing(root)).toBe(true);
       expect(root.querySelectorAll('.flower-thread-loading')).toHaveLength(1);
       for (const [id, body] of bodies) body.resolve(fullBody(id));

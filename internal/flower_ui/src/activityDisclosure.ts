@@ -68,6 +68,7 @@ export type FlowerActivityDisclosureMotion = Readonly<{
 
 export type FlowerActivityDisclosureMotionOptions = Readonly<{
   reducedMotion?: Accessor<boolean>;
+  animateClose?: Accessor<boolean>;
   initialOpen?: boolean;
   openDurationMs?: number;
   closeDurationMs?: number;
@@ -209,7 +210,7 @@ export function createFlowerActivityDisclosureMotion(
       stopMeasuring();
       const start = presentation();
       setState('closing');
-      animate(start, 0, reduced ? 0 : closeDurationMs, true);
+      animate(start, 0, reduced || options.animateClose?.() === false ? 0 : closeDurationMs, true);
     }
   }));
   onCleanup(() => { stopMeasuring(); cancelAnimation(); });
