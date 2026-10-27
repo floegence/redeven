@@ -47,7 +47,7 @@ export function TerminalSearchOverlay(props: TerminalSearchOverlayProps) {
         <Button
           size="sm"
           variant="ghost"
-          class="h-7 w-7 shrink-0 p-0 text-[var(--redeven-terminal-search-foreground)] hover:bg-[var(--redeven-terminal-search-hover)] hover:text-[var(--redeven-terminal-search-foreground)]"
+          class="w-7 shrink-0 p-0 text-[var(--redeven-terminal-search-foreground)] hover:bg-[var(--redeven-terminal-search-hover)] hover:text-[var(--redeven-terminal-search-foreground)]"
           onClick={props.onRetry}
           title={i18n.t('terminal.retry')}
           aria-label={i18n.t('terminal.retry')}
@@ -59,7 +59,7 @@ export function TerminalSearchOverlay(props: TerminalSearchOverlayProps) {
       <Button
         size="sm"
         variant="ghost"
-        class="h-7 w-7 shrink-0 p-0 text-[var(--redeven-terminal-search-foreground)] hover:bg-[var(--redeven-terminal-search-hover)] hover:text-[var(--redeven-terminal-search-foreground)]"
+        class="w-7 shrink-0 p-0 text-[var(--redeven-terminal-search-foreground)] hover:bg-[var(--redeven-terminal-search-hover)] hover:text-[var(--redeven-terminal-search-foreground)]"
         onClick={props.onPrevious}
         disabled={props.state === 'error' || props.state === 'searching' || props.resultCount <= 0}
         title={i18n.t('terminal.previous')}
@@ -69,7 +69,7 @@ export function TerminalSearchOverlay(props: TerminalSearchOverlayProps) {
       <Button
         size="sm"
         variant="ghost"
-        class="h-7 w-7 shrink-0 p-0 text-[var(--redeven-terminal-search-foreground)] hover:bg-[var(--redeven-terminal-search-hover)] hover:text-[var(--redeven-terminal-search-foreground)]"
+        class="w-7 shrink-0 p-0 text-[var(--redeven-terminal-search-foreground)] hover:bg-[var(--redeven-terminal-search-hover)] hover:text-[var(--redeven-terminal-search-foreground)]"
         onClick={props.onNext}
         disabled={props.state === 'error' || props.state === 'searching' || props.resultCount <= 0}
         title={i18n.t('terminal.next')}
@@ -79,7 +79,7 @@ export function TerminalSearchOverlay(props: TerminalSearchOverlayProps) {
       <Button
         size="sm"
         variant="ghost"
-        class="h-7 w-7 shrink-0 p-0 text-[var(--redeven-terminal-search-foreground)] hover:bg-[var(--redeven-terminal-search-hover)] hover:text-[var(--redeven-terminal-search-foreground)]"
+        class="w-7 shrink-0 p-0 text-[var(--redeven-terminal-search-foreground)] hover:bg-[var(--redeven-terminal-search-hover)] hover:text-[var(--redeven-terminal-search-foreground)]"
         onClick={props.onClose}
         title={i18n.t('terminal.close')}
       >

@@ -20,7 +20,7 @@
   :is(input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file'], [type='button'], [type='submit']),
     textarea, select, [data-floe-input-surface]):not(:where([data-floe-input-surface] *, .two-factor-code-surface)) {
   border: 1px solid var(--redeven-settings-field-border);
-  border-radius: 8px;
+  border-radius: var(--floe-radius-field, 0.625rem);
   background: var(--redeven-settings-field-bg);
   color: var(--foreground);
   box-shadow: none;
@@ -37,7 +37,7 @@
   .flower-provider-dialog, .redeven-terminal-settings-dialog, .managed-service-settings-drawer)
   :is(input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file'], [type='button'], [type='submit']),
     select, [data-floe-input-surface]):not(:where([data-floe-input-surface] *, .two-factor-code-surface)) {
-  min-height: 34px;
+  min-height: var(--floe-control-height-md, 2rem);
   font-family: var(--font-sans);
 }
 

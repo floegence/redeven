@@ -221,9 +221,9 @@ export function PdfPreviewPane(props: PdfPreviewPaneProps) {
       }}>
       <FilePreviewZoomControls zoom={zoom} kind="Pdf" metadata={<><span>PDF</span> · {loaded()?.pages.length ? i18n.tn('uiCopy.preview.pageCount', loaded()!.pages.length) : i18n.t('uiCopy.preview.noPages')}</>} />
       <div class="pdf-document-controls absolute left-2 top-2 z-10 flex items-center gap-0.5 rounded-lg border border-border/60 bg-background/90 p-1 shadow-sm backdrop-blur-sm">
-        <Button size="sm" variant="ghost" class="h-8 w-7 px-0" aria-label={i18n.t('filePreview.pdf.search')} title={i18n.t('filePreview.pdf.search')} disabled={!session()} onClick={openSearch}><Search class="size-3.5" /></Button>
+        <Button size="icon" variant="ghost" class="w-7" aria-label={i18n.t('filePreview.pdf.search')} title={i18n.t('filePreview.pdf.search')} disabled={!session()} onClick={openSearch}><Search class="size-3.5" /></Button>
         <Show when={props.editing}>
-          <Button size="sm" variant="ghost" class="h-8 w-7 px-0" aria-label={i18n.t('filePreview.pdf.highlight')} title={i18n.t(canHighlight() ? 'filePreview.pdf.highlight' : 'filePreview.pdf.selectText')} disabled={!canHighlight() || props.saving} onPointerDown={event => event.preventDefault()} onClick={() => void session()?.highlightSelection()}><Highlighter class="size-3.5" /></Button>
+          <Button size="icon" variant="ghost" class="w-7" aria-label={i18n.t('filePreview.pdf.highlight')} title={i18n.t(canHighlight() ? 'filePreview.pdf.highlight' : 'filePreview.pdf.selectText')} disabled={!canHighlight() || props.saving} onPointerDown={event => event.preventDefault()} onClick={() => void session()?.highlightSelection()}><Highlighter class="size-3.5" /></Button>
           <Dropdown align="start" triggerClass="flex h-8 w-7 cursor-pointer items-center justify-center rounded hover:bg-accent" triggerAriaLabel={i18n.t('filePreview.pdf.history')}
             trigger={<History class="size-3.5" />} disabled={props.saving}
             items={[
@@ -244,9 +244,9 @@ export function PdfPreviewPane(props: PdfPreviewPaneProps) {
                   else if (event.key === 'Enter') { event.preventDefault(); session()?.search(query(), event.shiftKey, true); }
                 }} />
               <span class="shrink-0 text-[11px] tabular-nums text-muted-foreground" role="status">{query() ? searchState().pending ? i18n.t('filePreview.pdf.searching') : searchState().total ? i18n.t('filePreview.pdf.matches', { current: searchState().current, total: searchState().total }) : i18n.t('filePreview.pdf.noMatches') : ''}</span>
-              <Button size="sm" variant="ghost" class="h-8 w-7 px-0" aria-label={i18n.t('filePreview.pdf.previous')} disabled={!searchState().total} onClick={() => session()?.search(query(), true, true)}><ArrowUp class="size-3.5" /></Button>
-              <Button size="sm" variant="ghost" class="h-8 w-7 px-0" aria-label={i18n.t('filePreview.pdf.next')} disabled={!searchState().total} onClick={() => session()?.search(query(), false, true)}><ArrowDown class="size-3.5" /></Button>
-              <Button size="sm" variant="ghost" class="h-8 w-7 px-0" aria-label={i18n.t('common.actions.close')} onClick={closeSearch}><X class="size-3.5" /></Button>
+              <Button size="icon" variant="ghost" class="w-7" aria-label={i18n.t('filePreview.pdf.previous')} disabled={!searchState().total} onClick={() => session()?.search(query(), true, true)}><ArrowUp class="size-3.5" /></Button>
+              <Button size="icon" variant="ghost" class="w-7" aria-label={i18n.t('filePreview.pdf.next')} disabled={!searchState().total} onClick={() => session()?.search(query(), false, true)}><ArrowDown class="size-3.5" /></Button>
+              <Button size="icon" variant="ghost" class="w-7" aria-label={i18n.t('common.actions.close')} onClick={closeSearch}><X class="size-3.5" /></Button>
             </div>
           </Show>
         </div>

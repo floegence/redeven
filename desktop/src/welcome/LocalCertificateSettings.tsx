@@ -147,7 +147,7 @@ export function LocalCertificateSettings(props: Readonly<{
         <Button size="sm" variant="outline" disabled={props.available === false} onClick={() => { setAuthorityRevoked(false); setConfirmation(undefined); void perform('status'); }}>{props.i18n.t('interactionContinuity.revalidate')}</Button></Show>
       <header class="environment-certificate-header flex items-center justify-between gap-3">
         <h4 class="text-xs font-semibold text-foreground">{props.i18n.t('settings.certificateSetup')}</h4>
-        <Button size="icon" variant="ghost" class="h-7 w-7 shrink-0" disabled={unavailable() || Boolean(operation())}
+        <Button size="sm" variant="ghost" class="w-7 shrink-0 p-0" disabled={unavailable() || Boolean(operation())}
           aria-label={props.i18n.t('settings.certificateRefresh')} title={props.i18n.t('settings.certificateRefresh')}
           onClick={() => void perform('status')}>
           <Refresh class="h-3.5 w-3.5" classList={{ 'animate-spin': operation() === 'status' }} aria-hidden="true" />

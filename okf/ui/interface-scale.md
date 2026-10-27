@@ -17,7 +17,7 @@ Published Floe owns typography, dimensions, responsive targets and virtual rows;
 Env App/Desktop bundle Inter Variable with shared script fallbacks. Guidance, errors, labels/dialogs use published roles, not fixed 13–14px or generic utilities. Root size, zoom and magnification remain user-controlled. [Message appearance](flower-message-appearance.md) owns the separate transcript reading scale.
 
 ## Controls and layout density
-Inline desktop actions use 28px targets; ordinary primary actions/fields use 32px. [Settings fields](runtime-settings.md#settings-controls-and-identity) use their explicit 34px treatment. Groups are 8px apart with the last action at trailing padding; focus changes only the existing border color.
+Inline desktop actions use 28px targets; ordinary primary actions/fields use 32px. [Settings fields](runtime-settings.md#settings-controls-and-identity) follow the same published 32px control height and `--floe-radius-field` corners rather than a product-local scale. Buttons take their height, padding, radius and type size from the published `size` primitive: `icon` for square icon actions, `md` for ordinary text actions, `lg` where a 36px target was already intended. Do not re-impose heights on top of `size`, because the merge helper lets a passed class silently defeat the primitive and neighbours diverge. Groups are 8px apart with the last action at trailing padding; focus changes only the existing border color.
 
 Measure real published components after fonts load, recording source/package identity, font, root, DPR and zoom. Mixed-script Markdown at 434px/758px must fit within 90% of the frozen reference height. Compare matching content/dimensions; another product's screenshots do not establish CSS measurements.
 

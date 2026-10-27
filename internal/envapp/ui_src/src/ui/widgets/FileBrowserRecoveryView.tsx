@@ -108,25 +108,25 @@ export function FileBrowserRecoveryView(props: FileBrowserRecoveryViewProps) {
         <div class={cn('flex flex-wrap items-center gap-x-2 gap-y-2', props.unavailable ? 'mt-6 border-t border-border/60 pt-5' : 'mt-3')}>
           <Show when={props.parentAvailable}>
             <Button {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS} size="md" variant="primary" icon={ArrowUp}
-              class="h-8 rounded-md px-3 text-xs shadow-none" onClick={props.onOpenParent}>
+              class="rounded-md px-3 text-xs shadow-none" onClick={props.onOpenParent}>
               {i18n.t('files.navigationFailure.openParent')}
             </Button>
           </Show>
           <Show when={props.accessFailure && props.canManageAccess}>
             <Button {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS} size="md" variant="primary" icon={Settings}
-              class="h-8 rounded-md px-3 text-xs shadow-none" onClick={props.onManageAccess}>
+              class="rounded-md px-3 text-xs shadow-none" onClick={props.onManageAccess}>
               {i18n.t('files.navigationFailure.manageAccess')}
             </Button>
           </Show>
           <Button {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS} size="md" variant={hasRecoveryDestination() ? 'ghost' : 'primary'}
-            class={cn('h-8 rounded-md px-3 text-xs shadow-none aria-disabled:cursor-wait aria-disabled:opacity-60', hasRecoveryDestination() && 'text-muted-foreground')}
+            class={cn('px-3 text-[length:var(--floe-type-caption)] shadow-none aria-disabled:cursor-wait aria-disabled:opacity-60', hasRecoveryDestination() && 'text-muted-foreground')}
             aria-disabled={props.pending} onClick={() => { if (!props.pending) props.onRetry(); }}>
             <Refresh class={cn('size-3', props.pending && 'motion-safe:animate-spin')} aria-hidden="true" />
             {i18n.t('files.navigationFailure.retry')}
           </Button>
           <Show when={props.homeAvailable}>
-            <Button {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS} size="sm" variant="ghost"
-              class="ml-auto h-8 px-1 text-[11px] font-normal text-muted-foreground" onClick={props.onOpenHome}>
+            <Button {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS} size="md" variant="ghost"
+              class="ml-auto px-1 text-[11px] font-normal text-muted-foreground" onClick={props.onOpenHome}>
               {i18n.t('files.navigationFailure.openHome')}
             </Button>
           </Show>

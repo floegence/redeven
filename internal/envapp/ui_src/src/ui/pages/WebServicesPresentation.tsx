@@ -11,8 +11,8 @@ export function WebServicesHeader(props: { actions?: JSX.Element }) {
   return <header class="web-services-header redeven-resource-header" data-testid="web-services-panel">
     <h1>{i18n.t('webServices.title')}</h1>
     <div class="web-services-header-actions">{props.actions ?? <>
-      <Button size="sm" variant="outline" disabled class={`h-8 ${redevenSurfaceRoleClass('control')}`}><FileText class="mr-1.5 h-3.5 w-3.5" /><span>{i18n.t('webServices.managed.serviceTemplates')}</span></Button>
-      <Button size="sm" disabled class="h-8"><Plus class="mr-1.5 h-3.5 w-3.5" /><span>{i18n.t('webServices.actions.addService')}</span></Button>
+      <Button size="md" variant="outline" disabled class={redevenSurfaceRoleClass('control')}><FileText class="mr-1.5 h-3.5 w-3.5" /><span>{i18n.t('webServices.managed.serviceTemplates')}</span></Button>
+      <Button size="md" disabled><Plus class="mr-1.5 h-3.5 w-3.5" /><span>{i18n.t('webServices.actions.addService')}</span></Button>
     </>}</div>
   </header>;
 }
@@ -41,7 +41,7 @@ export function WebServicesPageSkeleton() {
       <section class="space-y-3"><div class="web-services-toolbar"><div class="web-services-toolbar-heading"><h2>{i18n.t('webServices.collection.title')}</h2><span class="inline-flex h-7 w-7 shrink-0" aria-hidden="true" /></div><div class="web-services-toolbar-actions">
         <div class="web-services-search"><Search class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" /><Input disabled size="sm" class="h-9 w-full pl-9 pr-9" placeholder={i18n.t('webServices.search.placeholder')} /></div>
         <button disabled class="web-services-menu-trigger"><span>{i18n.t('webServices.collection.archives')}<ChevronDown class="ml-1.5 h-3.5 w-3.5" /></span></button>
-        <Button size="sm" variant="ghost" disabled class="h-9 w-9 shrink-0 px-0" aria-label={i18n.t('webServices.actions.refresh')}><RefreshIcon class="h-4 w-4 animate-spin motion-reduce:animate-none" /></Button>
+        <Button size="lg" variant="ghost" disabled class="w-9 shrink-0 px-0" aria-label={i18n.t('webServices.actions.refresh')}><RefreshIcon class="h-4 w-4 animate-spin motion-reduce:animate-none" /></Button>
       </div></div><div class="relative" style={{ 'min-height': '200px' }}><WebServicesListSkeleton /></div></section>
     </div></main>
   </div>;

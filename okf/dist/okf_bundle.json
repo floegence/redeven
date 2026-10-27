@@ -31851,15 +31851,15 @@
         "title": "Shared interface scale",
         "type": "UI Contract"
       },
-      "body_length": 2239,
+      "body_length": 2666,
       "summary": "Published Floe owns typography, dimensions, responsive targets and virtual rows; Redeven maps product roles to it. At 16px root/100% zoom, desktop body is 12px/20px, conversation titles 13px/20px, navigation 12px/18px and ordinary rows 28px including spacing. Touch/enlarged text grows naturally. No density setting, root shrink or transform changes scale.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Type roles and boundaries\nEnv App/Desktop bundle Inter Variable with shared script fallbacks. Guidance, errors, labels/dialogs use published roles, not fixed 13–14px or generic utilities. Root size, zoom and magnification remain user-controlled. [Message appearance](flower-message-appearance.md) owns the separate transcript reading scale.\n\n## Controls and layout density\nInline desktop actions use 28px targets; ordinary primary actions/fields use 32px. [Settings fields](runtime-settings.md#settings-controls-and-identity) use their explicit 34px treatment. Groups are 8px apart with the last action at trailing padding; focus changes only the existing border color.\n\nMeasure real published components after fonts load, recording source/package identity, font, root, DPR and zoom. Mixed-script Markdown at 434px/758px must fit within 90% of the frozen reference height. Compare matching content/dimensions; another product's screenshots do not establish CSS measurements.",
-          "char_count": 977
+          "body": "## Type roles and boundaries\nEnv App/Desktop bundle Inter Variable with shared script fallbacks. Guidance, errors, labels/dialogs use published roles, not fixed 13–14px or generic utilities. Root size, zoom and magnification remain user-controlled. [Message appearance](flower-message-appearance.md) owns the separate transcript reading scale.\n\n## Controls and layout density\nInline desktop actions use 28px targets; ordinary primary actions/fields use 32px. [Settings fields](runtime-settings.md#settings-controls-and-identity) follow the same published 32px control height and `--floe-radius-field` corners rather than a product-local scale. Buttons take their height, padding, radius and type size from the published `size` primitive: `icon` for square icon actions, `md` for ordinary text actions, `lg` where a 36px target was already intended. Do not re-impose heights on top of `size`, because the merge helper lets a passed class silently defeat the primitive and neighbours diverge. Groups are 8px apart with the last action at trailing padding; focus changes only the existing border color.\n\nMeasure real published components after fonts load, recording source/package identity, font, root, DPR and zoom. Mixed-script Markdown at 434px/758px must fit within 90% of the frozen reference height. Compare matching content/dimensions; another product's screenshots do not establish CSS measurements.",
+          "char_count": 1404
         },
         {
           "id": "boundaries",
@@ -32636,15 +32636,15 @@
         "title": "Runtime settings",
         "type": "UI Contract"
       },
-      "body_length": 2242,
+      "body_length": 2461,
       "summary": "Env App owns runtime settings destinations, localized drafts and API adapters; published Floe owns reusable layout/navigation. Narrow layouts remain usable and revisited panels retain draft/scroll. Authenticated APIs own writes; readers cannot edit administrator fields. Failures preserve input, while maintenance uses its existing controller after explicit confirmation.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Navigation and visual hierarchy\nDestinations are Config File, Connection, Runtime Status, Shell \u0026 Workspace, Codespaces \u0026 Tooling, Logging, Permission Policy, Flower and Debug Console. Page-owned geometry avoids competing global/lazy styles. Full padded diagnostic summaries toggle native disclosure with neutral hover and visible keyboard focus.\n\n## Settings controls and identity\nRuntime, Desktop environment, Flower, terminal and managed-service fields share 34px minimum height, 8px corners, 12px text, quiet fill and subdued 1px border. Floe owns keyboard, validation, menus and border-only focus. Scalar labels need no decorative icons.\n\n## Configuration editing\nExisting autosave/restart rules govern shell, filesystem, logging, ports and permissions. Settings PUT accepts flat fields, never response-group wrappers such as `runtime`/`logging`/`codespaces`. Health, diagnostics, backup/restore use right-column actions without bypassing permission/confirmation.\n\n## Flower extension placement\n[Flower extensions](flower-extensions.md) own Skills/MCP browsing and management.",
-          "char_count": 1084
+          "body": "## Navigation and visual hierarchy\nDestinations are Config File, Connection, Runtime Status, Shell \u0026 Workspace, Codespaces \u0026 Tooling, Logging, Permission Policy, Flower and Debug Console. Page-owned geometry avoids competing global/lazy styles. Full padded diagnostic summaries toggle native disclosure with neutral hover and visible keyboard focus.\n\n## Settings controls and identity\nRuntime, Desktop environment, Flower, terminal and managed-service fields share the published Floe control height (32px, `--floe-control-height-md`), `--floe-radius-field` corners, 12px text, quiet fill and subdued 1px border. Row identity icons and provider brands occupy the same 32px square on `--floe-radius-md`, so icon, field and select edges stay concentric within a row. Floe owns keyboard, validation, menus and border-only focus. Scalar labels need no decorative icons.\n\n## Configuration editing\nExisting autosave/restart rules govern shell, filesystem, logging, ports and permissions. Settings PUT accepts flat fields, never response-group wrappers such as `runtime`/`logging`/`codespaces`. Health, diagnostics, backup/restore use right-column actions without bypassing permission/confirmation.\n\n## Flower extension placement\n[Flower extensions](flower-extensions.md) own Skills/MCP browsing and management.",
+          "char_count": 1303
         },
         {
           "id": "boundaries",
@@ -33764,5 +33764,5 @@
       ]
     }
   ],
-  "source_sha256": "8b3d88a508eea8bca89b04183b2b299f182f7a56b9ff04d99c6ad49e8a95daf4"
+  "source_sha256": "427f5fc53359173d5de41366e221b4558b2735c16760fa308df764c4fff2188a"
 }

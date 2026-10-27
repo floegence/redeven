@@ -25,7 +25,7 @@ export function FilePreviewZoomControls(props: { zoom: PreviewZoom; kind: 'Pdf' 
     <div class={`${props.kind.toLowerCase()}-preview-controls pointer-events-none absolute inset-x-2 top-2 z-10 flex justify-end`}>
       <div class="preview-zoom-controls pointer-events-auto flex max-w-full items-center gap-0.5 rounded-lg border border-border/60 bg-background/90 p-1 shadow-sm backdrop-blur-sm">
         <Tooltip content={i18n.t(`uiCopy.preview.zoomOut${props.kind}`)} placement="bottom">
-          <Button size="sm" variant="ghost" class="h-8 w-8 shrink-0 px-0" disabled={!props.zoom.canZoomOut()} aria-label={i18n.t(`uiCopy.preview.zoomOut${props.kind}`)} onClick={props.zoom.zoomOut}><Minus class="h-3.5 w-3.5" /></Button>
+          <Button size="icon" variant="ghost" class="shrink-0 px-0" disabled={!props.zoom.canZoomOut()} aria-label={i18n.t(`uiCopy.preview.zoomOut${props.kind}`)} onClick={props.zoom.zoomOut}><Minus class="h-3.5 w-3.5" /></Button>
         </Tooltip>
         <Dropdown align="end" class="min-w-0" disabled={props.zoom.scale() === null}
           triggerClass="flex h-8 min-w-0 items-center gap-1.5 rounded px-1.5 text-xs hover:bg-accent focus-visible:outline-none focus-visible:bg-accent"
@@ -44,7 +44,7 @@ export function FilePreviewZoomControls(props: { zoom: PreviewZoom; kind: 'Pdf' 
           items={items()} value={props.zoom.mode()}
           onSelect={mode => { if (mode === 'contain' || mode === 'width' || mode === 'actual') props.zoom.selectMode(mode); }} />
         <Tooltip content={i18n.t(`uiCopy.preview.zoomIn${props.kind}`)} placement="bottom">
-          <Button size="sm" variant="ghost" class="h-8 w-8 shrink-0 px-0" disabled={!props.zoom.canZoomIn()} aria-label={i18n.t(`uiCopy.preview.zoomIn${props.kind}`)} onClick={props.zoom.zoomIn}><Plus class="h-3.5 w-3.5" /></Button>
+          <Button size="icon" variant="ghost" class="shrink-0 px-0" disabled={!props.zoom.canZoomIn()} aria-label={i18n.t(`uiCopy.preview.zoomIn${props.kind}`)} onClick={props.zoom.zoomIn}><Plus class="h-3.5 w-3.5" /></Button>
         </Tooltip>
       </div>
     </div>
