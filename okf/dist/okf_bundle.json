@@ -7975,7 +7975,7 @@
         "title": "Computer use product qualification",
         "type": "Acceptance Contract"
       },
-      "body_length": 6259,
+      "body_length": 7244,
       "summary": "Redeven qualifies Computer use through the actual product renderer, Runtime,\nmedia decoder and target adapter. A passing scenario proves only its declared\ntarget and provider scope. Fixture outcomes, decoded pixels and cleanup are\nrequired evidence; successful HTTP responses or tool metadata alone are\ninsufficient. Failed input and uncertain effects must never be replayed to\nmanufacture a passing result.",
       "sections": [
         {
@@ -33764,5 +33764,5 @@
       ]
     }
   ],
-  "source_sha256": "a8a1f78471692276321c740573d40e95a1aa9ab2d60751da033a142ec63f0868"
+  "source_sha256": "4abde60cbe2a0382144d0fc5bc65f945b7e79823c7319da9e950840c6a4c9488"
 }

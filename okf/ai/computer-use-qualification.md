@@ -71,6 +71,22 @@ Browser tests separately inject late decoding, expired interactions and queued c
 
 ## October 2026 contract qualification scope
 
+The final October 26 local run uses configured DeepSeek V4.1 Flash (1017), wire
+model `deepseek-flash`, with 12 scenarios repeated five times: 60/60 pass in
+173.114 seconds. Source hashes remain unchanged through the subsequent rebase.
+Its 273 tool activities include 31 error-status activities: 18 expected
+diagnostic rejections and 13 additional model-call errors in table/download
+tasks. All five image cases dispatch exactly one click; all five stale-image
+cases return the stale diagnostic with zero clicks. No export or counted save
+is replayed. This establishes the stated protocol outcomes, not flawless model
+planning.
+
+Retained earlier batches include a superseded 60/60 result whose stale-image
+assertion trusted final prose, a 51/60 stricter batch that exposed test and model
+failures, and a 59/60 batch whose image prompt omitted the assertion's explicit
+one-click requirement. Correcting those evidence defects precedes the final
+run; previous reports remain unchanged.
+
 The operation-contract qualification covers pure argument validation before
 focus, 2,100-result query reference retention, image mapping across device scales
 and emulated page scales, scrollbar exclusion, stale frames, live-view captures,
