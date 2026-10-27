@@ -144,13 +144,16 @@ export function createRuntimeThreadRecord(current: FlowerRuntimeCurrentView, ini
     if (!archive.size) return turns;
     const ids = new Set(readingRecords().map(record => record.item.turn_id));
     const byID = new Map((retainedPrefix ? priorTurns : []).filter(turn => ids.has(turn.turn_id)).map(turn => [turn.turn_id, turn]));
-    const available = new Set(readingRecords().map(record => record.item.id));
+    const positions = new Map(readingRecords().map(record => [record.item.id, record.item.ordinal]));
+    const mergeMembership = (previous: readonly string[], incoming: readonly string[]) =>
+      [...new Set([...previous.filter(id => archive.has(id)), ...incoming])].filter(id => positions.has(id))
+        .sort((a, b) => positions.get(a)! - positions.get(b)!);
     for (const turn of turns ?? []) {
       const prior = byID.get(turn.turn_id);
-      byID.set(turn.turn_id, prior?.run_id === turn.run_id ? { ...turn,
-        final_boundary_complete: turn.final_boundary_complete || sameLeaf && prior.final_boundary_complete,
-        intermediate_item_ids: [...new Set([...(prior.intermediate_item_ids ?? []), ...(turn.intermediate_item_ids ?? [])])].filter(id => available.has(id)),
-        final_item_ids: [...new Set([...prior.final_item_ids, ...turn.final_item_ids])].filter(id => available.has(id)),
+      byID.set(turn.turn_id, prior ? { ...turn,
+        final_boundary_complete: turn.final_boundary_complete || prior.run_id === turn.run_id && sameLeaf && prior.final_boundary_complete,
+        intermediate_item_ids: mergeMembership(prior.intermediate_item_ids ?? [], turn.intermediate_item_ids ?? []),
+        final_item_ids: mergeMembership(prior.run_id === turn.run_id ? prior.final_item_ids : [], turn.final_item_ids),
       } : turn);
     }
     return [...byID.values()].sort((a, b) => a.started_at.localeCompare(b.started_at));

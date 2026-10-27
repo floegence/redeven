@@ -1063,12 +1063,19 @@ describe('canonical original and Fork process regression', () => {
     expect(new Set(entries.map(row => row.key)).size).toBe(entries.length);
     expect(snapshot.messages.every(message => mapFlowerMessage({ ...message, timestamp: message.created_at_ms }).canonical_ordinal === message.canonical_ordinal)).toBe(true);
   });
-  it.each(['overlap', 'wrong-run', 'out-of-order', 'duplicate', 'missing'] as const)('rejects %s intermediate authority before cache admission', invalid => {
+  it('accepts confirmed intermediate items from earlier executions of the same turn', () => {
+    const current = canonicalProcessFixture();
+    const items = current.items!.map(item => item.id === 'research-intro' ? { ...item, run_id: 'earlier-run' } : item);
+    const snapshot = applyFlowerRuntimeCurrentView({ ...summary(), thread_id: current.thread_id }, { ...current, items });
+    expect(snapshot.turns![0].intermediate_item_ids).toContain('research-intro');
+    expect(projectFlowerTurnProcess(buildFlowerTimelineEntries(snapshot), snapshot.turns).groups.get('research-turn')?.processKeys).toContain('message:research-intro');
+  });
+  it.each(['overlap', 'wrong-turn', 'out-of-order', 'duplicate', 'missing'] as const)('rejects %s intermediate authority before cache admission', invalid => {
     const current = canonicalProcessFixture();
     const references = invalid === 'out-of-order' ? ['research-progress', 'research-intro'] : invalid === 'duplicate' ? ['research-intro', 'research-intro'] : invalid === 'missing' ? ['missing'] : ['research-intro'];
     const turns = [{ ...current.turns![0], intermediate_item_ids: references,
       ...(invalid === 'overlap' ? { outcome: 'completed' as const, final_item_ids: ['research-intro'], final_boundary_complete: true } : {}) }];
-    const items = current.items!.map(item => invalid === 'wrong-run' && item.id === 'research-intro' ? { ...item, run_id: 'foreign-run' } : item);
+    const items = current.items!.map(item => invalid === 'wrong-turn' && item.id === 'research-intro' ? { ...item, turn_id: 'foreign-turn' } : item);
     expect(() => applyFlowerRuntimeCurrentView({ ...summary(), thread_id: current.thread_id }, { ...current, items, turns })).toThrow(/canonical turn presentation/);
   });
 });

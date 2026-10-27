@@ -22,6 +22,8 @@ A single thinking-only process keeps its existing thinking disclosure and timing
 Running/preparing/retrying/finalizing/waiting turns stay expanded without a toggle. After a canonical outcome and end time, confirmed intermediate/typed process rows fold automatically, including the latest failed/cancelled/interrupted turn. Final and trailing partial output remain visible. Focus, selection, gestures, open details/thinking and reading away from the tail retain inspected work; observation cannot later undo that protection. Capture an unaffected visible anchor only when a real automatic collapse starts, and correct geometry through the existing scroll owner. Open/closed choices survive pagination, reconnects and regrouping. A newly classified row under inspection remains visible until the next explicit group toggle, without reopening other folded rows. Only an explicit disclosure or navigation action can open a closed group. Inspected bodies stay mounted and inert when folded, preserving nested choices and offsets. Main, embedded and child views share rendering with separate scroll owners.
 
 ## Layout and accessibility
+The turn header precedes its first loaded response after the original request, independently of which rows may fold. Canonical intermediate membership spans all executions of the same turn; source-run supersession remains engine-owned. In-turn Goal facts retain their turn ownership across continuation. Unknown prose and final output remain visible. A partial window uses its first loaded response without fetching earlier history for presentation. Retained canonical prefixes keep confirmed intermediate membership across a new run; incoming window facts replace overlapping classifications, and final boundaries remain run-scoped. Prepending the actual beginning moves the header while retaining its turn choice and keyboard focus; the button reads turn disclosure state independently of its anchor row visibility.
+
 Automatic turn/sequence folding settles summary insertion and process removal in one layout update before paint. Explicit manual open/close keeps the existing motion and reduced-motion preference; the disclosure owner retains the interaction choice. Canonical Path order, never timestamps, positions messages/receipts. Dialogue, final segments and secret-answer redaction remain intact.
 
 # Boundaries
@@ -30,7 +32,7 @@ Disclosure is ephemeral UI state. Final content and dialogue stay mounted and or
 
 # Evidence
 
-The 2026-10-27 regressions cover manual interleaved folding with retained input checkpoints and nested choices, plus root/child wheel and keyboard paging from a bodyless collapsed window. Two isolated historical copies pass the product HTTP path: one opening read each, no idle history traversal, and complete statistics after explicit paging.
+The 2026-10-27 regressions cover manual interleaved folding with retained input checkpoints and nested choices, plus root/child wheel and keyboard paging from a bodyless collapsed window. Three isolated historical copies pass the product HTTP path: one opening read each, no idle history traversal, complete statistics after explicit paging, and a header immediately after the original request. The continuation regression includes old-run opening prose and Goal; unknown prose remains visible under an independently controlled header. Browser tests also cover focus and closed-choice retention when earlier history moves that header.
 
 - `redeven:go.mod` - Published Floret dependency.
 
