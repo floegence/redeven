@@ -84,7 +84,7 @@ import {
   Trash,
   X,
 } from '@floegence/floe-webapp-core/icons';
-import { BottomBarItem, TopBarIconButton } from '@floegence/floe-webapp-core/layout';
+import { TopBarIconButton } from '@floegence/floe-webapp-core/layout';
 
 import { SSHEnvironmentSettingsForm } from './SSHEnvironmentSettingsForm';
 import { EnvironmentSettingsDialog, EnvironmentSettingsPanel, EnvironmentSettingsReveal } from './EnvironmentSettingsDialog';
@@ -250,6 +250,7 @@ import {
   type EnvironmentCardTone,
   type EnvironmentActionPresentation,
   type EnvironmentCenterTab,
+  type EnvironmentLibrarySummaryModel,
   type EnvironmentPrimaryActionOverlayModel,
 } from './viewModel';
 import { buildEnvironmentLibraryDisplayGroups, environmentCloudSections, type EnvironmentLibraryDisplayGroup } from './environmentLibraryProjection';
@@ -2612,6 +2613,18 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return;
     }
     setDesktopUpdateDialogOpen(true);
+  }
+
+  /* The title-bar button is now the only in-window update affordance, so it
+   * follows the state it reports: an update that is waiting opens its flow,
+   * anything else asks again. */
+  function activateDesktopUpdates(): void {
+    const state = desktopUpdateSnapshot().state;
+    if (state === 'available' || state === 'ready') {
+      openDesktopUpdates();
+      return;
+    }
+    checkForDesktopUpdates();
   }
   const settingsController = createEnvironmentSettingsController<ConnectionDialogState>({
     load: (environment_id, dialog_token) => props.runtime.settings.load({ environment_id, dialog_token }),
@@ -6446,7 +6459,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               class="redeven-desktop-update-button"
               data-update-state={desktopUpdateSnapshot().state}
               aria-label={desktopUpdateButtonLabel()}
-              onClick={checkForDesktopUpdates}
+              onClick={activateDesktopUpdates}
             >
               <Refresh
                 aria-hidden="true"
@@ -6459,68 +6472,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             </button>
           </DesktopTooltip>
         )}
-        bottomBarLeading={(
-          <div class="flex items-center gap-1.5 min-w-0">
-            <span class="redeven-bottom-bar-metric">
-              <span class="redeven-bottom-bar-metric__label">{localizedVisibleLabel(i18n(), librarySummary().environment_count)}</span>
-            </span>
-            <span class="redeven-bottom-bar-metric__sep">·</span>
-            <span class="redeven-bottom-bar-metric">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
-              <span class="redeven-bottom-bar-metric__label">{localizedWindowsLabel(i18n(), librarySummary().window_count)}</span>
-            </span>
-            <span class="redeven-bottom-bar-metric__sep">·</span>
-            <BottomBarMetric
-              count={librarySummary().ready_count}
-              label={i18n().t('launcher.ready')}
-              tone="success"
-            />
-            <span class="redeven-bottom-bar-metric__sep">·</span>
-            <BottomBarMetric
-              count={librarySummary().running_count}
-              label={i18n().t('launcher.running')}
-              tone="primary"
-            />
-            <span class="redeven-bottom-bar-metric__sep">·</span>
-            <BottomBarMetric
-              count={librarySummary().attention_count}
-              label={i18n().t('launcher.attention')}
-              tone="warning"
-            />
-          </div>
-        )}
-        bottomBarTrailing={(
-          <div class="flex items-center gap-2 font-sans">
-            {/* Issue warning */}
-            <Show when={snapshot().issue}>
-              <span class="flex shrink-0 items-center gap-1 text-[10px] font-medium text-warning">
-                <span class="h-2 w-2 shrink-0 border border-warning bg-warning/10" />
-                <span class="truncate max-w-[200px]">{localizedIssueTitle(i18n(), snapshot().issue!)}</span>
-              </span>
-            </Show>
-            <BottomBarItem class="cursor-pointer" onClick={openDesktopUpdates}>
-              <span
-                class={cn(
-                  'text-[11px]',
-                  desktopUpdateSnapshot().state === 'available' || desktopUpdateSnapshot().state === 'ready'
-                    ? 'text-primary'
-                    : desktopUpdateSnapshot().state === 'error'
-                      ? 'text-destructive'
-                      : '',
-                )}
-                aria-label={i18n().t('desktopUpdate.statusButton', {
-                  status: desktopUpdateStatusLabel(i18n(), desktopUpdateSnapshot()),
-                })}
-              >
-                {i18n().t('desktopUpdate.title')}
-              </span>
-            </BottomBarItem>
-            {/* Close / Quit */}
-            <BottomBarItem class="cursor-pointer" onClick={() => void closeLauncherOrQuit()}>
-              <span class="text-[11px]">{localizedCloseActionLabel(i18n(), snapshot().close_action)}</span>
-            </BottomBarItem>
-          </div>
-        )}
       >
         <Show when={environmentsVisited()}>
           <div class="h-full min-h-0" style={{ display: environmentsVisible() ? undefined : 'none' }}
@@ -6529,6 +6480,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               i18n={i18n()}
               visible={environmentsVisible()}
               snapshot={snapshot()}
+              librarySummary={librarySummary()}
               busyState={busyState()}
               actionProgress={activeActionProgress()}
               activeTab={activeCenterTab()}
@@ -7520,6 +7472,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   i18n: DesktopI18n;
   visible: boolean;
   snapshot: DesktopWelcomeSnapshot;
+  librarySummary: EnvironmentLibrarySummaryModel;
   busyState: DesktopLauncherBusyState;
   actionProgress: readonly DesktopLauncherActionProgress[];
   activeTab: EnvironmentCenterTab;
@@ -7640,13 +7593,6 @@ function ConnectEnvironmentSurface(props: Readonly<{
   });
   onCleanup(cancelTabEntrance);
 
-  const visibleEnvironmentCount = createMemo(() => (
-    environmentLibraryCount(
-      props.allLibraryGroups,
-      props.libraryQuery,
-      props.librarySourceFilter,
-    )
-  ));
   const localSourceCount = createMemo(() => (
     environmentLibraryCount(props.allLibraryGroups, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)
   ));
@@ -7815,6 +7761,11 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 <p class="text-xs text-muted-foreground">
                   {props.i18n.t(headerCopy().descriptionKey)}
                 </p>
+                <Show when={props.activeTab === 'environments'}>
+                  <div class="pt-1.5">
+                    <LibrarySummary i18n={props.i18n} summary={props.librarySummary} issue={props.snapshot.issue ?? undefined} />
+                  </div>
+                </Show>
               </div>
               <div class="redeven-center-actions flex min-w-0 items-center gap-2">
                 <div class="redeven-center-search">
@@ -7942,13 +7893,6 @@ function ConnectEnvironmentSurface(props: Readonly<{
                         {activeNonCategoryFilterChipLabel()}
                       </button>
                     </Show>
-                    <div class="hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
-                      <span>{props.i18n.t('environmentCenter.shownCount', { count: visibleEnvironmentCount() })}</span>
-                      <Show when={props.snapshot.open_windows.length > 0}>
-                        <span class="text-border">·</span>
-                        <span>{props.i18n.t('environmentCenter.liveCount', { count: props.snapshot.open_windows.length })}</span>
-                      </Show>
-                    </div>
                   </>
                 </Show>
                 <Show when={props.activeTab === 'control_planes'}>
@@ -8075,39 +8019,66 @@ function ConsoleBadge(props: Readonly<{
   return <span class="redeven-console-badge">{props.children}</span>;
 }
 
-function BottomBarMetric(props: Readonly<{
+function LibrarySummaryMetric(props: Readonly<{
   count: number;
   label: string;
   tone?: 'success' | 'primary' | 'warning';
-  icon?: JSX.Element;
 }>) {
-  const hasTone = () => props.tone !== undefined && props.count > 0;
-  const [popped, setPopped] = createSignal(false);
-  createEffect(on(() => props.count, () => {
-    if (props.count === 0) return;
-    setPopped(true);
-    const timer = setTimeout(() => setPopped(false), 180);
-    onCleanup(() => clearTimeout(timer));
-  }));
   return (
     <span
-      class="redeven-bottom-bar-metric"
-      data-tone={hasTone() ? props.tone : undefined}
+      class="redeven-library-summary__metric"
+      data-tone={props.tone}
       data-zero={props.count === 0 ? '' : undefined}
     >
-      {props.icon ?? (
-        <Show when={props.tone !== undefined}>
-          <span class="redeven-bottom-bar-metric__dot" aria-hidden="true" />
-        </Show>
-      )}
-      <span
-        class="redeven-bottom-bar-metric__count"
-        classList={{ 'redeven-bottom-bar-metric__count--pop': popped() }}
-      >
-        {props.count}
-      </span>
-      <span class="redeven-bottom-bar-metric__label">{props.label}</span>
+      <Show when={props.tone !== undefined}>
+        <span class="redeven-library-summary__dot" aria-hidden="true" />
+      </Show>
+      <span class="redeven-library-summary__count">{props.count}</span>
+      <span>{props.label}</span>
     </span>
+  );
+}
+
+/**
+ * Health of the whole library, not of the current filter: the counts sit under
+ * the surface description where the reader looks for context, and a standing
+ * problem stays visible there instead of only appearing in a toast.
+ */
+function LibrarySummary(props: Readonly<{
+  i18n: DesktopI18n;
+  summary: EnvironmentLibrarySummaryModel;
+  issue: DesktopWelcomeIssue | undefined;
+}>) {
+  return (
+    <div class="redeven-library-summary" data-redeven-library-summary="">
+      <LibrarySummaryMetric
+        count={props.summary.environment_count}
+        label={localizedVisibleLabel(props.i18n, props.summary.environment_count)}
+      />
+      <span class="redeven-library-summary__sep" aria-hidden="true">·</span>
+      <LibrarySummaryMetric
+        count={props.summary.window_count}
+        label={localizedWindowsLabel(props.i18n, props.summary.window_count)}
+      />
+      <Show when={props.summary.environment_count > 0}>
+        <span class="redeven-library-summary__sep" aria-hidden="true">·</span>
+        <LibrarySummaryMetric count={props.summary.ready_count} label={props.i18n.t('launcher.ready')} tone="success" />
+        <span class="redeven-library-summary__sep" aria-hidden="true">·</span>
+        <LibrarySummaryMetric count={props.summary.running_count} label={props.i18n.t('launcher.running')} tone="primary" />
+        <span class="redeven-library-summary__sep" aria-hidden="true">·</span>
+        <LibrarySummaryMetric count={props.summary.attention_count} label={props.i18n.t('launcher.attention')} tone="warning" />
+      </Show>
+      <Show when={props.issue}>
+        {(issue) => (
+          <>
+            <span class="redeven-library-summary__sep" aria-hidden="true">·</span>
+            <span class="redeven-library-summary__issue" title={localizedIssueTitle(props.i18n, issue())}>
+              {localizedIssueTitle(props.i18n, issue())}
+            </span>
+          </>
+        )}
+      </Show>
+    </div>
   );
 }
 

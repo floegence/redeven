@@ -323,7 +323,10 @@ describe('DesktopWelcomeShell', () => {
       appSrc.indexOf('trailingActions={('),
       appSrc.indexOf('topBarCornerActions={('),
     );
-    const cornerActions = appSrc.slice(appSrc.indexOf('topBarCornerActions={('), appSrc.indexOf('bottomBarLeading={('));
+    const cornerActions = appSrc.slice(
+      appSrc.indexOf('topBarCornerActions={('),
+      appSrc.indexOf('<Show when={environmentsVisited()}>'),
+    );
     const surfaceStart = appSrc.indexOf('function ConnectEnvironmentSurface(');
     const surfaceHeaderStart = appSrc.indexOf('<header class="redeven-header-separator', surfaceStart);
     const surfaceHeaderEnd = appSrc.indexOf('<div class="flex flex-col gap-3', surfaceHeaderStart);
@@ -335,7 +338,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('checkForDesktopUpdates={checkForDesktopUpdates}');
     expect(cornerActions).toContain('class="redeven-desktop-update-button"');
     expect(cornerActions).toContain('data-update-state={desktopUpdateSnapshot().state}');
-    expect(cornerActions).toContain('onClick={checkForDesktopUpdates}');
+    expect(cornerActions).toContain('onClick={activateDesktopUpdates}');
     expect(cornerActions).not.toContain("<span>{i18n().t('desktopUpdate.checkForUpdates')}</span>");
     expect(cornerActions).toContain('<DesktopTooltip');
     expect(cornerActions).toContain('placement="bottom"');
@@ -380,12 +383,12 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("return seed === '' ? null : `Gateway-${seed}`;");
     expect(appSrc).toContain('display_name_touched: overrides.display_name_touched === true');
     expect(appSrc).toContain(
-      'function openCreateGatewaySetup(gateway?: DesktopGatewaySource, focusSection?: DesktopGatewayResolveFocus): void',
+      'function openCreateGatewaySetup(gateway?: DesktopGatewaySource, focusSection?: DesktopGatewayResolveFocus | \'clients\'): void',
     );
     expect(appSrc).toContain('function gatewaySetupFocusForGateway(');
     expect(appSrc).toContain('requestedFocus?: DesktopGatewayResolveFocus');
     expect(appSrc).toContain("if (requestedFocus === 'url_endpoint' || requestedFocus === 'identity_trust') {");
-    expect(appSrc).toContain('focus_section: gatewaySetupFocusForGateway(gateway, focusSection)');
+    expect(appSrc).toContain("focus_section: gatewaySetupFocusForGateway(gateway, focusSection === 'clients' ? undefined : focusSection)");
     expect(appSrc).toContain("setActiveCenterTab('gateways')");
     expect(appSrc).toContain('<GatewaySetupDialog');
     expect(appSrc).toContain("kind: 'upsert_gateway'");
@@ -812,26 +815,41 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).not.toContain('.redeven-welcome-shell--spacious');
   });
 
-  it('drives the welcome bottom bar from the Environment Library summary model', () => {
+  it('drives the library summary in the surface header from the Environment Library summary model', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain('buildEnvironmentLibrarySummaryModel');
     expect(appSrc).toContain('const librarySummary = createMemo(() => (');
     expect(appSrc).toContain("environmentCloudSections(allLibraryGroups(), controlPlanes(), cloudQuery())");
-    expect(appSrc).toContain('localizedVisibleLabel(i18n(), librarySummary().environment_count)');
-    expect(appSrc).toContain('localizedWindowsLabel(i18n(), librarySummary().window_count)');
-    expect(appSrc).toContain('count={librarySummary().ready_count}');
-    expect(appSrc).toContain("label={i18n().t('launcher.ready')}");
-    expect(appSrc).toContain('count={librarySummary().running_count}');
-    expect(appSrc).toContain("label={i18n().t('launcher.running')}");
-    expect(appSrc).toContain('count={librarySummary().attention_count}');
-    expect(appSrc).toContain("label={i18n().t('launcher.attention')}");
+    expect(appSrc).toContain('librarySummary={librarySummary()}');
+    expect(appSrc).toContain('localizedVisibleLabel(props.i18n, props.summary.environment_count)');
+    expect(appSrc).toContain('localizedWindowsLabel(props.i18n, props.summary.window_count)');
+    expect(appSrc).toContain('count={props.summary.ready_count}');
+    expect(appSrc).toContain("label={props.i18n.t('launcher.ready')}");
+    expect(appSrc).toContain('count={props.summary.running_count}');
+    expect(appSrc).toContain("label={props.i18n.t('launcher.running')}");
+    expect(appSrc).toContain('count={props.summary.attention_count}');
+    expect(appSrc).toContain("label={props.i18n.t('launcher.attention')}");
+    expect(appSrc).toContain('issue={props.snapshot.issue ?? undefined}');
 
     expect(appSrc).not.toMatch(/\b(?:openCount|runningCount|offlineCount)\b/);
     expect(appSrc).not.toMatch(
       /snapshot\(\)\.environments\s*\.filter[\s\S]{0,240}(?:open|running|offline)[\s\S]{0,120}(?:\.length|Count|_count)/,
     );
     expect(appSrc).not.toContain("i18n().t('launcher.offline')");
+  });
+
+  it('carries no global bottom bar in the launcher shell', () => {
+    const appSrc = readWelcomeSource();
+    const shellSrc = fs.readFileSync(path.join(__dirname, 'DesktopLauncherShell.tsx'), 'utf8');
+    const styles = readWelcomeStyles();
+
+    expect(appSrc).not.toContain('bottomBarLeading');
+    expect(appSrc).not.toContain('bottomBarTrailing');
+    expect(appSrc).not.toContain('bottomBarHeight');
+    expect(appSrc).not.toMatch(/\bBottomBarItem\b/);
+    expect(shellSrc).not.toMatch(/\bBottomBar\b/);
+    expect(styles).not.toContain('bottom-bar');
   });
 
   it('uses shared tooltip and compact card-grid helpers for desktop help affordances', () => {
@@ -1193,7 +1211,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('data-redeven-action-popover-initial-focus=""');
   });
 
-  it('renders filter pills with counts, a dismissible chip for runtime target / control plane filters, and conditional live count', () => {
+  it('renders filter pills with counts, a dismissible chip for runtime target / control plane filters, and a live count in the header summary', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
 
@@ -1205,8 +1223,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('redeven-runtime-chip');
     expect(styles).toContain('.redeven-runtime-chip');
     expect(styles).toContain('.redeven-runtime-chip:hover');
-    // Conditional live count
-    expect(appSrc).toContain('open_windows.length > 0');
+    // The live count lives in the header summary instead of a tab-row counter.
+    expect(appSrc).toContain('localizedWindowsLabel(props.i18n, props.summary.window_count)');
+    expect(appSrc).not.toContain('environmentCenter.liveCount');
     // Dead code removed
     expect(appSrc).not.toContain('redeven-native-select');
     expect(appSrc).not.toContain('All Sources');
@@ -1360,18 +1379,18 @@ describe('DesktopWelcomeShell', () => {
       styles,
       ".redeven-status-indicator[data-tone='success'] .redeven-status-indicator__dot",
     );
-    const bottomBarSuccessRule = cssRuleBlock(
+    const summarySuccessRule = cssRuleBlock(
       styles,
-      ".redeven-bottom-bar-metric[data-tone='success'] .redeven-bottom-bar-metric__dot",
+      ".redeven-library-summary__metric[data-tone='success'] .redeven-library-summary__dot",
     );
-    const bottomBarWarningRule = cssRuleBlock(
+    const summaryWarningRule = cssRuleBlock(
       styles,
-      ".redeven-bottom-bar-metric[data-tone='warning'] .redeven-bottom-bar-metric__dot",
+      ".redeven-library-summary__metric[data-tone='warning'] .redeven-library-summary__dot",
     );
 
     expect(environmentSuccessRule).not.toContain('animation:');
-    expect(bottomBarSuccessRule).not.toContain('animation:');
-    expect(bottomBarWarningRule).not.toContain('animation:');
+    expect(summarySuccessRule).not.toContain('animation:');
+    expect(summaryWarningRule).not.toContain('animation:');
     expect(styles).not.toContain('@keyframes redeven-status-dot-glow');
     expect(styles).not.toContain('@keyframes redeven-bottom-bar-dot-breathe');
     expect(styles).not.toContain('@keyframes redeven-bottom-bar-dot-breathe-warning');

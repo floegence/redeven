@@ -5033,7 +5033,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     return (
     <Shell
       fillParent
-      bottomBarMode="hidden"
       hideMobileNavigationWhenKeyboardOpen
       topBarMobileMode="hidden"
       mobileNavigationActions={[{

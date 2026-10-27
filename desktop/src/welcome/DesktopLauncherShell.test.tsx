@@ -16,11 +16,6 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
       </div>
     </header>
   ),
-  BottomBar: (props: { class?: string; children?: JSX.Element }) => (
-    <footer data-floe-shell-slot="bottom-bar" class={props.class}>
-      {props.children}
-    </footer>
-  ),
 }));
 
 async function renderShell(): Promise<string> {
@@ -34,8 +29,6 @@ async function renderShell(): Promise<string> {
       logo={<button type="button">Logo</button>}
       trailingActions={<button type="button">Theme</button>}
       topBarCornerActions={<button type="button">Check for Updates</button>}
-      bottomBarLeading={<span>Connect Environment</span>}
-      bottomBarTrailing={<span>Disconnected</span>}
     >
       <main id="redeven-desktop-main">Content</main>
     </DesktopLauncherShell>
@@ -56,11 +49,11 @@ describe('DesktopLauncherShell', () => {
     expect(html).not.toContain('data-redeven-desktop-titlebar-region="center"');
   });
 
-  it('keeps skip-link and shared shell affordances in the desktop launcher shell', async () => {
+  it('keeps the skip link and no global bottom bar in the desktop launcher shell', async () => {
     const html = await renderShell();
 
     expect(html).toContain('href="#redeven-desktop-main"');
-    expect(html).toContain('data-floe-shell-slot="bottom-bar"');
+    expect(html).not.toContain('data-floe-shell-slot="bottom-bar"');
   });
 
   it('keeps the launcher content slot full-width instead of shrinking to child content width', async () => {

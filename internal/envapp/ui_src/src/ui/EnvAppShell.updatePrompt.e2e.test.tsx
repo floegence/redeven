@@ -109,7 +109,6 @@ vi.mock('@floegence/floe-webapp-core/app', async original => ({
 vi.mock('@floegence/floe-webapp-core/layout', async (importOriginal) => ({
   ...await importOriginal<typeof import('@floegence/floe-webapp-core/layout')>(),
   AppViewport: (props: any) => <>{props.children}</>,
-  BottomBarItem: (props: any) => <div>{props.children}</div>,
   DisplayModePageShell: (props: any) => (
     <div data-testid="display-mode-page-shell">
       {props.logo}

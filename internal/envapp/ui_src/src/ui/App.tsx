@@ -105,12 +105,6 @@ function buildFloeConfig(t: I18nHelpers['t'], navigation: ActivityNavigation) {
         cancel: t('shell.framework.cancel'),
         confirm: t('shell.framework.confirm'),
       },
-      statusIndicator: {
-        connected: t('shell.framework.connected'),
-        disconnected: t('shell.framework.disconnected'),
-        connecting: t('shell.framework.connecting'),
-        error: t('shell.framework.error'),
-      },
     },
   } as const;
 }
