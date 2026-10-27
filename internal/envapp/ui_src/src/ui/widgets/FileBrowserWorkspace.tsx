@@ -323,7 +323,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
     if (pathSubmitting()) {
       return { tone: 'muted' as const, text: i18n.t('files.openingPath') };
     }
-    return { tone: 'muted' as const, text: i18n.t('files.pathEditHint') };
+    return null;
   });
 
   const focusPathInput = () => {

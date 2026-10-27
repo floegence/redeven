@@ -91,6 +91,53 @@ it.each([360, 640, 1100])('keeps the header and content geometry stable while fi
   }
 });
 
+it.each([360, 640, 1100])('keeps the header and content geometry stable while editing paths at %s px', async width => {
+  await page.viewport(1280, 850);
+  const host = document.createElement('div');
+  host.style.cssText = `width:${width}px;height:560px`;
+  document.body.append(host);
+  const navigatedPaths: string[] = [];
+  dispose = render(() => <FloeConfigProvider><LayoutProvider>
+    <FileBrowserWorkspace mode="files" onModeChange={() => {}} files={[]}
+      currentPath="/" initialPath="/" instanceId="path-edit-geometry" resetKey={0} open={false}
+      onNavigate={path => navigatedPaths.push(path)} />
+  </LayoutProvider></FloeConfigProvider>, host);
+  const header = host.querySelector<HTMLElement>('.file-workspace-header')!;
+  const toolbar = host.querySelector<HTMLElement>('[data-toolbar-layout]')!;
+  const content = host.querySelector<HTMLElement>('[data-testid="file-browser-content-scroll-region"]')!;
+  await expect.poll(() => toolbar.dataset.toolbarLayout).toBe(width >= 800 ? 'inline' : 'stacked');
+  await document.fonts.ready;
+  await paint();
+  const geometry = () => [header, content].map(element => {
+    const rect = element.getBoundingClientRect();
+    return { top: rect.top, bottom: rect.bottom, height: rect.height };
+  });
+  const before = geometry();
+  for (const action of ['Escape', 'blur', 'Enter']) {
+    const currentPath = Array.from(host.querySelectorAll<HTMLButtonElement>('nav[aria-label="Breadcrumb"] button'))
+      .filter(button => button.closest('[aria-hidden="true"]') === null).at(-1)!;
+    currentPath.click();
+    await paint();
+    const input = host.querySelector<HTMLInputElement>('input[aria-label="Go to path"]')!;
+    expect(document.activeElement).toBe(input);
+    expect(input.value).toBe('/');
+    expect(geometry()).toEqual(before);
+    expect(host.querySelector('[data-testid="file-browser-header-status"]')).toBeNull();
+    expect(input.hasAttribute('aria-describedby')).toBe(false);
+    input.value = '/projects';
+    input.dispatchEvent(new InputEvent('input', { bubbles: true, data: '/projects' }));
+    if (action === 'blur') {
+      host.querySelector<HTMLInputElement>('input[aria-label="Filter files"]')!.focus();
+    } else {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: action, bubbles: true }));
+    }
+    await paint();
+    expect(host.querySelector('input[aria-label="Go to path"]')).toBeNull();
+    expect(geometry()).toEqual(before);
+    expect(navigatedPaths).toEqual(action === 'Enter' ? ['/projects'] : []);
+  }
+});
+
 it('retains action geometry across width changes and adjacent insertions', async () => {
   await page.viewport(1280, 850);
   const host = document.createElement('div');
