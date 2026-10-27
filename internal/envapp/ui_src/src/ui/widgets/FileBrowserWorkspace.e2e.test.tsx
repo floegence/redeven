@@ -926,8 +926,9 @@ describe('FileBrowserWorkspace interactions', () => {
       expect(pathInput).toBeTruthy();
       expect(pathInput?.value).toBe('~/src');
       const headerStatus = host.querySelector('[data-testid="file-browser-header-status"]') as HTMLElement | null;
-      expect(headerStatus?.textContent).toBe('Enter to open / Esc to cancel');
-      expect(headerStatus?.querySelector('[aria-hidden="true"]')).toBeNull();
+      expect(headerStatus).toBeNull();
+      expect(pathInput?.hasAttribute('aria-describedby')).toBe(false);
+      expect(host.textContent).not.toContain('Enter to open / Esc to cancel');
     } finally {
       dispose();
     }
