@@ -29,6 +29,4 @@ Redeven mounts released ReDevPlugin through one Go Host, HTTP namespace, Env App
 
 - `redeven:internal/redevpluginintegration/integration.go:1` - Opens Host modules and the canonical handler.
 
-- `redeven:internal/redevpluginintegration/session_adapter.go:340` - Maps read and admin external-package actions to explicit product permissions.
-
 - `redeven:internal/redevpluginintegration/runtime_module.go:1` - Configures the released runtime manager and fixed version.

@@ -44,5 +44,3 @@ The existing canonical active/running/idle state and the persisted activity indi
 - `redeven:internal/terminal/manager.go` - Registers terminal-go live, semantic history, clear, catalog, and lifecycle boundaries.
 
 - `redeven:internal/terminal/live_stream_test.go` - Proves permission admission and generation-scoped actor-owned clear.
-
-- `redeven:internal/envapp/ui_src/src/ui/services/terminalTransport.ts` - Adapts one Floeterm live stream and generation-bound semantic RPC controls.

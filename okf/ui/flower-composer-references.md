@@ -44,6 +44,4 @@ After Send, only the browser transport outbox may retain the original ordinary l
 
 - `redeven:internal/flower_ui/src/composer/FlowerComposerContextReferences.tsx` - Compact removable chips reuse the input boundary and restore keyboard focus.
 
-- `redeven:internal/flower_ui/src/composer/removeFlowerTurnLauncherReference.ts` - Removal keeps display, action and consolidated attachment identities aligned.
-
 - `redeven:internal/flower_ui/src/FlowerTurnLauncherPanel.test.tsx` - Exact removal and submission, frozen retry context, selection previews and consolidated snapshots.

@@ -52,5 +52,3 @@ Confirmed actions survive an observation failure; failed content never enters mo
 - `redeven:internal/ai/computer_semantic.go` - Runtime schema validation, role inventory, byte pruning and focus projection.
 
 - `redeven:internal/ai/computer_semantic_test.go` - graph, relationship, state, diff, selector and privacy assertions.
-
-- `redeven:internal/envapp/ui_src/scripts/computerBrowserPage.mjs` - Chromium native collection and frame references.

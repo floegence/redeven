@@ -52,8 +52,4 @@ The same capability and selection reach direct Environment models and Desktop mo
 
 - `redeven:internal/ai/model_catalog.go` - Read-only discovery from declared capabilities.
 
-- `redeven:internal/ai/model_gateway.go` - Provider request, stream, and approved history-field mapping.
-
-- `redeven:internal/config/ai_reasoning.go` - Selection validation and Default canonicalization.
-
 - `redeven:internal/ai/initial_turn_reasoning_test.go` - Default on an OpenAI-compatible model without reasoning controls starts a turn without reasoning wire fields.

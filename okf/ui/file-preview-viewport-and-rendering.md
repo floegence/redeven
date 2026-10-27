@@ -39,10 +39,3 @@ The [window actions contract](file-preview-window-actions.md) owns actions, draf
 - `redeven:internal/envapp/ui_src/src/ui/file-markdown/FileMarkdown.themes.browser.test.tsx` - All-theme contrast, distinct roles, floating windows, continuity, and forced colors.
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/createPreviewZoom.ts` - Zoom policy.
-
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewZoomControls.tsx` - Shared zoom controls.
-
-- `redeven:internal/envapp/ui_src/src/ui/widgets/PdfPreviewPane.tsx` - PDF virtualization over published layers.
-
-- `redeven:internal/envapp/ui_src/src/ui/widgets/MarkdownPreviewPane.tsx` - Contained Contents drawer.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/MarkdownPreviewPane.browser.test.tsx` - Drawer geometry, focus, dismissal, and local navigation at three widths in both modes.

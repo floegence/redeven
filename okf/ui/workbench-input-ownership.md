@@ -28,6 +28,4 @@ Components embedded in projected Workbench surfaces must use the shared floating
 
 - `redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchWheelInteractive.ts:1` - Wheel ownership uses a dedicated data attribute.
 
-- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchTextSelectionSurface.ts:12` - Text selection surfaces use a separate marker attribute.
-
 - `redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchInputRouting.test.ts:51` - Tests enforce that text-selection props do not grant wheel ownership by themselves.

@@ -34,8 +34,4 @@ Task labels and previews are presentation, not identity or results. Redeven must
 
 - `redeven:internal/ai/subagents_model_payload.go` - Removes coordination display echoes without changing complete handoffs.
 
-- `redeven:internal/ai/builtin_tool_handlers.go` - Declares the strict subagent tool input.
-
-- `redeven:internal/ai/subagents_floret.go` - Adapts subagent operations to typed Floret v7 child Thread methods.
-
 - `redeven:internal/ai/floret_tools.go` - Maps SubAgent calls and results into the typed operation Activity without losing action or target order.

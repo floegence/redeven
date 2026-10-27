@@ -9,10 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-- Authority: the Desktop test supervisor owns scenario termination, resource registration, cleanup deadlines, and final qualification status.
-- Outcome: an explicit acceptance run ends within its scenario and cleanup budgets without leaving its Electron, Runtime, bridge, or fixture resources behind.
-- Invariants: production Quit confirmation and independent Runtime lifetime remain intact; no process name, generic port, or foreground window grants stop authority.
-- Recovery boundary: timeout, interruption, unexpected exit, forced termination, cleanup error, and residual resources fail the run, retain diagnostics, and expose an explicit manifest cleanup command.
+The Desktop supervisor owns scenario/resource/cleanup deadlines and final status. Acceptance leaves no owned Electron/Runtime/bridge/fixtures. Preserve production Quit and independent Runtime lifetime; names, generic ports or foreground state grant no stop authority. Timeout/interruption/unexpected exit/force/cleanup/residue fails with retained diagnostics and explicit manifest cleanup.
 
 # Contract
 

@@ -25,6 +25,4 @@ Welcome and settings share a pure connection model derived from host access, pla
 
 - `redeven:desktop/src/main/desktopWelcomeRuntimePoller.test.ts` - Verifies five-second real probes with a pending Cloud request, per-target deduplication, and disabled automatic probing.
 
-- `redeven:desktop/src/main/runtimeState.test.ts` - Keeps current public reports authoritative over private startup metadata and handles explicit empty lists.
-
 - `redeven:desktop/src/shared/desktopEnvironmentConnection.ts` - One typed connection, address, and status model for Welcome and settings.

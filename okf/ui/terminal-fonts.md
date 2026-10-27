@@ -39,5 +39,3 @@ Quick CI and the final pre-push gate use the same Floeterm dependency consistenc
 - `redeven:scripts/check_floeterm_dependency_consistency.mjs` - Published Go/npm release parity shared by Quick CI and final integration.
 
 - `redeven:internal/envapp/ui_src/src/ui/services/terminalFonts.ts` - Client-local loading, stable candidate IDs, and side-effect-free resolution.
-
-- `redeven:internal/envapp/ui_src/src/ui/services/terminalFontAssets.ts` - Packaged WOFF2 faces and Unicode ranges.

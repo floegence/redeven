@@ -28,5 +28,3 @@ Resolve public npm dependencies without sibling wiring/patches. Renderer storage
 - `redeven:internal/envapp/ui_src/scripts/checkThemeColorSources.mjs` - Exact path and declaration boundaries for published theme sources.
 
 - `redeven:internal/envapp/ui_src/scripts/buildHostApplicationAppearance.mjs` - Generated standalone stylesheet readback against the published dependency.
-
-- `redeven:desktop/src/shared/desktopTheme.ts` - Published catalog admission, defaults, state keys, and snapshot contracts.

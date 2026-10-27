@@ -9,16 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Env App owns permanent SSH desktop deployment; the privileged native service
-owns physical-seat input and lock authority. This run consumes native
-`v0.22.34` and qualifies real udesk26 picture, mouse, keyboard, assisted Unicode
-commit, physical unlock, window switching, disconnect and Electron fullscreen.
-Ordinary input stays disabled while locked or disconnected. Ten injected
-control-channel interruptions recover to a new Viewer paint confirmation.
-The [Orange follow-up](remote-desktop-orange-viewer-results.md) owns recovered
-connection and Runtime update evidence; its Env App service update and Viewer
-acceptance remain pending. Real IME composition, matching cursor feedback,
-command RTT and RustDesk/NoMachine parity remain unqualified.
+Native v0.22.34 on udesk26 qualifies picture/input, assisted Unicode, physical unlock, switching, disconnect/fullscreen and ten interrupted-control recoveries. Locked/disconnected input stays disabled until fresh paint. Orange follow-up owns later updates. Real IME, matched cursor, command RTT, complete Orange acceptance and RustDesk/NoMachine parity remain unqualified.
 
 # Contract
 

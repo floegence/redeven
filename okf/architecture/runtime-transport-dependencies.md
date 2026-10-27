@@ -35,5 +35,3 @@ Compatibility depends on these published transport and terminal interfaces stayi
 - `redeven:go.mod:10` - Redeven pins floeterm terminal-go in the runtime module.
 
 - `redeven:internal/agent/agent.go:20` - Agent imports the published Flowersec Go v5 root package and uses `ConnectionController`, `WaitForSession`, `Connect`, `Session`, `RPCPeer`, and `ByteStream`.
-
-- `redeven:internal/envapp/ui_src/src/ui/App.tsx:217` - One Env App product tree owns one protocol provider.

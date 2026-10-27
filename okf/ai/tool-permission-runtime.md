@@ -65,8 +65,6 @@ Flower must not infer remote execution from thread context alone; it can only cl
 
 - `redeven:internal/ai/tools/registry.go:299` - OKF tools carry read-only structured presentation policy.
 
-- `redeven:internal/ai/floret_tools.go:91` - Redeven projects host builtins and selects the direct Floret-native path.
-
 - `redeven:internal/ai/floret_native_tools.go` - The unique native factory derives `web_fetch` from Floret and binds invocation product permission.
 
 - Patch sources/tests in internal/ai/: unified_diff_apply.go, patch_text.go, patch_tool.go; patch_{correctness,order,diagnostics,tool,runtime}_test.go cover ordering, no-effect rejection, endings, authorization, commit errors, schemas and restart/Fork history.

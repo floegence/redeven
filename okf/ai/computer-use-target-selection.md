@@ -5,7 +5,7 @@ description: Resolve logical targets without side effects and preserve each auth
 tags: [ai, computer-use, targets, permissions]
 timestamp: 2026-10-21T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-26"
+reviewed_at: "2026-10-27"
 ---
 # Summary
 
@@ -19,6 +19,13 @@ occupied resources fail explicitly without changing the previous selection.
 
 ## Discovery and selection
 `computer.targets` lists browser profiles/pages and application windows without a preselected target. Explicit system/personal-browser tasks use `system`, which excludes managed and native window candidates and never starts a managed profile.
+
+Set application to a name or bundle ID for bounded installed-app discovery,
+including apps not running. Discovery never launches. Selecting an application
+candidate opens/restores that exact catalog entry; one accessible window is
+selected, while zero or multiple windows return launch facts and window candidates.
+App and foreground grants, current target ownership and private pause boundaries
+are checked before launch. Launch uncertainty never authorizes automatic replay.
 
 A changed title/URL requires fresh discovery rather than a silent substitute.
 
@@ -34,7 +41,10 @@ A lost task page fails until an authorized candidate is selected. Deleting produ
 
 ## Binding contract and observation identity
 Selection returns version 2 with exact backend availability and the shared core
-script guide. ui.help discloses focused read, visual and download details on demand.
+script guide and one bounded initial observation through the normal runtime gate.
+Observation failure retains selected:true and needs_observation; private pauses
+retain selection without leaking content. Confirmed app opening remains
+action_executed:true. ui.help discloses read, visual and download details on demand.
 The earlier verbose capability fields are superseded by this model-facing guide;
 there are no product consumers of those fields. It is not a new registry or authorization source. Native adapters reject
 browser-only query, attribute and image-coordinate operations before dispatch.
@@ -55,7 +65,5 @@ Persisted preference or grants alone cannot prove readiness, foreground safety o
 # Evidence
 
 - `redeven:internal/ai/computer_runtime.go` - read-only resolution and store binding.
-
-- `redeven:internal/ai/run.go` - authorized selection before adapter dispatch.
 
 - `redeven:internal/ai/target_registry.go` - deterministic identity resolution.

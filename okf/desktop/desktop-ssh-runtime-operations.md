@@ -13,37 +13,31 @@ Desktop manages SSH-host and SSH-container Runtime only through the saved connec
 
 # Contract
 
-## Transport and authentication
-Connection keys include normalized destination/port, authentication, SSH binary and credential scope. Failure retains SSH diagnostics without route substitution or command replay. macOS/Linux reuse ControlMaster; Windows uses native OpenSSH bounded commands and one persistent child per private Bridge, without WSL or ControlMaster. Cancellation/disposal terminate only owned children.
+## Transport/authentication
 
-An omitted acquisition password reuses credentials already held privately by that exact transport scope; it is not a request to replace them with an empty password. Explicit credential changes still reject while leases exist, and other scopes never inherit those credentials. Without an available password, use OpenSSH batch authentication with configured keys or its agent even for a password-mode registration; never submit empty-password retries. Explicit management connection attempts allow this authentication; passive status inspection may defer it when no password is saved. Password availability is not management authority.
+Keys bind normalized destination/port, authentication, SSH executable and credential scope. Preserve failures without substitution/replay. macOS/Linux reuse ControlMaster; Windows uses bounded native OpenSSH and one persistent child per private Bridge, no WSL/ControlMaster. Cancel/dispose only owned children.
 
-Start, Restart and Update share transient-password IPC handling. Their executor carries explicit credentials unchanged through restart access/certificate preflight, preparation and readiness verification without saving them. An absent saved password stays omitted so an authenticated transport remains reusable. Observation requests never accept transient passwords.
+Omitted passwords reuse exact-scope private credentials, never clear them. Explicit changes reject during leases; no cross-scope inheritance. Without passwords, attempt configured keys/agent in batch mode even for password-mode registration; never send empty retries. Explicit connection allows this; passive status may defer. Password presence grants no authority. Start/Restart/Update carry transient credentials through certificate/access preflight, preparation and verification without saving. Observations reject passwords.
 
-One normalized Connect Timeout covers connection, probe, inventory and startup-readiness control; startup/package transfer keep their own deadlines. Windows uses the packaged x64 askpass helper: accept password/passphrase prompts, refuse host-key prompts, emit secrets only through private stdout and retain OpenSSH host-key checks. Passwords never enter arguments, files or logs; missing helper fails visibly.
+Normalized Connect Timeout bounds connection/probe/inventory/readiness; package/startup keep separate deadlines. Packaged Windows x64 askpass accepts password/passphrase, rejects host-key prompts, emits only private stdout and retains OpenSSH trust. Missing helper fails; secrets never enter argv/files/logs. Bounded SSH includes omit wildcard/negated picker aliases; explicit destinations remain valid. Save exact root/container engine+ID separately from display name.
 
-Discovery follows bounded SSH includes and excludes wildcard/negated aliases from selection, while explicit destinations remain allowed. Registrations separate display name from destination and save exact root and container engine/id.
+## Preparation/execution
 
-## Preparation
-One operation reuses its transport, probes platform once and prepares a lightweight helper only as needed for inventory/stop. Start/Stop never prepare a full package. Update independently verifies its package before modification; build/download/upload remain visible preparation phases. Clean-source builds use published dependencies and install Desktop dependencies before Env App assets; existing `node_modules` is not a prerequisite.
+One operation reuses transport, probes platform once and prepares a small helper only for inventory/stop. Start/Stop never build full packages. Update verifies before mutation; build/download/upload remain visible. Clean builds use published dependencies and install Desktop dependencies before Env App assets.
 
-Archives allow 256 MiB compressed and 512 MiB for the complete expanded tar stream, including Runtime, Computer suite and signed plugins. Enforce expansion while decoding, before target modification, and reuse one parsed inventory.
+Archives: ≤256 MiB compressed/512 MiB expanded tar stream including Runtime, Computer and signed plugins. Enforce while decoding before target writes; parse inventory once. Upload uses bounded writes/progress deadline; progressing transfer may exceed command timeout, which resumes after final write. Stall/cancel/loss terminates owned command; pipe progress is not receipt. Credential prompts have no upload deadline.
 
-Bulk upload uses bounded writes and a progress deadline; continuous progress may exceed command timeout, stalled writes terminate the owned command, and command completion timeout resumes after the last write. Pipe progress is not remote receipt. Cancellation/loss remains authoritative; administrator credential input never uses this deadline.
+Shared private slot metadata across upload/install/container/reinstall: runtime, managed, bin and both executables0700; stamp/evidence0600 regardless of umask. Normalization failure preserves live slot; ReDevPlugin owns executable admission.
 
-All upload/install/container/reinstall paths share private slot metadata: `runtime`, `runtime/managed`, `runtime/managed/bin` and both executables use `0700`; stamp/evidence use `0600`, independent of umask. Normalization failure preserves the live slot; ReDevPlugin owns final executable admission.
+Host actions use confirmed user/root; container actions inspect exact saved container. Start/Restart/Update/Reinstall may start it; Stop cannot and accepts empty Runtime inventory. Signal verified scope matches only; retain typed before/after. Wipe-reinstall may treat helper inventory/stop as best effort only when direct access can isolate root.
 
-## Exact target execution
-Host actions use the confirmed remote user/root; container actions inspect the saved exact container. Start/Restart/Update/Reinstall may start it; Stop never does and succeeds on empty Runtime inventory. Signal only verified scope matches and retain typed before/after state. Wipe reinstall treats helper inventory/stop as best effort when direct filesystem access can still isolate the root.
+Remote snippets perform one bounded probe/stage/inventory/stop/install/start/verify/isolate/cleanup. Desktop owns ordering/deadlines/cancellation/progress/retry; no remote lock, heartbeat or lifecycle machine.
 
-Remote snippets perform one bounded probe, stage, inventory, stop, install, start, verify, isolate or cleanup action. Desktop owns ordering, deadlines, cancellation, progress and retry; there is no remote lock, heartbeat or lifecycle machine.
+## Progress/failures
 
-## Progress and failures
-Direct bootstrap uses the generated signed `https://github.com/floegence/redeven/releases/latest/download/redeven-install.sh` with the explicit selected tag; Portal is not another installer. Transfers stay within one Launcher Operation task: uploads count local pipe writes, acquisition counts response bytes with usable content length, and shared cached acquisitions share progress. Direct downloads consume complete installer `Downloading Redeven: N%` records. Installer diagnostics use stderr; stdout carries only the staged path. Companion output cannot reset Runtime progress.
+Bootstrap uses generated signed https://github.com/floegence/redeven/releases/latest/download/redeven-install.sh with selected tag; Portal supplies no second installer. One Launcher Operation owns transfers: local upload writes, acquired response bytes with known size, shared acquisition progress. Direct downloads consume complete Downloading Redeven: N% records; stderr is diagnostics, stdout only staged path. Companion output cannot reset Runtime progress.
 
-No second download, progress-parser subprocess or SSH polling command is allowed. 100% transfer is not verified installation/readiness; preparation remains active through staged verification. Cancellation/failure freezes measured progress. Acquisition, staging-directory creation, upload and unpacking are preparation; only activation changes the live slot.
-
-The operation exists before its first SSH command. Connection, engine/container, preparation, command and readiness failures remain distinct with technical stderr. Empty successful startup-report reads mean pending until the bounded deadline; nonzero reads mean command failure, valid blocked reports mean Runtime failure, and only nonempty malformed reports are invalid. All lifecycle paths share this interpretation.
+No extra download/parser process/SSH poll. Transfer100% is not verified install/readiness. Failure/cancel freezes measured progress. Acquisition/directory/upload/unpack are preparation; only activation mutates live slot. Operation exists before first SSH command. Distinguish connection, engine/container, preparation, command and readiness failures with technical stderr. Empty successful startup-report means pending to deadline; nonzero read is command failure, valid blocked report Runtime failure, only nonempty malformed report invalid. Every lifecycle path uses this interpretation.
 
 # Boundaries
 
@@ -54,12 +48,3 @@ SSH registrations retain direct lifecycle menus. Gateway/Provider-only entries c
 - `redeven:desktop/src/main/sshTransportManager.ts:1` - Credential-scoped SSH transport reuse and cancellation.
 - `redeven:desktop/native/windows-ssh/main.go:1` - Native Windows askpass prompt and credential boundary.
 - `redeven:desktop/src/main/sshTransportManager.test.ts:1` - Platform execution, failure classification, and owned-child disposal.
-- `redeven:desktop/src/main/managedRuntimeSlot.ts:1` - Standard managed Runtime file inventory and private metadata contract.
-- `redeven:desktop/src/main/sshRuntime.ts:1` - Direct SSH Runtime package, helper, process, start, and verification operations.
-- `redeven:desktop/src/main/runtimeTransferProgress.ts:1` - Bounded transfer observation and upload event frequency.
-- `redeven:desktop/src/welcome/RuntimeComponentTransferProgress.tsx:1` - Localized determinate and indeterminate transfer meters.
-- `redeven:desktop/src/main/runtimeArchive.ts:1` and `redeven:desktop/src/main/runtimeArchive.test.ts:1` - Bounded package expansion and complete-suite admission.
-- `redeven:desktop/src/main/containerRuntime.ts:1` - Exact SSH-container command construction.
-- `redeven:desktop/src/main/runtimeLifecycleCoordinator.ts:1` - One current-Desktop owner per physical target.
-- `redeven:desktop/src/main/runtimeLifecycleExecutionPlan.ts:1` - Explicit intent-specific progress phases.
-- `redeven:desktop/src/main/reinstallTargetCoordinator.ts:1` - SSH and container final-recovery path.

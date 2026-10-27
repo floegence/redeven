@@ -34,6 +34,4 @@ Use restrained static depth and short functional control motion. The progress di
 
 - `redeven:internal/envapp/ui_src/src/ui/App.tsx` - Env App material configuration.
 
-- `redeven:desktop/src/welcome/App.tsx` - Welcome configuration and floating toast boundary.
-
 - `redeven:internal/envapp/ui_src/src/styles/redeven.css` - Opaque product surfaces and independent control boundary mapping.

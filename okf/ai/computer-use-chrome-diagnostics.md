@@ -9,14 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-ComputerUseRuntime owns Chrome readiness and its live handshake inventory.
-Desktop and Env App present the same host-specific prerequisite and failure
-facts. Installed Chrome alone does not establish browser-control readiness.
-Missing resources, unavailable graphical sessions, application launch failures,
-status-read failures and conversation-continuation failures have separate recovery
-instructions. Neither a successful launch nor installation acknowledgement resumes
-a task; only a compatible live profile can reach the existing Floret Respond path.
-Failures preserve user guidance and never substitute a different browser.
+ComputerUseRuntime owns readiness/live handshakes; Desktop/Env App share host-specific guidance. Installed Chrome or accepted launch is not control readiness or task continuation. Resource, graphical-session, launch, status and continuation failures have distinct recovery. Only a compatible live profile enters Floret Respond; preserve guidance, never substitute browsers.
 
 # Contract
 

@@ -37,5 +37,3 @@ These checks qualify Gateway membership, access, and isolation behavior on task-
 - `redeven:internal/localui/gateway_member_browser_test.go` — No-inbound-TCP production application fixture.
 
 - `redeven:desktop/scripts/fixtures/gateway-access-electron.ts` — Real Electron member access assertions.
-
-- `redeven:desktop/scripts/fixtures/gateway-runtime-browser.ts` — Real Flowersec business RPC and streaming.

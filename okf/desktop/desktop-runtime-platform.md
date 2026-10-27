@@ -26,5 +26,3 @@ Runtime owns OS/distribution facts; Desktop consumes recognized trusted observat
 - `redeven:spec/openapi/rcpp-v5.yaml` - Optional Runtime OS in the Cloud health schema.
 
 - `redeven:internal/runtimemanagement/runtime_platform_test.go` - Exact distribution identity, missing facts, shell literals and non-Linux boundaries.
-
-- `redeven:internal/localui/localui.go` - Runtime-owned OS in live health and management attach status.

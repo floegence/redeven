@@ -70,5 +70,3 @@ The probe never skipped canonical verification, changed production records, repl
 - `redeven:internal/ai/service_activation.go:1` - Summary/inventory preparation and explicit activation.
 
 - `redeven:internal/codeapp/ai_readiness_test.go:1` - Serialized stop, cleanup, retry and terminal close failure.
-
-- `redeven:internal/ai/storage_upgrade_test.go:1` - Replacement interruption and preserved datasets.

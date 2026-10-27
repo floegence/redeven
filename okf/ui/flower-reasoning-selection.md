@@ -34,6 +34,4 @@ This is shared Redeven UI policy, not a Floret API or a second preference store.
 
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Resolve confirmed settings independently from explicit drafts and freeze submission options.
 
-- `redeven:internal/flower_ui/src/composer/createFlowerComposerDraftCoordinator.ts` - Connection-local explicit new-thread reasoning choice.
-
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.reasoningSelection.browser.test.tsx` - Cold loading, explicit intent, failed saves, remounts, and request ownership.

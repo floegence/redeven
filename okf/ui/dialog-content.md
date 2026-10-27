@@ -30,6 +30,4 @@ Headers contain identity and controls only. Missing guidance must be repaired in
 
 - `redeven:internal/envapp/ui_src/src/ui/primitives/EnvAppModal.tsx` - Uses the published Dialog and ConfirmDialog contracts.
 
-- `redeven:internal/envapp/ui_src/src/ui/primitives/EnvAppDrawer.tsx` - Allocates body guidance and remaining drawer content height.
-
 - `redeven:internal/envapp/ui_src/src/ui/widgets/WindowModal.tsx` - Places window-local confirmation guidance in its scrollable body.

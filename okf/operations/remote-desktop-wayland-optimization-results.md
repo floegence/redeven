@@ -9,17 +9,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-This record owns evidence for the Wayland cursor and scheduling changes in
-`floe-native-apps` v0.22.12. The [session contract](../architecture/remote-desktop.md)
-owns authorization and generation boundaries; the
-[viewer contract](../architecture/remote-desktop-viewer.md) owns pointer presentation.
-A separate-cursor frame must contain cursor-free pixels, while view-only capture
-retains the host pointer. Input replies must not block capture or authority
-callbacks, and damage information cannot hide changes after a sequence gap.
-Distribution and browser evidence does not establish actual GNOME desktop latency.
-The user explicitly waived performance thresholds for the weak `udesk24` VM on
-2026-10-05. Functional regressions remain required; hardware availability is not
-performance evidence.
+Native v0.22.12 owns cursor/scheduling evidence; session/viewer contracts retain authority. Separate-cursor frames exclude pointer pixels; view-only keeps them. Input replies cannot block capture/authority, and damage cannot hide post-gap changes. Distribution/browser tests do not prove GNOME latency. User waived udesk24 performance on 2026-10-05, not functional regression.
 
 # Contract
 

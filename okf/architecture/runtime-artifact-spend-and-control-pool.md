@@ -25,6 +25,4 @@ This concept owns Redeven's durable spend ledger and control-artifact pool. Prod
 
 - `redeven:internal/agent/agent.go:1149` - Binds Lease spending to the digest-global durable ledger before connection.
 
-- `redeven:internal/agent/control_artifact_source.go:35` - Selects and burns sequence-bound persisted pool entries.
-
 - `redeven:internal/agent/control_artifact_pool.go:67` - Validates top-up and ACK replay through one pending request.

@@ -25,6 +25,4 @@ Temporary forwards are memory-only until Save; expired/unknown identities cannot
 
 - `redeven:internal/portforward/service.go` - Runtime normalizes addresses and owns exact persistent reuse, temporary expiry, and explicit persistence.
 
-- `redeven:internal/codeapp/appserver/managed_web_services.go` - Authorizes non-cacheable Managed Service opening without placing a private application path in audit detail.
-
 - `redeven:internal/managedwebservice/open_session.go` - Observes the applied instance and shares bounded opening preparation without implicit Restart.

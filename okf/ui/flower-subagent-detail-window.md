@@ -25,6 +25,4 @@ The detail window must not infer membership from activity, poll for updates, swi
 
 - `redeven:internal/ai/flower_current_projection.go` - Shares the safe current projection between HTTP and SSE.
 
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Owns stable selection, monotonic current updates, and separate parent and child activity viewports.
-
 - `redeven:internal/flower_ui/src/threadCache.ts` - Owns bounded retained detail and root-inventory cleanup; cache tests cover capacity, reconnect, attention and release.

@@ -154,18 +154,22 @@ export class BrowserComputerPage {
         if (this.openedPages.length < 16) { try { this.openedPages.push({ url: redactedNavigationURL(event.url) }); } catch { this.openedPages.push({ url: '' }); } }
         this.invalidate();
       });
-      listen('Page.downloadWillBegin', event => {
-        this.recordDownload({ id: event.guid, filename: String(event.suggestedFilename || '').slice(0, 512), state: 'in_progress' });
-      });
-      listen('Page.downloadProgress', event => {
-        const download = this.downloads.get(event.guid);
-        if (!download || !['inProgress','completed','canceled'].includes(event.state)) return;
-        download.received_bytes = event.receivedBytes;
-        if (event.state === 'completed' && this.transport.resolveDownload) {
-          void this.transport.resolveDownload(event.guid).then(facts => Object.assign(download, facts, { state: 'completed' }),
-            () => { download.state = 'unavailable'; }).finally(() => this.changed());
-        } else { download.state = event.state === 'inProgress' ? 'in_progress' : event.state; this.changed(); }
-      });
+      // Captured downloads already have SourceDownload identities and content.
+      // Native notifications must not create a second record for the same Blob.
+      if (!this.responseDownloads) {
+        listen('Page.downloadWillBegin', event => {
+          this.recordDownload({ id: event.guid, filename: String(event.suggestedFilename || '').slice(0, 512), state: 'in_progress' });
+        });
+        listen('Page.downloadProgress', event => {
+          const download = this.downloads.get(event.guid);
+          if (!download || !['inProgress','completed','canceled'].includes(event.state)) return;
+          download.received_bytes = event.receivedBytes;
+          if (event.state === 'completed' && this.transport.resolveDownload) {
+            void this.transport.resolveDownload(event.guid).then(facts => Object.assign(download, facts, { state: 'completed' }),
+              () => { download.state = 'unavailable'; }).finally(() => this.changed());
+          } else { download.state = event.state === 'inProgress' ? 'in_progress' : event.state; this.changed(); }
+        });
+      }
       listen('Fetch.requestPaused', event => {
         void (async () => {
           if (event.responseStatusCode !== undefined) {
@@ -866,7 +870,7 @@ export class BrowserComputerPage {
       try {
         if (this.stopped || this.operationCancelled || this.invalid) throw new Error('TAKEOVER_REQUIRED');
         const candidates = id ? [this.downloads.get(id)].filter(Boolean) : [...this.downloads.values()].filter(download => download.sequence > sequence);
-        if (candidates.length > 1) throw new Error('AMBIGUOUS_DOWNLOAD');
+        if (candidates.length > 1) throw Object.assign(new Error('AMBIGUOUS_DOWNLOAD'), { downloads: candidates.map(download => ({ ...download })) });
         const download = candidates[0];
         if (download && download.state !== 'in_progress') return { download: { ...download } };
         if (Date.now() >= deadline) return { state: 'timeout', ...(download ? { download: { ...download } } : {}) };

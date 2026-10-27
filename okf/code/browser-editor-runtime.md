@@ -27,6 +27,4 @@ Opening or managing Browser Editor is not just a static file route. The session-
 
 - `redeven:internal/codeapp/appserver/server.go:80` - App server backend owns codespace start, stop, delete, and port resolution.
 
-- `redeven:internal/codeapp/registry/schema.go:1` - Code App defines the strict v2 registry shape and transactional migrations for the two identified v1 layouts.
-
 - `redeven:internal/localui/localui.go:132` - Local UI mounts `/cs/` for codespace routes.

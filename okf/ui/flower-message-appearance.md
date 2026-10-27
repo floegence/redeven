@@ -36,8 +36,4 @@ Forced colors map sent bubbles to `Highlight` / `HighlightText`, pending input a
 
 - [User-message alignment, intrinsic widths and responsive wrapping](../../internal/envapp/ui_src/src/ui/FlowerSurface.userMessageLayout.browser.test.tsx)
 
-- [Resource placement, responsive cards and canonical preview identity](../../internal/envapp/ui_src/src/ui/FlowerSurface.canonicalReferences.browser.test.tsx)
-
 - [Image/file previews and attachment-only messages](../../internal/envapp/ui_src/src/ui/FlowerSurface.attachmentPreview.browser.test.tsx)
-
-- [Mixed text/image send, history reload and copy](../../internal/envapp/ui_src/src/ui/FlowerSurface.composerAttachments.browser.test.tsx)

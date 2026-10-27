@@ -35,7 +35,3 @@ Existing context-event target snapshots, multi-selection, permissions, file oper
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.e2e.test.tsx` - Verifies that Files passes a stable diff target to Shell in Activity and Workbench without preloading content.
-
-- `redeven:internal/gitrepo/diff_content_availability_test.go` - Checks disappeared changes, staged former untracked files, exact whitespace paths, and valid tracked deletions.
-
-- `redeven:internal/workbenchlayout/git_diff_widgets_test.go` - Verifies atomic placement, exact identity, geometry reuse, unavailable targets, and rollback.

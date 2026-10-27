@@ -9,14 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-The real `udesk24` GNOME 46 Wayland desktop passes the tested office workflow
-and display-mode recovery with published `floe-native-apps` v0.22.7. The user
-designated this host for functional validation only on 2026-10-02; its graphics
-performance does not block delivery. It still fails the
-[performance contract](remote-desktop-validation.md): current 1080p/1440p
-scrolling reaches 27.46/23.46 FPS despite authorized virtual graphics provisioning.
-Preserve the failures; X11 or synthetic results cannot replace Wayland evidence.
-The [overall record](remote-desktop-results.md) owns delivery and the other hosts.
+udesk24 GNOME 46/native v0.22.7 passes office/mode recovery. User designated it functional-only on 2026-10-02, so graphics performance does not block scoped delivery. Its 1080p/1440p scrolling still fails at 27.46/23.46 FPS after authorized provisioning. Preserve failures; X11/synthetic results cannot substitute. Overall results own other hosts/delivery.
 
 # Contract
 

@@ -7,6 +7,37 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createComputerScript } from './redevenComputerScript.mjs';
 
+test('one invocation combines page navigation, loops, conditional reads and a final screenshot', async () => {
+  const script = await createComputerScript();
+  const operations = [];
+  try {
+    const result = await script.execute(`
+      const values=[];
+      for(let page=1;page<=3;page++){
+        await browser.navigate('https://fixture.test/page/'+page);
+        const value=await ui.getByRole('region',{name:'Result',exact:true}).text();
+        if(value.truncated) break;
+        values.push(Number(value.text));
+      }
+      log(values.reduce((sum,value)=>sum+value,0));
+      globalThis.image=await ui.screenshot();
+    `, async op => { operations.push(op); return op.action==='text'?{text:String(operations.length/2),truncated:false}:op.action==='screenshot'?{frame_geometry:{frame:'f',document_id:'d'}}:{}; });
+    assert.deepEqual(operations.map(op=>op.action),['navigate','text','navigate','text','navigate','text','screenshot']);
+    assert.equal(result.logs[0][0],6);
+    await script.execute('log(typeof image.click);', async()=>assert.fail());
+  } finally { script.dispose(); }
+});
+
+test('download byte reads validate ranges before dispatch', async () => {
+  const script=await createComputerScript();
+  try {
+    const actions=[];
+    await script.execute("log(await browser.readDownload('known',{offset:3,limit:10}));",async op=>{actions.push(op);return {base64:'YQ==',truncated:false};});
+    assert.deepEqual(actions,[{action:'read_download',id:'known',offset:3,limit:10}]);
+    await assert.rejects(script.execute("await browser.readDownload('known',{offset:-1});",async()=>assert.fail('invalid range dispatched')));
+  } finally {script.dispose();}
+});
+
 test('budget and closed argument diagnostics describe repair', async () => {
   const script = await createComputerScript();
   try {

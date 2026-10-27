@@ -102,7 +102,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 		}
 	}
 	for repeat := 1; repeat <= repetitions; repeat++ {
-		for _, scenario := range []string{"bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
+		for _, scenario := range []string{"native_entry", "script_batch", "mixed_download", "bounded_read", "repair_limit", "budget_prefix", "large_scope", "current_download", "partial_effect", "key_validation", "scoped_query", "image_input", "wait_default", "title_freshness", "stale_frame", "invalid_options", "scroll_progress", "condition_wait", "natural_input", "natural_read", "strict_wait", "scrolled_click", "content_wait", "namespace_reset", "canonical_navigation"} {
 			t.Run(fmt.Sprintf("%s/%d", scenario, repeat), func(t *testing.T) {
 				// Every case owns its service, browser, fixture and output directory.
 				t.Parallel()
@@ -111,6 +111,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 					t.Fatal(err)
 				}
 				var exports, otherAccount, submissions, focused, entered, pointerClicks atomic.Int32
+				var visitedPages [3]atomic.Bool
 				var typedValue atomic.Value
 				site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					switch r.URL.Path {
@@ -122,6 +123,15 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 						return
 					case "/typed":
 						typedValue.Store(r.URL.Query().Get("value"))
+						return
+					case "/batch":
+						page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+						if page < 1 || page > 3 {
+							page = 1
+						}
+						visitedPages[page-1].Store(true)
+						w.Header().Set("Content-Type", "text/html")
+						_, _ = fmt.Fprintf(w, `<title>Batch report</title><p>Three report pages; each page has one score. Page URLs use ?page=1 through ?page=3.</p><div role="region" aria-label="Score">%d</div><a href="/batch?page=%d">Next page</a>`, page*7, page+1)
 						return
 					case "/entered":
 						entered.Add(1)
@@ -196,6 +206,17 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				profileDirectory := t.TempDir()
 				runtime := NewComputerUseRuntime(registry, map[string]TargetToolExecutor{"browser-main": NewPlaywrightTargetExecutor(node, helper, profileDirectory)}, t.TempDir())
 				configureBrowserFixture(t, runtime)
+				var nativeName string
+				var nativeFacts func() map[string]any
+				if scenario == "native_entry" {
+					nativeName, nativeFacts = prepareComputerEntryFixture(t)
+					root, _ := filepath.Abs("../..")
+					native := NewNativeDesktopTargetExecutor(filepath.Join(root, "desktop/native/computer-host/.build/release/redeven-computer-host"))
+					runtime.executors["desktop-main"] = native
+					if err := registry.Register(TargetDescriptor{ID: "desktop-main", Kind: "desktop.screen"}); err != nil {
+						t.Fatal(err)
+					}
+				}
 				defer runtime.Close()
 				target, err = runtime.PrepareTarget(t.Context(), target)
 				if err != nil {
@@ -212,6 +233,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				}
 				direct("browser.navigate", map[string]any{"url": site.URL + "/unrelated"})
 				state := t.TempDir()
+				project := t.TempDir()
 				modelID := selected.ID + "/" + model.ModelName
 				svc, e := NewService(Options{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: state, AgentHomeDir: state, Shell: "/bin/sh", TargetResolver: runtime, TargetToolExecutor: runtime, Config: &config.AIConfig{CurrentModelID: modelID, Providers: []config.AIProvider{selected}}, ResolveProviderAPIKey: func(id string) (string, bool, error) { return key, id == selected.ID, nil }, ProviderRequestTimeoutPolicy: flruntime.ProviderRequestTimeoutPolicy{MaxAttemptDuration: 2 * time.Minute, FirstOutputTimeout: time.Minute, IdleTimeout: time.Minute}})
 				if e != nil {
@@ -219,7 +241,7 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				}
 				defer svc.Close()
 				meta := testSendTurnMeta()
-				thread, e := svc.CreateThread(t.Context(), meta, "Computer reliability acceptance", modelID, "", "")
+				thread, e := svc.CreateThread(t.Context(), meta, "Computer reliability acceptance", modelID, "", project)
 				if e != nil {
 					t.Fatal(e)
 				}
@@ -249,6 +271,12 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				}
 
 				switch scenario {
+				case "script_batch":
+					prompt = "Open " + site.URL + "/batch?page=1 in this task's page, read all three scores and calculate their total. Once the page structure is known, process the remaining pages in one computer script using a loop and return a screenshot of the last page. Keep the original browser page available; do not use network scraping."
+				case "native_entry":
+					prompt = "Open the installed native application named " + nativeName + " using Computer Use discovery and selection. Enter exactly Flash 1017 in Acceptance code, click Confirm exactly once, read the resulting confirmation and capture a screenshot. This is a disposable acceptance app; do not touch any other application."
+				case "mixed_download":
+					prompt = "Export Orchid domains exactly once from the selected page. Save the exact completed download through browser.saveDownload, then use a terminal script to calculate total divided by count and save that result as acceptance-ratio.txt in the selected project directory. Inspect the file and report its absolute path. Use the normal tools available; do not fetch the export URL outside the browser or switch accounts."
 				case "bounded_read":
 					prompt = "Use ui.help('read') and locator.text() to read visible text of the region named Scrollable, then log its text, truncated and scope. Do not click, scroll, navigate or use shell/network tools."
 				case "repair_limit":
@@ -436,6 +464,64 @@ func TestComputerReliabilityDeepSeek(t *testing.T) {
 				case "scrolled_click":
 					if submissions.Load() != 1 || clickRejected || !strings.Contains(text, "Saved once") {
 						t.Errorf("scrolled click failed: submissions=%d errors=%v", submissions.Load(), scriptErrors)
+					}
+				case "script_batch":
+					batched, captured := false, false
+					confirmedTotal := false
+					reads := 0
+					for _, fact := range confirmedToolFacts {
+						// A final answer may be malformed even after a verified batch.
+						// Keep that provider/output outcome separate from tool execution.
+						logs, _ := json.Marshal(fact["logs"])
+						confirmedTotal = confirmedTotal || regexp.MustCompile(`\b42\b`).Match(logs)
+						navigations := 0
+						for _, action := range toAnySlice(fact["completed_actions"]) {
+							if action == "snapshot" || action == "read" || action == "text" {
+								reads++
+							}
+							if action == "navigate" || action == "click" {
+								navigations++
+							}
+							if action == "screenshot" {
+								captured = true
+							}
+						}
+						batched = batched || navigations >= 2
+					}
+					report["batch_confirmed"], report["screenshot_confirmed"] = batched, captured
+					report["clean_script_execution"] = len(scriptErrors) == 0
+					report["visited_pages"] = []bool{visitedPages[0].Load(), visitedPages[1].Load(), visitedPages[2].Load()}
+					report["confirmed_reads"] = reads
+					report["confirmed_total"], report["final_answer_has_total"] = confirmedTotal, strings.Contains(finalText, "42")
+					// Calculation may happen in the final model reply rather than in
+					// JavaScript. Neither is proof of page reads; those are checked above.
+					if !batched || !captured || reads < 3 || !visitedPages[0].Load() || !visitedPages[1].Load() || !visitedPages[2].Load() {
+						t.Errorf("batch facts missing: batch=%v image=%v errors=%v", batched, captured, scriptErrors)
+					}
+				case "mixed_download":
+					file, readErr := os.ReadFile(filepath.Join(project, "acceptance-ratio.txt"))
+					saved := false
+					for _, fact := range confirmedToolFacts {
+						for _, action := range toAnySlice(fact["completed_actions"]) {
+							saved = saved || action == "save_download"
+						}
+					}
+					if !saved || exports.Load() != 1 || readErr != nil || !strings.Contains(string(file), "20.5") || !strings.Contains(text, "terminal.exec") {
+						t.Errorf("mixed tool handoff failed: exports=%d file=%v", exports.Load(), readErr)
+					}
+				case "native_entry":
+					facts := nativeFacts()
+					report["native_facts"] = facts
+					discovered, selected, captured := false, false, false
+					for _, fact := range confirmedToolFacts {
+						discovered = discovered || fact["tool"] == "computer.targets"
+						selected = selected || fact["tool"] == "computer.select_target" && fact["status"] == "success" && fact["action_executed"] == true
+						for _, action := range toAnySlice(fact["completed_actions"]) {
+							captured = captured || action == "screenshot"
+						}
+					}
+					if !discovered || !selected || !captured || facts["clicks"] != float64(1) || facts["value"] != "Flash 1017" || !strings.Contains(text, "Confirmed: Flash 1017") {
+						t.Errorf("native entry not confirmed: %+v", facts)
 					}
 				case "bounded_read":
 					if !strings.Contains(text, "rendered_element") || !strings.Contains(text, "Scroll contents") || pointerClicks.Load() != 0 {

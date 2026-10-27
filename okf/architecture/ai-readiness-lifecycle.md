@@ -27,6 +27,4 @@ The controller imports no Floret/SQLite/threadstore packages, holds no Host/Back
 
 - `redeven:internal/codeapp/ai_readiness.go:1` - Owns serialized startup, sanitized state, generation cancellation, drain, replacement, and close.
 
-- `redeven:internal/codeapp/appserver/ai_readiness.go:1` - Defines the narrow lease provider, readiness DTO, route classification, and unavailable envelope.
-
 - `redeven:internal/codeapp/appserver/server.go:2277` - Acquires one request lease and propagates its service through request context.

@@ -303,6 +303,66 @@ final class NativeWindow {
 final class NativeAccessibility {
     var windows: [String: NativeWindow] = [:]
 
+    func applications(query: String) throws -> [[String: Any]] {
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, query.count <= 120 else { throw NativeInput.invalid("An application name or bundle ID is required.") }
+        let running = NSWorkspace.shared.runningApplications
+        return HostApplicationCatalog.applications().compactMap { url -> [String: Any]? in
+            guard let bundle = Bundle(url: url), let id = bundle.bundleIdentifier else { return nil }
+            let name = (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String) ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String) ?? url.deletingPathExtension().lastPathComponent
+            guard name.localizedCaseInsensitiveContains(query) || id.localizedCaseInsensitiveContains(query) else { return nil }
+            let app = running.first { $0.bundleURL?.resolvingSymlinksInPath() == url }
+            return ["id": HostApplicationCatalog.identifier(url), "display_name": name, "app_bundle_id": id, "state": app == nil ? "not_running" : "running"]
+        }.prefix(64).map { $0 }
+    }
+
+    func openApplication(id: String, bundleID: String, fullAccess: Bool, allowedApps: [String], allowForeground: Bool, started: () -> Void) throws -> [[String: Any]] {
+        guard HostApplicationCatalog.consoleAvailable, AXIsProcessTrusted(), CGPreflightScreenCaptureAccess() else { throw HostFailure(code: "TARGET_PERMISSION_REQUIRED", message: "Allow screen recording and accessibility in an unlocked desktop session.") }
+        guard fullAccess || (allowedApps.contains(bundleID) && allowForeground) else { throw HostFailure(code: "TARGET_PERMISSION_REQUIRED", message: "Application and foreground permission are required.") }
+        guard let url = HostApplicationCatalog.applications().first(where: { HostApplicationCatalog.identifier($0) == id }), Bundle(url: url)?.bundleIdentifier == bundleID else { throw HostFailure(code: "TARGET_CONNECTION_REQUIRED", message: "Discover the application again.") }
+        try execution.check()
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        configuration.createsNewApplicationInstance = false
+        var completed = false
+        var opened: NSRunningApplication?
+        let completionLock = NSLock()
+        func result() -> (Bool, NSRunningApplication?) {
+            completionLock.lock(); defer { completionLock.unlock() }
+            return (completed, opened)
+        }
+        started()
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration) { application, _ in
+            completionLock.lock(); opened = application; completed = true; completionLock.unlock()
+            CFRunLoopWakeUp(CFRunLoopGetMain())
+        }
+        let deadline = Date().addingTimeInterval(8)
+        while !result().0 && Date() < deadline { try execution.check(); CFRunLoopRunInMode(.defaultMode, 0.05, true) }
+        guard result().0, let opened = result().1, opened.bundleURL?.resolvingSymlinksInPath() == url else { throw HostFailure(code: "TARGET_ACTION_FAILED", message: "Application launch was not confirmed; inspect before retrying.") }
+        let application = AXUIElementCreateApplication(opened.processIdentifier)
+        let ready = Date().addingTimeInterval(2)
+        var restored: [AXUIElement] = []
+        var previous = ""
+        var stableSince = Date()
+        repeat {
+            try execution.check()
+            var settling = false
+            for window in (axValue(application, kAXWindowsAttribute) as? [AXUIElement] ?? []) where (axValue(window, kAXMinimizedAttribute) as? Bool) == true {
+                settling = true
+                if !restored.contains(where: { CFEqual($0, window) }) {
+                    try execution.check()
+                    guard AXUIElementSetAttributeValue(window, kAXMinimizedAttribute as CFString, kCFBooleanFalse) == .success else { throw NativeInput.unavailable() }
+                    restored.append(window)
+                }
+            }
+            let targets = try inventory(onlyOwner: opened.processIdentifier)
+            let signature = targets.compactMap { $0["id"] as? String }.sorted().joined(separator: ",")
+            if settling || signature != previous { previous = signature; stableSince = Date() }
+            if !settling && !targets.isEmpty && Date().timeIntervalSince(stableSince) >= 0.2 { return targets }
+            CFRunLoopRunInMode(.defaultMode, 0.05, true)
+        } while Date() < ready
+        return []
+    }
+
     func inventory(onlyOwner: pid_t? = nil) throws -> [[String: Any]] {
         guard AXIsProcessTrusted() else { throw HostFailure(code: "TARGET_PERMISSION_REQUIRED", message: "Allow Accessibility in System Settings.") }
         let excluded = try NativeScreenCapture.excludedOwner(environment: ProcessInfo.processInfo.environment)

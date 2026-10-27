@@ -44,5 +44,3 @@ The header switcher is only a product-specific compact presentation; it does not
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.mobile.browser.test.tsx` - Mobile permission placement, draft retention, request success/failure and keyboard dismissal.
 
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx:128` - Flower recognizes `model_io.updated` as a model-status presentation boundary.
-
-- `redeven:internal/flower_ui/src/contracts/flowerSurfaceContracts.ts:380` - Flower thread snapshots expose `model_id` and `reasoning_selection`.

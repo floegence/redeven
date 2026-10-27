@@ -34,5 +34,3 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 - `redeven:go.mod` - Pins the released Floret typed runtime without local replacement.
 
 - `redeven:internal/session/floret_v7_dependency_contract_test.go` - Enforces exact published-v7 adoption and rejects retired imports.
-
-- `redeven:internal/ai/floret_runtime.go` - Published runtime composition.

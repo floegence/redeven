@@ -33,6 +33,4 @@ A refresh failure after a terminal install exposes only an inventory refresh rec
 
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginUpdateReviewDialog.tsx:1` - Owns update review and result presentation.
 
-- `redeven:internal/envapp/ui_src/src/ui/plugins/ExternalPluginInstallDialog.tsx:1` - Owns explicit external-source admission UI.
-
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginUpdateProjection.ts:1` - Binds exact update target and candidate identity.

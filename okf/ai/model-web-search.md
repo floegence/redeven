@@ -30,5 +30,3 @@ Model inventory and selected membership belong to [Model directory and selection
 - redeven:internal/config/ai_web_search.go - Provider policy and effective model resolver.
 
 - redeven:internal/config/ai_web_search_controls_test.go - Switch matrix, aliases, defaults and atomic migration.
-
-- redeven:internal/ai/web_search_turn_integration_test.go - Captured wire tools, restart, frozen waiting Turn and current-settings retry.

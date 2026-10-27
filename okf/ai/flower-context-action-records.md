@@ -9,10 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-- Authority: Redeven owns a user-selected context action only before admission; Floret owns the admitted user message, ordered references, and Agent context lifecycle.
-- Outcome: one admission mapper validates and authorizes the submitted context action, then produces ordered durable `MessageReference` values and durable `UserInput.Context` snapshots.
-- Invariants: Redeven does not persist the mapped references, runtime context, or a post-admission context-action copy.
-- Failure boundary: malformed envelopes, unknown kinds, privacy-matrix violations, forged resource targets, and projection failures reject admission; the launcher preserves editable draft text and references.
+Redeven owns selected context before admission; Floret owns admitted messages/references/context. One mapper validates authorization/privacy then emits durable ordered MessageReference and UserInput.Context. No product copy persists afterward. Malformed/unknown/forged or failed projection rejects admission while preserving editable draft/references.
 
 # Contract
 
@@ -29,5 +26,3 @@ Context actions and references do not alter working directory, target permission
 - `redeven:desktop/src/welcome/environmentFlowerContext.ts` - Bounded, redacted environment inspection and card-owned operation capture.
 
 - `redeven:desktop/src/welcome/environmentFlowerContext.test.ts` - State distinctions, owner isolation, failure diagnostics, omission, Unicode bounds, and shared wire fixture.
-
-- `redeven:desktop/src/welcome/EnvironmentRelation.client.test.tsx` - Captured context submission, retry and close recovery, fresh reopening, and Cloud/Runtime isolation.

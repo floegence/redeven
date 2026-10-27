@@ -72,10 +72,4 @@ The [sidebar contract](flower-thread-sidebar.md) owns conversation rows, title e
 
 - `redeven:internal/flower_ui/src/threadDetailLoader.test.ts` - Shared demand, fresh confirmations, cancellation, explicit retry, settlement and bounded idle records.
 
-- `redeven:internal/flower_ui/src/threadSelectionSchedule.test.ts` - Visible feedback, hidden documents and idempotent commit cancellation.
-
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.test.tsx` - Latest selection, retained drafts and interaction ownership.
-
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.threadPresentation.browser.test.tsx` - First exposed destination, delayed reads, cached switches, cancellation, explicit input and failure recovery.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.continuousHistory.browser.test.tsx` - Short collapsed tails, delayed history, retained whitespace, resize, repeated scrolling and mounted-content observation.
-- `redeven:desktop/scripts/check-flower-startup.mjs` - Built Electron rendering opportunities on repeated cached selection, with owned-process cleanup.

@@ -28,5 +28,3 @@ Welcome projects one Environment library from authoritative snapshot owners. Exa
 - `redeven:desktop/src/main/environmentAccess.ts` - Authoritative connection ownership and preserved access defaults.
 
 - `redeven:desktop/src/main/runtimeConnectionProjection.test.ts` - Raw Local/SSH/WSL observations, restricted Cloud management, offline catalogs, window deduplication and identity conflicts.
-
-- `redeven:desktop/src/welcome/environmentLibraryProjection.ts` - One presentation of main-process ownership and Cloud source membership.

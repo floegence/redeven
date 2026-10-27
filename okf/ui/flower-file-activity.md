@@ -9,14 +9,7 @@ reviewed_at: "2026-10-26"
 ---
 # Summary
 
-Flower presents confirmed file reads and mutations from canonical typed Floret
-Activity. [Received output progress](flower-output-progress.md) owns temporary
-argument-generation counts before those outcomes exist. A mutation row shows the user-facing file name and aggregate added and
-deleted line counts; its detail contains the matching unified diff. Protocol
-fields, unrelated private paths never become display metadata. Explicit navigation targets
-are historical facts, not current read authority.
-An activity without typed mutation detail exposes safe purpose and status through
-the shared disclosure, without inventing a diff panel.
+Canonical typed Floret Activity owns confirmed reads/mutations; output-progress owns provisional argument counts. Rows show user filename and added/deleted totals with matching unified diff. Protocol fields/private paths never become display metadata. Historical targets grant no read authority. Missing typed detail shows purpose/status without inventing a diff.
 
 # Contract
 

@@ -38,6 +38,4 @@ Redeven maps product model and permission state into Floret's typed surface. It 
 
 - `redeven:internal/ai/floret_runtime.go` - Hosted Agents receive the current prompt, tools, model, reasoning, and context policy.
 
-- `redeven:internal/ai/prompt_builder.go` - Stable System Prompt construction.
-
 - `redeven:internal/ai/floret_bootstrap.go` - Restart uses canonical Turn input and provider-safe state.

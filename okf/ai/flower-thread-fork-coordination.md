@@ -9,10 +9,7 @@ reviewed_at: "2026-10-21"
 ---
 # Summary
 
-- Authority: Floret owns the forked journal and canonical destination identity; Redeven owns endpoint authorization and the destination's product settings.
-- Outcome: one stable client request forks the authorized source, adopts settings for the returned destination, and optionally sets an explicit title.
-- Invariants: source ownership is proven before Floret mutation, the returned destination is the only product adoption target, and the product stores no fork receipt, saga, or canonical lifecycle copy.
-- Failure boundary: invalid request identity, foreign source authority, Floret failure, or conflicting destination settings fails explicitly without a recovery coordinator or compensating canonical delete.
+Floret owns journal/destination identity; Redeven authorizes endpoint/source and adopts destination settings. One stable request optionally titles that returned destination only. No product fork receipt/saga/canonical copy. Invalid request, foreign source, Floret failure or conflicting settings fails explicitly, without a recovery coordinator or compensating canonical deletion.
 
 # Contract
 
@@ -29,7 +26,5 @@ Redeven never stores a fork saga, source/destination turn or run identity mappin
 # Evidence
 
 - `redeven:internal/ai/threads.go` - Authorizes the source, calls typed Floret Fork, adopts returned product settings, and applies an optional title.
-
-- `redeven:internal/ai/threadstore/orphan_adoption.go` - Inserts exact canonical-root settings idempotently and rejects conflicting settings.
 
 - `redeven:internal/ai/threadstore/orphan_adoption_test.go` - Covers exact adoption and conflict handling.

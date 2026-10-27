@@ -74,6 +74,20 @@ func handle(_ line: String) {
             emit(["type": "result", "request_id": id, "target_id": target, "payload": ["targets": try accessibility.inventory()]])
             return
         }
+        if tool == "computer.applications" && target == "desktop-main" {
+            guard let query = args["query"] as? String else { throw NativeInput.invalid("An application query is required.") }
+            emit(["type": "result", "request_id": id, "target_id": target, "payload": ["applications": try accessibility.applications(query: query)]])
+            return
+        }
+        if tool == "computer.open_application" && target == "desktop-main" {
+            guard let application = args["application_id"] as? String, let bundle = args["app_bundle_id"] as? String else { throw NativeInput.invalid("A discovered application is required.") }
+            let targets = try accessibility.openApplication(id: application, bundleID: bundle, fullAccess: request["full_access"] as? Bool == true, allowedApps: request["allowed_apps"] as? [String] ?? [], allowForeground: request["allow_foreground"] as? Bool == true, started: {
+                effectStarted = true
+                emit(["type": "started", "request_id": id, "target_id": target, "execution_mode": "foreground"])
+            })
+            emit(["type": "result", "request_id": id, "target_id": target, "payload": ["targets": targets, "action_executed": true]])
+            return
+        }
         guard let selected = accessibility.windows[target] else { throw HostFailure(code: "TARGET_CONNECTION_REQUIRED", message: "Select an application window before using it.") }
         window = selected; foreground.target = selected
         let privateInput = request["user_control"] as? Bool == true

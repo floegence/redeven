@@ -36,5 +36,3 @@ Presentation never changes Floret status, ordering, persistence, read acknowledg
 - `redeven:internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.ts` - The Env adapter maps authorized terminal output reads to the product API without owning process lifecycle.
 
 - `redeven:internal/ai/terminal_activity_test.go` - Verifies typed terminal outcomes survive the public activity sanitizer.
-
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Flower renders typed terminal activity detail and accessible execution status without approval presentation.

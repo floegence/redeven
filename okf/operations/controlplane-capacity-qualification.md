@@ -33,5 +33,3 @@ This opt-in qualification is separate from ordinary commit and push checks. Cred
 - `redeven:internal/agent/controlplane_capacity_qualification_test.go` — Production control lifecycle and signed Gateway observation harness.
 
 - `redeven:scripts/run_controlplane_capacity.sh` — Independent load-host invocation and fixture limits.
-
-- `redeven:internal/agent/heartbeat_policy.go` — Session-scoped policy validation.

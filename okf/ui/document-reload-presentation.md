@@ -39,6 +39,4 @@ Remembered geometry conveys neither resource data nor authority. Storage unavail
 
 - `redeven:internal/envapp/ui_src/index.html` - Static first-visit surface.
 
-- `redeven:internal/envapp/ui_src/vite.config.ts` - Published early bootstrap injection.
-
 - `redeven:internal/envapp/ui_src/src/ui/services/envReloadPresentation.ts` - Single Shell handoff and revocation boundaries.

@@ -26,6 +26,4 @@ Git remains authoritative; snapshots are read models. Hostile external writers a
 
 - `redeven:internal/gitrepo/workspace.go` - Captures workspace state and projects revision-bound pages.
 
-- `redeven:internal/gitrepo/workspace_paths.go` - Serves bounded path-scoped status and directory aggregates.
-
 - `redeven:internal/gitrepo/service.go` - Registers Git RPC handlers, capabilities, errors, and mutation entrypoints.

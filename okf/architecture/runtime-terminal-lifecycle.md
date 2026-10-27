@@ -30,6 +30,4 @@ Terminal lifecycle depends on the published Floeterm and Flowersec interfaces. R
 
 - `redeven:internal/terminal/manager.go:14` - Wraps published Floeterm terminal-go and Flowersec types.
 
-- `redeven:internal/terminal/lifecycle.go:190` - Joins concurrent delete callers on one cleanup operation.
-
 - `redeven:internal/terminal/semantic_history_rpc_test.go` - Verifies viewport, continuation, lane, generation, and payload bounds.

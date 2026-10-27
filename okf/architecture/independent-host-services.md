@@ -9,10 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-- Authority: the application owns its business execution; Redeven owns authorized lifecycle actions, native process identity, launch records, and opening validation.
-- Outcome: Desktop or Runtime exit, restart, or upgrade leaves a launched service's PID and launch generation unchanged.
-- Invariants: no new binary, resident supervisor, application-specific driver branch, process-output pipe to Runtime, or ownership inferred from PID alone.
-- Recovery boundary: absent, mismatched, and uninspectable resources are distinct. Only confirmed absence permits eligible automatic startup; opening failure never stops a running application.
+Applications own execution; Redeven owns authorized lifecycle, native identity, launch records and opening validation. Desktop/Runtime restart or upgrade preserves launched PID/generation. No supervisor, app-specific driver, output pipe or PID-only authority. Distinguish absence/mismatch/uninspectability; only proven absence permits startup, and opening failure never stops the app.
 
 # Contract
 
@@ -40,7 +37,5 @@ Imported Host templates receive `REDEVEN_TEMPLATE_DIR` pointing to the active or
 # Evidence
 
 - `redeven:internal/managedwebservice/custom_host.go` - Session launch, durable gate, identity verification, and explicit Stop.
-
-- `redeven:internal/managedwebservice/process_identity_darwin.go` - Native macOS boot and birth facts.
 
 - `redeven:internal/managedwebservice/process_identity_linux.go` - Native Linux boot, ticks, user, and namespace facts.

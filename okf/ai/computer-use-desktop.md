@@ -20,6 +20,13 @@ that every application or action can run unobtrusively in the background.
 ## macOS windows
 The Swift helper inventories regular and accessory application windows, reads AX roles, labels, non-sensitive values, supported actions and bounds, and exposes bounded subtree queries.
 
+Application discovery reuses HostApplicationCatalog; exact candidate selection
+uses NSWorkspace with current app/foreground permission. Launch completion is
+synchronized, cancellation stops further actions, and window readiness is bounded.
+Minimized windows are restored once and allowed to settle; zero/multiple windows
+return explicit selection facts. No path-supplied shell launcher or independent
+application lifecycle is exposed to guest scripts.
+
 Secret fields enter the existing private takeover channel rather than model observations.
 
 Snapshots declare source macos_accessibility and application_provided coverage.
@@ -39,7 +46,5 @@ Swift unit tests and real GTK/AT-SPI/Xvfb fixtures provide separate adapter proo
 # Evidence
 
 - `redeven:desktop/native/computer-host/Sources/RedevenComputerHost/Accessibility.swift` - window identity, AX observation and semantic actions.
-
-- `redeven:desktop/native/computer-host/Sources/RedevenComputerHost/ForegroundInput.swift` - foreground authorization, delivery acknowledgements and conditional restoration.
 
 - `redeven:desktop/native/computer-host/Sources/RedevenComputerHost/ScreenCapture.swift` - bounded window capture and exclusions.

@@ -35,5 +35,3 @@ A bundled original-color OS mark beside the Runtime name reflects trusted platfo
 # Evidence
 
 - `redeven:desktop/scripts/check-environment-card-tabs.mjs` - Ten locales, themes, text scaling, tabs, alignment, focus and busy states.
-- `redeven:desktop/src/shared/i18n/desktopI18n.test.ts` and `redeven:internal/envapp/ui_src/src/ui/i18n/i18n.test.ts` - Catalogs reject internal app labels.
-- `redeven:desktop/src/welcome/EnvironmentRelation.client.test.tsx` - Explicit routes, window focus and snapshot continuity.

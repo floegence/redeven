@@ -27,5 +27,3 @@ Only the shell-level recovery snapshot may suspend the Workbench interaction tre
 - `redeven:internal/envapp/ui_src/src/ui/workbench/EnvWorkbenchPage.test.tsx:2806` - Tests cover reusing a singleton widget without implicit ensureWidget centering when focus is disabled.
 
 - `redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchInputRouting.ts:241` - Selected Terminal wheel routing delegates only an explicit local-scroll marker to the widget without a DOM-focus gate.
-
-- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.interaction.test.tsx:650` - Surface interaction tests cover selected Terminal wheel ownership outside terminal focus and while Canvas is locked.

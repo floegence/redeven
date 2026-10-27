@@ -35,6 +35,4 @@ This is Redeven product preference policy using already published Floret capabil
 
 - `redeven:internal/ai/conversation_preferences.go` - Authenticated product preference API and model/directory/reasoning validation.
 
-- `redeven:internal/ai/threadstore/conversation_preferences.go` - Scoped transactional field merge, revision conflict, and v11 migration.
-
 - `redeven:internal/ai/threads.go` - Root creation precedence and final validation.

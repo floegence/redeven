@@ -49,5 +49,3 @@ It reports zero foreground operations within the same narrow managed-browser sco
 - `redeven:internal/ai/computer_benchmark_test.go` - production Service fixtures and measurements.
 
 - `redeven:scripts/run_computer_benchmark.mjs` - explicit credentialed runner and evidence output.
-
-- `redeven:scripts/computer_benchmark_report.mjs` - paired completeness and threshold evaluation.

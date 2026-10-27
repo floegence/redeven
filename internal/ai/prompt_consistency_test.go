@@ -11,8 +11,8 @@ import (
 )
 
 func TestFlowerPromptMatchesSelectedToolSurface(t *testing.T) {
-	// Keep the captured definitions immutable: task-file delivery adds one explicitly reviewed tool; the remaining definitions must
-	// not change the permission, interaction, or allowlist contracts.
+	// Reviewed Computer Use additions update the exact provider-visible baseline.
+	// Permission, interaction and allowlist variants remain independently checked.
 	var baseline map[string]struct {
 		SystemBytes int    `json:"system_bytes"`
 		ToolsSHA256 string `json:"tools_sha256"`

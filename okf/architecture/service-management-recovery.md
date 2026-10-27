@@ -9,10 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-- Authority: the Registry owns management records and lifecycle transactions; the Manager observes resources and determines actions; the Renderer presents that decision.
-- Outcome: every service explains its current situation, the last operation's result, and an available next step in Activity and Workbench.
-- Invariants: historical failures never determine current resource state; unavailable inspection never means absence; destructive effects require fresh ownership and explicit cleanup choices.
-- Failure boundary: an administrator with a working Registry can detach even when the engine is offline. Detachment preserves resources and never claims that business processes stopped.
+Registry owns lifecycle records/transactions; Manager observes resources and available actions; Renderer presents current state, last result and next step. Unavailable inspection is not absence; historical failure is not current state. Destruction requires fresh ownership/explicit cleanup. Authorized detach works with an offline engine but preserves resources and claims no process stop.
 
 # Contract
 
@@ -49,7 +46,5 @@ The contiguous `portforward_registry_v2` 3-to-4 migration preserves bindings, co
 # Evidence
 
 - `redeven:internal/managedwebservice/management_facts.go` - Structured observation and reference facts.
-
-- `redeven:internal/managedwebservice/management_plan.go` - Reviewed action selection and digest validation.
 
 - `redeven:internal/managedwebservice/management_uninstall.go` - Durable per-resource uninstall results and resumption.

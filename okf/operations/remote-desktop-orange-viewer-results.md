@@ -9,15 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Orange runs published native `v0.22.37` through Env App update and executable
-admission; all thirteen release qualification jobs pass. Real Viewer checks pass
-Unicode paste, physical lock, wrong-password rejection, unlock, successor input
-and scoped media recovery. Mac local Pinyin is deferred; host Pinyin remains
-unvalidated. Two paired rounds improve matched latency tails and motion FPS,
-but missing idle responses and failed SSH carrier recovery prevent RustDesk
-parity. A third RustDesk half has severe tails and disconnects. Comparison moves
-to udesk26 after measured Orange LAN loss; complete quality and resource
-evidence is still required.
+Orange native v0.22.37 passes thirteen release jobs and Viewer Unicode/lock/password/unlock/input/media checks. Mac Pinyin is deferred; host Pinyin unvalidated. Two paired rounds improve latency/FPS, but missing idle responses and SSH recovery fail parity; a third RustDesk half has severe tails/disconnects. Measured LAN loss moves comparison to udesk26; quality/resource evidence remains required.
 
 # Contract
 

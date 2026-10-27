@@ -45,6 +45,4 @@ It does not verify packages or releases, mint tokens, serve assets, grant permis
 
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginWebGL.browser.test.tsx` - Uses the published SDK and authenticated product placement adapter to verify WebGL 1/2 pixels, visibility, exact close, and reopening.
 
-- `redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.navigation.browser.test.tsx` - Verifies the published Dock order, trailing actions and saved pins, pointer activation, and keyboard activation.
-
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1` - Owns inventory, client lifetime, lifecycle commands, and cross-placement serialization.

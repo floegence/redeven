@@ -40,6 +40,4 @@ Results qualify the selected installed model and its observed serving capacity, 
 
 - `redeven:scripts/check_flower_context_ollama.sh` - Explicit real-provider entrypoint using the selected local profile.
 
-- `redeven:internal/ai/run_e2e_ollama_context_test.go` - Isolated service, transparent proxy, exact accounting, checkpoint retention, live stream, and restart assertions.
-
 - `redeven:internal/ai/model_catalog.go` - Discovers served capacity before theoretical model capacity.

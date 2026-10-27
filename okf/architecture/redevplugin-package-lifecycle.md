@@ -26,6 +26,4 @@ Redeven does not parse plugin bytes, persist inspection receipts, implement a se
 
 - `redeven:internal/redevpluginintegration/integration.go:240` - Constructs released Host modules and product adapters.
 
-- `redeven:internal/redevpluginintegration/session_lifecycle.go:1` - Carries transient connection generation while the Host owns durable teardown.
-
 - `redeven:internal/redevpluginintegration/runtime_module.go:1` - Admits the released runtime and its fixed process manager contract.

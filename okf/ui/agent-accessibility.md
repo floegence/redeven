@@ -9,14 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Redeven owns product names, descriptions, business state and relationships for
-Flower, Welcome, files, terminal and Workbench. Accessibility additions preserve
-existing classes, dimensions, colors, spacing, animations, event handlers and
-focus recovery. Hidden/inert views remain excluded. General controls and shared
-focus/floating mechanisms belong to published floe-webapp packages. A shared gap
-requires source and behavior evidence before any upstream work; Redeven consumes
-only a released upstream version. Failed audits report their exact scope and
-cannot be presented as full WCAG or model-performance qualification.
+Redeven owns names, descriptions, state and relationships while preserving geometry/styles/handlers/focus and hidden/inert exclusion. Published Floe owns reusable controls/focus/layers. Shared gaps require source/behavior evidence and released upstream fixes. Report audit scope accurately; accessibility changes alone certify neither full WCAG nor model performance.
 
 # Contract
 
@@ -35,7 +28,5 @@ Tests that deliberately filter cases qualify only the cases executed, never the 
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.tsx` - existing path guidance and per-instance description association.
-
-- `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionRuntime.tsx` - semantic terminal viewport and history controls.
 
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - composer names and existing hidden/inert interaction boundaries.

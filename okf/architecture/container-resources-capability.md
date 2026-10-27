@@ -26,6 +26,4 @@ Native container management uses one `containerengine` Docker/Podman execution l
 
 - `redeven:internal/containerengine/container_exec.go` - Validates running-container Exec and exact argv limits.
 
-- `redeven:internal/terminal/container_exec.go` - Owns hidden program-session access, attachment timeouts, and cleanup.
-
 - `redeven:internal/containerengine/resource_read.go` - Implements bounded batch statistics, raw Inspect, and safe Podman volume archive reads.

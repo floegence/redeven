@@ -123,11 +123,4 @@ this boundary without reviewing the upstream replacement and genuine fixtures.
 # Evidence
 
 - `redeven:internal/installer/signature.go:1` - Exact identity, authenticated roots and upstream signature verification.
-- `redeven:internal/installer/rekor.go:1` - Bounded, unchanged X.509 log input admission.
-- `redeven:internal/installer/install.go:1` - Verify-before-execute controller and upgrade ownership.
-- `redeven:internal/installer/suite.go:1` - Complete immutable suites, activation readback and restoration.
 - `redeven:internal/installer/install_test.go:1` - Consecutive activations preserve a live older process's resource access.
-- `redeven:internal/installer/distribution.go:1` - Signed compatibility and deployed-entry readiness.
-- `redeven:scripts/installer_bootstrap.sh.in:1` - Thin entry with fixed digests and no external verifier.
-- `redeven:scripts/render_installer_bootstrap.mjs:1` - Pins rendered from real build bytes.
-- `redeven:.github/workflows/promote-runtime-release.yml:1` - Explicit guarded default-version promotion.

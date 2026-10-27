@@ -33,5 +33,3 @@ The [preview viewport contract](file-preview-viewport-and-rendering.md) owns sha
 - `redeven:internal/envapp/ui_src/src/ui/widgets/PptxPreviewPane.tsx` - Local page windowing, zoom, notices, and source lifetime.
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/PptxPreviewPane.test.tsx` - Stale opens, disposal, windowing, and node failure disclosure.
-
-- `redeven:internal/envapp/ui_src/src/ui/widgets/PptxPreviewPane.browser.test.tsx` - Real renderer fit, projection, selection, stable text owners, and recovery.

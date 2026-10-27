@@ -33,5 +33,3 @@ The decision surface owns drafts, disabled reasons, focus, and row-local command
 - `redeven:internal/envapp/ui_src/src/ui/InterfaceCoordination.browser.test.tsx` - Compact question bounds, touch targets, scrolling, and retained selection.
 
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Input, approval, composer, and navigation behavior.
-
-- `redeven:internal/flower_ui/src/inputResponse.ts` - Strict settled-input response contract and live projection.

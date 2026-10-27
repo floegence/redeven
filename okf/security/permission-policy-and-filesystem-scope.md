@@ -34,6 +34,4 @@ Provider wire configuration may enable multi-call generation, but it cannot gran
 
 - `redeven:internal/config/permission_policy.go:11` - PermissionPolicy is the local endpoint cap for session metadata.
 
-- `redeven:internal/agent/agent.go:485` - Runtime session handling intersects granted permissions with the local cap.
-
 - `redeven:internal/filesystemscope/registry.go` and `redeven:internal/filesystemscope/registry_test.go` - Default read/write roots and preservation of explicit read-only policy.

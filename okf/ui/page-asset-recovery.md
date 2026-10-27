@@ -9,14 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Floe owns document asset comparison and per-view error isolation. Redeven owns
-the authenticated Env App entry route, secure-connection trigger, localized
-presentation, and explicit reload action. A connected Runtime does not prove
-that an already loaded browser document can still fetch its page modules.
-Changed builds and failed module loads must expose recovery rather than an
-endless loading placeholder. Detection never reloads over unsaved work.
-Recovery notices stay inside the active mode's content area, below the unchanged
-shell header and native window controls.
+Floe owns asset comparison/view isolation; Redeven owns authenticated entry, secure trigger, localization and explicit reload. Connected Runtime does not prove old page modules still load. Changed builds/import failures expose recovery instead of endless placeholders. Never reload over drafts; notices stay inside active content below unchanged shell/native controls.
 
 # Contract
 
@@ -37,7 +30,5 @@ Transport readiness does not prove document assets are current or loadable. Buil
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/reconnect/createEnvAppAssetRecovery.ts` - Secure-readiness trigger and authenticated document route.
-
-- `redeven:internal/envapp/ui_src/src/ui/reconnect/PageAssetRecovery.tsx` - Localized, non-destructive notice and explicit recovery action.
 
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Activity isolation and Workbench content boundary.

@@ -23,6 +23,4 @@ Redeven runtime owns action execution and provenance; Flower owns rendering and 
 
 - `redeven:internal/ai/run.go` - target tool dispatch and result provenance.
 
-- `redeven:internal/flower_ui/src/flowerLiveMapper.ts` - canonical Activity renderer mapping.
-
 - `redeven:internal/flower_ui/src/flowerActivityPresentation.ts` - computer and browser presentation handlers.

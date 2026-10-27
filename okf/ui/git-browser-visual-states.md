@@ -32,7 +32,3 @@ Inline inspection changes local presentation and file navigation only. Product t
 # Evidence
 
 - redeven:internal/envapp/ui_src/src/ui/widgets/GitCommitLoading.browser.test.tsx - Checks mounted-frame and geometric stability through delayed and superseded commit requests in both entry points at landscape, tall, and narrow sizes.
-
-- redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffSplit.browser.test.tsx - Verifies row density, stable commit-file navigation, responsive containment, independent scrolling, keyboard selection, removal of the selected file, and a persistent scrollbar with synchronized seeking, resizing, and scaled pointer dragging in a real browser.
-
-- redeven:internal/envapp/ui_src/src/ui/widgets/GitHistoryBrowser.e2e.test.tsx - Verifies commit navigation clears obsolete diff ownership and preserves commit actions.

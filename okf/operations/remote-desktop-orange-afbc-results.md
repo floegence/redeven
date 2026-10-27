@@ -9,14 +9,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-The native converter owns physical scanout format normalization; Redeven
-consumes its release without a second capture implementation. Orange's active
-1920x1080 Wayland scanout is decodable through its installed EGL stack once
-the exact legacy AFBC component convention is respected. Real pixel and native
-lock/unlock tests pass on orange; udesk26 passes the corresponding regression.
-Input authority remains with the privileged service and a fresh painted
-generation. Native results do not qualify browser/network latency, physical
-photons or an installed product update. Unsupported layouts fail explicitly.
+Published native conversion decodes Orange 1920x1080 Wayland scanout through installed EGL using the exact legacy AFBC convention. Real pixel/lock/unlock tests pass on Orange, with udesk26 regression. Privileged service/fresh paint owns input. Unsupported layouts fail; native results do not certify browser/network latency, physical photons or installed product update.
 
 # Contract
 

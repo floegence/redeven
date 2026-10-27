@@ -38,6 +38,4 @@ Preview scale, content bounds, and asynchronous renderer ownership follow the [v
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewSurface.tsx` - Chooses title-bar actions for desktop and the inline header for mobile.
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewActions.tsx` - Shares action availability, copy feedback, and preview-local selection mapping.
-
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewPanel.tsx` - Retains the body and unsaved-change confirmation boundary.

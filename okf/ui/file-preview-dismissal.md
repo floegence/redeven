@@ -37,6 +37,4 @@ The [window actions contract](file-preview-window-actions.md) owns file actions 
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/createFilePreviewController.ts` - Cancels work immediately and releases retained document resources at the presentation boundary.
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewHost.tsx` - Binds the global controller to the mounted preview surface.
-
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewSurface.tsx` - Releases retained content when the published presence owner disposes the panel.

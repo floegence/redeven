@@ -44,5 +44,3 @@ The [Managed Service release contract](../architecture/managed-service-release-d
 - `redeven:.github/workflows/update-service-template-dependency.yml` - Schedules isolated updates, prepares dependencies, and constrains generated output.
 
 - `redeven:scripts/update_service_template_dependency.mjs` - Enforces public module discovery, checksums, exact sums, no-op, and failure restoration.
-
-- `redeven:scripts/integrate_service_template_update.sh` - Checks the frozen base, fast-forwards local main, and invokes the normal push hook.

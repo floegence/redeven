@@ -17,17 +17,18 @@ import (
 // Candidates are short-lived discovery facts, not grants or a second selection
 // store. Only the Runtime can turn their opaque references into connections.
 type ComputerCandidate struct {
-	CandidateRef string `json:"candidate_ref"`
-	TargetID     string `json:"target_id,omitempty"`
-	Kind         string `json:"kind"`
-	DisplayName  string `json:"display_name"`
-	ProfileName  string `json:"profile_name,omitempty"`
-	Title        string `json:"title,omitempty"`
-	URL          string `json:"url,omitempty"`
-	AppBundleID  string `json:"app_bundle_id,omitempty"`
-	OpenerTabID  string `json:"opener_tab_id,omitempty"`
-	State        string `json:"state"`
-	NewTab       bool   `json:"new_tab,omitempty"`
+	CandidateRef  string `json:"candidate_ref"`
+	TargetID      string `json:"target_id,omitempty"`
+	Kind          string `json:"kind"`
+	DisplayName   string `json:"display_name"`
+	ProfileName   string `json:"profile_name,omitempty"`
+	Title         string `json:"title,omitempty"`
+	URL           string `json:"url,omitempty"`
+	AppBundleID   string `json:"app_bundle_id,omitempty"`
+	ApplicationID string `json:"application_id,omitempty"`
+	OpenerTabID   string `json:"opener_tab_id,omitempty"`
+	State         string `json:"state"`
+	NewTab        bool   `json:"new_tab,omitempty"`
 }
 
 type ComputerTargetInventory struct {
@@ -233,6 +234,7 @@ func (r *ComputerUseRuntime) ComputerTargets(ctx context.Context, call TargetToo
 	inventory := ComputerTargetInventory{Candidates: []ComputerCandidate{}, BrowserSource: "auto"}
 	var options struct {
 		BrowserSource string `json:"browser_source"`
+		Application   string `json:"application"`
 	}
 	if len(call.Arguments) > 0 && json.Unmarshal(call.Arguments, &options) != nil {
 		return inventory, errors.New("invalid browser source")
@@ -260,6 +262,9 @@ func (r *ComputerUseRuntime) ComputerTargets(ctx context.Context, call TargetToo
 		return inventory, err
 	}
 	inventory.CurrentTargetID = selected
+	if options.Application != "" {
+		return r.computerApplicationCandidates(ctx, call, policy, inventory, options.Application)
+	}
 	targets := r.registry.Snapshot()
 	if source == "auto" {
 		targets, err = r.ListComputerTargets(ctx)
@@ -420,6 +425,9 @@ func (r *ComputerUseRuntime) SelectComputerCandidate(ctx context.Context, call T
 		return TargetDescriptor{}, computerTargetFailure(call, "TARGET_NOT_ALLOWED")
 	}
 	var target TargetDescriptor
+	if candidate.view.ApplicationID != "" {
+		return r.selectComputerApplication(ctx, call, candidate.view, policy)
+	}
 	if candidate.connection != nil {
 		connection := *candidate.connection
 		if !connection.NewTab {
@@ -579,11 +587,41 @@ func (r *run) execComputerManagement(ctx context.Context, toolID, toolName strin
 	if frozen, ok := ctx.Value(computerAuthorizedCandidateKey{}).(string); ok && ref != frozen {
 		return nil, errors.New("computer candidate authorization changed")
 	}
+	candidate, candidateErr := host.computerCandidate(call.ThreadID, ref)
+	applicationOpened := candidateErr == nil && candidate.view.ApplicationID != ""
 	target, err := host.SelectComputerCandidate(ctx, call, ref, r.toolTargetPolicy)
 	if err != nil {
+		var application *computerApplicationSelection
+		if errors.As(err, &application) {
+			return toolExecutionOutput{Payload: map[string]any{"selected": false, "action_executed": true, "state": application.state, "candidates": application.candidates, "next_step": "The application was opened. Select a returned window candidate when permitted; if none exists, discover again or report that no accessible window is available. Do not repeat the launch."}}, application.cause
+		}
 		return nil, err
 	}
-	return toolExecutionOutput{TargetID: target.ID, Payload: map[string]any{"target_id": target.ID, "target_name": target.DisplayName, "target_kind": target.Kind, "capabilities": target.Capabilities, "tool_contract": computerTargetContract(target), "execution_location": target.Locality, "selected": true, "next_step": "Observe the selected page or application before acting."}}, nil
+	// Selection is already committed. Observe through the same Runtime gate and
+	// privacy boundary; an observation failure must not erase that selection.
+	call.TargetID, call.ToolName = target.ID, "computer.observe"
+	call.Arguments = json.RawMessage(`{"limit":80}`)
+	observed, observeErr := host.ExecuteTargetTool(ctx, call)
+	if takeoverResult(observed, observeErr) {
+		blocked, failure := computerBlockedExecution(call, target, computerPauseSafety(observed, observeErr), observed)
+		if payload, ok := blocked.Payload.(map[string]any); ok {
+			payload["selected"], payload["action_executed"] = true, applicationOpened
+		}
+		return blocked, failure
+	}
+	payload, _ := targetToolResultPayload(observed, target.ID, target).(map[string]any)
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	payload["target_id"], payload["target_kind"], payload["selected"] = target.ID, target.Kind, true
+	payload["tool_contract"] = computerTargetContract(target)
+	if applicationOpened {
+		payload["action_executed"] = true
+	}
+	if observeErr != nil {
+		payload["needs_observation"] = true
+	}
+	return toolExecutionOutput{facts: observed.executionFacts, TargetID: target.ID, Payload: payload, Attachments: toolAttachmentsFromTarget(observed.Attachments)}, observeErr
 }
 
 // Default selection describes a new task page without launching anything. The

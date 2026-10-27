@@ -28,12 +28,4 @@ Readiness is process-local availability, never Agent lifecycle. [Generation owne
 
 - [Companion readiness browser tests](../../internal/envapp/ui_src/src/ui/FlowerSurface.companionReadiness.browser.test.tsx) cover real companion geometry across both startup boundaries, explicit recovery, keyboard operation, localization, reduced motion and forced colors.
 
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.initialLoading.test.tsx` - Delayed first page, empty inventory, initial retry, access guidance and subsequent reconnect continuity.
-
-- `redeven:desktop/scripts/check-flower-startup.mjs` - Built Electron renderer keeps the existing loading presentation before its first page, then retains selection and drafts through later pages.
-
-- `redeven:internal/envapp/ui_src/src/ui/flower/AIReadinessBoundary.browser.test.tsx:1` - Browser interaction, reflow and recovery coverage.
-
 - `redeven:desktop/src/welcome/flower/DesktopFlowerRuntimeBoundary.client.test.tsx:1` - Stop deduplication, explicit retry, failure and draft continuity.
-
-- `redeven:desktop/src/main/runtimeFlowerRoutes.test.ts:1` - Exact authenticated readiness route and method boundaries.

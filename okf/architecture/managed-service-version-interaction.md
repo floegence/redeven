@@ -25,6 +25,4 @@ Only explicit submit requests execution. Selection, preparation and closing a dr
 
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Owns selection, compact presentation, inline notices, stop and admission handling.
 
-- `redeven:internal/envapp/ui_src/src/ui/pages/managedServiceUpdatePreparation.ts` - Serializes and invalidates preparation independently of candidate discovery.
-
 - `redeven:internal/envapp/ui_src/src/ui/pages/managedServiceUpdatePreparation.test.ts` - Covers rapid selection, session changes, expiry, and explicit retry.

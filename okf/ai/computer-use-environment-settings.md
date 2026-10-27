@@ -9,14 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Redeven owns one Browser and desktop dialog shared by Desktop and Env App.
-ComputerUseRuntime supplies current host capability and resource discovery;
-existing thread settings own selection and access grants; the Chrome extension
-owns confirmed pairing consent. These facts never substitute for one another.
-Opening, refreshing, or leaving settings never selects a page, grants access,
-starts a task, installs components, or launches a private desktop. Failed reads
-remain unknown, and a lost selected object remains unavailable until recovered
-or explicitly replaced. Floret remains the sole conversation lifecycle owner.
+Desktop/Env App share one Browser and desktop dialog. Runtime capability, thread selection/grants and extension consent are separate authorities. Open/refresh/close never selects, grants, runs, installs or launches. Failed reads stay unknown; lost selections remain unavailable until recovery/replacement. Floret alone owns conversation lifecycle.
 
 # Contract
 
@@ -37,7 +30,5 @@ Inspection never selects a page, grants authority, starts a task or installs com
 # Evidence
 
 - `redeven:internal/flower_ui/src/FlowerComputerConnections.tsx` - shared dialog and staged operations.
-
-- `redeven:internal/flower_ui/host/computerUseAdapter.ts` - one carrier-neutral Runtime adapter.
 
 - `redeven:internal/flower_ui/src/settings/FlowerSettingsSurface.tsx` - global entry to the same dialog.

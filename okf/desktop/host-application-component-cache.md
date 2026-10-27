@@ -44,6 +44,4 @@ This policy applies only to Desktop graphical component archives. Temporary ZIPs
 
 - [Runtime adapter](../../cmd/redeven/host_application_package.go): fixed retention policy, released SDK calls and independent maintenance diagnostics.
 
-- [Desktop ownership](../../desktop/src/main/hostApplicationComponents.ts): startup cleanup, scoped subprocesses and bounded chunk reads.
-
 - [Desktop regression tests](../../desktop/src/main/hostApplicationComponents.test.ts): cancellation, cache preservation and temporary-file boundaries.

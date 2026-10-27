@@ -9,14 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Desktop owns display association and default access selection. A Gateway member route
-joins an existing Runtime card only after the main process matches its member ID,
-Runtime public ID and paired Gateway key against the trusted Runtime management
-snapshot. Public health observations remain independently verified. Names, URLs,
-catalog availability and renderer claims never establish this relationship.
-Existing Local / Redeven Cloud binding and ownership remain independent.
-An unverified or changed route stays separate; a missing saved default requires
-an explicit replacement. Association grants no login or management authority.
+Desktop associates Gateway routes only after matching member ID, Runtime public ID and paired Gateway key against trusted management facts. Health is independently verified; names/URLs/catalogs/renderer claims grant no association. Local/Cloud ownership remains separate. Changed/unverified routes stay separate; missing default requires explicit replacement, never login/management authority.
 
 # Contract
 
@@ -53,5 +46,3 @@ This contract owns display association and route selection. Proof observation ne
 - `redeven:internal/runtimeidentity/access_identity.go` - State identity, exclusive initialization and nonce proof.
 
 - `redeven:internal/localui/access_identity_test.go` - Public/private identity agreement and independent Runtime authentication.
-
-- `redeven:spec/openapi/gateway-v6.yaml` - Signed membership and service identity schemas.

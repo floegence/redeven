@@ -42,6 +42,4 @@ These limits affect decoration only; they never truncate output or disable copyi
 
 - [Region lifetime and released enhancement](../../internal/flower_ui/src/chat/markdown/FlowerMarkdownBlock.tsx)
 
-- [Escaped fence metadata](../../internal/flower_ui/src/chat/markdown/markedConfig.ts)
-
 - [Browser interaction acceptance](../../internal/envapp/ui_src/src/ui/FlowerMarkdown.highlight.browser.test.tsx)

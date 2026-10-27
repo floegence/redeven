@@ -9,13 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Published Floe Native Apps owns Linux graphics, package planning and scoped host
-service adaptation. Redeven owns the authorized catalog, instance and viewer.
-New applications normally receive a private Wayland/Xwayland environment; an
-explicit upstream X11-only contract can select Xpra before execution. A launch
-never retries with another backend. Native applications need no full desktop or
-physical monitor. Snap and Flatpak additionally require their installed runtimes
-and necessary host services. Missing capabilities remain explicit failures.
+Floe Native Apps owns Linux graphics/package/service adaptation; Redeven owns catalog, authorization, instance and viewer. Default private Wayland/Xwayland or explicit preselected X11-only Xpra needs no full desktop/monitor. Never retry another backend. Snap/Flatpak need installed runtimes/services; missing capabilities fail explicitly.
 
 # Contract
 

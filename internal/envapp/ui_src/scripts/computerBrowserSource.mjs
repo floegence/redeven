@@ -1,5 +1,6 @@
 import { PlaywrightSourceBrowser, CDPSourcePage, ResponseDownloads, closeCDPPage } from '@floegence/floebrowser';
 import { BrowserComputerController } from './computerBrowserController.mjs';
+import { createComputerDownloadReader } from './computerDownloadReader.mjs';
 
 // The target helper owns one source adapter. Semantic tools and DOM projection
 // borrow its root and child transports; neither creates another debugger owner.
@@ -83,6 +84,8 @@ async function createSourceOwner(source, disposeSource, captureDownloads) {
     download.subscribe(changed); changed();
   }) : undefined;
   const controller = new BrowserComputerController(transport, { responseDownloads: downloads });
+  const reader = createComputerDownloadReader(source, controller.page);
+  controller.page.readDownload = options => reader.read(options);
 
   const attached = session => {
     void controller.page.initializeSession(session).catch(() => {
@@ -100,7 +103,7 @@ async function createSourceOwner(source, disposeSource, captureDownloads) {
   }
   catch (error) {
     source.off('sessionattached', attached); source.off('sessiondetached', detached); source.off('close', closed);
-    controller.close();
+    reader.close(); controller.close();
     for (const session of controller.page.sessions.keys()) controller.page.releaseSession(session);
     await downloads?.close();
     throw error;
@@ -135,6 +138,7 @@ async function createSourceOwner(source, disposeSource, captureDownloads) {
     dispose() {
       if (disposal) return disposal;
       disposed = true;
+      reader.close();
       source.off('sessionattached', attached);
       source.off('sessiondetached', detached);
       source.off('close', closed);

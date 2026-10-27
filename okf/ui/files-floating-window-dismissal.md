@@ -9,14 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-The Files surface controller owns whether a request is active and returns focus
-immediately when it closes. The floating window host retains the last request's
-title, persistence key, and live browser content while the published Floe
-FloatingWindow completes exit presence. This prevents a blank frame without
-starting another timer, copying rendered content, or keeping a second browser
-mounted. Floe marks the exiting window inert and retires it at the end of its
-motion, including reduced-motion behavior; a new request cancels that pending
-exit through the same window lifecycle.
+Files controller owns active request and immediate return focus. Floating host retains title/key/live browser through Floe exit presence, with no extra timer/copied content/second browser. Floe makes exit inert and disposes after motion, including reduced motion. New requests cancel exit through that same lifecycle.
 
 # Contract
 
@@ -37,7 +30,5 @@ The controller remains the owner of active request state and return focus. The h
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/createFileBrowserSurfaceController.ts` - Clears the active request and restores the visible opener on close.
-
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserSurfaceHost.tsx` - Retains the last presentation for the existing window exit lifecycle.
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserSurfaceHost.browser.test.tsx` - Checks frame-by-frame content continuity, inert exit, cleanup, reduced motion, themes, and rapid reopen.

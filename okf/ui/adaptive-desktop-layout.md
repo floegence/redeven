@@ -46,10 +46,4 @@ Narrow layouts may ellipsize selection titles; explanations remain normal prose 
 
 - `redeven:internal/envapp/ui_src/src/ui/App.tsx` - Maps native host identity and browser capabilities into Floe configuration.
 
-- `redeven:desktop/src/welcome/App.tsx` - Fixes Desktop Welcome to desktop interaction.
-
-- `redeven:internal/envapp/ui_src/src/ui/mobileViewportPolicy.ts` - Defines the browser product query.
-
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.navigation.browser.test.tsx` - Checks compact sidebar geometry, mobile dismissal, and retained navigation across inline/drawer transitions.
-
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.toolbar.browser.test.tsx` - Checks divider alignment at standard and enlarged root sizes across sidebar widths, responsive toolbar geometry, and stable header/content bounds when filtering or entering and leaving path editing.

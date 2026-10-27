@@ -53,8 +53,4 @@ Runtime owns routing and projection. Native Anthropic/Google discovery preserves
 
 - `redeven:scripts/model-catalog/upstream.json` - Pinned models.dev response projection and original response SHA-256.
 
-- `redeven:scripts/model-catalog/overrides.json` - Official-source corrections, search declarations, exclusions, and review dates.
-
-- `redeven:internal/ai/model_gateway.go` - Provider routing and Anthropic base normalization.
-
 - redeven:internal/ai/model_gateway_kimi_code_test.go - Subscription wire, canonical replay, quota classification and K3.1 platform parameters.

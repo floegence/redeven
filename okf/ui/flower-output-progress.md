@@ -41,6 +41,4 @@ Floret owns request accounting and ephemeral thread snapshots. Redeven's pure ar
 
 - `redeven:internal/flower_ui/src/icons/FlowerIcon.tsx` — Shared petal geometry, light outline and original dark gradient artwork.
 
-- `redeven:internal/flower_ui/src/icons/flower-icon.css` — Shell-theme artwork selection and compact sizing.
-
 - `redeven:internal/flower_ui/src/styles/flower.css` — Compact progress sizing, whole-bloom rotation and reduced-motion suppression.

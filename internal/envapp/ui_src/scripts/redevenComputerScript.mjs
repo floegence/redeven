@@ -189,6 +189,13 @@ export async function createComputerScript({ browser = true } = {}) {
           navigate: (url) => call({action: 'navigate', url: string(url,'url')}),
           back: () => call({action: 'back'}),
           reload: () => call({action: 'reload'}),
+          saveDownload: (id) => call({action:'save_download',id:string(id,'id')}),
+          readDownload: (id, value={}) => {
+            string(id,'id'); options(value,['offset','limit']);
+            if (value.offset !== undefined && (!Number.isSafeInteger(value.offset) || value.offset < 0)) invalid();
+            if (value.limit !== undefined && (!Number.isInteger(value.limit) || value.limit < 1 || value.limit > 65536)) invalid();
+            return call({action:'read_download',id,...value});
+          },
           downloadCursor: async () => {
             const result=await call({action:'download_cursor'}), cursor=result.cursor;
             return Object.freeze({...result, wait:(value={})=>{

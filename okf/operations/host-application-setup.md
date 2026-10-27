@@ -9,17 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-New Linux applications use the managed combined Wayland/Xwayland component from
-published Floe Native Apps. The application library provides its preparation and
-recovery flow; Desktop can transfer verified archives to an offline host. Native
-applications need no full desktop or physical monitor. Snap and Flatpak additionally
-need their installed package runtimes and required host services. Missing services
-produce explicit recovery guidance; Redeven never installs system packages or
-changes security policy automatically.
-
-The [platform contract](../architecture/host-application-platforms.md) owns package,
-service and isolation requirements; [preparation](../architecture/host-application-preparation.md)
-owns acquisition and recovery. Refresh the library after administrative changes.
+Published Floe Native Apps supplies managed Wayland/Xwayland; the library owns preparation/recovery and Desktop can transfer verified offline archives. No full desktop/monitor is needed. Snap/Flatpak require installed runtimes/services; missing prerequisites get explicit guidance, never automatic system/security changes. Platform/preparation contracts apply; refresh after admin changes.
 
 # Contract
 

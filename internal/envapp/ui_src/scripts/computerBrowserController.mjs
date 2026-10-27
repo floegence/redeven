@@ -123,6 +123,9 @@ export class BrowserComputerController {
         result = page.downloadCursor();
       } else if (tool === 'browser.wait_for_download') {
         result = await page.waitForDownload(args);
+      } else if (tool === 'browser.read_download') {
+        if (!page.readDownload) throw new Error('TARGET_CAPABILITY_UNAVAILABLE');
+        result = await page.readDownload(args);
       } else if (tool.startsWith('browser.')) {
         let url, entryId;
         if (tool === 'browser.navigate') url = args.url;
@@ -193,6 +196,7 @@ export class BrowserComputerController {
         safety: { level: 'routine', reason_codes: [], safe_to_capture: false, safe_to_send_to_model: false },
       };
       if (error instanceof BrowserNavigationError) return { error: error.message, result: error.result };
+      if (error.message === 'AMBIGUOUS_DOWNLOAD') return { error: error.message, result: { action_executed: false, downloads: error.downloads } };
       if (error.message === 'ELEMENT_NOT_ACTIONABLE') return { error: error.message,
         result: { action_executed: false, needs_observation: dispatched(), preparation_executed: dispatched() } };
       return { error: rejections.has(error.message) ? error.message : dispatched() ? 'EFFECT_OUTCOME_UNKNOWN' : 'TARGET_ACTION_FAILED',

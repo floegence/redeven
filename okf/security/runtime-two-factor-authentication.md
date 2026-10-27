@@ -9,7 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Runtime `accessgate` owns environment authentication independently of Redeven Cloud. Enabling two-factor authentication requires the environment password followed by a TOTP or single-use recovery code for ordinary browser, direct URL, and Cloud data sessions. A password-only challenge grants no file, terminal, editor, plugin, or forwarding access. Authenticated native/SSH management retains its separate private host authority; loopback addresses, Cloud administrator claims, and forwarded headers do not establish that authority. Missing or damaged committed authentication state fails closed. Host recovery locks ordinary access until a new password and authenticator are committed.
+Runtime accessgate owns authentication independently of Cloud. MFA requires password then TOTP/single-use recovery for browser/direct/Cloud sessions; password challenge grants no application access. Native/SSH management has separate authority, never inferred from loopback, Cloud admin or headers. Missing/corrupt state fails closed; recovery blocks access until new credentials commit.
 
 # Contract
 
@@ -33,7 +33,3 @@ Password-only challenges grant no ordinary product data access. Loopback address
 # Evidence
 
 - `redeven:internal/accessgate/authentication_test.go` - Exercises real codes, replay, restart, recovery consumption, throttle persistence, collisions, revocation and child scope.
-
-- `redeven:internal/accessgate/channel_registration_test.go` - Verifies open-access registration, authentication activation, inherited deadlines, revocation, and remote MFA admission.
-
-- `redeven:internal/agent/local_direct_test.go` - Rejects unauthorized or cancelled direct activation before plugin readiness.

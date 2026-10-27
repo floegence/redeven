@@ -9,16 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-The controlled physical-seat and X11 comparisons qualify their tested local
-configurations. The v0.22.29 physical-seat candidate reduced host-local input
-receipt latency and CPU use; the v0.22.10 X11 candidate reduced client-window
-response latency with working NVIDIA encoding and one local host-shaped cursor.
-
-Session authority remains owned by the
-[desktop contract](../architecture/remote-desktop.md). These measurements establish
-the tested configuration, not physical input-to-photon latency, universal GPU
-performance, zero-copy capture or WAN behavior. Capture/encoder failures still
-revoke media authority and require fresh current-generation paint.
+Physical-seat v0.22.29 improves host-local input receipt/CPU; X11 v0.22.10 improves client-window response with NVIDIA encoding/local host-shaped cursor. Results certify tested configurations only, not input-to-photon, universal GPU, zero-copy or WAN performance. Session authority persists; capture/encoder failure requires fresh current-generation paint.
 
 # Contract
 

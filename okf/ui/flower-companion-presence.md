@@ -40,5 +40,3 @@ Presence is a read-only projection of canonical work and local composer intent. 
 - `redeven:internal/flower_ui/src/flowerCompanionPresence.ts` - canonical thread summaries produce mutually exclusive priority groups and fallback-preserving title selection.
 
 - `redeven:internal/flower_ui/src/flowerCompanionLiveTail.ts` - active-run blocks project waiting/thinking status, compact tool presentation, or latest assistant output without exposing raw thinking.
-
-- `redeven:internal/flower_ui/src/flowerCompanionRunTracker.ts` - accepted typed current views bind exact active RunIDs to process-local generations and emit matching terminal receipts.

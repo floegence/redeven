@@ -48,6 +48,4 @@ Floret is the sole owner of admitted snapshots, model history, compaction and re
 
 - [Collector](../../internal/ai/prompt_workspace_context.go)
 
-- [Dynamic tool surface](../../internal/ai/run_tool_surface.go)
-
 - [Canonical read projection](../../internal/ai/floret_thread_context.go)

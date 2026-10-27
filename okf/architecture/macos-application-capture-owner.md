@@ -9,14 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-The host application Manager owns one lazily started Swift helper for its Runtime
-lifetime. All catalog requests, human-operated application sessions and
-[remote desktop sessions](remote-desktop.md) use that process. Suspending one application must not interrupt another application's
-capture. Application identity, viewer authorization, input, frame credit and
-cleanup remain independent. A helper crash fails its current sharing sessions
-without quitting native applications; a later explicit open may start a new
-helper. The [native application contract](macos-host-applications.md) owns OS
-permissions and process/window validation.
+One Manager-owned lazy Swift helper serves catalog, application and remote-desktop sessions for a Runtime. Suspend only the selected capture; identity, permissions, input, credit and cleanup stay independent. Helper failure ends sharing, not apps; explicit reopen may restart it. The native session contract owns OS permission and process/window validation.
 
 # Contract
 

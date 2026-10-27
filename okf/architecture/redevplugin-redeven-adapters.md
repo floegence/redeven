@@ -33,6 +33,4 @@ These adapters map product identity and presentation into released ReDevPlugin A
 
 - `redeven:internal/redevpluginintegration/integration.go:240` - Constructs released Host modules and product adapters.
 
-- `redeven:internal/redevpluginintegration/session_lifecycle.go:1` - Carries transient connection generation while Host owns durable teardown.
-
 - `redeven:internal/redevpluginintegration/trust_adapter.go:1` - Delegates package signature and freshness assessment upstream.

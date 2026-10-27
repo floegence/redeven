@@ -9,15 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Redeven owns one optional Chromium installation per Runtime state directory.
-The capability is enabled by default, but discovery, opening settings, enabling,
-and agent tool execution never download bytes. Only an authenticated user's
-explicit confirmation starts environment download or automatic Desktop acquisition and upload.
-Disabling persists, cancels installation, closes managed browser processes and
-blocks further use and installation prompts. Installed bytes and website data
-remain. Floret owns the input wait and continuation; installer status never
-becomes a second conversation lifecycle. Failed verification never publishes a
-partial package, and failures offer an explicit retry or alternative source.
+Runtime owns one optional Chromium install. Enabled by default, it downloads only after authenticated user confirmation, never discovery/settings/tools. Disable persists, cancels install, closes managed processes and blocks use/prompts while retaining bytes/site data. Floret owns waiting/continuation. Failed verification publishes no partial package; offer explicit retry/source choice.
 
 # Contract
 
@@ -42,7 +34,5 @@ Discovery, settings and agent execution cannot initiate installation. Verificati
 # Evidence
 
 - `redeven:desktop/src/main/runtimePackageCache.ts` - complete source suites and cache admission.
-
-- `redeven:scripts/stage_computer_resources.mjs` - verified native and cross-platform helper staging.
 
 - `redeven:internal/browserinstall/manager.go` - preference, upstream acquisition and atomic package publication.

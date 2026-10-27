@@ -26,6 +26,4 @@ Cards and inspector share the same accessible `aria-busy`, live-status, alert, a
 
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx:1` - Presents review and installation state.
 
-- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginInstallCoordinator.ts:1` - Retains and resumes authoritative Execution observation.
-
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApprovedInstallSetup.ts:1` - Completes only permitted post-install setup.

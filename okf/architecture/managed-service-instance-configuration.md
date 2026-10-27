@@ -26,6 +26,4 @@ No change to template topology/endpoint, ReDevPlugin or public IPC; no raw engin
 
 - `redeven:internal/managedwebservice/configuration.go` - Defines the override document, canonical identity, typed validation, and managed anchors.
 
-- `redeven:internal/managedwebservice/runtime_resolution.go` - Owns current-template resolution, selected-release materialization, and applied Runtime digest identity.
-
 - `redeven:internal/managedwebservice/settings.go` - Owns settings projection, secret redaction, candidate construction, Resource Plans, and risk classification.

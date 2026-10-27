@@ -9,10 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-- Authority: the readiness controller drains generations; each storage owner snapshots and migrates its own data; Floret alone terminates old execution.
-- Outcome: administrators can recover Flower history, settings, read state and uploads while other Runtime surfaces remain usable.
-- Invariants: no Flower writer during capture or replacement, complete verified collections, preservation of all existing snapshots, and no automatic execution replay.
-- Failure boundary: insufficient space, malformed backups, migration defects or interrupted replacement block Flower and preserve recoverable data; recovery does not roll back external actions or binaries.
+Readiness drains generations; storage owners snapshot/migrate their data and Floret ends old execution. Recover history/settings/read-state/uploads without stopping other surfaces. Freeze Flower writes during capture/replacement, verify complete collections and retain snapshots. Space, malformed data, migration or interruption blocks Flower while preserving recovery; no effect replay or binary rollback.
 
 # Contract
 
@@ -35,7 +32,5 @@ Only Flower-owned databases and uploaded resources participate in a restore. Cor
 # Evidence
 
 - `redeven:internal/ai/storage_snapshot.go` - Explicit capture, metadata and preserved snapshot inventory.
-
-- `redeven:internal/ai/storage_restore.go` - Owner preparation and durable complete-set replacement.
 
 - `redeven:internal/ai/storage_files.go` - Directory durability, staging cleanup and replacement verification.

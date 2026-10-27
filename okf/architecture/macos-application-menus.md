@@ -9,13 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-The macOS helper owns the menu exposed by a single-application viewer. It omits
-the entire system Apple subtree and identified cross-application visibility
-commands before issuing handles. Application titles remain literal native text.
-Only an enabled leaf from the current snapshot, still under its allowed live
-ancestry, can execute. Rejected or stale actions produce the existing localized
-operation error and preserve the application and capture. Menu inspection happens
-on explicit menu requests and actions, never on the launch or first-frame path.
+The helper exposes single-app menus, removing Apple/cross-app visibility branches before handles exist. Keep native titles literal. Only an enabled current leaf with verified live ancestry executes; stale/rejected actions retain app/capture and localized errors. Inspect menus only on explicit requests/actions, never launch/first frame.
 
 # Contract
 

@@ -3053,6 +3053,7 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	call.Arguments = rawArgs
 	if toolName == "computer.exec" {
 		call.revalidate = r.computerToolRevalidator(toolID, toolName)
+		call.downloadWriter = r.saveComputerDownload
 	}
 	decision, safetyErr := gate.AssessInteraction(ctx, call, target)
 	if safetyErr != nil {

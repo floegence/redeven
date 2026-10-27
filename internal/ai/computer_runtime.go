@@ -416,7 +416,49 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 		captureCtx, cancel = context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 	}
-	result, err := executor.ExecuteTargetTool(captureCtx, call)
+	var result TargetToolResult
+	var err error
+	if call.ToolName == "browser.save_download" {
+		if call.downloadWriter == nil {
+			return result, computerTargetFailure(call, "TARGET_CAPABILITY_UNAVAILABLE")
+		}
+		var payload map[string]any
+		payload, err = call.downloadWriter(ctx, func(readCtx context.Context, offset int) (map[string]any, error) {
+			read := call
+			read.ToolName = "browser.read_download"
+			read.RequiredCapabilities = requiredTargetCapabilities(read.ToolName)
+			read.Arguments, _ = json.Marshal(map[string]any{"id": input["id"], "offset": offset, "limit": 65536})
+			if err := r.authorizeComputerCall(readCtx, &read); err != nil {
+				return nil, err
+			}
+			value, err := executor.ExecuteTargetTool(readCtx, read)
+			if takeoverResult(value, err) {
+				control.recordPause(call, value, err)
+				safety := computerPauseSafety(value, err)
+				return nil, &targetToolPolicyError{code: "interaction_takeover_required", safety: &safety}
+			}
+			if err != nil {
+				return nil, err
+			}
+			data, ok := value.Result.(map[string]any)
+			if !ok || data["id"] != input["id"] {
+				return nil, computerTargetFailure(call, "TARGET_ACTION_FAILED")
+			}
+			return data, nil
+		})
+		if err != nil {
+			// The run removes an incomplete scratch file before returning. A
+			// content/IO failure proves neither an external effect nor browser death.
+			payload = map[string]any{"action_executed": false}
+			var failure *targetToolPolicyError
+			if !errors.As(err, &failure) && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+				err = computerTargetFailure(call, "TARGET_ACTION_FAILED")
+			}
+		}
+		result = TargetToolResult{TargetID: call.TargetID, Result: payload}
+	} else {
+		result, err = executor.ExecuteTargetTool(captureCtx, call)
+	}
 	// Release every transient executor frame once, including validation failures.
 	for _, attachment := range result.Attachments {
 		if release, ok := executor.(interface{ releaseTargetFrame(string) }); ok {
@@ -465,7 +507,7 @@ func (r *ComputerUseRuntime) executeComputerToolLocked(ctx context.Context, call
 					target.Ready, target.State = false, failure.targetState
 					_ = r.registry.Update(target)
 				}
-			} else if navigationFailure == nil && !errors.Is(err, errComputerEffectUnknown) {
+			} else if call.ToolName != "browser.save_download" && navigationFailure == nil && !errors.Is(err, errComputerEffectUnknown) {
 				target.Ready, target.State = false, "stopped"
 				_ = r.registry.Update(target)
 			}

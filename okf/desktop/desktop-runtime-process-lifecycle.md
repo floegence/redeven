@@ -35,6 +35,4 @@ Runtime owns business services and proxy sessions. User-supplied systemd, Docker
 
 - `redeven:desktop/src/main/runtimeLifecycleCoordinator.ts:1` - One process-local target coordinator.
 
-- `redeven:desktop/src/main/launcherOperations.ts:1` - Accepted-operation projection, terminal states, and action-specific cancellation presentation.
-
 - `redeven:desktop/src/main/runtimeLifecycleExecutionPlan.ts:1` - Ordered direct lifecycle steps by intent and placement.

@@ -31,5 +31,3 @@ Floret exclusively owns canonical compaction and Goal execution. [Usage and pres
 - `redeven:internal/ai/compact_thread_context.go` - Authorized asynchronous admission through published Floret.
 
 - `redeven:internal/ai/compact_thread_context_test.go` - Canvas Send rejection, preparation, replay, Goal intent and authorization.
-
-- `redeven:internal/codeapp/appserver/server_ai_compaction_test.go` - HTTP admission and strict request boundary.

@@ -9,14 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Redeven owns administrator-managed MCP configuration and a thin product adapter
-over the released official Model Context Protocol Go SDK. The SDK owns stdio
-and Streamable HTTP protocol sessions. Floret owns invocation identity,
-approval, one-shot effect authorization, history, and recovery through the
-[typed thread runtime](floret-thread-runtime.md). MCP must not introduce another
-execution queue, lifecycle projection, or retry authority. A lost call outcome
-is terminal and cannot be replayed. Invalid persisted configuration fails closed
-without changing the original bytes.
+Redeven configures MCP and adapts the released official Go SDK, which owns stdio/Streamable HTTP sessions. Floret owns invocation, approval, one-shot effects, history/recovery. Add no second execution queue/lifecycle/retry authority. Unknown call outcomes are terminal and never replayed; invalid persisted config fails without changing bytes.
 
 # Contract
 

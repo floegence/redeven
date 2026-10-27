@@ -9,7 +9,7 @@ reviewed_at: "2026-10-26"
 ---
 # Summary
 
-`redeven-gateway-v6` is the only served Gateway membership protocol. Its machine-readable authority is `spec/openapi/gateway-v6.yaml`. A signed invitation-code delivery carries administrator-confirmed share addresses. The authenticated exchange returns the signed internal enrollment descriptor with all confirmed Runtime connection endpoints. Gateway owns paired Desktop permissions and Runtime-initiated membership. Protocol mismatch fails explicitly; old URL-profile routes and HTTP forwarding are absent. Old Gateway configuration is rejected read-only; it is never silently rewritten. Gateway Cloud v3 is a separate, shared business contract referring to these same members.
+Gateway serves only redeven-gateway-v6, defined by spec/openapi/gateway-v6.yaml. Signed invitations carry admin-confirmed addresses; authenticated exchange returns the signed descriptor/all endpoints. Gateway owns paired Desktop permissions and Runtime-initiated membership. Mismatch/old config fails unchanged; old URL-profile/HTTP-forward routes are absent. Cloud v3 remains separate.
 
 # Contract
 
@@ -36,7 +36,5 @@ The OpenAPI document and signed DTOs are the protocol authority. Unknown routes,
 # Evidence
 
 - `redeven:spec/openapi/gateway-v6.yaml` — Closed OpenAPI surface.
-
-- `redeven:internal/runtimegateway/protocol/protocol.go` — Signed management DTOs.
 
 - `redeven:internal/runtimegateway/protocol/membership.go` — Member identity, policy and application contracts.

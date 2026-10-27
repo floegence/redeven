@@ -36,8 +36,4 @@ The bundle remains auditable only while OKF Markdown concepts are the sole autho
 
 - `redeven:scripts/build_assets.sh:53` - Embedded asset builds include the OKF bundle stage.
 
-- `redeven:scripts/build_okf_bundle.sh:19` - Bundle script resolves `okf` as source root and `okf/dist` as dist root.
-
 - `redeven:internal/okf/quality.go:1` - Enforces source character and lifecycle checks.
-
-- `redeven:scripts/okf/check_content_quality.sh:1` - Exposes report and strict quality modes.

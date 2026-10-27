@@ -7,6 +7,98 @@ import { chromium } from 'playwright';
 import { BrowserProjection } from '@floegence/floebrowser';
 import { BrowserComputerPage } from './computerBrowserPage.mjs';
 
+test('captured Blob downloads have one source-owned identity and preserve distinct same-name exports', { timeout: 20000 }, async t => {
+  const { createComputerBrowserSource } = await import('./computerBrowserSource.mjs');
+  const browser = await chromium.launch();
+  let owner;
+  const site = http.createServer((_request, response) => {
+    response.setHeader('content-type', 'text/html');
+    response.end(`<button onclick="window.exports=(window.exports||0)+1;const a=document.createElement('a');a.href=window.URL.createObjectURL(new Blob(['record,'+window.exports]));a.download='same.csv';document.body.append(a);a.click();setTimeout(()=>window.URL.revokeObjectURL(a.href),1000)">Export</button>`);
+  });
+  site.listen(0, '127.0.0.1'); await once(site, 'listening');
+  t.after(async () => { await owner?.dispose(); await browser.close(); site.closeAllConnections(); await new Promise(resolve => site.close(resolve)); });
+  const page = await browser.newPage();
+  await page.goto(`http://127.0.0.1:${site.address().port}`);
+  owner = await createComputerBrowserSource(page, 'captured-downloads', { captureDownloads: true });
+  owner.controller.page.fullAccess = true;
+  for (let index = 1; index <= 2; index++) {
+    const cursor = owner.controller.page.downloadCursor().cursor;
+    await page.getByRole('button', { name: 'Export' }).click();
+    const result = await owner.controller.page.waitForDownload({ after: cursor, timeout_ms: 5000 });
+    assert.equal(result.download?.state, 'completed', JSON.stringify({ result, cursor: owner.controller.page.downloadCursor(), clicks: await page.evaluate(() => window.exports) }));
+    const files = owner.source.downloads();
+    assert.equal(files.length, index);
+    assert.equal(owner.controller.page.downloadCursor().downloads.length, index);
+    const file = files.find(item => item.state.id === result.download.id);
+    assert.ok(file, 'Computer Use and source content must share one exact download identity');
+    const chunks = [];
+    for await (const chunk of await file.open(t.signal)) chunks.push(chunk);
+    assert.equal(Buffer.concat(chunks).toString(), 'record,' + index);
+    const first = await owner.controller.page.readDownload({ id: file.state.id, limit: 3 });
+    const rest = await owner.controller.page.readDownload({ id: file.state.id, offset: first.next_offset });
+    assert.equal(first.truncated, true);
+    assert.equal(rest.truncated, false);
+    assert.equal(Buffer.concat([Buffer.from(first.base64, 'base64'), Buffer.from(rest.base64, 'base64')]).toString(), 'record,' + index);
+    await assert.rejects(owner.controller.page.readDownload({ id: '../same.csv' }), /TARGET_CAPABILITY_UNAVAILABLE/u);
+    await assert.rejects(owner.controller.page.readDownload({ id: file.state.id, limit: 65537 }), /INVALID_REQUEST/u);
+    await assert.rejects(owner.controller.page.readDownload({ id: file.state.id, offset: 100 }), /INVALID_REQUEST/u);
+    const last = await owner.controller.page.readDownload({ id: file.state.id, offset: file.state.size });
+    assert.equal(last.bytes, 0);
+    assert.equal(last.truncated, false);
+  }
+  assert.equal(await page.evaluate(() => window.exports), 2);
+});
+
+test('captured downloads keep exact identities across frames and source pages', { timeout: 20000 }, async t => {
+  const { createComputerBrowserSource } = await import('./computerBrowserSource.mjs');
+  const browser = await chromium.launch();
+  const owners = [];
+  const site = http.createServer((request, response) => {
+    response.setHeader('content-type', 'text/html');
+    if (request.url === '/') response.end('<iframe src="/one"></iframe><iframe src="/two"></iframe>');
+    else response.end(`<button onclick="const a=document.createElement('a');a.href=window.URL.createObjectURL(new Blob(['${request.url}']));a.download='same.csv';a.click()">Export</button>`);
+  });
+  site.listen(0, '127.0.0.1'); await once(site, 'listening');
+  t.after(async () => { await Promise.all(owners.map(owner => owner.dispose())); await browser.close(); site.closeAllConnections(); await new Promise(resolve => site.close(resolve)); });
+  const origin = `http://127.0.0.1:${site.address().port}`;
+  for (let index = 0; index < 2; index++) {
+    const page = await browser.newPage();
+    await page.goto(origin);
+    const owner = await createComputerBrowserSource(page, 'download-source-' + index, { captureDownloads: true });
+    owners.push(owner); owner.controller.page.fullAccess = true;
+    const events = [];
+    page.on('pageerror', error => events.push(error.message));
+    owner.source.on('downloadunavailable', () => events.push('unavailable'));
+    owner.source.transport.on('Page.downloadWillBegin', () => events.push('started'));
+    for (const name of ['one', 'two']) {
+      const cursor = owner.controller.page.downloadCursor().cursor;
+      await page.frame({ url: origin + '/' + name }).getByRole('button', { name: 'Export' }).click();
+      const result = await owner.controller.page.waitForDownload({ after: cursor, timeout_ms: 5000 });
+      assert.equal(result.download?.state, 'completed', JSON.stringify({ index, name, events, result, frames: owner.source.frames().map(frame => ({id: frame.id, context: frame.contextID})), files: owner.source.downloads().map(file => file.state) }));
+      const value = await owner.controller.page.readDownload({ id: result.download.id });
+      assert.equal(Buffer.from(value.base64, 'base64').toString(), '/' + name);
+    }
+    assert.equal(owner.source.downloads().length, 2);
+    assert.equal(owner.controller.page.downloadCursor().downloads.length, 2);
+  }
+  const ids = owners.flatMap(owner => owner.source.downloads().map(file => file.state.id));
+  assert.equal(new Set(ids).size, 4);
+  await assert.rejects(owners[0].controller.page.readDownload({ id: ids[2] }), /TARGET_CAPABILITY_UNAVAILABLE/u);
+});
+
+test('distinct downloads remain ambiguous and return exact bounded candidates', async () => {
+  const page = new BrowserComputerPage({});
+  const after = page.downloadCursor().cursor;
+  page.recordDownload({ id: 'first', filename: 'same.csv', state: 'completed' });
+  page.recordDownload({ id: 'second', filename: 'same.csv', state: 'canceled' });
+  await assert.rejects(page.waitForDownload({ after, timeout_ms: 0 }), error => error.message === 'AMBIGUOUS_DOWNLOAD' && error.downloads.length === 2 && error.downloads[1].id === 'second');
+  assert.equal((await page.waitForDownload({ id: 'second' })).download.state, 'canceled');
+  page.recordDownload({ id: 'failed', filename: 'third.csv', state: 'failed' });
+  assert.equal((await page.waitForDownload({ id: 'failed' })).download.state, 'failed');
+  page.operationCancelled = true;
+  await assert.rejects(page.waitForDownload({ id: 'first' }), /TAKEOVER_REQUIRED/u);
+});
+
 test('input retirement attempts every held key and button while preserving a failed drain', async () => {
   const released = [];
   const transport = { async send(method, parameters) {

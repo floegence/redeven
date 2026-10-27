@@ -9,9 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-The shared Web Services interface presents the service identity, current backend status, available action, and supporting facts in that order. Activity and Workbench use the same collection and management drawer. Content must remain readable and actionable at narrow surface widths, with long translations and enlarged text. Historical failures cannot replace observed state. Failed checks preserve previously loaded facts with a visible explanation; unavailable actions retain an actionable inspection path within existing permissions.
-
-Local inventory continuity follows [Env App resource snapshots](../ui/env-resource-cache.md); presentation restoration grants no lifecycle or route authority.
+Activity/Workbench share service collection/drawer: identity, current status, action, then facts. Retain readable narrow/localized/enlarged-text layouts. Historical failure cannot replace state; failed checks retain facts with explanation and authorized inspection. Env App resource snapshots own inventory continuity; restored presentation grants no lifecycle/route authority.
 
 # Contract
 
@@ -43,7 +41,5 @@ The shell retains only collection and loading-presentation styles; management an
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx` - Shared collection, per-target opening, archive navigation, and refreshed facts.
-
-- `redeven:internal/envapp/ui_src/src/ui/pages/ManagedServiceManagementDrawer.tsx` - Reviewed actions, compact resource facts, and persistent execution footer.
 
 - `redeven:internal/envapp/ui_src/src/ui/pages/web-services.css` - Container-based layout, semantic surfaces, and reduced-motion handling.

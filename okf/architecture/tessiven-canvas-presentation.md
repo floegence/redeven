@@ -9,14 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-The Runtime interprets the current Tessiven DSL and projects a frozen,
-data-only `redeven.io/tessiven-presentation/v1` display model. Native clients
-render that model using bundled code. A DSL release does not by itself change
-the display format or require a client release. Historical YAML, its digest,
-revision identity, write validation and operation authority stay unchanged.
-An unsupported source retains verified source for viewing and export but does
-not invent topology. Integrity failure returns an error without an exportable
-source. No response supplies executable renderer code.
+Runtime projects current DSL into frozen data-only redeven.io/tessiven-presentation/v1; clients use bundled renderers. DSL releases do not change display format or require client updates. Preserve historical YAML, digest/revision and write authority. Unsupported source remains viewable/exportable without invented topology; integrity failure has no export. Never return executable code.
 
 # Contract
 

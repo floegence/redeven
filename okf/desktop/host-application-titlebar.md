@@ -37,5 +37,3 @@ Toolbar presentation does not own the capture or Xpra session. Disconnection dis
 - `redeven:internal/codeapp/appserver/host_application_viewer/toolbar.js` and `viewer.js` - Shared control presentation and Xpra-owned action routing.
 
 - `redeven:internal/envapp/ui_src/src/styles/hostApplicationSurfaces.browser.test.tsx` - Native safe areas, compact layouts, dark appearance and bounded popovers.
-
-- `redeven:desktop/scripts/check-host-application-titlebar.mjs` - Opt-in real Electron titlebar, isolated preload, actions and fullscreen acceptance with a disposable transport fixture.

@@ -27,6 +27,4 @@ Events are observations and context inputs, not a second result store or a backg
 
 - `redeven:internal/ai/parent_events_test.go` - Covers scoped reports, lifecycle references, bounded reads, waits and input attention.
 
-- `redeven:internal/ai/subagents_handoff_test.go` - Verifies complete child handoffs.
-
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Presents parent events and canonical child current views.

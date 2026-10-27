@@ -26,6 +26,4 @@ The Env App observer may present and localize released snapshots, but it cannot 
 
 - `redeven:internal/redevpluginintegration/integration.go:240` - Constructs released Host modules and product adapters.
 
-- `redeven:internal/redevpluginintegration/session_lifecycle.go:1` - Carries transient connection generation while the Host owns durable teardown.
-
 - `redeven:scripts/check_redevplugin_dependency_boundary.sh:1` - Rejects local wiring and platform duplication.

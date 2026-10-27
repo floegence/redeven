@@ -10,14 +10,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Desktop owns one settings window and one opening session per Environment. Opening
-never waits for a Runtime access read and a failed read never selects another
-editor. Registration ownership determines available sections; every access read
-and write carries an explicit Environment ID and resolves its registered
-management authority. Runtime owns access configuration. A failed operation
-preserves input and reports its real diagnostic; an obsolete response cannot
-change a newer opening. Cloud, URL and Gateway registrations cannot read or save
-Local access settings.
+One settings window/session per Environment opens without waiting for access reads. Registration controls sections; explicit Environment IDs resolve registered management authority for every operation. Runtime owns access config. Failure preserves drafts/diagnosis; stale responses cannot alter newer opens. Cloud/URL/Gateway cannot read or save Local access settings.
 
 # Contract
 
@@ -47,7 +40,3 @@ SSH field and secret details are owned by [SSH environment settings](desktop-ssh
 # Evidence
 
 - `redeven:desktop/scripts/check-settings-hit-targets.mjs` - Clicks inside tab and action padding, keyboard switching, multilingual narrow layouts and touch target dimensions.
-
-- `redeven:desktop/scripts/check-settings-restart.mjs` - Full Welcome shell acceptance for Local, SSH, WSL and container restart handoff, focus, dismissal, retry, narrow layouts and reduced motion.
-
-- `redeven:desktop/scripts/check-settings-expansion.mjs` - Per-frame window, footer and disclosure measurements, rapid reversals, immediate focus exclusion and reduced motion.
