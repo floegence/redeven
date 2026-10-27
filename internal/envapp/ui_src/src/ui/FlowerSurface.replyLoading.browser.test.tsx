@@ -1,6 +1,6 @@
 import '../index.css';
 import './flower-feature.css';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, expect, it, onTestFinished, vi } from 'vitest';
 import { commands, page } from 'vitest/browser';
 import type { FlowerLiveStreamEnvelope } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { createLocalizedFlowerSurfaceCopy } from '../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
@@ -46,6 +46,24 @@ it.each([{ width: 1280, slow: true }, { width: 390, slow: true }, { width: 1280,
   const user = root.querySelector<HTMLElement>('[data-flower-message-id="hi"]')!;
   const viewport = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
   const before = { reply: reply.getBoundingClientRect().top, user: user.getBoundingClientRect().top, scroll: viewport.scrollTop };
+  const initialHeight = viewport.scrollHeight;
+  const initialViewport = viewport.getBoundingClientRect();
+  const paintedFrames: number[][] = [];
+  let sampleFrame = 0;
+  const sample = () => {
+    const bounds = viewport.getBoundingClientRect();
+    paintedFrames.push([reply.getBoundingClientRect().top - before.reply, user.getBoundingClientRect().top - before.user,
+      viewport.scrollHeight - initialHeight, bounds.top - initialViewport.top, bounds.height - initialViewport.height]);
+    sampleFrame = requestAnimationFrame(sample);
+  };
+  sampleFrame = requestAnimationFrame(sample);
+  onTestFinished(() => cancelAnimationFrame(sampleFrame));
+  const verifyPaintedFrames = () => {
+    cancelAnimationFrame(sampleFrame);
+    expect(paintedFrames.length).toBeGreaterThan(0);
+    expect(Math.max(...paintedFrames.flat().map(Math.abs))).toBeLessThanOrEqual(1);
+    expect(viewport.querySelector('.flower-chat-notice')).toBeNull();
+  };
   let notices = 0;
   const observer = new MutationObserver(records => {
     for (const record of records) for (const node of record.addedNodes) {
@@ -64,6 +82,7 @@ it.each([{ width: 1280, slow: true }, { width: 390, slow: true }, { width: 1280,
     expect(root.querySelector('[data-flower-message-id="reply"]')).toBe(reply);
     expect(Math.abs(reply.getBoundingClientRect().top - before.reply)).toBeLessThanOrEqual(1);
     expect(Math.abs(user.getBoundingClientRect().top - before.user)).toBeLessThanOrEqual(1);
+    verifyPaintedFrames();
     return;
   }
   await waitFor(() => Boolean(root.querySelector('.flower-history-loading-notice')));
@@ -74,6 +93,8 @@ it.each([{ width: 1280, slow: true }, { width: 390, slow: true }, { width: 1280,
   const notice = root.querySelector<HTMLElement>('.flower-history-loading-notice')!;
   expect(notice).not.toBeNull();
   expect(notice.closest('.flower-chat-transcript')).toBeNull();
+  expect(notice.parentElement?.classList.contains('flower-chat-notices')).toBe(true);
+  expect(getComputedStyle(notice.parentElement!).position).toBe('absolute');
   expect(root.querySelectorAll('.flower-history-loading-notice')).toHaveLength(1);
   expect(notice.getAttribute('role')).toBe('status');
   expect(notice.textContent).toBe(copy.chat.history.loading);
@@ -94,4 +115,5 @@ it.each([{ width: 1280, slow: true }, { width: 390, slow: true }, { width: 1280,
   expect(Math.abs(reply.getBoundingClientRect().top - before.reply)).toBeLessThanOrEqual(1);
   expect(Math.abs(user.getBoundingClientRect().top - before.user)).toBeLessThanOrEqual(1);
   expect(loadHistory).toHaveBeenCalledTimes(2);
+  verifyPaintedFrames();
 });
