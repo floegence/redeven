@@ -30,6 +30,4 @@ Desktop/Env consume Runtime's authorized inventory. No Floret dependency, execut
 # Evidence
 
 - `redeven:internal/ai/model_catalog_manager.go`
-- `redeven:internal/config/ai_model_snapshot.go`
-- `redeven:internal/ai/provider_inventory.go`
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.modelMenu.browser.test.tsx`

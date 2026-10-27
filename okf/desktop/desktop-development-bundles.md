@@ -16,92 +16,29 @@ reviewed_at: "2026-10-26"
 
 # Contract
 
-## Service lifecycle
-`scripts/dev_desktop.sh` builds current tracked/non-ignored source and captures HEAD.
-Reject concurrent edits. Generated OKF and ignored assets are outputs; protect
-OKF sources, builders and Go embeds.
+## Build and launch
 
-The development launcher owns a profile-local build receipt. Reuse requires
-matching HEAD and tracked/non-ignored source bytes (including dirty files),
-dependency contents, toolchains, target and build settings, and byte-verified
-Desktop output plus immutable Runtime bundle. Missing, altered or incomplete
-outputs rebuild; failed preparation never launches a previous bundle. Concurrent
-source/input changes fail before launch. A newly installed pinned Rust toolchain
-is the only admitted preparation-time toolchain transition.
+scripts/dev_desktop.sh captures HEAD/current tracked and non-ignored source; concurrent edits fail. Generated OKF/ignored assets are outputs; protect authored OKF/builders/Go embeds. A profile-local receipt reuses output only when HEAD, dirty source, dependency bytes, toolchains, target/settings and verified Desktop/immutable Runtime bytes match. Missing/changed/incomplete output rebuilds; failed preparation never launches old bundles. Only installing pinned Rust admits preparation-time toolchain drift.
 
-`--rebuild` forces build preparation; `REDEVEN_AGENT_FORCE_INSTALL=1` reinstalls
-all three JavaScript packages once and forces preparation. Package manifests
-select pnpm or npm; successful install receipts bind manifests, selected locks
-and toolchain identity. Compatibility lockfiles do not select a second installer.
-The first launch after this change installs once to establish these receipts.
+--rebuild forces build; REDEVEN_AGENT_FORCE_INSTALL=1 reinstalls all three JS packages once. Manifests choose pnpm/npm; receipts bind selected locks/toolchain, not a second installer from compatibility locks. First launch establishes receipts.
 
-Development Rust staging may reuse profile-owned Cargo registry/target caches,
-while installing the exact locked published crate into fresh staging. Digest,
-executable and consumption checks still run and product evidence is regenerated.
-After verifying the cached published crate and resolving its locked dependencies
-offline, development installs without registry requests. Incomplete caches report
-the offline diagnostic and use the configured acquisition policy; corrupt crates
-fail, and compiler failures are not retried through a different path.
-Release staging always has isolated Cargo directories. Source changes conservatively
-rebuild the full product; this is not per-component or watch-mode compilation.
-Development overlaps Desktop compilation with Runtime preparation. Within the
-Runtime, embedded-assets/Go, verified plugin staging and Computer resources run
-independently. Env App, Code App and knowledge assets have distinct outputs;
-Env App's no-emit type check overlaps asset bundling under the same checkout lock.
-Third-party notice verification runs after all embedded-asset tasks succeed; it
-reads installed package metadata and Env App's YAML parser, so it cannot overlap
-cold dependency installation in a clean Runtime source copy.
-Go compilation waits for every embedded asset. Publication and cache receipts
-wait for all builds plus unchanged-source/input checks. Release builds retain
-their ordered preparation.
+Development may cache Cargo registry/targets while staging exact locked published crates freshly. Verify digest/execution/consumption and regenerate evidence. Complete caches resolve/install offline; incomplete caches follow acquisition policy with diagnostics. Corrupt crates or compiler failure cannot retry via another path. Release Cargo dirs stay isolated. Source changes rebuild whole product, not component/watch mode.
 
-Package dependency byte scans run in three workers alongside toolchain probes;
-their digests and ordering match serial verification. Parallel build supervisors
-label diagnostics, preserve failures and stop owned process groups (including
-nested supervisors) on cancellation or sibling failure.
+Desktop compilation overlaps Runtime preparation. Runtime assets/Go, plugin staging and Computer resources have independent outputs. Env App no-emit typecheck overlaps bundling under its checkout lock. Notices run after all asset tasks because installed metadata/YAML parser cannot race cold dependency install. Go waits for embeds; publication/receipts wait for all builds and unchanged-input checks. Release order stays sequential.
 
-Saved local Gateways reuse intact compatible installations through the Gateway
-service owner. Startup does not force replacement on Desktop source changes;
-missing or damaged packages are prepared by that owner, and explicit Update
-selects the current build. Verified package archives persist only within a cache
-generation bound to the launcher's complete build input key, including dirty
-source bytes. Different
-inputs discard the previous generation; calls without an input key use a fresh
-session cache. Archive verification remains owned by the package cache.
+Three dependency-scan workers overlap toolchain probes with serial-equivalent digests/order. Supervisors label diagnostics, preserve failures and stop owned groups/descendants on cancel or sibling failure.
 
-Development launches select gzip level 1 and Brotli quality 4 for embedded assets;
-decompression yields the original bytes. Ordinary/release builds default to
-maximum compression. The selected profile participates in build identity.
-Gateway source copies exclude unrelated agent worktrees and native build caches.
+Saved local Gateways reuse compatible intact installs; Desktop source change does not force replacement. Service owner prepares missing/damaged packages; explicit Update selects current build. Verified archive caches bind full launch input key including dirty source; changed keys discard previous generation, missing key creates session cache. Package owner verifies archives.
 
-Logs report dependency, input verification, Desktop, Runtime and Gateway timings,
-Gateway preparation phases, and total preparation before opening the window.
-A warm empty-profile launch is not an end-to-end latency claim for source changes
-or saved Gateways. Qualify both rebuilt and unchanged launches with a local
-Gateway, checking the current Runtime commit and owned-service cleanup.
+Dev embedded compression: gzip1/Brotli4 with identical decoded bytes; ordinary/release use maximum. Profile enters build identity. Gateway source copies omit unrelated worktrees/native caches. Logs separate dependencies/verification/Desktop/Runtime/Gateway phases and total. Empty-profile warm timings cannot certify changed-source/saved-Gateway launches; qualify both rebuilt/reused launches with local Gateway, exact Runtime commit and cleanup.
 
-Normal exit, startup failure, Ctrl+C and SIGTERM stop owned local services.
-The launcher owns coordination; product shutdown semantics remain unchanged.
+Normal exit, preparation failure, Ctrl+C/SIGTERM stop only owned local services; production shutdown semantics remain. Electron resolution emits path only, logs to stderr, propagates failure and rechecks executable after dependency builds.
 
-Shared Electron resolution returns only the path; installer logs use stderr.
-Propagate failures and check executability after dependency-changing builds.
+## Credentials and retention
 
-## Credentials
-Unpackaged development instances use AES-256-GCM with a random profile key
-(0600). Keep the key with the profile. It prevents plaintext disclosure, not
-same-user process access. Other launches use Electron system storage; codec
-construction never probes it.
+Unpackaged dev encrypts with AES-256-GCM/random profile key 0600, retained with profile; protects plaintext, not same-user access. Other launches use Electron system storage without constructor probing. Legacy Keychain opens recovery without reading preferences/system secrets; only explicit action decrypts and atomically migrates each file. Failure preserves credentials/retry/quit; corrupt keys require repair, never reset accounts/Runtime/Keychain.
 
-Legacy Keychain records open a recovery screen without system access or preference
-recovery. Only its explicit migration action decrypts and atomically migrates each
-file. Failure preserves credentials and permits retry/quit; corrupt keys require
-repair. Never reset accounts, Runtime state or Keychain entries.
-
-## Bundle retention
-Complete bundles publish under `<development-state-root>/desktop/bundles/<manifest-sha256>`.
-Retain the newest three, selected bundle (including reuse), and all live references.
-This bounds inactive verified package counts, not bytes; active or unverified
-entries can increase usage.
+Publish complete bundles under <development-state-root>/desktop/bundles/<manifest-sha256>. Keep newest three, selected (including reuse) and all live bundles. This bounds inactive verified package count, not bytes; active/unverified entries may grow.
 
 # Boundaries
 
@@ -115,9 +52,4 @@ in-progress directories.
 - `redeven:scripts/run_parallel_builds.test.mjs` - Overlap, failure and descendant cleanup.
 - `redeven:scripts/build_assets.test.mjs` - Cold-install ordering and asset/notice failure propagation.
 - `redeven:scripts/ui_package_install.test.mjs` - Manager selection, repeat installs and failure.
-- `redeven:scripts/redevplugin_build_cache.test.mjs` - Development reuse and release isolation.
-- `redeven:scripts/source_build_identity.mjs` - Mixed-source rejection.
-- `redeven:scripts/desktop_bundle_build_contract.test.mjs` - Source and staging boundaries.
-- `redeven:scripts/dev_desktop_signal_cleanup_test.sh` - Exit, download and reinstall cleanup.
 - `redeven:desktop/src/main/developmentSecretStorage.test.ts` - Restart, migration, failures, tags and permissions.
-- `redeven:desktop/scripts/check-development-credentials.mjs` - Real-product restarts, Env App, damaged keys and cleanup.

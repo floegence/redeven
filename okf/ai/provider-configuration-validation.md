@@ -36,5 +36,4 @@ The kimi_code provider uses its own subscription key and official China/global c
 
 - redeven:internal/config/ai.go - Validation/authentication.
 - redeven:internal/config/kimi_code_test.go - Endpoint, identity, capacity and reasoning bounds.
-- redeven:internal/ai/model_gateway_optional_key_test.go - Explicit keys and keyless requests ignore ambient credentials.
 - redeven:internal/ai/provider_adapter.go - Shared credential resolution and read failures.

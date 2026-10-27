@@ -58,9 +58,3 @@ Reviewed coordinates do not relax guards for other LGPL dependencies.
 - `redeven:internal/envapp/ui_src/package.json` - Published pins and matching overrides.
 
 - `redeven:internal/envapp/ui_src/scripts/computerBrowserSource.node-test.mjs` - Published source adapters retain navigation grants, user ownership and shared debugger identity.
-
-- `redeven:scripts/stage_computer_resources.test.mjs` - Relocated immutable helpers retain the released collector and projection protocol.
-
-- `redeven:internal/envapp/ui_src/src/ui/App.tsx:62` - Shell preset catalog and per-mode defaults.
-
-- `redeven:internal/envapp/ui_src/src/ui/file-markdown/FileMarkdown.browser.test.tsx` - CSS Color 4 Mermaid themes and accessible KaTeX across theme changes.

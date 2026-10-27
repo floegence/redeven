@@ -27,6 +27,4 @@ Floret validates retry checkpoints and confirmed tool results. The host never pa
 
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Shared failure, Stop and manual recovery actions.
 
-- `redeven:internal/flower_ui/src/runtimeCurrentView.ts` - Canonical item status projection.
-
 - `redeven:internal/flower_ui/src/flowerTimelineProjection.ts` - One timeline failure owner.

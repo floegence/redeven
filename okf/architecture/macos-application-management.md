@@ -9,14 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Redeven owns the Host Applications management UI and authenticated native actions.
-The OS owns process liveness, and the application owns saving or cancelling quit.
-Running applications remain manageable without a sharing session. An explicit
-quit validates the original process generations; it never force-kills an app,
-retargets a replacement process, or treats command acceptance as proof of exit.
-An unavailable or stale target returns an actionable error and preserves sharing.
-The [native session contract](macos-host-applications.md) owns capture, input and
-physical viewer closure.
+Redeven owns management UI and authenticated actions; OS owns liveness and apps own saving/cancelled quit. Manage running apps without sharing. Quit validates original process generations; never force-kill, retarget or infer exit from acceptance. Stale/unavailable targets retain sharing and actionable errors. Native sessions own capture, input and viewer closure.
 
 # Contract
 

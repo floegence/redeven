@@ -37,5 +37,3 @@ The published picker owns navigation and request lifetime. A validated selection
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.localization.browser.test.tsx` - All ten locale presentations and live language changes without replacing picker or composer inputs.
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.tsx` - Published path parsing and formatting, absolute identity, and localized input recovery.
-
-- `redeven:internal/envapp/ui_src/src/ui/pages/FileBrowserPageLoading.tsx` - Shared workspace presentation before the Files module is ready.

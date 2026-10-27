@@ -9,14 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Redeven's native application capture helper owns image resolution and encoding;
-the viewer owns picture preferences and measured display statistics. Application
-identity, permissions and input retain the [native session contract](macos-host-applications.md).
-A frame can acknowledge delivery only after decoding for the current capture
-generation. Quality changes and reconnects preserve the application process.
-Hardware or browser video unavailability selects the explicit image transport;
-the quality panel reports the transport actually producing frames. A real capture
-failure retains the session's existing reconnect boundary.
+The native helper owns resolution/encoding; viewer owns preferences/statistics. Current-generation decoding precedes acknowledgement. Quality/reconnect preserves app identity and native-session permissions/input. Unavailable video selects explicit image transport; report actual producing transport. Capture failures retain the existing reconnect boundary.
 
 # Contract
 

@@ -47,6 +47,4 @@ Composer drafts and the transport outbox own only unconfirmed browser input, sta
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerContextPreviewWindow.tsx` - Shared host presentation; immutable snapshots use the existing text viewer.
 
-- `redeven:internal/flower_ui/src/composer/createFlowerComposerDraftCoordinator.ts` - Per-thread composer draft owner.
-
 - `redeven:internal/flower_ui/src/transportOutbox.ts` - IndexedDB request recovery without secret answers.

@@ -9,7 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-`redeven native-bridge --state-root PATH` attaches a native client to the already running Runtime selected by that state root. The owner-only management socket is the attachment authority. The command carries `redeven-native-runtime-h2/1` over stdio and exposes only the fixed `native-runtime` CONNECT surface. Missing, inaccessible, stopped, or incompatible runtimes fail without installation, startup, address fallback, or Desktop credentials. Disconnecting releases this client's bridge and sessions, never the Runtime process.
+redeven native-bridge --state-root PATH attaches to the existing Runtime via its owner-only management socket. Stdio carries redeven-native-runtime-h2/1 and only native-runtime CONNECT. Missing/inaccessible/stopped/incompatible targets fail without install, startup, address fallback or Desktop credentials. Disconnect releases this client, not Runtime.
 
 # Contract
 

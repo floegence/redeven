@@ -9,14 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-This guide defines acceptance for the [desktop contract](../architecture/remote-desktop.md).
-Use published dependencies with `GOWORK=off`, preserve failed measurements and
-resolve unmet thresholds for the agreed performance hosts before declaring
-remote-desktop acceptance. Source integration does not substitute for this
-qualification. A connected picture, native input
-admission or a synthetic fixture does not certify real desktop performance.
-The [acceptance record](remote-desktop-results.md) owns measured results and
-remaining qualification.
+Qualify the desktop contract using published dependencies/GOWORK=off. Preserve failures and meet agreed-host thresholds before acceptance; integration, a picture, admitted input or synthetic fixture cannot substitute for real performance. The acceptance record owns measured results and remaining work.
 
 # Contract
 

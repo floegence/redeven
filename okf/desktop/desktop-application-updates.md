@@ -26,8 +26,4 @@ Sparkle owns macOS discovery, verification, download UI and relaunch. Runtime, P
 
 - `redeven:desktop/src/welcome/App.tsx:1` and `redeven:desktop/src/welcome/index.css:1` - Permanent icon entry, localized tooltip, and state presentation.
 
-- `redeven:desktop/src/main/desktopUpdateCoordinator.ts:1` - Unified state machine, concurrency, startup scheduling, and installation interlock.
-
-- `redeven:desktop/src/main/macSparkleUpdateAdapter.ts:1` - Sparkle bridge adapter and native update request boundary.
-
 - `redeven:desktop/src/main/linuxPackageUpdateAdapter.ts:1` - DEB/RPM update metadata, download, cancellation, and install adapter.

@@ -26,5 +26,3 @@ Welcome Flower and Tessiven share compatibility/AI readiness. Returning to prepa
 - `redeven:desktop/src/main/runtimeFlowerStreamOwner.ts` - Runtime event streams release their document ownership on full navigation, renderer crash, or destruction; in-page navigation preserves the active connection.
 
 - `redeven:desktop/src/welcome/FlowerNavigation.client.test.tsx` - Canvas startup waits for AI publication and preserves drafts through recovery.
-
-- `redeven:internal/envapp/ui_src/src/styles/desktop-tessiven-model.browser.test.tsx` - Real browser placement, configured Desktop model and draft recovery in light and dark themes.

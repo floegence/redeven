@@ -9,14 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Published `floe-native-apps` v0.22.7 passes Linux X11 and macOS product reconnect:
-the running audio device survives replacement, new samples reach its AudioWorklet,
-and input waits for current paint. Mac physical hotplug, locked replacement and
-Wayland mode changes also pass fresh-paint recovery. These results do not certify
-[Wayland performance](remote-desktop-wayland-results.md); `udesk24` is designated
-for functional validation only. The [session contract](../architecture/remote-desktop.md)
-owns normative behavior; the [overall record](remote-desktop-results.md) owns
-performance and delivery boundaries.
+Published native v0.22.7 reconnects Linux X11/macOS audio to AudioWorklet and gates input on fresh paint. Mac hotplug/locked replacement and Wayland mode recovery pass. This does not certify Wayland performance; udesk24 is functional-only. Session contracts own behavior; overall results retain performance/delivery limits.
 
 # Contract
 

@@ -33,7 +33,7 @@ Foreground macOS and credentialed model qualification remain explicit runs; the 
 ## Real DeepSeek reliability acceptance
 `TestComputerReliabilityDeepSeek` is an explicit paid lane through the production Service, Floret, configured DeepSeek provider and catalog-installed Chromium. It resolves the local `deepseek-flash` model (catalog display: DeepSeek V4.1 Flash (1017)) and rejects substitution. Required environment: `REDEVEN_COMPUTER_RELIABILITY_E2E=1`, absolute `REDEVEN_COMPUTER_CONFIG_ROOT`, `REDEVEN_COMPUTER_EVIDENCE_DIR` and `REDEVEN_BROWSER_TEST_INSTALLATION`. Run `go test ./internal/ai -run '^TestComputerReliabilityDeepSeek$' -count=1 -v -timeout=22m` with `GOWORK=off`.
 
-Set REDEVEN_COMPUTER_ACCEPTANCE_REPETITIONS=1..5 (default 1); use -parallel 3 for independent isolated cases. Twenty-two scenarios include bounded text, limit repair, budget/prefix retention, key validation before focus, paginated reads, frame-bound image input, default delay, current title, stale frame rejection, invalid guest options, scroll return facts, conditional waits, natural input/read tasks, strict timeout termination, below-fold semantic input, exact asynchronous content waits, canonical navigation landmarks and failure namespace reset. Reset diagnostics and completed waits are checked against canonical tool results.
+Set REDEVEN_COMPUTER_ACCEPTANCE_REPETITIONS=1..5 (default 1). Native entry also requires REDEVEN_COMPUTER_NATIVE_E2E=1 and the release Swift helper; serialize native cases on the shared desktop. Browser-only cases may use -parallel 3. Twenty-five scenarios include bounded text, limit repair, budget/prefix retention, key validation before focus, paginated reads, frame-bound image input, default delay, current title, stale frame rejection, invalid guest options, scroll return facts, conditional waits, natural input/read tasks, strict timeout termination, below-fold semantic input, exact asynchronous content waits, canonical navigation landmarks failure namespace reset, multi-page script batches, browser-to-task-file processing and installed native application entry. Reset diagnostics and completed waits are checked against canonical tool results.
 
 Natural tasks use the production default tool surface. Only the legacy default-wait
 case explicitly retains its primitive. Read canonical tool results through
@@ -51,13 +51,27 @@ and zero pointer events. Image input requires one counted pointer event. Read
 download bytes from the isolated fixture's owned directory without issuing an
 anonymous runtime call after the model has acquired target control.
 
+The batch case checks three fixture page visits, at least three completed reads,
+at least two navigations or clicks in one script, and a returned screenshot.
+Returned logged totals and final-answer totals are separate report fields; neither
+can substitute for execution facts. Mixed processing requires one export, a
+completed save_download and the terminal-produced project file. Native entry
+requires discovery, confirmed launch/selection, exact text, one counted click and
+a screenshot. Full source provider and secret files are hash-checked unchanged.
+
+TestComputerScriptExamplesQualification executes the exact maintained download
+help and batch example through production QuickJS, Runtime and installed Chromium,
+checking byte equality for a multi-chunk file and the actual page values.
+TestComputerNativeApplicationEntryQualification separately exercises single, no,
+multiple and minimized windows with the real native helper.
+
 Retain failed batches and classify model instruction failures, test defects and
 product defects separately. Scenario completion is not a zero-tool-error claim,
 and repeated qualification does not establish a general success probability.
 Freeze implementation hashes before qualification and rerun affected checks
 after integration changes.
 
-Scenarios also verify a 2,800+ node page and complete table totals, task-tab isolation and account restrictions, current-download identity/content despite an older same-named file, and one counted save followed by a diagnostic failure with no replay. Reports retain provider wire IDs, tool error counts, canonical histories, final answers and fixture outcomes. Configuration hashes must stay unchanged. This scope does not certify production accounts, native desktop UI or a universal model success rate.
+Scenarios also verify a 2,800+ node page and complete table totals, task-tab isolation and account restrictions, current-download identity/content despite an older same-named file, and one counted save followed by a diagnostic failure with no replay. Reports retain provider wire IDs, tool error counts, canonical histories, final answers and fixture outcomes. Configuration hashes must stay unchanged. The native-entry case qualifies only its disposable AppKit app. This scope does not certify production accounts, arbitrary native applications or a universal model success rate.
 
 ## Existing product fixtures
 

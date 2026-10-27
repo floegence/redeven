@@ -32,7 +32,18 @@ Locator key presses require a focusable DOM element. AX document roots are not e
 
 Download association uses `browser.downloadCursor()` before the triggering input, followed sequentially by `browser.waitForDownload({after:cursor})`; an exact known `id` is also accepted. A cursor is bounded in-memory state owned by the page. Old files never satisfy it and multiple new files fail as ambiguous. No automatic input replay, latest-file inference or durable download ledger exists.
 
-The guest cannot choose filesystem destinations or read file bytes; a later authorized file/command tool handles data processing.
+Captured downloads use the published SourceDownload identity as their sole writer;
+raw CDP notifications do not create duplicate semantic records. Distinct same-named
+exports remain distinct. AMBIGUOUS_DOWNLOAD carries bounded exact candidates.
+
+browser.readDownload(id,{offset,limit}) reads captured bytes by exact source ID,
+with bounded base64 output and explicit continuation. Sequential reads reuse one
+short-lived source stream; cancellation, idle expiry and disposal retire it.
+browser.saveDownload(id) copies up to 256 MiB into the current task scratch area;
+the run owns the destination, authorization and partial-file cleanup. Offset, byte
+count, identity and available total size are validated on every chunk. The guest
+cannot choose a destination or read arbitrary paths. Terminal/file tools process
+the returned path and deliver final artifacts to the user destination.
 
 Hit tests translate viewport CSS points into the owning CDP session document
 coordinates, including scrolled frames. Cross-process frame input checks every
@@ -71,3 +82,9 @@ See the [Codex design evidence](computer-use-design-evidence.md) for the public 
 - `redeven:internal/ai/computer_managed_browser_test.go` - login isolation, saved downloads and profile validation.
 
 - `redeven:internal/ai/computer_extension.go` - connection authorization, framing and scoped cancellation.
+
+Capture failures that occur before the published SourceDownload API supplies an
+identity cannot be attached to a guessed record. The existing unavailable event
+is not download-specific; this adapter does not latch it globally or infer an
+identity from filename/time. Such waits may still time out. A richer upstream
+identity-bearing failure contract would be required to improve that diagnosis.

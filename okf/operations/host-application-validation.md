@@ -9,15 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-This record distinguishes installed-stack evidence from host policy certification.
-Its distribution and pointer records describe retained historical Xpra versions.
-The [desktop and package validation record](host-application-desktop-validation.md)
-owns current combined-backend, sandbox package and product integration evidence.
-The Runtime capability and isolation contract is owned by
-[host application platforms](../architecture/host-application-platforms.md).
-A passing userspace check proves the tested Xpra/GIO/runtime combination only;
-missing subscriptions, CPU translation and untested host policy remain explicit.
-Administrators retain the [setup route](host-application-setup.md) for their host.
+Historical Xpra userspace checks certify only their tested stack, not host policy. Current combined-backend, sandbox and product evidence belongs to desktop/package validation; platform contracts own capability/isolation. Missing subscriptions, CPU translation and untested policy remain explicit. Administrators use the setup route.
 
 # Contract
 

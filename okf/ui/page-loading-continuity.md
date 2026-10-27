@@ -34,5 +34,3 @@ Loading stays inside the selected page or widget. It cannot replace an unrelated
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvPageLoading.tsx` - Exhaustive shared presentation registry.
 
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Activity module and access-check entry.
-
-- `redeven:internal/envapp/ui_src/src/ui/workbench/redevenWorkbenchWidgets.tsx` - Local widget loading boundaries.

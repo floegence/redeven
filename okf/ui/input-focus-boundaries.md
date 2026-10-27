@@ -33,6 +33,4 @@ Third-party frames, separate application views, and editor-internal input carrie
 
 - `redeven:internal/envapp/ui_src/package.json` - Published Floe dependency and source-policy checks.
 
-- `redeven:internal/envapp/ui_src/scripts/checkInputFocusSources.mjs` - Input-aware utility and CSS checks, preserving non-input focus rules.
-
 - `redeven:internal/envapp/ui_src/src/styles/inputFocusVisual.browser.test.tsx` - All shell themes, compound controls, readonly, disabled, invalid, and forced-color behavior.

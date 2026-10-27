@@ -28,6 +28,4 @@ It can be used to invoke Redeven product commands, but it must not be described 
 
 - `redeven:cmd/redeven/env.go:13` - The `env` command dispatches lifecycle subcommands.
 
-- `redeven:internal/agentprotocol/env.go:60` - Environment status, runtime summary, diagnostics, and operation plans define the JSON contract.
-
 - `redeven:internal/agentprotocol/targets.go:37` - Target discovery projects the default local target and saved catalog connections into target descriptors.

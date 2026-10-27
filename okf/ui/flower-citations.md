@@ -42,5 +42,3 @@ Assistant Markdown can already contain an explicit bibliography inside an unlabe
 - [Provider mapping and stream consistency](../../internal/ai/model_gateway_citations_test.go)
 
 - [Canonical historical blocks](../../internal/ai/floret_timeline_messages.go)
-
-- [Marker adaptation and URL boundary](../../internal/flower_ui/src/chat/markdown/flowerCitations.ts)

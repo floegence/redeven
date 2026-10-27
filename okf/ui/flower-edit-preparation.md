@@ -30,5 +30,3 @@ Candidate names never create file actions, authorize paths, admit tool execution
 - `redeven:internal/ai/flower_argument_preview.go` - Incremental bounded filename extraction from canonical patch headers.
 
 - `redeven:internal/ai/flower_argument_preview_test.go` - Partial paths, chunk boundaries, rename/delete, Unicode, body isolation, and display bounds.
-
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.streamingStability.browser.test.tsx` - Retained rows, progressive names, narrow viewports, approval, execution, and actual-result takeover.

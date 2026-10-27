@@ -32,6 +32,4 @@ Explicit environment replacement, permission-root replacement, connection recove
 
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:2405` - Activity/Workbench display mode uses a shared UI-first selection controller.
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:1423` - Terminal selection separates visual state, committed session state, and deferred focus.
-
 - `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.tsx:3246` - Files and Git retain mounted panels after first activation.

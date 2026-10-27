@@ -37,6 +37,4 @@ Failure, permission loss, cancellation failure and missing progress retain an ex
 
 - [Retained owners](../../desktop/src/welcome/EnvironmentCards.tsx)
 
-- [Operation and settings handoffs](../../desktop/src/welcome/App.tsx)
-
 - [Live presence and layers](../../desktop/src/welcome/DesktopActionPopover.tsx)

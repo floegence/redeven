@@ -9,10 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-- Authority: the Runtime Terminal Group Catalog owns group identity, metadata, ordering, revision, and each live Session's single group assignment; browser views never derive or persist that assignment.
-- Outcome: Activity and every Workbench Terminal show one consistent two-level group tree while retaining independent expansion state and Workbench widget placement.
-- Invariants: `default` always exists, cannot be renamed or deleted, and every client-visible Session has exactly one known `group_id`; a Group path affects only new Session startup.
-- Failure boundary: stale responses cannot regress the catalog, unknown groups trigger a refresh without reassignment, and Group deletion closes or safely hides every member before removing the Group.
+Runtime catalog alone owns group identity/order/revision and each Session assignment. Activity/Workbench share a two-level tree with independent expansion/placement. Default always exists, immutable; every session has one known group_id, and group paths affect new startup only. Stale replies cannot regress; unknown groups refresh without reassignment. Delete closes/hides members first.
 
 # Contract
 
@@ -40,7 +37,5 @@ Group membership is not Workbench placement, shell working directory, controller
 # Evidence
 
 - `redeven:internal/terminal/group_catalog.go` - Owns the revisioned catalog, protected Default Group, and atomic product mutations.
-
-- `redeven:internal/terminal/group_catalog_schema.go` - Defines and verifies the v1 SQLite schema through the shared migration engine.
 
 - `redeven:internal/terminal/groups.go` - Resolves paths, serializes membership changes, deletion, and Group order, bounds closes, and registers Terminal group types 2017-2023.

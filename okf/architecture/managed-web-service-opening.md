@@ -9,10 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-- Authority: the released template package owns entrance declarations and parsing; Runtime owns launch verification, preparation and private persistence; Desktop owns navigation results; Env App owns factual presentation.
-- Outcome: Host, Container and Compose hand a verified current entrance to the existing protected Forward route, including an already-running instance after an upgrade.
-- Invariants: opening never restarts, upgrades, reinstalls or modifies application data; one public preparation path owns results; HTTP 401 proves response availability, not authenticated access.
-- Failure boundary: unverified ownership, launch changes, unavailable output and unsafe URLs fail with retryable or explicit recovery explanations. A preparation failure never stops a healthy application.
+Released templates own entrance parsing; Runtime owns verified preparation/persistence, Desktop navigation and Env App display. Host/Container/Compose open current verified entrances through protected Forward, including running upgraded instances. No restart, upgrade or data change; HTTP 401 proves availability only. Unsafe/unverified entrances fail with recovery, never stop healthy apps.
 
 # Contract
 
@@ -47,5 +44,3 @@ Entrance preparation operates within the existing [Managed Web Service contract]
 - `redeven:internal/managedwebservice/opening_prepare.go` - Common source validation, private cache and generation checks.
 
 - `redeven:internal/managedwebservice/opening_launch.go` - Native and container launch authority, including unique Compose entrance selection.
-
-- `redeven:internal/containerengine/startup_logs.go` - Bounded current-launch output reads.

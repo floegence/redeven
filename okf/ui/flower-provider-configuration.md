@@ -32,5 +32,3 @@ Brand grouping is presentation only; both connection types remain in catalog/ser
 
 - redeven:internal/flower_ui/src/settings/FlowerProviderDialog.tsx - Shared settings/credential readiness.
 - redeven:internal/envapp/ui_src/src/ui/pages/settings/FlowerProviderDialog.test.tsx - Create/edit endpoint and authentication behavior.
-- redeven:internal/envapp/ui_src/src/ui/pages/settings/sections/FlowerSection.tsx - Atomic profile/credential saves.
-- redeven:internal/envapp/ui_src/src/ui/FlowerProviderDialog.kimiCode.browser.test.tsx - Responsive region/model selection and key preservation.

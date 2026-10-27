@@ -34,6 +34,4 @@ Existing client request errors retain their Retry action, subsequent polling, an
 
 - `redeven:internal/monitor/service.go` - Sole collectors, loopback filtering, snapshot publication, and cached RPC access.
 
-- `redeven:internal/monitor/network_history.go` - Windowed rates and counter-decrease protection.
-
 - `redeven:internal/monitor/network_counters_test.go` - Flag-based accounting, failure isolation, cancellation, and automatic recovery.

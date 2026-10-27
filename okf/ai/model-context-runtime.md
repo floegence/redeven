@@ -43,6 +43,4 @@ Redeven owns model preferences, credentials, gateway selection, and the one-shot
 
 - `redeven:internal/ai/floret_provider.go:55` - Provider stream deltas are sent to Floret as model events rather than mutating Flower state directly.
 
-- `redeven:internal/ai/floret_runtime.go` - Flower creates each new hosted Agent from the current System Prompt, tools, model, reasoning, and context policy.
-
 - `redeven:internal/ai/prompt_builder.go` - Stable persona, policy, and capability System Prompt without mutable objective or runtime overlays.

@@ -26,6 +26,4 @@ Do not copy upstream adapters, fingerprints, legacy paths, process/volume rules,
 
 - `redeven:go.mod` - Pins the released catalog module without local dependency wiring.
 
-- `redeven:internal/managedwebservice/builtin_templates.go` - Verifies and maps bundle records into generic templates.
-
 - `redeven:internal/managedwebservice/types.go` - Aliases the published TemplateSpec, localization, and icon types and defines product lifecycle responses.

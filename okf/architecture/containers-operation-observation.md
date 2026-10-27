@@ -46,6 +46,4 @@ Mobile and desktop expose the same state and cancellation authority. Service lif
 
 - `redeven:internal/containerresource/service.go` - Admits operations and observes interrupted startup state without replay.
 
-- `redeven:internal/containerresource/store.go` - Atomically records interrupted state and redacted evidence.
-
 - `redeven:internal/containerengine/cli_client.go` - Parses bounded image pull phase and layer evidence without retaining raw output.

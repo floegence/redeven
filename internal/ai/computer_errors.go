@@ -98,6 +98,11 @@ func computerBrowserFailure(call TargetToolCall, private bool, code string, payl
 	if known && payload != nil {
 		executed, _ := payload["action_executed"].(bool)
 		result.Result = map[string]any{"action_executed": executed, "needs_observation": executed}
+		if code == "AMBIGUOUS_DOWNLOAD" {
+			if downloads, ok := payload["downloads"].([]any); ok && len(downloads) <= 32 {
+				result.Result.(map[string]any)["downloads"] = downloads
+			}
+		}
 		if code == "ELEMENT_NOT_ACTIONABLE" && !executed && payload["stage"] == "focus" && payload["reason"] == "not_focusable" {
 			result.Result.(map[string]any)["stage"] = "focus"
 			result.Result.(map[string]any)["reason"] = "not_focusable"
@@ -165,7 +170,7 @@ func computerTargetFailure(call TargetToolCall, wireCode string) error {
 
 func computerCallMutates(call TargetToolCall) bool {
 	switch call.ToolName {
-	case "computer.screenshot", "computer.observe", "computer.wait", "computer.targets", "browser.wait_for_download", "browser.download_cursor":
+	case "computer.screenshot", "computer.observe", "computer.wait", "computer.targets", "browser.wait_for_download", "browser.download_cursor", "browser.read_download", "computer.applications":
 		return false
 	case "computer.action":
 		var operation map[string]any

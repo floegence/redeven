@@ -5,7 +5,7 @@ description: Keep shared Flower identity and output guidance separate from runti
 tags: [ai, flower, prompts, context]
 timestamp: 2026-10-21T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-26"
+reviewed_at: "2026-10-27"
 ---
 # Summary
 
@@ -37,15 +37,20 @@ There is no separate social or creative prompt path.
 
 Deterministic tests require the exact base prompt across all 18 permission, profile
 and allowlist combinations, pin reviewed tool-definition hashes, check file-delivery
-requirements and bound the prompt to 1,200 bytes.
+requirements and bound the prompt to 2,000 bytes.
 
 Synthetic receipts never execute proposed tools; the Service lane runs inside disposable state. Skipped paid runs are not new model qualification, and historical scores do not establish quality for this prompt.
 
-Computer simplification changes provider-visible tool definitions, not the shared
-base system prompt. Default discovery has three computer entry points; exact
-script signatures move to selection/help responses. The short definition retains
-sequential calls, observation, scope, partial-effect and no-replay rules. Historical
-primitive consumers retain executable contracts under current permissions.
+The base prompt adds one short execution strategy: use the most direct tool/API/CLI,
+batch known steps with scripts, inspect UI state as needed, and use reported
+effects/current state after interruption. This stays within the existing 2,000-byte
+budget; it does not add a procedural checklist.
+
+Default discovery still has three computer entry points. Definitions allow loops,
+conditions and multiple pages within the existing budget. Selection/help responses
+own exact signatures, snapshot shape, document-bound refs, automatic image output,
+backend-specific coordinates and download handoff. Historical primitive consumers
+retain executable contracts under current permissions.
 
 # Boundaries
 
@@ -56,9 +61,3 @@ Redeven owns Flower's product identity, output guidance and tool adaptation. Pub
 - redeven:internal/ai/prompt_builder.go — Shared identity and output instructions.
 
 - redeven:internal/ai/prompt_builder_tool_routing_test.go — Exact prompt and file-delivery contracts.
-
-- redeven:internal/ai/prompt_consistency_test.go — All-profile prompt and unchanged tool-definition checks.
-
-- redeven:internal/ai/prompt_profiles.go — Capability profile selection.
-
-- redeven:internal/ai/run_tool_surface.go — Permission-filtered tools and base prompt.

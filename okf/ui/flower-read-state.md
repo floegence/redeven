@@ -32,5 +32,3 @@ Read confirmation belongs to Redeven product state, not Floret execution or shar
 - `redeven:internal/flower_ui/src/threadCache.ts` - Independent monotonic activity and confirmation merging, with a separate loaded-content revision.
 
 - `redeven:internal/flower_ui/src/threadReadSync.test.ts` - Fake-clock retry, timeout, offline/access recovery, coalescing and late-callback coverage.
-
-- `redeven:internal/flower_ui/src/FlowerSurface.visibility.test.tsx` - Exact rendered-content and visibility evidence.

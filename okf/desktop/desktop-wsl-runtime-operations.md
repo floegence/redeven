@@ -9,7 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Redeven Desktop for Windows 11 x64 runs only the Electron Desktop process. It provides no native Local Environment, Windows Runtime, or local-container Runtime. A user may register one or more initialized Linux x64 WSL 2 distributions as independent WSL Environments. Desktop manages only the Redeven Linux Runtime inside the exact registered distribution and user; Windows retains authority over WSL installation, distribution state, termination, and removal. Missing WSL, WSL 1, initialization failure, missing Linux commands, a vanished distribution, package damage, or Bridge termination fails visibly and requires an explicit retry or lifecycle action.
+Windows 11 x64 runs Electron only: no native Local, Windows or local-container Runtime. Register initialized Linux x64 WSL2 distributions independently; manage only exact distribution/user Runtime. Windows owns WSL installation/lifecycle/removal. Missing/WSL1/uninitialized distributions, commands, damaged packages or lost Bridge fail visibly with explicit recovery.
 
 # Contract
 
@@ -42,7 +42,5 @@ Windows and WSL 2 remain separate authorities. No boundary may be hidden by a na
 # Evidence
 
 - `redeven:desktop/src/shared/desktopPlatformCapabilities.ts:1` - Main-owned Windows capability contract.
-
-- `redeven:desktop/src/main/desktopWSL.ts:1` - WSL output decoding, discovery, version observation, and Linux probe.
 
 - `redeven:desktop/src/main/runtimeHostAccess.ts:1` - Exact argument-array WSL command execution and streaming transport.

@@ -9,13 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Flowersec owns encryption, carrier selection, multiplexing, proxy framing and
-backpressure for remote desktop and host application windows. Redeven owns the
-resource, user authorization and route mapping. All graphical data, including
-state, attachment tickets, input, clipboard, audio, pixels and explicit disconnect,
-uses the published native session proxy. Static program bootstrap and acquisition
-remain on the authenticated browser entry. Missing authority fails closed; no
-viewer backend may silently open a raw graphical HTTP or WebSocket connection.
+Flowersec owns encryption, carrier/multiplexing/framing/backpressure; Redeven owns resources, authorization and routing. All graphical state, tickets, input, clipboard, audio, pixels and disconnect use native session proxy. Static bootstrap/acquisition stays authenticated browser traffic. Missing authority fails closed; raw graphical HTTP/WS bypass is forbidden.
 
 # Contract
 

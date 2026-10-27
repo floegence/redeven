@@ -44,6 +44,4 @@ Linux cannot generically request AppKit-style application quit or reopen, nor ad
 
 - [Linux instance lifecycle](linux-application-lifecycle.md): surviving private backends, connection revocation and exact-instance controls.
 
-- [macOS application management](macos-application-management.md): OS inventory, normal quit and explicit force quit.
-
 - [Lifecycle acceptance](../operations/host-application-lifecycle.md): focused native and renderer scenarios.

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { lstat, mkdir } from 'node:fs/promises';
 import { createComputerBrowserSource } from './computerBrowserSource.mjs';
+import { observeManagedBrowserDownloads } from './computerManagedDownloads.mjs';
 
 const profileIndex = process.argv.indexOf('--profile');
 const profile = profileIndex >= 0 ? process.argv[profileIndex + 1] : undefined;
@@ -59,9 +60,10 @@ try {
 
 
 function response(value) { process.stdout.write(JSON.stringify(value) + '\n'); }
-const sourceOwner = await createComputerBrowserSource(page, targetID);
+const sourceOwner = await createComputerBrowserSource(page, targetID, { nativeDownloads: false });
 const { source, controller } = sourceOwner;
 const cdp = source.transport;
+let stopDownloads;
 if (!browser) {
   downloadDirectory = path.join(profile, 'downloads');
   await mkdir(downloadDirectory, { recursive: true, mode: 0o700 });
@@ -77,6 +79,7 @@ if (downloadDirectory) {
     if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('INVALID_DOWNLOAD');
     return { path: file, size_bytes: stat.size };
   };
+  stopDownloads = observeManagedBrowserDownloads(source, controller.page, downloadDirectory);
 }
 response({ type: 'ready', protocol_version: 6, capabilities: ['observe', 'interaction'], execution_location: executionLocation });
 const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
@@ -88,6 +91,7 @@ for await (const line of rl) {
   const result = await controller.execute(request);
   response({ id: request.id, target_id: request.target_id, execution_location: executionLocation, ...result });
 }
+stopDownloads?.();
 await sourceOwner.dispose();
 if (browser) await browser.close();
 else await context.close();

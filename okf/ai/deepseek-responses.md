@@ -33,6 +33,4 @@ Floret owns raw response items, including reasoning and historical opaque search
 
 - `redeven:internal/ai/model_gateway_deepseek.go` - Thin released-gateway adapter.
 
-- `redeven:internal/ai/floret_provider.go` - Opaque state and request tool surface.
-
 - `redeven:internal/ai/floret_runtime.go` - Catalog-owned Turn tool surface.

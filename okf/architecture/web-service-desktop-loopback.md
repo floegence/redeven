@@ -25,6 +25,4 @@ Compatibility origin is not direct access, RBI, public listening, Local UI login
 
 - `redeven:internal/portforward/registry/schema.go` - The fresh Registry baseline persists one constrained access mode and route-safe forward identity.
 
-- `redeven:internal/portforward/service.go:1` - Runtime validates mode values and rejects local compatibility for non-HTTP targets.
-
 - `redeven:desktop/src/main/navigation.ts:256` - Navigation maps only the exact HTTP target scope and supported loopback aliases into the assigned gateway Origin.

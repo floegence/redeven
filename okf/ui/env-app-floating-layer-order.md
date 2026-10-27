@@ -40,9 +40,3 @@ This contract governs cross-surface Env App stacking and the Activity-versus-Wor
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/PersistentFloatingWindow.browser.test.tsx` - Published elastic drag, reachable header, settled persistence, maximize drag restore, and retained draft.
-
-- `redeven:desktop/src/preload/desktopEmbeddedDragHost.test.ts` - No self-triggered frame after overlay creation or clearing, stable region identity, frame replacement and externally removed overlay recovery.
-
-- `redeven:internal/envapp/ui_src/src/ui/services/desktopEmbeddedDragRegions.test.ts` - No refresh for ordinary blocker content; retained resize, geometry, marker and membership updates.
-
-- `redeven:internal/envapp/ui_src/scripts/checkMobileNavigation.mjs` - Replays native document panning, stale visual offsets, and transient keyboard heights while checking fixed header size, composer bounds, retained editor, and selection.

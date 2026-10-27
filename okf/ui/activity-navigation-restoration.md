@@ -37,6 +37,4 @@ A late restoration cannot replace explicit user navigation. Transient directory 
 
 - `redeven:internal/envapp/ui_src/src/ui/services/activityNavigation.ts` - Versioned record, strict target projection, migration, and recency fallback.
 
-- `redeven:internal/envapp/ui_src/src/ui/App.tsx` - Initial target and published `persistActiveTab: false` layout ownership.
-
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Display-mode separation, inventory validation, and cancellation fences.

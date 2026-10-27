@@ -9,15 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Redeven owns remote desktop authorization, ephemeral sessions, window placement,
-configuration and audit. Published `floe-native-apps` owns current-desktop
-selection, OS authorization, native input, capture, codecs, bounded playback and
-Linux component acquisition and the privileged physical-desktop service.
-A desktop session shares the existing signed-in macOS or Linux desktop. It never
-creates an application-private desktop, changes system security policy or grants
-access to a lower-permission user. Disconnect releases remote input and media;
-host applications and unsaved work survive. Platform unavailability revokes
-input and requires a fresh active frame before recovery.
+Redeven owns authorization, ephemeral sessions, placement/config/audit; published floe-native-apps owns OS selection, capture/input/codecs/playback and Linux acquisition/physical service. Share the signed-in macOS/Linux desktop without creating private desktops or changing OS policy. Disconnect preserves apps/work. Unavailability revokes input until a fresh active frame.
 
 # Contract
 

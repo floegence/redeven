@@ -26,6 +26,4 @@ Browser or UI-side permission claims remain non-authoritative. This concept only
 
 - `redeven:internal/config/permission_policy.go:13` - PermissionPolicy clamps control-plane session metadata to a user-approved local maximum.
 
-- `redeven:internal/agent/agent.go:473` - Unsupported floe_app values are rejected before runtime session startup.
-
 - `redeven:internal/session/types.go:29` - Process launch is allowed only when write and execute are both effective.

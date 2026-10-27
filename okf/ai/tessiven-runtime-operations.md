@@ -9,16 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-The Runtime-owned Tessiven product service is the authority for UI and Flower
-Runtime discovery and dispatch. It composes the existing Desktop connection
-registry, authenticated Gateway catalogs, Runtime business resource executors,
-and Desktop lifecycle coordinator. Discovery observes registered paths without
-starting a process or acquiring a business session. A reference identifies one
-path; it grants no permission. Lost source authority, changed path generations,
-replaced identities, and revoked permissions stop dispatch. A lost mutation
-response reports an uncertain canonical tool outcome. The model first inspects
-the original operation or current state before deciding what work remains; the
-original invocation never replays automatically.
+Runtime Tessiven service owns UI/Flower discovery and dispatch over existing registries/catalogs/executors. Discovery neither starts processes nor acquires business sessions. Path refs grant no permission. Lost authority, changed generations/identities or revocation stop dispatch. Lost mutation replies remain uncertain; inspect original operation/current state before deciding, never auto-replay.
 
 # Contract
 

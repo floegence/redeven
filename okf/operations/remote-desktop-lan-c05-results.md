@@ -9,15 +9,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-The primary qualification task owns C05 outcomes. The released six-frame path
-restores the ability to exceed 51 FPS while retaining later fixes, but does not
-restore the historical three-round stability or qualify complete RustDesk parity.
-All complete adverse trials count. Source-input loss invalidates ordinal latency
-association; missing presentation with all source inputs remains a valid failure.
-The [comparison contract](remote-desktop-rustdesk-comparison-results.md) owns
-acceptance and [C05 preparation](remote-desktop-lan-published-c05.md) owns immutable
-identities, controls, release checks and compatibility. Retry only a named fixture
-repair or a new discriminating hypothesis, after consulting the decision ledger.
+C05 owns results under the comparison contract; preparation owns immutable inputs/controls. Six-frame delivery exceeds 51 FPS but does not restore three-round stability or RustDesk parity. Count adverse complete trials. Lost source inputs invalidate ordinal latency; missing presentation with all inputs is failure. Retry only named fixture repairs or discriminating hypotheses recorded in the ledger.
 
 # Contract
 

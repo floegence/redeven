@@ -9,10 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-- Authority: Floret owns received events and their canonical context admission; the UI holds only presentation pages, report bodies and disclosure state.
-- Outcome: important child reports and automatic events appear directly in the selected parent conversation without opening the subagent dropdown.
-- Invariants: every event uses the canonical child avatar; receipt, admission and preservation notices do not appear in the timeline. Reading never wakes either task.
-- Failure boundary: recipient authorization and canonical fixed-range paging apply to every full read.
+Floret owns canonical child reports/events and admission; UI owns pages/bodies/disclosure only. Reports appear in the selected parent with canonical child avatars, without receipt/admission/preservation notices. Reading wakes neither task. Every full read rechecks recipient authority and canonical fixed-range paging.
 
 # Contract
 
@@ -27,7 +24,5 @@ An isolated Service/SQLite/scripted-provider browser qualification exercises act
 # Evidence
 
 - `redeven:internal/flower_ui/src/parentEvents.tsx` - Canonical avatars, inline disclosure, fixed-range reads and stale-response isolation.
-
-- `redeven:internal/flower_ui/src/flowerTimelineProjection.ts` - Chronological parent event insertion and stable event keys.
 
 - `redeven:internal/ai/parent_events.go` - Recipient authorization and canonical event reads.

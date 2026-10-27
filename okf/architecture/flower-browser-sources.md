@@ -9,10 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-- Authority: ComputerUseRuntime authorizes target selection and control; its browser source Host owns admitted CDP and extension adapters.
-- Outcome: Flower can discover, connect to, automate, observe, take over and return control of managed or explicitly selected browser tabs.
-- Invariants: discovery never grants input; each admitted page has one debugger and ordered input path; private opener ancestry remains hidden across CDP and extension inventories.
-- Failure boundary: source loss retires only affected target bindings. Unknown input outcomes are never replayed, and a failed source Host cannot silently create replacement authority.
+ComputerUseRuntime authorizes targets; its source Host owns CDP/extension adapters. Discovery grants no input. Each admitted page has one debugger/input order; private opener ancestry stays hidden across inventories. Source loss retires only affected bindings. Unknown effects never replay and Host failure never creates replacement authority.
 
 # Contract
 
@@ -29,7 +26,5 @@ Flower's user-control handback remains the canonical path for resuming a paused 
 # Evidence
 
 - `redeven:internal/ai/computer_runtime.go` - Target preparation, binding, execution and source lifetime.
-
-- `redeven:internal/ai/computer_browser_host.go` - Private source Host handshake and command boundary.
 
 - `redeven:internal/ai/computer_browser_privacy.go` - Cross-carrier native ancestry filtering.

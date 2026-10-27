@@ -31,5 +31,3 @@ Layout persistence does not report Git content freshness. Workbench may stabiliz
 - redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffPanel.test.tsx - Verifies deferred connection loading, transport replacement, late-result isolation, terminal errors, snapshot ownership, and same-path refresh.
 
 - redeven:internal/envapp/ui_src/src/ui/workbench/WorkbenchGitDiffWidget.tsx - Distinguishes unchanged placement snapshots from changed Git targets before supplying the shared diff panel.
-
-- redeven:internal/envapp/ui_src/src/ui/workbench/WorkbenchGitDiffWidget.browser.test.tsx - Verifies request, expansion, and scroll continuity across unrelated layout snapshots, target and explicit refresh invalidation, and transport recovery without moving the widget.

@@ -34,5 +34,3 @@ Redeven layout operations never grant plugin authority or inspect platform store
 - `redeven:internal/workbenchlayout/plugin_widgets.go:1` - Atomic placement, exact-instance removal, and layout event publication.
 
 - `redeven:internal/workbenchlayout/plugin_widgets_test.go:1` - Idempotency, concurrency, rollback, metadata, and geometry preservation.
-
-- `redeven:internal/envapp/ui_src/src/ui/workbench/EnvWorkbenchPage.tsx:1` - Read/save recovery, explicit placement, and in-place binding refresh.

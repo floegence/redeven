@@ -34,6 +34,5 @@ security, authorization, input, ordering or recovery contracts.
 
 # Evidence
 
-- [C05 measured results](remote-desktop-lan-c05-results.md) - Current paired outcomes, adverse trials, source-loss and detail limits.
 - [C05 preparation](remote-desktop-lan-published-c05.md) - Published dependency identity and fixture boundaries.
 - [RustDesk comparison](remote-desktop-rustdesk-comparison-results.md) - Acceptance criteria and parity limits.

@@ -32,5 +32,3 @@ Password retention, replacement and removal continue through the existing secret
 - `redeven:desktop/src/welcome/SSHEnvironmentSettingsForm.tsx` - Shared creation/editing fields, nested keyboard handling and validation presentation.
 
 - `redeven:desktop/src/welcome/SSHEnvironmentSettingsForm.client.test.tsx` - Editing, password actions, validation and save behavior.
-
-- `redeven:desktop/src/welcome/sshEnvironmentSettingsState.ts` - Editable fields and canonical SSH validation.

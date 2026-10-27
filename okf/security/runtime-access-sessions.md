@@ -9,7 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Runtime `accessgate` is the sole authority for ordinary session validity and revocation. A valid browser session survives refresh, new tabs and temporary disconnects without another password prompt. Cookie names isolate HTTP, HTTPS and Runtime ports; they never grant or extend authorization. Expiry, logout, security changes and Runtime restart require authentication again. Invalid authorities and incompatible Desktop peers fail closed. [Runtime two-factor authentication](runtime-two-factor-authentication.md) owns credential persistence, factor verification and owner management.
+Runtime accessgate alone owns ordinary validity/revocation. Valid browser sessions survive refresh/tabs/disconnect; cookie names isolate HTTP/HTTPS/ports without extending authority. Expiry/logout/security changes/restart require reauthentication. Invalid authority/incompatible Desktop fails closed; two-factor contract owns credentials and host recovery.
 
 # Contract
 
@@ -41,5 +41,3 @@ Native transport never acquires trusted Desktop management identity.
 - `redeven:internal/localui/access_cookie.go` - Owns name derivation, attributes and exact-scope deletion.
 
 - `redeven:internal/localui/access_cookie_test.go` - Covers validated/default/IPv6 authorities, ignored forwarded headers and rejected foreign or retired names.
-
-- `redeven:internal/localui/access_cookie_browser_test.go` - Runs production Go handlers and isolated state with real Chromium cookie storage, including legacy Secure cookies, refresh, tabs, reconnect, port isolation, MFA, expiry, restart and owner recovery.

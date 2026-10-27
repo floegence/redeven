@@ -41,12 +41,6 @@ No authority barriers, admission receipts, recovery handles or projection-cursor
 
 - `redeven:internal/ai/floret_effect_authorization.go` - Binds one-shot effect authorization to the exact Floret attempt.
 
-- `redeven:internal/ai/terminal_process.go` - Owns bounded PTY resources, output, reap, and termination.
-
-- `redeven:internal/ai/runtime_lifecycle_admission.go:1` - Admits and releases AI turn and terminal process workloads at their canonical lifecycle boundaries.
-
 - [Terminal wait integration](../../internal/ai/terminal_wait_floret_integration_test.go) - Exercises quiet repeated reads and mixed-effect repeat protection against published Floret.
-
-- [Terminal observation tests](../../internal/ai/terminal_process_wait_test.go) - Verify cancellation, independent readers, early returns, unchanged cursors, and concise model output.
 
 - [Terminal cleanup tests](../../internal/ai/terminal_process_cleanup_unix_test.go) - Exercise ignored-HUP children, preserved exit codes, Stop/Close/cancellation/timeouts/input failures, pinned root identity, cleanup failure admission, and unrelated-process isolation.

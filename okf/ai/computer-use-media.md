@@ -55,5 +55,4 @@ share paths, not authentication. Fixtures do not establish product qualification
 # Evidence
 
 - [Preparation](../../internal/ai/model_image_preparation.go)
-- [Media storage](../../internal/ai/computer_media.go)
 - [Viewer paths](../../internal/flower_ui/host/computerFramePath.ts)

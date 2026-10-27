@@ -9,15 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-OpenAI connections have one active authentication method: API key or ChatGPT
-account. Omitted authentication fields retain API-key behavior. ChatGPT uses
-OpenAI's public open-source sign-in and `/v1/responses` contracts; it never reads
-Codex credentials or calls a private ChatGPT backend. Floret v7.30.0 owns the
-engine, canonical conversation, provider-state lifecycle and compaction. Redeven
-owns account admission, protected credentials, provider configuration and UI.
-Verified local admission is mandatory, billing choice never changes silently,
-and private or remote callers cannot obtain account credentials. Account-lifecycle
-failures remain explicit through the canonical owner linked below.
+OpenAI uses one API-key or ChatGPT-account method; omission keeps API-key behavior. ChatGPT uses public sign-in/Responses contracts, never Codex secrets/private backend. Floret owns engine/history/provider state; Redeven owns verified local admission, protected accounts/config/UI. Billing never silently changes; callers cannot obtain credentials. Canonical lifecycle reports failures.
 
 # Contract
 
@@ -45,5 +37,3 @@ Old API-key-only saves remain supported.
 - `redeven:internal/codeapp/appserver/chatgpt_auth.go` - Trusted local admission for account access and management.
 
 - `redeven:internal/localui/local_runtime_browser_test.go` - Native handoff, public spoof rejection and exact authority.
-
-- `redeven:internal/ai/model_gateway_strict_test.go` - Real Flower strict wire contract, optional argument restoration and frozen-request rules.

@@ -9,17 +9,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-This matrix records observable lifecycle acceptance for Host Applications. The
-[shared authorization contract](../architecture/host-applications.md) and
-[macOS window lifecycle owner](../architecture/macos-application-window-lifecycle.md) remain normative.
-A live process, an available window, a decoded frame and an authenticated viewer
-are separate facts. Only explicit closure evidence ends the physical viewer.
-A missing or inaccessible surface must preserve the app and provide an accurate
-recovery path; it must never silently select an unrelated process or inject stale
-input. This matrix is not a certification of every installed application.
-
-See the [cross-platform behavior contract](../architecture/host-application-behavior.md)
-for aligned operations and unavoidable OS differences.
+Qualify process, window, decoded-frame and authenticated-viewer facts independently under application authorization/window-lifecycle contracts. Only confirmed closure ends physical viewers. Missing/inaccessible surfaces preserve apps and recovery, never retarget processes or inject stale input. Cross-platform operations retain OS differences; this is not all-app certification.
 
 # Contract
 

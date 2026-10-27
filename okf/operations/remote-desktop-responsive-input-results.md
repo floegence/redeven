@@ -9,16 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Native v0.22.33 provides idle capture wakeup; published Floe controllers own
-bounded pointer submission and local text mode. The
-[media contract](../architecture/remote-desktop-media.md) owns privileged
-authority; the [viewer contract](../architecture/remote-desktop-viewer.md) owns
-input modes. Locks remain physical-only; generation and mode changes revoke
-input. This record qualifies document contents, DRM feedback and encoded-frame
-arrival separately. The udesk26 path passes functional qualification. The
-[orange AFBC record](remote-desktop-orange-afbc-results.md) owns the later
-Wayland import repair and native lock/unlock qualification. Native qualification
-does not establish complete Viewer or performance acceptance.
+Native v0.22.33 wakes idle capture; Floe owns bounded pointer/local text. Media/viewer contracts own authority/modes; locks are physical-only and generation/mode changes revoke input. Document contents, DRM feedback and encoded arrival are separate checks. udesk26 passes; Orange AFBC follow-up owns later repair. Native success is not complete Viewer/performance acceptance.
 
 # Contract
 

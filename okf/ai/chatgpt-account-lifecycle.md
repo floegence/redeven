@@ -9,16 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Redeven's canonical protected account store owns verified ChatGPT registrations
-and sessions. Returning setup reuses saved registrations; only explicit new-account
-or workspace intent creates another. Email is never a registration or workspace
-key. OAuth completion persists sign-in independently of connection
-editing; identity-only grants never admit inference. Retry reuses issued client
-identity with fresh OAuth inputs. Renewal and logout serialize rotating tokens.
-Cancellation never installs usable credentials after its commit boundary, and
-interrupted cleanup uses the existing durable logout journal. Storage failure
-stops account use; local cleanup and remote revocation remain separate outcomes.
-Local admission is owned by the [authentication contract](chatgpt-local-authentication.md).
+The protected account store owns verified registrations/sessions; reuse unless explicit new-account/workspace intent. Email is no identity key. OAuth persistence is independent of connection editing; identity-only grants cannot infer. Retry refreshes OAuth inputs; renewal/logout serialize tokens. Cancellation/failed storage block credential use. Durable logout tracks interrupted cleanup; remote revocation remains separate.
 
 # Contract
 
@@ -46,5 +37,3 @@ This concept owns local registration and credential lifecycle. Connection config
 - `redeven:internal/chatgpt/client.go` - Bounded OAuth attempts, verified credential commit, issued-client recovery and canceled-session cleanup.
 
 - `redeven:internal/chatgpt/account_lifecycle_contract_test.go` - Repeated code failures, identity-only persistence, cancellation during exchange/installation, unconfirmed revocation and unbound renewal.
-
-- `redeven:internal/chatgpt/lifecycle_test.go` - Clock resume, cross-process rotation, logout races, storage faults and startup recovery.

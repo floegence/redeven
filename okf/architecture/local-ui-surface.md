@@ -9,7 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Redeven Local UI is the Runtime-owned client endpoint. Desktop and browsers can connect concurrently using independent access sessions. Public HTTP/WS or HTTPS/WSS shares one configured port; authenticated Desktop bridge traffic remains on its separate numeric-loopback listener and isolated `flowersec-private-loopback/1` profile. The versioned SQLite authority store is the sole issuer-side source for one-shot Flowersec authorization and browser spend state across all transports. [Local UI network exposure](../security/local-ui-network-exposure.md) owns protocol choice, scope, password, certificate, and migration rules.
+Runtime Local UI supports concurrent independent Desktop/browser sessions. Public HTTP/WS or HTTPS/WSS shares one port; private Desktop uses numeric loopback and flowersec-private-loopback/1. Versioned SQLite owns one-shot authorization/browser spend across transports. Network exposure owns protocol, scope, password, certificate and migration policy.
 
 # Contract
 
@@ -37,7 +37,5 @@ Saved next-start settings never replace the running URL list.
 # Evidence
 
 - `redeven:internal/localui/localui.go:50` - Local UI options require bind, agent, app server, state, runtime-control, version, diagnostics, and access gate inputs.
-
-- `redeven:internal/localui/bind.go:32` - Bind parsing distinguishes loopback, concrete network IP, and wildcard exposure while enforcing fixed network ports.
 
 - `redeven:internal/localui/http_security.go:24` - Listener and interface addresses produce the exact public network authority allowlist and real display URLs.

@@ -13,7 +13,8 @@ One `computer.exec` is one Floret tool invocation and one effect attempt.
 `ComputerUseRuntime` owns its isolated QuickJS process and checks every host
 operation. The guest receives only the controlled `ui`, `browser` and `log`
 interfaces. Partial progress survives failure; uncertain effects never replay.
-A page change ends the batch with successful partial progress for the Agent.
+Loops, conditions and navigation within the same selected page may compose in one call.
+A new target or permission boundary stops the batch with its confirmed prefix.
 A permission requirement or private input ends it through Floret's existing
 interaction boundary.
 
@@ -26,7 +27,8 @@ Each call allows 30 seconds and 50 operations. ui.budget() and returned budget
 metadata expose remaining time and operations. Explicit logs stream before later
 operations under a 64 KiB UTF-8 budget, retaining safe findings on timeout or
 uncertain effects. Private pauses, failed safety reads and navigation failures
-discard content. Keep batches to one page or verified subtask. Argument
+discard content. Batch known steps across pages within the runtime budget; return
+screenshots for model judgment when the next action depends on pixels. Argument
 diagnostics identify the method when known, field, expected form and fixed repair
 examples; raw errors remain private.
 
@@ -126,3 +128,30 @@ No second history or recovery ledger exists.
 - `redeven:internal/ai/computer_observation.go` - bounded output diffs and document/scope resets.
 
 - `redeven:internal/envapp/ui_src/scripts/redevenComputerScript.mjs` - restricted QuickJS API and process protocol.
+
+## Qualified browser batch example
+
+For an already inspected report whose three URLs and unique Score region are
+known, one call can combine navigation, bounded reads, a condition, computation
+and a final screenshot. Visual interpretation occurs after the call returns.
+
+<!-- qualified-browser-batch -->
+```javascript
+globalThis.batchScores = [];
+for (let page = 1; page <= 3; page++) {
+  await browser.navigate('https://example.test/report?page=' + page);
+  const value = await ui.getByRole('region', {name: 'Score', exact: true}).text();
+  ui.assert(!value.truncated && Number.isFinite(Number(value.text)));
+  batchScores.push(Number(value.text));
+}
+globalThis.batchTotal = batchScores.reduce((sum, value) => sum + value, 0);
+log({scores: batchScores, total: batchTotal});
+await ui.screenshot();
+```
+
+`TestComputerScriptExamplesQualification` runs this exact example and the
+production download-help example through QuickJS, Runtime and real installed
+Chromium. It verifies a 1.4 MB download byte-for-byte, one export and one identity,
+three page scores, retained environment state, and an actual screenshot.
+Screenshots automatically accompany the tool result. Their metadata is not a
+file path or PNG buffer; no extra export is required to display a capture.

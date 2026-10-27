@@ -40,8 +40,4 @@ rotation separately invalidates the live connection before another request.
 
 - `redeven:internal/ai/model_gateway_openai_connections.go` - Separates request fingerprints from authenticated connection admission and credential rotation.
 
-- `redeven:internal/config/ai.go` - One effective continuation policy for every adapter initialization path.
-
 - `redeven:internal/ai/openai_continuation_test.go` - Wire requests preserve full history with continuation disabled.
-
-- `redeven:internal/flower_ui/src/settings/FlowerProviderDialog.tsx` - Conditional opt-in control and draft lifecycle.

@@ -28,5 +28,3 @@ Floret alone checks attempt identity, commits output, persists and revalidates m
 - redeven:internal/ai/model_gateway_measurement.go - Response and connection evidence, identity isolation and native replay boundaries.
 
 - redeven:internal/ai/model_gateway_measurement_test.go - HTTP proof isolation, WebSocket lifetime changes, hidden execution rejection and explicit zero output.
-
-- redeven:internal/ai/model_gateway_prepared.go - Frozen prefix/suffix mapping across output refits and replay.

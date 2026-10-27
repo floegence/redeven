@@ -27,6 +27,4 @@ Floe and Flowersec own acquisition, retry timing, source consumption, protocol f
 
 - `redeven:internal/envapp/ui_src/src/ui/services/controlplaneApi.ts:501` - Maps local and remote acquisition into the published source.
 
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:542` - Enforces Service Worker script, scope, control, and runtime generation.
-
 - `redeven:internal/envapp/ui_src/src/ui/reconnect/createRuntimeReconnectController.ts:429` - Projects structured reconnect events without product retry heuristics.

@@ -26,7 +26,3 @@ The main CI and release gate owns validation ordering and exact-main provenance.
 # Evidence
 
 - `redeven:scripts/check_plugin_integration.sh:1` - Defines focused ReDevPlugin integration coverage.
-
-- `redeven:internal/pluginmarket/service_test.go:1` - Proves strict market validation and last-known-good fallback.
-
-- `redeven:internal/envapp/ui_src/scripts/checkPackagedRenderer.mjs:1` - Verifies the production Plugin entry and built renderer.

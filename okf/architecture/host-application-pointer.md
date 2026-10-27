@@ -9,13 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Published Floe remote-pointer owns content pointer events in Linux native/Xpra and macOS
-viewers. Touch swipes scroll; taps click; long presses provide drag or right click.
-A gesture stays bound to one painted window instance and connection generation.
-Cancellation drops queued movement and scroll and releases only its own buttons.
-Keyboard composition stays with [remote-input](host-application-input.md). Missing
-pointer capability requires saving, quitting and reopening the application; closing
-only its viewer does not upgrade or terminate the application process.
+Floe remote-pointer owns Linux/Xpra/macOS viewer gestures: swipe scroll, tap click, long press drag/right-click. Bind each to one painted window/generation. Cancellation drops queued movement/scroll and releases owned buttons. Remote-input owns composition. Missing capability requires save/quit/reopen; viewer closure neither upgrades nor stops the app.
 
 # Contract
 

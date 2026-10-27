@@ -69,7 +69,14 @@ func builtInComputerToolDefinitions() []ToolDef {
 	}
 	for i := range defs {
 		switch defs[i].Name {
+		case "computer.targets":
+			defs[i].Description += " Set application to an application name or bundle ID to discover installed native applications, including those not running; omit browser_source for this query."
+			var input map[string]any
+			_ = json.Unmarshal(defs[i].InputSchema, &input)
+			input["properties"].(map[string]any)["application"] = map[string]any{"type": "string", "minLength": 1, "maxLength": 120, "description": "Native application name or bundle ID."}
+			defs[i].InputSchema = toolSchemaRaw(input)
 		case "computer.select_target":
+			defs[i].Description += " Application candidates open or restore the discovered application. A single accessible window is selected; multiple windows return candidates to choose."
 			defs[i].Description += " For a new web task, use a new-tab candidate (default_candidate_ref for an unspecified source). Reuse an existing tab only when the user refers to it or it belongs to this task; never navigate an unrelated tab to start a new task. Pass the returned target_id to subsequent tools, never candidate_ref. Preserve the requested account/workspace scope."
 		case "computer.observe":
 			defs[i].Description += " truncated or children_truncated means omitted content, not empty rows or virtualization. Read those subtrees with root_ref before claiming completeness."
@@ -78,6 +85,6 @@ func builtInComputerToolDefinitions() []ToolDef {
 	return defs
 }
 
-const computerScriptDocumentation = `Execute JavaScript against the selected target. Send one computer call per batch. Use ui.snapshot() to inspect, ui.ref(observedRef).click()/fill(text)/press(key) to act, and inspect the result. Use browser.navigate(url) for browser navigation. Await each operation; log(value) returns concise text. Variables on globalThis persist only within this turn and target; check context_reset after a failure. Local const/let variables do not persist.
+const computerScriptDocumentation = `Execute JavaScript against the selected target. Send one computer call per batch. ui.snapshot() returns {document_id,url?,title?,nodes,truncated}, not an array: const {nodes}=await ui.snapshot(); log(nodes.map(n=>({ref:n.ref,role:n.role,name:n.name}))); Use ui.ref(observedRef).click()/fill(text)/press(key) to act. Use browser.navigate(url) for browser navigation; await ui.snapshot() afterward. Await each operation; log(value) returns concise text. Variables on globalThis persist only within this turn and target; check context_reset after a failure. Local const/let variables do not persist.
 Selection supplies core signatures; use await ui.help('core') if that guide is missing. Other topics: read, visual, downloads. Read a topic when needed instead of guessing methods. Browser methods exist only on browser targets. Select a candidate first; target can be omitted afterward.
-Execute only actions authorized by the user. Stop at a changed target or permission request. Earlier effects are not rolled back: inspect current state before continuing and never replay completed or uncertain input. Limits per call: 50 operations, 30 seconds, 64 MiB heap, 64 KiB logs. ui.budget() reports remaining time/operations. Prefer one page per call and log completed findings before continuing; safe logs survive interruption. No DOM, Node, filesystem, network or raw CDP.`
+Execute only actions authorized by the user. Stop at a changed target or permission request. Earlier effects are not rolled back: inspect current state before continuing and never replay completed or uncertain input. Limits per call: 50 operations, 30 seconds, 64 MiB heap, 64 KiB logs. ui.budget() reports remaining time/operations. Combine known steps, loops, conditions and multiple pages within the budget. Log completed findings. Capture screenshots in the script; return to the model before acting on a new visual judgment. Safe logs survive interruption. No timers (setTimeout/setInterval), DOM, Node, filesystem, network or raw CDP; use locator.requireState for condition waits.`

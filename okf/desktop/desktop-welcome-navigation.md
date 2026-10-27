@@ -27,6 +27,4 @@ Navigation grants no Runtime authority. [Ask Flower windows](../ui/ask-flower-wi
 
 - `redeven:desktop/src/welcome/App.tsx` - Renderer navigation and retained page visibility.
 
-- `redeven:desktop/src/main/main.ts` - Explicit host request revision and snapshot capture.
-
 - `redeven:desktop/src/main/desktopWelcomeState.ts` - Welcome snapshot projection.

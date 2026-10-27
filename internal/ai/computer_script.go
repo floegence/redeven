@@ -194,6 +194,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 	var lastObservation any
 	var observationScope string
 	var argumentDiagnostic map[string]any
+	var ambiguousDownloads []any
 	var lastFrameGeometry any
 	var fullObservation bool
 	observationInvalidated := false
@@ -216,6 +217,9 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 		output.executionFacts.completedActions = append([]string(nil), completed...)
 		output.executionFacts.needsObservation = observationInvalidated || observationFailureStage != "" || actionExecuted || errors.Is(outputErr, errComputerEffectUnknown)
 		if payload, ok := output.Result.(map[string]any); ok {
+			if ambiguousDownloads != nil && pause == nil {
+				payload["downloads"] = ambiguousDownloads
+			}
 			payload["context_reset"] = !healthy
 			if pause == nil && observationFailureStage == "" && navigationFailure == nil {
 				payload["logs"] = prefixLogs
@@ -333,6 +337,9 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				stopped = err
 				facts, _ := observed.Result.(map[string]any)
 				failureStage = computerDiagnosticValue("stage", facts["stage"])
+				if failure, ok := err.(*targetToolPolicyError); ok && failure.code == "ambiguous_download" {
+					ambiguousDownloads, _ = facts["downloads"].([]any)
+				}
 				failureReason = computerDiagnosticValue("reason", facts["reason"])
 				if errors.As(err, &navigationFailure) {
 					lastObservation = nil
@@ -510,7 +517,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 
 func computerOperationMutates(op map[string]any) bool {
 	switch anyToString(op["action"]) {
-	case "observe", "snapshot", "read", "text", "query", "table", "attribute", "help", "wait", "screenshot", "wait_for_download", "download_cursor":
+	case "observe", "snapshot", "read", "text", "query", "table", "attribute", "help", "wait", "screenshot", "wait_for_download", "download_cursor", "read_download":
 		return false
 	default:
 		return true
@@ -537,7 +544,7 @@ func computerScriptOperation(parent TargetToolCall, operation map[string]any) (T
 	case "screenshot":
 		call.ToolName = "computer.screenshot"
 		delete(args, "action")
-	case "navigate", "back", "reload", "wait_for_download", "download_cursor":
+	case "navigate", "back", "reload", "wait_for_download", "download_cursor", "read_download", "save_download":
 		call.ToolName = "browser." + anyToString(operation["action"])
 		delete(args, "action")
 	case "type":

@@ -9,16 +9,7 @@ reviewed_at: "2026-10-25"
 ---
 # Summary
 
-The primary qualification task owns acceptance. Full RustDesk parity and
-repeatable restoration of historical performance remain unaccepted. Published
-native v0.22.48 with negotiated six-frame delivery averages 46.21 FPS against
-RustDesk 32.54 FPS in three retained motion rounds. Candidate pooled P95 is
-310.60 ms against 207.59 ms, with nine versus three gaps over 250 ms. Candidate
-round three reaches 53.04 FPS/P95 150.20 ms with no long gaps, but the adverse
-first round cannot be replaced. Keep current security, authorization, confirmed
-paint, ordering and recovery safeguards. The [C05 result](remote-desktop-lan-c05-results.md) owns current
-results and open cases; the [decision ledger](remote-desktop-lan-experiment-ledger.md)
-records adopted, rejected and unresolved experiments.
+Full RustDesk parity/historical repeatability remain unaccepted. Native v0.22.48 six-frame, three rounds: mean FPS 46.21 vs 32.54; pooled P95 310.60 vs 207.59 ms; >250ms gaps nine vs three. Round three reaches 53.04 FPS/150.20ms with no gaps, but cannot replace adverse round one. Preserve safeguards; C05/decision ledger own results and experiments.
 
 # Contract
 

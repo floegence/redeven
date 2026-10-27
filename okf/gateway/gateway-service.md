@@ -9,7 +9,7 @@ reviewed_at: "2026-10-26"
 ---
 # Summary
 
-`redeven-gateway` owns one durable member directory, one-time invitation-code consumption, client access grants, policy and restricted forwarding. Runtime verifies the Gateway address and code, previews the signed enrollment descriptor, then explicitly confirms membership. Gateway never dials a Runtime address, scans a network, or installs, starts, stops, updates or resets a Runtime. LAN access works without Cloud. Gateway loss interrupts its network paths; independently authorized Runtime management remains separate.
+redeven-gateway owns durable membership, one-time invitations, client grants, policy and restricted forwarding. Runtime verifies address/code, previews signed enrollment then explicitly joins. Gateway never scans/dials Runtime addresses or manages Runtime lifecycle. LAN needs no Cloud; Gateway loss affects its paths, not independent management authority.
 
 # Contract
 
@@ -48,10 +48,7 @@ Gateway owns membership, policy, invitations, and restricted forwarding. Gateway
 # Evidence
 
 - `redeven:desktop/src/main/gatewayServiceHost.test.ts` — Different release/commit reuse and independent package integrity.
-- `redeven:desktop/scripts/check-gateway-enrollment-electron.mjs` — Optional real historical Gateway binary, current Desktop and Runtime enrollment, unchanged PID/binary/stamp and owned cleanup.
 
 - `redeven:internal/config/cloud_config_version_test.go` - Unsupported configuration fails without rewriting operator state.
-
-- `redeven:internal/agent/cloud_route_test.go` - Route changes preserve Cloud association and fence stale owners.
 
 - `redeven:internal/gatewaymembership/store.go` — Sole durable membership and invitation delivery.

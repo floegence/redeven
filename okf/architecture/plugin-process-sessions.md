@@ -9,14 +9,7 @@ reviewed_at: "2026-10-27"
 ---
 # Summary
 
-ReDevPlugin Process Broker is the single platform owner for local processes
-requested by plugins. Redeven supplies the authenticated user and environment
-scope, permission decision, minimal environment, secret resolver, state root,
-audit sink, and diagnostic sink; it does not expose a second process protocol.
-The observable outcome is an opaque session handle and bounded binary stdin,
-stdout, and stderr operations. The failure boundary is explicit: process
-output may be lost after a bounded buffer overflows, and Host shutdown,
-disable, uninstall, revocation, or owner teardown terminates owned processes.
+ReDevPlugin Process Broker alone owns plugin processes; Redeven supplies authenticated scope, permissions, minimal environment, secrets, state and diagnostics/audit. Opaque handles expose bounded binary stdio, never a second protocol. Overflow may lose output; Host close, disable, uninstall, revocation and owner teardown stop owned processes.
 
 # Contract
 

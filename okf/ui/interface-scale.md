@@ -28,7 +28,3 @@ Scale is presentation only. Composer drafts, permissions, atomic approval batche
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/BodyTypography.browser.test.tsx` - Real dialog/body/control roles, narrow fine-pointer versus touch fields, preserved headings and rename submission.
-
-- `redeven:desktop/scripts/check-body-typography.mjs` - Real Welcome/access workflow and generated recovery/loading documents in Chromium and isolated Electron, root scaling, touch targets, measurements and screenshots.
-
-- `redeven:internal/envapp/ui_src/src/ui/ResourceSurfacePolish.browser.test.tsx` - Complete permission guidance, host bounds, keyboard scrolling, and container title-band parity.

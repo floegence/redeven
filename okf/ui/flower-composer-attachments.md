@@ -34,6 +34,4 @@ Canonical timeline projection does not fall back to a staged client snapshot whe
 
 - `redeven:internal/flower_ui/src/attachments/flowerAttachmentModel.ts` - Unicode, selection, capability, route, and staged-identity helpers define shared semantics.
 
-- `redeven:internal/flower_ui/src/attachments/createFlowerAttachmentController.ts` - Ordered upload, progress, retry, cancel, remove, restore, and capability transitions share one controller.
-
 - `redeven:internal/flower_ui/src/attachments/FlowerAttachmentLane.tsx` - The accessible attachment lane presents bounded item states and icon actions.

@@ -26,6 +26,4 @@ No built-in service identities, copy, assets, commands or application-specific a
 
 - `redeven:internal/managedwebservice/builtin_templates.go` - Loads and strictly maps the released external catalog.
 
-- `redeven:internal/managedwebservice/runtime_resolution.go` - Resolves the current template with persisted instance state and computes the applied Runtime digest.
-
 - `redeven:internal/managedwebservice/runtime_binding.go` - Defines and validates the sole current RuntimeBinding format.

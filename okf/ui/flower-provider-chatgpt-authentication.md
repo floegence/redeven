@@ -33,6 +33,4 @@ Account removal does not delete an OpenAI account or provider configuration. The
 
 - `redeven:internal/flower_ui/src/settings/FlowerProviderDialog.tsx` - Account selection, recovery, sign-out continuity and confirmed local removal.
 
-- `redeven:internal/flower_ui/src/styles/flower.css` - Shared compact-summary geometry and disclosure presentation.
-
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.chatgpt.browser.test.tsx` - Attempt polling without account-list reloads.

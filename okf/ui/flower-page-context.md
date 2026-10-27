@@ -9,15 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Redeven owns Activity page readers and unadmitted page references. A new desktop
-companion conversation captures one removable origin snapshot without requesting
-data or replacing its native editor. Existing conversations never receive it.
-Each explicit opening without a selected thread or New action refreshes it;
-navigation and editing within that opening do not. Submission and
-same-request retry use its exact visible text; the existing draft and transport
-owners retain failed intent. Terminal references include the currently displayed
-screen through the same local capture path as right-click Ask Flower. Unloaded or
-unauthorized page facts are omitted.
+A new desktop companion captures one removable origin snapshot without reads/editor replacement; existing threads do not. Opening with no selection/New refreshes it, later navigation/editing does not. Submission/retry use exact visible text and existing draft/transport recovery. Terminal context captures current screen like Ask Flower; omit unloaded/unauthorized facts.
 
 # Contract
 
@@ -32,7 +24,5 @@ The automatic reference alone cannot enable empty Send.
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerContextPreviewWindow.tsx` - One host presentation for launcher and composer/chat snapshots.
-
-- `redeven:internal/flower_ui/src/icons/FlowerContextIcon.tsx` - Shared reference identity includes a dedicated page-context glyph.
 
 - `redeven:internal/envapp/ui_src/src/ui/flower/flowerPageContext.ts` - Reader functions and bounded immutable page snapshots.

@@ -9,10 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-- Authority: a Manager-owned Reporter publishes each active operation; the Registry owns durable history.
-- Outcome: users can inspect bounded lifecycle output in a focused drawer view and keep a brief completion visible while list and stream refreshes preserve the expanded operation.
-- Invariants: safe command templates, pre-persistence redaction, one operation ID for disclosure, readable terminal feedback, and no Runtime identity derived from output.
-- Failure boundary: persistence, streaming, capture, and validation failures never expose raw output, secrets, credentials, sensitive URL queries, private paths, or control characters.
+A Manager Reporter owns live operation output; Registry owns history. One operation ID preserves drawer disclosure and brief completion through list/stream refresh. Redact safe command templates before persistence; output never defines Runtime identity. Persistence, capture or stream failures must not expose secrets, URL queries, private paths or control characters.
 
 # Contract
 
@@ -33,7 +30,5 @@ Operation output is observability data, not a terminal, shell, downloadable tran
 # Evidence
 
 - `redeven:internal/managedwebservice/operation_progress.go` - Owns concurrent mutation, throttled persistence, limits, sequencing, and redaction.
-
-- `redeven:internal/managedwebservice/npm_host.go` - Streams real npm install and rebuild output through the Reporter.
 
 - `redeven:internal/managedwebservice/custom_host.go` - Streams Host lifecycle output through one collector and closes commands with their actual result.

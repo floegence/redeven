@@ -1,4 +1,4 @@
-/* global chrome, document, fixtureResponses, fixtureWaiters, fixtureWait, fixtureDeliver, fixtureDisconnect */
+/* global chrome, document, window, fixtureResponses, fixtureWaiters, fixtureWait, fixtureDeliver, fixtureDisconnect */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
@@ -56,6 +56,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     if (request.url === '/nested') { response.end('<input aria-label="Nested query"><button onclick="this.textContent=\'Nested done\'">Nested apply</button>'); return; }
     if (request.url === '/outer') { response.end(`<iframe src="http://127.0.0.1:${server.address().port}/nested"></iframe>`); return; }
     response.end("<title>Work</title><input aria-label='Query'><button>Apply</button><a href='/export'>Export</a><button onclick=\"window.open('/popup')\">Open details</button>"
+      + `<button onclick="window.exportCount=(window.exportCount||0)+1;const a=document.createElement('a');a.href=window.URL.createObjectURL(new Blob(['fixture,'+window.exportCount]));a.download='same.csv';document.body.append(a);a.click();setTimeout(()=>window.URL.revokeObjectURL(a.href),1000)">Blob export</button>`
       + (request.url === '/task' ? `<iframe src="http://localhost:${server.address().port}/outer"></iframe>` : ''));
   });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
@@ -339,6 +340,29 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     assert.equal(downloaded.result.download.state, 'completed', JSON.stringify(downloaded));
     assert.equal(downloaded.result.download.filename, 'extension.csv');
     assert.equal(downloaded.result.download.path, undefined, 'extension must not expose filesystem paths');
+    await t.test('each Blob export has one source identity, including distinct same-name exports', async () => {
+      const ids = new Set();
+      for (let index = 1; index <= 2; index++) {
+        const cursor = (await execute('browser.download_cursor')).result.cursor;
+        const clicked = await execute('computer.action', { action: 'click', selector: { role: 'button', name: 'Blob export', exact: true } });
+        assert.equal(clicked.error, undefined, JSON.stringify(clicked));
+        const completed = await execute('browser.wait_for_download', { after: cursor, timeout_ms: 5000 });
+        assert.equal(completed.error, undefined, JSON.stringify(completed));
+        assert.equal(completed.result.download.state, 'completed');
+        ids.add(completed.result.download.id);
+        const sourceFile = owners.get(selected.id).source.downloads().find(file => file.state.id === completed.result.download.id);
+        assert.ok(sourceFile);
+        const chunks = [];
+        for await (const chunk of await sourceFile.open(t.signal)) chunks.push(chunk);
+        assert.equal(Buffer.concat(chunks).toString(), 'fixture,' + index);
+        const read = await execute('browser.read_download', { id: completed.result.download.id });
+        assert.equal(read.error, undefined, JSON.stringify(read));
+        assert.equal(Buffer.from(read.result.base64, 'base64').toString(), 'fixture,' + index);
+        assert.equal(read.result.truncated, false);
+      }
+      assert.equal(ids.size, 2);
+      assert.equal(await task.evaluate(() => window.exportCount), 2);
+    });
     assert.deepEqual(await worker.evaluate(async () => (await chrome.tabs.query({ active: true })).map(tab => tab.id)), activeBeforeDownload);
     await t.test('native popup remains a separate unbound target', async () => {
     const popupResult = await execute('computer.action', { action: 'click', selector: { role: 'button', name: 'Open details' } });

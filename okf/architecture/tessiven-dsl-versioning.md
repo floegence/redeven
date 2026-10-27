@@ -9,14 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-The Runtime owns Tessiven DSL schema selection and explicit forward migrations.
-New documents use `apiVersion: redeven.io/tessiven/v1.1.0`. Supported legacy
-`redeven.io/tessiven/v1` and `v1.0.0` remain readable through the reviewed
-`v1 -> v1.0.0 -> v1.1.0` chain. Each edge updates only the version scalar;
-new group packing rules are opt-in and older documents retain automatic layout. Reads project current structured data while preserving historical YAML,
-digest and revision identity. Authorized edits save a new current snapshot.
-Unknown versions, invalid source/target documents or migration failures leave
-stored data intact; users need a compatible Runtime or a valid repair.
+Runtime owns schema selection and explicit v1→v1.0.0→v1.1.0 migrations. New documents use redeven.io/tessiven/v1.1.0; each edge changes only its version scalar, preserving legacy automatic layout. Reads preserve YAML/digest/revision; authorized edits save current snapshots. Invalid/unknown versions or migration failure leave storage unchanged and require compatible Runtime/repair.
 
 # Contract
 

@@ -35,6 +35,4 @@ Only Desktop chooses managed Runtime recovery. Optional platform display fields 
 
 - `redeven:desktop/src/main/desktopBundle.ts:1` - Runtime-only bundle identity and file validation.
 
-- `redeven:desktop/src/main/desktopWelcomeRuntimeState.ts:1` - Local readiness hydration with explicit state and Runtime roots.
-
 - `redeven:desktop/src/main/runtimeProcess.ts:1` - Local inventory and status lookup path contract.

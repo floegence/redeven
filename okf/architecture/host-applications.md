@@ -9,15 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Redeven owns application discovery, authorization and independent client sharing
-leases. Applications run as the host OS user without a container or virtual
-machine. Opening an application always admits or resumes sharing for the current
-client; closing that client's viewer releases only its lease and preserves the
-application. The last lease ends the route and transport without stopping the process;
-ordinary quit and confirmed force quit are separate explicit actions. Sharing
-routes are ephemeral. Surviving Linux instances require verified recovery, while
-macOS uses native OS inventory. Missing capabilities and failed capture remain
-visible and never imply that an application exited.
+Redeven owns discovery, authorization and independent client sharing leases for host-user apps, without containers/VMs. Open admits/resumes sharing; last-viewer closure ends transport, not the process. Quit/confirmed force quit are explicit. Linux recovery is verified; macOS uses OS inventory. Missing capability/capture never proves exit.
 
 # Contract
 

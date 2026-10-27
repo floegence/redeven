@@ -32,8 +32,4 @@ Canonical Floret messages remain the durable display source. Unavailable, forbid
 
 - [Inline media browser acceptance](../../internal/envapp/ui_src/src/ui/FlowerSurface.richMedia.browser.test.tsx): direct floating and file preview actions, focus restoration, retained inline state, and content geometry at desktop and narrow widths.
 
-- [Isolated Electron acceptance for Welcome and built Env App](../../desktop/scripts/check-flower-media.mjs): build Env App, then run `pnpm --dir desktop test:flower-media`; records both 30-second observations under `desktop/dist/flower-media-acceptance`.
-
 - [Markdown integration](../../internal/flower_ui/src/chat/markdown/FlowerMarkdownBlock.tsx)
-
-- [Resource mapping](../../internal/flower_ui/src/chat/markdown/flowerMarkdownMedia.ts)

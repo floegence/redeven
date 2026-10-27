@@ -30,6 +30,4 @@ One pure presenter owns trusted operation/title/description/command/target/risk 
 
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Canonical approval projection, per-interaction guards, batches, and focus handoff.
 
-- `redeven:internal/flower_ui/src/FlowerApprovalRow.tsx` - Stable disclosure, exact copying, and row-local feedback.
-
 - `redeven:internal/flower_ui/src/flowerApprovalPresentation.ts` - Trusted operation labels, targets, and risk fields.

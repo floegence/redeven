@@ -30,5 +30,3 @@ Floe owns reusable pickers/controls/icons. Redeven owns filesystem adaptation, p
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.tsx` - Owns the aggregated console, structured Compose and container-run forms, Exec placement, action presentation, and exact-target navigation.
 
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.test.tsx` - Verifies exact run serialization, localhost port defaults, Exec lifecycle, file selection, ordered Compose requests, navigation, actions, and failure behavior.
-
-- `redeven:internal/envapp/ui_src/src/ui/widgets/ContainerExecTerminal.tsx` - Adapts a product-owned Exec session to the existing terminal renderer and transport.

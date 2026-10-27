@@ -36,6 +36,4 @@ Gateway owns reverse-stream admission and bounded forwarding only. No path in th
 
 - `redeven:internal/gatewaymembership/listener.go` — Fixed stream dispatch and SDK relay.
 
-- `redeven:internal/gatewaymembership/runtime_connection.go` — Outbound controller and TLS application listener.
-
 - `redeven:internal/gatewayflow/budget.go` — Shared admission accounting.

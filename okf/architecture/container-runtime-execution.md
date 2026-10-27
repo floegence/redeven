@@ -32,6 +32,4 @@ Endpoint identifiers remain internal, and current endpoint resolution precedes e
 
 - `redeven:internal/containerengine/adapter.go` - Defines the shared typed engine boundary.
 
-- `redeven:internal/containerengine/resources_v4.go` - Discovers one active target per engine and resolves opaque endpoint routing.
-
 - `redeven:internal/containerengine/runtime_detection_test.go` - Proves immediate stopped-daemon feedback, independent discovery deadlines, and request cancellation with a virtual clock.

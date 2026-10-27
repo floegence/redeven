@@ -9,13 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-This guide qualifies the [client input contract](../architecture/host-application-input.md)
-through actual application receipts and saved bytes. Published upstream qualification
-owns native input adapters and prepared Xpra event ownership. Redeven verifies its
-viewer, authenticated transport, launch and recovery adapters. Sending a request or
-focusing a DOM element is insufficient. Existing applications retain their backend
-and loaded resources. Real system candidate selection and physical mobile acceptance
-remain separate; simulated events must never be reported as those checks.
+Qualify client input using real application receipts/saved bytes. Upstream owns native/Xpra adapters; Redeven verifies viewer, authorized transport, launch/recovery. Request dispatch or DOM focus is insufficient. Existing apps retain backends/resources. Simulated events cannot certify real system candidates or physical mobile input; those require separate acceptance.
 
 # Contract
 

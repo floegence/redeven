@@ -9,7 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Runtime owns a public client endpoint independently of the Desktop that starts it. New environments explicitly use HTTP on `localhost:23998`; HTTP needs no certificate. Network exposure retains local browser access and adds reachable network addresses; it requires a fixed port and an effective environment password. HTTPS is an independent explicit choice, with strict certificate validation and client trust. Pages and Flowersec WS/WSS share one public port. A TLS failure never downgrades to HTTP, and the authenticated private Desktop bridge never becomes a public fallback.
+New Runtime endpoints explicitly use HTTP localhost:23998; network exposure retains local access and requires fixed port/effective password. HTTPS is separate with strict certificate/trust checks. Pages and WS/WSS share the public port. TLS failure never downgrades; private Desktop bridge cannot become public fallback.
 
 # Contract
 

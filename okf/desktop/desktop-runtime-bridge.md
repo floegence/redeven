@@ -24,5 +24,4 @@ Runtime control is Desktop coordination, not a general network API or plugin gra
 # Evidence
 
 - `redeven:desktop/src/main/runtimeLifecycleCoordinator.ts` - Single target owner.
-- `redeven:desktop/src/main/desktopSessionContext.ts` - Explicit route and private document transport.
 - `redeven:desktop/src/main/codespaceNativeSession.ts` - Isolated request authentication.

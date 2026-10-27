@@ -9,10 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-- Authority: Floret v7 parent-scoped `ThreadRuntime.List` owns child membership; the child's complete `ThreadView` is the only detail-content authority.
-- Outcome: Flower opens a stable, parent-scoped detail window immediately and updates it live without polling or layout-changing sync chrome.
-- Invariants: every public child route uses canonical `thread_id`; `task_name` is required and never guessed from title, role, description, or message.
-- Failure boundary: malformed summaries, missing canonical identity, parent-child mismatch, or invalid detail contracts are rejected rather than mapped through legacy aliases.
+Floret parent-scoped ThreadRuntime.List owns membership; complete child ThreadView alone owns details. Open a stable immediate live window without polling/layout-changing sync UI. Routes use thread_id and explicit task_name, never inferred aliases. Malformed identity/contracts or parent-child mismatch fail rather than accepting legacy substitutes.
 
 # Contract
 

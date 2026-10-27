@@ -43,5 +43,3 @@ The companion never auto-expands for completion, failure, approval, or user inpu
 - `redeven:internal/envapp/ui_src/src/ui/plugins/ActivityPluginSurfacePage.tsx` - Active-page trusted bridge interaction projection.
 
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx` - Pinned plugin interaction dismisses Flower without retiring either product surface.
-
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Env App separates the published companion shell Portal from the stable product Portal and all explicit placement hosts.

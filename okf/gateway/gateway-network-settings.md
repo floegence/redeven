@@ -9,7 +9,7 @@ reviewed_at: "2026-10-26"
 ---
 # Summary
 
-Gateway owns three independent network settings: administrator-confirmed Runtime share endpoints, local listener bindings, and optional request Host restrictions. A verified host administrator saves them atomically. Listener edits take effect on the next explicit start or restart; the current sockets remain active. Empty Host restrictions permit every request hostname while all existing TLS, invitation, member and Desktop authorization continues to apply. Invalid configuration or failed persistence leaves the previous durable and live configuration intact.
+Gateway independently owns admin-confirmed share endpoints, listeners and optional Host restrictions, saved atomically by verified host admin. Listener edits require explicit restart; live sockets persist. Empty restrictions allow hostnames without weakening TLS/invitation/member/Desktop authorization. Invalid input or failed writes preserve saved/live state.
 
 # Contract
 
@@ -35,5 +35,3 @@ Member state v4 appends `allowed_hosts` to the existing endpoint state. Future v
 - `redeven:internal/gatewaymembership/network.go` — Validation, atomic persistence and original Host matching.
 
 - `redeven:internal/gatewaymembership/network_test.go` — Migration, preserved member authority, future rejection and failed-write rollback.
-
-- `redeven:internal/gatewaymembership/listener.go` — Product routing and published Flowersec upgrade admission.

@@ -9,14 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Runtime owns observer-bound private input and pixels; Floret owns the unresolved
-interaction and continuation through the [takeover contract](computer-use-takeover.md).
-The user can finish a secret or verification step without exposing its content
-to model history. Every operation binds the current observer, viewer revision,
-thread, run and target. Unknown input outcomes never replay. Disconnect disables
-input immediately; after the canonical answer, Flower resumes in a new Run and
-judges the current page through a fresh observation. Private input resumes only
-after a newly decoded frame matches the current observer, interaction and target.
+Runtime owns observer-bound private input/pixels; Floret owns takeover/continuation. Bind operations to current observer, revision, thread/run/target; never expose secrets or replay uncertain effects. Disconnect revokes input. Canonical answer starts a new Run with fresh observation; private input additionally waits for decoded matching observer/interaction/target pixels.
 
 # Contract
 
@@ -34,5 +27,3 @@ Browser observation is a bounded protection, not proof of atomic safety across a
 - `redeven:internal/ai/computer_user_control.go` - authenticated non-model input.
 
 - `redeven:scripts/check_computer_host_safety.mjs` - isolated real-browser safety and private form fixtures with cleanup.
-
-- `redeven:internal/envapp/ui_src/scripts/checkDesktopPrivateComputer.mjs` - isolated built Desktop, scripted provider, real private stream, delayed pixels, header FPS, paste, native IME and handback.

@@ -38,7 +38,3 @@ Verified host access owns Gateway administration. URL enrollment grants only env
 # Evidence
 
 - `redeven:internal/runtimegateway/trust/access_code_lifecycle_test.go` — Expiry, atomic consumption, response-loss retry, persistence and migration.
-
-- `redeven:internal/gatewayservice/client_authority_test.go` — Service-side management rejection and signed host identity preservation.
-
-- `redeven:internal/gatewaymembership/reverse_access_test.go` — Live session cancellation, pending-ticket denial and unaffected other clients and Runtime connections.

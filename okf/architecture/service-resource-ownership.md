@@ -9,10 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-- Authority: the Registry records resource allocations and identities; engine and filesystem inspection establish current facts.
-- Outcome: separate instances, including installations in separate Runtime state directories, receive independent default data and workspace resources.
-- Invariants: names alone never confer ownership; stopped containers count as references; external resources and unverified legacy assets cannot become implicitly deletable.
-- Failure boundary: inspection or identity uncertainty preserves resources and directs users to the management review. No running data is moved or copied during upgrade.
+Registry records allocations/identity; engine/filesystem inspection proves current facts. Instances across Runtime state roots get independent default data/workspaces. Names grant no ownership; stopped containers count. External/unverified legacy resources cannot become deletable. Uncertainty preserves resources for review; upgrades never move/copy running data.
 
 # Contract
 
@@ -35,7 +32,5 @@ Existing volume names and directories are not renamed, moved, or recreated durin
 # Evidence
 
 - `redeven:internal/managedwebservice/runtime_binding.go` - Instance-scoped bindings and preserved legacy locations.
-
-- `redeven:internal/managedwebservice/install_plan.go` - Final workspace review and stale-directory rejection.
 
 - `redeven:internal/managedwebservice/runtime_resource.go` - Durable container allocation and lost-response verification.

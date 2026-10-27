@@ -9,14 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-The Redeven viewer owns product controls and local feedback over published Floe
-input and native playback. The [remote desktop session contract](remote-desktop.md)
-owns authorization, capture generations and native authority. Only current painted
-control permits input. Separate-cursor control frames enable immediate client
-pointer movement independently of later frame arrival; embedded-cursor frames
-hide the local pointer. Local controls remain usable during recovery. Disconnect
-stops local input and playback immediately, then confirms server removal or offers
-an explicit retry. It never presents a frozen desktop as a live connection.
+Redeven controls/feedback use published input/playback; session contracts own authorization and capture generations. Only painted current control admits input. Separate cursor frames permit immediate pointer motion; embedded cursor hides local pointer. Recovery keeps local controls usable. Disconnect stops input/media, confirms removal or offers Retry; frozen pixels never imply connection.
 
 # Contract
 

@@ -9,7 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Desktop owns CodeSpace system-browser admission and listener lifetime. The trusted environment root sends a resource ID; main resolves the existing environment transport and opens a short-lived entry on an isolated loopback hostname. An ordinary browser exchanges that entry for a resource-bound session and uses native HTTP and WebSockets. Runtime remains the authority for permissions, AccessGate, and the running editor generation through the [native CodeSpace contract](codespace-native-access.md). The private bridge token never enters the browser. Closing the environment ends its browser routes; opening errors leave no newly authorized listener behind.
+Desktop resolves a trusted resource ID through the environment transport and opens an isolated short-lived loopback entry. Browser exchanges it for resource-bound HTTP/WS sessions; private bridge tokens never enter it. Runtime owns permissions, AccessGate and editor generation. Environment closure ends routes; failed open leaves no new authorized listener.
 
 # Contract
 
@@ -36,7 +36,5 @@ No upstream package, public listener, SSH forwarding process, editor injection, 
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/pages/EnvCodespacesPage.tsx` - Desktop browser selection submits resource intent after startup.
-
-- `redeven:desktop/src/main/main.ts` - Trusted sender, shared route selector, and environment-owned disposal.
 
 - `redeven:desktop/src/main/codespaceBrowserSessions.ts` - Profile identity, concurrent setup, explicit reopen, and failure cleanup.

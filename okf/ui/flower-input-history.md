@@ -30,6 +30,4 @@ Recall never submits, changes canonical messages, restores attachments or overwr
 
 - `redeven:internal/flower_ui/src/composer/flowerInputHistory.ts` - Selects canonical ordinary user text without restoring metadata or structured answers.
 
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Integrates released navigation with draft revisions, keyboard ownership, completion, visibility and localized announcements.
-
 - `redeven:internal/flower_ui/src/composer/flowerInputHistory.test.ts` - Verifies candidate authority, repeated text and secret-answer exclusion.

@@ -38,6 +38,4 @@ Desktop transitions close mobile navigation and restore the framework toolbar wi
 
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Coordinates requested navigation, Shell integration, handoff, and disclosure triggers.
 
-- `redeven:internal/envapp/ui_src/src/ui/MobileShellTools.tsx` - Places shared tools inside one navigation panel.
-
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginPanel.tsx` - Retains plugin content while Shell owns mobile placement.

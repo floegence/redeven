@@ -28,5 +28,4 @@ Floret owns summary, validation, convergence and installation. Never reclassify 
 # Evidence
 
 - `redeven:internal/ai/floret_thread_context.go` - Divider anchors and usage mapping.
-- `redeven:internal/flower_ui/src/chat/flowerContextPresentation.ts` - Usage and localized noop presentation.
 - `redeven:internal/flower_ui/src/runtimeCurrentView.test.ts` - Complete context/execution projection.

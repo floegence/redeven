@@ -31,6 +31,4 @@ The public Runtime does not configure LiteLLM, store its master key, settle bill
 
 - `redeven:internal/ai/platform_catalog.go` — request-local catalog and owner-scoped preference projection.
 
-- `redeven:internal/ai/platform_gateway.go` — trusted origin, renewal, streaming, and native envelope.
-
 - `redeven:internal/ai/floret_provider.go` — Floret identity and bounded auxiliary requests.

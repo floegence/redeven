@@ -32,6 +32,4 @@ A reference is user-supplied information, never authority or execution location.
 
 - [Shared surface](../../internal/flower_ui/src/FlowerSurface.tsx), [reference type dispatch](../../internal/flower_ui/src/composer/flowerDraftReferenceModel.ts) and [thread menu](../../internal/flower_ui/src/threads/FlowerThreadList.tsx).
 
-- [Strict context action](../../internal/flower_ui/src/contextActionWire.ts) and [admission authorization](../../internal/ai/thread_reference.go).
-
 - [Shared runtime identity](../../internal/flower_ui/src/flowerRuntimeIdentity.ts) and [Env App adapter regression](../../internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.test.ts).

@@ -10,13 +10,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Redeven supplies authenticated host facts and source policy to ReDevPlugin; it
-does not accept plugin ownership, authority, provenance, or trust from browser
-payloads. Every HTTP route passes explicit authentication, origin, CSRF, and
-closed-action authorization, and direct Host calls pass the same owner/action/
-resource policy. External package source, signature, execution approval, update
-eligibility, and permission are independent facts. Integrity failures, invalid
-runtime identity, and capability scope mismatches fail closed.
+ReDevPlugin receives authenticated host identity/source policy, never browser-claimed ownership/trust. HTTP checks auth, origin, CSRF and closed-action policy; direct calls check owner/action/resource. Package provenance, signature, execution approval, update eligibility and permission are independent. Integrity, runtime identity or scope mismatch fails closed.
 
 # Contract
 
@@ -69,7 +63,5 @@ Redeven security adapters may narrow authority; they may not mint platform token
 # Evidence
 
 - `redeven:internal/redevpluginintegration/session_adapter.go:1` - Derives exact owner hashes and bounded permission cache entries.
-
-- `redeven:internal/redevpluginintegration/security_adapter.go:1` - Implements the four-step web security contract.
 
 - `redeven:internal/redevpluginintegration/adapters_test.go:1` - Covers origin, CSRF, session, and action denial.

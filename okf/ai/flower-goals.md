@@ -43,5 +43,3 @@ Default Flower tools, capability lists and prompts omit write_todos and current 
 - redeven:internal/ai/activity_goal_test.go — public detail, timeline and live Goal   fidelity, closed display fields, exact long text and reviews during user waiting.
 
 - redeven:internal/ai/thread_goal.go — authorization and typed mutation mapping.
-
-- redeven:internal/ai/thread_goal_test.go — empty creation, provider reflection,   replay, conflicts, lost-response recovery, Stop during reflection, default Todo   exclusion and retained attachment submission.

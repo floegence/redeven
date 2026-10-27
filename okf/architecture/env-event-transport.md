@@ -36,6 +36,4 @@ An observer cannot choose another upstream, session identity or native HTTP tran
 
 - `redeven:internal/envapp/ui_src/src/ui/services/sessionHTTP.ts` - Product binding to the lifecycle's fetch and event APIs, with no retry or fallback.
 
-- `redeven:internal/envapp/ui_src/src/ui/services/connectionRuntime.ts` - All connection profiles bind and release the current lifecycle.
-
 - `redeven:internal/agent/agent.go` - Shared local and remote Env session proxy registration against the fixed AppServer.

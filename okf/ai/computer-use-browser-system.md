@@ -9,10 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-- Authority: the browser installation manager owns package and launch readiness; a short-lived Runtime command performs the explicitly authorized system transaction.
-- Outcome: Ubuntu user-namespace restrictions produce an actionable preparation step, and normal opens reuse the prepared version without repeated authorization.
-- Invariants: keep Chromium sandboxing and global AppArmor settings; only compiled catalog bytes may occupy a fixed, root-owned system path; no credentials cross the business API.
-- Failure boundary: missing dependencies, unavailable sandbox and unknown launch failures stay distinct; cancelled or failed publication cannot claim readiness or replace saved browser data.
+Installation manager owns readiness; a short Runtime command performs the approved system transaction. Ubuntu namespace restrictions get explicit preparation, then version reuse. Preserve Chromium sandbox/global AppArmor; admit only catalog bytes at a fixed root-owned path, without API credentials. Dependencies, sandbox and unknown launch failures stay distinct; failed/cancelled publication preserves data.
 
 # Contract
 
@@ -33,7 +30,5 @@ The operation retains personal browser processes, browser profiles, login state,
 # Evidence
 
 - `redeven:internal/browserinstall/system_readiness.go` - Single readiness state and structured action.
-
-- `redeven:internal/browserinstall/system_preparation.go` - Environment operation, private authorization stream and bounded lifetime.
 
 - `redeven:internal/browserinstall/system_linux.go` - Fixed privileged publication, trusted paths and exact AppArmor policy.

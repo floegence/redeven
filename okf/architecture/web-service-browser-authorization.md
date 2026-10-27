@@ -26,6 +26,4 @@ The cookie admits one proxy origin, never Local UI, Provider/Gateway, Flowersec 
 
 - `redeven:internal/localui/desktop_browser_handoff.go:1` - Runtime owns bounded one-time entries, clean redemption, exact session replacement, expiry, and cookie admission.
 
-- `redeven:internal/localui/localui.go:240` - The existing private bridge selects header or exact browser-session admission before the common forward backend.
-
 - `redeven:internal/codeapp/appserver/server.go:301` - The reserved browser cookie is stripped before upstream dispatch and filtered from upstream responses.

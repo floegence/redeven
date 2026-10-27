@@ -44,5 +44,3 @@ One connection controller owns Runtime Cloud execution. Unknown or retired confi
 - `redeven:internal/runtimecloud/protocol/contracts.go` — Mirrored independent identity, binding, recovery and route DTOs.
 
 - `redeven:internal/gatewaycloud/protocol/testdata/wire-v3.json` — Shared machine-management wire fixture.
-
-- `redeven:internal/agent/cloud_route_test.go` — Preflight, idempotent commit, cancellation and owner fences.

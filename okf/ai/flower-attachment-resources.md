@@ -9,10 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-- Authority: Redeven owns attachment bytes, metadata, owner scope, quota, and retention claims; Floret owns the canonical turn and attachment membership.
-- Outcome: clients upload bytes once and send opaque `attachment_id` values, while Flower displays an `attachment://v1/...` locator and providers receive only revalidated canonical resources.
-- Invariants: physical paths never leave the service, user ownership comes only from the authenticated session, and a product claim never substitutes for an exact Floret membership read.
-- Failure boundary: owner mismatch, unsupported media, quota exhaustion, missing canonical membership, metadata drift, digest drift, or missing bytes fails closed without weakening another reference.
+Redeven owns bytes/metadata, authenticated owner, quotas and retention; Floret owns turn membership. Upload once, send opaque attachment_id, display attachment://v1 locators and revalidate provider resources. Never expose paths or substitute product claims for canonical membership. Owner/media/quota/membership/metadata/digest/byte failures reject only the affected reference.
 
 # Contract
 
@@ -37,7 +34,5 @@ Redeven does not inspect or migrate Floret storage, persist message ordering, ex
 # Evidence
 
 - `redeven:internal/ai/threadstore/schema.go` - Product v1 declares user-owned attachment resources, attempts, claims, and neutral staging targets without legacy upload shapes.
-
-- `redeven:internal/ai/threadstore/upload_staging.go` - Staging capability hashes, exact claims, release, and atomic command transfer are enforced in the resource store.
 
 - `redeven:internal/ai/threadstore/uploads.go` - Transactional idempotency, quotas, claims, and last-reference deletion are enforced in the resource store.

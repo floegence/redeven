@@ -123,9 +123,3 @@ proof of runtime behavior or physical-host qualification.
 
 - `redeven:scripts/check_redevplugin_release_artifacts.sh`: upstream publication and registry readbacks.
 - `redeven:scripts/stage_redevplugin_release_artifacts.sh`: exact native crate graph and signing.
-- `redeven:scripts/redevplugin_release_contract.test.mjs` and `redeven:scripts/redevplugin_manifest_download.test.mjs`: CLI execution, evidence and strict TLS/transfer admission.
-- `redeven:scripts/prepare_redevplugin_rust_toolchain.sh` and `redeven:scripts/redevplugin_rust_toolchain.test.mjs`: exact cache/retry policy.
-- `redeven:scripts/check_redevplugin_consumption_gate.sh`: marker, binary target and signature admission.
-- `redeven:scripts/check_desktop_redevplugin_package.sh` and `redeven:scripts/extract_desktop_runtime.py`: native installer inventory and receipts.
-- `redeven:desktop/scripts/sign-packaged-runtime.mjs`: signed resources and startup checks.
-- `redeven:scripts/collect_release_artifacts.mjs` and `redeven:.github/workflows/release.yml`: closed four-target publication.

@@ -36,6 +36,4 @@ System-browser authorization and the persisted access-mode decision remain owned
 
 - `redeven:desktop/src/shared/desktopShellWebServiceWindowIPC.ts:1` - The semantic Desktop IPC validates HTTP(S) URLs and DNS-safe forward identities.
 
-- `redeven:desktop/src/main/navigation.ts:256` - Desktop recognizes the exact private Web Service route and projects it as the target address.
-
 - `redeven:desktop/src/main/webServiceLoopbackGateway.ts` - The isolated gateway maps redirects for the current protected Forward back to application-root paths without accepting other route identities.

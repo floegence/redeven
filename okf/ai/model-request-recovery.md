@@ -25,6 +25,4 @@ Redeven neither repairs old cancellation records nor owns a second retry loop.
 
 - `redeven:internal/ai/floret_request_timeout_integration_test.go` - Heartbeat and incomplete-argument deadlines, typed failures, no dispatch, and released admission/HTTP resources.
 
-- `redeven:internal/ai/model_gateway_terminal_deadline_test.go` - Terminal text, tools, truncation and content filtering release an open HTTP stream.
-
 - `redeven:internal/ai/provider_failure.go` - Structured response-time retry advice and safe diagnostics.

@@ -47,15 +47,3 @@ Floret remains the runtime/persistence owner; Floe owns generic parsing; Redeven
 # Evidence
 
 - [Indexed record tests](../../internal/flower_ui/src/runtimeThreadRecord.test.ts)
-
-- [Reactive record tests](../../internal/flower_ui/src/runtimeThreadRecord.client.test.ts)
-
-- [Incremental model and semantic differential tests](../../internal/flower_ui/src/chat/markdown/streamingMarkdownModel.test.ts)
-
-- [Soft reveal, stable ranges and motion preference checks](../../internal/envapp/ui_src/src/ui/FlowerMarkdown.softReveal.browser.test.tsx)
-
-- [Browser transcript completion and corrected-snapshot list regression](../../internal/envapp/ui_src/src/ui/FlowerSurface.streamingStability.browser.test.tsx)
-
-- [Frame queue Unicode soak, budgets, gaps and epoch recovery](../../internal/flower_ui/src/flowerLiveFrameQueue.test.ts)
-
-- [Browser/Desktop synthetic performance qualifier](../../scripts/check_flower_streaming_performance.mjs)

@@ -47,7 +47,3 @@ The matrix is evidence for its named versions and scenarios, not a distribution 
 # Evidence
 
 - `redeven:internal/hostapps/manager_test.go` - Installed GIO and Xpra launch, resume and stop checks.
-
-- `redeven:scripts/check_macos_host_application_input_targets.py` - Actual Chrome and Terminal input receipts.
-
-- `redeven:scripts/check_macos_host_application_startup.py` - Native attach, reconnect and capture lifecycle measurements.

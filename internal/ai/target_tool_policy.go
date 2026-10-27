@@ -124,6 +124,7 @@ type TargetToolAttachmentResolver interface {
 }
 
 type TargetToolCall struct {
+	downloadWriter        func(context.Context, func(context.Context, int) (map[string]any, error)) (map[string]any, error)
 	bindSelection         bool
 	fullAccess            bool
 	progress              func(mode, reason string)
@@ -202,10 +203,10 @@ func requiredTargetCapabilities(toolName string) []string {
 		return []string{"read"}
 	case "file.edit", "file.write", "apply_patch":
 		return []string{"write"}
-	case "computer.screenshot", "computer.observe", "browser.wait_for_download", "browser.download_cursor":
+	case "computer.screenshot", "computer.observe", "browser.wait_for_download", "browser.download_cursor", "browser.read_download", "computer.applications":
 		return []string{"observe"}
 	case "computer.exec", "computer.click", "computer.double_click", "computer.type", "computer.key", "computer.scroll", "computer.drag", "computer.wait",
-		"browser.navigate", "browser.back", "browser.reload":
+		"browser.navigate", "browser.back", "browser.reload", "browser.save_download":
 		return []string{"interaction"}
 	default:
 		return nil

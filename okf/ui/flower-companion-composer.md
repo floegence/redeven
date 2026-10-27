@@ -30,6 +30,4 @@ This concept owns content presentation only. [Flower companion presence](flower-
 
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Retained editor and explicit entry decisions.
 
-- `redeven:internal/flower_ui/src/styles/flower.css` - Compact content isolation and expanded text/toolbar layout.
-
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.composerFocus.browser.test.tsx` - Stable resting appearance across focus cycles in both themes and presentations, with forced-colors focus preserved.

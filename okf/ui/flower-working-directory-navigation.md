@@ -37,6 +37,4 @@ Directory callbacks express product navigation, not file-action authorization or
 
 - `redeven:internal/flower_ui/src/threads/FlowerThreadList.tsx` - ThreadID-owned   row menus retain a captured working directory across summary replacement.
 
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Transcript selection,   draft and conversation target resolution, capability dispatch, and destination focus handoff.
-
 - `redeven:internal/flower_ui/src/chat/FlowerWorkingDirectoryControl.tsx` -   Shared accessible header and selector presentation with suffix-preserving names.

@@ -28,6 +28,4 @@ Redeven must consume published Floret releases and must not persist a second cop
 
 - `redeven:internal/ai/tools/registry.go:98` - Builtin tool definitions declare mutation, approval, and presentation specs.
 
-- `redeven:internal/ai/run.go` - `terminal.exec` dispatch starts the hosted terminal process lifecycle.
-
 - `redeven:internal/ai/tools/types.go:126` - `ToolPresentationSpec` carries renderer, operation, label, fallback, compact payload, result payload, and activity chip fields.

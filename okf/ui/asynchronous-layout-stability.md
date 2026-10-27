@@ -9,7 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Floe owns reusable control geometry; Redeven owns the localized states and feedback placement of its product surfaces. Starting or finishing a request, copying a value, refreshing retained data, and decoding media must not push adjacent controls or content. Normal views stay compact without empty feedback rows. Blocking errors remain visible, and retained-content errors remain accessible through a compact disclosure in an existing action row. User navigation, explicit disclosure, and newly added records may change layout; asynchronous feedback must not simulate those actions.
+Floe owns shared geometry; Redeven owns localized feedback. Request/copy/refresh/media completion cannot push adjacent content. Keep compact normal views without empty feedback rows; blocking errors stay visible, retained-content errors use existing-row disclosure. User navigation/disclosure/new records may change layout; async feedback cannot simulate them.
 
 # Contract
 
@@ -29,7 +29,3 @@ Normal-state acceptance measures the top of actual content, including both chart
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/styles/hostApplicationAppearance.browser.test.tsx` - Standalone application controls keep localized labels on one line across Chromium, Firefox, and WebKit.
-
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvCodespacesPage.browser.test.tsx` - Card action alignment and complete localized labels through startup and editor preparation.
-
-- `redeven:internal/envapp/ui_src/src/ui/widgets/RuntimeMonitorDensity.browser.test.tsx` - Compact chart and active-session table positions.

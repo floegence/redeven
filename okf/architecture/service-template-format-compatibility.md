@@ -9,10 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-- Authority: the released `redeven-service-templates/template` package owns schemas, historical data adapters, and current types. Runtime owns authorization and execution.
-- Outcome: formally supported old template directories remain usable after a Redeven upgrade, with their original filenames, bytes, modes, digest, and source commit intact.
-- Invariants: compatibility operates in memory, feeds one current executor, never persists an adapted execution definition, and never installs, upgrades, or restarts a service by itself.
-- Failure boundary: invalid historical shapes, ambiguous entrypoints, incorrect identity, and future formats fail explicitly without altering files. Unsupported formats require a compatible release or author correction.
+Released template code owns schemas, historical adapters and current types; Runtime owns execution/authorization. Supported old directories retain bytes, filenames, modes, digest and commit. Adapt only in memory into one executor; no persisted definitions or automatic lifecycle effects. Invalid, ambiguous, future or unsupported formats fail unchanged with explicit recovery.
 
 # Contract
 
@@ -42,7 +39,5 @@ The npm SDK publishes the corresponding types, schemas, and GitHub acquisition c
 # Evidence
 
 - `redeven:go.mod` - Pins the formally released upstream reader and data types.
-
-- `redeven:internal/managedwebservice/templates.go` - Uses published validation and resolves imported source templates.
 
 - `redeven:internal/managedwebservice/template_sources.go` - Reads original directories through the published adapter and applies Runtime policy.

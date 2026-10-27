@@ -49,6 +49,4 @@ The [qualification contract](computer-use-qualification.md) owns acceptance and 
 
 - `redeven:internal/ai/computer_runtime.go` - target resources and readiness owner.
 
-- `redeven:desktop/src/main/runtimeFlowerRoutes.ts` - exact Desktop IPC routing to Runtime endpoints.
-
 - `redeven:internal/ai/run.go` - canonical tool boundary and partial error results.

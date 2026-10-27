@@ -28,5 +28,3 @@ Installation and connection never grant website access or authorize a tab. Uncer
 - `redeven:internal/ai/computer_extension_onboarding.go` - fixed native destinations and stable package staging.
 
 - `redeven:internal/ai/computer_extension_onboarding_test.go` - destination rejection, sandbox arguments and installation replacement.
-
-- `redeven:internal/flower_ui/src/FlowerChromeConnection.tsx` - bounded connection inventory observation and disposal.

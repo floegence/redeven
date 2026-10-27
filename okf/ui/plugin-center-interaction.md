@@ -37,6 +37,4 @@ Management presentation never creates a second lifecycle or permission authority
 
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterDrawer.tsx:1` - Retains content within an explicit global placement context and consumes the released bottom-drawer Dialog.
 
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1` - Owns entry, presence-based canvas input, mode/recovery closure, and successful placement focus.
-
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx:1` - Owns exact selection, scoped keyboard behavior, distinct accessibility IDs, and responsive details.

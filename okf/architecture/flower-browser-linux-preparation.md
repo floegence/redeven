@@ -9,10 +9,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-- Authority: Runtime owns installation discovery and Native Messaging registration; Host Applications owns the prepared application and its graphical lifecycle.
-- Outcome: Flower's connection guide can prepare a separate persistent Linux Chrome or Chromium profile without launching it or granting a browser target.
-- Invariants: clients submit only an installation ID, never paths or launch arguments; personal profiles and existing website data remain untouched.
-- Failure boundary: unsupported platforms, absent installations and unsafe profile directories fail before launch. Preparation cannot claim a successful connection.
+Runtime discovers installations and registers Native Messaging; Host Applications owns graphical lifecycle. The guide prepares a persistent Linux Chrome/Chromium profile without launch or target authority. Clients pass opaque installation IDs, never paths/argv. Preserve personal profiles; unsupported platforms, missing installs and unsafe directories fail before launch.
 
 # Contract
 
@@ -29,5 +26,3 @@ The Flower connection guide offers this action on a remote Linux host when the e
 - `redeven:internal/codeapp/appserver/browser_connection_api.go` - Authenticated preparation with fixed installation identity.
 
 - `redeven:internal/codeapp/appserver/browser_connection_api_test.go` - Missing authority and caller-selected path rejection.
-
-- `redeven:internal/browserbridge/remote_profile.go` - Stable profile placement and canonical registration reference.

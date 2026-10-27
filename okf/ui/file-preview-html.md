@@ -40,5 +40,3 @@ Edit opens the existing HTML source editor only when write permission permits. A
 - `redeven:internal/envapp/ui_src/src/ui/widgets/HtmlPreviewPane.tsx` - Product page placement over published Floe HTML isolation and explicit source editing.
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/HtmlPreviewPane.browser.test.tsx` - Real HTML/CSS/script rendering, isolation, editing, mobile sizing, and Workbench wheel ownership.
-
-- `redeven:internal/envapp/ui_src/src/ui/widgets/createFilePreviewController.test.ts` - HTML loading, bounded reads, save, discard, and unsaved-change confirmation.

@@ -26,6 +26,4 @@ Plugin UI uses only released sandbox bootstrap/bridge. Product adapters cannot w
 
 - `redeven:go.mod:14` - Pins the released ReDevPlugin Go module.
 
-- `redeven:internal/envapp/ui_src/package.json:45` - Pins the released ReDevPlugin UI package.
-
 - `redeven:internal/session/dependency_contract_test.go:1` - Matches downstream coordinates to the release manifest.
