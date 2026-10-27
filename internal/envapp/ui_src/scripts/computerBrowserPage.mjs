@@ -1,4 +1,5 @@
-import { browserKey } from './computerBrowserKeys.mjs';
+import { createHash } from 'node:crypto';
+import { validateBrowserAction } from './computerBrowserArguments.mjs';
 
 export const navigationURL = value => {
   if (typeof value !== 'string' || !value.trim() || value.length > 4096 || /\p{Cc}/u.test(value)) throw new Error('INVALID_REQUEST');
@@ -414,17 +415,19 @@ export class BrowserComputerPage {
     return { semantic_schema_version: 2, document_id: `${this.prefix}:${this.revision}`, nodes, truncated: total > nodes.length, total, execution_mode: 'background' };
   }
 
-  rememberNode(frame, node) {
+  rememberNode(frame, node, retain = true) {
     const ref = `${this.prefix}:${this.revision}:${frame.frame.id}:${node.backendDOMNodeId}`;
     const entry = { ref, frame, backendNodeId: node.backendDOMNodeId, axNodeId: node.nodeId, role: node.role?.value || 'unknown', name: Array.from(node.name?.value || '').slice(0, 2000).join(''), revision: this.revision };
+    if (!retain) return entry;
     if (this.references.size >= 2000 && !this.references.has(ref)) this.references.delete(this.references.keys().next().value);
     this.references.set(ref, entry);
     return entry;
   }
 
-  async resolve(selector) {
+  async resolve(selector, collect = false) {
     if (!selector || typeof selector !== 'object' || Object.keys(selector).some(key => !['ref', 'role', 'roles', 'name', 'exact', 'root_ref'].includes(key))) throw new Error('INVALID_REQUEST');
     let entry;
+    const matches = [];
     if (typeof selector.ref === 'string') {
       entry = this.references.get(selector.ref);
       if (!entry || entry.revision !== this.revision) throw new Error('STALE_REFERENCE');
@@ -459,11 +462,13 @@ export class BrowserComputerPage {
           const name = node.name?.value || '';
           if (!roles.some(wanted => wanted.toLowerCase() === role.toLowerCase())
             || (wantedName !== undefined && !(exact ? name === wantedName : name.toLocaleLowerCase().includes(wantedName.toLocaleLowerCase())))) continue;
-          if (entry) throw new Error('AMBIGUOUS_ELEMENT');
-          entry = this.rememberNode(frame, node);
+          if (entry && !collect) throw new Error('AMBIGUOUS_ELEMENT');
+          entry = this.rememberNode(frame, node, !collect);
+          matches.push(entry);
         }
       }
       if (revision !== this.revision) throw new Error('STALE_REFERENCE');
+      if (collect) return matches;
       if (!entry) throw new Error('ELEMENT_NOT_FOUND');
     }
     try {
@@ -473,7 +478,49 @@ export class BrowserComputerPage {
       const current = nodes.find(node => node.backendDOMNodeId === entry.backendNodeId);
       if (!current || current.ignored || current.role?.value !== entry.role || Array.from(current.name?.value || '').slice(0, 2000).join('') !== entry.name) throw new Error('changed');
     } catch { this.references.delete(entry.ref); throw new Error('STALE_REFERENCE'); }
-    return entry;
+    return collect ? [entry] : entry;
+  }
+
+  async query(selector, {limit=50,cursor} = {}) {
+    const matches = await this.resolve(selector,true);
+    const items = matches.map(({ref,role,name})=>({ref,role,name}));
+    const fingerprint = createHash('sha256').update(JSON.stringify([this.prefix,this.revision,selector,items])).digest('hex');
+    let offset=0;
+    if (cursor !== undefined) {
+      const parts=String(cursor).split(':');
+      if (parts.length!==2 || parts[0]!==fingerprint || !/^[0-9]+$/u.test(parts[1])) throw new Error('STALE_REFERENCE');
+      offset=Number(parts[1]);
+      if (!Number.isSafeInteger(offset) || offset>items.length) throw new Error('STALE_REFERENCE');
+    }
+    let end=offset, bytes=0;
+    while (end < items.length && end-offset < limit) {
+      const size=Buffer.byteLength(JSON.stringify(items[end]));
+      if (end>offset && bytes+size>48000) break;
+      bytes+=size;end++;
+    }
+    // Retain only this returned page, after scanning. Large collections must
+    // not evict their own first page from the bounded reference table.
+    for (const entry of matches.slice(offset,end)) {
+      if (this.references.size>=2000 && !this.references.has(entry.ref)) this.references.delete(this.references.keys().next().value);
+      this.references.set(entry.ref,entry);
+    }
+    return {document_id:this.prefix+':'+this.revision, scope:'loaded_accessibility_tree', total:items.length,
+      items:items.slice(offset,end), truncated:end<items.length, ...(end<items.length?{next_cursor:fingerprint+':'+end}:{})};
+  }
+
+  async attribute(element, name) {
+    const {node} = await element.frame.session.send('DOM.describeNode',{backendNodeId:element.backendNodeId});
+    const attributes=node.attributes || [];
+    let index=-1; for(let i=0;i<attributes.length;i+=2) if(attributes[i]===name) {index=i;break;}
+    let value=index>=0?attributes[index+1]:null;
+    if (value !== null && name==='href') {
+      try {
+        const url=new URL(value,element.frame.frame.url);
+        if (!['http:','https:'].includes(url.protocol)) value=null;
+        else { url.username='';url.password='';url.search='';url.hash='';value=url.href; }
+      } catch { value=null; }
+    }
+    return {attribute:name,value:value===null?null:Array.from(value).slice(0,2000).join('')};
   }
 
   async wait(selector, { state = 'visible', timeout_ms = 10000 } = {}) {
@@ -513,6 +560,24 @@ export class BrowserComputerPage {
       if (result.exceptionDetails || !result.result?.value) throw new Error('TARGET_OBSERVATION_UNAVAILABLE');
       return result.result.value;
     } finally { if (object.objectId) await session.send('Runtime.releaseObject', { objectId: object.objectId }); }
+  }
+
+  async scrollPosition(element) {
+    try {
+      if (!element) {
+        const { cssVisualViewport: viewport } = await this.transport.send('Page.getLayoutMetrics');
+        return { scope: 'viewport', x: viewport.pageX, y: viewport.pageY };
+      }
+      const session=element.frame.session;
+      const {executionContextId}=await session.send('Page.createIsolatedWorld',{frameId:element.frame.frame.id,worldName:'flower-observation'});
+      const {object}=await session.send('DOM.resolveNode',{backendNodeId:element.backendNodeId,executionContextId});
+      try {
+        const result=await session.send('Runtime.callFunctionOn',{objectId:object.objectId,returnByValue:true,
+          functionDeclaration:'function(){for(let e=this;e;e=e.parentElement){if(e.scrollHeight>e.clientHeight||e.scrollWidth>e.clientWidth)return {x:e.scrollLeft,y:e.scrollTop};}return {x:scrollX,y:scrollY};}'});
+        if (!result.exceptionDetails && result.result?.value) return {scope:'nearest_scroll_container',...result.result.value};
+      } finally { if(object.objectId) await session.send('Runtime.releaseObject',{objectId:object.objectId}); }
+    } catch { /* Missing offsets are not evidence that an input failed. */ }
+    return null;
   }
 
   async actionable(element, hitTest = false) {
@@ -708,13 +773,18 @@ export class BrowserComputerPage {
 
   async action(args) {
     if (this.invalid) throw new Error('TARGET_CONNECTION_REQUIRED');
+    const validated = validateBrowserAction(args, this.privateInput);
+    if (args.action === 'query') return this.query(args.selector,args);
     if (args.action === 'wait') return this.wait(args.selector, args);
     const element = args.selector ? await this.resolve(args.selector) : undefined;
+    if (args.action === 'attribute') return this.attribute(element,args.attribute);
     if (args.action === 'read') {
       const observed = await this.observe({ root_ref: element.ref, limit: 1 });
       return { semantic_schema_version: 2, node: observed.nodes[0] };
     }
     if (['click', 'fill'].includes(args.action) && !element) throw new Error('INVALID_REQUEST');
+    if (args.action === 'fill' && !['textbox', 'searchbox', 'combobox'].includes(element.role)) throw new Error('INVALID_REQUEST');
+    await this.preparePage();
     if (args.action === 'fill') {
       if (typeof args.text !== 'string' || args.text.length > 20000 || !['textbox', 'searchbox', 'combobox'].includes(element.role)) throw new Error('INVALID_REQUEST');
       await this.actionable(element);
@@ -741,7 +811,7 @@ export class BrowserComputerPage {
       await this.editText(undefined, args.text, false);
     } else if (args.action === 'key') {
       if (element) await this.effect(() => element.frame.session.send('DOM.focus', { backendNodeId: element.backendNodeId }));
-      const parameters = browserKey(args.key, this.privateInput);
+      const parameters = validated.key;
       const target = element?.frame.session || this.transport;
       await this.input(target, 'Input.dispatchKeyEvent', { type: 'keyDown', ...parameters });
       const release = { ...parameters }; delete release.text;
@@ -754,7 +824,10 @@ export class BrowserComputerPage {
       if (explicitPoint && (!Number.isFinite(args.x) || !Number.isFinite(args.y) || args.x < 0 || args.y < 0)) throw new Error('INVALID_REQUEST');
       const x = model ? model.content[0] + 1 : explicitPoint ? args.x : 1;
       const y = model ? model.content[1] + 1 : explicitPoint ? args.y : 1;
+      const before=await this.scrollPosition(element);
       await this.input(target, 'Input.dispatchMouseEvent', { type: 'mouseWheel', x, y, deltaY: args.delta_y, deltaX: args.delta_x || 0 });
+      const after=await this.scrollPosition(element);
+      return {action_executed:true,execution_mode:'background',scroll_progress:{before,after,changed:before&&after ? before.x!==after.x||before.y!==after.y : null,measurement:'immediate_after_dispatch'}};
     } else if (args.action === 'drag') {
       for (const key of ['from_x', 'from_y', 'to_x', 'to_y']) if (!Number.isFinite(args[key]) || args[key] < 0) throw new Error('INVALID_REQUEST');
       await this.input(this.transport, 'Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, x: args.from_x, y: args.from_y });

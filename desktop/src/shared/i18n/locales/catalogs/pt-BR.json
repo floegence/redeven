@@ -445,7 +445,11 @@
         "previewTool": "Ferramenta",
         "previewGroupBy": "Agrupar por",
         "previewUnavailable": "Esta ferramenta não forneceu uma prévia do resultado.",
-        "effectUncertain": "Resultado não confirmado"
+        "effectUncertain": "Resultado não confirmado",
+        "computerInputRejected": "Argumentos inválidos; nenhuma entrada enviada",
+        "computerPreparedOnly": "Preparação concluída; nenhuma entrada enviada",
+        "computerEffectConfirmed": "Uma ação foi concluída; verifique antes de continuar",
+        "computerNoObservation": "Nenhuma nova observação da página"
       },
       "toolActivityDetailsPending": "Aguardando detalhes da ferramenta",
       "toolActivityNoAdditionalDetails": "Nenhum detalhe adicional",
@@ -1648,6 +1652,30 @@
       "chromeRemoteHint": "Use um perfil de navegador separado com suas próprias sessões salvas.",
       "chromeRemotePrepare": "Configurar navegador separado",
       "chromeRemoteFailed": "Não foi possível preparar o navegador separado. Tente novamente."
+    },
+    "taskFiles": {
+      "title": "Arquivos",
+      "results": "Resultados",
+      "working": "Arquivos de trabalho",
+      "empty": "Nenhum arquivo foi entregue ainda.",
+      "preview": "Prévia",
+      "folder": "Abrir pasta",
+      "download": "Baixar",
+      "refresh": "Atualizar",
+      "more": "Carregar mais",
+      "clean": "Limpar arquivos de trabalho",
+      "confirm": "Excluir os arquivos de trabalho? Os resultados permanecerão no local salvo.",
+      "cancel": "Cancelar",
+      "close": "Fechar",
+      "loading": "Carregando arquivos…",
+      "failed": "Não foi possível carregar os arquivos. Tente novamente.",
+      "available": "Disponível",
+      "changed": "Alterado após a entrega",
+      "missing": "Arquivo não encontrado",
+      "unavailable": "Indisponível",
+      "busy": "Não é possível limpar durante uma conversa ou processo ativo.",
+      "warning": "Os dados do aplicativo estão neste espaço de trabalho. Mova-os para fora do projeto para separar os arquivos intermediários.",
+      "truncated": "Apenas os primeiros 200 arquivos de trabalho são exibidos."
     }
   },
   "common": {

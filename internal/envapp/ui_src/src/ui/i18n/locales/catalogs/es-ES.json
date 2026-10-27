@@ -5336,7 +5336,11 @@
         "previewTool": "Herramienta",
         "previewGroupBy": "Agrupar por",
         "previewUnavailable": "Esta herramienta no proporcionó una vista previa del resultado.",
-        "effectUncertain": "Resultado sin confirmar"
+        "effectUncertain": "Resultado sin confirmar",
+        "computerInputRejected": "Argumentos no válidos; no se envió ninguna entrada",
+        "computerPreparedOnly": "Preparación completada; no se envió ninguna entrada",
+        "computerEffectConfirmed": "Se completó una acción; compruebe antes de continuar",
+        "computerNoObservation": "No hay una nueva observación de la página"
       },
       "toolActivityDetailsPending": "Esperando los detalles de la herramienta",
       "toolActivityNoAdditionalDetails": "No hay más detalles",

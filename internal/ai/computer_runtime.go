@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"slices"
@@ -344,6 +345,16 @@ func (r *ComputerUseRuntime) ExecuteTargetTool(ctx context.Context, call TargetT
 		control.threadID, control.turnID, control.runID = call.ThreadID, call.TurnID, call.RunID
 		control.mu.Unlock()
 		call.bindSelection = false
+	}
+
+	var input map[string]any
+	_ = json.Unmarshal(call.Arguments, &input)
+	if input["coordinate_space"] != nil || input["frame"] != nil || input["document_id"] != nil || input["action"] == "query" || input["action"] == "attribute" {
+		target, resolveErr := r.registry.ResolveTarget(ctx, call.TargetID)
+		if resolveErr != nil || !strings.HasPrefix(target.Kind, "browser.") {
+			unlock()
+			return TargetToolResult{}, computerTargetFailure(call, "TARGET_CAPABILITY_UNAVAILABLE")
+		}
 	}
 	if call.ToolName == "computer.exec" {
 		r.releasePreviousComputerTarget(call)

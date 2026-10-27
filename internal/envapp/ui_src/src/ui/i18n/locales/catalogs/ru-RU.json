@@ -5437,7 +5437,11 @@
         "previewTool": "Инструмент",
         "previewGroupBy": "Группировка",
         "previewUnavailable": "Этот инструмент не предоставил предварительный просмотр результата.",
-        "effectUncertain": "Результат не подтверждён"
+        "effectUncertain": "Результат не подтверждён",
+        "computerInputRejected": "Недопустимые аргументы; ввод не отправлен",
+        "computerPreparedOnly": "Подготовка завершена; ввод не отправлен",
+        "computerEffectConfirmed": "Действие выполнено; проверьте результат перед продолжением",
+        "computerNoObservation": "Нет нового наблюдения страницы"
       },
       "toolActivityDetailsPending": "Ожидание сведений об инструменте",
       "toolActivityNoAdditionalDetails": "Дополнительных сведений нет",

@@ -1,4 +1,6 @@
 import { BrowserComputerPage, BrowserNavigationError, navigationURL, redactedNavigationURL } from './computerBrowserPage.mjs';
+import { argumentFailure, validateBrowserAction } from './computerBrowserArguments.mjs';
+import { viewportGeometry, sameGeometry, screenshotGeometry, imageCoordinates } from './computerBrowserFrame.mjs';
 
 const rejections = new Set(['INVALID_REQUEST', 'ELEMENT_NOT_ACTIONABLE', 'AMBIGUOUS_DOWNLOAD', 'STALE_REFERENCE', 'AMBIGUOUS_ELEMENT', 'ELEMENT_NOT_FOUND', 'CONDITION_TIMEOUT', 'TARGET_CAPABILITY_UNAVAILABLE', 'TARGET_PERMISSION_REQUIRED', 'TARGET_CONNECTION_REQUIRED', 'TARGET_NOT_READY', 'TARGET_NOT_ALLOWED', 'TAKEOVER_REQUIRED']);
 
@@ -12,9 +14,13 @@ export class BrowserComputerController {
   async initialize() { await this.page.initialize(); }
   close() { this.page.close(); }
   cancel() { this.page.cancel(); }
-  async capture() {
-    const { data } = await this.transport.send('Page.captureScreenshot', { format: 'png', fromSurface: true, captureBeyondViewport: false });
-    return { mime: 'image/png', data };
+  async capture(targetID) {
+    const before = targetID ? await viewportGeometry(this.transport) : undefined;
+    const { data } = await this.transport.send('Page.captureScreenshot', { format: 'png', fromSurface: true, captureBeyondViewport: false, ...(before ? {clip:{x:before.page_x,y:before.page_y,width:before.width,height:before.height,scale:1}} : {}) });
+    if (!before) return { mime: 'image/png', data };
+    const after = await viewportGeometry(this.transport);
+    if (!sameGeometry(before,after)) throw new Error('OBSERVATION_INVALIDATED');
+    return { mime: 'image/png', data, geometry: screenshotGeometry(data,after,`${this.page.prefix}:${this.page.revision}`,targetID) };
   }
   pause(safety, executed) {
     return { result: { code: 'TAKEOVER_REQUIRED', action_executed: executed }, safety };
@@ -99,14 +105,14 @@ export class BrowserComputerController {
         if (before.level === 'takeover') return this.pause(before, false);
       }
       if (!privateInput && page.openedPages.length) return await this.targetChange(false);
-      await page.preparePage();
       let result = {};
       const tool = request.tool_name;
       if (tool === 'computer.observe') result.observation = await this.readObservation(() => page.observe(args));
       else if (tool === 'computer.screenshot') { /* Capture only at the boundary below. */ }
       else if (tool === 'computer.wait') {
-        if (!Number.isFinite(args.milliseconds) || args.milliseconds < 0 || args.milliseconds > 30000) throw new Error('INVALID_REQUEST');
-        await page.delay(args.milliseconds);
+        const milliseconds = args.milliseconds ?? 0;
+        if (!Number.isInteger(milliseconds) || milliseconds < 0 || milliseconds > 30000) throw argumentFailure('milliseconds', 'integer_0_30000');
+        await page.delay(milliseconds);
       } else if (tool === 'browser.download_cursor') {
         result = page.downloadCursor();
       } else if (tool === 'browser.wait_for_download') {
@@ -130,7 +136,10 @@ export class BrowserComputerController {
           ...args, action: { 'computer.click': 'pointer_click', 'computer.double_click': 'double_click', 'computer.type': 'type', 'computer.key': 'key', 'computer.scroll': 'scroll', 'computer.drag': 'drag' }[tool],
         };
         if (!operation.action) throw new Error('INVALID_REQUEST');
-        result = await page.action(operation);
+        validateBrowserAction(operation, privateInput);
+        const mapped = operation.frame !== undefined || operation.coordinate_space !== undefined || operation.document_id !== undefined
+          ? imageCoordinates(operation, this.frameAnchor, await this.readObservation(() => viewportGeometry(this.transport), 'capture'), `${page.prefix}:${page.revision}`, request.target_id) : operation;
+        result = await page.action(mapped);
       }
       if (privateInput) return tool === 'computer.screenshot' ? { screenshot: await this.capture() } : { acknowledged: true };
       if (page.requiredURL) return { error: 'TARGET_PERMISSION_REQUIRED', result: { action_executed: dispatched(), required_navigation_url: page.requiredURL, needs_observation: true } };
@@ -139,7 +148,7 @@ export class BrowserComputerController {
       if (page.openedPages.length) return await this.targetChange(dispatched());
       const needsFrame = tool === 'computer.screenshot' || (tool === 'computer.observe' ? args.screenshot === true : request.script_operation !== true);
       const captureRevision = page.revision;
-      const frame = needsFrame ? await this.readObservation(() => this.capture(), 'capture') : undefined;
+      const frame = needsFrame ? await this.readObservation(() => this.capture(request.live_frame ? undefined : request.target_id), 'capture') : undefined;
       const captured = await this.readObservation(() => page.safety(), 'safety_scan');
       if (captured.level === 'takeover') return this.pause(captured, dispatched());
       if (frame && captureRevision !== page.revision) {
@@ -153,10 +162,12 @@ export class BrowserComputerController {
         const title = await page.inFrame({ session: this.transport, frame: frameTree.frame }, 'document.title');
         return { url: redactedNavigationURL(frameTree.frame.url), title };
       }, 'metadata');
-      return { result: { ...result, summary: tool === 'computer.action' ? args.action : tool, ...metadata,
+      if (frame?.geometry) this.frameAnchor = frame.geometry;
+      return { result: { ...result, ...(frame?.geometry ? {frame_geometry:frame.geometry} : {}), summary: tool === 'computer.action' ? args.action : tool, ...metadata,
         action_executed: dispatched(), execution_mode: 'background', ...(page.downloads.size ? { downloads: [...page.downloads.values()] } : {}) }, safety: captured, ...(frame ? { screenshot: frame } : {}) };
     } catch (error) {
       if (page.uncertainEffect) return { error: 'EFFECT_OUTCOME_UNKNOWN' };
+      if (error.diagnostic) return { error: error.message, result: { action_executed: dispatched(), needs_observation: dispatched(), diagnostic: error.diagnostic } };
       if (page.guardFailure) return { error: 'TARGET_CONNECTION_REQUIRED', result: { action_executed: dispatched(), needs_observation: dispatched() } };
       if (page.requiredURL) return { error: 'TARGET_PERMISSION_REQUIRED', result: { action_executed: dispatched(), required_navigation_url: page.requiredURL, needs_observation: true } };
       if (page.requiredOrigin || page.stopped) return this.pause({ level: 'takeover', reason_codes: [page.requiredOrigin ? 'site_permission' : 'user_control'],

@@ -445,7 +445,11 @@
         "previewTool": "工具",
         "previewGroupBy": "分組方式",
         "previewUnavailable": "此工具未提供結果預覽。",
-        "effectUncertain": "結果未確認"
+        "effectUncertain": "結果未確認",
+        "computerInputRejected": "參數無效，尚未傳送輸入",
+        "computerPreparedOnly": "已完成準備，尚未傳送輸入",
+        "computerEffectConfirmed": "已有操作完成，請先檢查再繼續",
+        "computerNoObservation": "本次沒有新的頁面觀察"
       },
       "toolActivityDetailsPending": "正在等待工具詳細資訊",
       "toolActivityNoAdditionalDetails": "沒有更多詳細資訊",
@@ -1648,6 +1652,30 @@
       "chromeRemoteHint": "使用獨立的瀏覽器設定檔，分別儲存網站登入狀態。",
       "chromeRemotePrepare": "設定獨立瀏覽器",
       "chromeRemoteFailed": "無法準備獨立瀏覽器，請重試。"
+    },
+    "taskFiles": {
+      "title": "檔案",
+      "results": "最終成果",
+      "working": "工作檔案",
+      "empty": "尚未交付檔案。",
+      "preview": "預覽",
+      "folder": "開啟所在資料夾",
+      "download": "下載",
+      "refresh": "重新整理",
+      "more": "載入更多",
+      "clean": "清理工作檔案",
+      "confirm": "刪除工作檔案？已交付檔案仍保留在原儲存位置。",
+      "cancel": "取消",
+      "close": "關閉",
+      "loading": "正在載入檔案…",
+      "failed": "無法載入檔案，請重試。",
+      "available": "可用",
+      "changed": "交付後已修改",
+      "missing": "檔案不存在",
+      "unavailable": "無法存取",
+      "busy": "對話或相關程序執行時，無法清理工作檔案。",
+      "warning": "應用程式狀態目錄位於此工作區內。請移至專案外，以隔離中間檔案。",
+      "truncated": "僅顯示前 200 個工作檔案。"
     }
   },
   "common": {

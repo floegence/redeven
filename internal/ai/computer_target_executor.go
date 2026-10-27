@@ -53,6 +53,7 @@ type playwrightTargetClient struct {
 }
 
 type playwrightTargetRequest struct {
+	LiveFrame             bool           `json:"live_frame,omitempty"`
 	FullAccess            bool           `json:"full_access"`
 	AllowedOrigins        []string       `json:"allowed_origins"`
 	AllowedNavigationURLs []string       `json:"allowed_navigation_urls,omitempty"`
@@ -176,7 +177,7 @@ func (e *PlaywrightTargetExecutor) executeTargetTool(ctx context.Context, call T
 		}
 	}()
 	requestID := fmt.Sprintf("%s-%d", strings.TrimSpace(call.ToolCallID), time.Now().UnixNano())
-	request := playwrightTargetRequest{FullAccess: call.fullAccess, AllowedOrigins: call.allowedOrigins, AllowedNavigationURLs: call.allowedNavigationURLs, ScriptOperation: call.scriptOperation, ID: requestID, TargetID: targetID, ToolName: strings.TrimSpace(call.ToolName), Args: args, UserControl: userControl, RecoveryObservation: call.recoveryObservation}
+	request := playwrightTargetRequest{LiveFrame: call.liveFrame, FullAccess: call.fullAccess, AllowedOrigins: call.allowedOrigins, AllowedNavigationURLs: call.allowedNavigationURLs, ScriptOperation: call.scriptOperation, ID: requestID, TargetID: targetID, ToolName: strings.TrimSpace(call.ToolName), Args: args, UserControl: userControl, RecoveryObservation: call.recoveryObservation}
 	failedExchange := func(err error) (TargetToolResult, error) {
 		return TargetToolResult{}, computerBrowserExchangeFailure(call, userControl, err)
 	}

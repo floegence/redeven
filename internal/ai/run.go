@@ -3108,12 +3108,19 @@ func targetToolResultPayload(result TargetToolResult, requestedTargetID string, 
 			if payload, ok := payloadOut.(map[string]any); ok {
 				payload["target_kind"] = target[0].Kind
 				if strings.HasPrefix(target[0].Kind, "browser.") && (result.Safety == nil || result.Safety.SafeToSendToModel) {
+					payload["discovery_name"] = target[0].DisplayName
+					payload["target_name"] = firstNonEmptyString(target[0].ID, requestedTargetID)
+					payload["observation_status"] = "not_observed"
 					identity := payload
 					if observation, ok := payload["observation"].(map[string]any); ok {
 						identity = observation
 					}
+					if _, hasTitle := identity["title"]; hasTitle {
+						payload["observation_status"] = "current"
+					}
 					if title := strings.TrimSpace(anyToString(identity["title"])); title != "" {
 						payload["target_name"] = title
+						payload["observation_status"] = "current"
 					}
 				}
 			}
@@ -3174,7 +3181,8 @@ func addTargetFrameFields(payload map[string]any, attachments []TargetToolAttach
 	if payload == nil || strings.TrimSpace(anyToString(payload["after_frame"])) != "" {
 		return
 	}
-	for _, attachment := range attachments {
+	for i := len(attachments) - 1; i >= 0; i-- {
+		attachment := attachments[i]
 		ref := strings.TrimSpace(attachment.ResourceRef)
 		if ref == "" || !strings.HasPrefix(ref, "computer://") || !strings.HasPrefix(strings.ToLower(strings.TrimSpace(attachment.MIMEType)), "image/") {
 			continue

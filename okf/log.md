@@ -1,5 +1,12 @@
 # Redeven OKF Update Log
 
+## 2026-10-26 — Computer operation contracts
+
+Document validated input ordering, browser frame mappings, bounded collection
+reads, current target identity, localized effect guidance and expanded real
+DeepSeek acceptance in the existing Computer Use concepts. No storage schema or
+Floret public API changes.
+
 Recent changes only. The linked concepts own current contracts and evidence; Git preserves the complete change history.
 
 ## 2026-10-26

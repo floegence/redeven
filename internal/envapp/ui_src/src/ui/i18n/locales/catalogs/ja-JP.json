@@ -5336,7 +5336,11 @@
         "previewTool": "ツール",
         "previewGroupBy": "グループ化",
         "previewUnavailable": "このツールは結果のプレビューを提供していません。",
-        "effectUncertain": "結果未確認"
+        "effectUncertain": "結果未確認",
+        "computerInputRejected": "引数が無効です。入力は送信されていません",
+        "computerPreparedOnly": "準備は完了しました。入力は送信されていません",
+        "computerEffectConfirmed": "操作が完了しています。続行前に確認してください",
+        "computerNoObservation": "新しいページ観察はありません"
       },
       "toolActivityDetailsPending": "ツールの詳細を待っています",
       "toolActivityNoAdditionalDetails": "追加の詳細はありません",

@@ -89,6 +89,9 @@ func computerBrowserFailure(call TargetToolCall, private bool, code string, payl
 	if known && payload != nil {
 		executed, _ := payload["action_executed"].(bool)
 		result.Result = map[string]any{"action_executed": executed, "needs_observation": executed}
+		if diagnostic := computerArgumentDiagnostic(payload["diagnostic"]); diagnostic != nil {
+			result.Result.(map[string]any)["diagnostic"] = diagnostic
+		}
 		if code == "ELEMENT_NOT_ACTIONABLE" && payload["preparation_executed"] == true {
 			result.Result.(map[string]any)["preparation_executed"] = true
 			result.Result.(map[string]any)["needs_observation"] = true

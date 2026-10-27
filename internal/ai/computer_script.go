@@ -189,12 +189,15 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 	var targetChange map[string]any
 	var lastObservation any
 	var observationScope string
+	var argumentDiagnostic map[string]any
+	var lastFrameGeometry any
 	var fullObservation bool
 	observationInvalidated := false
 	var observationFailureStage string
 	var navigationFailure *computerNavigationError
 	operations := 0
 	actionExecuted := false
+	preparationExecuted := false
 	failedOperationIndex := -1
 	failedAction := ""
 	requiredNavigationURL := ""
@@ -208,6 +211,15 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 		output.executionFacts.completedActions = append([]string(nil), completed...)
 		output.executionFacts.needsObservation = observationInvalidated || observationFailureStage != "" || actionExecuted
 		if payload, ok := output.Result.(map[string]any); ok {
+			if preparationExecuted {
+				payload["preparation_executed"] = true
+			}
+			if argumentDiagnostic != nil {
+				payload["diagnostic"] = argumentDiagnostic
+			}
+			if lastFrameGeometry != nil && pause == nil && targetChange == nil && !observationInvalidated && observationFailureStage == "" {
+				payload["frame_geometry"] = lastFrameGeometry
+			}
 			if failedOperationIndex >= 0 {
 				payload["failed_operation_index"] = failedOperationIndex
 				payload["failed_action"] = failedAction
@@ -296,7 +308,9 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				stopped = ErrInteractionTakeoverRequired
 			}
 			if payload, ok := observed.Result.(map[string]any); ok {
+				argumentDiagnostic = computerArgumentDiagnostic(payload["diagnostic"])
 				if payload["preparation_executed"] == true {
+					preparationExecuted = true
 					observationInvalidated = true
 					lastObservation = nil
 				}
@@ -311,6 +325,10 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 				if payload["action_executed"] == true {
 					actionExecuted = true
 					lastObservation = nil
+					lastFrameGeometry = nil
+				}
+				if value, ok := payload["frame_geometry"]; ok {
+					lastFrameGeometry = value
 				}
 				if observation, ok := payload["observation"]; ok {
 					if tree, ok := observation.(map[string]any); ok {
@@ -422,7 +440,7 @@ func (r *ComputerUseRuntime) executeComputerScript(ctx context.Context, call Tar
 
 func computerOperationMutates(op map[string]any) bool {
 	switch anyToString(op["action"]) {
-	case "observe", "read", "wait", "screenshot", "wait_for_download", "download_cursor":
+	case "observe", "read", "query", "attribute", "wait", "screenshot", "wait_for_download", "download_cursor":
 		return false
 	default:
 		return true
@@ -452,7 +470,7 @@ func computerScriptOperation(parent TargetToolCall, operation map[string]any) (T
 	case "navigate", "back", "reload", "wait_for_download", "download_cursor":
 		call.ToolName = "browser." + anyToString(operation["action"])
 		delete(args, "action")
-	case "read", "click", "fill", "key", "scroll", "wait", "pointer_click", "drag":
+	case "read", "query", "attribute", "click", "fill", "key", "scroll", "wait", "pointer_click", "drag":
 	default:
 		return TargetToolCall{}, computerTargetFailure(parent, "INVALID_REQUEST")
 	}

@@ -5,7 +5,7 @@ description: Resolve authenticated keyframes and bounded live samples into decod
 tags: [ai, computer-use, media, attachments]
 timestamp: 2026-10-08T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-23"
+reviewed_at: "2026-10-26"
 ---
 # Summary
 
@@ -30,6 +30,22 @@ lifetimes; tool success does not prove delivery. Model encodings never replace o
   not a provider limit. Remote DTOs share the cap; services own final rendering.
 - Floret compacts complete tool pairs and retains causes. UI provides numeric
   diagnostics and input/model guidance without unchanged Retry or secret payloads.
+
+## Browser image coordinates
+A model screenshot returns frame_geometry: its existing computer:// resource,
+document identity, actual PNG dimensions, CSS visual viewport and image-to-input
+scale/offset. Browser image input explicitly supplies coordinate_space:
+"image_pixels", frame and document_id. Default coordinates remain browser CSS
+viewport pixels or the native adapter's existing units. Native image mode is
+rejected before dispatch; full-page/cropped arbitrary images have no input mapping.
+
+The current controller holds one bounded model anchor. Viewer sampling cannot
+replace it. Changed target, document, scroll, viewport or scale rejects the image
+operation before input. This checks known changes, not arbitrary dynamic layout
+races; semantic locators remain preferable for moving controls. Existing model
+JPEG preparation preserves dimensions. Script geometry is invalidated after an
+action and suppressed after takeover or failed observation. The final attachment
+supplies after_frame when several screenshots were taken.
 
 # Boundaries
 
