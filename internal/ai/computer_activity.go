@@ -27,6 +27,13 @@ func computerActivityResultRows(tool string, payload map[string]any) []fltools.S
 		}
 		rows = append(rows, toolDetailRow(title, meta, content, format, "", false))
 	}
+	if diagnostic := computerArgumentDiagnostic(payload["diagnostic"]); diagnostic != nil {
+		for _, key := range []string{"phase", "field", "expected", "example", "recovery"} {
+			if value, exists := diagnostic[key]; exists {
+				add(key, "", toolDetailValue(value), fltools.StructuredActivityRowFormatText)
+			}
+		}
+	}
 	if progress := computerInputProgress(payload["input_progress"]); len(progress) > 0 {
 		for _, key := range []string{"stage", "posted", "observed", "expected"} {
 			if value, exists := progress[key]; exists {
@@ -239,4 +246,21 @@ func computerInputProgress(value any) map[string]any {
 		}
 	}
 	return result
+}
+
+// Presentation classification uses only returned effect facts. It never drives retries.
+func computerActivityFailurePhase(payload map[string]any) string {
+	if payload["effect_outcome_unknown"] == true {
+		return "unknown"
+	}
+	if payload["action_executed"] == true {
+		return "effect_confirmed"
+	}
+	if payload["preparation_executed"] == true {
+		return "prepared"
+	}
+	if computerArgumentDiagnostic(payload["diagnostic"]) != nil {
+		return "validation"
+	}
+	return ""
 }

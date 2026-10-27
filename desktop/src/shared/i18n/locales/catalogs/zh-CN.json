@@ -445,7 +445,11 @@
         "previewTool": "工具",
         "previewGroupBy": "分组方式",
         "previewUnavailable": "此工具未提供结果预览。",
-        "effectUncertain": "结果未确认"
+        "effectUncertain": "结果未确认",
+        "computerInputRejected": "参数无效，未发送输入",
+        "computerPreparedOnly": "已完成准备，未发送输入",
+        "computerEffectConfirmed": "已有操作完成，请先检查再继续",
+        "computerNoObservation": "本次没有新的页面观察"
       },
       "toolActivityDetailsPending": "正在等待工具详情",
       "toolActivityNoAdditionalDetails": "没有更多详情",
@@ -1648,6 +1652,30 @@
       "chromeRemoteHint": "使用独立的浏览器配置，单独保存网站登录状态。",
       "chromeRemotePrepare": "设置独立浏览器",
       "chromeRemoteFailed": "未能准备独立浏览器，请重试。"
+    },
+    "taskFiles": {
+      "title": "文件",
+      "results": "最终成果",
+      "working": "工作文件",
+      "empty": "尚未交付文件。",
+      "preview": "预览",
+      "folder": "打开所在目录",
+      "download": "下载",
+      "refresh": "刷新",
+      "more": "加载更多",
+      "clean": "清理工作文件",
+      "confirm": "删除工作文件？已交付文件仍保留在原保存位置。",
+      "cancel": "取消",
+      "close": "关闭",
+      "loading": "正在加载文件…",
+      "failed": "无法加载文件，请重试。",
+      "available": "可用",
+      "changed": "交付后已修改",
+      "missing": "文件不存在",
+      "unavailable": "无法访问",
+      "busy": "会话或相关进程正在运行时，无法清理工作文件。",
+      "warning": "应用状态目录位于此工作区内。请移至项目外，以隔离中间文件。",
+      "truncated": "仅显示前 200 个工作文件。"
     }
   },
   "common": {

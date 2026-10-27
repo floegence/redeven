@@ -23,7 +23,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
   // pre-existing focus emulation from a second automation owner.
   // Disposable fixtures must not wait for the user's macOS keychain. These
   // storage flags do not enable Playwright focus or other page overrides.
-  const chromeProcess = spawn(chromium.executablePath(), ['--headless=new', '--no-first-run', '--remote-debugging-port=0', '--use-mock-keychain', '--password-store=basic',
+  const chromeProcess = spawn(chromium.executablePath(), [...(process.env.REDEVEN_COMPUTER_HEADED === '1' ? [] : ['--headless=new']), '--force-device-scale-factor=2', '--no-first-run', '--remote-debugging-port=0', '--use-mock-keychain', '--password-store=basic',
     `--user-data-dir=${path.join(directory, 'profile')}`, `--disable-extensions-except=${extension}`, `--load-extension=${extension}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
   const chromeExited = once(chromeProcess, 'exit');
   t.after(async () => {
@@ -209,7 +209,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     await assert.rejects(call('reveal', { tab_id: '99999999' }), /EXTENSION_COMMAND_FAILED/);
     await user.bringToFront();
 
-    const execute = async (tool_name, args = {}) => call('execute', { tab_id: selected.id, request: { tool_name, args, full_access: true, script_operation: true } });
+    const execute = async (tool_name, args = {}) => call('execute', { tab_id: selected.id, request: { target_id:'extension-'+selected.id, tool_name, args, full_access: true, script_operation: true } });
     // OOP frame attachment can invalidate an initial read. Follow the explicit
     // observation contract without repeating any effect or selecting a new tab.
     let observed;
@@ -265,11 +265,24 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
     });
     await user.bringToFront();
     const activeBeforeInput = await worker.evaluate(async () => (await chrome.tabs.query({ active: true })).map(tab => tab.id));
-    assert.equal(await task.evaluate(() => document.hasFocus()), true, 'background page needs virtual focus without activating its tab: ' + JSON.stringify(observed));
+    assert.equal(await task.evaluate(() => document.hasFocus()), false, 'observation must not acquire virtual focus');
     await call('unbind', { tab_id: selected.id });
     assert.equal(await task.evaluate(() => document.hasFocus()), false, 'detach must release virtual focus');
     await call('bind', { tab_id: selected.id, tab_title: selected.title, tab_url: selected.url });
     await execute('computer.observe');
+    await t.test('extension frames bind image coordinates and invalid keys cannot focus', async () => {
+      const shot=await execute('computer.screenshot');
+      assert.ok(shot.result.frame_geometry,JSON.stringify(shot.result));
+      const g=shot.result.frame_geometry;
+      assert.equal(g.image.width/g.viewport.width,2);
+      const invalid=await execute('computer.key',{key:'Meta+Equal'});
+      assert.equal(invalid.error,'INVALID_REQUEST');assert.equal(invalid.result.action_executed,false);assert.equal(invalid.result.diagnostic.field,'key');
+      const point={x:0,y:0,coordinate_space:'image_pixels',frame:g.frame,document_id:g.document_id};
+      const mismatch=await execute('computer.click',{...point,document_id:'old'});
+      assert.equal(mismatch.error,'STALE_REFERENCE');assert.equal(mismatch.result.action_executed,false);
+      const clicked=await execute('computer.click',point);assert.equal(clicked.error,undefined,JSON.stringify(clicked));
+      assert.equal(clicked.result.action_executed,true);
+    });
     const nested = await execute('computer.action', { action: 'fill', selector: { role: 'textbox', name: 'Nested query' }, text: 'Cross-site value' });
     assert.equal(nested.error, undefined, JSON.stringify(nested));
     assert.equal(nested.safety?.level, 'routine', JSON.stringify(nested));
@@ -338,6 +351,7 @@ test('extension binds one tab, creates background tabs, preserves login, and fai
       await nativeCall('status', { tab_id: created.tab_id });
       withheldCredits = '';
     });
+    await user.bringToFront();
     await call('unbind', { tab_id: selected.id });
     assert.equal((await execute('computer.action', { action: 'fill', selector: { role: 'textbox', name: 'Query', exact: true }, text: 'Forbidden' })).error, 'TARGET_CONNECTION_REQUIRED');
     assert.equal(await task.locator('input').inputValue(), 'Continued');

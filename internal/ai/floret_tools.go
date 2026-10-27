@@ -1354,6 +1354,14 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 	if isComputerUseTool(toolName) {
 		activity.Label = activityPresentationLabel(anyToString(result.activityInput["description"]))
 		activity.Chips = nil
+		if status != toolResultStatusSuccess {
+			if phase := computerActivityFailurePhase(rawPayload); phase != "" {
+				activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_failure_phase", Label: "phase", Value: phase})
+			}
+		}
+		if rawPayload["observation_status"] == "not_observed" {
+			activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "computer_observation", Label: "observation", Value: "not_observed"})
+		}
 		if status != toolResultStatusSuccess && len(toAnySlice(rawPayload["completed_actions"])) > 0 {
 			activity.Chips = append(activity.Chips, fltools.ActivityChip{Kind: "partial_execution", Label: "partial", Value: "true"})
 		}

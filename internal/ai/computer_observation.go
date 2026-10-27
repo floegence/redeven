@@ -8,8 +8,9 @@ import (
 // Only the last emitted, bounded tree is retained by the Turn's script process.
 // Guest code always reads a full tree; this projection reduces model output.
 type computerObservationOutput struct {
-	scope    string
-	snapshot map[string]any
+	scope          string
+	snapshot       map[string]any
+	unchangedReads int
 }
 
 func (o *computerObservationOutput) render(value any, scope string, full bool) any {
@@ -51,6 +52,14 @@ func (o *computerObservationOutput) render(value any, scope string, full bool) a
 			output = cloneAnyMap(current)
 			output["format"] = "full"
 		}
+	}
+	if valid && previousValid && document != "" && scope == o.scope && reflect.DeepEqual(current, o.snapshot) {
+		o.unchangedReads++
+		if o.unchangedReads >= 2 {
+			output["advisory"] = "Repeated observation has no new information. Inspect a narrower scope or another representation only if needed; do not repeat an uncertain input."
+		}
+	} else {
+		o.unchangedReads = 0
 	}
 	o.scope, o.snapshot = scope, current
 	return output

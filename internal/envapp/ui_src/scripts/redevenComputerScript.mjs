@@ -98,8 +98,13 @@ export async function createComputerScript({ browser = true } = {}) {
         return value;
       };
       const call = async (operation) => JSON.parse(await invoke(JSON.stringify(operation)));
+      const imageOptions = (value) => { options(value, ['coordinate_space','frame','document_id']); if (value.coordinate_space !== 'image_pixels' || typeof value.frame !== 'string' || typeof value.document_id !== 'string') invalid(); return value; };
       const locator = (selector) => Object.freeze({
         read: () => call({action: 'read', selector}),
+        ...(${browser ? 'true' : 'false'} ? {
+          query: (value={}) => { options(value,['limit','cursor']); if(value.limit!==undefined&&(!Number.isInteger(value.limit)||value.limit<1||value.limit>200)) invalid(); if(value.cursor!==undefined) string(value.cursor); return call({action:'query',selector,...value}); },
+          getAttribute: (attribute) => { string(attribute); if(!['href','title','aria-label','aria-checked','aria-selected','aria-expanded','aria-rowcount','aria-colcount'].includes(attribute)) invalid(); return call({action:'attribute',selector,attribute}); },
+        } : {}),
         click: () => call({action: 'click', selector}),
         fill: (text) => call({action: 'fill', selector, text: string(text)}),
         press: (key) => call({action: 'key', selector, key: string(key)}),
@@ -112,8 +117,8 @@ export async function createComputerScript({ browser = true } = {}) {
           screenshot: () => call({action: 'screenshot'}),
           getByRole: (role, value = {}) => locator(selector(role, value)),
           ref: (ref) => locator({ref: string(ref)}),
-          click: (x, y) => call({action: 'pointer_click', x: number(x), y: number(y)}),
-          drag: (from_x, from_y, to_x, to_y, duration_ms = 0) => call({action: 'drag', from_x: number(from_x), from_y: number(from_y), to_x: number(to_x), to_y: number(to_y), duration_ms: number(duration_ms)}),
+          click: (x, y, image) => call({action: 'pointer_click', x: number(x), y: number(y), ...(image === undefined ? {} : imageOptions(image))}),
+          drag: (from_x, from_y, to_x, to_y, duration_ms = 0, image) => call({action: 'drag', from_x: number(from_x), from_y: number(from_y), to_x: number(to_x), to_y: number(to_y), duration_ms: number(duration_ms), ...(image === undefined ? {} : imageOptions(image))}),
           key: (key) => call({action: 'key', key: string(key)}),
           assert: (condition, message = 'Result check failed') => { if (!condition) throw new Error(message); },
         })},

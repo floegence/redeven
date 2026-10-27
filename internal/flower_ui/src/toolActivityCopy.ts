@@ -27,6 +27,10 @@ export const toolActivityEnUS = {
   "previewRetry": "Retry",
 
   "previewUnavailable": "This tool did not provide a result preview.",
+  "computerInputRejected": "Invalid arguments; no input sent",
+  "computerPreparedOnly": "Preparation completed; input not sent",
+  "computerEffectConfirmed": "An action completed; inspect before continuing",
+  "computerNoObservation": "No new page observation",
   "computerPageChanges": "Page changes",
   "computerDefault": "Default",
   "computerNewTab": "New tab",

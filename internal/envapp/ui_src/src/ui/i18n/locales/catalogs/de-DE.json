@@ -5336,7 +5336,11 @@
         "previewTool": "Werkzeug",
         "previewGroupBy": "Gruppieren nach",
         "previewUnavailable": "Dieses Werkzeug hat keine Ergebnisvorschau bereitgestellt.",
-        "effectUncertain": "Ergebnis unbestätigt"
+        "effectUncertain": "Ergebnis unbestätigt",
+        "computerInputRejected": "Ungültige Argumente; keine Eingabe gesendet",
+        "computerPreparedOnly": "Vorbereitung abgeschlossen; keine Eingabe gesendet",
+        "computerEffectConfirmed": "Eine Aktion wurde ausgeführt; vor dem Fortfahren prüfen",
+        "computerNoObservation": "Keine neue Seitenbeobachtung"
       },
       "toolActivityDetailsPending": "Warten auf Tool-Details",
       "toolActivityNoAdditionalDetails": "Keine weiteren Details",

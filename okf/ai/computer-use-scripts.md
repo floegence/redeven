@@ -33,6 +33,28 @@ The [semantic snapshot contract](computer-use-semantics.md) owns schema v2, role
 
 Private takeover keeps observations and pixels out of model history.
 
+## Validated inputs and bounded browser reads
+The browser adapter validates the complete operation before virtual focus,
+scroll preparation or input. Invalid arguments retain a closed diagnostic with
+phase, field, expected form and recovery; page errors and supplied secrets are
+never copied into it. Keys use characters or documented names with
+Alt/Control/Meta/Shift modifiers; physical codes such as Equal are not names.
+Primitive computer.wait defaults to zero milliseconds and adds no settling
+promise. Conditional waits retain their state and timeout contract.
+
+Browser locators expose query({limit,cursor}) over the authorized loaded AX
+scope and an attribute allowlist. Results carry total, truncation, document and
+cursor; changed contents invalidate pagination. Only returned page references
+enter the bounded reference table. Each page is at most 200 items and 48 KiB of
+items. Virtualized, unloaded rows are never counted as visited. href removes
+credentials, query and fragment and must not be reconstructed as an action URL.
+scroll_progress belongs to the scroll return value. It reports immediate
+before/after measurements, with null or unchanged values remaining inconclusive.
+
+Repeated identical observations in the same script namespace/document/scope
+receive a bounded advisory after two repeats. This never replays input, changes
+target, adds a planner, or persists a second lifecycle.
+
 # Boundaries
 
 ## Partial effects and continuation

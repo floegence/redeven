@@ -1577,6 +1577,12 @@ function presentationForStructured(item: FlowerActivityItem, copy?: FlowerActivi
       else detailBlocks.push(notice);
     }
   }
+  if (computer && !active) {
+    const phase = item.chips?.find(chip => chip.kind === 'computer_failure_phase')?.value;
+    const phaseCopy: Record<string, string> = {validation: words.computerInputRejected, prepared: words.computerPreparedOnly, effect_confirmed: words.computerEffectConfirmed, unknown: words.effectUncertain};
+    if (phase) meta = phaseCopy[phase] ?? meta;
+    else if (item.chips?.some(chip => chip.kind === 'computer_observation' && chip.value === 'not_observed')) meta = words.computerNoObservation;
+  }
   if (uncertain) meta = words.effectUncertain;
   const missingPresenter = ['threads.query', 'threads.read', 'threads.aggregate', 'computer.targets',
     'tessiven.runtimes', 'tessiven.runtime.inspect', 'tessiven.runtime.action', 'tessiven.inspect', 'tessiven.action'].includes(item.tool_name ?? '');

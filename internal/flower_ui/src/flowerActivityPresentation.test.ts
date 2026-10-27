@@ -1952,3 +1952,14 @@ describe('thread tool intent titles', () => {
     expect(presentFlowerActivityItem(item({ tool_name, renderer: 'structured', label: tool_name })).title).toEqual({ kind: 'plain', text: prefix });
   });
 });
+
+it.each([
+ ['validation', 'computerInputRejected'], ['prepared', 'computerPreparedOnly'], ['effect_confirmed', 'computerEffectConfirmed'],
+] as const)('presents the %s input phase from typed facts', (phase, key) => {
+ const result=presentFlowerActivityItem(item({tool_name:'computer.exec',renderer:'computer',status:'error',chips:[{kind:'computer_failure_phase',label:'phase',value:phase}],payload:{rows_provided:true}}));
+ expect(result.meta).toBe(toolActivityEnUS[key]);
+});
+it('labels a result without a fresh page observation', () => {
+ const result=presentFlowerActivityItem(item({tool_name:'computer.exec',renderer:'computer',chips:[{kind:'computer_observation',label:'observation',value:'not_observed'}],payload:{rows_provided:true}}));
+ expect(result.meta).toBe(toolActivityEnUS.computerNoObservation);
+});

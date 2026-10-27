@@ -32,6 +32,19 @@ The migrated product store remains the only selection store.
 
 A lost task page fails until an authorized candidate is selected. Deleting product settings removes the selection and grants; a later bind never recreates a deleted thread.
 
+## Binding contract and observation identity
+Selection returns a compact versioned contract for the exact backend, including
+coordinate/key grammar, read availability, mouse limits, waits, frames and download
+identity. It is not a new registry or authorization source. Native adapters reject
+browser-only query, attribute and image-coordinate operations before dispatch.
+
+discovery_name is the discovery label. target_name comes from this call's
+observed title, or the stable target ID if no title was observed;
+observation_status distinguishes current observation from no new observation.
+A failed or zero-operation script must not present an old about:blank label as a
+current page. Flower activity shows localized validation/preparation/confirmed or
+unknown-effect guidance from returned facts. These facts do not create retry authority.
+
 # Boundaries
 
 Task access contains exact allowed origins, application identities and temporary foreground permission. The script cannot submit its own grant fields.

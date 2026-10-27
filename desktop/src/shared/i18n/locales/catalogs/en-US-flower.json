@@ -278,7 +278,11 @@
       "previewTool": "Tool",
       "previewGroupBy": "Group by",
       "previewUnavailable": "This tool did not provide a result preview.",
-      "effectUncertain": "Result unconfirmed"
+      "effectUncertain": "Result unconfirmed",
+      "computerInputRejected": "Invalid arguments; no input sent",
+      "computerPreparedOnly": "Preparation completed; input not sent",
+      "computerEffectConfirmed": "An action completed; inspect before continuing",
+      "computerNoObservation": "No new page observation"
     },
     "toolActivityDetailsPending": "Waiting for tool details",
     "toolActivityNoAdditionalDetails": "No additional details",
@@ -1514,5 +1518,29 @@
     "chromeRemoteHint": "Use a separate browser profile with its own saved sign-ins.",
     "chromeRemotePrepare": "Set up separate browser",
     "chromeRemoteFailed": "The separate browser could not be prepared. Try again."
+  },
+  "taskFiles": {
+    "title": "Files",
+    "results": "Deliverables",
+    "working": "Working files",
+    "empty": "No files have been delivered yet.",
+    "preview": "Preview",
+    "folder": "Open folder",
+    "download": "Download",
+    "refresh": "Refresh",
+    "more": "Load more",
+    "clean": "Clean working files",
+    "confirm": "Delete working files? Delivered files stay in their saved locations.",
+    "cancel": "Cancel",
+    "close": "Close",
+    "loading": "Loading files…",
+    "failed": "Could not load files. Try again.",
+    "available": "Available",
+    "changed": "Changed since delivery",
+    "missing": "File missing",
+    "unavailable": "Unavailable",
+    "busy": "Working files cannot be cleaned while this conversation or its processes are active.",
+    "warning": "Application state is inside this workspace. Move it outside the project to keep intermediate files separate.",
+    "truncated": "Only the first 200 working files are shown."
   }
 }
