@@ -5,7 +5,7 @@ description: ReDevPlugin owns opaque external-process sessions, bounded binary s
 tags: [architecture, plugins, processes, redevplugin]
 timestamp: 2026-10-07T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-27"
 ---
 # Summary
 
@@ -25,6 +25,8 @@ Every session binds plugin instance, user scope, environment scope, plugin invoc
 
 Secret references are resolved by the Host adapter and values do not cross the UI, error, audit, or diagnostic projections.
 
+For one owner and client key, ReDevPlugin reuses only a field-equal launch request. It snapshots argument and environment collections before starting; later caller mutations cannot redefine an in-flight or running launch. Changed launch fields return a launch-conflict error. Redeven delegates this decision to the platform.
+
 ## Streams and lifecycle
 The first contract supports non-PTY stdin, stdout, and stderr only. Each output stream has an independent cursor and bounded ring buffer.
 
@@ -36,7 +38,7 @@ This concept owns platform process-session ownership, isolation, stream-loss sem
 
 # Evidence
 
-- ReDevPlugin `pkg/process/supervisor.go`, `pkg/process/supervisor_unix.go`, and `pkg/process/supervisor_windows.go` own session, stream, and process-tree behavior.
+- ReDevPlugin `pkg/process/supervisor.go`, `pkg/process/supervisor_unix.go`, and `pkg/process/supervisor_windows.go` own session, stream, and process-tree behavior. `supervisor_test.go` covers argument/environment boundary collisions, retained request copies, and pending-start conflicts.
 
 - ReDevPlugin `pkg/host/runtime_io.go` enforces method-level Process Broker access and emits redacted process diagnostics.
 

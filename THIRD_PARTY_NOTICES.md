@@ -2751,14 +2751,14 @@ SOFTWARE.
 | github.com/docker/docker-credential-helpers | v0.9.5 | MIT | Runtime | https://pkg.go.dev/github.com/docker/docker-credential-helpers@v0.9.5 | Detected from LICENSE. |
 | github.com/dsnet/compress | v0.0.2-0.20230904184137-39efe44ab707 | BSD-style | Runtime | https://pkg.go.dev/github.com/dsnet/compress@v0.0.2-0.20230904184137-39efe44ab707 | Detected from LICENSE.md. |
 | github.com/dunglas/httpsfv | v1.1.1 | BSD-style | Runtime | https://pkg.go.dev/github.com/dunglas/httpsfv@v1.1.1 | Detected from LICENSE. |
-| github.com/dustin/go-humanize | v1.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/dustin/go-humanize@v1.0.1 | Detected from LICENSE. |
+| github.com/dustin/go-humanize | v1.1.0 | MIT | Runtime | https://pkg.go.dev/github.com/dustin/go-humanize@v1.1.0 | Detected from LICENSE. |
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
 | github.com/floegence/floe-native-apps | v0.24.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floe-native-apps@v0.24.0 | Detected from LICENSE. |
 | github.com/floegence/floeterm/terminal-go | v0.19.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.19.2 | Floegence first-party dependency. |
 | github.com/floegence/floret/v7 | v7.87.4 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v7@v7.87.4 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v5 | v5.11.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v5@v5.11.1 | Floegence first-party dependency. |
 | github.com/floegence/redeven-service-templates | v0.7.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redeven-service-templates@v0.7.0 | Floegence first-party versioned Managed Service template catalog. |
-| github.com/floegence/redevplugin/v3 | v3.0.36 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.0.36 | Floegence first-party dependency. |
+| github.com/floegence/redevplugin/v3 | v3.0.37 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin/v3@v3.0.37 | Floegence first-party dependency. |
 | github.com/flynn/noise | v1.1.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/flynn/noise@v1.1.0 | Detected from LICENSE. |
 | github.com/go-chi/chi/v5 | v5.4.0 | MIT | Runtime | https://pkg.go.dev/github.com/go-chi/chi/v5@v5.4.0 | Detected from LICENSE. |
 | github.com/go-jose/go-jose/v4 | v4.1.4 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/go-jose/go-jose/v4@v4.1.4 | Detected from LICENSE. |
@@ -2817,7 +2817,7 @@ SOFTWARE.
 | github.com/minio/minlz | v1.0.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/minio/minlz@v1.0.1 | Detected from LICENSE. |
 | github.com/moby/term | v0.5.2 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/moby/term@v0.5.2 | Detected from LICENSE. |
 | github.com/modelcontextprotocol/go-sdk | v1.8.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/modelcontextprotocol/go-sdk@v1.8.0 | Detected from LICENSE. |
-| github.com/ncruces/go-strftime | v1.0.0 | MIT | Runtime | https://pkg.go.dev/github.com/ncruces/go-strftime@v1.0.0 | Detected from LICENSE. |
+| github.com/ncruces/go-strftime | v1.1.0 | MIT | Runtime | https://pkg.go.dev/github.com/ncruces/go-strftime@v1.1.0 | Detected from LICENSE. |
 | github.com/nozzle/throttler | v0.0.0-20180817012639-2ea982251481 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/nozzle/throttler@v0.0.0-20180817012639-2ea982251481 | Detected from LICENSE. |
 | github.com/nwaples/rardecode/v2 | v2.2.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/nwaples/rardecode/v2@v2.2.0 | Detected from LICENSE. |
 | github.com/oklog/ulid/v2 | v2.1.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/oklog/ulid/v2@v2.1.1 | Detected from LICENSE. |
@@ -2856,7 +2856,7 @@ SOFTWARE.
 | github.com/spf13/pflag | v1.0.10 | BSD-style | Runtime | https://pkg.go.dev/github.com/spf13/pflag@v1.0.10 | Detected from LICENSE. |
 | github.com/STARRY-S/zip | v0.2.3 | BSD-style | Runtime | https://pkg.go.dev/github.com/STARRY-S/zip@v0.2.3 | Detected from LICENSE. |
 | github.com/syndtr/goleveldb | v1.0.1-0.20220721030215-126854af5e6d | BSD-style | Runtime | https://pkg.go.dev/github.com/syndtr/goleveldb@v1.0.1-0.20220721030215-126854af5e6d | Detected from LICENSE. |
-| github.com/tdewolff/parse/v2 | v2.8.16 | MIT | Runtime | https://pkg.go.dev/github.com/tdewolff/parse/v2@v2.8.16 | Detected from LICENSE.md. |
+| github.com/tdewolff/parse/v2 | v2.8.20 | MIT | Runtime | https://pkg.go.dev/github.com/tdewolff/parse/v2@v2.8.20 | Detected from LICENSE.md. |
 | github.com/tetratelabs/wazero | v1.12.0 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/tetratelabs/wazero@v1.12.0 | Detected from LICENSE. |
 | github.com/theupdateframework/go-tuf | v0.7.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/theupdateframework/go-tuf@v0.7.0 | Detected from LICENSE. |
 | github.com/theupdateframework/go-tuf/v2 | v2.4.2 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/theupdateframework/go-tuf/v2@v2.4.2 | Detected from LICENSE. |
@@ -2882,15 +2882,15 @@ SOFTWARE.
 | go.uber.org/zap | v1.28.0 | MIT | Runtime | https://pkg.go.dev/go.uber.org/zap@v1.28.0 | Detected from LICENSE. |
 | go.yaml.in/yaml/v3 | v3.0.5 | Apache-2.0 | Runtime | https://pkg.go.dev/go.yaml.in/yaml/v3@v3.0.5 | Detected from LICENSE. |
 | go4.org | v0.0.0-20230225012048-214862532bf5 | Apache-2.0 | Runtime | https://pkg.go.dev/go4.org@v0.0.0-20230225012048-214862532bf5 | Detected from LICENSE. |
-| golang.org/x/crypto | v0.57.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/crypto@v0.57.0 | Detected from LICENSE. |
-| golang.org/x/image | v0.46.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/image@v0.46.0 | Detected from LICENSE. |
-| golang.org/x/mod | v0.41.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/mod@v0.41.0 | Detected from LICENSE. |
-| golang.org/x/net | v0.60.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/net@v0.60.0 | Detected from LICENSE. |
+| golang.org/x/crypto | v0.58.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/crypto@v0.58.0 | Detected from LICENSE. |
+| golang.org/x/image | v0.47.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/image@v0.47.0 | Detected from LICENSE. |
+| golang.org/x/mod | v0.42.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/mod@v0.42.0 | Detected from LICENSE. |
+| golang.org/x/net | v0.61.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/net@v0.61.0 | Detected from LICENSE. |
 | golang.org/x/oauth2 | v0.36.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/oauth2@v0.36.0 | Detected from LICENSE. |
-| golang.org/x/sync | v0.23.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/sync@v0.23.0 | Detected from LICENSE. |
+| golang.org/x/sync | v0.24.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/sync@v0.24.0 | Detected from LICENSE. |
 | golang.org/x/sys | v0.49.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/sys@v0.49.0 | Detected from LICENSE. |
-| golang.org/x/term | v0.46.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/term@v0.46.0 | Detected from LICENSE. |
-| golang.org/x/text | v0.42.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/text@v0.42.0 | Detected from LICENSE. |
+| golang.org/x/term | v0.47.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/term@v0.47.0 | Detected from LICENSE. |
+| golang.org/x/text | v0.43.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/text@v0.43.0 | Detected from LICENSE. |
 | golang.org/x/time | v0.15.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/time@v0.15.0 | Detected from LICENSE. |
 | google.golang.org/genproto/googleapis/api | v0.0.0-20260526163538-3dc84a4a5aaa | Apache-2.0 | Runtime | https://pkg.go.dev/google.golang.org/genproto/googleapis/api@v0.0.0-20260526163538-3dc84a4a5aaa | Detected from LICENSE. |
 | google.golang.org/genproto/googleapis/rpc | v0.0.0-20260526163538-3dc84a4a5aaa | Apache-2.0 | Runtime | https://pkg.go.dev/google.golang.org/genproto/googleapis/rpc@v0.0.0-20260526163538-3dc84a4a5aaa | Detected from LICENSE. |
@@ -2899,10 +2899,10 @@ SOFTWARE.
 | gopkg.in/yaml.v3 | v3.0.1 | Apache-2.0 | Runtime | https://pkg.go.dev/gopkg.in/yaml.v3@v3.0.1 | Detected from LICENSE. |
 | gotest.tools/v3 | v3.5.2 | Apache-2.0 | Runtime | https://pkg.go.dev/gotest.tools/v3@v3.5.2 | Detected from LICENSE. |
 | k8s.io/klog/v2 | v2.140.0 | Apache-2.0 | Runtime | https://pkg.go.dev/k8s.io/klog/v2@v2.140.0 | Detected from LICENSE. |
-| modernc.org/libc | v1.75.7 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/libc@v1.75.7 | Detected from LICENSE, LICENSE-3RD-PARTY.md. |
+| modernc.org/libc | v1.79.0 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/libc@v1.79.0 | Detected from LICENSE, LICENSE-3RD-PARTY.md. |
 | modernc.org/mathutil | v1.7.1 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/mathutil@v1.7.1 | Detected from LICENSE. |
 | modernc.org/memory | v1.12.1 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/memory@v1.12.1 | Detected from LICENSE, LICENSE-GO, LICENSE-LOGO, LICENSE-MMAP-GO. |
-| modernc.org/sqlite | v1.59.0 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/sqlite@v1.59.0 | Detected from LICENSE, LICENSE-SQLITE, LICENSE-SQLITE_VEC. |
+| modernc.org/sqlite | v1.61.0 | BSD-style | Runtime | https://pkg.go.dev/modernc.org/sqlite@v1.61.0 | Detected from LICENSE, LICENSE-3RD-PARTY.md, LICENSE-SQLITE, LICENSE-SQLITE_VEC. |
 
 ## JavaScript Packages
 
@@ -3050,8 +3050,8 @@ SOFTWARE.
 | @floegence/flowersec-node-native-linux-x64-gnu | 5.11.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-x64-gnu/v/5.11.1 |  |
 | @floegence/flowersec-node-native | 5.11.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native/v/5.11.1 |  |
 | @floegence/redeven-service-templates | 0.7.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fredeven-service-templates/v/0.7.0 | Floegence first-party SDK; the catalog module license policy below also covers this SDK from the same v0.7.0 source release. The SDK manifest omits its license field. |
-| @floegence/redevplugin-contracts | 3.0.36 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/3.0.36 |  |
-| @floegence/redevplugin-ui | 3.0.36 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/3.0.36 | License inherited from floegence/redevplugin root LICENSE. |
+| @floegence/redevplugin-contracts | 3.0.37 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/3.0.37 |  |
+| @floegence/redevplugin-ui | 3.0.37 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/3.0.37 | License inherited from floegence/redevplugin root LICENSE. |
 | @fontsource-variable/inter | 5.2.8 | OFL-1.1 | Desktop shell, Env App UI | https://www.npmjs.com/package/%40fontsource-variable%2Finter/v/5.2.8 |  |
 | @fontsource/ibm-plex-mono | 5.3.0 | OFL-1.1 | Env App UI | https://www.npmjs.com/package/%40fontsource%2Fibm-plex-mono/v/5.3.0 |  |
 | @fontsource/iosevka | 5.2.5 | OFL-1.1 | Desktop shell, Env App UI | https://www.npmjs.com/package/%40fontsource%2Fiosevka/v/5.2.5 |  |

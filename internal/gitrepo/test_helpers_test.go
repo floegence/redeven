@@ -46,7 +46,7 @@ func writeFixtureFile(t *testing.T, root string, relative string, data []byte) {
 func createTestRepoFixture(t *testing.T) testRepoFixture {
 	t.Helper()
 	root := t.TempDir()
-	runGitFixture(t, root, "init")
+	runGitFixture(t, root, "init", "--initial-branch=master")
 	runGitFixture(t, root, "config", "user.name", "Tester")
 	runGitFixture(t, root, "config", "user.email", "tester@example.com")
 
@@ -263,7 +263,7 @@ func createRemoteSyncFixture(t *testing.T, root string) remoteSyncFixture {
 	cloneRoot := filepath.Join(tempRoot, "origin-clone")
 	featureBranch := "feature/remote-checkout"
 
-	runGitFixture(t, tempRoot, "init", "--bare", remoteRoot)
+	runGitFixture(t, tempRoot, "init", "--bare", "--initial-branch="+baseBranch, remoteRoot)
 	runGitFixture(t, root, "remote", "add", "origin", remoteRoot)
 	runGitFixture(t, root, "push", "-u", "origin", baseBranch)
 	runGitFixture(t, tempRoot, "clone", remoteRoot, cloneRoot)

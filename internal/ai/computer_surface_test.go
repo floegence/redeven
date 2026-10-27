@@ -55,7 +55,7 @@ func TestComputerDefaultSurfaceInRun(t *testing.T) {
 // surface so restart/retry, image fidelity and partial-effect tests retain their
 // original contracts while new tasks exercise the compact production default.
 func legacyComputerFixtureTools() []string {
-	names := []string{"ask_user", "task_complete"}
+	names := []string{"ask_user"}
 	for _, d := range builtInToolDefinitions() {
 		names = append(names, d.Name)
 	}

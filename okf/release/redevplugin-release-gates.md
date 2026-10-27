@@ -5,7 +5,7 @@ description: Verify the released ReDevPlugin publication, native runtime evidenc
 tags: [release, redevplugin, artifacts, signing]
 timestamp: 2026-10-09T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-10-27"
 ---
 # Summary
 
@@ -16,7 +16,7 @@ Redeven admits only the coordinated ReDevPlugin release published through its ex
 ## Published source and trust
 
 Consume the coordinated ReDevPlugin release pinned in the product manifest
-(currently `v3.0.36`). The boundary guard rejects sibling wiring, Go workspaces/
+(currently `v3.0.37`). The boundary guard rejects sibling wiring, Go workspaces/
 replacements, npm links, copied runtimes/contracts, Rust path overrides and duplicate
 platform-core trees. Scans exclude generated dependencies/output and fail closed on
 scanner errors. The product commits neither plugin packages nor a separate catalog
