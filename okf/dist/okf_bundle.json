@@ -26129,7 +26129,7 @@
       "frontmatter": {
         "description": "Preserve desktop workflows in narrow windows while allocating temporary navigation drawers from local space.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-27",
         "tags": [
           "accessibility",
           "desktop",
@@ -26141,15 +26141,15 @@
         "title": "Adaptive desktop layout",
         "type": "UI Contract"
       },
-      "body_length": 2210,
+      "body_length": 2702,
       "summary": "Redeven chooses interaction mode through released Floe layout configuration.\nNative Desktop always uses desktop interaction. Browser mobile interaction\nrequires all three conditions: width below 768 CSS pixels, a coarse primary\npointer, and no primary hover capability. Narrow mouse windows retain Activity\nand Workbench. Floe owns media-query observation, local space measurement, and\ndrawer placement/focus; Redeven owns navigation disclosure and content.\nAutomatic sidebar placement never changes saved navigation or collapse preferences.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## One interaction mode\nDesktop Welcome and Desktop-hosted Env App configure `mobileQuery: 'not all'`; the Env App recognizes its native host through the existing Desktop bridge.\n\nResizing a desktop browser cannot rewrite its saved Activity/Workbench choice or activate mobile terminal input.\n\nA hidden toolbar action must retain an explicit reachable entry.\n\n## Temporary desktop navigation\nShell, Flower conversations, Files/Git navigation, and Terminal sessions measure their own shared navigation/content region. When that region cannot fit the current sidebar width plus 480 CSS pixels of main content, the sidebar becomes a transient left side drawer.\n\nMobile navigation retains its product-specific bottom/side panel behavior under the [mobile Shell](mobile-shell-navigation.md) and [Flower](flower-mobile-navigation.md) contracts.",
-          "char_count": 838
+          "body": "## One interaction mode\nDesktop Welcome and Desktop-hosted Env App configure `mobileQuery: 'not all'`; the Env App recognizes its native host through the existing Desktop bridge.\n\nResizing a desktop browser cannot rewrite its saved Activity/Workbench choice or activate mobile terminal input.\n\nA hidden toolbar action must retain an explicit reachable entry.\n\n## Temporary desktop navigation\nShell, Flower conversations, Files/Git navigation, and Terminal sessions measure their own shared navigation/content region. When that region cannot fit the current sidebar width plus 480 CSS pixels of main content, the sidebar becomes a transient left side drawer.\n\nFiles/Git navigation begins with its mode switch, without a separate Files title row or reserved header space. The mobile close action shares that row; desktop drawers retain their accessible dialog title and dismissal. Sidebar resizing and local tree scrolling remain available.\n\nMobile navigation retains its product-specific bottom/side panel behavior under the [mobile Shell](mobile-shell-navigation.md) and [Flower](flower-mobile-navigation.md) contracts.",
+          "char_count": 1119
         },
         {
           "id": "boundaries",
@@ -26174,6 +26174,11 @@
           "id": "redeven:internal/envapp/ui_src/src/ui/mobileViewportPolicy.ts:0:defines the browser product query.",
           "source": "redeven:internal/envapp/ui_src/src/ui/mobileViewportPolicy.ts",
           "description": "Defines the browser product query."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.navigation.browser.test.tsx:0:checks compact sidebar geometry, mobile dismissal, and retained navigation across inline/drawer transitions.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.navigation.browser.test.tsx",
+          "description": "Checks compact sidebar geometry, mobile dismissal, and retained navigation across inline/drawer transitions."
         }
       ],
       "snippet": "Redeven chooses interaction mode through released Floe layout configuration. Native Desktop always uses desktop interaction. Browser mobile interaction requires all three conditions: width below 768 CSS pixels, a coarse primary",
@@ -33769,5 +33774,5 @@
       ]
     }
   ],
-  "source_sha256": "bbd5406a6612c0b0dbbfc6c544df83848653670bbe25fadd145f039aee40f604"
+  "source_sha256": "06b628fe92609d8e39332a7224e4f7cb1060c9c21074d7d374501c7f58976526"
 }
