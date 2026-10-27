@@ -10,6 +10,12 @@ const server = await createSSHSettingsPreviewServer(0, ['environment-settings.ht
 await server.watcher.close();
 const browser = await chromium.launch({ headless: true });
 const report = { cases: [], errors: [] };
+async function settleVisuals(page) {
+  await page.evaluate(async () => {
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await Promise.all(document.getAnimations().filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished.catch(() => {})));
+  });
+}
 const locales = (process.env.REDEVEN_GATEWAY_QA_LOCALES || 'en-US,zh-CN,zh-TW,ja-JP,ko-KR,de-DE,es-ES,fr-FR,pt-BR,ru-RU').split(',');
 try {
   const load = relative => server.ssrLoadModule(fileURLToPath(new URL(relative, import.meta.url)));
@@ -92,6 +98,7 @@ try {
         const bounds = await dialog.boundingBox();
         assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width + 1 && bounds.height <= 900);
         assert.equal(await dialog.evaluate(element => element.scrollWidth > element.clientWidth + 1), false);
+        await settleVisuals(page);
         await page.screenshot({ path: output + '/' + locale + '-' + width + '-client.png' });
         await button(dialog, 'common.close').click(); await page.locator('[data-floe-dialog-panel].redeven-gateway-dialog').waitFor({ state: 'detached' });
         await button(workspace, 'gatewayExperience.allGateways').click(); await card.waitFor();
@@ -119,6 +126,7 @@ try {
         assert.equal(await page.locator('.redeven-gateway-action-popover-surface').count(), 0);
         await button(dialog, 'common.close').first().click(); await page.locator('[data-floe-dialog-panel].redeven-gateway-dialog').waitFor({ state: 'detached' });
         await button(nav, 'gatewayExperience.network').click();
+        await settleVisuals(page);
         await page.screenshot({ path: output + '/' + locale + '-' + width + '-network.png' });
         await button(nav, 'gatewayExperience.overview').click();
         await button(workspace, 'gatewayExperience.moreActions').click();
@@ -135,6 +143,7 @@ try {
         await page.getByRole('menuitem', { name: i18n.t('gatewayExperience.editConnection'), exact: true }).click();
         await dialog.locator('#gateway-name').fill('Connection draft');
         await button(dialog, 'common.cancel').click(); await page.locator('[data-floe-dialog-panel].redeven-gateway-dialog').waitFor({ state: 'detached' });
+        await settleVisuals(page);
         await page.screenshot({ path: output + '/' + locale + '-' + width + '-overview.png' });
         assert.equal(await page.locator('select').count(), 0);
         report.cases.push({ locale, width, dark, sections: 6, draftsRetained: true, explicitIssuance: true, serviceConfirmed: true, revocationConfirmed: true, keyboardMenu: true });
