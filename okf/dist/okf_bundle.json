@@ -27105,7 +27105,7 @@
       "frontmatter": {
         "description": "Read bounded presentations through the released Floe renderer without host tools or document uploads.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-22",
+        "reviewed_at": "2026-10-26",
         "tags": [
           "files",
           "pptx",
@@ -27116,15 +27116,15 @@
         "title": "Static PPTX file preview",
         "type": "UI Contract"
       },
-      "body_length": 1489,
+      "body_length": 1714,
       "summary": "Published Floe owns static PPTX parsing and rendering; Redeven owns the reading\nsurface and authorized file bytes. Supported presentations open locally with\nwindowed slides, selectable text, and stable zoom. External resources stay disabled;\nobsolete documents cannot replace the active source. Rendering failures expose\nlocal recovery or incomplete-content guidance. Original licenses and corresponding\nMPL source remain available with redistribution.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "PPTX uses the lazy published `@floegence/floe-webapp-core/pptx` entrypoint. Opening another file type must not load the PPTX engine.\n\nThe renderer's original licenses, ECMA geometry notice, bundled dependency notices, and MPL corresponding source are verified and retained in the distributed third-party notice.",
-          "char_count": 311
+          "body": "PPTX uses the lazy published `@floegence/floe-webapp-core/pptx` entrypoint. Opening another file type must not load the PPTX engine.\n\nPreview opens directly to the slides without a generic PowerPoint compatibility notice or an empty notice bar. Document-specific guidance appears only when external resources are disabled or some content cannot be rendered.\n\nThe renderer's original licenses, ECMA geometry notice, bundled dependency notices, and MPL corresponding source are verified and retained in the distributed third-party notice.",
+          "char_count": 536
         },
         {
           "id": "boundaries",
@@ -33764,5 +33764,5 @@
       ]
     }
   ],
-  "source_sha256": "f4ee2bf38b82408b30aff941a5ae6e1c1050e589add748c53caf217401bd05fb"
+  "source_sha256": "f88bf6905de7a22698a952388742a9fc6fc4835a4a74d542aa5fdae5f8f32e32"
 }

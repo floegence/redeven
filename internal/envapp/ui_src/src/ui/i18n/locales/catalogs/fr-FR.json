@@ -7196,7 +7196,6 @@
       "zoomInPptx": "Agrandir l’aperçu PPTX",
       "zoomOutPptx": "Réduire l’aperçu PPTX",
       "loadingPptx": "Chargement de la présentation…",
-      "pptxStaticNotice": "Aperçu statique. Les animations et certains effets peuvent différer de PowerPoint.",
       "pptxExternalNotice": "Les liens et ressources externes sont désactivés.",
       "pptxIncomplete": "Une partie du contenu des diapositives n’a pas pu être affichée. Téléchargez le fichier pour consulter l’original."
     },
