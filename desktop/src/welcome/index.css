@@ -233,6 +233,9 @@ html:not(.dark) .redeven-welcome-surface {
 
 .redeven-theme-picker__title {
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 0.875rem;
   font-weight: 600;
   letter-spacing: 0;
@@ -288,7 +291,6 @@ html:not(.dark) .redeven-welcome-surface {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.25rem;
-  margin-top: 0.5rem;
   border-radius: 0.375rem;
   background: color-mix(in srgb, var(--muted) 76%, transparent);
   padding: 0.25rem;

@@ -20547,7 +20547,7 @@
       "frontmatter": {
         "description": "Select global appearance, synchronize Desktop windows, and recover a failed theme change without losing workspace state.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-25",
+        "reviewed_at": "2026-10-27",
         "tags": [
           "desktop",
           "electron",
@@ -20558,15 +20558,15 @@
         "title": "Desktop shell theme state",
         "type": "Desktop Contract"
       },
-      "body_length": 1800,
+      "body_length": 2054,
       "summary": "Desktop owns global `system | light | dark` mode and remembered Floe light/dark presets. One validated snapshot drives Welcome, Env App, native chrome and generated documents. New/reset selections use Porcelain Light/Dark; valid choices survive upgrades. User changes paint pending feedback before asynchronous persistence, retain acknowledged state on failure and permit retry without losing mounted content, drafts or focus.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "- Admit ids/defaults/metadata from published Floe `/themes`; never copy palettes or weaken forced-color/high-contrast behavior. OS changes apply only in system mode.\n- Preload supplies the initial snapshot; user writes use asynchronous IPC without blocking input. [Surface material](../ui/surface-material.md) remains independent.\n- Settings derive content, panels, insets, dividers, controls and selections from active tokens, including Classic presets.\n- Native chrome uses published preview background and semantic foreground with at least 3:1 symbol contrast. Renderers reject palette-bearing IPC and use Floe CSS/Monaco definitions.",
-          "char_count": 637
+          "body": "- Admit ids/defaults/metadata from published Floe `/themes`; never copy palettes or weaken forced-color/high-contrast behavior. OS changes apply only in system mode.\n- Preload supplies the initial snapshot; user writes use asynchronous IPC without blocking input. [Surface material](../ui/surface-material.md) remains independent.\n- Settings derive content, panels, insets, dividers, controls and selections from active tokens, including Classic presets.\n- Welcome and Env App theme popovers begin with one localized, single-line Theme heading. Omit the selected-preset subtitle and visible color-mode caption; keep the color-mode radiogroup accessibly named. Inline settings retain their visible mode label.\n- Native chrome uses published preview background and semantic foreground with at least 3:1 symbol contrast. Renderers reject palette-bearing IPC and use Floe CSS/Monaco definitions.",
+          "char_count": 891
         },
         {
           "id": "boundaries",
@@ -33781,5 +33781,5 @@
       ]
     }
   ],
-  "source_sha256": "ae752aae0dfa63ebe38818673bda075455641ec58a3563659d726290fcb561ce"
+  "source_sha256": "f81a47285da373061278876560c3b8bf1582b9882fec85fa71e0333b86e21242"
 }

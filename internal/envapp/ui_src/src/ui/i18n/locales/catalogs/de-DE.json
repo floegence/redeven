@@ -443,7 +443,7 @@
     },
     "themePicker": {
       "openLabel": "Darstellung",
-      "title": "Darstellung",
+      "title": "Design",
       "closeLabel": "Darstellung schließen",
       "commandDescription": "Wählen Sie einen Farbmodus und eines der verfügbaren Oberflächendesigns.",
       "modeLabel": "Farbmodus",

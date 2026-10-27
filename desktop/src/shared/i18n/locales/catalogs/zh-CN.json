@@ -1954,7 +1954,7 @@
     "useLightTheme": "使用浅色主题",
     "themePicker": {
       "openLabel": "外观",
-      "title": "外观",
+      "title": "主题",
       "closeLabel": "关闭外观设置",
       "modeLabel": "颜色模式",
       "mode": {

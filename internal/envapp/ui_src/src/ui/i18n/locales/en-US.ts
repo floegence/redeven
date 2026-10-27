@@ -1723,7 +1723,7 @@ export const enUS = defineDictionary({
     },
     themePicker: {
       openLabel: 'Appearance',
-      title: 'Appearance',
+      title: 'Theme',
       closeLabel: 'Close appearance',
       commandDescription: 'Choose a color mode and one of the available shell themes.',
       modeLabel: 'Color mode',

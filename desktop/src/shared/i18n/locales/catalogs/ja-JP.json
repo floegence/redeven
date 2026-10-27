@@ -1954,7 +1954,7 @@
     "useLightTheme": "ライトテーマを使用",
     "themePicker": {
       "openLabel": "外観",
-      "title": "外観",
+      "title": "テーマ",
       "closeLabel": "外観設定を閉じる",
       "modeLabel": "カラーモード",
       "mode": {

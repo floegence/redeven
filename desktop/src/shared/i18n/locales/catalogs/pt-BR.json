@@ -1954,7 +1954,7 @@
     "useLightTheme": "Usar tema claro",
     "themePicker": {
       "openLabel": "Aparência",
-      "title": "Aparência",
+      "title": "Tema",
       "closeLabel": "Fechar o painel de aparência",
       "modeLabel": "Modo de cor",
       "mode": {

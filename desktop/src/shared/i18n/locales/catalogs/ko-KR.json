@@ -1954,7 +1954,7 @@
     "useLightTheme": "라이트 테마 사용",
     "themePicker": {
       "openLabel": "화면 모양",
-      "title": "화면 모양",
+      "title": "테마",
       "closeLabel": "화면 모양 설정 닫기",
       "modeLabel": "색상 모드",
       "mode": {
