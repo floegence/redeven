@@ -219,7 +219,6 @@ import {
   applyDesktopAccessModeToDraft,
 } from '../shared/desktopAccessModel';
 import {
-  buildEnvironmentLibrarySummaryModel,
   buildEnvironmentCardModel,
   buildEnvironmentSettingsRuntimeModel,
   buildEnvironmentCardFactsModel,
@@ -250,7 +249,6 @@ import {
   type EnvironmentCardTone,
   type EnvironmentActionPresentation,
   type EnvironmentCenterTab,
-  type EnvironmentLibrarySummaryModel,
   type EnvironmentPrimaryActionOverlayModel,
 } from './viewModel';
 import { buildEnvironmentLibraryDisplayGroups, environmentCloudSections, type EnvironmentLibraryDisplayGroup } from './environmentLibraryProjection';
@@ -2148,14 +2146,6 @@ function localizedOpenActionLabel(i18n: DesktopI18n, action: DesktopEnvironmentO
   }
 }
 
-function localizedWindowsLabel(i18n: DesktopI18n, count: number): string {
-  return i18n.t('launcher.windowsCount', { count });
-}
-
-function localizedVisibleLabel(i18n: DesktopI18n, count: number): string {
-  return i18n.t('launcher.visibleCount', { count });
-}
-
 async function copyToClipboard(text: string): Promise<void> {
   const value = trimString(text);
   if (!value) {
@@ -2948,11 +2938,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return true;
     }));
   };
-  const librarySummary = createMemo(() => (
-    buildEnvironmentLibrarySummaryModel(snapshot(), activeCenterTab() === 'control_planes'
-      ? environmentCloudSections(allLibraryGroups(), controlPlanes(), cloudQuery()).flatMap(section => section.visible_groups)
-      : libraryGroups())
-  ));
   const providerRuntimeLinkActionLabel = createMemo(() => (
     providerRuntimeLinkConfirmation()?.action === 'disconnect'
       ? i18n().t('environmentCenter.disconnectFromProvider')
@@ -6493,7 +6478,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               i18n={i18n()}
               visible={environmentsVisible()}
               snapshot={snapshot()}
-              librarySummary={librarySummary()}
               busyState={busyState()}
               actionProgress={activeActionProgress()}
               activeTab={activeCenterTab()}
@@ -7485,7 +7469,6 @@ function ConnectEnvironmentSurface(props: Readonly<{
   i18n: DesktopI18n;
   visible: boolean;
   snapshot: DesktopWelcomeSnapshot;
-  librarySummary: EnvironmentLibrarySummaryModel;
   busyState: DesktopLauncherBusyState;
   actionProgress: readonly DesktopLauncherActionProgress[];
   activeTab: EnvironmentCenterTab;
@@ -7774,10 +7757,12 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 <p class="text-xs text-muted-foreground">
                   {props.i18n.t(headerCopy().descriptionKey)}
                 </p>
-                <Show when={props.activeTab === 'environments'}>
-                  <div class="pt-1.5">
-                    <LibrarySummary i18n={props.i18n} summary={props.librarySummary} issue={props.snapshot.issue ?? undefined} />
-                  </div>
+                <Show when={props.activeTab === 'environments' && props.snapshot.issue}>
+                  {(issue) => (
+                    <p class="pt-1.5 text-xs text-warning" role="status">
+                      {localizedIssueTitle(props.i18n, issue())}
+                    </p>
+                  )}
                 </Show>
               </div>
               <div class="redeven-center-actions flex min-w-0 items-center gap-2">
@@ -8031,70 +8016,6 @@ function ConsoleBadge(props: Readonly<{
 }>) {
   return <span class="redeven-console-badge">{props.children}</span>;
 }
-
-function LibrarySummaryMetric(props: Readonly<{
-  count: number;
-  label: string;
-  tone?: 'success' | 'primary' | 'warning';
-}>) {
-  return (
-    <span
-      class="redeven-library-summary__metric"
-      data-tone={props.tone}
-      data-zero={props.count === 0 ? '' : undefined}
-    >
-      <Show when={props.tone !== undefined}>
-        <span class="redeven-library-summary__dot" aria-hidden="true" />
-      </Show>
-      <span class="redeven-library-summary__count">{props.count}</span>
-      <span>{props.label}</span>
-    </span>
-  );
-}
-
-/**
- * Health of the whole library, not of the current filter: the counts sit under
- * the surface description where the reader looks for context, and a standing
- * problem stays visible there instead of only appearing in a toast.
- */
-function LibrarySummary(props: Readonly<{
-  i18n: DesktopI18n;
-  summary: EnvironmentLibrarySummaryModel;
-  issue: DesktopWelcomeIssue | undefined;
-}>) {
-  return (
-    <div class="redeven-library-summary" data-redeven-library-summary="">
-      <LibrarySummaryMetric
-        count={props.summary.environment_count}
-        label={localizedVisibleLabel(props.i18n, props.summary.environment_count)}
-      />
-      <span class="redeven-library-summary__sep" aria-hidden="true">·</span>
-      <LibrarySummaryMetric
-        count={props.summary.window_count}
-        label={localizedWindowsLabel(props.i18n, props.summary.window_count)}
-      />
-      <Show when={props.summary.environment_count > 0}>
-        <span class="redeven-library-summary__sep" aria-hidden="true">·</span>
-        <LibrarySummaryMetric count={props.summary.ready_count} label={props.i18n.t('launcher.ready')} tone="success" />
-        <span class="redeven-library-summary__sep" aria-hidden="true">·</span>
-        <LibrarySummaryMetric count={props.summary.running_count} label={props.i18n.t('launcher.running')} tone="primary" />
-        <span class="redeven-library-summary__sep" aria-hidden="true">·</span>
-        <LibrarySummaryMetric count={props.summary.attention_count} label={props.i18n.t('launcher.attention')} tone="warning" />
-      </Show>
-      <Show when={props.issue}>
-        {(issue) => (
-          <>
-            <span class="redeven-library-summary__sep" aria-hidden="true">·</span>
-            <span class="redeven-library-summary__issue" title={localizedIssueTitle(props.i18n, issue())}>
-              {localizedIssueTitle(props.i18n, issue())}
-            </span>
-          </>
-        )}
-      </Show>
-    </div>
-  );
-}
-
 
 function ConsoleChipActionButton(props: Readonly<{
   onClick: JSX.EventHandlerUnion<HTMLButtonElement, MouseEvent>;

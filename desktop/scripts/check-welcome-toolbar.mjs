@@ -46,6 +46,9 @@ try {
           return { toolbar: read(toolbar), input: read(input), buttons: buttons.map(read) };
         });
         const label = `${locale}:${width}:${fontSize}:tab-${tab}`;
+        assert.equal(await page.locator('[data-redeven-library-summary]').count(), 0, 'Welcome omits aggregate metrics');
+        assert.equal(await page.locator('.redeven-header-separator h1').evaluate(title => title.parentElement.children.length), 2,
+          'The normal header contains only its title and description, without a summary spacer');
         const primary = geometry.buttons.at(-1);
         if (width >= 640 && fontSize === 16) assert.equal(geometry.input.height, 32, `${label}: desktop toolbar uses the shared 32px scale`);
         for (const button of geometry.buttons) {
@@ -62,6 +65,9 @@ try {
         assert.equal(primary.name, labels[tab], `${label}: icon action retains its full accessible name`);
         if (width >= 640) assert.ok(primary.text && !primary.text.includes('Redeven Cloud'), `${label}: desktop label stays concise`);
         report.cases.push(label);
+        if (tab === 0 && fontSize === 16 && [390, 1367].includes(width) && ['en-US', 'zh-CN'].includes(locale)) {
+          await page.locator('.redeven-header-separator').screenshot({ path: output + '/' + locale + '-' + width + '-environments.png' });
+        }
         if (tab === 1 && fontSize === 16 && [390, 1367].includes(width) && ['en-US', 'zh-CN'].includes(locale)) {
           await page.locator('.redeven-header-separator').screenshot({ path: `${output}/${locale}-${width}.png` });
         }
@@ -81,6 +87,16 @@ try {
       await page.keyboard.press('Escape');
       await page.getByRole('dialog').waitFor({ state: 'detached' });
     }
+    await page.locator('.redeven-console-tab').first().click();
+    await page.evaluate(() => window.settingsFixture.publish({ ...window.settingsFixtureSnapshot, issue: {
+      scope: 'startup', code: 'fixture_issue', title: 'Runtime needs attention', message: 'Fixture startup issue',
+      diagnostics_copy: '', target_url: '',
+    } }));
+    const issue = page.locator('.redeven-header-separator [role="status"]');
+    await issue.waitFor();
+    assert.equal(await issue.textContent(), 'Runtime needs attention', 'Snapshot issues remain visible independently of aggregate metrics');
+    await page.evaluate(() => window.settingsFixture.publish({ ...window.settingsFixtureSnapshot, issue: null }));
+    await issue.waitFor({ state: 'detached' });
     await context.close();
   }
   assert.deepEqual(report.errors, []);

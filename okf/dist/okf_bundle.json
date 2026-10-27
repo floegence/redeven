@@ -19474,7 +19474,7 @@
       "frontmatter": {
         "description": "Browse one Runtime card through its original Runtime, Cloud and Gateway access tabs.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-25",
+        "reviewed_at": "2026-10-27",
         "tags": [
           "cloud",
           "desktop",
@@ -19485,15 +19485,15 @@
         "title": "Desktop Environment library",
         "type": "Desktop Contract"
       },
-      "body_length": 2326,
+      "body_length": 2678,
       "summary": "Welcome projects one Environment library from authoritative snapshot owners. Exactly linked Runtime/Cloud entries share a card; paired Gateways add access tabs rather than duplicate cards. Independent Runtime, URL and Cloud owners retain their cards. Grouping never merges registrations, grants permission, substitutes failed transports or changes operation ownership. Unlinking restores independent cards; Cloud failures retain known environments with stale-result context.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "- Pair Local/SSH/WSL with Cloud only when linked Runtime ID, Cloud origin, Cloud ID and ENV ID agree. Access-point origin is routing metadata, so directory changes do not split identity. Current health outranks old window startup reports; retained display grants no control.\n- [Card presentation](desktop-environment-card-presentation.md) owns tabs/layout. Search and equivalent snapshots preserve selection; source filters apply their default once. [Interaction continuity](desktop-interaction-continuity.md) owns drafts, authority, visibility and stale responses.\n- Trusted Gateway summaries provide name, endpoints, member identity/phase and Cloud publication ownership. One member needs no selector. Refresh cannot restore a retired selection; confirmation cannot substitute a disappeared member. Existing menu order and capability checks remain authoritative.\n- Redeven Cloud shows a section per signed-in account and shared grid. Offer Refresh normally or after synchronization failure, and Sign in again after expiry. Either owner pin places a group in Pinned; controls change only the active owner and explain the other owner's pin.",
-          "char_count": 1140
+          "body": "- The Environment header shows its title, description and actionable search/refresh/create controls, without an aggregate statistics row. Category filters retain their counts; cards retain individual Runtime/window states. A current snapshot issue remains visible below the description only while present, without reserving space in the normal header.\n- Pair Local/SSH/WSL with Cloud only when linked Runtime ID, Cloud origin, Cloud ID and ENV ID agree. Access-point origin is routing metadata, so directory changes do not split identity. Current health outranks old window startup reports; retained display grants no control.\n- [Card presentation](desktop-environment-card-presentation.md) owns tabs/layout. Search and equivalent snapshots preserve selection; source filters apply their default once. [Interaction continuity](desktop-interaction-continuity.md) owns drafts, authority, visibility and stale responses.\n- Trusted Gateway summaries provide name, endpoints, member identity/phase and Cloud publication ownership. One member needs no selector. Refresh cannot restore a retired selection; confirmation cannot substitute a disappeared member. Existing menu order and capability checks remain authoritative.\n- Redeven Cloud shows a section per signed-in account and shared grid. Offer Refresh normally or after synchronization failure, and Sign in again after expiry. Either owner pin places a group in Pinned; controls change only the active owner and explain the other owner's pin.",
+          "char_count": 1492
         },
         {
           "id": "boundaries",
@@ -33769,5 +33769,5 @@
       ]
     }
   ],
-  "source_sha256": "0755458cf58245d564902e43c5fab3b55e8df2f51daf20d58a96be06d5d2fda5"
+  "source_sha256": "649f294f4e0aa8b84ff62ba3bdb60ea2a49ef0497529b5a0f1a38c01516539ce"
 }
