@@ -5,8 +5,12 @@ import { commands, page, userEvent } from 'vitest/browser';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FlowerLiveStreamEnvelope, FlowerParentEvent, FlowerRuntimeCurrentView, FlowerRuntimeCurrentItem, FlowerToolCallPreview } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
+import type { FlowerSurfaceCopy } from '../../../../flower_ui/src/copy';
+import { createLocalizedFlowerSurfaceCopy } from '../../../../flower_ui/src/i18n/createLocalizedFlowerSurfaceCopy';
+import { createTestI18nHelpers } from './i18n/locales/testDictionaries';
+import type { EnvAppTranslationKey } from './i18n';
 import { flowerActivityIdentity } from '../../../../flower_ui/src/flowerActivityIdentity';
-import { adapter, liveBootstrap, renderSurfaceWithAdapter, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+import { adapter, liveBootstrap, renderSurfaceWithAdapterProps, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
 const media = commands as unknown as { emulateMediaPreferences: (input: { reducedMotion?: 'reduce' | 'no-preference'; forcedColors?: 'active' | 'none' }) => Promise<void> };
 const item = (id: string, kind: FlowerRuntimeCurrentItem['kind'], text = id): FlowerRuntimeCurrentItem => ({ id, kind, text, turn_id: 'turn', run_id: 'run', ordinal: 0 });
@@ -33,28 +37,29 @@ const preview = (id: string): FlowerToolCallPreview => ({
   attempt_id: 'attempt', attempt_epoch: 0, call_id: id, name: 'apply_patch', arguments_complete: false,
   preview: { display_name: `${id}.ts`, additions: 2 },
 });
-async function mount(items: FlowerRuntimeCurrentItem[], previews: readonly FlowerToolCallPreview[] = [], parentEvents: readonly FlowerParentEvent[] = []) {
+async function mount(items: FlowerRuntimeCurrentItem[], previews: readonly FlowerToolCallPreview[] = [], parentEvents: readonly FlowerParentEvent[] = [], partial = false, copy?: FlowerSurfaceCopy) {
   await page.viewport(1280, 900);
-  let latest = { ...current(items, 1, parentEvents), ...(previews.length ? { tool_call_previews: previews } : {}) };
+  const window = partial ? { first_item_id: items[0].id, last_item_id: items.at(-1)!.id, has_before: true, has_after: false } : undefined;
+  let latest = { ...current(items, 1, parentEvents), ...(window ? { window } : {}), ...(previews.length ? { tool_call_previews: previews } : {}) };
   const seed = applyFlowerRuntimeCurrentView(thread({ thread_id: 'sequences', title: 'Tool sequences', messages: [] }), latest);
   const peer = thread({ thread_id: 'peer', title: 'Another conversation' });
   const values: FlowerLiveStreamEnvelope[] = [{ schema_version: 3, kind: 'ready', baseline_complete: true, summaries: [seed, peer] }];
   let wake: (() => void) | undefined;
-  const root = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [applyFlowerRuntimeCurrentView(seed, latest), peer]),
+  const root = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: vi.fn(async () => [applyFlowerRuntimeCurrentView(seed, latest), peer]),
     loadThread: vi.fn(async id => id === peer.thread_id ? liveBootstrap(peer) : { thread: applyFlowerRuntimeCurrentView(seed, latest), current: latest }),
     async *connectLiveStream({ signal }) {
       const abort = () => wake?.(); signal.addEventListener('abort', abort, { once: true });
       try { while (!signal.aborted) { const value = values.shift(); if (value) yield value; else await new Promise<void>(resolve => { wake = resolve; }); } }
       finally { signal.removeEventListener('abort', abort); }
     },
-  });
+  }, { copy });
   root.style.height = '780px';
   await waitFor(() => Boolean(root.querySelector('[data-thread-id="sequences"] button')));
   root.querySelector<HTMLButtonElement>('[data-thread-id="sequences"] button')!.click();
   await waitFor(() => Boolean(root.querySelector('[data-flower-activity-item-id], .flower-thinking-disclosure, .flower-tool-sequence-toggle')));
   await waitFor(() => root.querySelector('.flower-chat-transcript')?.getAttribute('data-flower-tail-preparing') !== 'true');
   return { root, push(next: FlowerRuntimeCurrentItem[], nextPreviews: readonly FlowerToolCallPreview[] = []) {
-    latest = { ...current(next, latest.view_version + 1), ...(nextPreviews.length ? { tool_call_previews: nextPreviews } : {}) };
+    latest = { ...current(next, latest.view_version + 1), ...(window ? { window } : {}), ...(nextPreviews.length ? { tool_call_previews: nextPreviews } : {}) };
     values.push({ schema_version: 3, kind: 'thread.batch', thread_id: 'sequences', current: latest }); wake?.();
   } };
 }
@@ -88,6 +93,37 @@ function expectConnectorBetween(root: HTMLElement, previousID: string, nextID: s
 afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('consecutive tools in the shared Flower surface', () => {
+  it.each(['zh-CN', 'en-US', 'de-DE', 'ja-JP'] as const)('keeps the incomplete label concise and accessible at 320 pixels in %s', async locale => {
+    const i18n = createTestI18nHelpers(locale);
+    const copy = createLocalizedFlowerSurfaceCopy({ locale, t: (key, params) => i18n.t(key as EnvAppTranslationKey, params),
+      tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params) });
+    const { root } = await mount([tool('a'), tool('b', 'running')], [], [], true, copy);
+    await page.viewport(320, 850);
+    const button = toggle(root, 'a');
+    expect(button.textContent).toBe(copy.chat.turnProcess.continuousTools);
+    expect(button.getAttribute('aria-label')).toContain(copy.chat.turnProcess.continuousTools);
+    expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth + 1);
+    if (locale === 'zh-CN') expect(button.textContent).toBe('连续工具调用');
+  });
+  it('shows only the generic label for an incomplete live group, including accessible text', async () => {
+    const { root, push } = await mount([tool('a'), tool('b', 'running')], [], [], true);
+    const button = toggle(root, 'a');
+    expect(button.textContent).toBe('Consecutive tool calls');
+    expect(button.getAttribute('aria-label')).toBe('Collapse tool calls: Consecutive tool calls');
+    button.click();
+    push([tool('a'), tool('b'), tool('c', 'running')]);
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    expect(button.textContent).toBe('Consecutive tool calls');
+    expect(button.querySelector('.flower-tool-sequence-running, .flower-tool-sequence-current')).toBeNull();
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+  });
+  it('shows full group statistics inside a partial history window without waiting for turn completion', async () => {
+    const { root } = await mount([item('before', 'assistant'), tool('a'), tool('b', 'running')], [], [], true);
+    const button = toggle(root, 'a');
+    expect(button.textContent).toContain('2 tool calls');
+    expect(button.textContent).toContain('1 running');
+    expect(button.textContent).not.toContain('Consecutive tool calls');
+  });
   it('keeps returned uncertainty grouped and visible while preserving manual disclosure', async () => {
     const failed = tool('uncertain', 'error', 'computer.exec', 'structured');
     const uncertain = { ...failed, activity: { ...failed.activity!, presentation: { ...failed.activity!.presentation as Record<string, unknown>,

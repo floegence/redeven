@@ -1,4 +1,3 @@
-import type { PreparedHistoryPage } from './historyTurnPreparation';
 import { $RAW } from 'solid-js/store';
 import type {
   FlowerThreadSnapshot,
@@ -206,9 +205,9 @@ export type ThreadCache = {
   hydrateItem(threadID: string, expected: FlowerRuntimeCurrentItem, loaded: FlowerRuntimeCurrentItem): boolean;
   receiveView(
     view: ThreadView,
-    options?: Readonly<{ preserveSummary?: boolean; current?: FlowerRuntimeCurrentView; prepared?: readonly PreparedHistoryPage[]; installedBaseline?: boolean }>,
+    options?: Readonly<{ preserveSummary?: boolean; current?: FlowerRuntimeCurrentView; installedBaseline?: boolean }>,
   ): ThreadViewReceiveResult;
-  receiveCurrent(view: ThreadDetailView, options?: Readonly<{ preserveSummary?: boolean; current?: FlowerRuntimeCurrentView; prepared?: readonly PreparedHistoryPage[]; installedBaseline?: boolean }>): ThreadViewReceiveResult;
+  receiveCurrent(view: ThreadDetailView, options?: Readonly<{ preserveSummary?: boolean; current?: FlowerRuntimeCurrentView; installedBaseline?: boolean }>): ThreadViewReceiveResult;
   receiveUpdate(update: FlowerRuntimeUpdate, options?: Readonly<{ installedInterest?: boolean }>): Readonly<{ cache: ThreadCache; observation?: FlowerRuntimeCurrentView; accepted: boolean }>;
   updateDetailAdjuncts(id: string, update: (thread: ThreadDetail) => ThreadDetail): ThreadCache;
   updateSummaryAdjuncts(id: string, update: (thread: ThreadDetail) => ThreadDetail): ThreadCache;
@@ -308,7 +307,7 @@ function createCache(
   reads: BaselineReads = new Map(),
   retainedIDs: ReadonlySet<string> = new Set(),
 ): ThreadCache {
-  const receive = (view: ThreadDetailView, title: ThreadTitleSnapshot | undefined, options?: Readonly<{ preserveSummary?: boolean; current?: FlowerRuntimeCurrentView; prepared?: readonly PreparedHistoryPage[]; installedBaseline?: boolean }>): ThreadViewReceiveResult => {
+  const receive = (view: ThreadDetailView, title: ThreadTitleSnapshot | undefined, options?: Readonly<{ preserveSummary?: boolean; current?: FlowerRuntimeCurrentView; installedBaseline?: boolean }>): ThreadViewReceiveResult => {
     const id = view.thread.thread_id.trim();
     if (!id) return {
       cache,
@@ -366,7 +365,7 @@ function createCache(
       ), read_only_reason: settingsState === 'accepted' ? view.thread.read_only_reason : runtimeView.thread.read_only_reason }),
     };
     const runtime = runtimeState === 'accepted' && options?.current
-      ? createRuntimeThreadRecord(options.current, { ...mergedView.thread, ...acceptedTitle }, views.get(id)?.runtime, options.prepared) : views.get(id)?.runtime;
+      ? createRuntimeThreadRecord(options.current, { ...mergedView.thread, ...acceptedTitle }, views.get(id)?.runtime) : views.get(id)?.runtime;
     const initializedView = runtimeState === 'accepted' && options?.current && runtime
       ? { ...mergedView, get version() { return runtime.version; }, thread: runtime.initializeThread() } : runtime ? { ...mergedView, get version() { return runtime.version; }, thread: runtime.syncAdjuncts(mergedView.thread as FlowerThreadSnapshot) } : mergedView;
     const next = new Map(views);

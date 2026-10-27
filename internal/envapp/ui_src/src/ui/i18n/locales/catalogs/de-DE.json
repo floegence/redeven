@@ -5736,6 +5736,7 @@
           "one": "{count} Unteraufgaben-Update",
           "other": "{count} Unteraufgaben-Updates"
         },
+        "continuousTools": "Aufeinanderfolgende Werkzeugaufrufe",
         "toolCalls": {
           "one": "{count} Werkzeugaufruf",
           "other": "{count} Werkzeugaufrufe"

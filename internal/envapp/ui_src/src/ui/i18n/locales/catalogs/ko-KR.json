@@ -5736,6 +5736,7 @@
           "one": "하위 작업 업데이트 {count}개",
           "other": "하위 작업 업데이트 {count}개"
         },
+        "continuousTools": "연속 도구 호출",
         "toolCalls": {
           "one": "도구 호출 {count}회",
           "other": "도구 호출 {count}회"

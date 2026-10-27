@@ -27,6 +27,7 @@ export type FlowerToolSequence = Readonly<{
   key: string;
   nodeKeys: readonly string[];
   entryKeys: readonly string[];
+  countsComplete: boolean;
   toolCount: number;
   latestToolLabel?: string;
   failedCount: number;
@@ -66,8 +67,9 @@ export function projectFlowerToolSequences(
   turns: readonly FlowerRuntimeTurn[] = [],
   previous?: FlowerToolSequenceProjection,
   breakBefore: ReadonlySet<string> = new Set(),
+  coverage: Readonly<{ hasBefore: boolean; hasAfter: boolean; missingEvents?: readonly Readonly<{ after: number; before: number }>[] }> = { hasBefore: false, hasAfter: false },
 ): FlowerToolSequenceProjection {
-  const tokens: (SequenceNode | { completedOutputScope: string } | null)[] = [];
+  const tokens: (SequenceNode | { completedOutputScope: string } | { gap: true } | null)[] = [];
   const turnsByID = uniqueTurnsByID(turns);
   const entryPositions = new Map(entries.map((entry, index) => [entry.key, index]));
   const sequenceScope = (ownerThreadID: string | undefined, turnID: string | undefined, runID: string | undefined) =>
@@ -83,7 +85,7 @@ export function projectFlowerToolSequences(
   };
 
   for (const entry of entries) {
-    if (breakBefore.has(entry.key)) tokens.push(null);
+    if (breakBefore.has(entry.key)) tokens.push({ gap: true });
     if (entry.type === 'parent_event') {
       tokens.push(parentEventNode(entry));
       continue;
@@ -101,6 +103,8 @@ export function projectFlowerToolSequences(
           tokens.push({ key: block.key, entryKey: entry.key, scope, turnID: entry.message.turn_id, kind: 'thinking', active: entry.message.live === true, failed: false });
         } else if (block.content.trim()) {
           tokens.push(!entry.message.live && entry.message.status === 'complete' ? { completedOutputScope: scope } : null);
+        } else if (entry.message.body_pending?.kind === 'text') {
+          tokens.push({ gap: true });
         }
       } else if (block.type === 'tool_preview') {
         const call = block.block.call;
@@ -143,29 +147,33 @@ export function projectFlowerToolSequences(
     }
   }
 
-  const runs: { nodes: SequenceNode[]; outputComplete: boolean }[] = [];
+  const runs: { nodes: SequenceNode[]; outputComplete: boolean; countsComplete: boolean }[] = [];
   let pending: SequenceNode[] = [];
-  const flush = (completedScope = '') => {
+  let startComplete = !coverage.hasBefore;
+  const flush = (endComplete: boolean, completedScope = '') => {
     if (pending.some(node => node.kind !== 'thinking')) runs.push({ nodes: pending,
+      countsComplete: startComplete && endComplete,
       outputComplete: Boolean(completedScope) && pending[0].scope === completedScope });
     pending = [];
+    startComplete = endComplete;
   };
   for (const node of tokens) {
+    if (node && 'gap' in node) { flush(false); continue; }
     if (!node || 'completedOutputScope' in node) {
-      flush(node?.completedOutputScope);
+      flush(true, node?.completedOutputScope);
       continue;
     }
-    if (pending.length && pending[0].scope !== node.scope) flush();
+    if (pending.length && pending[0].scope !== node.scope) flush(true);
     pending.push(node);
   }
-  flush();
+  flush(!coverage.hasAfter);
 
   const groups = new Map<string, FlowerToolSequence>();
   const members = new Map<string, FlowerToolSequenceMember>();
   const continuingEntries = new Set<string>();
   const settledTurns = new Set([...turnsByID.values()].filter((turn) => turn.outcome && turn.ended_at)
     .map((turn) => turn.turn_id));
-  runs.forEach(({ nodes, outputComplete }, index) => {
+  runs.forEach(({ nodes, outputComplete, countsComplete }, index) => {
     if (nodes.length < 2) return;
     const tools = nodes.filter(node => node.kind === 'tool');
     const thinking = nodes.filter(node => node.kind === 'thinking');
@@ -173,9 +181,19 @@ export function projectFlowerToolSequences(
     const firstEntry = Math.min(...nodes.map(node => entryPositions.get(node.entryKey) ?? 0));
     const lastEntry = Math.max(...nodes.map(node => entryPositions.get(node.entryKey) ?? firstEntry));
     const entryKeys = entries.slice(firstEntry, lastEntry + 1).map(entry => entry.key);
+    const ordinal = (entry: FlowerTimelineEntry | undefined) => entry?.type === 'message' ? entry.message.canonical_ordinal
+      : entry?.type === 'parent_event' ? entry.event.canonical_ordinal
+        : entry?.type === 'context_compaction' ? entry.decoration.compaction.canonical_ordinal : undefined;
+    const lower = firstEntry > 0 ? ordinal(entries[firstEntry - 1]) : -Infinity;
+    const upper = lastEntry + 1 < entries.length ? ordinal(entries[lastEntry + 1]) : Infinity;
+    const missingEvents = coverage.missingEvents?.some(gap => lower === undefined || upper === undefined
+      || lower < gap.before && upper > gap.after);
     const settled = Boolean(nodes[0].turnID && settledTurns.has(nodes[0].turnID));
+    // Keep disclosure identity when pagination prepends the missing prefix.
+    const retainedKey = nodes.find(node => previous?.groups.has(node.key) && !groups.has(node.key))?.key;
     let group: FlowerToolSequence = {
-      key: nodes[0].key,
+      key: retainedKey ?? nodes[0].key,
+      countsComplete: countsComplete && !missingEvents,
       nodeKeys: nodes.map(node => node.key),
       entryKeys,
       toolCount: tools.length,

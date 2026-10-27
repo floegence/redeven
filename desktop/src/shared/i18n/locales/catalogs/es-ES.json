@@ -839,6 +839,7 @@
             "other": "{count} actualizaciones de subtareas"
           }
         },
+        "continuousTools": "Llamadas consecutivas a herramientas",
         "toolCalls": {
           "kind": "plural",
           "forms": {

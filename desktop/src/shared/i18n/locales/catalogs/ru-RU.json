@@ -854,6 +854,7 @@
             "other": "{count} обновления подзадач"
           }
         },
+        "continuousTools": "Последовательные вызовы инструментов",
         "toolCalls": {
           "kind": "plural",
           "forms": {

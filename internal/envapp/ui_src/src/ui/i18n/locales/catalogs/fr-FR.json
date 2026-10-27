@@ -5736,6 +5736,7 @@
           "one": "{count} mise à jour de sous-tâche",
           "other": "{count} mises à jour de sous-tâches"
         },
+        "continuousTools": "Appels d’outils consécutifs",
         "toolCalls": {
           "one": "{count} appel d’outil",
           "other": "{count} appels d’outils"

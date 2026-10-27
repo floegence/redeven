@@ -103,6 +103,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
   });
   const label = () => {
     const group = member()!.group, copy = context!.copy();
+    if (!group.countsComplete) return copy.continuousTools;
     const summary = () => {
       const parts = [
         group.toolCount ? copy.toolCalls(group.toolCount) : '',
@@ -116,7 +117,7 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
     };
     return summary();
   };
-  const currentLabel = () => !expanded() && member()?.group.disclosure === 'manual' ? member()?.group.latestToolLabel : undefined;
+  const currentLabel = () => member()?.group.countsComplete && !expanded() && member()?.group.disclosure === 'manual' ? member()?.group.latestToolLabel : undefined;
   const Toggle = () => {
     let button: HTMLButtonElement;
     onCleanup(() => {
@@ -134,17 +135,19 @@ export function FlowerToolSequenceNode(props: Readonly<{ nodeKey: string; childr
         onClick={event => context!.toggle(member()!.group, event.currentTarget)}>
         <ChevronRight class="flower-tool-sequence-chevron" aria-hidden="true" />
         <span class="flower-tool-sequence-label">
+          <Show when={member()!.group.countsComplete} fallback={<span classList={{ 'flower-tool-sequence-failures': Boolean(member()!.group.failedCount || member()!.group.uncertainCount || member()!.group.failedSubagentEventCount) }}>{context!.copy().continuousTools}</span>}>
           <Show when={member()!.group.toolCount}>{count => <span>{context!.copy().toolCalls(count())}</span>}</Show>
           <Show when={member()!.group.failedCount}>{count => <span class="flower-tool-sequence-failures">{context!.copy().failedCalls(count())}</span>}</Show>
           <Show when={member()!.group.uncertainCount}>{count => <span class="flower-tool-sequence-failures">{context!.copy().effectUncertain} · {count()}</span>}</Show>
           <Show when={member()!.group.failedSubagentEventCount}>{count => <span class="flower-tool-sequence-subagent-failures">{context!.copy().failedSubtaskUpdates(count())}</span>}</Show>
           <Show when={member()!.group.thinkingCount}>{count => <span class="flower-tool-sequence-thinking">{context!.copy().thinkingSegments(count())}</span>}</Show>
           <Show when={member()!.group.subagentEventCount}>{count => <span class="flower-tool-sequence-subtasks">{context!.copy().subtaskUpdates(count())}</span>}</Show>
+          </Show>
         </span>
         <Show when={currentLabel()}>
           {label => <span class="flower-tool-sequence-current" title={label()}>{label()}</span>}
         </Show>
-        <Show when={member()!.group.runningCount}>{count => <span class="flower-tool-sequence-running">{context!.copy().runningTools(count())}</span>}</Show>
+        <Show when={member()!.group.countsComplete && member()!.group.runningCount}>{count => <span class="flower-tool-sequence-running">{context!.copy().runningTools(count())}</span>}</Show>
       </button>
     );
   };

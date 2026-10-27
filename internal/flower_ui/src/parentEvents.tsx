@@ -29,7 +29,7 @@ export function createParentEventReading(props: Readonly<{
 }>) {
   const [retained, setRetained] = createSignal<readonly FlowerParentEvent[]>([]);
   const [gaps, setGaps] = createSignal<readonly { beforeID: string; afterID: string; height: number }[]>([]);
-  const neighbors = new Map<string, { before?: string; after?: string }>();
+  const neighbors = new Map<string, { before?: string; after?: string; beforeOrdinal?: number; afterOrdinal?: number; leaf?: string }>();
   const [beforeCursor, setBeforeCursor] = createSignal('');
   const [bodies, setBodies] = createSignal<Readonly<Record<string, FlowerParentEvent>>>({});
   const detailQueue = createActivityReadQueue();
@@ -140,10 +140,16 @@ export function createParentEventReading(props: Readonly<{
     batch(change);
     if (anchor) requestAnimationFrame(() => { if (anchor.isConnected) scroll!.finishDisclosure(anchor); });
   };
-  const rememberNeighbors = (page: FlowerParentEventPage, query?: FlowerParentEventQuery) => {
+  const rememberNeighbors = (page: FlowerParentEventPage, query?: FlowerParentEventQuery, tailFirst?: number) => {
+    const exhausted = page.events.length < (query?.limit ?? 50);
+    const lower = query?.after_ordinal ?? (query?.latest ? tailFirst : undefined);
     for (const [index, event] of page.events.entries()) {
       const old = neighbors.get(event.id);
+      const sameSource = old?.leaf === page.leaf_id;
       neighbors.set(event.id, {
+        leaf: page.leaf_id,
+        beforeOrdinal: index === 0 && exhausted && lower !== undefined ? lower : sameSource ? old?.beforeOrdinal : undefined,
+        afterOrdinal: index === page.events.length - 1 && query?.before_ordinal !== undefined ? query.before_ordinal : sameSource ? old?.afterOrdinal : undefined,
         before: page.events[index - 1]?.id ?? query?.after_event_id ?? (event.id === page.first_event_id ? undefined : old?.before),
         after: page.events[index + 1]?.id ?? query?.before_event_id ?? (event.id === page.last_event_id ? undefined : old?.after),
       });
@@ -208,22 +214,6 @@ export function createParentEventReading(props: Readonly<{
         const page = await readPage(reader, request.threadID, query, scope.signal);
         if (current !== generation) return;
         pages.push({ page, query });
-        // A group label is a complete count, not the size of its last network
-        // page. Resolve the frozen displayed interval before publishing it.
-        if (replaceInterval && props.interval) {
-          const lower = query.after_ordinal ?? Math.max(0, (request.tailFirst ?? 1) - 1);
-          let previous = page;
-          while (previous.events.length >= (query.limit ?? 50) && previous.events[0].id !== previous.first_event_id
-            && previous.events[0].canonical_ordinal! > lower + 1) {
-            const before = previous.events[0].canonical_ordinal!;
-            const continuation: FlowerParentEventQuery = { action: 'list', leaf_id: query.leaf_id,
-              after_ordinal: lower, before_ordinal: before, limit: query.limit ?? 50 };
-            const earlier = await readPage(reader, request.threadID, continuation, scope.signal);
-            if (current !== generation) return;
-            pages.push({ page: earlier, query: continuation });
-            previous = earlier;
-          }
-        }
       }
       // Latest is the canonical owner's bounded reverse seek. Filtering its
       // small result avoids reading an arbitrarily dense receipt-only tail
@@ -261,7 +251,7 @@ export function createParentEventReading(props: Readonly<{
         preserve(() => {
           setRetained(retained().filter(event => pinned.has(event.id) || event.canonical_ordinal !== undefined && spans.some((span, index) =>
             event.canonical_ordinal! >= span.first && (index === spans.length - 1 && !interval!.hasAfter || event.canonical_ordinal! <= span.last))));
-          for (const value of pages) rememberNeighbors(value.page, value.query);
+          for (const value of pages) rememberNeighbors(value.page, value.query, request.tailFirst);
           install(result, request.query, retained().length === 0, false);
           setInitialReady(true);
         });
@@ -477,7 +467,23 @@ export function createParentEventReading(props: Readonly<{
       }
     });
   });
-  return { events, cursor, beforeCursor, gaps, schedule, initialReady,
+  // Missing receipts can interrupt any tool sequence crossing their interval.
+  // They never authorize more reads just to make a group count available.
+  const missingIntervals = createMemo(() => {
+    const rows = events();
+    const positions = new Map(rows.map(event => [event.id, event.canonical_ordinal]));
+    const leaf = props.page?.leaf_id;
+    const boundary = (id: string | undefined, side: 'beforeOrdinal' | 'afterOrdinal') => {
+      const value = id ? neighbors.get(id) : undefined;
+      return value?.leaf === leaf ? value?.[side] : undefined;
+    };
+    return [
+      ...(beforeCursor() ? [{ after: -Infinity, before: boundary(rows[0]?.id, 'beforeOrdinal') ?? rows[0]?.canonical_ordinal ?? Infinity }] : []),
+      ...gaps().map(gap => ({ after: boundary(gap.beforeID, 'afterOrdinal') ?? positions.get(gap.beforeID) ?? -Infinity, before: boundary(gap.afterID, 'beforeOrdinal') ?? positions.get(gap.afterID) ?? Infinity })),
+      ...(cursor() ? [{ after: boundary(rows.at(-1)?.id, 'afterOrdinal') ?? rows.at(-1)?.canonical_ordinal ?? -Infinity, before: Infinity }] : []),
+    ];
+  });
+  return { events, cursor, beforeCursor, gaps, schedule, initialReady, missingIntervals,
     retainBody: (id: string) => {
       const consumer = {};
       let owner = demanded.get(id);

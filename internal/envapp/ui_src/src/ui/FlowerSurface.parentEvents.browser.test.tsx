@@ -41,11 +41,13 @@ it('aligns receipt reads to the displayed canonical interval instead of the defa
   expect(read).toHaveBeenCalledTimes(1);
   expect(read.mock.calls[0][1]).toMatchObject({ leaf_id: 'receipt-leaf', latest: true, limit: 50 });
   expect(reading.events()).toHaveLength(20);
+  expect(reading.missingIntervals()).toEqual([{ after: -Infinity, before: 9800 }]);
   setInterval({ first: 4000, last: 4100, hasAfter: true });
   await waitFor(() => reading.events().length === 10 && reading.events()[0].id === 'position-400');
   expect(read).toHaveBeenCalledTimes(2);
   expect(read.mock.calls[1][1]).toMatchObject({ after_ordinal: 3999, before_ordinal: 4101 });
   expect(reading.events().every(value => value.canonical_ordinal! >= 4000 && value.canonical_ordinal! <= 4100)).toBe(true);
+  expect(reading.missingIntervals()).toEqual([{ after: -Infinity, before: 3999 }, { after: 4101, before: Infinity }]);
 });
 
 it('does not fetch report bodies while every report is collapsed', async () => {
@@ -75,7 +77,7 @@ it('preserves receipt projection identity when unrelated cache metadata changes'
   expect(read).toHaveBeenCalledTimes(1);
 });
 
-it('publishes the complete displayed receipt interval using bounded preview pages', async () => {
+it('publishes one bounded receipt page without completing counts through extra history reads', async () => {
   const host = document.createElement('div'); document.body.append(host);
   const all = Array.from({ length: 1000 }, (_, index) => ({ ...event('dense-' + index, 'completed'), canonical_ordinal: index + 1 }));
   const source: FlowerParentEventPage = { thread_id: 'parent', leaf_id: 'leaf', first_event_id: all[0].id,
@@ -92,8 +94,8 @@ it('publishes the complete displayed receipt interval using bounded preview page
     interval: { first: 100, last: 200, hasAfter: false } }); return null; }, host);
   onTestFinished(() => { dispose(); host.remove(); });
   await waitFor(() => !reading.busy());
-  expect(reading.events().map(value => value.id)).toEqual(all.slice(99).map(value => value.id));
-  expect(read).toHaveBeenCalledTimes(19);
+  expect(reading.events().map(value => value.id)).toEqual([all[99], ...all.slice(-50)].map(value => value.id));
+  expect(read).toHaveBeenCalledTimes(1);
   expect(read.mock.calls.every(([, query]) => query.limit === 50)).toBe(true);
   expect(reading.cursor()).toBe('');
 });

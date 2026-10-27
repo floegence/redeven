@@ -5736,6 +5736,7 @@
           "one": "サブタスクの更新 {count} 件",
           "other": "サブタスクの更新 {count} 件"
         },
+        "continuousTools": "連続したツール呼び出し",
         "toolCalls": {
           "one": "ツール呼び出し {count} 回",
           "other": "ツール呼び出し {count} 回"

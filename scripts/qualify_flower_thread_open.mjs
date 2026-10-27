@@ -31,6 +31,7 @@ try {
     const ordinals = new Map();
     const activityFields = [];
     const activityValues = [];
+    const activityOwners = new Map();
     try {
     page.on('pageerror', error => evidence.errors.push(String(error)));
     page.on('console', message => { if (message.type() === 'error') evidence.errors.push(message.text()); });
@@ -42,7 +43,10 @@ try {
         const body = response.ok() && url.searchParams.get('op') === 'history' ? JSON.parse(bytes.toString()) : undefined;
         if (response.ok() && url.searchParams.get('op') === 'activity_field') activityFields.push(JSON.parse(bytes.toString()));
         if (response.ok() && url.searchParams.get('op') === 'activity_value') activityValues.push(JSON.parse(bytes.toString()));
-        for (const item of body?.current?.items ?? []) ordinals.set(item.id, item.ordinal);
+        for (const item of body?.current?.items ?? []) {
+          ordinals.set(item.id, item.ordinal);
+          if (item.activity) for (const id of [item.id, item.activity.tool_id, item.activity.item_id].filter(Boolean)) activityOwners.set(id, item.id);
+        }
         evidence.requests.push({ op: url.searchParams.get('op'), status: response.status(), bytes: bytes.length,
           input: request.postData(), timing: request.timing(), window: body?.window ?? body?.current?.window });
         if (!response.ok()) evidence.errors.push({ op: url.searchParams.get('op'), status: response.status(), error: bytes.toString() });
@@ -204,7 +208,8 @@ try {
         const matching = rendered.filter(chunk => chunk.text?.trim() && activityFields.some(field => field.path === chunk.path
           && field.offset_bytes === chunk.offset && field.text === chunk.text));
         const detailText = await row.locator('.flower-activity-inline-details').textContent();
-        const messageID = await row.evaluate(node => node.closest('[data-flower-message-id]')?.getAttribute('data-flower-message-id'));
+        const messageID = activityOwners.get(disclosure);
+        assert.ok(messageID, 'Moved tool rows must retain their canonical activity owner.');
         const normalize = text => text.replace(/\s+/gu, '');
         for (const value of activityValues.filter(value => value.item_id === messageID)) {
           for (const key of ['command', 'output']) {
@@ -269,8 +274,8 @@ try {
       evidence.historyIdle = [];
       const historyCount = () => evidence.requests.filter(read => read.op === 'history').length;
       const verifyIdle = async direction => {
-        // A complete sealed turn may span several bounded requests. Wait for
-        // its atomic publication, then prove that layout cannot trigger reads.
+        // Wait for user-requested pagination, then prove that layout and
+        // incomplete group counts cannot trigger additional history reads.
         await page.waitForFunction(() => !document.querySelector('.flower-history-loading-notice'), undefined, { timeout: 30000 });
         await Promise.all(pending);
         const before = historyCount();

@@ -14,7 +14,7 @@ describe('Flower canonical reference presentation', () => {
 
     expect(source).toContain('parseChatMessageReferences(msg.references');
     expect(source).toContain('parseChatContextAction(turn().context_action)');
-    expect(source).not.toContain('parseChatContextAction(msg.context_action)');
+    expect(source).toContain('parseChatMessageReferences(msg.references) ?? (!msg.turn_id ? parseChatContextAction(msg.context_action) : null)');
   });
 
   it('uses one resource composition for admitted and queued user messages', () => {

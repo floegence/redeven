@@ -18,43 +18,32 @@ export function createFlowerToolSequenceLayout(projection: Accessor<FlowerToolSe
   let scheduled = false;
   const move = (parent: HTMLElement, node: HTMLElement, before: ChildNode | null) => {
     if (node.parentNode === parent && node.nextSibling === before) return;
-    // Chromium preserves focus, selection and embedded content during a move.
-    // Other supported browsers retain the same DOM with focus/ranges restored.
+    // Native movement retains embedded content and focus, but selection ranges
+    // still need explicit restoration when a prepended group adopts old rows.
     const target = parent as HTMLElement & { moveBefore?: (node: Node, before: Node | null) => void };
-    if (target.moveBefore && parent.isConnected && node.isConnected) {
-      target.moveBefore(node, before);
-      return;
-    }
     const focus = node.contains(document.activeElement) ? document.activeElement as HTMLElement : undefined;
+    if (target.moveBefore && parent.isConnected && node.isConnected) target.moveBefore(node, before);
+    else parent.insertBefore(node, before);
+    if (focus && document.activeElement !== focus) focus.focus({ preventScroll: true });
+  };
+  const place = () => {
+    scheduled = false;
+    if (disposed) return;
+    const current = untrack(projection);
     const selection = document.getSelection();
     const ranges = selection && !selection.isCollapsed
       ? Array.from({ length: selection.rangeCount }, (_, index) => {
         const range = selection.getRangeAt(index);
         return { start: range.startContainer, startOffset: range.startOffset, end: range.endContainer, endOffset: range.endOffset };
       }) : [];
-    parent.insertBefore(node, before);
-    focus?.focus({ preventScroll: true });
-    if (ranges.length && selection) {
-      selection.removeAllRanges();
-      ranges.forEach(saved => {
-        const range = document.createRange();
-        range.setStart(saved.start, saved.startOffset);
-        range.setEnd(saved.end, saved.endOffset);
-        selection.addRange(range);
-      });
-    }
-  };
-  const place = () => {
-    scheduled = false;
-    if (disposed) return;
-    const current = untrack(projection);
+
     // Restore independent rows before grouping; never nest a group in itself.
     for (const [key, element] of elements) {
       const member = current.members.get(key);
-      if (!member || member.first || !elements.has(member.group.key)) move(element.slot, element.node, null);
+      if (!member || member.first || !elements.has(member.group.nodeKeys[0])) move(element.slot, element.node, null);
     }
     for (const group of current.groups.values()) {
-      const first = elements.get(group.key);
+      const first = elements.get(group.nodeKeys[0]);
       if (!first) continue;
       let next: ChildNode | null = null;
       for (const key of [...group.nodeKeys.slice(1)].reverse()) {
@@ -63,6 +52,20 @@ export function createFlowerToolSequenceLayout(projection: Accessor<FlowerToolSe
         move(first.body, element.node, next);
         next = element.node;
       }
+    }
+    const changed = ranges.length && selection && (selection.rangeCount !== ranges.length || ranges.some((saved, index) => {
+      const range = selection.getRangeAt(index);
+      return range.startContainer !== saved.start || range.startOffset !== saved.startOffset
+        || range.endContainer !== saved.end || range.endOffset !== saved.endOffset;
+    }));
+    if (changed && selection) {
+      selection.removeAllRanges();
+      ranges.forEach(saved => {
+        const range = document.createRange();
+        range.setStart(saved.start, saved.startOffset);
+        range.setEnd(saved.end, saved.endOffset);
+        selection.addRange(range);
+      });
     }
   };
   createEffect(() => {
@@ -76,11 +79,11 @@ export function createFlowerToolSequenceLayout(projection: Accessor<FlowerToolSe
       const latest = [...untrack(projection).groups.values()].at(-1);
       if (!latest || latest.disclosure !== 'manual') return true;
       if (scheduled) return false;
-      return elements.get(latest.key)?.prepareDestination() ?? false;
+      return elements.get(latest.nodeKeys[0])?.prepareDestination() ?? false;
     },
     prepareArrival: (key: string) => {
       const member = untrack(projection).members.get(key);
-      return member ? elements.get(member.group.key)?.prepareArrival() ?? 0 : 0;
+      return member ? elements.get(member.group.nodeKeys[0])?.prepareArrival() ?? 0 : 0;
     },
     element: (key: string) => elements.get(key)?.node,
     register: (key: string, element: FlowerToolSequenceElement) => {

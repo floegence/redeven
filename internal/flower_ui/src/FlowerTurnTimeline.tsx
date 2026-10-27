@@ -24,6 +24,7 @@ type TimelineProps = Readonly<{
   liveConfirmed?: Accessor<boolean>;
   copy: FlowerTurnProcessCopy;
   readingBreaks?: ReadonlySet<string>;
+  missingEvents?: readonly Readonly<{ after: number; before: number }>[];
   renderBefore?: (entry: Accessor<FlowerTimelineEntry>) => JSX.Element;
   renderEntry: (entry: Accessor<FlowerTimelineEntry>, visible: Accessor<boolean>) => JSX.Element;
 }>;
@@ -228,7 +229,14 @@ export function FlowerTurnTimeline(props: TimelineProps) {
   let previousSequences: { threadID?: string; value: FlowerToolSequenceProjection } | undefined;
   const sequences = createMemo(() => {
     const previous = previousSequences?.threadID === props.thread?.thread_id ? previousSequences?.value : undefined;
-    const next = projectFlowerToolSequences(props.entries, props.thread?.thread_id, props.thread?.turns ?? [], previous, props.readingBreaks);
+    const next = projectFlowerToolSequences(props.entries, props.thread?.thread_id, props.thread?.turns ?? [], previous, props.readingBreaks, {
+      hasBefore: props.thread?.history_window?.has_before ?? false,
+      hasAfter: props.thread?.history_window?.has_after ?? false,
+      missingEvents: props.missingEvents,
+    });
+    // The canonical first node may change on prepend. Share its choice so a
+    // later navigation remount resolves the same manually controlled state.
+    for (const group of next.groups.values()) props.choices.alias(sequenceIdentity(group.nodeKeys[0]), sequenceIdentity(group.key));
     if (previous) untrack(() => {
       for (const group of next.groups.values()) {
         const addedKeys = new Set(group.nodeKeys.filter(key => !previous.members.has(key)));

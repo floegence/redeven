@@ -25,7 +25,8 @@ async function mount(initialFailures = 0) {
     const boundary = Boolean(request.anchor_id);
     if (!boundary) attempt++;
     const selected = !refresh ? items : boundary ? items.slice(0, 2) : items.slice(2);
-    const leaf = !refresh ? 'initial' : boundary && failures-- > 0 ? 'changed-' + attempt : 'stable-' + attempt;
+    if (refresh && !boundary && failures-- > 0) throw { code: 'transport' };
+    const leaf = !refresh ? 'initial' : 'stable-' + attempt;
     const current: FlowerRuntimeCurrentView = {
       thread_id: seed.thread_id, view_version: refresh ? 8 : 7, activity: 'idle', last_outcome: 'completed',
       turn_id: 'turn', run_id: 'run', items: selected, interactions: [], queue: [],
@@ -52,7 +53,7 @@ async function mount(initialFailures = 0) {
 }
 
 describe('Flower detail history recovery', () => {
-  it('reuses a prepared active prefix and keeps all 80 tools through live completion', async () => {
+  it('opens and settles a partial active turn without fetching its missing prefix', async () => {
     await page.viewport(1280, 900);
     const seed = thread({ thread_id: 'active-history', status: 'running', active_run_id: 'run', messages: [] });
     const items: FlowerRuntimeCurrentItem[] = [
@@ -106,7 +107,8 @@ describe('Flower detail history recovery', () => {
     }, { focusThreadRequest: { request_id: 'open-active', thread_id: seed.thread_id } });
     root.style.height = '780px';
     await waitFor(() => Boolean(root.querySelector('[data-flower-activity-item-id=tool-79]')));
-    expect(history).toHaveBeenCalledTimes(4);
+    expect(history).toHaveBeenCalledTimes(1);
+    expect(root.querySelector('.flower-tool-sequence-toggle')?.textContent).toBe('Consecutive tool calls');
     expect(root.querySelector('.flower-turn-summary-button')).toBeNull();
     terminal = true;
     items.push({ id: 'final', ordinal: 82, canonical_ordinal: 82, kind: 'assistant', text: 'All eighty tools are complete', turn_id: 'turn', run_id: 'run' });
@@ -114,22 +116,22 @@ describe('Flower detail history recovery', () => {
     await waitFor(() => root.textContent?.includes('All eighty tools are complete') === true);
     await waitFor(() => Boolean(root.querySelector('.flower-turn-summary-button')));
     root.querySelector<HTMLButtonElement>('.flower-turn-summary-button')!.click();
-    await waitFor(() => root.querySelector('.flower-tool-sequence-toggle')?.textContent?.includes('80 tool calls') === true);
+    await waitFor(() => root.querySelector('.flower-tool-sequence-toggle')?.textContent?.includes('Consecutive tool calls') === true);
     terminalSummary.resolve();
     await waitFor(() => history.mock.calls.filter(call => call[1].observer_id).length === 2);
     await new Promise(resolve => setTimeout(resolve, 100));
-    expect(root.querySelector('.flower-tool-sequence-toggle')?.textContent).toContain('80 tool calls');
+    expect(root.querySelector('.flower-tool-sequence-toggle')?.textContent).toBe('Consecutive tool calls');
     expect(root.textContent).toContain('All eighty tools are complete');
     expect(history.mock.calls.filter(call => call[1].observer_id)).toHaveLength(2);
-    expect(history.mock.calls.filter(call => call[1].anchor_id).map(call => call[1].limit)).toEqual([16, 32, 64]);
+    expect(history.mock.calls.filter(call => call[1].anchor_id).map(call => call[1].limit)).toEqual([]);
     expect(root.querySelector('.flower-thread-sync-error')).toBeNull();
   });
 
-  it('recovers an initial source advance by restarting the complete bounded read', async () => {
+  it('recovers an initial transport failure by retrying the bounded read', async () => {
     const { root, history, full } = await mount(1);
     await waitFor(() => Boolean(root.querySelector('[data-flower-message-id=latest]')));
     expect(history.mock.calls.filter(call => call[1].observer_id)).toHaveLength(2);
-    expect(history).toHaveBeenCalledTimes(4);
+    expect(history).toHaveBeenCalledTimes(2);
     expect(root.querySelector('.flower-thread-sync-error')).toBeNull();
     expect(full).not.toHaveBeenCalled();
   });
@@ -150,7 +152,7 @@ describe('Flower detail history recovery', () => {
       await waitFor(() => history.mock.calls.filter(call => call[1].observer_id).length === 3);
       await new Promise(resolve => setTimeout(resolve, 100));
       expect(flashes).toBe(0);
-      expect(history).toHaveBeenCalledTimes(5);
+      expect(history).toHaveBeenCalledTimes(3);
       expect(root.querySelector('[data-flower-message-id=latest]')).toBe(row);
       expect(root.querySelector('textarea')).toBe(editor);
       expect(editor.value).toBe('Keep the unsent draft');
@@ -167,7 +169,7 @@ describe('Flower detail history recovery', () => {
     await waitFor(() => [...root.querySelectorAll('button')].some(button => button.textContent?.trim() === 'Retry'), 5000);
     expect(history.mock.calls.filter(call => call[1].observer_id)).toHaveLength(4);
     await new Promise(resolve => setTimeout(resolve, 300));
-    expect(history).toHaveBeenCalledTimes(8);
+    expect(history).toHaveBeenCalledTimes(4);
     recover();
     const retry = [...root.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.trim() === 'Retry');
     expect(retry).toBeDefined(); retry!.click();
@@ -203,7 +205,7 @@ describe('Flower detail history recovery', () => {
     push(update(revisions[1], 'Fresh live output'));
     await waitFor(() => root.textContent?.includes('Fresh live output') === true);
     expect(root.textContent).not.toContain('Obsolete retry output');
-    expect(history).toHaveBeenCalledTimes(4);
+    expect(history).toHaveBeenCalledTimes(2);
     expect(root.querySelector('.flower-thread-sync-error')).toBeNull();
   });
 

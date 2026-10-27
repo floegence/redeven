@@ -104,7 +104,6 @@ import { SubagentAvatarStack } from './SubagentAvatarStack';
 import { FlowerToolSequenceNode } from './FlowerToolSequenceNode';
 import { FlowerThinkingDisclosure } from './FlowerThinkingDisclosure';
 import { FlowerTurnTimeline } from './FlowerTurnTimeline';
-import { prepareHistoryTurn, type PreparedHistoryPage } from './historyTurnPreparation';
 import { observeHistoryBodyLayout } from './historyBodyLayout';
 import { useFlowerActivityTitleReveal } from './flowerActivityTitleReveal';
 import { createFlowerTurnDisclosureStore } from './flowerTurnDisclosure';
@@ -3889,7 +3888,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     current?: FlowerRuntimeCurrentView,
     canonicalTitle = true,
     installedBaseline = false,
-    prepared: readonly PreparedHistoryPage[] = [],
   ): ThreadDetailReceiveResult => batch(() => {
     const threadID = trimString(candidate.thread.thread_id);
     if (!threadID || retiredThreadIDs.has(threadID)) {
@@ -3910,7 +3908,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const cache = threadCache();
       const options = {
         current,
-        prepared,
         installedBaseline,
         preserveSummary: source === 'summary_update'
           && (threadSnapshotRevision(summary) > (candidate.contentRevision ?? threadSnapshotRevision(candidate.thread))
@@ -3994,7 +3991,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const result = receiveThreadDetail({
         thread: { ...live.thread, ...(navigation?.childThreadID === live.thread.thread_id ? { parent_thread_id: navigation.parentThreadID } : {}) },
         version: Math.max(1, Math.floor(Number(live.current.view_version) || 0)),
-      }, source, live.current, true, revision !== undefined && revision === historyAcceptedReadingRevision, preparedHistoryPages.get(live));
+      }, source, live.current, true, revision !== undefined && revision === historyAcceptedReadingRevision);
       if (revision !== undefined) { historyReadRevisions.delete(live); acceptHistoryReading(revision); }
       return result;
     });
@@ -4211,12 +4208,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const observer = computerObserverID();
     if (threadID && observer) void props.adapter.releaseHistory?.(threadID, { observer_id: observer, reading_revision: revision, subagent }).catch(() => undefined);
   };
-  const preparedHistoryPages = new WeakMap<object, readonly PreparedHistoryPage[]>();
-  const cachedHistory = (current: FlowerRuntimeCurrentView) => ({
-    items: threadCache().readingItemIDs(current.thread_id).flatMap(id => {
-      const item = threadCache().runtimeItem(current.thread_id, id); return item ? [item] : [];
-    }), window: threadCache().views.get(current.thread_id)?.thread.history_window,
-  });
   const readHistory = async (tid: string, input: import('./contracts/flowerSurfaceContracts').FlowerHistoryRequest, signal: AbortSignal, foreground: boolean) => {
     if (!props.adapter.loadHistory) return props.adapter.loadThread(tid, signal);
     const observer = foreground ? computerObserverID() : '';
@@ -4229,11 +4220,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const view = await props.adapter.loadHistory(tid, { ...input, ...(observer ? { observer_id: observer, reading_revision: revision } : {}) }, signal);
       signal.throwIfAborted();
       if (observer && (revision !== historyReadingRevision || observer !== computerObserverID())) throw new DOMException('History read was superseded.', 'AbortError');
-      if (foreground) {
-        const cached = cachedHistory(view.current);
-        const pages = await prepareHistoryTurn(view, request => props.adapter.loadHistory!(tid, request, signal), signal, cached.items, cached.window);
-        preparedHistoryPages.set(view, pages);
-      }
       if (observer) { historyReadingInput = input; historyReadRevisions.set(view, revision); }
       return view;
   };
@@ -5963,7 +5949,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     contextUsage?: FlowerLiveStreamEnvelope['context_usage'],
     contextCompactions?: FlowerLiveStreamEnvelope['context_compactions'],
     timelineDecorations?: FlowerLiveStreamEnvelope['timeline_decorations'],
-    prepared: readonly PreparedHistoryPage[] = [],
   ): boolean => {
     const childThreadID = trimString(current.thread_id);
     const viewVersion = Math.max(0, Math.floor(Number(current.view_version) || 0));
@@ -5985,7 +5970,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     buildFlowerTimelineEntries(projected);
     const cached = threadCache().views.get(childThreadID);
     if (cached?.version && viewVersion < cached.version) return false;
-    const result = receiveThreadDetail({ thread: projected, version: viewVersion }, 'live_current', current, true, false, prepared);
+    const result = receiveThreadDetail({ thread: projected, version: viewVersion }, 'live_current', current, true, false);
     if (cached?.version === viewVersion) {
       // Context supplements have independent acceptance at the same actor
       // version, exactly as the selected root detail does.
@@ -6028,21 +6013,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     subagentHandoff = handoff;
     let revision = 0;
     try {
-      const { detail, prepared } = await recoverHistoryRead(async () => {
+      const detail = await recoverHistoryRead(async () => {
         revision = ++subagentReadingRevision;
         subagentPendingEnvelopes.clear();
         const detail = await readDetail(signal => props.adapter.loadSubagentDetail(request.parentThreadID, request.childThreadID,
           props.adapter.loadHistory ? { ...input, ...(observer ? { observer_id: observer, reading_revision: revision } : {}) } : undefined, signal), readController.signal);
-        let prepared: readonly PreparedHistoryPage[] = [];
-        const canonical = { ...detail.current, window: detail.window ?? detail.current.window };
-        if (canonical.window?.leaf_id) {
-          const cached = cachedHistory(canonical);
-          const pages = await prepareHistoryTurn({ ...detail, current: canonical },
-            input => readDetail(signal => props.adapter.loadSubagentDetail(request.parentThreadID, request.childThreadID, input, signal), readController.signal),
-            readController.signal, cached.items, cached.window);
-          prepared = pages.map(page => ({ current: page.current, thread: projectSubagentDetailThread(page)! }));
-        }
-        return { detail, prepared };
+        return detail;
       }, readController.signal);
       protectReadingHandoff(true);
       readController.signal.throwIfAborted();
@@ -6068,7 +6044,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (readingAnchor) subagentDetailScroll.preserveLayoutAnchor(readingAnchor);
       if (preserveReading) subagentDetailScroll.stopFollowing();
       batch(() => {
-        acceptActiveSubagentCurrent(request.parentThreadID, { ...detail.current, ...(detail.window ? { window: detail.window } : {}) }, detail.summary, detail.model_context, detail.context_usage, detail.context_compactions, detail.timeline_decorations, prepared);
+        acceptActiveSubagentCurrent(request.parentThreadID, { ...detail.current, ...(detail.window ? { window: detail.window } : {}) }, detail.summary, detail.model_context, detail.context_usage, detail.context_compactions, detail.timeline_decorations);
         acceptHistoryReading(revision, true);
       });
       setActiveSubagentDetail((latest) => (
@@ -12973,7 +12949,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       </Show></>}
 
       contextIndicator={<Show when={subagentDetailThread()?.model_context}><FlowerComposerContextIndicator placement="below-start" usage={subagentDetailThread()?.context_usage ?? {}} modelContext={subagentDetailThread()?.model_context} copy={copy()} /></Show>}
-      renderTimeline={() => <><FlowerTurnTimeline thread={subagentTimelineDocument().thread} entries={subagentDetailTimelineEntries()} readingBreaks={historyReadingBreaks(true)} renderBefore={entry => <>{historyGapBefore(entry, true)}{receiptGapBefore(entry, subagentParentEventReading)}</>}
+      renderTimeline={() => <><FlowerTurnTimeline thread={subagentTimelineDocument().thread} entries={subagentDetailTimelineEntries()} readingBreaks={historyReadingBreaks(true)} missingEvents={subagentParentEventReading.missingIntervals()} renderBefore={entry => <>{historyGapBefore(entry, true)}{receiptGapBefore(entry, subagentParentEventReading)}</>}
         failureNoticeVisible={runErrorNoticeVisible(subagentDetailThread())}
         runtimeID={props.adapter.runtime.runtime_id} scope="subagent" choices={turnDisclosureChoices}
         scroll={subagentDetailScroll} reducedMotion={reducedMotionPreferred} liveConfirmed={livePresentationConfirmed} copy={copy().chat.turnProcess}
@@ -14782,7 +14758,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               when={selectedThreadHasContent() || selectedThreadHasLiveProgress() || visibleTransportOutbox().length > 0}
               fallback={selectedThreadFallbackState()}
             >
-              <FlowerTurnTimeline thread={selectedTimelineDocument().thread} entries={visibleTimelineEntries()} readingBreaks={historyReadingBreaks()} renderBefore={entry => <>{historyGapBefore(entry)}{receiptGapBefore(entry, parentEventReading)}</>}
+              <FlowerTurnTimeline thread={selectedTimelineDocument().thread} entries={visibleTimelineEntries()} readingBreaks={historyReadingBreaks()} missingEvents={parentEventReading.missingIntervals()} renderBefore={entry => <>{historyGapBefore(entry)}{receiptGapBefore(entry, parentEventReading)}</>}
                 failureNoticeVisible={runErrorNoticeVisible(selectedThread())}
                 runtimeID={props.adapter.runtime.runtime_id} scope="main" choices={turnDisclosureChoices}
                 scroll={transcriptScroll} reducedMotion={reducedMotionPreferred} liveConfirmed={livePresentationConfirmed} copy={copy().chat.turnProcess}

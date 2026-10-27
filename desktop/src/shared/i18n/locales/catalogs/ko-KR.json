@@ -839,6 +839,7 @@
             "other": "하위 작업 업데이트 {count}개"
           }
         },
+        "continuousTools": "연속 도구 호출",
         "toolCalls": {
           "kind": "plural",
           "forms": {
