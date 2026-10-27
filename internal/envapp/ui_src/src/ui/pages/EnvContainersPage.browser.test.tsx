@@ -289,6 +289,66 @@ describe('native Containers responsive product surface', () => {
     await page.screenshot({ path: '__screenshots__/container-service-feedback-' + width + '.png' });
   });
 
+  it.each([[390, 'en-US'], [1440, 'en-US'], [390, 'zh-CN'], [390, 'zh-TW']] as const)('keeps service recovery readable at %spx in %s', async (width, locale) => {
+    await page.viewport(width, 900);
+    window.localStorage.setItem('redeven_ui_language_preference', locale);
+    const api = await import('../services/containerResourcesApi');
+    vi.mocked(api.listContainerServices).mockResolvedValueOnce([{
+      service_id: 'desktop', engine: 'docker', name: 'Docker Desktop', implementation: 'docker_desktop', state: 'stopped',
+      capabilities: { start: true, stop: true, restart: true }, configuration: { mode: 'local', sources: ['engine', 'docker_cli'] },
+    }]);
+    browserHarness.listOperations.mockResolvedValue([{
+      operation_id: 'desktop-start', method: 'container.services.start', engine: 'docker', resource_kind: 'container_service', resource_identity: 'desktop',
+      state: 'failed', error_code: 'engine_timeout', error_message: 'internal startup failure', created_at_unix_ms: Date.now() - 120000, updated_at_unix_ms: Date.now(), finished_at_unix_ms: Date.now(),
+    }]);
+    const mounted = mount('activity', 'dark'); dispose = mounted.dispose;
+    await expect.poll(() => mounted.host.textContent).toContain('postgres-development');
+    const serviceToggle = mounted.host.querySelector<HTMLButtonElement>('[aria-label="Container services"], [aria-label="容器服务"], [aria-label="容器服務"]')!;
+    serviceToggle.click();
+    await expect.poll(() => mounted.host.querySelector('.container-service-operation')?.textContent).toContain('Docker Desktop');
+    const recovery = mounted.host.querySelector('.container-service-operation')?.textContent ?? '';
+    expect(recovery).toContain(locale === 'zh-CN' ? '请在此电脑上打开' : locale === 'zh-TW' ? '請在這部電腦上開啟' : 'Open Docker Desktop');
+    expect(document.querySelector('[data-container-operations]')).toBeNull();
+    expect(mounted.host.querySelector('[role="progressbar"]')).toBeNull();
+    await expect.element(page.getByRole('button', { name: locale === 'zh-CN' ? '检查状态' : locale === 'zh-TW' ? '檢查狀態' : 'Check status', exact: true })).toBeVisible();
+    await expect.element(page.getByRole('button', { name: locale === 'zh-CN' ? '操作记录' : locale === 'zh-TW' ? '操作記錄' : 'Operation history', exact: true })).toBeVisible();
+    for (const animation of document.getAnimations()) if (Number.isFinite(animation.effect?.getComputedTiming().endTime)) animation.finish();
+    await settle();
+    for (const element of mounted.host.querySelectorAll<HTMLElement>('.container-service-card, .container-service-operation')) {
+      expect(element.scrollWidth).toBeLessThanOrEqual(element.clientWidth + 1);
+    }
+    await page.screenshot({ path: '__screenshots__/container-lifecycle-card-' + width + '-' + locale + '.png' });
+  });
+
+  it('keeps active lifecycle controls stable across polling and revalidates success', async () => {
+    const api = await import('../services/containerResourcesApi');
+    const stopped = {
+      service_id: 'desktop', engine: 'docker' as const, name: 'Docker Desktop', implementation: 'docker_desktop' as const, state: 'stopped' as const,
+      capabilities: { start: true, stop: true, restart: true }, configuration: { mode: 'local' as const, sources: ['engine' as const] },
+    };
+    vi.mocked(api.listContainerServices).mockResolvedValueOnce([stopped]);
+    const operation = {
+      operation_id: 'desktop-start', method: 'container.services.start', engine: 'docker', resource_kind: 'container_service', resource_identity: 'desktop',
+      state: 'running', created_at_unix_ms: Date.now(), updated_at_unix_ms: Date.now(),
+    };
+    browserHarness.listOperations.mockResolvedValue([operation]);
+    const mounted = mount('activity', 'dark'); dispose = mounted.dispose;
+    await expect.poll(() => mounted.host.textContent).toContain('postgres-development');
+    await page.getByRole('button', { name: 'Container services', exact: true }).click();
+    await expect.poll(() => mounted.host.querySelector('.container-service-operation')?.textContent).toContain('Starting');
+    await expect.element(page.getByRole('button', { name: 'Start', exact: true })).toBeDisabled();
+    const cancel = mounted.host.querySelector('.container-service-operation button');
+    const previousCalls = browserHarness.listOperations.mock.calls.length;
+    browserHarness.listOperations.mockImplementation(async () => [{ ...operation, updated_at_unix_ms: Date.now() }]);
+    await expect.poll(() => browserHarness.listOperations.mock.calls.length, { timeout: 3500 }).toBeGreaterThan(previousCalls);
+    expect(mounted.host.querySelector('.container-service-operation button')).toBe(cancel);
+    vi.mocked(api.listContainerServices).mockResolvedValueOnce([{ ...stopped, state: 'running' }]);
+    browserHarness.listOperations.mockResolvedValue([{ ...operation, state: 'succeeded' }]);
+    await expect.poll(() => mounted.host.querySelector('.container-service-card')?.getAttribute('data-state'), { timeout: 3500 }).toBe('running');
+    await expect.element(page.getByRole('button', { name: 'Stop', exact: true })).toBeEnabled();
+    expect(document.querySelector('[data-container-operations]')).toBeNull();
+  });
+
   it.each([390, 1440])('keeps reviewed service impact visible without internal hashes at %spx', async (width) => {
     await page.viewport(width, 900);
     browserHarness.preflight.mockResolvedValue({

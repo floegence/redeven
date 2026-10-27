@@ -3,6 +3,7 @@ package containerengine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -234,6 +235,38 @@ func TestContainerServicesBoundSlowEngineIndependently(t *testing.T) {
 	}
 }
 
+func TestDockerDesktopMacStartUsesApplicationLaunchAndWaitsForEngine(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var calls []string
+		probes := 0
+		client := &CLIClient{GOOS: "darwin", Runner: CommandRunnerFunc(func(_ context.Context, name string, args ...string) ([]byte, error) {
+			command := name + " " + strings.Join(args, " ")
+			calls = append(calls, command)
+			switch command {
+			case "docker context ls --format {{json .}}":
+				return []byte(`{"Name":"desktop-linux","Current":true,"DockerEndpoint":"unix:///desktop.sock"}`), nil
+			case "/usr/bin/open -g -b com.docker.docker":
+				return nil, nil
+			case "docker --context desktop-linux version --format {{json .}}":
+				probes++
+				if probes < 3 {
+					return nil, ErrDaemonStopped
+				}
+				return []byte(`{"Server":{"Version":"29.0.1"}}`), nil
+			default:
+				return nil, fmt.Errorf("unexpected command: %s", command)
+			}
+		})}
+		service := ContainerService{Engine: EngineDocker, Implementation: ContainerServiceDockerDesktop, endpointID: endpointID(EngineDocker, "desktop-linux")}
+		if err := client.runContainerServiceAction(context.Background(), service, MethodContainerServicesStart); err != nil {
+			t.Fatal(err)
+		}
+		if probes != 3 || strings.Count(strings.Join(calls, "\n"), "/usr/bin/open") != 1 {
+			t.Fatalf("launch must run once and wait for engine: %v", calls)
+		}
+	})
+}
+
 func TestDockerDesktopStoppedCommandFailureClassification(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
@@ -279,8 +312,8 @@ func TestDockerDesktopStoppedLifecyclePreservesServiceIdentity(t *testing.T) {
 			return []byte(`{"Client":{"Version":"29.0.1"},"Server":{"Version":"29.0.1"}}`), nil
 		case "docker desktop version --format json":
 			return []byte(`{"version":"v0.2.0"}`), nil
-		case "docker desktop start", "docker desktop stop":
-			running = command == "docker desktop start"
+		case "/usr/bin/open -g -b com.docker.docker", "docker desktop stop":
+			running = command == "/usr/bin/open -g -b com.docker.docker"
 			lifecycleCalls = append(lifecycleCalls, command)
 			return nil, nil
 		case "podman system connection list --format json":
@@ -321,7 +354,7 @@ func TestDockerDesktopStoppedLifecyclePreservesServiceIdentity(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if got := strings.Join(lifecycleCalls, ","); got != "docker desktop start,docker desktop stop,docker desktop start" {
+	if got := strings.Join(lifecycleCalls, ","); got != "/usr/bin/open -g -b com.docker.docker,docker desktop stop,/usr/bin/open -g -b com.docker.docker" {
 		t.Fatalf("lifecycle calls = %s", got)
 	}
 }
@@ -331,7 +364,7 @@ func TestContainerServiceLifecycleHasDedicatedBudget(t *testing.T) {
 		for _, method := range []Method{MethodContainerServicesStart, MethodContainerServicesStop, MethodContainerServicesRestart} {
 			t.Run(string(implementation)+"/"+string(method), func(t *testing.T) {
 				var deadlines []time.Time
-				client := &CLIClient{Timeout: time.Millisecond, Runner: CommandRunnerFunc(func(ctx context.Context, _ string, _ ...string) ([]byte, error) {
+				client := &CLIClient{GOOS: "linux", Timeout: time.Millisecond, Runner: CommandRunnerFunc(func(ctx context.Context, _ string, _ ...string) ([]byte, error) {
 					deadline, ok := ctx.Deadline()
 					if !ok || time.Until(deadline) < 119*time.Second || time.Until(deadline) > 120*time.Second {
 						t.Errorf("lifecycle command budget = %v, want a dedicated two-minute budget", time.Until(deadline))
@@ -358,7 +391,7 @@ func TestContainerServiceLifecycleHasDedicatedBudget(t *testing.T) {
 
 func TestContainerServiceLifecycleHonorsCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	client := &CLIClient{Runner: CommandRunnerFunc(func(ctx context.Context, _ string, _ ...string) ([]byte, error) {
+	client := &CLIClient{GOOS: "linux", Runner: CommandRunnerFunc(func(ctx context.Context, _ string, _ ...string) ([]byte, error) {
 		cancel()
 		<-ctx.Done()
 		return nil, ctx.Err()
@@ -372,6 +405,7 @@ func TestContainerServiceLifecycleHonorsCancellation(t *testing.T) {
 func TestContainerServiceLifecycleOutlivesQueryTimeout(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		client := NewCLIClient()
+		client.GOOS = "linux"
 		client.Runner = CommandRunnerFunc(func(ctx context.Context, _ string, _ ...string) ([]byte, error) {
 			select {
 			case <-time.After(11 * time.Second):
@@ -404,8 +438,81 @@ func TestContainerServiceLifecycleDeadlineRemainsBounded(t *testing.T) {
 				})
 				start := time.Now()
 				err := client.runContainerServiceAction(ctx, ContainerService{Implementation: ContainerServicePodmanMachine, machineName: "podman-default"}, MethodContainerServicesRestart)
-				if !errors.Is(err, context.DeadlineExceeded) || time.Since(start) != min(parentBudget, 2*time.Minute) || calls != 1 {
+				if (!errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, ErrEngineTimeout)) || time.Since(start) != min(parentBudget, 2*time.Minute) || calls != 1 {
 					t.Fatalf("deadline result: err=%v elapsed=%v calls=%d", err, time.Since(start), calls)
+				}
+			})
+		})
+	}
+}
+
+func TestDockerDesktopMacStartNeverConfusesLaunchWithReadiness(t *testing.T) {
+	for _, mode := range []string{"timeout", "canceled", "permission", "launch_failed", "missing_endpoint", "restart"} {
+		t.Run(mode, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				launches, stops, probes := 0, 0, 0
+				client := &CLIClient{GOOS: "darwin", Runner: CommandRunnerFunc(func(_ context.Context, name string, args ...string) ([]byte, error) {
+					command := name + " " + strings.Join(args, " ")
+					switch command {
+					case "docker context ls --format {{json .}}":
+						return []byte(`{"Name":"desktop-linux","Current":true,"DockerEndpoint":"unix:///desktop.sock"}`), nil
+					case "/usr/bin/open -g -b com.docker.docker":
+						launches++
+						if mode == "launch_failed" {
+							return nil, ErrCLIUnavailable
+						}
+						if mode == "canceled" {
+							cancel()
+						}
+						return nil, nil
+					case "docker desktop stop":
+						stops++
+						return nil, nil
+					case "docker --context desktop-linux version --format {{json .}}":
+						probes++
+						if mode == "permission" {
+							return nil, ErrPermissionDenied
+						}
+						if mode == "restart" {
+							return []byte(`{"Server":{"Version":"29.0.1"}}`), nil
+						}
+						return nil, ErrDaemonStopped
+					default:
+						t.Fatalf("unexpected command: %s", command)
+						return nil, nil
+					}
+				})}
+				service := ContainerService{Engine: EngineDocker, Implementation: ContainerServiceDockerDesktop, endpointID: endpointID(EngineDocker, "desktop-linux")}
+				method := MethodContainerServicesStart
+				want := error(context.DeadlineExceeded)
+				switch mode {
+				case "canceled":
+					want = context.Canceled
+				case "permission":
+					want = ErrPermissionDenied
+				case "launch_failed":
+					want = ErrCLIUnavailable
+				case "missing_endpoint":
+					service.endpointID = ""
+					want = ErrEndpointNotFound
+				case "restart":
+					method = MethodContainerServicesRestart
+					want = nil
+				}
+				err := client.runContainerServiceAction(ctx, service, method)
+				if !errors.Is(err, want) {
+					t.Fatalf("result = %v, want %v", err, want)
+				}
+				if mode == "missing_endpoint" && launches != 0 {
+					t.Fatal("launched without reviewed endpoint")
+				}
+				if mode == "restart" && (stops != 1 || launches != 1 || probes != 1) {
+					t.Fatalf("restart calls = %d/%d/%d", stops, launches, probes)
+				}
+				if launches > 1 {
+					t.Fatal("launch replayed")
 				}
 			})
 		})

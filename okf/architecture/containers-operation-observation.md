@@ -5,7 +5,7 @@ description: Keep endpoint-bound native mutations locked until authoritative rec
 tags: [architecture, containers, operations, reconciliation]
 timestamp: 2026-08-28T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-26"
+reviewed_at: "2026-10-27"
 ---
 # Summary
 
@@ -26,7 +26,7 @@ Reusing a request ID with different hashes produces an idempotency conflict inst
 ## Execution, cancellation, and events
 The service owns an operation context from queued state through reconciliation. Cancellation is an explicit API action; closing Activity, Workbench, an inspector, an event stream, or the browser never implies cancellation.
 
-Terminal errors use a small public taxonomy for storage, registry availability, rate limiting, not-found, and access denial; the drawer maps known codes to localized guidance alongside the durable timeline. Unknown codes use a localized generic failure; codes and backend messages remain diagnostic evidence, not visible UI copy. Timeout guidance acknowledges that the host action may still be in progress and asks users to refresh state before retrying.
+Terminal errors use a small public taxonomy for storage, registry availability, rate limiting, not-found, and access denial; the drawer maps known codes to localized guidance alongside the durable timeline. Unknown codes use a localized generic failure; codes and backend messages remain diagnostic evidence, not visible UI copy. Timeout guidance acknowledges that host work may still be in progress. Desktop service cards direct users to its native application for setup/startup recovery and expose status revalidation. Service history shows state transitions without generic execution stages or a synthetic percentage bar.
 
 ## Authoritative terminal observation
 After engine execution returns, the service reloads the exact endpoint-bound resource or relevant bounded inventory.
@@ -36,7 +36,7 @@ The operation is never replayed, regardless of whether the resource appears pres
 ## UI observation
 Inventory requests and streams are fenced by source runtime, endpoint, resource view, and request generation. A superseded response cannot replace current data.
 
-Mobile and desktop expose the same state and cancellation authority. The portaled operation drawer owns its responsive container; narrow drawers stack history and details without horizontal overflow.
+Mobile and desktop expose the same state and cancellation authority. Service lifecycle feedback stays on its card; history is secondary. Polling terminal transitions refresh authoritative service/runtime facts even when the event stream was lost. The portaled operation drawer owns its responsive container; narrow drawers stack history and details without horizontal overflow.
 
 # Boundaries
 

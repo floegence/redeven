@@ -96,18 +96,26 @@
 
 .container-service-operation {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 8px;
-  min-height: 42px;
-  padding: 8px 10px;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--primary) 9%, transparent);
-  text-align: left;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--primary) 16%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--primary) 5%, var(--card));
 }
-.container-service-operation > span { width: 8px; height: 8px; border-radius: 999px; background: var(--primary); }
-.container-service-operation strong { font-size: 12px; }
-.container-service-operation small { color: var(--muted-foreground); font-size: 11px; }
+.container-service-operation[data-state="failed"],
+.container-service-operation[data-state="interrupted"] {
+  border-color: color-mix(in srgb, var(--redeven-status-error) 24%, var(--border));
+  background: color-mix(in srgb, var(--redeven-status-error) 4%, var(--card));
+}
+.container-service-operation[data-state="failed"] .container-service-operation__status > svg,
+.container-service-operation[data-state="interrupted"] .container-service-operation__status > svg { color: var(--redeven-status-error-foreground); }
+.container-service-operation[data-state="succeeded"] .container-service-operation__status > svg { color: var(--redeven-status-success-foreground); }
+.container-service-operation__status { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.container-service-operation__status > svg { flex-shrink: 0; }
+.container-service-operation__status strong { flex: 1; font-size: 12px; }
+.container-service-operation__status small { color: var(--muted-foreground); font-size: 11px; white-space: nowrap; }
+.container-service-operation p { margin: 0; color: var(--muted-foreground); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.container-service-operation__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .container-service-proxy-form { display: grid; gap: 14px; }
 .container-service-proxy-form label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; }
 .container-service-proxy-form p { margin: 0; color: var(--muted-foreground); font-size: 11px; line-height: 1.55; }

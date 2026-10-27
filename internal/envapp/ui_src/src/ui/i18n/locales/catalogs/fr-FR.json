@@ -3164,7 +3164,17 @@
       "lifecycleWait": "Le démarrage, l’arrêt ou le redémarrage peut prendre jusqu’à deux minutes. Vous pouvez continuer à travailler pendant ce temps.",
       "interruptionTitle": "Interruption du service",
       "interruptionMessage": "Les conteneurs en cours d’exécution et les services Web dépendants peuvent être interrompus.",
-      "configurationRisk": "Des paramètres invalides peuvent empêcher le démarrage du service de conteneurs."
+      "configurationRisk": "Des paramètres invalides peuvent empêcher le démarrage du service de conteneurs.",
+      "lifecycle": {
+        "starting": "Démarrage…",
+        "stopping": "Arrêt…",
+        "restarting": "Redémarrage…",
+        "updating": "Application des modifications…",
+        "waiting": "En attente de la réponse du service. Vous pouvez continuer à travailler ; cette carte se met à jour automatiquement.",
+        "desktopRecovery": "Docker Desktop n’est pas encore prêt. Ouvrez Docker Desktop sur cet ordinateur, terminez la configuration ou résolvez l’erreur de démarrage, puis vérifiez l’état ici.",
+        "checkStatus": "Vérifier l’état",
+        "history": "Historique des actions"
+      }
     },
     "views": {
       "containers": "Conteneurs",

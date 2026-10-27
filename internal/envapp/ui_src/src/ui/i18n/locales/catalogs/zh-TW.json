@@ -3164,7 +3164,17 @@
       "lifecycleWait": "啟動、停止或重新啟動最多可能需要兩分鐘。等待期間可繼續使用其他功能。",
       "interruptionTitle": "服務中斷",
       "interruptionMessage": "執行中的容器及相依的 Web 服務可能會中斷。",
-      "configurationRisk": "無效設定可能導致容器服務無法啟動。"
+      "configurationRisk": "無效設定可能導致容器服務無法啟動。",
+      "lifecycle": {
+        "starting": "正在啟動…",
+        "stopping": "正在停止…",
+        "restarting": "正在重新啟動…",
+        "updating": "正在套用變更…",
+        "waiting": "正在等待服務回應。你可以繼續其他工作，此卡片會自動更新。",
+        "desktopRecovery": "Docker Desktop 尚未就緒。請在這部電腦上開啟 Docker Desktop，完成設定或處理啟動錯誤後，再檢查狀態。",
+        "checkStatus": "檢查狀態",
+        "history": "操作記錄"
+      }
     },
     "views": {
       "containers": "容器",

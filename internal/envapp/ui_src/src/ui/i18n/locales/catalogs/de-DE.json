@@ -3164,7 +3164,17 @@
       "lifecycleWait": "Starten, Stoppen oder Neustarten kann bis zu zwei Minuten dauern. Währenddessen können Sie weiterarbeiten.",
       "interruptionTitle": "Dienstunterbrechung",
       "interruptionMessage": "Laufende Container und abhängige Webdienste können unterbrochen werden.",
-      "configurationRisk": "Ungültige Einstellungen können den Start des Containerdienstes verhindern."
+      "configurationRisk": "Ungültige Einstellungen können den Start des Containerdienstes verhindern.",
+      "lifecycle": {
+        "starting": "Wird gestartet…",
+        "stopping": "Wird gestoppt…",
+        "restarting": "Wird neu gestartet…",
+        "updating": "Änderungen werden angewendet…",
+        "waiting": "Warten auf die Antwort des Dienstes. Sie können weiterarbeiten; diese Karte wird automatisch aktualisiert.",
+        "desktopRecovery": "Docker Desktop ist noch nicht bereit. Öffnen Sie Docker Desktop auf diesem Computer, schließen Sie die Einrichtung ab oder beheben Sie den Startfehler und prüfen Sie dann hier den Status.",
+        "checkStatus": "Status prüfen",
+        "history": "Aktionsverlauf"
+      }
     },
     "views": {
       "containers": "Container",

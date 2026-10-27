@@ -3164,7 +3164,17 @@
       "lifecycleWait": "起動、停止、再起動には最大2分かかる場合があります。完了を待つ間も他の機能を利用できます。",
       "interruptionTitle": "サービスの中断",
       "interruptionMessage": "実行中のコンテナと依存する Web サービスが中断される場合があります。",
-      "configurationRisk": "無効な設定はコンテナサービスの起動を妨げることがあります。"
+      "configurationRisk": "無効な設定はコンテナサービスの起動を妨げることがあります。",
+      "lifecycle": {
+        "starting": "起動中…",
+        "stopping": "停止中…",
+        "restarting": "再起動中…",
+        "updating": "変更を適用中…",
+        "waiting": "サービスの応答を待っています。他の作業を続けられます。このカードは自動的に更新されます。",
+        "desktopRecovery": "Docker Desktop の準備が完了していません。このコンピューターで Docker Desktop を開き、設定を完了するか起動エラーを解決してから、状態を確認してください。",
+        "checkStatus": "状態を確認",
+        "history": "操作履歴"
+      }
     },
     "views": {
       "containers": "コンテナ",

@@ -12299,7 +12299,7 @@
       "frontmatter": {
         "description": "Detect and safely manage the active local Docker or Podman implementation without exposing engine endpoints or elevation flows.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-26",
+        "reviewed_at": "2026-10-27",
         "tags": [
           "architecture",
           "containers",
@@ -12311,15 +12311,15 @@
         "title": "Container service management",
         "type": "Architecture Contract"
       },
-      "body_length": 4165,
+      "body_length": 5762,
       "summary": "One `ContainerServiceController` owns Docker/Podman service discovery, lifecycle, configuration, preflight identity and reconciliation. Opaque IDs hide endpoints. Host mutation requires full RWX and Admin without privilege elevation. Unknown ownership/revision/final state fails closed; interrupted work cannot be replayed.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "- Independently detect one service per engine without scanning/fallback. Each discovery has a two-second total budget shared by its commands; the concurrent engines cannot consume each other's budget. Reuse the selected endpoint inventory when binding health probes. [Resource readiness](container-resources-capability.md) remains independently bounded.\n- Docker Desktop ownership comes from the selected local `desktop-linux`/`desktop-windows` context or an exact endpoint-address alias of it. An installed Desktop plugin does not claim another local engine or remote context. Validate management using `docker desktop version --format json`, then read engine health from the bound endpoint. Never run the slow `desktop status` command during discovery.\n- Once the active context establishes Desktop ownership, management/health errors retain its service ID, implementation, configuration sources, and supported lifecycle actions. Report missing CLI, permission, timeout, and unknown failures explicitly; they never establish a stopped state. The API and UI allow Start only when stopped and Stop/Restart only when running. Configuration save-and-restart requires known running/stopped state before any write; plain save remains available. Resolve Podman Machine ownership before probing its remote health.\n- Start/stop/restart use typed service actions. Lifecycle commands share a two-minute budget across their steps, independent of the ten-second query timeout and two-second discovery budget. Parent cancellation/deadlines still apply; Desktop commands remain synchronous and final state is reloaded before success. Never invoke sudo/pkexec/polkit, prompt for elevation, alter groups or socket permissions. Keep operation locked until fresh authoritative final state.\n- Read-gated `GET /_redeven_proxy/api/container-resources/services` exposes access mode/source IDs; one source failure cannot hide another. Contiguous migrations map legacy state to `engine` and `client_proxy` to `docker_cli`.\n- Review shows the service name, localized risk and warnings, and only impact counts supplied by preflight. Request/plan hashes remain mandatory execution bindings but are never rendered. The operation drawer resolves service names instead of opaque IDs and localizes public error codes without displaying internal codes or raw backend prose.\n- One Container services Settings action carries warnings. Refresh retains cards, animates only its indicator and reports inline errors. A known Desktop with uncertain health retains its Start control, disabled with state guidance; successful revalidation enables the same control. Operation completion reloads authoritative service, runtime, inventory and Web Service facts.",
-          "char_count": 2718
+          "body": "- Independently detect one service per engine without scanning/fallback. Each discovery has a two-second total budget shared by its commands; the concurrent engines cannot consume each other's budget. Reuse the selected endpoint inventory when binding health probes. [Resource readiness](container-resources-capability.md) remains independently bounded.\n- Docker Desktop ownership comes from the selected local `desktop-linux`/`desktop-windows` context or an exact endpoint-address alias of it. An installed Desktop plugin does not claim another local engine or remote context. Validate management using `docker desktop version --format json`, then read engine health from the bound endpoint. Never run the slow `desktop status` command during discovery.\n- Once the active context establishes Desktop ownership, management/health errors retain its service ID, implementation, configuration sources, and supported lifecycle actions. Report missing CLI, permission, timeout, and unknown failures explicitly; they never establish a stopped state. The API and UI allow Start only when stopped and Stop/Restart only when running. Configuration save-and-restart requires known running/stopped state before any write; plain save remains available. Resolve Podman Machine ownership before probing its remote health.\n- Start/stop/restart use typed service actions. Lifecycle commands share a two-minute budget across their steps, independent of the ten-second query timeout and two-second discovery budget. Parent cancellation/deadlines still apply. On macOS, Start opens the official application with LaunchServices (`/usr/bin/open -g -b com.docker.docker`), then polls the reviewed local endpoint with bounded read-only probes until ready. Restart first stops Desktop under the same deadline. Other Desktop platforms and Stop retain the official CLI. Launch acceptance alone never establishes success; final state is reloaded before success. Never invoke sudo/pkexec/polkit, prompt for elevation, alter groups or socket permissions. Keep operation locked until fresh authoritative final state.\n- Read-gated `GET /_redeven_proxy/api/container-resources/services` exposes access mode/source IDs; one source failure cannot hide another. Contiguous migrations map legacy state to `engine` and `client_proxy` to `docker_cli`.\n- Review shows the service name, localized risk and warnings, and only impact counts supplied by preflight. Request/plan hashes remain mandatory execution bindings but are never rendered. The operation drawer resolves service names instead of opaque IDs and localizes public error codes without displaying internal codes or raw backend prose.\n- One Container services Settings action carries warnings. Refresh retains cards, animates only its indicator and reports inline errors. A known Desktop with uncertain health retains its Start control, disabled with state guidance; successful revalidation enables the same control. Service cards show action-specific pending state, elapsed time, localized recovery guidance, status revalidation, cancellation and secondary operation history without opening a drawer automatically. Unmeasured service work has no percentage bar. Operation completion through either SSE or fallback polling reloads authoritative service and runtime facts.",
+          "char_count": 3293
         },
         {
           "id": "boundaries",
@@ -12349,6 +12349,11 @@
           "id": "redeven:internal/containerengine/container_services_desktop_test.go:0:covers desktop context ownership, bounded discovery, management/health failures and recovery, unsafe-action rejection, and start/stop/start with stable identity.",
           "source": "redeven:internal/containerengine/container_services_desktop_test.go",
           "description": "Covers Desktop context ownership, bounded discovery, management/health failures and recovery, unsafe-action rejection, and start/stop/start with stable identity."
+        },
+        {
+          "id": "redeven:internal/containerresource/desktop_lifecycle_qualification_test.go:0:opt-in real macos stop/start qualification through preflight, durable operations and reconciliation. on 2026-10-27, docker desktop 4.52.0 / engine 29.0.1 stopped in 9.027 s and started in 12.854 s with verified final states. the previous cli-only path reproduced a backend host-initialization crash while its caller continued waiting. the test requires explicit host lifecycle authorization and is skipped in ordinary ci.",
+          "source": "redeven:internal/containerresource/desktop_lifecycle_qualification_test.go",
+          "description": "Opt-in real macOS stop/start qualification through preflight, durable operations and reconciliation. On 2026-10-27, Docker Desktop 4.52.0 / engine 29.0.1 stopped in 9.027 s and started in 12.854 s with verified final states. The previous CLI-only path reproduced a backend host-initialization crash while its caller continued waiting. The test requires explicit host lifecycle authorization and is skipped in ordinary CI."
         }
       ],
       "snippet": "One `ContainerServiceController` owns Docker/Podman service discovery, lifecycle, configuration, preflight identity and reconciliation. Opaque IDs hide endpoints. Host mutation requires full RWX and Admin without privilege elevation. Unknow",
@@ -12463,7 +12468,7 @@
       "frontmatter": {
         "description": "Keep endpoint-bound native mutations locked until authoritative reconciliation proves a terminal outcome.",
         "lifecycle": "contract",
-        "reviewed_at": "2026-10-26",
+        "reviewed_at": "2026-10-27",
         "tags": [
           "architecture",
           "containers",
@@ -12474,15 +12479,15 @@
         "title": "Native container operation observation",
         "type": "Architecture Contract"
       },
-      "body_length": 2911,
+      "body_length": 3259,
       "summary": "Every native Containers mutation has one durable Redeven operation identity and\none resource-local lock. Submission, cancellation, progress events, restart\nrecovery, and terminal reconciliation flow through `containerresource`.\nInventory refreshes and UI observation never become a second lifecycle owner.\nLost submissions, stale plans, runtime restarts, and unavailable engines are\nreported explicitly and are never hidden behind automatic replay.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Admission and serialization\nThe operation key contains engine, opaque endpoint ID, resource kind, and canonical identity.\n\nReusing a request ID with different hashes produces an idempotency conflict instead of a second operation.\n\n## Execution, cancellation, and events\nThe service owns an operation context from queued state through reconciliation. Cancellation is an explicit API action; closing Activity, Workbench, an inspector, an event stream, or the browser never implies cancellation.\n\nTerminal errors use a small public taxonomy for storage, registry availability, rate limiting, not-found, and access denial; the drawer maps known codes to localized guidance alongside the durable timeline. Unknown codes use a localized generic failure; codes and backend messages remain diagnostic evidence, not visible UI copy. Timeout guidance acknowledges that the host action may still be in progress and asks users to refresh state before retrying.\n\n## Authoritative terminal observation\nAfter engine execution returns, the service reloads the exact endpoint-bound resource or relevant bounded inventory.\n\nThe operation is never replayed, regardless of whether the resource appears present or absent.\n\n## UI observation\nInventory requests and streams are fenced by source runtime, endpoint, resource view, and request generation. A superseded response cannot replace current data.\n\nMobile and desktop expose the same state and cancellation authority. The portaled operation drawer owns its responsive container; narrow drawers stack history and details without horizontal overflow.",
-          "char_count": 1584
+          "body": "## Admission and serialization\nThe operation key contains engine, opaque endpoint ID, resource kind, and canonical identity.\n\nReusing a request ID with different hashes produces an idempotency conflict instead of a second operation.\n\n## Execution, cancellation, and events\nThe service owns an operation context from queued state through reconciliation. Cancellation is an explicit API action; closing Activity, Workbench, an inspector, an event stream, or the browser never implies cancellation.\n\nTerminal errors use a small public taxonomy for storage, registry availability, rate limiting, not-found, and access denial; the drawer maps known codes to localized guidance alongside the durable timeline. Unknown codes use a localized generic failure; codes and backend messages remain diagnostic evidence, not visible UI copy. Timeout guidance acknowledges that host work may still be in progress. Desktop service cards direct users to its native application for setup/startup recovery and expose status revalidation. Service history shows state transitions without generic execution stages or a synthetic percentage bar.\n\n## Authoritative terminal observation\nAfter engine execution returns, the service reloads the exact endpoint-bound resource or relevant bounded inventory.\n\nThe operation is never replayed, regardless of whether the resource appears present or absent.\n\n## UI observation\nInventory requests and streams are fenced by source runtime, endpoint, resource view, and request generation. A superseded response cannot replace current data.\n\nMobile and desktop expose the same state and cancellation authority. Service lifecycle feedback stays on its card; history is secondary. Polling terminal transitions refresh authoritative service/runtime facts even when the event stream was lost. The portaled operation drawer owns its responsive container; narrow drawers stack history and details without horizontal overflow.",
+          "char_count": 1932
         },
         {
           "id": "boundaries",
@@ -33764,5 +33769,5 @@
       ]
     }
   ],
-  "source_sha256": "427f5fc53359173d5de41366e221b4558b2735c16760fa308df764c4fff2188a"
+  "source_sha256": "c37062ac5af1ab62c9f06253fb142f9f58bee3a9c79ce2eb5020059453c33f4b"
 }
