@@ -27,7 +27,6 @@ import {
   Globe,
   Grid3x3,
   Highlighter,
-  Layers,
   LayoutDashboard,
   MoreHorizontal,
   Refresh,
@@ -3877,13 +3876,13 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
 
   const components = createMemo<FloeComponent[]>(() => {
     const list: FloeComponent[] = [
-      { id: 'terminal', name: i18n.t('shell.nav.terminal'), icon: Terminal, component: ActivityTerminalPage, sidebar: { order: 3, fullScreen: true } },
-      { id: 'monitor', name: i18n.t('shell.nav.monitoring'), icon: Activity, component: ActivityMonitorPage, sidebar: { order: 4, fullScreen: true } },
-      { id: 'files', name: i18n.t('shell.nav.fileBrowser'), icon: Files, component: ActivityFileBrowserPage, sidebar: { order: 2, fullScreen: true } },
-      { id: 'codespaces', name: i18n.t('shell.nav.codespaces'), icon: Code, component: ActivityCodespacesPage, sidebar: { order: 5, fullScreen: true } },
+      { id: 'terminal', name: i18n.t('shell.nav.terminal'), icon: ActivityBarTerminalIcon, component: ActivityTerminalPage, sidebar: { order: 3, fullScreen: true } },
+      { id: 'monitor', name: i18n.t('shell.nav.monitoring'), icon: ActivityBarMonitorIcon, component: ActivityMonitorPage, sidebar: { order: 4, fullScreen: true } },
+      { id: 'files', name: i18n.t('shell.nav.fileBrowser'), icon: ActivityBarFolderIcon, component: ActivityFileBrowserPage, sidebar: { order: 2, fullScreen: true } },
+      { id: 'codespaces', name: i18n.t('shell.nav.codespaces'), icon: ActivityBarCodespacesIcon, component: ActivityCodespacesPage, sidebar: { order: 5, fullScreen: true } },
       { id: 'ports', name: i18n.t('shell.nav.webServices'), icon: ActivityBarPortsIcon, component: ActivityPortForwardsPage, sidebar: { order: 6, fullScreen: true } },
       { id: 'applications', name: i18n.t('hostApplications.title'), icon: ActivityBarHostApplicationsIcon, component: ActivityHostApplicationsPage, sidebar: { order: 7, fullScreen: true } },
-      { id: 'containers', name: i18n.t('shell.nav.containers'), icon: Layers, component: ActivityContainersPage, sidebar: { order: 8, fullScreen: true } },
+      { id: 'containers', name: i18n.t('shell.nav.containers'), icon: ActivityBarContainersIcon, component: ActivityContainersPage, sidebar: { order: 8, fullScreen: true } },
     ];
     const ActivityFlowerFullPageHost = () => {
       let host: HTMLDivElement | undefined;

@@ -15,7 +15,8 @@
 .host-app-status-dot { display:inline-block; width:5px; height:5px; border-radius:50%; background:var(--redeven-status-success-foreground); flex-shrink:0; }
 .host-apps-library-heading { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; margin-bottom:20px; }
 .host-apps-filters { display:flex; align-items:center; flex-wrap:wrap; gap:10px; max-width:100%; }
-.host-apps-category { min-width:0; width:160px; max-width:100%; height:32px; padding:0 10px; border:1px solid var(--input); border-radius:6px; background:var(--background); color:var(--foreground); font-size:12px; cursor:pointer; text-overflow:ellipsis; }
+/* Geometry only: the shared native-select face owns the field recipe. */
+.host-apps-category { min-width:0; width:160px; max-width:100%; height:var(--floe-control-height-md); padding-inline:0.625rem; cursor:pointer; text-overflow:ellipsis; }
 .host-apps-search { position:relative; width:250px; max-width:100%; }
 .host-apps-search>svg { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--muted-foreground); pointer-events:none; }
 .host-apps-search input { height:var(--floe-control-height-md); padding-left:31px; font-size:12px; }

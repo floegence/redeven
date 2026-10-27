@@ -62,9 +62,12 @@
 .container-run-port-row { display: grid; grid-template-columns: minmax(90px, .7fr) minmax(100px, .8fr) minmax(150px, 1.2fr) 90px 36px; align-items: end; gap: 8px; }
 .container-run-port-row label,
 .container-run-device-row label { display: grid; min-width: 0; gap: 5px; }
+/* Geometry only: the shared native-select face supplies border, fill, radius
+ * and type. These controls sit in a dense grid, so they keep the compact row
+ * height and their own inline padding. */
 .container-run-port-row select,
 .container-run-field select,
-.container-run-unit select { min-height: 36px; border: 1px solid var(--border); border-radius: 7px; color: var(--foreground); background: var(--background); padding: 0 9px; font-size: 11px; }
+.container-run-unit select { min-height: 2.25rem; padding-inline: 0.5625rem; }
 .container-run-port-row small { grid-column: 1 / -1; }
 .container-run-empty { padding: 14px 0; color: var(--muted-foreground); font-size: 11px; }
 .container-run-add-group { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px; }

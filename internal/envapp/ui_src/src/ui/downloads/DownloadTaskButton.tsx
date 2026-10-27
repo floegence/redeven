@@ -1,5 +1,6 @@
 import { Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { Download, Refresh, X } from '@floegence/floe-webapp-core/icons';
+import { createFloatingPresence } from '@floegence/floe-webapp-core/ui';
 
 import { Tooltip } from '../primitives/Tooltip';
 import { useI18n } from '../i18n';
@@ -15,6 +16,10 @@ export function DownloadTaskButton(props: { tooltip?: string | false }) {
   const manager = useDownloadManager();
   const [open, setOpen] = createSignal(false);
   let rootEl: HTMLDivElement | undefined;
+  let panelEl: HTMLDivElement | undefined;
+  // floe's floating-presence contract owns the panel's enter and exit motion, so
+  // the layer outlives `open()` long enough for the exit transition to paint.
+  const presence = createFloatingPresence({ open, element: () => panelEl });
 
   const failedCount = createMemo(() => manager.tasks().filter((task) => task.status === 'failed').length);
   const activeCount = () => manager.activeCount();
@@ -79,8 +84,12 @@ export function DownloadTaskButton(props: { tooltip?: string | false }) {
         </Tooltip>
       </Show>
 
-      <Show when={open()}>
-        <div class="absolute right-0 top-[calc(100%+0.5rem)] z-[80] animate-in fade-in zoom-in-95 duration-150 max-sm:fixed max-sm:left-2 max-sm:right-2 max-sm:top-12">
+      <Show when={presence.mounted()}>
+        <div
+          ref={(el) => { panelEl = el; }}
+          data-floating-presence={presence.state()}
+          class="floe-floating-presence floe-floating-menu absolute right-0 top-[calc(100%+0.5rem)] z-[80] max-sm:fixed max-sm:left-2 max-sm:right-2 max-sm:top-12"
+        >
           <DownloadTaskPanel manager={manager} />
         </div>
       </Show>

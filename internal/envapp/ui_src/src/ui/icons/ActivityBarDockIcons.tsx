@@ -1,141 +1,143 @@
+import type { JSX } from 'solid-js';
+
 import { CodespacesActivityBarGlyph } from './CodespacesIcon';
 
+/* ======================================================================
+   Activity rail glyphs, redrawn in floe's published rail language.
+
+   These match `ActivityRailIcons` in @floegence/floe-webapp-core exactly:
+
+     - 24 viewBox with stroke-width 1.5, so a 20px slot carries ~1.25px of
+       ink — the same weight as the rest of the shell
+     - ink confined to the 3.5..20.5 box, so every tile shares a cap height
+       and the rail reads as one column
+     - one stroke colour (currentColor), no fill, no opacity tricks; state
+       is carried by the plate and the wrapper's colour transition
+     - geometry on whole/half units so hairlines land on pixel boundaries
+     - size comes from `width`/`height` attributes, letting the rail's
+       `w-5 h-5` class govern the rendered box instead of an inline style
+   ====================================================================== */
+
+const RAIL_INK = 1.5;
+
+function DockGlyph(props: {
+  children: JSX.Element;
+  class?: string;
+  identity?: string;
+}) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width={RAIL_INK}
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      class={props.class}
+      aria-hidden="true"
+      data-activity-bar-icon={props.identity}
+    >
+      {props.children}
+    </svg>
+  );
+}
+
+/** Terminal — a prompt chevron over a command caret. */
 export function ActivityBarTerminalIcon(props: { class?: string }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true">
-      <polyline
-        points="6,7 12,12 6,17"
-        stroke="currentColor"
-        stroke-opacity=".85"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      />
-      <line x1="14" y1="18" x2="18" y2="18" stroke="currentColor" stroke-opacity=".85" stroke-width="2" stroke-linecap="round" />
-    </svg>
+    <DockGlyph class={props.class}>
+      <path d="m7 8.5 3.5 3.5L7 15.5" />
+      <path d="M12.75 15.5h4.75" />
+    </DockGlyph>
   );
 }
 
+/** Files — the floe rail folder, one silhouette. */
 export function ActivityBarFolderIcon(props: { class?: string }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true">
-      <path
-        d="M5 7.5a1.5 1.5 0 0 1 1.5-1.5h2l1.5 1.25H17.5a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H6.5a1.5 1.5 0 0 1-1.5-1.5V7.5Z"
-        fill="currentColor"
-        fill-opacity=".85"
-      />
-      <path
-        d="M5 7.5v8a1.5 1.5 0 0 0 1.5 1.5h11a1.5 1.5 0 0 0 1.5-1.5v-6H9.5L8 8.75H6.5a1.5 1.5 0 0 0-1.5-.75Z"
-        fill="currentColor"
-        fill-opacity=".08"
-      />
-    </svg>
+    <DockGlyph class={props.class}>
+      <path d="M3.5 17.5V6.5a2 2 0 0 1 2-2h3.35a2 2 0 0 1 1.6.8l1 1.35a2 2 0 0 0 1.6.8h3.45a2 2 0 0 1 2 2v8.05a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2Z" />
+    </DockGlyph>
   );
 }
 
+/** Monitor — a monitor frame carrying a pulse trace. */
 export function ActivityBarMonitorIcon(props: { class?: string }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true">
-      <line x1="4" y1="7" x2="20" y2="7" stroke="currentColor" stroke-opacity=".08" stroke-width=".5" />
-      <line x1="4" y1="11" x2="20" y2="11" stroke="currentColor" stroke-opacity=".1" stroke-width=".5" />
-      <line x1="4" y1="15" x2="20" y2="15" stroke="currentColor" stroke-opacity=".08" stroke-width=".5" />
-      <line x1="4" y1="19" x2="20" y2="19" stroke="currentColor" stroke-opacity=".06" stroke-width=".5" />
-      <path d="M3,20 L4.5,20 L7,10 L10,18 L13,12 L15,14 L17,14 L21,16 L21,22 L3,22 Z" fill="currentColor" fill-opacity=".10" />
-      <polyline
-        points="3,20 4.5,20 7,10 10,18 13,12 15,14 17,14 21,16"
-        stroke="currentColor"
-        stroke-opacity=".85"
-        stroke-width="1.8"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      />
-      <circle cx="21" cy="16" r="1.4" fill="currentColor" fill-opacity=".2" stroke="none" />
-      <circle cx="21" cy="16" r=".8" fill="currentColor" fill-opacity=".85" stroke="none" />
-    </svg>
+    <DockGlyph class={props.class}>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+      <path d="M6.5 12h2.25l1.75 4 2.25-8 1.75 4h2.5" />
+    </DockGlyph>
   );
 }
 
+/** Codespaces — the product mark, already authored for this rail size. */
 export function ActivityBarCodespacesIcon(props: { class?: string }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true">
+    <DockGlyph class={props.class}>
       <CodespacesActivityBarGlyph />
-    </svg>
+    </DockGlyph>
   );
 }
 
+/** Web Services — a globe: outline, equator and one meridian. */
 export function ActivityBarPortsIcon(props: { class?: string }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true" data-activity-bar-icon="web-services">
-      <circle cx="12" cy="12" r="7" stroke="currentColor" stroke-opacity=".55" stroke-width="1" fill="currentColor" fill-opacity=".12" />
-      <path d="M12 5 A 3 7 0 0 0 12 19 A 3 7 0 0 0 12 5" stroke="currentColor" stroke-opacity=".5" stroke-width="1.5" fill="none" stroke-linecap="round" />
-      <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-opacity=".5" stroke-width="1.5" stroke-linecap="round" />
-    </svg>
+    <DockGlyph class={props.class} identity="web-services">
+      <circle cx="12" cy="12" r="8.5" />
+      <line x1="3.5" y1="12" x2="20.5" y2="12" />
+      <path d="M12 3.5a12 8.5 0 0 1 0 17a12 8.5 0 0 1 0-17Z" />
+    </DockGlyph>
   );
 }
 
+/** Host Applications — a window with a title bar and a play affordance. */
 export function ActivityBarHostApplicationsIcon(props: { class?: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true">
-      <rect x="3" y="3" width="14" height="14" rx="3" fill="currentColor" fill-opacity=".12" stroke="currentColor" stroke-opacity=".4" />
-      <rect x="7" y="7" width="14" height="14" rx="3" fill="var(--background)" stroke="currentColor" stroke-opacity=".8" stroke-width="1.4" />
-      <path d="M7 12h14" stroke="currentColor" stroke-opacity=".4" />
-      <path d="m12 14 5 2.5-5 2.5z" fill="currentColor" fill-opacity=".8" />
-    </svg>
+    <DockGlyph class={props.class}>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+      <path d="M3.5 9h17" />
+      <path d="M10.25 12.5v4.25l3.75-2.125Z" />
+    </DockGlyph>
   );
 }
 
+/** Containers — a stacked cube: lid, body, and the two visible edges. */
 export function ActivityBarContainersIcon(props: { class?: string }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true">
-      <path d="m12 3.8 7 3.5-7 3.5-7-3.5 7-3.5Z" fill="currentColor" fill-opacity=".16" stroke="currentColor" stroke-opacity=".78" stroke-width="1.35" stroke-linejoin="round" />
-      <path d="m5 11.2 7 3.5 7-3.5M5 15.1l7 3.5 7-3.5" stroke="currentColor" stroke-opacity=".78" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" />
-      <path d="M5 7.3v7.8M19 7.3v7.8" stroke="currentColor" stroke-opacity=".42" stroke-width="1.2" stroke-linecap="round" />
-    </svg>
+    <DockGlyph class={props.class}>
+      <path d="m12 3.5 7.5 3.75L12 11 4.5 7.25 12 3.5Z" />
+      <path d="m4.5 11.5 7.5 3.75 7.5-3.75" />
+      <path d="m4.5 15.75 7.5 3.75 7.5-3.75" />
+    </DockGlyph>
   );
 }
 
+/** Switch Environment — two opposed arrows. */
 export function ActivityBarSwitchIcon(props: { class?: string }) {
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.6"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      style={{ width: '18px', height: '18px' }}
-      class={props.class}
-      aria-hidden="true"
-      data-activity-bar-icon="switch-environment"
-    >
-      <path
-        d="m10 13 4-4m-5 7-2 2a4.2 4.2 0 0 1-6-6l5-5a4.2 4.2 0 0 1 6 0m0 10a4.2 4.2 0 0 0 6 0l5-5a4.2 4.2 0 0 0-6-6l-2 2"
-        transform="translate(1 1) scale(.91)"
-      />
-    </svg>
+    <DockGlyph class={props.class} identity="switch-environment">
+      <path d="M4.5 8.5h13" />
+      <path d="m14.5 5.5 3 3-3 3" />
+      <path d="M19.5 15.5h-13" />
+      <path d="m9.5 12.5-3 3 3 3" />
+    </DockGlyph>
   );
 }
 
+/** Runtime Settings — two faders on a shared rail. */
 export function ActivityBarSettingsIcon(props: { class?: string }) {
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.6"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      style={{ width: '18px', height: '18px' }}
-      class={props.class}
-      aria-hidden="true"
-      data-activity-bar-icon="runtime-settings"
-    >
-      <path d="M5 3v4m0 4v10M12 3v10m0 4v4M19 3v2m0 4v12" />
-      <rect x="3" y="7" width="4" height="4" rx="1" />
-      <rect x="10" y="13" width="4" height="4" rx="1" />
-      <rect x="17" y="5" width="4" height="4" rx="1" />
-    </svg>
+    <DockGlyph class={props.class} identity="runtime-settings">
+      <path d="M4 8.5h5" />
+      <path d="M13.5 8.5H20" />
+      <circle cx="11.25" cy="8.5" r="2.25" />
+      <path d="M4 15.5h9.5" />
+      <path d="M18 15.5h2" />
+      <circle cx="16" cy="15.5" r="2.25" />
+    </DockGlyph>
   );
 }

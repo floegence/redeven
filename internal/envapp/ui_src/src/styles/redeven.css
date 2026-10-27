@@ -1,5 +1,6 @@
 @import './loadingCurtain.css';
 @import './settings-controls.css';
+@import './native-controls.css';
 
 .managed-release-list-status {
   position: relative;
@@ -87,8 +88,8 @@
   height: calc(100% - var(--redeven-desktop-titlebar-height, 0px));
   width: min(58rem, 100%);
   max-width: 100%;
-  --floe-floating-enter-duration: 240ms;
-  --floe-floating-exit-duration: 180ms;
+  --floe-floating-enter-duration: var(--floe-duration-float);
+  --floe-floating-exit-duration: var(--floe-duration-fast);
 }
 
 [data-floe-dialog-panel].env-app-drawer-panel.service-template-explorer-drawer {
@@ -142,7 +143,7 @@
 
 .redeven-workbench-page[data-redeven-workbench-layout-interacting='true'] .workbench-widget {
   transition:
-    opacity 120ms ease-out, scale 120ms ease-out, border-color 120ms ease-out !important;
+    opacity var(--floe-duration-fast) var(--floe-ease-out), scale var(--floe-duration-fast) var(--floe-ease-out), border-color var(--floe-duration-fast) var(--floe-ease-out) !important;
 }
 
 .workbench-widget[data-redeven-workbench-widget-closing='true'] {
@@ -796,7 +797,7 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
   font-size: 11px;
   line-height: 1.5;
 }
-.git-branch-history-detail-panel { position: relative; animation: git-patch-reveal 140ms ease-out; }
+.git-branch-history-detail-panel { position: relative; animation: git-patch-reveal var(--floe-duration-fast) var(--floe-ease-out); }
 .git-branch-history-detail-close {
   position: absolute;
   top: 8px;
@@ -809,7 +810,7 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
   border-radius: var(--floe-radius-xs);
   color: var(--muted-foreground);
   cursor: pointer;
-  transition: background-color 150ms, color 150ms;
+  transition: background-color var(--floe-duration-fast) var(--floe-ease-out), color var(--floe-duration-fast) var(--floe-ease-out);
 }
 .git-branch-history-detail-close:hover {
   background: var(--muted);
@@ -1264,7 +1265,7 @@ html.dark .git-branch-stable-placeholder {
   min-height: 1.875rem;
   display: flex;
   align-items: center;
-  transition: opacity 120ms ease;
+  transition: opacity var(--floe-duration-fast) var(--floe-ease-out);
 }
 
 .git-changes-breadcrumb-slot[data-visible='false'] {
@@ -1480,7 +1481,7 @@ html.dark .git-changes-table-pending {
 
 .redeven-surface-panel--interactive {
   transition:
-    background-color 120ms ease-out, opacity 120ms ease-out;
+    background-color var(--floe-duration-fast) var(--floe-ease-out), opacity var(--floe-duration-fast) var(--floe-ease-out);
 }
 
 .redeven-surface-panel--interactive:hover {
@@ -1714,7 +1715,7 @@ html.dark .git-changes-table-pending {
   border-color: var(--redeven-settings-inset-border) !important;
   background: var(--redeven-settings-inset-bg) !important;
   transition:
-    border-color 120ms ease, background-color 120ms ease;
+    border-color var(--floe-duration-fast) var(--floe-ease-out), background-color var(--floe-duration-fast) var(--floe-ease-out);
 }
 
 .redeven-settings-choice:hover:not(:disabled):not([aria-disabled='true']) {
@@ -1785,7 +1786,7 @@ html.dark .git-changes-table-pending {
 }
 
 .redeven-settings-table__row--interactive {
-  transition: background-color 120ms ease;
+  transition: background-color var(--floe-duration-fast) var(--floe-ease-out);
 }
 
 .redeven-settings-table__row--interactive:hover {
@@ -2146,7 +2147,7 @@ html.dark .git-changes-table-pending {
   color: var(--muted-foreground);
   font-size: 0.75rem;
   font-weight: 600;
-  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease, opacity 120ms ease;
+  transition: background-color var(--floe-duration-fast) var(--floe-ease-out), color var(--floe-duration-fast) var(--floe-ease-out), border-color var(--floe-duration-fast) var(--floe-ease-out), opacity var(--floe-duration-fast) var(--floe-ease-out);
 }
 
 .flower-chat-chip-actionable:hover:not(:disabled),
@@ -2212,7 +2213,7 @@ html.dark .git-changes-table-pending {
   border-radius: 9999px;
   background: color-mix(in srgb, var(--muted) 36%, var(--background));
   color: var(--muted-foreground);
-  transition: background-color 120ms ease, color 120ms ease, opacity 120ms ease;
+  transition: background-color var(--floe-duration-fast) var(--floe-ease-out), color var(--floe-duration-fast) var(--floe-ease-out), opacity var(--floe-duration-fast) var(--floe-ease-out);
 }
 
 .flower-chat-meta-btn:hover:not(:disabled),
@@ -2534,7 +2535,7 @@ html.dark .git-changes-table-pending {
   color: var(--redeven-chat-muted);
   cursor: pointer;
   padding: 0;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  transition: background var(--floe-duration-fast) var(--floe-ease-out), border-color var(--floe-duration-fast) var(--floe-ease-out), color var(--floe-duration-fast) var(--floe-ease-out);
 }
 
 .chat-shell-command-action:hover,
@@ -2664,7 +2665,7 @@ html.dark .git-changes-table-pending {
   flex-shrink: 0;
   color: var(--redeven-chat-muted);
   transform: rotate(-90deg);
-  transition: transform 180ms ease;
+  transition: transform var(--floe-duration-base) var(--floe-ease-in-out);
 }
 
 .chat-shell-toggle-open {
@@ -2953,7 +2954,7 @@ a.chat-sources-cell-url:focus-visible {
   background: transparent;
   color: var(--muted-foreground);
   cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+  transition: background-color var(--floe-duration-fast) var(--floe-ease-out), color var(--floe-duration-fast) var(--floe-ease-out), border-color var(--floe-duration-fast) var(--floe-ease-out);
 }
 
 .chat-sources-action-btn:hover {
@@ -3017,7 +3018,7 @@ a.chat-sources-cell-url:focus-visible {
   background-color: color-mix(in srgb, var(--background) 90%, var(--muted) 10%);
   color: var(--foreground);
   cursor: pointer;
-  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+  transition: background-color var(--floe-duration-fast) var(--floe-ease-out), border-color var(--floe-duration-fast) var(--floe-ease-out), color var(--floe-duration-fast) var(--floe-ease-out);
 }
 
 .chat-sources-page-btn:hover:not(:disabled) {
@@ -3372,7 +3373,7 @@ a.chat-sources-cell-url:focus-visible {
   box-shadow:
     0 0 0 4px var(--background),
     0 2px 8px color-mix(in srgb, var(--foreground) 12%, transparent);
-  transition: background 120ms ease;
+  transition: background var(--floe-duration-fast) var(--floe-ease-out);
   touch-action: none;
   user-select: none;
   backdrop-filter: blur(8px);
@@ -4300,7 +4301,7 @@ html.dark .git-content-skeleton__block {
   border: 1px solid var(--browser-editor-frame-border);
   border-radius: 0.5rem;
   background: color-mix(in srgb, var(--card) 88%, var(--background) 12%);
-  transition: border-color 120ms ease, background-color 120ms ease;
+  transition: border-color var(--floe-duration-fast) var(--floe-ease-out), background-color var(--floe-duration-fast) var(--floe-ease-out);
 }
 
 .browser-editor-setup__body {
@@ -4553,7 +4554,7 @@ html.dark .git-content-skeleton__block {
   color: var(--muted-foreground);
   cursor: pointer;
   text-align: center;
-  transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+  transition: border-color var(--floe-duration-fast) var(--floe-ease-out), background-color var(--floe-duration-fast) var(--floe-ease-out), color var(--floe-duration-fast) var(--floe-ease-out);
 }
 
 .browser-editor-setup__method-option:hover:not(:disabled):not([data-selected='true']) {
@@ -4659,7 +4660,7 @@ html.dark .git-content-skeleton__block {
 
 .browser-editor-setup__step {
   min-width: 0;
-  transition: opacity 120ms ease, color 120ms ease;
+  transition: opacity var(--floe-duration-fast) var(--floe-ease-out), color var(--floe-duration-fast) var(--floe-ease-out);
 }
 
 .browser-editor-setup__steps[data-layout='wide'] .browser-editor-setup__step-connector {
@@ -4693,7 +4694,7 @@ html.dark .git-content-skeleton__block {
   border: 1.5px solid color-mix(in srgb, var(--border) 72%, transparent);
   border-radius: 50%;
   background: transparent;
-  transition: background-color 120ms ease, border-color 120ms ease;
+  transition: background-color var(--floe-duration-fast) var(--floe-ease-out), border-color var(--floe-duration-fast) var(--floe-ease-out);
 }
 
 .browser-editor-setup__step-dot[data-state='done'] {
@@ -4722,7 +4723,7 @@ html.dark .git-content-skeleton__block {
 .browser-editor-setup__step-line {
   flex: 1;
   background: color-mix(in srgb, var(--border) 55%, transparent);
-  transition: background-color 120ms ease;
+  transition: background-color var(--floe-duration-fast) var(--floe-ease-out);
 }
 
 .browser-editor-setup__steps[data-layout='wide'] .browser-editor-setup__step-line {
@@ -4802,7 +4803,7 @@ html.dark .git-content-skeleton__block {
   min-width: 0;
   border-radius: inherit;
   background: color-mix(in srgb, var(--primary) 76%, var(--foreground) 24%);
-  transition: width 240ms ease;
+  transition: width var(--floe-duration-float) var(--floe-ease-out);
 }
 
 .browser-editor-setup__stage-progress-meta {
@@ -4890,7 +4891,7 @@ html.dark .git-content-skeleton__block {
   font-weight: 600;
   color: var(--muted-foreground);
   text-align: left;
-  transition: background-color 120ms ease, color 120ms ease;
+  transition: background-color var(--floe-duration-fast) var(--floe-ease-out), color var(--floe-duration-fast) var(--floe-ease-out);
 }
 
 .browser-editor-setup__details-trigger:hover {
@@ -5237,7 +5238,7 @@ html.dark .git-content-skeleton__block {
   background: var(--redeven-status-info-soft, var(--muted));
   color: var(--redeven-status-info-foreground, var(--muted-foreground));
   white-space: nowrap;
-  transition: color 120ms ease, border-color 120ms ease, background-color 120ms ease;
+  transition: color var(--floe-duration-fast) var(--floe-ease-out), border-color var(--floe-duration-fast) var(--floe-ease-out), background-color var(--floe-duration-fast) var(--floe-ease-out);
 }
 
 .terminal-shared-geometry-notice__trigger:hover .terminal-shared-geometry-notice__chrome,
