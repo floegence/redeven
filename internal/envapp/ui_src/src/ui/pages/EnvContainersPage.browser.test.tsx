@@ -722,8 +722,8 @@ describe('native Containers responsive product surface', () => {
       expect(viewport.scrollWidth, label).toBeLessThanOrEqual(viewport.clientWidth + 1);
       const name = root.querySelector<HTMLElement>('.container-mobile-card strong')!;
       expect(name.getBoundingClientRect().width, label).toBeGreaterThan(180);
-      expect(getComputedStyle(name).fontSize, label).toBe('12px');
-      expect(getComputedStyle(root.querySelector('.container-search-control input')!).fontSize).toBe('12px');
+      expect(getComputedStyle(name).fontSize, label).toBe('13px');
+      expect(getComputedStyle(root.querySelector('.container-search-control input')!).fontSize).toBe('13px');
       expect(table.querySelectorAll('tbody tr').length, label).toBeGreaterThan(0);
     }
   });
@@ -1025,7 +1025,11 @@ describe('native Containers responsive product surface', () => {
     let pruneItem = visiblePruneItem();
     expect(pruneItem?.textContent).toContain('Prune unused');
     expect(pruneItem?.querySelector('svg')).not.toBeNull();
-    expect(pruneItem?.classList.contains('text-destructive')).toBe(true);
+    const dangerColor = document.createElement('span');
+    dangerColor.style.color = 'var(--error)';
+    pruneItem!.append(dangerColor);
+    expect(getComputedStyle(pruneItem!).color).toBe(getComputedStyle(dangerColor).color);
+    dangerColor.remove();
 
     root.querySelector<HTMLElement>('.container-search-control')!
       .dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
