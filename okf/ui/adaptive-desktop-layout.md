@@ -5,7 +5,7 @@ description: Preserve desktop workflows in narrow windows while allocating tempo
 tags: [ui, desktop, layout, navigation, accessibility]
 timestamp: 2026-09-27T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-22"
+reviewed_at: "2026-10-27"
 ---
 # Summary
 
@@ -29,6 +29,8 @@ A hidden toolbar action must retain an explicit reachable entry.
 ## Temporary desktop navigation
 Shell, Flower conversations, Files/Git navigation, and Terminal sessions measure their own shared navigation/content region. When that region cannot fit the current sidebar width plus 480 CSS pixels of main content, the sidebar becomes a transient left side drawer.
 
+Files/Git navigation begins with its mode switch, without a separate Files title row or reserved header space. The mobile close action shares that row; desktop drawers retain their accessible dialog title and dismissal. Sidebar resizing and local tree scrolling remain available.
+
 Mobile navigation retains its product-specific bottom/side panel behavior under the [mobile Shell](mobile-shell-navigation.md) and [Flower](flower-mobile-navigation.md) contracts.
 
 # Boundaries
@@ -45,3 +47,5 @@ Narrow layouts may ellipsize selection titles; explanations remain normal prose 
 - `redeven:desktop/src/welcome/App.tsx` - Fixes Desktop Welcome to desktop interaction.
 
 - `redeven:internal/envapp/ui_src/src/ui/mobileViewportPolicy.ts` - Defines the browser product query.
+
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FileBrowserWorkspace.navigation.browser.test.tsx` - Checks compact sidebar geometry, mobile dismissal, and retained navigation across inline/drawer transitions.

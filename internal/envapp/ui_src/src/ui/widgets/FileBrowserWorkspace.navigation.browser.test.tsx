@@ -35,6 +35,12 @@ describe('Files Activity navigation continuity', () => {
       await userEvent.click(host.querySelector<HTMLButtonElement>('button[aria-label="Toggle browser sidebar"]')!);
       await expect.poll(() => host.querySelector('[data-floe-drawer-side="left"]')).toBeTruthy();
     }
+    const sidebar = host.querySelector<HTMLElement>('aside')!;
+    const modeSwitch = sidebar.querySelector<HTMLElement>('[data-browser-mode-switch]')!;
+    expect(modeSwitch.getBoundingClientRect().top - sidebar.getBoundingClientRect().top).toBeLessThanOrEqual(10);
+    expect(Array.from(sidebar.querySelectorAll('span')).filter(element =>
+      element.textContent === 'Files' && element.checkVisibility({ visibilityProperty: true }),
+    )).toHaveLength(1);
     expect(host.querySelector('[data-filesystem-root-write-toggle]')).toBeNull();
     for (const [id, mode, path] of [['home', 'RW', '/workspace'], ['computer', 'RW', '/'], ['shared', 'RO', '/shared']]) {
       const row = host.querySelector<HTMLElement>(`[data-filesystem-root-id="${id}"]`)!;
@@ -167,6 +173,35 @@ describe('Files Activity navigation continuity', () => {
   });
 });
 
+
+it('keeps mobile dismissal beside the mode switch without shifting file content', async () => {
+  await page.viewport(390, 850);
+  const host = document.createElement('div');
+  host.style.cssText = 'width:390px;height:600px';
+  document.body.append(host);
+  const [open, setOpen] = createSignal(true);
+  cleanups.push(render(() => <FloeConfigProvider config={{ layout: { mobileQuery: 'all' } }}><LayoutProvider>
+    <FileBrowserWorkspace mode="files" onModeChange={() => {}} files={[]}
+      currentPath="/" initialPath="/" instanceId="mobile-sidebar-header" resetKey={0}
+      open={open()} onClose={() => setOpen(false)} />
+  </LayoutProvider></FloeConfigProvider>, host));
+  await paint();
+  const sidebar = host.querySelector<HTMLElement>('aside')!;
+  const modeSwitch = sidebar.querySelector<HTMLElement>('[data-browser-mode-switch]')!;
+  const close = sidebar.querySelector<HTMLButtonElement>('button[aria-label="Close sidebar"]')!;
+  expect(close).toBeTruthy();
+  const switchBounds = modeSwitch.getBoundingClientRect();
+  const closeBounds = close.getBoundingClientRect();
+  expect(switchBounds.top - sidebar.getBoundingClientRect().top).toBeLessThanOrEqual(10);
+  expect(closeBounds.left).toBeGreaterThanOrEqual(switchBounds.right);
+  expect(Math.abs(closeBounds.top + closeBounds.height / 2 - switchBounds.top - switchBounds.height / 2)).toBeLessThan(1);
+  const content = host.querySelector<HTMLElement>('[data-testid="file-browser-content-scroll-region"]')!;
+  const before = content.getBoundingClientRect().toJSON();
+  await userEvent.click(close);
+  await expect.poll(() => open()).toBe(false);
+  await expect.poll(() => sidebar.checkVisibility({ visibilityProperty: true })).toBe(false);
+  expect(content.getBoundingClientRect().toJSON()).toEqual(before);
+});
 
 describe('Files desktop adaptive navigation', () => {
   it('temporarily moves the existing directory tree into a left drawer without replacing file content', async () => {

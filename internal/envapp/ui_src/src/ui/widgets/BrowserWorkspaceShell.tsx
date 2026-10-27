@@ -1,8 +1,9 @@
 import './adaptive-sidebar.css';
 import { Show, createEffect, createSignal, type Accessor, type JSX } from 'solid-js';
 import { cn, createAdaptiveSidebar, createRetainedContent, useLayout } from '@floegence/floe-webapp-core';
-import { Dialog, DialogPlacementProvider } from '@floegence/floe-webapp-core/ui';
-import { SidebarPane } from '@floegence/floe-webapp-core/layout';
+import { Button, Dialog, DialogPlacementProvider } from '@floegence/floe-webapp-core/ui';
+import { ResizeHandle, Sidebar } from '@floegence/floe-webapp-core/layout';
+import { X } from '@floegence/floe-webapp-core/icons';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { useI18n } from '../i18n';
 
@@ -42,58 +43,42 @@ export function BrowserWorkspaceShell(props: BrowserWorkspaceShellProps) {
   createEffect(() => { if (!desktopOverlay()) setDesktopOpen(false); });
 
   const SidebarContent = createRetainedContent(() => (
-    <SidebarPane
-      title={<span class="text-muted-foreground">{props.title ?? i18n.t('files.title')}</span>}
-      headerActions={
-        <>
-          <Show when={isMobile() && props.onClose}>
-            <button
-              type="button"
-              onClick={() => props.onClose?.()}
-              class="flex items-center justify-center w-5 h-5 rounded cursor-pointer hover:bg-sidebar-accent/80 transition-colors"
-              aria-label={i18n.t('uiCopy.shell.closeSidebar')}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                class="w-3.5 h-3.5"
-              >
-                <path d="M18 6 6 18" />
-                <path d="m6 6 12 12" />
-              </svg>
-            </button>
-          </Show>
-        </>
-      }
-      width={isMobile() ? MOBILE_SIDEBAR_WIDTH : props.width}
-      open={desktopOverlay() || props.open}
-      resizable={!isMobile() && !desktopOverlay() && props.resizable}
-      onResize={props.onResize}
-      onClose={props.onClose}
-      mobileOverlay={false}
-      mobileBackdrop={false}
+    <Sidebar
+      ariaLabel={i18n.t('files.title')}
+      width={isMobile() ? MOBILE_SIDEBAR_WIDTH : props.width ?? 240}
+      collapsed={!desktopOverlay() && props.open === false}
+      resizer={(
+        <Show when={!isMobile() && !desktopOverlay() && props.resizable && props.open !== false && props.onResize}>
+          <ResizeHandle direction="horizontal" onResize={(delta) => props.onResize?.(delta)} />
+        </Show>
+      )}
       class={cn(
         'h-full',
         desktopOverlay() && '!w-full !min-w-0 !max-w-full',
-        // On mobile the aside must ALWAYS be absolutely positioned —
-        // not just when open — so the closing width-transition never
-        // pushes the content area.  SidebarPane's built-in overlay
-        // ties `position:absolute` to `open`, which causes a push
-        // during the close animation.
+        // Keep mobile navigation out of the content flow throughout closing.
         isMobile() && 'absolute inset-y-0 left-0 z-30 shadow-xl max-w-[80vw]',
       )}
-      innerClass={desktopOverlay() ? '!w-full' : undefined}
-      bodyClass={cn('py-0', props.sidebarBodyClass)}
-      bodyRef={props.bodyRef}
     >
-      <div class="flex h-full min-h-0 flex-col bg-sidebar">
+      <div
+        ref={props.bodyRef}
+        class={cn('flex h-full min-h-0 flex-col overflow-auto bg-sidebar', props.sidebarBodyClass)}
+        style={{ width: desktopOverlay() ? '100%' : `${isMobile() ? MOBILE_SIDEBAR_WIDTH : props.width ?? 240}px` }}
+      >
         <div class="sticky top-0 z-10 shrink-0 border-b border-sidebar-border bg-sidebar/95 px-2.5 py-1.5 backdrop-blur supports-[backdrop-filter]:bg-sidebar/90">
-          {props.modeSwitcher}
+          <div class="flex items-center gap-1.5">
+            <div class="min-w-0 flex-1">{props.modeSwitcher}</div>
+            <Show when={isMobile() && props.onClose}>
+              <Button
+                variant="ghost"
+                size="icon"
+                class="size-8 shrink-0"
+                onClick={() => props.onClose?.()}
+                aria-label={i18n.t('uiCopy.shell.closeSidebar')}
+              >
+                <X class="size-3.5" />
+              </Button>
+            </Show>
+          </div>
 
           <Show when={props.navigation}>
             <div class="mt-1.5">
@@ -106,7 +91,7 @@ export function BrowserWorkspaceShell(props: BrowserWorkspaceShellProps) {
           {props.sidebarBody}
         </div>
       </div>
-    </SidebarPane>
+    </Sidebar>
 
   ));
 
