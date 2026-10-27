@@ -11967,65 +11967,67 @@ function GatewaySourceOwner(props: Readonly<{
             </div>
           </div>
         </div>
-        <div class="redeven-gateway-card__actions">
-          <Show when={props.gateway.connection_kind !== 'url'}>
-            <Button size="sm" variant="outline" disabled={!props.available || primaryActionRunning() || props.gateway.local_enabled === false || !props.gateway.permissions?.manage_members} onClick={() => props.openCreateGatewaySetup(props.gateway, 'connect_client')}>{props.i18n.t('gatewayExperience.connectClient')}</Button>
-            <Button size="sm" disabled={!props.available || primaryActionRunning() || props.gateway.local_enabled === false || !props.gateway.permissions?.manage_members} onClick={() => props.openCreateGatewaySetup(props.gateway, 'connect_runtime')}>{props.i18n.t('gatewayExperience.connectRuntime')}</Button>
-          </Show>
-          <DesktopActionPopover
-            open={props.embeddedGatewayService !== props.gateway.gateway_id && actionPopoverOpen()}
-            onOpenChange={(open) => {
-              if (open) {
-                openActionPopover();
-                return;
-              }
-              closeActionPopover();
-            }}
-            onExitComplete={releaseClosedForegroundAction}
-            content={<Show when={props.embeddedGatewayService !== props.gateway.gateway_id}>{serviceContent()}</Show>}
-            anchorClass="redeven-gateway-card__primary-anchor"
-            allowMainAxisOverflow={false}
-            popoverAriaLabel={
-              progressPanelVisible()
-                ? (visibleGatewayProgress() ? localizedProgressTitle(props.i18n, visibleGatewayProgress()!) : props.i18n.t('environmentCenter.gatewayProgress'))
-                : localizedGatewaySourceText(props.i18n, row().guidance.title)
-            }
-            class="redeven-gateway-action-popover-surface"
-          >
-            <Button
-              size="sm"
-              variant={!progressPresentation() && displayedPrimaryAction().intent === 'refresh_gateway' ? 'ghost' : 'default'}
-              class={cn(
-                'redeven-gateway-card__primary-button min-w-0 justify-center',
-                !progressPresentation() && primaryBlocked() && 'redeven-split-action-trigger--blocked',
-                progressPresentation() && progressTriggerClassName(progressPresentation()!),
-              )}
-              icon={PrimaryActionIcon}
-              aria-busy={progressPresentation()?.kind === 'progress_trigger' || primaryBusy()}
-              aria-label={progressPresentation()?.ariaLabel}
-              data-floe-progress-shimmer={progressPresentation()?.kind === 'progress_trigger' || primaryBusy() ? 'surface' : undefined}
-              disabled={!props.available || !progressPresentation() && !displayedPrimaryAction().enabled && !primaryBlocked()}
-              aria-disabled={!progressPresentation() && primaryBlocked() ? true : undefined}
-              aria-haspopup={progressPresentation() || primaryHasGuide() ? 'dialog' : undefined}
-              aria-expanded={progressPresentation() || primaryHasGuide() ? props.actionPopoverOpen : undefined}
-              onClick={runPrimaryAction}
-            >
-              <span>{progressPresentation()?.label ?? primaryActionLabel()}</span>
-            </Button>
-          </DesktopActionPopover>
-          <div class="redeven-gateway-card__menu">
-            <Button size="sm" variant="ghost" onClick={() => props.openCreateGatewaySetup(props.gateway)}>{props.i18n.t('gatewayExperience.manage')}</Button>
-            <Dropdown align="end" class="redeven-gateway-object-menu" trigger={<MoreHorizontal class="h-3.5 w-3.5" />} triggerAriaLabel={moreActionsForLabel()} items={() => [
-              { id: 'edit', label: props.i18n.t('gatewayExperience.editConnection'), icon: Settings },
-              { id: 'toggle', label: props.i18n.t(props.gateway.local_enabled === false ? 'gatewayExperience.enableConnection' : 'gatewayExperience.disableConnection'), icon: PowerIcon, disabled: !props.available || primaryActionRunning() },
-              { id: 'remove', label: props.i18n.t('gatewayExperience.removeConnection'), icon: Trash, tone: 'danger' },
-            ]} onSelect={id => {
-              if (id === 'edit') props.openCreateGatewaySetup(props.gateway, 'settings');
-              else if (id === 'remove') props.deleteGateway(props.gateway);
-              else runAction({ intent: props.gateway.local_enabled === false ? 'enable_gateway' : 'disable_gateway', label: props.gateway.local_enabled === false ? 'Enable Gateway' : 'Disable Gateway', enabled: true, variant: 'outline' });
-            }} />
-          </div>
+        <div class="redeven-gateway-card__menu">
+          <Button size="sm" variant="outline" onClick={() => props.openCreateGatewaySetup(props.gateway)}>{props.i18n.t('gatewayExperience.manage')}<ChevronRight class="h-3.5 w-3.5" /></Button>
+          <Dropdown align="end" class="redeven-gateway-object-menu" triggerClass="redeven-gateway-more-trigger" trigger={<MoreHorizontal class="h-3.5 w-3.5" />} triggerAriaLabel={moreActionsForLabel()} items={() => [
+            { id: 'edit', label: props.i18n.t('gatewayExperience.editConnection'), icon: Settings },
+            { id: 'toggle', label: props.i18n.t(props.gateway.local_enabled === false ? 'gatewayExperience.enableConnection' : 'gatewayExperience.disableConnection'), icon: PowerIcon, disabled: !props.available || primaryActionRunning() },
+            { id: 'remove', label: props.i18n.t('gatewayExperience.removeConnection'), icon: Trash, tone: 'danger' },
+          ]} onSelect={id => {
+            if (id === 'edit') props.openCreateGatewaySetup(props.gateway, 'settings');
+            else if (id === 'remove') props.deleteGateway(props.gateway);
+            else runAction({ intent: props.gateway.local_enabled === false ? 'enable_gateway' : 'disable_gateway', label: props.gateway.local_enabled === false ? 'Enable Gateway' : 'Disable Gateway', enabled: true, variant: 'outline' });
+          }} />
         </div>
+      </div>
+      <div class="redeven-gateway-card__actions">
+        <Show when={props.gateway.connection_kind !== 'url'}>
+          <div class="redeven-gateway-enrollment-actions">
+            <Button size="sm" variant="outline" disabled={!props.available || primaryActionRunning() || props.gateway.local_enabled === false || !props.gateway.permissions?.manage_members} onClick={() => props.openCreateGatewaySetup(props.gateway, 'connect_client')}>{props.i18n.t('gatewayExperience.connectClient')}</Button>
+            <Button size="sm" variant="outline" disabled={!props.available || primaryActionRunning() || props.gateway.local_enabled === false || !props.gateway.permissions?.manage_members} onClick={() => props.openCreateGatewaySetup(props.gateway, 'connect_runtime')}>{props.i18n.t('gatewayExperience.connectRuntime')}</Button>
+          </div>
+        </Show>
+        <DesktopActionPopover
+          open={props.embeddedGatewayService !== props.gateway.gateway_id && actionPopoverOpen()}
+          onOpenChange={(open) => {
+            if (open) {
+              openActionPopover();
+              return;
+            }
+            closeActionPopover();
+          }}
+          onExitComplete={releaseClosedForegroundAction}
+          content={<Show when={props.embeddedGatewayService !== props.gateway.gateway_id}>{serviceContent()}</Show>}
+          anchorClass="redeven-gateway-card__primary-anchor"
+          allowMainAxisOverflow={false}
+          popoverAriaLabel={
+            progressPanelVisible()
+              ? (visibleGatewayProgress() ? localizedProgressTitle(props.i18n, visibleGatewayProgress()!) : props.i18n.t('environmentCenter.gatewayProgress'))
+              : localizedGatewaySourceText(props.i18n, row().guidance.title)
+          }
+          class="redeven-gateway-action-popover-surface"
+        >
+          <Button
+            size="sm"
+            variant={!progressPresentation() && displayedPrimaryAction().intent === 'refresh_gateway' ? 'ghost' : 'default'}
+            class={cn(
+              'redeven-gateway-card__primary-button min-w-0 justify-center',
+              !progressPresentation() && primaryBlocked() && 'redeven-split-action-trigger--blocked',
+              progressPresentation() && progressTriggerClassName(progressPresentation()!),
+            )}
+            icon={PrimaryActionIcon}
+            aria-busy={progressPresentation()?.kind === 'progress_trigger' || primaryBusy()}
+            aria-label={progressPresentation()?.ariaLabel}
+            data-floe-progress-shimmer={progressPresentation()?.kind === 'progress_trigger' || primaryBusy() ? 'surface' : undefined}
+            disabled={!props.available || !progressPresentation() && !displayedPrimaryAction().enabled && !primaryBlocked()}
+            aria-disabled={!progressPresentation() && primaryBlocked() ? true : undefined}
+            aria-haspopup={progressPresentation() || primaryHasGuide() ? 'dialog' : undefined}
+            aria-expanded={progressPresentation() || primaryHasGuide() ? props.actionPopoverOpen : undefined}
+            onClick={runPrimaryAction}
+          >
+            <span>{progressPresentation()?.label ?? primaryActionLabel()}</span>
+          </Button>
+        </DesktopActionPopover>
       </div>
       <div class="redeven-gateway-card__statusbar">
         <div class="redeven-gateway-card__status-row">
@@ -13413,7 +13415,7 @@ function GatewayWorkspace(props: Readonly<{
         <header class="redeven-gateway-workspace-header">
           <Button variant="ghost" size="sm" icon={ArrowLeft} onClick={props.onBack}>{props.i18n.t('gatewayExperience.allGateways')}</Button>
           <div class="redeven-gateway-workspace-title"><span class="redeven-gateway-card__mark" aria-hidden="true"><GatewayMark /></span><div><h2>{props.gateway?.display_name ?? props.state?.display_name}</h2><EnvironmentStatusIndicator tone={row()?.status_tone ?? 'neutral'}>{localizedGatewaySourceStatusLabel(props.i18n, row()?.status_label ?? '')}</EnvironmentStatusIndicator></div>
-            <Dropdown align="end" trigger={<MoreHorizontal class="h-4 w-4" />} triggerAriaLabel={props.i18n.t('gatewayExperience.moreActions')} items={() => [
+            <Dropdown align="end" triggerClass="redeven-gateway-more-trigger" trigger={<MoreHorizontal class="h-3.5 w-3.5" />} triggerAriaLabel={props.i18n.t('gatewayExperience.moreActions')} items={() => [
               { id: 'edit', label: props.i18n.t('gatewayExperience.editConnection'), icon: Settings },
               { id: 'toggle', label: props.i18n.t(props.gateway?.local_enabled === false ? 'gatewayExperience.enableConnection' : 'gatewayExperience.disableConnection'), disabled: !props.available },
               { id: 'remove', label: props.i18n.t('gatewayExperience.removeConnection'), icon: Trash, tone: 'danger' },
@@ -13430,10 +13432,10 @@ function GatewayWorkspace(props: Readonly<{
               <Show when={tab === 'overview'}>
                 <div class="redeven-gateway-section-heading"><h3>{sectionLabel(tab)}</h3><Show when={row()?.primary_action}>{action => <Button variant="outline" size="sm" disabled={!props.available || !action().enabled} onClick={() => props.onService(action())}>{localizedGatewaySourceActionLabel(props.i18n, action())}</Button>}</Show></div>
                 <Show when={props.state?.onboarding_complete}><p role="status" class="redeven-gateway-help">{props.i18n.t('gatewayExperience.saved')}</p></Show>
-                <Show when={hostManaged()}><div class="redeven-gateway-workspace-enrollment"><Button variant="outline" disabled={!canManage()} onClick={connectClient}>{props.i18n.t('gatewayExperience.connectClient')}</Button><Button data-gateway-add-environment disabled={!canManage()} onClick={connectRuntime}>{props.i18n.t('gatewayExperience.connectRuntime')}</Button></div></Show>
+                <Show when={hostManaged()}><div class="redeven-gateway-enrollment-actions"><Button size="sm" variant="outline" disabled={!canManage()} onClick={connectClient}>{props.i18n.t('gatewayExperience.connectClient')}</Button><Button size="sm" variant="outline" data-gateway-add-environment disabled={!canManage()} onClick={connectRuntime}>{props.i18n.t('gatewayExperience.connectRuntime')}</Button></div></Show>
                 <dl class="redeven-gateway-overview-facts"><div><dt>{props.i18n.t('gatewayJoin.address')}</dt><dd>{props.gateway?.member_endpoints?.map(endpoint => endpoint.address).join(', ') || props.gateway?.gateway_url || props.i18n.t('gatewayMembers.noConnectionAddresses')}</dd></div><div><dt>{props.i18n.t('gatewayExperience.identity')}</dt><dd>{props.gateway?.identity_fingerprint || '—'}</dd></div></dl>
                 <div class="redeven-gateway-section-heading"><h3>{props.i18n.t('gatewayMembers.members')}</h3><Button variant="ghost" size="sm" onClick={() => selectTab('runtimes')}>{props.i18n.t('environmentCenter.viewEnvironments')}</Button></div>
-                <Show when={props.gateway?.environments.length} fallback={<p class="redeven-gateway-empty-state">{props.i18n.t('gatewayMembers.empty')}</p>}><ul class="redeven-gateway-member-list"><For each={props.gateway?.environments}>{member => <li class="redeven-gateway-member-row"><strong>{member.display_name}</strong><span class="text-xs text-muted-foreground">{props.i18n.t(member.connected ? 'gatewayMembers.connected' : 'gatewayMembers.offline')}</span></li>}</For></ul></Show>
+                <Show when={props.gateway?.environments.length} fallback={<p class="redeven-gateway-empty-state">{props.i18n.t('gatewayMembers.empty')}</p>}><ul class="redeven-gateway-overview-members"><For each={props.gateway?.environments}>{member => <li><strong>{member.display_name}</strong><EnvironmentStatusIndicator tone={member.connected ? 'success' : 'neutral'}>{props.i18n.t(member.connected ? 'gatewayMembers.connected' : 'gatewayMembers.offline')}</EnvironmentStatusIndicator></li>}</For></ul></Show>
               </Show>
               <Show when={tab !== 'overview' && !hostManaged()}><p class="redeven-gateway-help">{props.i18n.t('gatewayClients.clientOnly')}</p></Show>
               <Show when={hostManaged() && sectionSession()?.visited.has(tab)}>
