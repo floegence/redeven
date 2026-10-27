@@ -78,13 +78,23 @@ try {
     }, theme);
     const cards = await page.locator('[data-card-state]').evaluateAll(elements => elements.map(element => {
       const style = getComputedStyle(element);
+      // Reduced motion collapses Floe's transitions to a 1ms floor rather than
+      // removing them, so a theme swap leaves a 1ms transition running for the
+      // frame it starts in. The contract is "nothing perceptible moves", which
+      // is a ceiling on the duration, not a zero count sampled at t=0.
+      const running = element.getAnimations({ subtree: true })
+        .filter(animation => animation.playState === 'running')
+        .map(animation => {
+          const duration = animation.effect?.getTiming?.().duration;
+          return typeof duration === 'number' ? duration : Infinity;
+        });
       return { border: style.borderTopColor, width: style.borderTopWidth, background: style.backgroundColor,
-        animations: element.getAnimations({ subtree: true }).filter(animation => animation.playState === 'running').length };
+        longestAnimation: running.length ? Math.max(...running) : 0 };
     }));
     for (const card of cards) {
       assert.equal(card.width, '1px', `${theme}: forced-color boundary retains geometry`);
       assert.notEqual(card.border, card.background, `${theme}: system boundary stays visible`);
-      assert.equal(card.animations, 0, `${theme}: reduced motion has no running card animation`);
+      assert.ok(card.longestAnimation <= 1, `${theme}: reduced motion leaves only the 1ms floor (${card.longestAnimation}ms)`);
     }
     report.systemCases.push({ theme, cards });
   }

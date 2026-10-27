@@ -62,15 +62,24 @@ async function motion(action = 'open') {
   }
 }
 async function assertFieldFocus() {
-  const values = await page.evaluate(() => {
+  const { values, expected } = await page.evaluate(() => {
+    // Resolve Floe's published tokens rather than hard-coding their px values:
+    // the field corner and control height are Floe's, not this dialog's.
+    const panel = document.querySelector('.redeven-environment-settings-dialog');
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;visibility:hidden;top:0;left:0;border-radius:var(--floe-radius-field);height:var(--environment-settings-control-height)';
+    panel.appendChild(probe);
+    const probeStyle = getComputedStyle(probe);
+    const expected = { radius: probeStyle.borderRadius, height: probe.offsetHeight };
+    probe.remove();
     const snapshot = (el) => { const s = getComputedStyle(el); return { width: el.offsetWidth, height: el.offsetHeight, border: s.borderWidth, padding: s.padding, shadow: s.boxShadow, outline: s.outlineStyle, color: s.borderColor, radius: s.borderRadius }; };
-    return [...document.querySelectorAll('.ssh-settings-form input:not([type="checkbox"]),.ssh-settings-form select')].map(el => {
+    return { expected, values: [...document.querySelectorAll('.ssh-settings-form input:not([type="checkbox"]),.ssh-settings-form select')].map(el => {
       el.style.transition = 'none'; el.blur(); const before = snapshot(el); el.focus(); return { id: el.id, before, after: snapshot(el) };
-    });
+    }) };
   });
   for (const field of values) {
-    assert.equal(field.before.radius, '8px', `${field.id}: settings corner scale`);
-    assert.equal(field.before.height, 36, `${field.id}: settings control height`);
+    assert.equal(field.before.radius, expected.radius, `${field.id}: settings corner scale`);
+    assert.equal(field.before.height, expected.height, `${field.id}: settings control height`);
     for (const key of ['width','height','border','padding','shadow']) assert.equal(field.after[key], field.before[key], `${field.id}: focus changes ${key}`);
     assert.equal(field.after.outline, 'none', `${field.id}: focus outline`);
     assert.notEqual(field.after.color, field.before.color, `${field.id}: invisible focus border`);
@@ -126,18 +135,36 @@ try {
   assert.ok(destinationSpace.textRight <= destinationSpace.indicatorLeft, 'SSH destination text must not overlap its feedback control');
   await motion('close');
   await motion('open');
-  const typography = await page.locator('.redeven-environment-settings-dialog').evaluate((el) => ({
-    title: getComputedStyle(el.querySelector('h2')).fontSize,
-    field: getComputedStyle(el.querySelector('input')).fontSize,
-    label: getComputedStyle(el.querySelector('.ssh-settings-field-label > label')).fontSize,
-    body: getComputedStyle(el).fontSize,
-    radius: parseFloat(getComputedStyle(el).borderRadius),
-  }));
-  assert.equal(typography.title, '16px');
-  assert.equal(typography.field, '12px');
-  assert.equal(typography.label, '13px');
-  assert.equal(typography.body, '12px');
-  assert.equal(typography.radius, 14, 'approved settings dialog radius');
+  const typography = await page.locator('.redeven-environment-settings-dialog').evaluate((el) => {
+    // Compare against Floe's ladder as resolved in this theme, so a shift in the
+    // published scale is a change here only if the dialog stops following it.
+    const token = (name, extra = '') => {
+      const probe = document.createElement('div');
+      probe.style.cssText = `position:absolute;visibility:hidden;top:0;left:0;font-size:var(${name});${extra}`;
+      el.appendChild(probe);
+      const value = getComputedStyle(probe).fontSize;
+      probe.remove();
+      return value;
+    };
+    const radiusProbe = document.createElement('div');
+    radiusProbe.style.cssText = 'position:absolute;visibility:hidden;top:0;left:0;border-radius:var(--floe-radius-panel)';
+    el.appendChild(radiusProbe);
+    const panelRadius = parseFloat(getComputedStyle(radiusProbe).borderRadius);
+    radiusProbe.remove();
+    return {
+      title: getComputedStyle(el.querySelector('h2')).fontSize,
+      field: getComputedStyle(el.querySelector('input')).fontSize,
+      label: getComputedStyle(el.querySelector('.ssh-settings-field-label > label')).fontSize,
+      body: getComputedStyle(el).fontSize,
+      radius: parseFloat(getComputedStyle(el).borderRadius),
+      expected: { heading: token('--floe-type-heading'), control: token('--floe-type-control'), body: token('--floe-type-body'), radius: panelRadius },
+    };
+  });
+  assert.equal(typography.title, typography.expected.heading, 'dialog title uses the heading step');
+  assert.equal(typography.field, typography.expected.control, 'fields use the control step');
+  assert.equal(typography.label, typography.expected.control, 'field labels use the control step');
+  assert.equal(typography.body, typography.expected.body, 'dialog body uses the body step');
+  assert.equal(typography.radius, typography.expected.radius, 'settings dialog uses the panel corner');
   const fields = await page.locator('.ssh-settings-field').evaluateAll(rows => rows.map(row => { const label = row.querySelector('.ssh-settings-field-label').getBoundingClientRect(), control = row.querySelector('.ssh-settings-field-control').getBoundingClientRect(); return { label: label.right, control: control.left, right: control.right }; }));
   assert.ok(fields.every(row => row.control - row.label >= 27), 'labels and controls occupy separate columns');
   assert.ok(fields.every(row => Math.abs(row.right - fields[0].right) < 1), 'all controls share the same right edge');
@@ -303,6 +330,15 @@ try {
   await page.locator('#fixture-open').click();
   await page.locator('.ssh-settings-form input').first().waitFor();
   await page.evaluate(() => document.fonts.ready);
+  // The touch targets are physical, so they must be measured at rest: the
+  // entry motion scales the panel (0.965 at its first frame), which shrinks a
+  // 44px control to ~42.5px and would read as a hit-target regression.
+  await page.waitForFunction(() => {
+    const panel = document.querySelector('.redeven-environment-settings-dialog');
+    if (!panel) return false;
+    const { transform, opacity } = getComputedStyle(panel);
+    return (transform === 'none' || transform === 'matrix(1, 0, 0, 1, 0, 0)') && opacity === '1';
+  });
   const touchFields = await page.locator('.ssh-settings-form input:not([type="checkbox"]), .ssh-settings-form select').evaluateAll(fields => fields.map(field => ({
     size: getComputedStyle(field).fontSize,
     height: field.getBoundingClientRect().height,

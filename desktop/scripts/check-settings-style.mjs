@@ -164,6 +164,14 @@ try {
       await page.evaluate(value => window.settingsFixture.publish(value), { ...snapshot, environments: [...snapshot.environments, entry] });
       await page.getByRole('button', { name: `Settings for Fixture ${kind}`, exact: true }).click();
       await dialog.waitFor();
+      // Measure at rest: the entry motion scales the panel to 0.965, which turns
+      // a 32px header action into ~30.9px and reads as a clipped hit target.
+      await page.waitForFunction(() => {
+        const panel = document.querySelector('[data-floe-dialog-panel]');
+        if (!panel) return false;
+        const { transform, opacity } = getComputedStyle(panel);
+        return (transform === 'none' || transform === 'matrix(1, 0, 0, 1, 0, 0)') && opacity === '1';
+      });
       const groups = dialog.locator('.ssh-settings-fields:visible, .environment-connection-group:visible, .environment-settings-information:visible');
       await groups.first().waitFor();
       const surfaces = await groups.evaluateAll(elements => elements.map(el => {

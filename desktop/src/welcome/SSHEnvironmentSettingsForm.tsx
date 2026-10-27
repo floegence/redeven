@@ -360,6 +360,7 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
               >
                 <select
                   id="ssh-settings-bootstrap_strategy"
+                  class="redeven-native-select"
                   value={props.state.bootstrap_strategy}
                   onChange={(event) =>
                     props.switchBootstrapStrategy(event.currentTarget.value as DesktopSSHBootstrapStrategy)

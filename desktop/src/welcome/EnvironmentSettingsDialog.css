@@ -3,7 +3,7 @@
   --environment-settings-border: var(--border);
   --environment-settings-radius: var(--floe-radius-control);
   --environment-settings-inset: 18px;
-  --environment-settings-control-height: 36px;
+  --environment-settings-control-height: var(--floe-control-height-lg);
 }
 /* Product geometry; Floe owns floating material and modal entry/exit motion. */
 [data-floe-dialog-panel].redeven-environment-settings-dialog {
@@ -240,7 +240,6 @@
 .ssh-settings-field-control { width: 258px; max-width: 56%; display: flex; flex-direction: column; gap: 6px; align-items: stretch; min-width: 0; }
 .ssh-settings-field:has(#ssh-settings-ssh_port) .ssh-settings-field-control { width: 88px; }
 .ssh-settings-form input:not([type='checkbox']), .ssh-settings-form select { width: 100%; min-width: 0; height: var(--environment-settings-control-height); }
-.ssh-settings-form select { padding-right: 24px; }
 .ssh-settings-help { font-size: var(--floe-type-supporting); line-height: 1.65; color: var(--muted-foreground); overflow-wrap: anywhere; margin-top: 3px; }
 .ssh-settings-help-link { color: var(--muted-foreground); font-size: var(--floe-type-supporting); text-align: left; width: fit-content; height: auto; min-height: 32px; }
 .ssh-settings-help-link:hover { color: var(--foreground); text-decoration: underline; text-underline-offset: 3px; }

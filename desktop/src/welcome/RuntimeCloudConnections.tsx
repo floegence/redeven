@@ -126,7 +126,7 @@ export function RuntimeCloudConnections(props: Readonly<{
     <Show when={invalid()}><p role="alert" class="text-warning">{t('interactionContinuity.unavailable')}</p><Button variant="outline" disabled={props.available === false || busy()} onClick={() => { if (props.available !== false && !busy()) { generation++; setAuthorityRevoked(false); setSessionTarget(props.targetID); setSessionKey(storageKey()); loadStored(storageKey()); } }}>{t('interactionContinuity.revalidate')}</Button></Show>
     <p>{t('cloudRoute.impact')}</p>
     <label class="block space-y-2"><span>{t('cloudRoute.selected')}</span>
-     <select class="w-full cursor-pointer rounded-md border border-border bg-background p-2" value={selected()} disabled={busy() || !!pending() || corrupt()} onChange={event => setSelected(event.currentTarget.value)}>
+     <select class="redeven-native-select" value={selected()} disabled={busy() || !!pending() || corrupt()} onChange={event => setSelected(event.currentTarget.value)}>
       <Show when={selectionInvalid()}><option value={selected()} disabled>{t('cloudRoute.gatewayUnavailable')}</option></Show>
       <option value="direct">{t('cloudRoute.direct')}</option>
       <KeyedFor each={props.memberships} by={member => member.member_id}>{member => <option value={member().member_id}>{member().gateway_name || member().gateway_id}</option>}</KeyedFor>

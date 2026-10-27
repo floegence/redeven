@@ -647,8 +647,12 @@ html:not(.dark) .redeven-welcome-surface {
 }
 
 /* The environment grid needs an identifiable perimeter even when the page and
- * card paints are close. Keep one neutral boundary and let Floe own its shadow. */
-.redeven-environment-card[data-floe-surface] {
+ * card paints are close. Keep one neutral boundary and let Floe own its shadow.
+ *
+ * Keyed on the variant attribute rather than `[data-floe-surface]`: Floe's Card
+ * only marks `variant="well"` with a surface, so the default card would keep the
+ * primitive's `border-transparent` utility and lose its edge entirely. */
+.redeven-environment-card[data-floe-card-variant] {
   border-color: var(--redeven-welcome-card-border);
   --floe-surface-shadow-raised: none;
 }
@@ -1577,20 +1581,50 @@ html:not(.dark) .redeven-endpoint-qr-panel {
 
 /* ── Filters ── */
 
+/* A native select wearing Floe's field recipe: the shared edge, the 10px field
+ * radius and the well fill, with the platform chevron replaced by the same
+ * quiet mark the dropdown rows use. Focus changes the edge colour only, per
+ * the input focus border contract. */
 .redeven-native-select {
   width: 100%;
   cursor: pointer;
-  border: 1px solid var(--border);
-  border-radius: var(--floe-radius-control);
-  background: var(--background);
-  padding: 0.55rem 0.7rem;
+  appearance: none;
+  border: 1px solid var(--floe-field-edge);
+  border-radius: var(--floe-radius-field);
+  background-color: var(--floe-field-fill);
+  background-image: var(--redeven-select-chevron);
+  background-repeat: no-repeat;
+  background-position: right var(--floe-control-padding-md) center;
+  background-size: 0.875rem 0.875rem;
+  padding: 0 var(--floe-control-padding-lg) 0 var(--floe-control-padding-md);
+  min-height: var(--floe-control-height-md);
   font-size: var(--floe-type-control);
+  line-height: var(--floe-line-control);
   color: var(--foreground);
+  transition:
+    background-color var(--floe-duration-fast) var(--floe-ease-out),
+    border-color var(--floe-duration-fast) var(--floe-ease-out);
+}
+
+.redeven-native-select:hover:not(:disabled) {
+  border-color: var(--floe-field-edge-hover);
+}
+
+.redeven-native-select:focus-visible {
+  outline: none;
+  border-color: var(--ring);
 }
 
 .redeven-native-select:disabled {
   cursor: not-allowed;
-  opacity: 0.7;
+  opacity: 0.6;
+}
+
+@media (forced-colors: active) {
+  .redeven-native-select {
+    appearance: auto;
+    background-image: none;
+  }
 }
 
 
@@ -4124,7 +4158,11 @@ pre,
 /* Product selection uses immediate fill feedback; Floe owns floating depth. */
 @media (forced-colors: none) {
   :root[data-floe-surface-style='soft-neumorphic']:not([data-floe-shell-theme='hc-light']) {
-    --redeven-welcome-card-border: var(--floe-surface-edge);
+    /* The edge mixes into the page, but a card edge has to hold against the
+     * card's own fill. Once the card sits lighter than the page — every dark
+     * shell theme — that mix lands within noise of the card, so mix the same
+     * weight into the surface the boundary actually outlines. */
+    --redeven-welcome-card-border: color-mix(in srgb, var(--foreground) 9%, var(--card));
     --redeven-welcome-rail-border: var(--floe-surface-divider);
 
     .redeven-header-separator,

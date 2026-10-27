@@ -1,17 +1,22 @@
-/* Redeven's approved settings scale. Floe still owns control semantics, menus,
- * validation and border-only focus; compound inputs retain one visible frame. */
+/* One chevron for every native select in the product. `appearance: none` is
+ * what makes a field and a select the same rectangle, so the mark has to be
+ * painted; sharing it here keeps the settings fields and the welcome surface
+ * from drifting into two different arrows. */
+:root {
+  --redeven-select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23807d77' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6.5 8 10.5 12 6.5'/%3E%3C/svg%3E");
+}
+
 :is(.redeven-settings-shell, .redeven-settings-dialog, .redeven-provider-dialog,
   .redeven-environment-settings-dialog, .flower-settings-surface,
   .flower-provider-dialog, .redeven-terminal-settings-dialog, .managed-service-settings-drawer) {
-  --redeven-settings-field-bg: color-mix(in srgb, var(--foreground) 2%, var(--background));
-  --redeven-settings-field-border: color-mix(in srgb, var(--foreground) 9%, transparent);
+  /* Floe's field recipe, not a local approximation: the well carries the
+   * affordance and the edge only gives it an end, so a settings field reads as
+   * the same control as the composer and the shell's own inputs. Both tokens
+   * already resolve per theme, which is why no dark override is needed. */
+  --redeven-settings-field-bg: var(--floe-field-fill);
+  --redeven-settings-field-border: var(--floe-field-edge);
+  --redeven-settings-field-border-hover: var(--floe-field-edge-hover);
   --input: var(--redeven-settings-field-border);
-}
-
-.dark :is(.redeven-settings-shell, .redeven-settings-dialog, .redeven-provider-dialog,
-  .redeven-environment-settings-dialog, .flower-settings-surface,
-  .flower-provider-dialog, .redeven-terminal-settings-dialog, .managed-service-settings-drawer) {
-  --redeven-settings-field-bg: color-mix(in srgb, var(--foreground) 7%, var(--background));
 }
 
 :is(.redeven-settings-shell, .redeven-settings-dialog, .redeven-provider-dialog,
@@ -21,15 +26,51 @@
     textarea, select, [data-floe-input-surface]):not(:where([data-floe-input-surface] *, .two-factor-code-surface)) {
   border: 1px solid var(--redeven-settings-field-border);
   border-radius: var(--floe-radius-field, 0.625rem);
-  background: var(--redeven-settings-field-bg);
+  /* Longhands only: a `background` shorthand here would reset the select
+   * chevron that the rule below paints. */
+  background-color: var(--redeven-settings-field-bg);
   color: var(--foreground);
   box-shadow: none;
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: var(--floe-type-control);
+  line-height: var(--floe-line-control);
   padding-block: 6px;
-  padding-inline: 10px;
+  padding-inline: var(--floe-control-padding-md);
   min-width: 0;
   max-width: 100%;
+}
+
+/* Hover brightens the edge, exactly as every other Floe field does. */
+:is(.redeven-settings-shell, .redeven-settings-dialog, .redeven-provider-dialog,
+  .redeven-environment-settings-dialog, .flower-settings-surface,
+  .flower-provider-dialog, .redeven-terminal-settings-dialog, .managed-service-settings-drawer)
+  :is(input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file'], [type='button'], [type='submit']),
+    textarea, select, [data-floe-input-surface]):not(:where([data-floe-input-surface] *, .two-factor-code-surface)):hover:not(:disabled):not([aria-disabled='true']) {
+  border-color: var(--redeven-settings-field-border-hover);
+}
+
+/* A select is a field plus one affordance: the quiet chevron the dropdown rows
+ * use, painted here because the shared field rule resets `background`. */
+:is(.redeven-settings-shell, .redeven-settings-dialog, .redeven-provider-dialog,
+  .redeven-environment-settings-dialog, .flower-settings-surface,
+  .flower-provider-dialog, .redeven-terminal-settings-dialog, .managed-service-settings-drawer)
+  select:not([multiple]):not([size]) {
+  appearance: none;
+  background-image: var(--redeven-select-chevron);
+  background-repeat: no-repeat;
+  background-position: right var(--floe-control-padding-md) center;
+  background-size: 0.875rem 0.875rem;
+  padding-inline-end: calc(var(--floe-control-padding-md) * 2 + 0.875rem);
+  cursor: pointer;
+}
+
+@media (forced-colors: active) {
+  :is(.redeven-settings-shell, .redeven-settings-dialog, .redeven-provider-dialog,
+    .redeven-environment-settings-dialog, .flower-settings-surface,
+    .flower-provider-dialog, .redeven-terminal-settings-dialog, .managed-service-settings-drawer)
+    select:not([multiple]):not([size]) {
+    appearance: auto;
+    background-image: none;
+  }
 }
 
 :is(.redeven-settings-shell, .redeven-settings-dialog, .redeven-provider-dialog,

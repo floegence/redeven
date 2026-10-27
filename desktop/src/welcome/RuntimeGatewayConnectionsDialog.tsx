@@ -114,7 +114,7 @@ export function RuntimeGatewayConnectionsDialog(props: Readonly<{
         <Show when={members().length > 1 && !gatewayID()}>
           <label class="block space-y-2 text-sm">
             <span>{text('gatewayConnections.select')}</span>
-            <select ref={select} class="w-full cursor-pointer rounded-md border border-border bg-background px-3 py-2.5"
+            <select ref={select} class="redeven-native-select"
               value={selected()} disabled={busy()} onChange={event => {
                 setSelected(event.currentTarget.value);
                 setError('');
