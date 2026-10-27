@@ -301,9 +301,11 @@ export function FlowerTurnTimeline(props: TimelineProps) {
     }
     props.scroll.measureAfterLayout();
   };
+  onMount(() => { onCleanup(props.scroll.registerDestination(sequenceLayout.prepareDestination)); });
   const sequenceContext = {
     ...sequenceLayout,
     projection: sequences,
+    preparing: props.scroll.isPreparing,
     expanded: (group: FlowerToolSequence) => props.choices.expanded(sequenceIdentity(group.key), group.disclosure),
     manuallyExpanded: (group: FlowerToolSequence) => props.choices.manuallyExpanded(sequenceIdentity(group.key)),
     manuallyControlled: (group: FlowerToolSequence) => props.choices.manuallyControlled(sequenceIdentity(group.key)),

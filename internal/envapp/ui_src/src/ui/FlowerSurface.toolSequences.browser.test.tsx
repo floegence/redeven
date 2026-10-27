@@ -88,6 +88,85 @@ function expectConnectorBetween(root: HTMLElement, previousID: string, nextID: s
 afterEach(async () => { document.getSelection()?.removeAllRanges(); await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' }); });
 
 describe('consecutive tools in the shared Flower surface', () => {
+  it('keeps following after layout and programmatic scrolling without reading input', async () => {
+    const calls = Array.from({ length: 36 }, (_, index) => tool(`layout-${index}`));
+    const { root, push } = await mount(calls);
+    const body = group(root, 'layout-0').querySelector<HTMLElement>('.flower-tool-sequence-scroll')!;
+    await expect.poll(() => body.scrollHeight - body.clientHeight - body.scrollTop).toBeLessThanOrEqual(1);
+    // Native anchoring, restored details and focus can change the offset without
+    // a wheel, key, touch or scrollbar gesture. They must not pause following.
+    body.scrollTop -= 64;
+    body.dispatchEvent(new Event('scroll'));
+    expect(body.hasAttribute('data-flower-reading-paused')).toBe(false);
+    push([...calls, tool('layout-new', 'running')]);
+    await waitFor(() => Boolean(row(root, 'layout-new')));
+    await expect.poll(() => body.scrollHeight - body.clientHeight - body.scrollTop).toBeLessThanOrEqual(1);
+    const image = document.createElement('img');
+    image.alt = 'Delayed tool screenshot';
+    row(root, 'layout-30').append(image);
+    image.src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="260"><rect width="400" height="260" fill="gray"/></svg>');
+    await image.decode();
+    await expect.poll(() => body.scrollHeight - body.clientHeight - body.scrollTop).toBeLessThanOrEqual(1);
+    expect(body.hasAttribute('data-flower-reading-paused')).toBe(false);
+  });
+
+  it('fits ten compact tool rows in the expanded desktop viewport', async () => {
+    const { root } = await mount(Array.from({ length: 30 }, (_, index) => tool(`compact-${index}`)));
+    const body = group(root, 'compact-0').querySelector<HTMLElement>('.flower-tool-sequence-scroll')!;
+    await expect.poll(() => body.scrollHeight - body.clientHeight - body.scrollTop).toBeLessThanOrEqual(1);
+    const bounds = body.getBoundingClientRect();
+    const rows = [...body.querySelectorAll<HTMLElement>('.flower-activity-inline-button')];
+    expect(rows.every(row => Math.abs(row.getBoundingClientRect().height - 28) <= 1)).toBe(true);
+    expect(rows.filter(row => { const rect = row.getBoundingClientRect(); return rect.top >= bounds.top - 1 && rect.bottom <= bounds.bottom + 1; })).toHaveLength(10);
+    if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: root, path: '__screenshots__/flower-tool-sequence-ten-rows.png' });
+  });
+
+  it('keeps a manually folded active group closed while showing its latest activity', async () => {
+    const { root, push } = await mount([tool('summary-a'), tool('summary-b', 'running')]);
+    toggle(root, 'summary-a').click();
+    await waitFor(() => collapsed(root, 'summary-a'));
+    push([tool('summary-a'), tool('summary-b'), tool('summary-c', 'running')]);
+    await waitFor(() => toggle(root, 'summary-a').textContent?.includes('3 tool calls') === true);
+    expect(toggle(root, 'summary-a').textContent).toContain('Execute summary-c');
+    expect(toggle(root, 'summary-a').getAttribute('aria-label')).toContain('Execute summary-c');
+    expect(collapsed(root, 'summary-a')).toBe(true);
+    root.querySelector<HTMLButtonElement>('[data-thread-id=peer] button')!.click();
+    await waitFor(() => !root.querySelector('.flower-tool-sequence-toggle'));
+    root.querySelector<HTMLButtonElement>('[data-thread-id=sequences] button')!.click();
+    await waitFor(() => Boolean(root.querySelector('.flower-tool-sequence-toggle')));
+    expect(collapsed(root, 'summary-a')).toBe(true);
+    expect(toggle(root, 'summary-a').textContent).toContain('Execute summary-c');
+  });
+
+  it.each(['reduce', 'no-preference'] as const)('reveals both tails together after switching back with restored details and %s motion', async reducedMotion => {
+    await media.emulateMediaPreferences({ reducedMotion });
+    const calls = Array.from({ length: 48 }, (_, index) => tool(`return-${index}`));
+    const { root, push } = await mount(calls);
+    row(root, 'return-45').querySelector<HTMLButtonElement>('.flower-activity-inline-button')!.click();
+    await waitFor(() => row(root, 'return-45').querySelector('.flower-activity-inline-details')?.getAttribute('data-state') === 'open');
+    root.querySelector<HTMLButtonElement>('[data-thread-id=peer] button')!.click();
+    await waitFor(() => !root.querySelector('.flower-tool-sequence-toggle'));
+    push([...calls, tool('return-48', 'running')]);
+    root.querySelector<HTMLButtonElement>('[data-thread-id=sequences] button')!.click();
+    const samples: { outer: number; inner: number; animated: number; visible: boolean }[] = [];
+    for (let frame = 0; frame < 35; frame++) {
+      await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+      const transcript = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
+      const tail = row(root, 'return-48');
+      if (!tail || transcript.dataset.flowerTailPreparing === 'true') continue;
+      const body = tail.closest<HTMLElement>('.flower-tool-sequence-scroll')!;
+      const bounds = body.getBoundingClientRect(), rect = tail.getBoundingClientRect();
+      samples.push({ outer: transcript.scrollHeight - transcript.clientHeight - transcript.scrollTop,
+        inner: body.scrollHeight - body.clientHeight - body.scrollTop,
+        animated: body.getAnimations({ subtree: true }).filter(animation => animation.playState === 'running'
+          && (animation.effect as KeyframeEffect).getKeyframes().some(keyframe => 'height' in keyframe)).length,
+        visible: rect.top >= bounds.top - 1 && rect.bottom <= bounds.bottom + 1 });
+    }
+    expect(samples.length).toBeGreaterThan(0);
+    expect(samples.every(sample => sample.outer <= 1 && sample.inner <= 1 && sample.visible && sample.animated === 0), JSON.stringify(samples)).toBe(true);
+    expect(row(root, 'return-45').querySelector('.flower-activity-inline-button')?.getAttribute('aria-expanded')).toBe('true');
+  });
+
   it('folds completed tools after output finishes without flickering between consecutive calls', async () => {
     const initial = [tool('auto-a'), tool('auto-b', 'running')];
     const { root, push } = await mount(initial);
@@ -232,7 +311,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(content.scrollHeight).toBeGreaterThan(content.clientHeight * 2);
     const wheel = commands as unknown as { wheelScrollRegion: (request: { regionSelector: string; targetSelector: string; deltaY: number; preserveScroll?: boolean }) => Promise<{ before: number; after: number }> };
     const input = async (direction: number, preserveScroll = false) => {
-      if (source === 'keyboard') { content.focus({ preventScroll: true }); await userEvent.keyboard(direction < 0 ? '{ArrowUp}' : '{PageDown}'); }
+      if (source === 'keyboard') { content.focus({ preventScroll: true }); await userEvent.keyboard(direction < 0 ? preserveScroll ? '{PageUp}' : '{ArrowUp}' : '{PageDown}'); }
       else await wheel.wheelScrollRegion({ regionSelector: '.flower-chat-transcript', targetSelector: '.flower-thinking-content', deltaY: direction * 120, preserveScroll });
     };
     content.scrollTop = 200;
@@ -259,7 +338,7 @@ describe('consecutive tools in the shared Flower surface', () => {
       expect(transcript.scrollTop).toBe(outerTop);
     }
     const end = new Promise<void>(resolve => transcript.addEventListener('scrollend', () => resolve(), { once: true }));
-    await input(-1);
+    await input(-1, true);
     await expect.poll(() => transcript.scrollTop).toBeLessThan(outerTop - 10);
     await end;
     const readingTop = transcript.scrollTop;
@@ -289,8 +368,9 @@ describe('consecutive tools in the shared Flower surface', () => {
     const transcript = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
     const sequence = root.querySelector<HTMLElement>('.flower-tool-sequence-scroll')!;
     expect(content.scrollHeight).toBeGreaterThan(content.clientHeight * 2);
-    const wheel = commands as unknown as { wheelScrollRegion: (request: { regionSelector: string; targetSelector: string; deltaY: number }) => Promise<{ before: number; after: number }> };
-    content.scrollTop = 100; sequence.scrollTop = 0;
+    const wheel = commands as unknown as { wheelScrollRegion: (request: { regionSelector: string; targetSelector: string; deltaY: number; preserveScroll?: boolean }) => Promise<{ before: number; after: number }> };
+    sequence.dispatchEvent(new WheelEvent('wheel', { deltaY: -120, bubbles: true }));
+    content.scrollTop = 100; sequence.scrollTop = 0; sequence.dispatchEvent(new Event('scroll'));
     let outerTop = transcript.scrollTop;
     transcript.addEventListener('wheel', () => { outerTop = transcript.scrollTop; }, { once: true });
     await wheel.wheelScrollRegion({ regionSelector: selector, deltaY: -60, targetSelector: selector });
@@ -299,7 +379,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     content.scrollTop = 0; sequence.scrollTop = 0;
     let edgeTop = transcript.scrollTop;
     transcript.addEventListener('wheel', () => { edgeTop = transcript.scrollTop; }, { once: true });
-    await wheel.wheelScrollRegion({ regionSelector: '.flower-chat-transcript', targetSelector: selector, deltaY: -120 });
+    await wheel.wheelScrollRegion({ regionSelector: '.flower-chat-transcript', targetSelector: selector, deltaY: -120, preserveScroll: true });
     await expect.poll(() => transcript.scrollTop).toBeLessThan(edgeTop - 50);
     const readingTop = transcript.scrollTop;
     push([...initial, item('preview-growth', 'assistant', 'New preview result.\n\n'.repeat(5))]);
@@ -387,6 +467,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(viewport.scrollHeight).toBeGreaterThan(viewport.clientHeight * 2);
     await expect.poll(() => viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop).toBeLessThanOrEqual(1);
 
+    viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -120, bubbles: true }));
     viewport.scrollTop = 40;
     viewport.dispatchEvent(new Event('scroll'));
     expect(viewport.hasAttribute('data-flower-reading-paused')).toBe(true);
@@ -400,6 +481,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     await waitFor(() => group(root, 'latest-0').dataset.state === 'open');
     await expect.poll(() => viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop).toBeLessThanOrEqual(1);
     expect(viewport.hasAttribute('data-flower-reading-paused')).toBe(false);
+    viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -120, bubbles: true }));
     viewport.scrollTop = 40;
     viewport.dispatchEvent(new Event('scroll'));
     if (status === 'running') {
@@ -428,6 +510,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(result.after).toBeLessThan(result.before);
     expect(transcript.scrollTop).toBe(transcriptTop);
     expect(header.getBoundingClientRect().top).toBe(top);
+    viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: 120, bubbles: true }));
     viewport.scrollTop = viewport.scrollHeight;
     viewport.dispatchEvent(new Event('scroll'));
     const savedTop = viewport.scrollTop;
@@ -478,6 +561,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     const { root, push } = await mount([...initial, tool('live-30', 'running')]);
     const viewport = root.querySelector<HTMLElement>('.flower-tool-sequence-scroll')!;
     await expect.poll(() => viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop).toBeLessThanOrEqual(1);
+    viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -120, bubbles: true }));
     viewport.scrollTop = 40;
     viewport.dispatchEvent(new Event('scroll'));
     const header = toggle(root, 'live-0');
@@ -486,6 +570,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
     expect(viewport.scrollTop).toBe(40);
     expect(toggle(root, 'live-0')).toBe(header);
+    viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: 120, bubbles: true }));
     viewport.scrollTop = viewport.scrollHeight;
     viewport.dispatchEvent(new Event('scroll'));
     push([...initial, tool('live-30'), tool('live-31'), tool('live-32', 'running')]);
@@ -640,7 +725,7 @@ describe('consecutive tools in the shared Flower surface', () => {
     expect(thoughts.map(node => Boolean(node.closest<HTMLElement>('.flower-tool-sequence-node')?.dataset.flowerSequence))).toEqual([true, true, true]);
     expect(thoughts[1].querySelectorAll('.flower-thinking-petal')).toHaveLength(5);
     expect(collapsed(root, 'b')).toBe(false);
-    expect(row(root, 'a').getBoundingClientRect().height).toBe(32);
+    expect(row(root, 'a').getBoundingClientRect().height).toBe(28);
     expect(Math.abs(row(root, 'b').getBoundingClientRect().top - thoughts[1].getBoundingClientRect().bottom)).toBeLessThan(1);
     expect(getComputedStyle(group(root, 'a').querySelector('.flower-tool-sequence-content')!, '::after').width).toBe('1px');
     expect(getComputedStyle(row(root, 'a').querySelector('.flower-activity-inline-title')!).fontSize).toBe('12px');

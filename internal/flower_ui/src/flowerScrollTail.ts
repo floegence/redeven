@@ -4,6 +4,9 @@ export const FLOWER_TRANSCRIPT_NEAR_BOTTOM_THRESHOLD_PX = 96;
 export const FLOWER_TRANSCRIPT_SCROLL_TO_LATEST_MS = 220;
 
 export type FlowerScrollTailController = Readonly<{
+  isPreparing: () => boolean;
+  registerDestination: (prepare: () => boolean) => () => void;
+  prepareDestination: () => boolean;
   bind: (node: HTMLDivElement | undefined) => void;
   nearBottom: Accessor<boolean>;
   followingLatest: Accessor<boolean>;
@@ -32,6 +35,8 @@ export type FlowerScrollTailController = Readonly<{
 }>;
 
 export type FlowerScrollTailControllerOptions = Readonly<{
+  nearBottomThreshold?: number;
+  observeChildren?: boolean;
   canFollowLatest?: () => boolean;
   preparing?: () => boolean;
   reducedMotionPreferred: () => boolean;
@@ -45,6 +50,8 @@ export type FlowerScrollTailControllerOptions = Readonly<{
 export function createFlowerScrollTailController(
   options: FlowerScrollTailControllerOptions,
 ): FlowerScrollTailController {
+  const destinations = new Set<() => boolean>();
+  const nearBottomThreshold = options.nearBottomThreshold ?? FLOWER_TRANSCRIPT_NEAR_BOTTOM_THRESHOLD_PX;
   const [nearBottom, setNearBottom] = createSignal(true);
   let node: HTMLDivElement | undefined;
   let knownScrollTop = 0;
@@ -159,7 +166,7 @@ export function createFlowerScrollTailController(
   };
   const isNearBottom = (): boolean => {
     if (!node) return true;
-    return node.scrollHeight - node.scrollTop - node.clientHeight <= FLOWER_TRANSCRIPT_NEAR_BOTTOM_THRESHOLD_PX;
+    return node.scrollHeight - node.scrollTop - node.clientHeight <= nearBottomThreshold;
   };
   const latestVisible = () => !followingLatest() && (!nearBottom() || !(options.canFollowLatest?.() ?? true));
   const cancelScheduledScroll = () => { pendingScroll = undefined; };
@@ -246,7 +253,7 @@ export function createFlowerScrollTailController(
     if (nextTop !== scrollTop) setScrollTop(target, nextTop);
     knownScrollHeight = scrollHeight;
     knownViewportHeight = viewportHeight;
-    setNearBottom(scrollHeight - nextTop - viewportHeight <= FLOWER_TRANSCRIPT_NEAR_BOTTOM_THRESHOLD_PX);
+    setNearBottom(scrollHeight - nextTop - viewportHeight <= nearBottomThreshold);
     if (notify) options.onLayout?.();
     // Reading anchors survive asynchronous Markdown, images and page decoration.
     // Only an active disclosure animation needs frame polling.
@@ -515,6 +522,15 @@ export function createFlowerScrollTailController(
       layout(performance.now(), false);
       if (options.onLayout) scheduleLayout();
     }) : undefined;
+    const observeChildren = () => {
+      if (!options.observeChildren || !resizeObserver || !node) return;
+      resizeObserver.disconnect();
+      resizeObserver.observe(node);
+      for (const child of node.children) resizeObserver.observe(child);
+    };
+    const childrenObserver = options.observeChildren && typeof MutationObserver === 'function'
+      ? new MutationObserver(() => { observeChildren(); flushLayout(false); scheduleLayout(); }) : undefined;
+    childrenObserver?.observe(node, { childList: true });
     resizeObserver?.observe(node);
     const boundNode = node;
     let disconnected = false;
@@ -522,6 +538,7 @@ export function createFlowerScrollTailController(
     // Observe that child after synchronous mounting, so history publication
     // and hydration are corrected before paint even without viewport resize.
     queueMicrotask(() => {
+      if (!disconnected) observeChildren();
       if (!disconnected && boundNode.firstElementChild) resizeObserver?.observe(boundNode.firstElementChild);
     });
     disconnect = () => {
@@ -534,11 +551,22 @@ export function createFlowerScrollTailController(
       boundNode.removeEventListener('scrollend', onScrollEnd);
       boundNode.removeEventListener('contentvisibilityautostatechange', measureAfterLayout, true);
       resizeObserver?.disconnect();
+      childrenObserver?.disconnect();
       disconnect = undefined;
     };
   };
 
   return {
+    isPreparing: () => options.preparing?.() ?? false,
+    registerDestination: prepare => {
+      destinations.add(prepare);
+      return () => { destinations.delete(prepare); };
+    },
+    prepareDestination: () => {
+      let ready = true;
+      for (const prepare of destinations) ready = prepare() && ready;
+      return ready;
+    },
     bind,
     nearBottom,
     followingLatest,
