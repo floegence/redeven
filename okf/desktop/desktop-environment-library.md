@@ -5,7 +5,7 @@ description: Browse one Runtime card through its original Runtime, Cloud and Gat
 tags: [desktop, environment, cloud, welcome]
 timestamp: 2026-10-10T00:00:00Z
 lifecycle: contract
-reviewed_at: "2026-10-25"
+reviewed_at: "2026-10-27"
 ---
 # Summary
 
@@ -13,6 +13,7 @@ Welcome projects one Environment library from authoritative snapshot owners. Exa
 
 # Contract
 
+- The Environment header shows its title, description and actionable search/refresh/create controls, without an aggregate statistics row. Category filters retain their counts; cards retain individual Runtime/window states. A current snapshot issue remains visible below the description only while present, without reserving space in the normal header.
 - Pair Local/SSH/WSL with Cloud only when linked Runtime ID, Cloud origin, Cloud ID and ENV ID agree. Access-point origin is routing metadata, so directory changes do not split identity. Current health outranks old window startup reports; retained display grants no control.
 - [Card presentation](desktop-environment-card-presentation.md) owns tabs/layout. Search and equivalent snapshots preserve selection; source filters apply their default once. [Interaction continuity](desktop-interaction-continuity.md) owns drafts, authority, visibility and stale responses.
 - Trusted Gateway summaries provide name, endpoints, member identity/phase and Cloud publication ownership. One member needs no selector. Refresh cannot restore a retired selection; confirmation cannot substitute a disappeared member. Existing menu order and capability checks remain authoritative.

@@ -816,28 +816,17 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).not.toContain('.redeven-welcome-shell--spacious');
   });
 
-  it('drives the library summary in the surface header from the Environment Library summary model', () => {
+  it('keeps the environment header free of aggregate metrics while retaining issue feedback', () => {
     const appSrc = readWelcomeSource();
+    const styles = readWelcomeStyles();
 
-    expect(appSrc).toContain('buildEnvironmentLibrarySummaryModel');
-    expect(appSrc).toContain('const librarySummary = createMemo(() => (');
-    expect(appSrc).toContain("environmentCloudSections(allLibraryGroups(), controlPlanes(), cloudQuery())");
-    expect(appSrc).toContain('librarySummary={librarySummary()}');
-    expect(appSrc).toContain('localizedVisibleLabel(props.i18n, props.summary.environment_count)');
-    expect(appSrc).toContain('localizedWindowsLabel(props.i18n, props.summary.window_count)');
-    expect(appSrc).toContain('count={props.summary.ready_count}');
-    expect(appSrc).toContain("label={props.i18n.t('launcher.ready')}");
-    expect(appSrc).toContain('count={props.summary.running_count}');
-    expect(appSrc).toContain("label={props.i18n.t('launcher.running')}");
-    expect(appSrc).toContain('count={props.summary.attention_count}');
-    expect(appSrc).toContain("label={props.i18n.t('launcher.attention')}");
-    expect(appSrc).toContain('issue={props.snapshot.issue ?? undefined}');
-
-    expect(appSrc).not.toMatch(/\b(?:openCount|runningCount|offlineCount)\b/);
-    expect(appSrc).not.toMatch(
-      /snapshot\(\)\.environments\s*\.filter[\s\S]{0,240}(?:open|running|offline)[\s\S]{0,120}(?:\.length|Count|_count)/,
-    );
-    expect(appSrc).not.toContain("i18n().t('launcher.offline')");
+    expect(appSrc).not.toContain('LibrarySummary');
+    expect(appSrc).not.toContain('librarySummary');
+    expect(appSrc).not.toContain('localizedVisibleLabel');
+    expect(appSrc).not.toContain('localizedWindowsLabel');
+    expect(styles).not.toContain('.redeven-library-summary');
+    expect(appSrc).toContain("props.activeTab === 'environments' && props.snapshot.issue");
+    expect(appSrc).toContain('localizedIssueTitle(props.i18n, issue())');
   });
 
   it('carries no global bottom bar in the launcher shell', () => {
@@ -1212,7 +1201,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('data-redeven-action-popover-initial-focus=""');
   });
 
-  it('renders filter pills with counts, a dismissible chip for runtime target / control plane filters, and a live count in the header summary', () => {
+  it('renders filter pills with counts and a dismissible chip for runtime target / control plane filters', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
 
@@ -1224,8 +1213,6 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('redeven-runtime-chip');
     expect(styles).toContain('.redeven-runtime-chip');
     expect(styles).toContain('.redeven-runtime-chip:hover');
-    // The live count lives in the header summary instead of a tab-row counter.
-    expect(appSrc).toContain('localizedWindowsLabel(props.i18n, props.summary.window_count)');
     expect(appSrc).not.toContain('environmentCenter.liveCount');
     // Dead code removed
     expect(appSrc).not.toContain('redeven-native-select');
@@ -1380,18 +1367,7 @@ describe('DesktopWelcomeShell', () => {
       styles,
       ".redeven-status-indicator[data-tone='success'] .redeven-status-indicator__dot",
     );
-    const summarySuccessRule = cssRuleBlock(
-      styles,
-      ".redeven-library-summary__metric[data-tone='success'] .redeven-library-summary__dot",
-    );
-    const summaryWarningRule = cssRuleBlock(
-      styles,
-      ".redeven-library-summary__metric[data-tone='warning'] .redeven-library-summary__dot",
-    );
-
     expect(environmentSuccessRule).not.toContain('animation:');
-    expect(summarySuccessRule).not.toContain('animation:');
-    expect(summaryWarningRule).not.toContain('animation:');
     expect(styles).not.toContain('@keyframes redeven-status-dot-glow');
     expect(styles).not.toContain('@keyframes redeven-bottom-bar-dot-breathe');
     expect(styles).not.toContain('@keyframes redeven-bottom-bar-dot-breathe-warning');
