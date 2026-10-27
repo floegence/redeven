@@ -70,6 +70,13 @@ unchanged; tool/help text adds exact scrolling, bounded reads, budget guidance
 and safe prefix output. No AXManualAccessibility override, domain migration or
 Floret public API change is introduced. Final rebased integration is separate.
 
+The additional Computer Stage browser suite reproduces four runner failures.
+Release-boundary assertions now await Floe's finite animations; screenshot
+checks expose the lazy preview and await disclosure completion. All 11 tests
+pass with the original geometry and image assertions. ResizeObserver loop
+warnings remain in the retained browser log; no production UI change or error
+filter is introduced by these runner corrections.
+
 ## Browser coordinates and explicit script contracts, October 27
 
 The contract repair qualifies the production Service, Floret v7.87.4, local

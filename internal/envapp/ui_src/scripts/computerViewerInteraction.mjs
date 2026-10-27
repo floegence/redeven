@@ -7,6 +7,15 @@ export async function dragViewerHandle(page, handle, dx, dy) {
   const x = box.x + box.width / 2; const y = box.y + box.height / 2;
   await page.mouse.move(x, y); await page.mouse.down();
   await page.mouse.move(x + dx * scaleX, y + dy * scaleY, { steps: 12 }); await page.mouse.up();
+  // Floe animates the release constraint; geometry assertions need its final
+  // position, not an intermediate bounce frame. Keep the boundary assertions.
+  await handle.evaluate(async element => {
+    await new Promise(resolve => element.ownerDocument.defaultView.requestAnimationFrame(resolve));
+    const surface = element.closest('[data-floe-geometry-surface]') ?? element;
+    await Promise.all(surface.getAnimations({ subtree: true })
+      .filter(animation => Number.isFinite(animation.effect?.getComputedTiming().endTime))
+      .map(animation => animation.finished.catch(() => undefined)));
+  });
 }
 
 export async function qualifyComputerViewerSurface({ page, root = page, output }) {
