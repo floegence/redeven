@@ -20,12 +20,15 @@ One `ContainerServiceController` owns Docker/Podman service discovery, lifecycle
 - Read-gated `GET /_redeven_proxy/api/container-resources/services` exposes access mode/source IDs; one source failure cannot hide another. Contiguous migrations map legacy state to `engine` and `client_proxy` to `docker_cli`.
 - Service actions and configuration changes use one confirmation: preflight first, then show the service name, localized risks and supplied impact counts, with an explicit Start/Stop/Restart/Save action. Never require retyping the service name or another review step. The client binds the displayed name to the request; the server still validates identity, permissions and request/plan hashes. Cancel creates no operation; duplicate submission stays locked. Hashes and raw backend prose are never rendered; operation history resolves service names and localizes public errors.
 - One Container services Settings action carries warnings. Refresh retains cards, animates only its indicator and reports inline errors. A known Desktop with uncertain health retains its Start control, disabled with state guidance; successful revalidation enables the same control. Service cards show action-specific pending state, elapsed time, localized recovery guidance, status revalidation, cancellation and secondary operation history without opening a drawer automatically. Unmeasured service work has no percentage bar. Operation completion through either SSE or fallback polling reloads authoritative service and runtime facts.
+- Cards prioritize observed service health. Active operations retain feedback and action locks. Terminal start/restart failures leave the card when running is observed; stop failures leave when stopped is observed. Unknown health and configuration failures retain actionable feedback. Completed/canceled records remain in secondary history. This changes presentation only: running does not prove a previous restart succeeded. History retains its original outcome, localized error and duration alongside separately labeled current service status; it never renders an empty error panel or a historical duration as current progress.
 
 # Boundaries
 
 `containerengine` owns exact argv, validation, atomic replacement/rollback and observation. `containerresource` owns preflight, impact, locking and sanitized durable state. Local API owns Read/RWX/Admin and no-store delivery. Docker Desktop/Podman Machine/remote tools retain private settings; administrators own installation/OS authority.
 
 # Evidence
+
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvContainersPage.test.tsx` and its browser suite cover recovered lifecycle failures, preserved active/configuration feedback, immutable history, and responsive status revalidation in English and Simplified/Traditional Chinese.
 
 - `redeven:internal/containerengine/container_services.go` - Defines the service model, safe DTO, preflights, and controller adapter boundary.
 

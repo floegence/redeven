@@ -3175,6 +3175,7 @@
         "checkStatus": "Comprobar estado",
         "history": "Historial de acciones"
       },
+      "currentStatus": "Estado actual del servicio",
       "confirmAction": "{action}: {name}"
     },
     "views": {

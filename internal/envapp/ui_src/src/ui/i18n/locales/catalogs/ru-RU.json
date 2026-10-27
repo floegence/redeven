@@ -3265,6 +3265,7 @@
         "checkStatus": "Проверить состояние",
         "history": "История операций"
       },
+      "currentStatus": "Текущее состояние службы",
       "confirmAction": "{action}: {name}"
     },
     "views": {

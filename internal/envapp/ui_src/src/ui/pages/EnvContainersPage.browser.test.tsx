@@ -320,6 +320,55 @@ describe('native Containers responsive product surface', () => {
     await page.screenshot({ path: '__screenshots__/container-lifecycle-card-' + width + '-' + locale + '.png' });
   });
 
+  it.each([[390, 'en-US'], [1440, 'zh-CN'], [390, 'zh-CN'], [390, 'zh-TW']] as const)('clears stale startup failure after authoritative recovery at %spx in %s', async (width, locale) => {
+    await page.viewport(width, 900);
+    window.localStorage.setItem('redeven_ui_language_preference', locale);
+    const api = await import('../services/containerResourcesApi');
+    const service = {
+      service_id: 'desktop', engine: 'docker' as const, name: 'Docker Desktop', implementation: 'docker_desktop' as const, state: 'stopped' as const,
+      capabilities: { start: true, stop: true, restart: true }, configuration: { mode: 'local' as const, sources: ['engine' as const] },
+    };
+    vi.mocked(api.listContainerServices).mockResolvedValueOnce([service]);
+    browserHarness.listOperations.mockResolvedValue([{
+      operation_id: 'previous-start', method: 'container.services.start', engine: 'docker', resource_kind: 'container_service', resource_identity: 'desktop',
+      state: 'failed', error_code: 'engine_timeout', error_message: 'internal startup failure',
+      created_at_unix_ms: Date.now() - 120000, updated_at_unix_ms: Date.now(), finished_at_unix_ms: Date.now(),
+    }]);
+    const copy = locale === 'zh-CN'
+      ? { services: '容器服务', check: '检查状态', history: '操作记录', stop: '停止', running: '运行中', current: '服务当前状态' }
+      : locale === 'zh-TW'
+        ? { services: '容器服務', check: '檢查狀態', history: '操作記錄', stop: '停止', running: '執行中', current: '服務目前狀態' }
+        : { services: 'Container services', check: 'Check status', history: 'Operation history', stop: 'Stop', running: 'Running', current: 'Current service status' };
+    const mounted = mount('activity', 'dark'); dispose = mounted.dispose;
+    await page.getByRole('button', { name: copy.services, exact: true }).click();
+    await expect.element(page.getByRole('button', { name: copy.check, exact: true })).toBeVisible();
+    const card = mounted.host.querySelector<HTMLElement>('.container-service-card')!;
+    expect(card.querySelector('.container-service-operation')?.getAttribute('data-state')).toBe('failed');
+    vi.mocked(api.listContainerServices).mockResolvedValueOnce([{ ...service, state: 'running' }]);
+    await page.getByRole('button', { name: copy.check, exact: true }).click();
+    await expect.poll(() => card.getAttribute('data-state')).toBe('running');
+    expect(card.querySelector('.container-service-card__header')?.textContent).toContain(copy.running);
+    expect(card.querySelector('.container-service-operation')).toBeNull();
+    expect(card.querySelector('[role="alert"]')).toBeNull();
+    expect(document.querySelector('[data-container-operations]')).toBeNull();
+    await expect.element(page.getByRole('button', { name: copy.stop, exact: true })).toBeEnabled();
+    await expect.element(page.getByRole('button', { name: copy.history, exact: true })).toBeVisible();
+    for (const animation of document.getAnimations()) if (Number.isFinite(animation.effect?.getComputedTiming().endTime)) animation.finish();
+    await settle();
+    for (const element of [card, ...card.querySelectorAll<HTMLElement>('.container-service-card__actions, button')]) {
+      expect(element.scrollWidth).toBeLessThanOrEqual(element.clientWidth + 1);
+    }
+    await page.screenshot({ path: '__screenshots__/container-service-recovered-' + width + '-' + locale + '.png' });
+    await page.getByRole('button', { name: copy.history, exact: true }).click();
+    const detail = document.querySelector<HTMLElement>('.container-operation-detail')!;
+    expect(detail.getAttribute('data-state')).toBe('failed');
+    expect(detail.querySelector('.container-operation-facts')?.textContent).toContain(copy.current);
+    expect(detail.querySelector('.container-operation-facts')?.textContent).toContain(copy.running);
+    expect(detail.querySelector('.container-operation-error p')?.textContent?.trim().length).toBeGreaterThan(10);
+    expect(detail.textContent).not.toContain('internal startup failure');
+    expect(detail.textContent).not.toContain('engine_timeout');
+  });
+
   it('keeps active lifecycle controls stable across polling and revalidates success', async () => {
     const api = await import('../services/containerResourcesApi');
     const stopped = {
