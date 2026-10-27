@@ -4,7 +4,6 @@
     "startGateway": "Gateway 시작 후 계속",
     "maintenance": "서비스 유지 관리",
     "overview": "개요",
-    "desktopConnection": "Desktop 연결",
     "identity": "Gateway 식별 정보",
     "chooseEnvironmentHelp": "환경을 선택하세요. 환경 창이 닫혀 있어도 Desktop에서 준비하고 연결할 수 있습니다.",
     "noManagedEnvironments": "먼저 Welcome에 관리 가능한 로컬 또는 원격 환경을 추가하세요.",
@@ -29,7 +28,16 @@
     "otherRuntime": "다른 관리자가 관리",
     "otherRuntimeHelp": "런타임 초대 코드를 생성하여 해당 관리자에게 등록을 요청합니다.",
     "copyConnection": "연결 정보 복사",
-    "clientDelivery": "게이트웨이 주소: {address}\n클라이언트 액세스 코드: {code}"
+    "clientDelivery": "게이트웨이 주소: {address}\n클라이언트 액세스 코드: {code}",
+    "allGateways": "모든 게이트웨이",
+    "network": "네트워크",
+    "manage": "관리",
+    "editConnection": "연결 편집",
+    "removeConnection": "목록에서 제거",
+    "moreActions": "추가 작업",
+    "enableConnection": "연결 활성화",
+    "disableConnection": "연결 비활성화",
+    "serviceVersion": "서비스 버전"
   },
   "interactionContinuity": {
     "accepted": "작업이 접수되었습니다. 실행 세부 정보를 기다리는 중입니다.",

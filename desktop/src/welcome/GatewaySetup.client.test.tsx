@@ -18,13 +18,18 @@ async function openSetup(transport = 'Local host') {
   document.querySelectorAll<HTMLButtonElement>('[data-gateway-onboarding-intent] button')[transport === 'URL' ? 0 : 1]!.click(); await settle();
   button(transport).click(); await settle();
 }
-async function openGatewayAccess() {
+async function openGatewayAccess(section = 'edit') {
   button('Gateways').click(); await settle();
-  const moreActions = document.querySelector<HTMLButtonElement>('.redeven-gateway-card [aria-haspopup="menu"]');
-  expect(moreActions).toBeTruthy(); moreActions!.click(); await settle();
-  expect([...document.querySelectorAll('[role="menuitem"]')].filter(item => controlText(item) === 'Grant access')).toHaveLength(0);
-  button('Gateway settings').click(); await settle();
-  button('Settings').click(); await settle();
+  if (section === 'edit') {
+    document.querySelector<HTMLButtonElement>('.redeven-gateway-card [aria-haspopup="menu"]')!.click(); await settle();
+    button('Edit connection').click(); await settle();
+  } else {
+    document.querySelector<HTMLButtonElement>('.redeven-gateway-card__name button')!.click(); await settle();
+    [...document.querySelectorAll<HTMLButtonElement>('[data-gateway-management-nav] button')].find(element => controlText(element) === section)!.click(); await settle();
+  }
+}
+function selectedSection(section: string) {
+  return document.querySelector('[data-gateway-management-nav] [aria-controls="gateway-management-' + section + '"]')?.getAttribute('aria-current');
 }
 
 function button(label: string): HTMLButtonElement {
@@ -64,6 +69,53 @@ async function mount(gateway?: DesktopGatewaySource, initialSnapshot?: DesktopWe
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(HTMLElement.prototype, 'animate'); });
 
 describe('Gateway product navigation', () => {
+  it('opens a full management page with six sections and no duplicate Desktop connection area', async () => {
+    const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
+    await mount({ ...source, connection_kind: 'local_host', permissions: { access: true, manage_members: true, configure_cloud: true } });
+    button('Gateways').click(); await settle();
+    document.querySelector<HTMLButtonElement>('.redeven-gateway-card__name button')!.click(); await settle();
+    expect(document.querySelector('[data-gateway-management-page]')).toBeTruthy();
+    expect([...document.querySelectorAll('[data-gateway-management-nav] button')].map(controlText)).toEqual(['Overview', 'Clients', 'Runtimes', 'Network', 'Redeven Cloud', 'Service maintenance']);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    button('All Gateways').click(); await settle();
+    expect(document.querySelector('[data-gateway-management-page]')?.hasAttribute('hidden')).toBe(true);
+    expect(document.querySelector('.redeven-gateway-card')).toBeTruthy();
+  });
+
+  it('retains network drafts and list filters across management and Welcome navigation', async () => {
+    const source = { ...compactEnvironmentPreviewFixture().coverage.gateway_sources[0], connection_kind: 'local_host' as const,
+      permissions: { access: true, manage_members: true, configure_cloud: true } };
+    await mount(source);
+    await openGatewayAccess('Network'); input('gateway-listen-addresses', '127.0.0.1:7555');
+    button('All Gateways').click(); await settle();
+    const query = document.querySelector<HTMLInputElement>('[aria-label="Search Gateways"]');
+    if (query) { query.value = source.display_name; query.dispatchEvent(new Event('input', { bubbles: true })); }
+    document.querySelector<HTMLButtonElement>('.redeven-gateway-card__name button')!.click(); await settle();
+    expect((document.getElementById('gateway-listen-addresses') as HTMLInputElement).value).toBe('127.0.0.1:7555');
+    button('Environments').click(); await settle(); button('Gateways').click(); await settle();
+    expect((document.getElementById('gateway-listen-addresses') as HTMLInputElement).value).toBe('127.0.0.1:7555');
+  });
+
+  it('disables a saved connection without opening service maintenance', async () => {
+    const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
+    const perform = await mount({ ...source, connection_kind: 'local_host', local_enabled: true });
+    await openGatewayAccess('Overview');
+    document.querySelector<HTMLElement>('[data-gateway-management-page] [aria-haspopup="menu"]')!.click(); await settle();
+    button('Disable connection').click(); await settle();
+    expect(perform).toHaveBeenCalledWith({ kind: 'set_gateway_enabled', gateway_id: source.gateway_id, enabled: false });
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('never grants host management to a URL connection with stale host permissions', async () => {
+    const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
+    const perform = await mount({ ...source, connection_kind: 'url', permissions: { access: true, manage_members: true, configure_cloud: true } });
+    await openGatewayAccess('Clients');
+    expect(document.querySelector('[data-gateway-management-page]')?.textContent).toContain('cannot change Gateway settings');
+    expect(document.querySelector('.redeven-gateway-clients-panel')).toBeNull();
+    expect(document.querySelector('[data-gateway-add-environment]')).toBeNull();
+    expect(perform).not.toHaveBeenCalled();
+  });
+
   it('exposes parallel enrollment actions and opens client preparation without issuing a code', async () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
     const perform = await mount({ ...source, connection_kind: 'local_host', permissions: { access: true, manage_members: true, configure_cloud: true } });
@@ -73,17 +125,17 @@ describe('Gateway product navigation', () => {
     expect([...actions.querySelectorAll('button')].map(controlText)).toContain('Connect client');
     expect([...actions.querySelectorAll('button')].map(controlText)).toContain('Connect Runtime');
     button('Connect client').click(); await settle();
-    expect(document.getElementById('gateway-settings-tab-clients')?.getAttribute('aria-selected')).toBe('true');
+    expect(selectedSection('clients')).toBe('page');
     expect(document.querySelector('[data-gateway-client-enrollment]')).toBeTruthy();
     expect(perform.mock.calls.some(([request]) => request.kind === 'issue_gateway_access_code')).toBe(false);
     expect(perform.mock.calls.some(([request]) => request.kind === 'inspect_gateway_cloud')).toBe(false);
   });
 
-  it('keeps Welcome navigation and opens five task-oriented management groups in one dialog', async () => {
+  it('keeps Welcome navigation alongside six management sections', async () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
-    await mount(source); await openGatewayAccess();
-    expect([...document.querySelectorAll('.redeven-gateway-settings-tablist [role="tab"]')].map(controlText)).toEqual(['Overview', 'Clients', 'Runtimes', 'Redeven Cloud', 'Settings']);
-    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    await mount({ ...source, connection_kind: 'local_host' }); await openGatewayAccess('Overview');
+    expect([...document.querySelectorAll('[data-gateway-management-nav] button')].map(controlText)).toEqual(['Overview', 'Clients', 'Runtimes', 'Network', 'Redeven Cloud', 'Service maintenance']);
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(0);
     button('Overview').click(); await settle();
     expect(document.querySelector('[data-gateway-add-environment]')).toBeTruthy();
     expect(button('Environments')).toBeTruthy();
@@ -92,7 +144,7 @@ describe('Gateway product navigation', () => {
 
   it('replaces management with the shared environment choice and restores its context', async () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
-    const perform = await mount({ ...source, connection_kind: 'local_host', permissions: { access: true, manage_members: true, configure_cloud: true } }); await openGatewayAccess();
+    const perform = await mount({ ...source, connection_kind: 'local_host', permissions: { access: true, manage_members: true, configure_cloud: true } }); await openGatewayAccess('Overview');
     button('Overview').click(); await settle();
     const trigger = document.querySelector<HTMLButtonElement>('[data-gateway-add-environment]')!;
     trigger.focus(); trigger.click(); await settle();
@@ -101,29 +153,29 @@ describe('Gateway product navigation', () => {
     expect(document.querySelectorAll('[role="dialog"][aria-modal="true"]')).toHaveLength(1);
     expect(perform).not.toHaveBeenCalled();
     button('Cancel').click(); await settle();
-    await vi.waitFor(() => expect(document.querySelector('.redeven-gateway-settings-tablist')).toBeTruthy());
-    expect(document.getElementById('gateway-settings-tab-runtimes')?.getAttribute('aria-selected')).toBe('true');
-    expect(document.querySelector('[data-gateway-environment-choice]')).toBeNull();
+    await vi.waitFor(() => expect(document.querySelector('[data-gateway-management-nav]')).toBeTruthy());
+    expect(selectedSection('runtimes')).toBe('page');
+    await vi.waitFor(() => expect(document.querySelector('[data-gateway-environment-choice]')).toBeNull());
     await vi.waitFor(() => expect(controlText(document.activeElement!)).toContain('Runtimes I manage'));
   });
 
   it('retains network drafts while enrollment replaces the manager', async () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
     await mount({ ...source, connection_kind: 'local_host', permissions: { access: true, manage_members: true, configure_cloud: true } });
-    await openGatewayAccess(); input('gateway-listen-addresses', '127.0.0.1:7555');
+    await openGatewayAccess('Network'); input('gateway-listen-addresses', '127.0.0.1:7555');
     const page = document.querySelector('[data-desktop-page="environments"]')!;
     const content = [...page.children];
     button('Overview').click(); await settle();
-    document.querySelector<HTMLButtonElement>('[role="dialog"] [data-gateway-add-environment]')!.click(); await settle(); button('Runtimes I manage').focus(); button('Runtimes I manage').click();
+    document.querySelector<HTMLButtonElement>('[data-gateway-management-page] [data-gateway-add-environment]')!.click(); await settle(); button('Runtimes I manage').focus(); button('Runtimes I manage').click();
     await vi.waitFor(() => expect(document.querySelector('[data-gateway-environment-choice]')).toBeTruthy());
     button('Close').click();
     await vi.waitFor(() => expect(document.querySelector('.redeven-gateway-wizard-dialog')).toBeNull());
     expect([...page.children]).toEqual(content);
-    document.querySelector<HTMLButtonElement>('[role="dialog"] [data-gateway-add-environment]')!.click(); await settle(); button('Runtimes I manage').focus(); button('Runtimes I manage').click();
+    document.querySelector<HTMLButtonElement>('[data-gateway-management-page] [data-gateway-add-environment]')!.click(); await settle(); button('Runtimes I manage').focus(); button('Runtimes I manage').click();
     await vi.waitFor(() => expect(document.querySelector('[data-gateway-environment-choice]')).toBeTruthy());
     button('Cancel').click(); await settle();
-    await vi.waitFor(() => expect(document.querySelector('.redeven-gateway-settings-tablist')).toBeTruthy());
-    button('Settings').click(); await settle();
+    await vi.waitFor(() => expect(document.querySelector('[data-gateway-management-nav]')).toBeTruthy());
+    button('Network').click(); await settle();
     expect((document.getElementById('gateway-listen-addresses') as HTMLInputElement).value).toBe('127.0.0.1:7555');
   });
 
@@ -131,13 +183,13 @@ describe('Gateway product navigation', () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
     const perform = await mount({ ...source, connection_kind: 'local_host', management_capability: 'managed_local_host',
       service_state: { status: 'ready', can_start: false, can_stop: true, can_restart: true, can_update: true, can_pair_after_start: false } });
-    await openGatewayAccess(); button('Restart Gateway').click(); await settle();
+    await openGatewayAccess('Service maintenance'); button('Restart Gateway').click(); await settle();
     expect(document.querySelector('[role="dialog"] .redeven-gateway-action-panel')).toBeTruthy();
     expect(document.querySelector('.redeven-gateway-action-popover-surface')).toBeNull();
     expect(perform).not.toHaveBeenCalled();
-    button('Back').click(); await settle();
+    button('Close').click(); await settle();
     expect(document.querySelector('.redeven-gateway-action-popover-surface')).toBeNull();
-    expect(document.getElementById('gateway-settings-tab-connection')?.getAttribute('aria-selected')).toBe('true');
+    expect(selectedSection('maintenance')).toBe('page');
   });
 
   it('opens Cloud directly in its own section and initializes its content once', async () => {
@@ -145,8 +197,8 @@ describe('Gateway product navigation', () => {
     const perform = await mount({ ...source, connection_kind: 'local_host', permissions: { access: true, manage_members: true, configure_cloud: true } });
     vi.stubGlobal('redevenDesktopLauncher', { performAction: perform });
     perform.mockResolvedValue({ ok: true, outcome: 'gateway_cloud_updated', gateway_cloud: { configured: false, state: 'unconfigured' } });
-    button('Gateways').click(); await settle(); document.querySelector<HTMLButtonElement>('.redeven-gateway-card [aria-haspopup="menu"]')!.click(); await settle(); button('Connect to Cloud').click(); await settle();
-    expect(document.getElementById('gateway-settings-tab-cloud')?.getAttribute('aria-selected')).toBe('true');
+    await openGatewayAccess('Redeven Cloud');
+    expect(selectedSection('cloud')).toBe('page');
     expect(document.querySelector('.redeven-gateway-cloud-embedded')?.textContent).toContain('Cloud access is not configured.');
     expect(perform.mock.calls.filter(([request]) => request.kind === 'inspect_gateway_cloud')).toHaveLength(1);
   });
@@ -161,11 +213,11 @@ describe('Gateway product navigation', () => {
       return { ok: true, outcome: 'saved_gateway', gateway_id: source.gateway_id };
     });
     button('Save Gateway').click(); await settle();
-    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
-    expect(document.getElementById('gateway-settings-tab-overview')?.getAttribute('aria-selected')).toBe('true');
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Gateway connection saved.');
-    expect(document.querySelector('.redeven-gateway-card')?.getAttribute('data-gateway-id')).toBe(source.gateway_id);
-    document.querySelector<HTMLButtonElement>('[role="dialog"] [data-gateway-add-environment]')!.click(); await settle(); button('Runtimes I manage').focus(); button('Runtimes I manage').click(); await settle();
+    await vi.waitFor(() => expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(0));
+    expect(selectedSection('overview')).toBe('page');
+    expect(document.querySelector('[data-gateway-management-page]')?.textContent).toContain('Gateway connection saved.');
+    expect(document.querySelector('[data-gateway-management-page]')?.textContent).toContain(source.display_name);
+    document.querySelector<HTMLButtonElement>('[data-gateway-management-page] [data-gateway-add-environment]')!.click(); await settle(); button('Runtimes I manage').focus(); button('Runtimes I manage').click(); await settle();
     await vi.waitFor(() => expect(document.querySelector('[data-gateway-environment-choice]')).toBeTruthy());
     expect(perform.mock.calls.map(([request]) => request.kind)).toEqual(['upsert_gateway']);
   });
@@ -281,44 +333,26 @@ describe('Gateway setup and own-service actions', () => {
     expect(perform).not.toHaveBeenCalled();
   });
 
-  it.each([true, false])('uses matching icon containers for every Gateway menu action, member management=%s', async manageMembers => {
+  it.each([true, false])('keeps saved connection actions in a shared object menu, member management=%s', async manageMembers => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
-    const perform = await mount({ ...source, connection_kind: 'local_host', management_capability: 'managed_local_host',
-      permissions: { access: true, manage_members: manageMembers, configure_cloud: true },
-      service_state: { status: 'service_needs_update', can_start: false, can_stop: true, can_restart: true, can_update: true, can_pair_after_start: false } });
+    const perform = await mount({ ...source, connection_kind: 'local_host', permissions: { access: true, manage_members: manageMembers, configure_cloud: true } });
     button('Gateways').click(); await settle();
     document.querySelector<HTMLButtonElement>('.redeven-gateway-card [aria-haspopup="menu"]')!.click(); await settle();
-    const items = [...document.querySelectorAll<HTMLElement>('.redeven-gateway-menu [role="menuitem"]')];
-    expect(items.map(controlText)).toEqual(['Connect to Cloud', 'Stop Gateway', 'Restart Gateway', 'Refresh', 'Disable Gateway',
-      'Gateway settings', 'Remove connection']);
-    for (const item of items) {
-      expect(item.firstElementChild?.className, controlText(item)).toBe('redeven-split-menu-item-icon');
-      expect(item.querySelectorAll('.redeven-split-menu-item-icon > svg'), controlText(item)).toHaveLength(1);
-      expect(item.querySelector(':scope > svg'), controlText(item)).toBeNull();
-    }
-    expect(button('Remove connection').dataset.tone).toBe('danger');
-    expect(button('Disable Gateway').dataset.tone).toBe('accent');
+    expect([...document.querySelectorAll('[role="menuitem"]')].map(controlText)).toEqual(['Edit connection', 'Disable connection', 'Remove from list']);
     expect(perform).not.toHaveBeenCalled();
   });
 
-  it('distinguishes restart from refresh and retains explicit restart confirmation', async () => {
+  it('keeps restart and refresh distinct and confirms restart from maintenance', async () => {
     const source = compactEnvironmentPreviewFixture().coverage.gateway_sources[0];
     const perform = await mount({ ...source, connection_kind: 'local_host', management_capability: 'managed_local_host',
       service_state: { status: 'service_needs_update', can_start: false, can_stop: true, can_restart: true, can_update: true, can_pair_after_start: false } });
-    button('Gateways').click(); await settle();
-    const initialGlyph = document.querySelector('.redeven-gateway-card__primary-button svg')!.innerHTML;
-    document.querySelector<HTMLButtonElement>('.redeven-gateway-card [aria-haspopup="menu"]')!.click(); await settle();
-    const restart = button('Restart Gateway');
-    const restartGlyph = restart.querySelector('svg')!.innerHTML;
-    expect(restartGlyph).not.toBe(button('Refresh').querySelector('svg')!.innerHTML);
-    restart.click(); await settle();
-    await vi.waitFor(() => expect(document.querySelector('.redeven-gateway-menu')).toBeNull());
-    expect(document.querySelector('.redeven-gateway-action-popover-surface')?.textContent).toContain('Restart Gateway');
-    expect(document.querySelector('.redeven-gateway-card__primary-button svg')?.innerHTML).toBe(restartGlyph);
+    await openGatewayAccess('Service maintenance');
+    expect(button('Refresh')).toBeTruthy();
+    button('Restart Gateway').click(); await settle();
+    expect(document.querySelector('[role="dialog"] .redeven-gateway-action-panel')?.textContent).toContain('Restart Gateway');
     expect(perform).not.toHaveBeenCalled();
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    await vi.waitFor(() => expect(document.querySelector('.redeven-gateway-action-popover-surface')).toBeNull());
-    expect(document.querySelector('.redeven-gateway-card__primary-button svg')?.innerHTML).toBe(initialGlyph);
+    button('Close').click(); await settle();
+    expect(selectedSection('maintenance')).toBe('page');
   });
 
   it('offers explicit authorization for a read-only Gateway without granting it automatically', async () => {

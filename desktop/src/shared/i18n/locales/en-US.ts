@@ -3,6 +3,16 @@ import flowerSurfaceEnUS from './catalogs/en-US-flower.json';
 
 export const enUS = {
   gatewayExperience: {
+    serviceVersion: "Service version",
+    allGateways: "All Gateways",
+    network: "Network",
+    manage: "Manage",
+    editConnection: "Edit connection",
+    removeConnection: "Remove from list",
+    moreActions: "More actions",
+    enableConnection: "Enable connection",
+    disableConnection: "Disable connection",
+
     clients: "Clients",
     cloud: "Redeven Cloud",
     connectClient: "Connect client",
@@ -21,7 +31,6 @@ export const enUS = {
     "startGateway": "Start Gateway and continue",
     "maintenance": "Service maintenance",
     "overview": "Overview",
-    "desktopConnection": "Desktop connection",
     "identity": "Gateway identity",
     "chooseEnvironmentHelp": "Choose an environment. Desktop can prepare and connect it here, even when its window is closed.",
     "noManagedEnvironments": "Add a managed local or remote environment to Welcome first.",

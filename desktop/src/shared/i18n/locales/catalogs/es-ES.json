@@ -4,7 +4,6 @@
     "startGateway": "Iniciar Gateway y continuar",
     "maintenance": "Mantenimiento del servicio",
     "overview": "Resumen",
-    "desktopConnection": "Conexión de Desktop",
     "identity": "Identidad del Gateway",
     "chooseEnvironmentHelp": "Elige un entorno. Desktop puede prepararlo y conectarlo aquí, aunque su ventana esté cerrada.",
     "noManagedEnvironments": "Añada primero un entorno local o remoto administrable a Welcome.",
@@ -29,7 +28,16 @@
     "otherRuntime": "Gestionado por otro administrador",
     "otherRuntimeHelp": "Crea una invitación para que el administrador del entorno de ejecución la acepte.",
     "copyConnection": "Copiar datos de conexión",
-    "clientDelivery": "Dirección del Gateway: {address}\nCódigo de acceso del cliente: {code}"
+    "clientDelivery": "Dirección del Gateway: {address}\nCódigo de acceso del cliente: {code}",
+    "allGateways": "Todos los Gateways",
+    "network": "Red",
+    "manage": "Administrar",
+    "editConnection": "Editar conexión",
+    "removeConnection": "Quitar de la lista",
+    "moreActions": "Más acciones",
+    "enableConnection": "Habilitar conexión",
+    "disableConnection": "Deshabilitar conexión",
+    "serviceVersion": "Versión del servicio"
   },
   "interactionContinuity": {
     "accepted": "Operación aceptada. Esperando los detalles de ejecución.",

@@ -4,7 +4,6 @@
     "startGateway": "Démarrer le Gateway et continuer",
     "maintenance": "Maintenance du service",
     "overview": "Vue d’ensemble",
-    "desktopConnection": "Connexion Desktop",
     "identity": "Identité du Gateway",
     "chooseEnvironmentHelp": "Choisissez un environnement. Desktop peut le préparer et le connecter ici, même si sa fenêtre est fermée.",
     "noManagedEnvironments": "Ajoutez d’abord un environnement local ou distant administrable à Welcome.",
@@ -29,7 +28,16 @@
     "otherRuntime": "Géré par un autre administrateur",
     "otherRuntimeHelp": "Créez une invitation pour l’environnement d’exécution que son administrateur pourra accepter.",
     "copyConnection": "Copier les informations de connexion",
-    "clientDelivery": "Adresse de la passerelle : {address}\nCode d’accès client : {code}"
+    "clientDelivery": "Adresse de la passerelle : {address}\nCode d’accès client : {code}",
+    "allGateways": "Tous les Gateways",
+    "network": "Réseau",
+    "manage": "Gérer",
+    "editConnection": "Modifier la connexion",
+    "removeConnection": "Retirer de la liste",
+    "moreActions": "Autres actions",
+    "enableConnection": "Activer la connexion",
+    "disableConnection": "Désactiver la connexion",
+    "serviceVersion": "Version du service"
   },
   "interactionContinuity": {
     "accepted": "Opération acceptée. En attente des détails d’exécution.",

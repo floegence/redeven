@@ -52,65 +52,68 @@ try {
         await document.fonts.ready;
       }, { dark, largeText, invitation: { ...invitationFixture, expires_at_unix_ms: Date.now() + 60_000 } });
       const card = page.locator(`[data-gateway-id="${gateway.gateway_id}"]`);
-      const moreActions = card.getByRole('button', { name: i18n.t('environmentCenter.moreActionsForLabel', { label: gateway.display_name }), exact: true });
-      await moreActions.click();
-      const gatewayMenu = page.locator('.redeven-gateway-menu');
-      await gatewayMenu.getByRole('menuitem', { name: i18n.t('environmentCenter.gatewayActionOpenSettings'), exact: true }).click();
+      await card.getByRole('button', { name: i18n.t('gatewayExperience.manage'), exact: true }).click();
+      const workspace = page.locator('[data-gateway-management-page]');
+      const nav = workspace.locator('[data-gateway-management-nav]');
+      await nav.getByRole('button', { name: i18n.t('gatewayClients.runtimes'), exact: true }).click();
+      const membersPanel = workspace.locator('#gateway-management-runtimes');
+      await membersPanel.getByRole('button', { name: i18n.t('gatewayExperience.connectRuntime'), exact: true }).click();
       const dialog = page.getByRole('dialog');
-      await dialog.getByRole('tab', { name: i18n.t('environmentCenter.environmentsSection'), exact: true }).click();
-      const membersPanel = dialog.getByRole('tabpanel', { name: i18n.t('environmentCenter.environmentsSection'), exact: true });
-      await dialog.locator('[data-gateway-invite-others] > summary').click();
+      await dialog.getByRole('button', { name: i18n.t('gatewayExperience.otherRuntime'), exact: true }).click();
       await dialog.getByRole('button', { name: i18n.t('gatewayMembers.createInvitation'), exact: true }).click();
       await dialog.getByText(i18n.t('gatewayMembers.failed'), { exact: true }).waitFor();
-      assert.equal(await membersPanel.getByText('Inherited', { exact: true }).isVisible(), true);
+      assert.equal(await membersPanel.getByText('Inherited', { exact: true }).count(), 1);
       await dialog.getByRole('button', { name: i18n.t('gatewayMembers.createInvitation'), exact: true }).click();
       await dialog.getByText(i18n.t('gatewayMembers.invitationReady'), { exact: true }).waitFor();
       assert.equal(await dialog.getByRole('timer').innerText(), i18n.tn('gatewayJoin.expiresIn', 1));
       assert.equal(await dialog.getByRole('button', { name: i18n.t('gatewayJoin.copyAddress'), exact: true }).count(), 1);
       assert.equal(await dialog.getByRole('button', { name: i18n.t('gatewayJoin.copyCode'), exact: true }).count(), 1);
+      await dialog.getByRole('button', { name: i18n.t('common.close'), exact: true }).click(); await dialog.waitFor({ state: 'detached' });
+      await nav.getByRole('button', { name: i18n.t('gatewayExperience.cloud'), exact: true }).click();
       // A policy preview only includes inherited members; saving requires a second explicit action.
-      await dialog.locator('summary').filter({ hasText: i18n.t('gatewayMembers.policy') }).click();
-      const technical = dialog.locator('.redeven-gateway-policy details');
+      await workspace.locator('summary').filter({ hasText: i18n.t('gatewayMembers.policy') }).click();
+      const technical = workspace.locator('.redeven-gateway-policy details');
       await technical.locator('summary').click();
       for (const key of ['hookMemberAdmission', 'hookSessionAccess', 'hookCloudPublication']) {
         assert.equal(await technical.getByText(i18n.t(`gatewayMembers.${key}`), { exact: false }).isVisible(), true);
       }
       await technical.locator('summary').click();
-      await dialog.getByRole('checkbox', { name: i18n.t('gatewayMembers.defaultAllow'), exact: true }).focus();
+      await workspace.getByRole('checkbox', { name: i18n.t('gatewayMembers.defaultAllow'), exact: true }).focus();
       await page.keyboard.press('Space');
-      const preview = dialog.locator('p').filter({ hasText: i18n.t('gatewayMembers.affected') });
+      const preview = workspace.locator('p').filter({ hasText: i18n.t('gatewayMembers.affected') });
       assert.ok((await preview.innerText()).includes('Inherited'));
       assert.ok(!(await preview.innerText()).includes('Explicit'));
-      await dialog.getByRole('button', { name: i18n.t('common.save'), exact: true }).click();
+      await workspace.getByRole('button', { name: i18n.t('common.save'), exact: true }).click();
       assert.equal((await page.evaluate(() => window.settingsFixture.requests)).some(r => r.kind === 'update_gateway_policy'), false);
-      await dialog.getByRole('button', { name: i18n.t('gatewayMembers.confirmSave'), exact: true }).click();
+      await workspace.getByRole('button', { name: i18n.t('gatewayMembers.confirmSave'), exact: true }).click();
       await page.waitForFunction(() => window.settingsFixture.requests.some(r => r.kind === 'update_gateway_policy'));
-      await dialog.locator('.redeven-gateway-policy > summary').click();
+      await workspace.locator('.redeven-gateway-policy > summary').click();
+      await nav.getByRole('button', { name: i18n.t('gatewayClients.runtimes'), exact: true }).click();
       for (const row of await membersPanel.locator('.redeven-gateway-member-row').all()) {
         await row.getByRole('button', { name: i18n.t('gatewayMembers.cloudPermission'), exact: true }).click();
         await page.getByRole('menuitem', { name: i18n.t('gatewayMembers.allow'), exact: true }).click();
       }
-      await dialog.getByRole('button', { name: i18n.t('gatewayMembers.confirmSave'), exact: true }).click();
-      await dialog.getByText(i18n.t('gatewayMembers.memberChanged'), { exact: true }).waitFor();
+      await workspace.getByRole('button', { name: i18n.t('gatewayMembers.confirmSave'), exact: true }).click();
+      await workspace.getByText(i18n.t('gatewayMembers.memberChanged'), { exact: true }).waitFor();
       const diagnostic = membersPanel.locator('.redeven-gateway-member-row details');
       assert.equal(await diagnostic.getAttribute('open'), null);
-      assert.equal(await dialog.getByText('MEMBER_VERSION_CONFLICT', { exact: true }).isVisible(), false);
+      assert.equal(await workspace.getByText('MEMBER_VERSION_CONFLICT', { exact: true }).isVisible(), false);
       await diagnostic.locator('summary').click();
-      await dialog.getByText('MEMBER_VERSION_CONFLICT', { exact: true }).waitFor();
+      await workspace.getByText('MEMBER_VERSION_CONFLICT', { exact: true }).waitFor();
       await diagnostic.locator('summary').click();
-      assert.equal(await dialog.evaluate(el => el.scrollWidth > el.clientWidth + 1), false, `${locale}/${width}: localized failure fits`);
+      assert.equal(await workspace.evaluate(el => el.scrollWidth > el.clientWidth + 1), false, `${locale}/${width}: localized failure fits`);
       await page.screenshot({ path: `${output}/${locale}-${width}-member-error.png` });
-      await dialog.getByRole('button', { name: i18n.t('gatewayMembers.confirmSave'), exact: true }).click();
+      await workspace.getByRole('button', { name: i18n.t('gatewayMembers.confirmSave'), exact: true }).click();
       const batches = (await page.evaluate(() => window.settingsFixture.requests)).filter(r => r.kind === 'update_gateway_members');
       assert.deepEqual(batches.map(r => r.items.map(item => item.member_id)), [['member_0', 'member_1'], ['member_1']]);
-      assert.equal(await dialog.evaluate(el => el.scrollWidth > el.clientWidth + 1), false, `${locale}/${width}: dialog fits`);
-      assert.equal(await dialog.locator('[data-floe-dialog-header] p').count(), 0);
-      for (const control of await dialog.locator('button:enabled, select:enabled, [role="checkbox"]:not([aria-disabled="true"])').all()) {
+      assert.equal(await workspace.evaluate(el => el.scrollWidth > el.clientWidth + 1), false, `${locale}/${width}: dialog fits`);
+      assert.equal(await workspace.locator('[data-floe-dialog-header] p').count(), 0);
+      for (const control of await workspace.locator('button:enabled, select:enabled, [role="checkbox"]:not([aria-disabled="true"])').all()) {
         if (await control.isVisible()) assert.equal(await control.evaluate(el => getComputedStyle(el).cursor), 'pointer');
       }
       await page.screenshot({ path: `${output}/${locale}-${width}.png` });
-      await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' });
-      await page.waitForFunction(() => document.activeElement?.getAttribute('aria-haspopup') === 'menu');
+      await workspace.getByRole('button', { name: i18n.t('gatewayExperience.allGateways'), exact: true }).click(); await workspace.waitFor({ state: 'hidden' });
+      await page.waitForFunction(() => document.activeElement?.matches('.redeven-gateway-card__name button'));
       // Failed refresh retains the last directory; access-only identities never gain mutation rights.
       await page.evaluate(({ snapshot, gateway }) => window.settingsFixture.publish({ ...snapshot, gateway_sources: [{ ...gateway, sync_state: 'catalog_failed', permissions: { access: true, manage_members: false, configure_cloud: false } }] }), { snapshot, gateway });
       await card.getByText(i18n.t('gatewayAccess.environmentListStale'), { exact: true }).waitFor();

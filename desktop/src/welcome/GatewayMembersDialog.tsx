@@ -1,6 +1,6 @@
 import { GatewayPicker } from './GatewayPicker';
 import { gatewayAllowedHost, gatewayConnectionOrigin, gatewayListenAddress } from '../shared/gatewayNetworkSettings';
-import { KeyedFor, Button, Checkbox, Input, StableText } from '@floegence/floe-webapp-core/ui';
+import { KeyedFor, Button, Checkbox, Input, StableText, Dialog } from '@floegence/floe-webapp-core/ui';
 import { ChevronDown, Plus, Trash, Copy } from '@floegence/floe-webapp-core/icons';
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show, untrack } from 'solid-js';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
@@ -12,6 +12,8 @@ import { DesktopTooltip } from './DesktopTooltip';
 
 export function GatewayMembersPanel(props: Readonly<{
   available?: boolean;
+  suspended?: boolean;
+  onPresenceChange?: (present: boolean) => void;
   gateway?: DesktopGatewaySource; i18n: DesktopI18n;
   section: 'connection' | 'runtimes' | 'policy'; refresh: () => Promise<unknown>;
   onEnroll?: () => void;
@@ -242,15 +244,41 @@ export function GatewayMembersPanel(props: Readonly<{
       <div class="redeven-gateway-network-actions"><Show when={networkSaved() || restartRequired()}><p role="status" class="redeven-gateway-help">{props.i18n.t(restartRequired() ? 'gatewayNetwork.restartRequired' : 'gatewayNetwork.saved')}</p></Show><Show when={restartRequired() && props.onRestart}><Button variant="outline" size="sm" onClick={() => props.onRestart?.()}>{props.i18n.t('gatewayExperience.reviewRestart')}</Button></Show><Button class="ml-auto cursor-pointer whitespace-nowrap" size="sm" disabled={props.available === false || busy() || Boolean(removingEndpointID()) || !props.gateway?.permissions?.manage_members || !networkDirty()} onClick={() => void saveEndpoints()}><StableText reserve={[props.i18n.t('gatewayNetwork.save'),props.i18n.t('gatewayNetwork.saving')]}>{props.i18n.t(busy() ? 'gatewayNetwork.saving' : 'gatewayNetwork.save')}</StableText></Button></div>
       </Show>
       <Show when={props.section === 'runtimes'}>
-      <div hidden={!enrolling()} data-gateway-runtime-enrollment>
+      <Dialog open={enrolling() && !props.suspended} onOpenChange={open => props.onEnrollmentChange?.(open)} onPresenceChange={present => { props.onPresenceChange?.(present); if (present) requestAnimationFrame(() => (enrollmentStep() === 'invite' ? invitationHeading : ownedRuntimeChoice)?.focus()); }} title={props.i18n.t('gatewayExperience.connectRuntime')} closeLabel={props.i18n.t('common.close')} class="redeven-gateway-dialog redeven-gateway-task-dialog"><div data-gateway-runtime-enrollment>
         <Button class="self-start" variant="ghost" size="sm" onClick={leaveEnrollment}>{props.i18n.t('gatewayJoin.back')}</Button>
-        <h3 class="redeven-gateway-section-title mt-3">{props.i18n.t('gatewayExperience.connectRuntime')}</h3>
         <div class="redeven-gateway-onboarding-choices mt-3" hidden={enrollmentStep() !== 'choice'}>
           <Button ref={ownedRuntimeChoice} variant="outline" aria-label={props.i18n.t('gatewayExperience.ownedRuntime')} disabled={!canEnroll() || busy()} onClick={() => props.onEnroll?.()}><span><strong>{props.i18n.t('gatewayExperience.ownedRuntime')}</strong><span class="block text-xs text-muted-foreground">{props.i18n.t('gatewayExperience.ownedRuntimeHelp')}</span></span></Button>
           <Button ref={otherRuntimeChoice} variant="outline" aria-label={props.i18n.t('gatewayExperience.otherRuntime')} disabled={!canEnroll() || busy()} onClick={() => { setEnrollmentStep('invite'); queueMicrotask(() => invitationHeading?.focus()); }}><span><strong>{props.i18n.t('gatewayExperience.otherRuntime')}</strong><span class="block text-xs text-muted-foreground">{props.i18n.t('gatewayExperience.otherRuntimeHelp')}</span></span></Button>
         </div>
       </div>
-      <div hidden={enrolling()}>
+      <section data-gateway-invite-others hidden={enrollmentStep() !== 'invite'}>
+        <div class="redeven-gateway-settings-section mt-3">
+        <div class="redeven-gateway-section-heading">
+          <div class="min-w-0">
+            <h3 ref={invitationHeading} tabIndex={-1}>{props.i18n.t('gatewayMembers.invite')}</h3>
+            <p>{props.i18n.t('gatewayMembers.inviteHelp')}</p>
+          </div>
+          <Button class="cursor-pointer" size="sm" disabled={props.available === false || busy() || !props.gateway?.permissions?.manage_members || savedEndpoints().length === 0 || endpointsDirty() || !endpointsValid()} onClick={() => void invite()}>{props.i18n.t('gatewayMembers.createInvitation')}</Button>
+        </div>
+        <Show when={!savedEndpoints().length}><p role="status" class="redeven-gateway-empty-state">{props.i18n.t('gatewayMembers.noConnectionAddresses')}</p><Show when={props.onNetwork}><Button variant="outline" size="sm" onClick={() => { props.onEnrollmentChange?.(false); props.onNetwork?.(); }}>{props.i18n.t('gatewayMembers.connectionAddresses')}</Button></Show></Show>
+        <Show when={invitation() && !endpointsDirty()}>
+          <div class="redeven-gateway-content-enter redeven-gateway-invitation-card">
+            <p role="status" class="text-sm font-medium text-primary">{props.i18n.t('gatewayMembers.invitationReady')}</p>
+            <p class="font-medium">{invitation()?.gateway_name}</p>
+            <GatewayPicker label={props.i18n.t('gatewayJoin.address')} placeholder="" disabled={busy()} value={shareAddress()}
+              options={(invitation()?.share_addresses ?? []).map(value => ({ value, label: value }))}
+              onChange={value => { setShareAddress(value); setCopied(''); }} />
+            <Button class="cursor-pointer whitespace-nowrap" size="sm" variant="outline" icon={Copy} disabled={invitationInvalidated() || props.available === false || !props.gateway?.permissions?.manage_members || invitation()!.expires_at_unix_ms<=now()} onClick={() => void copyInvitation(shareAddress(),'address')}><StableText reserve={[props.i18n.t('gatewayJoin.copyAddress'),props.i18n.t('gatewayJoin.copied')]}>{props.i18n.t(copied()==='address'?'gatewayJoin.copied':'gatewayJoin.copyAddress')}</StableText></Button>
+            <div><p class="text-sm">{props.i18n.t('gatewayJoin.code')}</p><p class="select-text break-all rounded-md bg-muted p-3 font-mono tracking-wide">{invitation()?.code.match(/.{1,5}/g)?.join('-')}</p></div>
+            <Button class="cursor-pointer whitespace-nowrap" size="sm" variant="outline" icon={Copy} disabled={invitationInvalidated() || props.available === false || !props.gateway?.permissions?.manage_members || invitation()!.expires_at_unix_ms<=now()} onClick={() => void copyInvitation(invitation()!.code,'code')}><StableText reserve={[props.i18n.t('gatewayJoin.copyCode'),props.i18n.t('gatewayJoin.copied')]}>{props.i18n.t(copied()==='code'?'gatewayJoin.copied':'gatewayJoin.copyCode')}</StableText></Button>
+            <p role="timer" class="text-sm text-muted-foreground">{invitation()!.expires_at_unix_ms<=now()?props.i18n.t('gatewayJoin.expired'):props.i18n.tn('gatewayJoin.expiresIn',Math.max(0,Math.ceil((invitation()!.expires_at_unix_ms-now())/60000)))}</p>
+            <Button class="cursor-pointer whitespace-nowrap" size="sm" variant="outline" disabled={props.available === false || busy()} onClick={() => void invite()}>{props.i18n.t('gatewayJoin.regenerate')}</Button>
+
+          </div>
+        </Show>
+      </div></section>
+      <Show when={error()}><p role="alert" class="text-sm text-error">{error()}</p></Show></Dialog>
+      <div>
       <section class="redeven-gateway-settings-section">
         <div class="redeven-gateway-section-heading"><h3 class="redeven-gateway-section-title">{props.i18n.t('gatewayMembers.members')}</h3><Show when={props.onEnroll}><Button ref={enrollmentTrigger} data-gateway-add-environment size="sm" icon={Plus} disabled={!canEnroll() || busy()} onClick={openEnrollment}>{props.i18n.t('gatewayExperience.connectRuntime')}</Button></Show></div>
         <Show when={members().length} fallback={<p class="redeven-gateway-empty-state redeven-gateway-member-empty">{props.i18n.t('gatewayMembers.empty')}</p>}>
@@ -291,32 +319,7 @@ export function GatewayMembersPanel(props: Readonly<{
         </div></Show>
       </section>
       </div>
-      <section data-gateway-invite-others hidden={props.section === 'runtimes' && (!enrolling() || enrollmentStep() !== 'invite')}>
-        <div class="redeven-gateway-settings-section mt-3">
-        <div class="redeven-gateway-section-heading">
-          <div class="min-w-0">
-            <h3 ref={invitationHeading} tabIndex={-1}>{props.i18n.t('gatewayMembers.invite')}</h3>
-            <p>{props.i18n.t('gatewayMembers.inviteHelp')}</p>
-          </div>
-          <Button class="cursor-pointer" size="sm" disabled={props.available === false || busy() || !props.gateway?.permissions?.manage_members || savedEndpoints().length === 0 || endpointsDirty() || !endpointsValid()} onClick={() => void invite()}>{props.i18n.t('gatewayMembers.createInvitation')}</Button>
-        </div>
-        <Show when={!savedEndpoints().length}><p role="status" class="redeven-gateway-empty-state">{props.i18n.t('gatewayMembers.noConnectionAddresses')}</p><Show when={props.onNetwork}><Button variant="outline" size="sm" onClick={props.onNetwork}>{props.i18n.t('gatewayMembers.connectionAddresses')}</Button></Show></Show>
-        <Show when={invitation() && !endpointsDirty()}>
-          <div class="redeven-gateway-content-enter redeven-gateway-invitation-card">
-            <p role="status" class="text-sm font-medium text-primary">{props.i18n.t('gatewayMembers.invitationReady')}</p>
-            <p class="font-medium">{invitation()?.gateway_name}</p>
-            <GatewayPicker label={props.i18n.t('gatewayJoin.address')} placeholder="" disabled={busy()} value={shareAddress()}
-              options={(invitation()?.share_addresses ?? []).map(value => ({ value, label: value }))}
-              onChange={value => { setShareAddress(value); setCopied(''); }} />
-            <Button class="cursor-pointer whitespace-nowrap" size="sm" variant="outline" icon={Copy} disabled={invitationInvalidated() || props.available === false || !props.gateway?.permissions?.manage_members || invitation()!.expires_at_unix_ms<=now()} onClick={() => void copyInvitation(shareAddress(),'address')}><StableText reserve={[props.i18n.t('gatewayJoin.copyAddress'),props.i18n.t('gatewayJoin.copied')]}>{props.i18n.t(copied()==='address'?'gatewayJoin.copied':'gatewayJoin.copyAddress')}</StableText></Button>
-            <div><p class="text-sm">{props.i18n.t('gatewayJoin.code')}</p><p class="select-text break-all rounded-md bg-muted p-3 font-mono tracking-wide">{invitation()?.code.match(/.{1,5}/g)?.join('-')}</p></div>
-            <Button class="cursor-pointer whitespace-nowrap" size="sm" variant="outline" icon={Copy} disabled={invitationInvalidated() || props.available === false || !props.gateway?.permissions?.manage_members || invitation()!.expires_at_unix_ms<=now()} onClick={() => void copyInvitation(invitation()!.code,'code')}><StableText reserve={[props.i18n.t('gatewayJoin.copyCode'),props.i18n.t('gatewayJoin.copied')]}>{props.i18n.t(copied()==='code'?'gatewayJoin.copied':'gatewayJoin.copyCode')}</StableText></Button>
-            <p role="timer" class="text-sm text-muted-foreground">{invitation()!.expires_at_unix_ms<=now()?props.i18n.t('gatewayJoin.expired'):props.i18n.tn('gatewayJoin.expiresIn',Math.max(0,Math.ceil((invitation()!.expires_at_unix_ms-now())/60000)))}</p>
-            <Button class="cursor-pointer whitespace-nowrap" size="sm" variant="outline" disabled={props.available === false || busy()} onClick={() => void invite()}>{props.i18n.t('gatewayJoin.regenerate')}</Button>
 
-          </div>
-        </Show>
-      </div></section>
       </Show>
       <Show when={props.section === 'policy'}>
       <Show when={policy()}>{current => <details class="redeven-gateway-disclosure redeven-gateway-policy group">

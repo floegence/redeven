@@ -45,7 +45,7 @@ describe('Gateway client enrollment', () => {
     button('gatewayClients.createCode').click(); await settle();
     button('gatewayExperience.copyConnection').click(); await settle();
     expect(writeText).toHaveBeenCalledExactlyOnceWith('Gateway address: https://draft.example:7443\nClient access code: client-only-code');
-    button('gatewayJoin.back').click(); await settle();
+    document.querySelector<HTMLButtonElement>('[role="dialog"] button[aria-label="Close"]')!.click(); await settle();
     expect(document.activeElement).toBe(button('gatewayExperience.connectClient'));
     button('gatewayExperience.connectClient').click(); await settle();
     expect(document.activeElement).toBe(address);
@@ -72,6 +72,7 @@ describe('Gateway client enrollment', () => {
     vi.useFakeTimers();
     const perform = vi.fn().mockResolvedValue({ ok: true, gateway_clients: [] });
     mount(perform); await vi.advanceTimersByTimeAsync(0);
+    button('gatewayExperience.connectClient').click();
     expect(document.querySelector('details')?.open).toBe(false);
     perform.mockResolvedValueOnce({ ok: true, gateway_access_code: { access_code: 'one-use', expires_at_unix_ms: Date.now() + 600000 } });
     button('gatewayExperience.connectClient').click();
