@@ -684,7 +684,6 @@ export type FlowerSurfaceCopy = Readonly<{
     threadLoadErrorTitle: string;
     threadLoading: string;
     threadEmpty: string;
-    threadSyncingLatest: string;
     threadSyncFailed: string;
     syncConnecting: string;
     syncReconnecting: string;
@@ -1184,7 +1183,6 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     threadLoadErrorTitle: 'Conversation could not load.',
     threadLoading: 'Loading conversation...',
     threadEmpty: 'This conversation has no content yet.',
-    threadSyncingLatest: 'Syncing the latest reply...',
     threadSyncFailed: 'Flower could not sync the latest reply. Try again.',
     syncConnecting: "Connecting live updates. Displayed state may be outdated.",
     syncReconnecting: "Reconnecting live updates. Displayed state may be outdated.",

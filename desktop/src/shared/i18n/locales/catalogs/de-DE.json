@@ -580,7 +580,6 @@
       "threadLoadErrorTitle": "Unterhaltung konnte nicht geladen werden.",
       "threadLoading": "Unterhaltung wird geladen...",
       "threadEmpty": "Diese Unterhaltung enthält noch keine Inhalte.",
-      "threadSyncingLatest": "Neueste Antwort wird synchronisiert...",
       "threadSyncFailed": "Flower konnte die neueste Antwort nicht synchronisieren. Versuche es erneut.",
       "syncConnecting": "Live-Aktualisierungen werden verbunden. Der angezeigte Stand kann veraltet sein.",
       "syncReconnecting": "Live-Aktualisierungen werden erneut verbunden. Der angezeigte Stand kann veraltet sein.",

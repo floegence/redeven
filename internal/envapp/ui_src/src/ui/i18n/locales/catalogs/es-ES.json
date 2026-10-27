@@ -5471,7 +5471,6 @@
       "threadLoadErrorTitle": "La conversación no se pudo cargar.",
       "threadLoading": "Cargando conversación...",
       "threadEmpty": "Esta conversación aún no tiene contenido.",
-      "threadSyncingLatest": "Sincronizando la respuesta más reciente...",
       "threadSyncFailed": "Flower no pudo sincronizar la respuesta más reciente. Inténtalo de nuevo.",
       "syncConnecting": "Conectando las actualizaciones en directo. El estado mostrado puede estar desactualizado.",
       "syncReconnecting": "Reconectando las actualizaciones en directo. El estado mostrado puede estar desactualizado.",

@@ -5473,7 +5473,6 @@
       "threadLoadErrorTitle": "对话加载失败。",
       "threadLoading": "正在加载对话...",
       "threadEmpty": "此对话暂无内容。",
-      "threadSyncingLatest": "正在同步最新回复...",
       "threadSyncFailed": "Flower 无法同步最新回复，请重试。",
       "syncConnecting": "正在连接实时更新，显示的状态可能已过时。",
       "syncReconnecting": "正在重新连接实时更新，显示的状态可能已过时。",
