@@ -757,6 +757,9 @@ func (c *CLIClient) runContainerServiceAction(ctx context.Context, service Conta
 	}
 	switch service.Implementation {
 	case ContainerServiceDockerDesktop:
+		if c.operatingSystem() == "darwin" && method != MethodContainerServicesStop {
+			return c.startDockerDesktopApplication(ctx, service, method)
+		}
 		action := strings.TrimPrefix(string(method), "container.services.")
 		_, err := run("docker", "desktop", action)
 		return err
@@ -791,6 +794,53 @@ func (c *CLIClient) runContainerServiceAction(ctx context.Context, service Conta
 		}
 	}
 	return ErrContainerServiceActionUnsupported
+}
+
+// LaunchServices owns the macOS application lifecycle. The Desktop CLI can
+// remain waiting after its background launch fails during host initialization.
+// Opening the official app preserves its native setup/recovery flow; only the
+// exact reviewed engine endpoint becoming ready establishes success.
+func (c *CLIClient) startDockerDesktopApplication(ctx context.Context, service ContainerService, method Method) error {
+	if !service.endpointID.Valid() {
+		return ErrEndpointNotFound
+	}
+	if method != MethodContainerServicesStart && method != MethodContainerServicesRestart {
+		return ErrContainerServiceActionUnsupported
+	}
+	bound, endpoint, err := c.BindEndpoint(ctx, EngineDocker, service.endpointID)
+	if err != nil {
+		return err
+	}
+	if endpoint.Remote {
+		return ErrContainerServiceActionUnsupported
+	}
+	if method == MethodContainerServicesRestart {
+		if _, err := c.runHostCommandEnvWithTimeout(ctx, containerServiceActionTimeout, nil, "docker", "desktop", "stop"); err != nil {
+			return err
+		}
+	}
+	if _, err := c.runHostCommand(ctx, "/usr/bin/open", "-g", "-b", "com.docker.docker"); err != nil {
+		return err
+	}
+	for {
+		probe, cancel := context.WithTimeout(bound, containerServiceDiscoveryTimeout)
+		status, err := c.Status(probe, EngineDocker)
+		cancel()
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if err == nil && status.Available {
+			return nil
+		}
+		if errors.Is(err, ErrPermissionDenied) || errors.Is(err, ErrCLIUnavailable) {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second):
+		}
+	}
 }
 
 func (c *CLIClient) validateContainerServiceCandidate(ctx context.Context, service ContainerService, definition containerServiceConfigurationSourceDefinition, candidate []byte) error {

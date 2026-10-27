@@ -3164,7 +3164,17 @@
       "lifecycleWait": "Iniciar, parar ou reiniciar pode levar até dois minutos. Você pode continuar trabalhando enquanto a operação é concluída.",
       "interruptionTitle": "Interrupção do serviço",
       "interruptionMessage": "Os contêineres em execução e os serviços Web dependentes podem ser interrompidos.",
-      "configurationRisk": "Configurações inválidas podem impedir a inicialização do serviço de contêineres."
+      "configurationRisk": "Configurações inválidas podem impedir a inicialização do serviço de contêineres.",
+      "lifecycle": {
+        "starting": "Iniciando…",
+        "stopping": "Parando…",
+        "restarting": "Reiniciando…",
+        "updating": "Aplicando alterações…",
+        "waiting": "Aguardando a resposta do serviço. Você pode continuar trabalhando; este cartão é atualizado automaticamente.",
+        "desktopRecovery": "O Docker Desktop ainda não está pronto. Abra o Docker Desktop neste computador, conclua a configuração ou resolva o erro de inicialização e verifique o status aqui.",
+        "checkStatus": "Verificar status",
+        "history": "Histórico de operações"
+      }
     },
     "views": {
       "containers": "Contêineres",

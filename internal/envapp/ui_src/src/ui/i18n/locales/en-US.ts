@@ -3401,6 +3401,16 @@ export const enUS = defineDictionary({
     },
     services: {
       open: 'Manage services', title: 'Container services',
+      lifecycle: {
+        starting: "Starting…",
+        stopping: "Stopping…",
+        restarting: "Restarting…",
+        updating: "Applying changes…",
+        waiting: "Waiting for the service to respond. You can keep working; this card updates automatically.",
+        desktopRecovery: "Docker Desktop has not become ready. Open Docker Desktop on this computer and complete any setup or resolve its startup error, then check status here.",
+        checkStatus: "Check status",
+        history: "Operation history",
+      },
       lifecycleWait: "Starting, stopping, or restarting can take up to two minutes. You can keep working while it completes.",
       interruptionTitle: "Service interruption",
       interruptionMessage: "Running containers and dependent Web Services may be interrupted.",
