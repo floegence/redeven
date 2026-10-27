@@ -4,24 +4,28 @@ import { historyReadingKey, historyReadingRequest, HISTORY_READING_ITEMS, HISTOR
 describe('continuous reading interest', () => {
   const window = { first_item_id: 'first', last_item_id: 'last', has_before: true, has_after: true };
   it('prefetches only adjacent membership without moving the visible interest', () => {
-    expect(historyReadingRequest(window, 'visible', { top: 600, height: 6000, viewport: 700 }, false, 'before'))
+    expect(historyReadingRequest(window, { top: 600, height: 6000, viewport: 700 }, false, 'before'))
       .toEqual({ anchor_id: 'first', direction: 'before', limit: HISTORY_PAGE_ITEMS });
-    expect(historyReadingRequest(window, 'visible', { top: 4800, height: 6000, viewport: 700 }, false, 'after'))
+    expect(historyReadingRequest(window, { top: 4800, height: 6000, viewport: 700 }, false, 'after'))
       .toEqual({ anchor_id: 'last', direction: 'after', limit: HISTORY_PAGE_ITEMS });
+  });
+  it('reads the canonical edge when all loaded message bodies are folded', () => {
+    expect(historyReadingRequest(window, { top: 0, height: 700, viewport: 700 }, false, 'before'))
+      .toEqual({ anchor_id: 'first', direction: 'before', limit: HISTORY_PAGE_ITEMS });
   });
   it('does not traverse history on initial reveal or at the actual end', () => {
     const tail = { ...window, has_after: false };
-    expect(historyReadingRequest(tail, 'last', { top: 0, height: 100, viewport: 700 }, true, undefined)).toBeUndefined();
-    expect(historyReadingRequest(tail, 'last', { top: 5000, height: 6000, viewport: 700 }, false, 'after')).toBeUndefined();
-    expect(historyReadingRequest(window, 'middle', { top: 2000, height: 6000, viewport: 700 }, false, 'before')).toBeUndefined();
+    expect(historyReadingRequest(tail, { top: 0, height: 100, viewport: 700 }, true, undefined)).toBeUndefined();
+    expect(historyReadingRequest(tail, { top: 5000, height: 6000, viewport: 700 }, false, 'after')).toBeUndefined();
+    expect(historyReadingRequest(window, { top: 2000, height: 6000, viewport: 700 }, false, 'before')).toBeUndefined();
   });
   it('replaces a historical interest with a tail interest only at the actual bottom', () => {
     const tail = { ...window, has_after: false };
     const around = { anchor_id: 'middle', direction: 'around' as const, limit: 150 };
-    expect(historyReadingRequest(tail, 'last', { top: 5299, height: 6000, viewport: 700 }, true, 'after', around))
+    expect(historyReadingRequest(tail, { top: 5299, height: 6000, viewport: 700 }, true, 'after', around))
       .toEqual({ direction: 'before', limit: HISTORY_READING_ITEMS });
-    expect(historyReadingRequest(tail, 'last', { top: 5100, height: 6000, viewport: 700 }, false, 'after', around)).toBeUndefined();
-    expect(historyReadingRequest(window, 'last', { top: 5300, height: 6000, viewport: 700 }, false, 'after', around))
+    expect(historyReadingRequest(tail, { top: 5100, height: 6000, viewport: 700 }, false, 'after', around)).toBeUndefined();
+    expect(historyReadingRequest(window, { top: 5300, height: 6000, viewport: 700 }, false, 'after', around))
       .toEqual({ anchor_id: 'last', direction: 'after', limit: HISTORY_PAGE_ITEMS });
   });
   it('changes request identity only with relevant bounds or reading intent', () => {

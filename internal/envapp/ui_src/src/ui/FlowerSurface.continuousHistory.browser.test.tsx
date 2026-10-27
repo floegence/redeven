@@ -522,6 +522,74 @@ describe('continuous history navigation', () => {
     expect(history.mock.calls.every(([, request]) => (request.limit ?? request.item_ids?.length ?? 150) <= 150)).toBe(true);
   });
 
+  it.each(['main-wheel', 'main-keyboard', 'child-wheel', 'child-keyboard'])('reads older %s history when all loaded message bodies are folded', async mode => {
+    const child = mode.startsWith('child');
+    await page.viewport(1280, 900);
+    const seed = thread({ thread_id: 'folded-history', messages: [] });
+    const items: FlowerRuntimeCurrentItem[] = [
+      { id: 'earliest-user', kind: 'user' as const, text: 'The original request', turn_id: 'work', run_id: 'work', ordinal: 1 },
+      ...Array.from({ length: 100 }, (_, i): FlowerRuntimeCurrentItem => ({
+        id: `folded-${i}`, kind: 'tool', turn_id: 'work', run_id: 'work', ordinal: i + 2,
+        activity: { item_id: `folded-${i}`, tool_id: `folded-${i}`, kind: 'tool', tool_name: 'terminal.exec',
+          status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
+          presentation: { label: `Inspect ${i}`, renderer: 'terminal', payload: { command: 'pwd', output: 'Done' } } },
+      })),
+    ].map(item => ({ ...item, canonical_ordinal: item.ordinal }));
+    const history = vi.fn(async (_id: string, request: FlowerHistoryRequest) => {
+      const selected = request.anchor_id || request.item_ids ? selectPage(items, request) : items.slice(-50);
+      const current: FlowerRuntimeCurrentView = { thread_id: seed.thread_id, activity: 'idle', view_version: 1,
+        items: selected, window: { ...pageBounds(items, selected), leaf_id: 'folded-leaf' },
+        turns: [{ turn_id: 'work', run_id: 'work', started_at: '2026-10-01T00:00:00Z', ended_at: '2026-10-01T00:14:02Z',
+          outcome: 'interrupted', elapsed_ms: 842000, waiting_ms: 0, work_duration_ms: 842000,
+          final_item_ids: [], final_boundary_complete: false }] };
+      return { current, thread: applyFlowerRuntimeCurrentView(seed, current) };
+    });
+    const childSummary = subagentSummary({ parent_thread_id: 'folded-parent', thread_id: seed.thread_id, status: 'interrupted' });
+    const parent = thread({ thread_id: childSummary.parent_thread_id, subagents: [childSummary], messages: [{
+      id: 'spawn-message', role: 'assistant', content: '', status: 'complete', created_at_ms: 100, turn_id: 'parent-turn',
+      blocks: [activityTimeline({ thread_id: childSummary.parent_thread_id, turn_id: 'parent-turn', run_id: 'parent-run', items: [activityItem({
+        item_id: 'spawn', tool_id: 'spawn', tool_name: 'subagents', renderer: 'subagent_operation', status: 'success',
+        payload: { action: 'spawn', targets: [{ thread_id: childSummary.thread_id, task_name: childSummary.task_name, status: 'interrupted' }], requested_count: 1 },
+      })] })],
+    }] });
+    const selected = child ? parent : seed;
+    const root = renderSurfaceWithAdapterProps({ ...adapter(true), listThreads: async () => [selected], loadHistory: child ? async () => liveBootstrap(parent) : history,
+      loadSubagentDetail: async (_parent, id, input) => { const result = await history(id, input ?? {}); return { summary: childSummary, current: result.current, window: result.current.window }; },
+      async *connectLiveStream({ signal }) {
+        yield { schema_version: 3, kind: 'ready', baseline_complete: true, observer_id: 'folded-reader', summaries: [selected] };
+        await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+      },
+    }, { focusThreadRequest: { request_id: 'folded-history', thread_id: selected.thread_id } });
+    root.style.height = '780px';
+    if (child) {
+      await waitFor(() => Boolean(root.querySelector('[data-flower-subagent-capsule]')));
+      root.querySelector<HTMLButtonElement>('[data-flower-subagent-capsule]')!.click();
+      await waitFor(() => Boolean(document.querySelector('.flower-subagent-detail-window')));
+    }
+    const surface = child ? document.querySelector<HTMLElement>('.flower-subagent-detail-window')! : root;
+    await waitFor(() => Boolean(surface?.querySelector('.flower-turn-summary-button')) && surface.querySelector<HTMLElement>('.flower-chat-transcript, .flower-subagent-detail-transcript')?.dataset.flowerTailPreparing !== 'true');
+    const viewport = surface.querySelector<HTMLDivElement>('.flower-chat-transcript, .flower-subagent-detail-transcript')!;
+    await waitFor(() => surface.querySelector('.flower-turn-summary-button')?.getAttribute('aria-expanded') === 'false');
+    expect([...surface.querySelectorAll<HTMLElement>('[data-flower-message-id]')].some(node => node.getBoundingClientRect().height > 0)).toBe(false);
+    expect(viewport.scrollHeight).toBe(viewport.clientHeight);
+    expect(history).toHaveBeenCalledOnce();
+    for (let pass = 0; pass < 3 && !surface.querySelector('[data-flower-message-id="earliest-user"]'); pass++) {
+      const before = history.mock.calls.length;
+      if (mode.endsWith('keyboard')) {
+        viewport.tabIndex = 0; viewport.focus({ preventScroll: true });
+        await userEvent.keyboard('{PageUp}');
+      } else viewport.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true }));
+      await waitFor(() => history.mock.calls.length > before);
+      await new Promise(resolve => setTimeout(resolve, 150));
+      expect(history.mock.calls.length - before).toBe(2);
+    }
+    expect(surface.querySelector('[data-flower-message-id="earliest-user"]')?.textContent).toContain('The original request');
+    const calls = history.mock.calls.length;
+    await new Promise(resolve => setTimeout(resolve, 250));
+    expect(history.mock.calls.length).toBe(calls);
+    expect(surface.querySelector('.flower-turn-summary-button')?.getAttribute('aria-expanded')).toBe('false');
+  });
+
   it('bounds collapsed history reads to scroll demand, including input at an immovable edge', async () => {
     const { root, history, viewport, scroll } = await mountContinuous(600, false, true);
     scroll(0, -100);
