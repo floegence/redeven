@@ -147,6 +147,9 @@ await session.run(async () => {
         let context;
         let page;
         let recording;
+        let recordFrame;
+        const frameWrites = new Set();
+        const recordingErrors = [];
         try {
           if (runtime === 'desktop') {
             application = await session.launchElectron(electron, {
@@ -199,10 +202,15 @@ await session.run(async () => {
           let frameIndex = 0;
           if (runtime === 'desktop') {
             await mkdir(path.join(artifacts, name), { recursive: true });
-            cdp.on('Page.screencastFrame', async ({ data, sessionId }) => {
-              await cdp.send('Page.screencastFrameAck', { sessionId });
-              await writeFile(path.join(artifacts, name, `${String(frameIndex++).padStart(4, '0')}.jpg`), Buffer.from(data, 'base64'));
-            });
+            recordFrame = ({ data, sessionId }) => {
+              const write = (async () => {
+                await cdp.send('Page.screencastFrameAck', { sessionId });
+                await writeFile(path.join(artifacts, name, `${String(frameIndex++).padStart(4, '0')}.jpg`), Buffer.from(data, 'base64'));
+              })();
+              frameWrites.add(write);
+              void write.then(() => frameWrites.delete(write), error => { frameWrites.delete(write); recordingErrors.push(error); });
+            };
+            cdp.on('Page.screencastFrame', recordFrame);
             await cdp.send('Page.startScreencast', {
               format: 'jpeg',
               quality: 65,
@@ -287,13 +295,21 @@ await session.run(async () => {
           );
           await session.writeEvidence(path.join(artifacts, 'metrics.json'), JSON.stringify(evidence, null, 2));
         } finally {
-          if (recording) await recording.send('Page.stopScreencast').catch(() => undefined);
+          if (recording) {
+            // Stop admitting frames, then drain acknowledgments and file writes
+            // before closing their CDP target. A late async event must not crash
+            // the next scenario or bypass the supervised cleanup.
+            recording.off('Page.screencastFrame', recordFrame);
+            await recording.send('Page.stopScreencast').catch(error => recordingErrors.push(error));
+            await Promise.allSettled([...frameWrites]);
+          }
 
           if (application) await session.closeElectron(application);
           if (browser) {
             await context?.close();
             await session.closeBrowser(browser);
           }
+          if (recordingErrors.length) throw new AggregateError(recordingErrors, 'Screencast capture failed');
         }
       }
     }
