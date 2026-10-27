@@ -107,23 +107,11 @@ func TestContainerServicesUseOfficialDockerLifecycleWithoutElevation(t *testing.
 	}
 }
 
-func TestDockerDesktopNotRunningIsStopped(t *testing.T) {
-	runner := &runtimeDiscoveryRunner{outputs: map[string]string{
-		"docker desktop status --format json": `{"status":"not running"}`,
-	}}
-	client := &CLIClient{Runner: runner}
-
-	state, ok := client.dockerDesktopState(context.Background())
-	if !ok || state != ContainerServiceStateStopped {
-		t.Fatalf("Docker Desktop state = %q, %v", state, ok)
-	}
-}
-
 func TestDockerDesktopExposesLocalEngineAndCLIConfiguration(t *testing.T) {
 	runner := &runtimeDiscoveryRunner{outputs: map[string]string{
-		"docker context ls --format {{json .}}":                `{"Name":"default","Current":true,"DockerEndpoint":"unix:///var/run/docker.sock"}` + "\n",
-		"docker --context default version --format {{json .}}": `{"Client":{"Version":"29.0.1"},"Server":{"Version":"29.0.1"}}`,
-		"docker desktop status --format json":                  `{"status":"running"}`,
+		"docker context ls --format {{json .}}":                      `{"Name":"desktop-linux","Current":true,"DockerEndpoint":"unix:///var/run/docker.sock"}` + "\n",
+		"docker --context desktop-linux version --format {{json .}}": `{"Client":{"Version":"29.0.1"},"Server":{"Version":"29.0.1"}}`,
+		"docker desktop version --format json":                       `{"version":"v0.2.0"}`,
 	}, errors: map[string]error{"podman system connection list --format json": ErrCLIUnavailable}}
 	home := t.TempDir()
 	client := &CLIClient{Runner: runner, UserHomeDir: func() (string, error) { return home, nil }}
@@ -162,9 +150,9 @@ func TestDockerDesktopConfigurationReportsSourceLocalFailures(t *testing.T) {
 		t.Skipf("symlink unavailable: %v", err)
 	}
 	runner := &runtimeDiscoveryRunner{outputs: map[string]string{
-		"docker context ls --format {{json .}}":                `{"Name":"default","Current":true,"DockerEndpoint":"unix:///var/run/docker.sock"}` + "\n",
-		"docker --context default version --format {{json .}}": `{"Client":{"Version":"29.0.1"},"Server":{"Version":"29.0.1"}}`,
-		"docker desktop status --format json":                  `{"status":"running"}`,
+		"docker context ls --format {{json .}}":                      `{"Name":"desktop-linux","Current":true,"DockerEndpoint":"unix:///var/run/docker.sock"}` + "\n",
+		"docker --context desktop-linux version --format {{json .}}": `{"Client":{"Version":"29.0.1"},"Server":{"Version":"29.0.1"}}`,
+		"docker desktop version --format json":                       `{"version":"v0.2.0"}`,
 	}, errors: map[string]error{"podman system connection list --format json": ErrCLIUnavailable}}
 	client := &CLIClient{Runner: runner, UserHomeDir: func() (string, error) { return home, nil }}
 	services, err := client.ContainerServices(context.Background())
@@ -351,9 +339,9 @@ func TestDockerCLIConfigurationExposesAllNonCredentialFieldsAndPreservesAuth(t *
 		t.Fatal(err)
 	}
 	runner := &runtimeDiscoveryRunner{outputs: map[string]string{
-		"docker context ls --format {{json .}}":                `{"Name":"default","Current":true,"DockerEndpoint":"unix:///var/run/docker.sock"}` + "\n",
-		"docker --context default version --format {{json .}}": `{"Client":{"Version":"29.0.1"},"Server":{"Version":"29.0.1"}}`,
-		"docker desktop status --format json":                  `{"status":"running"}`,
+		"docker context ls --format {{json .}}":                      `{"Name":"desktop-linux","Current":true,"DockerEndpoint":"unix:///var/run/docker.sock"}` + "\n",
+		"docker --context desktop-linux version --format {{json .}}": `{"Client":{"Version":"29.0.1"},"Server":{"Version":"29.0.1"}}`,
+		"docker desktop version --format json":                       `{"version":"v0.2.0"}`,
 	}, errors: map[string]error{"podman system connection list --format json": ErrCLIUnavailable}}
 	client := &CLIClient{Runner: runner, UserHomeDir: func() (string, error) { return home, nil }}
 	services, err := client.ContainerServices(context.Background())

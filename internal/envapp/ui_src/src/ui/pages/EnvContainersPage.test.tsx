@@ -102,7 +102,7 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
 
 vi.mock('@floegence/floe-webapp-core/ui', async importOriginal => ({
   ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
-  Button: (props: any) => <button type="button" class={props.class} data-variant={props.variant} disabled={props.disabled} aria-label={props['aria-label']} onClick={props.onClick}>{props.children}</button>,
+  Button: (props: any) => <button type="button" class={props.class} data-variant={props.variant} title={props.title} disabled={props.disabled} aria-label={props['aria-label']} onClick={props.onClick}>{props.children}</button>,
   Dropdown: (props: any) => <div class="test-dropdown">{props.trigger}<div data-test-dropdown-menu>{props.items.map((item: any) => <button type="button" data-tone={item.tone} disabled={item.disabled} onClick={() => props.onSelect(item.id)}>{item.icon?.()}{item.label}</button>)}</div></div>,
   DirectoryPicker: (props: any) => <Show when={props.open}><section data-directory-picker>{props.title}<button type="button" data-directory-picker-confirm onClick={() => { props.onSelect?.('/workspace/data'); props.onOpenChange?.(false); }}>confirm folder</button></section></Show>,
   FileOpenPicker: (props: any) => <Show when={props.open}><section data-file-open-picker>{props.title}<button type="button" data-picker-confirm onClick={() => {
@@ -511,6 +511,45 @@ describe('native Containers page', () => {
       }
     },
   );
+
+  it('retains the Desktop start control through health failures and recovery', async () => {
+    const stopped = {
+      service_id: 'container_service_desktop', engine: 'docker', name: 'Docker Desktop', implementation: 'docker_desktop', state: 'stopped',
+      capabilities: { start: true, stop: true, restart: true },
+      configuration: { mode: 'local', sources: ['engine', 'docker_cli'] },
+    };
+    harness.listServices.mockResolvedValue([stopped]);
+    const host = document.createElement('div');
+    document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host);
+    await settle();
+    host.querySelector<HTMLButtonElement>('[aria-label="containers.services.title"]')?.click();
+    await settle();
+    const card = host.querySelector<HTMLElement>('.container-service-card')!;
+    const start = Array.from(card.querySelectorAll<HTMLButtonElement>('button'))
+      .find(button => button.textContent?.includes('containers.actions.start'))!;
+    expect(start.disabled).toBe(false);
+
+    for (const state of ['unreachable', 'permission', 'error', 'not_installed', 'stopped']) {
+      const refresh = deferred<Array<typeof stopped & { guidance_code?: string }>>();
+      harness.listServices.mockImplementationOnce(() => refresh.promise);
+      host.querySelector<HTMLButtonElement>('[aria-label="containers.actions.refresh"]')?.click();
+      await settle();
+      expect(host.querySelector('.container-service-card')).toBe(card);
+      expect(card.contains(start)).toBe(true);
+      refresh.resolve([{ ...stopped, state, ...(state !== 'stopped' ? { guidance_code: 'detection_failed' } : {}) }]);
+      await settle();
+      expect(host.querySelector('.container-service-card')).toBe(card);
+      expect(card.contains(start)).toBe(true);
+      expect(start.disabled).toBe(state !== 'stopped');
+      if (state !== 'stopped') {
+        expect(start.title).toBe('containers.services.guidance.detection_failed');
+        start.click();
+        await settle();
+        expect(harness.preflight).not.toHaveBeenCalled();
+      }
+    }
+  });
 
   it('keeps service cards stable while refreshing and uses matching geometry for the initial skeleton', async () => {
     const services = [{

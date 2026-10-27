@@ -34,16 +34,17 @@ func (c *CLIClient) BindEndpoint(ctx context.Context, engine Engine, endpointID 
 	requested := strings.TrimSpace(string(endpointID))
 	for _, item := range items {
 		if requested == string(item.EndpointID) || (requested == "" && item.Default) {
-			bound := boundEngineEndpoint{
-				engine:        engine,
-				endpointID:    item.EndpointID,
-				name:          item.DisplayName,
-				useConnection: engine == EngineDocker || item.Remote,
-			}
-			return context.WithValue(ctx, endpointContextKey{}, bound), item, nil
+			return bindEngineEndpoint(ctx, item), item, nil
 		}
 	}
 	return nil, EngineEndpoint{}, ErrEndpointNotFound
+}
+
+func bindEngineEndpoint(ctx context.Context, endpoint EngineEndpoint) context.Context {
+	return context.WithValue(ctx, endpointContextKey{}, boundEngineEndpoint{
+		engine: endpoint.Engine, endpointID: endpoint.EndpointID, name: endpoint.DisplayName,
+		useConnection: endpoint.Engine == EngineDocker || endpoint.Remote,
+	})
 }
 
 func (c *CLIClient) ListEndpoints(ctx context.Context, engine Engine) ([]EngineEndpoint, error) {

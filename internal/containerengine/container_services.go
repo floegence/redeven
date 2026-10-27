@@ -359,14 +359,18 @@ func (a *Adapter) containerServiceController() (ContainerServiceController, erro
 func serviceSupportsMethod(service ContainerService, method Method) bool {
 	switch method {
 	case MethodContainerServicesStart:
-		return service.Capabilities.Start
+		return service.Capabilities.Start && service.State == ContainerServiceStateStopped
 	case MethodContainerServicesStop:
-		return service.Capabilities.Stop
+		return service.Capabilities.Stop && service.State == ContainerServiceStateRunning
 	case MethodContainerServicesRestart:
-		return service.Capabilities.Restart
+		return service.Capabilities.Restart && service.State == ContainerServiceStateRunning
 	default:
 		return false
 	}
+}
+
+func serviceSupportsConfigurationRestart(service ContainerService) bool {
+	return service.Capabilities.Restart && (service.State == ContainerServiceStateRunning || service.State == ContainerServiceStateStopped)
 }
 
 func validateContainerServiceConfigurationUpdate(req ContainerServiceConfigurationUpdateRequest) error {
