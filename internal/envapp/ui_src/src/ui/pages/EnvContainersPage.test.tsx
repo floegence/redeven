@@ -586,7 +586,69 @@ describe('native Containers page', () => {
     await settle(); expect(harness.listServices.mock.calls.length).toBeGreaterThan(calls);
   });
 
-  it('refreshes service readiness when polling observes completion after a lost stream', async () => {
+  it.each([
+    ['start', 'failed', 'running'],
+    ['start', 'interrupted', 'running'],
+    ['restart', 'failed', 'running'],
+    ['stop', 'failed', 'stopped'],
+    ['start', 'canceled', 'running'],
+    ['start', 'succeeded', 'stopped'],
+  ])('keeps terminal %s/%s evidence in history when the service is %s', async (action, outcome, state) => {
+    harness.listServices.mockResolvedValue([{
+      service_id: 'desktop', engine: 'docker', name: 'Docker Desktop', implementation: 'docker_desktop', state,
+      capabilities: { start: true, stop: true, restart: true }, configuration: { mode: 'local', sources: ['engine'] },
+    }]);
+    const operation = {
+      operation_id: 'previous-operation', method: 'container.services.' + action, engine: 'docker', resource_kind: 'container_service', resource_identity: 'desktop',
+      state: outcome, ...(outcome === 'succeeded' ? {} : { error_code: 'engine_timeout', error_message: 'internal diagnostic' }),
+      created_at_unix_ms: 1, updated_at_unix_ms: 120001, finished_at_unix_ms: 120001,
+    };
+    harness.listOperations.mockResolvedValue([operation]);
+    const host = document.createElement('div'); document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host); await settle();
+    host.querySelector<HTMLButtonElement>('[aria-label="containers.services.title"]')?.click(); await settle();
+    const card = host.querySelector<HTMLElement>('.container-service-card')!;
+    expect(card.textContent).toContain('containers.services.states.' + state);
+    expect(card.querySelector('.container-service-operation')).toBeNull();
+    const history = Array.from(card.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent?.includes('containers.services.lifecycle.history'));
+    expect(history).toBeDefined();
+    history!.click(); await settle();
+    const detail = host.querySelector<HTMLElement>('.container-operation-detail')!;
+    expect(detail.getAttribute('data-state')).toBe(outcome);
+    expect(detail.querySelector('.container-operation-facts')?.textContent).toContain('containers.services.states.' + state);
+    if (outcome !== 'succeeded') {
+      expect(detail.querySelector('.container-operation-error p')?.textContent).toContain('containers.operations.errors.engine_timeout');
+    }
+    expect(detail.textContent).not.toContain('internal diagnostic');
+    expect(operation.state).toBe(outcome);
+  });
+
+  it.each([
+    ['start', 'queued', 'running'], ['start', 'running', 'running'], ['start', 'canceling', 'running'],
+    ['stop', 'failed', 'running'], ['configuration.update', 'failed', 'running'],
+    ['restart', 'failed', 'stopped'], ['start', 'interrupted', 'unreachable'],
+    ['start', 'failed', 'permission'], ['start', 'failed', 'error'],
+  ])('preserves actionable %s/%s feedback while the service is %s', async (action, outcome, state) => {
+    harness.listServices.mockResolvedValue([{
+      service_id: 'desktop', engine: 'docker', name: 'Docker Desktop', implementation: 'docker_desktop', state,
+      capabilities: { start: true, stop: true, restart: true }, configuration: { mode: 'local', sources: ['engine'] },
+    }]);
+    harness.listOperations.mockResolvedValue([{
+      operation_id: 'service-operation', method: 'container.services.' + action, engine: 'docker', resource_kind: 'container_service', resource_identity: 'desktop',
+      state: outcome, error_code: 'engine_timeout', created_at_unix_ms: 1, updated_at_unix_ms: 120001,
+    }]);
+    const host = document.createElement('div'); document.body.append(host);
+    dispose = render(() => <EnvContainersPage />, host); await settle();
+    host.querySelector<HTMLButtonElement>('[aria-label="containers.services.title"]')?.click(); await settle();
+    const card = host.querySelector<HTMLElement>('.container-service-card')!;
+    expect(card.querySelector('.container-service-operation')?.getAttribute('data-state')).toBe(outcome);
+    if (['queued', 'running', 'canceling'].includes(outcome)) {
+      expect(card.getAttribute('data-active')).toBe('true');
+      expect(Array.from(card.querySelectorAll<HTMLButtonElement>('.container-service-card__actions button')).every(button => button.disabled)).toBe(true);
+    }
+  });
+
+  it.each(['succeeded', 'failed'])('refreshes service readiness when polling observes %s after a lost stream', async (outcome) => {
     const operation = {
       operation_id: 'starting', method: 'container.services.start', engine: 'docker', resource_kind: 'container_service', resource_identity: 'container_service_docker',
       state: 'running', created_at_unix_ms: Date.now(), updated_at_unix_ms: Date.now(),
@@ -601,10 +663,11 @@ describe('native Containers page', () => {
       service_id: 'container_service_docker', engine: 'docker', name: 'Docker Engine', implementation: 'docker_engine', state: 'running',
       capabilities: { start: true, stop: true, restart: true }, configuration: { mode: 'local', sources: ['engine'] },
     }]);
-    harness.listOperations.mockResolvedValue([{ ...operation, state: 'succeeded' }]);
+    harness.listOperations.mockResolvedValue([{ ...operation, state: outcome, ...(outcome === 'failed' ? { error_code: 'engine_timeout' } : {}) }]);
     await vi.waitFor(() => expect(harness.listServices.mock.calls.length).toBeGreaterThan(calls), { timeout: 2500 });
     await settle();
     expect(host.querySelector('.container-service-card')?.getAttribute('data-state')).toBe('running');
+    expect(host.querySelector('.container-service-operation')).toBeNull();
     expect(host.querySelector('[data-drawer]')).toBeNull();
   });
 

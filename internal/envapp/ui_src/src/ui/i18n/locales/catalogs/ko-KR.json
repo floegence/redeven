@@ -3175,6 +3175,7 @@
         "checkStatus": "상태 확인",
         "history": "작업 기록"
       },
+      "currentStatus": "현재 서비스 상태",
       "confirmAction": "{name}: {action}"
     },
     "views": {

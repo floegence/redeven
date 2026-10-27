@@ -3175,6 +3175,7 @@
         "checkStatus": "Status prüfen",
         "history": "Aktionsverlauf"
       },
+      "currentStatus": "Aktueller Dienststatus",
       "confirmAction": "{action}: {name}"
     },
     "views": {
