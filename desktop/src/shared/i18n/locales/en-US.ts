@@ -3,6 +3,17 @@ import flowerSurfaceEnUS from './catalogs/en-US-flower.json';
 
 export const enUS = {
   gatewayExperience: {
+    clients: "Clients",
+    cloud: "Redeven Cloud",
+    connectClient: "Connect client",
+    connectRuntime: "Connect Runtime",
+    ownedRuntime: "Runtimes I manage",
+    ownedRuntimeHelp: "Choose a saved environment and complete connection and enrollment here.",
+    otherRuntime: "Managed by another administrator",
+    otherRuntimeHelp: "Create a Runtime invitation for its administrator to accept.",
+    copyConnection: "Copy connection details",
+    clientDelivery: "Gateway address: {address}\nClient access code: {code}",
+
     confirming: "Confirming enrollment",
     confirmingHelp: "The request may have been accepted. Check the environment status before starting another enrollment. This check does not submit the invitation again.",
     saved: "Gateway connection saved. You can now add an environment.",
@@ -10,11 +21,8 @@ export const enUS = {
     "startGateway": "Start Gateway and continue",
     "maintenance": "Service maintenance",
     "overview": "Overview",
-    "access": "Access",
     "desktopConnection": "Desktop connection",
     "identity": "Gateway identity",
-    "addEnvironment": "Add environment",
-    "inviteOthers": "Invite someone else",
     "chooseEnvironmentHelp": "Choose an environment. Desktop can prepare and connect it here, even when its window is closed.",
     "noManagedEnvironments": "Add a managed local or remote environment to Welcome first.",
     "connectExisting": "Connect an existing Gateway",
@@ -136,7 +144,6 @@ export const enUS = {
   gatewayClients: {
     "connectionSettings": "Connection settings",
     "runtimes": "Runtimes",
-    "clientAccess": "Client access",
     "hostAccess": "You are connected to the device running this Gateway. You can manage Gateway settings here.",
     "hostVerification": "This connection has not been verified as the Gateway device, so Gateway settings are unavailable.",
     "clientOnly": "This is a Gateway access connection. You can open the Runtimes it provides, but you cannot change Gateway settings.",
@@ -2097,7 +2104,6 @@ export const enUS = {
 
     directoryHelpLabel: "How Gateway access works",
     directory: "Joined Runtimes",
-    directoryEmpty: "Create an invitation in More actions, then send it to the Runtime administrator.",
     directoryPending: "Refresh this Gateway to load joined Runtimes.",
     environmentListStale: "Refresh failed. Showing the last saved member list.",
     directoryIntro: "A Gateway is a shared access point for joined Runtimes.",

@@ -13,10 +13,30 @@ import { DesktopTooltip } from './DesktopTooltip';
 export function GatewayMembersPanel(props: Readonly<{
   available?: boolean;
   gateway?: DesktopGatewaySource; i18n: DesktopI18n;
-  section?: 'connection' | 'runtimes'; refresh: () => Promise<unknown>;
+  section: 'connection' | 'runtimes' | 'policy'; refresh: () => Promise<unknown>;
   onEnroll?: () => void;
+  enrolling?: boolean;
+  onEnrollmentChange?: (value: boolean) => void;
+  onNetwork?: () => void;
   onRestart?: () => void;
 }>) {
+  const [enrollmentStep, setEnrollmentStep] = createSignal<'choice' | 'invite'>('choice');
+  const enrolling = () => props.enrolling === true;
+  let enrollmentTrigger: HTMLButtonElement | undefined, ownedRuntimeChoice: HTMLButtonElement | undefined, otherRuntimeChoice: HTMLButtonElement | undefined, invitationHeading: HTMLHeadingElement | undefined;
+  function openEnrollment() {
+    props.onEnrollmentChange?.(true);
+    queueMicrotask(() => (enrollmentStep() === 'invite' ? invitationHeading : ownedRuntimeChoice)?.focus());
+  }
+  function leaveEnrollment() {
+    if (enrollmentStep() === 'invite') {
+      setEnrollmentStep('choice');
+      queueMicrotask(() => otherRuntimeChoice?.focus());
+    } else {
+      props.onEnrollmentChange?.(false);
+      queueMicrotask(() => enrollmentTrigger?.focus());
+    }
+  }
+  const canEnroll = () => props.available !== false && props.gateway?.connection_kind !== 'url' && props.gateway?.permissions?.manage_members === true;
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal('');
   const [invitation, setInvitation] = createSignal<GatewayInvitationCodeDelivery>();
@@ -221,9 +241,18 @@ export function GatewayMembersPanel(props: Readonly<{
       </details>
       <div class="redeven-gateway-network-actions"><Show when={networkSaved() || restartRequired()}><p role="status" class="redeven-gateway-help">{props.i18n.t(restartRequired() ? 'gatewayNetwork.restartRequired' : 'gatewayNetwork.saved')}</p></Show><Show when={restartRequired() && props.onRestart}><Button variant="outline" size="sm" onClick={() => props.onRestart?.()}>{props.i18n.t('gatewayExperience.reviewRestart')}</Button></Show><Button class="ml-auto cursor-pointer whitespace-nowrap" size="sm" disabled={props.available === false || busy() || Boolean(removingEndpointID()) || !props.gateway?.permissions?.manage_members || !networkDirty()} onClick={() => void saveEndpoints()}><StableText reserve={[props.i18n.t('gatewayNetwork.save'),props.i18n.t('gatewayNetwork.saving')]}>{props.i18n.t(busy() ? 'gatewayNetwork.saving' : 'gatewayNetwork.save')}</StableText></Button></div>
       </Show>
-      <Show when={props.section !== 'connection'}>
+      <Show when={props.section === 'runtimes'}>
+      <div hidden={!enrolling()} data-gateway-runtime-enrollment>
+        <Button class="self-start" variant="ghost" size="sm" onClick={leaveEnrollment}>{props.i18n.t('gatewayJoin.back')}</Button>
+        <h3 class="redeven-gateway-section-title mt-3">{props.i18n.t('gatewayExperience.connectRuntime')}</h3>
+        <div class="redeven-gateway-onboarding-choices mt-3" hidden={enrollmentStep() !== 'choice'}>
+          <Button ref={ownedRuntimeChoice} variant="outline" aria-label={props.i18n.t('gatewayExperience.ownedRuntime')} disabled={!canEnroll() || busy()} onClick={() => props.onEnroll?.()}><span><strong>{props.i18n.t('gatewayExperience.ownedRuntime')}</strong><span class="block text-xs text-muted-foreground">{props.i18n.t('gatewayExperience.ownedRuntimeHelp')}</span></span></Button>
+          <Button ref={otherRuntimeChoice} variant="outline" aria-label={props.i18n.t('gatewayExperience.otherRuntime')} disabled={!canEnroll() || busy()} onClick={() => { setEnrollmentStep('invite'); queueMicrotask(() => invitationHeading?.focus()); }}><span><strong>{props.i18n.t('gatewayExperience.otherRuntime')}</strong><span class="block text-xs text-muted-foreground">{props.i18n.t('gatewayExperience.otherRuntimeHelp')}</span></span></Button>
+        </div>
+      </div>
+      <div hidden={enrolling()}>
       <section class="redeven-gateway-settings-section">
-        <div class="redeven-gateway-section-heading"><h3 class="redeven-gateway-section-title">{props.i18n.t('gatewayMembers.members')}</h3><Show when={props.onEnroll}><Button data-gateway-add-environment size="sm" icon={Plus} disabled={busy()} onClick={() => props.onEnroll?.()}>{props.i18n.t('gatewayExperience.addEnvironment')}</Button></Show></div>
+        <div class="redeven-gateway-section-heading"><h3 class="redeven-gateway-section-title">{props.i18n.t('gatewayMembers.members')}</h3><Show when={props.onEnroll}><Button ref={enrollmentTrigger} data-gateway-add-environment size="sm" icon={Plus} disabled={!canEnroll() || busy()} onClick={openEnrollment}>{props.i18n.t('gatewayExperience.connectRuntime')}</Button></Show></div>
         <Show when={members().length} fallback={<p class="redeven-gateway-empty-state redeven-gateway-member-empty">{props.i18n.t('gatewayMembers.empty')}</p>}>
           <ul class="redeven-gateway-member-list"><KeyedFor each={members()} by={member => member.member_id}>{member => <li class="redeven-gateway-member-row">
             <div class="flex flex-wrap items-center justify-between gap-2"><strong class="break-all text-sm">{member().display_name}</strong>
@@ -261,17 +290,17 @@ export function GatewayMembersPanel(props: Readonly<{
           <Button class="cursor-pointer" size="sm" disabled={props.available === false || busy()} onClick={() => void saveMembers()}>{props.i18n.t('gatewayMembers.confirmSave')}</Button>
         </div></Show>
       </section>
-      <details class="redeven-gateway-disclosure" data-gateway-invite-others>
-        <summary class="cursor-pointer">{props.i18n.t('gatewayExperience.inviteOthers')}</summary>
+      </div>
+      <section data-gateway-invite-others hidden={props.section === 'runtimes' && (!enrolling() || enrollmentStep() !== 'invite')}>
         <div class="redeven-gateway-settings-section mt-3">
         <div class="redeven-gateway-section-heading">
           <div class="min-w-0">
-            <h3>{props.i18n.t('gatewayMembers.invite')}</h3>
+            <h3 ref={invitationHeading} tabIndex={-1}>{props.i18n.t('gatewayMembers.invite')}</h3>
             <p>{props.i18n.t('gatewayMembers.inviteHelp')}</p>
           </div>
           <Button class="cursor-pointer" size="sm" disabled={props.available === false || busy() || !props.gateway?.permissions?.manage_members || savedEndpoints().length === 0 || endpointsDirty() || !endpointsValid()} onClick={() => void invite()}>{props.i18n.t('gatewayMembers.createInvitation')}</Button>
         </div>
-        <Show when={!savedEndpoints().length}><p role="status" class="redeven-gateway-empty-state">{props.i18n.t('gatewayMembers.noConnectionAddresses')}</p></Show>
+        <Show when={!savedEndpoints().length}><p role="status" class="redeven-gateway-empty-state">{props.i18n.t('gatewayMembers.noConnectionAddresses')}</p><Show when={props.onNetwork}><Button variant="outline" size="sm" onClick={props.onNetwork}>{props.i18n.t('gatewayMembers.connectionAddresses')}</Button></Show></Show>
         <Show when={invitation() && !endpointsDirty()}>
           <div class="redeven-gateway-content-enter redeven-gateway-invitation-card">
             <p role="status" class="text-sm font-medium text-primary">{props.i18n.t('gatewayMembers.invitationReady')}</p>
@@ -287,8 +316,9 @@ export function GatewayMembersPanel(props: Readonly<{
 
           </div>
         </Show>
-      </div></details>
-
+      </div></section>
+      </Show>
+      <Show when={props.section === 'policy'}>
       <Show when={policy()}>{current => <details class="redeven-gateway-disclosure redeven-gateway-policy group">
         <summary class="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">{props.i18n.t('gatewayMembers.policy')}<ChevronDown class="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" /></summary>
         <div class="redeven-gateway-policy-content">

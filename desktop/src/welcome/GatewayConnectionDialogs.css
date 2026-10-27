@@ -71,6 +71,7 @@
 
 .redeven-gateway-settings-tablist {
   display: flex;
+  flex-wrap: wrap;
   flex: none;
   gap: .25rem;
   margin: 0 -.25rem;
@@ -1104,3 +1105,6 @@
 }
 
 .redeven-gateway-invitation-create p { flex: 1 1 12rem; }
+
+/* Retained subflows must not contribute to the active panel scroll extent. */
+.redeven-gateway-settings-panel [hidden] { display: none !important; }

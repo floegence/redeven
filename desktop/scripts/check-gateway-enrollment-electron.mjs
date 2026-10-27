@@ -71,7 +71,11 @@ await session.run(async () => {
   await page.evaluate(() => window.redevenDesktopLanguage.setPreference('en-US'));
   const action = request => page.evaluate(request => window.redevenDesktopLauncher.performAction(request), request);
   const snapshot = () => page.evaluate(() => window.redevenDesktopLauncher.getSnapshot());
+  let readinessObservation = '';
   await bounded(async () => { while (true) { const value = await snapshot();
+    if (value.issue?.code === 'desktop_bundle_invalid') throw new Error(value.issue.diagnostics_copy);
+    const observation = JSON.stringify(value.environments.map(entry => ({ id: entry.id, status: entry.runtime_health?.status, readiness: entry.runtime_health?.runtime_service?.open_readiness?.state })));
+    if (observation !== readinessObservation) { console.log('Runtime readiness', observation); readinessObservation = observation; }
     if (value.environments.some(entry => entry.id === 'local' && entry.runtime_health?.runtime_service?.open_readiness?.state === 'openable')) return;
     await new Promise(resolve => setTimeout(resolve, 250));
   } }, 90000, 'Real Runtime readiness');
@@ -97,9 +101,8 @@ await session.run(async () => {
   await page.getByRole('dialog').waitFor({ state: 'hidden' });
   await page.getByRole('button', { name: 'Gateways', exact: true }).click();
   const sourceCard = page.locator('[data-gateway-id="enrollment-qualification"]');
-  await sourceCard.getByRole('button', { name: 'More actions for Empty-address Gateway', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Gateway settings', exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Add environment', exact: true }).click();
+  await sourceCard.getByRole('button', { name: 'Connect Runtime', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Runtimes I manage', exact: true }).click();
   const dialog = page.getByRole('dialog');
   const choice = dialog.locator('[data-gateway-environment-choice] [data-floe-dropdown-trigger]');
   await choice.click();
@@ -110,7 +113,9 @@ await session.run(async () => {
   assert.ok((await picker.innerText()).includes(source.display_name), 'Gateway-side entry preselects registration with an empty address');
   await dialog.getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByRole('dialog').getByRole('tab', { name: 'Overview', exact: true }).waitFor();
-  await page.getByRole('dialog').getByRole('button', { name: 'Add environment', exact: true }).click();
+  await page.getByRole('dialog').getByRole('tab', { name: 'Overview', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Connect Runtime', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Runtimes I manage', exact: true }).click();
   await dialog.getByRole('button', { name: 'Restore connection', exact: true }).click();
   await dialog.locator('[data-gateway-endpoint-draft]').waitFor();
   await dialog.screenshot({ path: path.join(output, 'empty-address.png') });
@@ -154,6 +159,22 @@ await session.run(async () => {
   await gatewayCard.waitFor();
   assert.ok(!(await gatewayCard.innerText()).includes('Gateway update required'));
   await gatewayCard.screenshot({ path: path.join(output, 'compatible-gateway.png') });
+  const connectClient = gatewayCard.getByRole('button', { name: 'Connect client', exact: true });
+  await connectClient.click();
+  await dialog.getByRole('heading', { name: 'Connect client', exact: true }).waitFor();
+  assert.equal(await dialog.locator('.redeven-gateway-access-code').count(), 0, 'Opening client enrollment does not issue a code');
+  assert.equal(await dialog.getByRole('textbox', { name: 'Gateway address', exact: true }).inputValue(), origin);
+  await dialog.getByRole('button', { name: 'Create access code', exact: true }).click();
+  const accessCode = dialog.locator('.redeven-gateway-access-code code');
+  await accessCode.waitFor();
+  const issuedCode = await accessCode.innerText();
+  assert.ok(issuedCode.length > 10, 'The real Gateway issues a client access code');
+  await dialog.getByRole('button', { name: 'Back', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Connect client', exact: true }).click();
+  assert.equal(await accessCode.innerText(), issuedCode, 'Returning to enrollment retains the issued code');
+  await dialog.screenshot({ path: path.join(output, 'client-enrollment.png') });
+  await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'hidden' });
+  await page.waitForFunction(element => element === document.activeElement, await connectClient.elementHandle());
   const finalService = JSON.parse(execFileSync(gatewayBinary, ['service-status', '--state-root', gatewayState], { encoding: 'utf8' }));
   assert.equal(finalService.pid, started.pid, 'Pairing, refresh and enrollment must not restart a compatible Gateway');
   assert.equal(createHash('sha256').update(await readFile(gatewayBinary)).digest('hex'), binaryHash);
@@ -168,6 +189,7 @@ await session.run(async () => {
     'Actual Desktop main and renderer display a paired Gateway with no advertised addresses',
       'Wizard endpoint save persists to the real Gateway without replacing listener settings',
       'Gateway issues a real invitation; Runtime verifies it before membership exists',
-      'Explicit confirmation creates one connected Runtime member'], errors });
+      'Explicit confirmation creates one connected Runtime member',
+      'Direct client entry prepares the published address and explicitly issues and retains a real client access code'], errors });
   console.log('PASS real Desktop, Gateway and Runtime enrollment from an empty-address registration');
 });

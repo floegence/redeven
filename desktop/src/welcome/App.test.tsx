@@ -383,12 +383,12 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("return seed === '' ? null : `Gateway-${seed}`;");
     expect(appSrc).toContain('display_name_touched: overrides.display_name_touched === true');
     expect(appSrc).toContain(
-      'function openCreateGatewaySetup(gateway?: DesktopGatewaySource, focusSection?: DesktopGatewayResolveFocus | \'clients\'): void',
+      'function openCreateGatewaySetup(gateway?: DesktopGatewaySource, focusSection?: GatewaySetupTarget): void',
     );
     expect(appSrc).toContain('function gatewaySetupFocusForGateway(');
     expect(appSrc).toContain('requestedFocus?: DesktopGatewayResolveFocus');
     expect(appSrc).toContain("if (requestedFocus === 'url_endpoint' || requestedFocus === 'identity_trust') {");
-    expect(appSrc).toContain("focus_section: gatewaySetupFocusForGateway(gateway, focusSection === 'clients' ? undefined : focusSection)");
+    expect(appSrc).toContain("focus_section: gatewaySetupFocusForGateway(gateway, focusSection === 'url_endpoint' || focusSection === 'identity_trust' ? focusSection : undefined)");
     expect(appSrc).toContain("setActiveCenterTab('gateways')");
     expect(appSrc).toContain('<GatewaySetupDialog');
     expect(appSrc).toContain("kind: 'upsert_gateway'");
@@ -414,7 +414,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('props.openCreateGatewaySetup(props.gateway, action.resolve_focus)');
     expect(appSrc).toContain('<EnvironmentProgressPanel');
     expect(appSrc).toContain('buildGatewayActionPresentation');
-    expect(appSrc).toContain("props.i18n.t('gatewayAccess.directory')");
+    expect(appSrc).toContain("props.i18n.t('gatewayExperience.connectClient')");
+    expect(appSrc).toContain("props.i18n.t('gatewayExperience.connectRuntime')");
     expect(appSrc).not.toContain('gatewayStartRequiredDialog');
     expect(appSrc).toContain("case 'refresh_status':");
     expect(appSrc).toContain("case 'refresh_gateway':");

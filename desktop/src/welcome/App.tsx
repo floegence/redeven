@@ -449,6 +449,8 @@ type GatewayServiceSurface = Readonly<{
   close: () => void;
 }>;
 
+type GatewaySetupTarget = DesktopGatewayResolveFocus | 'clients' | 'runtimes' | 'cloud' | 'connect_client' | 'connect_runtime' | 'settings';
+
 type GatewaySetupDialogState = Readonly<{
   opening_id: number;
   interaction_identity?: string;
@@ -461,7 +463,9 @@ type GatewaySetupDialogState = Readonly<{
   connection_kind: DesktopGatewayConnectionKind;
   gateway_url: string;
   access_code: string;
-  settings_tab: 'overview' | 'connection' | 'runtimes' | 'clients';
+  settings_tab: 'overview' | 'connection' | 'runtimes' | 'clients' | 'cloud';
+  client_enrollment: boolean;
+  runtime_enrollment: boolean;
   onboarding_intent?: 'connect' | 'deploy';
   onboarding_complete?: boolean;
   allow_loopback_http: boolean;
@@ -1952,6 +1956,8 @@ function createGatewaySetupDialogState(
     connection_kind: connectionKind,
     gateway_url: trimString(overrides.gateway_url),
     access_code: trimString(overrides.access_code),
+    client_enrollment: overrides.client_enrollment ?? false,
+    runtime_enrollment: overrides.runtime_enrollment ?? false,
     settings_tab: overrides.settings_tab ?? (overrides.mode === 'edit' ? 'overview' : 'connection'),
     onboarding_intent: overrides.onboarding_intent,
     allow_loopback_http: overrides.allow_loopback_http === true,
@@ -3823,14 +3829,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return undefined;
   }
 
-  function openCreateGatewaySetup(gateway?: DesktopGatewaySource, focusSection?: DesktopGatewayResolveFocus | 'clients'): void {
+  function openCreateGatewaySetup(gateway?: DesktopGatewaySource, focusSection?: GatewaySetupTarget): void {
     if (activeSurface() !== 'connect_environment') {
       showConnectEnvironment(i18n().t('environmentCenter.addGatewayLauncherPrompt'));
       return;
     }
+    const focusedTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
     gatewaySetupReturnFocus = gateway
-      ? document.querySelector<HTMLElement>('[data-gateway-id="' + CSS.escape(gateway.gateway_id) + '"] [aria-haspopup="menu"]') ?? undefined
-      : document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+      ? focusedTrigger?.closest('[data-gateway-id="' + CSS.escape(gateway.gateway_id) + '"]') ? focusedTrigger
+        : document.querySelector<HTMLElement>('[data-gateway-id="' + CSS.escape(gateway.gateway_id) + '"] [aria-haspopup="menu"]') ?? undefined
+      : focusedTrigger;
     resetMessages();
     setGatewaySetupRecovery(null);
     setGatewaySetupTechnicalDetail('');
@@ -3859,8 +3867,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           container_label: gateway.container_label,
           gateway_url: gateway.gateway_url ?? '',
           allow_loopback_http: gateway.allow_loopback_http === true,
-          focus_section: gatewaySetupFocusForGateway(gateway, focusSection === 'clients' ? undefined : focusSection),
-          settings_tab: focusSection === 'clients' ? 'clients' : focusSection || gateway.status === 'pairing_required' || gateway.trust_state === 'unpaired' ? 'connection' : 'overview',
+          focus_section: gatewaySetupFocusForGateway(gateway, focusSection === 'url_endpoint' || focusSection === 'identity_trust' ? focusSection : undefined),
+          settings_tab: focusSection === 'clients' || focusSection === 'connect_client' ? 'clients'
+            : focusSection === 'runtimes' || focusSection === 'connect_runtime' ? 'runtimes'
+              : focusSection === 'cloud' ? 'cloud'
+                : focusSection || gateway.status === 'pairing_required' || gateway.trust_state === 'unpaired' ? 'connection' : 'overview',
+          client_enrollment: focusSection === 'connect_client',
+          runtime_enrollment: focusSection === 'connect_runtime',
         }
       : {}));
   }
@@ -7497,7 +7510,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   openLocalEnvironment: () => Promise<void>;
   openSettingsSurface: (environmentID?: string) => void;
   openCreateConnectionDialog: (message?: string, preferredKind?: ConnectionDialogKind) => void;
-  openCreateGatewaySetup: (gateway?: DesktopGatewaySource, focusSection?: DesktopGatewayResolveFocus | 'clients') => void;
+  openCreateGatewaySetup: (gateway?: DesktopGatewaySource, focusSection?: GatewaySetupTarget) => void;
   runGatewayLauncherAction: (request: DesktopLauncherActionRequest) => Promise<GatewayLauncherActionResult>;
   openGatewayMembers: (gateway: DesktopGatewaySource) => void;
   managedGatewayID: string;
@@ -10572,7 +10585,7 @@ function GatewaySourcesPanel(props: Readonly<{
   consumeLifecycleProgressFocusRequest: (requestID: number) => void;
   gatewaySourceFilter: string;
   gatewayQuery: string;
-  openCreateGatewaySetup: (gateway?: DesktopGatewaySource, focusSection?: DesktopGatewayResolveFocus | 'clients') => void;
+  openCreateGatewaySetup: (gateway?: DesktopGatewaySource, focusSection?: GatewaySetupTarget) => void;
   runGatewayLauncherAction: (request: DesktopLauncherActionRequest) => Promise<GatewayLauncherActionResult>;
   openGatewayMembers: (gateway: DesktopGatewaySource) => void;
   managedGatewayID: string;
@@ -11082,7 +11095,7 @@ function GatewaySourceCard(props: Readonly<{
   onActionPopoverOpenChange: (open: boolean) => void;
   moreActionsMenuOpen: boolean;
   onMoreActionsMenuOpenChange: (open: boolean) => void;
-  openCreateGatewaySetup: (gateway?: DesktopGatewaySource, focusSection?: DesktopGatewayResolveFocus | 'clients') => void;
+  openCreateGatewaySetup: (gateway?: DesktopGatewaySource, focusSection?: GatewaySetupTarget) => void;
   runGatewayLauncherAction: (request: DesktopLauncherActionRequest) => Promise<GatewayLauncherActionResult>;
   openGatewayMembers: (gateway: DesktopGatewaySource) => void;
   managedGatewayID: string;
@@ -12040,7 +12053,7 @@ function GatewaySourceCard(props: Readonly<{
         <div class="redeven-gateway-card__identity">
           <span class="redeven-gateway-card__mark" aria-hidden="true"><GatewayMark /></span>
           <div class="redeven-gateway-card__identity-text">
-            <h2 id={gatewayHeadingID} class="redeven-gateway-card__name" title={row().label}>{row().label}</h2>
+            <h2 id={gatewayHeadingID} class="redeven-gateway-card__name" title={row().label}><button type="button" class="cursor-pointer text-left" onClick={() => props.openCreateGatewaySetup(props.gateway)}>{row().label}</button></h2>
             <div class="redeven-gateway-card__connection">
               <span>{transportLabel()}</span>
               <Show when={props.gateway.connection_kind !== 'local_host' && row().endpoint_label}>
@@ -12049,27 +12062,11 @@ function GatewaySourceCard(props: Readonly<{
             </div>
           </div>
         </div>
-        <div class="redeven-gateway-card__directory">
-          <div class="redeven-gateway-card__directory-row">
-            <button type="button" class="redeven-gateway-card__directory-link"
-              aria-label={props.i18n.t('environmentCenter.viewEnvironments')}
-              aria-expanded={environmentsOpen() && row().environment_count > 0} aria-controls={environmentsOpen() && row().environment_count > 0 ? environmentListID : undefined}
-              disabled={row().environment_count === 0}
-              onClick={() => setEnvironmentsOpen(value => !value)}>
-              <span class="redeven-gateway-card__count-label">{props.i18n.t('gatewayAccess.directory')}</span>
-              <span class="redeven-gateway-card__count-value">
-                <span class="redeven-gateway-card__count">{catalogReady() || row().environment_count > 0 ? props.i18n.tn('plural.environmentCount', row().environment_count) : '—'}</span>
-                <Show when={row().environment_count > 0}><ChevronRight class="redeven-gateway-card__disclosure h-3 w-3" /></Show>
-              </span>
-            </button>
-            <button type="button" class="redeven-gateway-card__help"
-              aria-label={props.i18n.t('gatewayAccess.directoryHelpLabel')}
-              aria-expanded={directoryHelpOpen()} aria-controls={directoryHelpPresence.mounted() ? directoryHelpID : undefined}
-              onClick={() => setDirectoryHelpOpen(value => !value)}><HelpIcon class="h-3.5 w-3.5" /></button>
-          </div>
-        </div>
         <div class="redeven-gateway-card__actions">
-          <Show when={props.gateway.connection_kind !== 'url'}><Button size="sm" variant="outline" disabled={primaryActionRunning()} onClick={() => props.openCreateGatewaySetup(props.gateway, 'clients')}>{props.i18n.t('gatewayCloud.title')}</Button></Show>
+          <Show when={props.gateway.connection_kind !== 'url'}>
+            <Button size="sm" variant="outline" disabled={!props.available || primaryActionRunning() || props.gateway.local_enabled === false || !props.gateway.permissions?.manage_members} onClick={() => props.openCreateGatewaySetup(props.gateway, 'connect_client')}>{props.i18n.t('gatewayExperience.connectClient')}</Button>
+            <Button size="sm" disabled={!props.available || primaryActionRunning() || props.gateway.local_enabled === false || !props.gateway.permissions?.manage_members} onClick={() => props.openCreateGatewaySetup(props.gateway, 'connect_runtime')}>{props.i18n.t('gatewayExperience.connectRuntime')}</Button>
+          </Show>
           <DesktopActionPopover
             open={props.embeddedGatewayService !== props.gateway.gateway_id && actionPopoverOpen()}
             onOpenChange={(open) => {
@@ -12143,6 +12140,9 @@ function GatewaySourceCard(props: Readonly<{
                   }}
                 >
                   <div role="none" onKeyDown={handleMoreActionsKeyDown} inert={moreActionsPresence.exiting()} aria-hidden={moreActionsPresence.exiting()}>
+                    <Show when={props.gateway.connection_kind !== 'url'}><button type="button" role="menuitem" class="redeven-split-menu-item" onClick={() => {
+                      closeMoreActions(); props.openCreateGatewaySetup(props.gateway, 'cloud');
+                    }}><span class="redeven-split-menu-item-icon"><GatewayMark /></span>{props.i18n.t('gatewayCloud.title')}</button><div class="my-1 border-t border-border/60" role="separator" /></Show>
                     <KeyedFor each={menuActions()} by={action => action.intent}>
                       {(action) => (
                         <button
@@ -12168,7 +12168,7 @@ function GatewaySourceCard(props: Readonly<{
                     </KeyedFor>
                     <Show when={menuActions().length > 0}><div class="my-1 border-t border-border/60" role="separator" /></Show>
                     <button type="button" role="menuitem" class="redeven-split-menu-item" onClick={() => {
-                      closeMoreActions(); moreActionsAnchorRef?.querySelector('button')?.focus(); props.openCreateGatewaySetup(props.gateway);
+                      closeMoreActions(); moreActionsAnchorRef?.querySelector('button')?.focus(); props.openCreateGatewaySetup(props.gateway, 'settings');
                     }}>
                       <span class="redeven-split-menu-item-icon">
                         <Settings class="h-3.5 w-3.5" />
@@ -12196,10 +12196,27 @@ function GatewaySourceCard(props: Readonly<{
             {localizedGatewaySourceStatusLabel(props.i18n, row().status_label)}
           </EnvironmentStatusIndicator>
           <span class="redeven-gateway-card__trust">{trustLabel()}</span>
+          <div class="redeven-gateway-card__directory">
+            <div class="redeven-gateway-card__directory-row">
+              <button type="button" class="redeven-gateway-card__directory-link"
+                aria-label={props.i18n.t('environmentCenter.viewEnvironments')}
+                aria-expanded={environmentsOpen() && row().environment_count > 0} aria-controls={environmentsOpen() && row().environment_count > 0 ? environmentListID : undefined}
+                onClick={() => row().environment_count === 0 ? props.openCreateGatewaySetup(props.gateway, 'runtimes') : setEnvironmentsOpen(value => !value)}>
+                <span class="redeven-gateway-card__count-value">
+                  <span class="redeven-gateway-card__count">{catalogReady() || row().environment_count > 0 ? props.i18n.tn('plural.environmentCount', row().environment_count) : '—'}</span>
+                  <Show when={row().environment_count > 0}><ChevronRight class="redeven-gateway-card__disclosure h-3 w-3" /></Show>
+                </span>
+              </button>
+              <button type="button" class="redeven-gateway-card__help"
+                aria-label={props.i18n.t('gatewayAccess.directoryHelpLabel')}
+                aria-expanded={directoryHelpOpen()} aria-controls={directoryHelpPresence.mounted() ? directoryHelpID : undefined}
+                onClick={() => setDirectoryHelpOpen(value => !value)}><HelpIcon class="h-3.5 w-3.5" /></button>
+            </div>
+          </div>
         </div>
-        <Show when={row().environment_count === 0 || catalogFailed()}>
+        <Show when={catalogFailed() || !catalogReady() && row().environment_count === 0}>
           <p class="redeven-gateway-card__empty">{props.i18n.t(catalogFailed() ? (row().environment_count > 0 ? 'gatewayAccess.environmentListStale' : 'gatewayAccess.unavailable')
-            : !catalogReady() ? 'gatewayAccess.directoryPending' : 'gatewayAccess.directoryEmpty')}</p>
+            : 'gatewayAccess.directoryPending')}</p>
         </Show>
       </div>
       <Show when={directoryHelpPresence.mounted()}>
@@ -13519,7 +13536,7 @@ function GatewaySetupDialog(props: Readonly<{
   onSave: () => Promise<void>;
 }>) {
   const connectionKind = createMemo(() => props.state?.connection_kind ?? 'url');
-  const tabs = ['overview', 'runtimes', 'clients', 'connection'] as const;
+  const tabs = ['overview', 'clients', 'runtimes', 'cloud', 'connection'] as const;
   const canManage = createMemo(() => props.available && connectionKind() !== 'url' && props.gateway?.permissions?.manage_members === true);
   const managedOpening = createMemo<{ id: number; managed: boolean } | null>(previous => {
     const state = props.state;
@@ -13535,6 +13552,13 @@ function GatewaySetupDialog(props: Readonly<{
     return state ? { opening: state.opening_id, visited: state.settings_tab === 'clients' || previous?.opening === state.opening_id && previous.visited } : undefined;
   });
   const accessVisited = () => accessSession()?.visited === true;
+  const cloudSession = createMemo<{ opening: number; visited: boolean } | undefined>(previous => {
+    const state = props.state;
+    return state ? { opening: state.opening_id, visited: state.settings_tab === 'cloud' || previous?.opening === state.opening_id && previous.visited } : undefined;
+  });
+  const cloudVisited = () => cloudSession()?.visited === true;
+  function connectClient() { props.updateField('client_enrollment', true); selectTab('clients'); }
+  function connectRuntime() { props.updateField('runtime_enrollment', true); selectTab('runtimes'); }
   const activeTab = createMemo(() => managedSession() ? props.state?.settings_tab ?? 'overview' : 'connection');
   function selectTab(tab: typeof tabs[number]) {
     props.updateField('settings_tab', tab);
@@ -13579,7 +13603,7 @@ function GatewaySetupDialog(props: Readonly<{
               const index = tabs.indexOf(tab);
               const target = event.key === 'ArrowRight' ? tabs[(index + 1) % tabs.length] : event.key === 'ArrowLeft' ? tabs[(index + tabs.length - 1) % tabs.length] : event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[tabs.length - 1] : undefined;
               if (target) { event.preventDefault(); selectTab(target); }
-            }}>{props.i18n.t(tab === 'overview' ? 'gatewayExperience.overview' : tab === 'connection' ? 'common.settings' : tab === 'runtimes' ? 'environmentCenter.environmentsSection' : 'gatewayExperience.access')}</button>}</For>
+            }}>{props.i18n.t(tab === 'overview' ? 'gatewayExperience.overview' : tab === 'connection' ? 'common.settings' : tab === 'runtimes' ? 'gatewayClients.runtimes' : tab === 'cloud' ? 'gatewayExperience.cloud' : 'gatewayExperience.clients')}</button>}</For>
           </div>
         </Show>
         <div class="redeven-gateway-settings-panels">
@@ -13590,7 +13614,11 @@ function GatewaySetupDialog(props: Readonly<{
             <div><dt>{props.i18n.t('gatewayJoin.address')}</dt><dd>{props.gateway?.member_endpoints?.map(endpoint => endpoint.address).join(', ') || props.gateway?.gateway_url || props.i18n.t('gatewayMembers.noConnectionAddresses')}</dd></div>
             <div><dt>{props.i18n.t('gatewayExperience.identity')}</dt><dd>{props.gateway?.identity_fingerprint || props.i18n.t('gatewayClients.hostVerification')}</dd></div>
           </dl>
-          <div class="redeven-gateway-section-heading"><h3>{props.i18n.t('gatewayMembers.members')}</h3><Button data-gateway-add-environment size="sm" icon={Plus} onClick={props.onEnroll}>{props.i18n.t('gatewayExperience.addEnvironment')}</Button></div>
+          <Show when={hostManaged()}><div class="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" disabled={!canManage()} onClick={connectClient}>{props.i18n.t('gatewayExperience.connectClient')}</Button>
+            <Button data-gateway-add-environment size="sm" disabled={!canManage()} onClick={connectRuntime}>{props.i18n.t('gatewayExperience.connectRuntime')}</Button>
+          </div></Show>
+          <div class="redeven-gateway-section-heading"><h3>{props.i18n.t('gatewayMembers.members')}</h3></div>
           <Show when={props.gateway?.environments.length} fallback={<p class="redeven-gateway-empty-state">{props.i18n.t('gatewayMembers.empty')}</p>}><ul class="redeven-gateway-member-list"><For each={props.gateway?.environments}>{member => <li class="redeven-gateway-member-row"><strong>{member.display_name}</strong><span class="text-xs text-muted-foreground">{props.i18n.t(member.connected ? 'gatewayMembers.connected' : 'gatewayMembers.offline')}</span></li>}</For></ul></Show>
           <Button variant="ghost" onClick={() => selectTab('runtimes')}>{props.i18n.t('environmentCenter.viewEnvironments')}</Button>
         </div></Show>
@@ -13979,8 +14007,18 @@ function GatewaySetupDialog(props: Readonly<{
           }}</For></div>
         </section></Show>
         </div>
-        <Show when={managedSession()}><div id="gateway-settings-panel-runtimes" class={cn('redeven-gateway-settings-panel', activeTab() !== 'runtimes' && 'redeven-gateway-settings-panel--inactive')} role="tabpanel" aria-labelledby="gateway-settings-tab-runtimes" aria-hidden={activeTab() !== 'runtimes' ? 'true' : undefined} inert={activeTab() !== 'runtimes'}><GatewayMembersPanel available={props.available} gateway={props.gateway} i18n={props.i18n} refresh={props.refresh} onEnroll={props.onEnroll} section="runtimes" /></div></Show>
-        <Show when={managedSession()}><div id="gateway-settings-panel-clients" class={cn('redeven-gateway-settings-panel', activeTab() !== 'clients' && 'redeven-gateway-settings-panel--inactive')} role="tabpanel" aria-labelledby="gateway-settings-tab-clients" aria-hidden={activeTab() !== 'clients' ? 'true' : undefined} inert={activeTab() !== 'clients'}><Show when={hostManaged() && accessVisited()} fallback={<p class="redeven-gateway-help">{props.i18n.t('gatewayClients.clientOnly')}</p>}><GatewayClientsPanel available={props.available && hostManaged()} gatewayID={props.state?.gateway_id ?? ''} i18n={props.i18n} /></Show><Show when={hostManaged() && accessVisited()}><h3 class="redeven-gateway-section-title">{props.i18n.t('gatewayCloud.title')}</h3><GatewayCloudPanel embedded available={props.available && props.gateway?.permissions?.configure_cloud === true} gatewayID={props.state?.gateway_id ?? ''} gatewayName={props.state?.display_name ?? ''} i18n={props.i18n} /></Show></div></Show>
+        <Show when={managedSession()}><div id="gateway-settings-panel-runtimes" class={cn('redeven-gateway-settings-panel', activeTab() !== 'runtimes' && 'redeven-gateway-settings-panel--inactive')} role="tabpanel" aria-labelledby="gateway-settings-tab-runtimes" aria-hidden={activeTab() !== 'runtimes' ? 'true' : undefined} inert={activeTab() !== 'runtimes'}><GatewayMembersPanel available={props.available && hostManaged()} gateway={props.gateway} i18n={props.i18n} refresh={props.refresh} onEnroll={props.onEnroll} enrolling={props.state?.runtime_enrollment} onEnrollmentChange={value => props.updateField('runtime_enrollment', value)} onNetwork={() => selectTab('connection')} section="runtimes" /></div></Show>
+        <Show when={managedSession()}><div id="gateway-settings-panel-clients" class={cn('redeven-gateway-settings-panel', activeTab() !== 'clients' && 'redeven-gateway-settings-panel--inactive')} role="tabpanel" aria-labelledby="gateway-settings-tab-clients" aria-hidden={activeTab() !== 'clients' ? 'true' : undefined} inert={activeTab() !== 'clients'}>
+          <Show when={hostManaged() && accessVisited()} fallback={<p class="redeven-gateway-help">{props.i18n.t('gatewayClients.clientOnly')}</p>}>
+            <GatewayClientsPanel available={canManage()} gatewayID={props.state?.gateway_id ?? ''} endpoints={props.gateway?.member_endpoints} enrolling={props.state?.client_enrollment ?? false} onEnrollmentChange={value => props.updateField('client_enrollment', value)} i18n={props.i18n} />
+          </Show>
+        </div></Show>
+        <Show when={managedSession()}><div id="gateway-settings-panel-cloud" class={cn('redeven-gateway-settings-panel', activeTab() !== 'cloud' && 'redeven-gateway-settings-panel--inactive')} role="tabpanel" aria-labelledby="gateway-settings-tab-cloud" aria-hidden={activeTab() !== 'cloud' ? 'true' : undefined} inert={activeTab() !== 'cloud'}>
+          <Show when={hostManaged() && cloudVisited()} fallback={<p class="redeven-gateway-help">{props.i18n.t('gatewayClients.clientOnly')}</p>}>
+            <GatewayCloudPanel embedded available={props.available && hostManaged() && props.gateway?.permissions?.configure_cloud === true} gatewayID={props.state?.gateway_id ?? ''} gatewayName={props.state?.display_name ?? ''} i18n={props.i18n} />
+            <GatewayMembersPanel available={props.available && hostManaged()} gateway={props.gateway} i18n={props.i18n} refresh={props.refresh} section="policy" />
+          </Show>
+        </div></Show>
         </div>
         <Show when={props.recovery}>
           {recovery => <GatewayActionRecoveryNotice i18n={props.i18n} recovery={recovery()}
