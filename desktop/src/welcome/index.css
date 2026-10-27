@@ -3451,7 +3451,7 @@ pre,
 
 .redeven-gateway-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 28rem), 1fr));
   gap: 1rem;
   justify-content: start;
   align-items: start;
@@ -3471,9 +3471,11 @@ pre,
 .redeven-gateway-card__name > button:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
 .redeven-gateway-card__mark { display: grid; place-items: center; flex: 0 0 2.5rem; height: 2.5rem; border: 1px solid var(--border); border-radius: .625rem; color: var(--foreground); background: var(--muted); }
 .redeven-gateway-card__mark > svg { width: 1.625rem; height: 1.625rem; color: inherit; }
-.redeven-gateway-card__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; padding: 0 1.25rem 1rem; }
+.redeven-gateway-card__actions { padding: .25rem 1.25rem 1rem; }
+.redeven-gateway-card__actions .redeven-gateway-enrollment-actions { width: 100%; }
 .redeven-gateway-enrollment-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; gap: .5rem; max-width: 100%; width: max-content; }
 .redeven-gateway-enrollment-actions > button { min-width: 0; width: 100%; height: auto; min-height: var(--floe-control-height-sm); padding-block: .125rem; line-height: var(--floe-line-control); white-space: normal; text-wrap: balance; }
+.redeven-gateway-enrollment-actions > button > span:last-child { min-width: 0; overflow-wrap: anywhere; }
 .redeven-gateway-card__menu { display: flex; align-items: center; gap: .375rem; flex: none; }
 .redeven-gateway-object-menu { display: flex; }
 .redeven-gateway-more-trigger { display: inline-flex; align-items: center; justify-content: center; width: var(--floe-control-height-sm); height: var(--floe-control-height-sm); border: 1px solid transparent; border-radius: var(--radius-md); color: var(--floe-ink-soft); transition: color var(--floe-duration-fast) var(--floe-ease-out), background-color var(--floe-duration-fast) var(--floe-ease-out); }
@@ -3546,7 +3548,7 @@ pre,
 .redeven-gateway-card__directory-link:not(:disabled):hover .redeven-gateway-card__count { color: var(--primary); }
 .redeven-gateway-card__count-value { display: inline-flex; align-items: center; gap: .5rem; }
 .redeven-gateway-card__count { font-size: .75rem; font-weight: 500; line-height: 1.5; font-variant-numeric: tabular-nums; color: var(--foreground); }
-.redeven-gateway-card__empty { color: var(--muted-foreground); font-size: .6875rem; line-height: 1.65; text-wrap: pretty; }
+.redeven-gateway-card__empty { flex-basis: 100%; color: var(--muted-foreground); font-size: .6875rem; line-height: 1.65; text-wrap: pretty; }
 .redeven-gateway-card__environments { border-top: 1px solid var(--border); padding: 0 1.25rem; }
 
 .redeven-gateway-card__disclosure {

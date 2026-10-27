@@ -991,8 +991,9 @@
 
 /* Gateway management shares the Welcome content plane and Floe chrome tokens. */
 .redeven-gateway-workspace { min-width: 0; color: var(--foreground); }
-.redeven-gateway-workspace-header { display: flex; flex-direction: column; align-items: flex-start; gap: .75rem; padding-block: .25rem 1rem; }
-.redeven-gateway-workspace-title { display: flex; align-items: center; gap: .75rem; width: 100%; min-width: 0; }
+.redeven-gateway-workspace-header { display: flex; align-items: center; gap: .75rem; padding-block: .25rem 1rem; }
+.redeven-gateway-workspace-back { flex: none; }
+.redeven-gateway-workspace-title { display: flex; align-items: center; gap: .75rem; flex: 1; min-width: 0; }
 .redeven-gateway-workspace-title > div:first-of-type { min-width: 0; flex: 1; }
 .redeven-gateway-workspace-title h2 { margin-bottom: .25rem; overflow-wrap: anywhere; font-size: 1.25rem; font-weight: 600; line-height: 1.4; }
 .redeven-gateway-workspace-layout { display: grid; grid-template-columns: 11rem minmax(0,1fr); border-top: 1px solid var(--border); }
@@ -1033,6 +1034,7 @@
 }
 
 @media (pointer: coarse) {
+  .redeven-gateway-workspace-back { min-width: 2.75rem; }
   :is(.redeven-gateway-card, .redeven-gateway-workspace, .redeven-gateway-dialog) [data-floe-control='button'],
   .redeven-gateway-workspace-nav button { min-height: 2.75rem; }
 }
