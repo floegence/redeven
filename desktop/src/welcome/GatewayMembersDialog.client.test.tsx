@@ -286,11 +286,14 @@ it('preserves invitation delivery and member drafts across fresh Gateway snapsho
  const perform=vi.fn().mockResolvedValue({ok:true,outcome:'gateway_invitation_created',gateway_invitation_code:invitationFixture});
  const setGateway=mount(perform);await settle();button(i18n.t('gatewayMembers.createInvitation')).click();await settle();
  const memberSelect=document.querySelector<HTMLElement>('li [data-floe-dropdown-trigger]')!;await select(memberSelect,'allow');
+ await expect.poll(() => document.querySelector('[data-gateway-runtime-enrollment]')).toBeNull();
  const policyInput=document.querySelector<HTMLElement>('[role="checkbox"], input[type="checkbox"]')!;policyInput.click();await settle();
  setGateway(structuredClone(gateway));await settle();
- expect(document.querySelector('.redeven-gateway-invitation-card .font-mono')?.textContent?.replaceAll('-','')).toBe(invitationFixture.code);
  expect(memberSelect.textContent).toContain(i18n.t('gatewayMembers.allow'));expect(button(i18n.t('gatewayMembers.confirmSave')).disabled).toBe(false);
- expect(document.body.textContent).toContain(i18n.t('gatewayMembers.affected'));expect(perform).toHaveBeenCalledOnce();
+ expect(document.body.textContent).toContain(i18n.t('gatewayMembers.affected'));
+ document.querySelector<HTMLButtonElement>('[data-gateway-add-environment]')!.click();
+ await expect.poll(() => document.querySelector('.redeven-gateway-invitation-card .font-mono')?.textContent?.replaceAll('-','')).toBe(invitationFixture.code);
+ expect(perform).toHaveBeenCalledOnce();
 });
 
 it('preserves listener and Host drafts, disclosure and focus across fresh Gateway snapshots',async()=>{
